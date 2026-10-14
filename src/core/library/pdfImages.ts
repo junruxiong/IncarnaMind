@@ -2,7 +2,8 @@ import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
-import type { PDFPageProxy } from "pdfjs-dist/types/src/display/api";
+import type { PDFDocumentProxy, PDFPageProxy } from "pdfjs-dist/types/src/display/api";
+import type { DrawnPage, PageText } from "../../shared/citedPage";
 
 export interface DocumentPageImage {
   page: number;
@@ -19,28 +20,43 @@ export const PDF_IMAGE_LIMITS = {
   imagePixels: 20_000_000,
 };
 
+/** The most a cited page's picture may take (#133): its pages, one under the other. */
+const CITED_PAGE_BYTES = 16 * 1024 * 1024;
+/** The gap between a cited page's two pages, in its pixels, in the viewer's backdrop colour. */
+const CITED_PAGE_GAP = 16;
+
 type Canvas = NonNullable<Parameters<PDFPageProxy["render"]>[0]["canvas"]> & {
   toBuffer(mime: "image/jpeg", quality: number): Buffer;
 };
 type Surface = { canvas: Canvas };
+interface CanvasFactory {
+  create(width: number, height: number): Surface;
+  destroy(surface: Surface): void;
+}
 
-/** Runs in a disposable worker; no previews are written to disk. */
-export async function renderPdfImages(
+/** What a PDF's file must be to be drawn, and what is said when it isn't. */
+interface PdfChecks {
+  tooLarge: string;
+  changed: string;
+}
+
+/**
+ * Opens a PDF's file, if it is the version `contentHash` names, in a PDF.js
+ * worker of its own, and hands it to `use`; `checkWorker` throws the worker's
+ * error, if it had one. Everything is let go afterwards.
+ */
+async function withPdf<T>(
   file: string,
   contentHash: string,
-): Promise<DocumentPageImage[]> {
-  if ((await stat(file)).size > PDF_IMAGE_LIMITS.fileBytes)
-    throw new Error(
-      "PDF page previews support files up to 100 MB. Turn off page images to classify its text.",
-    );
+  checks: PdfChecks,
+  use: (document: PDFDocumentProxy, factory: CanvasFactory, checkWorker: () => void) => Promise<T>,
+): Promise<T> {
+  if ((await stat(file)).size > PDF_IMAGE_LIMITS.fileBytes) throw new Error(checks.tooLarge);
   const bytes = await readFile(file);
-  if (bytes.length > PDF_IMAGE_LIMITS.fileBytes)
-    throw new Error("The PDF is too large for page previews.");
+  if (bytes.length > PDF_IMAGE_LIMITS.fileBytes) throw new Error(checks.tooLarge);
   if (createHash("sha256").update(bytes).digest("hex") !== contentHash)
-    throw new Error(
-      "The Document changed. Wait for it to finish processing, then classify it again.",
-    );
-  const { getDocument, OPS, PDFWorker } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    throw new Error(checks.changed);
+  const { getDocument, PDFWorker } = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const packageDir = dirname(createRequire(import.meta.url).resolve("pdfjs-dist/package.json"));
   const worker = new PDFWorker({ verbosity: 0 });
   let task: ReturnType<typeof getDocument> | undefined;
@@ -73,10 +89,29 @@ export async function renderPdfImages(
     });
     const document = await task.promise;
     checkWorker();
-    const factory = document.canvasFactory as {
-      create(width: number, height: number): Surface;
-      destroy(surface: Surface): void;
-    };
+    return await use(document, document.canvasFactory as CanvasFactory, checkWorker);
+  } finally {
+    worker.port?.removeEventListener("message", onMessage);
+    try {
+      await task?.destroy();
+    } finally {
+      worker.destroy();
+    }
+  }
+}
+
+/** Runs in a disposable worker; no previews are written to disk. */
+export async function renderPdfImages(
+  file: string,
+  contentHash: string,
+): Promise<DocumentPageImage[]> {
+  const checks = {
+    tooLarge:
+      "PDF page previews support files up to 100 MB. Turn off page images to classify its text.",
+    changed: "The Document changed. Wait for it to finish processing, then classify it again.",
+  };
+  return withPdf(file, contentHash, checks, async (document, factory, checkWorker) => {
+    const { OPS } = await import("pdfjs-dist/legacy/build/pdf.mjs");
     // Always include the opening page; favour illustrations/charts in the next eleven.
     const candidates: { page: number; score: number }[] = [];
     for (
@@ -136,12 +171,81 @@ export async function renderPdfImages(
     }
     checkWorker();
     return images;
-  } finally {
-    worker.port?.removeEventListener("message", onMessage);
+  });
+}
+
+/**
+ * A Citation's cited pages (#133), drawn as previews are, one under the
+ * other, with the text runs on them where they are drawn, as the viewer's
+ * text layer counts them. Runs in a disposable worker.
+ */
+export async function drawPdfPages(
+  file: string,
+  contentHash: string,
+  pages: readonly number[],
+): Promise<DrawnPage> {
+  const checks = {
+    tooLarge: "Cited pages are saved for PDFs up to 100 MB.",
+    changed: "The Document changed since it was cited.",
+  };
+  return withPdf(file, contentHash, checks, async (document, factory, checkWorker) => {
+    const { Util } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const drawn: { surface: Surface; top: number }[] = [];
+    const text: PageText[] = [];
+    let width = 0;
+    let height = 0;
     try {
-      await task?.destroy();
+      for (const number of pages) {
+        if (number < 1 || number > document.numPages) {
+          throw new Error(`The PDF has no page ${number}.`);
+        }
+        const page = await document.getPage(number);
+        try {
+          const original = page.getViewport({ scale: 1 });
+          const viewport = page.getViewport({
+            scale: PDF_IMAGE_LIMITS.edge / Math.max(original.width, original.height),
+          });
+          const surface = factory.create(Math.ceil(viewport.width), Math.ceil(viewport.height));
+          const top = height === 0 ? 0 : height + CITED_PAGE_GAP;
+          drawn.push({ surface, top });
+          await page.render({ canvas: surface.canvas, viewport, background: "white" }).promise;
+          checkWorker();
+          const content = await page.getTextContent();
+          for (const item of content.items) {
+            if (!("str" in item)) continue;
+            const [, , c, d, e, f] = Util.transform(viewport.transform, item.transform);
+            const size = Math.hypot(c, d);
+            text.push({
+              text: item.str,
+              breakAfter: item.hasEOL,
+              box: { x: e, y: top + f - size, width: item.width * viewport.scale, height: size },
+            });
+          }
+          const last = text.at(-1);
+          if (last) last.breakAfter = true;
+          width = Math.max(width, surface.canvas.width);
+          height = top + surface.canvas.height;
+        } finally {
+          page.cleanup();
+        }
+      }
+      if (drawn.length === 0) throw new Error("No cited pages to draw.");
+      const sheet = factory.create(width, height);
+      try {
+        const context = sheet.canvas.getContext("2d");
+        if (!context) throw new Error("The cited pages couldn't be drawn.");
+        context.fillStyle = "#f4f5f7";
+        context.fillRect(0, 0, width, height);
+        for (const { surface, top } of drawn) context.drawImage(surface.canvas, 0, top);
+        const jpeg = sheet.canvas.toBuffer("image/jpeg", 80);
+        if (jpeg.length > CITED_PAGE_BYTES) throw new Error("The cited pages are too large.");
+        checkWorker();
+        return { data: new Uint8Array(jpeg), type: "image/jpeg", width, height, text };
+      } finally {
+        factory.destroy(sheet);
+      }
     } finally {
-      worker.destroy();
+      for (const { surface } of drawn) factory.destroy(surface);
     }
-  }
+  });
 }

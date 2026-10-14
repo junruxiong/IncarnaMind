@@ -369,12 +369,8 @@ test("a file deleted on disk shows as missing, still opens, and can be removed f
   expect(await pathsOpened(app)).toEqual([]);
   expect(await pathsShown(app)).toEqual([]);
 
-  // "Remove from IncarnaMind…" asks first, then the row goes.
+  // "Remove from IncarnaMind" asks nothing: the row goes, to Recently deleted.
   await actions.getByTestId("document.delete").click();
-  const confirm = window.getByTestId("delete-document-dialog");
-  await expect(confirm.getByRole("heading")).toHaveText("Remove this Document?");
-  await screenshot(window, "document-remove-dialog");
-  await confirm.getByTestId("confirm-delete-document").click();
   await expect(doomed).toHaveCount(0);
   await expect(items).toHaveCount(1);
   await app.close();

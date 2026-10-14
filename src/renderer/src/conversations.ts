@@ -29,6 +29,8 @@ interface ConversationsState {
   messages: readonly ConversationMessage[];
   /** A Question on its way to the core, shown at once until the core has it. */
   asking: string | null;
+  /** What that Question is about in its Mind (#565); "" when it is about nothing. */
+  askingQuote: string;
   /** Stop was pressed while that Question was on its way: its Answer stops as it starts. */
   stopWanted: boolean;
   /** An Answer to bring into view and flash once it shows: a link back from a Note leads there. */
@@ -40,6 +42,7 @@ export const useConversations = create<ConversationsState>()(() => ({
   openId: null,
   messages: [],
   asking: null,
+  askingQuote: "",
   stopWanted: false,
   sought: null,
 }));
@@ -132,16 +135,21 @@ export async function openConversation(conversationId: string, answerId?: string
 }
 
 /**
- * Asks a Question from a Mind's composer in the assistant's conversation (a
+ * Asks a Question from the composer in the assistant's conversation (a
  * new one for a new chat): it shows at once, and its Answer streams in there.
  * Why it couldn't be asked is kept for the composer (`composerKey`). Resolves
  * to whether it was asked.
  */
 export async function askInAssistant(
-  input: Omit<AskInConversationInput, "conversationId"> & { mindId: string },
+  input: Omit<AskInConversationInput, "conversationId"> & { mindId: string | null },
 ): Promise<boolean> {
   const key = composerKey(input.mindId);
-  useConversations.setState({ asking: input.text, stopWanted: false, sought: null });
+  useConversations.setState({
+    asking: input.text,
+    askingQuote: input.mindId ? (input.focus?.selection ?? "") : "",
+    stopWanted: false,
+    sought: null,
+  });
   try {
     const result = await core.askInConversation({
       ...input,

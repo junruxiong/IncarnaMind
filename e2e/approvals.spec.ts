@@ -100,12 +100,10 @@ test("a Tool that may change something pauses the Answer with an approval card: 
   await expect(answer).toHaveAttribute("data-status", "streaming");
   await expect(answer.getByTestId("answer-writing")).toHaveText("Waiting for your approval");
 
-  // Allow once: the call goes ahead (after the Connector's data-flow consent), and the Answer finishes.
+  // Allow once: the call goes ahead, and the Answer finishes. Connecting Tides allowed its Tool
+  // calls (ADR-0022): nothing asks to send.
   await card.getByTestId("approval-allow-once").click();
   await expect(card).toHaveCount(0);
-  const consent = window.getByTestId("consent-dialog");
-  await expect(consent).toContainText("Send data to Tides?");
-  await consent.getByTestId("consent-allow").click();
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await expect(answer).toContainText("book_boat said: Booked a boat trip from Dover.");
   await expect(answer).toContainText("That is all.");
@@ -179,9 +177,6 @@ test("in a Mind holding imported text, a write the User always allows asks, says
   const denyBox = await deny.boundingBox();
   expect(allowBox && denyBox && allowBox.x < denyBox.x).toBe(true);
   await pointAndClick(window, allow);
-  const consent = window.getByTestId("consent-dialog");
-  await expect(consent).toContainText("Send data to Tides?");
-  await pointAndClick(window, consent.getByTestId("consent-allow"));
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await expect(answer).toContainText("book_boat said: Booked a boat trip from Dover.");
   await expect(answer.getByTestId("answer-connector-call")).toHaveAttribute(
@@ -195,5 +190,22 @@ test("in a Mind holding imported text, a write the User always allows asks, says
   await expect(own).toContainText("book_boat said: Booked a boat trip from Dover.");
   await expect(own.getByTestId("approval-card")).toHaveCount(0);
   await expect(own.getByTestId("answer-connector-call")).not.toHaveAttribute("data-approval");
+
+  // Asked in the assistant beside the Mind holding imported text: the Question reads that Mind
+  // (#544), so the write asks there too, and says the Mind is why.
+  await pointAndClick(
+    window,
+    window.getByTestId("mind-list-item").filter({ hasText: "Imported lease" }),
+  );
+  await expect(editor).toContainText("The landlord's draft");
+  await ask(window, "Now book_boat from Dover");
+  const asked = assistantAnswers(window).last();
+  const askedCard = asked.getByTestId("approval-card");
+  await expect(askedCard).toBeVisible({ timeout: 15_000 });
+  await expect(askedCard.getByTestId("approval-third-party")).toHaveText(
+    "This Mind contains imported text, so it asks you first.",
+  );
+  await pointAndClick(window, askedCard.getByTestId("approval-deny"));
+  await expect(asked).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await app.close();
 });

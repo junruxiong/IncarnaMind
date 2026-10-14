@@ -4,6 +4,7 @@ import { describe, expect, test } from "vitest";
 import { RECOMMENDED_OLLAMA_MODEL } from "../../src/core";
 import { type ChatProviderKind, chatProviderKinds } from "../../src/core/api";
 import {
+  calculates,
   cloudWindow,
   givesStructuredOutput,
   readsImages,
@@ -28,6 +29,7 @@ import {
   KEY_PROVIDER_KINDS,
   keyProviderGroups,
 } from "../../src/core/providers/catalog/providers";
+import { KNOWN_PLAN_MODELS } from "../../src/core/providers/chatgpt/planEndpoint";
 import {
   baseUrlFor,
   endpointUrl,
@@ -118,6 +120,18 @@ describe("The provider catalog", () => {
     }
   });
 
+  test("Claude Haiku 5.5 and GPT-6 Luna answer by default, the strongest models stay in the menu, and the ChatGPT plan keeps its best model first", () => {
+    expect(catalogProvider("anthropic")?.roles).toMatchObject({
+      answers: "claude-haiku-5-5",
+      strongest: "claude-fable-5-1",
+    });
+    expect(catalogProvider("openai")?.roles).toMatchObject({
+      answers: "gpt-6-luna",
+      strongest: "gpt-6-astra",
+    });
+    expect(KNOWN_PLAN_MODELS[0]?.id).toBe("gpt-6.1-sol");
+  });
+
   test("the generated facts cover the hosted providers, with unique ids, and their sources' licences ship with the app", async () => {
     expect(providersWithModels().sort()).toEqual([
       "anthropic",
@@ -184,6 +198,23 @@ describe("The provider catalog", () => {
     expect(isNonChatModel("openai", "whisper-1")).toBe(true);
     expect(isNonChatModel("google", "gemini-embedding-001")).toBe(true);
     expect(isNonChatModel("openai", "gpt-7-preview")).toBe(false);
+  });
+
+  test.each<[ChatProviderKind, string, boolean]>([
+    ["anthropic", "claude-haiku-5-5", true],
+    ["anthropic", "claude-sonnet-5-5", true],
+    ["openai", "gpt-6-luna", true],
+    ["chatgpt", "gpt-6-sol", true],
+    ["openrouter", "openai/gpt-6-luna", false],
+    ["google", "gemini-3.8-flash", false],
+    ["deepseek", "deepseek-flash", false],
+    ["qwen", "qwen3.7-flash", false],
+    ["siliconflow", "deepseek-ai/DeepSeek-V4", false],
+    ["ollama", "gpt-oss:20b-cloud", false],
+    ["ollama", "qwen3.5:4b", false],
+  ])("%s %s is offered calculate by the catalog: %s", (kind, modelId, offered) => {
+    // Only models measured to use it well (#438); the evaluation (#441) turns on more.
+    expect(calculates(fromCatalog(kind, modelId))).toBe(offered);
   });
 
   test.each<[ChatProviderKind, string, boolean]>([
@@ -474,6 +505,23 @@ describe("Support tiers (ADR-0019)", () => {
         expect(step.zh.trim(), each.id).not.toBe("");
       }
     }
+  });
+
+  test("a key guide's steps say what to do; what a plan includes is said once, in the note under them, in both languages", () => {
+    const withNote = CATALOG_PROVIDERS.filter((each) => each.planCredits && each.keyGuide);
+    expect(withNote.map((each) => each.id)).toEqual(
+      expect.arrayContaining(["anthropic", "openai"]),
+    );
+    for (const each of withNote) {
+      for (const step of each.keyGuide ?? []) {
+        expect(step.en, each.id).not.toMatch(/include|doesn't/i);
+        expect(step.zh, each.id).not.toMatch(/不含|不包含|附带/);
+      }
+    }
+    // The Anthropic note says where the plan is linked, which its step no longer does.
+    const note = catalogProvider("anthropic")?.planCredits;
+    expect(note?.en).toContain("claude.ai's Billing");
+    expect(note?.zh).toContain("claude.ai");
   });
 
   test("a best-effort provider keeps its link to the provider's key page", () => {

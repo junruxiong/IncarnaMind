@@ -29,6 +29,7 @@ import {
   resolveInEditor,
   setEditTarget,
 } from "./editor/proposalReview";
+import { errorMessage } from "./errors";
 import { translateNow } from "./i18n";
 import { useAppStore } from "./store";
 
@@ -140,7 +141,7 @@ function whenShown(editor: Editor, request: string): Promise<PendingProposal | n
 /** A request that threw, as the result the composer shows. */
 const failure = (error: unknown): EditWithAiResult => ({
   kind: "failed",
-  error: { kind: "unknown", message: error instanceof Error ? error.message : String(error) },
+  error: { kind: "unknown", message: errorMessage(error, t) },
 });
 
 /**
@@ -380,14 +381,27 @@ export function editFromComposer(
 export function resolveProposalsIn(
   editor: Editor,
   mindId: string,
-  ids: readonly string[],
+  ids: readonly string[] | "all",
   outcome: "accept" | "reject",
 ): void {
   if (editor.isDestroyed || ids.length === 0) return;
-  const resolved = resolveInEditor(editor, new Set(ids), outcome);
+  // A Checkpoint of the Mind before an AI change goes in (#113). Not awaited: the core takes it
+  // before the change this sends next.
+  const accepting =
+    outcome === "accept" &&
+    pendingIn(editor.state).some(
+      (proposal) => !proposal.outOfDate && (ids === "all" || ids.includes(proposal.id)),
+    );
+  if (accepting) {
+    core.saveCheckpoint(mindId, "accept").catch(useAppStore.getState().reportError);
+  }
+  const picked = pendingIn(editor.state).filter((each) => ids === "all" || ids.includes(each.id));
+  const resolved = resolveInEditor(editor, ids === "all" ? ids : new Set(ids), outcome);
   if (resolved.length === 0) {
     // Only changes out of date were picked: they can't be accepted, and the User hears why.
-    if (outcome === "accept") speak(mindId, t("proposal.cantAccept"));
+    const theirs = picked.length > 0 && picked.every((each) => each.theirs);
+    if (outcome === "accept")
+      speak(mindId, t(theirs ? "proposal.cantAccept.theirs" : "proposal.cantAccept"));
     return;
   }
   const doc = editorDoc(editor);

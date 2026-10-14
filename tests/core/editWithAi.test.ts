@@ -19,7 +19,7 @@ import {
   resolveProposals,
 } from "../../src/shared/proposals";
 import { setUpWithDocuments } from "../helpers/citations";
-import { createTempDataFolder, nextEvent, startCore } from "../helpers/core";
+import { createTempDataFolder, nextEvent, saveProviderUnasked, startCore } from "../helpers/core";
 import { connectToMind, type MindClient } from "../helpers/mindClient";
 import { readMind, resolveChanges, shownWithChanges, writeMind } from "../helpers/minds";
 import { scriptedModels } from "../helpers/models";
@@ -229,9 +229,13 @@ describe("Edit with AI", () => {
     await resolveChanges(client, "accept");
     expect(await exported(core, mind.id)).toContain("Spring tides **come twice each month**.");
     expect(shownWithChanges(client)).toEqual(["Spring tides come twice each month."]);
+    // The words the changes added are AI text; those they kept are as they were.
     expect(readMind(client).firstChild?.toJSON().content).toEqual([
       text("Spring tides "),
-      text("come twice each month", "bold"),
+      text("come", "generated", "bold"),
+      text(" twice ", "bold"),
+      text("each", "generated", "bold"),
+      text(" month", "bold"),
       text("."),
     ]);
   });
@@ -717,7 +721,12 @@ describe("Edit with AI", () => {
             .map((child) => child.toString())
             .join(""),
         ),
-    ).toEqual(expected);
+    ).toEqual([
+      "The tides are strong and really regular.",
+      "Moon.",
+      // Stored as AI text, as the editor's binding keeps a mark.
+      "<generated>The Moon pulls the sea.</generated>",
+    ]);
   });
 
   test("an accepted change goes into the record of AI use with the model that wrote it; a rejected one, or one that only removes words, doesn't", async () => {
@@ -975,7 +984,7 @@ describe("Edit with AI and the model's service", () => {
     const dataDir = await createTempDataFolder();
     const models = scriptedModels(model);
     const core = startCore(dataDir, { createChatModel: models.createChatModel });
-    await core.saveChatProvider({ kind: "openai", apiKey: "sk-test", modelId: "gpt-test" });
+    await saveProviderUnasked(core, { kind: "openai", apiKey: "sk-test", modelId: "gpt-test" });
     const mind = await core.createMind({ title: "Cloud" });
     const client = await connectToMind(core, mind.id);
     const note = paragraph(text("A paragraph."));

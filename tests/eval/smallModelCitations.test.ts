@@ -76,6 +76,7 @@ function sessionOver({ name, pages, passages }: Excerpt) {
       },
       pageTexts: (_documentId, _contentHash, from, to) =>
         from === null || to === null ? units : inRange(from, to),
+      documentDate: () => null,
     },
     { onRecord: () => undefined },
   );

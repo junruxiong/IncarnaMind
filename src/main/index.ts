@@ -5,7 +5,6 @@ import {
   dialog,
   type IpcMainEvent,
   type IpcMainInvokeEvent,
-  ipcMain,
   powerMonitor,
 } from "electron";
 import {
@@ -15,15 +14,18 @@ import {
   createCore,
   resolveLanguage,
   type Settings,
+  type TaskKind,
 } from "../core";
 import { DataFromNewerVersionError } from "../core/errors";
 import type { Language } from "../core/language";
 import { channelFor, EVENT_CHANNEL } from "../shared/bridge";
 import { registerDocumentScheme, serveDocumentFiles } from "./documentProtocol";
 import { serveFileActions } from "./files";
+import { handle } from "./ipc";
 import { startLogging } from "./logging";
 import { isCaptureWindow } from "./meetings/capture";
 import { installAppMenu } from "./menu";
+import { createSystemNotifications } from "./notifications";
 import { chooseExecutor, createElectronAdapters, systemBrowser } from "./platform";
 import { DOWNLOAD_BUTTON, RELEASES_PAGE, startupDialog } from "./startupError";
 import { reportFullScreen, titleBarOptions } from "./titleBar";
@@ -62,6 +64,19 @@ async function testChatModel(): Promise<ChatModelFactory | undefined> {
   return undefined;
 }
 
+/**
+ * The smoke tests' scripted Task, which asks for approval and writes files
+ * (see ./scriptedTask). Only a test build has it, as it has the scripted chat
+ * model; a test starts it through `globalThis.incarnamindScriptedTask`.
+ */
+async function testTaskKinds(): Promise<TaskKind[]> {
+  if (import.meta.env.MODE === "test" && process.env.INCARNAMIND_TEST_TASKS === "1") {
+    const { scriptedTask } = await import("./scriptedTask");
+    return [scriptedTask];
+  }
+  return [];
+}
+
 let core: Core | undefined;
 
 /** The app's windows: not the hidden one that records a Meeting's audio. */
@@ -78,7 +93,7 @@ function isFromOurRenderer(event: IpcMainInvokeEvent | IpcMainEvent): boolean {
  */
 function exposeCore(core: Core): void {
   for (const method of coreApiMethods) {
-    ipcMain.handle(channelFor(method), (event, ...args: unknown[]) => {
+    handle(channelFor(method), (event, ...args) => {
       if (!isFromOurRenderer(event)) throw new Error("Refused a call from an unknown page.");
       return Reflect.apply(core[method], core, args) as Promise<unknown>;
     });
@@ -202,6 +217,7 @@ async function showStartupError(error: unknown): Promise<void> {
 
 app.whenReady().then(async () => {
   const createChatModel = await testChatModel();
+  const taskKinds = await testTaskKinds();
   const executor = await scriptExecutor;
   // The window's page starts loading while the core starts. Its calls reach the core once
   // `exposeCore` has run, below: they wait until this synchronous run is done.
@@ -209,8 +225,10 @@ app.whenReady().then(async () => {
   try {
     core = createCore({
       ...createElectronAdapters(logger),
+      notifications: createSystemNotifications(appWindows),
       ...(executor && { executor }),
       ...(createChatModel && { createChatModel }),
+      ...(taskKinds.length > 0 && { taskKinds }),
     });
   } catch (error) {
     await showStartupError(error);
@@ -218,6 +236,12 @@ app.whenReady().then(async () => {
     return;
   }
   exposeCore(core);
+  if (taskKinds.length > 0) {
+    const started = core;
+    (globalThis as { incarnamindScriptedTask?: unknown }).incarnamindScriptedTask = {
+      start: (mindId: string, input: unknown) => started.startTask("scripted", mindId, input).id,
+    };
+  }
   registerUpdateCheck(core);
   serveFileActions(core, {
     dataDir: app.getPath("userData"),

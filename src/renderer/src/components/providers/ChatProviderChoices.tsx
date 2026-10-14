@@ -1,7 +1,9 @@
 import { type ReactNode, useId } from "react";
 import type { ChatProvider, ChatProviderKind } from "../../../../core/api";
 import { keyProviderGroups } from "../../../../core/providers/catalog/providers";
+import { CHATGPT_SERVICE } from "../../../../core/providers/chatgpt/service";
 import { useT } from "../../i18n";
+import { OnThisComputer } from "../OnThisComputer";
 import {
   buttonStyle,
   choiceListClass,
@@ -17,8 +19,9 @@ import {
   useChatGptStorage,
   useContinueWithChatGpt,
 } from "./ChatGptSignIn";
+import { KeepLocalChoice } from "./KeepLocalChoice";
 import { type Ollama, OllamaProgress, ollamaDescription } from "./OllamaCard";
-import { ProviderForm } from "./ProviderForm";
+import { ProviderForm, ProviderSendsLine } from "./ProviderForm";
 
 const SHORT_NAMES: Partial<
   Record<ChatProviderKind, "providers.kind.short.qwen" | "providers.kind.short.deepseek">
@@ -88,10 +91,13 @@ export function ChatProviderChoices(props: ChatProviderChoicesProps) {
         inputId={`${name}-ollama`}
         chosen={choice === "ollama"}
         details={
-          (ollamaActionInRow || ollama.pulling || ollama.error) && (
+          (ollamaActionInRow || ollama.pulling || ollama.error || ollama.status?.running) && (
             <div className="flex flex-col items-start gap-3">
               <OllamaProgress ollama={ollama} />
               {ollamaActionInRow && <OllamaAction ollama={ollama} />}
+              {ollama.status?.running && (
+                <KeepLocalChoice keepLocal={ollama.keepLocal} disabled={ollama.pulling} />
+              )}
             </div>
           )
         }
@@ -100,9 +106,9 @@ export function ChatProviderChoices(props: ChatProviderChoicesProps) {
         <span className="flex min-w-0 flex-col gap-1">
           <span className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
             <span className={choiceTitleClass}>{t("providers.ollama.title")}</span>
-            <span className="text-label font-semibold text-success">
+            <OnThisComputer className="text-label font-semibold">
               {t("providers.choice.local")}
-            </span>
+            </OnThisComputer>
           </span>
           <span data-testid="ollama-status" className={choiceTextClass}>
             {ollamaDescription(ollama, t)}
@@ -153,7 +159,10 @@ function ChatGptChoice({ onSaved }: { onSaved(provider: ChatProvider): void }) {
     <div className="flex flex-col items-start gap-2">
       <ChatGptStorageNotice storage={storage} />
       {!sign.waiting && (
-        <ContinueWithChatGptButton onClick={() => void sign.run()} disabled={!storage.canSave} />
+        <>
+          <ProviderSendsLine provider={CHATGPT_SERVICE.name} />
+          <ContinueWithChatGptButton onClick={() => void sign.run()} disabled={!storage.canSave} />
+        </>
       )}
       <ChatGptSignInState sign={sign} />
     </div>
@@ -193,7 +202,7 @@ export function OllamaAction({ ollama, large = false }: { ollama: Ollama; large?
       <button
         type="button"
         data-testid="ollama-use"
-        disabled={pulling}
+        disabled={pulling || !ollama.keepLocal.asked}
         onClick={() => void ollama.use()}
         className={buttonStyle("primary", size)}
       >

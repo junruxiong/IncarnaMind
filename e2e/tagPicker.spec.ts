@@ -11,6 +11,7 @@ import {
   launchApp,
   removeDataFolder,
   setWindowSize,
+  tabTo,
 } from "./app";
 
 /*
@@ -97,6 +98,13 @@ async function addTextDocuments(window: Page, files: Record<string, string>): Pr
   ).toHaveCount(paths.length, { timeout: 20_000 });
 }
 
+/** Manage Tags, from the sidebar's Tags menu. */
+async function openManageTags(window: Page): Promise<void> {
+  await slideAndClick(window, window.getByTestId("tag-filter-menu"));
+  await slideAndClick(window, window.getByTestId("manage-tags"));
+  await expect(window.getByTestId("tags-dialog")).toBeVisible();
+}
+
 /** The Library's row of the Document with this name. */
 const rowOf = (library: Locator, name: string) =>
   library
@@ -118,9 +126,10 @@ test("Tags are added, created and removed with the keyboard, on one Document and
     const library = window.getByTestId("library");
     const invoice = rowOf(library, "March invoice");
 
-    // A row without Tags offers "+ Add tags"; the picker opens with the focus in its field.
+    // A row's Tags offer a faint "+" while it is pointed at; the picker opens with the focus in its field.
     const add = invoice.getByTestId("document-tags-menu");
-    await expect(add).toHaveText("+ Add tags");
+    await expect(add).toHaveAccessibleName("Edit Tags of March invoice");
+    await slideTo(window, invoice);
     await slideAndClick(window, add);
     const picker = invoice.getByTestId("document-tags-popover");
     const field = picker.getByTestId("tag-picker-input");
@@ -195,7 +204,11 @@ test("Tags are added, created and removed with the keyboard, on one Document and
       "none",
     );
     await screenshot(window, "picker-bulk");
+    // Esc with the focus back on the bar's button closes the picker, and leaves the selection.
+    await tabTo(window, bar.getByTestId("library-selection-tags"));
     await window.keyboard.press("Escape");
+    await expect(bulk).toBeHidden();
+    await expect(bar).toContainText("2 selected");
     await expect(q1.getByTestId("tag-chip")).toHaveText(["Report"]);
     await expect(q2.getByTestId("tag-chip")).toHaveText(["Report"]);
     await expect(chips).toHaveText(["Invoice"]);
@@ -289,7 +302,7 @@ async function decisionServer(): Promise<{ server: Server; readonly requests: nu
   };
 }
 
-test("a Tag automatic tagging wasn't sure of is confirmed or removed in one click, and Tags filter the Library", async () => {
+test("a Tag automatic tagging wasn't sure of is confirmed or removed in one click, and + Filter's Tags narrow the Library", async () => {
   const decisions = await decisionServer();
   const { server } = decisions;
   const { app, window } = await launchApp(dataDir);
@@ -311,7 +324,7 @@ test("a Tag automatic tagging wasn't sure of is confirmed or removed in one clic
     }, `http://127.0.0.1:${port}`);
     await slideAndClick(window, window.getByTestId("open-library"));
     const library = window.getByTestId("library");
-    await slideAndClick(window, library.getByRole("button", { name: "Organize", exact: true }));
+    await slideAndClick(window, library.getByTestId("library-organize"));
     const march = rowOf(library, "March invoice");
     const april = rowOf(library, "April invoice");
     // Applied, with an amber mark, waiting for the User.
@@ -347,7 +360,7 @@ test("a Tag automatic tagging wasn't sure of is confirmed or removed in one clic
     await slideAndClick(window, window.getByTestId("document-tab").getByTestId("tab-close"));
     await expect(viewer).toBeHidden();
 
-    // ✓ and × show once the chip is pointed at; ✓ keeps the Tag, as the User's.
+    // ✓ and × show once the row is pointed at; ✓ keeps the Tag, as the User's.
     await expect(marchInvoice.getByTestId("confirm-document-tag")).toBeHidden();
     await slideTo(window, marchInvoice);
     await slideAndClick(window, marchInvoice.getByTestId("confirm-document-tag"));
@@ -359,23 +372,47 @@ test("a Tag automatic tagging wasn't sure of is confirmed or removed in one clic
     await slideTo(window, aprilInvoice);
     await slideAndClick(window, aprilInvoice.getByTestId("reject-document-tag"));
     await expect(april.getByTestId("tag-chip")).toHaveCount(0);
+    // They wait in their Suggested Folders now: each Folder's ⋯ organizes it again.
     const asked = decisions.requests;
-    await slideAndClick(window, library.getByRole("button", { name: "Organize", exact: true }));
+    for (const name of ["Finance", "Reports & presentations"]) {
+      const head = library
+        .getByTestId("library-section")
+        .filter({ hasText: name })
+        .getByTestId("library-section-head");
+      await slideTo(window, head);
+      await slideAndClick(window, head.getByTestId("folder-menu"));
+      await slideAndClick(
+        window,
+        window
+          .getByTestId("folder-actions")
+          .filter({ visible: true })
+          .getByTestId("folder.organize"),
+      );
+    }
     await expect.poll(() => decisions.requests, { timeout: 15_000 }).toBe(asked + 4);
-    await expect(library.getByRole("button", { name: "Organize", exact: true })).toBeEnabled();
+    await expect(library.getByTestId("library-organizing")).toHaveCount(0);
     await expect(april.getByTestId("tag-chip")).toHaveCount(0);
     await expect(march.getByTestId("tag-chip")).toHaveAttribute("data-source", "user");
 
-    // A chip's name filters the Library by its Tag; the Tags filter says so, and so does the sidebar.
+    // + Filter's Tags narrow the Library by a Tag (a row's chip edits its Tags); the sidebar says so too.
     const q1 = rowOf(library, "Q1 report");
-    await slideAndClick(window, q1.getByTestId("tag-chip-filter"));
+    await slideAndClick(window, library.getByTestId("library-add-filter"));
+    await slideAndClick(
+      window,
+      window.locator('[data-testid="library-filter-kind"][data-facet="tag"]'),
+    );
+    await slideAndClick(
+      window,
+      library.getByRole("menuitemcheckbox", { name: "Report, 2 Documents" }),
+    );
+    await window.keyboard.press("Escape");
     const rows = library.getByTestId("library-document");
     await expect(rows).toHaveCount(2);
     const tagsFilter = library.locator('[data-testid="library-filter"][data-facet="tag"]');
     await expect(tagsFilter).toHaveText("Tags: Report");
     // Its options show each Tag's dot. Nothing awaits review now, so "Needs review" is gone
     // (sidebarTags.spec shows it with its ring).
-    await slideAndClick(window, tagsFilter);
+    await slideAndClick(window, tagsFilter.getByTestId("library-filter-chip"));
     const tagMenu = library.locator('[data-testid="library-filter-menu"][data-facet="tag"]');
     await expect(
       tagMenu.locator('[data-testid="library-filter-option"][data-value="needs-review"]'),
@@ -389,13 +426,18 @@ test("a Tag automatic tagging wasn't sure of is confirmed or removed in one clic
     await screenshot(window, "filter-colours");
     await window.keyboard.press("Escape");
     await expect(window.getByTestId("tag-filter-active")).toContainText("Report");
-    // With a Tag filter, a Question from here asks about exactly these Documents.
-    await expect(library.getByTestId("library-ask")).toHaveAttribute("data-scope", "documents");
-    await expect(library.getByTestId("library-ask")).toHaveText("Ask about these 2 Documents");
+    // With a Tag filter, ⌘A takes exactly these Documents, to ask about.
+    await rows.first().locator("[data-row-main]").focus();
+    await window.keyboard.press("ControlOrMeta+a");
+    await expect(
+      library.getByTestId("library-selection").locator('[data-command="document.ask"]'),
+    ).toHaveText("Ask about these 2 Documents");
+    await window.keyboard.press("Escape");
     // It combines with the other filters.
+    await slideAndClick(window, library.getByTestId("library-add-filter"));
     await slideAndClick(
       window,
-      library.locator('[data-testid="library-filter"][data-facet="format"]'),
+      window.locator('[data-testid="library-filter-kind"][data-facet="format"]'),
     );
     await slideAndClick(
       window,
@@ -405,7 +447,8 @@ test("a Tag automatic tagging wasn't sure of is confirmed or removed in one clic
     await expect(rows).toHaveCount(1);
     await expect(rows).toContainText("Q2 report");
     await screenshot(window, "library-filtered");
-    await slideAndClick(window, library.getByTestId("library-filters-clear"));
+    const remove = library.getByTestId("library-filter-remove");
+    while ((await remove.count()) > 0) await slideAndClick(window, remove.first());
     await expect(rows).toHaveCount(4);
     await expect(window.getByTestId("tag-filter-active")).toHaveCount(0);
 
@@ -413,9 +456,7 @@ test("a Tag automatic tagging wasn't sure of is confirmed or removed in one clic
     await (await bridge(window)).evaluate((core) =>
       core.updateSettings({ user: { language: "zh-CN" } }),
     );
-    await expect(library.locator('[data-testid="library-filter"][data-facet="tag"]')).toHaveText(
-      "标签",
-    );
+    await expect(library.getByTestId("library-add-filter")).toHaveText("筛选");
     await screenshot(window, "library-zh");
     await slideTo(window, q1);
     await slideAndClick(window, q1.getByTestId("document-tags-menu"));
@@ -459,7 +500,7 @@ test("Manage Tags shows how many Documents carry each, edits, merges and deletes
     });
     await slideAndClick(window, window.getByTestId("open-library"));
     const library = window.getByTestId("library");
-    await slideAndClick(window, library.getByRole("button", { name: "Manage tags" }));
+    await openManageTags(window);
     const dialog = window.getByTestId("tags-dialog");
     const row = (name: keyof typeof ids) =>
       dialog.locator(`[data-testid="tag-row"][data-tag-id="${ids[name]}"]`);
@@ -488,7 +529,7 @@ test("Manage Tags shows how many Documents carry each, edits, merges and deletes
     await expect(
       library.locator('[data-testid="tag-chip"]').filter({ hasText: "Report" }),
     ).toHaveAttribute("data-colour", "teal");
-    await slideAndClick(window, library.getByRole("button", { name: "Manage tags" }));
+    await openManageTags(window);
 
     // Merging Report into Notes: its Document keeps one Tag, Notes.
     await slideAndClick(window, row("Report").getByTestId("merge-tag"));
@@ -506,11 +547,9 @@ test("Manage Tags shows how many Documents carry each, edits, merges and deletes
       "Tags: Notes",
     );
 
-    // Deleting says how many Documents lose it.
-    await slideAndClick(window, library.getByRole("button", { name: "Manage tags" }));
+    // Deleting asks nothing: the Tag goes to Recently deleted.
+    await openManageTags(window);
     await slideAndClick(window, row("Notes").getByTestId("delete-tag"));
-    await expect(row("Notes")).toContainText("It is taken off 2 Documents.");
-    await slideAndClick(window, row("Notes").getByTestId("confirm-delete-tag"));
     await expect(row("Notes")).toHaveCount(0);
     await slideAndClick(window, dialog.getByRole("button", { name: "Done" }));
     // The filter by the deleted Tag goes with it.
@@ -520,7 +559,7 @@ test("Manage Tags shows how many Documents carry each, edits, merges and deletes
     await (await bridge(window)).evaluate((core) =>
       core.updateSettings({ user: { language: "zh-CN" } }),
     );
-    await slideAndClick(window, library.getByRole("button", { name: "管理标签" }));
+    await openManageTags(window);
     await expect(dialog.getByTestId("tag-row").first().getByTestId("tag-count")).toHaveText(
       "0 个文档",
     );

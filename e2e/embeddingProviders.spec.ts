@@ -215,3 +215,23 @@ test("reranking is on by default with the built-in model, can be turned off, and
   expect(settings).toMatchObject({ enabled: true, byDefault: false, kind: "built-in" });
   await app.close();
 });
+
+test("once the built-in model has reranked, Settings → Search says where it runs", async () => {
+  const tides = join(sources, "Tides.txt");
+  const moon = join(sources, "Moon.txt");
+  await writeFile(tides, "The tides rise and fall twice a day.\n");
+  await writeFile(moon, "The moon pulls the tides.\n");
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  await addDocuments(window, [tides, moon]);
+  await openSettings(window, "search");
+  const rerank = window.getByTestId("rerank-settings");
+  await expect(rerank.getByTestId("rerank-current")).toBeVisible();
+  await expect(rerank.getByTestId("rerank-runs-on")).toHaveCount(0);
+
+  await window.evaluate(() => (globalThis as Page).incarnamind.searchEvidence("tides"));
+
+  // The smoke tests' fake model runs on the CPU.
+  await expect(rerank.getByTestId("rerank-runs-on")).toHaveText("On this computer · CPU");
+  await app.close();
+});

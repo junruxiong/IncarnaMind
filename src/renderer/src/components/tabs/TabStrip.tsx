@@ -1,17 +1,12 @@
-import {
-  type KeyboardEvent,
-  type RefObject,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { type KeyboardEvent, type RefObject, useEffect, useRef, useState } from "react";
 import type { LayoutGroup, LayoutTab } from "../../../../core/api";
 import { shortcutLabel } from "../../commands/keymap";
 import { commands } from "../../commands/registry";
+import { FORMAT_LABELS, useExports } from "../../exports";
 import { useT } from "../../i18n";
 import { focusedGroupOf, groupOfTab } from "../../layoutSlice";
 import { useAppStore } from "../../store";
+import { InlineName } from "../InlineName";
 import {
   CloseLineIcon,
   ExportLineIcon,
@@ -21,6 +16,7 @@ import {
 } from "../lineIcons";
 import { ObjectMenu, useObjectMenu } from "../ObjectMenu";
 import { SidebarToggle } from "../SidebarToggle";
+import { TasksChip } from "../TasksChip";
 import { GroupMenu, StripButton } from "./TabMenus";
 import { focusTab, splitToTheRight } from "./tabActions";
 import { MeetingTabTime, TabIcon, useTabTitle } from "./tabItems";
@@ -29,7 +25,8 @@ import type { TabDrag } from "./useTabDrag";
 /*
  * A group's tab strip (DESIGN.md, Components: Mind tabs, which now hold
  * everything that opens): the tabs, then "+" for a new Mind in this group,
- * then Export (for a Mind), Split and ⋯. This file is their behaviour and
+ * then the Tasks chip (in the last group's strip), Export (for a Mind), Split
+ * and ⋯. This file is their behaviour and
  * structure; their whole look is the `.tab-strip` block in styles.css.
  */
 
@@ -54,6 +51,7 @@ export function TabStrip({
   const shownId = group.activeTabId;
   const shown = group.tabs.find((tab) => tab.id === shownId);
   const focused = merged || layout?.focusedGroupId === group.id;
+  const last = merged || index === (layout?.groups.length ?? 1) - 1;
 
   // The shown tab stays in sight when there are more tabs than room.
   useEffect(() => {
@@ -130,13 +128,14 @@ export function TabStrip({
         type="button"
         data-testid="new-tab"
         aria-label={t("tabs.new", { shortcut: shortcutLabel("tab.new") })}
-        title={t("tabs.new", { shortcut: shortcutLabel("tab.new") })}
+        title={t("tabs.new.about", { shortcut: shortcutLabel("tab.new") })}
         onClick={() => void createMind({ groupId: group.id })}
         className="tab-new"
       >
         <PlusLineIcon />
       </button>
       <span className="tab-strip-spacer" />
+      {last && <TasksChip />}
       {shown?.item.kind === "mind" && <ExportButton mindId={shown.item.mindId} />}
       {!merged && (
         <span className="tab-split">
@@ -154,14 +153,25 @@ export function TabStrip({
   );
 }
 
+/** Export: one click exports the Mind in the last format, as ⇧⌘E does (#100). */
 function ExportButton({ mindId }: { mindId: string }) {
   const t = useT();
+  const format = useAppStore((state) => state.settings?.user.exportOptions.format ?? "docx");
+  const saving = useExports(
+    (state) => state.result?.mindId === mindId && state.result.state === "saving",
+  );
+  const label = t("export.action.title", {
+    format: t(FORMAT_LABELS[format]),
+    shortcut: shortcutLabel("mind.export"),
+  });
   return (
     <button
       type="button"
       data-testid="export-mind"
-      aria-label={t("export.action.label")}
-      title={t("export.action.label")}
+      data-format={format}
+      aria-label={label}
+      aria-busy={saving || undefined}
+      title={label}
       onClick={() =>
         commands
           .run("mind.export", { focus: { kind: "mind", id: mindId }, surface: "mind" })
@@ -282,7 +292,7 @@ function Tab({ tab, groupId, selected, focusedGroup, divider, dragged, drag }: T
             title={title}
             onDone={() => {
               renameTab(null);
-              focusTab(tab.id);
+              focusTab(tab.id, { onlyIfLost: true });
             }}
           />
         ) : (
@@ -335,47 +345,21 @@ function Tab({ tab, groupId, selected, focusedGroup, divider, dragged, drag }: T
   );
 }
 
-/**
- * A Mind's title typed in its tab: Enter or leaving the field saves, Esc
- * cancels, a blank title changes nothing, and Enter while an input method is
- * composing doesn't cut the title off.
- */
+/** A Mind's title typed in its tab. */
 function RenameTab({ mindId, title, onDone }: { mindId: string; title: string; onDone(): void }) {
   const t = useT();
   const renameMind = useAppStore((state) => state.renameMind);
-  const [value, setValue] = useState(title);
-  const field = useRef<HTMLInputElement>(null);
-  const finished = useRef(false);
-
-  useLayoutEffect(() => {
-    field.current?.focus();
-    field.current?.select();
-  }, []);
-
-  const finish = (save: boolean) => {
-    if (finished.current) return;
-    finished.current = true;
-    if (save && value.trim() !== "" && value.trim() !== title) void renameMind(mindId, value);
-    onDone();
-  };
-
   return (
-    <input
-      ref={field}
-      value={value}
-      data-testid="tab-rename"
-      aria-label={t("mind.renameLabel", { title })}
-      onChange={(event) => setValue(event.target.value)}
-      onKeyDown={(event) => {
-        if (event.nativeEvent.isComposing) return;
-        if (event.key === "Enter" || event.key === "Escape") {
-          event.preventDefault();
-          event.stopPropagation();
-          finish(event.key === "Enter");
-        }
-      }}
-      onBlur={() => finish(true)}
+    <InlineName
+      value={title}
+      label={t("mind.renameLabel", { title })}
+      testId="tab-rename"
       className="tab-rename"
+      onCommit={(name) => {
+        onDone();
+        return renameMind(mindId, name);
+      }}
+      onCancel={onDone}
     />
   );
 }

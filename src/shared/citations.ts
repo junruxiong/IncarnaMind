@@ -13,6 +13,7 @@ import type {
   Document,
   KeptCitationText,
 } from "../core/api";
+import { displayName } from "./documentNames";
 import type { MessageKey } from "./i18n";
 import {
   citationLocation,
@@ -69,7 +70,9 @@ export function citedTextKept(
   });
 }
 
-type LiveDocument = Pick<Document, "id" | "contentHash">;
+/** What a Citation needs of a live Document: whether it is there, and the name to show for it. */
+type LiveDocument = Pick<Document, "id" | "contentHash"> &
+  Partial<Pick<Document, "name" | "title">>;
 
 /** A list of Documents by ID and by content: the first in the list with each. */
 interface DocumentIndex {
@@ -101,6 +104,47 @@ function indexOf(documents: readonly LiveDocument[]): DocumentIndex {
   return index;
 }
 
+/** The live Document a Citation opens: its own, or one with the same content added again after it was deleted. */
+function liveDocumentOf(
+  attributes: Partial<Pick<CitationAttributes, "documentId" | "contentHash">>,
+  documents: readonly LiveDocument[],
+): LiveDocument | undefined {
+  const { byId, byContent } = indexOf(documents);
+  const own = attributes.documentId ?? null;
+  return (
+    (own === null ? undefined : byId.get(own)) ??
+    (attributes.contentHash ? byContent.get(attributes.contentHash) : undefined)
+  );
+}
+
+type Named = Partial<Pick<CitationAttributes, "documentId" | "contentHash" | "documentName">>;
+
+/**
+ * The name a Citation shows for its Document: the Document's own name while it is here, so a
+ * rename shows in every Citation of it, and the name stored when it was cited only when the
+ * Document can't be found. The stored name is never rewritten.
+ */
+export function shownDocumentName(
+  attributes: Named,
+  documents: readonly LiveDocument[] | null,
+): string | null {
+  const live = documents ? liveDocumentOf(attributes, documents) : undefined;
+  return live?.name === undefined
+    ? (attributes.documentName ?? null)
+    : displayName({ name: live.name, title: live.title });
+}
+
+/** The attributes with `shownDocumentName` for the name: the same object when it is the stored one. */
+export function withShownName<T extends Named>(
+  attributes: T,
+  documents: readonly LiveDocument[] | null,
+): T {
+  const name = shownDocumentName(attributes, documents);
+  return name === (attributes.documentName ?? null)
+    ? attributes
+    : { ...attributes, documentName: name };
+}
+
 /**
  * The badge state of a Citation, given the User's live Documents (null while
  * they are loading) and the text kept of Documents unlinked with their Linked
@@ -118,10 +162,7 @@ export function citationState(
   const reason = attributes.checkReason ?? null;
   const own = attributes.documentId ?? null;
   if (documents === null) return { check, reason, documentId: own, changedAfterCited: false };
-  const { byId, byContent } = indexOf(documents);
-  const live =
-    (own === null ? undefined : byId.get(own)) ??
-    (attributes.contentHash ? byContent.get(attributes.contentHash) : undefined);
+  const live = liveDocumentOf(attributes, documents);
   const changedAfterCited =
     live !== undefined &&
     typeof attributes.contentHash === "string" &&

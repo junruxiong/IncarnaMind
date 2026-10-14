@@ -9,6 +9,7 @@ import { resolveLanguage } from "../../core/language";
 import { type MessageKey, type MessageParams, translate } from "../../shared/i18n";
 import { core, files } from "./core";
 import { errorMessage } from "./errors";
+import { translateNow } from "./i18n";
 import { useAppStore } from "./store";
 import { type Undoable, useUndo } from "./undo";
 
@@ -89,7 +90,7 @@ export const useReferenceImport = create<ReferenceImportState>()((set, get) => {
         },
       };
     } catch (error) {
-      set({ phase: "idle", progress: null, error: errorMessage(error) });
+      set({ phase: "idle", progress: null, error: errorMessage(error, translateNow) });
       return undefined;
     } finally {
       off();
@@ -123,7 +124,7 @@ export const useReferenceImport = create<ReferenceImportState>()((set, get) => {
         set({ result: { ...result, files: 0 } });
         await refreshUnmatched();
       } catch (error) {
-        set({ error: errorMessage(error) });
+        set({ error: errorMessage(error, translateNow) });
       } finally {
         set({ addingFiles: false });
       }
@@ -137,7 +138,7 @@ export const useReferenceImport = create<ReferenceImportState>()((set, get) => {
         await core.addReferenceFile(recordId, path);
         await refreshUnmatched();
       } catch (error) {
-        set({ error: errorMessage(error) });
+        set({ error: errorMessage(error, translateNow) });
       }
     },
 

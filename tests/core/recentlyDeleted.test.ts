@@ -1,7 +1,8 @@
 import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, test, vi } from "vitest";
-import type { Core, CoreAdapters, Document } from "../../src/core";
+import type { CitationAttributes, Core, CoreAdapters, Document } from "../../src/core";
+import { citationState } from "../../src/shared/citations";
 import {
   createTempDataFolder,
   manualClock,
@@ -21,6 +22,7 @@ import { classifierModel } from "../helpers/library";
 import { connectToMind } from "../helpers/mindClient";
 import { note, readMind, writeMind } from "../helpers/minds";
 import { scriptedModels } from "../helpers/models";
+import { buildPdf } from "../helpers/pdf";
 import { taggingModel, tagNamed, waitForTagging } from "../helpers/tags";
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -634,5 +636,96 @@ describe("Recently deleted", { timeout: 30_000 }, () => {
     );
     await reopened.restore([{ kind: "mind", id: recent.id }]);
     expect(ids(await reopened.listMinds())).toEqual([recent.id]);
+  });
+});
+
+describe("Deleting permanently keeps the text Citations quote", { timeout: 30_000 }, () => {
+  const SPRING = "Spring tides happen at new moon and at full moon.";
+  const TIDES = buildPdf([
+    { lines: ["Tides and the Moon", "The Moon raises two bulges of water on the Earth."] },
+    { lines: ["Spring and neap tides", SPRING] },
+    { lines: ["Tide tables", "Harbours publish the times of high water every year."] },
+  ]);
+
+  /** A Document whose page 2 a Note in a closed Mind cites, and the Document deleted. */
+  async function citedThenDeleted() {
+    const { core, clock, dataDir } = await start();
+    const path = await writeSourceFile(await createSourceFolder(), "Tides.pdf", TIDES);
+    const [document] = await addAndProcess(core, [path]);
+    if (!document) throw new Error("Nothing was added.");
+    const mind = await core.createMind({ title: "Reading notes" });
+    const client = await connectToMind(core, mind.id);
+    const cited = note("Spring tides");
+    const citation: CitationAttributes = {
+      passageId: "passage",
+      documentId: document.id,
+      documentName: document.name,
+      contentHash: document.contentHash,
+      pageFrom: 2,
+      pageTo: 2,
+      location: null,
+      quote: SPRING,
+      check: "found",
+      checkReason: null,
+    };
+    cited.content?.push({ type: "citation", attrs: citation });
+    writeMind(client, [cited]);
+    await client.settled();
+    await core.closeMind(mind.id);
+    clock.advance(1000);
+    await core.deleteDocument(document.id);
+    return { core, clock, dataDir, document, path, citation };
+  }
+
+  const pagesOf = (dataDir: string, documentId: string) =>
+    queryDatabase<{ page: number; live: number }>(
+      dataDir,
+      "SELECT page, deleted_at IS NULL AS live FROM document_pages WHERE document_id = ? ORDER BY page",
+      [documentId],
+    );
+
+  test("by the User: the cited page stays and the Citation can still be checked; the file stays too", async () => {
+    const { core, dataDir, document, path, citation } = await citedThenDeleted();
+    const bytes = await readFile(path);
+    const kept = nextEvent(core, "keptCitationTexts.changed");
+
+    await core.deletePermanently([{ kind: "document", id: document.id }]);
+
+    expect(await kept).toEqual([
+      { documentId: document.id, contentHash: document.contentHash, units: [2] },
+    ]);
+    expect(pagesOf(dataDir, document.id)).toEqual([{ page: 2, live: 1 }]);
+    expect(await core.listDeleted()).toEqual([]);
+    expect(
+      citationState(citation, await core.listDocuments(), await core.listKeptCitationTexts()),
+    ).toMatchObject({ check: "found" });
+    expect(await readFile(path)).toEqual(bytes);
+  });
+
+  test("by the 30 days: the same, at the next start", async () => {
+    const { core, clock, dataDir, document } = await citedThenDeleted();
+    core.close();
+    clock.advance(31 * DAY);
+
+    const reopened = startCore(dataDir, { now: clock.now });
+
+    expect(pagesOf(dataDir, document.id)).toEqual([{ page: 2, live: 1 }]);
+    expect(await reopened.listKeptCitationTexts()).toEqual([
+      { documentId: document.id, contentHash: document.contentHash, units: [2] },
+    ]);
+    expect(queryDatabase(dataDir, "SELECT purged_at IS NOT NULL AS purged FROM documents")).toEqual(
+      [{ purged: 1 }],
+    );
+  });
+
+  test("one nothing cites loses all its text", async () => {
+    const { core, dataDir } = await start();
+    const path = await writeSourceFile(await createSourceFolder(), "Tides.pdf", TIDES);
+    const [document] = await addAndProcess(core, [path]);
+    if (!document) throw new Error("Nothing was added.");
+    await core.deleteDocument(document.id);
+    await core.deletePermanently([{ kind: "document", id: document.id }]);
+    expect(pagesOf(dataDir, document.id)).toEqual([]);
+    expect(await core.listKeptCitationTexts()).toEqual([]);
   });
 });

@@ -2,7 +2,7 @@ import { useEffect, useId, useState } from "react";
 import type { OutputSettings } from "../../../core/api";
 import { core } from "../core";
 import { errorMessage } from "../errors";
-import { useT } from "../i18n";
+import { translateNow, useT } from "../i18n";
 import { folderName } from "../linkedFolders";
 import { chooseOutputLocation } from "../outputFiles";
 import { PathText } from "./PathText";
@@ -34,7 +34,7 @@ export function OutputLocationSettings() {
         if (current) setSettings(loaded);
       },
       (failure: unknown) => {
-        if (current) setProblem(errorMessage(failure));
+        if (current) setProblem(errorMessage(failure, translateNow));
       },
     );
     const stop = core.on("outputSettings.changed", setSettings);
@@ -50,7 +50,7 @@ export function OutputLocationSettings() {
       const updated = await action();
       if (updated) setSettings(updated);
     } catch (failure) {
-      setProblem(errorMessage(failure));
+      setProblem(errorMessage(failure, t));
     }
   };
 

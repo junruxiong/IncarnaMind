@@ -2,7 +2,7 @@ import { DataFromNewerVersionError } from "../core/errors";
 import type { Language } from "../core/language";
 import { translate } from "../shared/i18n";
 
-export const RELEASES_PAGE = "https://github.com/junruxiong/IncarnaMind/releases";
+export const RELEASES_PAGE = "https://github.com/IncarnaMind/IncarnaMind/releases";
 
 /** Index of "Download the latest version" in the buttons of a newer-data dialog. */
 export const DOWNLOAD_BUTTON = 0;

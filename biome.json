@@ -31,7 +31,13 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "preset": "recommended"
+      "preset": "recommended",
+      "a11y": {
+        "noLabelWithoutControl": {
+          "level": "error",
+          "options": { "inputComponents": ["TypingTextarea"] }
+        }
+      }
     }
   },
   "assist": {
@@ -56,6 +62,23 @@
                   "motion/react": "Animate through src/renderer/src/motion.ts: its tokens, helpers and reduced motion (DESIGN.md, Motion).",
                   "framer-motion": "Animate through src/renderer/src/motion.ts: its tokens, helpers and reduced motion (DESIGN.md, Motion).",
                   "motion-dom": "Animate through src/renderer/src/motion.ts: its tokens, helpers and reduced motion (DESIGN.md, Motion)."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/renderer/**", "!src/renderer/src/components/TypingTextarea.tsx"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noRestrictedElements": {
+              "level": "error",
+              "options": {
+                "elements": {
+                  "textarea": "Use TypingTextarea (components/TypingTextarea.tsx): a plain controlled <textarea> makes Undo take typing back one character at a time."
                 }
               }
             }

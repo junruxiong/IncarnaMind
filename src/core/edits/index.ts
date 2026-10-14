@@ -123,7 +123,7 @@ interface ParsedRegenerate {
 /** Writes a request's Proposals for the selection read again where they go (`propose`). */
 type Writer = (propose: (blocks: Y.XmlFragment, selection: Selection) => Written) => Written | null;
 
-function parsePlace(value: unknown, what: string): TextPlace {
+export function parsePlace(value: unknown, what: string): TextPlace {
   if (
     !isRecord(value) ||
     typeof value.blockId !== "string" ||
@@ -167,7 +167,7 @@ function parseInput(input: unknown): ParsedInput {
 }
 
 /** The model a request names: the Mind's own; null for the default chat model. */
-function parseModel(model: unknown): ChatModelChoice | null {
+export function parseModel(model: unknown): ChatModelChoice | null {
   return isRecord(model) &&
     typeof model.providerId === "string" &&
     model.providerId !== "" &&

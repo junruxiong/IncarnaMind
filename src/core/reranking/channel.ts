@@ -6,10 +6,10 @@
  * (eval/) runs it on a Node worker thread.
  *
  * Requests are { id, type: "load", files } or { id, type: "score", query,
- * texts }; the other end answers { id, scores } (or { id } for a load) or
- * { id, error }, taking one request at a time, in order.
+ * texts }; the other end answers { id, scores } (or { id, device } for a load)
+ * or { id, error }, taking one request at a time, in order.
  */
-import type { CrossEncoder, RerankingModelFiles } from "../adapters";
+import type { CrossEncoder, RerankingDevice, RerankingModelFiles } from "../adapters";
 
 export type CrossEncoderCommand =
   | { type: "load"; files: RerankingModelFiles }
@@ -18,10 +18,11 @@ export type CrossEncoderCommand =
 /** `id` pairs a response with its request. */
 export type CrossEncoderRequest = CrossEncoderCommand & { id: number };
 
-/** Scores for "score", nothing more for "load", or what went wrong. */
+/** Scores for "score", where the model runs for "load", or what went wrong. */
 export interface CrossEncoderResponse {
   id: number;
   scores?: number[];
+  device?: RerankingDevice;
   error?: string;
 }
 
@@ -43,8 +44,8 @@ type Pending = { resolve(response: CrossEncoderResponse): void; reject(error: Er
  */
 export function createChannelCrossEncoder(start: () => CrossEncoderChannel): CrossEncoder {
   let channel: CrossEncoderChannel | undefined;
-  let loadedKey: string | undefined;
-  let loading: { key: string; done: Promise<void> } | undefined;
+  let loaded: { key: string; device: RerankingDevice } | undefined;
+  let loading: { key: string; done: Promise<RerankingDevice> } | undefined;
   const pending = new Map<number, Pending>();
   let nextId = 1;
 
@@ -58,7 +59,7 @@ export function createChannelCrossEncoder(start: () => CrossEncoderChannel): Cro
     started.onExit((code) => {
       if (channel !== started) return;
       channel = undefined;
-      loadedKey = undefined;
+      loaded = undefined;
       const error = new Error(`The reranking process stopped (exit code ${code}).`);
       for (const waiting of pending.values()) waiting.reject(error);
       pending.clear();
@@ -82,22 +83,24 @@ export function createChannelCrossEncoder(start: () => CrossEncoderChannel): Cro
   return {
     async load(files) {
       const key = JSON.stringify(files);
-      if (channel && loadedKey === key) return;
+      if (channel && loaded?.key === key) return loaded.device;
       if (loading?.key !== key) {
         const done = request({ type: "load", files })
-          .then(() => {
-            loadedKey = key;
+          .then(({ device }) => {
+            if (!device) throw new Error("The reranking process didn't say where the model runs.");
+            loaded = { key, device };
+            return device;
           })
           .finally(() => {
             if (loading?.done === done) loading = undefined;
           });
         loading = { key, done };
       }
-      await loading.done;
+      return loading.done;
     },
 
     async score(query, texts) {
-      if (!channel || loadedKey === undefined) {
+      if (!channel || loaded === undefined) {
         throw new Error("The reranking model isn't loaded.");
       }
       const { scores } = await request({ type: "score", query, texts: [...texts] });
@@ -110,7 +113,7 @@ export function createChannelCrossEncoder(start: () => CrossEncoderChannel): Cro
     close() {
       const stopping = channel;
       channel = undefined;
-      loadedKey = undefined;
+      loaded = undefined;
       stopping?.stop();
     },
   };
@@ -127,8 +130,7 @@ export function serveCrossEncoder(crossEncoder: CrossEncoder, port: CrossEncoder
   async function handle(request: CrossEncoderRequest): Promise<CrossEncoderResponse> {
     try {
       if (request.type === "load") {
-        await crossEncoder.load(request.files);
-        return { id: request.id };
+        return { id: request.id, device: await crossEncoder.load(request.files) };
       }
       return { id: request.id, scores: await crossEncoder.score(request.query, request.texts) };
     } catch (error) {

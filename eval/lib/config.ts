@@ -63,6 +63,11 @@ export interface EvalConfig {
    * one's, which always runs and gates (INCARNAMIND_EVAL_RERANK); none by default.
    */
   rerank: RerankingModelDefinition[];
+  /**
+   * The built-in reranking model runs on the CPU, as on a computer with no GPU
+   * (INCARNAMIND_EVAL_RERANK_CPU=1); otherwise on the GPU where it can, as in the app.
+   */
+  rerankOnCpu: boolean;
   /** Each language needs at least this many Citations for the Citation targets to count. */
   minCitations: number;
   /** At most this many rounds of Questions to reach `minCitations`. */
@@ -273,6 +278,7 @@ export function readConfig(root: string, env: Env = process.env): EvalConfig {
     chat: chatSettings(env),
     cloudEmbedding: cloudEmbeddingSettings(env),
     rerank: rerankCandidates(env),
+    rerankOnCpu: value(env, "RERANK_CPU") === "1",
     minCitations: positiveInteger(env, "MIN_CITATIONS", 30),
     maxRounds: positiveInteger(env, "MAX_ROUNDS", 3),
     answerTimeoutMs: positiveInteger(env, "ANSWER_TIMEOUT_S", 300) * 1000,

@@ -9,9 +9,9 @@
  * - With a Cohere or Voyage key: the service's reranking model, through the
  *   AI SDK's `rerank` and the official @ai-sdk/cohere and @ai-sdk/voyage
  *   providers. Its requests are the "rerank" data flow: the search query and
- *   the candidate Passages, to the service. Nothing is sent before the User
- *   accepts it; when they decline, or a request fails, search keeps its own
- *   order. Local mode pauses it.
+ *   the candidate Passages, to the service. Choosing the service allows it
+ *   (ADR-0022); when the User declines it, or a request fails, search keeps
+ *   its own order. Local mode pauses it.
  * - Off, when the User turns it off: search keeps its own order.
  * The settings are per device: nothing stored is the default, null is off.
  * A key is in the keychain, never in SQLite.
@@ -106,7 +106,7 @@ function parseApiKey(value: unknown): string | undefined {
 function parseModel(value: unknown): string | null {
   if (value === null || (typeof value === "string" && value.trim() === "")) return null;
   if (typeof value !== "string" || value.length > 200) {
-    throw new InvalidInputError("Enter a reranking model name.");
+    throw new InvalidInputError({ key: "error.provider.rerankModelMissing" });
   }
   return value.trim();
 }
@@ -149,9 +149,7 @@ export function createRerank(options: {
 
   const refuseInLocalMode = () => {
     if (options.localOnly()) {
-      throw new InvalidInputError(
-        "Local mode is on: search results aren't sent to a reranking service. Turn it off in Settings first.",
-      );
+      throw new InvalidInputError({ key: "error.provider.rerankLocalMode" });
     }
   };
 
@@ -177,6 +175,7 @@ export function createRerank(options: {
       paused: pausedNow(current),
       byDefault: current?.byDefault === true,
       model: builtIn.status(),
+      runsOn: builtIn.device(),
     };
   };
 
@@ -313,9 +312,13 @@ export function createRerank(options: {
         input.modelId === undefined ? (sameKind ? saved.modelId : null) : parseModel(input.modelId);
       refuseInLocalMode();
       if (apiKey === undefined && (!sameKind || (await secrets.tryGet(KEY_NAME)) === null)) {
-        throw new InvalidInputError(`Enter your ${RERANK_SERVICES[kind].name} API key.`);
+        throw new InvalidInputError({
+          key: "error.provider.keyMissing",
+          values: { provider: RERANK_SERVICES[kind].name },
+        });
       }
-      // Nothing changes unless the User accepts sending search results there.
+      // Choosing it, where the form says what goes, allows it (ADR-0022); a decline stays.
+      consent.choose(["rerank"], RERANK_SERVICES[kind]);
       await consent.ensure("rerank", RERANK_SERVICES[kind]);
       if (apiKey !== undefined) await secrets.set(KEY_NAME, apiKey);
       settings.writeDeviceValue(SETTINGS_VALUE, { kind, modelId } satisfies StoredRerank);
@@ -334,7 +337,7 @@ export function createRerank(options: {
 
     /**
      * Reranks two fixed texts against a fixed query with the given service
-     * settings, or the saved ones. The rerank flow must be accepted first.
+     * settings, or the saved ones. It sends nothing of the User's, so it needs no consent.
      */
     async test(input: unknown): Promise<ConnectionTestResult> {
       if (input !== undefined && !isRecord(input)) {
@@ -352,10 +355,13 @@ export function createRerank(options: {
           : parseModel(input.modelId);
       const apiKey =
         parseApiKey(input?.apiKey) ?? (sameKind ? await secrets.tryGet(KEY_NAME) : null);
-      if (!apiKey) throw new InvalidInputError(`Enter your ${RERANK_SERVICES[kind].name} API key.`);
+      if (!apiKey)
+        throw new InvalidInputError({
+          key: "error.provider.keyMissing",
+          values: { provider: RERANK_SERVICES[kind].name },
+        });
       refuseInLocalMode();
       try {
-        await consent.ensure("rerank", RERANK_SERVICES[kind]);
         const { ranking } = await rerank({
           model: createModel({ kind, apiKey, modelId: modelId ?? DEFAULT_RERANK_MODELS[kind] }),
           documents: TEST_DOCUMENTS,

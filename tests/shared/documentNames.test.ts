@@ -1,6 +1,34 @@
 import { describe, expect, test } from "vitest";
 import { documentTitle } from "../../src/core/documents/title";
-import { displayName, fileNameOf, looksMachineMade } from "../../src/shared/documentNames";
+import {
+  displayName,
+  fileNameOf,
+  looksMachineMade,
+  titleWithoutSite,
+} from "../../src/shared/documentNames";
+
+describe("a web page's title in a citation", () => {
+  test.each([
+    ["Tea - The Open Encyclopedia", "Tea"],
+    ["Tea | The Open Encyclopedia", "Tea"],
+    ["Tea – The Open Encyclopedia", "Tea"],
+    ["Tea · The Open Encyclopedia", "Tea"],
+    ["Tea - the open encyclopedia", "Tea"],
+    ["Green tea - history - The Open Encyclopedia", "Green tea - history"],
+  ])("“%s” leaves off the site's name, which the citation gives on its own", (title, cited) => {
+    expect(titleWithoutSite(title, "The Open Encyclopedia")).toBe(cited);
+  });
+
+  test.each([
+    ["The Open Encyclopedia", "The Open Encyclopedia"],
+    ["Tea in The Open Encyclopedia", "The Open Encyclopedia"],
+    ["Tea: The Open Encyclopedia", "The Open Encyclopedia"],
+    [" - The Open Encyclopedia", "The Open Encyclopedia"],
+    ["Tea - The Open Encyclopedia", ""],
+  ])("“%s” stays as it is, the site being “%s”", (title, site) => {
+    expect(titleWithoutSite(title, site)).toBe(title);
+  });
+});
 
 describe("machine-made Document names", () => {
   test.each([

@@ -155,11 +155,13 @@ describe("A search's steps", { timeout: 60_000 }, () => {
 
   // protects=a failed search keeps why it failed, sorted as a provider's error, and the Answer goes on; fails_when=the call has no error kind, or the Answer fails with it; no_claim=a reranker that refuses its key stands in for any search model's failure.
   test("keep why a search failed, and the Answer goes on", async () => {
-    const model = citingModel({
-      query: "spring tides",
-      records: () => [],
-      answer: "I couldn't search your Documents.",
-    });
+    const model = scriptedModel((call) =>
+      call.tools.length > 0
+        ? { error: { status: 400, message: "this model does not support tools" } }
+        : {
+            text: JSON.stringify({ answer: "I couldn't search your Documents.", citations: [] }),
+          },
+    );
     const dataDir = await createTempDataFolder();
     const core = startCore(dataDir, {
       createChatModel: scriptedModels(model).createChatModel,

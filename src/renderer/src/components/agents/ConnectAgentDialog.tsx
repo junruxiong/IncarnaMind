@@ -9,7 +9,9 @@ import { clientInSentence } from "../../../../shared/agentNames";
 import { core } from "../../core";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
+import { InlinePath } from "../PathText";
 import { SecretStorageNotice } from "../providers/ProviderForm";
+import { SLOT, Slotted } from "../Slotted";
 import {
   buttonClass,
   dialogActionsClass,
@@ -149,8 +151,11 @@ export function ConnectAgentDialog({
         </fieldset>
         {preview && (
           <div data-testid="connect-agent-change" className="flex flex-col gap-1">
-            <p className={`${dialogTextClass} break-all`}>
-              {t("agents.connect.fileChange", { path: preview.path })}
+            <p className={dialogTextClass}>
+              <Slotted
+                message={t("agents.connect.fileChange", { path: SLOT })}
+                slot={<InlinePath path={preview.path} />}
+              />
             </p>
             <details>
               <summary className="cursor-pointer text-[13px] leading-5 text-ink-secondary">
@@ -163,8 +168,11 @@ export function ConnectAgentDialog({
           </div>
         )}
         {client?.skillPath && (
-          <p data-testid="connect-agent-skill" className={`${dialogTextClass} break-all`}>
-            {t("agents.connect.skill", { path: client.skillPath, agent })}
+          <p data-testid="connect-agent-skill" className={dialogTextClass}>
+            <Slotted
+              message={t("agents.connect.skill", { path: SLOT, agent })}
+              slot={<InlinePath path={client.skillPath} />}
+            />
           </p>
         )}
         {folders.length > 0 && chosen.size === 0 && (

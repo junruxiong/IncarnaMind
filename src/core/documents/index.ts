@@ -42,6 +42,7 @@ import type {
   DocumentScanProgress,
   DocumentStatus,
   DocumentText,
+  DocumentTextMatch,
   KeptCitationText,
   OwnFile,
   PassageSearchResult,
@@ -63,10 +64,22 @@ import type { Database, SqlValue } from "../storage";
 import { tagsOfDocument } from "../tags";
 import type { StoredTaggingState } from "../tags/tagger";
 import { createEmbeddingQueue } from "./embedding";
-import { DOCUMENT_EXTENSIONS, isInside, openFile, openImageBeside, relativePath } from "./files";
+import {
+  DOCUMENT_EXTENSIONS,
+  isInside,
+  openFile,
+  openImageBeside,
+  relativePath,
+  type StatIdentity,
+} from "./files";
 import { isPackageKind, packageSizeError } from "./formats/zip";
 import { keywordText } from "./keywords";
-import { createLibrary, type LibraryHooks, type LibraryOptions } from "./library";
+import {
+  createLibrary,
+  FORGET_FILE_IDENTITY,
+  type LibraryHooks,
+  type LibraryOptions,
+} from "./library";
 import type { PageText } from "./passages";
 import {
   CURRENT_SINCE,
@@ -94,6 +107,7 @@ import {
   passagesBetween,
   passagesBySeq,
   passagesInWindow,
+  textSearch,
   type WindowedPassage,
   windowedPassagesBySeq,
 } from "./search";
@@ -148,6 +162,7 @@ interface DocumentRow {
   own_file: string | null;
   counted_as_evidence: number;
   processing_version: number;
+  file_mtime_ms: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -182,7 +197,7 @@ const toUnitText = (row: UnitRow): PageText => ({
 const COLUMNS = `id, content_hash, name, kind, size, page_count, status,
   failure_reason, failure_message, folder_id, tagging_status, tagging_error_kind,
   tagging_error_message, embedding_model, path, linked_folder_id, file_status,
-  creation_date, title, own_file, counted_as_evidence, processing_version, created_at, updated_at`;
+  creation_date, title, own_file, counted_as_evidence, processing_version, file_mtime_ms, created_at, updated_at`;
 
 /** What IncarnaMind wrote the file as (#80), from its stored kind; a kind a newer version wrote counts as an export. */
 const ownFileOf = (row: Pick<DocumentRow, "own_file" | "counted_as_evidence">): OwnFile | null =>
@@ -212,11 +227,12 @@ function parseId(id: unknown): string {
 function parseName(name: unknown): string {
   if (typeof name !== "string") throw new InvalidInputError("A Document's name must be text.");
   const trimmed = name.trim();
-  if (!trimmed) throw new InvalidInputError("A Document's name can't be empty.");
+  if (!trimmed) throw new InvalidInputError({ key: "error.document.nameEmpty" });
   if (trimmed.length > MAX_NAME_LENGTH) {
-    throw new InvalidInputError(
-      `A Document's name can't be longer than ${MAX_NAME_LENGTH} characters.`,
-    );
+    throw new InvalidInputError({
+      key: "error.document.nameTooLong",
+      values: { max: MAX_NAME_LENGTH },
+    });
   }
   return trimmed;
 }
@@ -288,9 +304,7 @@ function parseSearchOptions(options: unknown): {
   if (!SEARCH_MODES.includes(mode as SearchMode)) {
     throw new InvalidInputError(`The search mode must be one of ${SEARCH_MODES.join(", ")}.`);
   }
-  if (!Number.isInteger(limit) || (limit as number) < 1 || (limit as number) > MAX_SEARCH_LIMIT) {
-    throw new InvalidInputError(`The limit must be a whole number from 1 to ${MAX_SEARCH_LIMIT}.`);
-  }
+  const checked = searchLimit(limit);
   if (
     documentIds !== undefined &&
     (!Array.isArray(documentIds) || !documentIds.every((id) => typeof id === "string" && id !== ""))
@@ -299,9 +313,22 @@ function parseSearchOptions(options: unknown): {
   }
   return {
     mode: mode as SearchMode,
-    limit: limit as number,
+    limit: checked,
     documentIds: documentIds as string[] | undefined,
   };
+}
+
+/** A search's `limit`, checked: a whole number from 1 to 200, 20 when not given. */
+function searchLimit(limit: unknown = DEFAULT_SEARCH_LIMIT): number {
+  if (
+    typeof limit !== "number" ||
+    !Number.isInteger(limit) ||
+    limit < 1 ||
+    limit > MAX_SEARCH_LIMIT
+  ) {
+    throw new InvalidInputError({ key: "error.search.limit", values: { max: MAX_SEARCH_LIMIT } });
+  }
+  return limit;
 }
 
 /** What the keyword index holds for a Passage: its Document's name, then its own words. */
@@ -385,6 +412,7 @@ export interface DocumentsOptions {
   textRecognition?: TextRecognitionModel;
   linkedFolders: {
     watch: WatchFolder;
+    stat: StatIdentity;
     retryMs: number;
     detectDataless: boolean;
   };
@@ -494,6 +522,7 @@ export function createDocuments(options: DocumentsOptions) {
             }
           : null,
       creationDate: row.creation_date,
+      modifiedAt: row.file_mtime_ms === null ? null : new Date(row.file_mtime_ms).toISOString(),
       title: row.title,
       web: row.kind === "web" ? webPageInfo(db, row.id) : null,
       reference: referenceOf(db, row.id),
@@ -1042,15 +1071,20 @@ export function createDocuments(options: DocumentsOptions) {
    * `pageTexts` does: of the version each quotes (or every version, if it
    * doesn't say), its Units (or all of them, for a whole file).
    */
-  function unitsToKeep(cited: readonly CitedUnits[]): string[] {
+  function unitsToKeep(cited: readonly CitedUnits[], deletedWith?: string): string[] {
     const ids = new Set<string>();
     const seen = new Set<string>();
     for (const units of cited) {
       const key = JSON.stringify(units);
       if (seen.has(key)) continue;
       seen.add(key);
-      const conditions = ["document_id = ?", "deleted_at IS NULL"];
+      const conditions = ["document_id = ?"];
       const params: SqlValue[] = [units.documentId];
+      if (deletedWith === undefined) conditions.push("deleted_at IS NULL");
+      else {
+        conditions.push("(deleted_at IS NULL OR deleted_at = ?)");
+        params.push(deletedWith);
+      }
       if (units.contentHash !== null) {
         conditions.push("content_hash = ?");
         params.push(units.contentHash);
@@ -1197,6 +1231,7 @@ export function createDocuments(options: DocumentsOptions) {
     say: options.say,
     folders: options.folders,
     watch: options.linkedFolders.watch,
+    stat: options.linkedFolders.stat,
     retryMs: options.linkedFolders.retryMs,
     detectDataless: options.linkedFolders.detectDataless,
     hooks: {
@@ -1499,9 +1534,7 @@ export function createDocuments(options: DocumentsOptions) {
     };
     if (!model.enabled()) {
       if (mode === "vector") {
-        throw new InvalidInputError(
-          "Vector search needs embeddings, which are off: turn them on in Settings → Search.",
-        );
+        throw new InvalidInputError({ key: "error.provider.embeddingsOff" });
       }
       return null;
     }
@@ -1640,14 +1673,15 @@ export function createDocuments(options: DocumentsOptions) {
   async function openablePath(idInput: unknown): Promise<DocumentRow> {
     const id = parseId(idInput);
     const before = find(id);
-    if (!before) throw new NotFoundError("There is no such Document.");
+    if (!before) throw new NotFoundError({ key: "error.document.notFound" });
     // A file is looked at again when it is opened: it may have changed, moved or gone.
     await library.check([before.path]);
     const row = find(id);
-    if (!row) throw new NotFoundError("There is no such Document.");
-    if (row.file_status === "missing") throw new NotFoundError("The Document's file is missing.");
+    if (!row) throw new NotFoundError({ key: "error.document.notFound" });
+    if (row.file_status === "missing")
+      throw new NotFoundError({ key: "error.document.fileMissing" });
     if (row.file_status === "unavailable") {
-      throw new NotFoundError("The Document's file can't be reached right now.");
+      throw new NotFoundError({ key: "error.document.fileUnavailable" });
     }
     return row;
   }
@@ -1793,6 +1827,24 @@ export function createDocuments(options: DocumentsOptions) {
     },
 
     /**
+     * A live Document's date, as Answers see it beside its Passages (#548):
+     * the date it states (its reference record's, else its creation date),
+     * else the day its file was last modified, in UTC. ISO 8601 at the
+     * precision known: "2025-05-14", "2024-03" or "2019". Null when nothing
+     * gives one, or the Document was deleted.
+     */
+    documentDate(documentId: string): string | null {
+      const row = find(documentId);
+      if (!row) return null;
+      const issued = referenceOf(db, documentId)?.fields.issued;
+      if (issued) return issued;
+      if (row.creation_date) return row.creation_date.slice(0, 10);
+      return row.file_mtime_ms === null
+        ? null
+        : new Date(row.file_mtime_ms).toISOString().slice(0, 10);
+    },
+
+    /**
      * The live Passages of a Document's current version that cover pages
      * `from` to `to` (any, for a Document without pages), in reading order.
      */
@@ -1821,7 +1873,7 @@ export function createDocuments(options: DocumentsOptions) {
      */
     cellNumber(idInput: unknown, sheet: string | null, ref: string): number | null {
       const row = find(parseId(idInput));
-      if (!row) throw new NotFoundError("There is no such Document.");
+      if (!row) throw new NotFoundError({ key: "error.document.notFound" });
       const units = db.all<UnitRow>(
         `SELECT page, text, kind, label, anchors FROM document_pages
          WHERE document_id = ? AND content_hash = ? AND deleted_at IS NULL AND kind = 'rows'
@@ -1839,7 +1891,7 @@ export function createDocuments(options: DocumentsOptions) {
     /** The text kept of a live Document's current version (see `CoreApi.readDocumentText`). */
     readText(idInput: unknown): DocumentText {
       const row = find(parseId(idInput));
-      if (!row) throw new NotFoundError("There is no such Document.");
+      if (!row) throw new NotFoundError({ key: "error.document.notFound" });
       const pages = db.all<UnitRow>(
         `SELECT page, text, kind, label, anchors FROM document_pages
          WHERE document_id = ? AND content_hash = ? AND deleted_at IS NULL ORDER BY page`,
@@ -1861,7 +1913,7 @@ export function createDocuments(options: DocumentsOptions) {
     /** The scanned pages of a live Document's current version (see `CoreApi.readScannedText`). */
     readScannedText(idInput: unknown): ScannedText {
       const row = find(parseId(idInput));
-      if (!row) throw new NotFoundError("There is no such Document.");
+      if (!row) throw new NotFoundError({ key: "error.document.notFound" });
       const units = db
         .all<UnitRow>(
           `SELECT page, text, kind, label, anchors FROM document_pages
@@ -1980,7 +2032,7 @@ export function createDocuments(options: DocumentsOptions) {
       announce(id);
       process(id);
       const row = find(id);
-      if (!row) throw new NotFoundError("There is no such Document.");
+      if (!row) throw new NotFoundError({ key: "error.document.notFound" });
       return toDocument(row);
     },
 
@@ -2000,7 +2052,7 @@ export function createDocuments(options: DocumentsOptions) {
       // Linked folder it is in, if the Output location is inside one.
       db.run(
         `UPDATE documents SET path = ?, source_kind = 'file', relative_path = NULL,
-           file_status = 'available', file_mtime_ms = NULL, updated_at = ?
+           file_status = 'available', file_mtime_ms = NULL, ${FORGET_FILE_IDENTITY}, updated_at = ?
          WHERE id = ? AND deleted_at IS NULL`,
         [path, now(), id],
       );
@@ -2015,7 +2067,7 @@ export function createDocuments(options: DocumentsOptions) {
     /** A live Document. Throws NotFoundError for an unknown or deleted one. */
     get(idInput: unknown): Document {
       const row = find(parseId(idInput));
-      if (!row) throw new NotFoundError("There is no such Document.");
+      if (!row) throw new NotFoundError({ key: "error.document.notFound" });
       return toDocument(row);
     },
 
@@ -2034,13 +2086,13 @@ export function createDocuments(options: DocumentsOptions) {
     rename(idInput: unknown, nameInput: unknown): Document {
       const id = parseId(idInput);
       const name = parseName(nameInput);
-      if (!find(id)) throw new NotFoundError("There is no such Document.");
+      if (!find(id)) throw new NotFoundError({ key: "error.document.notFound" });
       db.transaction(() => {
         db.run("UPDATE documents SET name = ?, updated_at = ? WHERE id = ?", [name, now(), id]);
         reindexName(id, name);
       });
       const row = find(id);
-      if (!row) throw new NotFoundError("There is no such Document.");
+      if (!row) throw new NotFoundError({ key: "error.document.notFound" });
       return toDocument(row);
     },
 
@@ -2054,7 +2106,7 @@ export function createDocuments(options: DocumentsOptions) {
         throw new InvalidInputError("counted must be true or false.");
       }
       const row = find(id);
-      if (!row) throw new NotFoundError("There is no such Document.");
+      if (!row) throw new NotFoundError({ key: "error.document.notFound" });
       if (row.own_file === null) {
         throw new InvalidInputError("Only a file IncarnaMind wrote is left out of evidence.");
       }
@@ -2067,7 +2119,7 @@ export function createDocuments(options: DocumentsOptions) {
         announce(id);
       }
       const updated = find(id);
-      if (!updated) throw new NotFoundError("There is no such Document.");
+      if (!updated) throw new NotFoundError({ key: "error.document.notFound" });
       return toDocument(updated);
     },
 
@@ -2078,7 +2130,7 @@ export function createDocuments(options: DocumentsOptions) {
     async delete(idInput: unknown): Promise<void> {
       const id = parseId(idInput);
       const row = find(id);
-      if (!row) throw new NotFoundError("There is no such Document.");
+      if (!row) throw new NotFoundError({ key: "error.document.notFound" });
       removeFromIndex([id], now());
       if (row.path !== legacyFolder && isInside(legacyFolder, row.path)) {
         await rm(row.path, { force: true }).catch(reportError);
@@ -2162,12 +2214,12 @@ export function createDocuments(options: DocumentsOptions) {
     retry(idInput: unknown): Document {
       const id = parseId(idInput);
       const row = find(id);
-      if (!row) throw new NotFoundError("There is no such Document.");
+      if (!row) throw new NotFoundError({ key: "error.document.notFound" });
       if (!failedNow(row)) {
-        throw new InvalidInputError("Only a Document that failed to process can be retried.");
+        throw new InvalidInputError({ key: "error.document.notFailed" });
       }
       if (row.file_status !== "available") {
-        throw new NotFoundError("The Document's file isn't there to read.");
+        throw new NotFoundError({ key: "error.document.fileGone" });
       }
       process(id);
       return toDocument(find(id) ?? row);
@@ -2193,7 +2245,7 @@ export function createDocuments(options: DocumentsOptions) {
         return { document: toDocument(row), stream, size };
       } catch (error) {
         await library.check([row.path]);
-        throw new NotFoundError("The Document's file can't be opened.", { cause: error });
+        throw new NotFoundError({ key: "error.document.fileCantOpen" }, { cause: error });
       }
     },
 
@@ -2249,6 +2301,15 @@ export function createDocuments(options: DocumentsOptions) {
       return passagesBySeq(db, fuseRankings(lists, limit, keywordOnly));
     },
 
+    /** See `CoreApi.searchDocumentText`. */
+    searchText(query: unknown, options?: unknown): DocumentTextMatch[] {
+      if (typeof query !== "string") throw new InvalidInputError("The search query must be text.");
+      if (options !== undefined && !isRecord(options)) {
+        throw new InvalidInputError({ key: "error.search.options" });
+      }
+      return textSearch(db, query, searchLimit(options?.limit));
+    },
+
     /** Linked folders (see ./library). */
     linkedFolders: library,
 
@@ -2286,6 +2347,37 @@ export function createDocuments(options: DocumentsOptions) {
         }
       });
       return collected;
+    },
+
+    /**
+     * Drops the text of deleted Documents being deleted permanently, except the Units
+     * `keep` says Citations still point to: they stay as the text kept of an unlinked
+     * Document does (`keptCitationTexts`), and go once nothing quotes them.
+     */
+    purgeText(ids: readonly string[], keep: readonly CitedUnits[]): void {
+      const at = now();
+      db.transaction(() => {
+        for (const id of ids) {
+          const row = db.get<{ deleted_at: string | null }>(
+            "SELECT deleted_at FROM documents WHERE id = ?",
+            [id],
+          );
+          if (!row?.deleted_at) continue;
+          const kept = unitsToKeep(
+            keep.filter((units) => units.documentId === id),
+            row.deleted_at,
+          );
+          db.run(
+            `UPDATE document_pages SET deleted_at = NULL, updated_at = ?
+             WHERE id IN (SELECT value FROM json_each(?)) AND deleted_at IS NOT NULL`,
+            [at, JSON.stringify(kept)],
+          );
+          db.run("DELETE FROM document_pages WHERE document_id = ? AND deleted_at IS NOT NULL", [
+            id,
+          ]);
+        }
+      });
+      options.emitKept?.(keptCitationTexts());
     },
 
     /**

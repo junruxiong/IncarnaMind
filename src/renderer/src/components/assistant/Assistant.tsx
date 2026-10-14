@@ -11,12 +11,14 @@ import {
   useState,
 } from "react";
 import type { AssistantDock } from "../../../../core/api";
-import { isSide } from "../../assistantPlace";
+import { foldsInMenu, isSide } from "../../assistantPlace";
 import { newChat } from "../../commands/assistant";
 import { assistantHandle, readMindHandle, useHandle } from "../../commands/handles";
 import { shortcutLabel } from "../../commands/keymap";
 import { useComposer } from "../../composer";
 import { conversationLabel, useOpenConversation } from "../../conversations";
+import { files } from "../../core";
+import { Composer } from "../../editor/Composer";
 import { useT } from "../../i18n";
 import { useAssistantWaiting } from "../../mindStatus";
 import { useAppStore } from "../../store";
@@ -30,11 +32,12 @@ import {
   HistoryLineIcon,
   PlusLineIcon,
 } from "../lineIcons";
-import { buttonStyle } from "../ui";
+import { TaskTray } from "../TaskTray";
 import { AssistantMenu } from "./AssistantMenu";
 import { ConversationThread } from "./ConversationThread";
 import { HistoryPopover } from "./HistoryPopover";
 import { useReadMindId } from "./readMind";
+import { useKeepInView } from "./useKeepInView";
 
 /**
  * The window's one assistant (#253), outside the tab groups, as in Cursor:
@@ -47,8 +50,8 @@ import { useReadMindId } from "./readMind";
  * Nothing in it is remounted when it moves, resizes or folds: the composer
  * keeps its draft and the conversation its scroll position.
  *
- * Esc inside it, with nothing in it open, folds it, the focus on what
- * unfolds it; a second Esc goes back to the Mind, where its cursor was.
+ * Esc inside it, with nothing in it open, goes back to the Mind, where its
+ * cursor was; the chevron folds it.
  */
 export function Assistant({
   dock,
@@ -81,6 +84,7 @@ export function Assistant({
   const titleButton = useRef<HTMLButtonElement>(null);
   const aside = useRef<HTMLElement>(null);
   const rail = folded && isSide(dock);
+  const foldInMenu = foldsInMenu(files.titleBar, dock);
   const readMindId = useReadMindId();
   const title = conversationLabel(useOpenConversation());
 
@@ -114,11 +118,12 @@ export function Assistant({
   };
   const openHistory = (from: HTMLElement) => setHistory((open) => (open ? null : from));
 
-  // Esc with the focus in it and nothing in it open: it folds, the focus on what unfolds it; then
-  // Esc goes back to the Mind. Heard on the window, after everything in it (the composer is drawn
-  // here from its Mind, so React's own bubbling never reaches here): a picker, a menu or History
-  // closes first, by its own Esc. Whether one was open is seen before anything handles the key,
-  // as a native menu closes itself on Esc without marking the key handled.
+  // Esc with the focus in it and nothing in it open goes back to the Mind, where its cursor was,
+  // and leaves the assistant as it is: only its chevron folds it. Heard on the window, after
+  // everything in it (the composer is drawn here from its Mind, so React's own bubbling never
+  // reaches here): a picker, a menu or History closes first, by its own Esc. Whether one was
+  // open is seen before anything handles the key, as a native menu closes itself on Esc without
+  // marking the key handled.
   useEffect(() => {
     let openInside = false;
     const before = (event: KeyboardEvent) => {
@@ -131,16 +136,6 @@ export function Assistant({
       const element = aside.current;
       if (!element || !(event.target instanceof Node) || !element.contains(event.target)) return;
       event.preventDefault();
-      if (!folded) {
-        setHistory(null);
-        void useAppStore
-          .getState()
-          .placeAssistant({ folded: true })
-          .then(() =>
-            element.querySelector<HTMLElement>('[data-testid="assistant-fold"]')?.focus(),
-          );
-        return;
-      }
       readMindHandle.current?.returnToNote();
     };
     window.addEventListener("keydown", before, true);
@@ -149,7 +144,7 @@ export function Assistant({
       window.removeEventListener("keydown", before, true);
       window.removeEventListener("keydown", onKey);
     };
-  }, [folded]);
+  }, []);
 
   const newChatButton = (
     <IconButton
@@ -227,7 +222,6 @@ export function Assistant({
             onClick={(event) => openHistory(event.currentTarget)}
             className="assistant-title"
           >
-            <ChatLineIcon className="size-4 shrink-0 text-ink-meta" />
             {/* The conversation's name; a new chat is "New chat". */}
             <span className="truncate">{title}</span>
             <ChevronDownLineIcon className="size-3 shrink-0 text-ink-meta" />
@@ -236,19 +230,21 @@ export function Assistant({
           <span className="flex-1" />
           {clock}
           {newChatButton}
-          <AssistantMenu />
-          <IconButton
-            testId="assistant-fold"
-            label={
-              folded
-                ? t("assistant.unfold", { shortcut: shortcutLabel("composer.focus") })
-                : t("assistant.fold")
-            }
-            expanded={!folded}
-            onClick={fold}
-          >
-            <FoldIcon dock={dock} folded={folded} />
-          </IconButton>
+          <AssistantMenu withFold={foldInMenu} />
+          {!foldInMenu && (
+            <IconButton
+              testId="assistant-fold"
+              label={
+                folded
+                  ? t("assistant.unfold", { shortcut: shortcutLabel("composer.focus") })
+                  : t("assistant.fold")
+              }
+              expanded={!folded}
+              onClick={fold}
+            >
+              <FoldIcon dock={dock} folded={folded} />
+            </IconButton>
+          )}
         </header>
       )}
       <AssistantMain folded={folded} readMindId={readMindId} onComposerSlot={onComposerSlot} />
@@ -259,8 +255,10 @@ export function Assistant({
 }
 
 /**
- * Under the header: the conversation and the composer. Kept while folded,
- * only hidden, so nothing in it starts over.
+ * Under the header: the conversation and the composer, which stays whatever
+ * is in focus (#621): a Mind's own is drawn in its slot, and with none in
+ * focus this one asks of every Document. Kept while folded, only hidden, so
+ * nothing in it starts over.
  */
 function AssistantMain({
   folded,
@@ -272,7 +270,12 @@ function AssistantMain({
   readMindId: string | null;
   onComposerSlot(element: HTMLElement | null): void;
 }) {
+  // One composer for every focus, so keys typed and the focus carry over as a Mind opens: it asks
+  // in the Mind in focus once that Mind's editor is open, and of every Document until then.
+  const seat = useComposer((state) => state.seat);
+  const mind = seat !== null && seat.mindId === readMindId ? seat : null;
   const thread = useRef<HTMLDivElement>(null);
+  useKeepInView(thread);
   /** Where the conversation was scrolled to, put back when it shows again. */
   const scrolled = useRef(0);
   useLayoutEffect(() => {
@@ -288,51 +291,12 @@ function AssistantMain({
           scrolled.current = event.currentTarget.scrollTop;
         }}
       >
-        <ConversationThread focusedMindId={readMindId} />
+        <ConversationThread focusedMindId={mind?.mindId ?? null} />
       </div>
-      <div ref={onComposerSlot} data-testid="assistant-composer" className="assistant-composer" />
-      {readMindId === null && <AskInNewMind />}
-    </div>
-  );
-}
-
-/**
- * With no Mind on screen to ask in (only the Library, say), a Question is
- * asked in a new Mind, as "Ask your own Question" does; ⌘J comes here.
- */
-function AskInNewMind() {
-  const t = useT();
-  const button = useRef<HTMLButtonElement>(null);
-  const focusWanted = useComposer((state) => state.focusWanted);
-  useEffect(() => {
-    const element = button.current;
-    if (!focusWanted || !element) return;
-    const take = () => {
-      if (element.getClientRects().length === 0) return false;
-      element.focus();
-      useComposer.getState().focusTaken();
-      return true;
-    };
-    if (take()) return;
-    const observer = new ResizeObserver(() => {
-      if (take()) observer.disconnect();
-    });
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [focusWanted]);
-  return (
-    <div data-testid="assistant-no-mind" className="assistant-no-mind">
-      <p>{t("assistant.noMind")}</p>
-      <button
-        ref={button}
-        type="button"
-        data-testid="assistant-ask-new-mind"
-        onClick={() => void useAppStore.getState().createMind({ startQuestion: true })}
-        className={buttonStyle("secondary", "sm")}
-      >
-        <PlusLineIcon className="size-4" />
-        {t("assistant.noMind.ask")}
-      </button>
+      <div ref={onComposerSlot} data-testid="assistant-composer" className="assistant-composer">
+        {mind && <TaskTray mindId={mind.mindId} />}
+        <Composer mind={mind} />
+      </div>
     </div>
   );
 }

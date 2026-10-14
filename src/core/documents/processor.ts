@@ -52,7 +52,8 @@ export interface Processor {
   cancel(documentId: string): void;
   /**
    * Holds jobs back, while a Meeting is recorded (#135): the one in the worker finishes, the
-   * rest wait, except a Transcript's, which is the recording itself and small (#136).
+   * rest wait, except a Transcript's, which is the recording itself and small (#136), and
+   * a web page's (#128).
    */
   hold(held: boolean): void;
   /** Stops the worker. Jobs not yet finished are dropped without a result. */
@@ -133,11 +134,18 @@ export function createProcessor(
     return started;
   }
 
-  /** The next job to run: the first in line, or while held, the first Transcript's. */
+  /**
+   * The next job to run: a web page's first, a small snapshot an Answer may be
+   * waiting to read (#128), then the first in line; while held, a web page's
+   * or the first Transcript's only.
+   */
   function take(): WorkerJob | undefined {
-    if (!held) return queue.shift();
-    const index = queue.findIndex((job) => job.task === "process" && job.kind === "transcript");
-    return index === -1 ? undefined : queue.splice(index, 1)[0];
+    const index = queue.findIndex(
+      (job) =>
+        job.task === "process" && (job.kind === "web" || (held && job.kind === "transcript")),
+    );
+    if (index !== -1) return queue.splice(index, 1)[0];
+    return held ? undefined : queue.shift();
   }
 
   function pump(): void {

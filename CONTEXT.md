@@ -31,7 +31,7 @@ What is generated in response to exactly one Question, right after it: a Block i
 _Avoid_: output, response, reply
 
 **Question context**:
-What an Answer is generated from: in a Mind, every Block above its Question, except Notes the User has excluded; in a Conversation, its earlier Questions and Answers. Plus Passages from the Documents in the Question's Search scope.
+What an Answer is generated from: in a Mind, every Block above its Question, except Notes the User has excluded; in a Conversation, its earlier Questions and Answers, and the Mind in focus when the Question was asked. Plus Passages from the Documents in the Question's Search scope.
 _Avoid_: prompt, history
 
 **Search scope**:
@@ -55,7 +55,7 @@ A file the User keeps, in a Linked folder or added on its own, that IncarnaMind 
 _Avoid_: file, doc, source
 
 **Web page**:
-A Document saved from a web address: a snapshot of the page's readable text, fetched from the User's computer when it is added, and again only when the User asks. Its Citations point at the snapshot, never at the live page, so they can always be checked.
+A Document saved from a web address: a snapshot of the page's readable text, fetched from the User's computer when it is added (by the User, or by an Answer that read it in a web search), and again only when the User asks. Its Citations point at the snapshot, never at the live page, so they can always be checked.
 _Avoid_: link, bookmark, clipping
 
 **Missing Document**:
@@ -83,8 +83,16 @@ A short span of a Document that can be retrieved and cited.
 _Avoid_: chunk, snippet
 
 **Citation**:
-A reference, anchored in the text of an Answer, to the Passage a claim was drawn from: the Location it cites, and a quote from the Passage that is checked against the text at that Location. Copied into a Note, it stays a Citation; Question context shows it as a plain reference to its Document.
+A reference, anchored in the text of an Answer, to the Passage a claim was drawn from: the Location it cites, and a quote from the Passage that is checked against the text at that Location. Copied into a Note, it stays a Citation; Question context shows it as a plain reference to its Document. It names its Document as the Document is named now, so a rename shows in every Citation of it; the name it was made with is kept, never rewritten, and shown only when the Document can't be found.
 _Avoid_: source, reference
+
+**Calculated figure**:
+A number in an Answer or Note that IncarnaMind worked out from numbers quoted from Documents, by a formula (or, later, an Analysis), rather than the AI working it out itself. It keeps its Inputs, each with its Citation, its formula and its result as shown. The AI writes a marker where it goes and never the number; the interface says "Calculated".
+_Avoid_: computed figure, calculated citation, derived number, formula
+
+**Input**:
+A number a Calculated figure or an Analysis is worked out from: a number in a Citation's quote (with the line that states its scale or currency, when only a heading does), a cell of a sheet (the number it stores, not the one it shows rounded), or a range of a sheet or CSV, in the version of its Document it was read from.
+_Avoid_: argument, variable, source
 
 **Footnote**:
 A note the User writes at a point in the text, shown there by its number; its text can hold Citations. Footnotes and Citations share one numbering, in the order they appear, in the Mind and in every export, where a Citation's footnote is its reference.
@@ -103,12 +111,20 @@ Every Document a Mind cites, once each, in its citation style: the References at
 _Avoid_: works cited (except as a style's own heading), sources list
 
 **Source provider**:
-A public service that Find sources searches for works to add to the Library: OpenAlex, arXiv and PubMed (Crossref looks a DOI up); openFDA and DailyMed for drug labels and ClinicalTrials.gov for trials, which are asked only when the User chooses them; later, services for laws, regulations and filings. A work with an open-access copy is added as a Document, which keeps the provider it came from and the date of the version it holds; any other work, as its Reference record alone. Each Source provider is asked once for consent before anything is sent to it.
+A public service that Find sources searches for works to add to the Library: OpenAlex, arXiv and PubMed (Crossref looks a DOI up); openFDA and DailyMed for drug labels, ClinicalTrials.gov for trials and the eCFR for US federal regulations, which are asked only when the User chooses them; GovInfo looks up the US Code and the CFR's official edition by citation, on the User's own key; later, services for other countries' laws and for company filings. A work with an open-access copy is added as a Document, which keeps the provider it came from and the date of the version it holds; any other work, as its Reference record alone. Each Source provider is asked once for consent before anything is sent to it.
 _Avoid_: source (a Document is not one), database, provider on its own (an AI model's provider)
 
 **Location**:
 Where in a Document a Citation points, in the unit the Document's own readers use: one or two pages of a PDF, one or two slides of a deck (speaker notes count as part of their slide), a sheet and a range of rows of a spreadsheet, the section a quote sits under in a Word file or Markdown (for a quote of a Word comment, the section the comment is anchored in, and that it is a comment by its author), the section and paragraphs of a Web page, a range of lines in plain text, or a range of time in a Transcript (shown as the time the quote starts, "14:26").
 _Avoid_: page (for anything that isn't a PDF), position, anchor
+
+**Cited page**:
+How a Citation's Location looked in the version it quotes, saved as a picture when the Citation is made, with the text drawn on it, so the quote can be shown where it stood after its file changes or goes. It is kept while a Citation or a Checkpoint points at it, and is never searched.
+_Avoid_: screenshot, thumbnail, preview
+
+**Source pack**:
+A PDF of the pages a Mind cites, made from Export options: a cover list, then one page for each cited Location, drawn from its cited page, with each quote highlighted and numbered as the Mind numbers its Citations. It is made from the cited pages, so it holds when a file has changed or gone.
+_Avoid_: evidence bundle, appendix, bundle
 
 **Folder**:
 A project inside IncarnaMind: a named place for Documents and Minds, with a description of what belongs there. Each Document and each Mind belongs to one Folder or is Not in a Folder; this does not change where a Document's original file is stored. A Mind in a Folder searches the Folder by default; deleting a Folder moves its Documents and Minds to Not in a Folder.
@@ -147,6 +163,10 @@ _Avoid_: function, action
 What a Tool call can do beyond the conversation it is part of: read data, write (change something), run code on a computer, or send data over the network, and where (some of the User's folders, a web host, a Connector's service, the Documents, a Mind). Whether a call asks the User first depends on its Effects.
 _Avoid_: permission, capability, side effect
 
+**Analysis**:
+Python an Answer wrote and IncarnaMind ran in its sandbox, with no network or files, over Inputs cited from Documents, kept in a Mind with its steps, Inputs, code and results.
+_Avoid_: notebook, script, code interpreter (in the interface), Skill script
+
 **Third-party text**:
 Text someone other than the User wrote that a Run reads: a saved Web page, the document being checked, or text in a Mind or Conversation that came from them (imported from someone else's file, a quote added from a Web page, or an Answer written from such text). Once a Run has read some, a call that writes or sends data asks even where the User chose "always". The User's other Documents don't count, though their text is untrusted too, and neither does text pasted from other apps, which can't be traced.
 _Avoid_: external content, untrusted content (which also covers the User's own Documents)
@@ -154,6 +174,10 @@ _Avoid_: external content, untrusted content (which also covers the User's own D
 **Connector**:
 An external service the User has connected, through which Answers can look things up or make changes.
 _Avoid_: MCP server, plugin, integration, connection
+
+**Web search**:
+Searching the web from an Answer, through the provider of the model it is asked with, when the User has turned it on and the Question asks for the web. Each page the Answer reads is saved as a Web page and cited like any Document; a page it didn't read is never cited.
+_Avoid_: browsing, grounding, online mode
 
 **Skill**:
 A packaged description of how to do a particular task, optionally with reference files and scripts, that an Answer can follow.
@@ -177,8 +201,12 @@ _Avoid_: default Skill, system Skill
 A change to a Mind, made by the AI or brought in from another person's Word file, that waits for the User to accept or reject it. Until it is accepted it does not count as part of the Mind, and it is out of date once the text it changes has changed. Each Proposal is one change in one place (the words it removes and those it adds there, or a whole Block), accepted or rejected on its own; one request, such as an Edit with AI, can make several. The interface calls them changes: "3 changes from the assistant".
 _Avoid_: suggestion, edit, draft, diff
 
+**AI text**:
+The words the AI wrote into a Mind that the User hasn't made their own: in Answers, Answers added to a note, accepted changes and accepted suggestions. They are drawn a step softer than the User's writing. What the User types, even inside AI text, is theirs, and "Mark as mine" makes selected AI text theirs. Exports and Question context read it as any other text; a Word export can mark it with a comment.
+_Avoid_: AI content, machine text
+
 **Checkpoint**:
-A saved copy of a Mind as it was just before an AI change, which the User can compare with another Checkpoint or restore from. Restoring one comes back as a Proposal, not as an overwrite.
+A saved copy of a Mind as it was just before an AI change, or after a pause in writing, which the User can compare, in the Mind's History, with another Checkpoint or with the Mind now, and restore from. Restoring one brings its content back as a new change, after a Checkpoint of the Mind as it is: nothing is overwritten, and Undo takes it back.
 _Avoid_: snapshot, version, backup, undo
 
 **Recently deleted**:
@@ -194,6 +222,14 @@ _Avoid_: toast, snackbar, notification
 **Citation check**:
 The test of whether a Citation's quote is found in the text at its Location. Its only failing result is quote not found.
 _Avoid_: validation, verification
+
+**Calculation check**:
+The test of whether a Calculated figure still holds: each Input's quote is found at its Location and reads as the same number, and the formula gives the same result. Its failing results are an Input not found and needs re-check. It says nothing about whether the right numbers were used, and never that a figure is correct.
+_Avoid_: verification, validation
+
+**Unchecked figure**:
+A number in an Answer that is neither in a quote of its sentence's Citations nor a Calculated figure: the AI worked it out or wrote it without a source. It is marked as quietly as a sentence without a Citation.
+_Avoid_: hallucinated number, unsupported (a claim check's result)
 
 **Quote not found**:
 The result of a Citation check when the Citation's quote is not in the text at its Location. It says nothing about whether the claim is true. "Not found" is used only for this.
@@ -284,7 +320,7 @@ _Avoid_: AI log, AI history
 ### Window
 
 **Tab**:
-What a Mind, the Library or a Document is open in. A preview tab, its title in italics, is replaced by the next Document opened in its group until the User keeps it; a pinned tab stays at the left of its group.
+What a Mind, the Library or a Document is open in. A preview tab, its title in italics, is replaced by the next Document opened in its group until the User keeps it; a pinned tab stays at the left of its group. Opening something already open goes to its tab, in any group; only Open in a new tab makes a second one.
 _Avoid_: pane, page, view
 
 **Group**:

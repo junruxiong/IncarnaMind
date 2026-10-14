@@ -37,7 +37,7 @@ The words from `CONTEXT.md`, then the ones the interaction rules bring in. Where
 
 | English | Chinese | Notes |
 |---|---|---|
-| Mind | Mind | A product name, like Notion: no translation, no plural, no measure word in labels. "新建 Mind", "Mind（3）", "这个 Mind" in prose. |
+| Mind | Mind | A product name, like Notion: no translation, no plural, no measure word in labels. "新建 Mind", "Mind（3）", "这个 Mind" in prose. Where the User first meets it (the example's banner, the first empty Mind, New Mind's tooltip) one sentence says what it is: "Mind 是你写作的页面，也可以在这里就你的文档提问，每条引文都会核对。" |
 | Assistant | 助手 | The one per window. "显示助手", "收起助手". As Kimi, Doubao and Yuanbao call themselves (智能助手, AI 助手). |
 | Conversation | 对话 | New chat is "新对话", History "历史对话", counted with 个: "3 个对话". As Doubao, Yuanbao, DeepSeek, Qwen, Feishu, Cherry Studio and Open WebUI show it. |
 | Note | 笔记 | |
@@ -55,11 +55,15 @@ The words from `CONTEXT.md`, then the ones the interaction rules bring in. Where
 | Passage | 段落 | |
 | Citation | 引用 | The numbered reference in an Answer, as Kimi, Doubao, Qwen, Cherry Studio and Open WebUI show it. |
 | quote (of a Citation) | 引文 | "已在第 3 页找到引文", "未找到引文". |
+| Quote (block) | 引述 | The "/" menu's block for quoted text; not a Citation (引用) or its quote (引文). |
 | Location | 位置 | "第 3 页", "第 2 张幻灯片", "第 4–6 行", "§ 标题", a web page's "§ 历史，第 3 段". |
+| Cited page | 引用页面 | The saved picture of what a Citation points at: "打开引用页面". |
+| Source pack | PDF 引用页面合集 | The export of a Mind's cited pages. The name starts with PDF so that "导出为 {format}" keeps its space between Latin and Chinese. |
 | Footnote | 脚注 | As Word, WPS and Feishu. "插入脚注", "脚注 3". |
 | Reference record | 引用信息 | The "Cite as" panel's title too. Its fields: 类型、标题、作者、日期、期刊（出处）、卷、期、页码、出版者、DOI、网址、语言. |
 | Needs details (a reference record) | 信息待补充 | |
 | Look up (a reference record) | 查询 | "按 DOI 从 Crossref 补全空白字段". |
+| Web search | 联网搜索 | Searching the web from an Answer: "允许回答联网搜索", "已联网搜索“…”". As Kimi, Doubao, Yuanbao and DeepSeek show it. |
 | Find sources | 查找资料 | "查找资料…". 资料 matches 资料库 (Library): what is found is added to it. |
 | Source provider | 资料来源 | "资料来源：OpenAlex arXiv PubMed". Not 提供商, which is an AI model's provider. |
 | Open access | 开放获取 | As CNKI and publishers say it. "仅开放获取", "无开放全文". |
@@ -84,12 +88,20 @@ The words from `CONTEXT.md`, then the ones the interaction rules bring in. Where
 | Built-in Skill | 内置技能 | |
 | Outside agent | 智能体 | The User's own AI agent: "连接智能体", "设置 → 智能体". As Kimi, Doubao, Yuanbao and Coze call an agent. |
 | Proposal | 修订 | Accept: 接受; Reject: 拒绝; Accept all: 全部接受; Reject all: 全部拒绝. As WPS and Feishu (接受修订, 拒绝修订). |
+| AI text | AI 生成的文字 | Not shown as a word in the interface yet. "Mark as mine" is 标为我写的, and its undo line 已标为你写的. |
 | Checkpoint | 检查点 | |
+| History (a Mind's versions) | 历史版本 | "历史版本", "恢复此版本", "当前版本". As Yuque and Tencent Docs. Not 历史对话, which is the assistant's. |
 | Citation check | 核对 | "正在核对引文…", "无法核对". |
 | Quote not found | 未找到引文 | |
 | Unsupported | 无依据 | |
 | Contradicted | 与文档矛盾 | |
 | Needs re-check | 需重新核对 | |
+| Not checked | 未核对 | A claim that wasn't checked: the model declined, its reply couldn't be read, or a limit stopped the run ("未核对：已达花费上限"). |
+| Claim | 说法 | What a check looks at, in an Answer, a Mind or a document someone else wrote. Counted with 条: "核对 24 条说法". Not 论断, an argued conclusion, or 主张, a party's claim in law: neither fits a sentence in a contract or a site report. |
+| Find support | 查找出处 | Finds a Passage to cite and offers Add as Citation. 出处 is the word for a source a writer cites (注明出处); not 依据, which reads as a check. |
+| Check against Documents | 对照文档核对 | Gives a verdict: 有依据, 无依据 or 与文档矛盾. |
+| Verify (a document) | 核对文档 | The verb is 核对, as for a Citation. |
+| Need a look | 需要留意 | The claims that are unsupported or contradicted: "3 条需要留意". |
 | Mark | 标记 | |
 | Run | 运行 | |
 | Task | 任务 | |
@@ -115,6 +127,14 @@ A figure in an Answer is written as reports write it, with no space between the 
 
 | English | Chinese | Notes |
 |---|---|---|
+| figure (a number in an Answer) | 数字 | Counted with 个: "计算了 2 个数字", "1 个数字未能计算". |
+| Calculated figure | 计算结果 | Its label word is 计算得出 ("计算得出 · 20.4%"), as "Calculated" is in English. |
+| Input (of a calculation) | 所用数据 | "所用数据均已找到". |
+| Calculation check | 核对计算 | The verb is 核对, as for a Citation: "正在核对数字…". |
+| Unchecked figure | 未核对的数字 | |
+| Analysis | 数据分析 | |
+| Recalculate | 重新计算 | |
+| Run again | 重新运行 | |
 | percentage points | 个百分点 | A difference of two percents: "2.3个百分点", never "2.3%". |
 | about (an approximate figure) | 约 | "约1.2亿元". |
 | times (a multiple) | 倍 | "4.00倍". |

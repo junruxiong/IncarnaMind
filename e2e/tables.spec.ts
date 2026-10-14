@@ -1,7 +1,6 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
-import type { CoreBridge } from "../src/core/api";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   addDocuments,
@@ -13,6 +12,7 @@ import {
   newMind,
   pointAndClick,
   removeDataFolder,
+  setLanguage,
   setWindowSize,
   slideSelect,
   useLocalChatModel,
@@ -67,15 +67,6 @@ test.afterEach(async () => {
   await removeDataFolder(dataDir);
   await removeDataFolder(sources);
 });
-
-const setLanguage = (window: Page, language: "en" | "zh-CN") =>
-  window.evaluate(
-    (value) =>
-      (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
-        user: { language: value },
-      }),
-    language,
-  );
 
 /** The table's text, row by row, each cell's lines joined by " / ". */
 const tableText = (table: Locator) =>

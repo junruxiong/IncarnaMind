@@ -5,7 +5,7 @@
  */
 import { createHash } from "node:crypto";
 import { once } from "node:events";
-import { createReadStream, type Stats } from "node:fs";
+import { type BigIntStats, createReadStream, type Stats } from "node:fs";
 import { lstat, readdir, realpath, stat } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, join, relative, sep } from "node:path";
 import { Readable } from "node:stream";
@@ -27,6 +27,37 @@ export const DOCUMENT_EXTENSIONS: Readonly<Record<DocumentKind, readonly string[
   web: [],
   transcript: ["vtt"],
 };
+
+/**
+ * Document formats IncarnaMind doesn't read yet, by extension: a file with one
+ * is left out of a search, and says so (#740). Other kinds of file (pictures,
+ * programs, mail) aren't Documents, and aren't named.
+ */
+export const UNREAD_FORMATS: ReadonlySet<string> = new Set([
+  ".doc",
+  ".dot",
+  ".docm",
+  ".xls",
+  ".xlt",
+  ".xlsm",
+  ".xlsb",
+  ".ppt",
+  ".pot",
+  ".pps",
+  ".pptm",
+  ".wps",
+  ".et",
+  ".dps",
+  ".caj",
+  ".rtf",
+  ".odt",
+  ".ods",
+  ".odp",
+  ".pages",
+  ".numbers",
+  ".key",
+  ".wpd",
+]);
 
 const KINDS: ReadonlyMap<string, DocumentKind> = new Map(
   Object.entries(DOCUMENT_EXTENSIONS).flatMap(([kind, extensions]) =>
@@ -144,9 +175,11 @@ export interface WalkOptions {
   detectDataless: boolean;
 }
 
-/** What `walk` found: supported files, and the folders it went through. */
+/** What `walk` found: supported files, files of formats not read, and the folders it went through. */
 export interface WalkResult {
   files: FoundFile[];
+  /** Files in a format IncarnaMind doesn't read (`UNREAD_FORMATS`): their absolute paths. */
+  unsupported: string[];
   /** Absolute paths of the folders walked, `start` included if it is one. */
   folders: string[];
 }
@@ -158,7 +191,7 @@ export interface WalkResult {
  * Rejects only if `start` itself can't be read, e.g. it is gone.
  */
 export async function walk(start: string, options: WalkOptions): Promise<WalkResult> {
-  const result: WalkResult = { files: [], folders: [] };
+  const result: WalkResult = { files: [], unsupported: [], folders: [] };
   const consider = async (path: string, stats?: Stats): Promise<void> => {
     const name = basename(path);
     const stubTarget = iCloudStubTarget(name);
@@ -193,7 +226,10 @@ export async function walk(start: string, options: WalkOptions): Promise<WalkRes
     }
     if (!info.isFile()) return;
     const kind = kindOf(path);
-    if (!kind) return;
+    if (!kind) {
+      if (UNREAD_FORMATS.has(extname(path).toLowerCase())) result.unsupported.push(path);
+      return;
+    }
     result.files.push({
       path,
       kind,
@@ -216,6 +252,35 @@ export async function statFile(path: string): Promise<Stats | undefined> {
     throw error;
   }
 }
+
+/** Reads what a file's identity on its disk is made of: Node's `stat`, with exact numbers. */
+export type StatIdentity = (
+  path: string,
+) => Promise<Pick<BigIntStats, "dev" | "ino" | "birthtimeNs">>;
+
+export const statIdentity: StatIdentity = (path) => stat(path, { bigint: true });
+
+/**
+ * Which file this is on this computer's disks (#389): its device, and its file
+ * number with its creation time, which stay the same while it is moved or
+ * edited in place on that disk. A file number can be given to a new file once
+ * its own is deleted; the creation time tells them apart. Decimal text, since
+ * file numbers can be too big for a JavaScript number (Windows' are 64-bit).
+ * `number` and `createdNs` are null where the file system gives none.
+ */
+export interface FileIdentity {
+  device: string;
+  number: string | null;
+  createdNs: string | null;
+}
+
+export const fileIdentity = (
+  stats: Pick<BigIntStats, "dev" | "ino" | "birthtimeNs">,
+): FileIdentity => ({
+  device: String(stats.dev),
+  number: stats.ino > 0n ? String(stats.ino) : null,
+  createdNs: stats.birthtimeNs > 0n ? String(stats.birthtimeNs) : null,
+});
 
 /** Whether there is a folder at the path. Any failure counts as no. */
 export async function isFolder(path: string): Promise<boolean> {

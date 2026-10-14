@@ -8,6 +8,8 @@ import {
   citationState,
   citedLocation,
   citedTextKept,
+  shownDocumentName,
+  withShownName,
 } from "../../src/shared/citations";
 import { type MessageKey, type MessageParams, translate } from "../../src/shared/i18n";
 import { parseLocation } from "../../src/shared/locations";
@@ -61,6 +63,35 @@ describe("Where a Citation points", () => {
     expect(citationSource(sheetCitation("年报.xlsx", "利润表"), in_("zh-CN")).text).toBe(
       "年报.xlsx，利润表，第 3 行",
     );
+  });
+});
+
+describe("The name a Citation shows for its Document", () => {
+  const renamed = [{ id: "tides", contentHash: "abc", name: "Tide tables" }];
+
+  test("is the Document's current name while it is there, and the stored one when it can't be found", () => {
+    expect(shownDocumentName(found, renamed)).toBe("Tide tables");
+    expect(shownDocumentName(found, [])).toBe("Tides");
+    expect(shownDocumentName(found, null)).toBe("Tides");
+    expect(shownDocumentName({ ...found, documentName: null }, [])).toBeNull();
+    // A Document with the same content, added again after the first was deleted, is the one it opens.
+    const again = [{ id: "tides-again", contentHash: "abc", name: "Tides (again)" }];
+    expect(shownDocumentName(found, again)).toBe("Tides (again)");
+    // Documents that don't say their names leave the stored one.
+    expect(shownDocumentName(found, [{ id: "tides", contentHash: "abc" }])).toBe("Tides");
+  });
+
+  test("is in the badge, the label and the card's line, and the stored attribute is left alone", () => {
+    const shown = withShownName(found, renamed);
+    expect(shown.documentName).toBe("Tide tables");
+    expect(found.documentName).toBe("Tides");
+    expect(citationSource(shown, in_("en")).text).toBe("Tide tables, p. 12–13");
+    expect(withShownName(found, [])).toBe(found);
+    const undated = { ...found, location: null, pageFrom: null, pageTo: null };
+    const state = citationState(undated, renamed);
+    expect(badgeMessage(state, withShownName(undated, renamed), in_("en")).params).toEqual({
+      document: "Tide tables",
+    });
   });
 });
 

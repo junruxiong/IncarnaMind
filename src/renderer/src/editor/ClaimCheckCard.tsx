@@ -1,0 +1,310 @@
+import type { Editor } from "@tiptap/core";
+import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import type * as Y from "yjs";
+import { CITATION_NODE, type CitationAttributes } from "../../../core/api";
+import { citationLocation, formatLocation, openKind } from "../../../shared/locations";
+import { addAsCitation, checkAgain } from "../checks";
+import { CountItLine } from "../components/CountItLine";
+import { useT } from "../i18n";
+import { groupsMerged } from "../layoutSlice";
+import { openCited } from "../openCited";
+import { useAppStore } from "../store";
+import type { ShownClaim } from "./claimChecks";
+import { ClaimMarkIcon, type ClaimMarkState } from "./icons";
+import { Popover } from "./Popover";
+
+/** How long a pointer rests on a mark before its card shows, and how long it may leave before it goes. */
+const SHOW_MS = 120;
+const HIDE_MS = 200;
+
+/** The card's colours, as a Citation card's in the same state. */
+const TONE: Record<ClaimMarkState, string> = {
+  checking: "checking",
+  supported: "found",
+  unsupported: "unsupported",
+  contradicted: "contradicted",
+  "not-checked": "cant-check",
+  "needs-recheck": "checking",
+};
+
+/** Whether the sentence already cites the Passage its check found. */
+function citesEvidence(editor: Editor, claim: ShownClaim): boolean {
+  const evidence = claim.check.evidence;
+  if (!evidence) return false;
+  let cited = false;
+  editor.state.doc.nodesBetween(claim.sentence.from, claim.sentence.to, (node) => {
+    if (node.type.name !== CITATION_NODE) return true;
+    const attributes = node.attrs as CitationAttributes;
+    if (attributes.documentId === evidence.documentId && attributes.quote === evidence.quote) {
+      cited = true;
+    }
+    return false;
+  });
+  return cited;
+}
+
+/**
+ * A sentence check's mark in the margin (#96), level with the sentence's
+ * first line: a quiet tick with "+" when the Passage found can become its
+ * Citation, an amber "!", an outlined red "≠", a grey ring when it wasn't
+ * checked, ↻ when it needs a re-check. Hovering or focusing it shows its
+ * card, and clicking keeps the card until it is dismissed; Esc closes it.
+ */
+export function ClaimMark({
+  claim,
+  editor,
+  mindId,
+  doc,
+  label,
+  style,
+  reveal,
+  onRevealed,
+}: {
+  claim: ShownClaim;
+  editor: Editor;
+  mindId: string;
+  doc: Y.Doc;
+  label: string;
+  style: CSSProperties;
+  reveal: boolean;
+  onRevealed(): void;
+}) {
+  const state = claim.shown.state;
+  const button = useRef<HTMLButtonElement>(null);
+  const [pinned, setPinned] = useState(false);
+  const [peeking, setPeeking] = useState(false);
+  const askers = useRef(new Set<string>());
+  const timer = useRef<number | undefined>(undefined);
+  const open = pinned || peeking;
+  const plus = state === "supported" && !citesEvidence(editor, claim);
+
+  const hold = useCallback((source: string, on: boolean) => {
+    if (on) askers.current.add(source);
+    else askers.current.delete(source);
+    window.clearTimeout(timer.current);
+    const wanted = askers.current.size > 0;
+    timer.current = window.setTimeout(() => setPeeking(wanted), wanted ? SHOW_MS : HIDE_MS);
+  }, []);
+  const dismiss = useCallback(() => {
+    askers.current.clear();
+    window.clearTimeout(timer.current);
+    setPinned(false);
+    setPeeking(false);
+  }, []);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+
+  /** After an action the card goes, and the focus stays in the Mind. */
+  const done = () => {
+    dismiss();
+    if (!editor.isDestroyed && !groupsMerged()) editor.view.focus();
+  };
+
+  return (
+    <>
+      <button
+        ref={button}
+        type="button"
+        data-testid="claim-mark"
+        data-check={state}
+        data-claim={claim.check.id}
+        data-open={open || undefined}
+        data-addable={plus || undefined}
+        className={`margin-check claim-mark ${reveal ? "margin-check--reveal" : ""}`}
+        style={style}
+        aria-label={label}
+        title={label}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        // Keep the editor's selection and focus where they are.
+        onMouseDown={(event) => event.preventDefault()}
+        onPointerEnter={() => hold("pointer", true)}
+        onPointerLeave={() => hold("pointer", false)}
+        onFocus={() => hold("focus", true)}
+        onBlur={() => hold("focus", false)}
+        onClick={() => setPinned(true)}
+        onAnimationEnd={(event) => {
+          if (event.target === event.currentTarget && reveal) onRevealed();
+        }}
+      >
+        <ClaimMarkIcon state={state} className="margin-check-icon" />
+        {plus && <span aria-hidden="true">+</span>}
+      </button>
+      {open &&
+        button.current &&
+        createPortal(
+          <Popover
+            anchor={button.current}
+            placement="bottom-end"
+            onDismiss={dismiss}
+            aria-label={label}
+            data-testid="claim-card"
+            data-check={state}
+            onPointerEnter={() => hold("card", true)}
+            onPointerLeave={() => hold("card", false)}
+            onFocus={() => hold("card-focus", true)}
+            onBlur={() => hold("card-focus", false)}
+          >
+            <ClaimCard
+              claim={claim}
+              addable={plus}
+              onAdd={() => {
+                addAsCitation(editor, claim);
+                done();
+              }}
+              onCheckAgain={(allDocuments) => {
+                void checkAgain(editor, mindId, doc, claim, allDocuments);
+                done();
+              }}
+              onOpen={done}
+            />
+          </Popover>,
+          document.body,
+        )}
+    </>
+  );
+}
+
+/**
+ * A sentence check's card: its state; for a Passage found, the Document and
+ * Location with the quote washed in the state's colour, and Add as Citation
+ * when it isn't cited yet; for a contradiction, what the Document says; for
+ * nothing found, where it looked, with Search all Documents; otherwise why,
+ * with Check again. Documents IncarnaMind wrote that matched are named, with
+ * Count it.
+ */
+function ClaimCard({
+  claim,
+  addable,
+  onAdd,
+  onCheckAgain,
+  onOpen,
+}: {
+  claim: ShownClaim;
+  addable: boolean;
+  onAdd(): void;
+  onCheckAgain(allDocuments?: boolean): void;
+  onOpen(): void;
+}) {
+  const t = useT();
+  const { shown, check } = claim;
+  const state = shown.state;
+  const evidence = state === "supported" || state === "contradicted" ? check.evidence : null;
+  const location = evidence ? citationLocation(evidence) : null;
+  const where = location ? formatLocation(location, t) : null;
+  const folderName = useAppStore((store) =>
+    check.scope.folderId === null
+      ? null
+      : (store.library?.groups.find((group) => group.id === check.scope.folderId)?.name ?? null),
+  );
+  const documents = useAppStore((store) => store.documents);
+  const searchedFolder = !check.scope.widened && folderName !== null;
+  const reason =
+    shown.state === "not-checked"
+      ? t(`claim.reason.${shown.reason}`, { detail: check.detail ?? "" })
+      : shown.state === "needs-recheck"
+        ? t(`claim.recheck.${shown.why}`)
+        : null;
+
+  return (
+    <div className={`citation-card citation-card--${TONE[state]}`} contentEditable={false}>
+      <div className="citation-card-head">
+        <p data-testid="claim-badge" data-check={state} className="citation-badge">
+          <ClaimMarkIcon state={state} className="citation-badge-icon" />
+          <span>{t(`claim.state.${state}`)}</span>
+        </p>
+        {state === "contradicted" && check.says && (
+          <p data-testid="claim-says" className="claim-card-says">
+            {check.says}
+          </p>
+        )}
+        {evidence && (
+          <p className="citation-card-source">
+            {[evidence.documentName, where].filter(Boolean).join(" · ")}
+          </p>
+        )}
+      </div>
+      {evidence?.quote && (
+        <figure className="citation-card-quote">
+          <figcaption className="sr-only">{t("citation.quote")}</figcaption>
+          <blockquote>
+            <span data-testid="claim-quote" className="citation-card-wash">
+              {evidence.quote}
+            </span>
+          </blockquote>
+        </figure>
+      )}
+      {state === "unsupported" && (
+        <p data-testid="claim-nothing" className="citation-card-note">
+          {searchedFolder
+            ? t("claim.unsupported.inFolder", { folder: folderName })
+            : t("claim.unsupported.anywhere")}
+        </p>
+      )}
+      {reason && (
+        <p data-testid="claim-reason" className="citation-card-note">
+          {reason}
+        </p>
+      )}
+      {check.excluded.map((left) => {
+        const document = documents.find((each) => each.id === left.documentId);
+        return (
+          document && (
+            <CountItLine key={left.documentId} document={document} testId="claim-left-out">
+              {t("evidence.excluded.ownFile", { name: left.documentName || document.name })}
+            </CountItLine>
+          )
+        );
+      })}
+      <div className="citation-card-actions">
+        {addable && (
+          <button
+            type="button"
+            data-testid="claim-add-citation"
+            className="citation-card-action citation-card-action--primary"
+            onClick={onAdd}
+          >
+            {t("claim.addAsCitation")}
+          </button>
+        )}
+        {evidence?.documentId && (
+          <button
+            type="button"
+            data-testid="claim-open"
+            className={`citation-card-action ${addable ? "" : "citation-card-action--primary"}`}
+            onClick={() => {
+              if (!evidence.documentId) return;
+              openCited(
+                { ...evidence, documentId: evidence.documentId },
+                { check: "found", withQuote: true, label: where },
+              );
+              onOpen();
+            }}
+          >
+            {t(`citation.open.${openKind(location)}`)}
+          </button>
+        )}
+        {state === "unsupported" && searchedFolder && (
+          <button
+            type="button"
+            data-testid="claim-search-all"
+            className="citation-card-action citation-card-action--primary"
+            onClick={() => onCheckAgain(true)}
+          >
+            {t("claim.searchAll")}
+          </button>
+        )}
+        {(state === "not-checked" || state === "needs-recheck") && (
+          <button
+            type="button"
+            data-testid="claim-check-again"
+            className="citation-card-action citation-card-action--primary"
+            onClick={() => onCheckAgain()}
+          >
+            {t("claim.checkAgain")}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}

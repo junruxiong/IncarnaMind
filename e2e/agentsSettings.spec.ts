@@ -12,6 +12,7 @@ import {
   launchApp,
   openSettings,
   removeDataFolder,
+  setLanguage,
   setWindowSize,
   showSettingsPage,
 } from "./app";
@@ -142,6 +143,66 @@ test("off by default; Connect asks once, writes Codex's settings as shown, and U
     await expect(page.getByTestId("agent-pairing")).toHaveCount(0);
     expect(await readFile(codexSettings, "utf8")).toBe(CODEX_SETTINGS);
     await expect(readFile(skillFile, "utf8")).rejects.toThrow(/ENOENT/);
+  } finally {
+    await app.close();
+  }
+});
+
+test("in the connect dialog a long path breaks at its slashes and no word breaks, in English and Chinese", async () => {
+  // A deep home folder, so both paths are longer than the dialog's line.
+  const deepHome = join(home, "projects-with-a-long-name", "second-level-folder-name");
+  await mkdir(deepHome, { recursive: true });
+  const { app, window } = await launchApp(dataDir, { home: deepHome });
+  try {
+    await dismissChatSetup(window);
+    await withCoast(window);
+    const page = await openSettings(window, "agents");
+    await page.getByTestId("agents-enabled").click();
+    await page.locator('[data-client="codex"]').getByTestId("agent-connect").click();
+    const dialog = window.getByTestId("connect-agent-dialog");
+    await expect(dialog.getByTestId("connect-agent-skill")).toBeVisible();
+
+    for (const language of ["en", "zh-CN"] as const) {
+      await setLanguage(window, language);
+      const paragraphs = [
+        dialog.getByTestId("connect-agent-change").locator("p"),
+        dialog.getByTestId("connect-agent-skill"),
+      ];
+      for (const paragraph of paragraphs) {
+        await expect(paragraph.locator("code")).toBeVisible();
+        const wrapping = await paragraph.evaluate((element) => {
+          const topOf = (node: Node, offset: number) => {
+            const range = new Range();
+            range.setStart(node, offset);
+            range.setEnd(node, offset + 1);
+            return Math.round(range.getBoundingClientRect().top);
+          };
+          const path = element.querySelector("code");
+          const pathLines = new Set<number>();
+          const misplaced: string[] = [];
+          const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+          for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+            const text = node.textContent ?? "";
+            const inPath = path?.contains(node) ?? false;
+            for (let at = 0; at < text.length; at++) {
+              const top = topOf(node, at);
+              if (inPath) pathLines.add(top);
+              if (at === 0 || topOf(node, at - 1) === top) continue;
+              // The line broke here. In the path only after a slash (or the hyphen a browser
+              // also breaks at); in the prose, never inside a Latin word.
+              const before = text[at - 1] ?? "";
+              const inside = inPath
+                ? !"/\\-".includes(before)
+                : /[A-Za-z’']/.test(before) && /[A-Za-z’']/.test(text[at] ?? "");
+              if (inside) misplaced.push(text.slice(Math.max(0, at - 6), at + 6));
+            }
+          }
+          return { pathLines: pathLines.size, misplaced };
+        });
+        expect(wrapping.pathLines, `${language}: the path wraps`).toBeGreaterThan(1);
+        expect(wrapping.misplaced, `${language}: a break inside a word or a name`).toEqual([]);
+      }
+    }
   } finally {
     await app.close();
   }

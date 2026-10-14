@@ -14,6 +14,7 @@ import {
   type CitationState,
   citationSource,
   citationState,
+  withShownName,
 } from "../../../shared/citations";
 import {
   citationLocation,
@@ -105,14 +106,15 @@ export function CitationView({
   /** The Mind's group: the Document opens in the group to its right. */
   const place = useTabPlace();
   const state = citationState(attributes, documents, kept);
+  const shown = withShownName(attributes, documents);
   const location = citationLocation(attributes);
   const where = location ? formatLocation(location, t) : null;
-  const badge = badgeMessage(state, attributes, t);
+  const badge = badgeMessage(state, shown, t);
   const badgeText = t(badge.key, badge.params);
   const number = citationNumberOf(decorations);
   // In a footnote's text it is part of the footnote: it shows where it points, not a number.
   const inFootnote = useContext(InFootnoteContext);
-  const pointsTo = citationSource(attributes, t).text;
+  const pointsTo = citationSource(shown, t).text;
   /** Clicked: the card stays until it is dismissed. */
   const [pinned, setPinned] = useState(false);
   /** Hovered or focused, with the card, the marker or its mark. */
@@ -148,13 +150,16 @@ export function CitationView({
     };
   }, [hold]);
 
-  /** Opens the cited place, or the Document; amber when opened anyway after "not found". */
-  const openCited = (withQuote: boolean) => {
+  /**
+   * Opens the cited place, or the Document; amber when opened anyway after "not found".
+   * From the card, a preview of the Document already open is kept.
+   */
+  const openCited = (withQuote: boolean, keep = false) => {
     const documentId = state.documentId ?? attributes.documentId;
     if (!documentId) return;
     openCitedPlace(
       { ...attributes, documentId },
-      { check: state.check, withQuote, number, label: where, from: place?.groupId },
+      { check: state.check, withQuote, number, label: where, from: place?.groupId, keep },
     );
   };
 
@@ -171,7 +176,7 @@ export function CitationView({
 
   /** What the card's Open does: the cited place, the quote washed where the check found it. */
   const openFromCard = () => {
-    openCited(quoteSaysSo(state.check));
+    openCited(quoteSaysSo(state.check), true);
     dismiss();
     // The focus stays in the Mind, unless the window shows one group and the Document came to the front.
     if (!groupsMerged()) editor.view.focus();
@@ -320,10 +325,10 @@ export function CitationView({
           >
             <CitationCard
               state={state}
-              attributes={attributes}
+              attributes={shown}
               badgeText={badgeText}
               onOpen={(withQuote) => {
-                openCited(withQuote);
+                openCited(withQuote, true);
                 dismiss();
                 if (!groupsMerged()) editor.view.focus();
               }}

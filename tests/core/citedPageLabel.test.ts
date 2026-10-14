@@ -47,6 +47,7 @@ function cited(
         units.filter(
           (unit) => unit.page !== null && unit.page >= (from ?? 0) && unit.page <= (to ?? 0),
         ),
+      documentDate: () => null,
     },
     {
       onRecord: (_marker, each) => {

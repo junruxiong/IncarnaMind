@@ -6,9 +6,7 @@
  */
 import type { EmbeddingModelError, RerankSettings } from "../../core/api";
 import type { MessageKey, MessageParams } from "../../shared/i18n";
-
-/** Decimal megabytes, as the search model's download is shown. */
-const MEGABYTE = 1_000_000;
+import { downloadProgress } from "./modelDownload";
 
 const failures: Record<Exclude<EmbeddingModelError["kind"], "load">, MessageKey> = {
   network: "embedding.model.failure.network",
@@ -21,6 +19,8 @@ export interface RerankingModelStatus {
   tone: "progress" | "error";
   /** One line. */
   short: string;
+  /** How far the download has come, kept whole by the status row: "3/90 MB". */
+  figure?: string;
   /** All of it, for the tooltip and screen readers. */
   full: string;
   /** Offer to try the download again. */
@@ -35,12 +35,12 @@ export function rerankingModelStatus(
   if (!rerank?.enabled || rerank.kind !== "built-in") return null;
   const { model } = rerank;
   if (model.state === "downloading") {
-    const downloaded = Math.floor(model.downloadedBytes / MEGABYTE);
-    const total = Math.ceil(model.totalBytes / MEGABYTE);
+    const { downloaded, total, figure } = downloadProgress(model, t);
     return {
       testId: "reranking-model-download",
       tone: "progress",
-      short: t("status.rerankDownloading", { downloaded, total }),
+      short: t("status.rerankDownloading"),
+      figure,
       full: t("rerank.settings.downloading", { downloaded, total }),
       retry: false,
     };

@@ -4,6 +4,7 @@ import type { Document } from "../../../core/api";
 import { type DocxResult, extractDocx } from "../../../core/documents/formats/docx";
 import { useT } from "../i18n";
 import type { ViewerTarget } from "../store";
+import { useCitedArea, useCitedAreaFailure } from "./citedArea";
 import {
   type DocxComment,
   fixSymbols,
@@ -220,6 +221,11 @@ function DocxPages({ loaded, target }: { loaded: Loaded; target: ViewerTarget })
     else range.setEnd(body, body.childNodes.length);
     return { range, heading };
   }, [docx, headingElements, target.pageFrom, target.pageTo]);
+
+  // A cited page drawn to save it (#133): the cited section.
+  const citedArea = useCallback(() => citedSection()?.range ?? null, [citedSection]);
+  useCitedArea(rendered === "yes", citedArea);
+  useCitedAreaFailure(rendered === "failed" ? failure : null);
 
   // Each open request highlights its quote: in the cited section first, then in the comments
   // anchored there, in their notes in the margin (#76), then anywhere.

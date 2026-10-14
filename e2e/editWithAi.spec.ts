@@ -10,6 +10,7 @@ import {
   askInAssistant,
   createDataFolder,
   dismissChatSetup,
+  focusEditor,
   launchApp,
   newMind,
   pointAndClick,
@@ -147,6 +148,8 @@ test("Shorten comes back as changes with their own bars: one accepted by mouse, 
   // Undo brings the rejected change back; Accept all takes it.
   await window.keyboard.press("ControlOrMeta+z");
   await expect(removed).toHaveText(["really "]);
+  await expect(bar.getByTestId("proposals-count")).toHaveText("1 change from the assistant");
+  await expect(changeBar).toContainText("Change 1 of 1");
   await pointAndClick(window, bar.getByTestId("proposals-accept-all"));
   await expect(bar).toHaveCount(0);
   await expect(note).toContainText("The tides here are strong and regular");
@@ -332,7 +335,7 @@ test("copying a paragraph with changes waiting gives the text as it stands, in p
 
   // What Copy would put on the clipboard for the whole paragraph, by type.
   const copyParagraph = async () => {
-    await editor.focus();
+    await focusEditor(window, editor);
     await window.keyboard.press("ControlOrMeta+a");
     return editor.evaluate((dom) => {
       const data = new DataTransfer();
@@ -361,7 +364,7 @@ test("copying a paragraph with changes waiting gives the text as it stands, in p
   await expect(note).toHaveText("The tides here are powerful and really regular.");
 
   // Shorten drops "really": waiting, the copy still has it; accepted, it doesn't.
-  await editor.focus();
+  await focusEditor(window, editor);
   await window.keyboard.press("ArrowRight");
   await selectWords(window, note, "The tides here are powerful and really regular.");
   await pointAndClick(window, window.getByTestId("selection-action-shorten"));

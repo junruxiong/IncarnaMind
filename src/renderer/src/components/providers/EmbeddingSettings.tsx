@@ -185,7 +185,7 @@ function LocalOnlySetting({ localOnly }: { localOnly: boolean }) {
     try {
       useAppStore.setState({ embedding: await core.setLocalOnly(enabled) });
     } catch (failure) {
-      useAppStore.setState({ actionError: errorMessage(failure) });
+      useAppStore.getState().reportError(failure);
     } finally {
       setBusy(false);
     }
@@ -296,7 +296,7 @@ function EmbeddingForm({ current, onDone }: { current: EmbeddingSettings; onDone
     try {
       setTest(await core.testEmbeddingConnection(input()));
     } catch (failure) {
-      setError(errorMessage(failure));
+      setError(errorMessage(failure, t));
     } finally {
       setBusy(null);
     }
@@ -311,7 +311,7 @@ function EmbeddingForm({ current, onDone }: { current: EmbeddingSettings; onDone
       key.clear();
       onDone();
     } catch (failure) {
-      setError(errorMessage(failure));
+      setError(errorMessage(failure, t));
     } finally {
       setBusy(null);
     }
@@ -326,7 +326,7 @@ function EmbeddingForm({ current, onDone }: { current: EmbeddingSettings; onDone
     try {
       setSecretStorage(await core.acceptPlainTextSecretStorage());
     } catch (failure) {
-      setError(errorMessage(failure));
+      setError(errorMessage(failure, t));
     }
   };
 
@@ -467,7 +467,7 @@ function EmbeddingForm({ current, onDone }: { current: EmbeddingSettings; onDone
             {t("embeddingProviders.test.ok", { dimensions: test.dimensions })}
           </p>
         ) : (
-          <TestResult result={test} onRetry={() => void runTest()} />
+          <TestResult result={test} />
         ))}
       {error && (
         <p role="alert" className={errorTextClass}>

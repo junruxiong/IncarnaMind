@@ -1,21 +1,22 @@
 import { useEffect, useRef } from "react";
 import { shortcutLabel } from "../commands/keymap";
+import { useDismissOnEscape } from "../escapeDismiss";
 import { useT } from "../i18n";
 import { useFade } from "../motion";
 import { useAppStore } from "../store";
 import { UNDO_SHOWN_MS, type UndoLineState, useUndo } from "../undo";
 
 const lineClass =
-  "mx-2 flex min-w-0 shrink-0 items-end gap-1 pt-0.5 pb-1 pl-2 text-[12px] leading-4 text-ink-secondary";
+  "mx-2 flex min-w-0 shrink-0 gap-1 pt-0.5 pb-1 pl-2 text-[12px] leading-4 text-ink-secondary";
 const actionClass =
   "h-6 shrink-0 rounded-md px-1 text-[12px] leading-5 font-semibold text-ink-secondary hover:bg-hover hover:text-ink";
 
 /**
  * The undo line (CONTEXT.md) at the foot of the sidebar, above Settings: what
  * the User just changed, then Undo, which does what ⌘Z does. One at a time; it
- * goes after a few seconds or with the next change, while ⌘Z still reaches
- * the change. An undo the core refuses shows here as one problem line with one
- * action. Read out politely.
+ * goes after a few seconds, with Esc or with the next change, while ⌘Z still
+ * reaches the change. An undo the core refuses shows here as one problem line
+ * with one action, which stays until dismissed. Read out politely.
  */
 export function UndoLine() {
   const line = useUndo((state) => state.line);
@@ -23,6 +24,16 @@ export function UndoLine() {
     <div role="status" aria-live="polite" data-testid="undo-line" className="flex flex-col">
       {/* A change shown where the User made it, under an Answer in the assistant, isn't shown twice. */}
       {line && !line.change?.shownAt && <Line key={line.id} line={line} />}
+    </div>
+  );
+}
+
+/** The line of a change made in a place of its own, shown there instead of the sidebar's foot (`Undoable.shownAt`). */
+export function UndoLineAt({ place }: { place: string }) {
+  const line = useUndo((state) => (state.line?.change?.shownAt === place ? state.line : null));
+  return (
+    <div aria-live="polite" data-testid="undo-line-here">
+      {line && <Line key={line.id} line={line} />}
     </div>
   );
 }
@@ -35,11 +46,13 @@ function Line({ line }: { line: UndoLineState }) {
   useFade(shown);
 
   useGoesBy(line.change ? line.id : null);
+  useDismissOnEscape(true, () => useUndo.getState().dismiss());
 
   if (line.problem) {
-    const { step, reason, fix } = line.problem;
+    const { step, wording, fix } = line.problem;
+    const reason = wording ? t(wording.key, wording.values) : line.problem.reason;
     return (
-      <div ref={shown} role="alert" data-testid="undo-problem" className={lineClass}>
+      <div ref={shown} role="alert" data-testid="undo-problem" className={`${lineClass} items-end`}>
         <span aria-hidden="true" className="mb-[9px] size-1.5 shrink-0 rounded-full bg-attention" />
         <span className="line-clamp-2 min-w-0 mb-1 break-words">
           {t(step === "undo" ? "undo.refused" : "redo.refused", { reason })}
@@ -61,13 +74,11 @@ function Line({ line }: { line: UndoLineState }) {
 
   const { message } = line.change;
   return (
-    <div ref={shown} className={lineClass}>
-      <span data-testid="undo-message" className="line-clamp-2 min-w-0 mb-1 break-words">
+    <div ref={shown} className={`${lineClass} items-center`}>
+      <span data-testid="undo-message" title={message} className="min-w-0 truncate">
         {message}
       </span>
-      <span aria-hidden="true" className="mb-1">
-        ·
-      </span>
+      <span aria-hidden="true">·</span>
       <button
         type="button"
         data-testid="undo-action"

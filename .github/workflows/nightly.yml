@@ -44,3 +44,27 @@ jobs:
           name: smoke-test-results-macos
           path: test-results/
           retention-days: 7
+
+  # The Word corpus (eval/word/README.md): the committed files and the extended set, fetched from
+  # their commit-pinned URLs, opened in LibreOffice headless.
+  word-corpus:
+    name: Word corpus, core and extended
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+      INCARNAMIND_WORD_REQUIRE_LIBREOFFICE: "1"
+      INCARNAMIND_WORD_SET: all
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Install LibreOffice Writer
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libreoffice-writer
+      - run: npm run eval:word:fetch
+      - run: npm run eval:word

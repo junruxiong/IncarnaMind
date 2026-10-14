@@ -23,10 +23,11 @@ const ICONS = {
 
 /**
  * The assistant's ⋯: where it sits (the User's choice is checked, even while
- * a narrow window shows a side dock at the bottom), then what acts on its
- * conversation. Each place is a command, as in ⌘K.
+ * a narrow window shows a side dock at the bottom), and, `withFold`, Fold
+ * (on Windows docked right, where the header has no room for it); then what
+ * acts on its conversation. Each is a command, as in ⌘K.
  */
-export function AssistantMenu() {
+export function AssistantMenu({ withFold = false }: { withFold?: boolean }) {
   const t = useT();
   const menu = usePopoverMenu();
   const chosen = useAppStore((state) => state.layout?.assistant.dock);
@@ -78,6 +79,17 @@ export function AssistantMenu() {
                 </button>
               );
             })}
+            {withFold && (
+              <button
+                type="button"
+                role="menuitem"
+                data-testid="assistant-menu-fold"
+                onClick={() => run("assistant.fold")}
+                className={`${menuItemClass} pl-8`}
+              >
+                {t("assistant.fold")}
+              </button>
+            )}
             <div className={menuRuleClass} />
             {makeSkill && (
               <button

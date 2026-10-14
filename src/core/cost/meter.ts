@@ -13,8 +13,13 @@
  *   provider that doesn't say, a stop, a failure halfway), at the prompt's
  *   estimate and the output that came, never above the reservation. One the
  *   provider never answered cost nothing, and its row is soft-deleted.
- *   Reservations left open by a crash settle at the reserved amount at the
- *   next start (`settleOpen`): nothing else is known of them.
+ *   Usage heard while a reply streams is kept on its open row. A reservation
+ *   a crash left open settles at that usage at the next start (`settleOpen`),
+ *   never at the reservation; with none heard, at nothing, marked
+ *   "interrupted" so the cost line can say its cost isn't known (#636).
+ * - A request that offers the provider's own web search (#128) also
+ *   reserves a search's fee and the input its pages may add, and settles at
+ *   the fee for each search it made.
  * - A ChatGPT plan request is recorded with its tokens and no price: the
  *   plan's own limit is its cap. An Ollama Cloud model's used-up allowance
  *   (HTTP 402) becomes a plan limit, the same stop as the ChatGPT plan's.
@@ -41,6 +46,8 @@ import type { ChatLanguageModel } from "../providers/models";
 import { tokenUsageOf } from "../providers/promptCache";
 import { CostCapError, PlanLimitError } from "../providers/providerErrors";
 import { retryAfterMs } from "../providers/retryAfter";
+import { searchFee } from "../providers/webSearch";
+import { currentTask } from "../runs/current";
 import type { TokenUsage } from "../runs/engine";
 import type { Database } from "../storage";
 import { costOf, inCurrency, promptTokensOf, reservationOf } from "./price";
@@ -90,6 +97,7 @@ interface RequestRow {
   requests: number;
   amount: number | null;
   tokens: number | null;
+  interrupted: number;
 }
 
 /** What streamed of a reply that reported no usage, to settle it by: about a token per three bytes. */
@@ -120,6 +128,30 @@ function ollamaLimit(model: MeteredModel, error: unknown): PlanLimitError | null
 const writesCache = (model: MeteredModel) => model.kind === "anthropic";
 
 /**
+ * The input a web search's pages may add to its request, reserved for each:
+ * the provider reads the pages it found as input before the model goes on.
+ */
+const SEARCH_INPUT_TOKENS = 30_000;
+
+/** A request's own web searches (#128), by the name the request gives each, with what one costs. */
+function searchesOffered(tools: CallOptions["tools"]): Map<string, Money> {
+  const offered = new Map<string, Money>();
+  for (const tool of tools ?? []) {
+    const fee = tool.type === "provider" ? searchFee(tool.id) : undefined;
+    if (fee) offered.set(tool.name, fee);
+  }
+  return offered;
+}
+
+/** The name of the search tool a reply's part shows the provider using, or null for any other part. */
+function searchMade(offered: ReadonlyMap<string, Money>, part: object): string | null {
+  if (!("type" in part) || part.type !== "tool-call") return null;
+  if (!("providerExecuted" in part) || part.providerExecuted !== true) return null;
+  const name = "toolName" in part ? part.toolName : null;
+  return typeof name === "string" && offered.has(name) ? name : null;
+}
+
+/**
  * The provider never answered: it refused the request with an HTTP error or a
  * plan's limit, or couldn't be reached. It bills nothing.
  */
@@ -146,7 +178,8 @@ export function createMeter(options: {
     db.all<RequestRow>(
       `SELECT provider_id, billing, currency, count(*) AS requests,
          sum(CASE status WHEN 'reserved' THEN reserved ELSE cost END) AS amount,
-         sum(coalesce(input_tokens, 0) + coalesce(output_tokens, 0)) AS tokens
+         sum(coalesce(input_tokens, 0) + coalesce(output_tokens, 0)) AS tokens,
+         sum(status = 'interrupted') AS interrupted
        FROM model_requests
        WHERE deleted_at IS NULL AND created_at >= ?
        GROUP BY provider_id, billing, currency
@@ -171,16 +204,27 @@ export function createMeter(options: {
     const { price } = model;
     const priced = model.billing === "per-token" && price !== undefined;
     const cacheWrites = writesCache(model);
+    const offered = searchesOffered(params.tools);
+    /** What searches with these tools cost, in the price's currency. */
+    const feesOf = (tools: Iterable<string>) => {
+      if (!priced || !price) return 0;
+      let sum = 0;
+      for (const name of tools) {
+        const fee = offered.get(name);
+        if (fee) sum += inCurrency(fee.amount, fee.currency, price.currency);
+      }
+      return sum;
+    };
     const reserved = priced
       ? reservationOf(
           {
-            promptTokens,
+            promptTokens: promptTokens + offered.size * SEARCH_INPUT_TOKENS,
             outputTokens: params.maxOutputTokens ?? model.maxOutput ?? DEFAULT_OUTPUT_TOKENS,
             cacheWrites,
           },
           price,
           at,
-        )
+        ) + feesOf(offered.keys())
       : null;
     const created = at.toISOString();
     db.transaction(() => {
@@ -193,8 +237,8 @@ export function createMeter(options: {
       }
       db.run(
         `INSERT INTO model_requests (id, provider_id, model_id, flow, billing, status, currency,
-           reserved, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, 'reserved', ?, ?, ?, ?)`,
+           reserved, run_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 'reserved', ?, ?, ?, ?, ?)`,
         [
           id,
           model.providerId,
@@ -203,6 +247,7 @@ export function createMeter(options: {
           model.billing,
           priced ? price.currency : null,
           reserved,
+          currentTask.getStore() ?? null,
           created,
           created,
         ],
@@ -228,6 +273,37 @@ export function createMeter(options: {
         ],
       );
     };
+    /** The web searches the reply made, by their tool's name. */
+    const searches: string[] = [];
+    /** What a usage report costs, with the searches made so far. */
+    const counted = (usage: Usage) =>
+      tokenUsageOf({
+        inputTokens: usage.inputTokens.total,
+        outputTokens: usage.outputTokens.total,
+        inputTokenDetails: {
+          cacheReadTokens: usage.inputTokens.cacheRead,
+          cacheWriteTokens: usage.inputTokens.cacheWrite,
+        },
+      });
+    /** Keeps usage heard before the reply ended on the open row, for a crash to settle by. */
+    const record = (usage: Usage) => {
+      if (!open || !reported(usage)) return;
+      const tokens = counted(usage);
+      db.run(
+        `UPDATE model_requests SET cost = ?, input_tokens = ?, cached_input_tokens = ?,
+           cache_write_tokens = ?, output_tokens = ?, updated_at = ?
+         WHERE id = ?`,
+        [
+          priced ? costOf(tokens, price, at, { cacheWrites }) + feesOf(searches) : null,
+          tokens.inputTokens ?? null,
+          tokens.cachedInputTokens ?? null,
+          tokens.cacheWriteTokens ?? null,
+          tokens.outputTokens ?? null,
+          now().toISOString(),
+          id,
+        ],
+      );
+    };
     /** Settles at what came back when nothing was reported: the prompt's estimate and the output's bytes. */
     const estimated = (outputBytes: number) => {
       const outputTokens = Math.ceil(outputBytes / 3);
@@ -235,24 +311,28 @@ export function createMeter(options: {
         priced && reserved !== null
           ? Math.min(
               reserved,
-              reservationOf({ promptTokens, outputTokens, cacheWrites: false }, price, at),
+              reservationOf({ promptTokens, outputTokens, cacheWrites: false }, price, at) +
+                feesOf(searches),
             )
           : null;
       close(cost, { inputTokens: promptTokens, outputTokens });
     };
 
     return {
+      /** Hears a part of the reply: a web search the provider made is billed. */
+      heard(part: object) {
+        const search = searchMade(offered, part);
+        if (search) searches.push(search);
+        const usage = "usage" in part ? (part.usage as Usage | undefined) : undefined;
+        if (usage && !("finishReason" in part)) record(usage);
+      },
       settle(usage: Usage, outputBytes: number) {
         if (!reported(usage)) return estimated(outputBytes);
-        const counted = tokenUsageOf({
-          inputTokens: usage.inputTokens.total,
-          outputTokens: usage.outputTokens.total,
-          inputTokenDetails: {
-            cacheReadTokens: usage.inputTokens.cacheRead,
-            cacheWriteTokens: usage.inputTokens.cacheWrite,
-          },
-        });
-        close(priced ? costOf(counted, price, at, { cacheWrites }) : null, counted);
+        const tokens = counted(usage);
+        close(
+          priced ? costOf(tokens, price, at, { cacheWrites }) + feesOf(searches) : null,
+          tokens,
+        );
       },
       /** It ended without a report: a failure after it began, a stop, or a provider that reports none. */
       end: estimated,
@@ -290,6 +370,7 @@ export function createMeter(options: {
             const request = begin(metered, params);
             try {
               const result = await doGenerate();
+              for (const part of result.content) request.heard(part);
               request.settle(result.usage, contentBytes(result.content));
               return result;
             } catch (error) {
@@ -320,6 +401,7 @@ export function createMeter(options: {
                     return;
                   }
                   bytes += streamedBytes(value);
+                  request.heard(value);
                   if (value.type === "finish") request.settle(value.usage, bytes);
                   const limit = value.type === "error" ? ollamaLimit(metered, value.error) : null;
                   controller.enqueue(limit ? { type: "error", error: limit } : value);
@@ -339,14 +421,22 @@ export function createMeter(options: {
       });
     },
 
-    /** Settles the reservations a crash left open, at their reserved amount. Returns how many. */
+    /**
+     * Settles the reservations a crash left open: at the usage heard before it, else at
+     * nothing, marked interrupted (what the provider billed isn't known, and no lookup is
+     * made). Never at the reservation. Returns how many.
+     */
     settleOpen(): number {
       const open = db.get<{ count: number }>(
         "SELECT count(*) AS count FROM model_requests WHERE status = 'reserved' AND deleted_at IS NULL",
       );
       if (!open?.count) return 0;
       db.run(
-        `UPDATE model_requests SET status = 'settled', cost = reserved, updated_at = ?
+        `UPDATE model_requests
+         SET status = CASE WHEN cost IS NOT NULL OR input_tokens IS NOT NULL OR output_tokens IS NOT NULL
+                           THEN 'settled' ELSE 'interrupted' END,
+             cost = CASE WHEN cost IS NULL AND currency IS NOT NULL THEN 0 ELSE cost END,
+             updated_at = ?
          WHERE status = 'reserved' AND deleted_at IS NULL`,
         [now().toISOString()],
       );
@@ -366,8 +456,10 @@ export function createMeter(options: {
           requests: 0,
           spent: [],
           unpricedTokens: 0,
+          interrupted: 0,
         };
         provider.requests += row.requests;
+        provider.interrupted += row.interrupted;
         if (row.billing === "per-token" && row.currency === null) {
           provider.unpricedTokens += row.tokens ?? 0;
         } else if (row.billing === "per-token" && row.currency && row.amount !== null) {
@@ -387,6 +479,29 @@ export function createMeter(options: {
           : null,
         providers: [...byProvider.values()],
       };
+    },
+
+    /**
+     * What a Task's model requests billed per token have cost, settled and
+     * still reserved, in the currency of most of it (the other at the fixed
+     * rate); null when none was priced.
+     */
+    taskCost(taskId: string): Money | null {
+      const rows = db.all<{ currency: Currency; amount: number }>(
+        `SELECT currency, sum(CASE status WHEN 'reserved' THEN reserved ELSE cost END) AS amount
+         FROM model_requests
+         WHERE run_id = ? AND deleted_at IS NULL AND billing = 'per-token'
+           AND currency IS NOT NULL
+         GROUP BY currency ORDER BY amount DESC`,
+        [taskId],
+      );
+      const [main] = rows;
+      if (!main) return null;
+      const amount = rows.reduce(
+        (sum, row) => sum + inCurrency(row.amount ?? 0, row.currency, main.currency),
+        0,
+      );
+      return { currency: main.currency, amount };
     },
 
     /**

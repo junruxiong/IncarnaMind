@@ -2,7 +2,7 @@
 
 `npm run eval:hard` checks how retrieval holds up where the gating set (`eval/README.md`) is easy: Questions worded unlike their Documents, numbers read from tables, answers spread over pages or Documents, Questions the library can't answer, Questions in the other language, and two versions of one Document. It asks them of a library at scale, across domains, in every retrieval mode, with embeddings on, so the default keyword search reranked by the built-in model can be compared with hybrid search reranked. It is reported, and never gates.
 
-Why: embeddings are off by default (ADR-0009, 2026-10-10), and search is keyword search (FTS5's BM25), the built-in cross-encoder over keyword search's top 60, and a translated second query for Questions in another language. That was decided on small, easy sets: on the gating set, keyword, vector and hybrid search tie (32, 31 and 32 of 40), and the every-format set is all hits. This tier is where vector search should earn its place if it ever does.
+Why: embeddings are off by default (ADR-0009, 2026-10-10), and search is keyword search (FTS5's BM25), the built-in cross-encoder over keyword search's top 20 (its top 60 until 2026-10-12), and a translated second query for Questions in another language. That was decided on small, easy sets: on the gating set, keyword, vector and hybrid search tie (32, 31 and 32 of 40), and the every-format set is all hits. This tier is where vector search should earn its place if it ever does.
 
 ## Running it
 
@@ -13,7 +13,7 @@ npm run eval:hard
 1. **Fetch.** The library's files are fetched into the evaluation's cache, `~/.cache/incarnamind-eval/hard/` (or `$INCARNAMIND_EVAL_CACHE/hard/`), and each is checked against the SHA-256 in `library.json`. A later run fetches nothing that's already there and unchanged. A file that has changed at its source, or can't be fetched, is left out and listed in the report, with the Questions that need it; the run goes on.
 2. **Index, in two passes** (`lib/indexing.ts`). A new temporary data folder, never the User's, gets every Document with `addDocuments`, processed by the core with embeddings off, as by default: each Document is ready once its text is extracted, its Passages built and its keyword index written, and the time until every Document is ready is what a User with embeddings off waits for. Then embeddings are turned on with the built-in model, as a User can in Settings, and the run waits until every Passage has a vector, timed apart, so the dense modes can be compared. It stops with a message if no Passage was embedded.
 3. **Check.** Each Question is checked against the text the app stored (`textProblems` in `lib/questions.ts`): each quote on its expected Units, on no other Unit of its Document, inside a Passage that covers them, and, for a near-duplicate, in no other version. A Question that fails is left out and listed.
-4. **Search.** Each Question is searched with keyword, vector and hybrid search, then reranked by the built-in reranking model over keyword search's top 60 (what the search Tool does by default, with the app's own parameter, and the gating set's gate), over keyword search's top 20 (the default before), and over hybrid search's candidates (what it does with embeddings on: the mode to compare the default with). A cross-lingual Question is searched again with its hand-written translation.
+4. **Search.** Each Question is searched with keyword, vector and hybrid search, then reranked by the built-in reranking model over keyword search's top 20 (what the search Tool does by default, with the app's own parameter), over keyword search's top 60 (the default before 2026-10-12, and the gating set's gate until then), and over hybrid search's candidates (what it does with embeddings on: the mode to compare the default with). A cross-lingual Question is searched again with its hand-written translation.
 5. **Time keyword search.** Each Question's query (and translation) runs again on the run's data folder with the app's own keyword SQL, keeping the top 60 the search Tool asks for, ordered by `bm25(passages_fts)` as `keywordSearch` orders it, and ordered by FTS5's `rank` column (bm25() with the same weights), each timed once after a warm-up pass (`lib/keywordTiming.ts`). FTS5 has no top-k pruning, so this is the cost that grows with the library. Measurement only, at this library's size (about 48,000 Passages; the tier doesn't reach 100,000).
 6. **Ask** (with a chat model). Embeddings are turned off again first, so Answers search as Users' do by default, as in `npm run eval`. Each Question is asked once, in a Mind of its own, and the Citations are scored per difficulty.
 7. **Report** into `eval/results/<start time>-hard/`: `report.md`, `report.json` and, with a chat model, `reviewer-sheet.csv` and `answers.md` (each Answer's full text, under its Question).
@@ -34,7 +34,7 @@ npm run eval:hard
 - **Searching and reranking:** about 10 minutes.
 - **Memory:** the run reports its peak; expect a few GB (the embedding and reranking models are about 1 GB each while loaded; the vectors about 75 MB).
 - **Without a chat model:** about an hour all told, with nothing sent anywhere once the models are cached.
-- **With a chat model:** 205 Answers more, each with up to 5 searches: two to three hours. At `claude-sonnet-5-5`'s $2 and $10 per million input and output tokens, with 25,000 to 50,000 input and about 1,000 output tokens an Answer, that is about $12 to $25.
+- **With a chat model:** 225 Answers more, each with up to 5 searches: two to three hours. At `claude-sonnet-5-5`'s $2 and $10 per million input and output tokens, with 25,000 to 50,000 input and about 1,000 output tokens an Answer, that is about $12 to $25.
 
 `INCARNAMIND_EVAL_KEEP_DATA=1` keeps the data folder; `INCARNAMIND_EVAL_CACHE` moves the cache.
 
@@ -92,8 +92,10 @@ npm run eval:hard
 | `unanswerable` | The library doesn't say | None: an Answer should cite nothing |
 | `cross-lingual` | Asked in the other language from its Document's, with `translatedQuery` | One Passage, in a Document with no translation in the Question's language |
 | `near-duplicate` | Two versions of a Document differ, and the Question names which | One Passage, whose quote is in no other version |
+| `false-premise` | The Question takes for granted what the Documents don't say: an approval, a figure, a cause (`premise` says what) | The Passage that says what the Documents do say |
+| `disagreeing` | Two Documents disagree, one newer and one older, and the Question doesn't say which it means | Two Passages, the newer first; `newer` and `older` give what each says, in the forms an Answer may write it |
 
-205 Questions:
+225 Questions:
 
 | Difficulty | English | Chinese |
 |---|---|---|
@@ -105,14 +107,16 @@ npm run eval:hard
 | unanswerable | 19 | 6 |
 | cross-lingual | 8 (about Chinese Documents) | 18 (about English Documents) |
 | near-duplicate | 16 | 8 |
+| false-premise | 5 | 5 |
+| disagreeing | 5 | 5 |
 
-Per domain: contracts 33, filings 46, papers 32, reports 57, manuals 16, medical 21. 17 of them ask about Word, Excel, PowerPoint or CSV files; 64 come from benchmarks (CUAD 25, FinanceBench 24, Qasper 15).
+Per domain: contracts 34, filings 50, papers 32, reports 65, manuals 19, medical 25. 17 of them ask about Word, Excel, PowerPoint or CSV files; 64 come from benchmarks (CUAD 25, FinanceBench 24, Qasper 15).
 
 **Sources.** CUAD's clause annotations (contracts), Qasper's evidence (papers) and FinanceBench's evidence pages (filings), each mapped to the pages the app stores and reworded where the original assumed the Document was in front of the reader (`benchmark` names the original). The rest were written for this library, in English and Chinese, from the Documents' text.
 
 **Checks.**
 
-- `tests/eval/hardQuestions.test.ts` checks the rules above, at least 15 Questions per difficulty with both languages in each, and every domain.
+- `tests/eval/hardQuestions.test.ts` checks the rules above, at least 15 Questions per difficulty (10 for `false-premise` and `disagreeing`) with both languages in each, and every domain.
 - Every quote was checked against the text the app's own processing extracts (`processFile`, pdf.js), one Document at a time: on its expected Units, on no other, inside a covering Passage; near-duplicates against their other versions. The run checks again on what it stored.
 - Unanswerable Questions were checked by searching the whole library's extracted text for their subject.
 
@@ -120,9 +124,13 @@ Per domain: contracts 33, filings 46, papers 32, reports 57, manuals 16, medical
 
 - **Hit:** every Passage a Question needs is among the top 5 of a search, each by the gating set's rule (the expected Document, covering the expected Units, holding the quote). Multi-page and cross-document Questions also report how many were found in part.
 - **Cross-lingual:** a Passage found by either the Question's own search or its translation's counts, as an Answer is told to search again in the Documents' language; the Question's own query alone is reported too.
-- **Modes:** keyword; keyword top 20 + rerank; keyword top 60 + rerank (the search Tool's default, with embeddings off); hybrid; hybrid + rerank (the search Tool with embeddings on, the one to compare the default with); vector.
+- **Modes:** keyword; keyword top 20 + rerank (the search Tool's default, with embeddings off); keyword top 60 + rerank (the default until 2026-10-12); hybrid; hybrid + rerank (the search Tool with embeddings on, the one to compare the default with); vector.
 - **Reported:** per difficulty, per domain, per language, and per domain × difficulty in each mode; ranks per Question; indexing time in two passes (every Document ready with embeddings off; then embedding every Passage, and the embedding model's own time), Passages and peak memory after each; keyword search's time per query (median, 95th percentile) beside the reranker's.
 - **Citations,** with a chat model, per difficulty: the gating set's figures, how many Answers cite a Document the Question needs (for a near-duplicate, the right version, and how many cite another), and, for unanswerable Questions, how many are answered without a Citation and how many decline (the Answer says the Documents don't answer the Question), with or without Citations, per language. A phrase rule in English and Chinese judges the decline (`eval/lib/declines.ts`: the app's own wording, "isn't in your Documents", "the Documents don't say", "the closest they come", 文档中没有提到, 文档未说明, 没有找到相关, and so on). A nearby fact cited without saying so is not a decline. The reviewer sheet lists the Answers the rule missed for a person to mark.
+- **The Answer rules** (#548), with a chat model, reported per model and not gating:
+  - **Premise flagged first:** of the Answers to `false-premise` Questions, those whose first paragraph says the premise doesn't hold: the decline rule, or a negation or a word naming the premise ("didn't", "hasn't", "in fact", "assumes"; 没有, 并非, 不是…而是, 实际上, 不支持). A phrase rule on the opening, not a judgement of the whole Answer.
+  - **Newer source leads:** of the Answers to `disagreeing` Questions, those that cite the newer Document and give what it says before what the older one says (or only the newer's), each found in the forms `newer` and `older` list, standing on its own ("4.8" isn't found in "14.8"), with grouped digits read alike. How many name the older one too is reported beside it.
+  - `report.md` lists each of these Answers with what the rules found and how it opens; `answers.md` has the whole text.
 
 ## Dumps, and scoring other orders offline
 
@@ -135,9 +143,9 @@ npm run eval:score -- eval/results/<start time>-dumps/hard.json --blend 0.5
 
 It fetches the library into the cache as above (a later run fetches nothing), adds the Documents with embeddings off, checks the Questions against the stored text as the hard tier does, and for each query of each of the 180 Questions with something to find (the Question, and its translation for a cross-lingual one) keeps keyword search's best 150 Passages, the built-in model's score for the first 60, each candidate's `rerankText`, a hit flag for each Passage the answer needs, and the Passages the search Tool hands the model. No embedding model runs. `INCARNAMIND_EVAL_KEEP_DATA=1` keeps the data folder. The scorer's `--by` takes `difficulty` (the default), `domain` or `language`.
 
-The run scores the same Questions as `npm run eval:hard` scores keyword search and keyword top 60 + rerank, and fails unless the dump's top 5 are the same numbers. The scorer reproduces them from the file; the **search Tool** row is new: how many Questions have every Passage they need among the Passages the Tool hands the model, which is what an Answer sees, where the top 5 is the order of the search before the Tool groups it into windows.
+The run scores the same Questions as `npm run eval:hard` scores keyword search and keyword top 20 + rerank, and fails unless the dump's top 5 are the same numbers. The scorer reproduces them from the file; the **search Tool** row is new: how many Questions have every Passage they need among the Passages the Tool hands the model, which is what an Answer sees, where the top 5 is the order of the search before the Tool groups it into windows.
 
-**Measured,** on an Apple M2 Max (12 cores) with other work running on it, library already cached: indexing 400 Documents (47,897 Passages) with embeddings off took 138 s, and writing the dump 17 minutes, which is the built-in model scoring 60 candidates for each of the 206 queries; the check against the run's own scoring took 13 minutes more. `hard.json` is 62 MB, and the scorer reads it and prints the table in under a second. The figures it gave, top 5, which the run's own scoring matched:
+**Measured** on 2026-10-10, when the Tool reranked keyword search's top 60 and handed 8 Passages, on an Apple M2 Max (12 cores) with other work running on it, library already cached: indexing 400 Documents (47,897 Passages) with embeddings off took 138 s, and writing the dump 17 minutes, which is the built-in model scoring 60 candidates for each of the 206 queries; the check against the run's own scoring took 13 minutes more. `hard.json` is 62 MB, and the scorer reads it and prints the table in under a second. The figures it gave, top 5, which the run's own scoring matched:
 
 | | keyword | keyword + rerank | search Tool |
 |---|---|---|---|
@@ -150,8 +158,51 @@ The run scores the same Questions as `npm run eval:hard` scores keyword search a
 | Near-duplicate | 19/24 | 20/24 | 18/24 |
 | **All** | **98/180** | **124/180** | **107/180** |
 
-Keyword + rerank at the top 8 and 10 is 135 and 143 of 180. The search Tool's figure is lower than the reranked top 5 because it hands the model whole windows of three Passages, at most 8 Passages from at most 4 Documents, so a Question that needs many Passages (multi-page) can lose some to the limits.
+Keyword + rerank at the top 8 and 10 is 135 and 143 of 180. The search Tool's figure is lower than the reranked top 5 because it hands the model whole windows of three Passages, at most 12 Passages from at most 4 Documents for a one-search Answer (8 until 2026-10-12, and still 8 in the Tool loop), so a Question that needs many Passages (multi-page) can lose some to the limits.
+
 ## Results
+
+### 2026-10-13: a note on Documents of different dates (#660)
+
+The 10 disagreeing Questions, twice each (20 Answers per cell), as above: before is #548's rules alone, after adds the note the search Tool appends when the Passages it hands come from Documents of different dates. "Handed both": Answers whose searches handed the model the newer and the older Document (or a translation of either).
+
+| | Haiku 5.5 before | Haiku 5.5 after | GPT-6 Luna before | GPT-6 Luna after |
+|---|---|---|---|---|
+| Newer source leads, cited | 18/20 | 18/20 | 15/20 | 16/20 |
+| Names the older one too | 16/20 | 17/20 | 6/20 | **11/20** |
+| Handed both, then led and named the older | 16 of 18 | 17 of 18 | 4 of 15 | **9 of 17** |
+| Quotes found | 45 of 45 | 48 of 48 | 23 of 23 | 35 of 36 |
+
+- Luna now names the older Document in about half its Answers that were handed both. The rest still give only the newer figure.
+- Luna's quote not found cites page 9 of the December 2024 China Economic Update for a sentence on page 8.
+- Worse with that first note: on the NIST question Luna answered six Functions both times before and five both times after, naming CSF 1.1's five as the older figure. CSF 2.0's text speaks of GOVERN and "the other five Functions". Haiku answered six both ways.
+
+The note then gained a line: "Take each Document's figure only from a sentence that states it for that Document, never from a passing mention." Asked again, the NIST Question 4 times and the 10 disagreeing Questions once each:
+
+| | Haiku 5.5 | GPT-6 Luna |
+|---|---|---|
+| NIST Question right (six Functions, CSF 2.0 first) | 4/4 | 4/4 |
+| Newer source leads, cited (the 10) | 9/10 | 10/10 |
+| Names the older one too (the 10) | 9/10 | 7/10 |
+| Handed both, then led and named the older (the 10) | 8 of 9 | 7 of 8 |
+| Quotes found (the 10) | 25 of 25 | 18 of 18 |
+
+### 2026-10-13: the Answer rules (#548), before and after
+
+The Citation part only, with the library added as by default (embeddings off) and no retrieval modes, at `main` 3125b9cd without and with the rules and the Passages' dates. "Before" asked 60 Questions: 5 of each earlier difficulty, spread evenly through each, and the 20 new ones, asked a second time. "After" asked all 25 unanswerable Questions once and the 20 new ones twice, so each cell of the new difficulties counts 20 Answers. Scored with the rules in `lib/answerRules.ts` as committed, from each run's `report.json`. An Apple M2 Max with other work running.
+
+| | Haiku 5.5 before | Haiku 5.5 after | GPT-6 Luna before | GPT-6 Luna after |
+|---|---|---|---|---|
+| Premise flagged first | 19/20 | 20/20 | 14/20 | 17/20 |
+| Newer source leads, cited | 17/20 | 18/20 | 13/20 | 16/20 |
+| Names the older one too | 15/20 | 17/20 | 7/20 | 6/20 |
+| Unanswerable: adds a figure from outside the Documents | 3/5, labelled | 0/25 | 3/5, unlabelled | 0/25 |
+
+- Claude Haiku 5.5 already flagged the premises and led with the newer source. GPT-6 Luna gains on both.
+- Before, both models answered an unanswerable Question from their own knowledge after saying the Documents didn't cover it (Amazon's 2021 net income, a chikungunya vaccine's dose, Moutai's 2024 revenue); Luna didn't say the figure wasn't from the Documents. Now an Answer says so and stops, adding at most what the Passages say that comes closest, cited.
+- Luna leaves the older Document out. Its searches handed it both Documents in 13 of the 20 Answers, and it led with the newer one and named the older in 2 of those. Before, part of its 7 was Answers that gave only the older figure (five Functions for the NIST CSF Core, 4.8% for China in 2024).
+- The Lockheed Martin Question fails for both models before and after: their searches don't reach the 10-Ks' headcount Passages.
+- A Passage's date is often its file's creation date, which can differ from the date printed on the page: Haiku called the FDA draft "dated 3 January 2025" (the PDF's metadata) where its cover says it was issued on 7 January.
 
 ### 2026-10-10: the first run
 

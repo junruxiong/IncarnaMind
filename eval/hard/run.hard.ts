@@ -26,7 +26,12 @@ import { readConfig } from "../lib/config";
 import { createWorkerEmbedder } from "../lib/embedder";
 import { openLibrary } from "../lib/library";
 import { createLog } from "../lib/log";
-import { createWorkerCrossEncoder, openReranker, type RerankerInfo } from "../lib/rerank";
+import {
+  createWorkerCrossEncoder,
+  openReranker,
+  prepareGpuFile,
+  type RerankerInfo,
+} from "../lib/rerank";
 import { KEYWORD_RERANK_DEPTH, rerankedLabel, rerankMode, TOP_K } from "../lib/retrieval";
 import { answerOptionsOf } from "../lib/timing";
 import { type HardCitations, runHardCitations } from "./lib/citations";
@@ -83,6 +88,7 @@ test("the hard tier", async () => {
 
   try {
     const fetched = await fetchLibrary(manifest, { root, cacheDir: config.cacheDir, log });
+    await prepareGpuFile(config, log);
     const available = fetched.documents.filter((document) => document.status === "ready");
     log(
       `${available.length} of ${manifest.documents.length} Documents in the cache (${(fetched.fetchedBytes / 1e6).toFixed(0)} MB fetched in ${fetched.seconds.toFixed(0)} s)`,
@@ -95,7 +101,7 @@ test("the hard tier", async () => {
       name: "hard",
       embedder: timing.embedder,
       modelCache: join(config.cacheDir, "models"),
-      reranker: createWorkerCrossEncoder(),
+      reranker: createWorkerCrossEncoder(config.rerankOnCpu),
       documents: available.map((document) => ({
         key: document.key,
         path: document.path as string,
@@ -147,7 +153,13 @@ test("the hard tier", async () => {
       for (const search of HARD_RERANKED_SEARCHES) {
         const mode = rerankMode(BUILT_IN_RERANKING_MODEL, search);
         log(`Reranking with ${rerankedLabel(search, BUILT_IN_RERANKING_MODEL.name)}`);
-        const reranker = await openReranker(BUILT_IN_RERANKING_MODEL, config.cacheDir, log, mode);
+        const reranker = await openReranker(
+          BUILT_IN_RERANKING_MODEL,
+          config.cacheDir,
+          log,
+          mode,
+          config.rerankOnCpu,
+        );
         try {
           await rerankAll(library.core, scored, ids, reranker, results);
           rerankers.push(reranker.info());

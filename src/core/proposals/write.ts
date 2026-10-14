@@ -18,12 +18,14 @@
  * - `takeBackForRegenerate` rejects a Proposal and says where the text it
  *   covered is now, to make it again from that text.
  *
- * Nothing in the Mind is changed but by marks, attributes and the new words:
- * the User's text stays where and what it was until they accept. Each
- * Proposal records the text it changes (`ProposalRef.target`), so that it
- * goes out of date once that text changes.
+ * Nothing in the Mind is changed but by marks, attributes and the new words,
+ * which are AI text (`GENERATED_MARK`) and stay so once accepted: the User's
+ * text stays where and what it was until they accept. Each Proposal records
+ * the text it changes (`ProposalRef.target`), so that it goes out of date
+ * once that text changes.
  */
 import * as Y from "yjs";
+import { INLINE_CODE_MARK } from "../../shared/aiText";
 import {
   INLINE_NODES,
   NODE_CHARACTER,
@@ -38,6 +40,7 @@ import {
   BLOCK_ID_ATTRIBUTE,
   CITATION_NODE,
   FOOTNOTE_NODE,
+  GENERATED_MARK,
   PROPOSAL_ATTRIBUTE,
   PROPOSAL_DELETE_MARK,
   PROPOSAL_INSERT_MARK,
@@ -143,7 +146,7 @@ export type ReadResult =
 const stringOf = (value: unknown) => (typeof value === "string" ? value : "");
 
 /** The paragraphs and headings of the Mind, in order, at any depth, with whether an Answer being written holds them. */
-function textBlocks(blocks: Y.XmlFragment): { element: Y.XmlElement; busy: boolean }[] {
+export function textBlocks(blocks: Y.XmlFragment): { element: Y.XmlElement; busy: boolean }[] {
   const found: { element: Y.XmlElement; busy: boolean }[] = [];
   const visit = (parent: Y.XmlFragment | Y.XmlElement, busy: boolean) => {
     for (const child of parent.toArray()) {
@@ -171,7 +174,7 @@ function inProposal(element: Y.XmlElement): boolean {
 }
 
 /** An element's children with where each starts in its text, an inline node counting as one. */
-function layout(element: Y.XmlElement) {
+export function layout(element: Y.XmlElement) {
   let at = 0;
   return element.toArray().flatMap((node) => {
     if (!(node instanceof Y.XmlText || node instanceof Y.XmlElement)) return [];
@@ -501,6 +504,10 @@ export interface Written {
 const refOf = ({ id, request, target }: ProposalRef): ProposalRef =>
   target === undefined ? { id, request } : { id, request, target };
 
+/** The marks of words a Proposal adds: AI text, unless they are inline code, which holds no other mark. */
+const asAiText = (marks: Attributes): Attributes =>
+  INLINE_CODE_MARK in marks ? marks : { ...marks, [GENERATED_MARK]: {} };
+
 /** Text a Proposal adds, and its marks, with no other Proposal's. */
 function withoutProposals(attributes: Attributes | undefined): Attributes {
   const kept: Attributes = {};
@@ -636,7 +643,10 @@ function insertTokens(
   let wordMarks = marks;
   const flush = () => {
     if (words === "") return;
-    insertText(element, position, words, { ...wordMarks, [PROPOSAL_INSERT_MARK]: inserted });
+    insertText(element, position, words, {
+      ...asAiText(wordMarks),
+      [PROPOSAL_INSERT_MARK]: inserted,
+    });
     position += words.length;
     words = "";
   };
@@ -680,7 +690,7 @@ function paragraphOf(
       children.push(elementOf(token.node, newId));
       continue;
     }
-    const marks = token.marks ?? {};
+    const marks = asAiText(token.marks ?? {});
     const last = runs.at(-1);
     if (last && sameMarks(last.attributes ?? {}, marks)) last.insert += token.text ?? "";
     else runs.push({ insert: token.text ?? "", attributes: marks });

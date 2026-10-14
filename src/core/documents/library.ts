@@ -13,9 +13,11 @@
  *   new one is a new version, processed again;
  * - a new file is hashed: if a Document with that hash lost its file (missing
  *   since, gone in this pass, or a copy left in the data folder by the old
- *   layout), it is that Document, moved, keeping its id, Tags and Citations;
- *   otherwise it is a new Document. New files are indexed newest first, and
- *   those modified at the same moment in the order of their paths;
+ *   layout), it is that Document, moved, keeping its id, Tags and Citations.
+ *   Failing that, it may be one whose file went, moved and edited
+ *   (`editedDocument`): a new version of it. Otherwise it is a new Document.
+ *   New files are indexed newest first, and those modified at the same moment
+ *   in the order of their paths;
  * - a known file that is gone makes its Document missing, or unavailable if
  *   what it was in can't be reached (an unplugged drive).
  *
@@ -36,7 +38,7 @@
 import { randomUUID } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { open, realpath, rm } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join, sep } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, sep } from "node:path";
 import type { MessageKey, MessageParams } from "../../shared/i18n";
 import type {
   DocumentKind,
@@ -45,13 +47,16 @@ import type {
   LinkedFolderPreview,
   LinkedFolderStatus,
   SkippedFile,
+  UnsupportedFile,
 } from "../api";
 import { InvalidInputError, NotFoundError } from "../errors";
 import { type Folders, folderIdFor } from "../folders";
 import type { Database } from "../storage";
 import {
   createIgnore,
+  type FileIdentity,
   type FoundFile,
+  fileIdentity,
   hashFile,
   iCloudStubTarget,
   isDataless,
@@ -62,6 +67,7 @@ import {
   nameFromPath,
   parentOf,
   relativePath,
+  type StatIdentity,
   statFile,
   walk,
 } from "./files";
@@ -84,10 +90,45 @@ export interface FileRow {
   status: string;
   /** Unless "failed": the latest version read failed, and this is the last good one. */
   failure_reason: string | null;
+  file_device: string | null;
+  file_number: string | null;
+  file_created_ns: string | null;
 }
 
 const FILE_COLUMNS = `id, path, name, kind, content_hash, size, file_mtime_ms, file_status,
-  linked_folder_id, folder_id, source_kind, relative_path, status, failure_reason`;
+  linked_folder_id, folder_id, source_kind, relative_path, status, failure_reason,
+  file_device, file_number, file_created_ns`;
+
+/** A file's identity on its disk (`FileIdentity`), set together with `identityValues`. */
+const IDENTITY_COLUMNS = "file_device = ?, file_number = ?, file_created_ns = ?";
+const identityValues = (identity: FileIdentity | null) =>
+  [identity?.device ?? null, identity?.number ?? null, identity?.createdNs ?? null] as const;
+
+/** Set where a Document's path comes to name a file that may be another, until it is seen. */
+export const FORGET_FILE_IDENTITY =
+  "file_device = NULL, file_number = NULL, file_created_ns = NULL";
+
+/**
+ * A file from another disk is only taken for a Document moved and edited
+ * (`editedDocument`) if its size is this close to the Document's: within this
+ * share of the larger, or this many bytes for small files.
+ */
+const EDITED_SIZE_SHARE = 0.1;
+const EDITED_SIZE_BYTES = 16 * 1024;
+const closeInSize = (a: number, b: number) =>
+  Math.abs(a - b) <= Math.max(EDITED_SIZE_BYTES, EDITED_SIZE_SHARE * Math.max(a, b));
+
+/** The file names that more than one of these files has. */
+function repeatedNames(paths: Iterable<string>): Set<string> {
+  const seen = new Set<string>();
+  const repeated = new Set<string>();
+  for (const path of paths) {
+    const name = basename(path);
+    if (seen.has(name)) repeated.add(name);
+    seen.add(name);
+  }
+  return repeated;
+}
 
 /**
  * Where a Document's file belongs (`documents.source_kind`): in a Linked
@@ -212,6 +253,7 @@ export interface LibraryOptions {
   folders: Folders;
   hooks: LibraryHooks;
   watch: WatchFolder;
+  stat: StatIdentity;
   retryMs: number;
   detectDataless: boolean;
 }
@@ -300,7 +342,7 @@ export function createLibrary(options: LibraryOptions) {
       if (row.source_kind === "data-folder" && row.relative_path !== null) {
         const relative = row.relative_path;
         if (!dataFolders.some((folder) => pathIn(folder, relative) === row.path)) {
-          db.run("UPDATE documents SET path = ? WHERE id = ?", [
+          db.run(`UPDATE documents SET path = ?, ${FORGET_FILE_IDENTITY} WHERE id = ?`, [
             pathIn(realDataFolder, relative),
             row.id,
           ]);
@@ -325,12 +367,17 @@ export function createLibrary(options: LibraryOptions) {
   const statuses = new Map<string, Exclude<LinkedFolderStatus, "paused">>();
   /** Each Linked folder's cloud placeholders: path to size. */
   const onlineOnly = new Map<string, Map<string, number>>();
+  /** Each Linked folder's files in a format not read (#740): their absolute paths. */
+  const unsupported = new Map<string, Set<string>>();
   /** Linked folders whose placeholders the User asked to download: read in their next whole pass. */
   const downloading = new Set<string>();
   /** Files found but not yet added in the pass under way, per Linked folder: counted in its progress. */
   const pendingNew = new Map<string, number>();
   /** New files that couldn't be read: tried again later. */
   const unreadable = new Set<string>();
+  /** Documents found missing in the pass under way, and in the one before: see `editedDocument`. */
+  let missingNow = new Set<string>();
+  let missingBefore = new Set<string>();
   let closed = false;
 
   // --- Linked folder rows -------------------------------------------------
@@ -385,6 +432,7 @@ export function createLibrary(options: LibraryOptions) {
         indexed: counts?.indexed ?? 0,
       },
       onlineOnly: { files: placeholders.size, bytes, downloading: downloading.has(row.id) },
+      unsupportedFiles: unsupported.get(row.id)?.size ?? 0,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
@@ -577,6 +625,10 @@ export function createLibrary(options: LibraryOptions) {
       id,
     ]);
 
+  /** Which file is at a path on this computer's disks now, or null if it can't be told. */
+  const identify = (path: string): Promise<FileIdentity | null> =>
+    options.stat(path).then(fileIdentity, () => null);
+
   /** The live Documents at `path` or inside it. */
   const documentsUnder = (path: string) => {
     const [from, to] = insideRange(path);
@@ -682,6 +734,7 @@ export function createLibrary(options: LibraryOptions) {
         changes.announced.add(row.id);
       }
       if (placeChanged) noteMoved(row, place, changes);
+      if (row.file_device === null) await noteIdentity(row);
       if (row.status === "queued") hooks.process(row.id);
       return true;
     }
@@ -693,6 +746,7 @@ export function createLibrary(options: LibraryOptions) {
       setFileStatus(row, "unavailable", changes);
       return true;
     }
+    const identity = await identify(row.path);
     const current = documentById(row.id);
     if (!current || current.path !== row.path) return true; // removed or moved meanwhile
     const newVersion = hashed.contentHash !== current.content_hash;
@@ -700,9 +754,16 @@ export function createLibrary(options: LibraryOptions) {
     const recovered = !newVersion && current.status !== "failed" && current.failure_reason !== null;
     db.run(
       `UPDATE documents SET size = ?, file_mtime_ms = ?, file_status = 'available',
-         ${PLACE_COLUMNS}, updated_at = ?
+         ${PLACE_COLUMNS}, ${IDENTITY_COLUMNS}, updated_at = ?
        WHERE id = ?`,
-      [hashed.size, file.mtimeMs, ...placeValues(place), now(), row.id],
+      [
+        hashed.size,
+        file.mtimeMs,
+        ...placeValues(place),
+        ...identityValues(identity),
+        now(),
+        row.id,
+      ],
     );
     if (recovered) {
       db.run(
@@ -720,6 +781,17 @@ export function createLibrary(options: LibraryOptions) {
     // A new version is processed; its text replaces the old one's in search once indexed.
     if (newVersion || current.status === "queued") hooks.process(row.id);
     return true;
+  }
+
+  /** Records which file a Document's is on this computer's disks, unless it moved meanwhile. */
+  async function noteIdentity(row: FileRow): Promise<void> {
+    const identity = await identify(row.path);
+    if (!identity) return;
+    db.run(`UPDATE documents SET ${IDENTITY_COLUMNS} WHERE id = ? AND path = ?`, [
+      ...identityValues(identity),
+      row.id,
+      row.path,
+    ]);
   }
 
   function noteMoved(
@@ -773,14 +845,135 @@ export function createLibrary(options: LibraryOptions) {
   }
 
   /**
+   * The Document a new file is, moved and edited where IncarnaMind didn't see
+   * it (#389), once its content matched none: the one whose file went that was
+   * this file on its disk. Or one whose file went in this pass or was found
+   * missing in the last, with the file's name: on the same disk, saved by an
+   * editor that replaces the file (#604), the one with its creation time, or
+   * else one with an older modified time; from another disk, which gives the
+   * file a new number, one with an older modified time and a size close to
+   * its. Those without the creation time only if no other new file in the
+   * pass has that name (`twins`). Never one of two that fit. Taken out of
+   * `removed` if found there. With `single`, only a file added on its own.
+   */
+  async function editedDocument(
+    file: Found,
+    identity: FileIdentity | null,
+    removed: FileRow[],
+    twins: ReadonlySet<string>,
+    single = false,
+  ): Promise<FileRow | undefined> {
+    if (!identity) return undefined;
+    const fits = (row: FileRow) =>
+      row.kind === file.kind && !isLegacyCopy(row.path) && (!single || !row.linked_folder_id);
+    let candidates = (await sameFileGone(file.path, identity, removed)).filter(fits);
+    const named = candidates.length === 0 ? goneWithName(file, removed).filter(fits) : [];
+    if (named.length > 0) candidates = savedAgain(file, identity, named, twins);
+    const [match] = candidates;
+    if (!match || candidates.length > 1) return undefined;
+    const at = removed.findIndex((row) => row.id === match.id);
+    if (at !== -1) removed.splice(at, 1);
+    return match;
+  }
+
+  /** The Documents whose file went that had this identity: the same device, file number and creation time. */
+  async function sameFileGone(
+    path: string,
+    identity: FileIdentity,
+    removed: readonly FileRow[],
+  ): Promise<FileRow[]> {
+    const { device, number, createdNs } = identity;
+    if (number === null || createdNs === null) return [];
+    const found = new Map<string, FileRow>();
+    for (const row of removed) {
+      if (
+        row.file_device === device &&
+        row.file_number === number &&
+        row.file_created_ns === createdNs
+      ) {
+        found.set(row.id, row);
+      }
+    }
+    for (const row of db.all<FileRow>(
+      `SELECT ${FILE_COLUMNS} FROM documents
+       WHERE file_number = ? AND file_device = ? AND file_created_ns = ? AND path <> ?
+         AND deleted_at IS NULL`,
+      [number, device, createdNs, path],
+    )) {
+      if (found.has(row.id)) continue;
+      // Gone, though no event has said so yet; one still there is a second link to the file.
+      if (
+        row.file_status === "missing" ||
+        (row.file_status === "available" && !(await statFile(row.path).catch(() => true)))
+      ) {
+        found.set(row.id, row);
+      }
+    }
+    return [...found.values()];
+  }
+
+  /**
+   * The ones of `named` (`goneWithName`) a file could be, its content and
+   * number new. On its disk: the ones that had its creation time, which Word
+   * keeps when it saves by replacing the file; else, as Pages saves, those
+   * with an older modified time, whatever their size, since an editor's save
+   * can make a file several times larger. From another disk: those with an
+   * older modified time and a size close to its. Only the creation time
+   * holds when another new file has the name.
+   */
+  function savedAgain(
+    file: Found,
+    identity: FileIdentity,
+    named: readonly FileRow[],
+    twins: ReadonlySet<string>,
+  ): FileRow[] {
+    const sameDisk = named.filter((row) => row.file_device === identity.device);
+    const created = sameDisk.filter(
+      (row) => identity.createdNs !== null && row.file_created_ns === identity.createdNs,
+    );
+    if (created.length > 0 || twins.has(basename(file.path))) return created;
+    const older = (row: FileRow) => row.file_mtime_ms !== null && file.mtimeMs > row.file_mtime_ms;
+    return named.filter(
+      (row) =>
+        older(row) && (row.file_device === identity.device || closeInSize(row.size, file.size)),
+    );
+  }
+
+  /**
+   * The Documents whose file went in this pass or was found missing in the
+   * last, with the file's name, whose disk was known.
+   */
+  function goneWithName(file: Found, removed: readonly FileRow[]): FileRow[] {
+    const recent = new Map<string, FileRow>();
+    for (const row of removed) {
+      if (row.file_status === "available" || missingBefore.has(row.id)) recent.set(row.id, row);
+    }
+    if (missingBefore.size > 0) {
+      for (const row of db.all<FileRow>(
+        `SELECT ${FILE_COLUMNS} FROM documents
+         WHERE id IN (SELECT value FROM json_each(?)) AND file_status = 'missing'
+           AND deleted_at IS NULL`,
+        [JSON.stringify([...missingBefore])],
+      )) {
+        if (!recent.has(row.id)) recent.set(row.id, row);
+      }
+    }
+    const name = basename(file.path);
+    return [...recent.values()].filter(
+      (row) => row.file_device !== null && basename(row.path) === name,
+    );
+  }
+
+  /**
    * Points a Document at its file's new path, keeping its id, Tags and
-   * Citations. Returns false if that can't be done any more: the Document
-   * changed meanwhile, or another one is at the path.
+   * Citations; a new version of it is processed. Returns false if that can't
+   * be done any more: the Document changed meanwhile, or another one is at
+   * the path.
    */
   async function relocate(
     row: FileRow,
     file: Found,
-    size: number,
+    seen: { size: number; identity: FileIdentity | null; newVersion: boolean },
     changes: Changes,
   ): Promise<boolean> {
     const current = documentById(row.id);
@@ -791,15 +984,24 @@ export function createLibrary(options: LibraryOptions) {
     const name = row.name === nameFromPath(row.path) ? nameFromPath(file.path) : row.name;
     db.run(
       `UPDATE documents SET path = ?, ${PLACE_COLUMNS}, file_status = 'available',
-         size = ?, file_mtime_ms = ?, name = ?, updated_at = ?
+         size = ?, file_mtime_ms = ?, name = ?, ${IDENTITY_COLUMNS}, updated_at = ?
        WHERE id = ? AND deleted_at IS NULL`,
-      [file.path, ...placeValues(place), size, file.mtimeMs, name, now(), row.id],
+      [
+        file.path,
+        ...placeValues(place),
+        seen.size,
+        file.mtimeMs,
+        name,
+        ...identityValues(seen.identity),
+        now(),
+        row.id,
+      ],
     );
     changes.announced.add(row.id);
     noteMoved(row, place, changes);
     if (name !== row.name) hooks.renamed(row.id);
+    if (seen.newVersion || current.status === "queued") hooks.process(row.id);
     // The old layout's copy in the data folder isn't needed once the original is linked.
-    if (current.status === "queued") hooks.process(row.id);
     if (isLegacyCopy(row.path)) {
       await rm(row.path, { force: true }).catch((error: unknown) => hooks.reportError(error));
     }
@@ -815,6 +1017,7 @@ export function createLibrary(options: LibraryOptions) {
     removed: FileRow[],
     changes: Changes,
     explicit: boolean,
+    twins: ReadonlySet<string>,
   ): Promise<string | undefined> {
     if (!explicit && file.owner && removedByUser(file.path, file.owner)) return undefined;
     let hashed: Awaited<ReturnType<typeof hashFile>>;
@@ -827,9 +1030,17 @@ export function createLibrary(options: LibraryOptions) {
     unreadable.delete(file.path);
     // A paused (or removed) Linked folder's files are left alone, unless the User adds one.
     if (closed || (!explicit && !ownerStillActive(file.owner))) return undefined;
-    const moved = await movedDocument(hashed.contentHash, file.path, removed);
+    const identity = await identify(file.path);
+    const moved =
+      (await movedDocument(hashed.contentHash, file.path, removed)) ??
+      (await editedDocument(file, identity, removed, twins));
     if (closed) return undefined;
-    if (moved && (await relocate(moved, file, hashed.size, changes))) return moved.id;
+    const seen = {
+      size: hashed.size,
+      identity,
+      newVersion: moved?.content_hash !== hashed.contentHash,
+    };
+    if (moved && (await relocate(moved, file, seen, changes))) return moved.id;
     // Checked just before writing, with nothing awaited in between: another task may have added it.
     const there = documentAt(file.path);
     if (there) return there.id;
@@ -838,8 +1049,9 @@ export function createLibrary(options: LibraryOptions) {
     const at = now();
     db.run(
       `INSERT INTO documents (id, content_hash, name, kind, size, status, path, linked_folder_id,
-         folder_id, source_kind, relative_path, file_status, file_mtime_ms, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?, 'available', ?, ?, ?)`,
+         folder_id, source_kind, relative_path, file_status, file_mtime_ms, file_device,
+         file_number, file_created_ns, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?, 'available', ?, ?, ?, ?, ?, ?)`,
       [
         id,
         hashed.contentHash,
@@ -849,6 +1061,7 @@ export function createLibrary(options: LibraryOptions) {
         file.path,
         ...placeValues(place),
         file.mtimeMs,
+        ...identityValues(identity),
         at,
         at,
       ],
@@ -863,10 +1076,16 @@ export function createLibrary(options: LibraryOptions) {
   /**
    * A file at a path where files added on their own are watched, with no
    * Document there: one of them, moved or renamed, if one whose file went
-   * has its content. Nothing else there is added.
+   * has its content, or was this file before it was edited. Nothing else
+   * there is added.
    */
-  async function arrived(file: Found, removed: FileRow[], changes: Changes): Promise<void> {
-    // Cheap first: only a file added on its own, of this size, can be it.
+  async function arrived(
+    file: Found,
+    removed: FileRow[],
+    changes: Changes,
+    twins: ReadonlySet<string>,
+  ): Promise<void> {
+    // Read only if a file added on its own, of this size, can have its content.
     const sameSize = (row: Pick<FileRow, "size" | "linked_folder_id">) =>
       !row.linked_folder_id && row.size === file.size;
     const possible =
@@ -877,16 +1096,26 @@ export function createLibrary(options: LibraryOptions) {
            AND file_status IN ('available', 'missing')`,
         [file.size, file.path],
       ) !== undefined;
-    if (!possible) return;
-    let hashed: Awaited<ReturnType<typeof hashFile>>;
-    try {
-      hashed = await hashFile(file.path);
-    } catch {
-      return; // gone again, or not readable: not one to follow now
+    let hashed: Awaited<ReturnType<typeof hashFile>> | undefined;
+    if (possible) {
+      try {
+        hashed = await hashFile(file.path);
+      } catch {
+        return; // gone again, or not readable: not one to follow now
+      }
     }
+    const identity = await identify(file.path);
     if (closed || documentAt(file.path)) return;
-    const moved = await movedDocument(hashed.contentHash, file.path, removed, true);
-    if (moved && !closed) await relocate(moved, file, hashed.size, changes);
+    const moved =
+      (hashed && (await movedDocument(hashed.contentHash, file.path, removed, true))) ??
+      (await editedDocument(file, identity, removed, twins, true));
+    if (!moved || closed) return;
+    const seen = {
+      size: hashed?.size ?? file.size,
+      identity,
+      newVersion: moved.content_hash !== hashed?.contentHash,
+    };
+    await relocate(moved, file, seen, changes);
   }
 
   /**
@@ -897,6 +1126,7 @@ export function createLibrary(options: LibraryOptions) {
     const current = documentById(row.id);
     if (!current || current.path !== row.path) return;
     const status = owner || (await isFolder(dirname(row.path))) ? "missing" : "unavailable";
+    if (status === "missing" && current.file_status !== "missing") missingNow.add(row.id);
     setFileStatus(current, status, changes);
   }
 
@@ -967,6 +1197,8 @@ export function createLibrary(options: LibraryOptions) {
 
   async function runPass(request: PassRequest): Promise<void> {
     if (closed) return;
+    missingBefore = missingNow;
+    missingNow = new Set();
     const changes: Changes = { announced: new Set(), moved: new Set(), folders: new Set() };
     const linked = liveFolders();
     /** Documents looked at, by path, and files found there, by path. */
@@ -1005,11 +1237,14 @@ export function createLibrary(options: LibraryOptions) {
       const ignore = ignoreOf(row);
       const placeholders = onlineOnly.get(row.id) ?? new Map<string, number>();
       onlineOnly.set(row.id, placeholders);
+      const notRead = unsupported.get(row.id) ?? new Set<string>();
+      unsupported.set(row.id, notRead);
       for (const part of parts) {
         for (const document of documentsUnder(part)) known.set(document.path, document);
         let files: FoundFile[] = [];
+        let unread: string[] = [];
         try {
-          ({ files } = await walk(part, {
+          ({ files, unsupported: unread } = await walk(part, {
             root: row.path,
             ignore,
             detectDataless: options.detectDataless,
@@ -1018,6 +1253,8 @@ export function createLibrary(options: LibraryOptions) {
           // Gone: whatever was indexed there is gone too.
         }
         for (const path of placeholders.keys()) if (isInside(part, path)) placeholders.delete(path);
+        for (const path of notRead) if (isInside(part, path)) notRead.delete(path);
+        for (const path of unread) notRead.add(path);
         for (const file of files) {
           if (!file.onlineOnly || known.has(file.path)) {
             // A known Document's placeholder isn't read either (see `checkKnown`).
@@ -1100,11 +1337,12 @@ export function createLibrary(options: LibraryOptions) {
     for (const file of fresh) {
       if (file.owner) pendingNew.set(file.owner.id, (pendingNew.get(file.owner.id) ?? 0) + 1);
     }
+    const twins = repeatedNames([...fresh, ...arrivals].map((file) => file.path));
     announceFolders();
     try {
       for (const file of fresh) {
         if (closed) return;
-        await addFound(file, removed, changes, false);
+        await addFound(file, removed, changes, false, twins);
         if (file.owner) {
           pendingNew.set(file.owner.id, (pendingNew.get(file.owner.id) ?? 1) - 1);
           announceProgress();
@@ -1116,7 +1354,7 @@ export function createLibrary(options: LibraryOptions) {
     // A file added on its own, moved or renamed, perhaps.
     for (const file of arrivals) {
       if (closed) return;
-      await arrived(file, removed, changes);
+      await arrived(file, removed, changes, twins);
     }
 
     // What is still unmatched has gone.
@@ -1180,9 +1418,9 @@ export function createLibrary(options: LibraryOptions) {
     try {
       real = await realpath(input);
     } catch {
-      throw new NotFoundError("There is no folder at that path.");
+      throw new NotFoundError({ key: "error.path.noFolder" });
     }
-    if (!(await isFolder(real))) throw new InvalidInputError("That path isn't a folder.");
+    if (!(await isFolder(real))) throw new InvalidInputError({ key: "error.path.notFolder" });
     return real;
   }
 
@@ -1191,12 +1429,25 @@ export function createLibrary(options: LibraryOptions) {
       throw new InvalidInputError("A Linked folder id is required.");
     }
     const row = folderRow(idInput);
-    if (!row) throw new NotFoundError("That Linked folder doesn't exist or has been removed.");
+    if (!row) throw new NotFoundError({ key: "error.linkedFolder.notFound" });
     return row;
   };
 
+  /** The files in a format not read (#740), in the Linked folders still there, with where each is. */
+  const unsupportedFiles = (): UnsupportedFile[] =>
+    liveFolders().flatMap((row) =>
+      [...(unsupported.get(row.id) ?? [])].sort().map((path) => ({
+        path,
+        name: basename(path),
+        extension: extname(path).toLowerCase(),
+        linkedFolderId: row.id,
+        relativeFolder: parentOf(relativePath(row.path, path)),
+      })),
+    );
+
   return {
     list,
+    unsupportedFiles,
 
     /** Starts watching every Linked folder, and reconciles everything with the disk. */
     start(): void {
@@ -1289,6 +1540,7 @@ export function createLibrary(options: LibraryOptions) {
           stopWatcher(inner.id);
           statuses.delete(inner.id);
           onlineOnly.delete(inner.id);
+          unsupported.delete(inner.id);
           db.run("UPDATE linked_folders SET deleted_at = ?, updated_at = ? WHERE id = ?", [
             at,
             at,
@@ -1331,6 +1583,7 @@ export function createLibrary(options: LibraryOptions) {
       });
       statuses.delete(row.id);
       onlineOnly.delete(row.id);
+      unsupported.delete(row.id);
       downloading.delete(row.id);
       for (const path of unreadable) if (isInside(row.path, path)) unreadable.delete(path);
       watchSingles(); // a file added on its own inside it is watched by itself now
@@ -1381,7 +1634,7 @@ export function createLibrary(options: LibraryOptions) {
           db.run("UPDATE linked_folders SET path = ? WHERE id = ?", [path, row.id]);
           // Each path is unique: set aside first, as one Document's new path may be another's old one.
           db.run(
-            `UPDATE documents SET path = 'locating:' || id
+            `UPDATE documents SET path = 'locating:' || id, ${FORGET_FILE_IDENTITY}
              WHERE linked_folder_id = ? AND relative_path IS NOT NULL`,
             [row.id],
           );
@@ -1394,6 +1647,7 @@ export function createLibrary(options: LibraryOptions) {
         });
         stopWatcher(row.id);
         onlineOnly.delete(row.id);
+        unsupported.delete(row.id);
         for (const file of unreadable) if (isInside(row.path, file)) unreadable.delete(file);
       }
       statuses.set(row.id, "scanning");
@@ -1494,6 +1748,7 @@ export function createLibrary(options: LibraryOptions) {
         };
         const results: (string | SkippedFile["reason"])[] = [];
         const linked = liveFolders();
+        const twins = repeatedNames(paths);
         for (const path of paths) {
           const kind = kindOf(path);
           if (!kind) {
@@ -1534,7 +1789,7 @@ export function createLibrary(options: LibraryOptions) {
             }
             continue;
           }
-          results.push((await addFound(file, [], changes, true)) ?? "unreadable");
+          results.push((await addFound(file, [], changes, true, twins)) ?? "unreadable");
         }
         finish(changes, new Set());
         return results;

@@ -14,15 +14,18 @@ import {
   chartSources,
   drawnSeries,
   kindFits,
+  listedRows,
   MAX_CHART_VALUES,
   seriesName as nameOfSeries,
   readChart,
+  unitlessRows,
 } from "../../../shared/charts";
 import {
   badgeMessage,
   type CitationState,
   citationSource,
   citationState,
+  withShownName,
 } from "../../../shared/citations";
 import { citationLocation, formatLocation } from "../../../shared/locations";
 import { ObjectMenu, useObjectMenu } from "../components/ObjectMenu";
@@ -35,6 +38,7 @@ import { ChartKindMenu } from "./ChartKindMenu";
 import { ChartPlot, type PointEvents, type PointRef, samePoint } from "./ChartPlot";
 import { ChartPointCard } from "./ChartPointCard";
 import { ChartValues } from "./ChartValues";
+import { chartCardPlace } from "./chartCardPlace";
 import { changeChart, chartTable, tableUpdate, toggledSeries, withKind } from "./chartCommands";
 import { type ChartHandle, chartHandles } from "./chartHandles";
 import { Popover } from "./Popover";
@@ -176,9 +180,18 @@ export function ChartView({ node, editor, getPos, deleteNode }: ReactNodeViewPro
   );
   const seriesName = useCallback((index: number) => nameOfSeries(chart, index, t), [chart, t]);
   const labelHeading = chart.data.labelHeading;
+  const listed = listedRows(chart.data);
   const drawn = drawnSeries(chart);
   const points = chartPoints(chart);
   const sources = chartSources(chart);
+  /** The value with no Citation the foot's button last found, which of how many, and of which. */
+  const [found, setFound] = useState<{
+    point: PointRef;
+    index: number;
+    total: number;
+    of: string;
+  } | null>(null);
+  const findButton = useRef<HTMLButtonElement>(null);
   const checks = checksOf(
     chartCells(chart).flatMap(({ value }) => (value.value === null ? [] : [stateOf(value)])),
   );
@@ -232,7 +245,7 @@ export function ChartView({ node, editor, getPos, deleteNode }: ReactNodeViewPro
   }, [blockId, deleteNode]);
 
   const titleOf = (point: PointRef) => {
-    const row = chart.data.rows[point.row]?.label ?? "";
+    const row = listed[point.row]?.label ?? "";
     // A pie's slices are one column's: its card says which, as a bar's does among several.
     if (
       chart.kind === "pie" ||
@@ -244,16 +257,18 @@ export function ChartView({ node, editor, getPos, deleteNode }: ReactNodeViewPro
   };
   const detailOf = (point: PointRef): string | null => {
     if (chart.kind === "scatter") {
-      const across = drawn[0];
-      const value = across === undefined ? null : chart.data.rows[point.row]?.values[across];
-      return value && across !== undefined
-        ? t("chart.point.named", { name: seriesName(across), value: value.shown })
+      // The row's value on the other axis: up, for one found across.
+      const other = point.series === drawn[0] ? drawn[1] : drawn[0];
+      const value = other === undefined ? null : listed[point.row]?.values[other];
+      return value && other !== undefined
+        ? t("chart.point.named", { name: seriesName(other), value: value.shown })
         : null;
     }
     if (chart.kind === "pie") {
       const total = points.reduce((sum, each) => sum + each.value.value, 0);
-      const value = chart.data.rows[point.row]?.values[point.series]?.value;
-      if (value == null || total <= 0) return null;
+      // Only a slice has a share: not a value left out of the drawing, nor a row cut from it.
+      const value = points.find((each) => samePoint(each, point))?.value.value;
+      if (value === undefined || total <= 0) return null;
       const share = new Intl.NumberFormat(language, {
         style: "percent",
         minimumFractionDigits: 1,
@@ -268,7 +283,7 @@ export function ChartView({ node, editor, getPos, deleteNode }: ReactNodeViewPro
     return null;
   };
   const valueText = (point: PointRef) => {
-    const value = chart.data.rows[point.row]?.values[point.series];
+    const value = listed[point.row]?.values[point.series];
     if (!value) return "";
     return chart.kind === "scatter"
       ? t("chart.point.named", { name: seriesName(point.series), value: value.shown })
@@ -277,12 +292,13 @@ export function ChartView({ node, editor, getPos, deleteNode }: ReactNodeViewPro
   const sourceText = (value: ChartValue | null | undefined) => {
     const state = stateOf(value);
     if (!value?.citation || !state) return t("chart.point.noCitation");
-    const badge = badgeMessage(state, value.citation, t);
-    return `${citationSource(value.citation, t).text}. ${t(badge.key, badge.params)}`;
+    const citation = withShownName(value.citation, documents);
+    const badge = badgeMessage(state, citation, t);
+    return `${citationSource(citation, t).text}. ${t(badge.key, badge.params)}`;
   };
 
   const openValue = (point: PointRef) => {
-    const value = chart.data.rows[point.row]?.values[point.series];
+    const value = listed[point.row]?.values[point.series];
     const state = stateOf(value);
     if (!value?.citation || !state) return;
     const documentId = state.documentId ?? value.citation.documentId;
@@ -302,16 +318,19 @@ export function ChartView({ node, editor, getPos, deleteNode }: ReactNodeViewPro
     peek: (point, anchor, source, on) => peek(point, anchor, source, on),
     activate: (point, anchor) => {
       pin(point, anchor);
-      const state = stateOf(chart.data.rows[point.row]?.values[point.series]);
+      const state = stateOf(listed[point.row]?.values[point.series]);
       // A quote that wasn't found opens from its card's Open, as a Citation's does.
       if (state && state.check !== "not-found") openValue(point);
     },
-    label: (point) =>
-      t("chart.point", {
+    label: (point) => {
+      const source = sourceText(listed[point.row]?.values[point.series]);
+      const noUnit = unitlessRows(chart.data, point.series).has(point.row);
+      return t("chart.point", {
         label: titleOf(point),
         value: valueText(point),
-        source: sourceText(chart.data.rows[point.row]?.values[point.series]),
-      }),
+        source: noUnit ? `${source} · ${t("chart.point.noUnit")}` : source,
+      });
+    },
   };
 
   const objectMenu = useObjectMenu({ kind: "chart", id: blockId });
@@ -323,8 +342,36 @@ export function ChartView({ node, editor, getPos, deleteNode }: ReactNodeViewPro
     count: points.length,
   });
   const legend = !asTable ? chartLegend(chart, seriesName) : [];
-  const shownCard = card ? chart.data.rows[card.point.row]?.values[card.point.series] : null;
+  const shownCard = card ? listed[card.point.row]?.values[card.point.series] : null;
   const shownState = stateOf(shownCard);
+  const shownUnitless = card
+    ? unitlessRows(chart.data, card.point.series).has(card.point.row)
+    : false;
+  const foundShown = found && card && samePoint(card.point, found.point) ? found : null;
+
+  /**
+   * The foot's "1 with no Citation": the next such value, in focus with its
+   * card, row by row and round again (#503). A scatter chart draws a row as one
+   * point, so a value across is found at its row's point.
+   */
+  const findUncited = () => {
+    const cells = sources.uncitedCells;
+    if (cells.length === 0 || !frame) return;
+    // Round again from the first when they changed: another kind, columns, or an Update.
+    const of = JSON.stringify(cells);
+    const index = found?.of === of ? (found.index + 1) % cells.length : 0;
+    const cell = cells[index];
+    if (!cell) return;
+    const at =
+      !asTable && chart.kind === "scatter" ? { ...cell, series: drawn[1] ?? cell.series } : cell;
+    const target = frame.querySelector<HTMLElement | SVGElement>(
+      `[data-point="${at.row}:${at.series}"]`,
+    );
+    if (!target) return;
+    setFound({ point: cell, index, total: cells.length, of });
+    target.focus();
+    pin(cell, target);
+  };
 
   const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key === "F2" && editable && !renaming) {
@@ -418,7 +465,7 @@ export function ChartView({ node, editor, getPos, deleteNode }: ReactNodeViewPro
               const state = stateOf(value);
               if (!value.citation || !state)
                 return { check: null, label: t("chart.point.noCitation") };
-              const badge = badgeMessage(state, value.citation, t);
+              const badge = badgeMessage(state, withShownName(value.citation, documents), t);
               return { check: state.check, label: t(badge.key, badge.params) };
             }}
           />
@@ -441,6 +488,8 @@ export function ChartView({ node, editor, getPos, deleteNode }: ReactNodeViewPro
         rows={chart.data.rows.length}
         cutFrom={chart.data.cutFrom}
         onUpdate={editable && update ? applyUpdate : null}
+        onFindUncited={findUncited}
+        findRef={findButton}
       />
       {card &&
         shownCard &&
@@ -449,9 +498,20 @@ export function ChartView({ node, editor, getPos, deleteNode }: ReactNodeViewPro
           <Popover
             anchor={card.anchor}
             placement="top"
-            // Between the plot's top and bottom: never over the chart's head (its "Bar ⌄") or its foot.
-            {...(frame && { within: frame })}
-            onDismiss={dismiss}
+            {...(frame && {
+              middleware: () =>
+                chartCardPlace(
+                  frame,
+                  frame.closest(".mind-column"),
+                  chart.kind === "pie" && !asTable,
+                ),
+            })}
+            onDismiss={(how) => {
+              // Esc on a value the foot found goes back to the foot, for the next.
+              const back = how === "escape" && foundShown ? findButton.current : null;
+              dismiss();
+              back?.focus();
+            }}
             aria-label={events.label(card.point)}
             data-testid="chart-card"
             onPointerEnter={() => hold("card", true)}
@@ -461,9 +521,17 @@ export function ChartView({ node, editor, getPos, deleteNode }: ReactNodeViewPro
           >
             <ChartPointCard
               title={titleOf(card.point)}
+              position={
+                foundShown && foundShown.total > 1
+                  ? t("chart.point.position", {
+                      index: foundShown.index + 1,
+                      count: foundShown.total,
+                    })
+                  : null
+              }
               value={valueText(card.point)}
               detail={detailOf(card.point)}
-              notDrawn={shownCard.value === null}
+              notDrawn={shownCard.value === null ? "number" : shownUnitless ? "unit" : null}
               cut={
                 chart.data.cutFrom
                   ? t("chart.cut", {
@@ -473,7 +541,7 @@ export function ChartView({ node, editor, getPos, deleteNode }: ReactNodeViewPro
                     })
                   : null
               }
-              citation={shownCard.citation}
+              citation={shownCard.citation && withShownName(shownCard.citation, documents)}
               state={shownState}
               onOpen={() => {
                 openValue(card.point);

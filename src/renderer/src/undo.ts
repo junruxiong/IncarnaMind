@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import { errorMessage } from "./errors";
+import type { ErrorWording } from "../../core/errors";
+import { describeError } from "./errors";
 
 /**
  * Undo instead of asking (docs/agents/interaction.md, rule 4): a change the User
@@ -47,6 +48,8 @@ export class UndoRefused extends Error {
 export interface UndoProblem {
   step: "undo" | "redo";
   reason: string;
+  /** The reason as a key of the dictionary, when the core gave one. */
+  wording?: ErrorWording;
   fix: UndoFix | null;
 }
 
@@ -93,6 +96,7 @@ export const useUndo = create<UndoState>()((set, get) => {
   const refused = (step: UndoProblem["step"], change: Undoable, error: unknown) => {
     const fix = error instanceof UndoRefused ? error.fix : null;
     const stack = step === "undo" ? "done" : "undone";
+    const { message, wording } = describeError(error);
     set((state) => ({
       ...(fix &&
         (step === "undo"
@@ -102,7 +106,8 @@ export const useUndo = create<UndoState>()((set, get) => {
         id: ++lines,
         problem: {
           step,
-          reason: errorMessage(error),
+          reason: message,
+          ...(wording && { wording }),
           fix: fix && {
             label: fix.label,
             run: async () => {

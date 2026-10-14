@@ -8,12 +8,12 @@
 
 - [ ] `npm run typecheck`, `npm run lint` and `npm test` pass
 - [ ] The smoke tests that touch this change pass (`npm run test:smoke`), and tests for changed or removed UI are updated
-- [ ] The edge cases in [the testing guide](https://github.com/junruxiong/IncarnaMind/blob/main/docs/agents/testing.md#edge-cases) that apply were tried: <!-- list them, and which don't apply -->
+- [ ] The edge cases in [the testing guide](https://github.com/IncarnaMind/IncarnaMind/blob/main/docs/agents/testing.md#edge-cases) that apply were tried: <!-- list them, and which don't apply -->
 - [ ] CI is green on this pull request: <!-- link the run -->
 
 ## If this changes UI
 
-Delete this section if the change has no UI. Otherwise check each line against [the interaction rules](https://github.com/junruxiong/IncarnaMind/blob/main/docs/agents/interaction.md):
+Delete this section if the change has no UI. Otherwise check each line against [the interaction rules](https://github.com/IncarnaMind/IncarnaMind/blob/main/docs/agents/interaction.md):
 
 - [ ] Each gesture follows a named app's convention (Claude, ChatGPT, Cursor, VS Code, Finder, Notion, Granola, or a Chinese app), or this says why none fits
 - [ ] Names shown rename in place (double-click or F2; Enter saves, Esc cancels; safe with a Chinese input method); Enter on a focused item opens it
@@ -35,4 +35,4 @@ Delete this section if the change has no UI. Otherwise check each line against [
 
 ## Sign-off
 
-Each commit carries a `Signed-off-by:` line (`git commit -s`). See [CONTRIBUTING.md](https://github.com/junruxiong/IncarnaMind/blob/main/CONTRIBUTING.md).
+Each commit carries a `Signed-off-by:` line (`git commit -s`). See [CONTRIBUTING.md](https://github.com/IncarnaMind/IncarnaMind/blob/main/CONTRIBUTING.md).

@@ -23,6 +23,8 @@ export interface FilesBridge {
   pathForFile(file: File): string;
   /** Shows a file IncarnaMind saved (`CoreApi.saveMindExport`), selected in the system's file manager. */
   showSavedFile(path: string): Promise<void>;
+  /** Opens a file IncarnaMind saved (`CoreApi.saveMindExport`) in the system's default app for it. */
+  openSavedFile(path: string): Promise<void>;
   /**
    * Shows the system's open dialog for the Output location (see
    * `CoreApi.setOutputLocation`), starting at the current one. Resolves with
@@ -69,6 +71,15 @@ export interface FilesBridge {
    * its absolute path, or null if the User cancelled.
    */
   pickReferenceFile(): Promise<string | null>;
+  /**
+   * Shows the system's open dialog for a Word file to import as a Mind (see
+   * `CoreApi.importWordFile`), as a sheet on the window, starting in the folder
+   * last picked from (else Downloads). Resolves with its absolute path, or null
+   * if the User cancelled.
+   */
+  pickWordFile(): Promise<string | null>;
+  /** As `pickWordFile`, for a PDF to verify (see `CoreApi.verifyDocument`). */
+  pickPdfFile(): Promise<string | null>;
   /**
    * Shows a Linked folder selected in the system's file manager (Finder,
    * Explorer). Rejects for an unknown Linked folder, or one that can't be
@@ -121,6 +132,7 @@ export interface RendererErrorReport {
 /** The main process's channels for the `FilesBridge` methods that need it. */
 export const FILES_CHANNELS = {
   showSavedFile: "files:showSavedFile",
+  openSavedFile: "files:openSavedFile",
   pickOutputLocation: "files:pickOutputLocation",
   openDataFolder: "files:openDataFolder",
   openLogsFolder: "files:openLogsFolder",
@@ -130,6 +142,8 @@ export const FILES_CHANNELS = {
   pickLinkedFolder: "files:pickLinkedFolder",
   pickDocuments: "files:pickDocuments",
   pickReferenceFile: "files:pickReferenceFile",
+  pickWordFile: "files:pickWordFile",
+  pickPdfFile: "files:pickPdfFile",
   showLinkedFolder: "files:showLinkedFolder",
   logError: "files:logError",
   /** From the page: the sidebar is hidden (true) or shown (false), for the View menu's label. */

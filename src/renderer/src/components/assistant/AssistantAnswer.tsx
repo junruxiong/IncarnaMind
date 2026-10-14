@@ -4,10 +4,12 @@ import { answerBlocks, hasText } from "../../answerBlocks";
 import { useAnswers } from "../../answers";
 import { useApprovals, waitingFor } from "../../approvals";
 import { regenerateAnswer } from "../../conversations";
-import { AnswerError, ApprovalCard } from "../../editor/AnswerView";
+import { AnswerError, ApprovalCard, figuresOf, UncalculatedLine } from "../../editor/AnswerView";
 import { AskProblem } from "../../editor/AskProblem";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
+import { useUnreadFiles } from "../../unreadFiles";
+import { UnreadFilesLine } from "../UnreadFilesLine";
 import { AnswerActions } from "./AnswerActions";
 import { AnswerSteps } from "./AnswerSteps";
 import { AnswerText } from "./AnswerText";
@@ -40,10 +42,10 @@ export function AssistantAnswer({
   keeping: AnswerKeeping;
 }) {
   const t = useT();
-  const { text, citations, status } = answer;
+  const { text, citations, figures, status } = answer;
   const blocks = useMemo(
-    () => answerBlocks({ text, citations, status }),
-    [text, citations, status],
+    () => answerBlocks({ text, citations, figures, status }),
+    [text, citations, figures, status],
   );
   const writing = useAnswers((state) => state.writing.has(answer.id));
   const streaming = writing || status === "streaming";
@@ -53,6 +55,8 @@ export function AssistantAnswer({
   const openSettings = useAppStore((state) => state.openSettings);
   const regenerate = () => void regenerateAnswer(answer.id);
   const written = hasText(blocks);
+  const { uncalculated } = figuresOf(answer.toolCalls);
+  const unread = useUnreadFiles(question?.scope ?? null);
 
   return (
     <article
@@ -83,6 +87,8 @@ export function AssistantAnswer({
           regenerate={regenerate}
         />
       )}
+      {!streaming && uncalculated > 0 && <UncalculatedLine count={uncalculated} />}
+      {!streaming && status !== "failed" && <UnreadFilesLine files={unread} />}
       {!streaming && status === "failed" && (
         <AnswerError
           kind={answer.errorKind ?? "unknown"}

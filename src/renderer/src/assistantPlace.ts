@@ -5,6 +5,7 @@ import type {
   AssistantPlace,
 } from "../../core/api";
 import { DEFAULT_ASSISTANT } from "../../core/api";
+import type { TitleBar } from "../../shared/titleBar";
 
 /*
  * Where the assistant is drawn and how big (#253), from the User's choices
@@ -191,3 +192,11 @@ export function restoredSize(place: AssistantPlace, dock: AssistantDock): Partia
   }
   return { width: DEFAULT_ASSISTANT.width };
 }
+
+/**
+ * Whether the assistant's Fold is in its ⋯ menu rather than its header
+ * (D189): on Windows, docked right, the header also holds the window's
+ * buttons, and its title needs the room.
+ */
+export const foldsInMenu = (titleBar: TitleBar, dock: AssistantDock): boolean =>
+  titleBar === "overlay" && dock === "right";
