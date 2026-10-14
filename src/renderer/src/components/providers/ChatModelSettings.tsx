@@ -5,6 +5,7 @@ import { useAnswers } from "../../answers";
 import { core } from "../../core";
 import { formatSpent } from "../../cost";
 import { useLanguage, useT } from "../../i18n";
+import { useKeyRefusals } from "../../keyRefusals";
 import { useModelNames } from "../../modelNames";
 import { useAppStore } from "../../store";
 import { useCostSummary } from "../SpendingCapSettings";
@@ -58,7 +59,17 @@ export function ChatModelSettings() {
     core.listChatProviders().then(setProviders, () => undefined);
   }, []);
 
-  const done = () => {
+  // "Check the key" on a refused Answer: that provider's key field, open.
+  const refused = useKeyRefusals((state) => state.showing);
+  useEffect(() => {
+    if (!refused) return;
+    setChanging(true);
+    setChoice("api-key");
+  }, [refused]);
+  useEffect(() => () => useKeyRefusals.getState().done(), []);
+
+  const done = (provider?: ChatProvider) => {
+    if (provider) useKeyRefusals.getState().saved(provider);
     setChanging(false);
     setChoice(null);
     refresh();
@@ -207,6 +218,7 @@ export function ChatModelSettings() {
               onSaved={done}
               ollamaActionInRow
               withMoreProviders
+              refused={refused}
             />
           </div>
           {current && (
@@ -215,6 +227,7 @@ export function ChatModelSettings() {
               onClick={() => {
                 setChanging(false);
                 setChoice(null);
+                useKeyRefusals.getState().done();
               }}
               className={buttonClass}
             >

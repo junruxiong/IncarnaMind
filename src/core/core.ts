@@ -20,6 +20,7 @@ import type { CoreAdapters } from "./adapters";
 import { agentSocketPath, createAgents } from "./agents";
 import { createAgentSetup, skillInstalled } from "./agents/setup";
 import { createAiUse } from "./aiUse";
+import { createAiUseStatement } from "./aiUseStatement";
 import { createAiSdkAnswerEngine, createAnswers } from "./answers";
 import { createChecks } from "./answers/checks";
 import { recheckCitation, recheckKept } from "./answers/citations";
@@ -130,7 +131,7 @@ import {
   parseMindId,
 } from "./minds";
 import { firstLineOf, readBlocks, theirChangesReading } from "./mindText";
-import { createNoteAdding } from "./noteAdding";
+import { createNoteAdding, insertBlocks } from "./noteAdding";
 import { createOutputFiles } from "./outputFiles";
 import { createPrivacy, type NetworkTrafficRegistry } from "./privacy";
 import { readsImages } from "./providers/capabilities";
@@ -1311,6 +1312,20 @@ export function createCore(adapters: CoreAdapters): Core {
     now: () => adapters.now?.() ?? new Date(),
   });
 
+  // The AI use statement (#739): a new Mind, made from what the Mind records.
+  const aiUseStatement = createAiUseStatement({
+    mind: (mindId) => minds.get(mindId),
+    read: (mindId, look) => content.peek(mindId, look),
+    entries: (mindId) => aiUse.list(mindId),
+    providers: () => chat.list(),
+    documents: () => documents.list(),
+    keptCitationTexts: () => documents.keptCitationTexts(),
+    language: () => settings.get().language,
+    createMind: makeMind,
+    write: (mindId, blocks) => content.edit(mindId, (note) => void insertBlocks(note, blocks)),
+    now,
+  });
+
   // The fingerprints of the files IncarnaMind writes (#80). A Document already indexed with
   // the same bytes is marked at once, and every window hears of it.
   const ownFiles = createOwnFiles(db, now);
@@ -2203,11 +2218,6 @@ export function createCore(adapters: CoreAdapters): Core {
       }
       const languageWas = settings.get().language;
       const updated = settings.update(change);
-      if (updated.language !== languageWas) {
-        examples
-          .followLanguage()
-          .catch((error) => console.error("The example Minds didn't follow the language:", error));
-      }
       if (!updated.user.suggestWhileWriting) suggestions.stop();
       events.emit("settings.changed", updated);
       // Skill scripts turned off: none runs any more, and none waits to.
@@ -2217,6 +2227,12 @@ export function createCore(adapters: CoreAdapters): Core {
       }
       const flowChanged = syncChatFlow();
       if (chatModel !== undefined || flowChanged) await readinessChanged();
+      // The examples follow the new language before this returns, so whoever awaits it can rely on it.
+      if (updated.language !== languageWas) {
+        await examples
+          .followLanguage()
+          .catch((error) => console.error("The example Minds didn't follow the language:", error));
+      }
       return updated;
     },
     addDocuments,
@@ -2562,6 +2578,7 @@ export function createCore(adapters: CoreAdapters): Core {
     getAiUseStatus: async () => aiUse.status(),
     clearAiUse: async () => aiUse.clear(),
     restoreAiUse: async (clearedAt) => aiUse.restore(clearedAt),
+    createAiUseStatement: async (mindId) => aiUseStatement.create(mindId),
 
     listFolders: async () => folders.list(),
 
