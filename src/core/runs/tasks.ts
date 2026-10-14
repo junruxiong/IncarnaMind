@@ -299,9 +299,12 @@ export function createTasks(options: TasksOptions) {
       actions: [...(kinds.get(record.kind)?.actions ?? DEFAULT_ACTIONS)],
       steps: stepsOf(record, latest.steps),
       stepCount: latest.count,
-      queued: messagesOf(record.id)
-        .filter((message) => message.status === "started")
-        .map(({ id, text }) => ({ id, text })),
+      queued:
+        record.finishedAt === null
+          ? messagesOf(record.id)
+              .filter((message) => message.status === "started")
+              .map(({ id, text }) => ({ id, text }))
+          : [],
       remaining:
         record.status === "paused" &&
         (record.pausedReason === "cost-cap" || record.pausedReason === "plan-limit")

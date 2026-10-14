@@ -5537,6 +5537,22 @@
   .task-progress-dot {
     color: var(--color-ink-placeholder);
   }
+  /* Done, what it made, before Review: "1 source saved · 2 changes proposed". */
+  .task-progress-summary {
+    color: var(--color-ink);
+  }
+  /* Stopped at a limit, the steps it has still to do (#130). */
+  .task-progress-remaining {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    color: var(--color-ink-secondary);
+  }
+  .task-progress-remaining-label {
+    font-size: 12.5px;
+    line-height: 18px;
+    color: var(--color-ink-meta);
+  }
 
   /*
    * An Answer's steps (#391; DESIGN.md, Answer › In the assistant): one
@@ -6327,6 +6343,67 @@
     line-height: 16px;
     color: var(--color-ink-meta);
     overflow-wrap: break-word;
+  }
+  /* A running plan's steps read as text, not as fields to edit. */
+  .research-plan-fixed--ink {
+    color: var(--color-ink);
+  }
+  .research-plan-view-mind {
+    min-width: 0;
+    font-weight: 600;
+    overflow-wrap: break-word;
+  }
+  /*
+   * What the User told a Task that it hasn't read yet (#130; DESIGN.md, Task
+   * tray › Queued messages), nearest the composer, wrapping rather than cut.
+   */
+  .task-queued {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    margin: 0;
+    padding: 4px 4px 4px 10px;
+    list-style: none;
+
+    & + * {
+      border-top: 1px solid var(--color-rule);
+    }
+  }
+  .task-queued-message {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    min-height: 24px;
+    padding: 3px 0;
+  }
+  .task-queued-arrow {
+    flex: none;
+    color: var(--color-ink-meta);
+  }
+  .task-queued-text {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    word-break: normal;
+  }
+  .task-queued-when {
+    color: var(--color-ink-meta);
+  }
+  .task-queued-remove {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    margin-top: -1px;
+    border-radius: 4px;
+    color: var(--color-ink-meta);
+
+    &:hover {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
   }
   .task-ask-count {
     flex: none;

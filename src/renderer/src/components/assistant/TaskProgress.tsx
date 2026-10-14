@@ -275,15 +275,36 @@ export function TaskProgress({
           </li>
         )}
       </ol>
+      {task.remaining.length > 0 && (
+        <div data-testid="task-progress-remaining" className="task-progress-remaining">
+          <p className="task-progress-remaining-label">{t("task.progress.remaining")}</p>
+          <ul className="task-progress-steps">
+            {task.remaining.map((step, index) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: what is left, in its order.
+              <li key={index} className="task-progress-step">
+                <span aria-hidden="true" className="task-progress-mark">
+                  –
+                </span>
+                <span>{step}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {detailsOpen && (
         <p id={detailsId} data-testid="task-progress-record" className="task-progress-details">
           {details(task, t, language)}
         </p>
       )}
       <div data-testid="task-progress-actions" className="task-progress-actions">
+        {task.summary && (
+          <span data-testid="task-progress-summary" className="task-progress-summary">
+            {task.summary}
+          </span>
+        )}
         {offered.map((action, index) => (
           <Fragment key={action.key}>
-            {index > 0 && <Dot />}
+            {(index > 0 || task.summary) && <Dot />}
             <button
               type="button"
               data-testid={`task-progress-${action.testId}`}

@@ -130,7 +130,14 @@ function researcher(seen: ModelCall[], hold?: { step: string; until: Promise<voi
 
 async function setUp(
   answering: MockLanguageModelV4,
-  { approve = "allow-once" }: { approve?: "allow-once" | "deny" } = {},
+  {
+    approve = "allow-once",
+    onAsk,
+  }: {
+    approve?: "allow-once" | "deny";
+    /** Done while the ask waits, before it is answered. */
+    onAsk?(core: Core, request: ApprovalRequest): Promise<unknown>;
+  } = {},
 ) {
   const { model, searches } = webSearchingModel(answering, FOUND);
   const web = await startWeb({
@@ -153,7 +160,9 @@ async function setUp(
   const asked: ApprovalRequest[] = [];
   core.on("approval.requested", (request) => {
     asked.push(request);
-    void core.respondToApproval(request.requestId, approve);
+    void (onAsk?.(core, request) ?? Promise.resolve()).then(() =>
+      core.respondToApproval(request.requestId, approve),
+    );
   });
   await core.updateSettings({ user: { webSearch: true } });
   const folder = await core.createLibraryGroup({ name: "Grocers", description: "" });
@@ -446,9 +455,17 @@ describe("Research", { timeout: 30_000 }, () => {
   });
 
   test("having read web pages, it asks before filing them into the Library; denied, they stay where they were saved and the draft is still written", async () => {
-    const { core, folder, mind, asked } = await setUp(researcher([]), { approve: "deny" });
+    const seen: ModelCall[] = [];
+    const { core, folder, mind, asked } = await setUp(researcher(seen), {
+      approve: "deny",
+      // Told while it waits: the draft, its next step, reads it.
+      onAsk: (each, request) => each.tellTask(request.taskId ?? "", "Keep it to one paragraph"),
+    });
     const task = await started(core, startInput(mind.id, folder.id));
     const done = await waitForTask(core, task.id, (each) => each.finishedAt !== null);
+    const draft = seen.at(-1);
+    expect(draft && requestText(draft)).toContain("- Keep it to one paragraph");
+    expect(done.queued).toEqual([]);
 
     expect(asked).toEqual([
       expect.objectContaining({

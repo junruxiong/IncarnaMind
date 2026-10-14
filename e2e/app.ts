@@ -275,17 +275,29 @@ export const flushUsageData = (app: ElectronApplication) =>
 
 /**
  * Stands in for the system's notifications: each one shown is recorded
- * instead (`notificationsShown`). Notifications made before this aren't.
+ * instead (`notificationsShown`, `clickNotification`). Notifications made
+ * before this aren't.
  */
 export const recordNotifications = (app: ElectronApplication) =>
   app.evaluate(({ Notification }) => {
     const shown: { title: string; body: string }[] = [];
-    (globalThis as { notificationsShown?: typeof shown }).notificationsShown = shown;
+    const held: Electron.Notification[] = [];
+    Object.assign(globalThis, { notificationsShown: shown, notificationsHeld: held });
     Notification.isSupported = () => true;
     Notification.prototype.show = function show(this: Electron.Notification) {
       shown.push({ title: this.title, body: this.body });
+      held.push(this);
     };
   });
+
+/** Clicks the notification recorded `index`th, as the User would in the system's list. */
+export const clickNotification = (app: ElectronApplication, index: number) =>
+  app.evaluate((_electron, at) => {
+    const held = (globalThis as { notificationsHeld?: Electron.Notification[] }).notificationsHeld;
+    const notification = held?.[at];
+    if (!notification) throw new Error(`No notification ${at} was shown.`);
+    notification.emit("click");
+  }, index);
 
 export const notificationsShown = (app: ElectronApplication) =>
   app.evaluate(
@@ -293,6 +305,13 @@ export const notificationsShown = (app: ElectronApplication) =>
       (globalThis as { notificationsShown?: { title: string; body: string }[] })
         .notificationsShown ?? [],
   );
+
+/** Force-quits the app as a crash would: its process killed, nothing saved on the way out. */
+export async function forceQuit(app: ElectronApplication): Promise<void> {
+  const exited = new Promise<void>((resolve) => app.process().once("exit", () => resolve()));
+  app.process().kill("SIGKILL");
+  await exited;
+}
 
 /** Chooses the Edit menu's Undo or Redo, as the application menu has it now. */
 export const clickEditItem = (app: ElectronApplication, id: "edit.undo" | "edit.redo") =>

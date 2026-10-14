@@ -301,6 +301,7 @@ export async function writeDraft(
   }) => Promise<CellAnswer>,
 ): Promise<{ written: WrittenDraft } | { failed: string } | { end: TaskEnd }> {
   task.started(DRAFT_STEP);
+  task.takeMessages();
   const documentIds = options.documents.live(found.documents);
   if (documentIds.length === 0) {
     task.settled(DRAFT_STEP, "failed", { problem: "no-sources" });
