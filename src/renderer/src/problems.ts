@@ -7,12 +7,16 @@ import type { SettingsPage } from "./settingsPages";
 /**
  * What a failed Answer says, and the one thing it offers (DESIGN.md,
  * Problems): its line, and either a page of Settings to fix it on, trying
- * again, a page of the provider's own, signing in again, or nothing when
- * none would help.
+ * again, a page of the provider's own, signing in again, getting a model
+ * on this computer, or nothing when none would help.
  */
 export type AnswerFix =
   | { kind: "settings"; page: SettingsPage; label: MessageKey }
   | { kind: "retry"; label: MessageKey }
+  /** The choice of a local model, in place (`LocalModelDialog`). */
+  | { kind: "local-model"; label: MessageKey }
+  /** Opening Ollama, or getting it, and then asking again (`OllamaNotRunningLine`). */
+  | { kind: "ollama" }
   /** A page of the provider's own, opened in the browser. */
   | { kind: "link"; url: string; label: MessageKey }
   /** Signing in with ChatGPT again, from the Answer, which is then tried again. */
@@ -44,8 +48,10 @@ export const ANSWER_PROBLEMS: Record<ProviderErrorKind, AnswerProblem> = {
   // Stopped by local mode: a model on this computer can write it.
   "local-mode": {
     line: "answer.error.local-mode",
-    fix: { kind: "settings", page: "models", label: "answer.error.useLocal" },
+    fix: { kind: "local-model", label: "answer.error.useLocal" },
   },
+  // The model is in Ollama, which isn't running: open it, or get it.
+  "ollama-not-running": { line: "answer.error.ollama-not-running", fix: { kind: "ollama" } },
   "rate-limit": { line: "answer.error.rate-limit", fix: retry },
   network: { line: "answer.error.network", fix: retry },
   provider: { line: "answer.error.provider", fix: retry },

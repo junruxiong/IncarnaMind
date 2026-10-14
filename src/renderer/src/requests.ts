@@ -13,6 +13,8 @@ interface Requests {
   deletePermanently: { items: readonly DeletedItem[]; empty: boolean } | null;
   /** The Meeting whose audio the User is asked about, on that Meeting's line. */
   deleteAudio: { meetingId: string } | null;
+  /** The choice of a local model, where "Keep everything on this computer" refused a Question and none is on this computer. */
+  chooseLocalModel: true | null;
   /** The Folder whose name and description the Library opens to edit. */
   editFolder: string | null;
   /** The Tag Manage Tags opens on, to rename. */
@@ -27,6 +29,7 @@ export const useRequests = create<Requests>((set) => ({
   unlink: null,
   deletePermanently: null,
   deleteAudio: null,
+  chooseLocalModel: null,
   editFolder: null,
   manageTag: null,
   nameFolder: null,

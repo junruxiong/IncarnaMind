@@ -2,6 +2,7 @@ import type { ChatReadiness } from "../../../../core/api";
 import { signInAgain } from "../../chatGptSignIn";
 import { useT } from "../../i18n";
 import { turnOffLocalMode } from "../../localMode";
+import { useRequests } from "../../requests";
 import type { SettingsPage } from "../../settingsPages";
 import { useAppStore } from "../../store";
 import { ProblemLine } from "../ProblemLine";
@@ -63,7 +64,7 @@ export function ReadinessExplanation({
 /**
  * Why Questions can't be asked, as one line with the one thing that fixes it.
  * Local mode refusing a cloud model has two ways out, so it offers both: a
- * local model, or turning local mode off (which can be undone).
+ * local model, chosen in place, or turning local mode off (which can be undone).
  * `refused`: a Question was just asked and not sent, rather than Questions
  * being off in general.
  */
@@ -91,7 +92,7 @@ export function ReadinessLine({
         action={{
           label: t("localMode.useLocal"),
           testId: "local-mode-use-local",
-          onClick: () => openSettings("models"),
+          onClick: () => useRequests.getState().ask({ chooseLocalModel: true }),
         }}
         also={{
           label: t("localMode.turnOff"),

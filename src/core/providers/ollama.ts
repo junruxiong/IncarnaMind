@@ -44,12 +44,38 @@ export const RECOMMENDED_OLLAMA_DOWNLOAD_GB =
 
 const DETECT_TIMEOUT_MS = 2_000;
 
-export async function detectOllama(baseUrl: string): Promise<OllamaStatus> {
+/** How long Open Ollama waits for Ollama to answer: its app takes a few seconds to start. */
+export const OLLAMA_START_TIMEOUT_MS = 20_000;
+
+/** Whether anything answers at `baseUrl`, in whatever words: asked as `detectOllama` asks, with a short timeout and no retry. */
+export async function ollamaAnswers(baseUrl: string): Promise<boolean> {
+  try {
+    await fetch(`${baseUrl}/api/tags`, { signal: AbortSignal.timeout(DETECT_TIMEOUT_MS) });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Looks for Ollama at `baseUrl`, with a short timeout and no retry. When it isn't
+ * running, `installed` says whether its app is on this computer (it isn't, by default).
+ */
+export async function detectOllama(
+  baseUrl: string,
+  installed: () => Promise<boolean> = async () => false,
+): Promise<OllamaStatus> {
+  const notRunning = async (): Promise<OllamaStatus> => ({
+    running: false,
+    baseUrl,
+    installed: await installed().catch(() => false),
+    recommendedModel: RECOMMENDED_OLLAMA_MODEL,
+  });
   try {
     const response = await fetch(`${baseUrl}/api/tags`, {
       signal: AbortSignal.timeout(DETECT_TIMEOUT_MS),
     });
-    if (!response.ok) return { running: false, baseUrl };
+    if (!response.ok) return notRunning();
     const body: unknown = await response.json();
     const listed = isRecord(body) && Array.isArray(body.models) ? body.models : [];
     const models: string[] = [];
@@ -69,7 +95,24 @@ export async function detectOllama(baseUrl: string): Promise<OllamaStatus> {
       recommendedModel: RECOMMENDED_OLLAMA_MODEL,
     };
   } catch {
-    return { running: false, baseUrl };
+    return notRunning();
+  }
+}
+
+/**
+ * Waits for Ollama to answer, as it does after its app is opened: asks again every
+ * `everyMs` until it does or `timeoutMs` has gone by, and gives what it found last.
+ */
+export async function waitForOllama(
+  baseUrl: string,
+  installed: () => Promise<boolean>,
+  { timeoutMs, everyMs = 500 }: { timeoutMs: number; everyMs?: number },
+): Promise<OllamaStatus> {
+  const until = Date.now() + timeoutMs;
+  for (;;) {
+    const status = await detectOllama(baseUrl, installed);
+    if (status.running || Date.now() >= until) return status;
+    await new Promise((resolve) => setTimeout(resolve, everyMs));
   }
 }
 

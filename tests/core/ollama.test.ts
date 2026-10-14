@@ -36,7 +36,12 @@ describe("Ollama", () => {
     const baseUrl = await unusedLocalUrl();
     const core = startCore(await createTempDataFolder());
 
-    expect(await core.detectOllama({ baseUrl })).toEqual({ running: false, baseUrl });
+    expect(await core.detectOllama({ baseUrl })).toEqual({
+      running: false,
+      baseUrl,
+      installed: false,
+      recommendedModel: RECOMMENDED_OLLAMA_MODEL,
+    });
   });
 
   test("one click pulls the recommended model with progress and selects it", async () => {

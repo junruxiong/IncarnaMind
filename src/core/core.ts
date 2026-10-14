@@ -139,8 +139,10 @@ import {
   detectOllama,
   hasOllamaModel,
   OLLAMA_REGISTRY,
+  OLLAMA_START_TIMEOUT_MS,
   pullOllamaModel,
   RECOMMENDED_OLLAMA_MODEL,
+  waitForOllama,
 } from "./providers/ollama";
 import { isCloudModelName } from "./providers/ollamaCloud";
 import { createOllamaModels } from "./providers/ollamaModels";
@@ -1845,6 +1847,7 @@ export function createCore(adapters: CoreAdapters): Core {
     if (input !== undefined && !isRecord(input)) throw new InvalidInputError("Expected an object.");
     return ollamaBaseUrl(input?.baseUrl);
   };
+  const ollamaInstalled = async () => (await adapters.ollamaApp?.installed()) ?? false;
 
   // Transcripts (#136): a Meeting is transcribed on this computer as it records, where this copy can.
   let listMeetings: (() => Meeting[]) | undefined;
@@ -2434,7 +2437,17 @@ export function createCore(adapters: CoreAdapters): Core {
     getSecretStorage: async () => secrets.status(),
     acceptPlainTextSecretStorage: async () => secrets.acceptPlainText(),
 
-    detectOllama: (input) => detectOllama(ollamaUrl(input)),
+    detectOllama: (input) => detectOllama(ollamaUrl(input), ollamaInstalled),
+    openOllama: async (input) => {
+      const baseUrl = ollamaUrl(input);
+      if (!(await ollamaInstalled())) {
+        throw new InvalidInputError({ key: "error.provider.ollamaCantOpen" });
+      }
+      await adapters.ollamaApp?.open();
+      return waitForOllama(baseUrl, ollamaInstalled, {
+        timeoutMs: adapters.ollamaStartTimeoutMs ?? OLLAMA_START_TIMEOUT_MS,
+      });
+    },
     selectOllama: async (input) => {
       const baseUrl = ollamaUrl(input);
       const model = input?.model ?? RECOMMENDED_OLLAMA_MODEL;
