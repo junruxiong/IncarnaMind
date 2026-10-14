@@ -425,6 +425,11 @@ export function mindTools(options: MindToolsOptions): Tool[] {
    * be written yet, or its input says nothing that streams.
    */
   const streams = new Map<string, { writer: Writer | null; created: boolean; breaks: number }>();
+  /**
+   * Calls already made: input the engine still hands over after the call ran
+   * (it reads the stream behind the call) writes nothing more.
+   */
+  const ended = new Set<string>();
 
   options.signal.addEventListener("abort", () => {
     for (const stream of streams.values()) {
@@ -443,7 +448,7 @@ export function mindTools(options: MindToolsOptions): Tool[] {
     text: string,
     open: (fields: ReturnType<typeof partialFields>) => { writer: Writer; created: boolean } | null,
   ): void => {
-    if (options.signal.aborted) return;
+    if (options.signal.aborted || ended.has(toolCallId)) return;
     const fields = partialFields(text);
     const content = fields.get("content");
     if (!content) return;
@@ -481,6 +486,7 @@ export function mindTools(options: MindToolsOptions): Tool[] {
   ): { change: MindChange; notFound: number; unrecorded: number } => {
     const stream = streams.get(toolCallId);
     streams.delete(toolCallId);
+    ended.add(toolCallId);
     let writer = stream?.writer ?? null;
     if (writer && (writer.mind.id !== mind.id || writer.named !== after)) {
       withdraw(writer);
