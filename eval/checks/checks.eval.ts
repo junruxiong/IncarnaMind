@@ -1,6 +1,6 @@
 /**
  * The checks evaluation (eval/checks/README.md, #86), part of `npm run eval`:
- * Find support's 200 sentences and verify's 10 received documents, run end to
+ * Find support's 208 sentences and verify's 10 received documents, run end to
  * end against one Folder of Documents and scored against the labels.
  *
  * It needs a chat model (INCARNAMIND_EVAL_CHAT_*), and skips without one or
