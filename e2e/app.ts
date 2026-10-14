@@ -47,6 +47,11 @@ export interface LaunchOptions {
    */
   ollama?: string;
   /**
+   * Set, the app really asks the Ollama at `ollama` whether it runs, and opening Ollama's app
+   * only counts (`ollamaAppOpened`). Without it, the scripted chat model's Ollama always runs.
+   */
+  ollamaApp?: "installed" | "missing";
+  /**
    * Where crash reports go: a test build offers them only with this, and
    * ignores the DSN a real build is made with. Point it at a local server.
    */
@@ -156,6 +161,7 @@ export async function launchApp(
   {
     fakeChat = false,
     ollama,
+    ollamaApp,
     sentryDsn,
     usageData,
     examples = false,
@@ -180,6 +186,8 @@ export async function launchApp(
   delete env.ELECTRON_RUN_AS_NODE;
   delete env.OLLAMA_HOST;
   if (ollama) env.OLLAMA_HOST = ollama;
+  delete env.INCARNAMIND_TEST_OLLAMA_APP;
+  if (ollamaApp) env.INCARNAMIND_TEST_OLLAMA_APP = ollamaApp;
   delete env.INCARNAMIND_TEST_SENTRY_DSN;
   delete env.INCARNAMIND_TEST_EXAMPLES;
   delete env.INCARNAMIND_TEST_POSTHOG_KEY;
@@ -594,6 +602,14 @@ export async function interceptOpenExternal(app: ElectronApplication) {
 /** The URLs the intercepted system browser was asked to open. */
 export function urlsOpened(app: ElectronApplication) {
   return app.evaluate(() => (globalThis as { urlsOpened?: string[] }).urlsOpened ?? []);
+}
+
+export function ollamaAppOpened(app: ElectronApplication) {
+  return app.evaluate(
+    () =>
+      (globalThis as { incarnamindOllamaApp?: { opened: number } }).incarnamindOllamaApp?.opened ??
+      0,
+  );
 }
 
 /**

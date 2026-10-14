@@ -103,11 +103,11 @@ test("in local mode a Question to a cloud model isn't sent: one line says so wit
   await window.keyboard.press("Escape");
   await bridge(window).language("en");
 
-  // Use a local model: opens the models in Settings, where a local one is set up.
   await refusal.getByTestId("local-mode-use-local").click();
-  await expect(window.getByTestId("settings")).toHaveAttribute("data-page", "models");
-  await window.keyboard.press("Escape");
+  await expect(window.getByTestId("local-model-dialog")).toBeVisible();
   await expect(window.getByTestId("settings")).toBeHidden();
+  await window.keyboard.press("Escape");
+  await expect(window.getByTestId("local-model-dialog")).toBeHidden();
 
   // Turn off local mode: the line goes, and Undo turns it on again.
   await refusal.getByTestId("local-mode-turn-off").click();
