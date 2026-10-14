@@ -122,7 +122,6 @@ export function ProviderForm({
   const keyRequired = kind !== null && kind !== "openai-compatible";
   const hasKey = apiKey.trim() !== "" || Boolean(saved?.hasApiKey);
   const keyBlocked = apiKey.trim() !== "" && secretStorage !== null && !secretStorage.canSave;
-  /** What "Use this key" still waits for, said beside it while it can't be pressed. */
   const missing: MessageKey | null =
     kind === null
       ? null

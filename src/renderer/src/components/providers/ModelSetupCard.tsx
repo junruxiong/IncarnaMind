@@ -50,7 +50,6 @@ export function ModelSetupCard() {
       );
   }, []);
   const open = (next: Exclude<View, null>) => setView(view === next ? null : next);
-  // Says why a model on this computer can't be used yet, with the next step (Get Ollama).
   const running = ollama.status?.running;
   const localWay = {
     testId: "way-local",
