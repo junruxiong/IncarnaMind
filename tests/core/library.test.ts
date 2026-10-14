@@ -350,6 +350,35 @@ describe("Library groups", () => {
     expect(requests).toEqual([]);
   });
 
+  test("saving the same organizing model again, for another setting, doesn't allow what the User revoked", async () => {
+    const { core, fake } = await setup();
+    const doc = await add(core);
+    const provider = await core.saveChatProvider({
+      kind: "openai",
+      apiKey: "test-key",
+      modelId: "small",
+    });
+    const classifier = {
+      kind: "chat" as const,
+      choice: { providerId: provider.id, modelId: "small" },
+    };
+    await core.saveLibrarySettings({ classifier, automatic: false });
+    await core.revokeConsent("classification", "https://api.openai.com");
+
+    await core.saveLibrarySettings({ classifier, automatic: true });
+    await core.classifyDocuments([doc.id]);
+    await settled(core, doc.id, "waiting");
+    expect(fake.calls).toHaveLength(0);
+
+    // Choosing another model is a new choice.
+    await core.saveLibrarySettings({
+      classifier: { ...classifier, choice: { ...classifier.choice, modelId: "other" } },
+      automatic: true,
+    });
+    await settled(core, doc.id);
+    expect(fake.calls).toHaveLength(1);
+  });
+
   test("in local mode a cloud classifier, though allowed, is never used", async () => {
     const { core, fake } = await setup();
     const doc = await add(core);
