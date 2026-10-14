@@ -211,7 +211,8 @@ const NOT_TEXT_CONTENT = new Set([WORD_RUN_MARK]);
 /** Mark attributes that are how a link opens, not where it leads. */
 const NOT_MARK_CONTENT = new Set(["target", "rel", "class"]);
 
-function sorted(value: unknown, skip: ReadonlySet<string> = new Set()): unknown {
+/** A value with its keys sorted and its empty ones left out, for hashing. */
+export function sorted(value: unknown, skip: ReadonlySet<string> = new Set()): unknown {
   if (Array.isArray(value)) return value.map((each) => sorted(each));
   if (!isRecord(value)) return value;
   return Object.fromEntries(
@@ -222,7 +223,7 @@ function sorted(value: unknown, skip: ReadonlySet<string> = new Set()): unknown 
   );
 }
 
-function canonical(node: Y.XmlElement | Y.XmlText): unknown {
+function canonical(node: Y.XmlElement | Y.XmlText, rejoin = true): unknown {
   if (node instanceof Y.XmlText) {
     const runs: [string, Record<string, unknown>][] = [];
     for (const run of node.toDelta() as {
@@ -238,6 +239,7 @@ function canonical(node: Y.XmlElement | Y.XmlText): unknown {
       const last = runs.at(-1);
       // Rejoin text that only a left-out mark split, so adding the mark keeps the fingerprint.
       if (
+        rejoin &&
         typeof run.insert === "string" &&
         last &&
         last[0] !== "￼" &&
@@ -256,7 +258,7 @@ function canonical(node: Y.XmlElement | Y.XmlText): unknown {
     node
       .toArray()
       .filter((child) => child instanceof Y.XmlElement || child instanceof Y.XmlText)
-      .map((child) => canonical(child as Y.XmlElement | Y.XmlText)),
+      .map((child) => canonical(child as Y.XmlElement | Y.XmlText, rejoin)),
   ];
 }
 
@@ -267,4 +269,9 @@ function canonical(node: Y.XmlElement | Y.XmlText): unknown {
  */
 export function wordFingerprint(element: Y.XmlElement): string {
   return targetHash(JSON.stringify(canonical(element)));
+}
+
+/** As recorded by versions before Minds kept the Word look, which didn't rejoin text. */
+export function wordFingerprintBeforeLook(element: Y.XmlElement): string {
+  return targetHash(JSON.stringify(canonical(element, false)));
 }

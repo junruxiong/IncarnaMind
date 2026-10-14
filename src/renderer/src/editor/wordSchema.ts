@@ -1,4 +1,7 @@
 import { Extension, Mark, mergeAttributes, Node, type NodeViewRenderer } from "@tiptap/core";
+import { Fragment, type Node as ProseMirrorNode, Slice } from "@tiptap/pm/model";
+import { Plugin } from "@tiptap/pm/state";
+import type * as Y from "yjs";
 import {
   IMAGE_NODE,
   WORD_ATOM_NODE,
@@ -7,6 +10,8 @@ import {
   WORD_RUN_MARK,
 } from "../../../core/api";
 import { readWordAtom, wordAtomText } from "../../../shared/wordFiles";
+import { wordLookOf } from "../../../shared/wordLook";
+import { editorDoc } from "./proposalReview";
 
 /**
  * An attribute kept in the HTML as `data-word-<name>`, so an atom copied and
@@ -184,9 +189,57 @@ export const InlineImage = Node.create({
 
 export const WORD_LOOK_TYPES = ["paragraph", "heading", "table", "tableCell", "tableHeader"];
 
+function lookKeysOf(doc: Y.Doc | null): ReadonlySet<string> {
+  const look = doc ? wordLookOf(doc) : null;
+  if (!look) return new Set();
+  return new Set(
+    [look.paragraphs, look.runs, look.tables, look.cells].flatMap((styles) => Object.keys(styles)),
+  );
+}
+
+/**
+ * Keys name a look by its content, so a pasted key the Mind has is the same
+ * look; one it doesn't have came from another file and is dropped.
+ */
+function withKnownLooks(fragment: Fragment, known: ReadonlySet<string>): Fragment {
+  const nodes: ProseMirrorNode[] = [];
+  fragment.forEach((node) => {
+    const marks = node.marks.filter(
+      (mark) => mark.type.name !== WORD_RUN_MARK || known.has(String(mark.attrs.k)),
+    );
+    if (node.isText) {
+      nodes.push(node.mark(marks));
+      return;
+    }
+    const key = node.attrs[WORD_LOOK_ATTRIBUTE];
+    const attrs =
+      typeof key === "string" && !known.has(key)
+        ? { ...node.attrs, [WORD_LOOK_ATTRIBUTE]: null }
+        : node.attrs;
+    nodes.push(node.type.create(attrs, withKnownLooks(node.content, known), marks));
+  });
+  return Fragment.fromArray(nodes);
+}
+
 /** `keepOnSplit`: Word gives a new paragraph the properties of the one before. */
 export const WordLookAttribute = Extension.create({
   name: "wordLookAttribute",
+
+  addProseMirrorPlugins() {
+    const editor = this.editor;
+    return [
+      new Plugin({
+        props: {
+          transformPasted: (slice) =>
+            new Slice(
+              withKnownLooks(slice.content, lookKeysOf(editorDoc(editor))),
+              slice.openStart,
+              slice.openEnd,
+            ),
+        },
+      }),
+    ];
+  },
 
   addGlobalAttributes() {
     return [

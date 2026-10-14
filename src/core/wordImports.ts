@@ -62,11 +62,11 @@ import {
   type WordReview,
 } from "./documents/formats/docxPackage";
 import { packageSizeError } from "./documents/formats/zip";
-import { InvalidInputError, isRecord } from "./errors";
+import { InvalidInputError, isRecord, MindReadOnlyError } from "./errors";
 import type { MindContent } from "./mindContent";
 import { type createMinds, parseFolderChoice } from "./minds";
 import type { Database } from "./storage";
-import { applyLook, planLook } from "./wordLookBackfill";
+import { applyLook, type LookPlan, planLook } from "./wordLookBackfill";
 
 /** The folder in the data folder that keeps imported Word packages. */
 export const WORD_PACKAGES_FOLDER = "Word imports";
@@ -515,10 +515,7 @@ export function createWordImports(options: WordImportsOptions) {
       };
     },
 
-    /**
-     * Gives Minds imported before the look was kept their look, once, on the
-     * Blocks still as imported. A core change, so not an Undo step.
-     */
+    /** Not an Undo step: it is the core's change, and the editor undoes only its own. */
     async addLooks(): Promise<void> {
       const imported = db.all<{ id: string; mind_id: string; sha256: string }>(
         `SELECT p.id, p.mind_id, p.sha256 FROM word_packages p JOIN minds m ON m.id = p.mind_id
@@ -550,21 +547,31 @@ export function createWordImports(options: WordImportsOptions) {
           const pkg = await openWordPackage(bytes);
           const structure = await readWordStructure(pkg, await reviewOf(pkg));
           if (closed) return;
-          // Planned inside the edit so it applies to the content it was planned on.
-          const plan = content.edit(mindId, (blocks) => {
-            if (!blocks.doc) return null;
-            const look = wordLookOf(blocks.doc);
-            if (look && look.version >= WORD_LOOK_VERSION) return null;
-            const planned = planLook(blocks.doc, blocks, structure);
-            applyLook(planned);
-            setWordLook(blocks.doc, structure.look);
-            return planned;
-          });
+          const wasLoaded = content.isLoaded(mindId);
+          let plan: LookPlan | null;
+          try {
+            // Planned inside the edit so it applies to the content it was planned on.
+            plan = content.edit(mindId, (blocks) => {
+              const doc = blocks.doc;
+              if (!doc || wordLookOf(doc)) return null;
+              const planned = planLook(doc, blocks, structure);
+              applyLook(doc, planned);
+              setWordLook(doc, structure.look);
+              return planned;
+            });
+          } finally {
+            if (!wasLoaded) content.close(mindId);
+          }
           recorded(rowId);
           if (plan) {
-            log.info("word.look.added", { mindId, given: plan.given, skipped: plan.skipped });
+            log.info("word.look.added", {
+              mindId,
+              given: plan.given,
+              editedSinceImport: plan.editedSinceImport,
+            });
           }
         } catch (error) {
+          if (error instanceof MindReadOnlyError) continue;
           log.error("word.look.failed", {
             mindId,
             error: error instanceof Error ? error.name : "unknown",
@@ -572,6 +579,7 @@ export function createWordImports(options: WordImportsOptions) {
           });
         }
       }
+      log.info("word.look.done", { minds: imported.length });
     },
 
     /** Stops writing Blocks: each import goes on from where it got to at the next start. */
