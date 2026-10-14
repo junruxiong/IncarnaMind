@@ -258,6 +258,8 @@ export interface AnswerConversations {
   add(input: QuestionInput, answerModel: ChatModelChoice | null, read: AnswerRead | null): Turn;
   /** The Question of an Answer, to write the Answer again. */
   questionOf(input: unknown): { answerId: string; question: ConversationQuestion };
+  /** Takes the Search scope off a Question: its Answers search every Document (#748). */
+  clearScope(questionId: string): ConversationQuestion | null;
   /** Empties an Answer, where it is, to write it again, reading `read`. */
   restartAnswer(
     answerId: string,
@@ -301,6 +303,10 @@ export interface CellAnswer {
 }
 
 /** No Search scope: every Document. */
+/** Tells the model its Question's Search scope holds no Documents, so it answers from what it has (#748). */
+const EMPTY_SCOPE_NOTE =
+  "The User limited this Question to a Search scope (Folders, Tags or Documents) that holds no Documents, so there is nothing to search. Answer from the Mind you read, the conversation and the request itself. If the Answer needs the User's Documents, say so plainly in one sentence: do not guess what they hold.";
+
 const NO_SCOPE: SearchScope = { folderIds: [], tagIds: [], documentIds: [] };
 
 /** The Folder a Search scope is, when it is one Folder alone; null otherwise. */
@@ -617,7 +623,11 @@ export function createAnswers(options: AnswersOptions) {
     context: QuestionContext;
     /** The Documents of the Question's Search scope; null with no Search scope (every Document). */
     documentIds: string[] | null;
-    /** The Search scope has no Documents to search: the Answer says so, and nothing is sent. */
+    /**
+     * The Search scope has no Documents to search. An outside agent's or a task's Answer says so
+     * and nothing is sent; the assistant's Question goes on to the model, which is told, and
+     * answers from the Mind it reads and the conversation (#748).
+     */
     emptyScope: boolean;
     /** The Skill the Question forces, loaded up front; null if none. */
     forcedSkill: string | null;
@@ -678,9 +688,8 @@ export function createAnswers(options: AnswersOptions) {
      * Question that has the Answer in its context counts as having read it too.
      * None for the Answer that says the Search scope is empty: no model wrote it.
      */
-    let textOrigin: ThirdPartySource | null = input.emptyScope
-      ? null
-      : (contextReasons[0]?.source ?? null);
+    let textOrigin: ThirdPartySource | null =
+      input.emptyScope && outside ? null : (contextReasons[0]?.source ?? null);
     /** What the Answer records of the Mind it read: less once the model's window cut it. */
     let read = input.mind?.read ?? null;
     /** How much of the Mind its request holds, from 0 to 1. */
@@ -692,6 +701,7 @@ export function createAnswers(options: AnswersOptions) {
     let support: CitationSupport | null = null;
     /** Markers the engine put in for records the model gave without them. */
     let placedMarkers = 0;
+    const citedAfterChecking = { count: 0, asked: false };
     /** The one request for exact quotes, if the engine made it (see ./quoteRetry). */
     let quoteRetry: QuoteRetry | null = null;
     /** The one request to fix figures, if the engine made it (see ./figureRetry). */
@@ -730,6 +740,7 @@ export function createAnswers(options: AnswersOptions) {
             ? { summary, ms: Math.max(0, thoughtUntil - reasoningStartedAt) }
             : null,
         ...(read?.partial && { readShare }),
+        ...(citedAfterChecking.count > 0 && { citedAfterChecking: citedAfterChecking.count }),
       };
     };
     let skills: SkillSession | null = null;
@@ -886,6 +897,7 @@ export function createAnswers(options: AnswersOptions) {
           status: written ? outcome.status : "stopped",
           ...session.summary(),
           placedMarkers,
+          citedAfterChecking: { ...citedAfterChecking },
           citationSupport: support,
           quoteRetry,
           figures: placed.figures,
@@ -1160,8 +1172,9 @@ export function createAnswers(options: AnswersOptions) {
     };
 
     const run = async () => {
-      // Rather than search every Document, the Answer says the scope has none to search.
-      if (input.emptyScope) {
+      // An outside agent's Question, or a table's cell, whose scope has no Documents has nothing to
+      // answer from: it says so without asking the model.
+      if (input.emptyScope && outside) {
         // On a later turn, as a model's Answer would arrive, so whoever asked hears every event.
         await new Promise((resolve) => setTimeout(resolve, 0));
         if (finished) return;
@@ -1328,6 +1341,8 @@ export function createAnswers(options: AnswersOptions) {
         hasRecord: (marker) => session.tools.hasRecord?.(marker) ?? false,
         unfoundQuotes: () => session.tools.unfoundQuotes?.() ?? [],
         correctQuote: (marker, quote) => session.tools.correctQuote?.(marker, quote) ?? false,
+        shownPassages: () => session.tools.shownPassages?.() ?? [],
+        quoteFound: (passage, quote) => session.tools.quoteFound?.(passage, quote) ?? false,
         ...(calculating && {
           calculate: (given: readonly unknown[], calculateOptions?: CiteOptions) =>
             figures.calculate(given, calculateOptions),
@@ -1388,7 +1403,9 @@ export function createAnswers(options: AnswersOptions) {
           [
             base,
             mode === "no-documents"
-              ? ""
+              ? input.emptyScope
+                ? EMPTY_SCOPE_NOTE
+                : ""
               : documentInstructions(
                   mode,
                   options.documents.searchableNames(documentIds, LISTED_DOCUMENTS),
@@ -1439,6 +1456,10 @@ export function createAnswers(options: AnswersOptions) {
             break;
           case "markers-placed":
             placedMarkers += event.count;
+            break;
+          case "cited-after-checking":
+            citedAfterChecking.count += event.count;
+            citedAfterChecking.asked ||= event.asked;
             break;
           case "mind-cut":
             if (read) read = event.share === 0 ? null : { ...read, partial: true };
@@ -1852,9 +1873,8 @@ export function createAnswers(options: AnswersOptions) {
         };
         const attributes: Partial<AnswerAttributes> = {
           questionId,
-          // No model writes an Answer that says the Search scope is empty.
-          providerId: asked.emptyScope ? null : model.providerId,
-          modelId: asked.emptyScope ? null : model.modelId,
+          providerId: model.providerId,
+          modelId: model.modelId,
           status: "streaming",
           errorKind: null,
           errorMessage: null,
@@ -1945,20 +1965,17 @@ export function createAnswers(options: AnswersOptions) {
       if ("asked" in ready) return ready;
       // From here on nothing awaits, so the conversation and the Mind can't change underneath.
       const { documentIds, emptyScope } = scopeNow(question.scope);
-      // No model writes an Answer that says the Search scope is empty, and it reads nothing.
-      const mind = emptyScope
-        ? null
-        : mindToRead(question.mind?.id ?? null, question.focus, question.text);
-      const turn = options.conversations.add(
-        question,
-        emptyScope ? null : ready.model,
-        readOf(mind),
-      );
+      const mind = mindToRead(question.mind?.id ?? null, question.focus, question.text);
+      const turn = options.conversations.add(question, ready.model, readOf(mind));
       return startInConversation(turn, ready, documentIds, emptyScope, mind);
     },
 
     /** Writes an Answer of a conversation again, in place (see `CoreApi.regenerateConversationAnswer`). */
     async regenerateInConversation(input: unknown): Promise<ConversationAskResult> {
+      const asked = options.conversations.questionOf(input);
+      if (isRecord(input) && input.clearScope === true) {
+        options.conversations.clearScope(asked.question.id);
+      }
       const { answerId, question } = options.conversations.questionOf(input);
       const ready = await readyModel(question.model, question.forcedSkill);
       if ("asked" in ready) return ready;
@@ -1966,14 +1983,8 @@ export function createAnswers(options: AnswersOptions) {
       const { documentIds, emptyScope } = scopeNow(question.scope);
       const from = question.askedFrom;
       const mind =
-        emptyScope || !from || from.deleted
-          ? null
-          : mindToRead(from.mindId, question.focus, question.text);
-      const turn = options.conversations.restartAnswer(
-        answerId,
-        emptyScope ? null : ready.model,
-        readOf(mind),
-      );
+        !from || from.deleted ? null : mindToRead(from.mindId, question.focus, question.text);
+      const turn = options.conversations.restartAnswer(answerId, ready.model, readOf(mind));
       return startInConversation(turn, ready, documentIds, emptyScope, mind);
     },
 

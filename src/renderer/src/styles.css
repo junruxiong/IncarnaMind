@@ -1133,6 +1133,13 @@
       margin-top: 0;
     }
   }
+  .mind-word-problem {
+    margin: -2px 0 6px;
+
+    + .mind-count {
+      margin-top: 0;
+    }
+  }
 
   /* A Mind made by "Verify a document…" (#97): where its text came from, then where its verify is. */
   .mind-verify {
@@ -1147,7 +1154,8 @@
     line-height: 20px;
     color: var(--color-ink-meta);
   }
-  .mind-verify-from {
+  .mind-verify-from,
+  .mind-word-from {
     display: flex;
     align-items: center;
     gap: 6px;
@@ -1309,12 +1317,12 @@
     background: var(--color-sheet);
     outline: none;
 
-    &:focus-visible {
-      border-color: var(--color-accent);
+    &[aria-invalid="true"] {
+      border-color: var(--color-warning);
     }
 
-    &[aria-invalid="true"] {
-      border-color: var(--color-danger);
+    &:focus-visible {
+      border-color: var(--color-accent);
     }
   }
   .count-target-set {
@@ -1333,7 +1341,7 @@
     grid-column: 1 / -1;
     font-size: 12px;
     line-height: 16px;
-    color: var(--color-danger);
+    color: var(--color-ink);
   }
 
   /* The editor and the margin column of checks beside it. */
@@ -2366,7 +2374,9 @@
   .block-math-error,
   .inline-math-error {
     font-family: var(--font-mono);
-    color: var(--color-danger);
+    color: var(--color-ink-meta);
+    text-decoration: underline dotted var(--color-warning);
+    text-underline-offset: 3px;
   }
   .tiptap-mathematics-render.ProseMirror-selectednode {
     background: var(--color-accent-wash);
@@ -2784,7 +2794,7 @@
     border-top: 1px solid var(--color-rule);
   }
   .answer-call--failed {
-    color: var(--color-danger);
+    color: var(--color-ink);
   }
   .answer-call-summary {
     display: flex;
@@ -2855,7 +2865,7 @@
   }
   .answer-call-error {
     font-family: var(--font-sans);
-    color: var(--color-danger);
+    color: var(--color-ink);
   }
   .answer-call-files {
     margin: 0 0 0 18px;
@@ -3015,15 +3025,6 @@
       color: var(--color-ink);
     }
   }
-  .approval-button--danger {
-    border-color: transparent;
-    background: var(--color-danger);
-    color: #fff;
-
-    &:hover {
-      background: #912018;
-    }
-  }
   /* In the assistant's narrower column the choices take less room, so Deny keeps its place at their row's end. */
   .assistant-answer .approval-actions {
     gap: 4px;
@@ -3049,7 +3050,7 @@
     font-size: var(--text-ui);
     line-height: var(--text-ui--line-height);
     font-weight: 600;
-    color: var(--color-danger);
+    color: var(--color-ink);
   }
   .approval-warning-body {
     font-size: 13px;
@@ -4366,7 +4367,7 @@
       white-space: nowrap;
     }
     .find-count--none {
-      color: var(--color-danger);
+      color: var(--color-ink);
     }
     button {
       display: flex;
@@ -5315,7 +5316,7 @@
   }
 
   /*
-   * A Task's progress in the thread (D189; DESIGN.md, Task progress in the
+   * A Task's progress in the thread (#657; DESIGN.md, Task progress in the
    * thread): its head (dot, name, how far), a 3px bar, its latest steps with
    * their marks, then quiet text actions.
    */
@@ -5723,6 +5724,7 @@
     color: var(--color-ink);
   }
   .assistant-answer-actions--added {
+    flex-wrap: nowrap;
     gap: 4px;
     margin-left: 0;
   }
@@ -5862,7 +5864,7 @@
     }
   }
   /*
-   * The Task tray (#126, narrowed by D189; DESIGN.md, Task tray): joined to
+   * The Task tray (#126, narrowed by #657; DESIGN.md, Task tray): joined to
    * the top of the composer, its width, sharing its edge: the plan card, the
    * one ask, its buttons pinned at the bottom while the rest scrolls, and
    * queued messages, each section ruled from the one above it.
