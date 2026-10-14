@@ -64,7 +64,7 @@ import {
   type OllamaModelProfile,
   type OllamaModels,
 } from "./ollamaModels";
-import { classifyProviderError, LocalModelError } from "./providerErrors";
+import { classifyProviderError, LocalModelError, OllamaNotRunningError } from "./providerErrors";
 
 /** How long a provider's model list is kept before it is asked again. */
 const MODEL_LIST_TTL_MS = 5 * 60_000;
@@ -811,6 +811,16 @@ export function createChat(options: {
       const { provider, modelId } = readiness;
       if (provider.service) await consent.ensure(flow, provider.service);
       const apiKey = acceptsApiKey(provider.kind) ? await secrets.get(keyName(provider.id)) : null;
+      // Ollama on this computer (its cloud models too, which it forwards) is asked first, so that
+      // it not running is said at once rather than after a request's retries.
+      if (
+        provider.kind === "ollama" &&
+        provider.baseUrl &&
+        serviceFor("ollama", provider.baseUrl) === null &&
+        !(await ollamaModels.running(provider.baseUrl))
+      ) {
+        throw new OllamaNotRunningError();
+      }
       const profile = await profileFor(provider.kind, provider.baseUrl, modelId);
       checkCanChat(profile, modelId);
       // The calls that don't write the Answer (tagging, classifying) skip thinking where they can.
