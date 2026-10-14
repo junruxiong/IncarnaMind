@@ -59,6 +59,7 @@ import { NoteHealth } from "../editor/NoteHealth";
 import { NoteKeymap } from "../editor/noteKeymap";
 import { noteExtensions } from "../editor/noteSchema";
 import { ProposalBars } from "../editor/ProposalBars";
+import { installSpikeHarness, spikeExtensions } from "../editor/pageView/spikeExtensions";
 import { ProposalReview } from "../editor/proposalReview";
 import { QuestionView } from "../editor/QuestionView";
 import { askInEditor, QuestionCommands } from "../editor/questionCommands";
@@ -398,10 +399,13 @@ function MindEditorView({
           describe: describeSuggestion,
           reportError: (error) => useAppStore.getState().reportError(error),
         }),
+        ...spikeExtensions(doc),
       ],
     },
     [doc, readOnly],
   );
+
+  useEffect(() => installSpikeHarness(editor), [editor]);
 
   useEffect(() => {
     if (!editor.isDestroyed) editor.setEditable(!readOnly && !importing);

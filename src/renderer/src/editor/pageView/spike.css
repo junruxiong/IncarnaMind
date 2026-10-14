@@ -1,0 +1,204 @@
+/* Spike for #755, not for merging. Carlito is the face LibreOffice draws Calibri with; the app already ships it (@fontsource/carlito, SIL OFL 1.1). */
+@font-face {
+  font-family: "Carlito";
+  font-weight: 400;
+  font-style: normal;
+  src: url("@fontsource/carlito/files/carlito-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Carlito";
+  font-weight: 700;
+  font-style: normal;
+  src: url("@fontsource/carlito/files/carlito-latin-700-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Carlito";
+  font-weight: 400;
+  font-style: italic;
+  src: url("@fontsource/carlito/files/carlito-latin-400-italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Carlito";
+  font-weight: 700;
+  font-style: italic;
+  src: url("@fontsource/carlito/files/carlito-latin-700-italic.woff2") format("woff2");
+}
+
+.mind-scroller:has(.spike-look) {
+  background: #e8e6e1;
+}
+.mind-measure:has(.spike-look) {
+  width: var(--spike-page-width, 794px);
+  margin-left: auto;
+  margin-right: auto;
+}
+.mind-editor.spike-look {
+  overflow-x: clip;
+  margin-left: 0;
+  width: var(--spike-page-width, 794px);
+  box-sizing: border-box;
+  padding: var(--spike-top, 96px) var(--spike-right, 96px) 0 var(--spike-left, 96px);
+  color: #111;
+  min-height: 0;
+  position: relative;
+  z-index: 1;
+}
+.mind-editor.spike-look:not(.spike-pages):not(.rm-with-pagination) {
+  background: #fff;
+  padding-bottom: var(--spike-bottom, 96px);
+}
+.mind-editor.spike-look > *,
+.mind-editor.spike-look > * + *,
+.mind-editor.spike-look > * + :is(h1, h2, h3, h4, h5, h6),
+.mind-editor.spike-look :is(ul, ol, li, blockquote),
+.mind-editor.spike-look li > * {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+.mind-editor.spike-look :is(p, h1, h2, h3, h4, h5, h6) {
+  margin: 0;
+}
+/* Collapsed rather than hidden: tiptap-pagination-plus counts pages from the editor's last child's box. */
+.mind-editor.spike-look > .word-block[data-kind="header"],
+.mind-editor.spike-look > .word-block[data-kind="footer"] {
+  height: 0;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  visibility: hidden;
+}
+.spike-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+.spike-overlay--top {
+  z-index: 2;
+}
+.spike-furniture {
+  position: absolute;
+  pointer-events: none;
+}
+.spike-mask {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: #fff;
+}
+.spike-mask--gap {
+  background: #e8e6e1;
+}
+.spike-sheet {
+  position: absolute;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.12);
+}
+.spike-header,
+.spike-footer {
+  position: absolute;
+  font-size: 12px;
+  color: #333;
+  white-space: pre;
+}
+.spike-notes {
+  position: absolute;
+  color: #111;
+}
+.spike-notes::before {
+  content: "";
+  display: block;
+  width: 144px;
+  border-top: 1px solid #555;
+  margin: 6px 0 7px;
+}
+
+/* Word's default table: 0.08" cell margins left and right, none above and below, single 0.5pt borders. */
+.mind-editor.spike-look .tableWrapper {
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+}
+.mind-editor.spike-look table {
+  border-collapse: collapse;
+  border-radius: 0;
+  margin: 0;
+  width: auto;
+}
+.mind-editor.spike-look :is(td, th) {
+  padding: 0 7.2px;
+  border: 0.667px solid #000;
+  background: none;
+  vertical-align: top;
+  font-weight: inherit;
+  text-align: inherit;
+}
+
+/* Export to PDF from Page view itself: only the sheets print, a sheet to a page. */
+@media print {
+  html.spike-printing,
+  html.spike-printing body,
+  html.spike-printing *:has(.spike-overlay) {
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
+    contain: none !important;
+    transform: none !important;
+  }
+  html.spike-printing body {
+    margin: 0 !important;
+  }
+  html.spike-printing body * {
+    visibility: hidden;
+  }
+  /* Out of layout, so the printed width is the sheet's and Chromium doesn't shrink it to fit. */
+  html.spike-printing
+    body
+    *:not(:has(.mind-editor-frame)):not(.mind-editor-frame):not(.mind-editor-frame *) {
+    display: none !important;
+  }
+  html.spike-printing body *:has(.mind-editor-frame) {
+    display: block !important;
+    position: static !important;
+    width: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+  }
+  html.spike-printing .mind-editor-frame,
+  html.spike-printing .mind-editor-frame * {
+    visibility: visible;
+  }
+  html.spike-printing .mind-editor-frame {
+    position: absolute !important;
+    left: 0 !important;
+    top: var(--spike-print-offset, 0) !important;
+    margin: 0 !important;
+  }
+  html.spike-printing .spike-overlay--top {
+    z-index: 2;
+  }
+  .spike-furniture {
+    position: absolute;
+    pointer-events: none;
+  }
+  .spike-mask {
+    position: absolute;
+    left: 0;
+    right: 0;
+    background: #fff;
+  }
+  .spike-mask--gap {
+    background: #e8e6e1;
+  }
+  .spike-sheet {
+    box-shadow: none;
+  }
+}
+
+/* A list item's marker takes the item's own line height and would prop its first line up past the paragraph's Word line. */
+.mind-editor.spike-look li {
+  line-height: 0;
+}
