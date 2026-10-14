@@ -11,6 +11,7 @@ import {
   setLanguage,
   setWindowSize,
   sidebarFolder,
+  useLocalChatModel,
 } from "./app";
 import { addLibrary, FIXTURE_COUNT, FOLDERS, NOT_IN_A_FOLDER, SCAN_NAME } from "./libraryFixture";
 
@@ -247,10 +248,10 @@ test("search narrows every section and hides the empty ones; a filter chip and t
     await search.fill("纪要");
     await expect(rowsOf(library)).toHaveCount(3);
 
-    // Nothing found says so, with one way back.
+    // Nothing found says so: ask about it instead, or go back.
     await search.fill("zzz nothing");
     await expect(library.getByTestId("library-no-match")).toHaveText(
-      "No Documents match · Clear search and filters",
+      "No Documents match · Ask about “zzz nothing” · Clear search and filters",
     );
     await pointAndClick(window, library.getByTestId("library-clear-narrowing"));
     await expect(search).toHaveValue("");
@@ -278,6 +279,33 @@ test("search narrows every section and hides the empty ones; a filter chip and t
     await expect(rowsOf(library).getByTestId("library-document-name")).toHaveText([SCAN_NAME]);
     await expect(rowsOf(library).getByTestId("document-status")).toContainText("No text");
     await expect(library.getByTestId("library-filter")).toContainText("Status: No text");
+  } finally {
+    await app.close();
+  }
+});
+
+test("words nothing in the Library matches are asked about in the assistant, by Enter or the line's button, in English and Chinese (#763)", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  try {
+    await setWindowSize(app, window, 1440, 900);
+    const library = await openFullLibrary(window);
+    await useLocalChatModel(window);
+    const search = library.getByTestId("library-search");
+    const asked = window.getByTestId("assistant-question");
+
+    await search.click();
+    await window.keyboard.type("harbour tide tables");
+    const line = library.getByTestId("library-no-match");
+    await expect(line.getByTestId("library-ask")).toHaveText("Ask about “harbour tide tables”");
+    await window.keyboard.press("Enter");
+    await expect(asked.last()).toContainText("harbour tide tables");
+
+    await setLanguage(window, "zh-CN");
+    await search.fill("潮汐时刻表");
+    await expect(line.getByTestId("library-ask")).toHaveText("就“潮汐时刻表”提问");
+    await expect(line.getByTestId("library-clear-narrowing")).toBeVisible();
+    await pointAndClick(window, line.getByTestId("library-ask"));
+    await expect(asked.last()).toContainText("潮汐时刻表");
   } finally {
     await app.close();
   }

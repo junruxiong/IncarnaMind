@@ -319,7 +319,7 @@ test("pausing a Linked folder and showing it as a flat list: ⌘Z sets it back a
   const { row, linked } = await linkPapers(window, app);
 
   await (await openLinkedFolderMenu(row)).getByTestId("linkedFolder.pause").click();
-  await expect(undoMessage(window)).toHaveText("Paused indexing in “Papers”");
+  await expect(undoMessage(window)).toHaveText("Paused reading in “Papers”");
   await screenshot(window, "pause-a-linked-folder-en-1600");
   expect((await linked())?.status).toBe("paused");
   await setWindowSize(app, window, 900, 660);
@@ -328,7 +328,7 @@ test("pausing a Linked folder and showing it as a flat list: ⌘Z sets it back a
   await expect.poll(async () => (await linked())?.status).toBe("watching");
   await redo(window);
   await expect.poll(async () => (await linked())?.status).toBe("paused");
-  await expect(undoMessage(window)).toHaveText("Paused indexing in “Papers”");
+  await expect(undoMessage(window)).toHaveText("Paused reading in “Papers”");
   await screenshot(window, "pause-a-linked-folder-en-900");
   await undo(window);
   await expect.poll(async () => (await linked())?.status).toBe("watching");
@@ -346,13 +346,13 @@ test("pausing a Linked folder and showing it as a flat list: ⌘Z sets it back a
 
   await setLanguage(window, "zh-CN");
   await (await openLinkedFolderMenu(row)).getByTestId("linkedFolder.pause").click();
-  await expect(undoMessage(window)).toHaveText("已暂停“Papers”的索引");
+  await expect(undoMessage(window)).toHaveText("已暂停读取“Papers”");
   await screenshot(window, "pause-a-linked-folder-zh-900");
   await setWindowSize(app, window, 1600, 660);
   await leaveText(window);
   await undo(window);
   await redo(window);
-  await expect(undoMessage(window)).toHaveText("已暂停“Papers”的索引");
+  await expect(undoMessage(window)).toHaveText("已暂停读取“Papers”");
   await screenshot(window, "pause-a-linked-folder-zh-1600");
   await undo(window);
   await expect.poll(async () => (await linked())?.status).toBe("watching");
@@ -365,7 +365,7 @@ test("quitting between the change and its Undo leaves the change made, and ⌘Z 
   await dismissChatSetup(first.window);
   const { row } = await linkPapers(first.window, first.app);
   await (await openLinkedFolderMenu(row)).getByTestId("linkedFolder.pause").click();
-  await expect(undoMessage(first.window)).toHaveText("Paused indexing in “Papers”");
+  await expect(undoMessage(first.window)).toHaveText("Paused reading in “Papers”");
   await newMind(first.window);
   await expect(undoMessage(first.window)).toHaveText("Made a new Mind");
   await first.app.close();

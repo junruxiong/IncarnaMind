@@ -10,6 +10,7 @@ import {
   launchApp,
   linkedFolderRow,
   removeDataFolder,
+  setLanguage,
   showSourceLocations,
   useLocalChatModel,
 } from "./app";
@@ -162,7 +163,13 @@ test("with only the example Documents, the footer doesn't ask for a model to tag
   const added = items.filter({ hasText: "Harbour notes" });
   await expect(added).toHaveAttribute("data-tagging", "waiting-for-provider");
   await expect(notice).toBeVisible();
-  await expect(notice).toContainText("Tags need a model");
+  await expect(notice).toContainText("Tags come once you choose an AI model");
+  await expect(notice.getByTestId("tagging-waiting-setup")).toHaveText("Choose…");
+  await setLanguage(window, "zh-CN");
+  await expect(notice).toContainText("选择 AI 模型后会自动打标签");
+  await expect(notice.getByTestId("tagging-waiting-setup")).toHaveText("选择…");
+  await notice.getByTestId("tagging-waiting-setup").click();
+  await expect(window.getByTestId("settings")).toHaveAttribute("data-page", "models");
   await app.close();
 });
 
