@@ -48,7 +48,7 @@ describe("a failed Answer's problem line", () => {
   test("Ollama not running says so in both languages, and its fix is Ollama's own (open it or get it)", () => {
     expect(ANSWER_PROBLEMS["ollama-not-running"]).toEqual({
       line: "answer.error.ollama-not-running",
-      fix: { kind: "ollama" },
+      fix: { kind: "ollama", label: "localModel.open" },
     });
     expect(translate("en", "answer.error.ollama-not-running")).toBe(
       "Ollama isn't running on this computer",
@@ -126,7 +126,7 @@ describe("a failed Answer's problem line", () => {
       KINDS.map((kind) => {
         const { line, fix } = ANSWER_PROBLEMS[kind];
         const words = translate(language, line, { model: "claude-sonnet-5.5" });
-        const label = "label" in fix ? translate(language, fix.label) : "";
+        const label = fix.kind === "none" ? "" : translate(language, fix.label);
         return { kind, words, label };
       });
     for (const language of ["en", "zh-CN"] as const) {
@@ -134,7 +134,7 @@ describe("a failed Answer's problem line", () => {
         expect(words, `${language} ${kind}`).not.toMatch(/\{/);
         // No full stop: the action follows on the same line.
         expect(words, `${language} ${kind}`).not.toMatch(/[.。]$/);
-        if ("label" in ANSWER_PROBLEMS[kind].fix) expect(label).not.toBe("");
+        if (ANSWER_PROBLEMS[kind].fix.kind !== "none") expect(label).not.toBe("");
       }
     }
     expect(translate("en", ANSWER_PROBLEMS.auth.line, { model: "claude-sonnet-5.5" })).toBe(

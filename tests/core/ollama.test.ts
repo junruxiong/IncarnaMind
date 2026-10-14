@@ -110,6 +110,7 @@ describe("Ollama", () => {
       const model = { model: RECOMMENDED_OLLAMA_MODEL };
       expect(translate(language, "providers.ollama.use", model)).toContain(size);
       expect(translate(language, "providers.ollama.pulling", model)).toContain(size);
+      expect(translate(language, "localModel.recommended", model)).toContain(size);
     }
   });
 

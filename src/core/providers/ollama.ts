@@ -31,8 +31,9 @@ export const OLLAMA_REGISTRY: Readonly<ExternalService> = {
  * evaluation in #67.
  *
  * Changing it: change the catalog's role, give the model an entry in
- * ./catalog/local, and set the size in the "providers.ollama.use" and
- * "providers.ollama.pulling" strings (a test checks they agree).
+ * ./catalog/local, and set the size in the "providers.ollama.use",
+ * "providers.ollama.pulling" and "localModel.recommended" strings (a test
+ * checks they agree).
  */
 export const RECOMMENDED_OLLAMA_MODEL: string = catalogProvider("ollama")?.roles.answers ?? "";
 
@@ -47,14 +48,20 @@ const DETECT_TIMEOUT_MS = 2_000;
 /** How long Open Ollama waits for Ollama to answer: its app takes a few seconds to start. */
 export const OLLAMA_START_TIMEOUT_MS = 20_000;
 
-/** Whether anything answers at `baseUrl`, in whatever words: asked as `detectOllama` asks, with a short timeout and no retry. */
-export async function ollamaAnswers(baseUrl: string): Promise<boolean> {
+/** Ollama's list of models at `baseUrl`, asked with a short timeout and no retry; null when nothing answers. */
+async function askOllama(baseUrl: string): Promise<Response | null> {
   try {
-    await fetch(`${baseUrl}/api/tags`, { signal: AbortSignal.timeout(DETECT_TIMEOUT_MS) });
-    return true;
+    return await fetch(`${baseUrl}/api/tags`, { signal: AbortSignal.timeout(DETECT_TIMEOUT_MS) });
   } catch {
-    return false;
+    return null;
   }
+}
+
+/** Whether anything answers at `baseUrl`, in whatever words, asked as `detectOllama` asks. */
+export async function ollamaAnswers(baseUrl: string): Promise<boolean> {
+  const response = await askOllama(baseUrl);
+  await response?.body?.cancel().catch(() => undefined);
+  return response !== null;
 }
 
 /**
@@ -71,11 +78,9 @@ export async function detectOllama(
     installed: await installed().catch(() => false),
     recommendedModel: RECOMMENDED_OLLAMA_MODEL,
   });
+  const response = await askOllama(baseUrl);
+  if (!response?.ok) return notRunning();
   try {
-    const response = await fetch(`${baseUrl}/api/tags`, {
-      signal: AbortSignal.timeout(DETECT_TIMEOUT_MS),
-    });
-    if (!response.ok) return notRunning();
     const body: unknown = await response.json();
     const listed = isRecord(body) && Array.isArray(body.models) ? body.models : [];
     const models: string[] = [];
