@@ -326,6 +326,16 @@ export function createJournal(db: Database, now: () => string) {
         .map(toStep);
     },
 
+    /** Keeps a record (`RECORD_PREFIX`) with what it holds, as started: a message queued, say. */
+    keep(taskId: string, key: string, result: unknown): void {
+      const at = now();
+      db.run(
+        `INSERT INTO run_steps (id, run_id, key, status, result, started_at, created_at, updated_at)
+         VALUES (?, ?, ?, 'started', ?, ?, ?, ?)`,
+        [randomUUID(), taskId, key, JSON.stringify(result), at, at, at],
+      );
+    },
+
     /** Records a step as started, before it runs: a new attempt of one that ran before. */
     started(taskId: string, key: string, effect: TaskEffect | null): void {
       const at = now();

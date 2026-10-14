@@ -34,6 +34,7 @@ import type {
   PlanResearchInput,
   ResearchPlan,
   ResearchPlanResult,
+  ResearchPlanView,
   ResearchSources,
   ResearchStartResult,
   ResearchTarget,
@@ -47,6 +48,7 @@ import {
   type ErrorWording,
   InvalidInputError,
   isRecord,
+  NotFoundError,
 } from "../errors";
 import type { PreparedChatModel } from "../providers/chat";
 import { classifyProviderError } from "../providers/providerErrors";
@@ -127,6 +129,8 @@ export interface ResearchOptions extends FinishOptions {
   resolveScope(scope: SearchScope): string[] | null;
   tasks: {
     start(kind: string, mindId: string, input: ResearchInput): Task;
+    /** A Task's record, with its input; null for none. */
+    get(taskId: string): { id: string; input: unknown } | null;
     /** A Task's journal, in the order its steps first started. */
     steps(taskId: string): StepRecord[];
   };
@@ -316,6 +320,7 @@ export function createResearch(options: ResearchOptions) {
     if (key === SAVE_STEP) {
       const saved = step?.status === "completed" ? savedOf(step.result) : null;
       if (!saved) return options.say("research.step.saving");
+      if (saved.declined) return options.say("research.step.notFiled");
       if (saved.documents === 0) return options.say("research.step.savedNone");
       return options.say(
         saved.documents === 1 ? "research.step.saved.one" : "research.step.saved.other",
@@ -407,12 +412,14 @@ export function createResearch(options: ResearchOptions) {
       { length: index },
       (_, at) => foundOf(task.step(stepKey(at)))?.notes ?? "",
     );
+    task.takeMessages();
     const context = stepContext({
       topic: input.topic,
       plan: input.plan,
       index,
       sources: input.sources,
       notes,
+      said: task.messages(),
     });
     const documentIds = input.sources.library
       ? input.scope
@@ -470,11 +477,7 @@ export function createResearch(options: ResearchOptions) {
     if (!("model" in ready)) return { status: "paused", reason: "not-ready" };
     if (task.signal.aborted) return { status: "stopped" };
     const local = options.chat.runsLocally(ready.model);
-    const keys = [
-      ...input.plan.steps.map((_, index) => stepKey(index)),
-      ...(input.sources.web ? [SAVE_STEP] : []),
-      DRAFT_STEP,
-    ];
+    const keys = stepKeys(input);
     const done = (key: string) => task.step(key)?.status === "completed";
     const report = () => task.progress({ done: keys.filter(done).length, total: keys.length });
     report();
@@ -520,9 +523,56 @@ export function createResearch(options: ResearchOptions) {
     return { status: "done" };
   }
 
+  /** The keys of a Task's steps, in order: its plan's, then filing its pages (with Web on), then the draft. */
+  const stepKeys = (input: ResearchInput) => [
+    ...input.plan.steps.map((_, index) => stepKey(index)),
+    ...(input.sources.web ? [SAVE_STEP] : []),
+    DRAFT_STEP,
+  ];
+
+  const journalOf = (taskId: string) =>
+    new Map(options.tasks.steps(taskId).map((step) => [step.key, step]));
+
   const taskKind: TaskKind = {
     kind: RESEARCH_TASK,
     run: runTask,
+    actions: ["plan", "tell", "pause", "stop"],
+    remainingOf(task) {
+      const input = inputOf(task.input);
+      if (!input) return [];
+      const steps = journalOf(task.id);
+      return stepKeys(input)
+        .filter((key) => steps.get(key)?.status !== "completed")
+        .map((key) => describe(undefined, key, input));
+    },
+    summaryOf(task) {
+      const steps = journalOf(task.id);
+      const saved = savedOf(steps.get(SAVE_STEP)?.result);
+      const written = writtenOf(steps.get(DRAFT_STEP)?.result);
+      const parts = [
+        ...(saved && saved.documents > 0
+          ? [
+              options.say(
+                saved.documents === 1
+                  ? "research.summary.saved.one"
+                  : "research.summary.saved.other",
+                { count: saved.documents },
+              ),
+            ]
+          : []),
+        ...(written
+          ? [
+              options.say(
+                written.changes === 1
+                  ? "research.summary.changes.one"
+                  : "research.summary.changes.other",
+                { count: written.changes },
+              ),
+            ]
+          : []),
+      ];
+      return parts.length > 0 ? parts.join(" · ") : null;
+    },
     questionOf: (input) => inputOf(input)?.topic ?? null,
     reviewOf(task) {
       const step = options.tasks.steps(task.id).find((each) => each.key === DRAFT_STEP);
@@ -538,6 +588,32 @@ export function createResearch(options: ResearchOptions) {
 
   return {
     taskKind,
+
+    /** A Research Task's plan, each step with how far it is. */
+    planView(taskId: unknown): ResearchPlanView {
+      const task = typeof taskId === "string" ? options.tasks.get(taskId) : null;
+      const input = task ? inputOf(task.input) : null;
+      if (!task || !input) throw new NotFoundError({ key: "error.research.notFound" });
+      const steps = journalOf(task.id);
+      const statusOf = (key: string): ResearchPlanView["steps"][number]["status"] => {
+        const step = steps.get(key);
+        if (!step) return "waiting";
+        if (step.status === "completed") return "done";
+        if (step.status === "started") return "running";
+        return "failed";
+      };
+      return {
+        title: input.plan.title,
+        steps: stepKeys(input).map((key) => ({
+          text: key.startsWith("step:")
+            ? describe(undefined, key, input)
+            : describe(steps.get(key), key, input),
+          status: statusOf(key),
+        })),
+        sources: input.sources,
+        writeInto: "mindId" in input.writeInto ? input.writeInto.mindId : null,
+      };
+    },
 
     async plan(given: PlanResearchInput): Promise<ResearchPlanResult> {
       if (!isRecord(given)) throw new InvalidInputError({ key: "error.research.plan" });

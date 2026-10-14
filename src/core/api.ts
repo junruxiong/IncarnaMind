@@ -3373,6 +3373,12 @@ export interface Task {
   steps: TaskStep[];
   /** How many steps it has started in all. */
   stepCount: number;
+  /** What the User told it that it hasn't read yet (`tellTask`), oldest first: read when its next step starts. */
+  queued: TaskMessage[];
+  /** Paused at a limit (the monthly cap, a plan's), the steps it has still to do, in its kind's words. */
+  remaining: string[];
+  /** Done, what it did in a few words ("3 sources saved · 2 changes proposed"); null otherwise. */
+  summary: string | null;
   startedAt: string;
   finishedAt: string | null;
   updatedAt: string;
@@ -3380,6 +3386,21 @@ export interface Task {
 
 /** What answering a Task's "unknown-outcome" ask does: the step again, or on without it. */
 export type TaskAskAnswer = "redo" | "skip";
+
+/** Something the User told a running Task (Tell it…), waiting for its next step. */
+export interface TaskMessage {
+  id: string;
+  text: string;
+}
+
+/** A Research Task's plan as it runs (Plan): each step with how far it is. */
+export interface ResearchPlanView {
+  title: string;
+  steps: { text: string; status: "waiting" | "running" | "done" | "failed" }[];
+  sources: ResearchSources;
+  /** The Mind it writes into, or null for a new one. */
+  writeInto: string | null;
+}
 
 /** Where a Research Task looks (#130): the web, and the Library within the composer's Search scope. */
 export interface ResearchSources {
@@ -7059,6 +7080,15 @@ export interface CoreApi {
   /** Every step of a Task, in the order each first started. */
   listTaskSteps(taskId: string): Promise<TaskStep[]>;
   /**
+   * Tell it…: a message for a running Task whose kind reads them (`actions`
+   * has "tell"), queued until its next step starts, which reads it.
+   */
+  tellTask(taskId: string, text: string): Promise<Task>;
+  /** Takes back a message the Task hasn't read yet; one it read stays. */
+  untellTask(taskId: string, messageId: string): Promise<Task>;
+  /** A Research Task's plan, each step with how far it is (Plan). */
+  getResearchPlan(taskId: string): Promise<ResearchPlanView>;
+  /**
    * Research (#130): the steps the composer's model proposes for a topic,
    * before it writes, in the topic's language; or, with `change`, the steps
    * redone as the User said. Only the topic (and the steps) are sent, once
@@ -7943,6 +7973,9 @@ const methods: Record<CoreApiMethod, true> = {
   stopTask: true,
   answerTaskAsk: true,
   listTaskSteps: true,
+  tellTask: true,
+  untellTask: true,
+  getResearchPlan: true,
   planResearch: true,
   startResearch: true,
   askQuestion: true,

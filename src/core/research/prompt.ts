@@ -83,6 +83,8 @@ export function stepContext(input: {
   index: number;
   sources: ResearchSources;
   notes: readonly string[];
+  /** What the User told it while it worked (Tell it…). */
+  said: readonly string[];
 }): QuestionContext {
   const { plan, index } = input;
   const step = plan.steps[index] ?? "";
@@ -96,11 +98,22 @@ export function stepContext(input: {
     "The plan:",
     ...plan.steps.map((each, at) => `${at + 1}. ${each}`),
     ...(found.length > 0 ? ["", "What the steps before found:", ...found] : []),
+    ...told(input.said),
     "",
     `Do only this step. Search ${where(input.sources)} for what it needs${input.sources.web ? ", read the few most useful pages" : ""}, and cite what you use. Then write short notes of what you found, a few sentences or a short list, each claim with its citation marker. Say plainly what you couldn't find.`,
   ].join("\n");
   return { messages: [{ role: "user", content: `${framing}\n\n${step}` }], question: step };
 }
+
+/** What the User told the research while it worked, for it to follow from then on. */
+const told = (said: readonly string[]) =>
+  said.length > 0
+    ? [
+        "",
+        "While it worked, the User told it this; follow it in this step and those after:",
+        ...said.map((each) => `- ${each}`),
+      ]
+    : [];
 
 /** A step's notes as later steps read them: its Citation markers left out. */
 export const notesOf = (markdown: string) =>
@@ -156,6 +169,7 @@ export function draftContext(input: {
   topic: string;
   plan: ResearchPlan;
   notes: readonly string[];
+  said: readonly string[];
 }): QuestionContext {
   const found = input.notes
     .map((note, at) => (note.trim() ? `Step ${at + 1}: ${note.slice(0, NOTES_PER_STEP)}` : ""))
@@ -164,6 +178,7 @@ export function draftContext(input: {
     "Write a cited draft for the User's notebook from research done in the background.",
     `The User asked: ${input.topic}`,
     ...(found.length > 0 ? ["What the research found:", ...found, ""] : []),
+    ...told(input.said),
     "Search the Documents for what supports each point and cite it. Start with a short heading, then a few short paragraphs or a list. Leave out what no Document supports, and say what is still open.",
     "Write for the notebook's reader: don't mention these notes, the research steps or the User.",
   ].join("\n");
