@@ -2218,11 +2218,6 @@ export function createCore(adapters: CoreAdapters): Core {
       }
       const languageWas = settings.get().language;
       const updated = settings.update(change);
-      if (updated.language !== languageWas) {
-        examples
-          .followLanguage()
-          .catch((error) => console.error("The example Minds didn't follow the language:", error));
-      }
       if (!updated.user.suggestWhileWriting) suggestions.stop();
       events.emit("settings.changed", updated);
       // Skill scripts turned off: none runs any more, and none waits to.
@@ -2232,6 +2227,12 @@ export function createCore(adapters: CoreAdapters): Core {
       }
       const flowChanged = syncChatFlow();
       if (chatModel !== undefined || flowChanged) await readinessChanged();
+      // The examples follow the new language before this returns, so whoever awaits it can rely on it.
+      if (updated.language !== languageWas) {
+        await examples
+          .followLanguage()
+          .catch((error) => console.error("The example Minds didn't follow the language:", error));
+      }
       return updated;
     },
     addDocuments,
