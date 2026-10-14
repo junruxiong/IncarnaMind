@@ -22,7 +22,7 @@ import { CheckLineIcon } from "../components/lineIcons";
 import { ProblemMark } from "../components/ProblemLine";
 import { usePopoverMenu } from "../components/usePopoverMenu";
 import { useLanguage, useT } from "../i18n";
-import { countMind } from "./wordCountText";
+import { createMindCounter } from "./wordCountText";
 
 /**
  * How long the editor is left alone before the count is worked out. Counting
@@ -30,6 +30,13 @@ import { countMind } from "./wordCountText";
  * fast in a long Mind as in a short one.
  */
 export const COUNT_IDLE_MS = 300;
+
+/**
+ * The most a count holds the main thread at once (#812). Only Blocks not
+ * counted yet take time, which after an edit is the Blocks it changed; a long
+ * Mind's first count goes on in idle time, a slice at a time.
+ */
+const COUNT_SLICE_MS = 8;
 
 const BASIS_NAMES: Record<CountBasis, MessageKey> = {
   words: "wordCount.basis.words",
@@ -47,22 +54,38 @@ function useCounts(editor: Editor): Counts {
   const [counts, setCounts] = useState<Counts>({ total: NO_COUNT, selection: null });
 
   useEffect(() => {
+    const counter = createMindCounter();
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let idle: number | undefined;
     const count = () => {
       timer = undefined;
+      idle = undefined;
       if (editor.isDestroyed) return;
+      const until = performance.now() + COUNT_SLICE_MS;
       const { from, to } = editor.state.selection;
-      setCounts(countMind(editor.state.doc, { from, to }));
+      const counted = counter.count(
+        editor.state.doc,
+        { from, to },
+        () => performance.now() > until,
+      );
+      if (counted) setCounts(counted);
+      else idle = requestIdleCallback(count);
+    };
+    const stop = () => {
+      clearTimeout(timer);
+      if (idle !== undefined) cancelIdleCallback(idle);
+      timer = undefined;
+      idle = undefined;
     };
     const later = () => {
-      clearTimeout(timer);
+      stop();
       timer = setTimeout(count, COUNT_IDLE_MS);
     };
     count();
     editor.on("update", later);
     editor.on("selectionUpdate", later);
     return () => {
-      clearTimeout(timer);
+      stop();
       editor.off("update", later);
       editor.off("selectionUpdate", later);
     };
