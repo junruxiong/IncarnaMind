@@ -287,20 +287,29 @@ function WebPageContent({
     const container = scroller.current;
     if (!body || !container) return;
     unmarkQuote(body);
+    for (const cited of body.querySelectorAll<HTMLElement>("[data-cited]")) {
+      delete cited.dataset.cited;
+    }
     const { first, range } = citedSections();
     const quote = target.quote;
-    const marks = quote
-      ? ((range && markQuote(textNodes(body, range), quote)) ?? markQuote(textNodes(body), quote))
+    // A picture's quote is its text read, which the page doesn't show: the picture is outlined.
+    const picture = target.figure
+      ? body.querySelector<HTMLElement>(`[data-figure="${target.figure}"]`)
       : null;
+    if (picture) picture.dataset.cited = "";
+    const marks =
+      quote && !picture
+        ? ((range && markQuote(textNodes(body, range), quote)) ?? markQuote(textNodes(body), quote))
+        : null;
     setHighlighted((count) => (marks ? count + 1 : 0));
-    const anchor = marks?.[0] ?? first ?? null;
+    const anchor = marks?.[0] ?? picture ?? first ?? null;
     const top = anchor
       ? anchor.getBoundingClientRect().top -
         container.getBoundingClientRect().top +
         container.scrollTop
       : 0;
     container.scrollTop = Math.max(0, top - (marks ? container.clientHeight / 3 : 24));
-  }, [page, target.request, target.quote, target.pageFrom, target.pageTo]);
+  }, [page, target.request, target.quote, target.pageFrom, target.pageTo, target.figure]);
 
   useLayoutEffect(() => {
     const element = column.current;
