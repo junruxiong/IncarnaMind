@@ -21,7 +21,7 @@ import { acceptedParagraphs, checkWellFormed, unzip } from "../helpers/docx";
 import type { MindClient } from "../helpers/mindClient";
 import { editMind, readMind, resolveChanges, shownWithChanges } from "../helpers/minds";
 import { field, NUMBERING, paragraph, run, wordFile } from "../helpers/word";
-import { importWord } from "../helpers/wordImports";
+import { importWordBytes } from "../helpers/wordMinds";
 
 const PRIYA = 'w:author="Priya Nair" w:date="2026-10-02T09:00:00Z"';
 const LARS = 'w:author="Lars Berg" w:date="2026-10-05T16:20:00Z"';
@@ -64,7 +64,11 @@ async function imported(body: string): Promise<{
   const dataDir = await createTempDataFolder();
   const core = startCore(dataDir);
   const bytes = wordFile({ body, numbering: NUMBERING });
-  return { core, bytes, ...(await importWord(core, dataDir, bytes)) };
+  return {
+    core,
+    bytes,
+    ...(await importWordBytes(core, dataDir, bytes, { origin: "someone-else" })),
+  };
 }
 
 async function exported(core: Core, mindId: string, trackChanges = true) {

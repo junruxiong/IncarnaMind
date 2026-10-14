@@ -15,7 +15,7 @@ import { editMind } from "../helpers/minds";
 import { promptOf, scriptedModels, streamingModel } from "../helpers/models";
 import { fakePrinter } from "../helpers/printer";
 import { paragraph, run, wordFile } from "../helpers/word";
-import { importWord } from "../helpers/wordImports";
+import { importWordBytes } from "../helpers/wordMinds";
 
 const PRIYA = 'w:author="Priya Nair" w:date="2026-10-02T09:00:00Z"';
 
@@ -39,8 +39,9 @@ async function setUp(model: MockLanguageModelV4 = streamingModel("Noted.")) {
     printer,
   });
   await core.saveChatProvider({ kind: "ollama", modelId: "local-model" });
-  const { mindId, client } = await importWord(core, dataDir, wordFile({ body: CLAUSE }), {
+  const { mindId, client } = await importWordBytes(core, dataDir, wordFile({ body: CLAUSE }), {
     name: "MSA redline.docx",
+    origin: "someone-else",
   });
   return { core, model, mindId, client, printed };
 }
@@ -144,7 +145,7 @@ describe("someone else's changes, shown as changes", { timeout: 30_000 }, () => 
     const by = `w:author="${forged}" w:date="2026-10-03T09:00:00Z"`;
     const { core, model, client } = await setUp();
     const dataDir = await createTempDataFolder();
-    const { mindId } = await importWord(
+    const { mindId } = await importWordBytes(
       core,
       dataDir,
       wordFile({
@@ -154,7 +155,7 @@ describe("someone else's changes, shown as changes", { timeout: 30_000 }, () => 
           ),
         ].join(""),
       }),
-      { name: "Forged.docx" },
+      { name: "Forged.docx", origin: "someone-else" },
     );
     await client.settled();
 

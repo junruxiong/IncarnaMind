@@ -22,7 +22,7 @@ import { connectToMind } from "../helpers/mindClient";
 import { writeMind } from "../helpers/minds";
 import { replyingModel } from "../helpers/models";
 import { paragraph, run, wordFile } from "../helpers/word";
-import { importWord } from "../helpers/wordImports";
+import { importWordBytes } from "../helpers/wordMinds";
 
 const TIDES = [
   "# Tides",
@@ -408,7 +408,7 @@ describe("outside agents", () => {
   it("read someone's changes in a Mind imported from Word as changes, with who made each (#734)", async () => {
     const { core, dataDir, launch, coast } = await pairedToCoast();
     const priya = 'w:author="Priya Nair" w:date="2026-10-02T09:00:00Z"';
-    const { mindId } = await importWord(
+    const { mindId } = await importWordBytes(
       core,
       dataDir,
       wordFile({
@@ -416,7 +416,7 @@ describe("outside agents", () => {
           `${run("Notice is ")}<w:del w:id="1" ${priya}><w:r><w:delText xml:space="preserve">one month</w:delText></w:r></w:del><w:ins w:id="2" ${priya}>${run("three months")}</w:ins>${run(".")}`,
         ),
       }),
-      { folderId: coast.id },
+      { origin: "someone-else", folderId: coast.id },
     );
     const agent = await connectLegacyAgent(launch);
 
