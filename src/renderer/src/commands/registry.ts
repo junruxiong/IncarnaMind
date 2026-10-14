@@ -72,7 +72,7 @@ export interface Command {
   group: CommandGroup;
   /** The kinds it acts on, as the selection or the focus. Without them, it acts on the window. */
   appliesTo?: readonly ObjectKind[];
-  /** Menus show it in the danger ink: it deletes, or takes something away. */
+  /** It deletes or takes something away: the conformance check expects it to change the core with no question. */
   destructive?: true;
   /** Whether it is offered at all. */
   when?(ctx: CommandContext): boolean;

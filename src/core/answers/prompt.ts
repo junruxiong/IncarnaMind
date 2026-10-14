@@ -95,15 +95,6 @@ export function mindInstructions(offered: boolean): string {
 }
 
 /**
- * A Search scope with no Documents, with the Minds' Tools offered (#202): a
- * request to change a Mind still works, and a Question about the Documents
- * gets `answer`, which says why there is nothing to search.
- */
-export function emptyScopeInstructions(answer: string): string {
-  return `The Question's Search scope has no Documents, so there is nothing to search or cite. If the User asks about their Documents, reply with just this: "${answer}"`;
-}
-
-/**
  * Connectors that are on but can't be used until the User signs in to them
  * again: their Tools aren't offered, and the Answer says so if it needed them.
  */
@@ -399,6 +390,34 @@ export function quoteRetryPrompt(records: readonly QuoteToRetry[]): string {
       ].join("\n"),
     )
     .join("\n\n");
+}
+
+/**
+ * Once an Answer is written with no Citation though it read Passages, and no
+ * sentence of it matches one: the one request for its Citations (see
+ * ./unmarkedQuotes).
+ */
+export const CITE_RETRY_INSTRUCTIONS = [
+  "You add the Citations an Answer left out. The Answer was written from the Passages below, but none of its sentences says which Passage it comes from.",
+  "- For each sentence of the Answer that a Passage supports, give the sentence as the Answer has it, the Passage's id, and a quote from the Passage that supports it: one unbroken stretch, copied character for character, no longer than a sentence. Don't reword, translate, join sentences, change characters or leave words out.",
+  "- Leave out sentences that no Passage supports. Don't change the Answer.",
+  'Reply with one JSON object: {"citations": [{"sentence": "…", "passage": "P1", "quote": "…"}]}, or {"citations": []} if no Passage supports any sentence.',
+].join("\n");
+
+/** The one request for an Answer's Citations: the Answer, then the Passages it read. */
+export function citeRetryPrompt(
+  answer: string,
+  passages: readonly { id: string; text: string }[],
+): string {
+  return [
+    "<answer>",
+    answer,
+    "</answer>",
+    "",
+    ...passages.map((passage) =>
+      [`<passage id="${attribute(passage.id)}">`, passage.text, "</passage>"].join("\n"),
+    ),
+  ].join("\n");
 }
 
 /** The request to rewrite `question` into a search query, with the notebook text above it. */
