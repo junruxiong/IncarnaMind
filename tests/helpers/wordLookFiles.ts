@@ -93,8 +93,19 @@ const CONTRACT_THEME = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><
 
 const CONTRACT_STYLES = `<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:hAnsiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia"/><w:sz w:val="24"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="160" w:line="259" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style><w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:basedOn w:val="Normal"/><w:pPr><w:jc w:val="center"/><w:spacing w:after="0"/></w:pPr><w:rPr><w:b/><w:smallCaps/><w:spacing w:val="40"/><w:sz w:val="32"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:keepNext/><w:spacing w:before="240" w:after="120"/><w:outlineLvl w:val="0"/></w:pPr><w:rPr><w:b/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Clause"><w:name w:val="Clause"/><w:basedOn w:val="Normal"/><w:pPr><w:jc w:val="both"/><w:ind w:left="567" w:hanging="567"/></w:pPr></w:style><w:style w:type="character" w:styleId="Defined"><w:name w:val="Defined term"/><w:rPr><w:b/></w:rPr></w:style>`;
 
-/** `eastAsia`: the file's East Asian language, as Word records it in its settings ("ja-JP"). */
-export function contractFile({ eastAsia }: { eastAsia?: string } = {}): Buffer {
+/**
+ * `eastAsia`: the file's East Asian language, as Word records it in its
+ * settings ("ja-JP"); `settings`: the settings part's whole text instead.
+ */
+export function contractFile({
+  eastAsia,
+  settings = eastAsia
+    ? `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:themeFontLang w:val="en-GB" w:eastAsia="${eastAsia}"/></w:settings>`
+    : undefined,
+}: {
+  eastAsia?: string;
+  settings?: string;
+} = {}): Buffer {
   const clause = (number: string, text: string) =>
     p(tabbed([number, text]), '<w:pStyle w:val="Clause"/>');
   const bordered = (side: string) =>
@@ -114,20 +125,13 @@ export function contractFile({ eastAsia }: { eastAsia?: string } = {}): Buffer {
   return wordFile({
     styles: CONTRACT_STYLES,
     rels: `<Relationship Id="rIdTheme" Type="${REL}/theme" Target="theme/theme1.xml"/>${
-      eastAsia
+      settings
         ? `<Relationship Id="rIdSettings" Type="${REL}/settings" Target="settings.xml"/>`
         : ""
     }`,
     parts: [
       { name: "word/theme/theme1.xml", data: CONTRACT_THEME },
-      ...(eastAsia
-        ? [
-            {
-              name: "word/settings.xml",
-              data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:themeFontLang w:val="en-GB" w:eastAsia="${eastAsia}"/></w:settings>`,
-            },
-          ]
-        : []),
+      ...(settings ? [{ name: "word/settings.xml", data: settings }] : []),
     ],
     body: [
       p(run("Supply agreement"), '<w:pStyle w:val="Title"/>'),

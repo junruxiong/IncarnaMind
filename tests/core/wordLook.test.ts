@@ -270,6 +270,43 @@ describe("a Mind imported from Word keeps its look", () => {
     });
   });
 
+  test("a broken settings part still imports, with the theme's Simplified Chinese face, and says so once", async () => {
+    const { log, entries } = recordingLog();
+    const { client, look } = await imported(
+      contractFile({ settings: "<w:settings><w:themeFontLang" }),
+      {
+        log,
+      },
+    );
+    expect(
+      styled(client, look).find((node) => node.text === "Supply agreement")?.runs[0],
+    ).toMatchObject({ eastAsia: "宋体" });
+    expect(entries.filter((entry) => entry.event === "word.look.partsUnreadable")).toEqual([
+      expect.objectContaining({ fields: { parts: "settings" } }),
+    ]);
+  });
+
+  test("two styles that name each other as next still import, each with the other's look as next", async () => {
+    const styles =
+      '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>' +
+      '<w:style w:type="paragraph" w:styleId="Question"><w:name w:val="Question"/><w:next w:val="Reply"/><w:pPr><w:jc w:val="right"/></w:pPr></w:style>' +
+      '<w:style w:type="paragraph" w:styleId="Reply"><w:name w:val="Reply"/><w:next w:val="Question"/><w:pPr><w:jc w:val="center"/></w:pPr></w:style>';
+    const { client, look } = await imported(
+      wordFile({
+        styles,
+        body: [
+          paragraph("Asked", { style: "Question" }),
+          paragraph("Answered", { style: "Reply" }),
+        ].join(""),
+      }),
+    );
+    const [asked, answered] = [0, 1].map(
+      (index) => look.paragraphs[String(readMind(client).child(index).attrs[WORD_LOOK_ATTRIBUTE])],
+    );
+    expect(look.paragraphs[String(asked?.next)]).toMatchObject({ align: "center" });
+    expect(look.paragraphs[String(answered?.next)]).toMatchObject({ align: "right" });
+  });
+
   test("bold in a character style switches a bold heading's bold off; bold on the run itself stays", async () => {
     const styles =
       '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>' +
@@ -506,6 +543,42 @@ describe("a Mind imported before gets its look once", () => {
       ),
     );
     expect(Buffer.from(Y.encodeStateVector(third.doc))).toEqual(Buffer.from(state));
+  });
+
+  test("a look an earlier version read is cleared and read again; keys it named are gone", async () => {
+    const { dataDir, core, mindId, client } = await imported(contractFile());
+    const clause = client.blocks
+      .toArray()
+      .find(
+        (child): child is Y.XmlElement =>
+          child instanceof Y.XmlElement && child.toString().includes("Prices are fixed"),
+      );
+    if (!clause) throw new Error("No clause.");
+    client.doc.transact(() => {
+      clause.setAttribute(WORD_LOOK_ATTRIBUTE, "pstale");
+      findText(client.blocks, "Prices are fixed").insert(0, "Edited. ");
+      client.doc.getMap(MIND_WORD_LOOK_FIELD).set("version", 0);
+    });
+    await client.settled();
+    core.close();
+    queryDatabase(dataDir, "UPDATE word_packages SET look_version = 0 WHERE mind_id = ?", [mindId]);
+
+    const { log, entries } = recordingLog();
+    const restarted = startCore(dataDir, { log });
+    const after = await connectToMind(restarted, mindId);
+    await vi.waitFor(() =>
+      expect(entries).toContainEqual(expect.objectContaining({ event: "word.look.done" })),
+    );
+    const look = wordLookOf(after.doc) as WordLook;
+    expect(look.version).toBe(1);
+    const nodes = styled(after, look);
+    expect(nodes.find((node) => node.text.startsWith("Edited."))?.look).toBeNull();
+    expect(nodes.find((node) => node.text.startsWith("3.1"))?.look).toMatchObject({
+      align: "justify",
+    });
+    expect(
+      queryDatabase<{ look_version: number }>(dataDir, "SELECT look_version FROM word_packages"),
+    ).toEqual([{ look_version: 1 }]);
   });
 
   test("a Mind as the version before the look wrote it gets the look on every Block, and export still writes the file's own bytes", async () => {

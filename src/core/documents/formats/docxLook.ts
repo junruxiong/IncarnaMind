@@ -21,8 +21,8 @@ import type {
 import { child, descendants, elements, local, onOff, parseXml, type XmlElement } from "./xml";
 
 /**
- * How the look was read. A later version that reads it differently and gives
- * it again must first clear the look's attributes and marks.
+ * How the look was read. A Mind whose look an earlier version read has it
+ * cleared (attributes, marks and map) and given again at the next start.
  */
 export const WORD_LOOK_VERSION = 1;
 
@@ -519,7 +519,6 @@ interface ThemeFonts {
 
 const EAST_ASIAN_SCRIPTS = ["Hans", "Hant", "Jpan", "Hang"];
 
-/** The theme's script for the file's East Asian language (`w:themeFontLang`). */
 function scriptOf(language: string | undefined): string | undefined {
   const code = language?.toLowerCase() ?? "";
   if (code.startsWith("zh")) return /-(tw|hk|mo|hant)/.test(code) ? "Hant" : "Hans";
@@ -528,14 +527,12 @@ function scriptOf(language: string | undefined): string | undefined {
   return undefined;
 }
 
-function readTheme(xml: string | undefined, language: string | undefined): ThemeFonts {
+function readTheme(root: XmlElement, language: string | undefined): ThemeFonts {
   const fonts: ThemeFonts = { major: {}, minor: {} };
-  if (!xml) return fonts;
   const wanted = scriptOf(language);
   const scripts = wanted
     ? [wanted, ...EAST_ASIAN_SCRIPTS.filter((each) => each !== wanted)]
     : EAST_ASIAN_SCRIPTS;
-  const root = parseXml(xml);
   const scheme = descendants(root, "a:fontScheme")[0];
   if (!scheme) return fonts;
   for (const kind of ["major", "minor"] as const) {
@@ -579,6 +576,7 @@ export interface ParagraphLookContext {
 
 export interface TableLookContext {
   key: string | null;
+  styleId: string | null;
   style: StyleDefinition[];
   cellBase: CellProps;
 }
@@ -619,11 +617,19 @@ export class LookReader {
   private readonly theme: ThemeFonts;
   private readonly levels = new Map<string, Map<number, { pPr?: XmlElement; rPr?: XmlElement }>>();
   private readonly width: number | null;
+  /** Parts the look would read but couldn't parse; the look goes on without them. */
+  readonly unreadable: string[] = [];
 
   constructor(parts: LookParts) {
-    const settings = parts.settings ? parseXml(parts.settings) : undefined;
-    const language = settings && child(settings, "w:themeFontLang")?.attrs["w:eastAsia"];
-    this.theme = readTheme(parts.theme, language);
+    const language = this.readable(
+      "settings",
+      parts.settings,
+      (root) => child(root, "w:themeFontLang")?.attrs["w:eastAsia"],
+    );
+    this.theme = this.readable("theme", parts.theme, (root) => readTheme(root, language)) ?? {
+      major: {},
+      minor: {},
+    };
     const root = parts.styles ? parseXml(parts.styles) : undefined;
     const defaults = root && child(root, "w:docDefaults");
     this.runDefaults = readRun(child(child(defaults ?? EMPTY, "w:rPrDefault") ?? EMPTY, "w:rPr"));
@@ -650,6 +656,20 @@ export class LookReader {
     }
     this.readNumbering(parts.numbering);
     this.width = textWidth(parts.document);
+  }
+
+  private readable<T>(
+    part: string,
+    xml: string | undefined,
+    read: (root: XmlElement) => T,
+  ): T | undefined {
+    if (xml === undefined) return undefined;
+    try {
+      return read(parseXml(xml));
+    } catch {
+      this.unreadable.push(part);
+      return undefined;
+    }
   }
 
   private readNumbering(xml: string | undefined): void {
@@ -737,7 +757,7 @@ export class LookReader {
       fixed: props.fixed ? (true as const) : undefined,
       columns: columns.length > 0 ? columns : undefined,
     });
-    return { key: this.tables.key(look), style, cellBase };
+    return { key: this.tables.key(look), styleId, style, cellBase };
   }
 
   cell(tc: XmlElement, table: TableLookContext): string | null {
@@ -787,9 +807,8 @@ export class LookReader {
 
   private readonly nextLooks = new Map<string, string | null>();
 
-  /** The look Enter gives the paragraph after one whose style names `styleId` as its next. */
   private nextLook(styleId: string, table: TableLookContext | null): string | null {
-    const id = `${table?.key ?? ""}|${styleId}`;
+    const id = `${table ? `table:${table.styleId ?? ""}` : "body"}|${styleId}`;
     const known = this.nextLooks.get(id);
     if (known !== undefined) return known;
     // Two styles can name each other as next.

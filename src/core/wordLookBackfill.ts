@@ -11,7 +11,13 @@ import {
   wordSourceOf,
 } from "../shared/wordFiles";
 import { runLookOf } from "../shared/wordLook";
-import { BLOCK_ID_ATTRIBUTE, WORD_LOOK_ATTRIBUTE, WORD_RUN_MARK, type WordSource } from "./api";
+import {
+  BLOCK_ID_ATTRIBUTE,
+  MIND_WORD_LOOK_FIELD,
+  WORD_LOOK_ATTRIBUTE,
+  WORD_RUN_MARK,
+  type WordSource,
+} from "./api";
 import type { WordStructure } from "./documents/formats/docxImport";
 
 type LookChange =
@@ -136,6 +142,32 @@ export function planLook(doc: Y.Doc, blocks: Y.XmlFragment, structure: WordStruc
     recordAgain(child);
   }
   return plan;
+}
+
+/** Takes away a look an earlier version gave, so keys it named don't outlive it. */
+export function clearLook(doc: Y.Doc, blocks: Y.XmlFragment): void {
+  const clear = (element: Y.XmlElement) => {
+    if (element.getAttribute(WORD_LOOK_ATTRIBUTE) !== undefined) {
+      element.removeAttribute(WORD_LOOK_ATTRIBUTE);
+    }
+    for (const child of element.toArray()) {
+      if (child instanceof Y.XmlElement) clear(child);
+      else if (child instanceof Y.XmlText) {
+        let at = 0;
+        for (const run of child.toDelta() as { insert: unknown; attributes?: object }[]) {
+          const length = typeof run.insert === "string" ? run.insert.length : 1;
+          if (run.attributes && WORD_RUN_MARK in run.attributes) {
+            child.format(at, length, { [WORD_RUN_MARK]: null });
+          }
+          at += length;
+        }
+      }
+    }
+  };
+  for (const child of blocks.toArray()) {
+    if (child instanceof Y.XmlElement) clear(child);
+  }
+  doc.getMap(MIND_WORD_LOOK_FIELD).clear();
 }
 
 export function applyLook(doc: Y.Doc, plan: LookPlan): void {
