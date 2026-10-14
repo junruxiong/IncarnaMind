@@ -1406,6 +1406,8 @@ export const zhCN = {
   "setup.way.key.line": "Anthropic、OpenAI、Google、DeepSeek 等。",
   "setup.way.local": "使用本机模型",
   "setup.way.local.line": "免费且私密。需要免费的 Ollama 应用；速度较慢，引用的可靠性较低。",
+  "setup.way.local.running": "Ollama 正在本机运行。免费且私密；速度较慢，引用的可靠性较低。",
+  "setup.way.local.notRunning": "这台电脑上没有运行 Ollama。可以免费获取。",
   "setup.way.chatgpt": "使用 ChatGPT 登录",
   "setup.way.chatgpt.line": "需要 Plus 或 Pro。中国大陆无法使用。",
   "setup.claude.title": "已经在用 Claude 订阅？",
@@ -1485,6 +1487,9 @@ export const zhCN = {
   "providers.form.recommended": "推荐：{model}",
   "providers.form.useKey": "使用这个密钥",
   "providers.form.checking": "正在检查密钥…",
+  "providers.form.needsKey": "请先粘贴密钥。",
+  "providers.form.needsAddress": "请先填写服务器地址。",
+  "providers.form.needsModel": "请先选择模型。",
   "providers.form.badKey": "这个密钥对 {provider} 无效。请到 {site} 检查。",
 
   "providers.test.ok": "连接成功：提供商已响应。",

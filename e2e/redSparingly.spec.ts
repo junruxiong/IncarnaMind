@@ -73,14 +73,15 @@ test("a refused key and a variable with no name read in ink after the amber mark
     const settings = await openSettings(window, "models");
     await settings.getByTestId("chat-choice-api-key").check();
     const form = settings.getByTestId("provider-form");
-    await form.getByRole("radio", { name: "OpenAI", exact: true }).check();
+    // The provider chips are labels around visually hidden radios.
+    await form.getByRole("radio", { name: "OpenAI", exact: true }).locator("xpath=..").click();
     await form.getByLabel(/^API key/).fill("sk-wrong-key");
-    await form.getByRole("button", { name: "Test connection" }).click();
+    await form.getByTestId("provider-use-key").click();
     const refused = form.getByTestId("connection-test");
-    await expect(refused).toContainText("The key was refused");
+    await expect(refused).toContainText("This key isn’t valid for OpenAI");
     await expectProblem(refused);
     await setLanguage(window, "zh-CN");
-    await expect(refused).toContainText("密钥被拒绝");
+    await expect(refused).toContainText("这个密钥对 OpenAI 无效");
     await expectProblem(refused);
     await setLanguage(window, "en");
 

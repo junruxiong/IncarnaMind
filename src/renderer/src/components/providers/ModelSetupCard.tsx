@@ -50,6 +50,23 @@ export function ModelSetupCard() {
       );
   }, []);
   const open = (next: Exclude<View, null>) => setView(view === next ? null : next);
+  // Says why a model on this computer can't be used yet, with the next step (Get Ollama).
+  const running = ollama.status?.running;
+  const localWay = {
+    testId: "way-local",
+    title: t("setup.way.local"),
+    line: t(
+      running === undefined
+        ? "setup.way.local.line"
+        : running
+          ? "setup.way.local.running"
+          : "setup.way.local.notRunning",
+    ),
+    onClick: () => open("local"),
+    ...(!running && {
+      link: { label: t("setup.getOllama"), href: "https://ollama.com/download" },
+    }),
+  };
 
   return (
     <section
@@ -126,13 +143,7 @@ export function ModelSetupCard() {
                     onClick={() => open("key")}
                     link={{ label: t("setup.how"), onClick: () => open("key") }}
                   />
-                  <Way
-                    testId="way-local"
-                    title={t("setup.way.local")}
-                    line={t("setup.way.local.line")}
-                    onClick={() => open("local")}
-                    link={{ label: t("setup.getOllama"), href: "https://ollama.com/download" }}
-                  />
+                  <Way {...localWay} />
                   <Way
                     testId="way-chatgpt"
                     title={t("setup.way.chatgpt")}
@@ -149,13 +160,7 @@ export function ModelSetupCard() {
                     onClick={() => open("key")}
                     link={{ label: t("setup.how"), onClick: () => open("key") }}
                   />
-                  <Way
-                    testId="way-local"
-                    title={t("setup.way.local")}
-                    line={t("setup.way.local.line")}
-                    onClick={() => open("local")}
-                    link={{ label: t("setup.getOllama"), href: "https://ollama.com/download" }}
-                  />
+                  <Way {...localWay} />
                 </>
               )}
               {!chinese && <ClaudeWay />}

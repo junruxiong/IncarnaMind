@@ -1472,6 +1472,9 @@ export const en = {
   "setup.way.local": "Use a model on this computer",
   "setup.way.local.line":
     "Free and private. Needs the free Ollama app. Slower, and cites less reliably.",
+  "setup.way.local.running":
+    "Ollama is running here. Free and private; slower, and cites less reliably.",
+  "setup.way.local.notRunning": "Ollama isn't running on this computer. It's free to get.",
   "setup.way.chatgpt": "Sign in with ChatGPT",
   "setup.way.chatgpt.line": "Plus or Pro. Not available in mainland China.",
   "setup.claude.title": "Already pay for Claude?",
@@ -1552,6 +1555,9 @@ export const en = {
   "providers.form.recommended": "Recommended: {model}",
   "providers.form.useKey": "Use this key",
   "providers.form.checking": "Checking the key…",
+  "providers.form.needsKey": "Paste the key first.",
+  "providers.form.needsAddress": "Enter the server's address first.",
+  "providers.form.needsModel": "Choose a model first.",
   "providers.form.badKey": "This key isn’t valid for {provider}. Check it on {site}.",
 
   "providers.test.ok": "Connected: the provider answered.",

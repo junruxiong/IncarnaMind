@@ -12,6 +12,7 @@ import {
   KEY_PROVIDER_KINDS,
   keyProviderGroups,
 } from "../../../../core/providers/catalog/providers";
+import type { MessageKey } from "../../../../shared/i18n";
 import { modelName } from "../../../../shared/modelName";
 import { core } from "../../core";
 import { errorMessage } from "../../errors";
@@ -121,11 +122,18 @@ export function ProviderForm({
   const keyRequired = kind !== null && kind !== "openai-compatible";
   const hasKey = apiKey.trim() !== "" || Boolean(saved?.hasApiKey);
   const keyBlocked = apiKey.trim() !== "" && secretStorage !== null && !secretStorage.canSave;
-  const complete =
-    kind !== null &&
-    modelId.trim() !== "" &&
-    (kind !== "openai-compatible" || baseUrl.trim() !== "") &&
-    (!keyRequired || hasKey);
+  /** What "Use this key" still waits for, said beside it while it can't be pressed. */
+  const missing: MessageKey | null =
+    kind === null
+      ? null
+      : kind === "openai-compatible" && baseUrl.trim() === ""
+        ? "providers.form.needsAddress"
+        : keyRequired && !hasKey
+          ? "providers.form.needsKey"
+          : modelId.trim() === ""
+            ? "providers.form.needsModel"
+            : null;
+  const complete = kind !== null && missing === null;
 
   const chip = (option: FormKind) => (
     <label
@@ -376,6 +384,11 @@ export function ProviderForm({
             >
               {busy ? t("providers.form.checking") : t("providers.form.useKey")}
             </button>
+            {missing && (
+              <span data-testid="provider-use-key-why" className={hintClass}>
+                {t(missing)}
+              </span>
+            )}
           </div>
 
           {test && !test.ok && (
