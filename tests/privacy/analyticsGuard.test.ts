@@ -109,9 +109,21 @@ const FORBIDDEN_IN_CODE = [
   /\btracesSampleRate\b|\bprofilesSampleRate\b|\btracesSampler\b/,
 ];
 
-/** The hosts a saved web page never fetches pictures from (#756) name analytics hosts to skip them. */
+// The hosts a saved web page never fetches pictures from (#756) name these to skip them: only
+// these exact entries of that list are let through, so anything else naming them still fails.
 const SKIP_LIST = "src/core/documents/web/adHosts.ts";
-const SKIPPED_HOSTS = ["www.google-analytics.com", "www.googletagmanager.com"];
+const SKIPPED_HOSTS = ["google-analytics.com", "googletagmanager.com"];
+
+/** What in a source file, by its path from the repository root, names an analytics service. */
+function forbiddenIn(name: string, text: string): string[] {
+  const checked =
+    name === SKIP_LIST
+      ? SKIPPED_HOSTS.reduce((rest, host) => rest.replaceAll(`"${host}"`, ""), text)
+      : text;
+  return FORBIDDEN_IN_CODE.filter((pattern) => pattern.test(checked)).map(
+    (pattern) => `${name}: matches ${pattern}`,
+  );
+}
 
 const isAnalytics = (name: string) =>
   ANALYTICS_PACKAGES.has(name) || ANALYTICS_SCOPES.some((scope) => name.startsWith(scope));
@@ -215,16 +227,23 @@ describe("Usage data only through its one door", () => {
   });
 
   test("the app's code names no analytics service or project, and sets up none of the usage features", () => {
-    const skipped = (name: string, pattern: RegExp) =>
-      name === SKIP_LIST && SKIPPED_HOSTS.some((host) => pattern.test(host));
-    const offending = sourceFiles(join(root, "src")).flatMap((file) => {
-      const name = relative(root, file).replaceAll("\\", "/");
-      const text = readFileSync(file, "utf8");
-      return FORBIDDEN_IN_CODE.filter(
-        (pattern) => pattern.test(text) && !skipped(name, pattern),
-      ).map((pattern) => `${name}: matches ${pattern}`);
-    });
+    const offending = sourceFiles(join(root, "src")).flatMap((file) =>
+      forbiddenIn(relative(root, file).replaceAll("\\", "/"), readFileSync(file, "utf8")),
+    );
     expect(offending).toEqual([]);
-    for (const host of SKIPPED_HOSTS) expect(isAdHost(host), host).toBe(true);
+    for (const host of SKIPPED_HOSTS) expect(isAdHost(`www.${host}`), host).toBe(true);
+  });
+
+  test("the list of hosts never fetched may name the analytics hosts it skips, and nothing more", () => {
+    expect(forbiddenIn(SKIP_LIST, 'const AD_HOSTS = ["google-analytics.com"];')).toEqual([]);
+    expect(
+      forbiddenIn(
+        SKIP_LIST,
+        'const AD_HOSTS = ["google-analytics.com"];\nfetch("https://www.google-analytics.com/x");',
+      ),
+    ).toEqual([`${SKIP_LIST}: matches /google-analytics\\.com/`]);
+    expect(forbiddenIn("src/other.ts", 'const AD_HOSTS = ["google-analytics.com"];')).toEqual([
+      "src/other.ts: matches /google-analytics\\.com/",
+    ]);
   });
 });
