@@ -5,21 +5,25 @@
  * picture. A picture that can't be read keeps its description alone.
  */
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { createCanvas } from "@napi-rs/canvas";
 import { describe, expect, test } from "vitest";
+import { DATABASE_FILE } from "../../src/core";
 import type { TextRecognizer } from "../../src/core/adapters";
 import type { Document } from "../../src/core/api";
 import { createFakeTextRecognizer } from "../../src/core/documents/scan/fake";
 import { BUILT_IN_TEXT_RECOGNITION_MODEL } from "../../src/core/documents/scan/model";
+import { openDatabase } from "../../src/core/storage";
 import { translate } from "../../src/shared/i18n";
 import { formatLocation } from "../../src/shared/locations";
 import type { UnitLabel } from "../../src/shared/units";
 import { askAndFinish, citingModel, onlyCitation, setUpWithDocuments } from "../helpers/citations";
-import { NO_MODEL_FILES, queryDatabase } from "../helpers/core";
+import { createTempDataFolder, NO_MODEL_FILES, queryDatabase, startCore } from "../helpers/core";
 import { waitForProcessing } from "../helpers/documents";
 import { startWeb } from "../helpers/web";
 
 const REPORT = readFileSync(new URL("../fixtures/web/report.html", import.meta.url));
+const ARTICLE = readFileSync(new URL("../fixtures/web/article.html", import.meta.url));
 
 const png = (width: number, height: number) => createCanvas(width, height).toBuffer("image/png");
 
@@ -48,6 +52,7 @@ async function startSite() {
   });
   return startWeb({
     "/report": () => ({ status: 200, body: REPORT }),
+    "/article": () => ({ status: 200, body: ARTICLE }),
     "/charts/revenue.png": served(png(400, 300)),
     "/harbour/berth.jpg": served(png(640, 480)),
   });
@@ -131,5 +136,49 @@ describe("A web page's pictures, read", { timeout: 30_000 }, () => {
         quote: citation.quote ?? "",
       }),
     ).toEqual({ unsure: ["44.9"], from: "picture" });
+  });
+
+  test("a page saved with pictures before they were read has them read once, at startup, and a page without any isn't processed again", async () => {
+    const web = await startSite();
+    const dataDir = await createTempDataFolder();
+    const first = startCore(dataDir, web.adapters);
+    const saved = async (path: string) => {
+      const result = await first.saveWebPage({ address: `http://127.0.0.1:${web.port}${path}` });
+      if (result.outcome !== "saved") throw new Error(JSON.stringify(result));
+      return result.document.id;
+    };
+    const report = await saved("/report");
+    const article = await saved("/article");
+    await waitForProcessing(first, [report, article]);
+    first.close();
+    const db = openDatabase(join(dataDir, DATABASE_FILE));
+    try {
+      db.run("UPDATE documents SET processing_version = 9");
+    } finally {
+      db.close();
+    }
+
+    const second = startCore(dataDir, {
+      ...web.adapters,
+      textRecognizer: recognizer(),
+      textRecognitionModelSource: NO_MODEL_FILES,
+    });
+    const statuses = Object.fromEntries(
+      (await second.listDocuments()).map((document) => [document.id, document.status]),
+    );
+    expect(statuses).toEqual({ [report]: "queued", [article]: "ready" });
+    await waitForProcessing(second, [report]);
+    expect(await second.searchPassages("44.9", { mode: "keyword" })).toHaveLength(1);
+    second.close();
+
+    const third = startCore(dataDir, {
+      ...web.adapters,
+      textRecognizer: recognizer(),
+      textRecognitionModelSource: NO_MODEL_FILES,
+    });
+    expect((await third.listDocuments()).every((document) => document.status === "ready")).toBe(
+      true,
+    );
+    third.close();
   });
 });

@@ -46,9 +46,11 @@ import { documentTitle } from "./title";
  * (a Word file's comments are read into the section their mark is in). 8:
  * #435 (a workbook's rows Units keep the number of each cell whose shown
  * text isn't that number written plainly). 9: #397 (a PDF's scanned pages
- * are read from their pictures; see `SCAN_CURRENT_SINCE`).
+ * are read from their pictures; see `SCAN_CURRENT_SINCE`). 10: #756 (a saved
+ * web page's pictures are read, their text in its section; see
+ * `PICTURES_CURRENT_SINCE`).
  */
-export const PROCESSING_VERSION = 9;
+export const PROCESSING_VERSION = 10;
 
 /**
  * Per kind, the oldest version whose Passages and Units are still what this
@@ -57,7 +59,8 @@ export const PROCESSING_VERSION = 9;
  * (and embeddings) stay as they are; version 6 changed no Passage or Unit;
  * version 7 changed only Word files', which gain their comments; version 8
  * only Excel workbooks', whose rows Units gain their cells' numbers; version 9
- * only PDFs' scanned pages, which `SCAN_CURRENT_SINCE` reads again.
+ * only PDFs' scanned pages, which `SCAN_CURRENT_SINCE` reads again; version
+ * 10 only web pages with saved pictures, which `PICTURES_CURRENT_SINCE` reads.
  */
 export const CURRENT_SINCE: Readonly<Record<DocumentKind, number>> = {
   pdf: 4,
@@ -94,6 +97,13 @@ export const HAN_CURRENT_SINCE = 6;
  * quotes, which are kept as they were read (see `ScanJob.keep`).
  */
 export const SCAN_CURRENT_SINCE = 9;
+
+/**
+ * For a web page saved with its pictures, the oldest version that reads
+ * them: one processed by an older version is processed again at startup,
+ * when there is a model to read them.
+ */
+export const PICTURES_CURRENT_SINCE = 10;
 
 /**
  * The version of the metadata read: what a Document's creation date is
