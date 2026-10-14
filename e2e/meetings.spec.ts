@@ -6,15 +6,19 @@ import type { CoreBridge } from "../src/core/api";
 import type { FakeCapture } from "../src/core/meetings/fakeCapture";
 import type { TestHooks } from "../src/shared/testHooks";
 import {
+  askInAssistant,
   closeSettings,
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  motionSettled,
   openDocumentAt,
   openSettings,
+  pointAndClick,
   removeDataFolder,
   setWindowSize,
   showSettingsPage,
+  useLocalChatModel,
   useOutputLocation,
 } from "./app";
 
@@ -804,4 +808,94 @@ test("recording details: a slow engine, a fallback and a part that can't be save
   await expect(window.getByTestId("meeting-details")).toHaveCount(0);
   await expect(window.getByTestId("meeting-line-unsaved")).toBeVisible();
   await shot(window, "meeting-line-unsaved-stopped-en");
+});
+
+test("asking during the call: the assistant listens to the live transcript, its Answer cites a time that opens the transcript there, quick asks start a conversation, and after Stop it is in the meeting's Folder", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await setWindowSize(app, window, 1440, 900);
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await useOutputLocation(window, sources);
+  await turnOnMeetings(window);
+  const bar = await startRecording(window, await recordMeeting(window), { notice: true });
+  const [meeting] = await bridge(window);
+  if (!meeting) throw new Error("No Meeting.");
+  // The meeting's Mind is in a Folder, where its conversations go.
+  const folderId = await window.evaluate(async (mindId) => {
+    const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    const folder = await core.createLibraryGroup({ name: "Launch", description: "" });
+    await core.moveToFolder({ mindIds: [mindId], folderId: folder.id });
+    return folder.id;
+  }, meeting.mindId);
+  await expect(bar.getByTestId("meeting-transcript-toggle")).toBeEnabled({ timeout: 20_000 });
+  await window.getByTestId("mind-editor").click();
+
+  // A new conversation says it listens, and offers the quick asks.
+  const reads = window.getByTestId("assistant-reads");
+  await expect(reads).toHaveText(/^Reads “Meeting, .+” · listening to the live transcript$/);
+  const starters = window.getByTestId("meeting-starter");
+  await expect(starters).toHaveText([
+    "Catch me up",
+    "Recap the last 5 minutes",
+    "What should I ask next?",
+    "Check what was just said",
+  ]);
+  await motionSettled(window);
+  await shot(window, "meeting-ask-starters-en");
+
+  // A Question about the call: its Answer cites a time in the transcript, the note untouched.
+  const answer = await askInAssistant(window, "When does the launch move to?");
+  await expect(answer.getByTestId("answer-steps")).toContainText("Listened to the live transcript");
+  const chip = answer.getByTestId("citation-chip").first();
+  await expect(chip).toHaveAttribute(
+    "aria-label",
+    /^Citation 1: Transcript · Meeting, .+, \d+:\d{2}/,
+  );
+  await expect(window.getByTestId("mind-editor")).toHaveText("");
+  await motionSettled(window);
+  await shot(window, "meeting-ask-answer-en");
+
+  // The Citation opens the transcript, hidden till now, at that line, beside the meeting's Mind.
+  await expect(window.getByTestId("viewer-transcript")).toHaveCount(0);
+  await pointAndClick(window, chip);
+  const card = window.getByTestId("citation-card");
+  if (await card.isVisible()) await card.getByTestId("citation-open").click();
+  const transcript = window.getByTestId("viewer-transcript");
+  await expect(transcript).toBeVisible();
+  await expect(transcript.locator("[data-quote-highlight]").first()).toBeInViewport();
+  await expect(window.getByTestId("mind-pane")).toBeVisible();
+  await shot(window, "meeting-ask-citation-en");
+
+  // A quick ask, in a new conversation, in Chinese.
+  await window.evaluate(async () =>
+    (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
+      user: { language: "zh-CN" },
+    }),
+  );
+  await window.getByTestId("assistant-new-chat").click();
+  await window.getByTestId("mind-editor").click();
+  await expect(reads).toHaveText(/^正在读“.+” · 正在听：实时转写$/);
+  await expect(starters).toHaveText([
+    "赶上进度",
+    "回顾最近 5 分钟",
+    "接下来该问什么？",
+    "核对刚才说的话",
+  ]);
+  await shot(window, "meeting-ask-starters-zh");
+  await pointAndClick(window, starters.first());
+  const asked = window.getByTestId("assistant").getByTestId("assistant-question").last();
+  await expect(asked).toContainText("赶上进度");
+  await expect(
+    window.getByTestId("assistant").getByTestId("assistant-answer").last(),
+  ).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+
+  // After Stop, both conversations are the meeting's Folder's.
+  await bar.getByTestId("meeting-stop").click();
+  await expect(bar).toBeHidden();
+  const titles = await window.evaluate(async (folder) => {
+    const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    return (await core.listConversations({ folderId: folder })).map((each) => each.title);
+  }, folderId);
+  expect(titles).toHaveLength(2);
+  await app.close();
 });

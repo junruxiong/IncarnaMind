@@ -709,6 +709,20 @@ export function createTranscripts(options: TranscriptsOptions) {
   }
 
   return {
+    /**
+     * Indexes a recording Meeting's Transcript again now, for a Question asked during the call
+     * (#144): what was said up to now can be found and cited. Resolves once its file is checked
+     * (a changed one is then processed). Nothing for a Meeting with no lines or one saved.
+     */
+    async refresh(meetingId: string): Promise<void> {
+      const state = states.get(meetingId);
+      if (closed || !state?.documentId || state.savedPath || state.cues.length === 0) return;
+      if (state.indexTimer) clearTimeout(state.indexTimer);
+      state.indexTimer = null;
+      state.lastIndexed = Date.now();
+      await documents.check(vttPath(meetingId));
+    },
+
     /** The Meeting's Transcript, as the window shows it. */
     of(meetingId: string): MeetingTranscript {
       const state = load(meetingId);

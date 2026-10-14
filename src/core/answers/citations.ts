@@ -894,6 +894,20 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
     if (found.length === 0) {
       return { text: "No Passages in the User's Documents match this search.", passageCount: 0 };
     }
+    return {
+      text: show(found),
+      passageCount: found.length,
+      passageIds: found.map((passage) => passage.passageId),
+      ranks: found.map((passage, index) => passage.rank ?? index),
+      // Someone else wrote a saved web page: reading it makes the Run third-party (#78).
+      ...(found.some((passage) => passage.documentKind === "web") && {
+        thirdParty: ["web-page"] as const,
+      }),
+    };
+  }
+
+  /** The Passages as the model reads them, each under the id it cites it by. */
+  function show(found: readonly WindowedPassage[]): string {
     const dates = new Map<string, string | null>();
     const dateOf = (documentId: string) => {
       if (!dates.has(documentId)) dates.set(documentId, documents.documentDate(documentId));
@@ -927,16 +941,7 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
         text,
       };
     });
-    return {
-      text: formatPassages(formatted),
-      passageCount: found.length,
-      passageIds: found.map((passage) => passage.passageId),
-      ranks: found.map((passage, index) => passage.rank ?? index),
-      // Someone else wrote a saved web page: reading it makes the Run third-party (#78).
-      ...(found.some((passage) => passage.documentKind === "web") && {
-        thirdParty: ["web-page"] as const,
-      }),
-    };
+    return formatPassages(formatted);
   }
 
   const tools: AnswerTools = {
@@ -1074,6 +1079,12 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
      */
     searchDocument: (documentId: string, query: string, signal?: AbortSignal) =>
       search(query, signal, [documentId]),
+
+    /**
+     * Gives the model Passages without a search: a meeting's live transcript (#144). They can
+     * be cited as a search's are, and don't count as one of the Answer's searches.
+     */
+    show,
 
     quotes,
 

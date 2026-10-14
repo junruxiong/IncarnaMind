@@ -160,6 +160,7 @@ import type {
   GatedCall,
   ToolSet,
 } from "./engine";
+import { listenedTokens, newestWithin, withTranscript } from "./liveTranscript";
 import { markdownToBlocks } from "./markdown";
 import {
   answerInstructions,
@@ -169,6 +170,7 @@ import {
   type ListedDocuments,
   languageInstruction,
   loadedSkillText,
+  meetingInstructions,
   mindInstructions,
   signInNeededInstructions,
   skillInstructions,
@@ -327,6 +329,11 @@ export interface AnswersOptions {
    * deleted, of a kind this version knows; null for any other.
    */
   readableMindName(mindId: string): string | null;
+  /**
+   * The live Transcript of the Meeting a Mind records now (#144), indexed up to now: its
+   * Passages in reading order; null when the Mind's Meeting isn't recording or has no lines yet.
+   */
+  liveTranscript(mindId: string): Promise<WindowedPassage[] | null>;
   providerExists(providerId: string): boolean;
   /** Whether Questions can be asked with this model (the default one when undefined). */
   readiness(choice: ChatModelChoice | undefined): Promise<ChatReadiness>;
@@ -658,6 +665,11 @@ export function createAnswers(options: AnswersOptions) {
     outside?: boolean;
     /** Which Tools its Run is offered (see `ToolSet`); absent: every Tool. */
     toolSet?: ToolSet;
+    /**
+     * Asked from a Mind whose Meeting may be recording (#144): its live Transcript, indexed up
+     * to now, to go with the Question. Absent: none.
+     */
+    listening?: () => Promise<WindowedPassage[] | null>;
     /** Written for a Task (#126), which gives way to Answers itself (see ../runs/tasks). */
     task?: boolean;
     /**
@@ -696,6 +708,8 @@ export function createAnswers(options: AnswersOptions) {
     let readShare = input.mind?.share ?? 1;
     let { messages } = context;
     let mindRequest = input.mind?.request;
+    /** It listened to a meeting's live transcript: the Question went with it. */
+    let listening = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
     let finished = false;
     let support: CitationSupport | null = null;
@@ -1226,6 +1240,20 @@ export function createAnswers(options: AnswersOptions) {
         readShare = within.share;
         if (read) read = within.request.text ? { ...read, partial: true } : null;
       }
+      if (input.listening) {
+        let heard: WindowedPassage[] | null = null;
+        try {
+          heard = await input.listening();
+        } catch (error) {
+          options.reportError(error);
+        }
+        if (finished) return;
+        const kept = newestWithin(heard ?? [], listenedTokens(prepared.window));
+        if (kept.length > 0) {
+          messages = withTranscript(messages, session.show(kept));
+          listening = true;
+        }
+      }
       // Stopped while waiting, e.g. for consent: send nothing.
       if (finished) return;
       if (consenting) {
@@ -1418,6 +1446,7 @@ export function createAnswers(options: AnswersOptions) {
             sourcesInstructions(sourceTools),
             webInstructions(withWebTools),
             mindInstructions(withMindTools),
+            meetingInstructions(listening),
             signInNeededInstructions(signInNeeded.map((connector) => connector.name)),
             language,
           ]
@@ -1793,6 +1822,7 @@ export function createAnswers(options: AnswersOptions) {
       emptyScope,
       forcedSkill: question.forcedSkill,
       consentNeeded: ready.consentNeeded,
+      ...(mind && { listening: () => options.liveTranscript(mind.mindId) }),
       assistant: {
         focused: mind && {
           mindId: mind.mindId,
