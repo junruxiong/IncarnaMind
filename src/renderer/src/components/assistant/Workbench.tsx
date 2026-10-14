@@ -80,7 +80,7 @@ export function Workbench({
   );
   const room = useContentSize(area);
   const [card, setCard] = useState<HTMLDivElement | null>(null);
-  useMeasuredCard(card);
+  useMeasuredCard(card, sidebarHidden);
   const [slot, setSlot] = useState<HTMLElement | null>(null);
   // The same element every time: moving or resizing the assistant draws the groups again only
   // as far as their own measurements change, so it keeps up with the pointer.
@@ -222,13 +222,16 @@ function useContentSize(element: HTMLElement | null): Size {
 }
 
 /** Keeps the card's width where the groups read it (`useCardWidth`). */
-function useMeasuredCard(card: HTMLElement | null): void {
+function useMeasuredCard(card: HTMLElement | null, sidebarHidden: boolean): void {
+  // Before the sidebar's slide starts, so the groups merge or part first and what they draw slides too.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `sidebarHidden` is when to measure again.
   useLayoutEffect(() => {
     if (!card) return;
-    const measure = () => useCardWidth.setState({ width: card.getBoundingClientRect().width });
+    // The laid-out width: a slide's transform must not count.
+    const measure = () => useCardWidth.setState({ width: card.offsetWidth });
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(card);
     return () => observer.disconnect();
-  }, [card]);
+  }, [card, sidebarHidden]);
 }
