@@ -117,6 +117,10 @@ describe("The search Tool's reply says which Documents in scope couldn't be read
       documentIds: [documentId("Tariffs 2024"), documentId("Harbour tariff notice")],
     });
     expect(results.join("\n")).toContain('"Harbour tariff notice.pdf" (a scan with no text)');
+
+    results.length = 0;
+    await askScoped(setup, { documentIds: [documentId("Harbour tariff notice")] });
+    expect(results.join("\n")).toContain('"Harbour tariff notice.pdf" (a scan with no text)');
   });
 
   test("names the pages of a scan that weren't read", async () => {
