@@ -1672,6 +1672,11 @@ export interface DocumentPlace {
   quote?: string;
   /** The Citation this was opened from, if a Citation opened it. */
   citation?: TabCitation;
+  /**
+   * In a Word file: the paragraph or table to go to, by its place in the main document
+   * part ("w:p#12", "w:tbl#3"), as a Mind imported from it records (`WordSource.n`, #736).
+   */
+  wordPlace?: string;
 }
 
 export interface LayoutTab {
@@ -2740,11 +2745,11 @@ export type LinkedFolderStatus = "scanning" | "watching" | "paused" | "unavailab
 
 /**
  * The groups that have an example Mind (onboarding, see src/core/examples.ts):
- * "tea" is the first-run default; the others are one per pick of the first
- * run's question (Papers and research, Reports and analysis, Contracts and
- * legal work, Meetings and team notes).
+ * "tea" is the first-run default; the others are closer to a kind of work
+ * (papers, reports, contracts, meetings), and open from the default's banner.
  */
-export type ExampleGroup = "tea" | "papers" | "reports" | "contracts" | "meetings";
+export const EXAMPLE_GROUPS = ["tea", "papers", "reports", "contracts", "meetings"] as const;
+export type ExampleGroup = (typeof EXAMPLE_GROUPS)[number];
 
 /**
  * An example Mind (onboarding, see src/core/examples.ts): "Where tea comes
@@ -2762,6 +2767,8 @@ export interface Examples {
   linkedFolderId: string | null;
   /** The example Answer, written in advance, while the example Mind exists. */
   answerId: string | null;
+  /** The other examples this one's banner offers, in this install's order (random, then kept). */
+  more: ExampleGroup[];
 }
 
 /**
@@ -2816,7 +2823,8 @@ export interface UnsupportedFile {
  * Why a file in a search's scope wasn't read, and what the User can do:
  * - "format": a format not read yet (.doc, .xls, .ppt, .wps, .caj…): convert it;
  * - "scan": a scan in which text recognition found no text (handwriting, a picture);
- * - "password": password-protected: remove the password;
+ * - "password": password-protected: a PDF is unlocked with its password
+ *   (`unlockDocument`, #763); another kind needs its password removed;
  * - "damaged": the file is broken, or couldn't be read;
  * - "too-large": too large to open;
  * - "pages": a scan some of whose pages haven't been read yet.
@@ -3843,6 +3851,17 @@ export interface ClaimCalculation {
    */
   agrees: boolean;
 }
+
+/** A password-protected PDF Document, and the password to open it with (#763). */
+export interface UnlockDocumentInput {
+  documentId: string;
+  password: string;
+}
+
+/** What unlocking a locked PDF did (#763). */
+export type UnlockDocumentResult =
+  | { kind: "unlocked"; document: Document }
+  | { kind: "wrong-password" };
 
 /** What one claim check found: the claim-check function's result (`checkClaim`). */
 export type ClaimCheckResult =
@@ -6838,6 +6857,26 @@ export interface CoreApi {
    */
   retryDocument(id: string): Promise<Document>;
   /**
+   * Opens a password-protected PDF Document with `password` (#763). When it
+   * opens, the password is kept on this device, in the system's keychain, by
+   * Document, and the Document is read again with it. "wrong-password" when
+   * it doesn't open it: nothing is kept. Throws InvalidInputError for a
+   * Document that isn't a PDF, or one that opens without a password, and
+   * NotFoundError for an unknown one or one whose file isn't there.
+   */
+  unlockDocument(input: UnlockDocumentInput): Promise<UnlockDocumentResult>;
+  /** Forgets a Document's kept PDF password (#763); its text stays as it was read. */
+  forgetDocumentPassword(documentId: string): Promise<void>;
+  /**
+   * The kept password of a locked PDF Document, for the viewer to open it
+   * with and for nothing else; null for any other Document, when none is
+   * kept, or when the Document's file isn't being shown (opened with
+   * `openDocumentFile` now or in the last few seconds) (#763).
+   */
+  documentPasswordFor(documentId: string): Promise<string | null>;
+  /** The Documents whose PDF password is kept on this device, by id (#763). */
+  listDocumentPasswords(): Promise<string[]>;
+  /**
    * The text IncarnaMind kept of a Document's current version: what the
    * viewer shows when the file is missing or can't be reached. Throws
    * NotFoundError for an unknown or deleted Document.
@@ -7401,6 +7440,15 @@ export interface CoreApi {
   /** Brings back what `clearAiUse` emptied at `clearedAt`. */
   restoreAiUse(clearedAt: string): Promise<AiUseStatus>;
   /**
+   * Makes the AI use statement of a Mind (#739) as a new Mind for the User to edit: in the
+   * Mind's Folder, in the interface language, named after it. It states, as counts drawn from
+   * what the Mind records, which models the AI wrote with and for what, how much AI text is in
+   * each section and what became of it, and the results of checking Citations and sentences. A
+   * figure the record doesn't hold is left out, and nothing is estimated. The Mind itself is
+   * left as it is. Throws NotFoundError for an unknown Mind.
+   */
+  createAiUseStatement(mindId: string): Promise<Mind>;
+  /**
    * The Folders of every Linked folder, as a flat list in name order (ignoring
    * case). Build the tree from each Folder's `parentId`; siblings keep the
    * list's order. Each Linked folder's own Folder has no parent.
@@ -7851,6 +7899,8 @@ export interface CoreEvents {
   "documents.moved": Document[];
   /** Documents removed from the index, by the User or with their Linked folder: their ids. */
   "documents.removed": string[];
+  /** The Documents whose PDF password is kept changed (#763): their ids now. */
+  "documentPasswords.changed": string[];
   /** Folders appeared or went with the folders on disk: the list as `listFolders` now returns it. */
   "folders.changed": Folder[];
   /**
@@ -8022,6 +8072,10 @@ const methods: Record<CoreApiMethod, true> = {
   renameDocument: true,
   deleteDocument: true,
   retryDocument: true,
+  unlockDocument: true,
+  forgetDocumentPassword: true,
+  documentPasswordFor: true,
+  listDocumentPasswords: true,
   readDocumentText: true,
   readScannedText: true,
   readScannedQuote: true,
@@ -8124,6 +8178,7 @@ const methods: Record<CoreApiMethod, true> = {
   getAiUseStatus: true,
   clearAiUse: true,
   restoreAiUse: true,
+  createAiUseStatement: true,
   listFolders: true,
   getLibrary: true,
   createLibraryGroup: true,
