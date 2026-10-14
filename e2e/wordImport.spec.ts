@@ -762,6 +762,7 @@ test("From the original's menu, Open the original opens it beside the Mind at th
     "Open the original",
     /^Show in (Finder|folder)$/,
   ]);
+  await motionSettled(window);
   await screenshot(window, "word-original-menu");
   await pointAndClick(window, items.getByTestId("mind-word-open-original"));
 
