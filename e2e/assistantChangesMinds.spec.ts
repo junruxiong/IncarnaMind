@@ -280,6 +280,43 @@ test("Reject all keeps a Mind the assistant made once something of it was accept
   await expect(rows.nth(0)).toContainText("· none waiting");
 });
 
+test("a change the assistant makes in a Mind comes in paragraph by paragraph, with Writing… on the next, and its card counts the changes as they come", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await setLanguage(window, "en");
+  await setWindowSize(app, window, 1440, 900);
+  await writeMind(window, "Q3 review", [
+    "The quarter was very good, and sales were really strong.",
+    "Margins were really thin in the north, and very wide in the south.",
+    "Hiring was very slow, and the new office opened really late in the year.",
+  ]);
+  const editor = window.getByTestId("mind-editor");
+  const paragraphs = editor.locator("p");
+
+  await window.keyboard.press("ControlOrMeta+j");
+  await expect(window.getByTestId("composer-input")).toBeFocused();
+  await window.keyboard.type("Shorten the summary slowly");
+  await window.keyboard.press("Enter");
+
+  // The first paragraph is changes, and counted on the card, while the last is still to come.
+  const answer = assistantAnswers(window).last();
+  await expect(paragraphs.first().locator("del.proposal-delete")).toHaveText(["very ", "really "], {
+    timeout: 15_000,
+  });
+  const writing = editor.getByTestId("mind-writing");
+  await expect(writing).toHaveText("Writing…");
+  await expect(paragraphs.nth(2).locator("del.proposal-delete")).toHaveCount(0);
+  await expect(answer.getByTestId("mind-changes-title")).toContainText("in “Q3 review”");
+  await screenshot(window, "assistant-edit-streaming");
+
+  await expect(answer).toHaveAttribute("data-status", "done", { timeout: 30_000 });
+  await expect(writing).toHaveCount(0);
+  await expect(window.getByTestId("proposals-count")).toHaveText("6 changes from the assistant");
+  await expect(answer.getByTestId("mind-changes-title")).toContainText("6 changes in “Q3 review”");
+  await screenshot(window, "assistant-edit-done");
+});
+
 test("a new Mind's text comes in Block by Block as the assistant writes it, with Writing… where the next goes", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);

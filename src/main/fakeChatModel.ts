@@ -91,7 +91,8 @@
  * <Mind>" (把 X 添加到 <Mind>) calls add_to_mind with X; "add X to <Mind> and
  * make a new note called Y" calls both. Each then replies with the first
  * sentence of what its calls came to; add_to_mind's and create_mind's input
- * streams in word by word, slowly for a Question asked "slowly". Anything
+ * streams in word by word, slowly for a Question asked "slowly", as does
+ * edit_mind's edit. Anything
  * else, asked in a Search scope with no Documents, gets the sentence the
  * instructions give for that.
  */
@@ -633,7 +634,8 @@ function mindsReply(prompt: Prompt, asked: string, names: readonly string[]): Re
   }
   if (SHORTEN.test(question)) {
     const result = lastResult(prompt, "edit_mind");
-    if (result === undefined) return { tool: "edit_mind", input: { instruction: question } };
+    // Asked "slowly", the edit is written slowly too.
+    if (result === undefined) return { tool: "edit_mind", input: { instruction: asked } };
     return { text: firstSentence(result) };
   }
   const add = ADD_TO.exec(question);
