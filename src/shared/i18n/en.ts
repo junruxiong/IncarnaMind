@@ -1556,6 +1556,7 @@ export const en = {
   "providers.form.anotherModel": "Another model…",
   "providers.form.recommended": "Recommended: {model}",
   "providers.form.useKey": "Use this key",
+  "providers.untested": "Not yet tested for checked Citations",
   "providers.form.checking": "Checking the key…",
   "providers.form.needsKey": "Paste the key first.",
   "providers.form.needsAddress": "Enter the server's address first.",

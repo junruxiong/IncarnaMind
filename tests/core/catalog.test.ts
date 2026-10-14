@@ -28,7 +28,7 @@ import { PRESETS } from "../../src/core/providers/catalog/presets";
 import {
   catalogProvider,
   isPreset,
-  KEY_PROVIDER_KINDS,
+  KEY_PROVIDERS,
   keyProviderGroups,
   kindOfCatalogId,
   untestedForCitations,
@@ -511,7 +511,7 @@ describe("Support tiers (ADR-0019)", () => {
     ).map((each) => each.id);
     expect(main).toEqual(expected);
     // Settings' "More providers" holds the rest, and nothing is lost between the two.
-    expect([...main, ...more].sort()).toEqual([...KEY_PROVIDER_KINDS].sort());
+    expect([...main, ...more].sort()).toEqual([...KEY_PROVIDERS].sort());
     expect(more).toEqual(expect.arrayContaining([...BEST_EFFORT, "openai-compatible"]));
   });
 

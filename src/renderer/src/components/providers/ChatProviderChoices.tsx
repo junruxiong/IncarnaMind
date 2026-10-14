@@ -1,6 +1,6 @@
 import { type ReactNode, useId } from "react";
 import type { ChatProvider, ChatProviderKind } from "../../../../core/api";
-import { keyProviderGroups } from "../../../../core/providers/catalog/providers";
+import { keyProviderGroups, kindOfCatalogId } from "../../../../core/providers/catalog/providers";
 import { CHATGPT_SERVICE } from "../../../../core/providers/chatgpt/service";
 import { useT } from "../../i18n";
 import type { KeyRefusal } from "../../keyRefusals";
@@ -244,10 +244,10 @@ export function OllamaAction({ ollama, large = false }: { ollama: Ollama; large?
 }
 
 /** The providers by their short names, in the language's list: "Anthropic, OpenAI or Google". */
-function providerList(kinds: readonly ChatProviderKind[], t: ReturnType<typeof useT>): string {
-  const names = kinds.map((kind) => {
-    const short = SHORT_NAMES[kind];
-    return t(short ?? `providers.kind.${kind}`);
+function providerList(ids: readonly string[], t: ReturnType<typeof useT>): string {
+  const names = ids.map((id) => {
+    const kind = kindOfCatalogId(id);
+    return t(SHORT_NAMES[kind] ?? `providers.kind.${kind}`);
   });
   const last = names.pop();
   if (last === undefined) return "";

@@ -11,7 +11,7 @@
  * This module holds no model facts, so the renderer can import it for names
  * and defaults without the generated data (see ./index).
  */
-import type { ChatProviderKind } from "../../api";
+import { type ChatProviderKind, chatProviderKinds } from "../../api";
 import { PRESETS } from "./presets";
 import type { CatalogProvider, Endpoint } from "./types";
 
@@ -662,8 +662,12 @@ export const catalogProviderOf = (
   catalogProviderOfKind(kind);
 
 /** The kind a provider of this catalog id is saved as: a preset's is "openai-compatible". */
-export const kindOfCatalogId = (id: string): ChatProviderKind =>
-  presetIds.has(id) ? "openai-compatible" : (id as ChatProviderKind);
+export function kindOfCatalogId(id: string): ChatProviderKind {
+  if (presetIds.has(id)) return "openai-compatible";
+  const kind = chatProviderKinds.find((each) => each === id);
+  if (!kind) throw new Error(`The catalog has no provider kind "${id}".`);
+  return kind;
+}
 
 /**
  * A preset whose Answers model hasn't passed the citing evaluation (#185): its
@@ -674,13 +678,13 @@ export const untestedForCitations = (provider: CatalogProvider | undefined): boo
   isPreset(provider) && provider?.citingTested === undefined;
 
 /**
- * The providers set up with a key or a server address, in catalog order: every
- * hosted provider, then a server the User gives. Ollama has its own card.
+ * The providers set up with a key or a server address, by catalog id, in
+ * catalog order: every hosted provider and preset, then a server the User
+ * gives. Ollama has its own card.
  */
-export const KEY_PROVIDER_KINDS: readonly ChatProviderKind[] = CATALOG_PROVIDERS.filter(
-  (each) =>
-    !presetIds.has(each.id) && (each.endpoints.length > 0 || each.id === "openai-compatible"),
-).map((each) => each.id as ChatProviderKind);
+export const KEY_PROVIDERS: readonly string[] = CATALOG_PROVIDERS.filter(
+  (each) => each.endpoints.length > 0 || each.id === "openai-compatible",
+).map((each) => each.id);
 
 /**
  * The providers to offer for a key, in the two groups the screens show: `main`,
@@ -688,19 +692,15 @@ export const KEY_PROVIDER_KINDS: readonly ChatProviderKind[] = CATALOG_PROVIDERS
  * stays among their providers whatever its tier), and `more`, under "More
  * providers". The first-run setup shows `main` for a User with none set up.
  */
-export function keyProviderGroups(setUp: readonly ChatProviderKind[] = []): {
-  main: ChatProviderKind[];
-  more: ChatProviderKind[];
+export function keyProviderGroups(setUp: readonly string[] = []): {
+  main: string[];
+  more: string[];
 } {
-  const firstClass = KEY_PROVIDER_KINDS.filter(
-    (kind) => catalogProviderOfKind(kind)?.support === "first-class",
-  );
+  const firstClass = KEY_PROVIDERS.filter((id) => catalogProvider(id)?.support === "first-class");
   // Set up, then listed after the first-class ones rather than among them.
-  const keptSetUp = KEY_PROVIDER_KINDS.filter(
-    (kind) => !firstClass.includes(kind) && setUp.includes(kind),
-  );
+  const keptSetUp = KEY_PROVIDERS.filter((id) => !firstClass.includes(id) && setUp.includes(id));
   const main = [...firstClass, ...keptSetUp];
-  return { main, more: KEY_PROVIDER_KINDS.filter((kind) => !main.includes(kind)) };
+  return { main, more: KEY_PROVIDERS.filter((id) => !main.includes(id)) };
 }
 
 /** The provider's endpoint with this id, else its first (the default); none for a server the User gives. */

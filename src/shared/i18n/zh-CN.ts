@@ -1488,6 +1488,7 @@ export const zhCN = {
   "providers.form.anotherModel": "其他模型…",
   "providers.form.recommended": "推荐：{model}",
   "providers.form.useKey": "使用这个密钥",
+  "providers.untested": "尚未测试引用核对",
   "providers.form.checking": "正在检查密钥…",
   "providers.form.needsKey": "请先粘贴密钥。",
   "providers.form.needsAddress": "请先填写服务器地址。",

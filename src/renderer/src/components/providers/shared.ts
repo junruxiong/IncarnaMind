@@ -1,6 +1,12 @@
 import { useRef, useState } from "react";
 import type { ChatProvider, ChatReadiness, ProviderErrorKind } from "../../../../core/api";
-import { catalogProviderOfKind } from "../../../../core/providers/catalog/providers";
+import type { Language } from "../../../../core/language";
+import {
+  catalogProvider,
+  catalogProviderOf,
+  isPreset,
+  kindOfCatalogId,
+} from "../../../../core/providers/catalog/providers";
 import { OLLAMA_CLOUD } from "../../../../core/providers/ollamaCloud";
 import type { MessageKey, MessageParams } from "../../../../shared/i18n";
 
@@ -27,11 +33,19 @@ export function readinessKey(
     : `providers.readiness.${reason}`;
 }
 
+/** A key provider's name by its catalog id: a preset's own, else its kind's. */
+export function keyProviderName(id: string, t: Translate, language: Language): string {
+  const preset = catalogProvider(id);
+  if (preset && isPreset(preset)) return preset.name[language === "zh-CN" ? "zh" : "en"];
+  return t(`providers.kind.${kindOfCatalogId(id)}`);
+}
+
 /** "OpenAI","OpenAI-compatible server · api.deepseek.com", "Ollama · on this computer". */
 export function providerLabel(provider: ChatProvider, t: Translate): string {
   if (provider.kind === "chatgpt") return t("chatgpt.title");
-  const kind = t(`providers.kind.${provider.kind}`);
-  const catalog = catalogProviderOfKind(provider.kind);
+  const catalog = catalogProviderOf(provider.kind, provider.catalogId);
+  const kind =
+    isPreset(catalog) && catalog ? catalog.name.en : t(`providers.kind.${provider.kind}`);
   if (catalog && catalog.endpoints.length > 0) {
     // A hosted provider: its name, and its region when it has more than one.
     if (catalog.endpoints.length === 1) return kind;
