@@ -162,6 +162,8 @@ export interface FakeOpenAI {
   modelList: typeof ACCOUNT_MODELS | number;
   /** How the Responses API answers a request with a valid token. */
   reply: ApiReply;
+  /** How it answers a request for one model, by its id, in place of `reply`. */
+  replyFor: Record<string, ApiReply>;
   /** Changes the next ID token, to check that a bad one is refused. */
   tamperIdToken: ((claims: Record<string, unknown>) => Record<string, unknown>) | null;
   /** Signs the next ID token with a key OpenAI doesn't publish. */
@@ -348,7 +350,7 @@ export async function createFakeOpenAI(
       });
       return;
     }
-    const { reply } = fake;
+    const reply = fake.replyFor[String(body.model)] ?? fake.reply;
     if (reply.kind === "error") {
       sendJson(response, reply.status, reply.body);
       return;
@@ -453,6 +455,7 @@ export async function createFakeOpenAI(
     revokeStatus: 200,
     modelList: ACCOUNT_MODELS,
     reply: { kind: "answer", text: ANSWER },
+    replyFor: {},
     tamperIdToken: null,
     foreignSigner: false,
     revokeAccessTokens: () => validAccessTokens.clear(),
