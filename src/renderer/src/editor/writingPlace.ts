@@ -10,9 +10,16 @@ import { Extension } from "@tiptap/core";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
+import { ySyncPluginKey } from "@tiptap/y-tiptap";
 import { BLOCK_ID_ATTRIBUTE, type WritingPlace as Place } from "../../../core/api";
 
-const writingPlaceKey = new PluginKey<Place | null>("writingPlace");
+/** Where the assistant writes next, and its marks, made when that changes and moved with each edit. */
+interface Writing {
+  place: Place | null;
+  marks: DecorationSet;
+}
+
+const writingPlaceKey = new PluginKey<Writing>("writingPlace");
 
 /** Where the Block with this id is, at any depth; null when it isn't in the Mind. */
 function blockAt(doc: ProseMirrorNode, id: string): { pos: number; node: ProseMirrorNode } | null {
@@ -63,21 +70,28 @@ export const WritingPlace = Extension.create<{ label(): string }>({
   addProseMirrorPlugins() {
     const { label } = this.options;
     return [
-      new Plugin<Place | null>({
+      new Plugin<Writing>({
         key: writingPlaceKey,
         state: {
-          init: () => null,
-          apply: (tr, place) => {
+          init: () => ({ place: null, marks: DecorationSet.empty }),
+          apply: (tr, writing, _before, state) => {
             const meta = tr.getMeta(writingPlaceKey) as Place | null | undefined;
-            return meta === undefined ? place : meta;
+            const place = meta === undefined ? writing.place : meta;
+            if (!place) return { place: null, marks: DecorationSet.empty };
+            // The Mind's document rewrites the whole text on a change from the core: found again then.
+            if (meta !== undefined || tr.getMeta(ySyncPluginKey)?.isChangeOrigin) {
+              return {
+                place,
+                marks: DecorationSet.create(state.doc, decorations(state.doc, place, label())),
+              };
+            }
+            return tr.docChanged
+              ? { place, marks: writing.marks.map(tr.mapping, tr.doc) }
+              : writing;
           },
         },
         props: {
-          decorations(state) {
-            const place = writingPlaceKey.getState(state);
-            if (!place) return null;
-            return DecorationSet.create(state.doc, decorations(state.doc, place, label()));
-          },
+          decorations: (state) => writingPlaceKey.getState(state)?.marks ?? null,
         },
       }),
     ];
