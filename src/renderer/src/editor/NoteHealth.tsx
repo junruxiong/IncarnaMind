@@ -1,14 +1,16 @@
 import type { Editor } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
+import { useEditorState } from "@tiptap/react";
 import { Fragment, useEffect, useState } from "react";
+import type * as Y from "yjs";
 import type { CitationAttributes } from "../../../core/api";
 import { citationState } from "../../../shared/citations";
-import { dismissCheckProblem, stopCheck, useChecks } from "../checks";
+import { checkSentences, dismissCheckProblem, stopCheck, useChecks } from "../checks";
 import { ProblemLine } from "../components/ProblemLine";
 import { ReadinessExplanation, readinessAction } from "../components/providers/ChatReadinessNotice";
 import { useLanguage, useT } from "../i18n";
 import { useAppStore } from "../store";
-import { shownClaims } from "./claimChecks";
+import { coverageOf, sameCoverage, shownClaims } from "./claimChecks";
 import {
   HEALTH_PARTS,
   type NoteHealth as Health,
@@ -16,6 +18,7 @@ import {
   noteHealth,
 } from "./healthCounts";
 import { CheckMarkIcon, ClaimMarkIcon } from "./icons";
+import { UncoveredLine } from "./UncoveredLine";
 import { COUNT_IDLE_MS } from "./WordCount";
 
 const NONE: Health = {
@@ -90,10 +93,23 @@ function useHealth(editor: Editor): Health {
  * sentences are checked, what is happening with Stop; or why a check gave
  * nothing, with the one thing that helps.
  */
-export function NoteHealth({ editor, mindId }: { editor: Editor; mindId: string }) {
+export function NoteHealth({
+  editor,
+  mindId,
+  doc,
+}: {
+  editor: Editor;
+  mindId: string;
+  doc: Y.Doc;
+}) {
   const t = useT();
   const language = useLanguage();
   const health = useHealth(editor);
+  const coverage = useEditorState({
+    editor,
+    selector: ({ editor: current }) => coverageOf(shownClaims(current.state)),
+    equalityFn: sameCoverage,
+  });
   const running = useChecks((state) => state.running[mindId]);
   const problem = useChecks((state) => state.problems[mindId]);
   const smallModel = useChecks((state) => state.smallModel[mindId] === true);
@@ -215,17 +231,47 @@ export function NoteHealth({ editor, mindId }: { editor: Editor; mindId: string 
           {t("checks.problem.local-mode")}
         </ProblemLine>
       )}
-      {!running && problem && problem.kind !== "not-ready" && problem.kind !== "local-mode" && (
-        <ProblemLine testId="checks-problem" className="mind-health-line" action={close}>
-          {problem.kind === "no-documents"
-            ? folderName
-              ? t("checks.problem.no-documents.folder", { folder: folderName })
-              : t("checks.problem.no-documents.all")
-            : problem.kind === "failed"
-              ? t("checks.problem.failed", { message: problem.message })
-              : t(`checks.problem.${problem.kind}`)}
+      {!running && !problem && coverage.mostlyUncovered && (
+        <UncoveredLine
+          className="mind-health-line"
+          onCheckAll={
+            coverage.canWiden && coverage.range && coverage.action
+              ? () =>
+                  void checkSentences(editor, mindId, doc, coverage.action ?? "find-support", {
+                    ...(coverage.range && { range: coverage.range }),
+                    allDocuments: true,
+                  })
+              : undefined
+          }
+        />
+      )}
+      {!running && problem?.kind === "no-documents" && (
+        <ProblemLine
+          testId="checks-problem"
+          className="mind-health-line"
+          action={{
+            label: t("checks.addFiles"),
+            testId: "checks-add-files",
+            onClick: () => void useAppStore.getState().pickDocuments(),
+          }}
+          also={close}
+        >
+          {folderName
+            ? t("checks.problem.no-documents.folder", { folder: folderName })
+            : t("checks.problem.no-documents.all")}
         </ProblemLine>
       )}
+      {!running &&
+        problem &&
+        problem.kind !== "not-ready" &&
+        problem.kind !== "local-mode" &&
+        problem.kind !== "no-documents" && (
+          <ProblemLine testId="checks-problem" className="mind-health-line" action={close}>
+            {problem.kind === "failed"
+              ? t("checks.problem.failed", { message: problem.message })
+              : t(`checks.problem.${problem.kind}`)}
+          </ProblemLine>
+        )}
     </>
   );
 }

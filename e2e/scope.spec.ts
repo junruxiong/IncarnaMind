@@ -75,7 +75,7 @@ test("typing @ in the composer limits the search to a Folder: the Answer cites o
   await expect(picker.getByRole("group", { name: "Documents" })).toBeVisible();
   const choices = picker.getByTestId("scope-choice");
   // The Linked folder's own Folder, then its folders, each with the path it is in.
-  await expect(choices.first()).toHaveText("Notes");
+  await expect(choices.first().locator(".truncate").first()).toHaveText("Notes");
   await expect(choices.first()).toHaveAttribute("aria-selected", "true");
   await window.keyboard.press("ArrowDown");
   await expect(choices.nth(1)).toHaveText(/^Kitchen/);
