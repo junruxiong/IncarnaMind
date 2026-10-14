@@ -1115,6 +1115,19 @@ export function createAnswers(options: AnswersOptions) {
     };
 
     /**
+     * Whether a Tool may act on a call's input as it comes, before the gate
+     * (#202): only when the gate lets every call of it through. A Connector's
+     * Tool and a Skill's scripts never do: the User's "ask" and "off" are
+     * theirs, and they ask by default. Any other Tool does when each of its
+     * Effects runs without asking, whatever the input: the Minds' Tools, whose
+     * only write is a Proposal.
+     */
+    const streamsInput = (tool: Tool): boolean =>
+      tool.provider.kind !== "connector" &&
+      tool.name !== SKILL_TOOLS.runScript &&
+      tool.effects({}).every(runsByDefault);
+
+    /**
      * `run_skill_script`'s call, once the gate let it through: runs the script
      * it checked, stopping it if the Answer stops. Its card keeps how the run
      * went, or why it couldn't run. A script the gate didn't let through never runs.
@@ -1447,6 +1460,7 @@ export function createAnswers(options: AnswersOptions) {
         documents,
         tools: [...provided, ...fromSkills, ...fromWeb, ...fromMinds],
         gate,
+        streamsInput,
         toolSet: input.toolSet,
         thirdParty: contextReasons,
         support: startingSupport(prepared.support, supportByModel.get(learntKey)),
