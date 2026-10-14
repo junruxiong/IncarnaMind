@@ -195,14 +195,14 @@ function askWaitingQuestion(): void {
   if (!waiting) return;
   useModelSetup.setState({ waiting: null });
   const { conversationId, ...question } = waiting;
-  void (async () => {
+  (async () => {
     // The conversation it was typed in, whichever is open now.
     if (useConversations.getState().openId !== conversationId) {
       if (conversationId) await openConversation(conversationId);
       else startNewChat();
     }
     await askInAssistant(question);
-  })();
+  })().catch((error: unknown) => useAppStore.getState().reportError(error));
 }
 
 core.on("chatReadiness.changed", (readiness) => {

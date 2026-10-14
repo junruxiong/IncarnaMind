@@ -13,7 +13,11 @@ import {
 import { showFileLabelKey } from "../fileInfo";
 import { useT } from "../i18n";
 import { enter } from "../motion";
-import { chooseOutputLocation } from "../outputFiles";
+import {
+  chooseOutputLocation,
+  defaultFolderLabel,
+  showOutputLocationSetting,
+} from "../outputFiles";
 import { saveFailureReason } from "../problems";
 import { CloseLineIcon, ExportLineIcon } from "./lineIcons";
 import { type ProblemAction, ProblemLine } from "./ProblemLine";
@@ -91,8 +95,10 @@ function ResultBody({
   const dismiss = useExports((state) => state.dismiss);
   const [error, setError] = useState<string | null>(null);
   const held = useHeld(line);
+  // The first save says where it went (D209): it stays until it is closed, as a problem does.
   const plain =
     result.state === "saved" &&
+    !result.defaulted &&
     result.unverified === 0 &&
     result.kept.length === 0 &&
     error === null;
@@ -159,10 +165,13 @@ function ResultBody({
                 role="status"
                 data-testid="export-done"
                 title={result.path}
-                className="flex min-w-0 items-center gap-2 text-[14px] leading-5 text-ink-secondary"
+                className="flex min-w-0 items-start gap-2 text-[14px] leading-5 text-ink-secondary"
               >
                 <CheckIcon />
-                <SavedName name={result.name} />
+                <SavedName
+                  name={result.name}
+                  folder={result.defaulted ? defaultFolderLabel(t) : null}
+                />
               </p>
               <span className="flex shrink-0 gap-1">
                 <button
@@ -173,14 +182,27 @@ function ResultBody({
                 >
                   {t("export.open")}
                 </button>
-                <button
-                  type="button"
-                  data-testid="export-show"
-                  onClick={() => run(() => files.showSavedFile(result.path), "export.failed.show")}
-                  className="h-7 rounded-md px-2.5 text-[13px] leading-5 font-semibold text-ink-secondary hover:bg-hover hover:text-ink"
-                >
-                  {t(showFileLabelKey(navigator.platform))}
-                </button>
+                {result.defaulted ? (
+                  <button
+                    type="button"
+                    data-testid="export-change-folder"
+                    onClick={showOutputLocationSetting}
+                    className="h-7 rounded-md px-2.5 text-[13px] leading-5 font-semibold text-ink-secondary hover:bg-hover hover:text-ink"
+                  >
+                    {t("export.changeFolder")}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    data-testid="export-show"
+                    onClick={() =>
+                      run(() => files.showSavedFile(result.path), "export.failed.show")
+                    }
+                    className="h-7 rounded-md px-2.5 text-[13px] leading-5 font-semibold text-ink-secondary hover:bg-hover hover:text-ink"
+                  >
+                    {t(showFileLabelKey(navigator.platform))}
+                  </button>
+                )}
               </span>
             </div>
             {result.unverified > 0 && (
@@ -249,12 +271,19 @@ function ResultBody({
   );
 }
 
-/** "Saved Tides.pdf", the file's name in the ink, as the design shows it. */
-function SavedName({ name }: { name: string }) {
+/**
+ * "Saved Tides.pdf", or "Saved “Tides.pdf” in Documents › IncarnaMind", the
+ * file's name in the ink, wrapped rather than cut short so all of it shows.
+ */
+function SavedName({ name, folder }: { name: string; folder: string | null }) {
   const t = useT();
-  const [before = "", after = ""] = t("export.done", { name: "\u0000" }).split("\u0000");
+  const said =
+    folder === null
+      ? t("export.done", { name: "\u0000" })
+      : t("export.doneIn", { name: "\u0000", folder });
+  const [before = "", after = ""] = said.split("\u0000");
   return (
-    <span className="min-w-0 truncate">
+    <span className="min-w-0 break-words">
       {before}
       <span className="font-semibold text-ink">{name}</span>
       {after}
@@ -272,7 +301,7 @@ function CheckIcon() {
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
-      className="size-4 shrink-0 text-ink"
+      className="mt-0.5 size-4 shrink-0 text-ink"
     >
       <path d="m5 12.5 4.5 4.5L19 7.5" />
     </svg>

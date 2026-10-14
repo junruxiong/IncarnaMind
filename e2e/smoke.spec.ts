@@ -215,7 +215,12 @@ test("first run asks for no model; the first own Question waits while the setup 
   );
   await expect(card).toContainText("Choose where Answers come from");
   await expect(card.getByTestId("setup-primary")).toHaveText("Use my ChatGPT plan");
-  await expect(card).toContainText("No key needed");
+  // Choosing it is the consent (ADR-0022), so its line names everything that goes.
+  await expect(card.getByTestId("setup-chatgpt-sends")).toHaveText(
+    "Plus or Pro · No key needed · Your Questions, the Mind you're in, Passages from your Documents, and Document text for Tags go to OpenAI under your ChatGPT account.",
+  );
+  // The card says what the Mind's "needs a chat model" line would, so that line steps aside.
+  await expect(window.getByTestId("chat-readiness")).toHaveCount(0);
   // The other ways are folded under the one recommended button.
   await expect(card.getByTestId("way-key")).toBeHidden();
   await card.getByTestId("setup-other").click();
@@ -230,6 +235,9 @@ test("first run asks for no model; the first own Question waits while the setup 
     }),
   );
   await expect(card.getByTestId("setup-primary")).toHaveText("粘贴 DeepSeek 密钥");
+  await expect(card.getByTestId("setup-deepseek-sends")).toHaveText(
+    "你的问题、当前 Mind、文档中的相关段落，以及用于打标签的文档文字，会通过你自己的密钥发送给 DeepSeek。",
+  );
   await window.evaluate(async () =>
     (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
       user: { language: "en" },
@@ -240,6 +248,7 @@ test("first run asks for no model; the first own Question waits while the setup 
   await card.getByTestId("setup-later").click();
   await expect(card).toBeHidden();
   await expect(window.getByTestId("composer-input")).toHaveValue("What is in my Documents?");
+  await expect(window.getByTestId("chat-readiness")).toBeVisible();
   await first.app.close();
 });
 

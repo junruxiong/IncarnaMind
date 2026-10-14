@@ -481,8 +481,8 @@ describe("changing a Linked folder", () => {
     method("setLinkedFolderPaused").mockResolvedValue({ ...linked, status: "paused" });
     const change = await useAppStore.getState().setLinkedFolderPaused("l", true);
     expect(change).toBe(top());
-    expect(change?.message).toBe("Paused indexing in “Papers”");
-    expect(change?.name).toBe("Pause indexing");
+    expect(change?.message).toBe("Paused reading in “Papers”");
+    expect(change?.name).toBe("Pause reading");
     expect(useAppStore.getState().linkedFolders[0]?.status).toBe("paused");
     method("setLinkedFolderPaused").mockResolvedValue(linked);
     await useUndo.getState().undo();
@@ -491,7 +491,7 @@ describe("changing a Linked folder", () => {
     method("setLinkedFolderPaused").mockResolvedValue({ ...linked, status: "paused" });
     await useUndo.getState().redo();
     expect(method("setLinkedFolderPaused")).toHaveBeenLastCalledWith("l", true);
-    expect(top()?.message).toBe("Paused indexing in “Papers”");
+    expect(top()?.message).toBe("Paused reading in “Papers”");
   });
 
   test("resuming says so, and pausing what is paused already offers nothing to undo", async () => {
@@ -500,8 +500,8 @@ describe("changing a Linked folder", () => {
     expect(await useAppStore.getState().setLinkedFolderPaused("l", true)).toBeUndefined();
     method("setLinkedFolderPaused").mockResolvedValue({ ...linked, status: "scanning" });
     const change = await useAppStore.getState().setLinkedFolderPaused("l", false);
-    expect(change?.message).toBe("Resumed indexing in “Papers”");
-    expect(change?.name).toBe("Resume indexing");
+    expect(change?.message).toBe("Resumed reading in “Papers”");
+    expect(change?.name).toBe("Resume reading");
   });
 
   test("a layout is undone by the one it had and done again by the new one", async () => {
@@ -520,8 +520,8 @@ describe("changing a Linked folder", () => {
     useAppStore.setState({ settings: { language: "zh-CN" } as never });
     method("setLinkedFolderPaused").mockResolvedValue({ ...linked, status: "paused" });
     await useAppStore.getState().setLinkedFolderPaused("l", true);
-    expect(top()?.message).toBe("已暂停“Papers”的索引");
-    expect(top()?.name).toBe("暂停索引");
+    expect(top()?.message).toBe("已暂停读取“Papers”");
+    expect(top()?.name).toBe("暂停读取");
     method("setLinkedFolderLayout").mockResolvedValue({ ...linked, layout: "flat" });
     await useAppStore.getState().setLinkedFolderLayout("l", "flat");
     expect(top()?.message).toBe("已将“Papers”显示为平铺列表");
@@ -767,5 +767,63 @@ describe("loading keeps a list the core pushed after reading it", () => {
     await loading;
 
     expect(folderIds()).toEqual(["mine", "examples"]);
+  });
+});
+
+describe("Organize says what it did (#763)", () => {
+  test("once it has gone through the Documents it says how many got a Suggested Folder, and Undo puts each back", async () => {
+    const { sayWhenOrganized } = await import("../../src/renderer/src/organizeRun");
+    const { useUndo } = await import("../../src/renderer/src/undo");
+    const before = new Map([
+      ["a", assignment("a", "classified")],
+      ["b", assignment("b", "classified")],
+    ]);
+    sayWhenOrganized(["a", "b"], before);
+
+    useAppStore.setState({
+      library: snapshot([assignment("a", "pending"), assignment("b", "classifying")]),
+    });
+    const earlier = useUndo.getState().line;
+    expect(useUndo.getState().line).toBe(earlier);
+    const suggested = (id: string) => ({
+      ...assignment(id, "classified", "g"),
+      suggested: true,
+    });
+    useAppStore.setState({ library: snapshot([suggested("a"), suggested("b")]) });
+
+    const change = useUndo.getState().line?.change;
+    expect(change?.message).toBe("Organize suggested a Folder for 2 Documents");
+    await useUndo.getState().undo();
+    const restored = method("restoreAssignment");
+    expect(restored).toHaveBeenCalledTimes(2);
+    expect(restored.mock.calls[0]?.[0]).toBe("a");
+    expect(restored.mock.calls[0]?.[1]).toMatchObject({ groupId: null, suggested: false });
+  });
+
+  test("Undo leaves a Document the User moved since", async () => {
+    const { sayWhenOrganized } = await import("../../src/renderer/src/organizeRun");
+    const { useUndo } = await import("../../src/renderer/src/undo");
+    method("restoreAssignment").mockClear();
+    const before = new Map([
+      ["a", assignment("a", "classified")],
+      ["b", assignment("b", "classified")],
+    ]);
+    useAppStore.setState({
+      library: snapshot([assignment("a", "pending"), assignment("b", "pending")]),
+    });
+    sayWhenOrganized(["a", "b"], before);
+    const suggested = (id: string) => ({ ...assignment(id, "classified", "g"), suggested: true });
+    useAppStore.setState({ library: snapshot([suggested("a"), suggested("b")]) });
+    // The User puts b somewhere else.
+    useAppStore.setState({
+      library: snapshot([
+        suggested("a"),
+        { ...assignment("b", "classified", null), source: "user" },
+      ]),
+    });
+    await useUndo.getState().undo();
+    const restored = method("restoreAssignment");
+    expect(restored).toHaveBeenCalledTimes(1);
+    expect(restored.mock.calls[0]?.[0]).toBe("a");
   });
 });
