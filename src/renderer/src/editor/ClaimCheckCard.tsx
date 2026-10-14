@@ -53,14 +53,9 @@ const sentenceOf = (editor: Editor, claim: ShownClaim) =>
 
 /**
  * Asks the assistant to look for the sentence on the web (#128), which a model
- * that can search does; with web search off, Settings shows where to turn it on.
+ * that can search does. The card says so first when web search is off (`ClaimCard`).
  */
 function searchTheWeb(mindId: string, sentence: string): void {
-  const { settings, openSettings } = useAppStore.getState();
-  if (!settings?.user.webSearch) {
-    openSettings("search");
-    return;
-  }
   void askInAssistant({
     text: translateNow("claim.webQuestion", { sentence }),
     mindId,
@@ -196,6 +191,10 @@ export function ClaimMark({
                 searchTheWeb(mindId, sentenceOf(editor, claim));
                 done();
               }}
+              onTurnOnWebSearch={() => {
+                useAppStore.getState().openSettings("search");
+                done();
+              }}
               onRemove={() => {
                 removeClaimMark(editor, claim);
                 done();
@@ -225,6 +224,7 @@ function ClaimCard({
   onFix,
   onFindSources,
   onSearchWeb,
+  onTurnOnWebSearch,
   onRemove,
 }: {
   claim: ShownClaim;
@@ -235,9 +235,13 @@ function ClaimCard({
   onFix(): void;
   onFindSources(): void;
   onSearchWeb(): void;
+  onTurnOnWebSearch(): void;
   onRemove(): void;
 }) {
   const t = useT();
+  const webSearchOn = useAppStore((store) => store.settings?.user.webSearch === true);
+  // Search the web with web search off says why, and where to turn it on, before anything else happens.
+  const [webOffShown, setWebOffShown] = useState(false);
   const { shown, check } = claim;
   const state = shown.state;
   // An unsupported sentence keeps the nearest line when it says something different (#770).
@@ -298,6 +302,19 @@ function ClaimCard({
           {searchedFolder
             ? t("claim.unsupported.inFolder", { folder: folderName })
             : t("claim.unsupported.anywhere")}
+        </p>
+      )}
+      {webOffShown && !webSearchOn && (
+        <p data-testid="claim-web-off" className="citation-card-note">
+          {t("claim.webSearchOff")}{" "}
+          <button
+            type="button"
+            data-testid="claim-web-off-settings"
+            className="font-semibold text-accent underline-offset-2 hover:underline"
+            onClick={onTurnOnWebSearch}
+          >
+            {t("claim.webSearchOff.action")}
+          </button>
         </p>
       )}
       {reason && (
@@ -378,7 +395,7 @@ function ClaimCard({
               type="button"
               data-testid="claim-search-web"
               className="citation-card-action"
-              onClick={onSearchWeb}
+              onClick={() => (webSearchOn ? onSearchWeb() : setWebOffShown(true))}
             >
               {t("claim.searchWeb")}
             </button>
