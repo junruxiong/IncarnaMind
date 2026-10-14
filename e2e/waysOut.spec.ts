@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge, SaveChatProviderInput } from "../src/core/api";
 import {
+  acceptPlainTextKeys,
   addDocuments,
   assistantAnswers,
   createDataFolder,
@@ -70,6 +71,8 @@ test("a refused key: Check the key opens its field with the refusal, and once a 
   const { app, window } = await launchApp(dataDir, { fakeChat: true, ollama: NO_OLLAMA });
   await dismissChatSetup(window);
   await setWindowSize(app, window, 1440, 900);
+  // Linux in CI has no keyring: keys are kept in plain text there, once accepted.
+  await acceptPlainTextKeys(window);
   await saveProvider(window, {
     kind: "anthropic",
     apiKey: "sk-ant-refused-0000",
