@@ -4,7 +4,8 @@ import { nodeWorkers } from "../vitest.config";
 
 /**
  * `npm run eval` (eval/README.md): the retrieval and Citation evaluation,
- * with the same worker-thread handling as the unit tests. Never part of
+ * and the checks evaluation (eval/checks/README.md), with the same
+ * worker-thread handling as the unit tests. Never part of
  * `npm test`, whose config only includes tests/.
  */
 export default defineConfig({
@@ -13,6 +14,8 @@ export default defineConfig({
   test: {
     include: ["eval/**/*.eval.ts"],
     environment: "node",
+    // One run at a time: each downloads the built-in models into the same cache, and times its searches.
+    fileParallelism: false,
     // The run prints its own progress and summary, as it goes.
     disableConsoleIntercept: true,
     reporters: [["default", { summary: false }]],

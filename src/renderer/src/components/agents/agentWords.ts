@@ -13,6 +13,7 @@ import {
 } from "../../../../core/api";
 import type { Language } from "../../../../core/language";
 import { clientInSentence, clientTitle } from "../../../../shared/agentNames";
+import { formatDateTime } from "../../../../shared/dates";
 import { type MessageKey, type MessageParams, translate } from "../../../../shared/i18n";
 
 type Translate = (key: MessageKey, params?: MessageParams) => string;
@@ -103,10 +104,7 @@ export function activityWords(activity: AgentActivity, t: Translate): string {
 }
 
 /** A time, as the activity list and "Last used" show it. */
-export const timeWords = (at: string, language: Language) =>
-  new Intl.DateTimeFormat(language, { dateStyle: "medium", timeStyle: "short" }).format(
-    new Date(at),
-  );
+export const timeWords = (at: string, language: Language) => formatDateTime(at, language);
 
 /** Where the step-by-step help for an agent is: the setup notes, in the interface language. */
 export const helpUrl = (client: AgentClientId | string, language: Language) =>

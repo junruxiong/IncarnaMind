@@ -1,5 +1,6 @@
 import type { Checkpoint, CheckpointReason } from "../../core/api";
 import type { Language } from "../../core/language";
+import { formatTime, formatWeekdayDate } from "../../shared/dates";
 import type { MessageKey, MessageParams } from "../../shared/i18n";
 
 /** What History says of a Checkpoint: pure, so a test can pin the clock and the language. */
@@ -24,22 +25,11 @@ export const reasonLabel = (checkpoint: Pick<Checkpoint, "reason">, say: Say): s
   checkpoint.reason === "idle" ? null : say(REASONS[checkpoint.reason]);
 
 /** The day it was saved, as its group in the picker is headed: "Friday 9 Oct", with the year when it isn't this one. */
-export function dayLabel(iso: string, now: Date, language: Language): string {
-  const at = new Date(iso);
-  return new Intl.DateTimeFormat(language === "zh-CN" ? "zh-CN" : "en-GB", {
-    weekday: "long",
-    day: "numeric",
-    month: "short",
-    ...(at.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }),
-  }).format(at);
-}
+export const dayLabel = (iso: string, now: Date, language: Language): string =>
+  formatWeekdayDate(iso, language, { now });
 
 /** The time it was saved, "10:42". */
-export const timeLabel = (iso: string, language: Language): string =>
-  new Intl.DateTimeFormat(language === "zh-CN" ? "zh-CN" : "en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(iso));
+export const timeLabel = (iso: string, language: Language): string => formatTime(iso, language);
 
 /** The version it is, "Friday 9 Oct, 10:42". */
 export const versionLabel = (
