@@ -2705,6 +2705,8 @@ export const zhCN = {
   "menu.reload": "重新加载",
   "menu.forceReload": "强制重新加载",
   "menu.devTools": "切换开发者工具",
+  "menu.export": "导出…",
+  "menu.export.named": "导出“{name}”…",
   "menu.window": "窗口",
   "menu.minimize": "最小化",
   "menu.zoom": "缩放",

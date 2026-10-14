@@ -2834,6 +2834,8 @@ export const en = {
   "menu.reload": "Reload",
   "menu.forceReload": "Force Reload",
   "menu.devTools": "Toggle Developer Tools",
+  "menu.export": "Export…",
+  "menu.export.named": "Export “{name}”…",
   "menu.window": "Window",
   "menu.minimize": "Minimize",
   "menu.zoom": "Zoom",
