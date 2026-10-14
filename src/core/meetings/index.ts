@@ -343,7 +343,7 @@ export function createMeetings(options: MeetingsOptions) {
         });
       }
     }
-    transcripts?.hear(current.meetingId, samples, run.startMs + msOf(run.samples));
+    transcripts?.hear(current.meetingId, source, samples, run.startMs + msOf(run.samples));
     run.waiting.push(samples);
     run.waitingSamples += samples.length;
     run.samples += samples.length;
