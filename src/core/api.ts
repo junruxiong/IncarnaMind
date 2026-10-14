@@ -1672,6 +1672,11 @@ export interface DocumentPlace {
   quote?: string;
   /** The Citation this was opened from, if a Citation opened it. */
   citation?: TabCitation;
+  /**
+   * In a Word file: the paragraph or table to go to, by its place in the main document
+   * part ("w:p#12", "w:tbl#3"), as a Mind imported from it records (`WordSource.n`, #736).
+   */
+  wordPlace?: string;
 }
 
 export interface LayoutTab {

@@ -160,6 +160,13 @@ describe("Tabs and groups", () => {
     expect(shown(layout)).toEqual(["*Lit review", "*Notes ~Report"]);
     expect(tabOf(layout, notes).tab.place).toEqual({ quote: "field" });
     expect(tabOf(layout, notes).tab.opened).toBe(openedBefore + 1);
+
+    // A Word file's original, opened at the paragraph a Mind's caret is in (#736).
+    layout = await change({ type: "open", item: notes, place: { wordPlace: "w:p#12" } });
+    expect(tabOf(layout, notes).tab.place).toEqual({ wordPlace: "w:p#12" });
+    await expect(
+      change({ type: "open", item: notes, place: { wordPlace: "w:r#1" } }),
+    ).rejects.toThrow(InvalidInputError);
   });
 
   test("a Document already open is shown where it is, even in the group it is opened from; Open the page keeps its preview; only Open in a new tab makes a second tab", async () => {
