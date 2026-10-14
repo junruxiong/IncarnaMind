@@ -413,7 +413,7 @@ describe("A new version of a Document in the Folder", { timeout: 30_000 }, () =>
     );
   });
 
-  test("sends nothing, and asks nothing, before the User allowed the checks flow for the model's service", async () => {
+  test("sends nothing, and asks nothing, while the checks flow isn't allowed for the model's service: choosing the provider allowed it, and the User revoked it", async () => {
     const calls: ModelCall[] = [];
     const model = checkingModel(PLANS, calls);
     const core = startCore(await createTempDataFolder(), {
@@ -425,11 +425,13 @@ describe("A new version of a Document in the Folder", { timeout: 30_000 }, () =>
     core.on("consent.requested", (request) => {
       if (request.flow.id === "checks") asked(request);
     });
-    await core.saveChatProvider({
+    const provider = await core.saveChatProvider({
       kind: "anthropic",
       modelId: "claude-haiku-5-5",
       apiKey: "sk-test",
     });
+    if (!provider.service) throw new Error("Anthropic is a service.");
+    await core.revokeConsent("checks", provider.service.id);
     const sources = await createTempDataFolder();
     const [tides, office] = (await addAndProcess(core, [
       await writeSourceFile(sources, TIDES.name, TIDES.contents),

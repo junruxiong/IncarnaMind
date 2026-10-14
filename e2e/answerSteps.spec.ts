@@ -59,18 +59,11 @@ test.afterEach(async () => {
 });
 
 const core = (window: Page) => ({
-  /** An Anthropic key, whose models summarize their reasoning, with Questions and tagging allowed. */
+  /** An Anthropic key, whose models summarize their reasoning: choosing it allows Questions and tagging. */
   anthropic: () =>
     window.evaluate(async (modelId) => {
       const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
-      const provider = await bridge.saveChatProvider({
-        kind: "anthropic",
-        apiKey: "sk-ant-test",
-        modelId,
-      });
-      if (!provider.service) return;
-      await bridge.allowDataFlow("chat", provider.service.id);
-      await bridge.allowDataFlow("tagging", provider.service.id);
+      await bridge.saveChatProvider({ kind: "anthropic", apiKey: "sk-ant-test", modelId });
     }, MODEL),
   /** A Mind, in a Folder if given (its id and name), opened from the sidebar. */
   mind: async (title: string, folder: { id: string; name: string } | null = null) => {
@@ -449,8 +442,6 @@ test("a Connector call waiting for approval: the line says so, its card waits ou
   await screenshot(window, "steps-approval-en");
 
   await pointAndClick(window, card.getByTestId("approval-allow-once"));
-  const consent = window.getByTestId("consent-dialog");
-  await pointAndClick(window, consent.getByTestId("consent-allow"));
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   const timeline = await openSteps(window, answer);
   // No search: the folded line says the Mind read, so the timeline doesn't.

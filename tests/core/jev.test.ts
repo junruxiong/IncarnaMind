@@ -373,31 +373,18 @@ describe("Tagging with Jev", { timeout: 30_000 }, () => {
   });
 });
 
-describe("Consent for Jev", { timeout: 30_000 }, () => {
-  test("nothing goes to TypeSafe before the User accepts the tagging flow to Jev", async () => {
+describe("Consent for Jev (ADR-0022)", { timeout: 30_000 }, () => {
+  test("choosing Jev, where its form says what goes, allows tagging to TypeSafe: nothing asks", async () => {
     const { core, jev, tagging } = await startWithJev();
     jev.answer({ Paper: 0.9 });
+    const requests: string[] = [];
+    core.on("consent.requested", (request) => requests.push(request.flow.id));
+
     expect(await core.saveJevSettings({ apiKey: JEV_KEY })).toMatchObject({ service: TYPESAFE });
-    expect(await core.listDataFlows()).toContainEqual({
-      flow: { id: "tagging", service: TYPESAFE, sends: TAGGING_SENDS },
-      consent: "not-asked",
-      decidedAt: null,
-    });
-
-    const requested = nextEvent(core, "consent.requested");
     const document = await addDocument(core, "Attention.md", PAPER_TEXT);
-    const request = await requested;
-
-    expect(request).toEqual({
-      requestId: expect.any(String),
-      flow: { id: "tagging", service: TYPESAFE, sends: TAGGING_SENDS },
-      newKinds: TAGGING_SENDS,
-    });
-    expect(jev.requests).toEqual([]);
-    expect((await core.listDocuments())[0]).toMatchObject({ status: "ready", tags: [] });
-
-    await core.respondToConsent(request.requestId, true);
     await waitForTagging(core, [document.id]);
+
+    expect(requests).toEqual([]);
     expect(await tagNamesOf(core, document.id)).toEqual(["Paper"]);
     expect(jev.requests).toHaveLength(1);
     expect(tagging.requests).toEqual([]);
@@ -405,35 +392,44 @@ describe("Consent for Jev", { timeout: 30_000 }, () => {
       flow: { id: "tagging", service: TYPESAFE, sends: TAGGING_SENDS },
       consent: "accepted",
       decidedAt: expect.any(String),
+      chosen: true,
     });
   });
 
-  test("declining sends nothing, to Jev or the chat model: Documents wait", async () => {
+  test("not allowed, tagging never asks and sends nothing, to Jev or the chat model: Documents wait", async () => {
     const { core, jev, tagging } = await startWithJev();
     await core.saveJevSettings({ apiKey: JEV_KEY });
-    const requested = nextEvent(core, "consent.requested");
-    const document = await addDocument(core, "Attention.md", PAPER_TEXT);
-    await core.respondToConsent((await requested).requestId, false);
+    await core.revokeConsent("tagging", TYPESAFE.id);
+    const requests: string[] = [];
+    core.on("consent.requested", (request) => requests.push(request.flow.id));
 
-    await waitForTagging(core, [document.id], (each) => each.tagging === "waiting-for-provider");
+    const first = await addDocument(core, "Attention.md", PAPER_TEXT);
     const second = await addDocument(core, "Invoice.txt", "Invoice 42. Amount due: 120 EUR.");
-    expect(second.tagging).toBe("waiting-for-provider");
+
+    expect([first.tagging, second.tagging]).toEqual([
+      "waiting-for-provider",
+      "waiting-for-provider",
+    ]);
+    expect(requests).toEqual([]);
     expect(jev.requests).toEqual([]);
     expect(tagging.requests).toEqual([]);
+
+    // Allowed in place: both go on.
+    jev.answer({ Paper: 0.9 });
+    await core.allowDataFlow("tagging", TYPESAFE.id);
+    await waitForTagging(core, [first.id, second.id]);
+    expect(jev.requests).toHaveLength(2);
   });
 });
 
 describe("Testing the Jev connection", { timeout: 30_000 }, () => {
-  test("a working key answers; TypeSafe needs consent first, and gets nothing of the User's", async () => {
+  test("a working key answers; TypeSafe gets nothing of the User's, so nothing asks", async () => {
     const { core, jev } = await startWithJev();
-    const requested = nextEvent(core, "consent.requested");
-    const tested = core.testJevConnection({ apiKey: JEV_KEY });
-    const request = await requested;
-    expect(request.flow).toEqual({ id: "tagging", service: TYPESAFE, sends: TAGGING_SENDS });
-    expect(jev.requests).toEqual([]);
+    const requests: string[] = [];
+    core.on("consent.requested", (request) => requests.push(request.flow.id));
 
-    await core.respondToConsent(request.requestId, true);
-    expect(await tested).toEqual({ ok: true });
+    expect(await core.testJevConnection({ apiKey: JEV_KEY })).toEqual({ ok: true });
+    expect(requests).toEqual([]);
     expect(jev.requests).toHaveLength(1);
     expect(jev.requests[0]?.body).toMatchObject({
       model: "jev-latest",

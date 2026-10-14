@@ -125,8 +125,8 @@ for (const { language, more, first, setUp, rest, guide } of LANGUAGES) {
     await window.keyboard.press("ControlOrMeta+j");
     await window.keyboard.type("Does a best-effort provider still answer?");
     await window.keyboard.press("Enter");
-    // Mistral is a cloud service: the first Question asks before sending anything.
-    await window.getByTestId("consent-allow").click();
+    // Choosing Mistral allowed sending to it (ADR-0022): nothing asks before the Answer.
+    await expect(window.getByTestId("consent-dialog")).toBeHidden();
     await expect(assistantAnswers(window).first()).toHaveAttribute("data-status", "done", {
       timeout: 15_000,
     });
