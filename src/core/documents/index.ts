@@ -75,12 +75,7 @@ import {
 } from "./files";
 import { isPackageKind, packageSizeError } from "./formats/zip";
 import { keywordText } from "./keywords";
-import {
-  createLibrary,
-  FORGET_FILE_IDENTITY,
-  type LibraryHooks,
-  type LibraryOptions,
-} from "./library";
+import { createLibrary, FORGET_FILE_IDENTITY, type LibraryHooks } from "./library";
 import type { PageText } from "./passages";
 import {
   CURRENT_SINCE,
@@ -419,8 +414,6 @@ export interface DocumentsOptions {
     retryMs: number;
     detectDataless: boolean;
   };
-  /** Says something to the User, in their language: why locating a Linked folder was refused. */
-  say: LibraryOptions["say"];
   reportError?: (error: unknown) => void;
 }
 
@@ -490,6 +483,15 @@ export function createDocuments(options: DocumentsOptions) {
     return row.status as DocumentStatus;
   };
 
+  /** The Mind a file was last imported as, still there (#720). */
+  const importedMindOf = (documentId: string): string | null =>
+    db.get<{ mind_id: string }>(
+      `SELECT p.mind_id FROM word_packages p JOIN minds m ON m.id = p.mind_id
+       WHERE p.document_id = ? AND p.deleted_at IS NULL AND m.deleted_at IS NULL
+       ORDER BY p.created_at DESC, p.rowid DESC LIMIT 1`,
+      [documentId],
+    )?.mind_id ?? null;
+
   const toDocument = (row: DocumentRow): Document => {
     const tagging = taggingOf(row.status, row.tagging_status);
     const status = statusOf(row);
@@ -531,6 +533,7 @@ export function createDocuments(options: DocumentsOptions) {
       reference: referenceOf(db, row.id),
       ownFile: ownFileOf(row),
       found: foundSourceOf(db, row.id),
+      importedAs: importedMindOf(row.id),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
@@ -1232,7 +1235,6 @@ export function createDocuments(options: DocumentsOptions) {
     db,
     now,
     dataDir,
-    say: options.say,
     folders: options.folders,
     watch: options.linkedFolders.watch,
     stat: options.linkedFolders.stat,
@@ -2012,6 +2014,9 @@ export function createDocuments(options: DocumentsOptions) {
       });
       return { documents, skipped };
     },
+
+    /** See the library's `newVersionFrom`: a newer draft of a Word file imported before (#720). */
+    newVersionFrom: (documentId: string, path: string) => library.newVersionFrom(documentId, path),
 
     /**
      * Adds a file IncarnaMind saved in the data folder, a web page's snapshot

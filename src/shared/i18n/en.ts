@@ -235,6 +235,7 @@ export const en = {
   "mind.count": "{count} Minds",
   "mind.moveTo": "Move to…",
   "document.openTab": "Open in a new tab",
+  "document.openMind": "Open its Mind",
   "document.peek": "Peek",
   "object.copy": "Copy",
   "document.tags": "Tags…",
@@ -954,6 +955,8 @@ export const en = {
   "info.from.linked": "Linked folder “{name}”",
   "info.from.own": "Other Documents",
   "info.folder": "Folder",
+  "info.mind": "Mind",
+  "info.importedAs": "Imported as a Mind",
   "info.tags": "Tags",
   "info.created": "Created",
   "info.createdValue": "{date} (the file’s own date)",
@@ -1048,12 +1051,6 @@ export const en = {
   "linkedFolders.locateAction": "Locate folder…",
   "linkedFolders.locate.pickTitle": "Locate “{name}”",
   "linkedFolders.locate.pickButton": "Choose",
-  "linkedFolders.locate.notThis":
-    "None of the files in “{name}” are in that folder. Choose the folder that holds them now.",
-  "linkedFolders.locate.overlaps":
-    "That folder is inside a Linked folder, or holds one. Choose the folder “{name}” is in now.",
-  "linkedFolders.locate.taken":
-    "“{file}” in that folder is in IncarnaMind already, added on its own. Delete it from IncarnaMind, then locate the folder again.",
   "linkedFolders.unlinkAction": "Unlink…",
   "linkedFolders.unlink.title": "Unlink “{name}”?",
   "linkedFolders.unlink.body":
@@ -1944,6 +1941,7 @@ export const en = {
   "scope.chip.more": "+{count} more",
   "scope.chip.moreLabel": "Show the other {count} Documents in the Search scope",
   "scope.chip.fewer": "Show fewer",
+  "scope.empty.line": "{scope} has no Documents",
   "scope.answer.empty":
     "This Question's Search scope has no Documents to search, so nothing was searched. Add Documents to its Folders or Tags, or remove the scope to search all your Documents.",
 
@@ -2531,6 +2529,8 @@ export const en = {
   "error.folder.nameTaken": "A folder with this name already exists.",
   "error.folder.limit": "The Library supports up to 100 folders.",
   "error.mind.notFound": "That Mind doesn't exist or has been deleted.",
+  "error.mind.notFromWord":
+    "This Mind wasn’t imported from a Word file, so it has no original to add.",
   "error.mind.newerVersion": "A newer version of IncarnaMind made this. Update to open it.",
   "error.mind.newerVersionEdit":
     "A newer version of IncarnaMind wrote this Mind. Update IncarnaMind to edit it.",
@@ -2593,6 +2593,96 @@ export const en = {
   "error.connector.jsonInvalid": "That isn't valid JSON: {reason}",
   "error.connector.noServers":
     "No MCP servers found: expected an “mcpServers” object, as Claude Desktop and Cursor write it.",
+  "error.restore.unknown": "That isn't in Recently deleted.",
+  "error.restore.deletedPermanently": "“{name}” was deleted permanently, so it can't be restored.",
+  "error.restore.expired":
+    "“{name}” was deleted more than {days} days ago, so it can't be restored.",
+  "error.restore.unlinked":
+    "“{name}” can't be restored: the Linked folder it was in has been unlinked.",
+  "error.restore.documentBack": "“{name}” is in the Library again, so it can't be restored.",
+  "error.restore.documentGone": "That Document was deleted. Restore it first.",
+  "error.restore.tagGone": "The Tag “{name}” was deleted. Restore it first.",
+  "error.restore.folderGone": "The Folder “{name}” was deleted. Restore it first.",
+  "error.restore.tagNameTaken":
+    "There is another Tag named “{name}” now. Rename it, then restore this one.",
+  "error.restore.folderNameTaken":
+    "There is another Folder named “{name}” now. Rename it, then restore this one.",
+  "error.restore.folderLimit":
+    "The Library holds up to 100 Folders. Delete one, then restore this one.",
+  "error.restore.notDeleted": "“{name}” isn't deleted, so it can't be deleted permanently.",
+  "error.history.gone": "That version is no longer kept.",
+  "error.linkedFolder.notThis":
+    "None of the files in “{name}” are in that folder. Choose the folder that holds them now.",
+  "error.linkedFolder.overlaps":
+    "That folder is inside a Linked folder, or holds one. Choose the folder “{name}” is in now.",
+  "error.linkedFolder.taken":
+    "“{file}” in that folder is in IncarnaMind already, added on its own. Delete it from IncarnaMind, then locate the folder again.",
+  "error.agent.notConnected": "That agent isn't connected.",
+  "error.agent.nameEmpty": "Give the agent a name.",
+  "error.agent.nameTooLong": "An agent's name can be at most {max} characters.",
+  "error.agent.nameTaken": "An agent named “{name}” is already connected.",
+  "error.agent.noFolders": "Choose at least one Folder for the agent to read.",
+  "error.agent.keyUnreadable":
+    "This agent's key can't be read on this computer. Disconnect it and connect it again.",
+  "error.agent.undoChanged": "{path} has changed since, so IncarnaMind left it as it is.",
+  "error.library.noClassifier": "Choose a classification model first.",
+  "error.library.noFolders": "Create or choose folders first.",
+  "error.library.classifierModel": "Choose a connected provider and a model.",
+  "error.library.autoNotLocal": "Automatic classification must run on this computer.",
+  "error.library.localModelMissing": "Enter the local server and decision model.",
+  "error.library.ollamaNotLocal": "The Ollama decision model must run on this computer.",
+  "error.meeting.notFound": "That Meeting doesn't exist or has been discarded.",
+  "error.meeting.off": "Meetings are turned off in Settings.",
+  "error.meeting.otherRecording": "Another Meeting is being recorded. Stop it first.",
+  "error.meeting.noticeUnread": "Read the recording notice before recording a Meeting.",
+  "error.meeting.cantDiscard": "Only a Meeting that hasn't started can be discarded.",
+  "error.meeting.alreadyStarted": "That Meeting has started already.",
+  "error.meeting.notRecording": "That Meeting isn't recording.",
+  "error.meeting.notPaused": "That Meeting isn't paused.",
+  "error.meeting.notBeingRecorded": "That Meeting isn't being recorded.",
+  "error.comparison.noQuestion": "Add a Question to compare by.",
+  "error.comparison.tooManyQuestions": "A comparison table has at most {max} Questions.",
+  "error.comparison.noDocuments": "There are no Documents to compare.",
+  "error.comparison.tooManyDocuments": "A comparison table has at most {max} Documents.",
+  "error.comparison.questionTooLong": "A Question can't be longer than {max} characters.",
+  "error.comparison.instructionTooLong":
+    "What else the table should show can't be longer than {max} characters.",
+  "error.comparison.notFound": "That comparison table isn't in this Mind.",
+  "error.edit.noInstruction": "Say what to change, or the language to translate into.",
+  "error.edit.instructionTooLong": "What to change can't be longer than {max} characters.",
+  "error.reference.tooLong": "A reference's field can't be longer than {max} characters.",
+  "error.reference.notYear": "“{text}” isn't a year or a date.",
+  "error.reference.notDoi": "“{text}” isn't a DOI.",
+  "error.import.undoGone": "That import can't be undone any more.",
+  "error.import.filesGone": "That import's files can't be added any more.",
+  "error.import.noSuchReference": "There is no such reference without a Document.",
+  "error.import.fileNotAdded": "That file can't be added as a Document.",
+  "error.sources.nothingToFind": "Type what to search for.",
+  "error.sources.yearsOrder": "The first year comes after the last.",
+  "error.sources.keyLooksWrong": "That doesn't look like a key. Check it and paste it again.",
+  "error.skill.notFound": "That Skill doesn't exist or has been removed.",
+  "error.skill.previewExpired": "That Skill preview has expired: choose the Skill again.",
+  "error.skill.builtInName":
+    "“{name}” is the name of a built-in Skill, whose files can't be replaced. Give the Skill another name in its SKILL.md, or duplicate the built-in Skill to make your own.",
+  "error.approval.riskNotAccepted":
+    "Confirm the risk warning before always running a Skill's scripts.",
+  "error.privacy.usageDataLocalMode":
+    "Usage data stays off while “Keep everything on this computer” is on.",
+  "error.check.claimTooLong": "The claim is too long to check: at most {max} characters.",
+  "error.check.localMode": "Local mode is on, and the model isn't on this computer.",
+  "error.check.declined":
+    "You declined sending the claim to the model's service, so nothing was sent.",
+  "error.tagging.noModel": "Choose a classification model.",
+  "error.tagging.cloudPaused": "Cloud classification is paused in local mode.",
+  "error.tagging.jevNotSetUp": "Jev isn't set up.",
+  "error.tagging.jevKeyUnreadable": "The Jev key can't be read on this device.",
+  "error.tagging.startOllama": "Start Ollama to use automatic local classification.",
+  "error.tagging.installModel":
+    "Install {model} in Ollama, then classify again, or select a model manually.",
+  "error.tagging.needsPageImages":
+    "This PDF needs page images. Install clef-flash in Ollama, then classify it again, or move it to a Folder yourself.",
+  "error.tagging.needsMemory":
+    "Clef-Flash needs more available memory for this PDF. Close other models and retry, or move it to a Folder yourself.",
 
   // The application menu (src/main/menu.ts).
   "menu.about": "About IncarnaMind",
@@ -2929,44 +3019,26 @@ export const en = {
   "gettingStarted.hide": "Hide Get started",
   "gettingStarted.done": "Done: ",
   "gettingStarted.step.citation": "Check a Citation in the example",
-  "gettingStarted.step.documents": "Index your Documents or connect apps",
+  "gettingStarted.step.documents": "Add your Documents",
   "gettingStarted.step.question": "Ask your own Question",
   "startGuide.title": "Start in three steps",
   "startGuide.documents.title": "Add your Documents, or connect your apps",
   "startGuide.documents.body":
     "PDF, Word, PowerPoint, Excel, Markdown or text. Your files stay where they are; IncarnaMind only reads them. A Google Drive or OneDrive folder synced to this computer works too.",
   "startGuide.documents.linkFolder": "Link a folder…",
-  "startGuide.documents.addFiles": "Add files",
+  "startGuide.documents.addFiles": "Add files…",
   "startGuide.documents.connectApp": "Connect an app…",
   "startGuide.documents.apps":
-    "Connect Notion, Google Drive or any app with an MCP server, and Answers can look things up there too. Only your Documents get checked Citations.",
+    "Connect Notion, Google Drive and other apps, and Answers can look things up there too. Only your Documents get checked Citations.",
   "startGuide.ask.title": "Ask a Question",
   "startGuide.ask.body":
-    "Press {shortcut} anywhere in a Mind and type. The Answer is written right below, from your Documents.",
+    "Press {shortcut} and ask. The Answer appears in the assistant; add it to your note with one click.",
   "startGuide.ask.example": "e.g. What do these reports say about Q3 revenue?",
   "startGuide.check.title": "Check where each claim comes from",
   "startGuide.check.body":
     "Every claim gets a mark in the margin: {mark} when the quote is found in your Document. Click it to open the page.",
   "startGuide.example.lead": "Want to see it first?",
   "startGuide.example.open": "Open the example Mind",
-  "restore.error.unknown": "That isn't in Recently deleted.",
-  "restore.error.deletedPermanently": "“{name}” was deleted permanently, so it can't be restored.",
-  "restore.error.expired":
-    "“{name}” was deleted more than {days} days ago, so it can't be restored.",
-  "restore.error.unlinked":
-    "“{name}” can't be restored: the Linked folder it was in has been unlinked.",
-  "restore.error.documentBack": "“{name}” is in the Library again, so it can't be restored.",
-  "restore.error.documentGone": "That Document was deleted. Restore it first.",
-  "restore.error.tagGone": "The Tag “{name}” was deleted. Restore it first.",
-  "restore.error.folderGone": "The Folder “{name}” was deleted. Restore it first.",
-  "restore.error.tagNameTaken":
-    "There is another Tag named “{name}” now. Rename it, then restore this one.",
-  "restore.error.folderNameTaken":
-    "There is another Folder named “{name}” now. Rename it, then restore this one.",
-  "restore.error.folderLimit":
-    "The Library holds up to 100 Folders. Delete one, then restore this one.",
-  "deletePermanently.error.notDeleted":
-    "“{name}” isn't deleted, so it can't be deleted permanently.",
   "meetings.mindTitle": "Meeting, {date}",
   "settings.pages.meetings": "Meetings",
   "status.readingPaused": "Reading paused while recording",
@@ -3355,6 +3427,11 @@ export const en = {
   "steps.sources": "{count} sources",
   "steps.sources.one": "1 source",
   "steps.sources.none": "no sources",
+  "steps.passages": "{count} passages",
+  "steps.passages.one": "1 passage",
+  "steps.readCited": "Read {passages} · {count} sentences cited after checking",
+  "steps.readCited.one": "Read {passages} · 1 sentence cited after checking",
+  "steps.readNoneMatched": "Read {passages} · none of its sentences could be matched to them",
   "steps.read": "Read “{mind}”",
   "steps.read.part": "Read part of “{mind}”",
   "steps.read.selection": "Read your selection in “{mind}”",
@@ -3503,7 +3580,6 @@ export const en = {
   "agents.setup.other": "Copy the settings to paste into your agent",
   "agents.note.codex":
     "Used in the ChatGPT app’s Work and Codex modes; ordinary Chat mode doesn’t use it.",
-  "agents.setup.undoChanged": "{path} has changed since, so IncarnaMind left it as it is.",
   "agents.client.other": "Other agent",
   "agents.client.codex": "ChatGPT app and Codex",
   "agents.sentence.codex": "the ChatGPT app or Codex",
@@ -3616,7 +3692,6 @@ export const en = {
   "history.noChanges": "No changes: these two versions read the same.",
   "history.restored": "Restored the version from {version}",
   "history.restored.name": "Restore Version",
-  "history.error.gone": "That version is no longer kept.",
   "wordImport.command": "Import a Word file…",
   "wordImport.pick.title": "Import a Word file",
   "wordImport.pick.filter": "Word documents",
@@ -3632,6 +3707,8 @@ export const en = {
   "wordImport.othersMore": "{count} more",
   "wordImport.keeps":
     "IncarnaMind keeps a copy of the file, so export can write your changes back into it.",
+  "wordImport.addOriginal": "Also add the original to the Library, so Answers can cite it",
+  "wordImport.newerDraft": "A newer draft of “{name}”? Keep both as versions",
   "wordImport.layoutNotShown":
     "This file’s layout (fonts, colours, shading and aligned columns) isn’t shown in the Mind. It’s kept, and comes back when you export to Word.",
   "wordImport.import": "Import",
@@ -3654,6 +3731,9 @@ export const en = {
     "“{name}” couldn’t be read. It may have moved, or IncarnaMind isn’t allowed to open it.",
   "wordImport.from": "From {name}",
   "wordImport.keepsStyles": "Export keeps its styles",
+  "wordImport.from.open": "Open {name} beside it",
+  "wordImport.notAdded": "“{name}” couldn’t be added to the Library, so Answers can’t cite it.",
+  "wordImport.addToLibrary": "Add to Library",
   "wordImport.from.tooltip":
     "Opened from a Word file. Export writes your changes back into it and keeps its styles, numbering, headers and footers.",
   "wordImport.progress": "Importing “{name}” · {percent}%",

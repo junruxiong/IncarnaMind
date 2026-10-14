@@ -648,6 +648,7 @@ describe("whose document it is", () => {
       layoutNotShown: false,
       changes: 0,
       comments: 0,
+      earlierDraft: null,
     });
 
     const changed = await saveFile(
