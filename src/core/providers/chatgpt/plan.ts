@@ -18,16 +18,12 @@ import type {
 } from "../../api";
 import { SecretStorageError } from "../../errors";
 import { DEFAULT_SIGN_IN_TIMEOUT_MS, OAuthFlowError, type PastedRedirect } from "../../oauth";
+import type { RefreshLock } from "../../oauthAccount";
 import type { Secrets } from "../../secrets";
 import type { SettingsStore } from "../../settings";
 import { ChatGptOtherAccountError, ChatGptPlanNotAllowedError } from "./errors";
 import { CHATGPT_PLAN_BASE_URL, KNOWN_PLAN_MODELS, listPlanModels } from "./planEndpoint";
-import {
-  type ChatGptSignInEndpoints,
-  createChatGptSignIn,
-  OPENAI_AUTH,
-  type RefreshLock,
-} from "./signIn";
+import { type ChatGptSignInEndpoints, createChatGptSignIn, OPENAI_AUTH } from "./signIn";
 
 /** Where the provider signs in and sends Questions. */
 export interface ChatGptPlanEndpoints extends ChatGptSignInEndpoints {

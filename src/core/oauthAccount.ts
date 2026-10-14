@@ -1,0 +1,397 @@
+/**
+ * A browser sign-in kept on this device, for a provider whose plan the User
+ * signs in with (the ChatGPT plan, a Claude account), on top of `./oauth`:
+ *
+ * - one sign-in at a time: starting again cancels the one still waiting, and
+ *   the address the browser shows can be pasted into the waiting one;
+ * - the tokens live only in the secret store, as one record with whatever
+ *   else the provider keeps;
+ * - an access token is refreshed when it is within five minutes of expiring.
+ *   Refresh tokens may rotate, so refreshes are serialised, across processes
+ *   too when the store is shared (see `RefreshLock`);
+ * - signing out ends the session at the provider when it can, then forgets
+ *   the tokens.
+ *
+ * Codes and tokens are never logged.
+ */
+import type { Browser } from "./adapters";
+import { SecretStorageError } from "./errors";
+import {
+  authorizeInBrowser,
+  type BrowserAuthorizationOptions,
+  type OAuthPage,
+  OAuthTokenError,
+  type OAuthTokens,
+  type PastedRedirect,
+  revokeOAuthToken,
+  type SignInRedirect,
+} from "./oauth";
+import type { Secrets } from "./secrets";
+
+/** Refresh this long before the access token expires. */
+const REFRESH_WINDOW_MS = 5 * 60_000;
+
+/** When neither the server nor the token says how long it lasts. */
+const ASSUMED_LIFETIME_MS = 60 * 60_000;
+
+/** Waits between tries to revoke the session at sign-out, when the provider can't be reached. */
+const REVOKE_RETRIES_MS = [250, 1000];
+
+/**
+ * A refresh or revocation gives up after this long, so a hanging token
+ * endpoint doesn't hold every request; well under the shared refresh lock's
+ * staleness (a minute), so no other process takes the lock over meanwhile.
+ * Giving up counts as a passing failure: the sign-in is kept.
+ */
+export const TOKEN_REQUEST_TIMEOUT_MS = 20_000;
+
+/** Refresh-token errors that mean the token can't be used again (RFC 6749, and OpenAI's own). */
+const UNUSABLE_REFRESH = new Set([
+  "invalid_grant",
+  "invalid_refresh_token",
+  "token_expired",
+  "refresh_token_expired",
+  "refresh_token_invalidated",
+  "refresh_token_reused",
+]);
+
+export interface StoredTokens {
+  accessToken: string;
+  refreshToken: string | null;
+  /** Milliseconds since the epoch. */
+  expiresAt: number;
+}
+
+/** Why there are no tokens: the User signed out, or a refresh failed. */
+export type SignInEnded = "signed-out" | "expired";
+
+/** What every kept sign-in records, beside what its provider keeps. */
+export interface OAuthAccountRecord {
+  tokens: StoredTokens | null;
+  ended: SignInEnded | null;
+}
+
+const text = (value: unknown) => (typeof value === "string" && value !== "" ? value : null);
+
+/** The tokens and their end from a stored record, as `OAuthAccountRecord`. */
+export function parseAccountRecord(record: Record<string, unknown>): OAuthAccountRecord {
+  const tokens = record.tokens as Record<string, unknown> | null | undefined;
+  const accessToken = tokens ? text(tokens.accessToken) : null;
+  return {
+    tokens:
+      tokens && accessToken && typeof tokens.expiresAt === "number"
+        ? { accessToken, refreshToken: text(tokens.refreshToken), expiresAt: tokens.expiresAt }
+        : null,
+    ended:
+      record.ended === "expired" ? "expired" : record.ended === "signed-out" ? "signed-out" : null,
+  };
+}
+
+/**
+ * Runs a refresh so that no other process sharing the same store refreshes
+ * at the same time. Within one process, refreshes already run one at a time.
+ */
+export interface RefreshLock {
+  run<T>(task: () => Promise<T>): Promise<T>;
+}
+
+const NO_LOCK: RefreshLock = { run: (task) => task() };
+
+/** What a refresh refusal means: the token can't be used again, or the client itself is gone. */
+export type RefreshRefusal = "unusable" | "client-gone";
+
+function refusal(error: unknown): RefreshRefusal | "passing" {
+  if (!(error instanceof OAuthTokenError) || error.status === null) return "passing";
+  if (error.code === "invalid_client") return "client-gone";
+  if (error.code && UNUSABLE_REFRESH.has(error.code)) return "unusable";
+  // A refusal without a known code: only an overloaded or slow server is worth waiting for.
+  const { status } = error;
+  return status >= 400 && status < 500 && status !== 408 && status !== 429 ? "unusable" : "passing";
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Ends a session at the provider by revoking its refresh token, trying again
+ * shortly when the provider can't be reached. True once it confirms; false if
+ * it couldn't be confirmed.
+ */
+export async function revokeRefreshToken(options: {
+  revokeUrl: string;
+  clientId: string;
+  refreshToken: string;
+  /** Who couldn't confirm, for the log, e.g. "OpenAI". */
+  provider: string;
+  fetch?: typeof globalThis.fetch;
+}): Promise<boolean> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await revokeOAuthToken({
+        revokeUrl: options.revokeUrl,
+        clientId: options.clientId,
+        token: options.refreshToken,
+        tokenTypeHint: "refresh_token",
+        signal: AbortSignal.timeout(TOKEN_REQUEST_TIMEOUT_MS),
+        ...(options.fetch && { fetch: options.fetch }),
+      });
+      return true;
+    } catch (error) {
+      // A refusal won't change by asking again; a server or network failure might.
+      const passing =
+        !(error instanceof OAuthTokenError) || error.status === null || error.status >= 500;
+      const wait = REVOKE_RETRIES_MS[attempt];
+      if (!passing || wait === undefined) {
+        console.error(`The sign-out couldn't be confirmed by ${options.provider}.`, error);
+        return false;
+      }
+      await sleep(wait);
+    }
+  }
+}
+
+export interface OAuthCredentials {
+  /**
+   * A current access token, refreshed first when it is about to expire.
+   * `rejected` is a token the API refused: if it is still the current one, it
+   * is refreshed even so. Throws the provider's sign-in-required error when
+   * there is no sign-in or it can't be refreshed.
+   */
+  access(options?: { rejected?: string }): Promise<{ accessToken: string }>;
+}
+
+/** The browser sign-in, with everything this module fills in left out. */
+export type Authorize = (
+  request: Omit<
+    BrowserAuthorizationOptions,
+    "openBrowser" | "onWaiting" | "pages" | "timeoutMs" | "signal" | "fetch"
+  >,
+) => Promise<OAuthTokens>;
+
+export function createOAuthAccount<A extends OAuthAccountRecord>(options: {
+  /** The record's name in the secret store. */
+  secretName: string;
+  /** Where the sign-in is kept: the device's secret store, or a shared one (see `RefreshLock`). */
+  secrets: Secrets;
+  /** The provider's record from what is stored; null when it can't be used. */
+  parse(record: Record<string, unknown>): A | null;
+  refreshLock?: RefreshLock;
+  browser: Browser;
+  /** The browser tab's pages, in the User's language. */
+  pages(): { success: OAuthPage; failure: OAuthPage };
+  signInTimeoutMs: number;
+  /** Milliseconds since the epoch. */
+  now(): number;
+  /** Trades the refresh token for new tokens at the provider. */
+  renew(account: A, refreshToken: string, signal: AbortSignal): Promise<OAuthTokens>;
+  /** What else an account forgets when its refresh is refused for good. Defaults to nothing. */
+  expired?(account: A, refusal: RefreshRefusal): A;
+  /** Ends the session at the provider at sign-out; true once confirmed. Defaults to nothing to end. */
+  revoke?(account: A, refreshToken: string): Promise<boolean>;
+  /** What else signing out forgets, besides the tokens. Defaults to nothing. */
+  forgetOnSignOut?(account: A): A;
+  /** The provider's error for a request without a usable sign-in. */
+  signInRequired(reason: SignInEnded): Error;
+  /** The sign-in changed: started, finished, signed out, or expired. */
+  onChange(): void;
+  fetch?: typeof globalThis.fetch;
+}) {
+  const { secrets, now, onChange } = options;
+  const lock = options.refreshLock ?? NO_LOCK;
+
+  /** Bumped by every sign-in and sign-out, so a refresh that finishes afterwards changes nothing. */
+  let generation = 0;
+  let refreshing: Promise<A> | null = null;
+  let running: { controller: AbortController; done: Promise<unknown> } | null = null;
+  let pasteRedirect: SignInRedirect["paste"] | null = null;
+  let signingOut = false;
+
+  const load = async (): Promise<A | null> => {
+    const json = await secrets.tryGet(options.secretName);
+    if (!json) return null;
+    try {
+      const value: unknown = JSON.parse(json);
+      if (typeof value !== "object" || value === null) return null;
+      return options.parse(value as Record<string, unknown>);
+    } catch {
+      return null;
+    }
+  };
+  const save = (account: A) => secrets.set(options.secretName, JSON.stringify(account));
+
+  const required = (account: A | null) =>
+    options.signInRequired(account?.ended === "expired" ? "expired" : "signed-out");
+
+  const expire = async (from: number, account: A, reason: RefreshRefusal) => {
+    if (from !== generation) return;
+    generation += 1;
+    const kept = options.expired?.(account, reason) ?? account;
+    await save({ ...kept, tokens: null, ended: "expired" });
+    onChange();
+  };
+
+  const isStale = (tokens: StoredTokens) => tokens.expiresAt - now() <= REFRESH_WINDOW_MS;
+
+  const storedTokens = (tokens: OAuthTokens, previous: StoredTokens | null): StoredTokens => ({
+    accessToken: tokens.accessToken,
+    // A refresh that doesn't rotate the refresh token keeps the old one.
+    refreshToken: tokens.refreshToken ?? previous?.refreshToken ?? null,
+    expiresAt: now() + (tokens.expiresIn ?? ASSUMED_LIFETIME_MS / 1000) * 1000,
+  });
+
+  /** One refresh at a time: everyone who needs a fresh token while it runs waits for it. */
+  const refresh = (current: A, rejected?: string): Promise<A> => {
+    if (refreshing) return refreshing;
+    const from = generation;
+    const run = lock.run(async () => {
+      // Another process sharing the store may have refreshed while this one waited for the lock.
+      const latest = (await load()) ?? current;
+      const tokens = latest.tokens;
+      if (!tokens) throw required(latest);
+      const replaced = tokens.accessToken !== current.tokens?.accessToken;
+      if (replaced && !isStale(tokens) && tokens.accessToken !== rejected) return latest;
+      if (!tokens.refreshToken) {
+        await expire(from, latest, "unusable");
+        throw options.signInRequired("expired");
+      }
+      let fresh: OAuthTokens;
+      try {
+        fresh = await options.renew(
+          latest,
+          tokens.refreshToken,
+          AbortSignal.timeout(TOKEN_REQUEST_TIMEOUT_MS),
+        );
+      } catch (error) {
+        const meaning = refusal(error);
+        if (meaning === "passing") throw error;
+        await expire(from, latest, meaning);
+        throw options.signInRequired("expired");
+      }
+      if (from !== generation) throw options.signInRequired("signed-out");
+      const next: A = { ...latest, tokens: storedTokens(fresh, tokens) };
+      // The access token, its expiry and the rotated refresh token are replaced together.
+      await save(next);
+      return next;
+    });
+    refreshing = run;
+    const clear = () => {
+      if (refreshing === run) refreshing = null;
+    };
+    run.then(clear, clear);
+    return run;
+  };
+
+  const credentials: OAuthCredentials = {
+    async access(request = {}) {
+      // Join a refresh already under way: its result replaces what is stored.
+      const current = refreshing ? await refreshing : await load();
+      if (signingOut || !current?.tokens) throw required(current);
+      const stale =
+        isStale(current.tokens) ||
+        (request.rejected !== undefined && request.rejected === current.tokens.accessToken);
+      const usable = stale ? await refresh(current, request.rejected) : current;
+      if (!usable.tokens) throw options.signInRequired("signed-out");
+      return { accessToken: usable.tokens.accessToken };
+    },
+  };
+
+  const cancelSignIn = async () => {
+    const current = running;
+    if (!current) return;
+    current.controller.abort();
+    await current.done.catch(() => undefined);
+  };
+
+  return {
+    credentials,
+    load,
+    /** Saves the record as it is, e.g. a registration kept for the next sign-in. */
+    save,
+    /** Saves what a sign-in ended with: a refresh that finishes afterwards changes nothing. */
+    async commit(account: A): Promise<void> {
+      generation += 1;
+      await save(account);
+    },
+    /** Tokens to keep from a token endpoint's answer, keeping the refresh token it didn't rotate. */
+    storedTokens,
+
+    signingIn: () => running !== null,
+
+    /**
+     * Runs `attempt`, which signs in through `authorize`: the browser opens
+     * and the sign-in waits for the User. Checks the secret store can keep
+     * the tokens first, and cancels a sign-in still waiting. Rejects with
+     * `SecretStorageError`, or with what `attempt` throws.
+     */
+    async signIn<T>(
+      attempt: (authorize: Authorize, signal: AbortSignal) => Promise<T>,
+    ): Promise<T> {
+      const storage = secrets.status();
+      // Check before the User signs in, not after: the tokens would have nowhere to go.
+      if (!storage.canSave) throw new SecretStorageError(storage.protection);
+      await cancelSignIn();
+      const controller = new AbortController();
+      const authorize: Authorize = async (request) => {
+        let paste: SignInRedirect["paste"] | null = null;
+        try {
+          return await authorizeInBrowser({
+            ...request,
+            openBrowser: (url) => options.browser.open(url),
+            onWaiting(waiting) {
+              paste = waiting;
+              pasteRedirect = waiting;
+            },
+            pages: options.pages(),
+            timeoutMs: options.signInTimeoutMs,
+            signal: controller.signal,
+            ...(options.fetch && { fetch: options.fetch }),
+          });
+        } finally {
+          if (pasteRedirect === paste) pasteRedirect = null;
+        }
+      };
+      const done = attempt(authorize, controller.signal);
+      running = { controller, done };
+      onChange();
+      try {
+        return await done;
+      } finally {
+        if (running?.controller === controller) running = null;
+        onChange();
+      }
+    },
+
+    cancelSignIn,
+
+    /**
+     * The address the browser ended on, pasted when it couldn't come back to
+     * IncarnaMind: the waiting sign-in goes on with it as with the browser's
+     * own redirect (see `SignInRedirect.paste`). "finished" when no sign-in
+     * is waiting.
+     */
+    pasteAddress: (address: string): PastedRedirect => pasteRedirect?.(address) ?? "finished",
+
+    /**
+     * Stops using the sign-in, ends its session at the provider and forgets
+     * its tokens. `revoked` is false when the provider couldn't confirm the
+     * session ended. Safe when signed out.
+     */
+    async signOut(): Promise<{ revoked: boolean }> {
+      await cancelSignIn();
+      generation += 1;
+      signingOut = true;
+      try {
+        const stored = await load();
+        if (!stored?.tokens) return { revoked: true };
+        const { refreshToken } = stored.tokens;
+        const revoked =
+          refreshToken && options.revoke ? await options.revoke(stored, refreshToken) : true;
+        const kept = options.forgetOnSignOut?.(stored) ?? stored;
+        await save({ ...kept, tokens: null, ended: "signed-out" });
+        return { revoked };
+      } finally {
+        signingOut = false;
+        onChange();
+      }
+    },
+  };
+}
