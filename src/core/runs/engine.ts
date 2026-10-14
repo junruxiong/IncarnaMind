@@ -98,6 +98,13 @@ export interface RunRequest {
    */
   gate(call: RunToolCall): Promise<GateDecision>;
   /**
+   * Whether a Tool hears a call's input as the model writes it
+   * (`RunTool.streamInput`), and so acts before its gate: only one whose
+   * calls the gate lets through whatever their input, so nothing happens
+   * that the User would have been asked about. Without it, none does.
+   */
+  streamsInput?(tool: string): boolean;
+  /**
    * Messages added while the Run goes on (e.g. the User's), asked for before
    * each model call after the first, so after the current Tool calls. Each is
    * sent once, where it was taken, and stays in the history after.

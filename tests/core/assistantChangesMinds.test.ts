@@ -485,6 +485,44 @@ describe("New Blocks come in as the model writes them", { timeout: 30_000 }, () 
     expect(await checkpointsOf(core, mind.id)).toHaveLength(1);
   });
 
+  // protects=a call that names another Mind writes its Blocks there as they come, never first into the Mind in focus; fails_when=Blocks show in the focused Mind, even for a moment; no_claim=a model that names the Mind after its content.
+  test("a call naming another Mind writes there as it comes, never into the Mind in focus", async () => {
+    const input = { mind: "Project plan", content: CONTENT };
+    const after = JSON.stringify(input).indexOf("courier");
+    const { core, mind, client } = await setUp(
+      scriptedModel(
+        ({ results }): ScriptedReply =>
+          results.length === 0
+            ? {
+                calls: [{ tool: "add_to_mind", input, streamInput: true }],
+                pause: { after, until: new Promise(() => undefined) },
+              }
+            : { text: "Added." },
+        { chunkSize: 4 },
+      ),
+    );
+    const plan = await core.createMind({ title: "Project plan" });
+    const planClient = await connectToMind(core, plan.id);
+    let focusedChanged = false;
+    client.blocks.observeDeep(() => {
+      if (pendingProposals(client.blocks).length > 0) focusedChanged = true;
+    });
+
+    const asked = await core.askInConversation({
+      text: "Add risks to Project plan",
+      mindId: mind.id,
+    });
+    if (!asked.asked) throw new Error("Not asked.");
+    await expect
+      .poll(() => shownWithChanges(planClient), { timeout: 10_000 })
+      .toEqual(["+ Risks", "+ The supplier is late."]);
+    expect(focusedChanged).toBe(false);
+    await core.stopConversationAnswer({
+      conversationId: asked.conversation.id,
+      answerId: asked.answerId,
+    });
+  });
+
   // protects=Stop while the model writes keeps the Blocks already written, as changes, on the Answer's card, and Writing… goes; fails_when=they vanish, or the card has no row for them; no_claim=none beyond protects.
   test("Stop keeps the Blocks already written, as changes on the card", async () => {
     const { core, mind, client } = await setUp(streamingAdd(new Promise(() => undefined)));
