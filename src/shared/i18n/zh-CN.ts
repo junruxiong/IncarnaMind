@@ -3563,11 +3563,6 @@ export const zhCN = {
   "wordImport.keptChange.row": "表格行（{count}）",
   "wordImport.keptChange.cell": "单元格（{count}）",
   "wordImport.keptChange.content": "域、图片或注释（{count}）",
-  "wordImport.sectionBreak.title": "删除分节符？",
-  "wordImport.sectionBreak.body":
-    "其后的页面将沿用前一节的版式：纸张大小、方向、分栏、页眉和页脚。",
-  "wordImport.sectionBreak.keep": "保留",
-  "wordImport.sectionBreak.delete": "删除",
   "wordAtom.keptAsIs": "{kind} · 保持原样",
   "wordAtom.keptAsIs.note": "IncarnaMind 无法编辑此内容，导出时原样写回。",
   "wordAtom.readOnly": "暂时只读",

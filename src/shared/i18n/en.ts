@@ -3750,11 +3750,6 @@ export const en = {
   "wordImport.keptChange.row": "table rows ({count})",
   "wordImport.keptChange.cell": "table cells ({count})",
   "wordImport.keptChange.content": "fields, pictures or notes ({count})",
-  "wordImport.sectionBreak.title": "Delete the section break?",
-  "wordImport.sectionBreak.body":
-    "The pages after it will take the layout of the pages before it: page size, orientation, columns, headers and footers.",
-  "wordImport.sectionBreak.keep": "Keep it",
-  "wordImport.sectionBreak.delete": "Delete",
   "wordAtom.keptAsIs": "{kind} · kept as is",
   "wordAtom.keptAsIs.note": "IncarnaMind can’t edit this. Export puts it back unchanged.",
   "wordAtom.readOnly": "Read-only for now",
