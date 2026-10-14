@@ -1154,6 +1154,26 @@
     line-height: 20px;
     color: var(--color-ink-meta);
   }
+  .mind-word-original {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+  }
+  .mind-word-more {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 20px;
+    border-radius: 4px;
+    color: var(--color-ink-meta);
+
+    &:hover,
+    &[aria-expanded="true"] {
+      background: var(--color-hover);
+    }
+  }
   .mind-verify-from,
   .mind-word-from {
     display: flex;

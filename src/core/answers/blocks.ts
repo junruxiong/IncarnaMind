@@ -272,3 +272,9 @@ export const contentMarkdown = contentMarkdownOf;
 export function contentHash(element: Y.XmlElement): string {
   return createHash("sha256").update(contentMarkdown(element)).digest("base64url").slice(0, 22);
 }
+
+/** The User has changed the Answer since it was written. */
+export function isEdited(answer: Y.XmlElement): boolean {
+  const hash = textAttribute(answer, "generatedHash");
+  return hash !== null && hash !== contentHash(answer);
+}
