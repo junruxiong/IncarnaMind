@@ -286,29 +286,26 @@ test("search narrows every section and hides the empty ones; a filter chip and t
 
 test("words nothing in the Library matches are asked about in the assistant, by Enter or the line's button, in English and Chinese (#763)", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
-  try {
-    await setWindowSize(app, window, 1440, 900);
-    const library = await openFullLibrary(window);
-    await useLocalChatModel(window);
-    const search = library.getByTestId("library-search");
-    const asked = window.getByTestId("assistant-question");
+  await setWindowSize(app, window, 1440, 900);
+  const library = await openFullLibrary(window);
+  await useLocalChatModel(window);
+  const search = library.getByTestId("library-search");
+  const asked = window.getByTestId("assistant-question");
 
-    await search.click();
-    await window.keyboard.type("harbour tide tables");
-    const line = library.getByTestId("library-no-match");
-    await expect(line.getByTestId("library-ask")).toHaveText("Ask about “harbour tide tables”");
-    await window.keyboard.press("Enter");
-    await expect(asked.last()).toContainText("harbour tide tables");
+  await search.click();
+  await window.keyboard.type("harbour tide tables");
+  const line = library.getByTestId("library-no-match");
+  await expect(line.getByTestId("library-ask")).toHaveText("Ask about “harbour tide tables”");
+  await window.keyboard.press("Enter");
+  await expect(asked.last()).toContainText("harbour tide tables");
 
-    await setLanguage(window, "zh-CN");
-    await search.fill("潮汐时刻表");
-    await expect(line.getByTestId("library-ask")).toHaveText("就“潮汐时刻表”提问");
-    await expect(line.getByTestId("library-clear-narrowing")).toBeVisible();
-    await pointAndClick(window, line.getByTestId("library-ask"));
-    await expect(asked.last()).toContainText("潮汐时刻表");
-  } finally {
-    await app.close();
-  }
+  await setLanguage(window, "zh-CN");
+  await search.fill("潮汐时刻表");
+  await expect(line.getByTestId("library-ask")).toHaveText("就“潮汐时刻表”提问");
+  await expect(line.getByTestId("library-clear-narrowing")).toBeVisible();
+  await pointAndClick(window, line.getByTestId("library-ask"));
+  await expect(asked.last()).toContainText("潮汐时刻表");
+  await app.close();
 });
 
 test("search finds the words inside Documents too, in every section: the line that holds them, where it is, its Folder, and a click opens it there, in English and Chinese", async () => {
