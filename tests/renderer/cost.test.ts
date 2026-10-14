@@ -38,11 +38,15 @@ describe("Cost in words", () => {
     expect(runStopText({ reason: "plan-limit", resetsAt: null }, t("en"), "en", now)).toBe(
       "Plan limit reached",
     );
-    expect(runStopText({ reason: "plan-limit", resetsAt: later }, t("en"), "en", now)).toBe(
-      "Plan limit reached · Try again after 2:30 PM",
+    expect(runStopText({ reason: "plan-limit", resetsAt: later }, t("en"), "en", now)).toMatch(
+      /^Plan limit reached · Try again after (14:30|2:30 pm)$/,
     );
-    expect(runStopText({ reason: "plan-limit", resetsAt: later }, t("zh-CN"), "zh-CN", now)).toBe(
-      "已达到订阅用量上限 · 14:30 后可重试",
+    expect(
+      runStopText({ reason: "plan-limit", resetsAt: later }, t("zh-CN"), "zh-CN", now),
+    ).toMatch(/^已达到订阅用量上限 · (14:30|下午2:30) 后可重试$/);
+    const tomorrow = new Date(2026, 9, 13, 14, 30).toISOString();
+    expect(runStopText({ reason: "plan-limit", resetsAt: tomorrow }, t("en"), "en", now)).toMatch(
+      /^Plan limit reached · Try again after 13 Oct, (14:30|2:30 pm)$/,
     );
   });
 

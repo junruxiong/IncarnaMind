@@ -6,6 +6,7 @@ import type {
   PrivacySettingsPatch,
   RegisteredDataFlow,
 } from "../../../core/api";
+import { formatDate } from "../../../shared/dates";
 import { core } from "../core";
 import { useLanguage, useT } from "../i18n";
 import { useAppStore } from "../store";
@@ -245,9 +246,7 @@ function ServiceDecision({
   const label = sendsMore
     ? t("consent.settings.status.sendsMore")
     : t(`consent.settings.status.${consent}`);
-  const date =
-    decidedAt &&
-    new Intl.DateTimeFormat(language, { dateStyle: "medium" }).format(new Date(decidedAt));
+  const date = decidedAt && formatDate(decidedAt, language);
   const decision =
     date && !sendsMore
       ? consent === "accepted" && chosen

@@ -20,7 +20,7 @@ import {
  * bottom, floats, folds and unfolds, and after the window narrows to 900px,
  * so the latest Answer's last lines and its Copy · Add to note are never left
  * under the composer; a Task starting, its progress at the thread's end and
- * its ask in the tray shortening the thread (D189), is kept up with too. A
+ * its ask in the tray shortening the thread (#657), is kept up with too. A
  * conversation
  * scrolled up keeps the turn at its top where it was. The checks are
  * relations to the thread's box. Set INCARNAMIND_SCREENSHOTS to a folder to

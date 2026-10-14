@@ -128,7 +128,7 @@ export interface TaskKind {
   remainingOf?(task: { id: string; mindId: string | null; input: unknown }): string[];
   /** Done, what it did in a few words. */
   summaryOf?(task: { id: string; mindId: string | null; input: unknown }): string | null;
-  /** What the User can ask of it from its progress (D189). Absent: Pause and Stop. */
+  /** What the User can ask of it from its progress (#657). Absent: Pause and Stop. */
   readonly actions?: readonly TaskAction[];
   /** What its steps do, in its own words, by key; a step it can't name shows its key. */
   describeSteps?(
