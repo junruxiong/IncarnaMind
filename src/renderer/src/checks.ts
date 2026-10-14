@@ -124,6 +124,13 @@ export function checkAgain(
   });
 }
 
+/** Takes a sentence's check mark off, leaving the sentence: one step for ⌘Z. */
+export function removeClaimMark(editor: Editor, claim: ShownClaim): void {
+  const mark = editor.state.schema.marks[CLAIM_CHECK_MARK];
+  if (!mark) return;
+  editor.view.dispatch(editor.state.tr.removeMark(claim.from, claim.to, mark));
+}
+
 /** Closing punctuation a Citation goes before: "…in the quarter [1]." */
 const CLOSING = /[\s.!?。！？…;；:："'”’)）\]】」』]+$/u;
 const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]$/u;
