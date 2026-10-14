@@ -665,7 +665,10 @@ test("a Word file over 500 MB fails as too large to open, in English and Chinese
     await expect(review).toHaveAttribute("data-status", "ready", { timeout: 30_000 });
     // "Failed" at the row's end; the reason for screen readers, and the limit in its tooltip.
     const status = refused.getByTestId("document-status");
-    await expect(status.locator("[aria-hidden]")).toHaveText("Failed");
+    await expect(status.locator("[aria-hidden]").filter({ hasText: "Failed" })).toHaveText(
+      "Failed",
+    );
+    await expect(status.locator(".bg-attention")).toBeVisible();
     await expect(status.locator(".sr-only")).toHaveText("Failed: the file is too large to open");
     await expect(status).toHaveAttribute(
       "title",
