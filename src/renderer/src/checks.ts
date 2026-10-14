@@ -10,6 +10,7 @@ import { TextSelection } from "@tiptap/pm/state";
 import type * as Y from "yjs";
 import { create } from "zustand";
 import {
+  type CheckMindMode,
   type CheckSentencesResult,
   CITATION_NODE,
   CLAIM_CHECK_MARK,
@@ -31,7 +32,7 @@ export type CheckProblem =
   /** Check this Mind (#737), in a Mind with no sentence to check. */
   | { kind: "no-claims" }
   /** Check this Mind (#737): the model couldn't name the claims. */
-  | { kind: "find-failed"; error: ProviderError };
+  | { kind: "find-failed"; error: ProviderError; mode: CheckMindMode; allDocuments: boolean };
 
 export interface CheckRunning {
   requestId: string;
@@ -147,6 +148,13 @@ export function checkAgain(
     range: { from: claim.from, to: claim.to },
     allDocuments,
   });
+}
+
+/** Takes a sentence's check mark off, leaving the sentence: one step for ⌘Z. */
+export function removeClaimMark(editor: Editor, claim: ShownClaim): void {
+  const mark = editor.state.schema.marks[CLAIM_CHECK_MARK];
+  if (!mark) return;
+  editor.view.dispatch(editor.state.tr.removeMark(claim.from, claim.to, mark));
 }
 
 /** Closing punctuation a Citation goes before: "…in the quarter [1]." */

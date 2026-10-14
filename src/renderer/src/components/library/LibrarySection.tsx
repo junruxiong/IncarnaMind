@@ -10,6 +10,7 @@ import {
   type SearchMatch,
   type LibrarySection as Section,
 } from "../../libraryPage";
+import { sayWhenOrganized, useOrganizeAsk } from "../../organizeRun";
 import { useRequests } from "../../requests";
 import { useAppStore } from "../../store";
 import { TREE_ROW } from "../../treeKeys";
@@ -69,6 +70,7 @@ export function LibrarySection({
       ) : (
         <LooseHead documents={documents} open={open} />
       )}
+      {!section.folder && <OrganizeNeedsModel documents={documents} />}
       {open &&
         listed.map((doc) => (
           <LibraryRow
@@ -258,12 +260,18 @@ function Organize({ documents }: { documents: readonly Document[] }) {
   const run = (ids: readonly string[]) => {
     const app = useAppStore.getState();
     if (!hasModel) {
-      app.openSettings("models");
+      useOrganizeAsk.getState().ask(ids);
       return;
     }
+    const before = new Map(
+      (app.library?.assignments ?? [])
+        .filter((item) => ids.includes(item.documentId))
+        .map((item) => [item.documentId, item]),
+    );
     core
       .classifyDocuments([...ids])
       .then(() => app.refreshLibrary())
+      .then(() => sayWhenOrganized(ids, before))
       .catch(app.reportError);
   };
   if (pending > 0) {
@@ -302,13 +310,124 @@ function Organize({ documents }: { documents: readonly Document[] }) {
   }
   if (!hasFolders || documents.length === 0) return null;
   return (
-    <button
-      type="button"
-      data-testid="library-organize"
-      onClick={() => run(documents.map((doc) => doc.id))}
-      className={quietButtonClass}
+    <span className="flex min-w-0 items-baseline gap-2">
+      <span
+        data-testid="library-organize-explain"
+        className="min-w-0 truncate text-[13px] text-ink-meta @max-[704px]/page:hidden"
+      >
+        {t("library.organize.explain")}
+      </span>
+      <button
+        type="button"
+        data-testid="library-organize"
+        title={t("library.organize.explain")}
+        onClick={() => run(documents.map((doc) => doc.id))}
+        className={quietButtonClass}
+      >
+        {t("library.classify")}
+      </button>
+    </span>
+  );
+}
+
+/**
+ * Organize with no model chosen (#763): a row under Not in a Folder's head
+ * says so where it was asked, with the way on: the AI model already
+ * connected, saying what would be sent to it, or one on this computer.
+ */
+function OrganizeNeedsModel({ documents }: { documents: readonly Document[] }) {
+  const t = useT();
+  const ids = useOrganizeAsk((state) => state.ids);
+  const hasModel = useAppStore((state) => Boolean(state.library?.settings.classifier));
+  const chosen = useAppStore((state) => state.settings?.user.chatModel ?? null);
+  const [company, setCompany] = useState<{ name: string; cloud: boolean } | null>(null);
+  const asked = ids !== null && !hasModel;
+  useEffect(() => {
+    if (!asked || !chosen) return;
+    let current = true;
+    core.listChatProviders().then(
+      (providers) => {
+        const provider = providers.find((each) => each.id === chosen.providerId);
+        if (current && provider) {
+          setCompany({
+            name: provider.service?.name ?? t(`providers.kind.${provider.kind}`),
+            cloud: provider.service !== null,
+          });
+        }
+      },
+      (error: unknown) => console.error("Organize couldn't list the AI model's services.", error),
+    );
+    return () => {
+      current = false;
+    };
+  }, [asked, chosen, t]);
+  if (!asked) return null;
+  const close = () => useOrganizeAsk.getState().close();
+  const use = () => {
+    if (!chosen) return;
+    core
+      .saveLibrarySettings({
+        classifier: { kind: "chat", choice: chosen },
+        automatic: useAppStore.getState().library?.settings.automatic ?? false,
+      })
+      .then(() => useAppStore.getState().refreshLibrary())
+      .then(() => {
+        close();
+        const before = new Map(
+          (useAppStore.getState().library?.assignments ?? [])
+            .filter((item) => ids.includes(item.documentId))
+            .map((item) => [item.documentId, item]),
+        );
+        return core
+          .classifyDocuments([...ids])
+          .then(() => useAppStore.getState().refreshLibrary())
+          .then(() => sayWhenOrganized(ids, before));
+      })
+      .catch(useAppStore.getState().reportError);
+  };
+  return (
+    <div
+      role="status"
+      data-testid="library-organize-needs-model"
+      className="flex flex-col gap-0.5 border-b border-rule py-2 pl-14 text-[13px] leading-5 text-ink-meta"
     >
-      {t("library.classify")}
-    </button>
+      <p>{t("library.organize.needsModel")}</p>
+      {company?.cloud && (
+        <p data-testid="library-organize-sends">
+          {t("library.organize.sends", { company: company.name })}
+        </p>
+      )}
+      <p className="flex flex-wrap gap-x-4">
+        {company && (
+          <button
+            type="button"
+            data-testid="library-organize-use"
+            onClick={use}
+            className={quietButtonClass}
+          >
+            {t("library.organize.use", { company: company.name })}
+          </button>
+        )}
+        <button
+          type="button"
+          data-testid="library-organize-set-up"
+          onClick={() => {
+            close();
+            useAppStore.getState().openSettings("models");
+          }}
+          className={quietButtonClass}
+        >
+          {t("library.organize.setUp")}
+        </button>
+        <button
+          type="button"
+          data-testid="library-organize-dismiss"
+          onClick={close}
+          className={quietButtonClass}
+        >
+          {t("library.organize.dismiss")}
+        </button>
+      </p>
+    </div>
   );
 }

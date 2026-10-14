@@ -142,6 +142,9 @@ export interface LaunchOptions {
  */
 export const WINDOW_SIZE = { width: 1600, height: 660 };
 
+/** The default Output location in Chinese, as the system names Documents: 文稿 on macOS, 文档 elsewhere. */
+export const DEFAULT_FOLDER_ZH = `${process.platform === "darwin" ? "文稿" : "文档"} › IncarnaMind`;
+
 /**
  * The key that, held with an arrow, moves the caret a word at a time, and with
  * Shift too selects by word: Option on macOS, Ctrl on Windows and Linux.
@@ -519,6 +522,15 @@ export async function tabMenu(window: Page): Promise<Locator> {
   return menu;
 }
 
+/** "Import a Word file…" from the "+" menu; the test answers the system's open dialog first. */
+export async function importWordFromMenu(window: Page): Promise<Locator> {
+  await window.getByTestId("plus-menu").click();
+  await window.getByTestId("plus-import-word").click();
+  const dialog = window.getByTestId("word-import-dialog");
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
 /** Export options…, from the tab's menu; resolves once the sheet shows `title`. */
 export async function openOptions(window: Page, title: string): Promise<void> {
   await pointAndClick(window, (await tabMenu(window)).getByTestId("mind.exportOptions"));
@@ -796,6 +808,20 @@ async function resizeContent(
       new Promise((drawn) => requestAnimationFrame(() => requestAnimationFrame(() => drawn(null)))),
   );
 }
+
+/** What the page copies goes to `copied` instead of the machine's clipboard. */
+export async function catchCopies(window: Page): Promise<void> {
+  await window.evaluate(() => {
+    const caught = globalThis as unknown as { copied?: string };
+    navigator.clipboard.writeText = async (text: string) => {
+      caught.copied = text;
+    };
+  });
+}
+
+/** What the page last copied since `catchCopies`. */
+export const copied = (window: Page) =>
+  window.evaluate(() => (globalThis as unknown as { copied?: string }).copied ?? "");
 
 /** Switches the interface's language, as Settings does. */
 export function setLanguage(window: Page, language: "en" | "zh-CN"): Promise<unknown> {
@@ -1214,6 +1240,60 @@ export async function tabTo(window: Page, target: Locator, max = 40): Promise<vo
     await window.keyboard.press(key);
   }
   await expect(target).toBeFocused();
+}
+
+/**
+ * Whether the focused control shows DESIGN.md's ring: a solid 2px accent outline, its own or,
+ * for the main button of a sidebar row, its row's.
+ */
+export const focusRingShows = (window: Page) =>
+  window.evaluate(() => {
+    const element = document.activeElement as HTMLElement | null;
+    if (!element) return false;
+    const probe = document.createElement("span");
+    probe.style.color = "var(--color-accent)";
+    document.body.append(probe);
+    const accent = getComputedStyle(probe).color;
+    probe.remove();
+    const rings = (holder: Element | null) => {
+      if (!holder) return false;
+      const style = getComputedStyle(holder);
+      return (
+        style.outlineStyle === "solid" &&
+        Number.parseFloat(style.outlineWidth) >= 2 &&
+        style.outlineColor === accent
+      );
+    };
+    return (
+      element.matches(":focus-visible") &&
+      (rings(element) || (element.matches(".row-main") && rings(element.closest(".group"))))
+    );
+  });
+
+/**
+ * Types a name through an input method: the composition is open, its Enter
+ * (the one that picks a candidate) changes nothing, and the next Enter saves.
+ */
+export async function typeWithInputMethod(
+  window: Page,
+  field: Locator,
+  name: string,
+): Promise<void> {
+  const session = await window.context().newCDPSession(window);
+  try {
+    await session.send("Input.imeSetComposition", {
+      text: "xinming",
+      selectionStart: 7,
+      selectionEnd: 7,
+    });
+    await field.dispatchEvent("keydown", { key: "Enter", isComposing: true, bubbles: true });
+    await expect(field).toBeVisible();
+    await session.send("Input.insertText", { text: name });
+    await expect(field).toHaveValue(name);
+  } finally {
+    await session.detach();
+  }
+  await window.keyboard.press("Enter");
 }
 
 /** Sets the sidebar's width, as dragging its edge does (165 is the narrowest), and waits for it. */

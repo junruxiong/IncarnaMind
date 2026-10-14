@@ -74,7 +74,7 @@ export async function checkMind(
     const result = await core.checkMind({ requestId, mindId, mode, allDocuments });
     if (result.kind === "checked") setCheckSmallModel(mindId, result.smallModel);
     else if (result.kind === "failed") {
-      setCheckProblem(mindId, { kind: "find-failed", error: result.error });
+      setCheckProblem(mindId, { kind: "find-failed", error: result.error, mode, allDocuments });
     } else if (result.kind === "nothing") setCheckProblem(mindId, { kind: "no-claims" });
     else if (result.kind !== "cancelled") setCheckProblem(mindId, result);
   } catch (error) {

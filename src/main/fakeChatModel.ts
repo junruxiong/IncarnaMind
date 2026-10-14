@@ -11,7 +11,9 @@
  * with "misquote" in it gets a quote that isn't on the page; one with "no page"
  * names no page, as a small model often doesn't; one with "each"
  * cites the first Passage of each Document found, with a marker for each; one
- * with "rows" quotes two lines, so a sheet's Citation covers a range of rows; one that
+ * with "rows" quotes two lines, so a sheet's Citation covers a range of rows; one with
+ * "quotation marks" (引号) quotes the clause after a line's colon or comma, and writes
+ * it in quotation marks with the word before it, which the page doesn't have (#483); one that
  * asks for it "as a table" gets a Markdown table with its markers in a cell; one that
  * asks "by quarter" (按季度) gets a table of quarterly figures, its marker in each cell
  * but the last, to chart (#436); "分季度" gets the same in Chinese, in 万元, and
@@ -25,8 +27,14 @@
  * that thinks does. A Question asked "slowly" waits a moment before each step
  * and writes its Answer word by word, so a test sees each step of the Answer.
  *
+ * A claim check that finds a sentence unsupported judges the nearest line it read: another
+ * number in it than the sentence's means it says something different (#770).
+ *
  * A Question with "blank reply" in it gets a reply with no text at all. A model whose id ends
- * "-not-found" fails as one its provider doesn't know.
+ * "-not-found" fails as one its provider doesn't know when it answers; one ending "-claims-not-found"
+ * does when it finds or checks claims. A key with "refused" in it is refused,
+ * as a provider refuses a wrong key (HTTP 401). A model whose id ends "-no-tools" refuses
+ * Tools and structured output, as a small server model does, so its Answers have no Citations.
  *
  * A comparison table's cell (#98) cites its Document's line that shares the
  * most words with the Question and answers with its value ("Termination
@@ -35,7 +43,9 @@
  *
  * A Question about the User's notes or what they selected ("notes", "selected",
  * 笔记, 选中), asked beside a Mind, gets an Answer that starts by saying what it
- * read of the Mind: its name and first line, and the selected text.
+ * read of the Mind: its name and first line, and the selected text. One about
+ * what someone changed ("change", 修订) lists the changes it read marked in
+ * the Mind, with who made each (#734).
  *
  * With Skills: a Question that names a listed Skill gets it loaded with
  * use_skill first. An Answer that follows a Skill (forced, or loaded) starts
@@ -69,6 +79,9 @@
  * of" as "many", Translate… puts the text in capitals, Explain says what the
  * passage starts with, and an instruction to "replace X with Y" (把 X 换成 Y)
  * does so, or "drop the citations" (去掉引用) leaves their markers out.
+ * "Restructure" (重新组织) cuts a plain last paragraph and puts the last
+ * section, from its heading (a "#" paragraph) on, first, keeping each
+ * paragraph's mark, as a model restructuring a whole Mind does (#703).
  *
  * Make this a Skill (`fakeSkillDraft`): a draft whose "when to use it" and first
  * step quote the Mind's last Question, so a test sees that the Mind was read.
@@ -90,7 +103,7 @@
  */
 import { APICallError } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
-import type { ChatModelFactory } from "../core";
+import type { ChatModelFactory, ChatModelSpec } from "../core";
 import { EXCERPT_END, EXCERPT_START } from "../core/tags/classify";
 
 type StreamResult = Awaited<ReturnType<MockLanguageModelV4["doStream"]>>;
@@ -233,15 +246,26 @@ const lastQuestion = (prompt: Prompt): string => lastUserText(prompt).split("\n\
 /** A Question about the User's notes or what they selected in them. */
 const ABOUT_THE_MIND = /\bnotes?\b|\bselect(?:ed|ion)\b|笔记|选中/i;
 
+/** A Question about what someone changed in the Mind. */
+const ABOUT_THE_CHANGES = /\bchang(?:e|es|ed)\b|修订/i;
+
 /** What the Answer says it read of the Mind a Question about it was asked beside, if any. */
 function mindRead(prompt: Prompt): string | null {
-  if (!ABOUT_THE_MIND.test(lastQuestion(prompt))) return null;
+  const question = lastQuestion(prompt);
+  const aboutChanges = ABOUT_THE_CHANGES.test(question);
+  if (!ABOUT_THE_MIND.test(question) && !aboutChanges) return null;
   // The Mind starts the first user message, and the selection the last (#564).
   const text = lastUserText(prompt);
   const mind = /<mind name="([^"]*)">\n([\s\S]*?)<\/mind>/.exec(
     userText(prompt.find((message) => message.role === "user")),
   );
   if (!mind) return null;
+  if (aboutChanges) {
+    const changes = [...(mind[2] ?? "").matchAll(/\[(?:inserted|deleted) by [^\]]*\]/g)];
+    return changes.length > 0
+      ? `Changes in “${mind[1]}”: ${changes.map((each) => each[0]).join("; ")}`
+      : `No changes are marked in “${mind[1]}”.`;
+  }
   const first = (mind[2] ?? "")
     .split("\n")
     .map((line) => line.replace(/^#+\s*/, "").trim())
@@ -319,17 +343,25 @@ const UNIT_MARK = /^\[(p\. \d+|slides? [^\]]+|§[^\]]*|[^\]]*rows? [\d–-]+|lin
 /** Where a slide's speaker notes, or a Word comment, start in a Passage. */
 const NOTES_MARK = /^\[(?:speaker notes|comment(?: by [^\]]+)?)\] /;
 
+/** A Question that asks for its quote in quotation marks (#483). */
+const QUOTED_WORDS = /\bquotation marks\b|引号/i;
+/** A line's lead, up to its first colon or comma, and the clause after it, without its full stop. */
+const CLAUSE_AFTER_LEAD = /^(.+?)([,:，：])\s*(.+?)[.!?。！？]?$/u;
+
 /**
  * The record for a Passage: its line that shares the most words with the
  * Question, where that line is (the page, or the Unit a mark before it names,
  * or else the Passage's own location), and the line as the quote. A Question
  * that says "rows" quotes that line and the next, so it covers a range of rows.
+ * One that says "quotation marks" (引号) quotes the clause after the line's
+ * colon or comma, and `quoted` is that clause with the word before it joined
+ * on, as an Answer that puts it in quotation marks writes it.
  */
 function recordFor(
   passage: ShownPassage,
   question: string,
   marker: number,
-): { record: Record<string, unknown>; shared: number } | null {
+): { record: Record<string, unknown>; shared: number; quoted: string | null } | null {
   const words = question
     .toLowerCase()
     .split(/\W+/)
@@ -367,6 +399,16 @@ function recordFor(
     quote = `${quote}\n${next.line}`;
   }
   if (/misquote/i.test(question)) quote = `${quote.replace(/[.!?]$/, "")} and tomorrow.`;
+  // A model that quotes what comes after the line's colon or comma, and writes the word before it into its quotation marks.
+  let quoted: string | null = null;
+  const clause = QUOTED_WORDS.test(question) ? CLAUSE_AFTER_LEAD.exec(picked.line) : null;
+  if (clause) {
+    const [, lead = "", separator = "", rest = ""] = clause;
+    quote = rest;
+    quoted = /\p{Script=Han}$/u.test(lead)
+      ? `${lead.slice(-2)}${rest}`
+      : `${lead.split(/\s+/).at(-1)}${separator === "," || separator === ":" ? " " : ""}${rest}`;
+  }
   const record = {
     marker,
     passage: passage.id,
@@ -377,7 +419,7 @@ function recordFor(
         : {}),
     quote,
   };
-  return { record, shared: best };
+  return { record, shared: best, quoted };
 }
 
 /**
@@ -748,6 +790,15 @@ function answerReply(prompt: Prompt, tools: readonly string[]): Reply {
       };
     }
   }
+  const firstPassage = passagesIn(searches.at(-1) ?? "")[0];
+  const quoted = firstPassage && recordFor(firstPassage, question, 1)?.quoted;
+  if (quoted) {
+    return {
+      text: /\p{Script=Han}/u.test(question)
+        ? `文档中写道“${quoted}”[^1]。`
+        : `Your Documents say “${quoted}” [^1].`,
+    };
+  }
   // The markers the last cite call recorded: "Recorded [^1], [^2]." and then any problems.
   const recordedLine = /^Recorded ([^.]*)\./.exec(cites.at(-1) ?? "")?.[1] ?? "";
   const recorded = [...new Set([...recordedLine.matchAll(/\[\^\d+\]/g)].map((match) => match[0]))];
@@ -847,6 +898,17 @@ function fakeSkillDraft(options: GenerateOptions): string | null {
 
 const FILLER = /(?:\b(?:very|really|truly|quite|actually|basically)\s+|非常|真的|其实|十分)/giu;
 
+/** A passage restructured (see the top of this file): its last section first, a plain last paragraph cut. */
+function restructured(passage: string): string {
+  const paragraphs = passage.split(/\n\n+/);
+  if (paragraphs.length > 1 && !/^(?:#|- |\d+\. |> )/.test(paragraphs.at(-1) ?? "")) {
+    paragraphs.pop();
+  }
+  const last = paragraphs.findLastIndex((paragraph) => paragraph.startsWith("#"));
+  if (last <= 0) return paragraphs.join("\n\n");
+  return [...paragraphs.slice(last), ...paragraphs.slice(0, last)].join("\n\n");
+}
+
 /** The scripted Edit with AI (see the top of this file): the passage's new text, or an explanation. */
 function fakeEdit(options: GenerateOptions): string | null {
   const request = options.prompt
@@ -888,6 +950,7 @@ function fakeEdit(options: GenerateOptions): string | null {
       if (replace?.[1] && replace[2] !== undefined)
         return passage.split(replace[1]).join(replace[2]);
       if (/drop the citations|去掉引用/i.test(asked)) return passage.replace(/\s*\[\d+\]/g, "");
+      if (/restructure|重新组织/i.test(asked)) return restructured(passage);
       if (SHORTEN.test(asked)) return passage.replace(FILLER, "");
       return `${passage} (edited)`;
     }
@@ -942,6 +1005,26 @@ function fakeClaims(options: GenerateOptions): string | null {
         : [Number(listed[1])];
     });
   return JSON.stringify({ claims });
+}
+
+/** The request to confirm a contradiction, or to judge the nearest line (#770, src/core/answers/checks/prompt.ts). */
+const CONFIRM_RUN = /^Compare a sentence the User wrote with words quoted from a Passage/m;
+
+/**
+ * The scripted judgement of a sentence beside the words quoted from a Passage: they conflict
+ * when the sentence has a number the quote doesn't while the quote has numbers, else they are
+ * the same.
+ */
+function fakeConfirm(options: GenerateOptions): string | null {
+  if (!CONFIRM_RUN.test(systemOf(options.prompt))) return null;
+  const text = lastUserText(options.prompt);
+  const sentence = /<sentence>\n([\s\S]*?)\n<\/sentence>/.exec(text)?.[1] ?? "";
+  const quote = /<quote>\n([\s\S]*?)\n<\/quote>/.exec(text)?.[1] ?? "";
+  const numbers = (value: string): string[] => value.match(/\d+(?:[.,]\d+)?/g) ?? [];
+  const quoted = numbers(quote);
+  return quoted.length > 0 && numbers(sentence).some((each) => !quoted.includes(each))
+    ? "conflict"
+    : "same";
 }
 
 /** A check Run's instructions (#96, src/core/answers/checks/prompt.ts). */
@@ -1024,27 +1107,79 @@ function replyParts(prompt: Prompt, tools: readonly OfferedTool[]): StreamPart[]
   return parts;
 }
 
+/** What a provider says of a wrong key, or of a model that can't use Tools or structured output. */
+function refusal(
+  spec: ChatModelSpec,
+  options: { tools?: unknown[]; responseFormat?: { type: string } },
+) {
+  if (spec.apiKey?.includes("refused")) {
+    return new APICallError({
+      message: "invalid x-api-key",
+      url: "https://fake.invalid/chat",
+      requestBodyValues: {},
+      statusCode: 401,
+    });
+  }
+  if (!spec.modelId.endsWith("-no-tools")) return null;
+  const asked =
+    (options.tools?.length ?? 0) > 0
+      ? `registry.ollama.ai/library/${spec.modelId} does not support tools`
+      : options.responseFormat?.type === "json"
+        ? "response_format is not supported by this model"
+        : null;
+  return asked
+    ? new APICallError({
+        message: asked,
+        url: "http://127.0.0.1/v1/chat/completions",
+        requestBodyValues: {},
+        statusCode: 400,
+      })
+    : null;
+}
+
 export const createFakeChatModel: ChatModelFactory = (spec) =>
   new MockLanguageModelV4({
     provider: "incarnamind-fake",
     modelId: spec.modelId,
     // Structured output (automatic tagging) gets its Tags as JSON; Edit with AI its new text;
     // anything else (a connection test) gets "OK".
-    doGenerate: async (options) => ({
-      content: [
-        {
-          type: "text",
-          text:
-            options.responseFormat?.type === "json"
-              ? fakeStructuredOutput(options)
-              : (fakeClaims(options) ?? fakeSkillDraft(options) ?? fakeEdit(options) ?? "OK"),
-        },
-      ],
-      finishReason: { unified: "stop", raw: undefined },
-      usage: USAGE,
-      warnings: [],
-    }),
-    doStream: async ({ prompt, tools, abortSignal }) => {
+    doGenerate: async (options) => {
+      const refused = refusal(spec, options);
+      if (refused) throw refused;
+      // A model id ending "-claims-not-found" is one its provider doesn't know when it checks or finds claims (#764).
+      if (spec.modelId.endsWith("-claims-not-found")) {
+        throw new APICallError({
+          message: `The model ${spec.modelId} does not exist`,
+          url: "https://fake.invalid/chat",
+          requestBodyValues: {},
+          statusCode: 404,
+        });
+      }
+      return {
+        content: [
+          {
+            type: "text",
+            text:
+              options.responseFormat?.type === "json"
+                ? fakeStructuredOutput(options)
+                : (fakeClaims(options) ??
+                  fakeConfirm(options) ??
+                  fakeSkillDraft(options) ??
+                  fakeEdit(options) ??
+                  "OK"),
+          },
+        ],
+        finishReason: { unified: "stop", raw: undefined },
+        usage: USAGE,
+        warnings: [],
+      };
+    },
+    doStream: async ({ prompt, tools, abortSignal, responseFormat }) => {
+      const refused = refusal(spec, {
+        ...(tools && { tools }),
+        ...(responseFormat && { responseFormat }),
+      });
+      if (refused) throw refused;
       // A model id ending "-not-found" is one its provider doesn't know, for a test of that Problem.
       if (spec.modelId.endsWith("-not-found")) {
         throw new APICallError({

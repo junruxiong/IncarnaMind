@@ -85,10 +85,13 @@ const PLACES: Place[] = [
   },
 ];
 
+/** What says a row is selected: its tree item in the sidebar, the row itself in the Library. */
+const marked = (row: Locator) => row.getByRole("treeitem").or(row.and(row.page().getByRole("row")));
+
 async function expectSelected(rows: Locator, selected: number[]): Promise<void> {
   const count = await rows.count();
   for (let index = 0; index < count; index++) {
-    await expect(rows.nth(index), `row ${index}`).toHaveAttribute(
+    await expect(marked(rows.nth(index)), `row ${index}`).toHaveAttribute(
       "aria-selected",
       selected.includes(index) ? "true" : "false",
     );
@@ -258,8 +261,8 @@ test("a Mind and a Document select together in the sidebar", async () => {
     const documents = sidebar.getByTestId("document-list-item");
     await pointAndClick(window, mind.getByTestId("mind-list-item"));
     await pointAndClick(window, documents.nth(2).getByTestId("open-document"), withKey);
-    await expect(mind).toHaveAttribute("aria-selected", "true");
-    await expect(documents.nth(2)).toHaveAttribute("aria-selected", "true");
+    await expect(marked(mind)).toHaveAttribute("aria-selected", "true");
+    await expect(marked(documents.nth(2))).toHaveAttribute("aria-selected", "true");
     await expect(sidebar.getByTestId("sidebar-selection")).toHaveText("2 selected · Esc clears");
 
     // ⌘A takes every row of every kind in the tree.
@@ -353,9 +356,9 @@ for (const place of PLACES) {
       await place.target(rows.nth(3)).dblclick();
       await expect(field).toHaveCount(1);
       await expect(field).toBeFocused();
-      await expectSelected(rows, [3]);
       await window.keyboard.press("Escape");
       await expect(field).toHaveCount(0);
+      await expectSelected(rows, [3]);
     } finally {
       await app.close();
     }
