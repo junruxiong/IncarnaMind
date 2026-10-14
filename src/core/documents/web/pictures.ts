@@ -10,6 +10,8 @@ import { type PageFetch, type PageResponse, USER_AGENT } from "./fetch";
 export interface PictureLimits {
   /** Smaller on either side is an icon or a pixel. */
   minSide: number;
+  /** More pixels than this, as its header says, would take too much memory to draw or read. */
+  maxPixels: number;
   maxBytes: number;
   maxTotalBytes: number;
   maxCount: number;
@@ -21,6 +23,7 @@ export interface PictureLimits {
 
 export const PICTURE_LIMITS: PictureLimits = {
   minSide: 64,
+  maxPixels: 50_000_000,
   maxBytes: 5 * 1024 * 1024,
   maxTotalBytes: 25 * 1024 * 1024,
   maxCount: 60,
@@ -222,6 +225,8 @@ async function fetchOne(
     if (!type || !size || size.width < limits.minSide || size.height < limits.minSide) {
       return { kind: "not-kept" };
     }
+    // A small file can declare a huge picture: one that would fill the memory once drawn.
+    if (size.width * size.height > limits.maxPixels) return { kind: "too-large" };
     return {
       kind: "kept",
       picture: { index: candidate.index, address: candidate.address, bytes, type, ...size },
