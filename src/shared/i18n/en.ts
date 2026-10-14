@@ -2569,6 +2569,7 @@ export const en = {
   "error.document.fileUnavailable": "The Document's file can't be reached right now.",
   "error.document.fileGone": "The Document's file isn't there to read.",
   "error.document.fileCantOpen": "The Document's file can't be opened.",
+  "error.document.noSuchPicture": "The Document shows no such picture.",
   "error.document.notFailed": "Only a Document that failed to process can be retried.",
   "error.search.limit": "The limit must be a whole number from 1 to {max}.",
   "error.search.options": "The search's options must be given as a list of settings.",
