@@ -2767,7 +2767,6 @@ export interface Examples {
   linkedFolderId: string | null;
   /** The example Answer, written in advance, while the example Mind exists. */
   answerId: string | null;
-  /** The other examples this one's banner offers, in this install's order (random, then kept). */
   more: ExampleGroup[];
 }
 

@@ -23,12 +23,12 @@ import {
   SettingsLineIcon,
   VerifyLineIcon,
 } from "./lineIcons";
+import { NudgeSlot } from "./NudgeSlot";
 import { SidebarSelection } from "./SidebarSelection";
 import { SidebarStatus } from "./SidebarStatus";
 import { SidebarToggle } from "./SidebarToggle";
 import { rowButtonClass, rowClass, rowIconClass } from "./sidebarRows";
 import { UndoLine } from "./UndoLine";
-import { UsageDataCard } from "./UsageDataCard";
 import { iconButtonClass, menuClass, menuItemClass, menuRuleClass } from "./ui";
 import { usePopoverMenu } from "./usePopoverMenu";
 
@@ -69,7 +69,7 @@ export function Sidebar({ width, onOpenSettings }: { width: number; onOpenSettin
         </div>
       </div>
 
-      <UsageDataCard />
+      <NudgeSlot />
       <UndoLine />
       <CopiedLine />
       <footer
