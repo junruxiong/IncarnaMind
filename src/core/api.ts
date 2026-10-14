@@ -1204,6 +1204,8 @@ export type CitationCheck =
 export type CitationCheckReason =
   /** Not found: the quote isn't in the text of the cited Units (pages, slides…). */
   | "quote-not-on-pages"
+  /** Not found: the words the Answer put in quotation marks aren't in the text of the cited Units (#483). */
+  | "quoted-words-not-on-pages"
   /** Not found: the cited Units aren't all among the Units of the cited Passage. */
   | "pages-outside-passage"
   /** Not found: a Citation covers one Unit, or two consecutive ones of one sheet, at most. */
@@ -1291,6 +1293,24 @@ export type CitationLocation =
       paragraphs?: { from: number; to: number };
     };
 
+/** A stretch of words, and whether the Document has it where the Answer's quoted words were looked for. */
+export interface QuotedPiece {
+  text: string;
+  found: boolean;
+}
+
+/**
+ * Words an Answer put in quotation marks that aren't in the text its Citation
+ * points to (#483), for the card to set beside the Document's own: each in
+ * pieces, so the card washes what matches and what doesn't.
+ */
+export interface QuotedWords {
+  /** The Answer's words, whole; the pieces the Document doesn't have are `found: false`. */
+  answer: QuotedPiece[];
+  /** The Document's words nearest them, the matching stretch `found: true`; null when none is near. */
+  closest: QuotedPiece[] | null;
+}
+
 /**
  * A Citation's attributes, as stored on its node in the Mind's Yjs document.
  * Everything a footnote or a message needs is stored here, so it still reads
@@ -1327,6 +1347,8 @@ export interface CitationAttributes {
   checkReason: CitationCheckReason | null;
   /** One line on what the evidence says, when a claim check has one ("The agreement says 31 October 2026, p. 7"). */
   verdict?: string | null;
+  /** The Answer's quoted words the check didn't find, when that is why `check` is "not-found" (#483). */
+  quotedWords?: QuotedWords | null;
 }
 
 /** A Citation, as the Answer event stream reports it. */
@@ -1341,6 +1363,7 @@ export interface Citation {
   quote: string;
   check: CitationCheck;
   checkReason: CitationCheckReason | null;
+  quotedWords?: QuotedWords;
 }
 
 /**
@@ -2730,7 +2753,7 @@ export type ExampleGroup = "credit" | "papers" | "reports" | "contracts" | "meet
  */
 export interface Examples {
   /**
-   * Which example this is. "tea": "Where tea comes from", which a first run of
+   * Which example this is. "tea": "Draft: credit committee paper", which a first run of
    * an earlier version made; it is shown as the example, and removed, while
    * there is no credit paper, but no longer made (#802).
    */
@@ -2796,7 +2819,7 @@ export interface UnsupportedFile {
 /**
  * Why a file in a search's scope wasn't read, and what the User can do:
  * - "format": a format not read yet (.doc, .xls, .ppt, .wps, .caj…): convert it;
- * - "scan": a scan with no text yet: it needs text recognition;
+ * - "scan": a scan in which text recognition found no text (handwriting, a picture);
  * - "password": password-protected: remove the password;
  * - "damaged": the file is broken, or couldn't be read;
  * - "too-large": too large to open;
@@ -2815,6 +2838,8 @@ export interface UnreadFile {
   extension: string | null;
   /** The Document, or null for a file in a format not read. */
   documentId: string | null;
+  /** For "pages": the scanned pages that couldn't be read, from 1; empty when none could be, and for every other reason. */
+  pages: number[];
 }
 
 /**
@@ -3812,7 +3837,9 @@ export type ClaimCheckResult =
       verdict: ClaimVerdict;
       /**
        * For "supported" and "contradicted": the Passage that decides it, as a
-       * Citation whose quote the Citation check found. Null for "unsupported".
+       * Citation whose quote the Citation check found. For "unsupported": null,
+       * or the nearest line when it states another value for the very thing
+       * the sentence says: "the Documents say something different" (#770).
        */
       evidence: Citation | null;
       /** For "supported" and "contradicted": what the Document says, in one plain sentence. */
@@ -5757,7 +5784,16 @@ export interface ExportPreferences {
   docx: WordExportPreferences;
   pdf: { includeQuestions: boolean };
   html: { includeQuestions: boolean };
+  /** How a PDF, an HTML file or Markdown shows someone's changes still waiting (#734). Absent: shown. */
+  theirChanges?: TheirChangesShown;
 }
+
+/**
+ * How an export other than Word's shows someone's changes from a Word file
+ * still waiting (#734): marked as changes, with who made each and when, or
+ * as if every one were accepted. A Word file keeps them as tracked changes.
+ */
+export type TheirChangesShown = "shown" | "accepted";
 
 /** A Word export's own choices (#107), each on until the User turns it off (see `ExportMindOptions`). */
 export interface WordExportPreferences {
@@ -5790,6 +5826,8 @@ export interface ExportMindOptions {
   trackChanges?: boolean;
   /** Word only: AI text gets a comment by IncarnaMind, "Written by IncarnaMind". Absent: off. */
   markAiText?: boolean;
+  /** PDF, HTML and Markdown: how someone's changes still waiting are shown (#734). Absent: shown. */
+  theirChanges?: TheirChangesShown;
   /**
    * Word only: a Citation whose check failed (its quote wasn't found, or its
    * claim is unsupported or contradicted) gets a comment by IncarnaMind
@@ -5818,6 +5856,8 @@ export interface MindExportPreview {
   questions: number;
   /** The Mind was imported from a Word file, which a Word export writes back into (#105). */
   fromWord: boolean;
+  /** Someone's changes from that Word file still waiting (#734), shown or accepted as `theirChanges` says. */
+  theirChanges: number;
 }
 
 /** A Mind exported as a file, for the host to save where the User chooses. */
@@ -5833,7 +5873,7 @@ export type SavedMindExport =
   /** Saved, with what it holds, so the result line can say how many quotes weren't found. */
   | ({ status: "saved"; file: SavedFile; word: WordExportReport | null } & Omit<
       MindExportPreview,
-      "fileName" | "fromWord"
+      "fileName" | "fromWord" | "theirChanges"
     >)
   /**
    * Not saved: a Mind imported from Word can't keep something in its file
@@ -5961,9 +6001,12 @@ export interface SetMindCitationStyleOptions {
  * renames or deletes a file that is already there.
  */
 export interface OutputSettings {
-  /** The folder the User chose, absolute, symbolic links resolved; null until they choose (the first save asks). */
+  /**
+   * The folder new files go in, absolute, symbolic links resolved; null until
+   * the first save, which takes `suggested` without asking (D209).
+   */
   location: string | null;
-  /** The folder the first save offers: "IncarnaMind" in the User's Documents folder. */
+  /** The default: "IncarnaMind" in the User's Documents folder (文稿 on a Chinese Mac). */
   suggested: string;
   /** The Linked folders the User has answered about, oldest answer first. */
   linkedFolders: LinkedFolderWriting[];
@@ -5981,14 +6024,22 @@ export interface LinkedFolderWriting {
 
 /**
  * A save waiting for the User's answer (`respondToFileWrite`), asked once:
- * - "output-location": no Output location is chosen yet. Accepting saves in
- *   the suggested folder; `setOutputLocation` answers with another one.
+ * - "output-location": none is chosen and the default, `suggested`, can't
+ *   take new files (`problem`). `setOutputLocation` answers with another
+ *   folder; accepting makes the default the Output location all the same.
  * - "linked-folder": the file would go inside a Linked folder. Accepting lets
  *   IncarnaMind add files there from now on; declining stops it, until the
  *   User changes it in Settings (`setLinkedFolderWriting`).
  */
 export type FileWriteRequest =
-  | { requestId: string; kind: "output-location"; suggested: string; fileName: string }
+  | {
+      requestId: string;
+      kind: "output-location";
+      suggested: string;
+      fileName: string;
+      /** Why `suggested` can't take it. */
+      problem: OutputFolderProblem;
+    }
   | {
       requestId: string;
       kind: "linked-folder";
@@ -5997,12 +6048,20 @@ export type FileWriteRequest =
       fileName: string;
     };
 
+/** Why a folder can't take new files: it can't be made (a file is in the way), or IncarnaMind may not write in it. */
+export type OutputFolderProblem = "missing" | "not-writable";
+
 /** A new file IncarnaMind saved. */
 export interface SavedFile {
   /** Absolute. */
   path: string;
   /** Its name: the one asked for, or, when that was taken, the next free one ("Tides 2.docx"). */
   name: string;
+  /**
+   * This save took the default Output location, Documents › IncarnaMind,
+   * none being chosen yet (D209): what shows it says where, with a way to change it.
+   */
+  defaulted: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -6200,6 +6259,8 @@ export interface MeetingTranscript {
   model: TranscriptionModelStatus | null;
   /** The WebVTT file in the Output location, once saved. */
   savedPath: string | null;
+  /** Its save took the default Output location, none being chosen yet (`SavedFile.defaulted`). */
+  savedDefaulted: boolean;
   problem: TranscriptProblem | null;
 }
 
@@ -6233,6 +6294,12 @@ export interface StartMeetingInput {
 // Outside agents (#351, experimental)
 
 /**
+ * Stands for Not in a Folder where a Folder's id goes in a pairing's scope and in an
+ * agent's `folderIds`. A Folder's id is a random UUID, so it can't be one.
+ */
+export const NOT_IN_A_FOLDER_ID = "not-in-a-folder";
+
+/**
  * An outside agent the User connected: an AI agent they run themselves, such
  * as Claude Code or Codex, that uses IncarnaMind as an MCP server. One pairing
  * per agent, on this device only: the agent runs on this computer.
@@ -6241,7 +6308,11 @@ export interface AgentPairing {
   id: string;
   /** What the User calls it, e.g. "Claude Code". Unique among pairings, ignoring case. */
   name: string;
-  /** The Folders it may search and read, with their Minds. None until the User picks some. */
+  /**
+   * The Folders it may search and read, with their Minds, and `NOT_IN_A_FOLDER_ID` for the
+   * Documents in no Folder at the time of each call, without their Minds. None until the
+   * User picks some.
+   */
   folderIds: string[];
   /** The agent it was set up in, e.g. "codex"; null for one set up by hand. */
   client: string | null;
@@ -6266,7 +6337,7 @@ export interface AgentSettings {
 export interface ConnectAgentInput {
   /** Trimmed; must not be empty, nor another pairing's name (ignoring case). */
   name: string;
-  /** Folders (by id) it may read; none by default. */
+  /** Folders (by id, or `NOT_IN_A_FOLDER_ID`) it may read; none by default. */
   folderIds?: string[];
   /** The agent it is set up in, e.g. "codex": lower-case letters, digits and hyphens. */
   client?: string;

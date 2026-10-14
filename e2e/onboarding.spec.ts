@@ -162,10 +162,22 @@ test("a first run opens on the credit paper with no model set up: its Citations 
     .poll(async () => (await highlight.allTextContents()).join(""))
     .toContain("Net debt to EBITDA was 3.1 times");
 
-  // Moving on to a Mind of one's own: the chat setup is offered then.
+  // The banner's way on: adding one's own Documents, in place, as Get started's step does (#766).
   await window.keyboard.press("Escape");
-  await pointAndClick(window, pane.getByTestId("example-add-own"));
-  await expect(window.getByTestId("chat-setup")).toBeVisible();
+  const addOwn = pane.getByTestId("example-add-own");
+  await expect(addOwn).toHaveText("Add your Documents");
+  await pointAndClick(window, addOwn);
+  const ways = window.getByTestId("example-add-items");
+  await expect(ways.getByRole("menuitem")).toHaveText(["Add files…", "Link a folder…"]);
+  await expect(ways.getByRole("menuitem").first()).toBeFocused();
+  await expect(window.getByTestId("mind-title")).toHaveValue("Draft: credit committee paper");
+  await expect(window.getByTestId("chat-setup")).toBeHidden();
+  await window.keyboard.press("Escape");
+  await expect(addOwn).toBeFocused();
+  await setLanguage(window, "zh-CN");
+  await expect(addOwn).toHaveText("添加你的文档");
+  await pointAndClick(window, addOwn);
+  await expect(ways.getByRole("menuitem")).toHaveText(["添加文件…", "添加同步文件夹…"]);
 });
 
 test("removing the examples deletes the example Mind, its Documents and the copies of their files, and they aren't made again", async () => {
@@ -224,7 +236,13 @@ test("with only the example Documents, the footer doesn't ask for a model to tag
   const added = items.filter({ hasText: "Harbour notes" });
   await expect(added).toHaveAttribute("data-tagging", "waiting-for-provider");
   await expect(notice).toBeVisible();
-  await expect(notice).toContainText("Tags need a model");
+  await expect(notice).toContainText("No AI model for Tags");
+  await expect(notice.getByTestId("tagging-waiting-setup")).toHaveText("Choose…");
+  await setLanguage(window, "zh-CN");
+  await expect(notice).toContainText("打标签需要 AI 模型");
+  await expect(notice.getByTestId("tagging-waiting-setup")).toHaveText("选择…");
+  await notice.getByTestId("tagging-waiting-setup").click();
+  await expect(window.getByTestId("settings")).toHaveAttribute("data-page", "models");
   await app.close();
 });
 
@@ -236,8 +254,8 @@ test("an empty Mind of one's own shows the three steps; Get started ticks itself
   const { window } = await launchApp(dataDir, { examples: true, fakeChat: true });
   await expect(progress(window)).toHaveText("· 0 of 3");
 
-  // The banner's way on: a Mind of one's own, which shows the three steps.
-  await pointAndClick(window, window.getByTestId("example-add-own"));
+  // A Mind of one's own shows the three steps.
+  await newMind(window);
   await dismissChatSetup(window);
   const guide = window.getByTestId("start-guide");
   await expect(guide).toBeVisible();

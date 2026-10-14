@@ -392,7 +392,7 @@ function useStatuses(): Status[] {
       short: t("status.taggingWaiting"),
       full: t("jev.waiting.notice"),
       action: {
-        label: t("status.setUp"),
+        label: t("status.choose"),
         testId: "tagging-waiting-setup",
         run: () => openSettings("models"),
       },

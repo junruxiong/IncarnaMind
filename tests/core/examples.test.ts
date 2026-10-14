@@ -333,6 +333,35 @@ describe("the example Mind follows the interface language (#709)", { timeout: 60
       "Draft: credit committee paper",
     ]);
   });
+
+  // protects=an example whose Documents a check result relies on keeps them when the language changes, so that result isn't left needing a check for a change the User didn't make (#819); fails_when=the Documents are swapped and the check goes stale; no_claim=none beyond protects.
+  test("an example whose Documents a check relies on keeps its language and Documents", async () => {
+    const { core } = await startWithExamples("en");
+    const made = await core.createExamples();
+    await foundIn(core, made.mindId as string, "Net debt to EBITDA");
+    const [results] = await core.listDocuments({ linkedFolderId: made.linkedFolderId as string });
+    core.retention.retain("check-result", "a-mind-of-the-users", [
+      { documentId: results?.id as string, contentHash: results?.contentHash as string },
+    ]);
+
+    await core.updateSettings({ user: { language: "zh-CN" } });
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    expect((await core.listMinds()).map((mind) => mind.title)).toEqual([
+      "Draft: credit committee paper",
+    ]);
+    expect((await core.listDocuments()).map((each) => each.id)).toContain(results?.id);
+
+    // Once nothing relies on them, the next change of language swaps them.
+    core.retention.release("check-result", "a-mind-of-the-users");
+    await core.updateSettings({ user: { language: "en" } });
+    await core.updateSettings({ user: { language: "zh-CN" } });
+    await vi.waitFor(async () => {
+      expect((await core.listMinds()).map((mind) => mind.title)).toEqual([
+        EXAMPLE_SETS.credit["zh-CN"].title,
+      ]);
+    });
+  });
 });
 
 const GROUPS = [
