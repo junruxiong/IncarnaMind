@@ -107,6 +107,7 @@ registerMenu("chart", [
   "chart.kind.line",
   "chart.kind.pie",
   "chart.kind.scatter",
+  "chart.switch",
   "chart.update",
   "chart.rename",
   "block.delete",

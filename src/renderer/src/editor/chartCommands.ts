@@ -175,7 +175,7 @@ export function insertChart(editor: Editor, chart: ChartAttributes): boolean {
 export function changeChart(
   editor: Editor,
   pos: number,
-  change: Partial<Pick<ChartAttributes, "kind" | "title" | "drawn" | "data">>,
+  change: Partial<Pick<ChartAttributes, "kind" | "title" | "drawn" | "data" | "source">>,
 ): boolean {
   const node = editor.state.doc.nodeAt(pos);
   if (!node || node.type.name !== CHART_NODE || !editor.isEditable) return false;
@@ -240,6 +240,7 @@ export function tableUpdate(
     blockId: chart.source.kind === "table" ? chart.source.blockId : null,
     title: chart.title,
     language,
+    switched: chart.source.kind === "table" && chart.source.switched === true,
   });
   if (!fresh) return null;
   return sameChartData(fresh.data, chart.data) ? null : fresh.data;
