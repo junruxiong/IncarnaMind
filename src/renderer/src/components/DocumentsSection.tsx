@@ -21,7 +21,7 @@ import { useRequests } from "../requests";
 import { scanningStatus } from "../scanStatus";
 import { rowsIn, selectedOn, useSelectable, useSelectionOrder } from "../selection";
 import { useSortMenu } from "../sortMenu";
-import { isOwnDocument, selectVisibleDocuments, useAppStore } from "../store";
+import { allExamples, isOwnDocument, selectVisibleDocuments, useAppStore } from "../store";
 import { chipsOf, tagIndex } from "../tagEditing";
 import { moveThroughRows, TREE_ROW, useTreeItem } from "../treeKeys";
 import { useRename } from "../useRename";
@@ -104,7 +104,7 @@ export function DocumentsSection() {
   const hasAnyDocuments = documentCount > 0;
   const firstOpen = useFirstOpen();
   const hasOwnDocuments = useAppStore((state) =>
-    state.documents.some((each) => isOwnDocument(each, state.examples)),
+    state.documents.some((each) => isOwnDocument(each, allExamples(state))),
   );
   const quiet = firstOpen && !hasOwnDocuments;
   const [chosenView, setView] = useState<BrowseView>("folders");
