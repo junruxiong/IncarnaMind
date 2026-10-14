@@ -2638,6 +2638,7 @@ export const zhCN = {
     "你已设置不允许 IncarnaMind 向这个同步文件夹添加文件，因此没有保存任何内容。",
   "error.files.notSaved.show": "只能显示 IncarnaMind 保存的文件。",
   "error.files.notSaved.open": "只能打开 IncarnaMind 保存的文件。",
+  "error.provider.unknown": "无法识别服务商“{provider}”。",
   "error.provider.modelMissing": "输入模型名称。",
   "error.provider.embeddingModelMissing": "输入嵌入模型名称。",
   "error.provider.rerankModelMissing": "输入重排序模型名称。",

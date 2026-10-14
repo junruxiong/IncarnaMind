@@ -166,7 +166,10 @@ function parseCatalogId(kind: ChatProviderKind, value: unknown): string | null {
   }
   const preset = typeof value === "string" ? catalogProvider(value) : undefined;
   if (kind !== "openai-compatible" || !preset || !isPreset(preset)) {
-    throw new InvalidInputError(`Unknown chat provider "${String(value)}".`);
+    throw new InvalidInputError({
+      key: "error.provider.unknown",
+      values: { provider: String(value) },
+    });
   }
   return preset.id;
 }

@@ -2758,6 +2758,7 @@ export const en = {
   "error.files.notSaved.show": "Only a file IncarnaMind saved can be shown.",
   "error.files.notSaved.open": "Only a file IncarnaMind saved can be opened.",
   "error.provider.modelMissing": "Enter a model name.",
+  "error.provider.unknown": "IncarnaMind doesn't know the provider “{provider}”.",
   "error.provider.embeddingModelMissing": "Enter an embedding model name.",
   "error.provider.rerankModelMissing": "Enter a reranking model name.",
   "error.provider.keyMissing": "Enter an API key for {provider}.",
