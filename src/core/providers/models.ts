@@ -18,10 +18,10 @@ import { createZai } from "@ai-sdk/zai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import type { LanguageModel } from "ai";
 import type { ChatProviderKind } from "../api";
+import type { OAuthCredentials } from "../oauthAccount";
 import { catalogFacts, modelsProviderOfKind } from "./catalog";
 import { catalogProviderOfKind } from "./catalog/providers";
 import { createPlanChatModel } from "./chatgpt/planEndpoint";
-import type { ChatGptCredentials } from "./chatgpt/signIn";
 import { endpointUrl } from "./kinds";
 import { createOllamaChatModel } from "./ollamaChat";
 import { DEFAULT_OLLAMA_SETTINGS, type OllamaModelSettings } from "./ollamaModels";
@@ -53,7 +53,7 @@ export interface ChatModelSpec {
   apiKey: string | null;
   modelId: string;
   /** "chatgpt" only: the User's ChatGPT sign-in, which signs (and refreshes) every request. */
-  credentials?: ChatGptCredentials;
+  credentials?: OAuthCredentials;
   /** "ollama" only: the settings every request to the model carries (see ./ollamaModels). */
   ollama?: OllamaModelSettings;
 }
