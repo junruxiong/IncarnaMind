@@ -5,8 +5,8 @@
 <h1 align="center">IncarnaMind</h1>
 
 <p align="center">
-  <b>Catch the wrong number before you send it.</b><br>
-  Write and ask in one place, with answers from your own files and the AI model you choose. Free and open source, on your computer.
+  <b>Your files, your AI: write, ask, check and compare in one place.</b><br>
+  Answers come from your own files, with the AI model you choose. Free and open source, on your computer.
 </p>
 
 <p align="center"><a href="https://tally.so/r/rjN2jL?ref=readme"><img src="docs/images/notify-en.svg" width="278" height="40" alt="Get notified when the alpha opens"></a></p>
