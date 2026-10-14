@@ -59,29 +59,32 @@ function comparable(stated: FigureUnit, result: ResultUnit): boolean {
       return (result.kind === "currency" && result.code === stated.code) || result.kind === "plain";
     case "other":
       return (result.kind === "other" && result.word === stated.word) || result.kind === "plain";
+    // A bare number isn't a ratio's: "42" could be 0.42 or 42%, so it is compared only with an amount.
     case "plain":
-      return result.kind !== "percent" && result.kind !== "points" && result.kind !== "yes-no";
+      return result.kind === "plain" || result.kind === "currency" || result.kind === "other";
   }
 }
 
 /**
  * How far a number may be from the value it was rounded from: half its last
  * place as written ("1.1x", 0.05; "25%", half a percent; "£131.9m", £50,000).
- * One written as approximate ("about £130m") was rounded to its last digit
- * that isn't a zero.
+ * One written as approximate is looser: "about £130m" was rounded to its last
+ * digit that isn't a zero, and "about 1.3x" is a place either way more.
  */
 function tolerance(stated: Figure): number {
   const place =
     (stated.unit.kind === "percent" || stated.unit.kind === "points" ? 0.01 : 1) * stated.scale;
   let step = place * 10 ** -stated.decimals;
-  if (stated.approximate && stated.decimals === 0) {
+  let more = 0;
+  if (stated.approximate && stated.decimals > 0) more = step;
+  else if (stated.approximate) {
     let written = Math.round(Math.abs(stated.value) / place);
     while (written >= 10 && written % 10 === 0) {
       written /= 10;
       step *= 10;
     }
   }
-  return step / 2 + 1e-9 * Math.max(1, Math.abs(stated.value));
+  return step / 2 + more + 1e-9 * Math.max(1, Math.abs(stated.value));
 }
 
 /**
