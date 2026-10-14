@@ -481,7 +481,7 @@ test("the banner offers the other examples in an order picked once per install; 
   const order = await groupsShown(window);
   expect([...order].sort()).toEqual(["contracts", "meetings", "papers"]);
   const tabs = window.getByTestId("tab-title");
-  await expect(tabs).toHaveText(["Where tea comes from"]);
+  await expect(tabs).toHaveCount(0);
 
   // Contracts opens beside the first example, which stays in its own tab.
   await moreLinks(window).and(window.locator('[data-group="contracts"]')).click();
