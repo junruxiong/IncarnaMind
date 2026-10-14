@@ -184,6 +184,7 @@ export interface AppState extends LayoutSlice {
   examples: Examples | null;
   otherExamples: Examples[];
   ownAnswerArrived: boolean;
+  askedOwnAtLaunch: boolean;
   usageNotice: "auto" | "kept" | "answered";
   /**
    * The privacy choices on this device: the first run asks about usage data
@@ -726,6 +727,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     examples: null,
     otherExamples: [],
     ownAnswerArrived: false,
+    askedOwnAtLaunch: false,
     usageNotice: "auto",
     privacy: null,
     questionToStart: null,
@@ -796,6 +798,7 @@ export const useAppStore = create<AppState>()((set, get) => {
           documents,
           examples,
           otherExamples: otherExamples.filter(isMade),
+          askedOwnAtLaunch: settings.device.gettingStarted.askedOwn,
           status: { kind: "ready" },
         });
         await get().refreshLibrary();
