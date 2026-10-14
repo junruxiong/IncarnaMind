@@ -3,10 +3,8 @@ import { syncBuiltinESMExports } from "node:module";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-/** The environment variable the setup file keeps the real home folder in. */
-export const REAL_HOME = "INCARNAMIND_TEST_REAL_HOME";
+export const REAL_HOME_VARIABLE = "INCARNAMIND_TEST_REAL_HOME";
 
-/** The variables that name the home folder and the folders in it, all pointed at `home`. */
 export function homeEnv(home: string): Record<string, string> {
   return {
     HOME: home,
@@ -123,7 +121,6 @@ export function installHomeGuard(guard: HomeGuard): void {
   installed = guard;
 }
 
-/** The guard tests/setup/home.ts installed for this test file. */
 export function installedHomeGuard(): HomeGuard {
   if (!installed)
     throw new Error("No home guard: tests/setup/home.ts isn't in this config's setupFiles.");

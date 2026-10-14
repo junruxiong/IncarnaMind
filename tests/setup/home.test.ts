@@ -9,9 +9,9 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, test } from "vitest";
-import { createHomeGuard, installedHomeGuard, REAL_HOME } from "../helpers/home";
+import { createHomeGuard, installedHomeGuard, REAL_HOME_VARIABLE } from "../helpers/home";
 
-const realHome = process.env[REAL_HOME] ?? "";
+const realHome = process.env[REAL_HOME_VARIABLE] ?? "";
 const refusal = (path: string) => `Refused a write under the real home folder: ${path}.`;
 
 describe("the home guard", () => {

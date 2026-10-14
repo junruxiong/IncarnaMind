@@ -9,11 +9,11 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, afterEach } from "vitest";
-import { createHomeGuard, homeEnv, installHomeGuard, REAL_HOME } from "../helpers/home";
+import { createHomeGuard, homeEnv, installHomeGuard, REAL_HOME_VARIABLE } from "../helpers/home";
 
 // A worker that runs a second test file already has a temporary HOME.
-const realHome = process.env[REAL_HOME] ?? homedir();
-process.env[REAL_HOME] = realHome;
+const realHome = process.env[REAL_HOME_VARIABLE] ?? homedir();
+process.env[REAL_HOME_VARIABLE] = realHome;
 const home = mkdtempSync(join(tmpdir(), "incarnamind-test-home-"));
 Object.assign(process.env, homeEnv(home));
 
