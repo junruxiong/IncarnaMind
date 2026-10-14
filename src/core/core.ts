@@ -48,6 +48,7 @@ import {
   type Meeting,
   type Mind,
   type MindCitationStyle,
+  NOT_IN_A_FOLDER_ID,
   type OwnFileKind,
   type ProviderError,
   type SavedExport,
@@ -1969,10 +1970,16 @@ export function createCore(adapters: CoreAdapters): Core {
     access: {
       say: (key, params) => translate(settings.get().language, key, params),
       folders: () => library.folders().map((folder) => ({ id: folder.id, name: folder.name })),
-      documentsIn: (folderIds) =>
-        folderIds.length === 0
-          ? []
-          : (resolveScope({ folderIds: [...folderIds], tagIds: [], documentIds: [] }) ?? []),
+      documentsIn: (folderIds) => {
+        const folders = folderIds.filter((id) => id !== NOT_IN_A_FOLDER_ID);
+        const filed =
+          folders.length === 0
+            ? []
+            : (resolveScope({ folderIds: folders, tagIds: [], documentIds: [] }) ?? []);
+        return folders.length === folderIds.length
+          ? filed
+          : [...new Set([...filed, ...library.unfiledDocumentIds()])];
+      },
       // Without the reranker: it costs about a second a search (ADR-0009), and an agent's
       // search must answer in well under 100 ms.
       search: (query, documentIds, parameters, signal) =>

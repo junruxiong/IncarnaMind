@@ -3461,7 +3461,10 @@ export const zhCN = {
   "agents.connect.name": "名称",
   "agents.connect.namePlaceholder": "我的智能体",
   "agents.connect.folders": "它可以读取的文件夹",
-  "agents.connect.noFolders": "你还没有文件夹。先在资料库中新建一个，再回到这里。",
+  "agents.connect.allUnfiled":
+    "你的文档还没有放进文件夹，所以这里就是全部文档。如果只想分享一部分，先在资料库里把它们放进一个文件夹。",
+  "agents.connect.empty.title": "还没有可读取的内容",
+  "agents.connect.empty.body": "添加你想让{agent}读取的文档。它们会出现在这里，随时可选。",
   "agents.connect.pickOne": "至少选择一个文件夹。",
   "agents.connect.fileChange": "IncarnaMind 会在 {path} 中添加以下内容：",
   "agents.connect.skill":
