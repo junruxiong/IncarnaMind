@@ -11,7 +11,7 @@ import { useLanguage, useT } from "../i18n";
 import { turnOffLocalMode } from "../localMode";
 import { checkReferences, stopReferenceCheck, useReferenceChecks } from "../referenceChecks";
 import { useAppStore } from "../store";
-import { NEEDS_A_LOOK, ReferenceCheckList } from "./ReferenceCheckList";
+import { NEEDS_A_LOOK, ReferenceCheckList, SERVICE_NAMES } from "./ReferenceCheckList";
 
 /** The Mind's text Blocks, as the reference list is read from them. */
 function blocksOf(doc: ProseMirrorNode): ListBlock[] {
@@ -93,17 +93,24 @@ export function ReferencesLine({ editor, mindId }: { editor: Editor; mindId: str
     );
   }
 
-  const stoppedBy =
-    state?.kind === "checked"
-      ? (state.references.find((reference) => STOPPED.has(reference.reason))?.reason ?? null)
-      : null;
   const looked =
     state?.kind === "checked"
       ? state.references.filter((reference) => !STOPPED.has(reference.reason))
       : [];
-  // Offline or slowed down, the entries it didn't ask about are one problem, not a row each.
-  const stopped = stoppedBy && (
+  // Offline or slowed down, the entries a service wasn't asked about are one problem, not a row each.
+  const stoppedBy =
+    state?.kind === "checked"
+      ? [
+          ...new Map(
+            state.references
+              .filter((reference) => STOPPED.has(reference.reason) && reference.service)
+              .map((reference) => [reference.service, reference.reason] as const),
+          ),
+        ]
+      : [];
+  const stopped = stoppedBy.map(([service, reason]) => (
     <ProblemLine
+      key={service}
       testId="references-stopped"
       className="mind-verify-problem"
       action={{
@@ -113,19 +120,20 @@ export function ReferencesLine({ editor, mindId }: { editor: Editor; mindId: str
       }}
     >
       {t(
-        stoppedBy === "rate-limited"
+        reason === "rate-limited"
           ? "references.stopped.rate-limited"
           : "references.stopped.unreachable",
+        { service: service ? SERVICE_NAMES[service] : "" },
       )}
     </ProblemLine>
-  );
+  ));
 
   if (state?.kind === "checked" && looked.length > 0) {
     const total = state.references.length;
     const parts = (
       [
         ["not-found", "references.notFound"],
-        ["not-in-crossref", "references.notInCrossref"],
+        ["not-listed", "references.notListed"],
         ["mismatch", "references.mismatch"],
         ["not-checked", "references.notChecked"],
       ] as const

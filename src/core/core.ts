@@ -1560,13 +1560,13 @@ export function createCore(adapters: CoreAdapters): Core {
     signal: lifetime.signal,
     pace,
   });
-  // Checking a Mind's reference list (#711) sends each reference only, to Crossref, once the
-  // User starts it where a line says so; never in local mode.
+  // Checking a Mind's reference list (#711) sends each reference only, to Crossref, OpenAlex
+  // and arXiv, once the User starts it where a line says so; never in local mode.
   const referenceChecks = createReferenceChecks({
     consent,
     localOnly: () => embedding.localOnly(),
     http: createSourceHttp(pace, paceTimers),
-    crossrefUrl: adapters.referenceLookup?.crossref,
+    urls: adapters.referenceLookup,
     content,
     progress: (event) => events.emit("referenceCheck.progress", event),
     signal: lifetime.signal,

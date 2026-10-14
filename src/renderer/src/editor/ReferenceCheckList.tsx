@@ -1,7 +1,14 @@
-import type { ReferenceCheck } from "../../../core/api";
+import type { ReferenceCheck, ReferenceService } from "../../../core/api";
 import { formatNames } from "../../../shared/references";
 import { useLanguage, useT } from "../i18n";
 import type { Translate } from "../objects";
+
+/** Each service by its name, which no language translates. */
+export const SERVICE_NAMES: Readonly<Record<ReferenceService, string>> = {
+  crossref: "Crossref",
+  openalex: "OpenAlex",
+  arxiv: "arXiv",
+};
 
 /** A checked reference, with the Block it is in. */
 export type ListedCheck = ReferenceCheck & { blockId: string };
@@ -9,7 +16,7 @@ export type ListedCheck = ReferenceCheck & { blockId: string };
 /** The order the list shows marks in: surest sign of an invented reference first. */
 const ORDER: readonly ReferenceCheck["mark"][] = [
   "not-found",
-  "not-in-crossref",
+  "not-listed",
   "mismatch",
   "not-checked",
   "found",
@@ -30,7 +37,7 @@ const AUTHORS_SHOWN = 3;
 const MARK_DOT: Record<ReferenceCheck["mark"], string> = {
   found: "bg-success",
   mismatch: "bg-attention",
-  "not-in-crossref": "bg-attention",
+  "not-listed": "bg-attention",
   "not-found": "bg-danger",
   "not-checked": "bg-ink-placeholder",
 };
@@ -78,26 +85,37 @@ function RecordLine({
 
 /** What a reference's mark says under it: how it differs, or what a miss can mean. */
 function details(reference: ListedCheck, t: Translate): string[] {
-  if (reference.mark === "not-in-crossref") return [t("references.notInCrossref.detail")];
+  if (reference.mark === "not-listed") return [t("references.notListed.detail")];
+  const service = reference.service ? SERVICE_NAMES[reference.service] : "";
   return reference.differences.map((difference) =>
     difference.field === "year"
       ? t("references.difference.year.cited", {
           cited: difference.cited ?? "",
           found: difference.found,
+          service,
         })
       : t(
           difference.field === "title"
             ? "references.difference.title"
             : "references.difference.authors",
-          { found: difference.found },
+          { found: difference.found, service },
         ),
   );
 }
 
+/** The mark as its line says it: which service found it, or why it wasn't checked. */
+function markText(reference: ListedCheck, t: Translate): string {
+  const service = reference.service ? SERVICE_NAMES[reference.service] : "";
+  return reference.mark === "not-checked" && reference.reason
+    ? t(`references.reason.${reference.reason}`, { service })
+    : t(`references.mark.${reference.mark}`, { service });
+}
+
 /**
  * A checked reference list's entries (#711), under its line, by mark, those
- * that need a look first: each with its mark, why, and the record it matched. Clicking
- * one, or Enter on it, moves to its Block.
+ * that need a look first: each with its mark, why, and the record it
+ * matched, with the service it came from. Clicking one, or Enter on it,
+ * moves to its Block.
  */
 export function ReferenceCheckList({
   references,
@@ -128,9 +146,7 @@ export function ReferenceCheckList({
                 aria-hidden="true"
                 className={`size-1.5 shrink-0 rounded-full ${MARK_DOT[reference.mark]}`}
               />
-              {reference.mark === "not-checked" && reference.reason
-                ? t(`references.reason.${reference.reason}`)
-                : t(`references.mark.${reference.mark}`)}
+              {markText(reference, t)}
             </span>
             <span className="mind-reference-text">{reference.reference}</span>
             {details(reference, t).map((detail) => (

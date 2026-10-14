@@ -136,6 +136,10 @@ export interface SourceTerms {
   intervalMs: number;
 }
 
+/** A provider that both searches and looks works up. */
+export type SearchingProvider = SourceProvider &
+  Required<Pick<SourceProvider, "search" | "resolve">>;
+
 export interface SourceProvider {
   /** Unique and stable: it is stored with what it added. */
   readonly id: string;

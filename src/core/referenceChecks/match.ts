@@ -13,6 +13,7 @@
  */
 import {
   ARXIV_IN_TEXT,
+  arxivOf,
   DOI_IN_TEXT,
   doiOf,
   titleWords,
@@ -28,8 +29,9 @@ const SHORT_TITLE = 3;
 /** A reference as written, with what can be read from it without a service. */
 export interface CitedReference {
   text: string;
-  /** Its DOI, or for an arXiv preprint the DOI arXiv registers for it. */
   doi: string | null;
+  /** Its arXiv number, without the version. */
+  arxiv: string | null;
   /** The year it names: the first four-digit year from 1500 to 2099. */
   year: number | null;
 }
@@ -48,8 +50,31 @@ export function citedReference(text: string): CitedReference {
   return {
     text: text.replace(/\s+/g, " ").trim(),
     doi: doiOf(text),
+    arxiv: arxivOf(text),
     year: year ? Number(year) : null,
   };
+}
+
+/** A title in quotation marks, as numbered styles write it: “Attention is all you need,”. */
+const QUOTED_TITLE = /[“"]([^”"]{3,}?)[,.]?[”"]/;
+/** A title before its type, as GB/T 7714 writes it: 机器学习[M]. */
+const TYPED_TITLE = /([^.。]+?)\s*\[(?:J|M|C|D|R|S|P|N|EB\/OL|Z)\]/;
+/** A title after the year, as APA and Harvard write it: (2017). Attention is all you need. */
+const TITLE_AFTER_YEAR =
+  /(?:\((?:1[5-9]|20)\d\d[a-z]?\)\.?|(?<!\d)(?:1[5-9]|20)\d\d[a-z]?\.)\s*([^.?!。]+[?!]?)/;
+
+/**
+ * The title a reference gives, as citation styles set it apart: quoted,
+ * before its type, or after the year; else the part after the authors.
+ * Null when it can't be told.
+ */
+export function titleOf(reference: string): string | null {
+  for (const pattern of [QUOTED_TITLE, TYPED_TITLE, TITLE_AFTER_YEAR]) {
+    const title = pattern.exec(reference)?.[1]?.trim();
+    if (title && titleWords(title).length > 0) return title;
+  }
+  const parts = reference.split(/[.。]\s+/).slice(1);
+  return parts.find((part) => titleWords(part).length >= 2)?.trim() ?? null;
 }
 
 /** The share of a title's words that a reference holds, from 0 to 1. */

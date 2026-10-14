@@ -5,6 +5,7 @@ import type { CoreBridge } from "../src/core/api";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   type CrossrefWork,
+  type OpenAlexWork,
   type ReferenceServices,
   startReferenceServices,
 } from "../tests/helpers/referenceServices";
@@ -53,6 +54,14 @@ const DEEP: CrossrefWork = {
 };
 const INVENTED =
   "Marlowe, T. (2019). Quantum gradient folding in recurrent attention lattices. J. Imagined Results, 4.";
+/** A conference paper Crossref has no record of, which OpenAlex holds. */
+const FEW_SHOT: OpenAlexWork = {
+  id: "https://openalex.org/W3030163527",
+  doi: "https://doi.org/10.48550/arxiv.2005.14165",
+  display_name: "Language Models are Few-Shot Learners",
+  publication_date: "2020-05-28",
+  authorships: [{ author: { display_name: "Tom B. Brown" } }],
+};
 
 /** A short paper someone else wrote, with a reference list holding one invented work. */
 const PAPER = buildPdf([
@@ -63,6 +72,7 @@ const PAPER = buildPdf([
       "Hochreiter, S., & Schmidhuber, J. (1997). Long short-term memory. Neural Computation.",
       "LeCun, Y., Bengio, Y., & Hinton, G. (2015). Deep learning. Nature. doi:10.1038/nature14539.",
       INVENTED,
+      "Brown, T., et al. (2020). Language models are few-shot learners. Advances in NeurIPS, 33.",
     ],
   },
 ]);
@@ -73,7 +83,7 @@ let services: ReferenceServices;
 test.beforeEach(async () => {
   dataDir = await createDataFolder();
   sources = await createDataFolder();
-  services = await startReferenceServices({ works: [LSTM, DEEP] });
+  services = await startReferenceServices({ works: [LSTM, DEEP], openalex: [FEW_SHOT] });
 });
 test.afterEach(async () => {
   await services.close();
@@ -120,24 +130,27 @@ test("a verified document's references are looked up, and the invented one is fl
 
   const line = window.getByTestId("references-line");
   await expect(line.getByTestId("references-sends")).toHaveText(
-    "Looks up the list's 3 references in Crossref, sending only each reference as written.",
+    "Looks up the list's 4 references in Crossref, then OpenAlex or arXiv if needed, sending only each reference as written.",
   );
   await screenshot(window, "references-start-en");
   await pointAndClick(window, line.getByTestId("references-check"));
 
   await expect(line.getByTestId("references-done")).toHaveText(
-    "Checked 3 references·1 not in Crossref",
+    "Checked 4 references·1 not in Crossref or OpenAlex",
   );
   // The one that needs a look comes first, saying how much its mark can say.
   const listed = window.getByTestId("reference-check");
-  await expect(listed).toHaveCount(3);
+  await expect(listed).toHaveCount(4);
   const flagged = listed.first();
-  await expect(flagged).toHaveAttribute("data-mark", "not-in-crossref");
-  await expect(flagged).toContainText("Not in Crossref");
+  await expect(flagged).toHaveAttribute("data-mark", "not-listed");
+  await expect(flagged).toContainText("Not in Crossref or OpenAlex");
   await expect(flagged).toContainText("Quantum gradient folding");
   await expect(flagged).toContainText("so the work may still exist");
-  // The found ones follow, each with the record it matched and its DOI, which opens the work.
+  // The found ones follow, each with the service it was found in, the record and its DOI.
   await expect(listed.nth(1)).toHaveAttribute("data-mark", "found");
+  await expect(listed.nth(1)).toContainText("Found in Crossref");
+  await expect(listed.nth(3)).toContainText("Found in OpenAlex");
+  await expect(listed.nth(3)).toContainText("Language models are few-shot learners");
   const record = window.getByTestId("reference-record").first();
   await expect(record).toContainText(
     "Long Short-Term Memory · Hochreiter, Sepp; Schmidhuber, Jürgen · 1997",
@@ -169,19 +182,21 @@ test("in Chinese and a narrow window, and in local mode, where it says why and o
   });
 
   const local = window.getByTestId("references-local-mode");
-  await expect(local).toContainText("无法查找这 3 条参考文献");
+  await expect(local).toContainText("无法查找这 4 条参考文献");
   await screenshot(window, "references-local-zh");
   await pointAndClick(window, local.getByTestId("references-local-mode-off"));
 
   const line = window.getByTestId("references-line");
   await expect(line.getByTestId("references-sends")).toHaveText(
-    "在 Crossref 中查找列表里的 3 条参考文献，只发送每条参考文献的原文。",
+    "在 Crossref 中查找列表里的 4 条参考文献，必要时再查 OpenAlex 或 arXiv，只发送每条参考文献的原文。",
   );
   await pointAndClick(window, line.getByTestId("references-check"));
   await expect(line.getByTestId("references-done")).toHaveText(
-    "已核对 3 条参考文献·1 条不在 Crossref 中",
+    "已核对 4 条参考文献·1 条在 Crossref 和 OpenAlex 中都没有",
   );
-  await expect(window.getByTestId("reference-check").first()).toContainText("不在 Crossref 中");
+  await expect(window.getByTestId("reference-check").first()).toContainText(
+    "Crossref 和 OpenAlex 中都没有",
+  );
   await screenshot(window, "references-flagged-zh");
   // Narrow, the line wraps rather than overflowing the Mind.
   const lineBox = await line.boundingBox();
@@ -219,7 +234,7 @@ test("Stop ends a check; offline, it stops at the first failure with one problem
   services.fail(null);
   await pointAndClick(window, stopped.getByTestId("references-try-again"));
   await expect(line.getByTestId("references-done")).toHaveText(
-    "Checked 3 references·1 not in Crossref",
+    "Checked 4 references·1 not in Crossref or OpenAlex",
   );
   await expect(stopped).toHaveCount(0);
   await app.close();
