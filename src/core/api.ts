@@ -3769,6 +3769,17 @@ export interface LeftOutDocument {
   reason: EvidenceExclusion;
 }
 
+/** A password-protected PDF Document, and the password to open it with (#763). */
+export interface UnlockDocumentInput {
+  documentId: string;
+  password: string;
+}
+
+/** What unlocking a locked PDF did (#763). */
+export type UnlockDocumentResult =
+  | { kind: "unlocked"; document: Document }
+  | { kind: "wrong-password" };
+
 /** What one claim check found: the claim-check function's result (`checkClaim`). */
 export type ClaimCheckResult =
   | {
@@ -6683,6 +6694,25 @@ export interface CoreApi {
    */
   retryDocument(id: string): Promise<Document>;
   /**
+   * Opens a password-protected PDF Document with `password` (#763). When it
+   * opens, the password is kept on this device, in the system's keychain, by
+   * Document, and the Document is read again with it. "wrong-password" when
+   * it doesn't open it: nothing is kept. Throws InvalidInputError for a
+   * Document that isn't a PDF, and NotFoundError for an unknown one or one
+   * whose file isn't there.
+   */
+  unlockDocument(input: UnlockDocumentInput): Promise<UnlockDocumentResult>;
+  /** Forgets a Document's kept PDF password (#763); its text stays as it was read. */
+  forgetDocumentPassword(documentId: string): Promise<void>;
+  /**
+   * The kept password of a locked PDF Document, for the viewer to open it
+   * with and for nothing else; null for any other Document, or when none is
+   * kept (#763).
+   */
+  documentPasswordFor(documentId: string): Promise<string | null>;
+  /** The Documents whose PDF password is kept on this device, by id (#763). */
+  listDocumentPasswords(): Promise<string[]>;
+  /**
    * The text IncarnaMind kept of a Document's current version: what the
    * viewer shows when the file is missing or can't be reached. Throws
    * NotFoundError for an unknown or deleted Document.
@@ -7696,6 +7726,8 @@ export interface CoreEvents {
   "documents.moved": Document[];
   /** Documents removed from the index, by the User or with their Linked folder: their ids. */
   "documents.removed": string[];
+  /** The Documents whose PDF password is kept changed (#763): their ids now. */
+  "documentPasswords.changed": string[];
   /** Folders appeared or went with the folders on disk: the list as `listFolders` now returns it. */
   "folders.changed": Folder[];
   /**
@@ -7865,6 +7897,10 @@ const methods: Record<CoreApiMethod, true> = {
   renameDocument: true,
   deleteDocument: true,
   retryDocument: true,
+  unlockDocument: true,
+  forgetDocumentPassword: true,
+  documentPasswordFor: true,
+  listDocumentPasswords: true,
   readDocumentText: true,
   readScannedText: true,
   readScannedQuote: true,

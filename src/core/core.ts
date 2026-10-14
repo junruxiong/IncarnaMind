@@ -1,4 +1,5 @@
 import { mkdirSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { homedir, tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 import * as Y from "yjs";
@@ -53,6 +54,7 @@ import {
   type SavedExport,
   type SearchScope,
   type Task,
+  type UnlockDocumentInput,
   type UnreadFile,
   type Unsubscribe,
 } from "./api";
@@ -75,8 +77,10 @@ import {
   parseListOptions,
 } from "./documents";
 import { createEvidence, parseCheckedDocument, passageResult } from "./documents/evidence";
+import { pdfOpensWith } from "./documents/extract";
 import { statIdentity } from "./documents/files";
 import { createOwnFiles } from "./documents/ownFiles";
+import { createPdfPasswords } from "./documents/pdfPasswords";
 import { createVersionRetention, type VersionRetention } from "./documents/retention";
 import { BUILT_IN_TEXT_RECOGNITION_MODEL, createTextRecognitionModel } from "./documents/scan";
 import { tunedSearch } from "./documents/searchTuning";
@@ -287,6 +291,27 @@ export interface Core extends CoreApi, CoreEventSource {
  * Opens (or creates) the data folder and its database, brings the schema up to
  * date, and returns the core. The host passes in every platform capability.
  */
+
+/** The longest password a PDF is unlocked with: far beyond any real one, short enough to refuse junk. */
+const MAX_PDF_PASSWORD = 1_024;
+
+const parseDocumentId = (input: unknown): string => {
+  if (typeof input !== "string" || input === "") {
+    throw new InvalidInputError({ key: "error.document.notFound" });
+  }
+  return input;
+};
+
+/** `unlockDocument`'s input. Its errors never repeat the password. */
+function parseUnlock(input: unknown): UnlockDocumentInput {
+  if (!isRecord(input)) throw new InvalidInputError({ key: "error.document.passwordMissing" });
+  const { password } = input;
+  if (typeof password !== "string" || password === "" || password.length > MAX_PDF_PASSWORD) {
+    throw new InvalidInputError({ key: "error.document.passwordMissing" });
+  }
+  return { documentId: parseDocumentId(input.documentId), password };
+}
+
 export function createCore(adapters: CoreAdapters): Core {
   const { dataDir } = adapters.paths;
   mkdirSync(dataDir, { recursive: true });
@@ -407,6 +432,15 @@ export function createCore(adapters: CoreAdapters): Core {
     file: (documentId, groupId) => library.file(documentId, groupId),
   });
   const secrets = createSecrets(adapters.keychain, settings);
+  const pdfPasswords = createPdfPasswords(secrets, settings);
+  /** Forgets the passwords of Documents gone from the Library (#763), and says which are kept. */
+  const forgetPasswords = async (ids: readonly string[]) => {
+    const kept = pdfPasswords.kept();
+    const gone = ids.filter((id) => kept.includes(id));
+    if (gone.length === 0) return;
+    for (const id of gone) await pdfPasswords.forget(id);
+    events.emit("documentPasswords.changed", pdfPasswords.kept());
+  };
   const consent = createConsent(db, events, now);
   /** Aborts work still running (model downloads, a ChatGPT sign-in, provider requests) when the core closes. */
   const lifetime = new AbortController();
@@ -486,6 +520,7 @@ export function createCore(adapters: CoreAdapters): Core {
       now,
       model: embedding.model,
       textRecognition: textRecognitionModel,
+      pdfPassword: (id) => pdfPasswords.of(id),
       folders,
       emitStatus: (document) => {
         events.emit("document.status", document);
@@ -497,6 +532,9 @@ export function createCore(adapters: CoreAdapters): Core {
       emitRemoved: (ids) => {
         events.emit("documents.removed", ids);
         batches.changed(ids);
+        forgetPasswords(ids).catch((error: unknown) =>
+          console.error("A removed Document's PDF password couldn't be forgotten.", error),
+        );
       },
       emitKept: (kept) => events.emit("keptCitationTexts.changed", kept),
       foldersChanged,
@@ -549,7 +587,8 @@ export function createCore(adapters: CoreAdapters): Core {
       background,
       document: (id) => documents.getMany([id])[0] ?? null,
       filePath: (id) => documents.filePath(id),
-      drawPdf: documentCitedPages,
+      drawPdf: async (documentId, file, contentHash, pages, signal) =>
+        documentCitedPages(file, contentHash, pages, signal, await pdfPasswords.of(documentId)),
       capturePage: adapters.capturePage,
       log: adapters.log ?? silentLogger,
     });
@@ -1478,7 +1517,12 @@ export function createCore(adapters: CoreAdapters): Core {
     chatReadsImages: (choice) => chat.readsImages(choice),
     async pageImages(id, contentHash, signal) {
       try {
-        return await documentPageImages(await documents.filePath(id), contentHash, signal);
+        return await documentPageImages(
+          await documents.filePath(id),
+          contentHash,
+          signal,
+          await pdfPasswords.of(id),
+        );
       } catch (error) {
         // A missing source file is a visible classification failure, not a retry loop.
         throw new Error(error instanceof Error ? error.message : String(error), { cause: error });
@@ -2193,6 +2237,28 @@ export function createCore(adapters: CoreAdapters): Core {
       activity.documentDeleted(id as string);
     },
     retryDocument: async (id) => documents.retry(id),
+    unlockDocument: async (input) => {
+      const { documentId, password } = parseUnlock(input);
+      const document = documents.getMany([documentId])[0];
+      if (!document) throw new NotFoundError({ key: "error.document.notFound" });
+      if (document.kind !== "pdf") throw new InvalidInputError({ key: "error.document.notPdf" });
+      const bytes = await readFile(await documents.filePath(documentId));
+      if (!(await pdfOpensWith(bytes, password))) return { kind: "wrong-password" };
+      await pdfPasswords.keep(documentId, password);
+      events.emit("documentPasswords.changed", pdfPasswords.kept());
+      const failed = document.status === "failed";
+      return { kind: "unlocked", document: failed ? documents.retry(documentId) : document };
+    },
+    forgetDocumentPassword: async (id) => forgetPasswords([parseDocumentId(id)]),
+    documentPasswordFor: async (id) => {
+      const document = documents.getMany([parseDocumentId(id)])[0];
+      if (document?.kind !== "pdf") return null;
+      return (await pdfPasswords.of(document.id)) ?? null;
+    },
+    listDocumentPasswords: async () => {
+      const kept = pdfPasswords.kept();
+      return documents.getMany(kept).map((each) => each.id);
+    },
     readDocumentText: async (id) => documents.readText(id),
     readScannedText: async (id) => documents.readScannedText(id),
     readScannedQuote: async (input) => {
