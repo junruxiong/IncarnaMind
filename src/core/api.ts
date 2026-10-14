@@ -2248,28 +2248,27 @@ export type ReferenceLookupFailureReason =
   | "unreachable"
   | "service-error";
 
+/** A service a reference is looked up in (#711). */
+export type ReferenceService = "crossref" | "openalex" | "arxiv";
+
 /**
- * How a reference in a Mind's reference list checks against Crossref (#711):
+ * How a reference in a Mind's reference list checks (#711), looked up in
+ * Crossref, then OpenAlex, and an arXiv number on arXiv:
  * - "found": the work exists, as written;
  * - "mismatch": a record exists, but its title, year or first author differ;
  * - "not-found": the DOI or arXiv number it gives leads nowhere: no agency
- *   registered it;
- * - "not-in-crossref": searched for as written, it matches no Crossref record.
- *   It may still exist: Crossref doesn't hold every conference paper,
- *   preprint or Chinese journal;
+ *   registered it, or arXiv has no such preprint;
+ * - "not-listed": searched for as written, neither Crossref nor OpenAlex has
+ *   a record like it. It may still exist: neither holds every conference
+ *   paper, preprint or Chinese journal;
  * - "not-checked": it couldn't be asked about (`ReferenceCheck.reason`).
  */
-export type ReferenceCheckMark =
-  | "found"
-  | "mismatch"
-  | "not-found"
-  | "not-in-crossref"
-  | "not-checked";
+export type ReferenceCheckMark = "found" | "mismatch" | "not-found" | "not-listed" | "not-checked";
 
 /**
- * Why a reference wasn't checked; "registered-elsewhere": its DOI (or arXiv
- * number) exists, but another agency than Crossref registered it, as DataCite
- * does arXiv's, so its details couldn't be compared.
+ * Why a reference wasn't checked; "registered-elsewhere": its DOI exists,
+ * but another agency than Crossref registered it and OpenAlex has no record
+ * of it either, so its details couldn't be compared.
  */
 export type ReferenceCheckReason =
   | "local-mode"
@@ -2293,6 +2292,11 @@ export interface ReferenceCheck {
   /** As written, its white space collapsed. */
   reference: string;
   mark: ReferenceCheckMark;
+  /**
+   * The service that answered: whose record it is, which said its DOI or
+   * arXiv number leads nowhere, or which couldn't be asked ("not-checked").
+   */
+  service: ReferenceService | null;
   /** The record of the work it names; null when none was found, or it wasn't checked. */
   record: {
     title: string;
@@ -4848,8 +4852,9 @@ export type DataKind = (typeof dataKinds)[number];
  *   arXiv, when the User asks Look up to fill its reference record (#286).
  *   Nothing else: no file, text or name. None in local mode.
  * - "reference-check": each entry of a Mind's reference list, as written,
- *   to Crossref, when the User checks the list's references (#711). Nothing
- *   else of the Mind. None in local mode.
+ *   to Crossref, then to OpenAlex when Crossref has no record of it, and an
+ *   arXiv number to arXiv, when the User checks the list's references
+ *   (#711). Nothing else of the Mind. None in local mode.
  * - "find-sources": what the User (or an Answer, for them) searches for, with
  *   its filters, to each Source provider searched, and the identifier of a
  *   work they add, to the provider that gives its full text or record (#296).
@@ -6864,11 +6869,12 @@ export interface CoreApi {
    */
   lookUpReference(documentId: string): Promise<ReferenceLookupResult>;
   /**
-   * Looks up each entry of a Mind's reference list in Crossref (#711): by its
-   * DOI, else by the reference as written. Only the reference is sent. The
-   * User starts it where a line by its action says so, so calling it is the
-   * consent to the "reference-check" flow (ADR-0022); never in local mode,
-   * where every entry is "not-checked". One check of a Mind at a time;
+   * Looks up each entry of a Mind's reference list (#711) in Crossref, by its
+   * DOI, else by the reference as written; then in OpenAlex when Crossref has
+   * no record; an arXiv number on arXiv. Only the reference is sent. The User
+   * starts it where a line by its action names the services, so calling it
+   * is the consent to the "reference-check" flow (ADR-0022); never in local
+   * mode, where every entry is "not-checked". One check of a Mind at a time;
    * "referenceCheck.progress" says how far it is.
    */
   checkReferences(mindId: string): Promise<CheckReferencesResult>;

@@ -807,11 +807,11 @@ export interface CoreAdapters {
    */
   jevHostedUrl?: string;
   /**
-   * Where Look up (#286) asks Crossref's and arXiv's APIs. Defaults to
-   * theirs; tests point them at a local fake server. Consent still treats
-   * the requests as going to Crossref and arXiv.
+   * Where Look up (#286) and checking references (#711) ask Crossref's,
+   * arXiv's and OpenAlex's APIs. Defaults to theirs; tests point them at a
+   * local fake server. Consent still treats the requests as going to each.
    */
-  referenceLookup?: { crossref?: string; arxiv?: string };
+  referenceLookup?: { crossref?: string; arxiv?: string; openalex?: string };
   /**
    * Where Find sources (#296) asks each Source provider, by its id
    * ("openalex", "arxiv", "pubmed", "crossref", "openfda", "dailymed", "clinicaltrials", "ecfr", "govinfo"). Defaults to the real

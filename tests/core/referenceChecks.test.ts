@@ -5,18 +5,25 @@ import {
   differences,
   holdsTitle,
   titleCoverage,
+  titleOf,
 } from "../../src/core/referenceChecks/match";
 import { checkableReferences } from "../../src/shared/referenceList";
 import { createTempDataFolder, startCore } from "../helpers/core";
 import { connectToMind } from "../helpers/mindClient";
 import { heading, note, writeMind } from "../helpers/minds";
 import { unusedLocalUrl } from "../helpers/ollama";
-import { type CrossrefWork, startReferenceServices } from "../helpers/referenceServices";
+import {
+  type CrossrefWork,
+  type OpenAlexWork,
+  recordedAnswer,
+  startReferenceServices,
+} from "../helpers/referenceServices";
 
 /*
  * Checking a reference list (#711): each entry looked up in Crossref, by DOI
- * or as written, and marked found, doesn't match, not found or not checked.
- * A local stand-in answers for Crossref: no test reaches the real one.
+ * or as written, then in OpenAlex, and an arXiv number on arXiv, and marked
+ * found, doesn't match, not found, not listed or not checked. A local
+ * stand-in answers for all three: no test reaches the real ones.
  */
 
 const LSTM: CrossrefWork = {
@@ -58,6 +65,30 @@ const PREPRINT =
 const INVENTED_PREPRINT =
   "Ray, S. (2023). Recursive gradient lattices for sparse memory. arXiv preprint arXiv:2399.00001.";
 const WEB_PAGE = "OpenAI. (2022). Introducing ChatGPT. https://openai.com/blog/chatgpt";
+const CONFERENCE =
+  "Brown, T., Mann, B., et al. (2020). Language models are few-shot learners. Advances in Neural Information Processing Systems, 33.";
+const ON_ARXIV =
+  "Vaswani, A., et al. (2017). Attention is all you need. arXiv preprint arXiv:1706.03762.";
+const DATASET =
+  "Doe, A. (2021). Measurements of widgets in coastal towns. Zenodo. doi:10.5281/zenodo.123456";
+
+/** OpenAlex's records: a conference paper Crossref lacks, and an arXiv preprint by its DOI. */
+const OPENALEX_WORKS: OpenAlexWork[] = [
+  {
+    id: "https://openalex.org/W3030163527",
+    doi: "https://doi.org/10.48550/arxiv.2005.14165",
+    display_name: "Language Models are Few-Shot Learners",
+    publication_date: "2020-05-28",
+    authorships: [{ author: { display_name: "Tom B. Brown" } }],
+  },
+  {
+    id: "https://openalex.org/W1522301498",
+    doi: "https://doi.org/10.48550/arxiv.1412.6980",
+    display_name: "Adam: A Method for Stochastic Optimization",
+    publication_date: "2014-12-22",
+    authorships: [{ author: { display_name: "Diederik P. Kingma" } }],
+  },
+];
 
 /** A core whose Crossref is the stand-in, with a Mind whose reference list holds `entries`. */
 async function setUp(
@@ -66,11 +97,17 @@ async function setUp(
 ) {
   const services = await startReferenceServices({
     works,
-    registered: { "10.48550/arXiv.1412.6980": "datacite" },
+    registered: {
+      "10.48550/arXiv.1412.6980": "datacite",
+      "10.48550/arXiv.1706.03762": "datacite",
+      "10.5281/zenodo.123456": "datacite",
+    },
+    openalex: OPENALEX_WORKS,
+    arxiv: { "1706.03762": recordedAnswer("arxiv-attention.xml") },
   });
   onTestFinished(() => services.close());
   const core: Core = startCore(await createTempDataFolder(), {
-    referenceLookup: { crossref: services.url, arxiv: services.url },
+    referenceLookup: { crossref: services.url, arxiv: services.url, openalex: services.url },
   });
   if (localOnly) await core.setLocalOnly(true);
   const mind = await core.createMind({ title: "Draft" });
@@ -85,7 +122,7 @@ async function setUp(
 }
 
 describe("Checking a reference list (#711)", { timeout: 30_000 }, () => {
-  // protects=each mark: found by search and by DOI, not in Crossref (searched, nothing like it), not found (a DOI or arXiv number leading nowhere), doesn't match (year, author), not checked when another agency holds the DOI; a web page isn't looked up; only the reference is sent; checking again asks nothing twice; fails_when=a mark is wrong, a search miss reads as an invented reference, a preprint reads as not found, more than the reference goes, or a reference is asked about again; no_claim=Crossref's real matching (the evaluation, eval/references).
+  // protects=each mark and the service that gave it: found in Crossref by search and by DOI, in OpenAlex by title (a conference paper) and by DOI (an arXiv preprint), on arXiv; not listed (in neither Crossref nor OpenAlex); not found (a DOI or arXiv number leading nowhere); doesn't match (year, author); not checked when another agency holds a DOI neither has; a web page isn't looked up; only the reference is sent; checking again asks nothing twice; fails_when=a mark is wrong, a search miss reads as an invented reference, a preprint reads as not found, more than the reference goes, or a reference is asked about again; no_claim=Crossref's real matching (the evaluation, eval/references).
   test("every entry gets its mark, and only the reference is sent", async () => {
     const entries = [
       REAL,
@@ -97,6 +134,9 @@ describe("Checking a reference list (#711)", { timeout: 30_000 }, () => {
       WEB_PAGE,
       PREPRINT,
       INVENTED_PREPRINT,
+      CONFERENCE,
+      ON_ARXIV,
+      DATASET,
     ];
     const { core, services, mindId } = await setUp(entries);
     const progress: CoreEvents["referenceCheck.progress"][] = [];
@@ -105,15 +145,18 @@ describe("Checking a reference list (#711)", { timeout: 30_000 }, () => {
     const result = await core.checkReferences(mindId);
 
     if (result.kind !== "checked") throw new Error(`Not checked: ${result.kind}`);
-    expect(result.references.map(({ mark, reason }) => [mark, reason])).toEqual([
-      ["found", null],
-      ["found", null],
-      ["not-in-crossref", null],
-      ["mismatch", null],
-      ["mismatch", null],
-      ["not-found", null],
-      ["not-checked", "registered-elsewhere"],
-      ["not-found", null],
+    expect(result.references.map(({ mark, service, reason }) => [mark, service, reason])).toEqual([
+      ["found", "crossref", null],
+      ["found", "crossref", null],
+      ["not-listed", null, null],
+      ["mismatch", "crossref", null],
+      ["mismatch", "crossref", null],
+      ["not-found", "crossref", null],
+      ["found", "openalex", null],
+      ["not-found", "crossref", null],
+      ["found", "openalex", null],
+      ["found", "arxiv", null],
+      ["not-checked", null, "registered-elsewhere"],
     ]);
     const [real, byDoi, , wrongYear, wrongAuthor] = result.references;
     expect(real?.record).toEqual({
@@ -136,7 +179,7 @@ describe("Checking a reference list (#711)", { timeout: 30_000 }, () => {
       expect(decodeURIComponent(request.path)).not.toContain("Recurrent networks remember");
     }
     expect(services.requests.some(({ path }) => path.toLowerCase().includes("openai"))).toBe(false);
-    expect(progress.at(-1)).toEqual({ mindId, done: 8, total: 8 });
+    expect(progress.at(-1)).toEqual({ mindId, done: 11, total: 11 });
 
     // Checked again, nothing is asked twice.
     const asked = services.requests.length;
@@ -218,14 +261,18 @@ describe("Checking a reference list (#711)", { timeout: 30_000 }, () => {
       kind: "checked",
       references: [
         { mark: "found" },
-        { mark: "not-in-crossref" },
+        { mark: "not-listed" },
         { mark: "mismatch" },
         { mark: "not-found" },
       ],
     });
 
     const offline = startCore(await createTempDataFolder(), {
-      referenceLookup: { crossref: await unusedLocalUrl(), arxiv: await unusedLocalUrl() },
+      referenceLookup: {
+        crossref: await unusedLocalUrl(),
+        arxiv: await unusedLocalUrl(),
+        openalex: await unusedLocalUrl(),
+      },
     });
     const mind = await offline.createMind({ title: "Offline" });
     const client = await connectToMind(offline, mind.id);
@@ -237,12 +284,28 @@ describe("Checking a reference list (#711)", { timeout: 30_000 }, () => {
     });
   });
 
+  // protects=OpenAlex offline: Crossref's answers stand, the first miss isn't checked with OpenAlex named, and OpenAlex isn't asked again; fails_when=a miss reads as not listed when OpenAlex wasn't asked, or each miss tries OpenAlex; no_claim=none beyond protects.
+  test("when OpenAlex can't be reached, Crossref's answers stand and OpenAlex is asked once", async () => {
+    const { core, services, mindId } = await setUp([REAL, INVENTED, CONFERENCE]);
+    services.fail("unreachable", "openalex");
+
+    expect(await core.checkReferences(mindId)).toMatchObject({
+      kind: "checked",
+      references: [
+        { mark: "found", service: "crossref" },
+        { mark: "not-checked", service: "openalex", reason: "unreachable" },
+        { mark: "not-checked", service: "openalex", reason: "unreachable" },
+      ],
+    });
+    expect(services.requests.filter(({ path }) => path.includes("search="))).toHaveLength(1);
+  });
+
   // protects=a Mind with no reference list says so and sends nothing; Stop gives "cancelled" and nothing more is sent; fails_when=either sends, hangs, or a stopped check goes on asking; no_claim=none beyond protects.
   test("no reference list sends nothing; Stop cancels a check under way", async () => {
     const services = await startReferenceServices({ works: [LSTM] });
     onTestFinished(() => services.close());
     const core = startCore(await createTempDataFolder(), {
-      referenceLookup: { crossref: services.url, arxiv: services.url },
+      referenceLookup: { crossref: services.url, arxiv: services.url, openalex: services.url },
     });
     const mind = await core.createMind({ title: "No list" });
     const client = await connectToMind(core, mind.id);
@@ -263,15 +326,27 @@ describe("Checking a reference list (#711)", { timeout: 30_000 }, () => {
 });
 
 describe("Reading a reference as written", () => {
-  // protects=the DOI and year are read from the text, an arXiv number as arXiv's DOI, and neither's digits taken for a year; fails_when=a DOI's or arXiv number's digits read as the year, or trailing punctuation stays in the DOI; no_claim=none beyond protects.
+  // protects=the DOI, arXiv number and year are read from the text, and neither identifier's digits taken for a year; fails_when=a DOI's or arXiv number's digits read as the year, or trailing punctuation stays in the DOI; no_claim=none beyond protects.
   test("its DOI and year", () => {
     expect(citedReference(`${BY_DOI}.`)).toMatchObject({ doi: "10.1038/nature14539", year: 2015 });
     expect(
       citedReference("Vaswani, A. Attention is all you need. arXiv:1706.03762v5 (2017)."),
-    ).toMatchObject({ doi: "10.48550/arXiv.1706.03762", year: 2017 });
+    ).toMatchObject({ doi: null, arxiv: "1706.03762", year: 2017 });
     expect(
       citedReference("Wu, L. (2021). 深度学习综述. 计算机学报. https://doi.org/10.1234/2019.5"),
     ).toMatchObject({ doi: "10.1234/2019.5", year: 2021 });
+  });
+
+  // protects=the title is read as each common style sets it apart (APA, numbered with quotes, GB/T 7714, Vancouver), for OpenAlex's search by title; fails_when=an author list or venue is taken for the title; no_claim=styles beyond these.
+  test("its title, in the common styles", () => {
+    expect(titleOf(CONFERENCE)).toBe("Language models are few-shot learners");
+    expect(
+      titleOf('[3] A. Vaswani et al., "Attention is all you need," in Proc. NeurIPS, 2017.'),
+    ).toBe("Attention is all you need");
+    expect(titleOf("周志华. 机器学习[M]. 北京: 清华大学出版社, 2016.")).toBe("机器学习");
+    expect(titleOf("Smith J, Doe K. Widgets in coastal towns. J Widgets. 2020;12:3-4.")).toBe(
+      "Widgets in coastal towns",
+    );
   });
 
   // protects=a list ends at the first paragraph that isn't a reference, so an appendix after it isn't looked up; fails_when=the appendix's text is taken for a reference; no_claim=none beyond protects.

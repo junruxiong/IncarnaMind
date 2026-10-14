@@ -74,16 +74,15 @@ export function titleWords(text: string): string[] {
   return words;
 }
 
-/**
- * The DOI a reference gives, as the record keeps it; for a preprint on arXiv
- * given by its number, the DOI arXiv registers for it ("10.48550/arXiv.…").
- */
+/** The DOI a reference gives, as the record keeps it. */
 export function doiOf(reference: string): string | null {
   const written = DOI_IN_TEXT.exec(reference)?.[1];
-  if (written) return normalizeDoi(written);
-  const arxiv = ARXIV_IN_TEXT.exec(reference)?.[1];
-  return arxiv ? `10.48550/arXiv.${arxiv}` : null;
+  return written ? normalizeDoi(written) : null;
 }
+
+/** The arXiv number a reference gives, without its version: "1706.03762". */
+export const arxivOf = (reference: string): string | null =>
+  ARXIV_IN_TEXT.exec(reference)?.[1] ?? null;
 
 /**
  * Whether a reference names a scholarly work a check can look up: one with a
@@ -91,7 +90,7 @@ export function doiOf(reference: string): string | null {
  * Crossref doesn't hold, would read as "not found").
  */
 function isCheckable(reference: string): boolean {
-  if (doiOf(reference)) return true;
+  if (doiOf(reference) || arxivOf(reference)) return true;
   if (WEB_ADDRESS.test(reference)) return false;
   return titleWords(reference).length >= MIN_WORDS;
 }
