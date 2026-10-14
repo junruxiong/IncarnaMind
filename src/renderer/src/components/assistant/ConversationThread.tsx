@@ -14,6 +14,7 @@ import {
   useOpenConversation,
 } from "../../conversations";
 import { useT } from "../../i18n";
+import { isLive, useMeetings } from "../../meetings";
 import { togglePlanView, useResearch } from "../../research";
 import { type ScopeChip, scopeChips } from "../../scope";
 import { useAppStore } from "../../store";
@@ -26,9 +27,9 @@ import { AddToMindPicker } from "./AddToMindPicker";
 import { WritingLine } from "./AnswerActions";
 import { LiveLine } from "./AnswerSteps";
 import { type AnswerKeeping, AssistantAnswer } from "./AssistantAnswer";
+import { MeetingStarters } from "./MeetingStarters";
 import { TaskProgress, type TaskProgressActions } from "./TaskProgress";
 
-/** What a Task's progress offers beyond Pause and Stop: its plan, and Tell it… (#130). */
 const TASK_ACTIONS: TaskProgressActions = { plan: togglePlanView, tell: aimAt };
 
 /** How long an Answer a link back led to stays flashed. */
@@ -68,7 +69,14 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
     ? (focusedMind && mindName(focusedMind)) || t("mind.untitled")
     : null;
   const nextScope = useNextScope(focusedMindId);
-  const reads = readsLine(t, focusedMind ? focusedMindName : null, nextScope);
+  // While the Mind's meeting records, the assistant listens to its live transcript (#144).
+  const listening = useMeetings((state) =>
+    state.meetings.some((meeting) => meeting.mindId === focusedMindId && isLive(meeting)),
+  );
+  const reads =
+    listening && focusedMindName
+      ? t("assistant.reads.listening", { mind: focusedMindName })
+      : readsLine(t, focusedMind ? focusedMindName : null, nextScope);
   const [picking, setPicking] = useState<{
     answer: ConversationAnswer;
     anchor: HTMLElement;
@@ -151,6 +159,7 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
           <p data-testid="assistant-empty" className="assistant-empty">
             {t("assistant.empty")}
           </p>
+          {listening && <MeetingStarters />}
         </>
       )}
       {interleave(messages, tasks).map((entry) => {
