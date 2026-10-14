@@ -678,6 +678,7 @@ export const zhCN = {
   "proposal.theirs.rejectAll": "全部拒绝 {name} 的修订",
   "proposal.unknownAuthor": "未知作者",
   "proposal.madeBy": "{author}，{date}",
+  "proposal.why": "原因：{reason}",
   "proposal.outOfDate.why.theirs":
     "你后来改过这段文字，所以无法接受这处修订。可以拒绝，或自己改好。",
   "proposal.announce.theirs": "{author} 的修订：{what}。按 {accept} 接受，按 {reject} 拒绝。",
@@ -1842,6 +1843,7 @@ export const zhCN = {
 
   "answer.label": "回答",
   "answer.status.streaming": "正在回答…",
+  "mind.writing": "正在修改…",
   "answer.phase.waiting-for-consent": "等待你允许发送",
   "answer.phase.loading": "正在加载模型…",
   "answer.phase.searching": "正在搜索你的文档…",

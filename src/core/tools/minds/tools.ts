@@ -40,6 +40,7 @@ import {
   type MindChange,
   type TextPlace,
   type ThirdPartySource,
+  type WritingPlace,
 } from "../../api";
 import { plainText } from "../../mindText";
 import { insertBlocks } from "../../noteAdding";
@@ -83,12 +84,8 @@ export interface MindsForTools {
   create(title: string, folderId: string | null): ChangeableMind;
   /** The name of a Folder, or null when there is none by that id. */
   folderName(folderId: string): string | null;
-  /**
-   * Says where a call is writing a Mind's new Blocks as they come (#202):
-   * after the top-level Block `after`, or at the end (null); `place` null once
-   * it has stopped.
-   */
-  writing(mindId: string, place: { after: string | null } | null): void;
+  /** Says where a call is writing a Mind's new Blocks as they come (#202); `place` null once it has stopped. */
+  writing(mindId: string, place: WritingPlace | null): void;
   /** Edit with AI over a stretch of a Mind (../../edits, `proposeInMind`). */
   proposeInMind(input: {
     mindId: string;
@@ -97,9 +94,15 @@ export interface MindsForTools {
     instruction: string;
     prepared: PreparedChatModel;
     signal: AbortSignal;
-    /** Runs once the change is known, just before its Proposals are written. */
+    /** Runs just before the change's first Proposals are written. */
     beforeWriting(): void;
-  }): Promise<{ result: EditWithAiResult; length: { before: string; after: string } | null }>;
+    /** More of its Proposals are in the Mind, as they come. */
+    written(request: string, count: number): void;
+  }): Promise<{
+    result: EditWithAiResult;
+    length: { before: string; after: string } | null;
+    reason: string | null;
+  }>;
 }
 
 export interface MindToolsOptions {
@@ -579,13 +582,15 @@ export function mindTools(options: MindToolsOptions): Tool[] {
       if (typeof stretch === "string") {
         throw new Error(`Nothing was changed in “${mind.name}”: ${stretch}.`);
       }
-      const { result, length } = await minds.proposeInMind({
+      const { result, length, reason } = await minds.proposeInMind({
         mindId: mind.id,
         ...stretch,
         instruction,
         prepared: options.prepared,
         signal,
         beforeWriting: () => minds.checkpoint(mind.id),
+        written: (request, proposals) =>
+          options.changed(toolCallId, { mindId: mind.id, created: false, request, proposals }),
       });
       if (result.kind !== "proposed") {
         const why = notProposed(result, mind.name);
@@ -601,6 +606,7 @@ export function mindTools(options: MindToolsOptions): Tool[] {
       const went = length ? ` (${lengths(length.before, length.after)})` : "";
       return [
         `Proposed ${changes(result.proposals)} in “${mind.name}”${went}. ${WAITING}`,
+        ...(reason ? [`Why, as the rewrite says: ${reason}`] : []),
         ...(result.droppedCitations > 0
           ? [
               `${result.droppedCitations === 1 ? "1 Citation" : `${result.droppedCitations} Citations`} would be removed with the words they belong to; the User sees that on the change: say so.`,
