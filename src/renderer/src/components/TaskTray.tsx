@@ -142,7 +142,7 @@ function TaskAskView({ task }: { task: Task }) {
 }
 
 /**
- * The Task tray (#126, narrowed by D189; DESIGN.md, Task tray): joined to the
+ * The Task tray (#126, narrowed by #657; DESIGN.md, Task tray): joined to the
  * top of the assistant's composer, only what waits for the User, nearest the
  * keyboard. Top to bottom: the plan card before a Task starts, the one
  * waiting ask, then queued messages, which wrap. Progress is in the thread

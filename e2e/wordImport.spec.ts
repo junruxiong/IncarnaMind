@@ -279,7 +279,7 @@ test("someone else's tracked changes wait in place with who made them and when: 
   const changeBar = window.getByTestId("change-bar");
   await editor.locator("ins.proposal-theirs", { hasText: "three months" }).hover();
   await expect(changeBar).toContainText("Change 3 of 4");
-  await expect(changeBar.getByTestId("change-bar-author")).toHaveText("Lars Berg, October 5, 2026");
+  await expect(changeBar.getByTestId("change-bar-author")).toHaveText("Lars Berg, 5 Oct 2026");
   await motionSettled(window);
   await screenshot(window, "their-changes");
 
