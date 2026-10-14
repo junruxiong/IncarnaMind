@@ -1,5 +1,5 @@
 /** The instructions every Answer is written with. Kept short: every word is sent with every Question. */
-import type { CitationSupport, SkillFile } from "../api";
+import type { CitationSupport, SkillFile, UnreadFile, UnreadReason } from "../api";
 import type { LoadedSkill, SkillSummary } from "../skills";
 
 /** A language a Question is clearly written in, judged by its script alone. */
@@ -198,6 +198,41 @@ export interface ListedDocuments {
 function listedName(name: string): string {
   const line = name.replace(/\s+/g, " ").trim();
   return line.length > MAX_NAME_LENGTH ? `${line.slice(0, MAX_NAME_LENGTH - 1)}…` : line;
+}
+
+/** How many Documents `unreadDocumentsNote` names before "and N more". */
+const NAMED_UNREAD = 5;
+
+/** Why a Document couldn't be read, as the note tells the model. */
+const UNREAD_WORDS: Record<UnreadReason, (pages: readonly number[]) => string> = {
+  scan: () => "a scan with no text",
+  pages: (pages) => {
+    if (pages.length === 0) return "its scanned pages weren't read";
+    const shown = pages.slice(0, 10).join(", ") + (pages.length > 10 ? ", …" : "");
+    return pages.length === 1
+      ? `scanned page ${shown} wasn't read`
+      : `scanned pages ${shown} weren't read`;
+  },
+  password: () => "password-protected",
+  damaged: () => "damaged or couldn't be opened",
+  "too-large": () => "too large to open",
+  format: () => "a format IncarnaMind doesn't read",
+};
+
+/**
+ * A reminder after a search's Passages when Documents in the Search scope
+ * have no text to search, or pages with none (#485): no search finds
+ * anything in them, so a model that finds nothing says the answer may be
+ * there instead of taking another Document's figure for it. Names each, with
+ * why; empty when there are none.
+ */
+export function unreadDocumentsNote(unread: readonly UnreadFile[]): string {
+  if (unread.length === 0) return "";
+  const named = unread
+    .slice(0, NAMED_UNREAD)
+    .map((file) => `"${listedName(file.name)}" (${UNREAD_WORDS[file.reason](file.pages)})`);
+  const more = unread.length - named.length;
+  return `IncarnaMind couldn't read the text of some Documents in the search, so no Passage comes from that text: ${named.join(", ")}${more > 0 ? `, and ${more} more` : ""}. If the Passages don't clearly answer the Question and it may be about one of them, say in one sentence that it couldn't be read, so the answer may be there, rather than taking another Document's figure for it.`;
 }
 
 /**

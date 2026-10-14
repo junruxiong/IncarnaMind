@@ -983,6 +983,7 @@ export function createCore(adapters: CoreAdapters): Core {
       searchableNames: (documentIds, limit) =>
         documents.searchableNames(documentIds ?? undefined, limit),
       searchableLanguages: (documentIds) => documents.searchableLanguages(documentIds ?? undefined),
+      unread: (documentIds) => findUnreadDocuments(documents.unread(documentIds ?? undefined)),
       search: searchDocuments,
       citationSource: (passageId) => documents.citationSource(passageId),
       pageTexts: (documentId, contentHash, from, to) =>
@@ -2265,10 +2266,7 @@ export function createCore(adapters: CoreAdapters): Core {
     listUnreadFiles: async (scope) => {
       const wanted = parseSearchScope(scope);
       const inScope = wanted ? resolveScope(wanted) : null;
-      const kept = inScope === null ? null : new Set(inScope);
-      const unread = findUnreadDocuments(
-        documents.list().filter((each) => kept === null || kept.has(each.id)),
-      );
+      const unread = findUnreadDocuments(documents.unread(inScope ?? undefined));
       // Files in a format not read belong to Folders only: a Tag or a Document can't name them.
       // A Folder holds those in it and under it, even where no Document is.
       const named = wanted
@@ -2294,6 +2292,7 @@ export function createCore(adapters: CoreAdapters): Core {
             reason: "format",
             extension: file.extension,
             documentId: null,
+            pages: [],
           }),
         );
       return [...unread, ...files];
