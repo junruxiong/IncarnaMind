@@ -19,7 +19,7 @@ import {
 } from "./app";
 
 /*
- * Tasks (#126, D189): a comparison table keeps filling as a Task when its
+ * Tasks (#126, #657): a comparison table keeps filling as a Task when its
  * Mind is closed and when IncarnaMind is force-quit, and goes on at the next
  * start; its progress shows in the assistant's thread, where it started, with
  * its bar, latest steps and what it can be asked (Pause, Stop). A Task that

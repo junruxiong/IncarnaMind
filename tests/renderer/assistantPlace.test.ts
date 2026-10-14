@@ -179,7 +179,7 @@ describe("the groups", () => {
 });
 
 describe("Fold", () => {
-  test("is in ⋯ only on Windows docked right, where the header holds the window's buttons (D189)", () => {
+  test("is in ⋯ only on Windows docked right, where the header holds the window's buttons (#657)", () => {
     expect(foldsInMenu("overlay", "right")).toBe(true);
     for (const dock of ["left", "bottom", "float"] as const) {
       expect(foldsInMenu("overlay", dock)).toBe(false);
