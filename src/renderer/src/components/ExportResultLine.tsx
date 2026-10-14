@@ -13,7 +13,11 @@ import {
 import { showFileLabelKey } from "../fileInfo";
 import { useT } from "../i18n";
 import { enter } from "../motion";
-import { chooseOutputLocation, showOutputLocationSetting } from "../outputFiles";
+import {
+  chooseOutputLocation,
+  defaultFolderLabel,
+  showOutputLocationSetting,
+} from "../outputFiles";
 import { saveFailureReason } from "../problems";
 import { CloseLineIcon, ExportLineIcon } from "./lineIcons";
 import { type ProblemAction, ProblemLine } from "./ProblemLine";
@@ -166,7 +170,7 @@ function ResultBody({
                 <CheckIcon />
                 <SavedName
                   name={result.name}
-                  folder={result.defaulted ? t("outputLocation.defaultName") : null}
+                  folder={result.defaulted ? defaultFolderLabel(t) : null}
                 />
               </p>
               <span className="flex shrink-0 gap-1">

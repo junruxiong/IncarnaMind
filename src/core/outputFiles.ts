@@ -250,10 +250,16 @@ export function createOutputFiles(options: OutputFilesOptions) {
     return current();
   };
 
+  /** Asks where new files go, saying why the default can't take this one; cancels if none is chosen. */
+  const askForLocation = async (fileName: string, problem: OutputFolderProblem): Promise<void> => {
+    await ask("output-location", { kind: "output-location", suggested, fileName, problem });
+    if (location() === null) throw new FileWriteCancelledError();
+  };
+
   /**
    * The Output location, made again if it was removed from a folder still
-   * there. None chosen yet, the default, without asking (D209); asking, saying
-   * why, if the default can't take files, and cancelling if none is chosen.
+   * there. None chosen yet, the default, without asking (D209), kept once a
+   * file is written there; asking, saying why, if it can't take files.
    */
   const outputFolder = async (
     fileName: string,
@@ -261,17 +267,8 @@ export function createOutputFiles(options: OutputFilesOptions) {
     let chosen = location();
     if (chosen === null) {
       const usable = await usableDefault(suggested);
-      if (usable.ok) {
-        settings.writeDeviceValue(OUTPUT_LOCATION, usable.real);
-        changed();
-        return { folder: usable.real, defaulted: true };
-      }
-      await ask("output-location", {
-        kind: "output-location",
-        suggested,
-        fileName,
-        problem: usable.reason,
-      });
+      if (usable.ok) return { folder: usable.real, defaulted: true };
+      await askForLocation(fileName, usable.reason);
       chosen = location();
       if (chosen === null) throw new FileWriteCancelledError();
     }
@@ -375,7 +372,19 @@ export function createOutputFiles(options: OutputFilesOptions) {
         if (linked && !(await allowedIn(linked, name))) continue;
         // Before the file exists, so a Linked folder can't index it as the User's.
         if (file.ownFile) options.recordOwnFile(file.data, file.ownFile);
-        const used = await writeNewFile(folder, name, file.data);
+        let used: string;
+        try {
+          used = await writeNewFile(folder, name, file.data);
+        } catch (error) {
+          // macOS can refuse Documents only when a file is made in it, after the folder looked fine.
+          if (!defaulted || !isRefused(error)) throw error;
+          await askForLocation(name, "not-writable");
+          continue;
+        }
+        if (defaulted) {
+          settings.writeDeviceValue(OUTPUT_LOCATION, folder);
+          changed();
+        }
         const path = join(folder, used);
         saved.add(path);
         return { path, name: used, defaulted };

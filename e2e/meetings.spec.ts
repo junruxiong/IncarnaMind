@@ -8,6 +8,7 @@ import type { TestHooks } from "../src/shared/testHooks";
 import {
   closeSettings,
   createDataFolder,
+  DEFAULT_FOLDER_ZH,
   dismissChatSetup,
   launchApp,
   openDocumentAt,
@@ -388,9 +389,12 @@ test("Show transcript opens the live Transcript beside the meeting, Hide transcr
   await bar.getByTestId("meeting-stop").click();
   await expect(bar).toBeHidden();
   const saved = window.getByTestId("meeting-transcript-line");
-  await expect(saved).toHaveText("转写稿已保存到“文稿 › IncarnaMind” · 打开转写稿 · 更改文件夹…", {
-    timeout: 20_000,
-  });
+  await expect(saved).toHaveText(
+    `转写稿已保存到“${DEFAULT_FOLDER_ZH}” · 打开转写稿 · 更改文件夹…`,
+    {
+      timeout: 20_000,
+    },
+  );
   await shot(window, "meeting-transcript-saved-zh");
   await window.evaluate(async () =>
     (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({

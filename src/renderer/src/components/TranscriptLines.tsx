@@ -3,7 +3,7 @@ import type { MessageKey } from "../../../shared/i18n";
 import { useT } from "../i18n";
 import { formatBytes } from "../linkedFolders";
 import { useMeetings } from "../meetings";
-import { showOutputLocationSetting } from "../outputFiles";
+import { defaultFolderLabel, showOutputLocationSetting } from "../outputFiles";
 import { showTranscript } from "../transcripts";
 import { type ProblemAction, ProblemLine } from "./ProblemLine";
 import { useTabPlace } from "./tabs/tabItems";
@@ -97,7 +97,7 @@ export function TranscriptLines({
     line = {
       // The first save says where it went (D209).
       text: transcript.savedDefaulted
-        ? t("meetings.transcript.savedIn", { folder: t("outputLocation.defaultName") })
+        ? t("meetings.transcript.savedIn", { folder: defaultFolderLabel(t) })
         : t("meetings.transcript.saved"),
       action: {
         label: t("meetings.transcript.open"),

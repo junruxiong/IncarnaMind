@@ -1390,6 +1390,7 @@ export const en = {
     "Where exports and files that Tasks save go. IncarnaMind writes nowhere else without asking.",
   "outputLocation.change": "Change…",
   "outputLocation.defaultName": "Documents › IncarnaMind",
+  "outputLocation.defaultName.other": "Documents › IncarnaMind",
   "outputLocation.default": "The default: new files go here until you choose another folder.",
   "outputLocation.failed": "Couldn't change it: {reason}",
   "outputLocation.pick.title": "Choose where new files go",
