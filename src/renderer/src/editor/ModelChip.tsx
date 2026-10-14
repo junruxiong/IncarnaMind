@@ -216,7 +216,7 @@ export function ModelChip({ doc, onChosen }: { doc: Y.Doc | null; onChosen(): vo
                   !event.metaKey &&
                   !event.ctrlKey &&
                   !event.altKey &&
-                  event.target !== search.current
+                  !(event.target instanceof HTMLInputElement)
                 ) {
                   search.current?.focus();
                 }
