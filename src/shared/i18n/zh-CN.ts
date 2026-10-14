@@ -819,6 +819,8 @@ export const zhCN = {
   "viewer.markdown.image": "图片",
   "viewer.markdown.imageWeb": "不加载网络图片",
   "viewer.markdown.imageMissing": "找不到图片",
+  "viewer.web.picturesLeftOut.one": "有 1 张图片超出单页上限，未保存",
+  "viewer.web.picturesLeftOut": "有 {count} 张图片超出单页上限，未保存",
   "viewer.docx.comment": "{author} 的批注",
 
   "location.page": "第 {range} 页",
