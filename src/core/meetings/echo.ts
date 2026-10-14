@@ -15,8 +15,9 @@
  *
  * The two sources are timestamped apart (./index), so where the echo sits
  * against its reference moves: the filter looks a little ahead of the
- * microphone as well as behind it, and when the echo's strongest partition
- * nears either end of the filter, the filter's window moves to keep it in.
+ * microphone as well as behind it, its window moves when the echo's
+ * strongest partition nears either end, and when the two clocks drift apart
+ * the reference is read later or earlier at the rate the echo slides.
  */
 import { createRealFft } from "./fft";
 
@@ -38,6 +39,8 @@ const MOVE_AFTER = 40;
 const HISTORY = MAX_LEAD * ECHO_BLOCK + 16_000;
 /** How often, in blocks, the echo's position is compared with where it was, to measure drift. */
 const DRIFT_EVERY = 32;
+/** How alike the two impulse responses must be for their offset to count: otherwise the filter was still learning. */
+const SAME_SHAPE = 0.9;
 /** How much of the drift measured each time is corrected. */
 const DRIFT_GAIN = 0.3;
 /** The most drift corrected, as a share of a sample per sample: clocks a little apart differ by about 1e-4. */
@@ -46,8 +49,10 @@ const MAX_DRIFT = 1e-3;
 const SINC_TAPS = 16;
 const SINC_PHASES = 256;
 
+// Speex's constants (libspeexdsp/mdf.c), for 16 kHz and 16 ms blocks.
 const PREEMPHASIS = 0.9;
 const MIN_LEAK = 0.005;
+const SMOOTHING = 0.35 / PARTITIONS;
 const SPEC_AVERAGE = ECHO_BLOCK / 16_000;
 const BETA0 = (2 * ECHO_BLOCK) / 16_000;
 const BETA_MAX = (0.5 * ECHO_BLOCK) / 16_000;
@@ -98,10 +103,11 @@ export function createEchoCanceller() {
   const accRe = new Float64Array(BINS);
   const accIm = new Float64Array(BINS);
   const time = new Float64Array(WINDOW);
+  /** The reference samples one window reads, with the sinc's reach either side. */
+  const raw = new Float64Array(WINDOW + 1 + SINC_TAPS);
   const foregroundEcho = new Float64Array(ECHO_BLOCK);
   const backgroundEcho = new Float64Array(ECHO_BLOCK);
   const estimate = new Float64Array(ECHO_BLOCK);
-  const errorSignal = new Float64Array(ECHO_BLOCK);
   const microphone = new Float64Array(ECHO_BLOCK);
   const xf = new Float64Array(BINS);
   const rf = new Float64Array(BINS);
@@ -189,19 +195,22 @@ export function createEchoCanceller() {
       base++;
       phase = 0;
     }
+    const reach = phase === 0 ? 0 : SINC_TAPS / 2;
+    const first = base - 1 - reach;
+    for (let i = 0; i < raw.length; i++) raw[i] = referenceAt(first + i);
     const taps = SINC[phase] as Float64Array;
-    const read = (sample: number) => {
-      if (phase === 0) return referenceAt(sample);
-      let value = 0;
-      for (let t = 0; t < SINC_TAPS; t++) {
-        value += (taps[t] as number) * referenceAt(sample + t - (SINC_TAPS / 2 - 1));
+    let previous = 0;
+    for (let i = -1; i < WINDOW; i++) {
+      let value: number;
+      if (phase === 0) {
+        value = raw[i + 1] as number;
+      } else {
+        value = 0;
+        const from = i + 1 + reach - (SINC_TAPS / 2 - 1);
+        for (let t = 0; t < SINC_TAPS; t++)
+          value += (taps[t] as number) * (raw[from + t] as number);
       }
-      return value;
-    };
-    let previous = read(base - 1);
-    for (let i = 0; i < WINDOW; i++) {
-      const value = read(base + i);
-      time[i] = value - PREEMPHASIS * previous;
+      if (i >= 0) time[i] = value - PREEMPHASIS * previous;
       previous = value;
     }
     fft.forward(time, xRe[slot] as Float64Array, xIm[slot] as Float64Array);
@@ -326,8 +335,9 @@ export function createEchoCanceller() {
     let best = 3;
     for (let i = 0; i < lags.length; i++)
       if ((lags[i] as number) > (lags[best] as number)) best = i;
-    const energy = Math.sqrt(correlation(0) * before.taps.reduce((sum, tap) => sum + tap * tap, 0));
-    if (best === 0 || best === lags.length - 1 || (lags[best] as number) < 0.98 * energy) return;
+    const energyOf = (signal: Float64Array) => signal.reduce((sum, tap) => sum + tap * tap, 0);
+    const alike = (lags[best] as number) / Math.sqrt(energyOf(taps) * energyOf(before.taps));
+    if (best === 0 || best === lags.length - 1 || alike < SAME_SHAPE) return;
     const left = lags[best - 1] as number;
     const middle = lags[best] as number;
     const right = lags[best + 1] as number;
@@ -352,7 +362,6 @@ export function createEchoCanceller() {
   }
 
   return {
-    debug: () => ({ drift, tau, lead, adapted, leak }),
     /** The computer's sound, its first sample at `at`, counted in samples of the Meeting's time. */
     reference(samples: Int16Array, at: number): void {
       if (at + samples.length <= referenceFrom) return;
@@ -376,7 +385,6 @@ export function createEchoCanceller() {
      */
     cancel(block: Int16Array, at: number): Int16Array {
       count++;
-      const ss = 0.35 / PARTITIONS;
       if (nextAt !== at) reload(at);
       nextAt = at + ECHO_BLOCK;
       let clipped = false;
@@ -410,8 +418,7 @@ export function createEchoCanceller() {
       filterOutput(fRe, fIm, foregroundEcho);
       let sff = 0;
       for (let i = 0; i < ECHO_BLOCK; i++) {
-        errorSignal[i] = (microphone[i] as number) - (foregroundEcho[i] as number);
-        sff += (errorSignal[i] as number) ** 2;
+        sff += ((microphone[i] as number) - (foregroundEcho[i] as number)) ** 2;
       }
 
       if (adapted) adjustProp();
@@ -530,7 +537,7 @@ export function createEchoCanceller() {
 
       see = Math.max(see, (WINDOW * 100) / 64);
       for (let k = 0; k < BINS; k++) {
-        power[k] = (1 - ss) * (power[k] as number) + 1 + ss * (xf[k] as number);
+        power[k] = (1 - SMOOTHING) * (power[k] as number) + 1 + SMOOTHING * (xf[k] as number);
       }
       let localPey = 1;
       let localPyy = 1;
