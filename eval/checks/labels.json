@@ -3512,6 +3512,142 @@
       "confirmed": false
     },
     {
+      "id": "fs-201",
+      "set": "find-support",
+      "language": "en",
+      "document": "Riverside Library Renovation Report.docx",
+      "sentence": "The national grant pays for about 42 per cent of the renovation budget.",
+      "label": "supported",
+      "evidence": {
+        "document": "Riverside Library Renovation Report.docx",
+        "location": "§ 2 Costs",
+        "units": [3, 3],
+        "quote": "The total budget is £2.6 million, of which £1.1 million comes from a national library improvement grant"
+      },
+      "contradiction": null,
+      "note": "Worked out, not stated (#707): £1.1 million ÷ £2.6 million = 42.3%.",
+      "confirmed": false
+    },
+    {
+      "id": "fs-202",
+      "set": "find-support",
+      "language": "en",
+      "document": "Riverside Library Renovation Report.docx",
+      "sentence": "The national grant pays for 52 per cent of the renovation budget.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Riverside Library Renovation Report.docx",
+        "location": "§ 2 Costs",
+        "units": [3, 3],
+        "quote": "The total budget is £2.6 million, of which £1.1 million comes from a national library improvement grant"
+      },
+      "contradiction": null,
+      "note": "Worked out, not stated (#707): £1.1 million ÷ £2.6 million = 42.3%, not 52%.",
+      "confirmed": false
+    },
+    {
+      "id": "fs-203",
+      "set": "find-support",
+      "language": "en",
+      "document": "Riverside Library Renovation Report.docx",
+      "sentence": "Library visits fell by about 23 per cent between 2019 and 2025.",
+      "label": "supported",
+      "evidence": {
+        "document": "Riverside Library Renovation Report.docx",
+        "location": "§ 1 Background",
+        "units": [2, 2],
+        "quote": "Visits fell from 212,000 in 2019 to 164,000 in 2025"
+      },
+      "contradiction": null,
+      "note": "Worked out, not stated (#707): (212,000 − 164,000) ÷ 212,000 = 22.6%.",
+      "confirmed": false
+    },
+    {
+      "id": "fs-204",
+      "set": "find-support",
+      "language": "en",
+      "document": "Riverside Library Renovation Report.docx",
+      "sentence": "Library visits fell by about 30 per cent between 2019 and 2025.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Riverside Library Renovation Report.docx",
+        "location": "§ 1 Background",
+        "units": [2, 2],
+        "quote": "Visits fell from 212,000 in 2019 to 164,000 in 2025"
+      },
+      "contradiction": null,
+      "note": "Worked out, not stated (#707): (212,000 − 164,000) ÷ 212,000 = 22.6%, not about 30%.",
+      "confirmed": false
+    },
+    {
+      "id": "fs-205",
+      "set": "find-support",
+      "language": "en",
+      "document": "Regional Revenue.xlsx",
+      "sentence": "West's revenue in the first two quarters of 2026 came to £739,800.",
+      "label": "supported",
+      "evidence": {
+        "document": "Regional Revenue.xlsx",
+        "location": "Revenue, row 7",
+        "units": [1, 1],
+        "quote": "West £350,200 £389,600 £421,800 £466,100"
+      },
+      "contradiction": null,
+      "note": "Worked out, not stated (#707): £350,200 + £389,600 = £739,800.",
+      "confirmed": false
+    },
+    {
+      "id": "fs-206",
+      "set": "find-support",
+      "language": "en",
+      "document": "Regional Revenue.xlsx",
+      "sentence": "West's revenue in the first two quarters of 2026 came to £793,800.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Regional Revenue.xlsx",
+        "location": "Revenue, row 7",
+        "units": [1, 1],
+        "quote": "West £350,200 £389,600 £421,800 £466,100"
+      },
+      "contradiction": null,
+      "note": "Worked out, not stated (#707): £350,200 + £389,600 = £739,800, not £793,800.",
+      "confirmed": false
+    },
+    {
+      "id": "fs-207",
+      "set": "find-support",
+      "language": "en",
+      "document": "Riverside Library Renovation Report.docx",
+      "sentence": "There were 48,000 fewer library visits in 2025 than in 2019.",
+      "label": "supported",
+      "evidence": {
+        "document": "Riverside Library Renovation Report.docx",
+        "location": "§ 1 Background",
+        "units": [2, 2],
+        "quote": "Visits fell from 212,000 in 2019 to 164,000 in 2025"
+      },
+      "contradiction": null,
+      "note": "Worked out, not stated (#707): 212,000 − 164,000 = 48,000.",
+      "confirmed": false
+    },
+    {
+      "id": "fs-208",
+      "set": "find-support",
+      "language": "en",
+      "document": "Riverside Library Renovation Report.docx",
+      "sentence": "There were 58,000 fewer library visits in 2025 than in 2019.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Riverside Library Renovation Report.docx",
+        "location": "§ 1 Background",
+        "units": [2, 2],
+        "quote": "Visits fell from 212,000 in 2019 to 164,000 in 2025"
+      },
+      "contradiction": null,
+      "note": "Worked out, not stated (#707): 212,000 − 164,000 = 48,000, not 58,000.",
+      "confirmed": false
+    },
+    {
       "id": "vf-01-01",
       "set": "verify",
       "language": "en",
