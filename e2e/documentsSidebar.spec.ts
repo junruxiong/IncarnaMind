@@ -285,8 +285,8 @@ test("Add Documents opens a sheet on the window in a folder on this computer, th
         ).openDialogsAsked ?? [],
     );
 
-  // From the "+" menu, the one place to add; the empty sidebar says so.
-  await expect(window.getByTestId("documents-empty")).toContainText("with the + above");
+  // From the "+" menu; the empty sidebar offers the same.
+  await expect(window.getByTestId("documents-empty-add-files")).toHaveText("Add files…");
   await window.getByTestId("plus-menu").click();
   await window.getByTestId("plus-add-documents").click();
   const items = window.getByTestId("document-list-item");

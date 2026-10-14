@@ -168,7 +168,7 @@ test("Always run shows a risk warning first; confirmed, the Skill's scripts run 
   await expect(policy).toHaveCount(1);
   await expect(policy).toContainText("Scripts of greeter");
   await expect(policy.getByTestId("approval-policy-value")).toHaveText("Always run");
-  await policy.getByRole("button", { name: "Revoke the setting for Scripts of greeter" }).click();
+  await policy.getByRole("button", { name: "Reset Scripts of greeter to ask every time" }).click();
   await expect(policy).toHaveCount(0);
   await showSettingsPage(window, "skills");
   const scripts = window.getByTestId("skill-scripts-settings");
