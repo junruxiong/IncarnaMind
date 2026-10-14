@@ -1,15 +1,19 @@
 /**
- * Keeps a web page as it looks (#756): the core's `PageLook`. Each page is
- * loaded once, alone, in a hidden window of a session held only in memory and
- * cleared after it: no Node and no preload, no cookies or storage kept, no
- * permissions, pop-ups or downloads, no navigation away from the page, and
- * nothing on this computer or its network but the page's own host. Once it has
- * loaded, or stopped waiting for it, the page is printed as the screen shows
- * it, and the window is destroyed: all of it within the time limit.
+ * Keeps a web page as it looks: the core's `PageLook`. Each page is loaded
+ * once, alone, in a hidden page (./hiddenPage) of a session held only in
+ * memory and cleared after it, which reaches the network only through a
+ * proxy that connects only to the public internet (./lookProxy). It keeps no
+ * cookies or storage, and is refused permissions, pop-ups, downloads,
+ * printing, WebRTC outside the proxy and navigation away from the page. Once
+ * the page has loaded, or the wait for it is over, it is printed as the
+ * screen shows it, and the page is destroyed: all within the time limit.
  */
 import { once } from "node:events";
-import { BrowserWindow, type Session, session } from "electron";
+import { type Session, session, type WebContents } from "electron";
 import type { Logger, PageLook, WebPageLookFailure } from "../core";
+import type { Resolve } from "../core/tools/web/addresses";
+import { onHiddenPage } from "./hiddenPage";
+import { startLookProxy } from "./lookProxy";
 
 /** Not "persist:": the session lives in memory only. */
 const PARTITION = "page-look";
@@ -22,22 +26,15 @@ const WIDTH = 1280;
 const HEIGHT = 1600;
 /** Inches, as printToPDF takes them: room for the date, title and address it prints. */
 const MARGIN = 0.4;
+const MAX_PAGES = 200;
+const MAX_BYTES = 50 * 1024 * 1024;
 
-const PRIVATE_HOST =
-  /^(?:localhost|.+\.localhost|.+\.local|127(?:\.\d+){3}|10(?:\.\d+){3}|192\.168(?:\.\d+){2}|172\.(?:1[6-9]|2\d|3[01])(?:\.\d+){2}|169\.254(?:\.\d+){2}|0\.0\.0\.0|\[::1?\]|\[f[cd][0-9a-f]{0,2}:.*\]|\[fe[89ab][0-9a-f]:.*\])$/i;
-
-/**
- * What the page may load: the web, and data it makes itself. Never a file,
- * the app's own schemes, or a host on this computer or its network, unless
- * the page itself is there.
- */
-function allowed(url: string, pageHost: string): boolean {
-  const parsed = URL.parse(url);
-  if (!parsed) return false;
-  if (parsed.protocol === "data:" || parsed.protocol === "blob:") return true;
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
-  return parsed.hostname === pageHost || !PRIVATE_HOST.test(parsed.hostname);
-}
+/** Runs before the page's own scripts, in every frame: a page can't open a print dialog. */
+const NO_PRINT = `Object.defineProperty(window, "print", {
+  value: () => undefined,
+  writable: false,
+  configurable: false,
+});`;
 
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
@@ -46,6 +43,8 @@ const aborted = (error: Error) => "errno" in error && error.errno === -3;
 type Made = Awaited<ReturnType<PageLook["render"]>>;
 
 const failed = (failure: WebPageLookFailure, message: string): Made => ({ failure, message });
+
+const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 function prepare(): Session {
   const lookSession = session.fromPartition(PARTITION, { cache: false });
@@ -57,11 +56,51 @@ function prepare(): Session {
   return lookSession;
 }
 
+/**
+ * Before the page loads: its print disabled in every frame, a frame of
+ * another site's included once it is attached, and its styles for the screen.
+ */
+async function prepareDebugger(contents: WebContents, log: Logger): Promise<void> {
+  const tools = contents.debugger;
+  tools.attach("1.3");
+  tools.on("message", (_event, method, params: { sessionId?: string }) => {
+    if (method !== "Target.attachedToTarget" || !params.sessionId) return;
+    const { sessionId } = params;
+    Promise.all([
+      tools.sendCommand("Page.enable", {}, sessionId),
+      tools.sendCommand("Page.addScriptToEvaluateOnNewDocument", { source: NO_PRINT }, sessionId),
+      tools.sendCommand(
+        "Target.setAutoAttach",
+        { autoAttach: true, waitForDebuggerOnStart: true, flatten: true },
+        sessionId,
+      ),
+    ])
+      .then(() => tools.sendCommand("Runtime.runIfWaitingForDebugger", {}, sessionId))
+      .catch((error: unknown) => {
+        if (!contents.isDestroyed()) log.warn("webPages.lookFrame", { message: messageOf(error) });
+      });
+  });
+  await tools.sendCommand("Page.enable");
+  await tools.sendCommand("Page.addScriptToEvaluateOnNewDocument", { source: NO_PRINT });
+  await tools.sendCommand("Target.setAutoAttach", {
+    autoAttach: true,
+    waitForDebuggerOnStart: true,
+    flatten: true,
+  });
+  await tools.sendCommand("Emulation.setEmulatedMedia", { media: "screen" });
+}
+
 export function createPageLook({
   log,
+  resolve,
+  standIn,
   limitMs = LIMIT_MS,
 }: {
   log: Logger;
+  /** Resolves host names for the proxy, as web search's fetcher does. */
+  resolve: Resolve;
+  /** Test builds: the local server standing in for the web. */
+  standIn?: number;
   /** Test builds shorten it to see a page that never loads closed. */
   limitMs?: number;
 }): PageLook {
@@ -69,94 +108,72 @@ export function createPageLook({
   let previous: Promise<unknown> = Promise.resolve();
 
   async function render(address: string): Promise<Made> {
-    const pageHost = URL.parse(address)?.hostname;
-    if (!pageHost) return failed("unreachable", "Not a web address.");
+    if (!URL.parse(address)) return failed("unreachable", "Not a web address.");
     lookSession ??= prepare();
     const own = lookSession;
-    own.webRequest.onBeforeRequest((details, callback) =>
-      callback({ cancel: !allowed(details.url, pageHost) }),
-    );
-    const window = new BrowserWindow({
-      show: false,
-      width: WIDTH,
-      height: HEIGHT,
-      title: "IncarnaMind page look",
-      webPreferences: {
-        sandbox: true,
-        contextIsolation: true,
-        nodeIntegration: false,
-        nodeIntegrationInSubFrames: false,
-        nodeIntegrationInWorker: false,
-        webviewTag: false,
-        session: own,
-        backgroundThrottling: false,
-        spellcheck: false,
-        disableDialogs: true,
-      },
-    });
-    const contents = window.webContents;
-    contents.setAudioMuted(true);
-    contents.setWindowOpenHandler(() => ({ action: "deny" }));
-    contents.on("will-navigate", (event) => event.preventDefault());
-    contents.on("will-attach-webview", (event) => event.preventDefault());
-    // Some sites turn away a browser that names itself Electron.
-    contents.setUserAgent(contents.getUserAgent().replace(/\s(?:incarnamind|Electron)\/\S+/gi, ""));
-    let timer: ReturnType<typeof setTimeout> | undefined;
+    const proxy = await startLookProxy({ resolve, ...(standIn ? { standIn } : {}) });
     try {
-      const made = (async (): Promise<Made> => {
-        const loading = contents.loadURL(address).then(
-          () => null,
-          (error: unknown) => (error instanceof Error ? error : new Error(String(error))),
-        );
-        const loaded = await Promise.race([loading, wait(LOAD_MS).then(() => null)]);
-        // A page whose script tried to go elsewhere while it loaded is still there: the load
-        // only reports the navigation refused (ERR_ABORTED).
-        if (loaded && !(aborted(loaded) && contents.getURL())) {
-          return failed("unreachable", loaded.message);
-        }
-        if (loaded && contents.isLoading()) {
-          await Promise.race([once(contents, "did-stop-loading"), wait(LOAD_MS)]);
-        }
-        await wait(SETTLE_MS);
-        try {
-          contents.debugger.attach("1.3");
-          await contents.debugger.sendCommand("Emulation.setEmulatedMedia", { media: "screen" });
-        } catch (error) {
-          // Printed with the page's print styles instead, which may hide some of it.
-          log.warn("webPages.lookScreenMedia", {
-            message: error instanceof Error ? error.message : String(error),
-          });
-        }
-        const pdf = await contents.printToPDF({
-          printBackground: true,
-          displayHeaderFooter: true,
-          pageSize: {
-            width: WIDTH / 96 + 2 * MARGIN,
-            height: HEIGHT / 96 + 2 * MARGIN,
-          },
-          margins: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN },
-        });
-        return { pdf: new Uint8Array(pdf) };
-      })();
-      made.catch(() => undefined);
-      const timedOut = new Promise<Made>((resolve) => {
-        timer = setTimeout(
-          () => resolve(failed("timed-out", `Not printed in ${limitMs} ms.`)),
+      // Loopback too goes through the proxy, which refuses it: Chromium bypasses it there otherwise.
+      await own.setProxy({ proxyRules: proxy.address, proxyBypassRules: "<-loopback>" });
+      return await onHiddenPage<Made>(
+        {
+          session: own,
+          width: WIDTH,
+          height: HEIGHT,
           limitMs,
-        );
-      });
-      return await Promise.race([made, timedOut]);
-    } catch (error) {
-      return failed("failed", error instanceof Error ? error.message : String(error));
-    } finally {
-      clearTimeout(timer);
-      if (!window.isDestroyed()) window.destroy();
-      await Promise.all([own.clearStorageData(), own.clearCache(), own.clearAuthCache()]).catch(
-        (error: unknown) =>
-          log.error("webPages.lookClear", {
-            message: error instanceof Error ? error.message : String(error),
-          }),
+          onLimit: () => failed("timed-out", `Not printed in ${limitMs} ms.`),
+        },
+        async (contents) => {
+          contents.setWebRTCIPHandlingPolicy("disable_non_proxied_udp");
+          // Some sites turn away a browser that names itself Electron.
+          contents.setUserAgent(
+            contents.getUserAgent().replace(/\s(?:incarnamind|Electron)\/\S+/gi, ""),
+          );
+          await contents.loadURL("about:blank");
+          await prepareDebugger(contents, log);
+          let committed = false;
+          contents.on("did-navigate", (_event, url) => {
+            if (url !== "about:blank") committed = true;
+          });
+          const loading = contents.loadURL(address).then(
+            () => null,
+            (error: unknown) => (error instanceof Error ? error : new Error(String(error))),
+          );
+          const loaded = await Promise.race([loading, wait(LOAD_MS).then(() => null)]);
+          // A page whose script tried to go elsewhere while it loaded is still there: the load
+          // only reports the navigation refused (ERR_ABORTED).
+          if (loaded && !(aborted(loaded) && committed)) {
+            return failed("unreachable", loaded.message);
+          }
+          if (!committed) return failed("timed-out", "The page never answered.");
+          if (contents.isLoading()) {
+            await Promise.race([once(contents, "did-stop-loading"), wait(LOAD_MS)]);
+          }
+          await wait(SETTLE_MS);
+          const pdf = await contents.printToPDF({
+            printBackground: true,
+            displayHeaderFooter: true,
+            pageRanges: `1-${MAX_PAGES}`,
+            pageSize: { width: WIDTH / 96 + 2 * MARGIN, height: HEIGHT / 96 + 2 * MARGIN },
+            margins: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN },
+          });
+          if (pdf.byteLength > MAX_BYTES) {
+            return failed("too-large", `${pdf.byteLength} bytes of PDF.`);
+          }
+          return { pdf };
+        },
       );
+    } catch (error) {
+      return failed("failed", messageOf(error));
+    } finally {
+      await Promise.all([
+        own.clearStorageData(),
+        own.clearCache(),
+        own.clearAuthCache(),
+        own.clearHostResolverCache(),
+        own.closeAllConnections(),
+        proxy.close(),
+      ]).catch((error: unknown) => log.error("webPages.lookClear", { message: messageOf(error) }));
     }
   }
 

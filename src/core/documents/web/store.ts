@@ -45,22 +45,32 @@ export interface WebPagePicture {
 
 export const lookName = (lookHash: string) => `${lookHash}.pdf`;
 
-const LOOK_FAILURES: readonly string[] = ["timed-out", "unreachable", "failed"];
+const LOOK_FAILURES = new Set<string>([
+  "timed-out",
+  "unreachable",
+  "too-large",
+  "stopped",
+  "failed",
+]);
+const isLookFailure = (value: string | null): value is WebPageLookFailure =>
+  value !== null && LOOK_FAILURES.has(value);
+
+/** A look's file is named by the SHA-256 of its content, and nothing else is read as one. */
+const isLookHash = (value: string | null): value is string =>
+  value !== null && /^[0-9a-f]{64}$/.test(value);
 
 function lookOf(row: WebPageRow): WebPageLook | null {
   switch (row.look_status) {
     case "saving":
       return { status: "saving" };
     case "saved":
-      return row.look_hash && row.look_saved_at
+      return isLookHash(row.look_hash) && row.look_saved_at
         ? { status: "saved", savedAt: row.look_saved_at, path: `looks/${lookName(row.look_hash)}` }
         : null;
     case "failed":
       return {
         status: "failed",
-        failure: LOOK_FAILURES.includes(row.look_failure ?? "")
-          ? (row.look_failure as WebPageLookFailure)
-          : "failed",
+        failure: isLookFailure(row.look_failure) ? row.look_failure : "failed",
       };
     default:
       return null;
@@ -90,40 +100,53 @@ export function webPageInfo(db: Database, documentId: string): WebPageInfo | nul
   };
 }
 
-/** A version's look: asked for ("saving"), made, or failed. */
 export function recordLook(
   db: Database,
   documentId: string,
   contentHash: string,
   look:
-    | { status: "saving" }
+    | { status: "saving"; resumed?: true }
     | { status: "saved"; lookHash: string; savedAt: string }
     | { status: "failed"; failure: WebPageLookFailure },
   at: string,
-): void {
-  db.run(
-    `UPDATE web_pages SET look_status = ?, look_hash = ?, look_saved_at = ?, look_failure = ?,
-       updated_at = ?
-     WHERE document_id = ? AND content_hash = ? AND deleted_at IS NULL`,
-    [
-      look.status,
-      look.status === "saved" ? look.lookHash : null,
-      look.status === "saved" ? look.savedAt : null,
-      look.status === "failed" ? look.failure : null,
-      at,
-      documentId,
-      contentHash,
-    ],
+): boolean {
+  // In Recently deleted too: restored, the page says how its look went.
+  return (
+    db.all<{ id: string }>(
+      `UPDATE web_pages SET look_status = ?, look_hash = ?, look_saved_at = ?, look_failure = ?,
+         updated_at = ?
+       WHERE document_id = ? AND content_hash = ? RETURNING id`,
+      [
+        look.status,
+        look.status === "saved" ? look.lookHash : null,
+        look.status === "saved" ? look.savedAt : null,
+        look.status === "failed"
+          ? look.failure
+          : look.status === "saving" && look.resumed
+            ? RESUMED
+            : null,
+        at,
+        documentId,
+        contentHash,
+      ],
+    ).length > 0
   );
 }
 
-/** Versions whose look was being made when the app last quit, of live Documents. */
+/** On a look being made: it was made again once already, after the app quit while making it. */
+const RESUMED = "resumed";
+
 export function looksUnderWay(
   db: Database,
-): { documentId: string; contentHash: string; address: string }[] {
+): { documentId: string; contentHash: string; address: string; resumed: boolean }[] {
   return db
-    .all<{ document_id: string; content_hash: string; address: string }>(
-      `SELECT w.document_id, w.content_hash, w.address FROM web_pages w
+    .all<{
+      document_id: string;
+      content_hash: string;
+      address: string;
+      look_failure: string | null;
+    }>(
+      `SELECT w.document_id, w.content_hash, w.address, w.look_failure FROM web_pages w
        JOIN documents d ON d.id = w.document_id
        WHERE w.look_status = 'saving' AND w.deleted_at IS NULL AND d.deleted_at IS NULL`,
     )
@@ -131,6 +154,7 @@ export function looksUnderWay(
       documentId: row.document_id,
       contentHash: row.content_hash,
       address: row.address,
+      resumed: row.look_failure === RESUMED,
     }));
 }
 
@@ -145,7 +169,6 @@ export function keptLookHashes(db: Database): Set<string> {
   );
 }
 
-/** The look the Document's last version has, by its content's hash; null if it has none. */
 export function currentLookHash(db: Database, documentId: string): string | null {
   const latest = db.get<{ look_status: string | null; look_hash: string | null }>(
     `SELECT look_status, look_hash FROM web_pages
@@ -153,7 +176,7 @@ export function currentLookHash(db: Database, documentId: string): string | null
      ORDER BY fetched_at DESC, rowid DESC LIMIT 1`,
     [documentId],
   );
-  return latest?.look_status === "saved" ? latest.look_hash : null;
+  return latest?.look_status === "saved" && isLookHash(latest.look_hash) ? latest.look_hash : null;
 }
 
 export function documentAtAddress(db: Database, address: string): string | null {

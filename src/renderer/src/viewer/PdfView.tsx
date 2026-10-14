@@ -110,7 +110,7 @@ export function PdfView({
 }: {
   document: Document;
   target: ViewerTarget;
-  /** Another PDF the Document serves, instead of its file: a web page's look (#756). */
+  /** Another PDF the Document serves, instead of its file: a web page's look. */
   source?: string;
   /** Under the toolbar, whatever the PDF's state. */
   banner?: ReactNode;

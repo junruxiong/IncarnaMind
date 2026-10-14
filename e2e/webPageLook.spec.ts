@@ -15,13 +15,15 @@ import {
 } from "./app";
 
 /*
- * Keeping a saved web page as it looks (#756), from a local server standing
- * in for the web: off unless the User asks; asked, a PDF of the page as a
- * browser shows it, opened in the PDF view and back to its text. The page's
- * own script reports what the hidden window let it reach, into the PDF; the
- * server hears what it asked for. A page that never loads is given up and its
- * window closed. Set INCARNAMIND_SCREENSHOTS to a folder to also save
- * screenshots there.
+ * Keeping a saved web page as it looks, from a local server standing in for
+ * the web at every host: off unless the User asks; asked, a PDF of the page
+ * as a browser shows it, opened in the PDF view and back to its text. The
+ * page's own script reports what the hidden page let it do, into the PDF,
+ * and tries to reach this computer by a local name, by addresses written
+ * for it, and by a name that resolves to it: the server hears none of that.
+ * The hidden page is never one of the app's windows, and one that never
+ * loads is given up at the time limit and closed. Set INCARNAMIND_SCREENSHOTS
+ * to a folder to also save screenshots there.
  */
 
 const SCREENSHOTS = process.env.INCARNAMIND_SCREENSHOTS;
@@ -30,12 +32,19 @@ const ARTICLE = `<h1>Harbour trade in 2026</h1>
 <p>${"The harbour handled more cargo in the first half of 2026 than in any half year since records began, the port authority said on Monday. ".repeat(3)}</p>
 <p>${"Container traffic rose fastest, while bulk cargo held steady through the spring and the new berth opened a month ahead of plan. ".repeat(3)}</p>`;
 
+/** Requests that would reach this computer: a local name, addresses written for it, a name resolving to it. */
+const PROBES = ["/probe-localhost", "/probe-mapped", "/probe-nat64", "/probe-loopback"];
+
 /**
- * Its script runs only in a browser: what it reaches goes into the page, and
- * so into the PDF, and its requests to /beacon, /popup and /elsewhere tell
- * the server it ran, or tried to leave.
+ * Its script runs only in a browser: what it can do goes into the page, and
+ * so into the PDF; its print would block it if a dialog opened; and its
+ * requests to /beacon, /popup and /elsewhere tell the server it ran, or tried
+ * to leave.
  */
-const page = (title: string) => `<!DOCTYPE html><html lang="en"><head><title>${title}</title></head>
+const page = (
+  title: string,
+  port: number,
+) => `<!DOCTYPE html><html lang="en"><head><title>${title}</title></head>
 <body><article>${ARTICLE}<p id="sandbox"></p></article>
 <script>
 (async () => {
@@ -46,7 +55,16 @@ const page = (title: string) => `<!DOCTYPE html><html lang="en"><head><title>${t
   let stored = "none";
   try { stored = localStorage.getItem("visited") ? "kept" : "none"; localStorage.setItem("visited", "1"); } catch { stored = "none"; }
   report.push("storage:" + stored);
-  report.push(await fetch("file:///etc/hosts").then(() => "file:read", () => "file:blocked"));
+  window.print();
+  report.push("print:returned");
+  const probe = (address) => fetch(address, { mode: "no-cors" }).catch(() => undefined);
+  await Promise.all([
+    probe("http://localhost.:${port}/probe-localhost"),
+    probe("http://[::ffff:7f00:1]:${port}/probe-mapped"),
+    probe("http://[64:ff9b::7f00:1]:${port}/probe-nat64"),
+    probe("http://rebind.loopback.test:${port}/probe-loopback"),
+    probe("http://other.example:${port}/probe-public"),
+  ]);
   document.getElementById("sandbox").textContent = "Sandbox " + report.join(" ");
   new Image().src = "/beacon";
   window.open("/popup");
@@ -77,11 +95,11 @@ test.beforeEach(async () => {
       });
       response.end(body);
     };
-    if (path === "/report") return send(page("Harbour trade in 2026"));
-    if (path === "/again") return send(page("Harbour trade, again"));
+    if (path === "/report") return send(page("Harbour trade in 2026", port));
+    if (path === "/again") return send(page("Harbour trade, again", port));
     if (path === "/slow") {
       slowServed += 1;
-      if (slowServed === 1) return send(page("A page that never loads"));
+      if (slowServed === 1) return send(page("A page that never loads", port));
       return;
     }
     response.writeHead(404, { Connection: "close" });
@@ -101,7 +119,7 @@ async function add(window: Page, path: string, title: string, keepLook: boolean)
   await window.getByTestId("plus-menu").click();
   await window.getByTestId("plus-add-web-page").click();
   const dialog = window.getByTestId("add-web-page-dialog");
-  await dialog.getByTestId("add-web-page-addresses").fill(`http://127.0.0.1:${port}${path}`);
+  await dialog.getByTestId("add-web-page-addresses").fill(`http://look.example:${port}${path}`);
   await dialog.getByTestId("add-web-page-keep-look").setChecked(keepLook);
   await dialog.getByTestId("add-web-page-confirm").click();
   await expect(dialog).toBeHidden({ timeout: 30_000 });
@@ -110,8 +128,12 @@ async function add(window: Page, path: string, title: string, keepLook: boolean)
   await row.getByTestId("open-document").click();
 }
 
-const windowCount = (app: ElectronApplication) =>
-  app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length);
+/** The app's windows, and every window, the hidden ones included. */
+const windowCounts = (app: ElectronApplication) =>
+  app.evaluate(({ BaseWindow, BrowserWindow }) => ({
+    app: BrowserWindow.getAllWindows().length,
+    all: BaseWindow.getAllWindows().length,
+  }));
 
 test("off by default: the box is unticked, a page saved is never loaded for its look, and the setting ticks it", async () => {
   const { app, window } = await launchApp(dataDir, { home, web: port });
@@ -157,25 +179,25 @@ test("off by default: the box is unticked, a page saved is never loaded for its 
   await app.close();
 });
 
-test("asked, the page as it looked opens in the PDF view and back to its text, and its window reached no Node, cookies, storage, files or other pages", async () => {
+test("asked, the page as it looked opens in the PDF view and back to its text; its hidden page reached no Node, cookies, storage, print dialog, other pages or this computer", async () => {
   const { app, window } = await launchApp(dataDir, { home, web: port });
   await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
-  const windows = await windowCount(app);
+  const windows = await windowCounts(app);
 
   await add(window, "/report", "Harbour trade in 2026", true);
   const viewer = window.getByTestId("viewer");
   const line = viewer.getByTestId("viewer-web-look");
   await expect(line).toHaveAttribute("data-status", "saved", { timeout: 30_000 });
-  await expect(line).toContainText(/^Saved as it looked on \d{1,2} \w{3} \d{4}, \d{2}:\d{2}/);
-  await expect.poll(() => windowCount(app)).toBe(windows);
+  await expect(line).toContainText(/^Saved as it looked on \d{1,2} \w{3} \d{4}, \d{1,2}:\d{2}/);
+  await expect.poll(() => windowCounts(app)).toEqual(windows);
   if (SCREENSHOTS) await window.screenshot({ path: join(SCREENSHOTS, "look-saved-en.png") });
 
   await viewer.getByTestId("viewer-web-show-look").click();
   await expect(viewer.getByTestId("viewer-web-look-bar")).toContainText("As it looked on");
   const pdfText = viewer.locator('[data-page-number="1"] .textLayer');
   await expect(pdfText).toContainText("Harbour trade in 2026");
-  await expect(pdfText).toContainText("Sandbox node:none cookie:none storage:none file:blocked");
+  await expect(pdfText).toContainText("Sandbox node:none cookie:none storage:none print:returned");
   if (SCREENSHOTS) await window.screenshot({ path: join(SCREENSHOTS, "look-shown-en.png") });
 
   await setLanguage(window, "zh-CN");
@@ -191,10 +213,13 @@ test("asked, the page as it looked opens in the PDF view and back to its text, a
   await add(window, "/again", "Harbour trade, again", true);
   await expect(line).toHaveAttribute("data-status", "saved", { timeout: 30_000 });
   await viewer.getByTestId("viewer-web-show-look").click();
-  await expect(pdfText).toContainText("Sandbox node:none cookie:none storage:none file:blocked");
+  await expect(pdfText).toContainText("Sandbox node:none cookie:none storage:none print:returned");
 
   const paths = heard.map((each) => each.path);
   expect(paths.filter((path) => path === "/beacon")).toHaveLength(2);
+  for (const probe of PROBES) expect(paths).not.toContain(probe);
+  // The same request to a public host goes through: what stopped the others is the guard.
+  expect(paths).toContain("/probe-public");
   expect(paths).not.toContain("/popup");
   expect(paths).not.toContain("/elsewhere");
   expect(heard.filter((each) => each.path === "/again").map((each) => each.cookie)).toEqual([
@@ -204,18 +229,19 @@ test("asked, the page as it looked opens in the PDF view and back to its text, a
   await app.close();
 });
 
-test("a page that never finishes loading is given up at the time limit, its window closed, with Try again", async () => {
-  const { app, window } = await launchApp(dataDir, { home, web: port, lookLimit: 3_000 });
+test("a page that never finishes loading is given up at the time limit, its hidden page, never one of the app's windows, closed, with Try again", async () => {
+  const { app, window } = await launchApp(dataDir, { home, web: port, lookLimit: 8_000 });
   await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
-  const windows = await windowCount(app);
+  const windows = await windowCounts(app);
 
   await add(window, "/slow", "A page that never loads", true);
+  await expect.poll(() => windowCounts(app)).toEqual({ app: windows.app, all: windows.all + 1 });
   const viewer = window.getByTestId("viewer");
   const failed = viewer.getByTestId("viewer-web-look-failed");
   await expect(failed).toContainText("didn't finish loading", { timeout: 30_000 });
   await expect(failed.getByTestId("viewer-web-look-try-again")).toBeVisible();
-  await expect.poll(() => windowCount(app)).toBe(windows);
+  await expect.poll(() => windowCounts(app)).toEqual(windows);
   if (SCREENSHOTS) await window.screenshot({ path: join(SCREENSHOTS, "look-failed-en.png") });
   await setLanguage(window, "zh-CN");
   await expect(failed).toContainText("未能保存网页原貌");

@@ -828,6 +828,8 @@ export const zhCN = {
   "viewer.web.look.showText": "查看文字",
   "viewer.web.look.failed.timed-out": "未能保存网页原貌：30 秒内没有加载完。",
   "viewer.web.look.failed.unreachable": "未能保存网页原貌：网页无法加载。",
+  "viewer.web.look.failed.too-large": "未能保存网页原貌：生成的 PDF 会超过 50 MB。",
+  "viewer.web.look.failed.stopped": "未能保存网页原貌：生成时 IncarnaMind 停止了运行。",
   "viewer.web.look.failed.failed": "未能保存网页原貌。",
   "viewer.web.pictureNotSaved": "未随网页保存",
   "viewer.docx.comment": "{author} 的批注",
