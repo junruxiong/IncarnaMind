@@ -58,9 +58,6 @@ export interface WebPagesOptions {
   reportError?: (error: unknown) => void;
 }
 
-/** Longer than a save takes: a picture file younger than this may be one being saved. */
-const SAVING_MS = 60 * 60 * 1000;
-
 /** Where a picture's file is, as the snapshot names it beside itself. */
 const pictureName = (picture: { pictureHash: string; mediaType: string }) =>
   `${picture.pictureHash}.${PICTURE_EXTENSIONS[picture.mediaType] ?? "bin"}`;
@@ -99,6 +96,18 @@ export function createWebPages(options: WebPagesOptions) {
   const { db, now, documents } = options;
   const folder = join(options.dataDir, "Web pages");
   const pictureFolder = join(folder, "pictures");
+  /**
+   * Pictures a save has written and not recorded yet, with how many saves:
+   * no clean-up takes them meanwhile.
+   */
+  const saving = new Map<string, number>();
+  const hold = (hashes: readonly string[], by: number) => {
+    for (const hash of hashes) {
+      const count = (saving.get(hash) ?? 0) + by;
+      if (count > 0) saving.set(hash, count);
+      else saving.delete(hash);
+    }
+  };
   /** Asked twice at once, a save or a fetch is done once. */
   const underWay = new Map<string, Promise<WebPageResult>>();
 
@@ -172,14 +181,21 @@ export function createWebPages(options: WebPagesOptions) {
         : { kept: [], leftOut: 0 };
     const shown = new Map<number, ShownPicture>();
     const pictures: WebPagePicture[] = [];
-    for (const picture of fetched.kept) {
-      const kept = { ...(await keepPicture(picture)), number: pictures.length + 1 };
-      pictures.push(kept);
-      shown.set(picture.index, {
-        src: `pictures/${pictureName(kept)}`,
-        width: kept.width,
-        height: kept.height,
-      });
+    const hashes = fetched.kept.map((picture) => hashBytes(picture.bytes));
+    hold(hashes, 1);
+    try {
+      for (const picture of fetched.kept) {
+        const kept = { ...(await keepPicture(picture)), number: pictures.length + 1 };
+        pictures.push(kept);
+        shown.set(picture.index, {
+          src: `pictures/${pictureName(kept)}`,
+          width: kept.width,
+          height: kept.height,
+        });
+      }
+    } catch (error) {
+      hold(hashes, -1);
+      throw error;
     }
     return {
       snapshot,
@@ -187,6 +203,21 @@ export function createWebPages(options: WebPagesOptions) {
       pictures,
       leftOut: fetched.leftOut,
     };
+  }
+
+  /** Writes a page, its pictures held from clean-up until it is recorded. */
+  async function withPage<T>(
+    page: PageToWrite,
+    task: (page: PageToWrite) => Promise<T> | T,
+  ): Promise<T> {
+    try {
+      return await task(page);
+    } finally {
+      hold(
+        page.pictures.map((picture) => picture.pictureHash),
+        -1,
+      );
+    }
   }
 
   /** Writes a snapshot over `path`, whole or not at all. */
@@ -236,16 +267,11 @@ export function createWebPages(options: WebPagesOptions) {
       const files = await readdir(pictureFolder).catch(() => [] as string[]);
       await Promise.all(
         files
-          .filter((file) => !kept.has(file.split(".")[0] ?? ""))
-          .map(async (file) => {
-            const path = join(pictureFolder, file);
-            // A page being saved writes its pictures before it records them.
-            const written = await stat(path).then(
-              (info) => info.mtimeMs,
-              () => Date.now(),
-            );
-            if (Date.now() - written > SAVING_MS) await rm(path, { force: true });
-          }),
+          .filter((file) => {
+            const hash = file.split(".")[0] ?? "";
+            return !kept.has(hash) && !saving.has(hash);
+          })
+          .map((file) => rm(join(pictureFolder, file), { force: true })),
       );
     },
 
@@ -275,16 +301,17 @@ export function createWebPages(options: WebPagesOptions) {
       if (known) return Promise.resolve(saved(known));
       return once(address, async () => {
         try {
-          const page = await pageFor(address, html, fetch);
-          const meanwhile = documentAtAddress(db, address);
-          if (meanwhile) return saved(meanwhile);
-          const id = randomUUID();
-          const file = await write(join(folder, `${id}.html`), page.xhtml);
-          const document = documents.addSnapshot(id, page.snapshot.title, file, () => {
-            record(id, file, address, page);
-            added?.(id);
+          return await withPage(await pageFor(address, html, fetch), async (page) => {
+            const meanwhile = documentAtAddress(db, address);
+            if (meanwhile) return saved(meanwhile);
+            const id = randomUUID();
+            const file = await write(join(folder, `${id}.html`), page.xhtml);
+            const document = documents.addSnapshot(id, page.snapshot.title, file, () => {
+              record(id, file, address, page);
+              added?.(id);
+            });
+            return { outcome: "saved", document, existing: false };
           });
-          return { outcome: "saved", document, existing: false };
         } catch (error) {
           return failed(address, error);
         }
@@ -303,12 +330,17 @@ export function createWebPages(options: WebPagesOptions) {
       }
       return once(`document:${document.id}`, async () => {
         try {
-          const page = await pageFor(info.address, undefined);
-          const current = documents.get(document.id);
-          const file = await write(current.path, page.xhtml);
-          record(current.id, file, info.address, page);
-          await documents.check(current.path);
-          return { outcome: "saved", document: documents.get(current.id), existing: true };
+          return await withPage(await pageFor(info.address, undefined), async (page) => {
+            const current = documents.get(document.id);
+            const file = await write(current.path, page.xhtml);
+            record(current.id, file, info.address, page);
+            await documents.check(current.path);
+            return {
+              outcome: "saved" as const,
+              document: documents.get(current.id),
+              existing: true,
+            };
+          });
         } catch (error) {
           if (error instanceof NotFoundError) throw error;
           return failed(info.address, error);

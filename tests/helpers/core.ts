@@ -118,6 +118,13 @@ export function startCore(dataDir: string, overrides: Partial<CoreAdapters> = {}
       ecfr: NOWHERE,
       govinfo: NOWHERE,
     },
+    // The public internet's fetcher (web search, a saved page's pictures) reaches no host from a
+    // test: a test that fetches gives its stand-in web (../helpers/web).
+    web: {
+      resolve: async (host) => {
+        throw new Error(`Tests reach no host: ${host}.`);
+      },
+    },
     ...overrides,
     // Linked folders settle and retry quickly in tests.
     linkedFolders: { settleMs: 30, retryMs: 300, ...overrides.linkedFolders },
