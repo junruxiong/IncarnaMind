@@ -18,6 +18,7 @@ import { usePopoverMenu } from "../components/usePopoverMenu";
 import { useComposer } from "../composer";
 import { core } from "../core";
 import { useT } from "../i18n";
+import { useModelMenuRequests } from "../modelMenu";
 import { useModelNames } from "../modelNames";
 import { usePlanStandIn } from "../planLimits";
 import { useAppStore } from "../store";
@@ -98,7 +99,16 @@ function chooseModel(doc: Y.Doc | null, choice: ChatModelChoice): void {
  * with ChatGPT"; while its model is chosen, it says the plan is in use, with
  * "Manage usage". Not shown before any chat model is set up.
  */
-export function ModelChip({ doc, onChosen }: { doc: Y.Doc | null; onChosen(): void }) {
+export function ModelChip({
+  doc,
+  onChosen,
+  opensOnRequest = false,
+}: {
+  doc: Y.Doc | null;
+  onChosen(): void;
+  /** The assistant's chip: "Choose another model" on an Answer opens its menu (`requestModelMenu`). */
+  opensOnRequest?: boolean;
+}) {
   const t = useT();
   const chosen = useMindModel(doc);
   const defaultModel = useAppStore((state) => state.settings?.user.chatModel ?? null);
@@ -134,6 +144,15 @@ export function ModelChip({ doc, onChosen }: { doc: Y.Doc | null; onChosen(): vo
     core.getChatGptPlan().then(setPlan, () => undefined);
   }, [menu.open, loadModels]);
   useEffect(() => core.on("chatGptPlan.changed", setPlan), []);
+
+  const requests = useModelMenuRequests((state) => state.count);
+  const answered = useRef(requests);
+  useEffect(() => {
+    if (requests === answered.current) return;
+    answered.current = requests;
+    const chip = menu.buttonProps.ref.current;
+    if (opensOnRequest && chip && !menu.open) chip.click();
+  }, [requests, opensOnRequest, menu.buttonProps.ref, menu.open]);
 
   const current = chosen ?? defaultModel;
   if (!current) return null;
