@@ -5,7 +5,7 @@
  * INCARNAMIND_LIVE_ANTHROPIC_MODEL, Haiku 5.5 by default), and makes no
  * request without one. INCARNAMIND_LIVE_REPORT keeps what each run said.
  */
-import { appendFile } from "node:fs/promises";
+import { appendFile, utimes } from "node:fs/promises";
 import { describe, expect, test } from "vitest";
 import { createAiSdkChatModel } from "../../src/core";
 import { detectLanguage } from "../../src/core/documents/textLanguage";
@@ -65,9 +65,10 @@ describe.each(CASES)("claim check language, live: $language", (each) => {
       await core.saveChatProvider({ kind: "anthropic", apiKey: KEY ?? "", modelId: MODEL });
       await core.updateSettings({ user: { language: each.language } });
       const sources = await createTempDataFolder();
-      await addAndProcess(core, [
-        await writeSourceFile(sources, each.document.name, each.document.contents),
-      ]);
+      // A file dated 1 January 2000, as a placeholder date would show: it is never to be repeated (#821).
+      const file = await writeSourceFile(sources, each.document.name, each.document.contents);
+      await utimes(file, new Date("2000-01-01T00:00:00Z"), new Date("2000-01-01T00:00:00Z"));
+      await addAndProcess(core, [file]);
       const lines: string[] = [`## ${MODEL} · ${each.language}`];
       const languages: (string | null)[] = [];
       for (const claim of each.claims) {
@@ -80,6 +81,11 @@ describe.each(CASES)("claim check language, live: $language", (each) => {
         await appendFile(process.env.INCARNAMIND_LIVE_REPORT, `${lines.join("\n")}\n\n`);
       }
       expect(languages.length).toBeGreaterThan(0);
+      for (const line of lines.slice(1)) {
+        expect(line, "no date, and none of our words for how it was found").not.toMatch(
+          /2000|\bindex|passage|metadata|索引|段落|元数据/i,
+        );
+      }
       for (const found of languages) expect(found ?? each.expected).toBe(each.expected);
     },
   );
