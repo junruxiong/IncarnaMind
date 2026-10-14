@@ -1,3 +1,4 @@
+import { formatDate } from "../../shared/dates";
 import { translate } from "../../shared/i18n";
 import type { Language } from "../language";
 import type { Footnote } from "../mindText";
@@ -48,7 +49,8 @@ export function exportLabels(language: Language): ExportLabels {
     },
     change: ({ kind, pending }) => {
       const author = pending.by || t("export.change.someone");
-      const date = changeDate(pending.at);
+      // The day the Word file names, not the day it falls on here: Word writes its own clock's time.
+      const date = pending.at ? formatDate(pending.at, language, { timeZone: "UTC" }) : "";
       const key = (
         {
           insert: "export.change.inserted",
@@ -60,6 +62,3 @@ export function exportLabels(language: Language): ExportLabels {
     },
   };
 }
-
-/** The day a change was made, as the Word file gives it. */
-const changeDate = (at: string | null) => /^\d{4}-\d{2}-\d{2}/.exec(at ?? "")?.[0] ?? null;

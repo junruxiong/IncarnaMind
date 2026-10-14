@@ -112,8 +112,8 @@ test("the assistant reads someone's changes as changes, and a PDF shows them str
     "\n",
   );
   expect(marked).toContain("9.2 The Customer may terminate for convenience.");
-  expect(marked).toContain("Deleted by Priya Nair, 2026-10-02");
-  expect(marked).toContain("Replaced by Priya Nair, 2026-10-02");
+  expect(marked).toContain("Deleted by Priya Nair, 2 Oct 2026");
+  expect(marked).toContain("Replaced by Priya Nair, 2 Oct 2026");
 
   // As if accepted: the clause is gone, the notice is 90 days, and no note is left.
   await openOptions(window, "Export options");

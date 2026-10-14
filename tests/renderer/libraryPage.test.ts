@@ -136,6 +136,18 @@ describe("search", () => {
     expect(nameMatchOf(minutes, queryWords("财务"), tagNames)).toBeNull();
   });
 
+  test("as in ⌘K, a Chinese name is found by its pinyin and initials, and a long word with one typo", () => {
+    const name = displayName(minutes);
+    const marked = (query: string) =>
+      (nameMatchOf(minutes, queryWords(query), tagNames) ?? []).map((range) =>
+        name.slice(range.start, range.end),
+      );
+    expect(marked("huiyi")).toEqual(["会议"]);
+    expect(marked("hyjy")).toEqual(["会议纪要"]);
+    expect(nameMatchOf(lease, queryWords("rotterdma"), tagNames)).not.toBeNull();
+    expect(nameMatchOf(lease, queryWords("contarct"), tagNames)).not.toBeNull();
+  });
+
   test("the line found starts a little before its first word found, at a word, so a narrow row shows it", () => {
     const mark = (line: { text: string; ranges: { start: number; end: number }[] }) =>
       line.ranges.map((range) => line.text.slice(range.start, range.end));
@@ -224,11 +236,11 @@ describe("the problem line", () => {
 describe("dates", () => {
   const now = new Date("2026-10-13T12:00:00Z");
 
-  test("this year's as a month and a day, earlier ones with the year", () => {
-    expect(addedLabel("2026-10-09T10:00:00Z", now, "en")).toBe("Oct 9");
-    expect(addedLabel("2025-03-04T10:00:00Z", now, "en")).toBe("Mar 4, 2025");
+  test("this year's as a day and a month, earlier ones with the year", () => {
+    expect(addedLabel("2026-10-09T10:00:00Z", now, "en")).toBe("9 Oct");
+    expect(addedLabel("2025-03-04T10:00:00Z", now, "en")).toBe("4 Mar 2025");
     expect(addedLabel("2026-10-09T10:00:00Z", now, "zh-CN")).toBe("10月9日");
-    expect(addedLabel("2025-03-04T10:00:00Z", now, "zh-CN")).toBe("2025/3/4");
+    expect(addedLabel("2025-03-04T10:00:00Z", now, "zh-CN")).toBe("2025年3月4日");
     expect(addedLabel("not a date", now, "en")).toBe("");
   });
 });

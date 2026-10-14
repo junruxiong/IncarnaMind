@@ -472,6 +472,7 @@ describe("Consent for the Mind read", { timeout: 30_000 }, () => {
       flow: { id: "chat", service: provider.service, sends: ["blocks", "passages"] },
       consent: "accepted",
       decidedAt: expect.any(String),
+      chosen: false,
     });
   });
 });

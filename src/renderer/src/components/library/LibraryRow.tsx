@@ -7,6 +7,7 @@ import { useLanguage, useT } from "../../i18n";
 import { FORMAT_LABELS } from "../../libraryFilters";
 import { addedLabel, foundLine, type SearchMatch } from "../../libraryPage";
 import { atPassage, passagePlace } from "../../palette";
+import { usePeekKey } from "../../peek";
 import { missingList } from "../../referenceEditing";
 import { useSelectable } from "../../selection";
 import { useAppStore } from "../../store";
@@ -34,7 +35,7 @@ export const COLUMN_CLASSES = {
   // Narrow, only the chips go: the "+" stays, so Tags… from the menu still has its place.
   tags: "w-[200px] shrink-0 @max-[512px]/page:w-auto @max-[512px]/page:[&_[data-testid^=tag-chip]]:hidden",
   format: "w-[76px] shrink-0 @max-[704px]/page:hidden",
-  added: "w-20 shrink-0 @max-[768px]/page:hidden",
+  added: "w-24 shrink-0 @max-[768px]/page:hidden",
   more: "flex w-7 shrink-0 justify-end",
 } as const;
 
@@ -147,6 +148,7 @@ export const LibraryRow = memo(function LibraryRow({
         { as: "library", ...(place && { from: place.groupId }) },
       ),
   );
+  const peek = usePeekKey(doc.id, "library");
   // A double-click keeps the preview it opened, then renames.
   const rename = useRename<HTMLButtonElement>(`library-document:${doc.id}`, () =>
     keepPreviewOf(doc.id),
@@ -183,6 +185,7 @@ export const LibraryRow = memo(function LibraryRow({
       data-suggested={suggestedIn !== null ? "" : undefined}
       role="row"
       {...select.rowProps}
+      {...peek.rowProps}
       {...objectMenu.rowProps}
       onKeyDown={onKeyDown}
       onClick={(event) => {

@@ -46,16 +46,15 @@ const bridge = (window: Page) => ({
         }),
       language,
     ),
-  /** Claude Haiku 5.5 on an Anthropic key, billed per token, with Questions to Anthropic allowed. */
+  /** Claude Haiku 5.5 on an Anthropic key, billed per token: choosing it allows Questions to Anthropic. */
   keyProvider: () =>
     window.evaluate(async () => {
       const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
-      const provider = await core.saveChatProvider({
+      await core.saveChatProvider({
         kind: "anthropic",
         apiKey: "sk-ant-test",
         modelId: "claude-haiku-5-5",
       });
-      if (provider.service) await core.allowDataFlow("chat", provider.service.id);
     }),
   cap: () =>
     window.evaluate(

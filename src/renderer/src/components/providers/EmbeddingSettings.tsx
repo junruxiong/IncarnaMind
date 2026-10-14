@@ -467,7 +467,7 @@ function EmbeddingForm({ current, onDone }: { current: EmbeddingSettings; onDone
             {t("embeddingProviders.test.ok", { dimensions: test.dimensions })}
           </p>
         ) : (
-          <TestResult result={test} onRetry={() => void runTest()} />
+          <TestResult result={test} />
         ))}
       {error && (
         <p role="alert" className={errorTextClass}>

@@ -6,6 +6,7 @@ import type {
   PrivacySettingsPatch,
   RegisteredDataFlow,
 } from "../../../core/api";
+import { formatDate } from "../../../shared/dates";
 import { core } from "../core";
 import { useLanguage, useT } from "../i18n";
 import { useAppStore } from "../store";
@@ -225,7 +226,7 @@ function ServiceDecision({
   const t = useT();
   const language = useLanguage();
   const [busy, setBusy] = useState(false);
-  const { flow, consent, decidedAt } = status;
+  const { flow, consent, decidedAt, chosen } = status;
 
   const run = async (action: () => Promise<void>) => {
     setBusy(true);
@@ -245,14 +246,12 @@ function ServiceDecision({
   const label = sendsMore
     ? t("consent.settings.status.sendsMore")
     : t(`consent.settings.status.${consent}`);
+  const date = decidedAt && formatDate(decidedAt, language);
   const decision =
-    decidedAt && !sendsMore
-      ? t("privacy.flows.decided", {
-          status: label,
-          date: new Intl.DateTimeFormat(language, { dateStyle: "medium" }).format(
-            new Date(decidedAt),
-          ),
-        })
+    date && !sendsMore
+      ? consent === "accepted" && chosen
+        ? t("privacy.flows.chosen", { service: flow.service.name, date })
+        : t("privacy.flows.decided", { status: label, date })
       : label;
 
   return (
