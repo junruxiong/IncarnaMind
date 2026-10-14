@@ -2244,9 +2244,9 @@ export const zhCN = {
   "scripts.card.deny": "拒绝",
   "scripts.alwaysRun.title": "始终运行 {skill} 的脚本？",
   "scripts.alwaysRun.body":
-    "从现在起，只要回答需要，{skill} 的每个脚本都会直接运行，不再询问你。脚本没有沙盒：它们可以读取、修改或删除你的文件，安装软件，并通过互联网发送你的数据。只对你完全信任的技能这样做。你可以在“设置”的“批准”中停止允许。",
+    "从现在起，只要回答需要，{skill} 的每个脚本都会直接运行，不再询问你。脚本没有沙盒：它们可以读取、修改或删除你的文件，安装软件，并通过互联网发送你的数据。只对你完全信任的技能这样做。你可以在“设置”的“批准”中恢复默认。",
   "scripts.alwaysRun.bodySandboxed":
-    "从现在起，只要回答需要，{skill} 的每个脚本都会直接运行，不再询问你。脚本在沙盒中运行：无法访问你的个人文件夹和 IncarnaMind 的数据，只能写入自己的工作文件夹，也不能访问互联网。但它们仍能读取这台电脑上其他位置的文件，例如外接硬盘上的文件。只对你信任的技能这样做。你可以在“设置”的“批准”中停止允许。",
+    "从现在起，只要回答需要，{skill} 的每个脚本都会直接运行，不再询问你。脚本在沙盒中运行：无法访问你的个人文件夹和 IncarnaMind 的数据，只能写入自己的工作文件夹，也不能访问互联网。但它们仍能读取这台电脑上其他位置的文件，例如外接硬盘上的文件。只对你信任的技能这样做。你可以在“设置”的“批准”中恢复默认。",
   "scripts.alwaysRun.confirm": "始终运行 {skill} 的脚本",
   "scripts.alwaysRun.cancel": "取消",
   "scripts.call.waiting": "等待你的批准：{script}（{skill}）",
@@ -2809,7 +2809,7 @@ export const zhCN = {
   "approvals.card.allowOnce": "允许一次",
   "approvals.card.alwaysAllow": "始终允许",
   "approvals.card.alwaysAllowHint":
-    "以后运行 {tool} 时不再询问。你可以在“设置”的“批准”中停止允许。",
+    "以后运行 {tool} 时不再询问。你可以在“设置”的“批准”中恢复默认。",
   "approvals.card.deny": "拒绝",
   "approvals.thirdParty.read.imported": "这条回答读过含有导入文字的 Mind，所以会先问你。",
   "approvals.thirdParty.read.webPage": "这条回答读过网页，所以会先问你。",
@@ -2832,10 +2832,10 @@ export const zhCN = {
   "approvals.tools.off": "关闭",
   "approvals.settings.title": "批准",
   "approvals.settings.body":
-    "可能修改内容的工具和技能脚本在每次运行前都会询问。这里列出你始终允许、设为每次询问或已关闭的每个工具，以及脚本始终运行的每个技能。恢复默认后，它会重新在每次运行前询问。",
+    "可能修改内容的工具和技能脚本在每次运行前都会询问。这里列出你始终允许、设为每次询问或已关闭的每个工具，以及脚本始终运行的每个技能。恢复默认后，它会按默认方式运行。",
   "approvals.settings.empty": "没有设为始终允许、每次询问或关闭的工具，也没有脚本始终运行的技能。",
   "approvals.settings.revoke": "恢复默认",
-  "approvals.settings.revokeLabel": "将 {name} 恢复为每次询问",
+  "approvals.settings.revokeLabel": "将 {name} 恢复默认",
   "approvals.settings.skillScripts": "{skill} 的脚本",
   "approvals.policy.always": "始终允许",
   "approvals.policy.ask": "每次询问",
