@@ -24,7 +24,9 @@
  * and writes its Answer word by word, so a test sees each step of the Answer.
  *
  * A Question with "blank reply" in it gets a reply with no text at all. A model whose id ends
- * "-not-found" fails as one its provider doesn't know.
+ * "-not-found" fails as one its provider doesn't know. A key with "refused" in it is refused,
+ * as a provider refuses a wrong key (HTTP 401). A model whose id ends "-no-tools" refuses
+ * Tools and structured output, as a small server model does, so its Answers have no Citations.
  *
  * A comparison table's cell (#98) cites its Document's line that shares the
  * most words with the Question and answers with its value ("Termination
@@ -80,7 +82,7 @@
  */
 import { APICallError } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
-import type { ChatModelFactory } from "../core";
+import type { ChatModelFactory, ChatModelSpec } from "../core";
 import { EXCERPT_END, EXCERPT_START } from "../core/tags/classify";
 
 type StreamResult = Awaited<ReturnType<MockLanguageModelV4["doStream"]>>;
@@ -939,27 +941,66 @@ function replyParts(prompt: Prompt, tools: readonly OfferedTool[]): StreamPart[]
   return parts;
 }
 
+/** What a provider says of a wrong key, or of a model that can't use Tools or structured output. */
+function refusal(
+  spec: ChatModelSpec,
+  options: { tools?: unknown[]; responseFormat?: { type: string } },
+) {
+  if (spec.apiKey?.includes("refused")) {
+    return new APICallError({
+      message: "invalid x-api-key",
+      url: "https://fake.invalid/chat",
+      requestBodyValues: {},
+      statusCode: 401,
+    });
+  }
+  if (!spec.modelId.endsWith("-no-tools")) return null;
+  const asked =
+    (options.tools?.length ?? 0) > 0
+      ? `registry.ollama.ai/library/${spec.modelId} does not support tools`
+      : options.responseFormat?.type === "json"
+        ? "response_format is not supported by this model"
+        : null;
+  return asked
+    ? new APICallError({
+        message: asked,
+        url: "http://127.0.0.1/v1/chat/completions",
+        requestBodyValues: {},
+        statusCode: 400,
+      })
+    : null;
+}
+
 export const createFakeChatModel: ChatModelFactory = (spec) =>
   new MockLanguageModelV4({
     provider: "incarnamind-fake",
     modelId: spec.modelId,
     // Structured output (automatic tagging) gets its Tags as JSON; Edit with AI its new text;
     // anything else (a connection test) gets "OK".
-    doGenerate: async (options) => ({
-      content: [
-        {
-          type: "text",
-          text:
-            options.responseFormat?.type === "json"
-              ? fakeStructuredOutput(options)
-              : (fakeClaims(options) ?? fakeSkillDraft(options) ?? fakeEdit(options) ?? "OK"),
-        },
-      ],
-      finishReason: { unified: "stop", raw: undefined },
-      usage: USAGE,
-      warnings: [],
-    }),
-    doStream: async ({ prompt, tools, abortSignal }) => {
+    doGenerate: async (options) => {
+      const refused = refusal(spec, options);
+      if (refused) throw refused;
+      return {
+        content: [
+          {
+            type: "text",
+            text:
+              options.responseFormat?.type === "json"
+                ? fakeStructuredOutput(options)
+                : (fakeClaims(options) ?? fakeSkillDraft(options) ?? fakeEdit(options) ?? "OK"),
+          },
+        ],
+        finishReason: { unified: "stop", raw: undefined },
+        usage: USAGE,
+        warnings: [],
+      };
+    },
+    doStream: async ({ prompt, tools, abortSignal, responseFormat }) => {
+      const refused = refusal(spec, {
+        ...(tools && { tools }),
+        ...(responseFormat && { responseFormat }),
+      });
+      if (refused) throw refused;
       // A model id ending "-not-found" is one its provider doesn't know, for a test of that Problem.
       if (spec.modelId.endsWith("-not-found")) {
         throw new APICallError({

@@ -1441,6 +1441,8 @@ export const en = {
   "providers.form.apiKey": "API key",
   "providers.form.apiKeyOptional": "API key (optional)",
   "providers.form.apiKeySaved": "A key is saved. Leave this empty to keep it.",
+  "providers.form.keyRefused": "{provider} refused this key on {when}.",
+  "providers.form.keyRefusedNow": "{provider} refused this key.",
   "providers.form.region": "Region",
   "providers.region.cn": "China",
   "providers.region.intl": "International",
@@ -1484,7 +1486,7 @@ export const en = {
   "providers.secrets.unavailable":
     "This system can't encrypt API keys, so they can't be saved. You can still use Ollama, or a server that needs no key.",
 
-  "providers.ollama.title": "Local models with Ollama",
+  "providers.ollama.title": "On this computer (free)",
   "providers.ollama.checking": "Looking for Ollama on this computer…",
   "providers.ollama.detected":
     "Ollama is running on this computer. With a local model, your Questions and Documents stay on it.",
@@ -1493,6 +1495,7 @@ export const en = {
   "providers.ollama.use": "Use local models ({model}, 3.3 GB)",
   "providers.ollama.pulling": "Downloading {model} (3.3 GB)… This can take a while.",
   "providers.ollama.checkAgain": "Check again",
+  "providers.ollama.get": "Get Ollama",
 
   "providers.readiness.no-provider":
     "Asking Questions needs a chat model. Notes and Documents work without one.",
@@ -1962,6 +1965,7 @@ export const en = {
   "answer.error.plan-limit": "Your ChatGPT plan's usage limit is reached",
   "answer.error.blocked": "OpenAI didn't let IncarnaMind use your ChatGPT plan",
   "answer.error.checkKey": "Check the key",
+  "answer.error.askAgain": "Ask again",
   "answer.error.removeFromMenu": "Remove from menu",
   "answer.error.chooseModel": "Choose another model",
   "answer.error.allow": "Allow it",
@@ -2158,8 +2162,8 @@ export const en = {
   "citation.regenerate": "Regenerate the Answer",
   "citation.changedAfterCited": "The Document changed after this was cited.",
   "citation.recheck": "Check against the current version",
-  "citation.unsupported":
-    "This model can't call tools or return structured output, so this Answer has no Citations. Pick another model on the Question to get Citations.",
+  "citation.unsupported": "{model} can’t add Citations, so nothing in this Answer is checked",
+  "citation.unsupported.choose": "Choose another model",
 
   "search.running": "Searching your Documents…",
   "search.done": "Searched your Documents",

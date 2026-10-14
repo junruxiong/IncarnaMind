@@ -662,7 +662,11 @@ export function Composer({
           className="composer-input"
         />
         <div ref={controls} className="composer-controls">
-          <ModelChip doc={mind?.doc ?? null} onChosen={() => field.current?.focus()} />
+          <ModelChip
+            doc={mind?.doc ?? null}
+            onChosen={() => field.current?.focus()}
+            opensOnRequest
+          />
           {hasSearchScope(scope) ? (
             <ScopeChips
               scope={scope}
