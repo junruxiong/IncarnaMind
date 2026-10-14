@@ -202,11 +202,13 @@ export const documentCommands: readonly Command[] = [
         : t("documents.retryAction"),
     group: "main",
     appliesTo: ["document"],
-    // Only a failed one whose file is there to be read again.
+    // Only a failed one, or a scan with no text, whose file is there to be read again.
     when: (ctx) =>
       everyDocument(
         ctx,
-        (document) => document.status === "failed" && document.fileStatus === "available",
+        (document) =>
+          (document.status === "failed" || document.status === "no-text") &&
+          document.fileStatus === "available",
       ),
     reversible: true,
     run: async (ctx) => {

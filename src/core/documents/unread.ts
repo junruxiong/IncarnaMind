@@ -29,6 +29,7 @@ export function findUnreadDocuments(documents: readonly Document[]): UnreadFile[
       reason,
       extension: null,
       documentId: document.id,
+      pages: reason === "pages" ? (document.failure?.pages ?? []) : [],
     });
   }
   return found;

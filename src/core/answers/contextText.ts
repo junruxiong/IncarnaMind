@@ -8,7 +8,9 @@
  * "[Attention Is All You Need, p. 3]", not as markers the model could reuse,
  * and the User's footnotes where their markers are, as Pandoc's inline notes:
  * "^[…]". Underline and highlight add nothing, and an image adds nothing (the
- * model can't see it).
+ * model can't see it). In a Mind imported from a Word file, someone's changes
+ * still waiting are read as changes, with who made them and when:
+ * "[deleted by Priya Nair, 2026-10-02: …]" (#734).
  */
 
 import type * as Y from "yjs";
@@ -16,6 +18,7 @@ import { chosenSeries } from "../../shared/charts";
 import { type LiveDocument, shownDocumentName } from "../../shared/citations";
 import { withFigureText } from "../../shared/figureMarkers";
 import { citationLocation, englishLocation } from "../../shared/locations";
+import { wordFileOf } from "../../shared/wordFiles";
 import type { MarkedCitation, MarkedFigure } from "../api";
 import {
   type Block,
@@ -27,7 +30,9 @@ import {
   readBlocks,
   type TableCell,
   tableLayout,
+  theirChangesReading,
 } from "../mindText";
+import { changedContent, changeSpans, type ShownChange } from "../shownChanges";
 
 /** The live Documents a Citation's name is looked up in; null: not known, so names stay as cited. */
 type Documents = readonly LiveDocument[] | null;
@@ -99,18 +104,25 @@ const readOptions = (documents: Documents): ReadOptions => ({
   trimBeforeCitation: false,
 });
 
+/** How an element is read: in a Mind imported from a Word file, with someone's changes as changes. */
+function readingOf(element: Y.XmlElement, documents: Documents): ReadOptions {
+  const { doc } = element;
+  const options = readOptions(documents);
+  return doc && wordFileOf(doc) ? { ...options, review: theirChangesReading(doc) } : options;
+}
+
 /**
  * A Block (or any element) as Markdown, e.g. for Question context. Its Citations name their
  * Documents as `documents` names them now. An Answer's fingerprint (`contentHash`) gives none
  * and reads the names as cited, or a rename would make every Answer look edited.
  */
 export function elementMarkdown(element: Y.XmlElement, documents: Documents = null): string {
-  return blocksMarkdown(readBlock(element, readOptions(documents)), documents).trim();
+  return blocksMarkdown(readBlock(element, readingOf(element, documents)), documents).trim();
 }
 
 /** An element's content as Markdown: its child Blocks separated by blank lines. */
 export function contentMarkdownOf(element: Y.XmlElement, documents: Documents = null): string {
-  return blocksMarkdown(readBlocks(element, readOptions(documents)), documents).trim();
+  return blocksMarkdown(readBlocks(element, readingOf(element, documents)), documents).trim();
 }
 
 function blocksMarkdown(blocks: readonly Block[], documents: Documents): string {
@@ -124,9 +136,9 @@ function blockMarkdown(block: Block, documents: Documents): string {
   switch (block.kind) {
     case "paragraph":
     case "question":
-      return inlineMarkdown(block.content);
+      return inlineMarkdown(changedContent(block));
     case "heading":
-      return `${"#".repeat(block.level)} ${inlineMarkdown(block.content)}`;
+      return `${"#".repeat(block.level)} ${inlineMarkdown(changedContent(block))}`;
     case "code": {
       const fence = block.code.includes("```") ? "````" : "```";
       return `${fence}${block.language}\n${block.code}\n${fence}`;
@@ -250,7 +262,29 @@ function listMarkdown(list: Extract<Block, { kind: "list" }>, documents: Documen
 }
 
 function inlineMarkdown(content: readonly Inline[]): string {
-  return content.map(inlineText).join("");
+  return changeSpans(content)
+    .map(({ change, content: part }) => {
+      const text = notAMark(part.map(inlineText).join(""));
+      return change ? `[${changeWords(change)}: ${text}]` : text;
+    })
+    .join("");
+}
+
+/** Text that reads like a change's mark, escaped: only the reader writes "[deleted by …". */
+const notAMark = (text: string) => text.replace(/\[(?=\s*(?:inserted|deleted) by\b)/gi, "\\[");
+
+/** The longest author name a change's mark shows: the file says what it likes. */
+const AUTHOR_LENGTH = 80;
+
+/** Who made a change and when, for the model: "deleted by Priya Nair, 2026-10-02". */
+function changeWords({ kind, pending }: ShownChange): string {
+  const day = /^\d{4}-\d{2}-\d{2}/.exec(pending.at ?? "")?.[0];
+  // A name can't close the mark, or open another.
+  const author = (pending.by ?? "")
+    .replace(/[[\]\r\n]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return `${kind === "insert" ? "inserted" : "deleted"} by ${author.slice(0, AUTHOR_LENGTH) || "someone"}${day ? `, ${day}` : ""}`;
 }
 
 function inlineText(inline: Inline): string {

@@ -144,6 +144,8 @@ interface AppState extends LayoutSlice {
   settingsOpen: boolean;
   /** The page Settings shows. */
   settingsPage: SettingsPage;
+  /** A setting Settings opened at, shown and focused once it is drawn, which then clears this. */
+  settingsAt: "output-location" | null;
   /**
    * Every Folder of every Linked folder, flat, in name order: each Linked
    * folder's own Folder and those inside it. The sidebar builds the tree from each `parentId`.
@@ -280,9 +282,10 @@ interface AppState extends LayoutSlice {
   reportError(error: unknown): void;
   /**
    * Opens Settings at a page: the general one unless asked otherwise, e.g.
-   * Models to set one up, or Privacy to allow a declined flow.
+   * Models to set one up, or Privacy to allow a declined flow; and, with
+   * `at`, at one setting on it.
    */
-  openSettings(page?: SettingsPage): void;
+  openSettings(page?: SettingsPage, at?: "output-location"): void;
   closeSettings(): void;
   showSettingsPage(page: SettingsPage): void;
   /**
@@ -688,6 +691,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     rerank: null,
     settingsOpen: false,
     settingsPage: "general",
+    settingsAt: null,
     folders: [],
     linkedFolders: [],
     linking: null,
@@ -1114,9 +1118,9 @@ export const useAppStore = create<AppState>()((set, get) => {
       void get().changeLayout(change);
     },
 
-    openSettings(page) {
+    openSettings(page, at) {
       // Also a click handler: anything but a page name opens General.
-      set({ settingsOpen: true, settingsPage: resolveSettingsPage(page) });
+      set({ settingsOpen: true, settingsPage: resolveSettingsPage(page), settingsAt: at ?? null });
     },
 
     showSettingsPage(page) {
@@ -1124,7 +1128,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     },
 
     closeSettings() {
-      set({ settingsOpen: false });
+      set({ settingsOpen: false, settingsAt: null });
     },
 
     updateSettings: (patch) =>

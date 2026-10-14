@@ -4,11 +4,11 @@ import { shortcutLabel } from "../commands/keymap";
 import { CheckMarkIcon } from "../editor/icons";
 import { useGap, useT } from "../i18n";
 import { useAppStore } from "../store";
+import { useAddYourDocuments } from "./AddYourDocuments";
 import { AskIcon, PlugIcon } from "./icons";
-import { ChevronRightLineIcon, CloseLineIcon, FolderPlusLineIcon, PlusLineIcon } from "./lineIcons";
+import { ChevronRightLineIcon, CloseLineIcon } from "./lineIcons";
 import { SLOT, Slotted } from "./Slotted";
-import { buttonStyle, menuClass, menuItemClass } from "./ui";
-import { usePopoverMenu } from "./usePopoverMenu";
+import { buttonStyle } from "./ui";
 
 /**
  * Onboarding (DESIGN.md, First run): the example Mind ("Example" chips, its
@@ -96,8 +96,7 @@ export function GetStartedCard() {
   const updateGettingStarted = useAppStore((state) => state.updateGettingStarted);
   const openExamples = useAppStore((state) => state.openExamples);
   const startQuestion = useAppStore((state) => state.startQuestion);
-  const picking = useAppStore((state) => state.pickingDocuments);
-  const addMenu = usePopoverMenu({ focus: "first" });
+  const addMenu = useAddYourDocuments("get-started-add");
   if (!steps) return null;
 
   const done = steps.filter((step) => step.done).length;
@@ -106,12 +105,6 @@ export function GetStartedCard() {
     citation: () => void openExamples(),
     question: startQuestion,
   };
-  /** Closes the menu, then does it. */
-  const choose = (action: () => void) => () => {
-    addMenu.close();
-    action();
-  };
-
   return (
     <section
       aria-labelledby="get-started-title"
@@ -177,35 +170,7 @@ export function GetStartedCard() {
           );
         })}
       </ol>
-      <div
-        {...addMenu.menuProps}
-        role="menu"
-        aria-label={t("gettingStarted.step.documents")}
-        data-testid="get-started-add-items"
-        className={menuClass}
-      >
-        <button
-          type="button"
-          role="menuitem"
-          data-testid="get-started-add-files"
-          disabled={picking}
-          onClick={choose(() => void useAppStore.getState().pickDocuments())}
-          className={`${menuItemClass} pl-2`}
-        >
-          <PlusLineIcon className="size-4 shrink-0 text-ink-meta" />
-          <span className="flex-1">{t("startGuide.documents.addFiles")}</span>
-        </button>
-        <button
-          type="button"
-          role="menuitem"
-          data-testid="get-started-link-folder"
-          onClick={choose(() => void useAppStore.getState().addLinkedFolder())}
-          className={`${menuItemClass} pl-2`}
-        >
-          <FolderPlusLineIcon className="size-4 shrink-0 text-ink-meta" />
-          <span className="flex-1">{t("startGuide.documents.linkFolder")}</span>
-        </button>
-      </div>
+      {addMenu.menu}
       <button
         type="button"
         data-testid="onboarding-groups"
@@ -219,13 +184,13 @@ export function GetStartedCard() {
 }
 
 /**
- * Above the example Mind's title: what a Mind is, and the ways on: a Mind of
- * one's own, to add Documents or apps to, or removing the examples.
+ * Above the example Mind's title: what a Mind is, and the ways on: adding
+ * one's own Documents, in place (#766), or removing the examples.
  */
 export function ExampleBanner() {
   const t = useT();
   const gap = useGap();
-  const createMind = useAppStore((state) => state.createMind);
+  const addMenu = useAddYourDocuments("example-add");
   const removeExamples = useAppStore((state) => state.removeExamples);
   return (
     <aside
@@ -256,13 +221,14 @@ export function ExampleBanner() {
         </p>
         <div className="flex flex-wrap gap-2">
           <button
+            {...addMenu.buttonProps}
             type="button"
             data-testid="example-add-own"
-            onClick={() => void createMind()}
             className={buttonStyle("primary", "sm")}
           >
             {t("examples.banner.addOwn")}
           </button>
+          {addMenu.menu}
           <button
             type="button"
             data-testid="example-remove"

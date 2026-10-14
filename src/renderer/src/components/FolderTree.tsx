@@ -14,7 +14,7 @@ import { sorted } from "../sort";
 import { useSort } from "../sortChoices";
 import { documentFields, folderFields } from "../sortFields";
 import { selectTagFilterKey, useAppStore } from "../store";
-import { TREE_ROW } from "../treeKeys";
+import { foldKeys, useTreeItem } from "../treeKeys";
 import { ExampleChip } from "./GettingStarted";
 import {
   ChevronDownLineIcon,
@@ -224,11 +224,13 @@ export function FolderTree({ documents, filtering, renderDocument }: FolderTreeP
   // Without Linked folders there is nothing to set the Other Documents apart from.
   if (tree.length === 0) {
     return others.length === 0 ? null : (
-      <ul data-testid="document-tree">{others.map((item) => renderDocument(item, 0))}</ul>
+      <ul role="none" data-testid="document-tree">
+        {others.map((item) => renderDocument(item, 0))}
+      </ul>
     );
   }
   return (
-    <ul aria-label={t("folders.label")} data-testid="document-tree">
+    <ul role="none" data-testid="document-tree">
       {renderLevel(
         sorted(tree, choices.sidebar ?? forAll, (node) => folderFields(node.folder), language),
       )}
@@ -296,6 +298,7 @@ function LinkedFolderItem({
         <ObjectMenu
           target={{ kind: "linkedFolder", id: linked.id }}
           label={t("linkedFolders.more", { name })}
+          tabIndex={-1}
         />
       }
       data={{
@@ -362,6 +365,7 @@ function GroupItem(props: GroupItemProps) {
   const tagFilter = useAppStore(selectTagFilterKey);
   const objectMenu = useObjectMenu(object ?? { kind: "folder", id: groupKey });
   const open = expandable && expanded;
+  const treeItem = useTreeItem({ depth, expanded: expandable ? open : undefined });
   const Chevron = open ? ChevronDownLineIcon : ChevronRightLineIcon;
   const buttonClass = actions ? `${rowButtonClass} ${clearsActions.menu}` : rowButtonClass;
   const inner = (
@@ -392,8 +396,7 @@ function GroupItem(props: GroupItemProps) {
   );
 
   return (
-    <li>
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: a right-click shortcut to the row's menu, whose ⋯ button is the way in by keyboard. */}
+    <li role="none">
       <div
         data-testid={testId}
         data-depth={depth}
@@ -404,18 +407,24 @@ function GroupItem(props: GroupItemProps) {
         {expandable ? (
           <button
             type="button"
-            {...TREE_ROW}
+            {...treeItem}
             data-testid="folder-toggle"
-            aria-expanded={open}
             title={title ?? name}
             onClick={() => toggle(groupKey, tagFilter)}
+            onKeyDown={foldKeys(open, () => toggle(groupKey, tagFilter))}
             className={buttonClass}
             style={rowPadding(depth)}
           >
             {inner}
           </button>
         ) : (
-          <div title={title ?? name} className={buttonClass} style={rowPadding(depth)}>
+          <div
+            {...treeItem}
+            tabIndex={-1}
+            title={title ?? name}
+            className={buttonClass}
+            style={rowPadding(depth)}
+          >
             {inner}
           </div>
         )}
@@ -437,7 +446,7 @@ function GroupItem(props: GroupItemProps) {
         )}
         {actions && <div className={rowActionsClass}>{actions}</div>}
       </div>
-      {open && <ul>{children}</ul>}
+      {open && <ul role="none">{children}</ul>}
     </li>
   );
 }

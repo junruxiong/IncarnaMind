@@ -80,6 +80,7 @@ import type {
   QuoteRetry,
   ReadThirdPartySource,
   ThirdPartyReason,
+  UnreadFile,
 } from "../api";
 import { ONE_SEARCH_PARAMETERS, type SearchToolParameters } from "../documents/searchTool";
 import { detectLanguage } from "../documents/textLanguage";
@@ -111,6 +112,7 @@ import {
   searchQueryPrompt,
   TRANSLATE_QUERY_INSTRUCTIONS,
   translateQueryPrompt,
+  unreadDocumentsNote,
 } from "./prompt";
 import { retryQuotes } from "./quoteRetry";
 import { citeUnmarked } from "./unmarkedQuotes";
@@ -210,6 +212,8 @@ export interface AnswerTools {
    * Question is in another language. Empty or absent when they can't be told.
    */
   readonly documentLanguages?: readonly DocumentLanguage[];
+  /** The Documents in the Search scope whose text couldn't be read: the search Tool says so. Absent: none are known. */
+  unreadDocuments?(): readonly UnreadFile[];
   /** The document-search Tool. */
   searchDocuments(
     query: string,
@@ -992,8 +996,12 @@ function createWritingEngine(options: AiSdkAnswerEngineOptions): AnswerEngine {
       // With no Documents there is nothing to search or cite: Skills and
       // Connector Tools alone, or a plain Answer. Web search saves what it reads as
       // Documents, which are cited, so with it the Documents' Tools are offered too.
+      // So are they where the only Documents in scope couldn't be read: the search says so (#485).
       const savesDocuments = request.tools.some((each) => each.provider.kind === "web");
-      if (request.documents.documentCount === 0 && !savesDocuments) {
+      const hasUnread =
+        (request.support ?? "tools") === "tools" &&
+        (request.documents.unreadDocuments?.().length ?? 0) > 0;
+      if (request.documents.documentCount === 0 && !savesDocuments && !hasUnread) {
         if (request.tools.length > 0 && (request.support ?? "tools") === "tools") {
           let unsupported = false;
           for await (const event of fitted(() =>
@@ -1213,9 +1221,12 @@ export function documentTools(
         for (const source of found.thirdParty ?? []) readThirdParty?.(source);
         const result = hooks.fit(found);
         hooks.searched(toolCallId, result.passageCount, found.passageIds);
-        // Named from the Passages that fit, so it never names a Document the model wasn't handed.
-        const note = datedDocumentsNote(result.text);
-        return note ? `${result.text}\n\n${note}` : result.text;
+        // The dates are named from the Passages that fit, so never a Document the model wasn't handed.
+        const notes = [
+          datedDocumentsNote(result.text),
+          unreadDocumentsNote(documents.unreadDocuments?.() ?? []),
+        ];
+        return [result.text, ...notes].filter((part) => part !== "").join("\n\n");
       },
     },
     cite: {
