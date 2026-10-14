@@ -143,11 +143,11 @@ test("a Folder renames in its section of the Library, and a Tag in the sidebar: 
     await window.getByTestId("browse-views").getByRole("button", { name: "Tags" }).click();
     const tags = window.getByTestId("sidebar-tag");
     const tides = tags.filter({ hasText: "Tides" });
-    await tides.getByRole("button").first().focus();
+    await tides.getByRole("treeitem").first().focus();
     await window.keyboard.press("F2");
     const tagField = tags.getByRole("textbox");
     await cancels(window, tagField, tides.getByTestId("row-text"), "Tides");
-    await expect(tides.getByRole("button").first()).toBeFocused();
+    await expect(tides.getByRole("treeitem").first()).toBeFocused();
 
     // A blank name, and the same name, change nothing.
     await window.keyboard.press("F2");
@@ -157,7 +157,7 @@ test("a Folder renames in its section of the Library, and a Tag in the sidebar: 
     await expect(window.getByRole("alert")).toHaveCount(0);
 
     // A name another Tag has is said in a line, and the name stays.
-    await expect(tides.getByRole("button").first()).toBeFocused();
+    await expect(tides.getByRole("treeitem").first()).toBeFocused();
     await window.keyboard.press("F2");
     await tagField.fill("Moons");
     await window.keyboard.press("Enter");

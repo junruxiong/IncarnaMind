@@ -457,6 +457,15 @@ const ASCII_PUNCTUATION = /[!-/:-@[-`{-~]/;
 const isWhitespace = (char: string | undefined) => char === undefined || /\s/.test(char);
 const isPunctuation = (char: string | undefined) =>
   char !== undefined && /[\p{P}\p{S}]/u.test(char);
+/**
+ * Chinese has no spaces, so CommonMark's flanking rule leaves `**仍未确定：**下一步` unclosed
+ * (#790). Beside punctuation, a CJK letter counts like a space, as in markdown-cjk-friendly.
+ */
+const isCjk = (char: string | undefined) =>
+  char !== undefined &&
+  /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Bopomofo}]/u.test(
+    char,
+  );
 
 const CODE: MarkJSON = { type: "code", attrs: {} };
 
@@ -688,10 +697,10 @@ function tokenize(source: string, open: boolean): Token[] {
       const after = source[i + run];
       const leftFlanking =
         !isWhitespace(after) &&
-        (!isPunctuation(after) || isWhitespace(before) || isPunctuation(before));
+        (!isPunctuation(after) || isWhitespace(before) || isPunctuation(before) || isCjk(before));
       const rightFlanking =
         !isWhitespace(before) &&
-        (!isPunctuation(before) || isWhitespace(after) || isPunctuation(after));
+        (!isPunctuation(before) || isWhitespace(after) || isPunctuation(after) || isCjk(after));
       flush();
       tokens.push({
         kind: "delimiter",

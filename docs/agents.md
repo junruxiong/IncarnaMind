@@ -8,7 +8,7 @@ If you already use an AI agent, such as Claude, ChatGPT, Codex, Cursor or Antigr
 
 1. Open IncarnaMind, then **Settings → Agents**, and turn on **Connect AI agents**.
 2. Find your agent in the list (agents on this computer come first) and click **Connect**.
-3. Choose the folders it may read, then click **Allow and connect**. It can't read anything else.
+3. Choose the folders it may read, then click **Allow and connect**. It can't read anything else. **Not in a Folder** is a choice too: the Documents that are in no Folder when the agent asks, so a Document you later put in a Folder is no longer shared; your Minds are shared only with their Folder. With no Documents yet, the dialog offers **Add Documents…**.
 4. Follow the one step for your agent below.
 
 Keep IncarnaMind open while you use your agent: the agent talks to it.

@@ -10,13 +10,14 @@ import { CloseLineIcon } from "../lineIcons";
  * The page's head: "Library" and how many Documents it holds, as the
  * sidebar says, the one primary "Add Documents ▾", and under them the wide
  * search field, which `/` focuses from anywhere on the page but a field, and
- * ↓ leaves for the first row.
+ * ↓ leaves for the first row; Enter asks about it when nothing matches.
  */
 export function LibraryHeader({
   count,
   search,
   onSearch,
   onDown,
+  onEnter,
   field,
 }: {
   count: number;
@@ -24,6 +25,8 @@ export function LibraryHeader({
   onSearch(search: string): void;
   /** ↓ in the search field. */
   onDown(): void;
+  /** Enter in the search field, when it does something: asking about what nothing matches. */
+  onEnter?: (() => void) | undefined;
   field: RefObject<HTMLInputElement | null>;
 }) {
   const t = useT();
@@ -80,6 +83,9 @@ export function LibraryHeader({
             } else if (event.key === "ArrowDown" && !event.nativeEvent.isComposing) {
               event.preventDefault();
               onDown();
+            } else if (event.key === "Enter" && onEnter && !event.nativeEvent.isComposing) {
+              event.preventDefault();
+              onEnter();
             }
           }}
           className="min-w-0 flex-1 bg-transparent text-ui text-ink outline-0 placeholder:text-ink-placeholder [&::-webkit-search-cancel-button]:hidden"

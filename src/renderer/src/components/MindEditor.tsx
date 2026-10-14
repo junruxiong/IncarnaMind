@@ -30,6 +30,7 @@ import { ComparisonTableView } from "../editor/ComparisonTableView";
 import { CitationClusters } from "../editor/citationClusters";
 import { CitationNumbers, redrawFootnotes, setCitationForm } from "../editor/citationNumbers";
 import { ClaimChecks, setClaimContext } from "../editor/claimChecks";
+import { useClickBelowNote } from "../editor/clickBelowNote";
 import { comparisonCellView, comparisonRowView } from "../editor/comparisonViews";
 import { CopyCitations } from "../editor/copyCitations";
 import { DocumentChipView } from "../editor/DocumentChipView";
@@ -64,7 +65,6 @@ import { askInEditor, QuestionCommands } from "../editor/questionCommands";
 import { QuestionFold } from "../editor/questionFold";
 import { ReferencesBlock } from "../editor/ReferencesBlock";
 import { ScopePicker } from "../editor/ScopePicker";
-import { SectionBreakDialog } from "../editor/SectionBreakDialog";
 import { type SelectionAction, SelectionMenu } from "../editor/SelectionMenu";
 import { SlashMenu } from "../editor/SlashMenu";
 import { compareSlashItem, noteSlashItems, skillSlashItems } from "../editor/slashItems";
@@ -75,7 +75,7 @@ import { SmartTypography } from "../editor/typography";
 import { useVerification, VerifyLine } from "../editor/VerifyLine";
 import { wordAtomView, wordBlockView } from "../editor/WordAtomView";
 import { WordCount } from "../editor/WordCount";
-import { useWordFile, WordOrigin } from "../editor/WordOrigin";
+import { OriginalNotAdded, useWordFile, WordOrigin } from "../editor/WordOrigin";
 import { requestEdit, startEditing, TRANSLATE_LANGUAGES } from "../editWithAi";
 import { translateNow, useT } from "../i18n";
 import { markSelectionAsMine } from "../markAsMine";
@@ -317,8 +317,6 @@ function MindEditorView({
       : t("editor.footnote.label", { number });
   /** The position of the formula whose LaTeX is being edited. */
   const [editingMath, setEditingMath] = useState<number | null>(null);
-  /** A change that would delete a Word file's section break, waiting for the User to say (#104). */
-  const [sectionBreakRetry, setSectionBreakRetry] = useState<(() => void) | null>(null);
   /** A Mind still filling in from a Word file can't be edited until it has (#104). */
   const importing = useWordFile(doc).progress !== null;
   /** The Mind's citation style, followed as it changes (#289). */
@@ -345,7 +343,6 @@ function MindEditorView({
           chartView,
           wordAtomView,
           wordBlockView,
-          onSectionBreakDelete: (retry) => setSectionBreakRetry(() => retry),
         }),
         // Footnotes are numbered as the Mind's citation style counts its Citations (#289).
         CitationNumbers.configure({ form: () => citationStyle(styleRef.current).form }),
@@ -495,6 +492,7 @@ function MindEditorView({
   }, [reads, editor, mindId, doc]);
 
   // The selection menu's AI section: each comes back as changes to accept or reject; Mark as mine acts at once.
+  const hasDocuments = useAppStore((state) => state.documents.length > 0);
   const aiActions = useMemo((): SelectionAction[] => {
     const available = (current: typeof editor) => selectionForEdit(current.state) !== null;
     const run = (action: "improve" | "shorten" | "explain") => (current: typeof editor) =>
@@ -517,17 +515,23 @@ function MindEditorView({
       { id: "explain", label: "editor.ai.explain", icon: "?", available, run: run("explain") },
       {
         id: "find-support",
-        label: "editor.ai.findSupport",
+        label: hasDocuments ? "editor.ai.findSupport" : "editor.ai.addDocumentsToFindSupport",
         icon: <SearchLineIcon className="size-3.5" />,
         available,
-        run: (current) => void checkSentences(current, mindId, doc, "find-support"),
+        run: (current) =>
+          hasDocuments
+            ? void checkSentences(current, mindId, doc, "find-support")
+            : void useAppStore.getState().pickDocuments(),
       },
       {
         id: "check-against-documents",
-        label: "editor.ai.checkAgainstDocuments",
+        label: hasDocuments ? "editor.ai.checkAgainstDocuments" : "editor.ai.addDocumentsToCheck",
         icon: <CheckLineIcon className="size-3.5" />,
         available,
-        run: (current) => void checkSentences(current, mindId, doc, "check-against-documents"),
+        run: (current) =>
+          hasDocuments
+            ? void checkSentences(current, mindId, doc, "check-against-documents")
+            : void useAppStore.getState().pickDocuments(),
       },
       {
         id: "mark-as-mine",
@@ -547,7 +551,7 @@ function MindEditorView({
         },
       },
     ];
-  }, [mindId, doc]);
+  }, [mindId, doc, hasDocuments]);
 
   // When the language changes: relabel. Setting the props also redraws the placeholder,
   // and the footnotes' markers are named anew.
@@ -630,6 +634,8 @@ function MindEditorView({
   const outlineShown = useMindTools((state) => state.outlineMindId === mindId);
   const guide = useGettingStarted() !== null && empty && !isExample && !readOnly;
   const verification = useVerification(doc);
+  const frame = useRef<HTMLDivElement>(null);
+  useClickBelowNote(editor, frame);
 
   return (
     <MindIdContext.Provider value={mindId}>
@@ -637,19 +643,19 @@ function MindEditorView({
         createPortal(
           <>
             <WordOrigin doc={doc} />
+            <OriginalNotAdded mindId={mindId} />
             {verification ? (
               <VerifyLine editor={editor} doc={doc} mindId={mindId} verification={verification} />
             ) : (
               <WordCount editor={editor} doc={doc}>
-                <NoteHealth editor={editor} mindId={mindId} />
+                <NoteHealth editor={editor} mindId={mindId} doc={doc} />
               </WordCount>
             )}
           </>,
           countSlot,
         )}
-      <SectionBreakDialog retry={sectionBreakRetry} onClose={() => setSectionBreakRetry(null)} />
       {readOnly && <MindNotice kind="read-only" />}
-      <div className={`mind-editor-frame ${guide ? "mind-editor-frame--guide" : ""}`}>
+      <div ref={frame} className={`mind-editor-frame ${guide ? "mind-editor-frame--guide" : ""}`}>
         {!readOnly && <ProposalBars editor={editor} mindId={mindId} />}
         <EditorContent editor={editor} />
         {!readOnly && <EndHint editor={editor} text={hintText} onAsk={askOnLine} />}

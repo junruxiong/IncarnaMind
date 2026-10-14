@@ -14,6 +14,7 @@ import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
 import { CheckLineIcon, ChevronLeftLineIcon, PencilLineIcon, TrashLineIcon } from "../lineIcons";
+import { ProblemMark } from "../ProblemLine";
 import { buttonStyle, errorTextClass, iconButtonClass, primaryButtonClass } from "../ui";
 import { ConnectorForm } from "./ConnectorForm";
 import { ConnectorTile } from "./ConnectorTile";
@@ -211,6 +212,7 @@ export function ConnectorDetail({
       </div>
       {error && (
         <p role="alert" className={errorTextClass}>
+          <ProblemMark />
           {error}
         </p>
       )}
@@ -371,7 +373,10 @@ function ErrorNotice({ error, onRetry }: { error: ConnectorError; onRetry(): voi
       data-error-kind={error.kind}
       className="mt-1 flex flex-col gap-1.5 text-[13px] leading-5 text-ink"
     >
-      <p className="break-words">{message}</p>
+      <p className="break-words">
+        <ProblemMark />
+        {message}
+      </p>
       <div className="flex flex-wrap items-center gap-2 text-[12px]">
         {error.retrying ? (
           <span className="text-ink-meta">{t("connectors.restarting")}</span>
