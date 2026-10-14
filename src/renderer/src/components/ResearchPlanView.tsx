@@ -25,13 +25,21 @@ function usePlan(task: Task): Plan | null {
   return plan;
 }
 
-function StepMark({ status, number }: { status: Plan["steps"][number]["status"]; number: number }) {
+function StepMark({
+  status,
+  number,
+  live,
+}: {
+  status: Plan["steps"][number]["status"];
+  number: number;
+  live: boolean;
+}) {
   if (status === "done")
     return <CheckLineIcon aria-hidden="true" className="task-progress-check" />;
   if (status === "running") {
     return (
       <span aria-hidden="true" className="task-progress-mark">
-        <span className="task-dot" />
+        <span className={live ? "task-dot" : "task-dot task-dot--idle"} />
       </span>
     );
   }
@@ -94,7 +102,11 @@ export function ResearchPlanView({ task }: { task: Task }) {
               data-status={step.status}
               className="research-plan-step research-plan-step--fixed"
             >
-              <StepMark status={step.status} number={index + 1} />
+              <StepMark
+                status={step.status}
+                number={index + 1}
+                live={task.status === "running" && task.ask === null}
+              />
               <span className="research-plan-fixed research-plan-fixed--ink">{step.text}</span>
             </li>
           ))}
