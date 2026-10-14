@@ -496,6 +496,7 @@ function MindEditorView({
   }, [reads, editor, mindId, doc]);
 
   // The selection menu's AI section: each comes back as changes to accept or reject; Mark as mine acts at once.
+  const hasDocuments = useAppStore((state) => state.documents.length > 0);
   const aiActions = useMemo((): SelectionAction[] => {
     const available = (current: typeof editor) => selectionForEdit(current.state) !== null;
     const run = (action: "improve" | "shorten" | "explain") => (current: typeof editor) =>
@@ -518,17 +519,23 @@ function MindEditorView({
       { id: "explain", label: "editor.ai.explain", icon: "?", available, run: run("explain") },
       {
         id: "find-support",
-        label: "editor.ai.findSupport",
+        label: hasDocuments ? "editor.ai.findSupport" : "editor.ai.addDocumentsToFindSupport",
         icon: <SearchLineIcon className="size-3.5" />,
         available,
-        run: (current) => void checkSentences(current, mindId, doc, "find-support"),
+        run: (current) =>
+          hasDocuments
+            ? void checkSentences(current, mindId, doc, "find-support")
+            : void useAppStore.getState().pickDocuments(),
       },
       {
         id: "check-against-documents",
-        label: "editor.ai.checkAgainstDocuments",
+        label: hasDocuments ? "editor.ai.checkAgainstDocuments" : "editor.ai.addDocumentsToCheck",
         icon: <CheckLineIcon className="size-3.5" />,
         available,
-        run: (current) => void checkSentences(current, mindId, doc, "check-against-documents"),
+        run: (current) =>
+          hasDocuments
+            ? void checkSentences(current, mindId, doc, "check-against-documents")
+            : void useAppStore.getState().pickDocuments(),
       },
       {
         id: "mark-as-mine",
@@ -548,7 +555,7 @@ function MindEditorView({
         },
       },
     ];
-  }, [mindId, doc]);
+  }, [mindId, doc, hasDocuments]);
 
   // When the language changes: relabel. Setting the props also redraws the placeholder,
   // and the footnotes' markers are named anew.
@@ -645,7 +652,7 @@ function MindEditorView({
               <VerifyLine editor={editor} doc={doc} mindId={mindId} verification={verification} />
             ) : (
               <WordCount editor={editor} doc={doc}>
-                <NoteHealth editor={editor} mindId={mindId} />
+                <NoteHealth editor={editor} mindId={mindId} doc={doc} />
               </WordCount>
             )}
           </>,
