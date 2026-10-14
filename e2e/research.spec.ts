@@ -448,6 +448,18 @@ test("the plan card follows the composer's model chip, says when the web can't b
     await expect(progress).toHaveAttribute("data-status", "running");
     await expect(queued).toHaveCount(0, { timeout: 30_000 });
     await expect(window.getByTestId("task-tray")).toHaveCount(0);
+    // ⌘K reaches Tell it… too; Esc goes back to asking.
+    await window.keyboard.press("ControlOrMeta+k");
+    await expect(window.getByTestId("palette-search")).toBeFocused();
+    await window.keyboard.type("告诉正在运行");
+    await expect(window.getByTestId("palette").getByTestId("palette-item").first()).toContainText(
+      "告诉正在运行的任务…",
+    );
+    await window.keyboard.press("Enter");
+    await expect(chip).toBeVisible();
+    await expect(input).toBeFocused();
+    await window.keyboard.press("Escape");
+    await expect(chip).toHaveCount(0);
 
     await progress.getByTestId("task-progress-stop").focus();
     await window.keyboard.press("Enter");

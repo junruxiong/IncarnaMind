@@ -2166,6 +2166,10 @@ export const en = {
   "tasks.row.recentTitle": "{task}: {mind}",
   "command.showTasks": "Show Tasks",
   "command.showTasks.keywords": "tasks running background needs you",
+  "command.tellTask": "Tell the Running Task…",
+  "command.tellTask.keywords": "tell message steer change research queue",
+  "command.researchPlan": "Show the Research Plan",
+  "command.researchPlan.keywords": "plan steps research running",
 
   "cost.and": "{first} and {second}",
   "cost.estimate": "About {calls} calls, {tokens} tokens, {cost}",

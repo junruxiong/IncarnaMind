@@ -2084,6 +2084,10 @@ export const zhCN = {
   "tasks.row.recentTitle": "{task}：{mind}",
   "command.showTasks": "显示任务",
   "command.showTasks.keywords": "任务 进行中 后台 需要你处理",
+  "command.tellTask": "告诉正在运行的任务…",
+  "command.tellTask.keywords": "告诉 消息 调整 修改 研究 排队",
+  "command.researchPlan": "查看研究计划",
+  "command.researchPlan.keywords": "计划 步骤 研究 运行中",
 
   "cost.and": "{first} 和 {second}",
   "cost.estimate": "约 {calls} 次调用、{tokens} token、{cost}",
