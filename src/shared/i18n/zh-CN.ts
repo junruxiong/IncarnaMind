@@ -225,6 +225,7 @@ export const zhCN = {
   "folder.newMindHere": "在此新建 Mind",
   "folder.untitled": "未命名文件夹",
   "folder.untitled.numbered": "未命名文件夹 {number}",
+  "folder.fromStarters": "从预设文件夹新建…",
   "folder.newWith": "新建文件夹并放入所选项目",
   "folder.newWith.document": "新建文件夹并放入此文档",
   "folder.newWith.mind": "新建文件夹并放入此 Mind",
