@@ -287,12 +287,19 @@ test('Get started\'s "Add your Documents" opens Add files… and Link a folder�
   await expect(window.getByTestId("chat-setup")).toBeHidden();
   await window.keyboard.press("Escape");
   await expect(ways).toBeHidden();
+  await expect(step).toBeFocused();
 
+  // In Chinese, at the narrowest window, the menu still opens whole, inside the window.
   await setLanguage(window, "zh-CN");
+  await setWindowSize(app, window, 900, 760);
   await expect(step).toHaveAccessibleName("添加你的文档");
   await expectPlainWords(firstScreen);
   await pointAndClick(window, step);
   await expect(ways.getByRole("menuitem")).toHaveText(["添加文件…", "添加同步文件夹…"]);
+  const menuBox = await ways.boundingBox();
+  const width = await window.evaluate(() => globalThis.innerWidth);
+  expect(menuBox?.x ?? -1).toBeGreaterThanOrEqual(0);
+  expect((menuBox?.x ?? 0) + (menuBox?.width ?? 0)).toBeLessThanOrEqual(width);
   await interceptOpenDialog(app, notes);
   await pointAndClick(window, ways.getByRole("menuitem").first());
   await expect(
@@ -306,11 +313,11 @@ test('Get started\'s "Add your Documents" opens Add files… and Link a folder�
   await newMind(window);
   await dismissChatSetup(window);
   const guide = window.getByTestId("start-guide");
-  await expect(guide).toContainText("回答会出现在右侧，一键加入笔记。");
+  await expect(guide).toContainText("回答会出现在助手里，一键加入笔记。");
   await expectPlainWords([guide]);
   await setLanguage(window, "en");
   await expect(guide).toContainText(
-    "The Answer appears on the right; add it to your note with one click.",
+    "The Answer appears in the assistant; add it to your note with one click.",
   );
   await expectPlainWords([guide, window.getByTestId("sidebar")]);
 });

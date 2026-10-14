@@ -2914,7 +2914,7 @@ export const en = {
     "Connect Notion, Google Drive and other apps, and Answers can look things up there too. Only your Documents get checked Citations.",
   "startGuide.ask.title": "Ask a Question",
   "startGuide.ask.body":
-    "Press {shortcut} and ask. The Answer appears on the right; add it to your note with one click.",
+    "Press {shortcut} and ask. The Answer appears in the assistant; add it to your note with one click.",
   "startGuide.ask.example": "e.g. What do these reports say about Q3 revenue?",
   "startGuide.check.title": "Check where each claim comes from",
   "startGuide.check.body":
