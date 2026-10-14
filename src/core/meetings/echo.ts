@@ -4,14 +4,16 @@
  * and coloured by the room; Chromium's own canceller can't help, because it
  * only removes sound the page itself plays (ADR-0015).
  *
- * This is Speex's MDF (Valin, "On Adjusting the Learning Rate in Frequency
- * Domain Echo Cancellation With Double-Talk", 2007): a partitioned-block
- * frequency-domain adaptive filter whose learning rate follows how much
- * residual echo is left, so it slows down while the User talks over the
- * others, with a background filter that adapts and a foreground filter that
- * takes its weights only once they do better. With headphones there is no
- * echo to learn, the filter stays near zero and the microphone passes
- * through.
+ * Derived from libspeexdsp's mdf.c (BSD-3-Clause, Copyright (C) 2003-2008
+ * Jean-Marc Valin), whose notice is in resources/notices/speexdsp.txt and
+ * ships with the app. It is Speex's MDF (Valin, "On Adjusting the Learning
+ * Rate in Frequency Domain Echo Cancellation With Double-Talk", 2007): a
+ * partitioned-block frequency-domain adaptive filter whose learning rate
+ * follows how much residual echo is left, so it slows down while the User
+ * talks over the others, with a background filter that adapts and a
+ * foreground filter that takes its weights only once they do better. With
+ * headphones there is no echo to learn, the filter stays near zero and the
+ * microphone passes through.
  *
  * The two sources are timestamped apart (./index), so where the echo sits
  * against its reference moves: the filter looks a little ahead of the

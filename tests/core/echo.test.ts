@@ -258,6 +258,20 @@ describe("A Meeting on laptop speakers", () => {
   });
 });
 
+describe("The canceller's licence", () => {
+  test("the notice of the Speex code it is derived from ships with the app", () => {
+    const root = join(__dirname, "..", "..");
+    const notice = readFileSync(join(root, "resources", "notices", "speexdsp.txt"), "utf8");
+    expect(notice).toContain("Copyright (C) 2003-2008 Jean-Marc Valin");
+    expect(notice).toContain(
+      "Redistributions of source code must retain the above copyright notice",
+    );
+    expect(notice).toContain("POSSIBILITY OF SUCH DAMAGE.");
+    const builder = readFileSync(join(root, "electron-builder.yml"), "utf8");
+    expect(builder).toMatch(/- from: resources\/notices\n\s+to: notices\n/);
+  });
+});
+
 describe("The canceller's FFT", () => {
   test("gives the DFT, divided by its size, and the inverse gives the samples back", () => {
     const fft = createRealFft(32);
