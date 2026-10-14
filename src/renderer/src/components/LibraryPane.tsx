@@ -4,7 +4,7 @@ import type { Document, LibraryGroup } from "../../../core/api";
 import { focusComposer } from "../commands/assistant";
 import { useComposer } from "../composer";
 import { LIBRARY_DELETED } from "../deletedItems";
-import { errorMessage } from "../errors";
+import { errorMessage, providerErrorText } from "../errors";
 import { useFindSources } from "../findSources";
 import { useLanguage, useT } from "../i18n";
 import {
@@ -168,9 +168,10 @@ export function LibraryPane() {
   const notSortedOf = useCallback(
     (documentId: string) => {
       const item = assignments.get(documentId);
-      return item?.status === "failed" ? (item.error?.message ?? "") : null;
+      if (item?.status !== "failed") return null;
+      return item.error ? providerErrorText(item.error, t) : "";
     },
-    [assignments],
+    [assignments, t],
   );
   const problem = useMemo(() => problemOf(documents), [documents]);
   // Files in the Linked folders that aren't Documents because their format isn't read yet (#740).

@@ -30,7 +30,7 @@ import { messageReference } from "../../core/references";
 import { asGenerated } from "../../shared/aiText";
 import type { NodeJSON } from "../../shared/blockJson";
 import { setOrigins } from "../../shared/blockOrigins";
-import { mindName } from "../../shared/naming";
+import { cutTitle, mindName } from "../../shared/naming";
 import { citedTables, recheckCitations, textLength, withoutIds } from "../../shared/noteBlocks";
 import { readMindHandle } from "./commands/handles";
 import { conversationLabel, questionOf } from "./conversations";
@@ -53,9 +53,10 @@ export interface AddedAnswer {
   blocks: NodeJSON[];
 }
 
-const nameOfMind = (mindId: string) => {
+/** The Mind's name, which an unnamed Mind is about to take from the Question (the core names it a moment after the Note is in). */
+const nameOfMind = (mindId: string, question: string) => {
   const mind = useAppStore.getState().minds.find((each) => each.id === mindId);
-  return (mind && mindName(mind)) || t("mind.untitled");
+  return (mind && mindName(mind)) || cutTitle(question) || t("mind.untitled");
 };
 
 const originOf = ({ answer }: AddedAnswer): BlockOrigin => ({
@@ -131,7 +132,7 @@ async function addToReadMind(added: AddedAnswer, mindId: string): Promise<boolea
     .catch(useAppStore.getState().reportError);
   offerEditorUndo(
     editor,
-    t("answer.added", { mind: nameOfMind(mindId) }),
+    t("answer.added", { mind: nameOfMind(mindId, originOf(added).question) }),
     answerUndoPlace(added.answer.id),
   );
   return true;
@@ -146,7 +147,7 @@ async function addToOtherMind(added: AddedAnswer, mindId: string, openIt: boolea
     model: added.answer.model,
   });
   useUndo.getState().push({
-    message: t("answer.added", { mind: nameOfMind(mindId) }),
+    message: t("answer.added", { mind: nameOfMind(mindId, originOf(added).question) }),
     undo: () => core.undoAddToNote({ mindId, blockIds }),
     shownAt: answerUndoPlace(added.answer.id),
   });
