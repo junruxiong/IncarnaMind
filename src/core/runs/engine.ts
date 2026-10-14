@@ -35,7 +35,7 @@ export interface RunEngine {
  * gets them as the model sent them. Arguments that don't match never reach
  * `gate` or the Tool: the call fails, and the model reads why.
  */
-export type RunTool = Pick<Tool, "name" | "description" | "inputSchema" | "call">;
+export type RunTool = Pick<Tool, "name" | "description" | "inputSchema" | "call" | "streamInput">;
 
 /** A call of a Tool, under the id the model gave it. */
 export interface RunToolCall {
@@ -154,6 +154,12 @@ export type RunEvent =
    * a block of reasoning. It is never in `messages`.
    */
   | { type: "reasoning"; text: string }
+  /**
+   * The model began writing a call of a Tool, before its input is whole, when
+   * its provider streams Tool inputs: the Tool hears the input as it comes
+   * (`RunTool.streamInput`), and "tool-call" follows with all of it.
+   */
+  | { type: "tool-input-started"; id: string; tool: string }
   /**
    * The model asked for a Tool. Its `gate`, then its call, run alongside the
    * stream, so they may begin before this event is read.
