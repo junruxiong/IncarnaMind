@@ -1410,7 +1410,7 @@ async function startGettingStarted(exampleMindId: string): Promise<void> {
 export const isOwnDocument = (document: Document, examples: Examples | null) =>
   document.linkedFolderId === null || document.linkedFolderId !== examples?.linkedFolderId;
 
-/** Ticks "Index your Documents or connect apps" once there are Documents of the User's own, or Connectors. */
+/** Ticks "Add your Documents" once there are Documents of the User's own, or Connectors. */
 function tickIndexed(connectors: number): void {
   const { documents, examples, updateGettingStarted } = useAppStore.getState();
   if (connectors > 0 || documents.some((each) => isOwnDocument(each, examples)))
@@ -1475,13 +1475,15 @@ export function recordUsage(event: UiUsageEvent): void {
   core.recordUsage(event).catch((error: unknown) => console.error(error));
 }
 
-// A Connector is one way to "Index your Documents or connect apps".
 core.on("connectors.changed", (connectors) => tickIndexed(connectors.length));
 
-// A Question of the User's own: anything but the example Answer, written again.
-core.on("answer.started", ({ answerId }) => {
+// An Answer to a Question of the User's own: anything but the example Answer, written again.
+// Only one that arrives: not one refused or failed (#766).
+core.on("answer.finished", ({ answerId, status }) => {
   const { examples, updateGettingStarted } = useAppStore.getState();
-  if (answerId !== examples?.answerId) updateGettingStarted({ askedOwn: true });
+  if (status === "done" && answerId !== examples?.answerId) {
+    updateGettingStarted({ askedOwn: true });
+  }
 });
 
 core.on("chatReadiness.changed", (chatReadiness) => {

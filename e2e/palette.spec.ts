@@ -340,7 +340,7 @@ test("runs a command on the Documents selected in the sidebar, taken back with U
   await pointAndClick(window, rows.nth(2).getByTestId("open-document"), {
     modifiers: ["ControlOrMeta"],
   });
-  await expect(rows.nth(2)).toHaveAttribute("aria-selected", "true");
+  await expect(rows.nth(2).getByRole("treeitem")).toHaveAttribute("aria-selected", "true");
 
   await openPalette(window);
   await window.keyboard.type("delete");

@@ -5,6 +5,7 @@ import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { translateNow, useT } from "../../i18n";
 import { useAppStore } from "../../store";
+import { ProblemMark } from "../ProblemLine";
 import { TypingTextarea } from "../TypingTextarea";
 import { buttonStyle, errorTextClass, fieldLabelClass, inputClass } from "../ui";
 
@@ -111,6 +112,7 @@ export function FolderForm({
       </label>
       {error && (
         <p role="alert" className={`${errorTextClass} mt-3`}>
+          <ProblemMark />
           {error}
         </p>
       )}
@@ -160,6 +162,7 @@ export function StarterFolders({ close }: { close(): void }) {
       ))}
       {error && (
         <p role="alert" className={`${errorTextClass} mt-2`}>
+          <ProblemMark />
           {error}
         </p>
       )}
