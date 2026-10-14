@@ -261,7 +261,7 @@ test("first-run's line under an API key names only the providers listed below it
     },
     "zh-CN": {
       names: ["Anthropic", "OpenAI", "Google", "OpenRouter", "DeepSeek", "通义千问", "硅基流动"],
-      others: "更多提供商在“设置”中。",
+      others: "更多服务在“设置”中。",
     },
   } as const;
   for (const language of ["zh-CN", "en"] as const) {
