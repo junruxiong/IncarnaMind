@@ -4,7 +4,13 @@ import { answerBlocks, hasText } from "../../answerBlocks";
 import { useAnswers } from "../../answers";
 import { useApprovals, waitingFor } from "../../approvals";
 import { regenerateAnswer } from "../../conversations";
-import { AnswerError, ApprovalCard, figuresOf, UncalculatedLine } from "../../editor/AnswerView";
+import {
+  AnswerError,
+  ApprovalCard,
+  figuresOf,
+  NoCitationsLine,
+  UncalculatedLine,
+} from "../../editor/AnswerView";
 import { AskProblem } from "../../editor/AskProblem";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
@@ -75,9 +81,10 @@ export function AssistantAnswer({
         onRegenerate={regenerate}
       />
       {answer.citationSupport === "none" && (
-        <p data-testid="answer-no-citations" className="answer-info">
-          {t("citation.unsupported")}
-        </p>
+        <NoCitationsLine
+          modelId={answer.model?.modelId ?? null}
+          providerId={answer.model?.providerId ?? null}
+        />
       )}
       {(written || streaming) && (
         <AnswerText
@@ -97,6 +104,7 @@ export function AssistantAnswer({
           // A conversation doesn't keep when a plan's limit resets: the line says so without it.
           resetsAt={null}
           details={answer.errorMessage}
+          failedAt={answer.updatedAt}
           onRetry={regenerate}
           onOpenSettings={openSettings}
         />
