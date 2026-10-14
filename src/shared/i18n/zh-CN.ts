@@ -1027,7 +1027,7 @@ export const zhCN = {
   "status.scanning.other": "正在识别 {count} 页扫描件…",
   "status.tagging.one": "正在为 1 个文档打标签…",
   "status.tagging.other": "正在为 {count} 个文档打标签…",
-  "status.taggingWaiting": "选择 AI 模型后会自动打标签",
+  "status.taggingWaiting": "打标签需要 AI 模型",
   "status.taggingPermission": "打标签需要你允许",
   "status.choose": "选择…",
   "status.downloading": "搜索模型",
@@ -1283,7 +1283,7 @@ export const zhCN = {
   "tags.dialog.retag.started": "已开始重新打标签。",
   "tags.dialog.done": "完成",
 
-  "jev.waiting.notice": "选好模型后再打标签。",
+  "jev.waiting.notice": "选择 AI 模型后会自动打标签。",
   "jev.waiting.permission": "允许把文档文字发送给 {service} 后再打标签。",
   "jev.chip.needsReview": "待确认",
   "jev.chip.likely": "{tag}：自动添加，可能性 {percent}%",
