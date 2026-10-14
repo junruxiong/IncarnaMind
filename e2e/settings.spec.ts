@@ -145,6 +145,7 @@ test("Organize in the Library, with no model chosen yet, opens Models, where Org
     );
     await window.getByTestId("open-library").click();
     await window.getByTestId("library").getByTestId("library-organize").click();
+    await window.getByTestId("library").getByTestId("library-organize-set-up").click();
     const settings = window.getByTestId("settings");
     await expect(settings).toHaveAttribute("data-page", "models");
     await expect(settings.getByTestId("organization-settings")).toBeVisible();
