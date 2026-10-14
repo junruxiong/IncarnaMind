@@ -838,6 +838,7 @@ export const zhCN = {
   "location.section.comment.anonymous": "{section}，批注",
   "location.section.paragraph.one": "{section}，第 {range} 段",
   "location.section.paragraph.other": "{section}，第 {range} 段",
+  "location.section.figure": "{section}，图 {number}",
   "location.lines.one": "第 {range} 行",
   "location.lines.other": "第 {range} 行",
 
@@ -2094,6 +2095,9 @@ export const zhCN = {
   "citation.scan": "从扫描件识别的文字",
   "citation.scan.unsure.one": "从扫描件识别的文字 · 1 处可能识别有误",
   "citation.scan.unsure.other": "从扫描件识别的文字 · {count} 处可能识别有误",
+  "citation.picture": "从图片中识别",
+  "citation.picture.unsure.one": "从图片中识别 · 1 处可能识别有误",
+  "citation.picture.unsure.other": "从图片中识别 · {count} 处可能识别有误",
   "citation.scan.unsureWord": "可能识别有误，请对照原页核对",
   "citation.quote": "引文：",
   "citation.quoted.answer": "回答中",

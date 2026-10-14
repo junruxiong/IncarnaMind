@@ -874,6 +874,7 @@ export const en = {
   "location.section.comment.anonymous": "{section}, comment",
   "location.section.paragraph.one": "{section}, ¶\u00a0{range}",
   "location.section.paragraph.other": "{section}, ¶\u00a0{range}",
+  "location.section.figure": "{section}, figure\u00a0{number}",
   "location.lines.one": "line {range}",
   "location.lines.other": "lines {range}",
 
@@ -2185,6 +2186,9 @@ export const en = {
   "citation.scan": "Text read from a scan",
   "citation.scan.unsure.one": "Text read from a scan · 1 word may be misread",
   "citation.scan.unsure.other": "Text read from a scan · {count} words may be misread",
+  "citation.picture": "Read from a picture",
+  "citation.picture.unsure.one": "Read from a picture · 1 word may be misread",
+  "citation.picture.unsure.other": "Read from a picture · {count} words may be misread",
   "citation.scan.unsureWord": "May be misread: check it on the page",
   "citation.quote": "The quote:",
   "citation.quoted.answer": "In the Answer",

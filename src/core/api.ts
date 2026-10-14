@@ -1291,6 +1291,8 @@ export type CitationLocation =
       notes?: boolean;
       comment?: { author: string | null };
       paragraphs?: { from: number; to: number };
+      /** A web page's picture the quote was read from, numbered in the page from 1. */
+      figure?: number;
     };
 
 /** A stretch of words, and whether the Document has it where the Answer's quoted words were looked for. */
@@ -2653,6 +2655,8 @@ export interface ScannedText {
  */
 export interface ScannedQuote {
   unsure: string[];
+  /** A scanned page's, or a saved web page's picture's (#756). */
+  from: "scan" | "picture";
 }
 
 /** A Citation's quote, as `readScannedQuote` looks it up: its Document, version, Units and quote. */

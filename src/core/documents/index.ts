@@ -28,10 +28,12 @@ import type { LiveDocument } from "../../shared/citations";
 import { quoteInUnits } from "../../shared/locations";
 import {
   type Anchor,
+  anchorsOf,
   cellNumber,
   type TextUnit,
   type UnitKind,
   type UnitLabel,
+  type UnitText,
 } from "../../shared/units";
 import { cleanQuote } from "../answers/citations";
 import type { CitedUnits } from "../answers/citedVersions";
@@ -1979,31 +1981,39 @@ export function createDocuments(options: DocumentsOptions) {
         input.pageFrom,
         input.pageTo ?? input.pageFrom,
       );
-      if (!units.some((unit) => unit.label?.scan && !unit.label.scan.unread)) return null;
+      const read = (unit: UnitText) =>
+        (unit.label?.scan && !unit.label.scan.unread) ||
+        unit.label?.figures?.some((figure) => !figure.unread);
+      if (!units.some(read)) return null;
       const ranges = quoteInUnits(units, cleanQuote(input.quote));
       if (!ranges || ranges.length === 0) return null;
       const unsure: string[] = [];
+      const covers = (from: number, to: number) =>
+        ranges.some((range) => range.start < to && range.end > from);
       // A quote of a page of text beside a scanned one wasn't read from a scan.
       let scanned = false;
+      let pictured = false;
       let start = 0;
       for (const unit of units) {
         const end = start + unit.text.length;
-        if (
-          unit.label?.scan &&
-          !unit.label.scan.unread &&
-          ranges.some((range) => range.start < end && range.end > start)
-        ) {
-          scanned = true;
-        }
+        if (unit.label?.scan && !unit.label.scan.unread && covers(start, end)) scanned = true;
         for (const [from, to] of unit.label?.scan?.unsure ?? []) {
-          if (ranges.some((range) => range.start < start + to && range.end > start + from)) {
-            unsure.push(unit.text.slice(from, to));
+          if (covers(start + from, start + to)) unsure.push(unit.text.slice(from, to));
+        }
+        for (const figure of unit.label?.figures ?? []) {
+          const anchor = anchorsOf(unit).find((each) => each.target === `figure${figure.number}`);
+          if (figure.unread || !anchor || !covers(start + anchor.start, start + anchor.end)) {
+            continue;
+          }
+          pictured = true;
+          for (const [from, to] of figure.unsure ?? []) {
+            if (covers(start + from, start + to)) unsure.push(unit.text.slice(from, to));
           }
         }
         // `joinUnits` puts one line break between Units.
         start = end + 1;
       }
-      return scanned ? { unsure } : null;
+      return scanned ? { unsure, from: "scan" } : pictured ? { unsure, from: "picture" } : null;
     },
 
     /** `added` hears of each new Document as it is stored, before it is processed. */
