@@ -1818,6 +1818,17 @@
     height: 12px;
     flex-shrink: 0;
   }
+  /*
+   * Another model answers while the chosen one's plan limit is used up: filled, so it reads as a
+   * state, and kept whole, so its time shows; the Search scope beside it gives up room first.
+   */
+  .composer-model[data-stand-in]:not(:hover, [aria-expanded="true"]) {
+    background: var(--color-hover);
+    color: var(--color-ink-secondary);
+  }
+  .composer-model-anchor:has(> [data-stand-in]) {
+    flex-shrink: 0;
+  }
   .composer-model-anchor {
     display: flex;
     min-width: 0;

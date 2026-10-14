@@ -1912,6 +1912,11 @@ export const en = {
   "composer.paste.saveFailed": "The pasted text couldn’t be saved as a Document. Try again.",
   "composer.model.label": "Model: {model}, {via}. Change it for this Mind",
   "composer.model.labelPlain": "Model: {model}. Change it for this Mind",
+  "composer.model.standIn": "{model} · until {time}",
+  "composer.model.standIn.title":
+    "{chosen}’s limit is used up until {time}. Questions go to {model} until then.",
+  "composer.model.standIn.titleForNow":
+    "{chosen}’s limit is used up for now. Questions go to {model} until it’s back.",
   "composer.model.menu": "Model for this Mind",
   "composer.model.intro": "For this Mind’s next Questions. It’s remembered for the Mind.",
   "composer.model.group.keys": "Your keys",
@@ -2020,6 +2025,11 @@ export const en = {
   "answer.error.cost-cap": "Monthly cap reached",
   "answer.error.changeCap": "Change cap",
   "answer.error.plan-limit.ollama": "Your Ollama Cloud usage is used up",
+  "answer.error.planModel": "{model}’s limit on your plan is used up until {time}.",
+  "answer.error.planModel.forNow": "{model}’s limit on your plan is used up for now.",
+  "answer.error.planModels": "Your plan’s limits are used up until {time}.",
+  "answer.error.planModels.forNow": "Your plan’s limits are used up for now.",
+  "answer.error.answerWith": "Answer with {model}",
 
   "run.stopped.cost-cap": "Monthly cap reached",
   "run.stopped.plan-limit": "Plan limit reached",

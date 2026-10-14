@@ -5,39 +5,18 @@
  * with none; the plan says again when a model is used up.
  */
 import { type LanguageModelMiddleware, wrapLanguageModel } from "ai";
-import type { ChatGptPlanLimits, ChatGptPlanModel } from "../../api";
+import type { ChatGptPlanLimits } from "../../api";
 import type { ChatLanguageModel } from "../models";
 import { classifyProviderError } from "../providerErrors";
 
 /** With no reset time from the plan, the chosen model is tried again this long after its last try. */
-export const RETRY_WITHOUT_RESET_MS = 60 * 60_000;
+const RETRY_WITHOUT_RESET_MS = 60 * 60_000;
 
 type Wrapped = Parameters<NonNullable<LanguageModelMiddleware["wrapStream"]>>[0];
 type StreamPart =
   Awaited<ReturnType<Wrapped["doStream"]>>["stream"] extends ReadableStream<infer Part>
     ? Part
     : never;
-
-/**
- * The plan's first model, in the plan's own order, whose limit isn't used
- * up, passing over `failed`; null when none is left.
- */
-export function nextPlanModel(
-  models: readonly ChatGptPlanModel[],
-  limits: ChatGptPlanLimits,
-  failed: string,
-): ChatGptPlanModel | null {
-  const usedUp = new Set(limits.usedUp.map((limit) => limit.modelId));
-  return models.find((model) => model.id !== failed && !usedUp.has(model.id)) ?? null;
-}
-
-/** When the first used-up limit resets (ISO 8601); null when the plan said for none. */
-export function firstReset(limits: ChatGptPlanLimits): string | null {
-  const times = limits.usedUp.flatMap((limit) => (limit.resetsAt ? [limit.resetsAt] : []));
-  return times.sort()[0] ?? null;
-}
-
-export type PlanLimits = ReturnType<typeof createPlanLimits>;
 
 export function createPlanLimits(options: {
   /** Milliseconds since the epoch. */

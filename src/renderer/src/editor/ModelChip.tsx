@@ -19,6 +19,7 @@ import { useComposer } from "../composer";
 import { core } from "../core";
 import { useT } from "../i18n";
 import { useModelNames } from "../modelNames";
+import { usePlanStandIn } from "../planLimits";
 import { useAppStore } from "../store";
 import { ChevronDownSmallIcon } from "./icons";
 
@@ -107,6 +108,7 @@ export function ModelChip({ doc, onChosen }: { doc: Y.Doc | null; onChosen(): vo
   const groups = useAnswers((state) => state.models);
   const loadModels = useAnswers((state) => state.loadModels);
   const nameOf = useModelNames();
+  const standIn = usePlanStandIn();
   const [query, setQuery] = useState("");
   const search = useRef<HTMLInputElement>(null);
   // Over the composer, not on it.
@@ -150,13 +152,34 @@ export function ModelChip({ doc, onChosen }: { doc: Y.Doc | null; onChosen(): vo
   };
   const via = provider ? t(VIA[groupOf(provider, isCloud(provider.id, current.modelId))]) : null;
   const shown = nameOf(current.modelId, current.providerId);
+  const answering =
+    standIn && provider?.kind === "chatgpt" && standIn.insteadOf === current.modelId
+      ? { name: nameOf(standIn.modelId, current.providerId).name, until: standIn.untilTime }
+      : null;
+  const chipText = answering?.until
+    ? t("composer.model.standIn", { model: answering.name, time: answering.until })
+    : (answering?.name ?? shown.name);
   const named = shown.id ? `${shown.name} · ${shown.id}` : shown.name;
-  const title = via ? `${named} · ${via}` : named;
+  const title = answering
+    ? answering.until
+      ? t("composer.model.standIn.title", {
+          chosen: shown.name,
+          model: answering.name,
+          time: answering.until,
+        })
+      : t("composer.model.standIn.titleForNow", { chosen: shown.name, model: answering.name })
+    : via
+      ? `${named} · ${via}`
+      : named;
   const label = via
-    ? t("composer.model.label", { model: shown.name, via })
-    : t("composer.model.labelPlain", { model: shown.name });
+    ? t("composer.model.label", { model: chipText, via })
+    : t("composer.model.labelPlain", { model: chipText });
 
   const choose = (choice: ChatModelChoice) => {
+    // The User's own pick wins over a stand-in, for the model it stood in for too.
+    if (answering || (standIn && choice.modelId === standIn.insteadOf)) {
+      core.endPlanStandIn().catch(useAppStore.getState().reportError);
+    }
     chooseModel(doc, choice);
     menu.close();
     onChosen();
@@ -189,13 +212,14 @@ export function ModelChip({ doc, onChosen }: { doc: Y.Doc | null; onChosen(): vo
         type="button"
         {...menu.buttonProps}
         data-testid="composer-model"
+        data-stand-in={answering ? "" : undefined}
         aria-label={label}
         title={title}
         onPointerEnter={loadModels}
         onFocus={loadModels}
         className="composer-chip composer-model"
       >
-        <span className="truncate">{shown.name}</span>
+        <span className="truncate">{chipText}</span>
         <ChevronDownSmallIcon className="composer-model-chevron" />
       </button>
       <div

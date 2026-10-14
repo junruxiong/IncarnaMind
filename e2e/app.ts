@@ -20,6 +20,7 @@ import {
 import type { FakeTranscriberOptions } from "../src/core/transcription/fake";
 import type { DocumentLocation } from "../src/shared/documentViewer";
 import type { TestHooks } from "../src/shared/testHooks";
+import { type FakeOpenAIServer, signInAt } from "../tests/helpers/fakeOpenAI";
 
 const appDir = resolve(__dirname, "..");
 
@@ -596,6 +597,28 @@ export async function interceptOpenExternal(app: ElectronApplication) {
 /** The URLs the intercepted system browser was asked to open. */
 export function urlsOpened(app: ElectronApplication) {
   return app.evaluate(() => (globalThis as { urlsOpened?: string[] }).urlsOpened ?? []);
+}
+
+/**
+ * Continue with ChatGPT in Settings → Models, as the User does, against the
+ * local stand-in for OpenAI the app was launched with (`chatGpt`); then closes
+ * Settings. With no chat model before, the plan's first model becomes the default.
+ */
+export async function signInWithChatGpt(
+  app: ElectronApplication,
+  window: Page,
+  openai: FakeOpenAIServer,
+): Promise<void> {
+  await interceptOpenExternal(app);
+  const plan = (await openSettings(window, "models")).getByTestId("chatgpt-settings");
+  await acceptPlainTextKeys(window, plan);
+  await plan.getByTestId("chatgpt-continue").click();
+  await expect.poll(() => urlsOpened(app)).toHaveLength(1);
+  const [authorize] = await urlsOpened(app);
+  expect((await signInAt(openai, authorize ?? "")).status).toBe(200);
+  await window.getByTestId("chatgpt-welcome-ok").click();
+  await expect(plan.getByTestId("chatgpt-in-use")).toBeVisible();
+  await closeSettings(window);
 }
 
 /**

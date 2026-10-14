@@ -6,7 +6,9 @@ import { useApprovals, waitingFor } from "../../approvals";
 import { regenerateAnswer } from "../../conversations";
 import { AnswerError, ApprovalCard, figuresOf, UncalculatedLine } from "../../editor/AnswerView";
 import { AskProblem } from "../../editor/AskProblem";
+import { PlanLimitLine } from "../../editor/PlanLimitLine";
 import { useT } from "../../i18n";
+import { useStoppedByPlanLimit } from "../../planLimits";
 import { useScopeEmpty } from "../../scopeDocuments";
 import { useAppStore } from "../../store";
 import { useUnreadFiles } from "../../unreadFiles";
@@ -61,6 +63,12 @@ export function AssistantAnswer({
   const scopeEmpty = useScopeEmpty(question?.scope ?? null);
   const scopeName = useStepsScopeOf(question)(0);
   const unread = useUnreadFiles(question?.scope ?? null);
+  const planModel = useStoppedByPlanLimit(
+    status === "failed" ? (answer.errorKind ?? null) : null,
+    answer.model?.providerId ?? null,
+  )
+    ? (answer.model?.modelId ?? null)
+    : null;
 
   return (
     <article
@@ -106,7 +114,7 @@ export function AssistantAnswer({
       )}
       {!streaming && uncalculated > 0 && <UncalculatedLine count={uncalculated} />}
       {!streaming && status !== "failed" && <UnreadFilesLine files={unread} />}
-      {!streaming && status === "failed" && (
+      {!streaming && status === "failed" && !planModel && (
         <AnswerError
           kind={answer.errorKind ?? "unknown"}
           modelId={answer.model?.modelId ?? null}
@@ -116,6 +124,14 @@ export function AssistantAnswer({
           details={answer.errorMessage}
           onRetry={regenerate}
           onOpenSettings={openSettings}
+        />
+      )}
+      {!streaming && status === "failed" && planModel && (
+        <PlanLimitLine
+          modelId={planModel}
+          providerId={answer.model?.providerId ?? null}
+          details={answer.errorMessage}
+          onAnswerAgain={regenerate}
         />
       )}
       {problem && (
