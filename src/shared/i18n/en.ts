@@ -563,6 +563,8 @@ export const en = {
   "claim.cited": "Cited in this sentence",
   "claim.unsupported.inFolder": "Nothing in “{folder}” says this.",
   "claim.unsupported.anywhere": "Nothing in your Documents says this.",
+  "claim.unsupported.differs": "Your Documents say something different:",
+  "claim.fixSentence": "Fix the sentence",
   "claim.findSources": "Find sources",
   "claim.searchWeb": "Search the web",
   "claim.removeMark": "Remove the mark",

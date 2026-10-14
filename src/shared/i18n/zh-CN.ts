@@ -548,6 +548,8 @@ export const zhCN = {
   "claim.cited": "这句话已引用它",
   "claim.unsupported.inFolder": "“{folder}”中没有内容提到这一点。",
   "claim.unsupported.anywhere": "你的文档中没有内容提到这一点。",
+  "claim.unsupported.differs": "你的文档里是另一种说法：",
+  "claim.fixSentence": "修改这句话",
   "claim.findSources": "查找来源",
   "claim.searchWeb": "网页搜索",
   "claim.removeMark": "移除标记",
