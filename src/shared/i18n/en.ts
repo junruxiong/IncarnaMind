@@ -29,6 +29,7 @@ export const en = {
   "library.organize.use": "Use {company}",
   "library.organize.sends":
     "Sends your Documents' text, Folder names and Tag definitions to {company}",
+  "library.organize.dismiss": "Not now",
   "library.organize.setUp": "Set up a model on this computer",
   "library.organize.done.one": "Organize suggested a Folder for 1 Document",
   "library.organize.done": "Organize suggested a Folder for {count} Documents",
