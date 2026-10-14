@@ -13,6 +13,7 @@ import {
   createCore,
   DATABASE_FILE,
   type Keychain,
+  type Paths,
   type SaveChatProviderInput,
   type SecretProtection,
 } from "../../src/core";
@@ -73,6 +74,9 @@ export function createMemoryKeychain(protection: SecretProtection = "os"): Memor
   };
 }
 
+/** Adapters a test overrides; the paths it leaves out keep `startCore`'s. */
+export type TestAdapters = Omit<Partial<CoreAdapters>, "paths"> & { paths?: Partial<Paths> };
+
 /**
  * Starts the core on `dataDir` with test adapters: an English OS, an in-memory
  * keychain, no browser, shell or processes, the deterministic fake embedding
@@ -80,10 +84,9 @@ export function createMemoryKeychain(protection: SecretProtection = "os"): Memor
  * and no lookups of models in Ollama. Closed when the current test finishes; call `close()` yourself to
  * simulate quitting the app.
  */
-export function startCore(dataDir: string, overrides: Partial<CoreAdapters> = {}): Core {
+export function startCore(dataDir: string, overrides: TestAdapters = {}): Core {
+  const { paths, ...rest } = overrides;
   const core = createCore({
-    // A Documents folder of its own, so a test that saves a file never writes into the User's.
-    paths: { dataDir, documents: join(dataDir, "Documents"), citationStyles: CITATION_STYLES },
     systemLanguages: () => ["en-US"],
     systemUserName: () => "Priya Raman",
     keychain: createMemoryKeychain(),
@@ -122,7 +125,15 @@ export function startCore(dataDir: string, overrides: Partial<CoreAdapters> = {}
       ecfr: NOWHERE,
       govinfo: NOWHERE,
     },
-    ...overrides,
+    ...rest,
+    // A home and a Documents folder of its own, so a test never reads or writes the User's.
+    paths: {
+      dataDir,
+      home: join(dataDir, "home"),
+      documents: join(dataDir, "Documents"),
+      citationStyles: CITATION_STYLES,
+      ...paths,
+    },
     // Linked folders settle and retry quickly in tests.
     linkedFolders: { settleMs: 30, retryMs: 300, ...overrides.linkedFolders },
   });
