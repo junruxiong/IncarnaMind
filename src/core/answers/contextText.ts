@@ -13,6 +13,7 @@
 
 import type * as Y from "yjs";
 import { chosenSeries } from "../../shared/charts";
+import { type LiveDocument, shownDocumentName } from "../../shared/citations";
 import { withFigureText } from "../../shared/figureMarkers";
 import { citationLocation, englishLocation } from "../../shared/locations";
 import type { MarkedCitation, MarkedFigure } from "../api";
@@ -28,14 +29,27 @@ import {
   tableLayout,
 } from "../mindText";
 
+/** The live Documents a Citation's name is looked up in; null: not known, so names stay as cited. */
+type Documents = readonly LiveDocument[] | null;
+
+const textOf = (value: unknown) => (typeof value === "string" ? value : null);
+
 /**
  * A Citation as a plain reference to its source, e.g. "[Attention Is All You
  * Need, p. 3]": how Question context shows the model Citations in Notes and
- * earlier Answers. One without a Document's name is not shown.
+ * earlier Answers. It names the Document as it is named now. One without a
+ * Document's name is not shown.
  */
-function citationSource(attributes: Record<string, unknown>): Footnote {
-  const name = attributes.documentName;
-  if (typeof name !== "string" || name === "") return { source: "", unverified: false };
+function citationSource(attributes: Record<string, unknown>, documents: Documents): Footnote {
+  const name = shownDocumentName(
+    {
+      documentId: textOf(attributes.documentId),
+      contentHash: textOf(attributes.contentHash),
+      documentName: textOf(attributes.documentName),
+    },
+    documents,
+  );
+  if (!name) return { source: "", unverified: false };
   const from = attributes.pageFrom;
   const to = attributes.pageTo;
   const location = citationLocation({
@@ -55,48 +69,58 @@ export function answerMarkdown(
   text: string,
   citations: readonly MarkedCitation[],
   figures: readonly MarkedFigure[] = [],
+  documents: Documents = null,
 ): string {
   const byMarker = new Map(citations.map((citation) => [citation.marker, citation]));
   const figureByMarker = new Map(figures.map((figure) => [figure.marker, figure]));
   return withFigureText(text, (marker) => figureByMarker.get(marker) ?? null)
     .replace(/([ \t]?)\[\^(\d{1,4})\]/g, (_, space: string, marker: string) => {
       const citation = byMarker.get(Number(marker));
-      const { source } = citationSource({
-        documentName: citation?.documentName,
-        pageFrom: citation?.pageFrom,
-        pageTo: citation?.pageTo,
-        location: citation?.location,
-      });
+      const { source } = citationSource(
+        {
+          documentId: citation?.documentId,
+          contentHash: citation?.contentHash,
+          documentName: citation?.documentName,
+          pageFrom: citation?.pageFrom,
+          pageTo: citation?.pageTo,
+          location: citation?.location,
+        },
+        documents,
+      );
       return source ? `${space}[${source}]` : "";
     })
     .trim();
 }
 
 /** Questions are read too, as the User's words; the space before a Citation stays. */
-const READ: ReadOptions = {
+const readOptions = (documents: Documents): ReadOptions => ({
   includeQuestions: true,
-  footnote: citationSource,
+  footnote: (attributes) => citationSource(attributes, documents),
   trimBeforeCitation: false,
-};
+});
 
-/** A Block (or any element) as Markdown, e.g. for Question context. */
-export function elementMarkdown(element: Y.XmlElement): string {
-  return blocksMarkdown(readBlock(element, READ)).trim();
+/**
+ * A Block (or any element) as Markdown, e.g. for Question context. Its Citations name their
+ * Documents as `documents` names them now. An Answer's fingerprint (`contentHash`) gives none
+ * and reads the names as cited, or a rename would make every Answer look edited.
+ */
+export function elementMarkdown(element: Y.XmlElement, documents: Documents = null): string {
+  return blocksMarkdown(readBlock(element, readOptions(documents)), documents).trim();
 }
 
 /** An element's content as Markdown: its child Blocks separated by blank lines. */
-export function contentMarkdownOf(element: Y.XmlElement): string {
-  return blocksMarkdown(readBlocks(element, READ)).trim();
+export function contentMarkdownOf(element: Y.XmlElement, documents: Documents = null): string {
+  return blocksMarkdown(readBlocks(element, readOptions(documents)), documents).trim();
 }
 
-function blocksMarkdown(blocks: readonly Block[]): string {
+function blocksMarkdown(blocks: readonly Block[], documents: Documents): string {
   return blocks
-    .map(blockMarkdown)
+    .map((block) => blockMarkdown(block, documents))
     .filter((text) => text.trim() !== "")
     .join("\n\n");
 }
 
-function blockMarkdown(block: Block): string {
+function blockMarkdown(block: Block, documents: Documents): string {
   switch (block.kind) {
     case "paragraph":
     case "question":
@@ -112,16 +136,16 @@ function blockMarkdown(block: Block): string {
     case "rule":
       return "---";
     case "list":
-      return listMarkdown(block);
+      return listMarkdown(block, documents);
     case "quote":
-      return blocksMarkdown(block.content)
+      return blocksMarkdown(block.content, documents)
         .split("\n")
         .map((line) => (line ? `> ${line}` : ">"))
         .join("\n");
     case "table":
-      return tableMarkdown(block.rows);
+      return tableMarkdown(block.rows, documents);
     case "chart":
-      return chartMarkdown(block);
+      return chartMarkdown(block, documents);
     case "image":
     // Only an export writes a Bibliography; a Mind's own Blocks never hold one.
     case "bibliography":
@@ -134,12 +158,12 @@ function blockMarkdown(block: Block): string {
  * row, a cell's lines joined by "<br>", and a cell over several columns or
  * rows in the first of them.
  */
-function tableMarkdown(rows: readonly TableCell[][]): string {
+function tableMarkdown(rows: readonly TableCell[][], documents: Documents): string {
   const layout = tableLayout(rows);
   const lines = layout.rows.map((row) => {
     const cells: string[] = [];
     for (const { cell, continued } of row) {
-      const text = cell && !continued ? blocksMarkdown(cell.content) : "";
+      const text = cell && !continued ? blocksMarkdown(cell.content, documents) : "";
       // A backslash before a pipe is escaped first, or it would escape the pipe's own escape.
       cells.push(
         text
@@ -157,7 +181,7 @@ function tableMarkdown(rows: readonly TableCell[][]): string {
   return lines.join("\n");
 }
 
-function chartMarkdown(block: Extract<Block, { kind: "chart" }>): string {
+function chartMarkdown(block: Extract<Block, { kind: "chart" }>, documents: Documents): string {
   const { chart } = block;
   const drawn = chosenSeries(chart);
   const marks: Marks = {
@@ -188,7 +212,7 @@ function chartMarkdown(block: Extract<Block, { kind: "chart" }>): string {
         const value = row.values[series];
         if (!value) return cell([]);
         const source = value.citation
-          ? citationSource(value.citation as unknown as Record<string, unknown>)
+          ? citationSource(value.citation as unknown as Record<string, unknown>, documents)
           : null;
         return cell([
           ...words(value.shown),
@@ -205,19 +229,19 @@ function chartMarkdown(block: Extract<Block, { kind: "chart" }>): string {
   const cut = chart.data.cutFrom
     ? ` (its first ${chart.data.rows.length} rows of ${chart.data.cutFrom})`
     : "";
-  return `Chart, ${chart.kind}${chart.title ? `: ${chart.title}` : ""}${cut}\n\n${tableMarkdown(rows)}`;
+  return `Chart, ${chart.kind}${chart.title ? `: ${chart.title}` : ""}${cut}\n\n${tableMarkdown(rows, documents)}`;
 }
 
 /** Question context writes a Citation's source, never its work. */
 const blankWork = { documentId: null, documentName: null, location: null };
 
-function listMarkdown(list: Extract<Block, { kind: "list" }>): string {
+function listMarkdown(list: Extract<Block, { kind: "list" }>, documents: Documents): string {
   let number = list.start;
   return list.items
     .map((item) => {
       const marker = list.ordered ? `${number++}.` : "-";
       const indent = " ".repeat(marker.length + 1);
-      return blocksMarkdown(item)
+      return blocksMarkdown(item, documents)
         .split("\n")
         .map((line, index) => (index === 0 ? `${marker} ${line}` : line ? `${indent}${line}` : ""))
         .join("\n");
