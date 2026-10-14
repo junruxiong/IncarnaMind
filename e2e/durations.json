@@ -96,6 +96,7 @@
   "sourcePack.spec.ts": 23,
   "suggestions.spec.ts": 12,
   "tabGroups.spec.ts": 23,
+  "tableToChart.spec.ts": 40,
   "tables.spec.ts": 32,
   "tabs.spec.ts": 30,
   "tagPicker.spec.ts": 33,
