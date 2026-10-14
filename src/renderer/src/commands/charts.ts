@@ -32,7 +32,6 @@ export const chartCommands: readonly Command[] = [
     group: "main",
     appliesTo: ["block"],
     reversible: true,
-    // Not offered for a table that isn't a series of numbers: a calculation's working table.
     when: (ctx) => {
       const editor = noteOf(ctx);
       return (

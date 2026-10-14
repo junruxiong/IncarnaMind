@@ -294,7 +294,6 @@ export function chartPoints(chart: Pick<ChartAttributes, "kind" | "drawn" | "dat
   return points;
 }
 
-/** What a number measures, as a chart's value or a figure read from a cell holds it. */
 type Measured = Pick<ChartValue, "unit" | "scale">;
 
 /** Whether a value says what it counts: a unit ("$", "%", "吨") or a scale ("million", "亿"). */
