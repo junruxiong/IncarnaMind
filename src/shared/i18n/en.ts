@@ -97,7 +97,7 @@ export const en = {
     "Start with the folders you need. Rename them or add your own at any time.",
   "library.addSelected": "Add selected folders",
   "library.modelHint":
-    "Choose the model that assigns folders and tags. This can be different from your chat model. Cloud models ask before receiving your document text, folder names and tag definitions, and, if they can read images, the first pages of scanned PDFs.",
+    "Choose the model that assigns folders and tags. This can be different from your chat model. A cloud model receives your document text, folder names and tag definitions, and, if it can read images, the first pages of scanned PDFs.",
   "library.connection": "Connection",
   "library.manualOnly": "Organize manually",
   "library.jev": "Jev · saved connection",
@@ -172,22 +172,27 @@ export const en = {
   "command.palette.open": "Search…",
   "command.settings.page": "Settings: {page}",
   "palette.label": "Search",
-  "palette.placeholder": "Search Minds, Documents, Folders, Tags and actions…",
+  "palette.placeholder": "Search Minds, conversations, Documents, Folders, Tags and actions…",
   "palette.results": "Results",
   "palette.group.recent": "Recent",
   "palette.group.minds": "Minds",
+  "palette.group.conversations": "Conversations",
   "palette.group.documents": "Documents",
   "palette.group.foldersAndTags": "Folders and Tags",
   "palette.group.actions": "Actions",
   "palette.group.notes": "In your notes",
   "palette.group.documentText": "In your Documents",
+  "palette.group.conversationText": "In your conversations",
   "palette.kind.mind": "Mind",
+  "palette.kind.conversation": "Conversation",
   "palette.kind.folder": "Folder",
   "palette.kind.tag": "Tag",
   "palette.tag.count": "on {count} Documents",
   "palette.tag.count.one": "on 1 Document",
   "palette.searching": "Searching notes and Documents…",
   "palette.empty": "No matches in names or text",
+  "palette.ask": "Ask about “{text}”",
+  "palette.ask.in": "in {conversation}",
   "palette.hint.move": "to move",
   "palette.hint.open": "to open",
   "palette.hint.openTab": "in a new tab",
@@ -229,6 +234,7 @@ export const en = {
   "mind.count": "{count} Minds",
   "mind.moveTo": "Move to…",
   "document.openTab": "Open in a new tab",
+  "document.peek": "Peek",
   "object.copy": "Copy",
   "document.tags": "Tags…",
   "folder.organize": "Organize this Folder",
@@ -954,6 +960,10 @@ export const en = {
   "info.slides.other": "{count} slides",
   "info.sheets.one": "1 sheet",
   "info.sheets.other": "{count} sheets",
+  "peek.label": "Peek: {name}",
+  "peek.kind": "Kind",
+  "peek.ask": "Ask about this",
+  "peek.addTags": "+ Add tags",
   "info.files.one": "1 file",
   "info.files.other": "{count} files",
   "documents.other": "Other Documents",
@@ -1059,6 +1069,7 @@ export const en = {
   "status.tagging.one": "Tagging 1 Document…",
   "status.tagging.other": "Tagging {count} Documents…",
   "status.taggingWaiting": "Tags need a model",
+  "status.taggingPermission": "Tags need your OK",
   "status.setUp": "Set up",
   "status.downloading": "Search model",
   "status.downloadFailed": "Search model download failed",
@@ -1325,8 +1336,8 @@ export const en = {
   "tags.dialog.retag.started": "Re-tagging has started.",
   "tags.dialog.done": "Done",
 
-  "jev.waiting.notice":
-    "Automatic tagging is waiting for a model. Your Documents are tagged as soon as one is set up.",
+  "jev.waiting.notice": "Tags wait until you choose a model.",
+  "jev.waiting.permission": "Tags wait until you allow Document text to go to {service}.",
   "jev.chip.needsReview": "needs review",
   "jev.chip.likely": "{tag}: added automatically, {percent}% likely",
   "jev.chip.review":
@@ -1354,6 +1365,7 @@ export const en = {
   "jev.form.reviewHint":
     "Below the first number a Tag isn't applied; from the second it is applied without a mark.",
   "jev.form.save": "Use Jev for tagging",
+  "jev.form.sends": "Document text for Tags goes to Jev when it tags your Documents.",
 
   "settings.title": "Settings",
   "settings.pages.models": "Models",
@@ -1454,6 +1466,8 @@ export const en = {
   "providers.form.test": "Test connection",
   "providers.form.testing": "Testing…",
   "providers.form.save": "Use this provider",
+  "providers.sends":
+    "Your Questions, the Mind you're in, Passages from your Documents, and Document text for Tags go to {provider} when you use it.",
   "providers.form.saving": "Saving…",
 
   "providers.test.ok": "Connected: the provider answered.",
@@ -1747,12 +1761,13 @@ export const en = {
   "privacy.intro":
     "IncarnaMind collects no usage data. This page lists everything it sends from this computer, and lets you change it.",
   "privacy.flows.intro":
-    "These send your content to a service outside this computer. Nothing is sent on one until you allow it, and nothing at all while “Keep everything on this computer” is on. Where a provider offers the choice, IncarnaMind asks it not to store your requests.",
+    "These send your content to a service outside this computer. Choosing a service, where IncarnaMind says what goes to it, allows these; nothing is sent on one you haven't allowed, and nothing at all while “Keep everything on this computer” is on. Where a provider offers the choice, IncarnaMind asks it not to store your requests.",
   "privacy.flows.service": "to {service}",
   "privacy.flows.local": "Stays on this computer",
   "privacy.flows.sends": "Sends:",
   "privacy.flows.notInUse": "Not in use: everything stays on this computer.",
   "privacy.flows.decided": "{status} on {date}",
+  "privacy.flows.chosen": "Allowed when you chose {service}, {date}",
   "privacy.flows.allow": "Allow",
   "privacy.traffic.title": "Other network traffic",
   "privacy.traffic.intro":
@@ -2543,6 +2558,7 @@ export const en = {
     "No keyring is running, so API keys would be stored in plain text. Start GNOME Keyring or KWallet, or accept plain-text storage in Settings.",
   "error.secrets.unencrypted": "This system can't encrypt API keys, so they can't be saved.",
   "error.consent.declined": "You declined sending data to {service}, so nothing was sent.",
+  "error.consent.needed": "Waiting until you allow sending data to {service}. Nothing was sent.",
   "error.connector.notFound": "That Connector doesn't exist.",
   "error.connector.nameEmpty": "A Connector's name can't be empty.",
   "error.connector.nameTooLong": "A Connector's name can't be longer than {max} characters.",
@@ -2698,11 +2714,13 @@ export const en = {
   "connectors.directory.what": "What it can do",
   "connectors.directory.what.before":
     "Its Tools show here once it's connected, each with whether it asks before it runs.",
+  "connectors.directory.what.listed":
+    "These are its Tools as IncarnaMind reviewed them. Once it's connected, you choose which of them ask first or are off.",
   "connectors.directory.tool.reads": "Reads",
   "connectors.directory.tool.changes": "May change things",
   "connectors.directory.where": "Where your data goes",
   "connectors.directory.where.body":
-    "What the assistant asks {name} for, such as words from your Question, goes to {name}, once you agree. What it returns goes to your chat model, as your Documents do.",
+    "Once you connect it, what the assistant asks {name} for, such as words from your Question, goes to {name}. What it returns goes to your chat model, as your Documents do.",
   "connectors.directory.how": "How it signs in",
   "connectors.directory.how.browser":
     "Sign in with {name} in your browser. Your sign-in is kept in your keychain.",
@@ -2736,7 +2754,7 @@ export const en = {
   "connectors.error.failed": "It couldn't be connected.",
   "connectors.tools.none": "No Tools",
   "connectors.tools.note":
-    "A Connector says which of its Tools only read; IncarnaMind can't check that. Those run without asking, and the others ask before each call. Change either here.",
+    "A Connector says which of its Tools only read; IncarnaMind can't check that. Those run without asking, and the others ask before each call. Change either here, or turn a Tool off so Answers don't use it.",
   "connectors.form.name": "Name",
   "connectors.form.command": "Command",
   "connectors.form.commandHint":
@@ -2748,6 +2766,8 @@ export const en = {
     "For API keys and the like. The values are kept in your keychain, never in IncarnaMind's database.",
   "connectors.form.envInvalid": "Write each environment variable as NAME=value.",
   "connectors.form.add": "Add Connector",
+  "connectors.form.sends":
+    "What Answers ask this Connector's Tools goes to it, and it may send that over the internet.",
   "connectors.form.adding": "Adding…",
   "connectors.form.cancel": "Cancel",
   "connectors.form.save": "Save and restart",
@@ -2766,6 +2786,8 @@ export const en = {
   "connectors.import.env": "Environment: {names} (kept in your keychain)",
   "connectors.import.confirm": "Add {count} Connectors",
   "connectors.import.confirm.one": "Add 1 Connector",
+  "connectors.import.sends":
+    "What Answers ask these Connectors' Tools goes to them, and they may send that over the internet.",
   "connectors.import.nothing": "Nothing here can be added.",
   "connectors.import.adding": "Adding…",
   "connectors.consent.note":
@@ -2857,16 +2879,18 @@ export const en = {
   "approvals.tools.select": "When an Answer calls {tool}",
   "approvals.tools.ask": "Ask every time",
   "approvals.tools.always": "Always allow",
+  "approvals.tools.off": "Off",
   "approvals.settings.title": "Approvals",
   "approvals.settings.body":
-    "Tools that may change something, and Skill scripts, ask before each run. Here is every Tool you always allow or set to ask every time, and every Skill whose scripts always run. Revoke one to go back to the default.",
+    "Tools that may change something, and Skill scripts, ask before each run. Here is every Tool you always allow, set to ask every time or turned off, and every Skill whose scripts always run. Revoke one to go back to the default.",
   "approvals.settings.empty":
-    "No Tool is set to always allow or to ask every time. No Skill's scripts always run.",
+    "No Tool is set to always allow, to ask every time or to stay off. No Skill's scripts always run.",
   "approvals.settings.revoke": "Revoke",
   "approvals.settings.revokeLabel": "Revoke the setting for {name}",
   "approvals.settings.skillScripts": "Scripts of {skill}",
   "approvals.policy.always": "Always allow",
   "approvals.policy.ask": "Ask every time",
+  "approvals.policy.off": "Off",
   "approvals.policy.alwaysRun": "Always run",
 
   // Onboarding: the example Mind, the "Get started" checklist and the three steps.
@@ -3412,11 +3436,9 @@ export const en = {
   "command.answer.regenerate": "Regenerate the Answer",
   "command.answer.stop": "Stop the Answer",
   "command.answer.stop.unavailable": "No Answer is being written",
-  "origin.from": "From the conversation “{title}”",
-  "origin.open": "Open the conversation this came from",
+  "origin.open": "Open the source conversation",
   "origin.deleted": "From the conversation “{title}”, now in Recently deleted",
   "origin.gone": "From a conversation that has been deleted",
-  "origin.asked": "You asked: {question}",
   "assistant.narrow":
     "While the window is narrower than 1,000 px the assistant sits at the bottom; it goes back to the side when the window is wider.",
   "command.assistant.dock": "Assistant: {dock}",
@@ -3615,6 +3637,8 @@ export const en = {
   "wordImport.othersMore": "{count} more",
   "wordImport.keeps":
     "IncarnaMind keeps a copy of the file, so export can write your changes back into it.",
+  "wordImport.layoutNotShown":
+    "This file’s layout (fonts, colours, shading and aligned columns) isn’t shown in the Mind. It’s kept, and comes back when you export to Word.",
   "wordImport.import": "Import",
   "wordImport.importing": "Importing…",
   "wordImport.cancel": "Cancel",
