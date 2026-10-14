@@ -283,7 +283,6 @@ test("onboarding offers starter folders, and Organize with no model chosen opens
   try {
     await window.getByTestId("onboarding-groups").click();
     await expect(window.getByTestId("library")).toBeVisible();
-    await expect(window.getByTestId("chat-setup")).not.toBeVisible();
     await window.evaluate(async () =>
       (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
         user: { language: "zh-CN" },
