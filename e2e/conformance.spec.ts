@@ -46,12 +46,13 @@ import {
  * - run each reversible command from the menu, then ⌘Z: the core, read through the bridge, holds
  *   what it held before (what the command made waits in Recently deleted once taken back), a
  *   change that was made offered Undo, and a delete asked nothing;
- * - an irreversible command asks first and changes nothing until answered.
+ * - an irreversible command asks first and changes nothing until answered;
+ * - a kind ⌘K finds by name is found there, and its reversible delete runs from ⌘K on its row
+ *   with the checks above.
  *
  * The kinds, the menus and the commands are read from the registry, so a command added to a menu
  * is run here with no edit. A kind needs a stage below to be made and shown: the types fail until
- * a new kind has one. Selecting two with ⌘-click and running a command on both waits for #225,
- * and finding it by name in ⌘K for the palette (#116, #230).
+ * a new kind has one. Selecting two with ⌘-click and running a command on both waits for #225.
  *
  * What the core holds here is its Minds, Documents, Folders, Tags, Linked folders and Recently
  * deleted (`coreState`), or, for what lives in a Mind's text, that Mind's note. A window's tabs
@@ -342,6 +343,7 @@ async function checkCommand(
   key: string,
   commandId: string,
   registry: Registry,
+  through: "menu" | "palette" = "menu",
 ): Promise<"ran" | "not offered"> {
   const { window } = run;
   const command = registry.commands[commandId];
@@ -350,13 +352,27 @@ async function checkCommand(
   const readState = () => stateOf(run, stage, key);
   const before = await settled(window, readState);
 
-  const shown = await menuByRightClick(window, place);
-  const item = place.menu.getByTestId(commandId);
-  if (!shown.includes(commandId) || (await item.getAttribute("aria-disabled")) === "true") {
-    await closeMenu(window, place);
-    return "not offered";
+  if (through === "palette") {
+    // ⌘K on its row acts on it; ">" lists the actions that apply.
+    await place.hit.focus();
+    await window.keyboard.press("ControlOrMeta+k");
+    await expect(window.getByTestId("palette-search")).toBeFocused();
+    await window.keyboard.type(">");
+    const item = window.getByTestId("palette").locator(`[data-key="command:${commandId}"]`);
+    if ((await item.count()) === 0) {
+      await window.keyboard.press("Escape");
+      return "not offered";
+    }
+    await pointAndClick(window, item);
+  } else {
+    const shown = await menuByRightClick(window, place);
+    const item = place.menu.getByTestId(commandId);
+    if (!shown.includes(commandId) || (await item.getAttribute("aria-disabled")) === "true") {
+      await closeMenu(window, place);
+      return "not offered";
+    }
+    await pointAndClick(window, item);
   }
-  await pointAndClick(window, item);
 
   if (!command.reversible) {
     await expect(window.locator("dialog[open]")).toBeVisible();
@@ -410,6 +426,23 @@ async function checkCommand(
   return "ran";
 }
 
+/** ⌘K finds it by its name, among the objects of its kind. */
+async function checkFoundInPalette(run: Run, kind: ObjectKind, stage: Stage, key: string) {
+  const { window } = run;
+  const name = await stage.name?.(run, key);
+  if (!name) throw new Error(`⌘K finds ${kind} by name, so its stage must say how to read it.`);
+  await window.keyboard.press("ControlOrMeta+k");
+  await expect(window.getByTestId("palette-search")).toBeFocused();
+  await window.keyboard.type(name);
+  const found = window
+    .getByTestId("palette")
+    .locator(`[data-testid="palette-item"][data-kind="${kind}"]`)
+    .filter({ hasText: name });
+  await expect(found.first()).toBeVisible();
+  await window.keyboard.press("Escape");
+  await expect(window.getByTestId("palette")).toBeHidden();
+}
+
 /** The one test of a kind: make it, then every check above, in one app. */
 async function conform(run: Run, kind: ObjectKind, stage: Stage): Promise<void> {
   const { window } = run;
@@ -446,6 +479,21 @@ async function conform(run: Run, kind: ObjectKind, stage: Stage): Promise<void> 
   test
     .info()
     .annotations.push({ type: `${kind}: not offered here`, description: notOffered.join(" ") });
+
+  if (registry.found.includes(kind)) {
+    await test.step(`${kind}: found by name in ⌘K`, () =>
+      checkFoundInPalette(run, kind, stage, key));
+    const removal = menu.find(({ id }) => {
+      const command = registry.commands[id];
+      return command?.destructive && command.reversible;
+    });
+    if (removal) {
+      await test.step(`${kind}: ${removal.id} from ⌘K`, async () => {
+        const result = await checkCommand(run, kind, stage, key, removal.id, registry, "palette");
+        expect(result, `${removal.id} is offered in ⌘K on its row`).toBe("ran");
+      });
+    }
+  }
 }
 
 const folderOnDisk = async (name: string) => {
