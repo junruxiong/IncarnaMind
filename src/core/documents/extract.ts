@@ -8,14 +8,14 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { CJK } from "../../shared/text";
 import type { TextUnit } from "../../shared/units";
-import type { PagePicture, RecognizedLine } from "../adapters";
+import type { PagePicture, PictureRead, RecognizedLine } from "../adapters";
 import type { DocumentKind } from "../api";
 import { isRecord } from "../errors";
 import { ExtractionError, extractUnits } from "./formats";
 import { type FigureReading, readWebPage, webUnits } from "./formats/web";
 import { scannedUnit } from "./scan/layout";
 import { type CanvasFactory, isScanned, pagePicture } from "./scan/pages";
-import { figurePicture } from "./scan/picture";
+import { PICTURE_LIMITS, pictureSize, pictureType } from "./web/pictures";
 
 export { ExtractionError };
 
@@ -27,6 +27,10 @@ export interface PageReading {
   keep: ReadonlyMap<number, TextUnit>;
   /** The lines on a page's picture. Rejects with `ReadingUnavailable` when no page can be read now. */
   read(page: number, picture: PagePicture): Promise<RecognizedLine[]>;
+  /** As `read`, for a picture file, decoded where the model runs. */
+  readFile(page: number, file: Uint8Array): Promise<PictureRead>;
+  /** For the log. */
+  documentId: string;
   /** `read` of `of` scanned pages are read; `unit` is the one just read. */
   progress(read: number, of: number, unit: TextUnit | null): void;
   /** Aborted when the job is stopped: no further page is read. */
@@ -65,8 +69,8 @@ export async function extractText(
 
 /**
  * A web page's Units with its saved pictures' text read. A picture that
- * can't be drawn, or that the model fails on, keeps its description alone;
- * once the model can't be had, the pictures left are marked unread.
+ * isn't one to read, or that fails to decode or read, keeps its description
+ * alone; once the model can't be had, the pictures left are marked unread.
  */
 async function extractWeb(
   bytes: Uint8Array,
@@ -99,7 +103,10 @@ async function extractWeb(
         readings.set(figure.number, unread);
       } else {
         // Marked unread, it would be read again at every start, and fail again.
-        console.error(`A saved web page's picture ${figure.src} couldn't be read:`, error);
+        console.error(
+          `Document ${reading.documentId}: its picture ${figure.src} couldn't be read:`,
+          error,
+        );
       }
     }
     reading.progress(index + 1, figures.length, null);
@@ -113,14 +120,17 @@ async function readFigure(
   reading: PageReading,
   readPicture: (src: string) => Promise<Uint8Array>,
 ): Promise<FigureReading | null> {
-  let picture: PagePicture;
-  try {
-    picture = await figurePicture(await readPicture(src));
-  } catch {
-    // Its bytes were checked as a picture when saved; one the canvas can't decode has only its description.
+  const file = await readPicture(src);
+  const type = pictureType(file);
+  const size = type && pictureSize(file, type);
+  if (!size || size.width * size.height > PICTURE_LIMITS.maxPixels) {
+    console.error(
+      `Document ${reading.documentId}: its picture ${src} isn't one to read, or is too large`,
+    );
     return null;
   }
-  const read = scannedUnit(number, await reading.read(number, picture), picture, reading.reader);
+  const picture = await reading.readFile(number, file);
+  const read = scannedUnit(number, picture.lines, picture, reading.reader);
   const unsure = read.label?.scan?.unsure;
   return {
     reader: reading.reader,

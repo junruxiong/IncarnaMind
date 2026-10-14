@@ -17,7 +17,8 @@ import type {
 
 export type TextRecognizerCommand =
   | { type: "load"; files: TextRecognitionFiles }
-  | { type: "read"; picture: PagePicture; page: number };
+  | { type: "read"; picture: PagePicture; page: number }
+  | { type: "readFile"; file: Uint8Array; page: number };
 
 /** `id` pairs a response with its request. */
 export type TextRecognizerRequest = TextRecognizerCommand & { id: number };
@@ -26,6 +27,8 @@ export type TextRecognizerRequest = TextRecognizerCommand & { id: number };
 export interface TextRecognizerResponse {
   id: number;
   lines?: RecognizedLine[];
+  /** For "readFile": the size the picture was read at. */
+  size?: { width: number; height: number };
   error?: string;
 }
 
@@ -109,6 +112,15 @@ export function createChannelTextRecognizer(start: () => TextRecognizerChannel):
       return lines;
     },
 
+    async readFile(file, page) {
+      if (!channel || loadedKey === undefined) {
+        throw new Error("The text recognition model isn't loaded.");
+      }
+      const { lines, size } = await request({ type: "readFile", file, page });
+      if (!lines || !size) throw new Error("The text recognition process returned no lines.");
+      return { lines, ...size };
+    },
+
     close() {
       const stopping = channel;
       channel = undefined;
@@ -131,6 +143,10 @@ export function serveTextRecognizer(recognizer: TextRecognizer, port: TextRecogn
       if (request.type === "load") {
         await recognizer.load(request.files);
         return { id: request.id };
+      }
+      if (request.type === "readFile") {
+        const { lines, width, height } = await recognizer.readFile(request.file, request.page);
+        return { id: request.id, lines, size: { width, height } };
       }
       return { id: request.id, lines: await recognizer.read(request.picture, request.page) };
     } catch (error) {

@@ -7,7 +7,7 @@
  */
 import type { Worker } from "node:worker_threads";
 import type { TextUnit } from "../../shared/units";
-import type { PagePicture, RecognizedLine } from "../adapters";
+import type { PagePicture, PictureRead, RecognizedLine } from "../adapters";
 import type {
   MetadataJob,
   MetadataResult,
@@ -38,6 +38,8 @@ export interface ProcessorHandlers {
    * when no page can be read now (the model can't be had).
    */
   read(job: ProcessingJob, page: number, picture: PagePicture): Promise<RecognizedLine[]>;
+  /** As `read`, for a picture file (`TextRecognizer.readFile`). */
+  readFile(job: ProcessingJob, page: number, file: Uint8Array): Promise<PictureRead>;
   /** Whether an error from `read` means no page can be read now. */
   isUnavailable(error: unknown): boolean;
 }
@@ -97,15 +99,25 @@ export function createProcessor(
     if (current) finish(current.id, { outcome: "crashed", message });
   }
 
-  /** A job's request to read a page's picture: answered once the model has read it. */
-  function read(from: Worker, id: number, request: number, page: number, picture: PagePicture) {
+  /** A job's request to read a page's picture, or a picture file: answered once the model has read it. */
+  function read(
+    from: Worker,
+    id: number,
+    request: number,
+    page: number,
+    what: { picture: PagePicture } | { file: Uint8Array },
+  ) {
     const asked = current;
     if (asked?.id !== id || asked.job.task !== "process") return;
     const answer = (message: WorkerRequest) => {
       if (worker === from && current?.id === id) from.postMessage(message);
     };
-    handlers.read(asked.job, page, picture).then(
-      (lines) => answer({ id, request, lines }),
+    const reading: Promise<Pick<Extract<WorkerRequest, { request: number }>, "lines" | "read">> =
+      "picture" in what
+        ? handlers.read(asked.job, page, what.picture).then((lines) => ({ lines }))
+        : handlers.readFile(asked.job, page, what.file).then((read) => ({ read }));
+    reading.then(
+      (answered) => answer({ id, request, ...answered }),
       (error: unknown) =>
         answer({
           id,
@@ -122,8 +134,8 @@ export function createProcessor(
     const started = startDocumentWorker({ name: "incarnamind-documents" });
     started.on("message", (response: WorkerResponse) => {
       if ("result" in response) finish(response.id, response.result);
-      else if ("picture" in response) {
-        read(started, response.id, response.request, response.page, response.picture);
+      else if ("picture" in response || "file" in response) {
+        read(started, response.id, response.request, response.page, response);
       } else if (current?.id === response.id && current.job.task === "process") {
         const { job } = current;
         call(() => handlers.onProgress(job, response.progress));

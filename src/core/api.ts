@@ -1901,7 +1901,7 @@ export interface DocumentFailure {
   pages?: number[];
 }
 
-/** Where reading a PDF's scanned pages (#397), or a saved web page's pictures, is while it is processed. */
+/** Where reading a PDF's scanned pages, or a saved web page's pictures, is while it is processed. */
 export interface DocumentScanProgress {
   /** How many of its pages are scans to read, or of a saved web page's pictures. */
   pages: number;
