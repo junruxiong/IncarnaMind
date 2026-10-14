@@ -2529,6 +2529,7 @@ export const zhCN = {
   "error.folder.nameTaken": "已有同名的文件夹。",
   "error.folder.limit": "资料库最多可以有 100 个文件夹。",
   "error.mind.notFound": "这个 Mind 不存在或已删除。",
+  "error.layout.wordPlace": "无法打开 Word 文件中的这个位置。",
   "error.mind.notFromWord": "这个 Mind 不是从 Word 文件导入的，没有可添加的原文件。",
   "error.mind.newerVersion": "这是较新版本的 IncarnaMind 创建的。更新后才能打开。",
   "error.mind.newerVersionEdit":
@@ -3657,6 +3658,8 @@ export const zhCN = {
   "wordImport.from": "来自“{name}”",
   "wordImport.keepsStyles": "导出时保留原有格式",
   "wordImport.from.open": "在旁边打开“{name}”",
+  "wordImport.original.more": "“{name}”的更多操作",
+  "wordImport.openOriginal": "打开原文件",
   "wordImport.notAdded": "未能把“{name}”加入资料库，回答无法引用它。",
   "wordImport.addToLibrary": "加入资料库",
   "wordImport.from.tooltip":

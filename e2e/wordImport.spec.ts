@@ -700,6 +700,78 @@ test("an original the Library can't take is said under the Mind's line, and Add 
   await app.close();
 });
 
+test("From the original's menu, Open the original opens it beside the Mind at the paragraph the caret is in, in English and Chinese", async () => {
+  const CAPPED = "Clause 9: each party's total liability is capped at a year's fees.";
+  // Every tenth crosses a page, as Word marks it: the viewer draws it as two paragraphs.
+  const recitals = (from: number, count: number) =>
+    Array.from({ length: count }, (_, index) =>
+      (from + index) % 10 === 0
+        ? paragraph(
+            `${run(`Recital ${from + index}: the parties record a fact `)}<w:r><w:lastRenderedPageBreak/><w:t xml:space="preserve">of the background.</w:t></w:r>`,
+          )
+        : paragraph(`Recital ${from + index}: the parties record a fact of the background.`),
+    );
+  const path = join(files, "Supply agreement.docx");
+  await writeFile(
+    path,
+    wordFile({
+      body: [
+        paragraph("Supply agreement", { style: "Title" }),
+        // A text box Word saves twice: its newer copy isn't drawn, so the places shift by six.
+        paragraph(textBox(["At a glance", "Term", "Two years", "Cap", "A year's fees", "Law"])),
+        // Long enough that the pages scroll to it.
+        ...recitals(1, 150),
+        paragraph(CAPPED),
+        ...recitals(151, 150),
+      ].join(""),
+    }),
+  );
+  const { app, window } = await launchApp(dataDir, { home });
+  await dismissChatSetup(window);
+  await setWindowSize(app, window, 1440, 900);
+  await interceptOpenDialog(app, path);
+  const dialog = await importWordFromMenu(window);
+  await dialog.getByTestId("word-import-confirm").click();
+  await expect(dialog).toBeHidden();
+  await expectReadyDocuments(window, 1);
+
+  // The caret in clause 9, then From › Open the original.
+  const editor = window.getByTestId("mind-editor");
+  await editor.locator("p", { hasText: "Clause 9:" }).click();
+  await pointAndClick(window, window.getByTestId("mind-word-original-menu"));
+  const items = window.getByTestId("mind-word-original-items");
+  await expect(items.getByRole("menuitem")).toHaveText([
+    "Open the original",
+    /^Show in (Finder|folder)$/,
+  ]);
+  await motionSettled(window);
+  await screenshot(window, "word-original-menu");
+  await pointAndClick(window, items.getByTestId("mind-word-open-original"));
+
+  // Beside the Mind, at clause 9: a third of the way down the pages.
+  await expect(window.getByTestId("viewer-title")).toHaveText("Supply agreement");
+  await expect(window.getByTestId("mind-pane")).toBeVisible();
+  const pages = window.getByTestId("viewer-docx");
+  await expect(pages).toHaveAttribute("data-rendered", "yes");
+  const capped = pages.locator("section.docx > article p", { hasText: "Clause 9:" });
+  await expect(capped).toBeInViewport();
+  await expect
+    .poll(async () => {
+      const [line, view] = await Promise.all([capped.boundingBox(), pages.boundingBox()]);
+      return line && view ? Math.abs(line.y - view.y - view.height / 3) : Number.POSITIVE_INFINITY;
+    })
+    .toBeLessThan(24);
+  await motionSettled(window);
+  await screenshot(window, "word-original-at-caret");
+
+  // A right-click on the line opens the same menu, in Chinese.
+  await setLanguage(window, "zh-CN");
+  await window.getByTestId("mind-word-original").click({ button: "right" });
+  await expect(items.getByRole("menuitem")).toHaveText(["打开原文件", /^在(访达|文件夹)中显示$/]);
+  await window.keyboard.press("Escape");
+  await app.close();
+});
+
 test("unticked, the Word file is imported as a Mind alone", async () => {
   const path = join(files, "Supply agreement.docx");
   await writeFile(path, contract());
