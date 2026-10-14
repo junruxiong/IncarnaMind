@@ -24,16 +24,24 @@ const MOST_CHIPS = 2;
  * holds (a spark marks one tagging applied automatically, an amber dot one it
  * wasn't sure of, with ✓ and × to confirm or remove it), then "+N", then the
  * button that opens the Tag picker. A narrow viewer keeps only the button.
+ * In a peek (`variant="peek"`) every chip shows, wrapping, and the button says "+ Add tags".
  * The Library's rows have their own (`RowTags`).
  */
-export function DocumentTagChips({ document }: { document: Document }) {
+export function DocumentTagChips({
+  document,
+  variant = "header",
+}: {
+  document: Document;
+  variant?: "header" | "peek";
+}) {
+  const peek = variant === "peek";
   const t = useT();
   const tags = useAppStore((state) => state.tags);
   const popover = useTagPopover();
   const chips = chipsOf(document.tags, tags);
   const fitting = useFittingChips(chips.length, MOST_CHIPS);
-  const listed = chips.slice(0, MOST_CHIPS);
-  const hidden = chips.slice(fitting.shown);
+  const listed = peek ? chips : chips.slice(0, MOST_CHIPS);
+  const hidden = peek ? [] : chips.slice(fitting.shown);
   const label = pickerLabel(t, [document]);
   const more = t("tags.chip.more", {
     count: hidden.length,
@@ -43,12 +51,12 @@ export function DocumentTagChips({ document }: { document: Document }) {
     <div
       ref={fitting.row}
       data-testid="document-tags"
-      className="viewer-tags flex items-center gap-1"
+      className={`flex items-center gap-1 ${peek ? "min-w-0 flex-wrap" : "viewer-tags"}`}
     >
       {listed.map(({ tag, link }) => (
         <TagChip key={tag.id} document={document} tag={tag} link={link} />
       ))}
-      {chips.length > 0 && (
+      {!peek && chips.length > 0 && (
         <button
           type="button"
           data-tag-more=""
@@ -67,9 +75,15 @@ export function DocumentTagChips({ document }: { document: Document }) {
         data-testid="document-tags-menu"
         aria-label={t("tags.edit", { name: document.name })}
         title={t("tags.edit", { name: document.name })}
-        className="viewer-icon-button"
+        className={
+          peek
+            ? `h-6 shrink-0 rounded-sm px-1.5 text-[12px] text-ink-meta hover:bg-hover hover:text-ink ${
+                chips.length === 0 ? "-ml-1.5" : ""
+              }`
+            : "viewer-icon-button"
+        }
       >
-        <TagLineIcon className="size-4" />
+        {peek ? t("peek.addTags") : <TagLineIcon className="size-4" />}
       </button>
       <div
         {...popover.popoverProps}
