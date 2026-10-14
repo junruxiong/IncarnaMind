@@ -41,6 +41,7 @@ const WORDS = {
     open: "Open Ollama",
     opening: "Opening Ollama…",
     get: "Get Ollama ↗",
+    tryAgain: "Try again",
     notDetected: "To run models on this computer, install Ollama from ollama.com and start it.",
     installed: "Ollama is on this computer, but it isn't running.",
     detected:
@@ -53,6 +54,7 @@ const WORDS = {
     open: "打开 Ollama",
     opening: "正在打开 Ollama…",
     get: "下载 Ollama ↗",
+    tryAgain: "重试",
     notDetected: "如需在本机运行模型，请从 ollama.com 安装并启动 Ollama。",
     installed: "这台电脑上有 Ollama，但它没有运行。",
     detected: "Ollama 正在本机运行。使用本地模型时，你的问题和文档都不会离开这台电脑。",
@@ -267,7 +269,7 @@ for (const language of LANGUAGES) {
     await app.close();
   });
 
-  test(`Ollama not installed: the Answer says so with Get Ollama, which opens ollama.com (${language})`, async () => {
+  test(`Ollama not installed: the Answer says so with Get Ollama, which opens ollama.com; back with it running, Try again asks the Question again (${language})`, async () => {
     const port = await freePort();
     const { app, window } = await launchApp(dataDir, {
       fakeChat: true,
@@ -299,6 +301,17 @@ for (const language of LANGUAGES) {
     expect(await ollamaAppOpened(app)).toBe(0);
     // Nothing else happened: the Question is still unanswered, its line still there.
     await expect(line).toBeVisible();
+
+    // Back in the window with Ollama installed and running: Try again asks the same Question.
+    await startOllama(port);
+    await window.evaluate(() => globalThis.dispatchEvent(new Event("focus")));
+    await expect(line).toHaveText(`${words.notRunning} · ${words.tryAgain}`);
+    await pointAndClick(window, line.getByTestId("answer-error-action"));
+    const answered = assistantAnswers(window).last();
+    await expect(answered).toHaveAttribute("data-status", "done", { timeout: 20_000 });
+    await expect(answered.getByTestId("assistant-answer-text")).not.toBeEmpty();
+    await expect(answered.getByTestId("answer-error")).toHaveCount(0);
+    expect(await ollamaAppOpened(app)).toBe(0);
     await app.close();
   });
 }

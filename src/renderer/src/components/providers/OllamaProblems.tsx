@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect } from "react";
 import type { ProviderErrorKind } from "../../../../core/api";
 import { useT } from "../../i18n";
 import { ollamaLineAction } from "../../ollamaProblem";
@@ -72,7 +72,13 @@ export function OllamaNotRunningLine({
   onRetry?: (() => void) | undefined;
 }) {
   const t = useT();
-  const { status, opening, open } = useOllamaStatus();
+  const { status, opening, detect, open } = useOllamaStatus();
+  // Back from getting Ollama, or from starting it by hand: Try again once it runs.
+  useEffect(() => {
+    const lookAgain = () => void detect();
+    window.addEventListener("focus", lookAgain);
+    return () => window.removeEventListener("focus", lookAgain);
+  }, [detect]);
   const next = ollamaLineAction(status, opening);
   let action: ProblemAction | undefined;
   if (next === "try-again" && onRetry) {

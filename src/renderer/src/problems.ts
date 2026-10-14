@@ -15,8 +15,11 @@ export type AnswerFix =
   | { kind: "retry"; label: MessageKey }
   /** The choice of a local model, in place (`LocalModelDialog`). */
   | { kind: "local-model"; label: MessageKey }
-  /** Opening Ollama, or getting it, and then asking again (`OllamaNotRunningLine`). */
-  | { kind: "ollama" }
+  /**
+   * Opening Ollama (`label`) and then asking again; getting it where it isn't on this
+   * computer, and Try again once it runs (`OllamaNotRunningLine`).
+   */
+  | { kind: "ollama"; label: MessageKey }
   /** A page of the provider's own, opened in the browser. */
   | { kind: "link"; url: string; label: MessageKey }
   /** Signing in with ChatGPT again, from the Answer, which is then tried again. */
@@ -51,7 +54,10 @@ export const ANSWER_PROBLEMS: Record<ProviderErrorKind, AnswerProblem> = {
     fix: { kind: "local-model", label: "answer.error.useLocal" },
   },
   // The model is in Ollama, which isn't running: open it, or get it.
-  "ollama-not-running": { line: "answer.error.ollama-not-running", fix: { kind: "ollama" } },
+  "ollama-not-running": {
+    line: "answer.error.ollama-not-running",
+    fix: { kind: "ollama", label: "localModel.open" },
+  },
   "rate-limit": { line: "answer.error.rate-limit", fix: retry },
   network: { line: "answer.error.network", fix: retry },
   provider: { line: "answer.error.provider", fix: retry },
