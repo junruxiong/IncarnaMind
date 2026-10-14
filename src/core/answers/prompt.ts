@@ -176,6 +176,10 @@ const CALCULATIONS =
 const UNBROKEN_QUOTE =
   "- Copy each quote as one unbroken stretch of the Passage: don't leave words out with an ellipsis (... or …); quote less instead.";
 
+/** The Citation check also looks for the words an Answer puts in quotation marks (#483): a reader takes them for the Document's own. */
+const QUOTATION_MARKS =
+  "- Use quotation marks only around a Document's exact words, the same as the record's quote.";
+
 /** The most Document names the instructions list: the most recently added. */
 export const LISTED_DOCUMENTS = 50;
 
@@ -244,6 +248,7 @@ export function documentInstructions(
         "Cite every claim you draw from a Passage:",
         `- Before writing the Answer, call cite once with a record for each quote you will use: a marker number (1, 2, …), ${RECORD}.`,
         UNBROKEN_QUOTE,
+        QUOTATION_MARKS,
         "- In the Answer, put the marker as [^1] right after each claim it supports, in a table's cell too. Use only markers you recorded, and add no list of sources.",
         "- Write nothing before your Tool calls: only the Answer, after them.",
         notCovered(true),
@@ -266,6 +271,7 @@ export function documentInstructions(
         "- answer: the Answer, in Markdown. Cite every claim you draw from a Passage by putting a marker such as [^1] right after it, in a table's cell too. Add no list of sources.",
         `- citations: one record for each marker: ${RECORD}.`,
         UNBROKEN_QUOTE,
+        QUOTATION_MARKS,
         ...(calculate ? [CALCULATIONS] : []),
         notCovered(true),
         readingRules(true),

@@ -224,7 +224,7 @@ _Avoid_: toast, snackbar, notification
 ### Checks
 
 **Citation check**:
-The test of whether a Citation's quote is found in the text at its Location. Its only failing result is quote not found.
+The test of whether a Citation's quote is found in the text at its Location, and of whether the words its sentence puts in quotation marks (at least 4 words, or 6 characters in Chinese or Japanese) are found in the text at the Locations the sentence cites. Its only failing result is quote not found.
 _Avoid_: validation, verification
 
 **Calculation check**:
@@ -236,7 +236,7 @@ A number in an Answer that is neither in a quote of its sentence's Citations nor
 _Avoid_: hallucinated number, unsupported (a claim check's result)
 
 **Quote not found**:
-The result of a Citation check when the Citation's quote is not in the text at its Location. It says nothing about whether the claim is true. "Not found" is used only for this.
+The result of a Citation check when the Citation's quote, or words its sentence puts in quotation marks, are not in the text at its Location. It says nothing about whether the claim is true. "Not found" is used only for this.
 _Avoid_: broken, invalid, failed
 
 **Unsupported**:
