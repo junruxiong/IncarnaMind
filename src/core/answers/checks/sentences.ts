@@ -10,6 +10,7 @@ import { INLINE_NODE, sentenceSpans } from "../../../shared/sentences";
 import {
   BLOCK_ID_ATTRIBUTE,
   CITATION_NODE,
+  type CitedQuote,
   CLAIM_CHECK_MARK,
   type ClaimCheckAttributes,
   PROPOSAL_ATTRIBUTE,
@@ -38,8 +39,8 @@ export interface SelectedSentence {
   text: string;
   /** Its paragraph's text, for what its words refer to. */
   context: string;
-  /** What its Citations quote, and the Documents they cite. */
-  cited: { documentId: string | null; documentName: string; quote: string }[];
+  /** What its Citations quote. */
+  cited: CitedQuote[];
 }
 
 export type SelectedSentences =
@@ -89,18 +90,19 @@ function holdsProposal(element: Y.XmlElement, from: number, to: number): boolean
   return false;
 }
 
-/** What the Citations in `from`..`to` of a Block quote, and the Documents they cite. */
-function citedIn(element: Y.XmlElement, from: number, to: number) {
+/** What the Citations in `from`..`to` of a Block quote. */
+function citedIn(element: Y.XmlElement, from: number, to: number): CitedQuote[] {
   return layout(element).flatMap(({ node, start }) => {
     if (start < from || start >= to || !(node instanceof Y.XmlElement)) return [];
     if (node.nodeName !== CITATION_NODE) return [];
-    const { documentId, documentName, quote } = node.getAttributes() as Attributes;
+    const { documentId, documentName, contentHash, quote } = node.getAttributes() as Attributes;
     return typeof quote === "string" && quote !== ""
       ? [
           {
-            documentId: typeof documentId === "string" && documentId !== "" ? documentId : null,
             documentName: typeof documentName === "string" ? documentName : "",
             quote,
+            ...(typeof documentId === "string" && { documentId }),
+            ...(typeof contentHash === "string" && { contentHash }),
           },
         ]
       : [];
