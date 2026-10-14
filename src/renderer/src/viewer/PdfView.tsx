@@ -111,6 +111,7 @@ export function PdfView({ document, target }: { document: Document; target: View
   /** Counts the times it was unlocked, to open it again. */
   const [unlocked, setUnlocked] = useState(0);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `unlocked` opens it again once its password is kept.
   useEffect(() => {
     let cancelled = false;
     let task: PDFDocumentLoadingTask | undefined;
@@ -157,7 +158,6 @@ export function PdfView({ document, target }: { document: Document; target: View
       cancelled = true;
       void task?.destroy();
     };
-    // `unlocked` opens it again once its password is kept.
   }, [document.id, unlocked]);
 
   switch (loaded.kind) {

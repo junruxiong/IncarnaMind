@@ -53,9 +53,9 @@ export function lockedPdf(lines: readonly string[], password: string): Buffer {
     return md5(fileKey, suffix).subarray(0, 10);
   };
 
-  const escape = (text: string) => text.replace(/[\\()]/g, (char) => `\\${char}`);
+  const literal = (text: string) => text.replace(/[\\()]/g, (char) => `\\${char}`);
   const content = Buffer.from(
-    `BT /F1 12 Tf 72 720 Td ${lines.map((line) => `(${escape(line)}) Tj 0 -14 Td`).join(" ")} ET`,
+    `BT /F1 12 Tf 72 720 Td ${lines.map((line) => `(${literal(line)}) Tj 0 -14 Td`).join(" ")} ET`,
     "latin1",
   );
   const stream = rc4(objectKey(5), content);

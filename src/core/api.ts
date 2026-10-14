@@ -2762,7 +2762,8 @@ export interface UnsupportedFile {
  * Why a file in a search's scope wasn't read, and what the User can do:
  * - "format": a format not read yet (.doc, .xls, .ppt, .wps, .caj…): convert it;
  * - "scan": a scan with no text yet: it needs text recognition;
- * - "password": password-protected: remove the password;
+ * - "password": password-protected: a PDF is unlocked with its password
+ *   (`unlockDocument`, #763); another kind needs its password removed;
  * - "damaged": the file is broken, or couldn't be read;
  * - "too-large": too large to open;
  * - "pages": a scan some of whose pages haven't been read yet.
@@ -6698,16 +6699,17 @@ export interface CoreApi {
    * opens, the password is kept on this device, in the system's keychain, by
    * Document, and the Document is read again with it. "wrong-password" when
    * it doesn't open it: nothing is kept. Throws InvalidInputError for a
-   * Document that isn't a PDF, and NotFoundError for an unknown one or one
-   * whose file isn't there.
+   * Document that isn't a PDF, or one that opens without a password, and
+   * NotFoundError for an unknown one or one whose file isn't there.
    */
   unlockDocument(input: UnlockDocumentInput): Promise<UnlockDocumentResult>;
   /** Forgets a Document's kept PDF password (#763); its text stays as it was read. */
   forgetDocumentPassword(documentId: string): Promise<void>;
   /**
    * The kept password of a locked PDF Document, for the viewer to open it
-   * with and for nothing else; null for any other Document, or when none is
-   * kept (#763).
+   * with and for nothing else; null for any other Document, when none is
+   * kept, or when the Document's file isn't being shown (opened with
+   * `openDocumentFile` now or in the last few seconds) (#763).
    */
   documentPasswordFor(documentId: string): Promise<string | null>;
   /** The Documents whose PDF password is kept on this device, by id (#763). */

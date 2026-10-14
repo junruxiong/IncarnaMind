@@ -68,7 +68,11 @@ export function createProcessor(
 ): Processor {
   const queue: WorkerJob[] = [];
   let worker: Worker | undefined;
-  let current: { id: number; job: WorkerJob } | undefined;
+  /**
+   * The job under way. `posted`: it has gone to the worker; until then (its
+   * PDF's password is being read) a stop is kept in `stopped`.
+   */
+  let current: { id: number; job: WorkerJob; posted: boolean; stopped: boolean } | undefined;
   let nextId = 1;
   let pumpScheduled = false;
   let closed = false;
@@ -156,12 +160,19 @@ export function createProcessor(
     const job = take();
     if (!job) return;
     const id = nextId++;
-    current = { id, job };
+    const started = { id, job, posted: false, stopped: false };
+    current = started;
     if (job.task === "process") call(() => handlers.onStart(job));
     worker ??= startWorker();
     const running = worker;
     const send = (password: string | undefined) => {
       if (closed || current?.id !== id || worker !== running) return;
+      // Stopped while its password was read: it never starts.
+      if (started.stopped) {
+        finish(id, { outcome: "stopped" });
+        return;
+      }
+      started.posted = true;
       running.postMessage({
         id,
         job,
@@ -197,7 +208,9 @@ export function createProcessor(
       );
       if (index !== -1) queue.splice(index, 1);
       if (current?.job.task === "process" && current.job.documentId === documentId) {
-        worker?.postMessage({ id: current.id, stop: true } satisfies WorkerRequest);
+        if (current.posted) {
+          worker?.postMessage({ id: current.id, stop: true } satisfies WorkerRequest);
+        } else current.stopped = true;
       }
     },
     hold(value) {
