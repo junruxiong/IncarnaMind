@@ -119,7 +119,7 @@ test("first run, in Chinese: an earlier sign-in's address is refused, and the ad
     await setup.getByTestId("chatgpt-continue").click();
     const address = await addressAfterApproving(app);
 
-    await expect(setup).toContainText("没有回到 IncarnaMind？");
+    await expect(setup).toContainText("没有回到 IncarnaMind？粘贴浏览器地址栏里的地址");
     await setup.getByRole("button", { name: "粘贴浏览器地址栏里的地址" }).click();
     const field = setup.getByTestId("chatgpt-paste-address");
     await expect(field).toBeFocused();
