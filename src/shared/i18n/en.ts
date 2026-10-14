@@ -855,6 +855,8 @@ export const en = {
   "viewer.markdown.image": "Image",
   "viewer.markdown.imageWeb": "Images from the web aren't loaded",
   "viewer.markdown.imageMissing": "Image not found",
+  "viewer.web.picturesLeftOut.one": "1 picture wasn't saved: over the limit for a page",
+  "viewer.web.picturesLeftOut": "{count} pictures weren't saved: over the limit for a page",
   "viewer.docx.comment": "Comment by {author}",
 
   "location.page": "p. {range}",

@@ -119,7 +119,7 @@ import { detectLanguage, languageList, type TextLanguage } from "./textLanguage"
 import { createVectorIndex } from "./vectors";
 import type { WatchFolder } from "./watcher";
 import type { SnapshotFile } from "./web";
-import { webPageInfo } from "./web/store";
+import { showsPicture, webPageInfo } from "./web/store";
 
 const DEFAULT_SEARCH_LIMIT = 20;
 const MAX_SEARCH_LIMIT = 200;
@@ -2297,7 +2297,8 @@ export function createDocuments(options: DocumentsOptions) {
 
     /**
      * Opens a picture a live Markdown Document shows from beside it, by the
-     * path written in the file (see `openImageBeside`). Anything else is
+     * path written in the file (see `openImageBeside`), or one a saved web
+     * page's versions show, by its path in the snapshot. Anything else is
      * refused (NotFoundError).
      */
     async openImage(idInput: unknown, path: unknown): Promise<DocumentImage> {
@@ -2305,7 +2306,13 @@ export function createDocuments(options: DocumentsOptions) {
         throw new InvalidInputError("An image's path must be text.");
       }
       const row = await openablePath(idInput);
-      if (row.kind !== "markdown") {
+      if (row.kind === "web") {
+        // A saved web page's picture: one of the files its versions show, and nothing else (#756).
+        const hash = /^pictures\/([0-9a-f]{64})\.(?:png|jpg|gif|webp|avif)$/.exec(path)?.[1];
+        if (!hash || !showsPicture(db, row.id, hash)) {
+          throw new NotFoundError("The web page shows no such picture.");
+        }
+      } else if (row.kind !== "markdown") {
         throw new NotFoundError("Only a Markdown Document shows pictures from beside it.");
       }
       try {

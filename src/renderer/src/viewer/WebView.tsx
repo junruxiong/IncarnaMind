@@ -7,6 +7,7 @@ import { useLanguage, useT } from "../i18n";
 import type { ViewerTarget } from "../store";
 import { pageDate } from "../webPages";
 import { useCitedArea } from "./citedArea";
+import { loadDocumentPicture } from "./documentPicture";
 import { markQuote, textNodes, unmarkQuote } from "./domQuote";
 import { FileStates } from "./FileStates";
 import { CitationMark, marginRoom, markTopFor, quoteMarkOf, quoteTone } from "./quoteMark";
@@ -52,21 +53,88 @@ const DRAWN = new Set([
   "mark",
 ]);
 
-const count = (value: string | undefined) => {
+const count = (value: string | undefined, below = 1000) => {
   const number = Number(value);
-  return Number.isInteger(number) && number > 0 && number < 1000 ? String(number) : null;
+  return Number.isInteger(number) && number > 0 && number < below ? String(number) : null;
 };
+
+/** A picture the page shows from its own saved files (#756): "pictures/<hash>.png". */
+const SAVED_PICTURE = /^pictures\/[0-9a-f]{64}\.(?:png|jpg|gif|webp|avif)$/;
+
+/** Where a snapshot is drawn: its Document, and what stops its pictures' loading. */
+interface DrawContext {
+  documentId: string;
+  signal: AbortSignal;
+  t: (key: MessageKey) => string;
+  /** Pictures shown so far, numbered as the page shows them. */
+  pictures: number;
+}
+
+/** The page the viewer draws into (the name `Document` is the Library's). */
+type Page = HTMLElement["ownerDocument"];
+
+/** A labelled box for a picture that isn't shown: its description, and why. */
+function placeholder(owner: Page, alt: string, note: string, t: DrawContext["t"]): HTMLElement {
+  const element = owner.createElement("span");
+  element.className = "document-image-placeholder";
+  element.dataset.quoteSkip = "";
+  const label = owner.createElement("span");
+  label.className = "document-image-placeholder-label";
+  label.textContent = alt || t("viewer.markdown.image");
+  const why = owner.createElement("span");
+  why.className = "document-image-placeholder-note";
+  why.textContent = note;
+  element.append(label, why);
+  return element;
+}
+
+/**
+ * A picture saved with the page, read from its file once drawn; a box of its
+ * size meanwhile, so the page doesn't move as it comes in.
+ */
+function savedPicture(
+  owner: Page,
+  src: string,
+  alt: string,
+  size: { width: string | null; height: string | null },
+  context: DrawContext,
+): HTMLElement {
+  const picture = owner.createElement("img");
+  picture.alt = alt;
+  picture.className = "document-image document-web-picture";
+  picture.dataset.quoteSkip = "";
+  picture.dataset.testid = "web-picture";
+  context.pictures += 1;
+  picture.dataset.figure = String(context.pictures);
+  if (size.width && size.height) {
+    picture.style.aspectRatio = `${size.width} / ${size.height}`;
+    picture.style.width = `min(100%, ${size.width}px)`;
+  }
+  loadDocumentPicture(context.documentId, src, context.signal).then(
+    (url) => {
+      if (!context.signal.aborted) picture.src = url;
+    },
+    () => {
+      if (context.signal.aborted) return;
+      picture.replaceWith(
+        placeholder(owner, alt, context.t("viewer.markdown.imageMissing"), context.t),
+      );
+    },
+  );
+  return picture;
+}
 
 /**
  * Draws a snapshot's article with DOM calls, never as markup: only the
  * elements in `DRAWN`, links to web addresses (which open in the browser),
- * and a placeholder for each picture, which isn't fetched.
+ * the pictures saved with the page, from its own files, and a placeholder
+ * for each picture that wasn't saved, which isn't fetched.
  */
 function draw(
   nodes: readonly XmlNode[],
   parent: HTMLElement,
   blocks: ReadonlyMap<XmlNode, number>,
-  t: (key: MessageKey) => string,
+  context: DrawContext,
 ): void {
   const owner = parent.ownerDocument;
   for (const node of nodes) {
@@ -78,17 +146,19 @@ function draw(
     let element: HTMLElement | null = null;
     let inner: HTMLElement | null = null;
     if (name === "img") {
-      element = owner.createElement("span");
-      element.className = "document-image-placeholder";
-      element.dataset.quoteSkip = "";
-      const label = owner.createElement("span");
-      label.className = "document-image-placeholder-label";
-      label.textContent = node.attrs.alt?.trim() || t("viewer.markdown.image");
-      const note = owner.createElement("span");
-      note.className = "document-image-placeholder-note";
-      note.textContent = t("viewer.markdown.imageWeb");
-      element.append(label, note);
-      parent.append(element);
+      const alt = node.attrs.alt?.trim() ?? "";
+      const src = node.attrs.src ?? "";
+      parent.append(
+        SAVED_PICTURE.test(src)
+          ? savedPicture(
+              owner,
+              src,
+              alt,
+              { width: count(node.attrs.width, 20_000), height: count(node.attrs.height, 20_000) },
+              context,
+            )
+          : placeholder(owner, alt, context.t("viewer.markdown.imageWeb"), context.t),
+      );
       continue;
     }
     if (name === "a") {
@@ -116,7 +186,7 @@ function draw(
     }
     const block = blocks.get(node);
     if (element && block !== undefined) element.dataset.block = String(block);
-    draw(node.children, inner ?? element ?? parent, blocks, t);
+    draw(node.children, inner ?? element ?? parent, blocks, context);
     if (element) parent.append(element);
   }
 }
@@ -168,6 +238,7 @@ function WebPageContent({
     [page],
   );
   const site = page.meta.siteName ?? document.web?.siteName ?? null;
+  const leftOut = document.web?.picturesLeftOut ?? 0;
   const byline = [page.meta.author, page.meta.published && pageDate(page.meta.published, language)]
     .filter(Boolean)
     .join(" · ");
@@ -175,9 +246,18 @@ function WebPageContent({
   useLayoutEffect(() => {
     const body = host.current;
     if (!body || !page.article) return;
-    draw(page.article.children, body, blocks, t);
-    return () => body.replaceChildren();
-  }, [page, blocks, t]);
+    const loading = new AbortController();
+    draw(page.article.children, body, blocks, {
+      documentId: document.id,
+      signal: loading.signal,
+      t,
+      pictures: 0,
+    });
+    return () => {
+      loading.abort();
+      body.replaceChildren();
+    };
+  }, [page, blocks, t, document.id]);
 
   /** The cited sections' first block, and their range as drawn, to the last one's last block. */
   const citedSections = useCallback((): { first: Element | null; range: Range | null } => {
@@ -289,6 +369,18 @@ function WebPageContent({
                   {page.meta.title ?? document.name}
                 </h1>
                 {byline && <p className="document-web-byline">{byline}</p>}
+                {leftOut > 0 && (
+                  <p data-testid="viewer-web-left-out" className="document-web-byline">
+                    {t(
+                      leftOut === 1
+                        ? "viewer.web.picturesLeftOut.one"
+                        : "viewer.web.picturesLeftOut",
+                      {
+                        count: leftOut,
+                      },
+                    )}
+                  </p>
+                )}
               </header>
               <div ref={host} data-testid="viewer-web-article" className="document-markdown" />
               {mark && markTop !== null && (
