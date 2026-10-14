@@ -18,6 +18,7 @@
 import type { CannotAnswerReason, ChatProviderKind, OtherModel } from "../../api";
 import generated from "./models.json";
 import { OVERRIDES } from "./overrides";
+import { catalogProviderOf } from "./providers";
 import type { CatalogModel, GeneratedProviderModels, ModelFacts } from "./types";
 
 export { LOCAL_MODEL_TIERS, LOCAL_MODELS, recommendedLocalModels } from "./local";
@@ -25,8 +26,12 @@ export {
   CATALOG_PROVIDERS,
   type CatalogProviderId,
   catalogProvider,
+  catalogProviderOf,
   catalogProviderOfKind,
   endpointOf,
+  isPreset,
+  kindOfCatalogId,
+  untestedForCitations,
 } from "./providers";
 export type * from "./types";
 
@@ -142,14 +147,19 @@ export function otherModel(
 }
 
 /**
- * The model set a provider kind uses on an endpoint: the kind's own, and
- * OpenAI's for the ChatGPT plan, which serves OpenAI's models. A provider whose
+ * The model set a provider kind uses on an endpoint: the kind's own, or its
+ * preset's (`catalogId`), and OpenAI's for the ChatGPT plan, which serves OpenAI's models. A provider whose
  * regions differ in their models has a set for each region after the first
  * ("qwen/intl"); an endpoint without a set of its own, or none given, uses the
  * provider's.
  */
-export function modelsProviderOfKind(kind: ChatProviderKind, endpoint?: string | null): string {
+export function modelsProviderOfKind(
+  kind: ChatProviderKind,
+  endpoint?: string | null,
+  catalogId?: string | null,
+): string {
   if (kind === "chatgpt") return "openai";
-  const regional = endpoint ? `${kind}/${endpoint}` : undefined;
-  return regional && MODELS.has(regional) ? regional : kind;
+  const set = catalogProviderOf(kind, catalogId)?.id ?? kind;
+  const regional = endpoint ? `${set}/${endpoint}` : undefined;
+  return regional && MODELS.has(regional) ? regional : set;
 }
