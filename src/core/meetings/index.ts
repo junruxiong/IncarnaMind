@@ -23,6 +23,7 @@
  * capture is kept in its health record (./health, #161).
  */
 import { randomUUID } from "node:crypto";
+import { formatDay } from "../../shared/dates";
 import { translate } from "../../shared/i18n";
 import {
   type AudioCapture,
@@ -573,11 +574,7 @@ export function createMeetings(options: MeetingsOptions) {
 
   const meetingTitle = () => {
     const language = options.language();
-    const date = new Intl.DateTimeFormat(language === "zh-CN" ? "zh-CN" : "en-GB", {
-      day: "numeric",
-      month: "long",
-    }).format(new Date(clock()));
-    return translate(language, "meetings.mindTitle", { date });
+    return translate(language, "meetings.mindTitle", { date: formatDay(clock(), language) });
   };
 
   const parseInput = (input: unknown): Record<string, unknown> => {
