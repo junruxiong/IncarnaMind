@@ -34,4 +34,19 @@ describe("the line of a Passage nearest a sentence (#770)", () => {
       ]),
     ).toMatchObject({ id: "P1" });
   });
+
+  test("two common words don't make an unrelated sentence's line near, in English and Chinese", () => {
+    const company = [
+      { id: "P1", text: "The company reported its results for the year 2025 in March." },
+    ];
+    expect(
+      nearestLine("Our company will open three new offices in Singapore during 2025.", company),
+    ).toBeNull();
+    const chinese = [{ id: "P1", text: "公司发布了年度报告，营收增长明显。" }];
+    expect(nearestLine("这家公司的年度旅行计划包括去云南和四川的长途徒步。", chinese)).toBeNull();
+    // The same words in a sentence about the same thing still count.
+    expect(nearestLine("The company reported results for the year 2025.", company)).toMatchObject({
+      id: "P1",
+    });
+  });
 });

@@ -323,6 +323,47 @@ describe("One claim check", () => {
     expect(unrelated).toMatchObject({ shown: { state: "unsupported" }, check: { evidence: null } });
   });
 
+  // protects=a sentence about something else that shares a common word or two with a line asks the model nothing more, in English and Chinese; a near one still does; fails_when=every unsupported sentence pays an extra request; no_claim=none beyond protects.
+  test.each([
+    {
+      name: "English",
+      report: {
+        name: "Report.md",
+        contents: "The company reported its results for the year 2025 in March.",
+      },
+      unrelated: "Our company will open three new offices in Singapore during 2025.",
+      near: "The company reported its results for the year 2026 in March.",
+    },
+    {
+      name: "Chinese",
+      report: { name: "Report.md", contents: "公司发布了年度报告，营收增长明显。" },
+      unrelated: "这家公司的年度旅行计划包括去云南和四川的长途徒步。",
+      near: "公司发布了年度报告，营收下降明显。",
+    },
+  ])(
+    "$name: an unrelated sentence makes no extra request (#770)",
+    async ({ report, unrelated, near }) => {
+      const plans = {
+        [unrelated]: { verdict: "unsupported" as const },
+        [near]: { verdict: "unsupported" as const },
+      };
+      const asked = (model: ReturnType<typeof checkingModel>) =>
+        model.doGenerateCalls.filter((call) =>
+          JSON.stringify(call.prompt).includes("Compare a sentence"),
+        ).length;
+
+      const model = checkingModel(plans);
+      const { check } = await mindWith([unrelated], model, [report]);
+      await check();
+      expect(asked(model)).toBe(0);
+
+      const nearModel = checkingModel(plans);
+      const nearby = await mindWith([near], nearModel, [report]);
+      await nearby.check();
+      expect(asked(nearModel)).toBe(1);
+    },
+  );
+
   test("the nearest line is shown only when, judged alone, it differs", async () => {
     const same = { verdict: "unsupported" as const, judgement: "neither" as const };
     const { core, client, check } = await mindWith(
