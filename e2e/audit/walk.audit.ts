@@ -210,13 +210,6 @@ test("A1 first run: the example Mind and its Citation card", async () => {
       await click(window, window.getByTestId("example-add-own"));
       await window.waitForTimeout(800);
       await shot(window, "A06-after-add-your-own");
-      const setup = window.getByTestId("chat-setup");
-      if (await setup.isVisible()) {
-        await scan(window, "A06-chat-setup");
-        await window.keyboard.press("Escape");
-        await window.waitForTimeout(300);
-        record("walk.escape.chatSetup", { closes: !(await setup.isVisible()) });
-      }
     });
   } finally {
     if (app) await close(app);
@@ -232,21 +225,25 @@ test("A2 first run without examples: chat setup, the empty Mind, Settings", asyn
     app = await launch(dataDir);
     const { window } = app;
     await sealShell(app.app);
-    await step(T, "chat setup dialog", async () => {
-      const setup = window.getByTestId("chat-setup");
-      await expect(setup).toBeVisible({ timeout: 15_000 });
-      await window.waitForTimeout(1500); // Ollama detection settles
-      await shot(window, "A10-chat-setup");
-      await scan(window, "A10-chat-setup");
+    await step(T, "model setup card at the first own Question", async () => {
+      await click(window, window.getByTestId("plus-menu"));
+      await click(window, window.getByTestId("plus-new-mind"));
+      await window.getByTestId("mind-editor").click();
+      await window.keyboard.press("ControlOrMeta+j");
+      await window.keyboard.type("What is in my Documents?");
+      await window.keyboard.press("Enter");
+      await expect(window.getByTestId("model-setup")).toBeVisible({ timeout: 15_000 });
+      await shot(window, "A10-model-setup");
+      await scan(window, "A10-model-setup");
       const stops = await focusWalk(window, 14, "focus/A10");
-      record("walk.focus.chatSetup", stops);
+      record("walk.focus.modelSetup", stops);
     });
     await step(T, "set up later", async () => {
-      await click(window, window.getByTestId("chat-setup-later"));
-      await expect(window.getByTestId("chat-setup")).toBeHidden();
+      await click(window, window.getByTestId("setup-later"));
+      await expect(window.getByTestId("model-setup")).toBeHidden();
       await window.waitForTimeout(400);
-      await shot(window, "A11-no-mind-open");
-      await scan(window, "A11-no-mind-open");
+      await shot(window, "A11-after-set-up-later");
+      await scan(window, "A11-after-set-up-later");
     });
     await step(T, "empty Mind with three steps", async () => {
       await click(window, window.getByTestId("plus-menu"));
@@ -314,7 +311,6 @@ test("A3 a working session: a Linked folder, Answers with Citations, the viewer,
     app = await launch(dataDir, { fakeChat: true });
     const { window } = app;
     await sealShell(app.app);
-    await click(window, window.getByTestId("chat-setup-later"));
     await chooseFakeModel(window);
     await window.evaluate(async () => {
       const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
@@ -709,7 +705,6 @@ test("A4 approvals and consent", async () => {
     app = await launch(dataDir, { fakeChat: true });
     const { window } = app;
     await sealShell(app.app);
-    await click(window, window.getByTestId("chat-setup-later"));
     await chooseFakeModel(window);
     await window.evaluate(
       async ({ node, server }) => {
@@ -785,9 +780,6 @@ test("A6 window sizes, the three steps, the @ and / menus, hover states", async 
         timeout: 20_000,
       });
       await click(window, window.getByTestId("new-tab"));
-      const setup = window.getByTestId("chat-setup");
-      await expect(setup).toBeVisible();
-      await click(window, setup.getByTestId("chat-setup-later"));
       await expect(window.getByTestId("start-guide")).toBeVisible();
       await window.mouse.move(700, 600, { steps: 6 });
       await window.waitForTimeout(400);
@@ -916,8 +908,7 @@ test("A7 what the window shows while it starts", async () => {
   let app: Launched | undefined;
   try {
     // A data folder from an earlier run, as on any later start.
-    const first = await launch(dataDir, { readyTestId: "chat-setup" });
-    await click(first.window, first.window.getByTestId("chat-setup-later"));
+    const first = await launch(dataDir, { readyTestId: "plus-menu" });
     await close(first);
     app = await launch(dataDir, { readyTestId: null });
     const frames: { ms: number; blank: boolean }[] = [];
@@ -947,7 +938,6 @@ test("A5 offline: the chat model can't be reached", async () => {
     app = await launch(dataDir);
     const { window } = app;
     await sealShell(app.app);
-    await click(window, window.getByTestId("chat-setup-later"));
     // An Ollama on a closed local port: nothing leaves the machine.
     await window.evaluate(async () => {
       const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
