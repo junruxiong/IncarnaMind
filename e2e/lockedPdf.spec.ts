@@ -2,9 +2,13 @@ import { expect, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import { writeLockedPdf } from "../tests/helpers/lockedPdf";
 import {
+  acceptPlainTextKeys,
+  askInAssistant,
+  useLocalChatModel as connectLocalChatModel,
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  newMind,
   openDocumentMenu,
   removeDataFolder,
   setLanguage,
@@ -15,8 +19,8 @@ import {
  * A password-protected PDF (#763): its row offers Unlock…, which opens it in
  * the viewer with the password asked for in place. A wrong password says so
  * under the field, its text kept and selected; the right one opens the pages
- * and reads the PDF. Its row then offers Forget password. In English and
- * Chinese.
+ * and reads the PDF. Its row then offers Forget password. Beside an Answer,
+ * it says it is locked and offers Unlock… too. In English and Chinese.
  */
 
 const PASSWORD = "tide-tables-7Q!";
@@ -53,6 +57,9 @@ test("a locked PDF is unlocked in place: a wrong password says so, the right one
   const locked = window.getByTestId("viewer").getByTestId("pdf-locked");
   await expect(locked).toContainText("This PDF is locked");
   const field = locked.getByTestId("pdf-password");
+  await expect(field).toBeFocused();
+  // With no keyring running (CI's Linux), the User first accepts keeping it without one.
+  await acceptPlainTextKeys(window, locked);
   await expect(field).toBeFocused();
 
   // A wrong password: said under the field, which keeps its text, selected, to type over.
@@ -99,5 +106,38 @@ test("a locked PDF is unlocked in place: a wrong password says so, the right one
   await openDocumentMenu(item);
   await expect(window.getByRole("menuitem", { name: "Forget password" })).toHaveCount(0);
   await window.keyboard.press("Escape");
+  await app.close();
+});
+
+test("beside an Answer, a locked PDF says so and offers Unlock…, which opens it where its password is asked for, in English and Chinese", async () => {
+  const path = await writeLockedPdf(
+    sources,
+    "Harbour accounts.pdf",
+    ["Harbour accounts"],
+    PASSWORD,
+  );
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await setWindowSize(app, window, 1440, 900);
+  await dismissChatSetup(window);
+  await connectLocalChatModel(window);
+  await window.getByTestId("add-documents-input").setInputFiles([path]);
+  await expect(window.getByTestId("document-list-item")).toHaveAttribute("data-status", "failed");
+  await newMind(window);
+
+  const answer = await askInAssistant(window, "When does the harbour office open?");
+  const line = answer.getByTestId("unread-files");
+  await line.getByTestId("unread-files-show").click();
+  const row = line.getByTestId("unread-file");
+  await expect(row).toHaveAttribute("data-reason", "password");
+  await expect(row).toContainText("Harbour accounts.pdf: Locked with a password.");
+  await expect(row).not.toContainText("Remove the password");
+  await setLanguage(window, "zh-CN");
+  await expect(row).toContainText("已加密。");
+  await expect(row.getByTestId("unread-file-unlock")).toHaveText("解锁…");
+
+  await row.getByTestId("unread-file-unlock").click();
+  await expect(window.getByTestId("viewer").getByTestId("pdf-locked")).toContainText(
+    "这个 PDF 已加密",
+  );
   await app.close();
 });

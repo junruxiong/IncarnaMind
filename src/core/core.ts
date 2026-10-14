@@ -77,7 +77,7 @@ import {
   parseListOptions,
 } from "./documents";
 import { createEvidence, parseCheckedDocument, passageResult } from "./documents/evidence";
-import { pdfOpensWith } from "./documents/extract";
+import { pdfIsLocked, pdfOpensWith } from "./documents/extract";
 import { statIdentity } from "./documents/files";
 import { createOwnFiles } from "./documents/ownFiles";
 import { createPdfPasswords } from "./documents/pdfPasswords";
@@ -85,6 +85,7 @@ import { createVersionRetention, type VersionRetention } from "./documents/reten
 import { BUILT_IN_TEXT_RECOGNITION_MODEL, createTextRecognitionModel } from "./documents/scan";
 import { tunedSearch } from "./documents/searchTuning";
 import { findUnreadDocuments } from "./documents/unread";
+import { createViewing } from "./documents/viewing";
 import { fsWatchFolder } from "./documents/watcher";
 import { createWebPages } from "./documents/web";
 import { createEdits } from "./edits";
@@ -433,6 +434,7 @@ export function createCore(adapters: CoreAdapters): Core {
   });
   const secrets = createSecrets(adapters.keychain, settings);
   const pdfPasswords = createPdfPasswords(secrets, settings);
+  const viewing = createViewing();
   /** Forgets the passwords of Documents gone from the Library (#763), and says which are kept. */
   const forgetPasswords = async (ids: readonly string[]) => {
     const kept = pdfPasswords.kept();
@@ -2243,6 +2245,9 @@ export function createCore(adapters: CoreAdapters): Core {
       if (!document) throw new NotFoundError({ key: "error.document.notFound" });
       if (document.kind !== "pdf") throw new InvalidInputError({ key: "error.document.notPdf" });
       const bytes = await readFile(await documents.filePath(documentId));
+      if (!(await pdfIsLocked(bytes))) {
+        throw new InvalidInputError({ key: "error.document.notLocked" });
+      }
       if (!(await pdfOpensWith(bytes, password))) return { kind: "wrong-password" };
       await pdfPasswords.keep(documentId, password);
       events.emit("documentPasswords.changed", pdfPasswords.kept());
@@ -2252,7 +2257,7 @@ export function createCore(adapters: CoreAdapters): Core {
     forgetDocumentPassword: async (id) => forgetPasswords([parseDocumentId(id)]),
     documentPasswordFor: async (id) => {
       const document = documents.getMany([parseDocumentId(id)])[0];
-      if (document?.kind !== "pdf") return null;
+      if (document?.kind !== "pdf" || !viewing.isShown(document.id)) return null;
       return (await pdfPasswords.of(document.id)) ?? null;
     },
     listDocumentPasswords: async () => {
@@ -2856,7 +2861,10 @@ export function createCore(adapters: CoreAdapters): Core {
     retryTranscript: async (meetingId) => meetings.retryTranscript(meetingId),
     openAudioSettings: (source) => meetings.openSettings(source),
 
-    openDocumentFile: (documentId) => documents.openFile(documentId),
+    openDocumentFile: async (documentId) => {
+      const file = await documents.openFile(documentId);
+      return { ...file, stream: viewing.watch(file.document.id, file.stream) };
+    },
     openDocumentImage: (documentId, path) => documents.openImage(documentId, path),
     readCellNumber: (documentId, sheet, ref) => documents.cellNumber(documentId, sheet, ref),
     openDocumentInApp: async (documentId) => {

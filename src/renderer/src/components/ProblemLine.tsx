@@ -50,18 +50,25 @@ export function ProblemLine({
           each && (
             <Fragment key={each.label}>
               <span aria-hidden="true"> · </span>
-              <button
-                type="button"
-                data-testid={each.testId}
-                disabled={each.disabled}
-                onClick={each.onClick}
-                className="rounded-sm font-semibold text-accent underline-offset-2 hover:underline disabled:opacity-50 disabled:hover:no-underline"
-              >
-                {each.label}
-              </button>
+              <ProblemActionButton action={each} />
             </Fragment>
           ),
       )}
     </p>
+  );
+}
+
+/** An action after a problem's words: "· Show". */
+export function ProblemActionButton({ action }: { action: ProblemAction }) {
+  return (
+    <button
+      type="button"
+      data-testid={action.testId}
+      disabled={action.disabled}
+      onClick={action.onClick}
+      className="rounded-sm font-semibold text-accent underline-offset-2 hover:underline disabled:opacity-50 disabled:hover:no-underline"
+    >
+      {action.label}
+    </button>
   );
 }

@@ -1,28 +1,50 @@
 import { type FormEvent, useEffect, useRef, useState } from "react";
-import { buttonStyle, fieldClass } from "../components/ui";
+import type { SecretStorageStatus } from "../../../core/api";
+import { SecretStorageNotice } from "../components/providers/ProviderForm";
+import { buttonStyle, errorTextClass, fieldClass } from "../components/ui";
 import { core } from "../core";
+import { errorMessage } from "../errors";
 import { useT } from "../i18n";
-import { useAppStore } from "../store";
 
 /**
  * A password-protected PDF the viewer can't open yet (#763): its password is
  * asked for in place. Unlocking keeps it, by the core, and the PDF opens; a
  * wrong one says so under the field, which keeps the text, selected, to try
  * again. The field is uncontrolled, so the password stays out of React state.
+ * The password is kept with the system's keyring: on Linux with none running,
+ * the User first accepts keeping it without one, as for an API key.
  */
 export function LockedPdf({ documentId, onUnlocked }: { documentId: string; onUnlocked(): void }) {
   const t = useT();
   const field = useRef<HTMLInputElement>(null);
   const [wrong, setWrong] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [secretStorage, setSecretStorage] = useState<SecretStorageStatus | null>(null);
+  const blocked = secretStorage !== null && !secretStorage.canSave;
 
   useEffect(() => field.current?.focus(), []);
+  useEffect(() => {
+    core.getSecretStorage().then(setSecretStorage, (failure: unknown) => {
+      setError(errorMessage(failure, t));
+    });
+  }, [t]);
+
+  const acceptPlainText = async () => {
+    try {
+      setSecretStorage(await core.acceptPlainTextSecretStorage());
+      field.current?.focus();
+    } catch (failure) {
+      setError(errorMessage(failure, t));
+    }
+  };
 
   const unlock = async (event: FormEvent) => {
     event.preventDefault();
     const input = field.current;
-    if (!input || input.value === "" || busy) return;
+    if (!input || input.value === "" || busy || blocked) return;
     setBusy(true);
+    setError(null);
     try {
       const result = await core.unlockDocument({ documentId, password: input.value });
       if (result.kind === "wrong-password") {
@@ -33,8 +55,8 @@ export function LockedPdf({ documentId, onUnlocked }: { documentId: string; onUn
       }
       input.value = "";
       onUnlocked();
-    } catch (error) {
-      useAppStore.getState().reportError(error);
+    } catch (failure) {
+      setError(errorMessage(failure, t));
     } finally {
       setBusy(false);
     }
@@ -58,13 +80,16 @@ export function LockedPdf({ documentId, onUnlocked }: { documentId: string; onUn
           autoComplete="off"
           aria-invalid={wrong || undefined}
           aria-describedby={wrong ? "pdf-password-wrong" : undefined}
-          onInput={() => setWrong(false)}
+          onInput={() => {
+            setWrong(false);
+            setError(null);
+          }}
           className={`${fieldClass} min-w-0 flex-1`}
         />
         <button
           type="submit"
           data-testid="pdf-unlock"
-          disabled={busy}
+          disabled={busy || blocked}
           className={buttonStyle("primary")}
         >
           {t("viewer.locked.unlock")}
@@ -79,6 +104,14 @@ export function LockedPdf({ documentId, onUnlocked }: { documentId: string; onUn
         >
           {t("viewer.locked.wrong")}
         </p>
+      )}
+      {error !== null && (
+        <p role="alert" data-testid="pdf-unlock-error" className={errorTextClass}>
+          {error}
+        </p>
+      )}
+      {secretStorage && blocked && (
+        <SecretStorageNotice status={secretStorage} onAccept={() => void acceptPlainText()} />
       )}
     </form>
   );

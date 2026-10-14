@@ -164,13 +164,17 @@ export async function pdfMetadata(
 }
 
 /**
- * Whether `password` opens a PDF (#763): false when it doesn't. Throws when
- * the PDF can't be opened for another reason.
+ * Whether `password` opens a PDF (#763); without one, whether it opens as it
+ * is. False when it doesn't. Throws when the PDF can't be opened for another reason.
  */
-export async function pdfOpensWith(bytes: Uint8Array, password: string): Promise<boolean> {
+export async function pdfOpensWith(bytes: Uint8Array, password?: string): Promise<boolean> {
   const { getDocument } = await loadPdfJs();
   // pdf.js may take ownership of the buffer, so give it a copy.
-  const task = getDocument({ data: new Uint8Array(bytes), password, verbosity: 0 });
+  const task = getDocument({
+    data: new Uint8Array(bytes),
+    ...(password !== undefined && { password }),
+    verbosity: 0,
+  });
   try {
     await task.promise;
     return true;
@@ -181,6 +185,10 @@ export async function pdfOpensWith(bytes: Uint8Array, password: string): Promise
     await task.destroy();
   }
 }
+
+/** Whether a PDF needs a password to open (#763). */
+export const pdfIsLocked = async (bytes: Uint8Array): Promise<boolean> =>
+  !(await pdfOpensWith(bytes));
 
 async function extractPdf(
   bytes: Uint8Array,
