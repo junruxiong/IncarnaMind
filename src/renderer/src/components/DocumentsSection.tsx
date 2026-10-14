@@ -18,18 +18,13 @@ import { fileStatusLabel, formatCount } from "../linkedFolders";
 import { usePeekKey } from "../peek";
 import { useRequests } from "../requests";
 import { scanningStatus } from "../scanStatus";
-import {
-  extendThroughRows,
-  rowsIn,
-  selectedOn,
-  useSelectable,
-  useSelectionOrder,
-} from "../selection";
+import { rowsIn, selectedOn, useSelectable, useSelectionOrder } from "../selection";
 import { useSortMenu } from "../sortMenu";
 import { selectVisibleDocuments, useAppStore } from "../store";
 import { chipsOf, tagIndex } from "../tagEditing";
-import { moveThroughRows, TREE_ROW } from "../treeKeys";
+import { moveThroughRows, TREE_ROW, useTreeItem } from "../treeKeys";
 import { useRename } from "../useRename";
+import { useTreeKeyboard } from "../useTreeKeyboard";
 import { ActiveTagFilter, DocumentTagMenu, TagFilterMenu } from "./DocumentTags";
 import { FolderTree } from "./FolderTree";
 import { InlineName } from "./InlineName";
@@ -114,6 +109,7 @@ export function DocumentsSection() {
   const addDocuments = useAppStore((state) => state.addDocuments);
   const picker = useRef<HTMLInputElement>(null);
   const tree = useRef<HTMLDivElement>(null);
+  const treeKeys = useTreeKeyboard(tree);
   // ⌘A and Shift-click reach the rows in view: every Mind and Document the tree draws.
   useSelectionOrder("sidebar", () => rowsIn(tree.current));
   const tags = useAppStore((state) => state.tags);
@@ -167,12 +163,12 @@ export function DocumentsSection() {
   const empty = documents.length === 0 && (filtering || !hasFolders);
 
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: ↑ and ↓ move between the rows' buttons inside it.
+    // biome-ignore lint/a11y/noStaticElementInteractions: ↑ and ↓ go on from the tree's first and last rows to Search and All Documents.
     <div
       data-testid="documents-section"
       {...tagNamesTipListProps}
       onKeyDown={(event) => {
-        if (!moveThroughRows(event)) extendThroughRows(event, "sidebar");
+        if (!event.defaultPrevented) moveThroughRows(event);
       }}
     >
       {/* Files given straight to the page arrive here, as from the dialog: the smoke tests add them so. */}
@@ -247,7 +243,13 @@ export function DocumentsSection() {
       )}
       {/* Under the switcher, so it never moves; in the Tags view, the chosen Tags say it. */}
       {view !== "tags" && <ActiveTagFilter />}
-      <div ref={tree} role="tree" aria-multiselectable="true" aria-label={t("sidebar.tree")}>
+      <div
+        ref={tree}
+        role="tree"
+        aria-multiselectable="true"
+        aria-label={t("sidebar.tree")}
+        {...treeKeys}
+      >
         {view === "folders" ? (
           <LibraryFolders documents={documents} renderDocument={renderDocument} />
         ) : view === "tags" ? (
@@ -325,9 +327,9 @@ const DocumentRow = memo(function DocumentRow({
   const peek = usePeekKey(item.id, "sidebar");
   const lit = isOpen || select.selected;
   const muted = !lit && (isProcessing(item.status) || item.fileStatus !== "available");
+  const treeItem = useTreeItem({ depth, selected: select.selected });
 
   return (
-    // biome-ignore lint/a11y/useFocusableInteractive: the row's own button takes the focus, and the arrow keys move between them.
     <li
       data-testid="document-list-item"
       data-document-id={item.id}
@@ -336,8 +338,8 @@ const DocumentRow = memo(function DocumentRow({
       data-status={item.status}
       data-file-status={item.fileStatus}
       data-tagging={item.tagging}
-      role="treeitem"
-      {...select.rowProps}
+      role="none"
+      {...select.refProps}
       {...peek.rowProps}
       {...(rename.renaming ? {} : objectMenu.rowProps)}
       className={rowClass(lit, muted ? "muted" : "item")}
@@ -359,7 +361,7 @@ const DocumentRow = memo(function DocumentRow({
         <button
           {...rename.nameProps}
           type="button"
-          {...TREE_ROW}
+          {...treeItem}
           data-testid="open-document"
           aria-current={isOpen ? "true" : undefined}
           aria-description={tagNames}
@@ -387,11 +389,12 @@ const DocumentRow = memo(function DocumentRow({
       )}
       {!rename.renaming && (
         <div className={rowActionsClass}>
-          <DocumentTagMenu item={item} buttonClassName={rowActionButtonClass} />
+          <DocumentTagMenu item={item} buttonClassName={rowActionButtonClass} tabIndex={-1} />
           <ObjectMenu
             target={{ kind: "document", id: item.id }}
             label={t("documents.more", { name: item.name })}
             here={{ "document.rename": rename.start }}
+            tabIndex={-1}
           />
         </div>
       )}

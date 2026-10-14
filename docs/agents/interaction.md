@@ -63,6 +63,7 @@ Each rule has a check a reviewer can apply. A UI change that breaks a rule says 
 | Delete | Moves to Recently deleted for 30 days, no question asked | Notion, Granola, Apple Notes, Finder, Feishu |
 | Undo | ⌘Z after any change, not only typing | Linear, Things |
 | Look inside a file | Space shows a quick preview beside the list; Enter opens it in the viewer | Finder's Quick Look |
+| Walk the sidebar | The tree is one Tab stop; ↑ ↓ Home End move, → opens a Folder or steps into it, ← closes it or steps out, typing a name's first letters jumps to it, ⌘⌫ (Delete on Windows and Linux) moves to Recently deleted | Finder's list view, Windows Explorer |
 | Files dropped on the composer | They become Documents and that Question's scope | Claude, ChatGPT |
 | Insert | "/" in the note, matching pinyin for Chinese | Notion, Feishu, Yuque |
 | Changes the AI proposes | Shown as changes in the note; one key accepts all, one rejects all | Cursor, Notion AI |
