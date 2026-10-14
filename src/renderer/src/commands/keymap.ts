@@ -31,7 +31,7 @@ const inList = (target: EventTarget | null) =>
   target.closest(`${SELECTABLE_LIST}, ${ROW}`) !== null;
 
 /** The object whose row holds the focus: the one its ⋯ button names. */
-function objectAt(target: EventTarget | null): ObjectRef | null {
+export function objectAt(target: EventTarget | null): ObjectRef | null {
   if (!inList(target) || !(target instanceof Element)) return null;
   const named = target.closest(ROW)?.querySelector<HTMLElement>("[data-object-menu]")
     ?.dataset.objectMenu;
@@ -44,7 +44,7 @@ const isSurface = (value: string | undefined): value is Surface =>
   (SURFACES as readonly (string | undefined)[]).includes(value);
 
 /** The surface an element is on: the nearest `data-surface`, or else the Mind. */
-function surfaceOf(target: EventTarget | null): Surface {
+export function surfaceOf(target: EventTarget | null): Surface {
   const marked =
     target instanceof Element
       ? target.closest<HTMLElement>("[data-surface]")?.dataset.surface
