@@ -8,7 +8,7 @@ import type {
 } from "../../src/core/api";
 import { chosenScope, composerScope, NO_SCOPE } from "../../src/renderer/src/composer";
 import { movedLocally, moveMessage, moveName, undoMoves } from "../../src/renderer/src/moves";
-import { scopeChips } from "../../src/renderer/src/scope";
+import { scopeChips, scopeCounts } from "../../src/renderer/src/scope";
 import { type MessageKey, type MessageParams, translate } from "../../src/shared/i18n";
 import { hasSearchScope } from "../../src/shared/searchScope";
 
@@ -100,7 +100,14 @@ describe("a Search scope's chips", () => {
     expect(
       scopeChips(library, { folderIds: ["live", "gone", "unknown"], tagIds: [], documentIds: [] }),
     ).toEqual([
-      { kind: "folder", id: "live", name: "Vendor selection", deleted: false, documentKind: null },
+      {
+        kind: "folder",
+        id: "live",
+        name: "Vendor selection",
+        deleted: false,
+        documentKind: null,
+        count: 0,
+      },
       { kind: "folder", id: "gone", name: "Finance", deleted: true, documentKind: null },
       { kind: "folder", id: "unknown", name: null, deleted: true, documentKind: null },
     ]);
@@ -225,5 +232,45 @@ describe("moving Minds and Documents", () => {
         names,
       ),
     ).toBe("已将 2 个对话移动到“财务”");
+  });
+});
+
+describe("how many Documents each Folder and Tag holds (#764)", () => {
+  const document = (id: string, over: Record<string, unknown> = {}) =>
+    ({
+      id,
+      name: id,
+      kind: "pdf",
+      status: "ready",
+      fileStatus: "available",
+      folderId: null,
+      tags: [],
+      ...over,
+    }) as never;
+
+  test("counts the searchable Documents of an in-app Folder, a Linked folder with its sub-Folders, and a Tag", () => {
+    const folder = (id: string, parentId: string | null) => ({ id, name: id, parentId }) as never;
+    const counts = scopeCounts({
+      folders: [folder("root", null), folder("deep", "root"), folder("quiet", null)],
+      groups: [group("filed", "Filed"), group("empty", "Empty")],
+      tags: [{ id: "t1", name: "Tide" }] as never,
+      documents: [
+        document("a", { folderId: "root", tags: [{ tagId: "t1" }] }),
+        document("b", { folderId: "deep" }),
+        document("scan", { folderId: "deep", status: "no-text" }),
+        document("gone", { folderId: "root", fileStatus: "missing" }),
+        document("c"),
+      ],
+      assignments: [
+        { documentId: "c", groupId: "filed" },
+        { documentId: "scan", groupId: "filed" },
+      ] as never,
+    });
+    expect(counts.get("root")).toBe(2);
+    expect(counts.get("deep")).toBe(1);
+    expect(counts.get("quiet")).toBe(0);
+    expect(counts.get("filed")).toBe(1);
+    expect(counts.get("empty")).toBe(0);
+    expect(counts.get("t1")).toBe(1);
   });
 });

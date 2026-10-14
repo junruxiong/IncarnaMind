@@ -16,6 +16,7 @@ import { modelName } from "../../../../shared/modelName";
 import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useLanguage, useT } from "../../i18n";
+import { ProblemMark } from "../ProblemLine";
 import {
   buttonClass,
   errorTextClass,
@@ -387,6 +388,7 @@ export function ProviderForm({
           )}
           {error && (
             <p role="alert" className={errorTextClass}>
+              <ProblemMark />
               {error}
             </p>
           )}
@@ -452,7 +454,10 @@ export function TestResult({
   }
   return (
     <div data-testid="connection-test" role="alert" className={errorTextClass}>
-      <p>{authLine ?? t(testErrorKey(result.error.kind))}</p>
+      <p>
+        <ProblemMark />
+        {authLine ?? t(testErrorKey(result.error.kind))}
+      </p>
       {/* The provider's own words help with its errors. */}
       {result.error.message && (
         <p className="mt-1 text-[12px] leading-[18px] break-words text-ink-meta">

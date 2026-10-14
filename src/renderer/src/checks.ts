@@ -19,6 +19,8 @@ import { mindModelOf } from "../../shared/mindModel";
 import { core } from "./core";
 import type { ShownClaim } from "./editor/claimChecks";
 import { selectionForEdit } from "./editor/editSelection";
+import { errorMessage } from "./errors";
+import { translateNow } from "./i18n";
 
 /** Why a check gave no marks, for the line under the Mind's title. */
 export type CheckProblem =
@@ -96,7 +98,7 @@ export async function checkSentences(
       model: mindModelOf(doc),
     });
   } catch (error) {
-    result = { kind: "failed", message: error instanceof Error ? error.message : String(error) };
+    result = { kind: "failed", message: errorMessage(error, translateNow) };
   } finally {
     setFor("running", mindId, null);
   }
@@ -122,6 +124,13 @@ export function checkAgain(
     range: { from: claim.from, to: claim.to },
     allDocuments,
   });
+}
+
+/** Takes a sentence's check mark off, leaving the sentence: one step for ⌘Z. */
+export function removeClaimMark(editor: Editor, claim: ShownClaim): void {
+  const mark = editor.state.schema.marks[CLAIM_CHECK_MARK];
+  if (!mark) return;
+  editor.view.dispatch(editor.state.tr.removeMark(claim.from, claim.to, mark));
 }
 
 /** Closing punctuation a Citation goes before: "…in the quarter [1]." */
