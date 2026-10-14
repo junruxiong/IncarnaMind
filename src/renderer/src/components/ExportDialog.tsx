@@ -165,7 +165,10 @@ function TheirChangesRow({
           data-testid="export-their-changes"
           value={value}
           aria-describedby={`${id}-hint`}
-          onChange={(event) => onChange(event.target.value as TheirChangesShown)}
+          onChange={(event) => {
+            const chosen = event.target.value;
+            if (chosen === "shown" || chosen === "accepted") onChange(chosen);
+          }}
           className="h-8 w-44 appearance-none rounded-sm border border-rule-strong bg-sheet pr-8 pl-2.5 text-ui text-ink focus:border-accent"
         >
           <option value="shown">{t("export.theirChanges.shown")}</option>

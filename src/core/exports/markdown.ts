@@ -218,11 +218,13 @@ class MarkdownWriter {
     const spans = changeSpans(content);
     return spans
       .map(({ change, content: part }, at) => {
-        const text = this.marked(part, context);
+        const text = notCriticMarkup(this.marked(part, context));
         if (!change) return text;
         const marked = change.kind === "insert" ? `{++${text}++}` : `{--${text}--}`;
         const ended = changeEnding(spans, at);
-        return ended ? `${marked}{>>${this.labels.change(ended)}<<}` : marked;
+        if (!ended) return marked;
+        const note = notCriticMarkup(escapeText(this.labels.change(ended), context.table));
+        return `${marked}{>>${note}<<}`;
       })
       .join("");
   }
@@ -374,6 +376,10 @@ function image(src: string, alt: string, context: Context): string {
  * could make one: before another, or at either end of the text, which a
  * highlight's "==" may be written next to.
  */
+/** Text with CriticMarkup's delimiters escaped, so only the writer opens or closes a change or its note. */
+const notCriticMarkup = (text: string) =>
+  text.replace(/\{(?=\+\+|--|>>|~~|==)/g, "\\{").replace(/(\+\+|--|<<|~~|==)\}/g, "$1\\}");
+
 function escapeText(text: string, table: boolean): string {
   const escaped = text
     .replace(/[\\`*_~[\]$<]/g, "\\$&")

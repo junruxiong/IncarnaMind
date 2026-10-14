@@ -264,16 +264,27 @@ function listMarkdown(list: Extract<Block, { kind: "list" }>, documents: Documen
 function inlineMarkdown(content: readonly Inline[]): string {
   return changeSpans(content)
     .map(({ change, content: part }) => {
-      const text = part.map(inlineText).join("");
+      const text = notAMark(part.map(inlineText).join(""));
       return change ? `[${changeWords(change)}: ${text}]` : text;
     })
     .join("");
 }
 
+/** Text that reads like a change's mark, escaped: only the reader writes "[deleted by …". */
+const notAMark = (text: string) => text.replace(/\[(?=\s*(?:inserted|deleted) by\b)/gi, "\\[");
+
+/** The longest author name a change's mark shows: the file says what it likes. */
+const AUTHOR_LENGTH = 80;
+
 /** Who made a change and when, for the model: "deleted by Priya Nair, 2026-10-02". */
 function changeWords({ kind, pending }: ShownChange): string {
   const day = /^\d{4}-\d{2}-\d{2}/.exec(pending.at ?? "")?.[0];
-  return `${kind === "insert" ? "inserted" : "deleted"} by ${pending.by || "someone"}${day ? `, ${day}` : ""}`;
+  // A name can't close the mark, or open another.
+  const author = (pending.by ?? "")
+    .replace(/[[\]\r\n]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return `${kind === "insert" ? "inserted" : "deleted"} by ${author.slice(0, AUTHOR_LENGTH) || "someone"}${day ? `, ${day}` : ""}`;
 }
 
 function inlineText(inline: Inline): string {
