@@ -5,11 +5,18 @@
  * `searchEvidence` (which leaves out the document being checked, #80) and a
  * check against the Passages it found.
  *
- * Extraction and the check are a baseline of one model call each until the
- * claim-check function (#96) and verify's claim extraction (#97) exist; the
- * run then calls theirs here, and its bars gate.
+ * The check is the app's claim-check function (#96, `checkClaim`), as Find
+ * support and verify run it; extraction is still a baseline of one model call
+ * (`baselinePipeline`), until verify's claim extraction (#97) can be called
+ * on its own, and the bars gate then.
  */
-import type { CheckedDocument, Core, PassageSearchResult, SearchScope } from "../../../src/core";
+import type {
+  CheckedDocument,
+  Citation,
+  Core,
+  PassageSearchResult,
+  SearchScope,
+} from "../../../src/core";
 import type { Generate } from "../../lib/rewrites";
 import type { CheckOutcome, FoundEvidence, Verdict } from "./scoring";
 
@@ -165,6 +172,48 @@ export function baselinePipeline(options: PipelineOptions): ChecksPipeline {
           }
         : null;
       return { verdict, evidence };
+    },
+  };
+}
+
+export interface CorePipelineOptions extends Omit<PipelineOptions, "core"> {
+  core: Pick<Core, "searchEvidence" | "checkClaim">;
+  /** A Document's name in the labels, from a Citation of it. */
+  citedName(citation: Citation): string;
+}
+
+/** The baseline's extraction, and the app's claim check (`checkClaim`) for each sentence or claim. */
+export function corePipeline(options: CorePipelineOptions): ChecksPipeline {
+  const { core, scope, citedName } = options;
+  const baseline = baselinePipeline(options);
+  return {
+    usage: baseline.usage,
+    extractClaims: baseline.extractClaims,
+
+    async check(sentence, checked) {
+      let result: Awaited<ReturnType<Core["checkClaim"]>>;
+      try {
+        result = await core.checkClaim({ claim: sentence, scope, ...(checked && { checked }) });
+      } catch (error) {
+        return notChecked(`The check failed: ${messageOf(error)}`);
+      }
+      if (result.verdict === "not-checked") {
+        return notChecked(`${result.reason}${result.detail ? `: ${result.detail}` : ""}`);
+      }
+      const { evidence } = result;
+      return {
+        verdict: result.verdict,
+        evidence: evidence
+          ? {
+              document: citedName(evidence),
+              units:
+                evidence.pageFrom !== null && evidence.pageTo !== null
+                  ? [evidence.pageFrom, evidence.pageTo]
+                  : null,
+              quote: evidence.quote,
+            }
+          : null,
+      };
     },
   };
 }
