@@ -4,7 +4,8 @@
  * changes still wait there. Review and Open bring the Mind up at its first
  * change; Accept all and Reject all act on every row at once, with Undo on
  * the Answer's line and ⌘Z. Rejecting a Mind the Answer made deletes it,
- * which closes its tab; Undo brings it back beside the Mind in focus.
+ * which closes its tab, unless something else is in it now; Undo brings it
+ * back beside the Mind in focus.
  *
  * The card reads and changes each Mind through a copy of its document in this
  * window (./mindCopies), the editor's or not: its counts follow every change
@@ -174,16 +175,37 @@ interface Done {
   redo(): Promise<void>;
 }
 
-/** Deletes a Mind the Answer made, closing its tab; Undo brings it back beside the focused one. */
-async function removeMade(row: ChangedMind, count: number): Promise<Done> {
+/** Whether a Mind's copy holds nothing: only empty lines. */
+const isEmpty = (doc: Y.Doc) =>
+  doc
+    .getXmlFragment(MIND_CONTENT_FIELD)
+    .toArray()
+    .every(
+      (block) =>
+        block instanceof Y.XmlElement && block.nodeName === "paragraph" && block.length === 0,
+    );
+
+/**
+ * Reject all in a Mind the Answer made: its changes go, and so does the Mind,
+ * closing its tab, once nothing else is in it (the User may have written in
+ * it, or accepted some). Undo brings it back beside the focused one.
+ */
+async function rejectMade(row: ChangedMind): Promise<Done | null> {
+  const rejected = await resolveRow(row, "reject");
+  const doc = held.get(row.mindId)?.doc;
+  if (!rejected || !doc || !isEmpty(doc)) return rejected;
   await core.deleteMind(row.mindId);
   return {
-    count,
+    count: rejected.count,
     undo: async () => {
       await core.restore([{ kind: "mind", id: row.mindId }]);
+      await rejected.undo();
       await openBeside(row.mindId);
     },
-    redo: () => core.deleteMind(row.mindId),
+    redo: async () => {
+      await rejected.redo();
+      await core.deleteMind(row.mindId);
+    },
   };
 }
 
@@ -235,11 +257,10 @@ export async function resolveAllChanges(
   try {
     for (const row of rows) {
       if (!minds.some((mind) => mind.id === row.mindId)) continue;
-      if (outcome === "reject" && row.created) {
-        done.push(await removeMade(row, waiting(row) ?? 0));
-        continue;
-      }
-      const step = await resolveRow(row, outcome);
+      const step =
+        outcome === "reject" && row.created
+          ? await rejectMade(row)
+          : await resolveRow(row, outcome);
       if (step) done.push(step);
     }
   } catch (error) {
