@@ -404,7 +404,7 @@ async function* run(request: RunRequest): AsyncGenerator<RunEvent> {
       switch (part.type) {
         case "tool-input-start": {
           const tool = request.tools.find((each) => each.name === part.toolName);
-          if (!tool?.streamInput) break;
+          if (!tool?.streamInput || !request.streamsInput?.(tool.name)) break;
           produced = true;
           inputs.set(part.id, { tool, text: "" });
           yield { type: "tool-input-started", id: part.id, tool: part.toolName };

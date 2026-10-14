@@ -90,11 +90,11 @@
  * which Edit with AI's scripted model carries out as Shorten; one for a new
  * note (新笔记, 新建) calls create_mind, titled from what follows "called"
  * (叫), its content citing the Documents when there are any; and "add X to
- * <Mind>" (把 X 添加到 <Mind>) calls add_to_mind with X; "add X to <Mind> and
- * make a new note called Y" calls both. Each then replies with the first
- * sentence of what its calls came to; add_to_mind's and create_mind's input
- * streams in word by word, slowly for a Question asked "slowly", as does
- * edit_mind's edit. Anything
+ * <Mind>" (把 X 添加到 <Mind>) calls add_to_mind with X, and "add X" (添加 X)
+ * adds X to the Mind in focus; "add X to <Mind> and make a new note called Y"
+ * calls both. Each then replies with the first sentence of what its calls
+ * came to; add_to_mind's and create_mind's input streams in word by word,
+ * slowly for a Question asked "slowly", as does edit_mind's edit. Anything
  * else, asked in a Search scope with no Documents, gets the sentence the
  * instructions give for that.
  */
@@ -625,6 +625,8 @@ const CALLED = /\b(?:called|named|titled)\s+[“"]?(.+?)[”"]?[.。]?$|叫[“"
 /** A request to add something to a Mind by name: what, and to which. */
 const ADD_TO =
   /^add\s+(.+?)\s+to\s+[“"]?(.+?)[”"]?[.。]?$|^把\s*(.+?)\s*添加到\s*[“"]?(.+?)[”"]?[。]?$/iu;
+/** A request to add something to the Mind in focus: "add X" (添加 X). */
+const ADD_HERE = /^add\s+(.+?)[.。]?$|^添加\s*(.+?)[。]?$/iu;
 /** Both at once: "add X to <Mind> and make a new note called Y". */
 const ADD_AND_NEW =
   /^add\s+(.+?)\s+to\s+[“"]?(.+?)[”"]?\s+and\s+(?:make|create)\s+a\s+new\s+note\s+called\s+[“"]?(.+?)[”"]?[.。]?$/iu;
@@ -669,6 +671,13 @@ function mindsReply(prompt: Prompt, asked: string, names: readonly string[]): Re
         input: { mind: add[2] ?? add[4], content: add[1] ?? add[3] },
       };
     }
+    return { text: firstSentence(result) };
+  }
+  const here = ADD_HERE.exec(question);
+  if (here) {
+    const result = lastResult(prompt, "add_to_mind");
+    if (result === undefined)
+      return { tool: "add_to_mind", input: { content: here[1] ?? here[2] } };
     return { text: firstSentence(result) };
   }
   if (!NEW_NOTE.test(question)) return null;

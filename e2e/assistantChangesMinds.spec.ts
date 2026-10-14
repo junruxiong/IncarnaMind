@@ -203,7 +203,7 @@ test("“Create a new note called Fieldwork plan” makes an empty Mind at once,
   await screenshot(window, "empty-note-by-name");
 });
 
-test("with no Mind open, a request to change one says so and offers New Mind", async () => {
+test("with no Mind open, a request to change one says so, and New Mind makes one and asks it again there", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
   await useLocalChatModel(window);
@@ -211,14 +211,21 @@ test("with no Mind open, a request to change one says so and offers New Mind", a
   await setWindowSize(app, window, 1440, 900);
   await expect(window.getByTestId("mind-tab")).toHaveCount(0);
 
-  const answer = await askInAssistant(window, "Shorten the summary");
+  const answer = await askInAssistant(window, "Add a risks section");
   await expect(answer.getByTestId("assistant-answer-text")).toContainText("No Mind is open");
   const offer = answer.getByTestId("mind-changes-no-mind");
   await expect(offer).toContainText("No Mind was open to change.");
   await screenshot(window, "no-mind-open");
   await pointAndClick(window, offer.getByTestId("mind-changes-new-mind"));
+
+  // The request goes to the new Mind, as a change there, asked again from it.
   await expect(window.getByTestId("mind-tab")).toHaveCount(1);
-  await expect(window.getByTestId("mind-title")).toBeFocused();
+  const again = assistantAnswers(window).last();
+  await expect(assistantAnswers(window)).toHaveCount(2);
+  await expect(again).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+  await expect(window.getByTestId("proposals-count")).toHaveText("1 change from the assistant");
+  await expect(window.getByTestId("mind-editor")).toContainText("a risks section");
+  await expect(again.getByTestId("mind-changes-no-mind")).toHaveCount(0);
 });
 
 test("changes stay in their Mind when the User moves to another and back, and go out of date once their words are edited", async () => {
@@ -250,6 +257,61 @@ test("changes stay in their Mind when the User moves to another and back, and go
   });
   await window.keyboard.type("l");
   await expect(window.getByTestId("change-out-of-date")).toHaveCount(1);
+});
+
+test("Reject all keeps a Mind the assistant made once the User has written in it, and Undo brings its changes back", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await setLanguage(window, "en");
+  await setWindowSize(app, window, 1440, 900);
+  await writeMind(window, "Q3 review", ["The quarter was good."]);
+
+  const answer = await askInAssistant(
+    window,
+    "Make a new note called Fieldwork plan with a summary",
+  );
+  const card = answer.getByTestId("mind-changes");
+  await expect(card.getByTestId("mind-changes-title")).toHaveText(
+    "Created “Fieldwork plan with a summary” · 2 changes",
+  );
+  const made = window.getByTestId("mind-tab").filter({ hasText: "Fieldwork plan with a summary" });
+  await expect(made).toHaveCount(1);
+
+  // The User writes a line of their own in it, under the changes: from its title, Enter, then the end.
+  await pointAndClick(window, made);
+  const title = window.getByTestId("mind-title");
+  await expect(title).toHaveValue("Fieldwork plan with a summary");
+  await expect(window.getByTestId("proposals-count")).toHaveText("2 changes from the assistant");
+  const editor = window.getByTestId("mind-editor");
+  await pointAndClick(window, title);
+  await window.keyboard.press("End");
+  await window.keyboard.press("Enter");
+  await expect(editor).toBeFocused();
+  // The cursor is in the first change once its bar shows.
+  await expect(window.getByTestId("change-bar")).toContainText("Change 1 of 2");
+  await window.keyboard.press(process.platform === "darwin" ? "Meta+ArrowDown" : "Control+End");
+  await expect(window.getByTestId("change-bar")).toContainText("Change 2 of 2");
+  await window.keyboard.press("Enter");
+  await window.keyboard.type("Ask the roastery about Tuesdays.");
+  await expect(editor.locator("p").last()).toHaveText("Ask the roastery about Tuesdays.");
+
+  await pointAndClick(window, card.getByTestId("mind-changes-reject-all"));
+  await expect(window.getByTestId("proposals-bar")).toHaveCount(0);
+  await expect(made).toHaveCount(1);
+  await expect(editor.locator("p")).toHaveText(["Ask the roastery about Tuesdays."]);
+  await expect(card.getByTestId("mind-changes-title")).toHaveText(
+    "Created “Fieldwork plan with a summary”",
+  );
+  await expect(answer.getByTestId("answer-added")).toContainText("Rejected 2 changes");
+
+  await pointAndClick(window, answer.getByTestId("answer-added-undo"));
+  await expect(window.getByTestId("proposals-count")).toHaveText("2 changes from the assistant");
+  await expect(card.getByTestId("mind-changes-title")).toHaveText(
+    "Created “Fieldwork plan with a summary” · 2 changes",
+  );
+  await expect(editor).toContainText("Ask the roastery about Tuesdays.");
+  await expect(made).toHaveCount(1);
 });
 
 test("Reject all keeps a Mind the assistant made once something of it was accepted", async () => {

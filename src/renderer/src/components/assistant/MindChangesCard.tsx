@@ -1,7 +1,8 @@
 import { useMemo } from "react";
-import type { ConversationAnswer } from "../../../../core/api";
+import type { ConversationAnswer, ConversationQuestion } from "../../../../core/api";
 import { mindName } from "../../../../shared/naming";
 import { type ChangedMind, changedMinds } from "../../changedMinds";
+import { askInAssistant } from "../../conversations";
 import { useT } from "../../i18n";
 import { resolveAllChanges, showChanges, useWaitingChanges, type Waiting } from "../../mindChanges";
 import type { Translate } from "../../objects";
@@ -172,17 +173,37 @@ export function wantedAMind(answer: Pick<ConversationAnswer, "toolCalls">): bool
 
 /**
  * Under an Answer asked with no Mind in focus that tried to change one
- * (#202): it says so, and offers New Mind, whose title takes the cursor.
+ * (#202): it says so, and offers New Mind, which makes one (in the Folder of
+ * the Question's Search scope, when that is one Folder) and asks the
+ * Question again from it, so the change goes there.
  */
-export function NoMindLine() {
+export function NoMindLine({ question }: { question: ConversationQuestion }) {
   const t = useT();
+  const { scope } = question;
+  const folderId =
+    scope && scope.folderIds.length === 1 && scope.tagIds.length + scope.documentIds.length === 0
+      ? (scope.folderIds[0] ?? null)
+      : null;
+  const askInNewMind = () =>
+    void useAppStore.getState().createMind({
+      folderId,
+      focusBody: true,
+      made: (mindId) =>
+        void askInAssistant({
+          mindId,
+          text: question.text,
+          scope,
+          model: question.model,
+          forcedSkill: question.forcedSkill,
+        }),
+    });
   return (
     <p data-testid="mind-changes-no-mind" className="mind-changes-no-mind">
       {t("mindChanges.noMind")}
       <button
         type="button"
         data-testid="mind-changes-new-mind"
-        onClick={() => void useAppStore.getState().createMind()}
+        onClick={askInNewMind}
         className="mind-changes-review"
       >
         {t("sidebar.newMind")}

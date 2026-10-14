@@ -331,6 +331,8 @@ export interface AnswerRequest {
    * it, every call runs.
    */
   gate?(tool: Tool, call: GatedCall): Promise<GateDecision>;
+  /** Whether a Tool hears its calls' input as it comes (see `RunRequest.streamsInput`). Without it, none does. */
+  streamsInput?(tool: Tool): boolean;
   /** Which Tools the Run is offered. Absent: "answer", every Tool. */
   toolSet?: ToolSet;
   /**
@@ -1444,6 +1446,10 @@ async function* toolLoop(
       return tool && request.gate
         ? request.gate(tool, { ...call, tainted, thirdParty: [...thirdParty] })
         : RUN;
+    },
+    streamsInput: (name) => {
+      const tool = offered.get(name);
+      return tool !== undefined && (request.streamsInput?.(tool) ?? false);
     },
     window,
     // The Answer written beside `cite` or `calculate`, with all they were given taken, is complete:
