@@ -20,10 +20,12 @@ import {
 import { ComposerDockContext } from "../../editor/mindContext";
 import { useT } from "../../i18n";
 import { useCardWidth } from "../../layoutSlice";
+import { useQuietAssistant } from "../../quietAssistant";
 import { useAppStore } from "../../store";
 import { useWindowSize } from "../../useWindowWidth";
 import { ResizeRod } from "../ResizeRod";
 import { TabGroups } from "../tabs/TabGroups";
+import { AskPill } from "./AskPill";
 import { Assistant } from "./Assistant";
 import { FloatResize } from "./FloatResize";
 import { SnapZones } from "./SnapZones";
@@ -53,6 +55,7 @@ export function Workbench({
   const t = useT();
   const place = useAppStore((state) => state.layout?.assistant) ?? DEFAULT_ASSISTANT;
   const placeAssistant = useAppStore((state) => state.placeAssistant);
+  const quiet = useQuietAssistant();
   const viewport = useWindowSize();
   /** Sizes while the User drags a line or an edge, before they are kept. */
   const [preview, setPreview] = useState<Partial<AssistantPlace> | null>(null);
@@ -94,7 +97,7 @@ export function Workbench({
           ? {}
           : { height };
   /** Room the assistant takes from the card on its side, for what the window draws there. */
-  const beside = side ? (folded ? RAIL : width) + GAP : 0;
+  const beside = quiet ? 0 : side ? (folded ? RAIL : width) + GAP : 0;
 
   const resize = (next: Partial<AssistantPlace>) => setPreview(next);
   const keep = (next: Partial<AssistantPlace>) => {
@@ -127,8 +130,9 @@ export function Workbench({
       >
         <ComposerDockContext.Provider value={slot}>{groups}</ComposerDockContext.Provider>
         {cardOverlay}
+        {quiet && <AskPill />}
       </div>
-      {dock === "float" ? null : folded ? (
+      {quiet || dock === "float" ? null : folded ? (
         <div aria-hidden="true" className="workbench-gap" />
       ) : (
         <ResizeRod
@@ -149,7 +153,7 @@ export function Workbench({
       <Assistant
         dock={dock}
         folded={folded}
-        style={style}
+        style={quiet ? { display: "none" } : style}
         attributes={{
           "data-chosen-dock": place.dock,
           "data-at-window-left": atWindowLeft ? "" : undefined,
