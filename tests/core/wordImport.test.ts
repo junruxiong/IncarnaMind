@@ -402,12 +402,13 @@ describe("a Word file becomes a Mind", () => {
       { source: "word-change", author: "Priya Nair", date: "2026-10-02T09:00:00Z" },
     ]);
 
-    // Until it is accepted, a change isn't the Mind's text, as with the AI's; no comment is in it either.
+    // An export shows them as changes, with who made each (#734); no comment is in the text.
     const markdown = new TextDecoder().decode(
       (await core.exportMind(mindId, { format: "markdown" })).data,
     );
-    expect(markdown).toContain("Gives up vacant possession substantially.");
-    expect(markdown).not.toContain("in full");
+    expect(markdown).toContain(
+      "Gives up vacant possession{++ in full++}{>>Inserted by Priya Nair, 2026-10-02<<}{-- substantially--}{>>Deleted by Priya Nair, 2026-10-02<<}.",
+    );
     expect(markdown).not.toContain("We can't accept");
     expect(wordReportOf(client.doc)).toMatchObject({ changes: 2, comments: 1, sections: 2 });
   });

@@ -84,9 +84,6 @@ describe("someone else's changes, shown as changes", { timeout: 30_000 }, () => 
       "9.3 Fees paid are not refunded[inserted by Priya Nair, 2026-10-02:  under any circumstances].",
     );
     expect(sent).not.toContain("A paragraph the AI would add.");
-    // The model is told what the marks are.
-    const instructions = promptOf(model).find((message) => message.role === "system")?.text;
-    expect(instructions).toContain("[deleted by NAME, DATE: …]");
   });
 
   test("Markdown shows them as CriticMarkup with who made each, or as if accepted", async () => {

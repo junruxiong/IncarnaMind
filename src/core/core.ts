@@ -2658,6 +2658,7 @@ export function createCore(adapters: CoreAdapters): Core {
       const {
         fileName,
         fromWord: _,
+        theirChanges: _waiting,
         data,
         word,
         ...counts
