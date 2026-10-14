@@ -2252,10 +2252,19 @@ export type ReferenceLookupFailureReason =
  * How a reference in a Mind's reference list checks against Crossref (#711):
  * - "found": the work exists, as written;
  * - "mismatch": a record exists, but its title, year or first author differ;
- * - "not-found": no record is this work, or its DOI leads nowhere;
+ * - "not-found": the DOI or arXiv number it gives leads nowhere: no agency
+ *   registered it;
+ * - "not-in-crossref": searched for as written, it matches no Crossref record.
+ *   It may still exist: Crossref doesn't hold every conference paper,
+ *   preprint or Chinese journal;
  * - "not-checked": it couldn't be asked about (`ReferenceCheck.reason`).
  */
-export type ReferenceCheckMark = "found" | "mismatch" | "not-found" | "not-checked";
+export type ReferenceCheckMark =
+  | "found"
+  | "mismatch"
+  | "not-found"
+  | "not-in-crossref"
+  | "not-checked";
 
 /**
  * Why a reference wasn't checked; "registered-elsewhere": its DOI (or arXiv
@@ -2284,12 +2293,6 @@ export interface ReferenceCheck {
   /** As written, its white space collapsed. */
   reference: string;
   mark: ReferenceCheckMark;
-  /**
-   * How it was looked up: by the DOI (or arXiv number) it gives, or by
-   * searching for it as written, which finds only what Crossref holds; null
-   * when it wasn't.
-   */
-  by: "doi" | "search" | null;
   /** The record of the work it names; null when none was found, or it wasn't checked. */
   record: {
     title: string;

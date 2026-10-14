@@ -11,11 +11,19 @@
  * (the DOI leads to a record, but not to this work); found by searching, it
  * is no match at all.
  */
-import { ARXIV_IN_TEXT, DOI_IN_TEXT, doiOf, titleWords } from "../../shared/referenceList";
+import {
+  ARXIV_IN_TEXT,
+  DOI_IN_TEXT,
+  doiOf,
+  titleWords,
+  YEAR_IN_TEXT,
+} from "../../shared/referenceList";
 import type { ReferenceDifference, ReferenceFields, ReferenceName } from "../api";
 
 /** Of the record's title words, the share the reference must hold for it to be that work. */
 export const SAME_TITLE = 0.75;
+/** A title of fewer words than this ("Deep learning", "Introduction") must stand alone in the reference. */
+const SHORT_TITLE = 3;
 
 /** A reference as written, with what can be read from it without a service. */
 export interface CitedReference {
@@ -33,12 +41,10 @@ export interface WorkRecord {
   years: number[];
 }
 
-const YEAR = /(?<!\d)(1[5-9]\d\d|20\d\d)(?!\d)/;
-
 /** What can be read from a reference as written: its DOI and year. */
 export function citedReference(text: string): CitedReference {
   // A DOI's or arXiv number's digits aren't its year: "arXiv:1706.03762".
-  const year = YEAR.exec(text.replace(DOI_IN_TEXT, " ").replace(ARXIV_IN_TEXT, " "))?.[1];
+  const year = YEAR_IN_TEXT.exec(text.replace(DOI_IN_TEXT, " ").replace(ARXIV_IN_TEXT, " "))?.[1];
   return {
     text: text.replace(/\s+/g, " ").trim(),
     doi: doiOf(text),
@@ -56,6 +62,24 @@ export function titleCoverage(reference: string, title: string): number {
   return shared / wanted.size;
 }
 
+/** Where a reference's parts end: its authors, year, title and venue are set apart by these. */
+const PARTS = /[.?!;:"“”。；：]+/;
+
+/**
+ * Whether a reference holds a record's title: most of its words; a short
+ * title, as a part of its own, so a record titled "Introduction" isn't a
+ * reference to "Introduction to quantum widgets".
+ */
+export function holdsTitle(reference: string, title: string): boolean {
+  const wanted = titleWords(title);
+  if (wanted.length === 0) return false;
+  if (wanted.length >= SHORT_TITLE) return titleCoverage(reference, title) >= SAME_TITLE;
+  return reference.split(PARTS).some((part) => {
+    const words = titleWords(part);
+    return words.length === wanted.length && words.every((word, at) => word === wanted[at]);
+  });
+}
+
 /** A name's family name, or a literal name whole. */
 const familyOf = (name: ReferenceName) => ("family" in name ? name.family : name.literal);
 
@@ -70,7 +94,7 @@ const authorList = (authors: readonly ReferenceName[]) =>
 export function differences(cited: CitedReference, record: WorkRecord): ReferenceDifference[] {
   const found: ReferenceDifference[] = [];
   const title = record.fields.title ?? "";
-  if (title && titleCoverage(cited.text, title) < SAME_TITLE) {
+  if (title && !holdsTitle(cited.text, title)) {
     found.push({ field: "title", found: title, cited: null });
   }
   if (cited.year !== null && record.years.length > 0 && !record.years.includes(cited.year)) {
