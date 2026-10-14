@@ -1,8 +1,9 @@
 /**
  * Periods: the labels of a table that say when, which a chart puts on its
- * x axis. Years ("2023", "FY2024", "2024年"), quarters and halves ("Q1 2025",
- * "2025Q1", "第一季度", "2024年第一季度", "H1 2025"), months ("Jan 2025",
- * "2025-03", "3月") and dates ("2025-03-31", "30 June 2025", "12月31日").
+ * x axis. Years ("2023", "FY2024", "2024年", "Year 1"), quarters and halves
+ * ("Q1 2025", "2025Q1", "第一季度", "2024年第一季度", "H1 2025"), months
+ * ("Jan 2025", "2025-03", "3月", "2025年1-6月") and dates ("2025-03-31",
+ * "30 June 2025", "12月31日").
  *
  * Pure, with no Node or DOM imports: the core, the renderer and a later phone
  * build share it.
@@ -26,21 +27,24 @@ const PERIODS: readonly RegExp[] = [
   String.raw`(?:fy|cy)\s?'?\d{2}${ESTIMATE}`,
   String.raw`${YEAR}\s?(?:年度?|财年|財年)`,
   String.raw`[〇零一二三四五六七八九]{4}\s?年`,
-  // Quarters and halves: Q1, Q1 2025, 2025Q1, 1Q25, Q1 FY25, H1 2025, 1H25, Quarter 1.
+  // Years of a plan: Year 1, Yr 2, 第1年, 第三年.
+  String.raw`(?:year|yr)\.?\s?\d{1,2}`,
+  String.raw`第\s?(?:\d{1,2}|[一二三四五六七八九十]{1,3})\s?年`,
+  // Quarters and halves: Q1, Q1 2025, 2025Q1, 2024年Q1, 1Q25, Q1 FY25, H1 2025, 1H25, Quarter 1.
   String.raw`q\s?[1-4](?:\s?[-/,'’.]?\s?(?:${FISCAL}\s?)?${YEAR_SHORT})?${ESTIMATE}`,
-  String.raw`(?:${FISCAL}\s?)?${YEAR_SHORT}\s?[-/. ]?\s?q\s?[1-4]${ESTIMATE}`,
+  String.raw`(?:${FISCAL}\s?)?${YEAR_SHORT}(?:\s?年)?\s?[-/. ]?\s?q\s?[1-4]${ESTIMATE}`,
   String.raw`[1-4]q(?:\s?'?\s?(?:${FISCAL}\s?)?${YEAR_SHORT})?`,
-  String.raw`h\s?[12](?:\s?[-/']?\s?${YEAR_SHORT})?`,
+  String.raw`h\s?[12](?:\s?[-/']?\s?(?:${FISCAL}\s?)?${YEAR_SHORT})?`,
   String.raw`[12]h(?:\s?'?${YEAR_SHORT})?`,
   String.raw`(?:quarter|qtr)\.?\s?[1-4](?:\s?,?\s?${YEAR})?`,
   // Chinese quarters and halves: 一季度, 第一季度, 2024年第一季度, 上半年, 全年.
   String.raw`${CHINESE_YEAR}第?\s?${CHINESE_NUMBER}\s?季度?`,
   `${CHINESE_YEAR}(?:上半年|下半年|全年|前三季度?)`,
-  // Months: Jan, January 2025, Jan-25, 2025-03, 03/2025, 2025年3月, 3月, 十二月.
+  // Months: Jan, January 2025, Jan-25, 2025-03, 03/2025, 2025年3月, 2025年1-6月, 3月, 十二月.
   String.raw`${MONTH}(?:[\s,'’-]*${YEAR_SHORT})?`,
   `${YEAR}${SEPARATOR}${MONTH_NUMBER}`,
   String.raw`${MONTH_NUMBER}\s?[-/]\s?${YEAR}`,
-  String.raw`${CHINESE_YEAR}${CHINESE_MONTH}\s?月份?`,
+  String.raw`${CHINESE_YEAR}${CHINESE_MONTH}(?:\s?[-–~～至]\s?${CHINESE_MONTH})?\s?月份?`,
   // Dates: 2025-03-31, 31/03/2025, 30 June 2025, June 30, 2025, 2024年12月31日.
   `${YEAR}${SEPARATOR}${MONTH_NUMBER}${SEPARATOR}${DAY_NUMBER}`,
   String.raw`\d{1,2}[-/]\d{1,2}[-/]\d{2,4}|\d{1,2}\.\d{1,2}\.\d{4}`,
