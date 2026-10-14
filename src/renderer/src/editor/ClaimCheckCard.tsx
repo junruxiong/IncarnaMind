@@ -9,6 +9,7 @@ import { addAsCitation, checkAgain, removeClaimMark } from "../checks";
 import { CountItLine } from "../components/CountItLine";
 import { askInAssistant } from "../conversations";
 import { useFindSources } from "../findSources";
+import { firstOpenOf } from "../firstOpen";
 import { translateNow, useT } from "../i18n";
 import { groupsMerged } from "../layoutSlice";
 import { openCited } from "../openCited";
@@ -117,6 +118,11 @@ export function ClaimMark({
   }, []);
   useEffect(() => () => window.clearTimeout(timer.current), []);
 
+  const guided = useAppStore((app) => {
+    const progress = app.settings?.device.gettingStarted;
+    return state === "contradicted" && !progress?.citationChecked && firstOpenOf(progress);
+  });
+
   /** After an action the card goes, and the focus stays in the Mind. */
   const done = () => {
     dismiss();
@@ -132,6 +138,7 @@ export function ClaimMark({
         data-check={state}
         data-claim={claim.check.id}
         data-open={open || undefined}
+        data-guided={guided || undefined}
         data-addable={plus || undefined}
         className={`margin-check claim-mark ${reveal ? "margin-check--reveal" : ""}`}
         style={style}

@@ -23,6 +23,7 @@ import { comparisonCommands } from "./comparisons";
 import { deletedCommands } from "./deleted";
 import { editCommands } from "./edit";
 import { evidenceCommands } from "./evidence";
+import { exampleCommands } from "./examples";
 import { exportCommands } from "./exports";
 import { feedbackCommands } from "./feedback";
 import { fileCommands } from "./fileInfo";
@@ -134,6 +135,7 @@ const appCommands: readonly Command[] = [
   ...meetingCommands,
   ...webPageCommands,
   ...feedbackCommands,
+  ...exampleCommands,
   ...sortCommands,
   ...fileCommands,
   ...evidenceCommands,

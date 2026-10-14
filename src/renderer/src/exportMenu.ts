@@ -12,3 +12,13 @@ export function useExportMenu(): void {
   });
   useEffect(() => files.setExportMenu(name), [name]);
 }
+
+export function useExamplesMenu(): void {
+  const removed = useAppStore((state) => {
+    const made = [state.examples, ...state.otherExamples].some(
+      (each) => each !== null && (each.mindId !== null || each.linkedFolderId !== null),
+    );
+    return state.examples?.available === true && !made;
+  });
+  useEffect(() => files.setExamplesRemoved(removed), [removed]);
+}

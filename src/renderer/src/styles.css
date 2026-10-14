@@ -3838,6 +3838,9 @@
     height: 100%;
     pointer-events: none;
   }
+  .margin-check[data-guided] {
+    box-shadow: 0 0 0 2px var(--color-accent);
+  }
   .margin-check {
     position: absolute;
     left: 12px;
