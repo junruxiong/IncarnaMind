@@ -72,8 +72,9 @@ describe("What the meta line shows while an Answer is written", () => {
 
     await askAndEnd(core, client, mind.id, asked.attrs.id);
 
-    // Nothing was loaded: the model loads, starts, searches, then writes.
-    expect(phases).toEqual(["loading", "writing", "searching", "writing"]);
+    // Nothing was loaded: the model loads, starts, searches, then writes. Its Answer draws on the
+    // Passages with no Citation, so it is asked once more for them (#760).
+    expect(phases).toEqual(["loading", "writing", "searching", "writing", "checking-quotes"]);
   });
 
   test("a small local model, which cites with structured output: searching first, then loading, then writing", async () => {
@@ -98,8 +99,12 @@ describe("What the meta line shows while an Answer is written", () => {
     // The one search needs no model; then the model loads, and writes. (Whether "writing" shows
     // for a moment between the search and "loading" depends on when Ollama says it is loading.)
     expect(phases[0]).toBe("searching");
-    expect(phases.slice(1).filter((phase) => phase !== "writing")).toEqual(["loading"]);
-    expect(phases.at(-1)).toBe("writing");
+    // Its Answer draws on the Passages with no Citation, so it is asked once more for them (#760).
+    expect(phases.slice(1).filter((phase) => phase !== "writing")).toEqual([
+      "loading",
+      "checking-quotes",
+    ]);
+    expect(phases.at(-2)).toBe("writing");
   });
 
   test("a model Ollama has loaded already goes straight to writing", async () => {

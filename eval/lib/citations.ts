@@ -123,6 +123,12 @@ export interface AnswerRecord {
    * absent: none was made.
    */
   quoteRetry?: QuoteRetry | null;
+  /**
+   * Citations the engine added for sentences written without markers (#760),
+   * and whether the model was asked once more for them; absent in a result
+   * file from before.
+   */
+  citedAfterChecking?: { count: number; asked: boolean } | null;
   /** The tokens the Answer's model calls counted (#343); absent in a result file from before. */
   usage?: AnswerUsage | null;
   /** Where the Answer's time went; absent without a recording (a result file from before, or no chat model). */
@@ -620,6 +626,7 @@ async function askOne(
     droppedRecords: finished?.droppedRecords ?? 0,
     rejectedRecords: finished?.rejectedRecords ?? [],
     quoteRetry: finished?.quoteRetry ?? null,
+    citedAfterChecking: finished?.citedAfterChecking ?? null,
     usage: finished?.usage ?? null,
     ...(recording && {
       timing: timingOf(recording, totalMs, text),
