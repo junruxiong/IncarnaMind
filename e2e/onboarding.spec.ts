@@ -7,8 +7,10 @@ import {
   assistantAnswers,
   createDataFolder,
   dismissChatSetup,
+  expectReadyDocuments,
   interceptOpenDialog,
   launchApp,
+  leaveFirstOpen,
   linkedFolderRow,
   newMind,
   removeDataFolder,
@@ -93,14 +95,10 @@ test("a first run opens on the example Mind: its Answer is written in advance, i
   const pane = window.getByTestId("mind-pane");
   await expect(window.getByTestId("mind-title")).toHaveValue("Where tea comes from");
   await expect(pane.getByTestId("example-banner")).toContainText("This is an example Mind.");
-  // "Example" on the Mind and on its Documents' Linked folder; both Documents are listed.
   await expect(window.getByTestId("mind-list-item").getByTestId("example-chip")).toHaveText(
     "Example",
   );
-  await expect(window.getByTestId("document-list-item")).toHaveText([
-    /Tea · Wikipedia|茶 · 维基百科/,
-    /Tea · Wikipedia|茶 · 维基百科/,
-  ]);
+  await expectReadyDocuments(window, 2);
   // No model needed: no setup over it, and no "set up a chat model" notice in it.
   await expect(window.getByTestId("chat-setup")).toBeHidden();
   await expect(pane.getByTestId("chat-readiness")).toHaveCount(0);
@@ -114,12 +112,6 @@ test("a first run opens on the example Mind: its Answer is written in advance, i
   await expect(checks).toHaveCount(2);
   await expect(checks.nth(0)).toHaveAttribute("data-check", "found", { timeout: 20_000 });
   await expect(checks.nth(1)).toHaveAttribute("data-check", "found", { timeout: 20_000 });
-
-  // The Linked folder's chip, as on disk, once its status (indexing) leaves the room for it.
-  await showSourceLocations(window);
-  await expect(linkedFolderRow(window, "Examples").getByTestId("example-chip")).toBeVisible({
-    timeout: 30_000,
-  });
 
   await expect(progress(window)).toHaveText("· 0 of 3");
   // Clicking a green check opens its card and the Document at the quote, and ticks the first step.
@@ -147,6 +139,18 @@ test("a first run opens on the example Mind: its Answer is written in advance, i
   await expect(addOwn).toHaveText("添加你的文档");
   await pointAndClick(window, addOwn);
   await expect(ways.getByRole("menuitem")).toHaveText(["添加文件…", "添加同步文件夹…"]);
+  await window.keyboard.press("Escape");
+
+  await setLanguage(window, "en");
+  await leaveFirstOpen(window);
+  await expect(window.getByTestId("document-list-item")).toHaveText([
+    /Tea · Wikipedia|茶 · 维基百科/,
+    /Tea · Wikipedia|茶 · 维基百科/,
+  ]);
+  await showSourceLocations(window);
+  await expect(linkedFolderRow(window, "Examples").getByTestId("example-chip")).toBeVisible({
+    timeout: 30_000,
+  });
 });
 
 test("removing the examples deletes the example Mind, its Documents and the copies of their files, and they aren't made again", async () => {
@@ -188,6 +192,7 @@ test("with only the example Documents, the footer doesn't ask for a model to tag
   const own = join(sources, "Harbour notes.md");
   await writeFile(own, "# Harbour notes\n\nThe harbour master publishes the tide tables.\n");
   const { app, window } = await launchApp(dataDir, { examples: true });
+  await leaveFirstOpen(window);
   const items = window.getByTestId("document-list-item");
   const notice = window.getByTestId("sidebar-footer").getByTestId("tagging-waiting");
 
@@ -384,6 +389,7 @@ test("Get started can be hidden, and stays hidden", async () => {
 
 test("the hint at the end of a Mind focuses the composer when its link is clicked once the cursor is on its line, and is otherwise the line to write on", async () => {
   const { window } = await launchApp(dataDir, { examples: true, fakeChat: true });
+  await leaveFirstOpen(window);
   const editor = window.getByTestId("mind-editor");
   const hint = window.getByTestId("end-hint");
   await expect(hint).toHaveAttribute("data-place", "afterAnswer");
