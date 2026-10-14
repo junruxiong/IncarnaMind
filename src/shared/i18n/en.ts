@@ -38,7 +38,8 @@ export const en = {
   "unread.count.one": "1 file couldn't be read",
   "unread.count": "{count} files couldn't be read",
   "unread.show": "Show",
-  "unread.file": "{name}: {reason}",
+  "unread.file.reason": ": {reason}",
+  "unread.ocr": "Read with OCR",
   "unread.hide": "Hide",
   "unread.reason.format":
     "Format not read yet ({extension}). Convert it to PDF, Word, PowerPoint or Excel.",

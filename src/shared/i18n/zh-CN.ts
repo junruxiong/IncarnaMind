@@ -35,7 +35,8 @@ export const zhCN = {
   "unread.count.one": "1 个文件未能读取",
   "unread.count": "{count} 个文件未能读取",
   "unread.show": "显示",
-  "unread.file": "{name}：{reason}",
+  "unread.file.reason": "：{reason}",
+  "unread.ocr": "识别文字",
   "unread.hide": "收起",
   "unread.reason.format":
     "暂不支持此格式（{extension}）。请转换为 PDF、Word、PowerPoint 或 Excel。",
