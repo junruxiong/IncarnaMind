@@ -306,6 +306,19 @@ test("onboarding offers starter folders, and Organize with no model chosen opens
   }
 });
 
+test("the + menu offers New Folder, then From starter folders…, which opens the starter folders (#123)", async () => {
+  const { window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  await window.getByTestId("plus-menu").click();
+  const items = window.getByRole("menuitem");
+  const names = await items.allInnerTexts();
+  const folder = names.findIndex((name) => name.startsWith("New Folder"));
+  expect(names[folder + 1]).toBe("From starter folders…");
+  await window.getByTestId("plus-starter-folders").click();
+  await expect(window.getByTestId("library")).toBeVisible();
+  await expect(window.getByRole("region", { name: "Starter folders" })).toBeVisible();
+});
+
 test("a Document waiting for Ollama says why in the interface language, in its info", async () => {
   const { app, window } = await launchApp(dataDir);
   try {

@@ -239,6 +239,7 @@ export const en = {
   "folder.newMindHere": "New Mind here",
   "folder.untitled": "Untitled Folder",
   "folder.untitled.numbered": "Untitled Folder {number}",
+  "folder.fromStarters": "From starter folders…",
   "folder.newWith": "New Folder with these",
   "folder.newWith.document": "New Folder with this Document",
   "folder.newWith.mind": "New Folder with this Mind",
