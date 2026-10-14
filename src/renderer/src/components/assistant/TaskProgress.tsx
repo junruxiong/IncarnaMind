@@ -1,6 +1,7 @@
 import { Fragment, type ReactNode, useEffect, useId, useState } from "react";
 import type { Task, TaskStep } from "../../../../core/api";
 import type { Language } from "../../../../core/language";
+import { formatDateTime } from "../../../../shared/dates";
 import { core } from "../../core";
 import { formatMoney } from "../../cost";
 import { useLanguage, useT } from "../../i18n";
@@ -65,10 +66,7 @@ function details(task: Task, t: Translate, language: Language): string {
   if (task.kind === "comparison" && task.progress) {
     parts.push(t("task.details.cells", { done: task.progress.done, total: task.progress.total }));
   }
-  const time = new Intl.DateTimeFormat(language, { hour: "numeric", minute: "2-digit" }).format(
-    new Date(task.startedAt),
-  );
-  parts.push(t("task.details.started", { time }));
+  parts.push(t("task.details.started", { time: formatDateTime(task.startedAt, language) }));
   if (task.cost) parts.push(t("task.details.cost", { cost: formatMoney(task.cost, language) }));
   return parts.join(" · ");
 }
@@ -123,7 +121,7 @@ function useAllSteps(task: Task, wanted: boolean): readonly TaskStep[] | null {
 }
 
 /**
- * A Task's progress in the thread (D189; DESIGN.md, Task progress in the
+ * A Task's progress in the thread (#657; DESIGN.md, Task progress in the
  * thread; the boards Tasks-*), where it started, as an Answer shows its
  * steps: the live dot and its name, how far it is; a 3px bar; "Show all N
  * steps"; its latest steps, ✓ when done and a dot on the one it is on; then
