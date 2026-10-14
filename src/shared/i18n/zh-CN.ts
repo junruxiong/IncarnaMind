@@ -2785,7 +2785,7 @@ export const zhCN = {
   "startGuide.documents.apps":
     "连接 Notion、Google Drive 等应用后，回答也能在其中查找资料。只有你的文档会得到可核对的引用。",
   "startGuide.ask.title": "提一个问题",
-  "startGuide.ask.body": "按 {shortcut} 提问，回答会出现在右侧，一键加入笔记。",
+  "startGuide.ask.body": "按 {shortcut} 提问，回答会出现在助手里，一键加入笔记。",
   "startGuide.ask.example": "例如：这些报告对第三季度营收是怎么说的？",
   "startGuide.check.title": "核对每个说法的出处",
   "startGuide.check.body":
