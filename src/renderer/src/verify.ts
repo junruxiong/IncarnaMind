@@ -30,7 +30,6 @@ interface VerifyState {
 
 export const useVerify = create<VerifyState>()(() => ({ running: null, outcomes: {} }));
 
-
 function settle(mindId: string, outcome: VerifyOutcome | null) {
   useVerify.setState((state) => {
     const outcomes = { ...state.outcomes };
