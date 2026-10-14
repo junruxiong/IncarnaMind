@@ -347,8 +347,7 @@
    * The sidebar's panel (#219). Shown, it has no box of its own (the sidebar
    * is a flex item as before). Hidden, it is out to the left of the window,
    * and comes out over the content (peeking) when the pointer touches the left
-   * edge or keyboard focus is in it. The sidebar inside it is what moves or
-   * fades (slideSidebar in motion.ts, #855), so the panel paints nothing itself.
+   * edge or keyboard focus is in it. It paints nothing: the sidebar moves inside it.
    */
   .sidebar-panel {
     display: contents;

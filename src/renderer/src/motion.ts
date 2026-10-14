@@ -405,8 +405,7 @@ function unstyle(elements: readonly HTMLElement[], opacity = true): void {
   }
 }
 
-/** Stops whatever moves `element` and ends it, uncounted. */
-function halt(element: HTMLElement): void {
+function haltUncounted(element: HTMLElement): void {
   const previous = latest.get(element);
   if (!previous) return;
   previous.stop();
@@ -585,7 +584,7 @@ function leaving(
   const copy = copyOf(element, box);
   const scrollTop = element.scrollTop;
   // The element itself is at rest at once, whatever it was doing: it is going.
-  halt(element);
+  haltUncounted(element);
   unstyle([element]);
   return () => {
     pending++;
@@ -760,7 +759,7 @@ function moveFrames(
   options: { spring?: SpringName; velocity?: { x: number; y: number } },
 ): void {
   // A move it interrupts stops where it is, and is measured from there.
-  for (const { element } of moves) halt(element);
+  for (const { element } of moves) haltUncounted(element);
   const frames = moves.map(({ element, from, to }) => {
     const box = element.getBoundingClientRect();
     const resized = from.width !== to.width || from.height !== to.height;
@@ -847,7 +846,7 @@ export function slideSidebar(
     from: boxOf(element.getBoundingClientRect()),
   }));
   return () => {
-    for (const element of elements) halt(element);
+    for (const element of elements) haltUncounted(element);
     const moves = before
       .filter(({ element }) => element.isConnected)
       .map((move) => ({ ...move, to: boxOf(move.element.getBoundingClientRect()) }))
