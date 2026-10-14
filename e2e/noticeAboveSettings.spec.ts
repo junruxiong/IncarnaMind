@@ -2,6 +2,7 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
+import { SHOW_AGENT_CONNECTION } from "../src/shared/agentConnection";
 import {
   acceptPlainTextKeys,
   createDataFolder,
@@ -13,6 +14,11 @@ import {
   setLanguage,
   setWindowSize,
 } from "./app";
+
+test.skip(
+  !SHOW_AGENT_CONNECTION,
+  "Its notice comes from renaming an agent in Settings › Agents, hidden while SHOW_AGENT_CONNECTION is false.",
+);
 
 /*
  * A notice raised while Settings is open is drawn above it, readable and dismissable (#754).

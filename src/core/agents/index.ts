@@ -19,6 +19,7 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import type { Socket } from "node:net";
 import { AGENT_SOCKET_ENV, AGENT_TOKEN_ENV } from "../../shared/agentSocket";
+import type { Logger } from "../adapters";
 import {
   AGENT_TOOLS,
   type AgentActivity,
@@ -78,6 +79,9 @@ export interface AgentLauncher {
 }
 
 export interface AgentsOptions {
+  /** See `CoreAdapters.agents.offered`. */
+  offered: boolean;
+  log: Logger;
   db: Database;
   now(): string;
   clock(): number;
@@ -176,7 +180,8 @@ export function createAgents(options: AgentsOptions) {
   let closed = false;
   let mcp: Promise<typeof import("./mcp")> | null = null;
 
-  const enabled = () => options.readValue(ENABLED_KEY) === true;
+  const turnedOn = () => options.readValue(ENABLED_KEY) === true;
+  const enabled = () => options.offered && turnedOn();
   const say = options.access.say;
 
   const livePairings = () =>
@@ -225,11 +230,13 @@ export function createAgents(options: AgentsOptions) {
 
   const changed = () => options.changed(settings());
 
-  options.consent.registry.register({
-    id: "agents",
-    sends: AGENT_FLOW_SENDS,
-    services: async () => livePairings().map(serviceOf),
-  });
+  if (options.offered) {
+    options.consent.registry.register({
+      id: "agents",
+      sends: AGENT_FLOW_SENDS,
+      services: async () => livePairings().map(serviceOf),
+    });
+  }
 
   const parseName = (value: unknown, exceptId: string | null): string => {
     if (typeof value !== "string" || value.trim() === "") {
@@ -557,7 +564,15 @@ export function createAgents(options: AgentsOptions) {
     localModeChanged: changed,
 
     /** Starts listening, if connecting agents was left on. */
-    start: () => syncListening(),
+    start: () => {
+      if (!options.offered && (turnedOn() || livePairings().length > 0)) {
+        options.log.info("agents.notOffered", {
+          turnedOn: turnedOn(),
+          pairings: livePairings().length,
+        });
+      }
+      return syncListening();
+    },
 
     /** Stops listening and closes every connection. Safe to call twice. */
     async close(): Promise<void> {

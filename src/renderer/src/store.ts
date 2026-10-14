@@ -1138,7 +1138,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     },
 
     showSettingsPage(page) {
-      set({ settingsPage: page });
+      set({ settingsPage: resolveSettingsPage(page) });
     },
 
     closeSettings() {
