@@ -1,0 +1,6555 @@
+{
+  "version": 1,
+  "issue": 86,
+  "review": {
+    "by": null,
+    "at": null
+  },
+  "folder": [
+    {
+      "name": "Riverside Library Renovation Report.docx",
+      "path": "eval/retrieval/formats/files/Riverside Library Renovation Report.docx",
+      "format": "docx",
+      "language": "en",
+      "source": "synthetic",
+      "licence": "Apache-2.0",
+      "sha256": "042ef546ca32951f5294a0f518c06a6e2413b1f72e04aac16bf97b1ca2f1d0cf"
+    },
+    {
+      "name": "Riverside Library Steering Meeting.vtt",
+      "path": "eval/retrieval/formats/files/Riverside Library Steering Meeting.vtt",
+      "format": "transcript",
+      "language": "en",
+      "source": "synthetic",
+      "licence": "Apache-2.0",
+      "sha256": "c9a831d662fafa260b95e03b43952b597a91bf6cb88946e77e1c2aa6c9625e57"
+    },
+    {
+      "name": "Coffee Subscription Launch Review.pptx",
+      "path": "eval/retrieval/formats/files/Coffee Subscription Launch Review.pptx",
+      "format": "pptx",
+      "language": "en",
+      "source": "synthetic",
+      "licence": "Apache-2.0",
+      "sha256": "3541ca01c0d87c47ce1c71b407816eac03e4e2e72eb9336b110c9031529787d4"
+    },
+    {
+      "name": "Quarterly Research Update.pptx",
+      "path": "tests/fixtures/formats/Quarterly Research Update.pptx",
+      "format": "pptx",
+      "language": "en",
+      "source": "synthetic",
+      "licence": "Apache-2.0",
+      "sha256": "bb1ada6331be0f2f1dd15e0f446a01f2f9846c9b7dc394841af4fb636a9c2b4c"
+    },
+    {
+      "name": "Clinic Staffing Plan 2027.xlsx",
+      "path": "eval/retrieval/formats/files/Clinic Staffing Plan 2027.xlsx",
+      "format": "xlsx",
+      "language": "en",
+      "source": "synthetic",
+      "licence": "Apache-2.0",
+      "sha256": "3e8da9e24deaa748c81b4986ee6d97ed18e5678ab9d75bdf66677d8280ff33d3"
+    },
+    {
+      "name": "Regional Revenue.xlsx",
+      "path": "tests/fixtures/formats/Regional Revenue.xlsx",
+      "format": "xlsx",
+      "language": "en",
+      "source": "synthetic",
+      "licence": "Apache-2.0",
+      "sha256": "4bc1fcb178984d6fe30f3f58746529b4883195fadfb240f7445c403fed5ec24e"
+    },
+    {
+      "name": "Bike Share Stations September 2026.csv",
+      "path": "eval/retrieval/formats/files/Bike Share Stations September 2026.csv",
+      "format": "csv",
+      "language": "en",
+      "source": "synthetic",
+      "licence": "Apache-2.0",
+      "sha256": "9e573676c35a93ac1817dffb137ca5f8a51c0f97d9bd4939ffc22c15878b8f03"
+    },
+    {
+      "name": "Field Kit Setup Guide.md",
+      "path": "eval/retrieval/formats/files/Field Kit Setup Guide.md",
+      "format": "markdown",
+      "language": "en",
+      "source": "synthetic",
+      "licence": "Apache-2.0",
+      "sha256": "fed89067daa86d8540745aacfadd4fda3bf1ccde77fedd74094137e95dab4821"
+    },
+    {
+      "name": "Night Shift Handbook.txt",
+      "path": "eval/retrieval/formats/files/Night Shift Handbook.txt",
+      "format": "text",
+      "language": "en",
+      "source": "synthetic",
+      "licence": "Apache-2.0",
+      "sha256": "f2af8ba4f54b20329f738f3b1ef856176bf66b1345d77303239a56aa3f31607b"
+    },
+    {
+      "name": "Urban Heat in Six Districts.pdf",
+      "path": "eval/retrieval/formats/files/Urban Heat in Six Districts.pdf",
+      "format": "pdf",
+      "language": "en",
+      "source": "synthetic",
+      "licence": "Apache-2.0",
+      "sha256": "172d941f00dcfb44274cb995f8a7d820b5620f77da2c35e3c76da8b14a472b2e"
+    },
+    {
+      "name": "社区食堂试点评估报告.docx",
+      "path": "eval/retrieval/formats/files/社区食堂试点评估报告.docx",
+      "format": "docx",
+      "language": "zh",
+      "source": "synthetic",
+      "licence": "Apache-2.0",
+      "sha256": "81b806666e432c6faac0d85bc6b338094014479db1fc77e8f510b2db0cca225a"
+    },
+    {
+      "name": "社区食堂周例会.vtt",
+      "path": "eval/retrieval/formats/files/社区食堂周例会.vtt",
+      "format": "transcript",
+      "language": "zh",
+      "source": "synthetic",
+      "licence": "Apache-2.0",
+      "sha256": "db0577a6a1e196fd7718e402b733fe27c9a1eda9bf6ceef4bbd3b715a69b26dc"
+    },
+    {
+      "name": "新能源公交季度运营汇报.pptx",
+      "path": "eval/retrieval/formats/files/新能源公交季度运营汇报.pptx",
+      "format": "pptx",
+      "language": "zh",
+      "source": "synthetic",
+      "licence": "Apache-2.0",
+      "sha256": "cad63357a0564dcac52cf2fcdab70439be7e616704007c8153b14bdf8bc8b66f"
+    },
+    {
+      "name": "门店销售与库存2026.xlsx",
+      "path": "eval/retrieval/formats/files/门店销售与库存2026.xlsx",
+      "format": "xlsx",
+      "language": "zh",
+      "source": "synthetic",
+      "licence": "Apache-2.0",
+      "sha256": "d2c41d0ebaee548d7d21a2999e064212bc24f6d017c3138cb45997cb722f43f6"
+    },
+    {
+      "name": "小区垃圾分类统计2026年9月.csv",
+      "path": "eval/retrieval/formats/files/小区垃圾分类统计2026年9月.csv",
+      "format": "csv",
+      "language": "zh",
+      "source": "synthetic",
+      "licence": "Apache-2.0",
+      "sha256": "3c241a5d9a5cbd8416f16a3b5e1e4f629e33469308455dc4d275eb744c0d6587"
+    },
+    {
+      "name": "实验室数据管理规范.md",
+      "path": "eval/retrieval/formats/files/实验室数据管理规范.md",
+      "format": "markdown",
+      "language": "zh",
+      "source": "synthetic",
+      "licence": "Apache-2.0",
+      "sha256": "95a357ab4bd5737d73b2a2457debdbe6d188200ea48b9c35c960e12e54d134d9"
+    },
+    {
+      "name": "冷链仓库值班手册.txt",
+      "path": "eval/retrieval/formats/files/冷链仓库值班手册.txt",
+      "format": "text",
+      "language": "zh",
+      "source": "synthetic",
+      "licence": "Apache-2.0",
+      "sha256": "0f5cadfa930a6c45073f3b0f4b7f6c1f0c3a64058f43f828f50ad2ade675dd9d"
+    },
+    {
+      "name": "城市绿地与夏季降温调查.pdf",
+      "path": "eval/retrieval/formats/files/城市绿地与夏季降温调查.pdf",
+      "format": "pdf",
+      "language": "zh",
+      "source": "synthetic",
+      "licence": "Apache-2.0",
+      "sha256": "10b0eeb42df9a0f95407a85987b79f561f9b1e8a0c69ecb01c9558ff7ca1ec13"
+    },
+    {
+      "name": "维基百科-可持续发展目标.pdf",
+      "path": "eval/retrieval/fixtures/维基百科-可持续发展目标.pdf",
+      "format": "pdf",
+      "language": "zh",
+      "source": "https://zh.wikipedia.org/w/index.php?oldid=94740074",
+      "licence": "CC BY-SA 4.0",
+      "sha256": "ac3918426a776e0771604f84efb207a5769706237d3d79598493f7bc3b4af13e"
+    },
+    {
+      "name": "Roof contract signed for Riverside Library",
+      "path": "eval/checks/web/riverside-roof-contract.html",
+      "address": "https://example.org/riverside-borough-council/news/roof-contract-signed",
+      "format": "web",
+      "language": "en",
+      "source": "synthetic",
+      "licence": "Apache-2.0",
+      "sha256": "d116bfb6067e72797c9e07a3a3b16cb624b69ab3058ad20d55952bacaaf139d2"
+    },
+    {
+      "name": "夜班线路N3将于12月1日开通",
+      "path": "eval/checks/web/jiangcheng-n3-night-line.html",
+      "address": "https://example.org/jiangcheng-bus/news/n3-night-line",
+      "format": "web",
+      "language": "zh",
+      "source": "synthetic",
+      "licence": "Apache-2.0",
+      "sha256": "6623d0b2d8c36d2cdda527adfd84933b9943189f9b1d92b912b6fd6c4e6bb247"
+    }
+  ],
+  "received": [
+    {
+      "id": "vf-01",
+      "name": "Hartley Building progress report 3.pdf",
+      "path": "eval/checks/received/Hartley Building progress report 3.pdf",
+      "format": "pdf",
+      "language": "en",
+      "kind": "A contractor's progress report",
+      "source": "synthetic",
+      "licence": "Apache-2.0",
+      "sha256": "945aecd9a6b4fe4e48f79ddc142032e372fd1702c42dbc13c454e07fbed4d580"
+    },
+    {
+      "id": "vf-02",
+      "name": "Harbour Roasters press release draft.docx",
+      "path": "eval/checks/received/Harbour Roasters press release draft.docx",
+      "format": "docx",
+      "language": "en",
+      "kind": "A PR agency's draft press release",
+      "source": "synthetic",
+      "licence": "Apache-2.0",
+      "sha256": "73c02c58a7a738baf555b2a34971e204d74bf6e59e1cda1dfd5a76f5e51734f1"
+    },
+    {
+      "id": "vf-03",
+      "name": "Meridian Health Staffing proposal.pdf",
+      "path": "eval/checks/received/Meridian Health Staffing proposal.pdf",
+      "format": "pdf",
+      "language": "en",
+      "kind": "A staffing agency's proposal",
+      "source": "synthetic",
+      "licence": "Apache-2.0",
+      "sha256": "856045bcfdaa4da86c1c00b847d7f61f18e6d666ddbe1e93de4a5bf19450bf7f"
+    },
+    {
+      "id": "vf-04",
+      "name": "Cityride September 2026 operator report.pptx",
+      "path": "eval/checks/received/Cityride September 2026 operator report.pptx",
+      "format": "pptx",
+      "language": "en",
+      "kind": "An operator's monthly report",
+      "source": "synthetic",
+      "licence": "Apache-2.0",
+      "sha256": "880d7c127a254c4ca57392c93e637fd04db013bea2de85806d384fceea6e7ac0"
+    },
+    {
+      "id": "vf-05",
+      "name": "Northgate Advisory memo on the heat study.docx",
+      "path": "eval/checks/received/Northgate Advisory memo on the heat study.docx",
+      "format": "docx",
+      "language": "en",
+      "kind": "A consultant's memo",
+      "source": "synthetic",
+      "licence": "Apache-2.0",
+      "sha256": "5cbfd20fdc0c583bed0142a4e9c5f32af9daebad139507b0f92fe3e0dab546a0"
+    },
+    {
+      "id": "vf-06",
+      "name": "禾丰餐饮运营情况说明.docx",
+      "path": "eval/checks/received/禾丰餐饮运营情况说明.docx",
+      "format": "docx",
+      "language": "zh",
+      "kind": "合作方（运营商）的情况说明",
+      "source": "synthetic",
+      "licence": "Apache-2.0",
+      "sha256": "4124927880e927fb53774ef98802b4af399c7ad447ef5afcd6506010dfb32746"
+    },
+    {
+      "id": "vf-07",
+      "name": "江城公交第三季度新闻稿.pdf",
+      "path": "eval/checks/received/江城公交第三季度新闻稿.pdf",
+      "format": "pdf",
+      "language": "zh",
+      "kind": "媒体的新闻稿",
+      "source": "synthetic",
+      "licence": "Apache-2.0",
+      "sha256": "2c3802acbf8e5b9607abd81e64ebe3476f34608e2ac1363053efb90edd0111af"
+    },
+    {
+      "id": "vf-08",
+      "name": "浙北乳品季度对账说明.pdf",
+      "path": "eval/checks/received/浙北乳品季度对账说明.pdf",
+      "format": "pdf",
+      "language": "zh",
+      "kind": "供应商的对账说明",
+      "source": "synthetic",
+      "licence": "Apache-2.0",
+      "sha256": "7b94dc650dd2fd93563d54a1d38e8cd6e2d080164654bafcb596649f39466406"
+    },
+    {
+      "id": "vf-09",
+      "name": "江城晚报绿地降温报道.docx",
+      "path": "eval/checks/received/江城晚报绿地降温报道.docx",
+      "format": "docx",
+      "language": "zh",
+      "kind": "报纸的报道",
+      "source": "synthetic",
+      "licence": "Apache-2.0",
+      "sha256": "9dfce44ac87d2410ffc76258657521c18b481b2a60162a31e3ed2d056387c27e"
+    },
+    {
+      "id": "vf-10",
+      "name": "冷链仓库第三方巡检报告.pdf",
+      "path": "eval/checks/received/冷链仓库第三方巡检报告.pdf",
+      "format": "pdf",
+      "language": "zh",
+      "kind": "第三方的巡检报告",
+      "source": "synthetic",
+      "licence": "Apache-2.0",
+      "sha256": "e4b2a400a9fb1f3fdec5aba3414a880dc7ed2bac9bd0d0fd457f26f45a648a02"
+    }
+  ],
+  "items": [
+    {
+      "id": "fs-001",
+      "set": "find-support",
+      "language": "en",
+      "document": "Riverside Library Renovation Report.docx",
+      "sentence": "The Riverside Library first opened its doors in 1968.",
+      "label": "supported",
+      "evidence": {
+        "document": "Riverside Library Renovation Report.docx",
+        "location": "§ 1 Background",
+        "units": [2, 2],
+        "quote": "The Riverside Library opened in 1968"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-002",
+      "set": "find-support",
+      "language": "en",
+      "document": "Riverside Library Renovation Report.docx",
+      "sentence": "Annual visits to the library dropped from 212,000 in 2019 to 164,000 in 2025.",
+      "label": "supported",
+      "evidence": {
+        "document": "Riverside Library Renovation Report.docx",
+        "location": "§ 1 Background",
+        "units": [2, 2],
+        "quote": "Visits fell from 212,000 in 2019 to 164,000 in 2025"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-003",
+      "set": "find-support",
+      "language": "en",
+      "document": "Riverside Library Renovation Report.docx",
+      "sentence": "The council gave the renovation the go-ahead on 14 March 2026, following a consultation with 1,870 responses.",
+      "label": "supported",
+      "evidence": {
+        "document": "Riverside Library Renovation Report.docx",
+        "location": "§ 1 Background",
+        "units": [2, 2],
+        "quote": "The council approved the renovation on 14 March 2026 after a public consultation that drew 1,870 responses."
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-004",
+      "set": "find-support",
+      "language": "en",
+      "document": "Riverside Library Renovation Report.docx",
+      "sentence": "Ascend Access is delivering the lifts and ramps for £385,000.",
+      "label": "supported",
+      "evidence": {
+        "document": "Riverside Library Renovation Report.docx",
+        "location": "§ 2 Costs",
+        "units": [3, 3],
+        "quote": "Lifts and ramps Ascend Access £385,000"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-005",
+      "set": "find-support",
+      "language": "en",
+      "document": "Riverside Library Renovation Report.docx",
+      "sentence": "A £1.1 million national library improvement grant pays for part of the £2.6 million budget.",
+      "label": "supported",
+      "evidence": {
+        "document": "Riverside Library Renovation Report.docx",
+        "location": "§ 2 Costs",
+        "units": [3, 3],
+        "quote": "The total budget is £2.6 million, of which £1.1 million comes from a national library improvement grant"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-006",
+      "set": "find-support",
+      "language": "en",
+      "document": "Riverside Library Renovation Report.docx",
+      "sentence": "The north wing will close for eleven weeks from 1 February 2027.",
+      "label": "supported",
+      "evidence": {
+        "document": "Riverside Library Renovation Report.docx",
+        "location": "§ 2.1 North wing",
+        "units": [4, 4],
+        "quote": "Temporary closure starts on 1 February 2027 and lasts eleven weeks."
+      },
+      "contradiction": null,
+      "note": "The south wing's closure, in the next section, starts on 6 September 2027 and lasts seven weeks.",
+      "confirmed": false
+    },
+    {
+      "id": "fs-007",
+      "set": "find-support",
+      "language": "en",
+      "document": "Riverside Library Renovation Report.docx",
+      "sentence": "While the south wing is closed, staff will work from the town hall annexe.",
+      "label": "supported",
+      "evidence": {
+        "document": "Riverside Library Renovation Report.docx",
+        "location": "§ 2.2 South wing",
+        "units": [5, 5],
+        "quote": "Staff move to the town hall annexe during the works."
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-008",
+      "set": "find-support",
+      "language": "en",
+      "document": "Riverside Library Renovation Report.docx",
+      "sentence": "Longer opening hours were the change most requested in the consultation, by 62 per cent of respondents.",
+      "label": "supported",
+      "evidence": {
+        "document": "Riverside Library Renovation Report.docx",
+        "location": "§ 5 Consultation findings",
+        "units": [8, 8],
+        "quote": "The most requested change was longer opening hours, named by 62 per cent of respondents."
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-009",
+      "set": "find-support",
+      "language": "en",
+      "document": "Riverside Library Renovation Report.docx",
+      "sentence": "The ramp at the front steps will have a gradient of 1 in 15.",
+      "label": "supported",
+      "evidence": {
+        "document": "Riverside Library Renovation Report.docx",
+        "location": "§ 6 Accessibility",
+        "units": [9, 9],
+        "quote": "a ramp at a gradient of 1 in 15"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-010",
+      "set": "find-support",
+      "language": "en",
+      "document": "Riverside Library Renovation Report.docx",
+      "sentence": "The library's last major refurbishment was in 1984.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Riverside Library Renovation Report.docx",
+        "location": "§ 1 Background",
+        "units": [2, 2],
+        "quote": "last had a major refurbishment in 1994"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-011",
+      "set": "find-support",
+      "language": "en",
+      "document": "Riverside Library Renovation Report.docx",
+      "sentence": "Little Oak Interiors is due to finish the children's library fit-out in June 2027.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Riverside Library Renovation Report.docx",
+        "location": "§ 2 Costs",
+        "units": [3, 3],
+        "quote": "Children's library fit-out Little Oak Interiors £212,500 September 2027"
+      },
+      "contradiction": null,
+      "note": "June 2027 is the roof package's completion.",
+      "confirmed": false
+    },
+    {
+      "id": "fs-012",
+      "set": "find-support",
+      "language": "en",
+      "document": "Riverside Library Renovation Report.docx",
+      "sentence": "In 2023 weekly opening hours were cut from 58 to 40.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Riverside Library Renovation Report.docx",
+        "location": "§ 1 Background",
+        "units": [2, 2],
+        "quote": "Opening hours were cut from 58 to 46 hours a week in 2023"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-013",
+      "set": "find-support",
+      "language": "en",
+      "document": "Riverside Library Renovation Report.docx",
+      "sentence": "The café and community room are being built by Hartley Building Ltd.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Riverside Library Renovation Report.docx",
+        "location": "§ 2 Costs",
+        "units": [3, 3],
+        "quote": "Café and community room Brookside Joinery £178,000 October 2027"
+      },
+      "contradiction": null,
+      "note": "Hartley Building Ltd has the roof package.",
+      "confirmed": false
+    },
+    {
+      "id": "fs-014",
+      "set": "find-support",
+      "language": "en",
+      "document": "Riverside Library Renovation Report.docx",
+      "sentence": "The library employed nine full-time staff in 2025.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "The report gives 2025 visits and members, not staff numbers.",
+      "confirmed": false
+    },
+    {
+      "id": "fs-015",
+      "set": "find-support",
+      "language": "en",
+      "document": "Riverside Library Renovation Report.docx",
+      "sentence": "The library's energy use fell by 10 per cent between 2024 and 2025.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "Only the 2025 figure, 386 megawatt hours, is given.",
+      "confirmed": false
+    },
+    {
+      "id": "fs-016",
+      "set": "find-support",
+      "language": "en",
+      "document": "Riverside Library Renovation Report.docx",
+      "sentence": "The local history archive will be digitised during the closure.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "The archive is packed and moved for the programme; nothing says it is digitised.",
+      "confirmed": false
+    },
+    {
+      "id": "fs-017",
+      "set": "find-support",
+      "language": "en",
+      "document": "Riverside Library Steering Meeting.vtt",
+      "sentence": "The contractor said the scaffolding would come down on 9 March.",
+      "label": "supported",
+      "evidence": {
+        "document": "Riverside Library Steering Meeting.vtt",
+        "location": "0:12",
+        "units": [1, 1],
+        "quote": "The contractor confirmed the scaffolding comes down on the ninth of March."
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-018",
+      "set": "find-support",
+      "language": "en",
+      "document": "Riverside Library Steering Meeting.vtt",
+      "sentence": "The steering group approved £42,000 for furniture in January.",
+      "label": "supported",
+      "evidence": {
+        "document": "Riverside Library Steering Meeting.vtt",
+        "location": "0:34",
+        "units": [1, 1],
+        "quote": "We approved forty-two thousand pounds for furniture in January."
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-019",
+      "set": "find-support",
+      "language": "en",
+      "document": "Riverside Library Steering Meeting.vtt",
+      "sentence": "The opening hours survey drew 380 responses.",
+      "label": "supported",
+      "evidence": {
+        "document": "Riverside Library Steering Meeting.vtt",
+        "location": "1:17",
+        "units": [1, 1],
+        "quote": "We had three hundred and eighty responses to the survey."
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-020",
+      "set": "find-support",
+      "language": "en",
+      "document": "Riverside Library Steering Meeting.vtt",
+      "sentence": "Harbour Street Kitchen made the lower of the two café bids.",
+      "label": "supported",
+      "evidence": {
+        "document": "Riverside Library Steering Meeting.vtt",
+        "location": "1:49",
+        "units": [1, 1],
+        "quote": "Two bids came in, and the lower one is from Harbour Street Kitchen."
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-021",
+      "set": "find-support",
+      "language": "en",
+      "document": "Riverside Library Steering Meeting.vtt",
+      "sentence": "The council lends a stair climber for free if it is booked two weeks ahead.",
+      "label": "supported",
+      "evidence": {
+        "document": "Riverside Library Steering Meeting.vtt",
+        "location": "1:04",
+        "units": [1, 1],
+        "quote": "The council lends one for free if we book it two weeks ahead."
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-022",
+      "set": "find-support",
+      "language": "en",
+      "document": "Riverside Library Steering Meeting.vtt",
+      "sentence": "The children's wing is due to reopen on 2 May.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Riverside Library Steering Meeting.vtt",
+        "location": "0:26",
+        "units": [1, 1],
+        "quote": "The children's wing still reopens on the twelfth of May."
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-023",
+      "set": "find-support",
+      "language": "en",
+      "document": "Riverside Library Steering Meeting.vtt",
+      "sentence": "The furniture supplier quoted £45,500.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Riverside Library Steering Meeting.vtt",
+        "location": "0:39",
+        "units": [1, 1],
+        "quote": "The supplier quote came in at thirty-nine thousand five hundred"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-024",
+      "set": "find-support",
+      "language": "en",
+      "document": "Riverside Library Steering Meeting.vtt",
+      "sentence": "The lift manufacturer will pay a penalty for delivering the parts late.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "The meeting records the delay and a new delivery week, but no penalty.",
+      "confirmed": false
+    },
+    {
+      "id": "fs-025",
+      "set": "find-support",
+      "language": "en",
+      "document": "Coffee Subscription Launch Review.pptx",
+      "sentence": "By the end of September the subscription had 9,420 paying subscribers.",
+      "label": "supported",
+      "evidence": {
+        "document": "Coffee Subscription Launch Review.pptx",
+        "location": "slide 2",
+        "units": [2, 2],
+        "quote": "Paid subscribers reached 9,420 by the end of September."
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-026",
+      "set": "find-support",
+      "language": "en",
+      "document": "Coffee Subscription Launch Review.pptx",
+      "sentence": "The average order value went up to £14.80 per delivery.",
+      "label": "supported",
+      "evidence": {
+        "document": "Coffee Subscription Launch Review.pptx",
+        "location": "slide 2",
+        "units": [2, 2],
+        "quote": "Average order value rose to £14.80 per delivery."
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-027",
+      "set": "find-support",
+      "language": "en",
+      "document": "Coffee Subscription Launch Review.pptx",
+      "sentence": "Boxes too big for a letterbox drew the most complaints.",
+      "label": "supported",
+      "evidence": {
+        "document": "Coffee Subscription Launch Review.pptx",
+        "location": "slide 3",
+        "units": [3, 3],
+        "quote": "Most complaints were about boxes too big for a letterbox."
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-028",
+      "set": "find-support",
+      "language": "en",
+      "document": "Coffee Subscription Launch Review.pptx",
+      "sentence": "Courier costs fell from £2.90 a parcel at launch to an average of £2.35.",
+      "label": "supported",
+      "evidence": {
+        "document": "Coffee Subscription Launch Review.pptx",
+        "location": "slide 5",
+        "units": [5, 5],
+        "quote": "Courier costs average £2.35 per parcel, down from £2.90 at launch."
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-029",
+      "set": "find-support",
+      "language": "en",
+      "document": "Coffee Subscription Launch Review.pptx",
+      "sentence": "The eight-week podcast sponsorship cost £18,000.",
+      "label": "supported",
+      "evidence": {
+        "document": "Coffee Subscription Launch Review.pptx",
+        "location": "slide 7",
+        "units": [7, 7],
+        "quote": "The podcast sponsorship cost £18,000 for eight weeks."
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-030",
+      "set": "find-support",
+      "language": "en",
+      "document": "Coffee Subscription Launch Review.pptx",
+      "sentence": "A single Colombian cooperative supplies 40 per cent of the beans.",
+      "label": "supported",
+      "evidence": {
+        "document": "Coffee Subscription Launch Review.pptx",
+        "location": "slide 9",
+        "units": [9, 9],
+        "quote": "One cooperative in Colombia supplies 40 per cent of our beans."
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-031",
+      "set": "find-support",
+      "language": "en",
+      "document": "Coffee Subscription Launch Review.pptx",
+      "sentence": "The Explorer tier, one bag a month for £12.50, had 4,180 subscribers.",
+      "label": "supported",
+      "evidence": {
+        "document": "Coffee Subscription Launch Review.pptx",
+        "location": "slide 4",
+        "units": [4, 4],
+        "quote": "Explorer 1 £12.50 4,180"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-032",
+      "set": "find-support",
+      "language": "en",
+      "document": "Coffee Subscription Launch Review.pptx",
+      "sentence": "Green coffee prices have risen 12 per cent since March.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Coffee Subscription Launch Review.pptx",
+        "location": "slide 9",
+        "units": [9, 9],
+        "quote": "Green coffee prices have risen 22 per cent since March."
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-033",
+      "set": "find-support",
+      "language": "en",
+      "document": "Coffee Subscription Launch Review.pptx",
+      "sentence": "The September survey had 2,114 responses.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Coffee Subscription Launch Review.pptx",
+        "location": "slide 3",
+        "units": [3, 3],
+        "quote": "The survey had 1,214 responses"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-034",
+      "set": "find-support",
+      "language": "en",
+      "document": "Coffee Subscription Launch Review.pptx",
+      "sentence": "Paid social adverts were paused in June after the cost per sign-up doubled.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Coffee Subscription Launch Review.pptx",
+        "location": "slide 7",
+        "units": [7, 7],
+        "quote": "Paid social adverts were paused in August after costs per sign-up doubled."
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-035",
+      "set": "find-support",
+      "language": "en",
+      "document": "Coffee Subscription Launch Review.pptx",
+      "sentence": "Most Office tier subscribers are law firms.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "The Office tier is sold mainly through two coworking chains; nothing on law firms.",
+      "confirmed": false
+    },
+    {
+      "id": "fs-036",
+      "set": "find-support",
+      "language": "en",
+      "document": "Coffee Subscription Launch Review.pptx",
+      "sentence": "Late deliveries cost the company £3,000 in refunds in September.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "Late deliveries were 2.1 per cent of parcels; refunds aren't mentioned.",
+      "confirmed": false
+    },
+    {
+      "id": "fs-037",
+      "set": "find-support",
+      "language": "en",
+      "document": "Quarterly Research Update.pptx",
+      "sentence": "Customer churn dropped to 4.2 per cent after the onboarding was redesigned.",
+      "label": "supported",
+      "evidence": {
+        "document": "Quarterly Research Update.pptx",
+        "location": "slide 2",
+        "units": [2, 2],
+        "quote": "Customer churn fell to 4.2 per cent after the onboarding redesign."
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-038",
+      "set": "find-support",
+      "language": "en",
+      "document": "Quarterly Research Update.pptx",
+      "sentence": "Seventeen deals worth £830k were at the proposal stage.",
+      "label": "supported",
+      "evidence": {
+        "document": "Quarterly Research Update.pptx",
+        "location": "slide 4",
+        "units": [4, 4],
+        "quote": "Proposal 17 830"
+      },
+      "contradiction": null,
+      "note": "The table's header gives the value in £k.",
+      "confirmed": false
+    },
+    {
+      "id": "fs-039",
+      "set": "find-support",
+      "language": "en",
+      "document": "Quarterly Research Update.pptx",
+      "sentence": "Net revenue retention reached 121 per cent.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Quarterly Research Update.pptx",
+        "location": "slide 2",
+        "units": [2, 2],
+        "quote": "Net revenue retention reached 112 per cent."
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-040",
+      "set": "find-support",
+      "language": "en",
+      "document": "Quarterly Research Update.pptx",
+      "sentence": "The onboarding redesign was led by the customer success team.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "The deck credits the redesign with lower churn but doesn't say who led it.",
+      "confirmed": false
+    },
+    {
+      "id": "fs-041",
+      "set": "find-support",
+      "language": "en",
+      "document": "Clinic Staffing Plan 2027.xlsx",
+      "sentence": "Barnsfield, in the East region, plans for 13 nurses and 7 doctors.",
+      "label": "supported",
+      "evidence": {
+        "document": "Clinic Staffing Plan 2027.xlsx",
+        "location": "Staffing, row 4",
+        "units": [1, 1],
+        "quote": "Barnsfield East 13 7 813 £1,206,700"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-042",
+      "set": "find-support",
+      "language": "en",
+      "document": "Clinic Staffing Plan 2027.xlsx",
+      "sentence": "Lowfield's planned budget is £673,600.",
+      "label": "supported",
+      "evidence": {
+        "document": "Clinic Staffing Plan 2027.xlsx",
+        "location": "Staffing, row 31",
+        "units": [1, 1],
+        "quote": "Lowfield North 7 4 444 £673,600"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-043",
+      "set": "find-support",
+      "language": "en",
+      "document": "Clinic Staffing Plan 2027.xlsx",
+      "sentence": "Twelve ECG machines are on order from Cardiotech Supplies.",
+      "label": "supported",
+      "evidence": {
+        "document": "Clinic Staffing Plan 2027.xlsx",
+        "location": "Equipment, row 2",
+        "units": [3, 3],
+        "quote": "ECG machine Cardiotech Supplies £4,850 12"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-044",
+      "set": "find-support",
+      "language": "en",
+      "document": "Clinic Staffing Plan 2027.xlsx",
+      "sentence": "Forty examination couches are due in November 2026.",
+      "label": "supported",
+      "evidence": {
+        "document": "Clinic Staffing Plan 2027.xlsx",
+        "location": "Equipment, row 5",
+        "units": [3, 3],
+        "quote": "Examination couch Wardrobe Healthcare £640 40 November 2026"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-045",
+      "set": "find-support",
+      "language": "en",
+      "document": "Clinic Staffing Plan 2027.xlsx",
+      "sentence": "Woodlands, in the West region, is planned at 943 weekly hours.",
+      "label": "supported",
+      "evidence": {
+        "document": "Clinic Staffing Plan 2027.xlsx",
+        "location": "Staffing, row 54",
+        "units": [2, 2],
+        "quote": "Woodlands West 18 5 943"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-046",
+      "set": "find-support",
+      "language": "en",
+      "document": "Clinic Staffing Plan 2027.xlsx",
+      "sentence": "Vaccine fridges from ColdChain Direct cost £3,210 each.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Clinic Staffing Plan 2027.xlsx",
+        "location": "Equipment, row 7",
+        "units": [3, 3],
+        "quote": "Vaccine fridge ColdChain Direct £2,310"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-047",
+      "set": "find-support",
+      "language": "en",
+      "document": "Clinic Staffing Plan 2027.xlsx",
+      "sentence": "The Riverside clinic is in the North region.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Clinic Staffing Plan 2027.xlsx",
+        "location": "Staffing, row 44",
+        "units": [1, 1],
+        "quote": "Riverside East 8 3 453 £622,700"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-048",
+      "set": "find-support",
+      "language": "en",
+      "document": "Clinic Staffing Plan 2027.xlsx",
+      "sentence": "Greystone has had two doctor posts vacant since the summer.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "The plan gives Greystone 3 doctors; it records no vacancies.",
+      "confirmed": false
+    },
+    {
+      "id": "fs-049",
+      "set": "find-support",
+      "language": "en",
+      "document": "Regional Revenue.xlsx",
+      "sentence": "The West region's revenue rose every quarter of 2026, from £350,200 in Q1 to £466,100 in Q4.",
+      "label": "supported",
+      "evidence": {
+        "document": "Regional Revenue.xlsx",
+        "location": "Revenue, row 7",
+        "units": [1, 1],
+        "quote": "West £350,200 £389,600 £421,800 £466,100"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-050",
+      "set": "find-support",
+      "language": "en",
+      "document": "Regional Revenue.xlsx",
+      "sentence": "Revenue across all regions came to £6,812,100 in 2026.",
+      "label": "supported",
+      "evidence": {
+        "document": "Regional Revenue.xlsx",
+        "location": "Revenue, row 8",
+        "units": [1, 1],
+        "quote": "All regions £1,580,600 £1,637,750 £1,734,450 £1,859,300 £6,812,100"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-051",
+      "set": "find-support",
+      "language": "en",
+      "document": "Regional Revenue.xlsx",
+      "sentence": "The Q4 figures stay a forecast until the December close.",
+      "label": "supported",
+      "evidence": {
+        "document": "Regional Revenue.xlsx",
+        "location": "Notes, row 4",
+        "units": [2, 2],
+        "quote": "Q4 is a forecast until the December close."
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-052",
+      "set": "find-support",
+      "language": "en",
+      "document": "Regional Revenue.xlsx",
+      "sentence": "Central region revenue for 2026 was £2,421,600.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Regional Revenue.xlsx",
+        "location": "Revenue, row 5",
+        "units": [1, 1],
+        "quote": "Central £530,400 £547,900 £561,000 £602,300 £2,241,600"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-053",
+      "set": "find-support",
+      "language": "en",
+      "document": "Regional Revenue.xlsx",
+      "sentence": "Q1 closed late because of a payroll migration.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Regional Revenue.xlsx",
+        "location": "Notes, row 2",
+        "units": [2, 2],
+        "quote": "Q1 closed two days late because of the ledger migration."
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-054",
+      "set": "find-support",
+      "language": "en",
+      "document": "Regional Revenue.xlsx",
+      "sentence": "The South region has the smallest sales team.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "The workbook gives revenue by region, not team sizes.",
+      "confirmed": false
+    },
+    {
+      "id": "fs-055",
+      "set": "find-support",
+      "language": "en",
+      "document": "Bike Share Stations September 2026.csv",
+      "sentence": "Clock Tower station, in Central, logged 4,005 trips in September.",
+      "label": "supported",
+      "evidence": {
+        "document": "Bike Share Stations September 2026.csv",
+        "location": "row 17",
+        "units": [1, 1],
+        "quote": "BS-1016 Clock Tower Central 12 4005"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-056",
+      "set": "find-support",
+      "language": "en",
+      "document": "Bike Share Stations September 2026.csv",
+      "sentence": "The Cathedral station in Docklands has 17 docks.",
+      "label": "supported",
+      "evidence": {
+        "document": "Bike Share Stations September 2026.csv",
+        "location": "row 13",
+        "units": [1, 1],
+        "quote": "BS-1012 Cathedral Docklands 17"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-057",
+      "set": "find-support",
+      "language": "en",
+      "document": "Bike Share Stations September 2026.csv",
+      "sentence": "Trips from Rope Walk averaged 10.5 minutes in September.",
+      "label": "supported",
+      "evidence": {
+        "document": "Bike Share Stations September 2026.csv",
+        "location": "row 51",
+        "units": [2, 2],
+        "quote": "BS-1050 Rope Walk Riverside 32 4283 10.5"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-058",
+      "set": "find-support",
+      "language": "en",
+      "document": "Bike Share Stations September 2026.csv",
+      "sentence": "Velodrome station is in the Riverside district.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Bike Share Stations September 2026.csv",
+        "location": "row 64",
+        "units": [2, 2],
+        "quote": "BS-1063 Velodrome Old Town"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-059",
+      "set": "find-support",
+      "language": "en",
+      "document": "Bike Share Stations September 2026.csv",
+      "sentence": "The Museum station recorded 3,890 trips in September.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Bike Share Stations September 2026.csv",
+        "location": "row 42",
+        "units": [2, 2],
+        "quote": "BS-1041 Museum Central 12 3980"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-060",
+      "set": "find-support",
+      "language": "en",
+      "document": "Bike Share Stations September 2026.csv",
+      "sentence": "Most trips from the University station are made by students.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "The table gives each station's trips and average length, not who rides.",
+      "confirmed": false
+    },
+    {
+      "id": "fs-061",
+      "set": "find-support",
+      "language": "en",
+      "document": "Field Kit Setup Guide.md",
+      "sentence": "Trip plans have to be registered with the base office at least 48 hours in advance.",
+      "label": "supported",
+      "evidence": {
+        "document": "Field Kit Setup Guide.md",
+        "location": "§ Before you leave",
+        "units": [3, 3],
+        "quote": "Register the trip plan with the base office at least 48 hours ahead."
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-062",
+      "set": "find-support",
+      "language": "en",
+      "document": "Field Kit Setup Guide.md",
+      "sentence": "The tablet tries to sync every 20 minutes, on port 8443.",
+      "label": "supported",
+      "evidence": {
+        "document": "Field Kit Setup Guide.md",
+        "location": "§ Syncing data",
+        "units": [4, 4],
+        "quote": "port = 8443 interval_minutes = 20"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-063",
+      "set": "find-support",
+      "language": "en",
+      "document": "Field Kit Setup Guide.md",
+      "sentence": "The ford is closed when the Hollin gauge reads above 1.2 m.",
+      "label": "supported",
+      "evidence": {
+        "document": "Field Kit Setup Guide.md",
+        "location": "§ Before you leave",
+        "units": [3, 3],
+        "quote": "A river level above 1.2 m at the Hollin gauge closes the ford."
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-064",
+      "set": "find-support",
+      "language": "en",
+      "document": "Field Kit Setup Guide.md",
+      "sentence": "The water filter's cartridge is replaced after 1,000 litres.",
+      "label": "supported",
+      "evidence": {
+        "document": "Field Kit Setup Guide.md",
+        "location": "§ Packing list",
+        "units": [2, 2],
+        "quote": "Replace the cartridge after 1,000 litres"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-065",
+      "set": "find-support",
+      "language": "en",
+      "document": "Field Kit Setup Guide.md",
+      "sentence": "Bag A should weigh under 7 kg when packed.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Field Kit Setup Guide.md",
+        "location": "§ Packing list",
+        "units": [2, 2],
+        "quote": "Bag A should weigh under 9 kg when packed"
+      },
+      "contradiction": null,
+      "note": "7 kg is Bag B's limit.",
+      "confirmed": false
+    },
+    {
+      "id": "fs-066",
+      "set": "find-support",
+      "language": "en",
+      "document": "Field Kit Setup Guide.md",
+      "sentence": "Teams call the base office at 07:00 and 19:00 every day.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Field Kit Setup Guide.md",
+        "location": "§ Radio procedure",
+        "units": [6, 6],
+        "quote": "Call the base office at 08:00 and 18:00 every day you are out"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-067",
+      "set": "find-support",
+      "language": "en",
+      "document": "Field Kit Setup Guide.md",
+      "sentence": "The satellite messenger can send photos to the base office.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "The guide covers its check-ins, SOS and battery, not photos.",
+      "confirmed": false
+    },
+    {
+      "id": "fs-068",
+      "set": "find-support",
+      "language": "en",
+      "document": "Field Kit Setup Guide.md",
+      "sentence": "Each team must carry two satellite messengers on overnight trips.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "The packing list has one satellite messenger and no rule on carrying two.",
+      "confirmed": false
+    },
+    {
+      "id": "fs-069",
+      "set": "find-support",
+      "language": "en",
+      "document": "Night Shift Handbook.txt",
+      "sentence": "Ward 7 has 30 beds, and its lead nurse hands over at 20:00.",
+      "label": "supported",
+      "evidence": {
+        "document": "Night Shift Handbook.txt",
+        "location": "line 9",
+        "units": [1, 1],
+        "quote": "Ward 7 Aileen Doherty 20:00 30"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-070",
+      "set": "find-support",
+      "language": "en",
+      "document": "Night Shift Handbook.txt",
+      "sentence": "A NEWS2 score of 5 or more means calling the on-call registrar.",
+      "label": "supported",
+      "evidence": {
+        "document": "Night Shift Handbook.txt",
+        "location": "line 26",
+        "units": [1, 1],
+        "quote": "Call the on-call registrar for a NEWS2 score of 5 or more"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-071",
+      "set": "find-support",
+      "language": "en",
+      "document": "Night Shift Handbook.txt",
+      "sentence": "Visiting ends at 20:00 on all wards.",
+      "label": "supported",
+      "evidence": {
+        "document": "Night Shift Handbook.txt",
+        "location": "line 48",
+        "units": [1, 1],
+        "quote": "Visiting ends at 20:00 on every ward."
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-072",
+      "set": "find-support",
+      "language": "en",
+      "document": "Night Shift Handbook.txt",
+      "sentence": "Blood gas cartridges ordered before 02:00 come with the morning delivery.",
+      "label": "supported",
+      "evidence": {
+        "document": "Night Shift Handbook.txt",
+        "location": "line 69",
+        "units": [2, 2],
+        "quote": "Order blood gas cartridges before 02:00 so that they arrive with the morning delivery."
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-073",
+      "set": "find-support",
+      "language": "en",
+      "document": "Night Shift Handbook.txt",
+      "sentence": "Each nurse takes a 30-minute break during the night.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Night Shift Handbook.txt",
+        "location": "line 43",
+        "units": [1, 1],
+        "quote": "Each nurse takes a 45-minute break between 01:00 and 04:00"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-074",
+      "set": "find-support",
+      "language": "en",
+      "document": "Night Shift Handbook.txt",
+      "sentence": "For a cardiac arrest, staff dial 3333.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Night Shift Handbook.txt",
+        "location": "line 28",
+        "units": [1, 1],
+        "quote": "For a cardiac arrest, dial 2222"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-075",
+      "set": "find-support",
+      "language": "en",
+      "document": "Night Shift Handbook.txt",
+      "sentence": "Agency nurses are shown the fire exits at the start of every shift.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "The fire section gives the assembly point and evacuation, nothing on agency nurses.",
+      "confirmed": false
+    },
+    {
+      "id": "fs-076",
+      "set": "find-support",
+      "language": "en",
+      "document": "Night Shift Handbook.txt",
+      "sentence": "Ward 9 cares mainly for stroke patients.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "Ward 9 has 22 beds and a lead nurse; no specialty is given.",
+      "confirmed": false
+    },
+    {
+      "id": "fs-077",
+      "set": "find-support",
+      "language": "en",
+      "document": "Urban Heat in Six Districts.pdf",
+      "sentence": "Eastgate's surface temperatures peaked at 47.2 °C on 19 July.",
+      "label": "supported",
+      "evidence": {
+        "document": "Urban Heat in Six Districts.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "Surface temperatures in the Eastgate district peaked at 47.2 °C on 19 July"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-078",
+      "set": "find-support",
+      "language": "en",
+      "document": "Urban Heat in Six Districts.pdf",
+      "sentence": "In Old Market, night-time air temperatures stayed above 24 °C for nine nights running.",
+      "label": "supported",
+      "evidence": {
+        "document": "Urban Heat in Six Districts.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "Night-time air temperatures stayed above 24 °C for nine nights in a row in the Old Market area"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-079",
+      "set": "find-support",
+      "language": "en",
+      "document": "Urban Heat in Six Districts.pdf",
+      "sentence": "Sea breezes cooled the Docks district by about 2 °C, but only within 300 metres of the shore.",
+      "label": "supported",
+      "evidence": {
+        "document": "Urban Heat in Six Districts.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "Wind from the sea cooled the Docks district by about 2 °C on most afternoons, but only within 300 metres of the shore."
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-080",
+      "set": "find-support",
+      "language": "en",
+      "document": "Urban Heat in Six Districts.pdf",
+      "sentence": "Street trees took two summers to start giving shade.",
+      "label": "supported",
+      "evidence": {
+        "document": "Urban Heat in Six Districts.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "Street trees took two summers to give shade"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-081",
+      "set": "find-support",
+      "language": "en",
+      "document": "Urban Heat in Six Districts.pdf",
+      "sentence": "In the survey, 41 per cent of Eastgate residents said they changed their walking route on hot days.",
+      "label": "supported",
+      "evidence": {
+        "document": "Urban Heat in Six Districts.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "41 per cent of those in Eastgate changed their walking route on hot days"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-082",
+      "set": "find-support",
+      "language": "en",
+      "document": "Urban Heat in Six Districts.pdf",
+      "sentence": "Median household income in Eastgate is 38 per cent below the city's.",
+      "label": "supported",
+      "evidence": {
+        "document": "Urban Heat in Six Districts.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "median household income in Eastgate is 38 per cent below the city's"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-083",
+      "set": "find-support",
+      "language": "en",
+      "document": "Urban Heat in Six Districts.pdf",
+      "sentence": "Until radiation shields were fitted on 3 July, sensors in direct sun read up to 1.5 °C high.",
+      "label": "supported",
+      "evidence": {
+        "document": "Urban Heat in Six Districts.pdf",
+        "location": "p. 2",
+        "units": [2, 2],
+        "quote": "Sensors in direct sun read up to 1.5 °C high until radiation shields were fitted on 3 July."
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-084",
+      "set": "find-support",
+      "language": "en",
+      "document": "Urban Heat in Six Districts.pdf",
+      "sentence": "Permeable paving cost £41 per square metre.",
+      "label": "supported",
+      "evidence": {
+        "document": "Urban Heat in Six Districts.pdf",
+        "location": "p. 3",
+        "units": [3, 3],
+        "quote": "Permeable paving 6,700 m² 0.9 £41 per m²"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-085",
+      "set": "find-support",
+      "language": "en",
+      "document": "Urban Heat in Six Districts.pdf",
+      "sentence": "Eastgate stayed above 30 °C for 12 hours on the hottest day.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Urban Heat in Six Districts.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "Eastgate stayed above 30 °C for 9.5 hours."
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-086",
+      "set": "find-support",
+      "language": "en",
+      "document": "Urban Heat in Six Districts.pdf",
+      "sentence": "The residents' survey had 1,410 respondents.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Urban Heat in Six Districts.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "A survey of 1,140 residents"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-087",
+      "set": "find-support",
+      "language": "en",
+      "document": "Urban Heat in Six Districts.pdf",
+      "sentence": "Looking after a street tree costs about £42 a year from its fifth year.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Urban Heat in Six Districts.pdf",
+        "location": "p. 2",
+        "units": [2, 2],
+        "quote": "a street tree costs about £22 a year to look after from its fifth year"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-088",
+      "set": "find-support",
+      "language": "en",
+      "document": "Urban Heat in Six Districts.pdf",
+      "sentence": "Eastgate has the city's oldest housing.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "The study calls Eastgate one of the poorest districts; housing age isn't given.",
+      "confirmed": false
+    },
+    {
+      "id": "fs-089",
+      "set": "find-support",
+      "language": "en",
+      "document": "Urban Heat in Six Districts.pdf",
+      "sentence": "Misting stations were switched off at night to save water.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "The study gives their water use and daily checks, not their hours.",
+      "confirmed": false
+    },
+    {
+      "id": "fs-090",
+      "set": "find-support",
+      "language": "en",
+      "document": "Urban Heat in Six Districts.pdf",
+      "sentence": "The study recommends cool roofs for all new schools.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "Cool roofs suit the Docks' flat-roofed warehouses; nothing on schools.",
+      "confirmed": false
+    },
+    {
+      "id": "fs-091",
+      "set": "find-support",
+      "language": "en",
+      "document": "Urban Heat in Six Districts.pdf",
+      "sentence": "The cooling measures were chosen by a residents' panel.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "The study doesn't say how the four measures were chosen.",
+      "confirmed": false
+    },
+    {
+      "id": "fs-092",
+      "set": "find-support",
+      "language": "en",
+      "document": "Roof contract signed for Riverside Library",
+      "sentence": "The roof and insulation contract went to Hartley Building Ltd, the first of four works packages.",
+      "label": "supported",
+      "evidence": {
+        "document": "Roof contract signed for Riverside Library",
+        "location": "§ Start, ¶ 1",
+        "units": [1, 1],
+        "quote": "with Hartley Building Ltd, the first of the renovation's four works packages"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-093",
+      "set": "find-support",
+      "language": "en",
+      "document": "Roof contract signed for Riverside Library",
+      "sentence": "Hartley Building Ltd will employ four local apprentices for the length of the contract.",
+      "label": "supported",
+      "evidence": {
+        "document": "Roof contract signed for Riverside Library",
+        "location": "§ What happens first, ¶ 2",
+        "units": [2, 2],
+        "quote": "Hartley Building Ltd will take on four local apprentices for the length of the contract."
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-094",
+      "set": "find-support",
+      "language": "en",
+      "document": "Roof contract signed for Riverside Library",
+      "sentence": "A specialist studio will restore the reading room's stained glass window for £28,000.",
+      "label": "supported",
+      "evidence": {
+        "document": "Roof contract signed for Riverside Library",
+        "location": "§ The stained glass window, ¶ 1",
+        "units": [3, 3],
+        "quote": "restored by a specialist studio at a cost of £28,000"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-095",
+      "set": "find-support",
+      "language": "en",
+      "document": "Roof contract signed for Riverside Library",
+      "sentence": "While the north wing is shut, the mobile library van will park outside the leisure centre on Tuesdays and Fridays.",
+      "label": "supported",
+      "evidence": {
+        "document": "Roof contract signed for Riverside Library",
+        "location": "§ Using the library during the works, ¶ 1",
+        "units": [5, 5],
+        "quote": "the mobile library van will stop outside the leisure centre every Tuesday and Friday"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-096",
+      "set": "find-support",
+      "language": "en",
+      "document": "Roof contract signed for Riverside Library",
+      "sentence": "The council expects the library to reopen in full in November 2027.",
+      "label": "supported",
+      "evidence": {
+        "document": "Roof contract signed for Riverside Library",
+        "location": "§ Reopening, ¶ 1",
+        "units": [6, 6],
+        "quote": "The council expects the renovated library to reopen in full in November 2027"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-097",
+      "set": "find-support",
+      "language": "en",
+      "document": "Roof contract signed for Riverside Library",
+      "sentence": "The scaffolding goes up on the Mill Lane side of the building.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Roof contract signed for Riverside Library",
+        "location": "§ What happens first, ¶ 1",
+        "units": [2, 2],
+        "quote": "Scaffolding will go up on the Wharf Street side of the building"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-098",
+      "set": "find-support",
+      "language": "en",
+      "document": "Roof contract signed for Riverside Library",
+      "sentence": "The reading room's stained glass window was made in 1994.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Roof contract signed for Riverside Library",
+        "location": "§ The stained glass window, ¶ 1",
+        "units": [3, 3],
+        "quote": "made for the library's opening in 1968"
+      },
+      "contradiction": null,
+      "note": "1994 is the year of the last major refurbishment.",
+      "confirmed": false
+    },
+    {
+      "id": "fs-099",
+      "set": "find-support",
+      "language": "en",
+      "document": "Roof contract signed for Riverside Library",
+      "sentence": "The roof contract includes solar panels on the south-facing slope.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "The page lists the roof, insulation, apprentices and window; no solar panels.",
+      "confirmed": false
+    },
+    {
+      "id": "fs-100",
+      "set": "find-support",
+      "language": "en",
+      "document": "Roof contract signed for Riverside Library",
+      "sentence": "Hartley Building Ltd won the contract against three other bidders.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "The page doesn't say how many bid.",
+      "confirmed": false
+    },
+    {
+      "id": "fs-101",
+      "set": "find-support",
+      "language": "zh",
+      "document": "社区食堂试点评估报告.docx",
+      "sentence": "社区食堂试点的评估期从2025年7月到2026年6月。",
+      "label": "supported",
+      "evidence": {
+        "document": "社区食堂试点评估报告.docx",
+        "location": "§ Start",
+        "units": [1, 1],
+        "quote": "评估期为2025年7月至2026年6月"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-102",
+      "set": "find-support",
+      "language": "zh",
+      "document": "社区食堂试点评估报告.docx",
+      "sentence": "评估期内试点累计供餐41.6万份，日均约1,140份。",
+      "label": "supported",
+      "evidence": {
+        "document": "社区食堂试点评估报告.docx",
+        "location": "§ 一、项目背景",
+        "units": [2, 2],
+        "quote": "评估期内累计供餐41.6万份，日均供餐约1,140份"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-103",
+      "set": "find-support",
+      "language": "zh",
+      "document": "社区食堂试点评估报告.docx",
+      "sentence": "城东街道约有3,100名独居老人。",
+      "label": "supported",
+      "evidence": {
+        "document": "社区食堂试点评估报告.docx",
+        "location": "§ 一、项目背景",
+        "units": [2, 2],
+        "quote": "其中独居老人约3,100人"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-104",
+      "set": "find-support",
+      "language": "zh",
+      "document": "社区食堂试点评估报告.docx",
+      "sentence": "滨江食堂由邻里膳坊运营，满意度为89%。",
+      "label": "supported",
+      "evidence": {
+        "document": "社区食堂试点评估报告.docx",
+        "location": "§ 二、运营数据",
+        "units": [3, 3],
+        "quote": "滨江食堂 邻里膳坊 215 89%"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-105",
+      "set": "find-support",
+      "language": "zh",
+      "document": "社区食堂试点评估报告.docx",
+      "sentence": "食材成本约占每餐成本的六成以上。",
+      "label": "supported",
+      "evidence": {
+        "document": "社区食堂试点评估报告.docx",
+        "location": "§ 二、运营数据",
+        "units": [3, 3],
+        "quote": "其中食材成本约占62%"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-106",
+      "set": "find-support",
+      "language": "zh",
+      "document": "社区食堂试点评估报告.docx",
+      "sentence": "滨江片区的助餐点设在滨江公园东门。",
+      "label": "supported",
+      "evidence": {
+        "document": "社区食堂试点评估报告.docx",
+        "location": "§ （二）滨江片区",
+        "units": [5, 5],
+        "quote": "片区内另设一处助餐点，位于滨江公园东门。"
+      },
+      "contradiction": null,
+      "note": "桂花苑片区的助餐点在社区服务中心一楼。",
+      "confirmed": false
+    },
+    {
+      "id": "fs-107",
+      "set": "find-support",
+      "language": "zh",
+      "document": "社区食堂试点评估报告.docx",
+      "sentence": "营养师把每餐用盐量控制在4克以内。",
+      "label": "supported",
+      "evidence": {
+        "document": "社区食堂试点评估报告.docx",
+        "location": "§ 三、问题与建议",
+        "units": [6, 6],
+        "quote": "营养师已将每餐用盐量控制在4克以内"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-108",
+      "set": "find-support",
+      "language": "zh",
+      "document": "社区食堂试点评估报告.docx",
+      "sentence": "问卷有效样本中，80岁以上老人占31%。",
+      "label": "supported",
+      "evidence": {
+        "document": "社区食堂试点评估报告.docx",
+        "location": "§ 五、居民反馈",
+        "units": [8, 8],
+        "quote": "其中80岁以上老人占31%"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-109",
+      "set": "find-support",
+      "language": "zh",
+      "document": "社区食堂试点评估报告.docx",
+      "sentence": "新村食堂计划在2026年第四季度扩建，座位将增加到80个。",
+      "label": "supported",
+      "evidence": {
+        "document": "社区食堂试点评估报告.docx",
+        "location": "§ 六、下一步工作",
+        "units": [9, 9],
+        "quote": "2026年第四季度完成新村食堂的场地扩建，座位增加到80个。"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-110",
+      "set": "find-support",
+      "language": "zh",
+      "document": "社区食堂试点评估报告.docx",
+      "sentence": "老街食堂有58个座位。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "社区食堂试点评估报告.docx",
+        "location": "§ 三、问题与建议",
+        "units": [6, 6],
+        "quote": "老街食堂只有38个座位"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-111",
+      "set": "find-support",
+      "language": "zh",
+      "document": "社区食堂试点评估报告.docx",
+      "sentence": "试点总投入中，区财政补贴占81%。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "社区食堂试点评估报告.docx",
+        "location": "§ 四、经费情况",
+        "units": [7, 7],
+        "quote": "其中区财政补贴占71%"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-112",
+      "set": "find-support",
+      "language": "zh",
+      "document": "社区食堂试点评估报告.docx",
+      "sentence": "滨江片区的晚餐供应预计于2026年11月开始。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "社区食堂试点评估报告.docx",
+        "location": "§ （二）滨江片区",
+        "units": [5, 5],
+        "quote": "预计于2027年3月开始，新增厨师1名"
+      },
+      "contradiction": null,
+      "note": "2026年11月是桂花苑片区的开始时间。",
+      "confirmed": false
+    },
+    {
+      "id": "fs-113",
+      "set": "find-support",
+      "language": "zh",
+      "document": "社区食堂试点评估报告.docx",
+      "sentence": "配送中心每周二、四、六送货。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "社区食堂试点评估报告.docx",
+        "location": "§ Notes",
+        "units": [10, 10],
+        "quote": "配送中心每周一、三、五送货"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-114",
+      "set": "find-support",
+      "language": "zh",
+      "document": "社区食堂试点评估报告.docx",
+      "sentence": "桂花苑食堂的厨师都有十年以上从业经验。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "报告只说桂花苑片区将新增厨师2名，没有厨师的从业年限。",
+      "confirmed": false
+    },
+    {
+      "id": "fs-115",
+      "set": "find-support",
+      "language": "zh",
+      "document": "社区食堂试点评估报告.docx",
+      "sentence": "试点食堂计划在2027年引入营养配餐软件。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "报告建议2027年扩大试点并引入线上预订，没有提到配餐软件。",
+      "confirmed": false
+    },
+    {
+      "id": "fs-116",
+      "set": "find-support",
+      "language": "zh",
+      "document": "社区食堂试点评估报告.docx",
+      "sentence": "新村食堂的租金比其他食堂高一倍。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "报告只说新村食堂亏损的原因之一是租金高，没有比较租金。",
+      "confirmed": false
+    },
+    {
+      "id": "fs-117",
+      "set": "find-support",
+      "language": "zh",
+      "document": "社区食堂周例会.vtt",
+      "sentence": "九月平均每天有136位老人到食堂用餐。",
+      "label": "supported",
+      "evidence": {
+        "document": "社区食堂周例会.vtt",
+        "location": "0:12",
+        "units": [1, 1],
+        "quote": "九月平均每天有一百三十六位老人来用餐"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-118",
+      "set": "find-support",
+      "language": "zh",
+      "document": "社区食堂周例会.vtt",
+      "sentence": "周三用餐人数最多，因为当天有免费量血压活动。",
+      "label": "supported",
+      "evidence": {
+        "document": "社区食堂周例会.vtt",
+        "location": "0:19",
+        "units": [1, 1],
+        "quote": "周三的人最多，因为那天有免费量血压的活动。"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-119",
+      "set": "find-support",
+      "language": "zh",
+      "document": "社区食堂周例会.vtt",
+      "sentence": "登记送餐的行动不便老人有23位。",
+      "label": "supported",
+      "evidence": {
+        "document": "社区食堂周例会.vtt",
+        "location": "1:27",
+        "units": [1, 1],
+        "quote": "行动不便的老人有二十三位登记了送餐。"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-120",
+      "set": "find-support",
+      "language": "zh",
+      "document": "社区食堂周例会.vtt",
+      "sentence": "从十月起，每周四中午提供手工面条。",
+      "label": "supported",
+      "evidence": {
+        "document": "社区食堂周例会.vtt",
+        "location": "2:15",
+        "units": [1, 1],
+        "quote": "从十月起每周四中午提供手工面条。"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-121",
+      "set": "find-support",
+      "language": "zh",
+      "document": "社区食堂周例会.vtt",
+      "sentence": "保温箱最便宜的报价是两千元。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "社区食堂周例会.vtt",
+        "location": "1:48",
+        "units": [1, 1],
+        "quote": "最便宜的一家报价一千六百元"
+      },
+      "contradiction": null,
+      "note": "两千元是保温箱的预算上限。",
+      "confirmed": false
+    },
+    {
+      "id": "fs-122",
+      "set": "find-support",
+      "language": "zh",
+      "document": "社区食堂周例会.vtt",
+      "sentence": "街道消防检查定在十月十五日上午。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "社区食堂周例会.vtt",
+        "location": "2:28",
+        "units": [1, 1],
+        "quote": "街道消防检查定在十月十七日上午"
+      },
+      "contradiction": null,
+      "note": "十月十五日是集中清理通道的日子。",
+      "confirmed": false
+    },
+    {
+      "id": "fs-123",
+      "set": "find-support",
+      "language": "zh",
+      "document": "社区食堂周例会.vtt",
+      "sentence": "送餐志愿者每月可以领取交通补贴。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "例会只说两位志愿者骑电动车送餐，没有提补贴。",
+      "confirmed": false
+    },
+    {
+      "id": "fs-124",
+      "set": "find-support",
+      "language": "zh",
+      "document": "社区食堂周例会.vtt",
+      "sentence": "重阳节长寿面活动由区民政局出资。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "例会提到活动和预计人数，没有说谁出资。",
+      "confirmed": false
+    },
+    {
+      "id": "fs-125",
+      "set": "find-support",
+      "language": "zh",
+      "document": "新能源公交季度运营汇报.pptx",
+      "sentence": "第三季度百公里平均电耗为62.4千瓦时。",
+      "label": "supported",
+      "evidence": {
+        "document": "新能源公交季度运营汇报.pptx",
+        "location": "slide 2",
+        "units": [2, 2],
+        "quote": "百公里平均电耗为62.4千瓦时"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-126",
+      "set": "find-support",
+      "language": "zh",
+      "document": "新能源公交季度运营汇报.pptx",
+      "sentence": "本季度乘客满意度得分为86.7分。",
+      "label": "supported",
+      "evidence": {
+        "document": "新能源公交季度运营汇报.pptx",
+        "location": "slide 3",
+        "units": [3, 3],
+        "quote": "乘客满意度调查得分为86.7分"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-127",
+      "set": "find-support",
+      "language": "zh",
+      "document": "新能源公交季度运营汇报.pptx",
+      "sentence": "9路共有28辆车，日均客流11,300人次。",
+      "label": "supported",
+      "evidence": {
+        "document": "新能源公交季度运营汇报.pptx",
+        "location": "slide 4",
+        "units": [4, 4],
+        "quote": "9路 28 11,300"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-128",
+      "set": "find-support",
+      "language": "zh",
+      "document": "新能源公交季度运营汇报.pptx",
+      "sentence": "动力电池的质保期为8年或60万公里，以先到者为准。",
+      "label": "supported",
+      "evidence": {
+        "document": "新能源公交季度运营汇报.pptx",
+        "location": "slide 5",
+        "units": [5, 5],
+        "quote": "电池质保期为8年或60万公里，以先到者为准。"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-129",
+      "set": "find-support",
+      "language": "zh",
+      "document": "新能源公交季度运营汇报.pptx",
+      "sentence": "8月充电量为126万千瓦时。",
+      "label": "supported",
+      "evidence": {
+        "document": "新能源公交季度运营汇报.pptx",
+        "location": "slide 6",
+        "units": [6, 6],
+        "quote": "各月充电量（万千瓦时） 充电量 7月: 118, 8月: 126"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-130",
+      "set": "find-support",
+      "language": "zh",
+      "document": "新能源公交季度运营汇报.pptx",
+      "sentence": "现金支付的比例比去年下降了5个百分点。",
+      "label": "supported",
+      "evidence": {
+        "document": "新能源公交季度运营汇报.pptx",
+        "location": "slide 7",
+        "units": [7, 7],
+        "quote": "现金支付比例比去年下降了5个百分点。"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-131",
+      "set": "find-support",
+      "language": "zh",
+      "document": "新能源公交季度运营汇报.pptx",
+      "sentence": "夜间末班车增加了安全员随车，覆盖12条线路。",
+      "label": "supported",
+      "evidence": {
+        "document": "新能源公交季度运营汇报.pptx",
+        "location": "slide 8",
+        "units": [8, 8],
+        "quote": "夜间末班车增加安全员随车，覆盖12条线路。"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-132",
+      "set": "find-support",
+      "language": "zh",
+      "document": "新能源公交季度运营汇报.pptx",
+      "sentence": "26路下月起将延伸到北站枢纽。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "新能源公交季度运营汇报.pptx",
+        "location": "slide 4",
+        "units": [4, 4],
+        "quote": "26路下月起延伸到高铁西站。"
+      },
+      "contradiction": null,
+      "note": "北站枢纽是第二座充电站的位置。",
+      "confirmed": false
+    },
+    {
+      "id": "fs-133",
+      "set": "find-support",
+      "language": "zh",
+      "document": "新能源公交季度运营汇报.pptx",
+      "sentence": "8月夜间充电比例为87%。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "新能源公交季度运营汇报.pptx",
+        "location": "slide 6",
+        "units": [6, 6],
+        "quote": "8月用电高峰时段夜间充电比例达到78%。"
+      },
+      "contradiction": null,
+      "note": "87%是纯电动公交车的占比。",
+      "confirmed": false
+    },
+    {
+      "id": "fs-134",
+      "set": "find-support",
+      "language": "zh",
+      "document": "新能源公交季度运营汇报.pptx",
+      "sentence": "故障车辆平均停运时间缩短至2.8天。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "新能源公交季度运营汇报.pptx",
+        "location": "slide 5",
+        "units": [5, 5],
+        "quote": "故障车辆平均停运时间缩短至1.8天。"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-135",
+      "set": "find-support",
+      "language": "zh",
+      "document": "新能源公交季度运营汇报.pptx",
+      "sentence": "1路是全市客流最大的公交线路。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "汇报只列出1路、9路、26路三条线路，没有全市比较。",
+      "confirmed": false
+    },
+    {
+      "id": "fs-136",
+      "set": "find-support",
+      "language": "zh",
+      "document": "新能源公交季度运营汇报.pptx",
+      "sentence": "集团计划明年采购50辆氢燃料公交车。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "汇报只说要替换剩余13%的燃油公交车，没有提氢燃料车。",
+      "confirmed": false
+    },
+    {
+      "id": "fs-137",
+      "set": "find-support",
+      "language": "zh",
+      "document": "门店销售与库存2026.xlsx",
+      "sentence": "中山路广场店（嘉兴）第三季度同比增长25.0%。",
+      "label": "supported",
+      "evidence": {
+        "document": "门店销售与库存2026.xlsx",
+        "location": "销售, row 17",
+        "units": [1, 1],
+        "quote": "中山路广场店 嘉兴 ¥910,866 25.0%"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-138",
+      "set": "find-support",
+      "language": "zh",
+      "document": "门店销售与库存2026.xlsx",
+      "sentence": "全麦吐司的安全库存为1200，补货周期为1天。",
+      "label": "supported",
+      "evidence": {
+        "document": "门店销售与库存2026.xlsx",
+        "location": "库存, row 3",
+        "units": [3, 3],
+        "quote": "全麦吐司 滨江中心仓 1850 1200 1"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-139",
+      "set": "find-support",
+      "language": "zh",
+      "document": "门店销售与库存2026.xlsx",
+      "sentence": "门店销售表由李晓雯制作。",
+      "label": "supported",
+      "evidence": {
+        "document": "门店销售与库存2026.xlsx",
+        "location": "销售, row 80",
+        "units": [2, 2],
+        "quote": "制表人 李晓雯"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-140",
+      "set": "find-support",
+      "language": "zh",
+      "document": "门店销售与库存2026.xlsx",
+      "sentence": "胜利路社区店（绍兴）的客单价为86.0。",
+      "label": "supported",
+      "evidence": {
+        "document": "门店销售与库存2026.xlsx",
+        "location": "销售, row 31",
+        "units": [1, 1],
+        "quote": "胜利路社区店 绍兴 ¥801,732 21.0% 86.0"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-141",
+      "set": "find-support",
+      "language": "zh",
+      "document": "门店销售与库存2026.xlsx",
+      "sentence": "黄河路旗舰店第三季度销售额为810,978元。",
+      "label": "supported",
+      "evidence": {
+        "document": "门店销售与库存2026.xlsx",
+        "location": "销售, row 65",
+        "units": [2, 2],
+        "quote": "黄河路旗舰店 温州 ¥810,978"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-142",
+      "set": "find-support",
+      "language": "zh",
+      "document": "门店销售与库存2026.xlsx",
+      "sentence": "延安路店（杭州）第三季度销售额同比下降3.0%。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "门店销售与库存2026.xlsx",
+        "location": "销售, row 53",
+        "units": [1, 1],
+        "quote": "延安路店 杭州 ¥995,950 3.0%"
+      },
+      "contradiction": null,
+      "note": "表中延安路店是增长3.0%；下降3.0%的是文化路店。",
+      "confirmed": false
+    },
+    {
+      "id": "fs-143",
+      "set": "find-support",
+      "language": "zh",
+      "document": "门店销售与库存2026.xlsx",
+      "sentence": "手冲咖啡豆存放在萧山冷链仓。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "门店销售与库存2026.xlsx",
+        "location": "库存, row 5",
+        "units": [3, 3],
+        "quote": "手冲咖啡豆 余杭常温仓 940 600 14"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-144",
+      "set": "find-support",
+      "language": "zh",
+      "document": "门店销售与库存2026.xlsx",
+      "sentence": "坚果礼盒库存为7,280。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "门店销售与库存2026.xlsx",
+        "location": "库存, row 7",
+        "units": [3, 3],
+        "quote": "坚果礼盒 余杭常温仓 2780"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-145",
+      "set": "find-support",
+      "language": "zh",
+      "document": "门店销售与库存2026.xlsx",
+      "sentence": "杭州地区门店第三季度共举办了12场促销活动。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "表中只有销售额、同比增长和客单价，没有促销活动。",
+      "confirmed": false
+    },
+    {
+      "id": "fs-146",
+      "set": "find-support",
+      "language": "zh",
+      "document": "门店销售与库存2026.xlsx",
+      "sentence": "有机鲜牛奶的进货单价为每盒6.5元。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "库存表只有库存量、安全库存和补货周期。",
+      "confirmed": false
+    },
+    {
+      "id": "fs-147",
+      "set": "find-support",
+      "language": "zh",
+      "document": "小区垃圾分类统计2026年9月.csv",
+      "sentence": "金桂家园有1062户，9月分类准确率为92%。",
+      "label": "supported",
+      "evidence": {
+        "document": "小区垃圾分类统计2026年9月.csv",
+        "location": "row 16",
+        "units": [1, 1],
+        "quote": "金桂家园 南岸街道 1062 92%"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-148",
+      "set": "find-support",
+      "language": "zh",
+      "document": "小区垃圾分类统计2026年9月.csv",
+      "sentence": "明珠苑的督导员是许美玲。",
+      "label": "supported",
+      "evidence": {
+        "document": "小区垃圾分类统计2026年9月.csv",
+        "location": "row 45",
+        "units": [1, 1],
+        "quote": "明珠苑 北山街道 1199 85% 87.5 许美玲"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-149",
+      "set": "find-support",
+      "language": "zh",
+      "document": "小区垃圾分类统计2026年9月.csv",
+      "sentence": "兰亭雅居9月厨余垃圾为18.0吨。",
+      "label": "supported",
+      "evidence": {
+        "document": "小区垃圾分类统计2026年9月.csv",
+        "location": "row 72",
+        "units": [2, 2],
+        "quote": "兰亭雅居 南岸街道 1230 85% 18.0"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-150",
+      "set": "find-support",
+      "language": "zh",
+      "document": "小区垃圾分类统计2026年9月.csv",
+      "sentence": "碧水新村属于东湖街道。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "小区垃圾分类统计2026年9月.csv",
+        "location": "row 23",
+        "units": [1, 1],
+        "quote": "碧水新村 西溪街道"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-151",
+      "set": "find-support",
+      "language": "zh",
+      "document": "小区垃圾分类统计2026年9月.csv",
+      "sentence": "翠湖名邸9月分类准确率为78%。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "小区垃圾分类统计2026年9月.csv",
+        "location": "row 13",
+        "units": [1, 1],
+        "quote": "翠湖名邸 北山街道 903 92%"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-152",
+      "set": "find-support",
+      "language": "zh",
+      "document": "小区垃圾分类统计2026年9月.csv",
+      "sentence": "阳光花园9月的分类准确率比8月提高了5个百分点。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "表中只有9月的准确率。",
+      "confirmed": false
+    },
+    {
+      "id": "fs-153",
+      "set": "find-support",
+      "language": "zh",
+      "document": "实验室数据管理规范.md",
+      "sentence": "原始测序数据存放在冷存储阵列B，保留10年。",
+      "label": "supported",
+      "evidence": {
+        "document": "实验室数据管理规范.md",
+        "location": "§ 存储位置与保留期限",
+        "units": [2, 2],
+        "quote": "原始测序数据 | 冷存储阵列B | 10年"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-154",
+      "set": "find-support",
+      "language": "zh",
+      "document": "实验室数据管理规范.md",
+      "sentence": "实验结束后24小时内必须上传原始数据。",
+      "label": "supported",
+      "evidence": {
+        "document": "实验室数据管理规范.md",
+        "location": "§ 数据提交流程",
+        "units": [3, 3],
+        "quote": "实验结束后24小时内上传原始数据。"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-155",
+      "set": "find-support",
+      "language": "zh",
+      "document": "实验室数据管理规范.md",
+      "sentence": "超过200GB的单个文件要先联系平台工程师分卷。",
+      "label": "supported",
+      "evidence": {
+        "document": "实验室数据管理规范.md",
+        "location": "§ 数据提交流程",
+        "units": [3, 3],
+        "quote": "单个文件超过200GB时，须先联系平台工程师分卷。"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-156",
+      "set": "find-support",
+      "language": "zh",
+      "document": "实验室数据管理规范.md",
+      "sentence": "访问权限每半年复核一次。",
+      "label": "supported",
+      "evidence": {
+        "document": "实验室数据管理规范.md",
+        "location": "§ 访问权限",
+        "units": [6, 6],
+        "quote": "权限每半年复核一次"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-157",
+      "set": "find-support",
+      "language": "zh",
+      "document": "实验室数据管理规范.md",
+      "sentence": "平台每晚备份的数据保留30天。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "实验室数据管理规范.md",
+        "location": "§ 备份脚本",
+        "units": [4, 4],
+        "quote": "KEEP_DAYS=45"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-158",
+      "set": "find-support",
+      "language": "zh",
+      "document": "实验室数据管理规范.md",
+      "sentence": "显微图像的保留期限为10年。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "实验室数据管理规范.md",
+        "location": "§ 存储位置与保留期限",
+        "units": [2, 2],
+        "quote": "显微图像 | 影像服务器 | 5年"
+      },
+      "contradiction": null,
+      "note": "10年是原始测序数据的保留期限。",
+      "confirmed": false
+    },
+    {
+      "id": "fs-159",
+      "set": "find-support",
+      "language": "zh",
+      "document": "实验室数据管理规范.md",
+      "sentence": "原始数据每季度做一次异地备份。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "规范只写了每晚自动备份到归档目录，没有异地备份。",
+      "confirmed": false
+    },
+    {
+      "id": "fs-160",
+      "set": "find-support",
+      "language": "zh",
+      "document": "实验室数据管理规范.md",
+      "sentence": "合作单位人员申请访问须提前一周提交。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "权限表只写了合作单位人员的权限和审批人。",
+      "confirmed": false
+    },
+    {
+      "id": "fs-161",
+      "set": "find-support",
+      "language": "zh",
+      "document": "冷链仓库值班手册.txt",
+      "sentence": "早班由刘建国负责，08:00交接，使用3号对讲机频道。",
+      "label": "supported",
+      "evidence": {
+        "document": "冷链仓库值班手册.txt",
+        "location": "line 7",
+        "units": [1, 1],
+        "quote": "早班 刘建国 08:00 3"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-162",
+      "set": "find-support",
+      "language": "zh",
+      "document": "冷链仓库值班手册.txt",
+      "sentence": "叉车电量低于30%时要立即充电。",
+      "label": "supported",
+      "evidence": {
+        "document": "冷链仓库值班手册.txt",
+        "location": "line 17",
+        "units": [1, 1],
+        "quote": "检查叉车电量，低于30%时立即充电"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-163",
+      "set": "find-support",
+      "language": "zh",
+      "document": "冷链仓库值班手册.txt",
+      "sentence": "冷冻区温度连续15分钟高于零下15度时，要马上通知设备工程师。",
+      "label": "supported",
+      "evidence": {
+        "document": "冷链仓库值班手册.txt",
+        "location": "line 25",
+        "units": [1, 1],
+        "quote": "冷冻区温度连续15分钟高于零下15度时，立即通知设备工程师。"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-164",
+      "set": "find-support",
+      "language": "zh",
+      "document": "冷链仓库值班手册.txt",
+      "sentence": "夜班要在早上7点30分前填好值班日志。",
+      "label": "supported",
+      "evidence": {
+        "document": "冷链仓库值班手册.txt",
+        "location": "line 60",
+        "units": [2, 2],
+        "quote": "夜班须在早上7点30分前填写值班日志"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-165",
+      "set": "find-support",
+      "language": "zh",
+      "document": "冷链仓库值班手册.txt",
+      "sentence": "堆放物品距离消防通道不少于0.5米。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "冷链仓库值班手册.txt",
+        "location": "line 49",
+        "units": [1, 1],
+        "quote": "堆放物品距离通道不少于1米"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-166",
+      "set": "find-support",
+      "language": "zh",
+      "document": "冷链仓库值班手册.txt",
+      "sentence": "门禁系统每天22:30自动上锁。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "冷链仓库值班手册.txt",
+        "location": "line 36",
+        "units": [1, 1],
+        "quote": "AUTO_LOCK=22:00"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-167",
+      "set": "find-support",
+      "language": "zh",
+      "document": "冷链仓库值班手册.txt",
+      "sentence": "值班人员每两小时巡查一次月台门。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "手册只要求交班时检查月台门；每两小时巡检的是制冷机组。",
+      "confirmed": false
+    },
+    {
+      "id": "fs-168",
+      "set": "find-support",
+      "language": "zh",
+      "document": "冷链仓库值班手册.txt",
+      "sentence": "仓库每季度进行一次消防演练。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "消防一节写了明火、通道和灭火器，没有演练。",
+      "confirmed": false
+    },
+    {
+      "id": "fs-169",
+      "set": "find-support",
+      "language": "zh",
+      "document": "城市绿地与夏季降温调查.pdf",
+      "sentence": "调查在江城市五个城区测量了地表温度和气温。",
+      "label": "supported",
+      "evidence": {
+        "document": "城市绿地与夏季降温调查.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "我们在江城市五个城区测量了地表温度和气温"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-170",
+      "set": "find-support",
+      "language": "zh",
+      "document": "城市绿地与夏季降温调查.pdf",
+      "sentence": "临江区高层建筑密集，夜间气温连续七晚高于25℃。",
+      "label": "supported",
+      "evidence": {
+        "document": "城市绿地与夏季降温调查.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "临江区夜间气温连续七晚高于25℃，主要原因是高层建筑密集"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-171",
+      "set": "find-support",
+      "language": "zh",
+      "document": "城市绿地与夏季降温调查.pdf",
+      "sentence": "屋顶绿化使顶层住户室内气温平均下降了2.2℃。",
+      "label": "supported",
+      "evidence": {
+        "document": "城市绿地与夏季降温调查.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "顶层住户室内气温平均下降2.2℃"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-172",
+      "set": "find-support",
+      "language": "zh",
+      "document": "城市绿地与夏季降温调查.pdf",
+      "sentence": "问卷调查了1,260名居民。",
+      "label": "supported",
+      "evidence": {
+        "document": "城市绿地与夏季降温调查.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "对1,260名居民的问卷显示"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-173",
+      "set": "find-support",
+      "language": "zh",
+      "document": "城市绿地与夏季降温调查.pdf",
+      "sentence": "老城区1990年以前建成的住宅占62%。",
+      "label": "supported",
+      "evidence": {
+        "document": "城市绿地与夏季降温调查.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "老城区1990年以前建成的住宅占62%"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-174",
+      "set": "find-support",
+      "language": "zh",
+      "document": "城市绿地与夏季降温调查.pdf",
+      "sentence": "高新区的昼夜温差是五个城区中最大的。",
+      "label": "supported",
+      "evidence": {
+        "document": "城市绿地与夏季降温调查.pdf",
+        "location": "p. 2",
+        "units": [2, 2],
+        "quote": "昼夜温差是五个城区中最大的"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-175",
+      "set": "find-support",
+      "language": "zh",
+      "document": "城市绿地与夏季降温调查.pdf",
+      "sentence": "下一轮调查将在2027年夏季进行。",
+      "label": "supported",
+      "evidence": {
+        "document": "城市绿地与夏季降温调查.pdf",
+        "location": "p. 3",
+        "units": [3, 3],
+        "quote": "下一轮调查将在2027年夏季进行"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-176",
+      "set": "find-support",
+      "language": "zh",
+      "document": "城市绿地与夏季降温调查.pdf",
+      "sentence": "西湖区正午平均气温比老城区低3.1℃。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "城市绿地与夏季降温调查.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "正午平均气温比老城区低3.8℃"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-177",
+      "set": "find-support",
+      "language": "zh",
+      "document": "城市绿地与夏季降温调查.pdf",
+      "sentence": "透水铺装的成本为每平方米380元。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "城市绿地与夏季降温调查.pdf",
+        "location": "p. 3",
+        "units": [3, 3],
+        "quote": "透水铺装 12,800平方米 1.0 每平方米260元"
+      },
+      "contradiction": null,
+      "note": "每平方米380元是屋顶绿化的成本。",
+      "confirmed": false
+    },
+    {
+      "id": "fs-178",
+      "set": "find-support",
+      "language": "zh",
+      "document": "城市绿地与夏季降温调查.pdf",
+      "sentence": "7月5日加装防辐射罩之前，记录仪读数最多偏高2.6℃。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "城市绿地与夏季降温调查.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "阳光直射下的记录仪读数最多偏高1.6℃"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-179",
+      "set": "find-support",
+      "language": "zh",
+      "document": "城市绿地与夏季降温调查.pdf",
+      "sentence": "老城区计划在2027年新建两处街心公园。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "报告只建议补种行道树，没有提到街心公园。",
+      "confirmed": false
+    },
+    {
+      "id": "fs-180",
+      "set": "find-support",
+      "language": "zh",
+      "document": "城市绿地与夏季降温调查.pdf",
+      "sentence": "喷雾降温设施由市城管局负责日常维护。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "报告只说设施需要每天检查水质，没有说由谁维护。",
+      "confirmed": false
+    },
+    {
+      "id": "fs-181",
+      "set": "find-support",
+      "language": "zh",
+      "document": "维基百科-可持续发展目标.pdf",
+      "sentence": "可持续发展目标在2015年底取代了千年发展目标。",
+      "label": "supported",
+      "evidence": {
+        "document": "维基百科-可持续发展目标.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "这些⽬标于 2015 年底替换千年发展⽬标"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-182",
+      "set": "find-support",
+      "language": "zh",
+      "document": "维基百科-可持续发展目标.pdf",
+      "sentence": "这些目标从2016年一直持续到2030年。",
+      "label": "supported",
+      "evidence": {
+        "document": "维基百科-可持续发展目标.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "这些⽬标将从 2016 年⼀直持续到 2030 年"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-183",
+      "set": "find-support",
+      "language": "zh",
+      "document": "维基百科-可持续发展目标.pdf",
+      "sentence": "可持续发展目标共包含169项细项目标。",
+      "label": "supported",
+      "evidence": {
+        "document": "维基百科-可持续发展目标.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "这⼀系列⽬标共有 169 项細項⽬标"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-184",
+      "set": "find-support",
+      "language": "zh",
+      "document": "维基百科-可持续发展目标.pdf",
+      "sentence": "截至2015年8月2日，已有193个国家赞同这些目标。",
+      "label": "supported",
+      "evidence": {
+        "document": "维基百科-可持续发展目标.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "截⾄ 2015 年 8 ⽉ 2 ⽇，共有 193 个国家赞同了以下 17 点⽬标"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-185",
+      "set": "find-support",
+      "language": "zh",
+      "document": "维基百科-可持续发展目标.pdf",
+      "sentence": "目标1.1按每天生活费不足1.25美元的标准界定极端贫穷。",
+      "label": "supported",
+      "evidence": {
+        "document": "维基百科-可持续发展目标.pdf",
+        "location": "p. 3",
+        "units": [3, 3],
+        "quote": "⽬前標準按照每天⽣活費不⾜ 1.25 美元計算"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-186",
+      "set": "find-support",
+      "language": "zh",
+      "document": "维基百科-可持续发展目标.pdf",
+      "sentence": "可持续发展目标在2012年底取代了千年发展目标。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "维基百科-可持续发展目标.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "这些⽬标于 2015 年底替换千年发展⽬标"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-187",
+      "set": "find-support",
+      "language": "zh",
+      "document": "维基百科-可持续发展目标.pdf",
+      "sentence": "目标3.1要求到2030年让每10万个活产的死胎数少于100个。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "维基百科-可持续发展目标.pdf",
+        "location": "p. 3",
+        "units": [3, 3],
+        "quote": "讓每 100,000 個活產的死胎數少於 70 個"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-188",
+      "set": "find-support",
+      "language": "zh",
+      "document": "维基百科-可持续发展目标.pdf",
+      "sentence": "可持续发展目标的落实情况由联合国大会每五年全面审查一次。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "文章列出目标和细项，没有提到每五年审查。",
+      "confirmed": false
+    },
+    {
+      "id": "fs-189",
+      "set": "find-support",
+      "language": "zh",
+      "document": "夜班线路N3将于12月1日开通",
+      "sentence": "N3路每天晚上10点到次日凌晨5点运营。",
+      "label": "supported",
+      "evidence": {
+        "document": "夜班线路N3将于12月1日开通",
+        "location": "§ Start, ¶ 1",
+        "units": [1, 1],
+        "quote": "每天晚上10点至次日凌晨5点运营"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-190",
+      "set": "find-support",
+      "language": "zh",
+      "document": "夜班线路N3将于12月1日开通",
+      "sentence": "N3路全程18.6公里，设有14个站点。",
+      "label": "supported",
+      "evidence": {
+        "document": "夜班线路N3将于12月1日开通",
+        "location": "§ 线路走向, ¶ 1",
+        "units": [2, 2],
+        "quote": "全程18.6公里，共设14个站点"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-191",
+      "set": "find-support",
+      "language": "zh",
+      "document": "夜班线路N3将于12月1日开通",
+      "sentence": "N3路夜间每30分钟发一班车。",
+      "label": "supported",
+      "evidence": {
+        "document": "夜班线路N3将于12月1日开通",
+        "location": "§ 线路走向, ¶ 2",
+        "units": [2, 2],
+        "quote": "夜间发车间隔为30分钟"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-192",
+      "set": "find-support",
+      "language": "zh",
+      "document": "夜班线路N3将于12月1日开通",
+      "sentence": "N3路单程票价为2元。",
+      "label": "supported",
+      "evidence": {
+        "document": "夜班线路N3将于12月1日开通",
+        "location": "§ 线路走向, ¶ 2",
+        "units": [2, 2],
+        "quote": "单程票价2元"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-193",
+      "set": "find-support",
+      "language": "zh",
+      "document": "夜班线路N3将于12月1日开通",
+      "sentence": "北站枢纽充电站建成后将设有40个充电桩。",
+      "label": "supported",
+      "evidence": {
+        "document": "夜班线路N3将于12月1日开通",
+        "location": "§ 北站枢纽充电站, ¶ 1",
+        "units": [4, 4],
+        "quote": "建成后设有40个充电桩"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-194",
+      "set": "find-support",
+      "language": "zh",
+      "document": "夜班线路N3将于12月1日开通",
+      "sentence": "乘客意见征集共收到建议1,850条。",
+      "label": "supported",
+      "evidence": {
+        "document": "夜班线路N3将于12月1日开通",
+        "location": "§ 乘客意见征集, ¶ 1",
+        "units": [5, 5],
+        "quote": "共收到建议1,850条"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-195",
+      "set": "find-support",
+      "language": "zh",
+      "document": "夜班线路N3将于12月1日开通",
+      "sentence": "N3路的每班车都配有一名安全员。",
+      "label": "supported",
+      "evidence": {
+        "document": "夜班线路N3将于12月1日开通",
+        "location": "§ 车辆与安全, ¶ 1",
+        "units": [3, 3],
+        "quote": "每班车配一名安全员随车"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-196",
+      "set": "find-support",
+      "language": "zh",
+      "document": "夜班线路N3将于12月1日开通",
+      "sentence": "N3路的终点站是北站枢纽。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "夜班线路N3将于12月1日开通",
+        "location": "§ 线路走向, ¶ 1",
+        "units": [2, 2],
+        "quote": "N3路由北站枢纽发车，经人民路、解放路和中山路，开往高铁西站"
+      },
+      "contradiction": null,
+      "note": "北站枢纽是起点，终点是高铁西站。",
+      "confirmed": false
+    },
+    {
+      "id": "fs-197",
+      "set": "find-support",
+      "language": "zh",
+      "document": "夜班线路N3将于12月1日开通",
+      "sentence": "N3路途经人民路、建设路和中山路。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "夜班线路N3将于12月1日开通",
+        "location": "§ 线路走向, ¶ 1",
+        "units": [2, 2],
+        "quote": "经人民路、解放路和中山路"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "fs-198",
+      "set": "find-support",
+      "language": "zh",
+      "document": "夜班线路N3将于12月1日开通",
+      "sentence": "N3路开通后，原有的夜间出租车补贴将取消。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "页面没有提到出租车补贴。",
+      "confirmed": false
+    },
+    {
+      "id": "fs-199",
+      "set": "find-support",
+      "language": "zh",
+      "document": "夜班线路N3将于12月1日开通",
+      "sentence": "N3路的司机须持有夜班驾驶资格证。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "页面只说每班车配一名安全员，没有司机资格的要求。",
+      "confirmed": false
+    },
+    {
+      "id": "fs-200",
+      "set": "find-support",
+      "language": "zh",
+      "document": "夜班线路N3将于12月1日开通",
+      "sentence": "意见征集中有三成乘客希望增加早班车。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "征集结果只说超过一半希望延长末班车时间。",
+      "confirmed": false
+    },
+    {
+      "id": "vf-01-01",
+      "set": "verify",
+      "language": "en",
+      "document": "Hartley Building progress report 3.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "Roof works were programmed to start on 4 January 2027.",
+      "label": "supported",
+      "evidence": {
+        "document": "Riverside Library Renovation Report.docx",
+        "location": "§ 4 Programme",
+        "units": [7, 7],
+        "quote": "Works start on 4 January 2027 with the roof"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-01-02",
+      "set": "verify",
+      "language": "en",
+      "document": "Hartley Building progress report 3.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "Under our contract, the roof and insulation package is due to be completed in April 2027.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Riverside Library Renovation Report.docx",
+        "location": "§ 2 Costs",
+        "units": [3, 3],
+        "quote": "Roof and insulation Hartley Building Ltd £1,240,000 June 2027"
+      },
+      "contradiction": {
+        "document": "Hartley Building progress report 3.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "due to be completed in April 2027"
+      },
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-01-03",
+      "set": "verify",
+      "language": "en",
+      "document": "Hartley Building progress report 3.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "Our contract for the roof and insulation package is valued at £1,240,000.",
+      "label": "supported",
+      "evidence": {
+        "document": "Riverside Library Renovation Report.docx",
+        "location": "§ 2 Costs",
+        "units": [3, 3],
+        "quote": "Roof and insulation Hartley Building Ltd £1,240,000"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-01-04",
+      "set": "verify",
+      "language": "en",
+      "document": "Hartley Building progress report 3.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "Forty-two operatives worked on site during March.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "Nothing in the Folder counts the workers on site.",
+      "confirmed": false
+    },
+    {
+      "id": "vf-01-05",
+      "set": "verify",
+      "language": "en",
+      "document": "Hartley Building progress report 3.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "Insulation to the reading room ceiling was 60 per cent complete by the end of March.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "The Folder has no progress figures for the insulation.",
+      "confirmed": false
+    },
+    {
+      "id": "vf-01-06",
+      "set": "verify",
+      "language": "en",
+      "document": "Hartley Building progress report 3.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "Two working days were lost to high winds in the first week of March.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "Nothing in the Folder on weather delays.",
+      "confirmed": false
+    },
+    {
+      "id": "vf-01-07",
+      "set": "verify",
+      "language": "en",
+      "document": "Hartley Building progress report 3.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "The scaffolding was supplied and erected by Apex Access Ltd.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "The steering meeting says when the scaffolding comes down; no supplier is named.",
+      "confirmed": false
+    },
+    {
+      "id": "vf-01-08",
+      "set": "verify",
+      "language": "en",
+      "document": "Hartley Building progress report 3.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "The roof must be watertight before the lift installation can begin.",
+      "label": "supported",
+      "evidence": {
+        "document": "Riverside Library Renovation Report.docx",
+        "location": "§ 4 Programme",
+        "units": [7, 7],
+        "quote": "which must be watertight before the lifts are installed"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-01-09",
+      "set": "verify",
+      "language": "en",
+      "document": "Hartley Building progress report 3.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "Lifts and ramps are being installed by Hartley Building Ltd under the same contract.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Riverside Library Renovation Report.docx",
+        "location": "§ 2 Costs",
+        "units": [3, 3],
+        "quote": "Lifts and ramps Ascend Access £385,000"
+      },
+      "contradiction": {
+        "document": "Hartley Building progress report 3.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "installed by Hartley Building Ltd"
+      },
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-01-10",
+      "set": "verify",
+      "language": "en",
+      "document": "Hartley Building progress report 3.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "The site compound takes up half of the staff car park.",
+      "label": "supported",
+      "evidence": {
+        "document": "Riverside Library Renovation Report.docx",
+        "location": "§ 4 Programme",
+        "units": [7, 7],
+        "quote": "site compound will take half of the staff car park"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-01-11",
+      "set": "verify",
+      "language": "en",
+      "document": "Hartley Building progress report 3.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "Progress meetings are held every Tuesday at the council offices.",
+      "label": "supported",
+      "evidence": {
+        "document": "Riverside Library Renovation Report.docx",
+        "location": "§ 4 Programme",
+        "units": [7, 7],
+        "quote": "Progress meetings are held every Tuesday at the council offices"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-01-12",
+      "set": "verify",
+      "language": "en",
+      "document": "Hartley Building progress report 3.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "All waste from the strip-out has been recycled.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "Nothing in the Folder on waste.",
+      "confirmed": false
+    },
+    {
+      "id": "vf-01-13",
+      "set": "verify",
+      "language": "en",
+      "document": "Hartley Building progress report 3.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "Asbestos removal in the boiler room ceiling was priced at £64,000 in the March 2026 survey.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Riverside Library Renovation Report.docx",
+        "location": "§ 3 Risks",
+        "units": [6, 6],
+        "quote": "removal is priced at £46,000"
+      },
+      "contradiction": {
+        "document": "Hartley Building progress report 3.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "priced at £64,000"
+      },
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-01-14",
+      "set": "verify",
+      "language": "en",
+      "document": "Hartley Building progress report 3.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "The bat survey found no roost under the eaves.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Riverside Library Renovation Report.docx",
+        "location": "§ 3 Risks",
+        "units": [6, 6],
+        "quote": "A bat roost under the east eaves may delay the roof works"
+      },
+      "contradiction": {
+        "document": "Hartley Building progress report 3.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "found no roost under the eaves"
+      },
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-01-15",
+      "set": "verify",
+      "language": "en",
+      "document": "Hartley Building progress report 3.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "Our site manager walks the eaves with an ecologist every week.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "The report asks for the bat survey to be repeated in May; no weekly checks.",
+      "confirmed": false
+    },
+    {
+      "id": "vf-01-16",
+      "set": "verify",
+      "language": "en",
+      "document": "Hartley Building progress report 3.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "The council's contingency is held at 15 per cent of the works cost.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Riverside Library Renovation Report.docx",
+        "location": "§ 2 Costs",
+        "units": [3, 3],
+        "quote": "A contingency of 10 per cent of the works cost is held by the council's capital programme board."
+      },
+      "contradiction": {
+        "document": "Hartley Building progress report 3.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "held at 15 per cent"
+      },
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-01-17",
+      "set": "verify",
+      "language": "en",
+      "document": "Hartley Building progress report 3.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "The total renovation budget is £3.2 million.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Riverside Library Renovation Report.docx",
+        "location": "§ 2 Costs",
+        "units": [3, 3],
+        "quote": "The total budget is £2.6 million"
+      },
+      "contradiction": {
+        "document": "Hartley Building progress report 3.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "£3.2 million"
+      },
+      "note": "The council's web page gives £2.6 million too.",
+      "confirmed": false
+    },
+    {
+      "id": "vf-01-18",
+      "set": "verify",
+      "language": "en",
+      "document": "Hartley Building progress report 3.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "The new roof membrane carries a 25-year manufacturer's warranty.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "Nothing in the Folder on warranties.",
+      "confirmed": false
+    },
+    {
+      "id": "vf-01-19",
+      "set": "verify",
+      "language": "en",
+      "document": "Hartley Building progress report 3.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "The replacement windows for the reading room will be triple-glazed.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "The report blames the single-glazed reading room windows for energy use; nothing on new windows.",
+      "confirmed": false
+    },
+    {
+      "id": "vf-02-01",
+      "set": "verify",
+      "language": "en",
+      "document": "Harbour Roasters press release draft.docx",
+      "location": "§ Start",
+      "units": [1, 1],
+      "claim": "Harbour Roasters' coffee subscription reached 9,420 paid subscribers at the end of September.",
+      "label": "supported",
+      "evidence": {
+        "document": "Coffee Subscription Launch Review.pptx",
+        "location": "slide 2",
+        "units": [2, 2],
+        "quote": "Paid subscribers reached 9,420 by the end of September."
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-02-02",
+      "set": "verify",
+      "language": "en",
+      "document": "Harbour Roasters press release draft.docx",
+      "location": "§ Start",
+      "units": [1, 1],
+      "claim": "Every bag is roasted no more than 48 hours before it is dispatched.",
+      "label": "supported",
+      "evidence": {
+        "document": "Coffee Subscription Launch Review.pptx",
+        "location": "slide 5",
+        "units": [5, 5],
+        "quote": "Beans are roasted no more than 48 hours before dispatch."
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-02-03",
+      "set": "verify",
+      "language": "en",
+      "document": "Harbour Roasters press release draft.docx",
+      "location": "§ Start",
+      "units": [1, 1],
+      "claim": "Two roasting shifts run every weekday at the company's Manchester roastery.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Coffee Subscription Launch Review.pptx",
+        "location": "slide 5",
+        "units": [5, 5],
+        "quote": "Two roasting shifts run on weekdays at the Bristol roastery."
+      },
+      "contradiction": {
+        "document": "Harbour Roasters press release draft.docx",
+        "location": "§ Start",
+        "units": [1, 1],
+        "quote": "Manchester roastery"
+      },
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-02-04",
+      "set": "verify",
+      "language": "en",
+      "document": "Harbour Roasters press release draft.docx",
+      "location": "§ Start",
+      "units": [1, 1],
+      "claim": "A new roastery in Leeds begins shipping on 3 November, halving delivery times in the north.",
+      "label": "supported",
+      "evidence": {
+        "document": "Coffee Subscription Launch Review.pptx",
+        "location": "slide 2",
+        "units": [2, 2],
+        "quote": "the Leeds roastery starts shipping on 3 November, which halves delivery times in the north"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-02-05",
+      "set": "verify",
+      "language": "en",
+      "document": "Harbour Roasters press release draft.docx",
+      "location": "§ Start",
+      "units": [1, 1],
+      "claim": "In September's customer survey the service scored a net promoter score of 61.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Coffee Subscription Launch Review.pptx",
+        "location": "slide 3",
+        "units": [3, 3],
+        "quote": "Net promoter score was 52 in the September survey."
+      },
+      "contradiction": {
+        "document": "Harbour Roasters press release draft.docx",
+        "location": "§ Start",
+        "units": [1, 1],
+        "quote": "net promoter score of 61"
+      },
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-02-06",
+      "set": "verify",
+      "language": "en",
+      "document": "Harbour Roasters press release draft.docx",
+      "location": "§ Start",
+      "units": [1, 1],
+      "claim": "Customers named freshness as the feature they liked best.",
+      "label": "supported",
+      "evidence": {
+        "document": "Coffee Subscription Launch Review.pptx",
+        "location": "slide 3",
+        "units": [3, 3],
+        "quote": "Freshness was the most praised feature"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-02-07",
+      "set": "verify",
+      "language": "en",
+      "document": "Harbour Roasters press release draft.docx",
+      "location": "§ Start",
+      "units": [1, 1],
+      "claim": "About 9 per cent of subscribers cancelled in their first month.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Coffee Subscription Launch Review.pptx",
+        "location": "slide 2",
+        "units": [2, 2],
+        "quote": "Cancellations in the first month stayed below 6 per cent."
+      },
+      "contradiction": {
+        "document": "Harbour Roasters press release draft.docx",
+        "location": "§ Start",
+        "units": [1, 1],
+        "quote": "About 9 per cent"
+      },
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-02-08",
+      "set": "verify",
+      "language": "en",
+      "document": "Harbour Roasters press release draft.docx",
+      "location": "§ Start",
+      "units": [1, 1],
+      "claim": "The Office plan delivers four bags a month for £58.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Coffee Subscription Launch Review.pptx",
+        "location": "slide 4",
+        "units": [4, 4],
+        "quote": "Office 6 £58.00 1,280"
+      },
+      "contradiction": {
+        "document": "Harbour Roasters press release draft.docx",
+        "location": "§ Start",
+        "units": [1, 1],
+        "quote": "four bags a month"
+      },
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-02-09",
+      "set": "verify",
+      "language": "en",
+      "document": "Harbour Roasters press release draft.docx",
+      "location": "§ Start",
+      "units": [1, 1],
+      "claim": "Subscribers in Scotland are served from a depot in Edinburgh, which opened in July.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Coffee Subscription Launch Review.pptx",
+        "location": "slide 8",
+        "units": [8, 8],
+        "quote": "Scotland is served from the Glasgow depot, which opened in July."
+      },
+      "contradiction": {
+        "document": "Harbour Roasters press release draft.docx",
+        "location": "§ Start",
+        "units": [1, 1],
+        "quote": "a depot in Edinburgh"
+      },
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-02-10",
+      "set": "verify",
+      "language": "en",
+      "document": "Harbour Roasters press release draft.docx",
+      "location": "§ Start",
+      "units": [1, 1],
+      "claim": "Referral codes have brought in more than 2,000 subscribers since launch.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Coffee Subscription Launch Review.pptx",
+        "location": "slide 7",
+        "units": [7, 7],
+        "quote": "Referral codes brought in 1,310 subscribers since launch."
+      },
+      "contradiction": {
+        "document": "Harbour Roasters press release draft.docx",
+        "location": "§ Start",
+        "units": [1, 1],
+        "quote": "more than 2,000 subscribers"
+      },
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-02-11",
+      "set": "verify",
+      "language": "en",
+      "document": "Harbour Roasters press release draft.docx",
+      "location": "§ Start",
+      "units": [1, 1],
+      "claim": "Harbour Roasters was founded in 2019 by two former baristas.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "Nothing in the Folder on how the company started.",
+      "confirmed": false
+    },
+    {
+      "id": "vf-02-12",
+      "set": "verify",
+      "language": "en",
+      "document": "Harbour Roasters press release draft.docx",
+      "location": "§ Start",
+      "units": [1, 1],
+      "claim": "All of its coffee is certified organic and Fairtrade.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "The deck names a Colombian cooperative and a Peruvian trial supplier; no certification.",
+      "confirmed": false
+    },
+    {
+      "id": "vf-02-13",
+      "set": "verify",
+      "language": "en",
+      "document": "Harbour Roasters press release draft.docx",
+      "location": "§ Start",
+      "units": [1, 1],
+      "claim": "The boxes are fully compostable.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "The deck says the boxes are too big for a letterbox; nothing on what they're made of.",
+      "confirmed": false
+    },
+    {
+      "id": "vf-02-14",
+      "set": "verify",
+      "language": "en",
+      "document": "Harbour Roasters press release draft.docx",
+      "location": "§ Start",
+      "units": [1, 1],
+      "claim": "Subscribers can pause their plan at any time from the app.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "Nothing in the Folder on pausing or an app.",
+      "confirmed": false
+    },
+    {
+      "id": "vf-02-15",
+      "set": "verify",
+      "language": "en",
+      "document": "Harbour Roasters press release draft.docx",
+      "location": "§ Start",
+      "units": [1, 1],
+      "claim": "Explorer subscribers receive a tasting card with every bag.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "The deck gives the Explorer tier's bags, price and subscribers only.",
+      "confirmed": false
+    },
+    {
+      "id": "vf-02-16",
+      "set": "verify",
+      "language": "en",
+      "document": "Harbour Roasters press release draft.docx",
+      "location": "§ Start",
+      "units": [1, 1],
+      "claim": "Deliveries are carbon-neutral through the courier's offset programme.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "The deck gives courier costs and late deliveries; nothing on carbon.",
+      "confirmed": false
+    },
+    {
+      "id": "vf-02-17",
+      "set": "verify",
+      "language": "en",
+      "document": "Harbour Roasters press release draft.docx",
+      "location": "§ Start",
+      "units": [1, 1],
+      "claim": "The company plans to open a coffee bar at its roastery next spring.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "The next quarter's plans are a decaf tier, 12,000 subscribers and gift subscriptions.",
+      "confirmed": false
+    },
+    {
+      "id": "vf-03-01",
+      "set": "verify",
+      "language": "en",
+      "document": "Meridian Health Staffing proposal.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "Your 2027 staffing plan sets a total budget of £50,929,200.",
+      "label": "supported",
+      "evidence": {
+        "document": "Clinic Staffing Plan 2027.xlsx",
+        "location": "Staffing, row 56",
+        "units": [2, 2],
+        "quote": "Total budget £50,929,200"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-03-02",
+      "set": "verify",
+      "language": "en",
+      "document": "Meridian Health Staffing proposal.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "Westbury, in the East region, plans for 19 nurses and 7 doctors.",
+      "label": "supported",
+      "evidence": {
+        "document": "Clinic Staffing Plan 2027.xlsx",
+        "location": "Staffing, row 52",
+        "units": [2, 2],
+        "quote": "Westbury East 19 7"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-03-03",
+      "set": "verify",
+      "language": "en",
+      "document": "Meridian Health Staffing proposal.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "The plan budgets £438,000 for Ashford Vale.",
+      "label": "supported",
+      "evidence": {
+        "document": "Clinic Staffing Plan 2027.xlsx",
+        "location": "Staffing, row 3",
+        "units": [1, 1],
+        "quote": "Ashford Vale North 6 2 320 £438,000"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-03-04",
+      "set": "verify",
+      "language": "en",
+      "document": "Meridian Health Staffing proposal.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "Marsh End, a South region clinic, is planned at 350 weekly hours.",
+      "label": "supported",
+      "evidence": {
+        "document": "Clinic Staffing Plan 2027.xlsx",
+        "location": "Staffing, row 33",
+        "units": [1, 1],
+        "quote": "Marsh End South 6 2 350"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-03-05",
+      "set": "verify",
+      "language": "en",
+      "document": "Meridian Health Staffing proposal.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "Hawthorn, in the West region, is planned with 12 nurses.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Clinic Staffing Plan 2027.xlsx",
+        "location": "Staffing, row 22",
+        "units": [1, 1],
+        "quote": "Hawthorn West 19 7 1047"
+      },
+      "contradiction": {
+        "document": "Meridian Health Staffing proposal.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "planned with 12 nurses"
+      },
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-03-06",
+      "set": "verify",
+      "language": "en",
+      "document": "Meridian Health Staffing proposal.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "Kingsmead's budget is £656,800.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Clinic Staffing Plan 2027.xlsx",
+        "location": "Staffing, row 27",
+        "units": [1, 1],
+        "quote": "Kingsmead North 9 2 472 £565,800"
+      },
+      "contradiction": {
+        "document": "Meridian Health Staffing proposal.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "£656,800"
+      },
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-03-07",
+      "set": "verify",
+      "language": "en",
+      "document": "Meridian Health Staffing proposal.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "The staffing plan was approved by Dr Helen Okafor.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Clinic Staffing Plan 2027.xlsx",
+        "location": "Staffing, row 57",
+        "units": [2, 2],
+        "quote": "Approved by Dr Helen Okoro"
+      },
+      "contradiction": {
+        "document": "Meridian Health Staffing proposal.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "Dr Helen Okafor"
+      },
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-03-08",
+      "set": "verify",
+      "language": "en",
+      "document": "Meridian Health Staffing proposal.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "The plan is due for review on 30 November 2026.",
+      "label": "supported",
+      "evidence": {
+        "document": "Clinic Staffing Plan 2027.xlsx",
+        "location": "Staffing, row 58",
+        "units": [2, 2],
+        "quote": "Review date 2026-11-30"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-03-09",
+      "set": "verify",
+      "language": "en",
+      "document": "Meridian Health Staffing proposal.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "Sonaris Imaging is supplying six ultrasound scanners.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Clinic Staffing Plan 2027.xlsx",
+        "location": "Equipment, row 4",
+        "units": [3, 3],
+        "quote": "Ultrasound scanner Sonaris Imaging £18,200 4"
+      },
+      "contradiction": {
+        "document": "Meridian Health Staffing proposal.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "six ultrasound scanners"
+      },
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-03-10",
+      "set": "verify",
+      "language": "en",
+      "document": "Meridian Health Staffing proposal.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "The defibrillators are due for delivery in February 2027.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Clinic Staffing Plan 2027.xlsx",
+        "location": "Equipment, row 3",
+        "units": [3, 3],
+        "quote": "Defibrillator Lifeline Medical £1,390 26 December 2026"
+      },
+      "contradiction": {
+        "document": "Meridian Health Staffing proposal.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "February 2027"
+      },
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-03-11",
+      "set": "verify",
+      "language": "en",
+      "document": "Meridian Health Staffing proposal.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "The ECG machines come with a five-year service contract.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "The equipment sheet gives supplier, price, units and delivery only.",
+      "confirmed": false
+    },
+    {
+      "id": "vf-03-12",
+      "set": "verify",
+      "language": "en",
+      "document": "Meridian Health Staffing proposal.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "The vaccine fridges will be installed by ColdChain Direct's own engineers.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "The equipment sheet names ColdChain Direct as supplier; nothing on installation.",
+      "confirmed": false
+    },
+    {
+      "id": "vf-03-13",
+      "set": "verify",
+      "language": "en",
+      "document": "Meridian Health Staffing proposal.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "Agency nurses currently fill 14 per cent of shifts across your network.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "Nothing in the Folder on agency shifts.",
+      "confirmed": false
+    },
+    {
+      "id": "vf-03-14",
+      "set": "verify",
+      "language": "en",
+      "document": "Meridian Health Staffing proposal.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "The North region has the highest vacancy rate in your network.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "The plan has no vacancy figures.",
+      "confirmed": false
+    },
+    {
+      "id": "vf-03-15",
+      "set": "verify",
+      "language": "en",
+      "document": "Meridian Health Staffing proposal.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "Each clinic must keep at least one doctor on site during opening hours.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "No such rule in the Folder; the night shift handbook's staffing rule is about nurses on wards.",
+      "confirmed": false
+    },
+    {
+      "id": "vf-03-16",
+      "set": "verify",
+      "language": "en",
+      "document": "Meridian Health Staffing proposal.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "Your network employs 85 healthcare assistants.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "The plan counts nurses and doctors only.",
+      "confirmed": false
+    },
+    {
+      "id": "vf-03-17",
+      "set": "verify",
+      "language": "en",
+      "document": "Meridian Health Staffing proposal.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "Cedar Park will open on Saturdays from January.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "The plan gives Cedar Park's staff, hours and budget, not opening days.",
+      "confirmed": false
+    },
+    {
+      "id": "vf-04-01",
+      "set": "verify",
+      "language": "en",
+      "document": "Cityride September 2026 operator report.pptx",
+      "location": "slide 2",
+      "units": [2, 2],
+      "claim": "Gas Works, in Central, recorded 4,775 trips in September.",
+      "label": "supported",
+      "evidence": {
+        "document": "Bike Share Stations September 2026.csv",
+        "location": "row 27",
+        "units": [1, 1],
+        "quote": "BS-1026 Gas Works Central 12 4775"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-04-02",
+      "set": "verify",
+      "language": "en",
+      "document": "Cityride September 2026 operator report.pptx",
+      "location": "slide 2",
+      "units": [2, 2],
+      "claim": "Science Park recorded 5,750 trips in September.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Bike Share Stations September 2026.csv",
+        "location": "row 52",
+        "units": [2, 2],
+        "quote": "BS-1051 Science Park Central 12 4750"
+      },
+      "contradiction": {
+        "document": "Cityride September 2026 operator report.pptx",
+        "location": "slide 2",
+        "units": [2, 2],
+        "quote": "5,750 trips"
+      },
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-04-03",
+      "set": "verify",
+      "language": "en",
+      "document": "Cityride September 2026 operator report.pptx",
+      "location": "slide 2",
+      "units": [2, 2],
+      "claim": "Abbey Road has 12 docks and averaged 9-minute trips.",
+      "label": "supported",
+      "evidence": {
+        "document": "Bike Share Stations September 2026.csv",
+        "location": "row 2",
+        "units": [1, 1],
+        "quote": "BS-1001 Abbey Road Central 12 900 9.0"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-04-04",
+      "set": "verify",
+      "language": "en",
+      "document": "Cityride September 2026 operator report.pptx",
+      "location": "slide 2",
+      "units": [2, 2],
+      "claim": "Albert Dock is in the Old Town district.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Bike Share Stations September 2026.csv",
+        "location": "row 3",
+        "units": [1, 1],
+        "quote": "BS-1002 Albert Dock Docklands"
+      },
+      "contradiction": {
+        "document": "Cityride September 2026 operator report.pptx",
+        "location": "slide 2",
+        "units": [2, 2],
+        "quote": "in the Old Town district"
+      },
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-04-05",
+      "set": "verify",
+      "language": "en",
+      "document": "Cityride September 2026 operator report.pptx",
+      "location": "slide 3",
+      "units": [3, 3],
+      "claim": "Bus Station, in the University Quarter, averaged 27-minute trips.",
+      "label": "supported",
+      "evidence": {
+        "document": "Bike Share Stations September 2026.csv",
+        "location": "row 10",
+        "units": [1, 1],
+        "quote": "BS-1009 Bus Station University Quarter 27 4636 27.0"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-04-06",
+      "set": "verify",
+      "language": "en",
+      "document": "Cityride September 2026 operator report.pptx",
+      "location": "slide 3",
+      "units": [3, 3],
+      "claim": "Wool Hall has 32 docks.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Bike Share Stations September 2026.csv",
+        "location": "row 69",
+        "units": [2, 2],
+        "quote": "BS-1068 Wool Hall Old Town 22"
+      },
+      "contradiction": {
+        "document": "Cityride September 2026 operator report.pptx",
+        "location": "slide 3",
+        "units": [3, 3],
+        "quote": "32 docks"
+      },
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-04-07",
+      "set": "verify",
+      "language": "en",
+      "document": "Cityride September 2026 operator report.pptx",
+      "location": "slide 3",
+      "units": [3, 3],
+      "claim": "Trips from Canal Basin averaged 25.5 minutes.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Bike Share Stations September 2026.csv",
+        "location": "row 11",
+        "units": [1, 1],
+        "quote": "BS-1010 Canal Basin Riverside 32 1203 15.5"
+      },
+      "contradiction": {
+        "document": "Cityride September 2026 operator report.pptx",
+        "location": "slide 3",
+        "units": [3, 3],
+        "quote": "25.5 minutes"
+      },
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-04-08",
+      "set": "verify",
+      "language": "en",
+      "document": "Cityride September 2026 operator report.pptx",
+      "location": "slide 3",
+      "units": [3, 3],
+      "claim": "Ferry Terminal, in Old Town, has 22 docks.",
+      "label": "supported",
+      "evidence": {
+        "document": "Bike Share Stations September 2026.csv",
+        "location": "row 24",
+        "units": [1, 1],
+        "quote": "BS-1023 Ferry Terminal Old Town 22"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-04-09",
+      "set": "verify",
+      "language": "en",
+      "document": "Cityride September 2026 operator report.pptx",
+      "location": "slide 3",
+      "units": [3, 3],
+      "claim": "Town Hall station sits in the Central district.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Bike Share Stations September 2026.csv",
+        "location": "row 61",
+        "units": [2, 2],
+        "quote": "BS-1060 Town Hall Riverside"
+      },
+      "contradiction": {
+        "document": "Cityride September 2026 operator report.pptx",
+        "location": "slide 3",
+        "units": [3, 3],
+        "quote": "in the Central district"
+      },
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-04-10",
+      "set": "verify",
+      "language": "en",
+      "document": "Cityride September 2026 operator report.pptx",
+      "location": "slide 4",
+      "units": [4, 4],
+      "claim": "E-bikes made up 35 per cent of the fleet in September.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "The station table has no fleet figures.",
+      "confirmed": false
+    },
+    {
+      "id": "vf-04-11",
+      "set": "verify",
+      "language": "en",
+      "document": "Cityride September 2026 operator report.pptx",
+      "location": "slide 4",
+      "units": [4, 4],
+      "claim": "Bikes were available at 92 per cent of stations at peak times.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "The station table has no availability figures.",
+      "confirmed": false
+    },
+    {
+      "id": "vf-04-12",
+      "set": "verify",
+      "language": "en",
+      "document": "Cityride September 2026 operator report.pptx",
+      "location": "slide 4",
+      "units": [4, 4],
+      "claim": "We added 1,200 annual members in September.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "Nothing in the Folder on members.",
+      "confirmed": false
+    },
+    {
+      "id": "vf-04-13",
+      "set": "verify",
+      "language": "en",
+      "document": "Cityride September 2026 operator report.pptx",
+      "location": "slide 5",
+      "units": [5, 5],
+      "claim": "Twelve new stations will open in the Docklands next spring.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "The table lists today's stations only.",
+      "confirmed": false
+    },
+    {
+      "id": "vf-04-14",
+      "set": "verify",
+      "language": "en",
+      "document": "Cityride September 2026 operator report.pptx",
+      "location": "slide 5",
+      "units": [5, 5],
+      "claim": "Vandalism cost the scheme £14,000 in September.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "Nothing in the Folder on vandalism.",
+      "confirmed": false
+    },
+    {
+      "id": "vf-04-15",
+      "set": "verify",
+      "language": "en",
+      "document": "Cityride September 2026 operator report.pptx",
+      "location": "slide 5",
+      "units": [5, 5],
+      "claim": "The Hospital station is used mostly by night-shift staff.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "The table gives the Hospital station's trips, not who rides.",
+      "confirmed": false
+    },
+    {
+      "id": "vf-04-16",
+      "set": "verify",
+      "language": "en",
+      "document": "Cityride September 2026 operator report.pptx",
+      "location": "slide 5",
+      "units": [5, 5],
+      "claim": "Weekend trips were 40 per cent longer than weekday trips.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "The table gives one average trip length per station.",
+      "confirmed": false
+    },
+    {
+      "id": "vf-05-01",
+      "set": "verify",
+      "language": "en",
+      "document": "Northgate Advisory memo on the heat study.docx",
+      "location": "§ Findings",
+      "units": [2, 2],
+      "claim": "The study measured temperatures in six districts between June and August 2026.",
+      "label": "supported",
+      "evidence": {
+        "document": "Urban Heat in Six Districts.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "We measured surface and air temperatures in six districts of a coastal city from June to August 2026"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-05-02",
+      "set": "verify",
+      "language": "en",
+      "document": "Northgate Advisory memo on the heat study.docx",
+      "location": "§ Findings",
+      "units": [2, 2],
+      "claim": "The highest surface temperature, 47.2 °C, was recorded in Old Market on 19 July.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Urban Heat in Six Districts.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "Surface temperatures in the Eastgate district peaked at 47.2 °C on 19 July"
+      },
+      "contradiction": {
+        "document": "Northgate Advisory memo on the heat study.docx",
+        "location": "§ Findings",
+        "units": [2, 2],
+        "quote": "recorded in Old Market"
+      },
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-05-03",
+      "set": "verify",
+      "language": "en",
+      "document": "Northgate Advisory memo on the heat study.docx",
+      "location": "§ Findings",
+      "units": [2, 2],
+      "claim": "Eastgate's tree cover is 6 per cent, well below the city average of 19 per cent.",
+      "label": "supported",
+      "evidence": {
+        "document": "Urban Heat in Six Districts.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "Tree cover in Eastgate is 6 per cent, against a city average of 19 per cent."
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-05-04",
+      "set": "verify",
+      "language": "en",
+      "document": "Northgate Advisory memo on the heat study.docx",
+      "location": "§ Findings",
+      "units": [2, 2],
+      "claim": "Hillside was on average 4.3 °C cooler than Eastgate at noon.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Urban Heat in Six Districts.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "was on average 3.4 °C cooler at noon than Eastgate"
+      },
+      "contradiction": {
+        "document": "Northgate Advisory memo on the heat study.docx",
+        "location": "§ Findings",
+        "units": [2, 2],
+        "quote": "4.3 °C cooler"
+      },
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-05-05",
+      "set": "verify",
+      "language": "en",
+      "document": "Northgate Advisory memo on the heat study.docx",
+      "location": "§ Findings",
+      "units": [2, 2],
+      "claim": "Heat-related hospital admissions in Eastgate doubled between 2020 and 2025.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "The study gives ambulance call-outs rising by a fifth on the hottest days of 2025; nothing on admissions.",
+      "confirmed": false
+    },
+    {
+      "id": "vf-05-06",
+      "set": "verify",
+      "language": "en",
+      "document": "Northgate Advisory memo on the heat study.docx",
+      "location": "§ Findings",
+      "units": [2, 2],
+      "claim": "Older residents in Eastgate spend on average six hours a day indoors in summer.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "The study didn't measure time indoors.",
+      "confirmed": false
+    },
+    {
+      "id": "vf-05-07",
+      "set": "verify",
+      "language": "en",
+      "document": "Northgate Advisory memo on the heat study.docx",
+      "location": "§ Cooling measures",
+      "units": [3, 3],
+      "claim": "Cool roofs were the most expensive measure per square metre.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Urban Heat in Six Districts.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "were the cheapest measure per square metre"
+      },
+      "contradiction": {
+        "document": "Northgate Advisory memo on the heat study.docx",
+        "location": "§ Cooling measures",
+        "units": [3, 3],
+        "quote": "the most expensive measure"
+      },
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-05-08",
+      "set": "verify",
+      "language": "en",
+      "document": "Northgate Advisory memo on the heat study.docx",
+      "location": "§ Cooling measures",
+      "units": [3, 3],
+      "claim": "Street trees cost £130 each to plant.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Urban Heat in Six Districts.pdf",
+        "location": "p. 3",
+        "units": [3, 3],
+        "quote": "Street trees 2,150 trees 2.6 £310 per tree"
+      },
+      "contradiction": {
+        "document": "Northgate Advisory memo on the heat study.docx",
+        "location": "§ Cooling measures",
+        "units": [3, 3],
+        "quote": "£130 each"
+      },
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-05-09",
+      "set": "verify",
+      "language": "en",
+      "document": "Northgate Advisory memo on the heat study.docx",
+      "location": "§ Cooling measures",
+      "units": [3, 3],
+      "claim": "Each misting station uses about 40 litres of water an hour.",
+      "label": "supported",
+      "evidence": {
+        "document": "Urban Heat in Six Districts.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "each used about 40 litres of water an hour"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-05-10",
+      "set": "verify",
+      "language": "en",
+      "document": "Northgate Advisory memo on the heat study.docx",
+      "location": "§ Cooling measures",
+      "units": [3, 3],
+      "claim": "The city installed 20 misting stations in June 2026.",
+      "label": "contradicted",
+      "evidence": {
+        "document": "Urban Heat in Six Districts.pdf",
+        "location": "p. 3",
+        "units": [3, 3],
+        "quote": "The 12 misting stations installed in June 2026"
+      },
+      "contradiction": {
+        "document": "Northgate Advisory memo on the heat study.docx",
+        "location": "§ Cooling measures",
+        "units": [3, 3],
+        "quote": "20 misting stations"
+      },
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-05-11",
+      "set": "verify",
+      "language": "en",
+      "document": "Northgate Advisory memo on the heat study.docx",
+      "location": "§ Cooling measures",
+      "units": [3, 3],
+      "claim": "Permeable paving also reduced surface flooding on the test streets.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "The study measured paving's cooling only.",
+      "confirmed": false
+    },
+    {
+      "id": "vf-05-12",
+      "set": "verify",
+      "language": "en",
+      "document": "Northgate Advisory memo on the heat study.docx",
+      "location": "§ Cooling measures",
+      "units": [3, 3],
+      "claim": "Cool roofs were first trialled in the city in 2019.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "Nothing in the Folder on earlier trials.",
+      "confirmed": false
+    },
+    {
+      "id": "vf-05-13",
+      "set": "verify",
+      "language": "en",
+      "document": "Northgate Advisory memo on the heat study.docx",
+      "location": "§ Cooling measures",
+      "units": [3, 3],
+      "claim": "Misting stations halved heat complaints at the bus stops where they were installed.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "The study gives the stations' cooling and water use; nothing on complaints.",
+      "confirmed": false
+    },
+    {
+      "id": "vf-05-14",
+      "set": "verify",
+      "language": "en",
+      "document": "Northgate Advisory memo on the heat study.docx",
+      "location": "§ Next steps",
+      "units": [4, 4],
+      "claim": "A follow-up study with 80 indoor loggers will start in June 2027.",
+      "label": "supported",
+      "evidence": {
+        "document": "Urban Heat in Six Districts.pdf",
+        "location": "p. 2",
+        "units": [2, 2],
+        "quote": "a follow-up study with 80 indoor loggers starts in June 2027"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-05-15",
+      "set": "verify",
+      "language": "en",
+      "document": "Northgate Advisory memo on the heat study.docx",
+      "location": "§ Next steps",
+      "units": [4, 4],
+      "claim": "The study was funded by a national research council grant.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "Nothing in the Folder on funding.",
+      "confirmed": false
+    },
+    {
+      "id": "vf-05-16",
+      "set": "verify",
+      "language": "en",
+      "document": "Northgate Advisory memo on the heat study.docx",
+      "location": "§ Next steps",
+      "units": [4, 4],
+      "claim": "The city plans to plant 5,000 street trees by 2030.",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "The study mentions the first 600 trees, not a 5,000 target.",
+      "confirmed": false
+    },
+    {
+      "id": "vf-06-01",
+      "set": "verify",
+      "language": "zh",
+      "document": "禾丰餐饮运营情况说明.docx",
+      "location": "§ 一、基本情况",
+      "units": [2, 2],
+      "claim": "桂花苑食堂由我公司运营，日均供餐260份。",
+      "label": "supported",
+      "evidence": {
+        "document": "社区食堂试点评估报告.docx",
+        "location": "§ 二、运营数据",
+        "units": [3, 3],
+        "quote": "桂花苑食堂 禾丰餐饮公司 260"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-06-02",
+      "set": "verify",
+      "language": "zh",
+      "document": "禾丰餐饮运营情况说明.docx",
+      "location": "§ 一、基本情况",
+      "units": [2, 2],
+      "claim": "新村食堂日均供餐210份，满意度达到92%。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "社区食堂试点评估报告.docx",
+        "location": "§ 二、运营数据",
+        "units": [3, 3],
+        "quote": "新村食堂 禾丰餐饮公司 150 86%"
+      },
+      "contradiction": {
+        "document": "禾丰餐饮运营情况说明.docx",
+        "location": "§ 一、基本情况",
+        "units": [2, 2],
+        "quote": "日均供餐210份，满意度达到92%"
+      },
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-06-03",
+      "set": "verify",
+      "language": "zh",
+      "document": "禾丰餐饮运营情况说明.docx",
+      "location": "§ 一、基本情况",
+      "units": [2, 2],
+      "claim": "老年居民每餐自付8元，其余部分由区财政补贴。",
+      "label": "supported",
+      "evidence": {
+        "document": "社区食堂试点评估报告.docx",
+        "location": "§ 一、项目背景",
+        "units": [2, 2],
+        "quote": "老年居民每餐自付8元，其余部分由区财政补贴。"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-06-04",
+      "set": "verify",
+      "language": "zh",
+      "document": "禾丰餐饮运营情况说明.docx",
+      "location": "§ 一、基本情况",
+      "units": [2, 2],
+      "claim": "试点期间各食堂平均每餐成本为16.8元。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "社区食堂试点评估报告.docx",
+        "location": "§ 二、运营数据",
+        "units": [3, 3],
+        "quote": "各食堂平均每餐成本为18.6元"
+      },
+      "contradiction": {
+        "document": "禾丰餐饮运营情况说明.docx",
+        "location": "§ 一、基本情况",
+        "units": [2, 2],
+        "quote": "16.8元"
+      },
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-06-05",
+      "set": "verify",
+      "language": "zh",
+      "document": "禾丰餐饮运营情况说明.docx",
+      "location": "§ 一、基本情况",
+      "units": [2, 2],
+      "claim": "食材统一由区农产品配送中心采购配送。",
+      "label": "supported",
+      "evidence": {
+        "document": "社区食堂试点评估报告.docx",
+        "location": "§ 二、运营数据",
+        "units": [3, 3],
+        "quote": "食材采购统一由区农产品配送中心负责。"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-06-06",
+      "set": "verify",
+      "language": "zh",
+      "document": "禾丰餐饮运营情况说明.docx",
+      "location": "§ 一、基本情况",
+      "units": [2, 2],
+      "claim": "配送中心的合同将于2027年6月到期。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "社区食堂试点评估报告.docx",
+        "location": "§ 二、运营数据, comment by Reviewer",
+        "units": [3, 3],
+        "quote": "配送中心的合同将于2026年12月到期"
+      },
+      "contradiction": {
+        "document": "禾丰餐饮运营情况说明.docx",
+        "location": "§ 一、基本情况",
+        "units": [2, 2],
+        "quote": "2027年6月到期"
+      },
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-06-07",
+      "set": "verify",
+      "language": "zh",
+      "document": "禾丰餐饮运营情况说明.docx",
+      "location": "§ 二、运营情况",
+      "units": [3, 3],
+      "claim": "增设第二个打饭窗口后，桂花苑食堂高峰排队时间缩短到8分钟左右。",
+      "label": "supported",
+      "evidence": {
+        "document": "社区食堂试点评估报告.docx",
+        "location": "§ 二、运营数据",
+        "units": [3, 3],
+        "quote": "增设第二个打饭窗口后缩短到8分钟左右"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-06-08",
+      "set": "verify",
+      "language": "zh",
+      "document": "禾丰餐饮运营情况说明.docx",
+      "location": "§ 二、运营情况",
+      "units": [3, 3],
+      "claim": "桂花苑片区的晚餐供应将于2027年3月开始。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "社区食堂试点评估报告.docx",
+        "location": "§ （一）桂花苑片区",
+        "units": [4, 4],
+        "quote": "预计于2026年11月开始，新增厨师2名"
+      },
+      "contradiction": {
+        "document": "禾丰餐饮运营情况说明.docx",
+        "location": "§ 二、运营情况",
+        "units": [3, 3],
+        "quote": "2027年3月开始"
+      },
+      "note": "2027年3月是滨江片区的开始时间。",
+      "confirmed": false
+    },
+    {
+      "id": "vf-06-09",
+      "set": "verify",
+      "language": "zh",
+      "document": "禾丰餐饮运营情况说明.docx",
+      "location": "§ 二、运营情况",
+      "units": [3, 3],
+      "claim": "评估期内新村食堂实现盈利约42万元。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "社区食堂试点评估报告.docx",
+        "location": "§ 四、经费情况",
+        "units": [7, 7],
+        "quote": "评估期内运营亏损最大的是新村食堂，全年亏损约42万元"
+      },
+      "contradiction": {
+        "document": "禾丰餐饮运营情况说明.docx",
+        "location": "§ 二、运营情况",
+        "units": [3, 3],
+        "quote": "实现盈利约42万元"
+      },
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-06-10",
+      "set": "verify",
+      "language": "zh",
+      "document": "禾丰餐饮运营情况说明.docx",
+      "location": "§ 二、运营情况",
+      "units": [3, 3],
+      "claim": "新村食堂的志愿者送餐员有9人。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "报告只给出桂花苑片区12人、滨江片区7人。",
+      "confirmed": false
+    },
+    {
+      "id": "vf-06-11",
+      "set": "verify",
+      "language": "zh",
+      "document": "禾丰餐饮运营情况说明.docx",
+      "location": "§ 二、运营情况",
+      "units": [3, 3],
+      "claim": "我公司厨房员工均持有有效健康证。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "资料中没有健康证的信息。",
+      "confirmed": false
+    },
+    {
+      "id": "vf-06-12",
+      "set": "verify",
+      "language": "zh",
+      "document": "禾丰餐饮运营情况说明.docx",
+      "location": "§ 二、运营情况",
+      "units": [3, 3],
+      "claim": "桂花苑食堂每周推出两款新菜品。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "资料只提到最受欢迎的菜品和每周四的手工面条。",
+      "confirmed": false
+    },
+    {
+      "id": "vf-06-13",
+      "set": "verify",
+      "language": "zh",
+      "document": "禾丰餐饮运营情况说明.docx",
+      "location": "§ 三、下一步打算",
+      "units": [4, 4],
+      "claim": "我公司已为新村食堂采购了一台新的蒸饭柜。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "资料中没有设备采购的信息。",
+      "confirmed": false
+    },
+    {
+      "id": "vf-06-14",
+      "set": "verify",
+      "language": "zh",
+      "document": "禾丰餐饮运营情况说明.docx",
+      "location": "§ 三、下一步打算",
+      "units": [4, 4],
+      "claim": "新村食堂的租金每年为36万元。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "报告只说新村食堂租金高，没有金额。",
+      "confirmed": false
+    },
+    {
+      "id": "vf-06-15",
+      "set": "verify",
+      "language": "zh",
+      "document": "禾丰餐饮运营情况说明.docx",
+      "location": "§ 三、下一步打算",
+      "units": [4, 4],
+      "claim": "桂花苑食堂的厨房于2025年5月完成排烟改造。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "报告说改造费用主要用于厨房排烟等，没有完成日期。",
+      "confirmed": false
+    },
+    {
+      "id": "vf-06-16",
+      "set": "verify",
+      "language": "zh",
+      "document": "禾丰餐饮运营情况说明.docx",
+      "location": "§ 三、下一步打算",
+      "units": [4, 4],
+      "claim": "我公司计划在2027年投资50万元建设中央厨房。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "资料中没有中央厨房的计划。",
+      "confirmed": false
+    },
+    {
+      "id": "vf-07-01",
+      "set": "verify",
+      "language": "zh",
+      "document": "江城公交第三季度新闻稿.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "第三季度，江城公交集团纯电动公交车占比达到87%。",
+      "label": "supported",
+      "evidence": {
+        "document": "新能源公交季度运营汇报.pptx",
+        "location": "slide 2",
+        "units": [2, 2],
+        "quote": "纯电动公交车占比达到87%"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-07-02",
+      "set": "verify",
+      "language": "zh",
+      "document": "江城公交第三季度新闻稿.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "第三季度准点率提升至95.3%。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "新能源公交季度运营汇报.pptx",
+        "location": "slide 2",
+        "units": [2, 2],
+        "quote": "准点率提升至93.5%"
+      },
+      "contradiction": {
+        "document": "江城公交第三季度新闻稿.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "95.3%"
+      },
+      "note": "95.2%是1路的准点率。",
+      "confirmed": false
+    },
+    {
+      "id": "vf-07-03",
+      "set": "verify",
+      "language": "zh",
+      "document": "江城公交第三季度新闻稿.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "本季度新增低地板无障碍车辆15辆。",
+      "label": "supported",
+      "evidence": {
+        "document": "新能源公交季度运营汇报.pptx",
+        "location": "slide 3",
+        "units": [3, 3],
+        "quote": "本季度新增低地板无障碍车辆15辆"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-07-04",
+      "set": "verify",
+      "language": "zh",
+      "document": "江城公交第三季度新闻稿.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "1路日均客流18,600人次，准点率95.2%。",
+      "label": "supported",
+      "evidence": {
+        "document": "新能源公交季度运营汇报.pptx",
+        "location": "slide 4",
+        "units": [4, 4],
+        "quote": "1路 42 18,600 95.2%"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-07-05",
+      "set": "verify",
+      "language": "zh",
+      "document": "江城公交第三季度新闻稿.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "第二座充电站将于2027年1月投入使用，位于高铁西站。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "新能源公交季度运营汇报.pptx",
+        "location": "slide 2",
+        "units": [2, 2],
+        "quote": "第二座充电站将于2027年1月投入使用，位于北站枢纽"
+      },
+      "contradiction": {
+        "document": "江城公交第三季度新闻稿.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "位于高铁西站"
+      },
+      "note": "公交集团的网页也说充电站在北站枢纽。",
+      "confirmed": false
+    },
+    {
+      "id": "vf-07-06",
+      "set": "verify",
+      "language": "zh",
+      "document": "江城公交第三季度新闻稿.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "本季度共更换电池组16套。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "新能源公交季度运营汇报.pptx",
+        "location": "slide 5",
+        "units": [5, 5],
+        "quote": "本季度更换电池组6套"
+      },
+      "contradiction": {
+        "document": "江城公交第三季度新闻稿.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "16套"
+      },
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-07-07",
+      "set": "verify",
+      "language": "zh",
+      "document": "江城公交第三季度新闻稿.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "夜班线路N3将于11月1日开通。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "新能源公交季度运营汇报.pptx",
+        "location": "slide 9",
+        "units": [9, 9],
+        "quote": "N3路预计12月1日开通"
+      },
+      "contradiction": {
+        "document": "江城公交第三季度新闻稿.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "11月1日开通"
+      },
+      "note": "公交集团的网页也说12月1日开通。",
+      "confirmed": false
+    },
+    {
+      "id": "vf-07-08",
+      "set": "verify",
+      "language": "zh",
+      "document": "江城公交第三季度新闻稿.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "乘客支付方式中，公交卡占比最高。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "新能源公交季度运营汇报.pptx",
+        "location": "slide 7",
+        "units": [7, 7],
+        "quote": "手机扫码: 64, 公交卡: 29, 现金: 7"
+      },
+      "contradiction": {
+        "document": "江城公交第三季度新闻稿.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "公交卡占比最高"
+      },
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-07-09",
+      "set": "verify",
+      "language": "zh",
+      "document": "江城公交第三季度新闻稿.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "驾驶员疲劳监测系统已覆盖全部车辆。",
+      "label": "supported",
+      "evidence": {
+        "document": "新能源公交季度运营汇报.pptx",
+        "location": "slide 8",
+        "units": [8, 8],
+        "quote": "驾驶员疲劳监测系统已覆盖全部车辆"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-07-10",
+      "set": "verify",
+      "language": "zh",
+      "document": "江城公交第三季度新闻稿.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "目前全市公交线路总数达到186条。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "资料中没有全市线路总数。",
+      "confirmed": false
+    },
+    {
+      "id": "vf-07-11",
+      "set": "verify",
+      "language": "zh",
+      "document": "江城公交第三季度新闻稿.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "集团今年共招聘新驾驶员240名。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "资料中没有招聘信息。",
+      "confirmed": false
+    },
+    {
+      "id": "vf-07-12",
+      "set": "verify",
+      "language": "zh",
+      "document": "江城公交第三季度新闻稿.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "9路将于明年改为纯电动双层巴士。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "汇报只给出9路的车辆数、客流和准点率。",
+      "confirmed": false
+    },
+    {
+      "id": "vf-07-13",
+      "set": "verify",
+      "language": "zh",
+      "document": "江城公交第三季度新闻稿.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "百公里电耗比去年同期下降了4%。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "汇报只给出本季度的62.4千瓦时，没有同比数字。",
+      "confirmed": false
+    },
+    {
+      "id": "vf-07-14",
+      "set": "verify",
+      "language": "zh",
+      "document": "江城公交第三季度新闻稿.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "老年人持卡乘车继续免费。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "资料中没有票价优惠的信息。",
+      "confirmed": false
+    },
+    {
+      "id": "vf-07-15",
+      "set": "verify",
+      "language": "zh",
+      "document": "江城公交第三季度新闻稿.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "高新区自动驾驶接驳线路将投入10辆无人驾驶小巴。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "汇报只说在高新区试点自动驾驶接驳线路，没有车辆数。",
+      "confirmed": false
+    },
+    {
+      "id": "vf-07-16",
+      "set": "verify",
+      "language": "zh",
+      "document": "江城公交第三季度新闻稿.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "第三季度共处理乘客投诉1,250件。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "汇报只说投诉最多的是早晚高峰拥挤，没有件数。",
+      "confirmed": false
+    },
+    {
+      "id": "vf-08-01",
+      "set": "verify",
+      "language": "zh",
+      "document": "浙北乳品季度对账说明.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "第三季度门店合计销售额为50,525,225元。",
+      "label": "supported",
+      "evidence": {
+        "document": "门店销售与库存2026.xlsx",
+        "location": "销售, rows 77–79",
+        "units": [2, 2],
+        "quote": "合计销售额 ¥50,525,225"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-08-02",
+      "set": "verify",
+      "language": "zh",
+      "document": "浙北乳品季度对账说明.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "人民路广场店（嘉兴）第三季度同比增长22.0%。",
+      "label": "supported",
+      "evidence": {
+        "document": "门店销售与库存2026.xlsx",
+        "location": "销售, row 7",
+        "units": [1, 1],
+        "quote": "人民路广场店 嘉兴 ¥531,676 22.0%"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-08-03",
+      "set": "verify",
+      "language": "zh",
+      "document": "浙北乳品季度对账说明.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "复兴路旗舰店第三季度销售额为1,050,573元。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "门店销售与库存2026.xlsx",
+        "location": "销售, rows 69–70",
+        "units": [2, 2],
+        "quote": "复兴路旗舰店 温州 ¥1,000,573"
+      },
+      "contradiction": {
+        "document": "浙北乳品季度对账说明.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "1,050,573元"
+      },
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-08-04",
+      "set": "verify",
+      "language": "zh",
+      "document": "浙北乳品季度对账说明.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "本季度销售数据截止到2026年10月15日。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "门店销售与库存2026.xlsx",
+        "location": "销售, row 81",
+        "units": [2, 2],
+        "quote": "数据截止日期 2026-09-30"
+      },
+      "contradiction": {
+        "document": "浙北乳品季度对账说明.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "2026年10月15日"
+      },
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-08-05",
+      "set": "verify",
+      "language": "zh",
+      "document": "浙北乳品季度对账说明.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "萧山冷链仓有机鲜牛奶库存量为4200，高于3000的安全库存。",
+      "label": "supported",
+      "evidence": {
+        "document": "门店销售与库存2026.xlsx",
+        "location": "库存, row 2",
+        "units": [3, 3],
+        "quote": "有机鲜牛奶 萧山冷链仓 4200 3000"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-08-06",
+      "set": "verify",
+      "language": "zh",
+      "document": "浙北乳品季度对账说明.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "鲜榨橙汁库存为2,320，高于安全库存。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "门店销售与库存2026.xlsx",
+        "location": "库存, row 6",
+        "units": [3, 3],
+        "quote": "鲜榨橙汁 滨江中心仓 1320 1500"
+      },
+      "contradiction": {
+        "document": "浙北乳品季度对账说明.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "库存为2,320，高于安全库存"
+      },
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-08-07",
+      "set": "verify",
+      "language": "zh",
+      "document": "浙北乳品季度对账说明.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "鲜榨橙汁的补货周期为2天。",
+      "label": "supported",
+      "evidence": {
+        "document": "门店销售与库存2026.xlsx",
+        "location": "库存, row 6",
+        "units": [3, 3],
+        "quote": "鲜榨橙汁 滨江中心仓 1320 1500 2"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-08-08",
+      "set": "verify",
+      "language": "zh",
+      "document": "浙北乳品季度对账说明.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "冷冻水饺存放在滨江中心仓。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "门店销售与库存2026.xlsx",
+        "location": "库存, row 4",
+        "units": [3, 3],
+        "quote": "冷冻水饺 萧山冷链仓"
+      },
+      "contradiction": {
+        "document": "浙北乳品季度对账说明.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "存放在滨江中心仓"
+      },
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-08-09",
+      "set": "verify",
+      "language": "zh",
+      "document": "浙北乳品季度对账说明.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "坚果礼盒的补货周期为14天。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "门店销售与库存2026.xlsx",
+        "location": "库存, row 7",
+        "units": [3, 3],
+        "quote": "坚果礼盒 余杭常温仓 2780 800 30"
+      },
+      "contradiction": {
+        "document": "浙北乳品季度对账说明.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "补货周期为14天"
+      },
+      "note": "14天是手冲咖啡豆的补货周期。",
+      "confirmed": false
+    },
+    {
+      "id": "vf-08-10",
+      "set": "verify",
+      "language": "zh",
+      "document": "浙北乳品季度对账说明.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "我公司供应的有机鲜牛奶保质期为7天。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "库存表没有保质期。",
+      "confirmed": false
+    },
+    {
+      "id": "vf-08-11",
+      "set": "verify",
+      "language": "zh",
+      "document": "浙北乳品季度对账说明.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "第三季度我公司向各门店共配送鲜奶18万盒。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "资料中没有配送量。",
+      "confirmed": false
+    },
+    {
+      "id": "vf-08-12",
+      "set": "verify",
+      "language": "zh",
+      "document": "浙北乳品季度对账说明.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "双方约定的结算周期为月结30天。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "资料中没有结算条款。",
+      "confirmed": false
+    },
+    {
+      "id": "vf-08-13",
+      "set": "verify",
+      "language": "zh",
+      "document": "浙北乳品季度对账说明.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "全麦吐司由我公司旗下烘焙工厂每日供货。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "库存表只写了全麦吐司的仓库、库存和补货周期。",
+      "confirmed": false
+    },
+    {
+      "id": "vf-08-14",
+      "set": "verify",
+      "language": "zh",
+      "document": "浙北乳品季度对账说明.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "第四季度起，鲜奶供货价格上调3%。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "资料中没有供货价格。",
+      "confirmed": false
+    },
+    {
+      "id": "vf-08-15",
+      "set": "verify",
+      "language": "zh",
+      "document": "浙北乳品季度对账说明.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "滨江中心仓于2026年8月完成扩建。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "资料中没有仓库扩建的信息。",
+      "confirmed": false
+    },
+    {
+      "id": "vf-08-16",
+      "set": "verify",
+      "language": "zh",
+      "document": "浙北乳品季度对账说明.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "手冲咖啡豆的主要产地为云南保山。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "库存表没有产地。",
+      "confirmed": false
+    },
+    {
+      "id": "vf-09-01",
+      "set": "verify",
+      "language": "zh",
+      "document": "江城晚报绿地降温报道.docx",
+      "location": "§ Start",
+      "units": [1, 1],
+      "claim": "2025年，江城市日最高气温超过35℃的天数达到41天。",
+      "label": "supported",
+      "evidence": {
+        "document": "城市绿地与夏季降温调查.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "2025年日最高气温超过35℃的天数达到41天"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-09-02",
+      "set": "verify",
+      "language": "zh",
+      "document": "江城晚报绿地降温报道.docx",
+      "location": "§ Start",
+      "units": [1, 1],
+      "claim": "老城区正午地表温度最高达到48.6℃。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "城市绿地与夏季降温调查.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "老城区正午地表温度最高达到46.8℃"
+      },
+      "contradiction": {
+        "document": "江城晚报绿地降温报道.docx",
+        "location": "§ Start",
+        "units": [1, 1],
+        "quote": "48.6℃"
+      },
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-09-03",
+      "set": "verify",
+      "language": "zh",
+      "document": "江城晚报绿地降温报道.docx",
+      "location": "§ Start",
+      "units": [1, 1],
+      "claim": "老城区绿地率仅为12%。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "城市绿地与夏季降温调查.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "老城区的绿地率仅为8%"
+      },
+      "contradiction": {
+        "document": "江城晚报绿地降温报道.docx",
+        "location": "§ Start",
+        "units": [1, 1],
+        "quote": "12%"
+      },
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-09-04",
+      "set": "verify",
+      "language": "zh",
+      "document": "江城晚报绿地降温报道.docx",
+      "location": "§ Start",
+      "units": [1, 1],
+      "claim": "西湖区绿地率最高，达到38%。",
+      "label": "supported",
+      "evidence": {
+        "document": "城市绿地与夏季降温调查.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "西湖区绿地率最高，达到38%"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-09-05",
+      "set": "verify",
+      "language": "zh",
+      "document": "江城晚报绿地降温报道.docx",
+      "location": "§ Start",
+      "units": [1, 1],
+      "claim": "北山区夏季平均气温比老城区低2℃。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "报告只说明北山区的测点和被剔除的数据，没有比较气温。",
+      "confirmed": false
+    },
+    {
+      "id": "vf-09-06",
+      "set": "verify",
+      "language": "zh",
+      "document": "江城晚报绿地降温报道.docx",
+      "location": "§ Start",
+      "units": [1, 1],
+      "claim": "高温天老城区急诊就诊人数增加了三成。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "报告没有急诊数据。",
+      "confirmed": false
+    },
+    {
+      "id": "vf-09-07",
+      "set": "verify",
+      "language": "zh",
+      "document": "江城晚报绿地降温报道.docx",
+      "location": "§ Start",
+      "units": [1, 1],
+      "claim": "临江区居民中有一半以上家中没有空调。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "报告没有空调拥有率。",
+      "confirmed": false
+    },
+    {
+      "id": "vf-09-08",
+      "set": "verify",
+      "language": "zh",
+      "document": "江城晚报绿地降温报道.docx",
+      "location": "§ 降温措施",
+      "units": [2, 2],
+      "claim": "喷雾降温设施每套每小时耗水约45升。",
+      "label": "supported",
+      "evidence": {
+        "document": "城市绿地与夏季降温调查.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "每套每小时耗水约45升"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-09-09",
+      "set": "verify",
+      "language": "zh",
+      "document": "江城晚报绿地降温报道.docx",
+      "location": "§ 降温措施",
+      "units": [2, 2],
+      "claim": "行道树每棵种植成本为1,600元。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "城市绿地与夏季降温调查.pdf",
+        "location": "p. 3",
+        "units": [3, 3],
+        "quote": "行道树 3,400棵 2.9 每棵2,600元"
+      },
+      "contradiction": {
+        "document": "江城晚报绿地降温报道.docx",
+        "location": "§ 降温措施",
+        "units": [2, 2],
+        "quote": "1,600元"
+      },
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-09-10",
+      "set": "verify",
+      "language": "zh",
+      "document": "江城晚报绿地降温报道.docx",
+      "location": "§ 降温措施",
+      "units": [2, 2],
+      "claim": "屋顶绿化在老城区坡屋顶住宅上效果良好，已全面推广。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "城市绿地与夏季降温调查.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "试点的六处中有两处出现渗漏，已停止推广"
+      },
+      "contradiction": {
+        "document": "江城晚报绿地降温报道.docx",
+        "location": "§ 降温措施",
+        "units": [2, 2],
+        "quote": "效果良好，已全面推广"
+      },
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-09-11",
+      "set": "verify",
+      "language": "zh",
+      "document": "江城晚报绿地降温报道.docx",
+      "location": "§ 降温措施",
+      "units": [2, 2],
+      "claim": "透水铺装还能减少暴雨时的路面积水。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "报告只测了透水铺装的降温幅度。",
+      "confirmed": false
+    },
+    {
+      "id": "vf-09-12",
+      "set": "verify",
+      "language": "zh",
+      "document": "江城晚报绿地降温报道.docx",
+      "location": "§ 降温措施",
+      "units": [2, 2],
+      "claim": "市政府已决定明年新建20处喷雾降温设施。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "报告说2026年6月建成15处，没有提到明年新建。",
+      "confirmed": false
+    },
+    {
+      "id": "vf-09-13",
+      "set": "verify",
+      "language": "zh",
+      "document": "江城晚报绿地降温报道.docx",
+      "location": "§ 研究团队",
+      "units": [3, 3],
+      "claim": "这项调查由江城市气象台完成。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "城市绿地与夏季降温调查.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "江城市生态环境研究所工作报告第9号"
+      },
+      "contradiction": {
+        "document": "江城晚报绿地降温报道.docx",
+        "location": "§ 研究团队",
+        "units": [3, 3],
+        "quote": "由江城市气象台完成"
+      },
+      "note": "气象台只提供了高温日数据。",
+      "confirmed": false
+    },
+    {
+      "id": "vf-09-14",
+      "set": "verify",
+      "language": "zh",
+      "document": "江城晚报绿地降温报道.docx",
+      "location": "§ 研究团队",
+      "units": [3, 3],
+      "claim": "调查共花费经费120万元。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "报告没有调查经费。",
+      "confirmed": false
+    },
+    {
+      "id": "vf-09-15",
+      "set": "verify",
+      "language": "zh",
+      "document": "江城晚报绿地降温报道.docx",
+      "location": "§ 研究团队",
+      "units": [3, 3],
+      "claim": "研究团队共有12名成员。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "报告只署了两位作者的名字，没有团队人数。",
+      "confirmed": false
+    },
+    {
+      "id": "vf-09-16",
+      "set": "verify",
+      "language": "zh",
+      "document": "江城晚报绿地降温报道.docx",
+      "location": "§ 研究团队",
+      "units": [3, 3],
+      "claim": "研究建议优先在老城区和临江区补种行道树。",
+      "label": "supported",
+      "evidence": {
+        "document": "城市绿地与夏季降温调查.pdf",
+        "location": "p. 3",
+        "units": [3, 3],
+        "quote": "建议优先在老城区和临江区补种行道树"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-10-01",
+      "set": "verify",
+      "language": "zh",
+      "document": "冷链仓库第三方巡检报告.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "仓库规定冷冻区温度不得高于零下18度。",
+      "label": "supported",
+      "evidence": {
+        "document": "冷链仓库值班手册.txt",
+        "location": "line 16",
+        "units": [1, 1],
+        "quote": "冷冻区不得高于零下18度"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-10-02",
+      "set": "verify",
+      "language": "zh",
+      "document": "冷链仓库第三方巡检报告.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "停电超过10分钟时须启动备用发电机。",
+      "label": "supported",
+      "evidence": {
+        "document": "冷链仓库值班手册.txt",
+        "location": "line 26",
+        "units": [1, 1],
+        "quote": "停电超过10分钟时，启动备用发电机"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-10-03",
+      "set": "verify",
+      "language": "zh",
+      "document": "冷链仓库第三方巡检报告.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "灭火器每月15日由安保部检查。",
+      "label": "supported",
+      "evidence": {
+        "document": "冷链仓库值班手册.txt",
+        "location": "line 50",
+        "units": [1, 1],
+        "quote": "灭火器每月15日由安保部检查"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-10-04",
+      "set": "verify",
+      "language": "zh",
+      "document": "冷链仓库第三方巡检报告.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "供应商车辆须提前一天预约卸货时段。",
+      "label": "supported",
+      "evidence": {
+        "document": "冷链仓库值班手册.txt",
+        "location": "line 42",
+        "units": [1, 1],
+        "quote": "供应商车辆须提前一天预约卸货时段"
+      },
+      "contradiction": null,
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-10-05",
+      "set": "verify",
+      "language": "zh",
+      "document": "冷链仓库第三方巡检报告.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "夜班负责人为孙雅琴，交接时间为00:00。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "冷链仓库值班手册.txt",
+        "location": "line 9",
+        "units": [1, 1],
+        "quote": "夜班 马文涛 00:00"
+      },
+      "contradiction": {
+        "document": "冷链仓库第三方巡检报告.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "夜班负责人为孙雅琴"
+      },
+      "note": "孙雅琴是中班负责人。",
+      "confirmed": false
+    },
+    {
+      "id": "vf-10-06",
+      "set": "verify",
+      "language": "zh",
+      "document": "冷链仓库第三方巡检报告.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "冷藏车车厢温度高于零下15度的不予接收。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "冷链仓库值班手册.txt",
+        "location": "line 43",
+        "units": [1, 1],
+        "quote": "车厢温度高于零下12度的不予接收"
+      },
+      "contradiction": {
+        "document": "冷链仓库第三方巡检报告.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "高于零下15度"
+      },
+      "note": "零下15度是冷冻区报警的温度。",
+      "confirmed": false
+    },
+    {
+      "id": "vf-10-07",
+      "set": "verify",
+      "language": "zh",
+      "document": "冷链仓库第三方巡检报告.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "制冷机组每四小时巡检一次。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "冷链仓库值班手册.txt",
+        "location": "line 54",
+        "units": [2, 2],
+        "quote": "制冷机组每两小时巡检一次"
+      },
+      "contradiction": {
+        "document": "冷链仓库第三方巡检报告.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "每四小时"
+      },
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-10-08",
+      "set": "verify",
+      "language": "zh",
+      "document": "冷链仓库第三方巡检报告.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "门禁系统在门打开超过60秒后报警。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "冷链仓库值班手册.txt",
+        "location": "line 34",
+        "units": [1, 1],
+        "quote": "ALARM_DELAY=90"
+      },
+      "contradiction": {
+        "document": "冷链仓库第三方巡检报告.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "超过60秒"
+      },
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-10-09",
+      "set": "verify",
+      "language": "zh",
+      "document": "冷链仓库第三方巡检报告.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "按规定，外来司机可以进入冷库作业区协助卸货。",
+      "label": "contradicted",
+      "evidence": {
+        "document": "冷链仓库值班手册.txt",
+        "location": "line 44",
+        "units": [1, 1],
+        "quote": "外来司机不得进入冷库作业区，卸货由本库叉车司机完成。"
+      },
+      "contradiction": {
+        "document": "冷链仓库第三方巡检报告.pdf",
+        "location": "p. 1",
+        "units": [1, 1],
+        "quote": "外来司机可以进入冷库作业区"
+      },
+      "note": null,
+      "confirmed": false
+    },
+    {
+      "id": "vf-10-10",
+      "set": "verify",
+      "language": "zh",
+      "document": "冷链仓库第三方巡检报告.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "仓库冷冻区面积为3,200平方米。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "手册没有仓库面积。",
+      "confirmed": false
+    },
+    {
+      "id": "vf-10-11",
+      "set": "verify",
+      "language": "zh",
+      "document": "冷链仓库第三方巡检报告.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "现场抽查的12台叉车中有2台电池老化。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "手册只要求交班时检查叉车电量。",
+      "confirmed": false
+    },
+    {
+      "id": "vf-10-12",
+      "set": "verify",
+      "language": "zh",
+      "document": "冷链仓库第三方巡检报告.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "仓库已通过ISO 22000食品安全管理体系认证。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "资料中没有认证信息。",
+      "confirmed": false
+    },
+    {
+      "id": "vf-10-13",
+      "set": "verify",
+      "language": "zh",
+      "document": "冷链仓库第三方巡检报告.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "备用发电机每月进行一次带载试运行。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "手册只写了停电超过10分钟时启动备用发电机。",
+      "confirmed": false
+    },
+    {
+      "id": "vf-10-14",
+      "set": "verify",
+      "language": "zh",
+      "document": "冷链仓库第三方巡检报告.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "温度记录保存期限为两年。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "手册只要求交班时核对温度记录。",
+      "confirmed": false
+    },
+    {
+      "id": "vf-10-15",
+      "set": "verify",
+      "language": "zh",
+      "document": "冷链仓库第三方巡检报告.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "仓库共安装了48个监控摄像头。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "资料中没有监控摄像头。",
+      "confirmed": false
+    },
+    {
+      "id": "vf-10-16",
+      "set": "verify",
+      "language": "zh",
+      "document": "冷链仓库第三方巡检报告.pdf",
+      "location": "p. 1",
+      "units": [1, 1],
+      "claim": "叉车司机每年须参加一次安全培训。",
+      "label": "unsupported",
+      "evidence": null,
+      "contradiction": null,
+      "note": "资料中没有培训要求。",
+      "confirmed": false
+    }
+  ]
+}
