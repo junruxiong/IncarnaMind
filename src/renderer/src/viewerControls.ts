@@ -10,6 +10,7 @@
 import type { TestHooks } from "../../shared/testHooks";
 import { menuEntries, menuKinds } from "./commands/menus";
 import { COMMAND_GROUPS, commands } from "./commands/registry";
+import { findable } from "./finding";
 import { currentTabOf } from "./layoutSlice";
 import { leavingCopies, motionRunning, setMotionSpeed } from "./motion";
 import { interceptSkillPicker } from "./skills";
@@ -48,6 +49,7 @@ export function installTestHooks(): void {
           },
         ]),
       ),
+      found: findable.all().map((kind) => kind.kind),
     }),
     motionRunning,
     setMotionSpeed,
