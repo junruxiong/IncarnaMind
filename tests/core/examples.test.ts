@@ -218,7 +218,6 @@ describe("the example Mind follows the interface language (#709)", { timeout: 60
     appendParagraph(client, "My own note.");
     await client.settled();
     await core.updateSettings({ user: { language: "zh-CN" } });
-    await new Promise((resolve) => setTimeout(resolve, 500));
     expect((await core.listMinds()).map((mind) => mind.title)).toEqual(["Where tea comes from"]);
   });
 
@@ -232,8 +231,8 @@ describe("the example Mind follows the interface language (#709)", { timeout: 60
       { documentId: tea?.id as string, contentHash: tea?.contentHash as string },
     ]);
 
+    // updateSettings returns once the examples have followed the language, or not.
     await core.updateSettings({ user: { language: "zh-CN" } });
-    await new Promise((resolve) => setTimeout(resolve, 500));
 
     expect((await core.listMinds()).map((mind) => mind.title)).toEqual(["Where tea comes from"]);
     expect((await core.listDocuments()).map((each) => each.id)).toContain(tea?.id);
