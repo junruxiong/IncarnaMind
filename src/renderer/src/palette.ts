@@ -1,27 +1,27 @@
 /**
- * ⌘K: Minds, Documents, Folders and Tags by name and the registry's commands,
- * matched here as the User types, then the words inside Minds and Documents,
- * which the core finds once typing pauses.
+ * ⌘K: every object the registry finds by name (./finding) and the commands
+ * that apply where the User is, matched here as the User types; then the words
+ * inside Minds, Documents and conversations, which the core finds once typing
+ * pauses; and, when nothing matches, asking about what was typed.
  */
 import { create } from "zustand";
 import type {
+  ConversationMatch,
   Document,
-  DocumentGroupAssignment,
   DocumentKind,
-  DocumentTag,
   DocumentTextMatch,
-  LibraryGroup,
   Mind,
   MindTextMatch,
-  Tag,
   TextRange,
 } from "../../core/api";
+import type { Language } from "../../core/language";
 import type { CommandId } from "../../shared/commands";
 import { displayName } from "../../shared/documentNames";
+import { translate } from "../../shared/i18n";
 import { formatLocation } from "../../shared/locations";
 import { mindName } from "../../shared/naming";
-import type { TagColour } from "../../shared/tagColours";
-import { shortcutLabel } from "./commands/keymap";
+import { focusComposer } from "./commands/assistant";
+import { objectAt, shortcutLabel, surfaceOf } from "./commands/keymap";
 import {
   COMMAND_GROUPS,
   type CommandContext,
@@ -30,45 +30,66 @@ import {
   isEnabled,
   labelOf,
 } from "./commands/registry";
+import { useComposer } from "./composer";
+import { conversationLabel, openConversation } from "./conversations";
 import { noteHolding } from "./editor/noteKeymap";
 import { cursorAtBlock } from "./editor/notePlace";
-import { KIND_LABELS } from "./fileInfo";
+import { type FindableKind, type FoundObject, findable } from "./finding";
+import { currentTabOf } from "./layoutSlice";
 import { matchName, type NameMatch, queryWords } from "./matcher";
 import type { ObjectRef, Translate } from "./objects";
+import { useSelection } from "./selection";
+import { refKey } from "./selectionModel";
 import { useAppStore } from "./store";
+
+const NOTHING: CommandContext = { selection: [], focus: null, surface: "palette" };
+
+/** What the tab in front shows, as an object. */
+function objectInFront(): ObjectRef | null {
+  const item = currentTabOf(useAppStore.getState().layout)?.item;
+  if (item?.kind === "mind") return { kind: "mind", id: item.mindId };
+  if (item?.kind === "document") return { kind: "document", id: item.documentId };
+  return null;
+}
+
+/**
+ * What commands run from ⌘K act on: the selection while the focus is in the
+ * list that holds it, else the row with the focus, else what the tab in front
+ * shows, as a list's own keys and the shortcuts on the note decide.
+ */
+export function contextAt(active: Element | null): CommandContext {
+  const { surface, items } = useSelection.getState();
+  if (surface !== null && items.length > 0 && surfaceOf(active) === surface) {
+    return { ...NOTHING, selection: items };
+  }
+  return { ...NOTHING, focus: objectAt(active) ?? objectInFront() };
+}
 
 interface PaletteState {
   open: boolean;
+  /** What its commands act on: the window as it was when ⌘K opened. */
+  context: CommandContext;
   show(): void;
   hide(): void;
 }
 
 export const usePalette = create<PaletteState>()((set) => ({
   open: false,
-  show: () => set({ open: true }),
+  context: NOTHING,
+  show: () => set({ open: true, context: contextAt(document.activeElement) }),
   hide: () => set({ open: false }),
 }));
 
-/** Commands run from ⌘K act on the window; the selection comes with #230. */
-export const PALETTE_CONTEXT: CommandContext = { selection: [], focus: null, surface: "palette" };
-
 export type PaletteItem =
-  | {
-      kind: "object";
-      key: string;
-      ref: ObjectRef;
-      name: string;
-      ranges: TextRange[];
-      meta: string;
-      documentKind?: DocumentKind;
-      tagColour?: TagColour;
-    }
+  | ({ kind: "object"; key: string; ranges: TextRange[] } & FoundObject)
   | {
       kind: "command";
       key: string;
       id: CommandId;
       name: string;
       ranges: TextRange[];
+      /** What it acts on, when one thing: "Supplier review: Aldermoor Freight". */
+      meta: string;
       shortcut: string | null;
     }
   | {
@@ -92,34 +113,42 @@ export type PaletteItem =
       pageTo: number | null;
       excerpt: string;
       highlights: TextRange[];
-    };
-
-export type PaletteGroupId =
-  | "recent"
-  | "minds"
-  | "documents"
-  | "foldersAndTags"
-  | "actions"
-  | "notes"
-  | "documentText";
+    }
+  | {
+      kind: "said";
+      key: string;
+      conversationId: string;
+      /** The Answer that holds the words, to show; null when it is a Question. */
+      answerId: string | null;
+      name: string;
+      meta: string;
+      excerpt: string;
+      highlights: TextRange[];
+    }
+  | { kind: "ask"; key: string; text: string; name: string; meta: string };
 
 export interface PaletteGroup {
-  id: PaletteGroupId;
+  /** A registered kind's group, or the palette's own: recent, actions, notes, documentText, conversationText, ask. */
+  id: string;
+  /** The registry's title for an object group; the others are the palette's own. */
+  title?: FindableKind["group"]["title"];
   items: PaletteItem[];
 }
 
-/** A Document as the palette reads it. */
-export type NamedDocument = Pick<Document, "id" | "name" | "title" | "kind"> & {
-  tags: readonly Pick<DocumentTag, "tagId">[];
-};
+/** The objects of each registered kind, read once for each change. */
+export interface Findings {
+  kinds: readonly { kind: FindableKind; objects: readonly FoundObject[] }[];
+  /** An object's name, by `refKey`. */
+  names: ReadonlyMap<string, string>;
+}
 
-/** What names are found among, as the palette reads them. */
-export interface NamedThings {
-  minds: readonly Mind[];
-  documents: readonly NamedDocument[];
-  folders: readonly Pick<LibraryGroup, "id" | "name">[];
-  assignments: readonly Pick<DocumentGroupAssignment, "documentId" | "groupId">[];
-  tags: readonly Pick<Tag, "id" | "name" | "colour">[];
+export function findings(t: Translate): Findings {
+  const kinds = findable.all().map((kind) => ({ kind, objects: kind.objects(t) }));
+  const names = new Map<string, string>();
+  for (const { objects } of kinds) {
+    for (const object of objects) names.set(refKey(object.ref), object.name);
+  }
+  return { kinds, names };
 }
 
 /** How many of each group show; the rest is a word or two more away. */
@@ -143,129 +172,49 @@ export const searchesWords = (text: string) => text.length >= 2 || /\p{Script=Ha
 const best = <T extends { match: NameMatch }>(found: T[], count: number) =>
   found.sort((a, b) => b.match.score - a.match.score).slice(0, count);
 
-const count = (
-  t: Translate,
-  n: number,
-  one: Parameters<Translate>[0],
-  many: Parameters<Translate>[0],
-) => t(n === 1 ? one : many, { count: n });
-
 /** A Mind's name, or "Untitled". */
 const nameOfMind = (mind: Mind, t: Translate) => mindName(mind) || t("mind.untitled");
 
-function mindItem(mind: Mind, match: NameMatch | null, folders: Map<string, string>, t: Translate) {
-  const folder = mind.folderId ? folders.get(mind.folderId) : undefined;
-  return {
-    kind: "object",
-    key: `mind:${mind.id}`,
-    ref: { kind: "mind", id: mind.id },
-    name: nameOfMind(mind, t),
-    ranges: match?.ranges ?? [],
-    meta: [t("palette.kind.mind"), folder].filter(Boolean).join(" · "),
-  } satisfies PaletteItem;
-}
-
-/** Minds, Documents, Folders and Tags whose names hold every word typed, best first. */
-export function nameGroups(
-  words: readonly string[],
-  things: NamedThings,
-  t: Translate,
-): PaletteGroup[] {
-  const folders = new Map(things.folders.map((folder) => [folder.id, folder.name]));
-  const folderOf = new Map(
-    things.assignments.flatMap((each) => (each.groupId ? [[each.documentId, each.groupId]] : [])),
-  );
-
-  const minds = best(
-    things.minds.flatMap((mind) => {
-      const match = matchName(words, nameOfMind(mind, t));
-      return match ? [{ mind, match }] : [];
-    }),
-    SHOWN.names,
-  ).map(({ mind, match }) => mindItem(mind, match, folders, t));
-
-  const documents = best(
-    things.documents.flatMap((document) => {
-      const match = matchName(words, displayName(document));
-      return match ? [{ document, match }] : [];
-    }),
-    SHOWN.names,
-  ).map(({ document, match }): PaletteItem => {
-    const groupId = folderOf.get(document.id);
-    return {
-      kind: "object",
-      key: `document:${document.id}`,
-      ref: { kind: "document", id: document.id },
-      name: displayName(document),
-      ranges: match.ranges,
-      meta: [t(KIND_LABELS[document.kind]), groupId ? folders.get(groupId) : undefined]
-        .filter(Boolean)
-        .join(" · "),
-      documentKind: document.kind,
+/** The registry's objects whose names hold every word typed, best first, by group. */
+export function nameGroups(words: readonly string[], found: Findings): PaletteGroup[] {
+  const groups = new Map<
+    string,
+    PaletteGroup & { matched: { item: PaletteItem; match: NameMatch }[] }
+  >();
+  for (const { kind, objects } of found.kinds) {
+    const group = groups.get(kind.group.id) ?? {
+      id: kind.group.id,
+      title: kind.group.title,
+      items: [],
+      matched: [],
     };
-  });
-
-  const inFolder = new Map<string, number>();
-  for (const groupId of folderOf.values()) inFolder.set(groupId, (inFolder.get(groupId) ?? 0) + 1);
-  const tagged = new Map<string, number>();
-  for (const document of things.documents) {
-    for (const link of document.tags) tagged.set(link.tagId, (tagged.get(link.tagId) ?? 0) + 1);
+    groups.set(kind.group.id, group);
+    for (const object of objects) {
+      const match = matchName(words, object.name);
+      if (!match) continue;
+      const key = refKey(object.ref);
+      group.matched.push({ item: { ...object, kind: "object", key, ranges: match.ranges }, match });
+    }
   }
-  const foldersAndTags = best(
-    [
-      ...things.folders.flatMap((folder) => {
-        const match = matchName(words, folder.name);
-        if (!match) return [];
-        const documents = inFolder.get(folder.id) ?? 0;
-        const item: PaletteItem = {
-          kind: "object",
-          key: `folder:${folder.id}`,
-          ref: { kind: "folder", id: folder.id },
-          name: folder.name,
-          ranges: match.ranges,
-          meta: [
-            t("palette.kind.folder"),
-            count(t, documents, "library.count.one", "library.count"),
-          ].join(" · "),
-        };
-        return [{ item, match }];
-      }),
-      ...things.tags.flatMap((tag) => {
-        const match = matchName(words, tag.name);
-        if (!match) return [];
-        const documents = tagged.get(tag.id) ?? 0;
-        const item: PaletteItem = {
-          kind: "object",
-          key: `tag:${tag.id}`,
-          ref: { kind: "tag", id: tag.id },
-          name: tag.name,
-          ranges: match.ranges,
-          meta: [
-            t("palette.kind.tag"),
-            count(t, documents, "palette.tag.count.one", "palette.tag.count"),
-          ].join(" · "),
-          tagColour: tag.colour,
-        };
-        return [{ item, match }];
-      }),
-    ],
-    SHOWN.names,
-  ).map(({ item }) => item);
-
-  return [
-    { id: "minds" as const, items: minds },
-    { id: "documents" as const, items: documents },
-    { id: "foldersAndTags" as const, items: foldersAndTags },
-  ].filter((group) => group.items.length > 0);
+  return [...groups.values()].flatMap(({ id, title, matched }) => {
+    const items = best(matched, SHOWN.names).map(({ item }) => item);
+    return items.length > 0 ? [{ id, title, items }] : [];
+  });
 }
 
 /** With nothing typed: the Minds edited last. */
-export function recentGroup(things: NamedThings, t: Translate): PaletteGroup[] {
-  const folders = new Map(things.folders.map((folder) => [folder.id, folder.name]));
-  const items = [...things.minds]
+export function recentGroup(minds: readonly Mind[], found: Findings): PaletteGroup[] {
+  const objects = new Map(
+    found.kinds.flatMap(({ objects }) => objects.map((object) => [refKey(object.ref), object])),
+  );
+  const items = [...minds]
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
     .slice(0, SHOWN.recent)
-    .map((mind) => mindItem(mind, null, folders, t));
+    .flatMap((mind): PaletteItem[] => {
+      const key = refKey({ kind: "mind", id: mind.id });
+      const object = objects.get(key);
+      return object ? [{ ...object, kind: "object", key, ranges: [] }] : [];
+    });
   return items.length > 0 ? [{ id: "recent", items }] : [];
 }
 
@@ -274,38 +223,49 @@ const browsingOrder = (group: CommandGroup) =>
   group === "main" ? -1 : COMMAND_GROUPS.indexOf(group);
 
 /**
- * The registry's commands the palette can run here, with their shortcuts: those
- * whose name or keywords hold every word typed, best first, or all of them
- * with nothing typed.
+ * The registry's commands that apply here, with their shortcuts and, when they
+ * act on one thing, its name: those whose name or keywords, in English or
+ * Chinese, hold every word typed, best first, or all of them with nothing typed.
  */
 export function actionGroup(
   words: readonly string[],
   ctx: CommandContext,
-  t: Translate,
+  language: Language,
+  names: Findings["names"],
 ): PaletteGroup[] {
+  const t: Translate = (key, params) => translate(language, key, params);
+  const otherLanguage = language === "zh-CN" ? "en" : "zh-CN";
+  const other: Translate = (key, params) => translate(otherLanguage, key, params);
+  const targets = ctx.selection.length > 0 ? ctx.selection : ctx.focus ? [ctx.focus] : [];
+  const [target] = targets;
+  const targetName = targets.length === 1 && target ? (names.get(refKey(target)) ?? "") : "";
   const offered = commands
     .list(ctx)
     .filter((command) => command.palette !== false && isEnabled(command, ctx));
   const items = offered.flatMap((command) => {
     const name = labelOf(command, ctx, t);
     const byName = words.length > 0 ? matchName(words, name) : null;
-    const byKeyword =
+    const elsewhere =
       byName || words.length === 0
         ? null
-        : (command.keywords ?? [])
-            .map((key) => matchName(words, t(key)))
+        : [
+            labelOf(command, ctx, other),
+            ...(command.keywords ?? []).flatMap((key) => [t(key), other(key)]),
+          ]
+            .map((each) => matchName(words, each))
             .find((match) => match !== null);
-    if (words.length > 0 && !byName && !byKeyword) return [];
+    if (words.length > 0 && !byName && !elsewhere) return [];
     const item: PaletteItem = {
       kind: "command",
       key: `command:${command.id}`,
       id: command.id,
       name,
       ranges: byName?.ranges ?? [],
+      meta: command.appliesTo ? targetName : "",
       shortcut: command.shortcut ? shortcutLabel(command.id) : null,
     };
-    // A match by keyword ranks below one by name.
-    const score = byName?.score ?? (byKeyword ? byKeyword.score - 4000 : 0);
+    // A match by keyword or in the other language ranks below one by its name.
+    const score = byName?.score ?? (elsewhere ? elsewhere.score - 4000 : 0);
     return [{ item, score, group: command.group }];
   });
   if (words.length > 0) items.sort((a, b) => b.score - a.score);
@@ -339,6 +299,9 @@ export function noteGroup(
   });
   return items.length > 0 ? [{ id: "notes", items: items.slice(0, SHOWN.words) }] : [];
 }
+
+/** A Document as the palette reads it. */
+export type NamedDocument = Pick<Document, "id" | "name" | "title" | "kind">;
 
 /** Where a Passage found is, for a PDF's page or a deck's slide; "" for the other kinds. */
 export function passagePlace(
@@ -397,6 +360,45 @@ export function documentTextGroup(
   return items.length > 0 ? [{ id: "documentText", items: items.slice(0, SHOWN.words) }] : [];
 }
 
+/** "In your conversations": the conversations whose messages hold the words, with the first that does. */
+export function conversationTextGroup(found: readonly ConversationMatch[]): PaletteGroup[] {
+  const items = found.flatMap(({ conversation, messages }): PaletteItem[] => {
+    const [message] = messages;
+    if (!message) return [];
+    return [
+      {
+        kind: "said",
+        key: `said:${conversation.id}`,
+        conversationId: conversation.id,
+        answerId: message.kind === "answer" ? message.messageId : null,
+        name: conversationLabel(conversation),
+        meta: "",
+        excerpt: message.excerpt,
+        highlights: message.highlights,
+      },
+    ];
+  });
+  return items.length > 0 ? [{ id: "conversationText", items: items.slice(0, SHOWN.words) }] : [];
+}
+
+/** When nothing matches: asking about what was typed, in the assistant's open conversation. */
+export function askGroup(text: string, conversation: string, t: Translate): PaletteGroup[] {
+  return [
+    {
+      id: "ask",
+      items: [
+        {
+          kind: "ask",
+          key: "ask",
+          text,
+          name: t("palette.ask", { text }),
+          meta: t("palette.ask.in", { conversation }),
+        },
+      ],
+    },
+  ];
+}
+
 /** Resolves with the open note that holds the Block, once its Mind shows; null if it doesn't. */
 function noteShowing(blockId: string, timeoutMs = 5_000) {
   const until = performance.now() + timeoutMs;
@@ -411,20 +413,20 @@ function noteShowing(blockId: string, timeoutMs = 5_000) {
 }
 
 /**
- * Does what choosing an item does: opens what it names, or runs its command.
- * `inTab` (⌘↵) opens a Document in a tab of its own rather than beside the Mind.
+ * Does what choosing an item does: opens what it names, runs its command on
+ * what ⌘K acts on, or asks. `inTab` (⌘↵) opens a Document in a tab of its own.
  */
-export async function runItem(item: PaletteItem, { inTab = false } = {}): Promise<void> {
+export async function runItem(
+  item: PaletteItem,
+  { inTab = false, context = NOTHING }: { inTab?: boolean; context?: CommandContext } = {},
+): Promise<void> {
   const store = useAppStore.getState();
   switch (item.kind) {
-    case "object": {
-      const id: CommandId =
-        inTab && item.ref.kind === "document" ? "document.openTab" : `${item.ref.kind}.open`;
-      await commands.run(id, { ...PALETTE_CONTEXT, focus: item.ref });
+    case "object":
+      await findable.of(item.ref.kind)?.open(item.ref, { inTab });
       return;
-    }
     case "command":
-      await commands.run(item.id, PALETTE_CONTEXT);
+      await commands.run(item.id, context);
       return;
     case "note": {
       store.openMind(item.mindId);
@@ -437,6 +439,13 @@ export async function runItem(item: PaletteItem, { inTab = false } = {}): Promis
         { documentId: item.documentId, ...atPassage(item) },
         { as: inTab ? "here" : "list" },
       );
+      return;
+    case "said":
+      await openConversation(item.conversationId, item.answerId ?? undefined);
+      return;
+    case "ask":
+      focusComposer();
+      useComposer.getState().requestAsk(item.text);
       return;
   }
 }
