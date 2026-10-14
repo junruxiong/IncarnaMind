@@ -29,7 +29,15 @@ export function usageDataShown(state: NudgeState): boolean {
   return !usageData.asked && ownAnswered;
 }
 
+/**
+ * A test build sends usage data from its first launch, so its notice comes
+ * first; a release asks only after the first own Answer, behind Get started.
+ */
 const ORDER: readonly { id: NudgeId; shown(state: NudgeState): boolean }[] = [
+  {
+    id: "usage-data",
+    shown: (state) => state.privacy?.usageData.testerBuild === true && usageDataShown(state),
+  },
   {
     id: "get-started",
     shown: (state) => gettingStartedShown(state.settings?.device.gettingStarted),
