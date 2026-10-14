@@ -541,12 +541,6 @@ export function createActiveEmbedding(options: {
           values: { provider: embeddingProviderName(choice) },
         });
       }
-      if (service) {
-        // Choosing it, where the dialog says what goes, allows it (ADR-0022); a decline stays.
-        consent.choose(["embeddings"], service);
-        await consent.ensure("embeddings", service);
-      }
-
       const saved = stored();
       const sameModel =
         wasOn && saved !== null && embeddingModelKey(saved) === embeddingModelKey(choice);
@@ -557,6 +551,8 @@ export function createActiveEmbedding(options: {
         dimensions: sameModel ? saved.dimensions : null,
       } satisfies StoredProvider);
       settings.writeDeviceValue(ENABLED_VALUE, true);
+      // Choosing it, where the dialog says what goes, allows it (ADR-0022).
+      if (service) consent.choose(["embeddings"], service);
       if (sameModel) {
         // A new key: try again whatever failed before.
         if (error !== null) setError(null);
