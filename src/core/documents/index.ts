@@ -85,6 +85,7 @@ import {
   CURRENT_SINCE,
   HAN_CURRENT_SINCE,
   METADATA_VERSION,
+  PICTURES_CURRENT_SINCE,
   PROCESSING_VERSION,
   type ProcessedPassage,
   type ProcessingJob,
@@ -1342,6 +1343,16 @@ export function createDocuments(options: DocumentsOptions) {
                AND dp.deleted_at IS NULL
                AND (length(trim(dp.text)) < ? OR json_extract(dp.label, '$.scan') IS NOT NULL)))`,
         [now(), BigInt(SCAN_CURRENT_SINCE), BigInt(MIN_PAGE_TEXT * 2)],
+      );
+      db.run(
+        `UPDATE documents SET status = 'queued', updated_at = ?
+         WHERE deleted_at IS NULL AND kind = 'web' AND processing_version < ?
+           AND status IN ('ready', 'embedding', 'waiting-for-model')
+           AND EXISTS (
+             SELECT 1 FROM web_page_pictures wp
+             WHERE wp.document_id = documents.id AND wp.content_hash = documents.content_hash
+               AND wp.deleted_at IS NULL)`,
+        [now(), BigInt(PICTURES_CURRENT_SINCE)],
       );
     }
     db.run(
