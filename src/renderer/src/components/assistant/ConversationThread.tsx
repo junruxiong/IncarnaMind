@@ -93,13 +93,16 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
     scroller.addEventListener("scroll", onScroll);
     return () => scroller.removeEventListener("scroll", onScroll);
   }, []);
+  // A Research topic asked, or a Task started, grows it too; a Task's every step doesn't move it.
+  const started = tasks.length;
+  const askedAt = plan?.askedAt;
   // biome-ignore lint/correctness/useExhaustiveDependencies: each change to the messages may grow the thread.
   useLayoutEffect(() => {
     const scroller = log.current?.parentElement;
     if (scroller && (atFoot.current || asking) && !sought) {
       scroller.scrollTop = scroller.scrollHeight;
     }
-  }, [messages, asking, sought]);
+  }, [messages, asking, sought, started, askedAt]);
 
   // A link back led here: that Answer comes into view, flashed, once it shows (its conversation's
   // messages may come a moment after it is opened).
