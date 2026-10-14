@@ -1344,9 +1344,30 @@ export function createRewriteStream(
         if (done) writeHeld(segments.length);
       }),
 
-    /** Stopped: the paragraphs held are written, and the selection's not reached stay as they are. */
+    /**
+     * Stopped: the paragraphs held are written, each into the selection's
+     * next one when much like it, else as a new Block where the text has got
+     * to. Nothing the model never reached goes, so none of the selection's
+     * paragraphs is removed.
+     */
     stop: (): boolean =>
-      wrote(() => writeHeld(Math.min(segments.length, at + held.length + LOOKAHEAD))),
+      wrote(() => {
+        for (const paragraph of held) {
+          const segment = segments[at];
+          const alike =
+            segment !== undefined &&
+            (paragraph.kind === null || paragraph.kind === segment.kind) &&
+            likeness(segment.tokens, paragraph.tokens) >= MOVED_LIKENESS;
+          if (!alike) {
+            addNew(paragraph);
+            continue;
+          }
+          writeHunks(segment, paragraph.tokens, next, newId, notes);
+          place = { element: segment.element, kind: segment.kind, side: "after" };
+          at += 1;
+        }
+        held.length = 0;
+      }),
 
     /** The model is done: the selection's paragraphs it never reached go. */
     finish: (): boolean =>

@@ -449,6 +449,7 @@ export function createEdits(options: EditsOptions) {
         onError: () => undefined,
       });
       let shown = false;
+      let afterBreak = false;
       for await (const part of result.fullStream) {
         if (part.type === "error") throw part.error;
         if (part.type === "abort") {
@@ -459,12 +460,18 @@ export function createEdits(options: EditsOptions) {
         if (part.type !== "text-delta") continue;
         raw += part.text;
         if (!stream) continue;
+        // A paragraph is finished once the next one starts after a line break: the reply is read
+        // again only at a break and just after one, not at every word.
+        const reread = part.text.includes("\n") || afterBreak;
+        afterBreak = part.text.includes("\n");
+        if (shown && !reread) continue;
         const sofar = passageSoFar(raw, selection.text);
         if (sofar === null) continue;
         if (!shown) {
           shown = true;
           showWriting();
         }
+        if (!reread) continue;
         step(() => stream.write(sofar));
         if (refused) break;
         showWriting();

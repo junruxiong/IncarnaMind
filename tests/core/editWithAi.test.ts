@@ -917,6 +917,47 @@ describe("Edit with AI as the model writes (#202)", () => {
     expect(await editing).toEqual({ kind: "cancelled" });
   });
 
+  // protects=Stop writes a paragraph held for its place as a new Block where the text had got to, and removes none of the selection's, a heading the model never reached included; fails_when=Stop proposes deleting a heading, or writes the held paragraph over the paragraph after it; no_claim=what a later paragraph would have been.
+  test("Stop with a paragraph held writes it as a new Block, and removes nothing the model never reached", async () => {
+    const controlled = controlledModel();
+    const { core, mind, client } = await setUp(controlled.model);
+    const first = paragraph(text("Spring tides are strong at new moon."));
+    const heading: JSONContent & { attrs: { id: string } } = {
+      type: "heading",
+      attrs: { id: `block-${++ids}`, level: 2 },
+      content: [text("Harbours")],
+    };
+    const last = paragraph(text("Harbours publish the times of high water every year."));
+    writeMind(client, [first, heading, last]);
+    await client.settled();
+
+    const input = across(
+      client,
+      mind.id,
+      [first.attrs.id, heading.attrs.id, last.attrs.id],
+      "instruction",
+      "Add an opening line about the coast road",
+    );
+    const editing = core.editWithAi(input);
+    await controlled.requested();
+    // The first paragraph is kept, much changed; the second is like none of the selection's, so it is held.
+    controlled.push(
+      "Spring tides are strong at new moon and at full moon.\n\nA new opening line about the coast road.\n\n## Harb",
+    );
+    await vi.waitFor(() => expect(pendingProposals(client.blocks).length).toBeGreaterThan(0));
+    await core.cancelEdit(input.requestId);
+    await editing;
+    await client.settled();
+
+    const shown = shownWithChanges(client);
+    expect(shown[0]).toContain("{+");
+    expect(shown.slice(1)).toEqual([
+      "+ A new opening line about the coast road.",
+      "Harbours",
+      "Harbours publish the times of high water every year.",
+    ]);
+  });
+
   // protects=a reply that rewrites every paragraph (a translation) still comes in paragraph by paragraph, each paired with the one it translates; fails_when=nothing shows until the end, or a paragraph is added beside the one it translates; no_claim=languages the word comparison can't tell apart.
   test("a translation comes in paragraph by paragraph, each in place of the one it translates", async () => {
     const controlled = controlledModel();
