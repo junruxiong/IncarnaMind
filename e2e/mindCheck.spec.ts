@@ -194,7 +194,7 @@ test("In Chinese and a narrow window, from the Mind's tab menu: a model on this 
   await expect(marks(window).and(window.locator('[data-check="unsupported"]'))).toHaveCount(15);
 
   // Nothing in the Folder says any of it: checked against every Document, the Tides PDF does.
-  const widen = health.getByTestId("health-check-all-documents");
+  const widen = window.getByTestId("checks-uncovered").getByTestId("checks-check-all");
   await expect(widen).toHaveText("对照全部文档核对");
   await pointAndClick(window, widen);
   await expect(window.getByTestId("checks-running")).toHaveCount(0);

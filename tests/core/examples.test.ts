@@ -218,8 +218,34 @@ describe("the example Mind follows the interface language (#709)", { timeout: 60
     appendParagraph(client, "My own note.");
     await client.settled();
     await core.updateSettings({ user: { language: "zh-CN" } });
-    await new Promise((resolve) => setTimeout(resolve, 500));
     expect((await core.listMinds()).map((mind) => mind.title)).toEqual(["Where tea comes from"]);
+  });
+
+  // protects=an example whose Documents a check result relies on keeps them when the language changes, so that result isn't left needing a check for a change the User didn't make (#819); fails_when=the Documents are swapped and the check goes stale; no_claim=none beyond protects.
+  test("an example whose Documents a check relies on keeps its language and Documents", async () => {
+    const { core } = await startWithExamples("en");
+    const made = await core.createExamples();
+    await foundIn(core, made.mindId as string, "Tea drinking");
+    const [tea] = await core.listDocuments({ linkedFolderId: made.linkedFolderId as string });
+    core.retention.retain("check-result", "a-mind-of-the-users", [
+      { documentId: tea?.id as string, contentHash: tea?.contentHash as string },
+    ]);
+
+    // updateSettings returns once the examples have followed the language, or not.
+    await core.updateSettings({ user: { language: "zh-CN" } });
+
+    expect((await core.listMinds()).map((mind) => mind.title)).toEqual(["Where tea comes from"]);
+    expect((await core.listDocuments()).map((each) => each.id)).toContain(tea?.id);
+
+    // Once nothing relies on them, the next change of language swaps them.
+    core.retention.release("check-result", "a-mind-of-the-users");
+    await core.updateSettings({ user: { language: "en" } });
+    await core.updateSettings({ user: { language: "zh-CN" } });
+    await vi.waitFor(async () => {
+      expect((await core.listMinds()).map((mind) => mind.title)).toEqual([
+        EXAMPLE_SETS.tea["zh-CN"].title,
+      ]);
+    });
   });
 });
 

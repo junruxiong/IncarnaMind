@@ -18,6 +18,7 @@ import { usePopoverMenu } from "../components/usePopoverMenu";
 import { useComposer } from "../composer";
 import { core } from "../core";
 import { useT } from "../i18n";
+import { useModelMenuRequests } from "../modelMenu";
 import { useModelNames } from "../modelNames";
 import { useAppStore } from "../store";
 import { ChevronDownSmallIcon } from "./icons";
@@ -82,6 +83,21 @@ export function useMindModel(doc: Y.Doc | null): ChatModelChoice | null {
   return doc ? choice : withoutMind;
 }
 
+/** The model a run in the Mind uses: the Mind's own, else the default the composer shows. */
+export function useRunModel(doc: Y.Doc | null): {
+  providerId: string | null;
+  modelId: string | null;
+} {
+  const own = useMindModel(doc);
+  const providerId = useAppStore((state) =>
+    state.chatReadiness?.ready ? state.chatReadiness.provider.id : null,
+  );
+  const modelId = useAppStore((state) =>
+    state.chatReadiness?.ready ? state.chatReadiness.modelId : null,
+  );
+  return own ?? { providerId, modelId };
+}
+
 function chooseModel(doc: Y.Doc | null, choice: ChatModelChoice): void {
   if (doc) setMindModel(doc, choice);
   else useComposer.setState({ modelWithoutMind: choice });
@@ -97,7 +113,16 @@ function chooseModel(doc: Y.Doc | null, choice: ChatModelChoice): void {
  * with ChatGPT"; while its model is chosen, it says the plan is in use, with
  * "Manage usage". Not shown before any chat model is set up.
  */
-export function ModelChip({ doc, onChosen }: { doc: Y.Doc | null; onChosen(): void }) {
+export function ModelChip({
+  doc,
+  onChosen,
+  opensOnRequest = false,
+}: {
+  doc: Y.Doc | null;
+  onChosen(): void;
+  /** The assistant's chip: "Choose another model" on an Answer opens its menu (`requestModelMenu`). */
+  opensOnRequest?: boolean;
+}) {
   const t = useT();
   const chosen = useMindModel(doc);
   const defaultModel = useAppStore((state) => state.settings?.user.chatModel ?? null);
@@ -132,6 +157,15 @@ export function ModelChip({ doc, onChosen }: { doc: Y.Doc | null; onChosen(): vo
     core.getChatGptPlan().then(setPlan, () => undefined);
   }, [menu.open, loadModels]);
   useEffect(() => core.on("chatGptPlan.changed", setPlan), []);
+
+  const requests = useModelMenuRequests((state) => state.count);
+  const answered = useRef(requests);
+  useEffect(() => {
+    if (requests === answered.current) return;
+    answered.current = requests;
+    const chip = menu.buttonProps.ref.current;
+    if (opensOnRequest && chip && !menu.open) chip.click();
+  }, [requests, opensOnRequest, menu.buttonProps.ref, menu.open]);
 
   const current = chosen ?? defaultModel;
   if (!current) return null;

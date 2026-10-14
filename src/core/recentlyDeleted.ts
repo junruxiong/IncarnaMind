@@ -202,18 +202,21 @@ export function createRecentlyDeleted(options: {
         row.linked_folder_id,
       ])
     )
-      throw new NotFoundError(say("restore.error.unlinked", { name }));
+      throw new NotFoundError({ key: "error.restore.unlinked", values: { name } });
     if (db.get("SELECT 1 FROM documents WHERE path = ? AND deleted_at IS NULL", [row.path]))
-      throw new InvalidInputError(say("restore.error.documentBack", { name }));
+      throw new InvalidInputError({ key: "error.restore.documentBack", values: { name } });
   }
 
   function checkLinks(links: readonly TagLinkState[]): void {
     for (const { documentId, tagId } of links) {
       if (!db.get("SELECT 1 FROM documents WHERE id = ? AND deleted_at IS NULL", [documentId]))
-        throw new NotFoundError(say("restore.error.documentGone"));
+        throw new NotFoundError({ key: "error.restore.documentGone" });
       const tag = rowOf("tag", tagId);
       if (!tag || tag.deleted_at !== null)
-        throw new NotFoundError(say("restore.error.tagGone", { name: tag?.name ?? "" }));
+        throw new NotFoundError({
+          key: "error.restore.tagGone",
+          values: { name: tag?.name ?? "" },
+        });
     }
   }
 
@@ -297,15 +300,19 @@ export function createRecentlyDeleted(options: {
         for (const ref of refs) {
           const { kind } = ref;
           const row = rowOf(kind, ref.id);
-          if (!row) throw new NotFoundError(say("restore.error.unknown"));
+          if (!row) throw new NotFoundError({ key: "error.restore.unknown" });
           const name = nameOf(kind, row);
           if (row.deleted_at !== null) {
             if (row.purged_at !== null)
-              throw new NotFoundError(say("restore.error.deletedPermanently", { name }));
+              throw new NotFoundError({
+                key: "error.restore.deletedPermanently",
+                values: { name },
+              });
             if (row.deleted_at < since)
-              throw new NotFoundError(
-                say("restore.error.expired", { name, days: RECENTLY_DELETED_DAYS }),
-              );
+              throw new NotFoundError({
+                key: "error.restore.expired",
+                values: { name, days: RECENTLY_DELETED_DAYS },
+              });
             if (kind === "mind") {
               minds.restore(ref.id);
               content.restore(ref.id, row.deleted_at);
@@ -326,7 +333,10 @@ export function createRecentlyDeleted(options: {
               restored.folders = true;
             } else {
               if (tags.list().some((tag) => sameName(tag.name, row.name)))
-                throw new InvalidInputError(say("restore.error.tagNameTaken", { name }));
+                throw new InvalidInputError({
+                  key: "error.restore.tagNameTaken",
+                  values: { name },
+                });
               for (const id of tags.restore(ref.id, row.deleted_at)) restored.tagged.add(id);
               restored.tags = true;
             }
@@ -370,11 +380,12 @@ export function createRecentlyDeleted(options: {
       db.transaction(() => {
         for (const { kind, id } of refs) {
           const row = rowOf(kind, id);
-          if (!row) throw new NotFoundError(say("restore.error.unknown"));
+          if (!row) throw new NotFoundError({ key: "error.restore.unknown" });
           if (row.deleted_at === null)
-            throw new InvalidInputError(
-              say("deletePermanently.error.notDeleted", { name: nameOf(kind, row) }),
-            );
+            throw new InvalidInputError({
+              key: "error.restore.notDeleted",
+              values: { name: nameOf(kind, row) },
+            });
           purge(db, kind, [id], at, documentText);
         }
       });

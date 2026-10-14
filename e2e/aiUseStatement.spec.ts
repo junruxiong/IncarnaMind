@@ -1,0 +1,248 @@
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { expect, type Locator, type Page, test } from "@playwright/test";
+import { buildPdf } from "../tests/helpers/pdf";
+import {
+  addDocuments,
+  addToNote,
+  askInAssistant,
+  createDataFolder,
+  dismissChatSetup,
+  launchApp,
+  motionSettled,
+  newMind,
+  pointAndClick,
+  pointAt,
+  removeDataFolder,
+  setLanguage,
+  setWindowSize,
+  useLocalChatModel,
+} from "./app";
+
+/*
+ * Export AI use statement (#739): from a Mind's ⋯ menu and from ⌘K, the
+ * counts of what the Mind records of AI use open as a new Mind in a tab beside
+ * it, to edit. The Mind the User is in stays open and as it was; Undo takes
+ * the new one back to Recently deleted. Set INCARNAMIND_SCREENSHOTS to a folder
+ * to also save screenshots.
+ */
+
+const SCREENSHOTS = process.env.INCARNAMIND_SCREENSHOTS;
+const screenshot = async (window: Page, name: string) => {
+  if (!SCREENSHOTS) return;
+  await motionSettled(window);
+  await window.screenshot({ path: join(SCREENSHOTS, `${name}.png`) });
+};
+
+const TIDES = buildPdf([
+  { lines: ["Tides and the Moon", "The Moon raises two bulges of water on the Earth."] },
+  { lines: ["Spring and neap tides", "Spring tides happen at new moon and at full moon."] },
+]);
+
+const TEXTS = {
+  en: {
+    heading: "Methods",
+    command: "Export AI use statement",
+    title: "AI use statement: Thesis",
+    sections: ["AI models and what they were used for", "AI text, by section", "Checks"],
+    made: "Made “AI use statement: Thesis”",
+    undo: "Undo",
+    added: "Answers added to the document",
+    found: "Quote found",
+    note: "Schools have their own forms for declaring AI use. Use these counts to fill in yours.",
+    empty:
+      "There is nothing to report: IncarnaMind has no record of AI use in this document, and the document has no Citations or checks.",
+  },
+  "zh-CN": {
+    heading: "第一章 绪论",
+    command: "导出 AI 使用声明",
+    title: "AI 使用声明：Thesis",
+    sections: [
+      "一、使用的 AI 模型及用途",
+      "二、AI 生成文字的保留与改写（按章节）",
+      "三、引用与说法的核对",
+    ],
+    made: "已新建“AI 使用声明：Thesis”",
+    undo: "撤销",
+    added: "将助手的回答加入文档",
+    found: "找到引文",
+    note: "各学校对 AI 使用声明另有格式要求，请以学校提供的表格为准，可据此处的统计数字填写。",
+    empty: "无可说明的内容：IncarnaMind 中没有本文档使用 AI 的记录，文档中也没有引用和核对结果。",
+  },
+} as const;
+
+let dataDir: string;
+let sources: string;
+test.beforeEach(async () => {
+  dataDir = await createDataFolder();
+  sources = await createDataFolder();
+});
+test.afterEach(async () => {
+  await removeDataFolder(dataDir);
+  await removeDataFolder(sources);
+});
+
+const editorOf = (window: Page) => window.getByTestId("mind-editor").filter({ visible: true });
+const tabs = (window: Page) => window.getByRole("tab");
+
+/** A new Mind, "Thesis", with a heading and an Answer from the assistant added under it, Citation and all. */
+async function writeThesis(window: Page, heading: string): Promise<Locator> {
+  await writeFile(join(sources, "Tides.pdf"), TIDES);
+  await addDocuments(window, [join(sources, "Tides.pdf")]);
+  await newMind(window);
+  await window.getByTestId("mind-title").fill("Thesis");
+  const editor = editorOf(window);
+  await editor.click();
+  await window.keyboard.type(`# ${heading}`);
+  await window.keyboard.press("Enter");
+  await addToNote(window, await askInAssistant(window, "When do spring tides happen?"));
+  await expect(editor.getByTestId("citation")).toHaveCount(1);
+  await expect(editor.getByTestId("citation")).toHaveAttribute("data-check", "found");
+  return editor;
+}
+
+/** Each table of a Mind as rows of cell text. */
+const tablesOf = (editor: Locator) =>
+  editor
+    .locator("table")
+    .evaluateAll((tables) =>
+      tables.map((table) =>
+        [...table.querySelectorAll("tr")].map((row) =>
+          [...row.querySelectorAll("th, td")].map((cell) => cell.textContent?.trim() ?? ""),
+        ),
+      ),
+    );
+
+/** Runs the command from the Mind's row ⋯ menu, or from ⌘K, as a person does. */
+async function runCommand(
+  window: Page,
+  via: "menu" | "palette",
+  text: (typeof TEXTS)[keyof typeof TEXTS],
+  shot: string,
+): Promise<void> {
+  if (via === "menu") {
+    const row = window.getByTestId("mind-row").filter({ hasText: "Thesis" });
+    await pointAt(window, row);
+    await pointAndClick(window, row.getByTestId("mind-menu"));
+    const menu = row.getByTestId("mind-actions");
+    // In the menu's order: right after the export items.
+    const ids = await menu
+      .getByRole("menuitem")
+      .evaluateAll((items) => items.map((item) => item.getAttribute("data-testid")));
+    expect(ids.indexOf("mind.aiUseStatement")).toBe(ids.indexOf("mind.exportOptions") + 1);
+    await expect(menu.getByTestId("mind.aiUseStatement")).toHaveText(text.command);
+    await screenshot(window, `${shot}-menu`);
+    await pointAndClick(window, menu.getByTestId("mind.aiUseStatement"));
+  } else {
+    await window.keyboard.press("ControlOrMeta+k");
+    await expect(window.getByTestId("palette-search")).toBeFocused();
+    await window.keyboard.type(">");
+    const item = window.getByTestId("palette").locator('[data-key="command:mind.aiUseStatement"]');
+    await expect(item).toContainText(text.command);
+    await screenshot(window, `${shot}-palette`);
+    await pointAndClick(window, item);
+  }
+}
+
+const CASES = [
+  { language: "en", width: 1600, via: "menu" },
+  { language: "zh-CN", width: 900, via: "palette" },
+  { language: "en", width: 900, via: "palette" },
+  { language: "zh-CN", width: 1600, via: "menu" },
+] as const;
+
+for (const { language, width, via } of CASES) {
+  test(`${via === "menu" ? "from the Mind's ⋯ menu" : "from ⌘K"} it opens in a new tab beside the Mind, to edit, and Undo takes it back (${language}, ${width} px)`, async () => {
+    const { app, window } = await launchApp(dataDir, { fakeChat: true });
+    await dismissChatSetup(window);
+    await useLocalChatModel(window);
+    await setLanguage(window, language);
+    await setWindowSize(app, window, width, 800);
+    const text = TEXTS[language];
+    const shot = `ai-statement-${language}-${width}`;
+    const thesis = await writeThesis(window, text.heading);
+    const written = await thesis.innerText();
+    const found = await thesis.locator('[data-testid="citation"][data-check="found"]').count();
+    await expect(tabs(window)).toHaveCount(1);
+
+    await runCommand(window, via, text, shot);
+
+    // A new tab right after the Mind's, in front; the Mind is still open in its own.
+    await expect(tabs(window)).toHaveCount(2);
+    await expect(tabs(window).nth(0)).toContainText("Thesis");
+    await expect(tabs(window).nth(1)).toContainText(text.title);
+    await expect(tabs(window).nth(1)).toHaveAttribute("aria-selected", "true");
+    const statement = editorOf(window);
+    await expect(statement.getByRole("heading")).toHaveText(text.sections);
+    await expect(window.getByTestId("undo-message")).toHaveText(text.made);
+    await screenshot(window, shot);
+
+    // The counts are the Mind's: its Answer added once, its one Citation found, its heading's section.
+    const [uses, byHeading, citations] = await tablesOf(statement);
+    expect(uses?.at(-1)).toEqual([text.added, "fake-model", "1"]);
+    expect(byHeading?.at(1)?.slice(0, 3)).toEqual([text.heading, "1", "0"]);
+    expect(Number(byHeading?.at(1)?.[3])).toBeGreaterThan(0);
+    expect(citations?.at(1)).toEqual([text.found, String(found)]);
+    await expect(statement.locator(":scope > p").last()).toHaveText(text.note);
+    await statement.locator(":scope > p").last().scrollIntoViewIfNeeded();
+    await screenshot(window, `${shot}-end`);
+
+    // The tables sit inside the Mind's text, and the page doesn't scroll sideways.
+    const card = await statement.boundingBox();
+    for (const table of await statement.locator("table").all()) {
+      const box = await table.boundingBox();
+      expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(
+        (card?.x ?? 0) + (card?.width ?? 0) + 1,
+      );
+    }
+    expect(
+      await window.evaluate(() => document.documentElement.scrollWidth <= globalThis.innerWidth),
+    ).toBe(true);
+
+    // Undo takes the new Mind to Recently deleted, leaving the Mind it is of in front; ⇧⌘Z brings it back.
+    await expect(window.getByTestId("undo-action")).toHaveText(text.undo);
+    await pointAndClick(window, window.getByTestId("undo-action"));
+    await expect(tabs(window)).toHaveCount(1);
+    await expect(tabs(window).nth(0)).toContainText("Thesis");
+    await window.getByTestId("plus-menu").focus();
+    await window.keyboard.press("ControlOrMeta+Shift+z");
+    await expect(tabs(window)).toHaveCount(2);
+    await expect(tabs(window).nth(1)).toContainText(text.title);
+    await expect(statement.getByRole("heading")).toHaveText(text.sections);
+
+    // It is the User's to edit: a plain Mind, its text theirs.
+    await expect(statement).toHaveAttribute("contenteditable", "true");
+    const first = statement.locator(":scope > p").first();
+    await first.click();
+    await window.keyboard.type("Reworded. ");
+    await expect(first).toContainText("Reworded. ");
+
+    // The Mind it is of is open as it was, one click away.
+    await pointAndClick(window, tabs(window).nth(0));
+    await expect(editorOf(window).getByTestId("citation")).toHaveCount(1);
+    expect(await editorOf(window).innerText()).toBe(written);
+  });
+}
+
+test("an empty Mind says there is nothing to report, not a table of zeros, in both languages", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await setWindowSize(app, window, 900, 700);
+  for (const language of ["en", "zh-CN"] as const) {
+    await setLanguage(window, language);
+    const text = TEXTS[language];
+    await newMind(window);
+    await window.getByTestId("mind-title").fill("Thesis");
+    const before = await tabs(window).count();
+
+    await runCommand(window, "palette", text, `ai-statement-empty-${language}`);
+
+    await expect(tabs(window)).toHaveCount(before + 1);
+    const statement = editorOf(window);
+    await expect(statement.locator(":scope > p").nth(1)).toHaveText(text.empty);
+    await expect(statement.locator("table")).toHaveCount(0);
+    await expect(statement.getByRole("heading")).toHaveCount(0);
+    await expect(statement.locator(":scope > p").last()).toHaveText(text.note);
+    await screenshot(window, `ai-statement-empty-${language}`);
+  }
+});

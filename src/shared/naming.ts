@@ -5,29 +5,123 @@
  */
 export const NAME_LENGTH = 60;
 
-const cjkLetter = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u;
+/** The fewest characters a cut at a clause mark keeps, so an opening like "Yes, but" isn't all that is left. */
+const MIN_CLAUSE = 16;
+
 const trailingMarks = /[\s.,;:!?…。，；：！？、\-–—]+$/u;
 const quotes = /^["'“”‘’「」『』《》]+|["'“”‘’「」『』《》]+$/gu;
 
+/** Where the text's words begin and end, in any language (Chinese and Japanese included). */
+const words = new Intl.Segmenter(undefined, { granularity: "word" });
+
+/** Words a name never ends on: each starts something a cut leaves unsaid, and is dropped whole. */
+const DANGLING_WORDS: ReadonlySet<string> = new Set([
+  ...(
+    "a an the of to in on at for from with without by as and or but nor plus than that which " +
+    "who whom whose if so per via into onto between among during while when where what how why " +
+    "its their our your"
+  ).split(" "),
+  ..."的 和 与 及 或 并 且 而 但 若 如 则 以 把 被 为 之 对 从 向 在 比".split(" "),
+  ...(
+    "以及 并且 而且 或者 因为 所以 如果 但是 然而 同时 其中 关于 对于 根据 按照 通过 为了 由于 " +
+    "还是 加上 另外 此外"
+  ).split(" "),
+]);
+
+/**
+ * How many characters of `text` end on a word, at most `limit`; `limit` itself
+ * when the first word is longer. It counts whole characters, so none is broken.
+ */
+function wordEnd(text: string, limit: number): number {
+  const parts = Array.from(words.segment(text));
+  const joined = (index: number) => {
+    const [before, part, after] = [parts[index - 1], parts[index], parts[index + 1]];
+    return part?.segment === "-" && before?.isWordLike && after?.isWordLike;
+  };
+  let characters = 0;
+  let end = 0;
+  for (const [index, { segment }] of parts.entries()) {
+    characters += Array.from(segment).length;
+    if (characters > limit) break;
+    // A hyphen joins the words around it ("full-time"), which a cut keeps whole.
+    if (!joined(index) && !joined(index + 1)) end = characters;
+  }
+  return end > 0 ? end : limit;
+}
+
+/**
+ * `text` without the words a cut leaves hanging at its end ("…per year, plus"),
+ * and without trailing marks. Only a whole word of the list goes, never part of one.
+ */
+function withoutDanglingEnd(text: string): string {
+  let kept = text.replace(trailingMarks, "");
+  for (;;) {
+    let last: { segment: string; index: number } | undefined;
+    for (const part of words.segment(kept)) if (part.isWordLike) last = part;
+    if (!last || !DANGLING_WORDS.has(last.segment.toLowerCase())) return kept;
+    const rest = kept.slice(0, last.index).replace(trailingMarks, "");
+    if (rest === "") return kept;
+    kept = rest;
+  }
+}
+
+/** Whether the character at `index` ends a clause: a Chinese mark, or a comma, semicolon or colon before a space. */
+function endsClause(characters: readonly string[], index: number): boolean {
+  const mark = characters[index];
+  if (mark === undefined) return false;
+  return "，；：。？！".includes(mark) || (",;:".includes(mark) && characters[index + 1] === " ");
+}
+
 /**
  * The text's first line, cut to about `NAME_LENGTH` characters without trailing
- * punctuation: at a word boundary where words are separated by spaces, at a
- * character in Chinese or Japanese. It counts whole characters, so none is broken.
- * Empty when the text has no first line.
+ * punctuation, at a word (Chinese words too). The cut never leaves a half
+ * sentence: it falls back to the last clause mark when that keeps at least half
+ * of the cut ("…per year" rather than "…per year, plus"), and drops a word such as
+ * "the" or "plus", or a Chinese 的 or 和, left at its end. Empty when the text has
+ * no first line.
  */
 export function cutTitle(raw: string): string {
-  const first = raw.split(/\r?\n/).find((line) => line.trim() !== "") ?? "";
-  const characters = Array.from(first.replace(/\s+/g, " ").trim());
-  if (characters.length <= NAME_LENGTH) return characters.join("").replace(trailingMarks, "");
-  let end = NAME_LENGTH;
-  const last = characters[end - 1] ?? "";
-  const next = characters[end] ?? "";
-  const insideWord = next !== " " && last !== " " && !cjkLetter.test(last) && !cjkLetter.test(next);
-  if (insideWord) {
-    const space = characters.lastIndexOf(" ", end - 1);
-    if (space > 0) end = space;
+  const first = (raw.split(/\r?\n/).find((line) => line.trim() !== "") ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const characters = Array.from(first);
+  if (characters.length <= NAME_LENGTH) return first.replace(trailingMarks, "");
+  const end = wordEnd(first, NAME_LENGTH);
+  for (let index = end - 1; index >= Math.max(MIN_CLAUSE, end / 2); index--) {
+    if (endsClause(characters, index)) {
+      return withoutDanglingEnd(characters.slice(0, index).join(""));
+    }
   }
-  return characters.slice(0, end).join("").replace(trailingMarks, "");
+  return withoutDanglingEnd(characters.slice(0, end).join(""));
+}
+
+/**
+ * `text` cut to at most `limit` characters at a word, as `cutTitle` cuts,
+ * for a name that has room for more than a title, such as a file's.
+ */
+export function cutAtWord(text: string, limit: number): string {
+  const characters = Array.from(text);
+  if (characters.length <= limit) return text;
+  return withoutDanglingEnd(characters.slice(0, wordEnd(text, limit)).join(""));
+}
+
+/**
+ * `name` shortened to one line: kept whole if `fits` says it fits, else cut at a
+ * word and ended with "…", so the longest start that fits shows.
+ */
+export function fitName(name: string, fits: (text: string) => boolean): string {
+  if (fits(name)) return name;
+  const characters = Array.from(name);
+  let low = 0;
+  let high = characters.length - 1;
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2);
+    if (fits(`${characters.slice(0, middle).join("")}…`)) low = middle;
+    else high = middle - 1;
+  }
+  const shown = Math.max(low, 1);
+  const kept = withoutDanglingEnd(characters.slice(0, wordEnd(name, shown)).join(""));
+  return `${kept || characters.slice(0, shown).join("")}…`;
 }
 
 /** What a Mind is called: the title the User typed, else its first line of text. Empty when it has neither. */

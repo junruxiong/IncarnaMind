@@ -238,6 +238,7 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
       /^Export as HTML$/,
       /^Export as Markdown \(\.md\)$/,
       /^Export options…$/,
+      /^Export AI use statement$/,
       /^History$/,
       /^Check this Mind$/,
       /^Check for contradictions$/,
@@ -270,15 +271,17 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
     await expect(notInAFolder(window).getByTestId("mind-list-item")).toHaveText("Shortlist");
     await expect(undoLine.getByTestId("undo-message")).toHaveCount(0);
 
-    // By the keyboard alone: Tab to the row's ⋯, Enter, down past Outline, the exports, History,
-    // Check this Mind, Check for contradictions, Citation style… and Make this a Skill to Move to…,
-    // type, Enter.
+    // By the keyboard alone: Shift+F10 on the row, down past Outline, the exports, the AI use
+    // statement, History, Check this Mind, Check for contradictions, Citation style… and Make this
+    // a Skill to Move to…, type, Enter. The row's ⋯ is not a Tab stop.
     await shortlist.getByTestId("mind-list-item").focus();
     await window.keyboard.press("Tab");
-    await expect(shortlist.getByTestId("mind-menu")).toBeFocused();
-    await window.keyboard.press("Enter");
+    await expect(shortlist.getByTestId("mind-menu")).not.toBeFocused();
+    await window.keyboard.press("Shift+Tab");
+    await expect(shortlist.getByTestId("mind-list-item")).toBeFocused();
+    await window.keyboard.press("Shift+F10");
     await expect(actions.getByTestId("mind.open")).toBeFocused();
-    for (let step = 0; step < 14; step++) await window.keyboard.press("ArrowDown");
+    for (let step = 0; step < 15; step++) await window.keyboard.press("ArrowDown");
     await expect(actions.getByTestId("mind.moveTo")).toBeFocused();
     await window.keyboard.press("Enter");
     await expect(picker.getByTestId("move-to-search")).toBeFocused();
@@ -314,7 +317,9 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
     await editor.click();
     await window.keyboard.press("ControlOrMeta+j");
     const composer = window.getByTestId("composer");
-    await expect(composer.getByTestId("scope-chip")).toHaveText("Research");
+    // The Folder holds no Document yet: its chip says so (#764).
+    await expect(composer.getByTestId("scope-chip").locator(".truncate")).toHaveText("Research");
+    await expect(composer.getByTestId("scope-chip-empty")).toBeVisible();
     await window.keyboard.type("What do my notes say?");
     await window.keyboard.press("Enter");
     const answer = assistantAnswers(window).first();
@@ -334,7 +339,9 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
     );
     // Open as before the double-click.
     await expect(renamed).toHaveAttribute("data-expanded", "true");
-    await expect(composer.getByTestId("scope-chip")).toHaveText("Research notes");
+    await expect(composer.getByTestId("scope-chip").locator(".truncate")).toHaveText(
+      "Research notes",
+    );
     for (const key of ["F2"]) {
       await renamed.getByTestId("folder-row").focus();
       await window.keyboard.press(key);
@@ -366,11 +373,11 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
     );
 
     // Its Mind is Not in a Folder now: it searches everything; the Answer asked, which had no
-    // Documents to search in the Folder, still says only the Mind it was asked from.
+    // Documents to search in the Folder, read the Mind it was asked from (#748).
     await expect(renamed).toHaveCount(0);
     await expect(notInAFolder(window).getByTestId("mind-list-item")).toHaveText("Shortlist");
     await expect(composer.getByTestId("composer-scope-all")).toBeVisible();
-    await expect(answer.getByTestId("answer-steps-line")).toHaveText("Asked from Shortlist");
+    await expect(answer.getByTestId("answer-steps-line")).toHaveText("Read “Shortlist”");
 
     // In Chinese, the same tree.
     await window.evaluate(() =>

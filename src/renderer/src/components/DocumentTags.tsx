@@ -18,10 +18,12 @@ import { usePopoverMenu } from "./usePopoverMenu";
 export function DocumentTagMenu({
   item,
   buttonClassName,
+  tabIndex,
   children,
 }: {
   item: Document;
   buttonClassName: string;
+  tabIndex?: number;
   children?: ReactNode;
 }) {
   const t = useT();
@@ -35,6 +37,7 @@ export function DocumentTagMenu({
         data-testid="document-tags-menu"
         aria-label={label}
         title={label}
+        tabIndex={tabIndex}
         className={buttonClassName}
       >
         {children ?? <TagLineIcon className="size-[15px]" />}
@@ -87,11 +90,12 @@ export function DocumentTagFooter({ item, close }: { item: Document; close(): vo
         <span
           data-testid="document-tagging"
           title={item.taggingError?.message}
-          className={`max-w-28 truncate px-1 text-[12px] ${
-            item.tagging === "failed" ? "text-danger" : "text-ink-meta"
-          }`}
+          className="flex max-w-28 items-center gap-1.5 px-1 text-[12px] text-ink-meta"
         >
-          {taggingLine}
+          {item.tagging === "failed" && (
+            <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-attention" />
+          )}
+          <span className="truncate">{taggingLine}</span>
         </span>
       )}
       {item.status === "ready" && (

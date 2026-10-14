@@ -33,6 +33,7 @@
  * Word export reads them too, for review (`ReadOptions.review`, #107).
  */
 import * as Y from "yjs";
+import { originOf } from "../shared/blockOrigins";
 import { type ChartAttributes, chartSources, chosenSeries, readChart } from "../shared/charts";
 import { cellProblemMessage, comparisonCellOf, comparisonQuestionsOf } from "../shared/comparisons";
 import { type MessageKey, type MessageParams, translate } from "../shared/i18n";
@@ -48,6 +49,7 @@ import {
 import { readWordAtom, wordAtomText } from "../shared/wordFiles";
 import {
   ANSWER_BLOCK,
+  BLOCK_ID_ATTRIBUTE,
   CHART_NODE,
   CITATION_NODE,
   type CitedWork,
@@ -242,8 +244,10 @@ export interface ReadOptions {
    * waiting add is read too, and each part of one is marked (`Pendings`), and
    * AI text is marked `ai`. One of the AI's out of date is read as if it
    * weren't there, as accepting every change leaves it; someone's change from
-   * the Word file stays theirs to resolve (#108). Absent everywhere else: a
-   * change's words aren't the Mind's until it is accepted.
+   * the Word file stays theirs to resolve (#108). Or read with someone's
+   * changes from a Word file as changes, and the AI's as everywhere else
+   * (`theirChangesReading`, #734). Absent everywhere else: a change's words
+   * aren't the Mind's until it is accepted.
    */
   review?: ReviewReading;
   /** Set by the reader in an Answer from before AI text was marked, which is the AI's as a whole. */
@@ -252,8 +256,8 @@ export interface ReadOptions {
 
 /** What reading for review needs to know of a Mind's changes (`reviewReading`). */
 export interface ReviewReading {
-  /** The changes out of date that are read as if they weren't there, by id. */
-  stale: ReadonlySet<string>;
+  /** Whether a change, by id, is read as if it weren't there: one of the AI's out of date. */
+  skips(id: string): boolean;
   /** When a request's changes were made, and by whom if not by IncarnaMind. */
   made(request: string): Omit<Pending, "id">;
 }
@@ -261,9 +265,25 @@ export interface ReviewReading {
 /** What a Mind's Blocks need for reading them for review (`ReadOptions.review`). */
 export function reviewReading(blocks: Y.XmlFragment): ReviewReading {
   const { doc } = blocks;
+  const stale = new Set(
+    [...outOfDateProposals(blocks)].filter((id) => !id.startsWith(WORD_CHANGE_ID)),
+  );
   return {
-    stale: new Set([...outOfDateProposals(blocks)].filter((id) => !id.startsWith(WORD_CHANGE_ID))),
+    skips: (id) => stale.has(id),
     made: (request) => madeBy(doc ? proposalRequestOf(doc, request) : null),
+  };
+}
+
+/**
+ * Reading a Mind with someone's changes from a Word file as changes (#734):
+ * each part of one marked (`Pendings`), with who made it and when, for what
+ * a model or a reader of an export is shown. The AI's changes still waiting
+ * are read as everywhere else, as if they weren't there.
+ */
+export function theirChangesReading(doc: Y.Doc): ReviewReading {
+  return {
+    skips: (id) => !id.startsWith(WORD_CHANGE_ID),
+    made: (request) => madeBy(proposalRequestOf(doc, request)),
   };
 }
 
@@ -276,7 +296,7 @@ export function madeBy(made: ProposalRequest | null): Omit<Pending, "id"> {
 /** The change a mark's or an attribute's value is part of, read for review; none if it is out of date. */
 export function pendingOf(value: unknown, review: ReviewReading | undefined): Pending | undefined {
   const ref = review ? readProposalRef(value) : null;
-  if (!review || !ref || review.stale.has(ref.id)) return undefined;
+  if (!review || !ref || review.skips(ref.id)) return undefined;
   return { id: ref.id, ...review.made(ref.request) };
 }
 
@@ -343,6 +363,8 @@ function firstText(element: Y.XmlElement): string {
 /**
  * What a Mind without a title is called: its first line of text, cut as a title.
  * An Answer's text, or a comparison table's, is not the User's, so it isn't read.
+ * A Note added from an Answer is named by the Question it answered (#769): the
+ * Answer's first line isn't a name.
  */
 export function firstLineOf(blocks: Y.XmlFragment): string {
   for (const block of blocks.toArray()) {
@@ -353,8 +375,10 @@ export function firstLineOf(blocks: Y.XmlFragment): string {
     ) {
       continue;
     }
-    const title = cutTitle(firstText(block));
-    if (title !== "") return title;
+    const written = cutTitle(firstText(block));
+    if (written === "") continue;
+    const origin = blocks.doc && originOf(blocks.doc, stringAttribute(block, BLOCK_ID_ATTRIBUTE));
+    return (origin && cutTitle(origin.question)) || written;
   }
   return "";
 }

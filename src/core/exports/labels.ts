@@ -1,6 +1,8 @@
+import { formatDate } from "../../shared/dates";
 import { translate } from "../../shared/i18n";
 import type { Language } from "../language";
 import type { Footnote } from "../mindText";
+import type { NotedChange } from "../shownChanges";
 
 export interface ExportLabels {
   question: string;
@@ -16,6 +18,8 @@ export interface ExportLabels {
   aiText: string;
   /** A Word file's comment on a Citation whose check failed: what failed, and the source. */
   failedCheck(footnote: Footnote): string;
+  /** Who made someone's change shown in an export, and when (#734): "Deleted by Priya Nair, 2 Oct 2026". */
+  change(change: NotedChange): string;
 }
 
 export function exportLabels(language: Language): ExportLabels {
@@ -42,6 +46,19 @@ export function exportLabels(language: Language): ExportLabels {
             : t("export.comment.notFound.noQuote", { source })
           : t(`export.comment.${failed.check}`, { source });
       return failed.verdict ? `${said}\n${failed.verdict}` : said;
+    },
+    change: ({ kind, pending }) => {
+      const author = pending.by || t("export.change.someone");
+      // The day the Word file names, not the day it falls on here: Word writes its own clock's time.
+      const date = pending.at ? formatDate(pending.at, language, { timeZone: "UTC" }) : "";
+      const key = (
+        {
+          insert: "export.change.inserted",
+          delete: "export.change.deleted",
+          replace: "export.change.replaced",
+        } as const
+      )[kind];
+      return date ? t(key, { author, date }) : t(`${key}.noDate`, { author });
     },
   };
 }

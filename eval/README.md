@@ -319,6 +319,7 @@ These cases of the Citation check are unit tests, so they run with `npm test` on
 | Table rows (#76) | A Markdown row without its pipes; a slide's or a Word file's row, stored with tabs between its cells, quoted with pipes; a cell changed or left out isn't found. | The same, for rows whose cells have no spaces around them once read. | `tests/shared/quoteMatch.test.ts` ("a table's row…"), `tests/core/locations.test.ts`, `tests/renderer/slides.test.ts` (the viewer's highlight) |
 | A slide's figures (#76) | A chart's `1560` quoted as `1,560`, only when the quote isn't found as it is; another figure isn't found. | The same. | `tests/shared/numberMatch.test.ts` ("matching numbers in a slide…") |
 | The match is exact | A paraphrase, a quote with one word changed, and a quote from another page than the one cited aren't found. | A paraphrase, and a quote from another page. | `tests/core/citations.test.ts` ("a paraphrased quote is 'not found'") |
+| Words an Answer puts in quotation marks (#483) | A span of at least 4 words in `"…"`, `“…”`, `‘…’` or `«…»` is looked for in the Units its sentence cites, as a quote is; a changed word, or two words joined across a colon, isn't found. A comma or full stop inside the closing mark, a Document's own name, and a span in a sentence with no Citation aren't looked at. | A span of at least 6 characters in `“…”`, `「…」` or `『…』`: “培训覆盖率达到98%” isn't found in “安全培训，覆盖率达到98%”. | `tests/core/quotedWords.test.ts`, `tests/core/quotedWordsEdges.test.ts`, `e2e/quotedWords.spec.ts` |
 
 `tests/eval/recordedCitations.test.ts` also checks again the Citations a real run recorded (see Results).
 
@@ -463,6 +464,7 @@ The check now ignores letter case, reads "[^36]" as "[36]", and finds a quote wi
   - `retrieval/fixtures/`: the Chinese Documents, CC BY-SA 4.0; see `ATTRIBUTION.md` there.
   - `retrieval/formats.json`: the every-format set's Questions.
   - `retrieval/formats/`: its Documents (`files/`), the script that writes them, and `ATTRIBUTION.md`.
+- **The checks evaluation:** `checks/`, with its labels, Documents and README.
 - **Tests of the evaluation itself:** these run with `npm test`, without the model.
   - `tests/eval/scoring.test.ts` checks how the evaluation scores sentences, Citations, hits and the reviewer sheet.
   - `tests/eval/citations.test.ts` runs the Citation part through a core with a scripted model.
@@ -470,6 +472,11 @@ The check now ignores letter case, reads "[^36]" as "[36]", and finds a quote wi
   - `tests/eval/recordedCitations.test.ts` checks the Citations of the 2026-10-07 run again with today's check.
   - `tests/eval/smallModelCitations.test.ts` shows, without a model, the ways a small model's Citations of the gating set's long PDFs aren't found (#67): records written by hand, through the core's citation session, over the stored text of their pages.
   - `tests/eval/formatSet.test.ts` checks the every-format set against the stored text; `tests/eval/formatScoring.test.ts`, its figures and reports; `tests/eval/formatCitations.test.ts`, the Citation check on every Location kind.
+  - `tests/eval/checkSet.test.ts` checks the checks evaluation's labels against the stored text; `tests/eval/checkScoring.test.ts`, its scoring; `tests/eval/checkPipeline.test.ts`, its pipeline through a core with a scripted model.
+
+## The checks evaluation
+
+`npm run eval` also runs the checks evaluation when a chat model is given (`npm run eval -- eval/checks` runs it alone): Find support's 200 labelled sentences and verify's 10 received documents, run end to end against one Folder and scored against the labels, with the bars of #86, #96 and #97 reported until those exist (#86). See `checks/README.md`.
 
 ## The hard tier
 

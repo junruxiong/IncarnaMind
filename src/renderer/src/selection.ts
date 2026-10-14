@@ -99,14 +99,18 @@ export const useSelectedOn = (surface: SelectSurface): readonly ObjectRef[] =>
 /**
  * One row's part in the gestures. A click opens it and selects just it;
  * ⌘-click or Ctrl-click adds or removes it, and Shift-click extends from the
- * anchor, neither opening anything. `rowProps` go on the row's element.
+ * anchor, neither opening anything. `rowProps` go on the row's element; a row
+ * that is a tree item holds `aria-selected` on the item itself, so it takes
+ * only `refProps`.
  */
 export function useSelectable(ref: ObjectRef, surface: SelectSurface, open: () => void) {
   const key = refKey(ref);
   const selected = useSelection((state) => state.surface === surface && state.keys.has(key));
+  const refProps = { "data-select-ref": key } as const;
   return {
     selected,
-    rowProps: { "aria-selected": selected, "data-select-ref": key } as const,
+    refProps,
+    rowProps: { "aria-selected": selected, ...refProps } as const,
     onClick(event: MouseEvent) {
       const { toggle, extendTo, choose } = useSelection.getState();
       if (event.metaKey || event.ctrlKey) {

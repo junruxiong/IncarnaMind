@@ -1,18 +1,20 @@
 import type { Editor } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
+import { useEditorState } from "@tiptap/react";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import type * as Y from "yjs";
 import type { CitationAttributes } from "../../../core/api";
 import { citationState } from "../../../shared/citations";
-import { dismissCheckProblem, stopCheck, useChecks } from "../checks";
+import { checkSentences, dismissCheckProblem, stopCheck, useChecks } from "../checks";
 import { ProblemLine } from "../components/ProblemLine";
 import { ReadinessExplanation, readinessAction } from "../components/providers/ChatReadinessNotice";
 import { useContradictionLine } from "../contradictions";
 import { errorMessage } from "../errors";
 import { useLanguage, useT } from "../i18n";
-import { startMindCheck, useMindCheck, useMindCheckRun } from "../mindCheck";
+import { checkMind, startMindCheck, useMindCheck, useMindCheckRun } from "../mindCheck";
 import { useAppStore } from "../store";
-import { shownClaims } from "./claimChecks";
+import { AnswerError } from "./AnswerView";
+import { coverageOf, sameCoverage, shownClaims } from "./claimChecks";
 import {
   HEALTH_PARTS,
   type NoteHealth as Health,
@@ -20,7 +22,9 @@ import {
   noteHealth,
 } from "./healthCounts";
 import { CheckMarkIcon, ClaimMarkIcon } from "./icons";
-import { CheckedWhen, MindCheckAction, MindCheckProgress, MindCheckWiden } from "./MindCheckLine";
+import { CheckedWhen, MindCheckAction, MindCheckProgress } from "./MindCheckLine";
+import { useRunModel } from "./ModelChip";
+import { UncoveredLine } from "./UncoveredLine";
 import { COUNT_IDLE_MS } from "./WordCount";
 
 const NONE: Health = {
@@ -113,6 +117,12 @@ export function NoteHealth({
   const skipped = useMemo(() => new Set(skippedKeys.split(" ").filter(Boolean)), [skippedKeys]);
   const health = useHealth(editor, skipped);
   const asking = useMindCheck((state) => state.asking[mindId] !== undefined);
+  const coverage = useEditorState({
+    editor,
+    selector: ({ editor: current }) => coverageOf(shownClaims(current.state)),
+    equalityFn: sameCoverage,
+  });
+  const runModel = useRunModel(doc);
   const running = useChecks((state) => state.running[mindId]);
   const problem = useChecks((state) => state.problems[mindId]);
   const smallModel = useChecks((state) => state.smallModel[mindId] === true);
@@ -200,7 +210,6 @@ export function NoteHealth({
               </Fragment>
             );
           })}
-          {checkedAll && !running && !asking && <MindCheckWiden editor={editor} mindId={mindId} />}
           {canCheck && (
             <>
               <span className="mind-health-dot" aria-hidden="true">
@@ -265,26 +274,67 @@ export function NoteHealth({
           {t("checks.problem.local-mode")}
         </ProblemLine>
       )}
-      {!running && problem && problem.kind !== "not-ready" && problem.kind !== "local-mode" && (
-        <ProblemLine testId="checks-problem" className="mind-health-line" action={close}>
-          {problem.kind === "no-documents"
-            ? folderName
-              ? t("checks.problem.no-documents.folder", { folder: folderName })
-              : t("checks.problem.no-documents.all")
-            : problem.kind === "only-cited"
+      {!running && !asking && !problem && coverage.mostlyUncovered && (
+        <UncoveredLine
+          className="mind-health-line"
+          onCheckAll={
+            !coverage.canWiden
+              ? undefined
+              : checkedAll
+                ? () => void startMindCheck(mindId, "all", { allDocuments: true })
+                : coverage.range && coverage.action
+                  ? () =>
+                      void checkSentences(editor, mindId, doc, coverage.action ?? "find-support", {
+                        ...(coverage.range && { range: coverage.range }),
+                        allDocuments: true,
+                      })
+                  : undefined
+          }
+        />
+      )}
+      {!running && problem?.kind === "no-documents" && (
+        <ProblemLine
+          testId="checks-problem"
+          className="mind-health-line"
+          action={{
+            label: t("checks.addFiles"),
+            testId: "checks-add-files",
+            onClick: () => void useAppStore.getState().pickDocuments(),
+          }}
+          also={close}
+        >
+          {folderName
+            ? t("checks.problem.no-documents.folder", { folder: folderName })
+            : t("checks.problem.no-documents.all")}
+        </ProblemLine>
+      )}
+      {!running && problem?.kind === "find-failed" && (
+        <AnswerError
+          kind={problem.error.kind}
+          modelId={runModel.modelId}
+          providerId={runModel.providerId}
+          resetsAt={problem.error.resetsAt ?? null}
+          details={problem.error.message}
+          onRetry={() =>
+            void checkMind(mindId, problem.mode, { allDocuments: problem.allDocuments })
+          }
+          onOpenSettings={openSettings}
+        />
+      )}
+      {!running &&
+        problem &&
+        problem.kind !== "not-ready" &&
+        problem.kind !== "local-mode" &&
+        problem.kind !== "no-documents" &&
+        problem.kind !== "find-failed" && (
+          <ProblemLine testId="checks-problem" className="mind-health-line" action={close}>
+            {problem.kind === "only-cited"
               ? t("checks.problem.only-cited.folder", { folder: folderName ?? "" })
               : problem.kind === "failed"
                 ? t("checks.problem.failed", { message: errorMessage(problem.error, t) })
-                : problem.kind === "find-failed"
-                  ? t("verify.problem.failed", {
-                      message:
-                        problem.error.kind === "cost-cap" || problem.error.kind === "plan-limit"
-                          ? t(`run.stopped.${problem.error.kind}`)
-                          : problem.error.message,
-                    })
-                  : t(`checks.problem.${problem.kind}`)}
-        </ProblemLine>
-      )}
+                : t(`checks.problem.${problem.kind}`)}
+          </ProblemLine>
+        )}
     </>
   );
 }

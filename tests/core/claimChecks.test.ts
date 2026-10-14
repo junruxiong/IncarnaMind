@@ -125,6 +125,39 @@ async function mindWith(
   return { ...setup, block, body, check, tides: setup.documents[0] as Document };
 }
 
+describe("The language of a check's sentence", () => {
+  test.each([
+    ["en", "English", "Simplified Chinese"],
+    ["zh-CN", "Simplified Chinese", "English"],
+  ] as const)(
+    "is the interface's, %s, whatever language the sentence is in, and the request says so",
+    async (language, named, other) => {
+      const calls: ModelCall[] = [];
+      const { core, check } = await mindWith([CONTRADICTED], checkingModel(PLANS, calls));
+      await core.updateSettings({ user: { language } });
+
+      await check();
+
+      expect(calls.length).toBeGreaterThan(0);
+      for (const call of calls) {
+        expect(call.system).toContain(`one plain sentence in ${named}`);
+        expect(call.system).not.toContain(`sentence in ${other}`);
+        expect(JSON.stringify(call.options.prompt)).toContain(`Write your sentence in ${named}.`);
+      }
+    },
+  );
+
+  test("follows a sentence in Chinese too only as far as the interface does", async () => {
+    const calls: ModelCall[] = [];
+    const sentence = "涨潮每天发生两次。";
+    const { check } = await mindWith([sentence], checkingModel({}, calls));
+
+    await check();
+
+    expect(JSON.stringify(calls[0]?.options.prompt)).toContain("Write your sentence in English.");
+  });
+});
+
 describe("Find support", () => {
   test("marks each sentence the selection touches with what its check found", async () => {
     const { core, client, check, tides } = await mindWith([SUPPORTED, CONTRADICTED, UNSUPPORTED]);
@@ -263,6 +296,86 @@ describe("One claim check", () => {
     expect((await shownChecks(again.core, again.client))[0]).toMatchObject({
       shown: { state: "supported" },
       check: { evidence: { quote: "Harbours publish the times of high water every year." } },
+    });
+  });
+
+  // protects=a sentence found unsupported keeps the nearest line the Run read when that line states another value for the same thing, and the verdict stays unsupported; fails_when=the line is lost, the verdict says contradicted, or an unrelated sentence gets a line; no_claim=how a real model words its judgement.
+  test("an unsupported sentence keeps the nearest line that says something different (#770)", async () => {
+    const different = { verdict: "unsupported" as const };
+    const { core, client, check } = await mindWith(
+      [CONTRADICTED, UNSUPPORTED],
+      checkingModel({ [CONTRADICTED]: different, [UNSUPPORTED]: different }),
+    );
+
+    await check();
+
+    const [near, unrelated] = await shownChecks(core, client);
+    expect(near).toMatchObject({
+      shown: { state: "unsupported" },
+      check: {
+        evidence: {
+          documentName: "Tides",
+          quote: "Harbours publish the times of high water every year.",
+          check: "found",
+        },
+      },
+    });
+    expect(unrelated).toMatchObject({ shown: { state: "unsupported" }, check: { evidence: null } });
+  });
+
+  // protects=a sentence about something else that shares a common word or two with a line asks the model nothing more, in English and Chinese; a near one still does; fails_when=every unsupported sentence pays an extra request; no_claim=none beyond protects.
+  test.each([
+    {
+      name: "English",
+      report: {
+        name: "Report.md",
+        contents: "The company reported its results for the year 2025 in March.",
+      },
+      unrelated: "Our company will open three new offices in Singapore during 2025.",
+      near: "The company reported its results for the year 2026 in March.",
+    },
+    {
+      name: "Chinese",
+      report: { name: "Report.md", contents: "公司发布了年度报告，营收增长明显。" },
+      unrelated: "这家公司的年度旅行计划包括去云南和四川的长途徒步。",
+      near: "公司发布了年度报告，营收下降明显。",
+    },
+  ])(
+    "$name: an unrelated sentence makes no extra request (#770)",
+    async ({ report, unrelated, near }) => {
+      const plans = {
+        [unrelated]: { verdict: "unsupported" as const },
+        [near]: { verdict: "unsupported" as const },
+      };
+      const asked = (model: ReturnType<typeof checkingModel>) =>
+        model.doGenerateCalls.filter((call) =>
+          JSON.stringify(call.prompt).includes("Compare a sentence"),
+        ).length;
+
+      const model = checkingModel(plans);
+      const { check } = await mindWith([unrelated], model, [report]);
+      await check();
+      expect(asked(model)).toBe(0);
+
+      const nearModel = checkingModel(plans);
+      const nearby = await mindWith([near], nearModel, [report]);
+      await nearby.check();
+      expect(asked(nearModel)).toBe(1);
+    },
+  );
+
+  test("the nearest line is shown only when, judged alone, it differs", async () => {
+    const same = { verdict: "unsupported" as const, judgement: "neither" as const };
+    const { core, client, check } = await mindWith(
+      [CONTRADICTED],
+      checkingModel({ [CONTRADICTED]: same }),
+    );
+
+    await check();
+
+    expect((await shownChecks(core, client))[0]).toMatchObject({
+      shown: { state: "unsupported" },
+      check: { evidence: null },
     });
   });
 
@@ -564,5 +677,17 @@ describe("Stopping", () => {
       { state: "unsupported" },
       { state: "not-checked", reason: "stopped" },
     ]);
+  });
+});
+
+describe("What the check is told about dates and its own workings (#821)", () => {
+  test("its instructions keep a metadata date and the words index, passages and metadata out of the explanation", async () => {
+    const calls: ModelCall[] = [];
+    const { check } = await mindWith([CONTRADICTED], checkingModel(PLANS, calls));
+    await check();
+    const system = calls[0]?.system ?? "";
+    expect(system).toContain("file's own metadata");
+    expect(system).toContain("never mention it unless the sentence itself is about a date");
+    expect(system).toContain("Never mention the index, the search, the passages");
   });
 });
