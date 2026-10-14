@@ -189,7 +189,7 @@ test("with no Ollama on this computer, the setup card's local way says so, and o
   await expect(local).toContainText("Ollama isn't running on this computer. It's free to get.");
   await local.click();
   await expect(setup.getByTestId("ollama-status")).toHaveText(
-    "Ollama isn't running on this computer. It's free to get.",
+    "To run models on this computer, install Ollama from ollama.com and start it.",
   );
   const get = setup.getByTestId("ollama-get");
   const again = setup.getByTestId("ollama-check-again");
@@ -215,7 +215,7 @@ test("a choice that can't be used right now says why, with its next step: Ollama
   const settings = await openSettings(window, "models");
   const choices = settings.getByTestId("chat-provider-choices");
   await expect(choices.getByTestId("ollama-status")).toHaveText(
-    "Ollama isn't running on this computer. It's free to get.",
+    "To run models on this computer, install Ollama from ollama.com and start it.",
   );
   await expect(choices.getByTestId("chat-choice-ollama")).not.toBeChecked();
   await expect(choices.getByTestId("ollama-get")).toBeVisible();
@@ -230,7 +230,7 @@ test("a choice that can't be used right now says why, with its next step: Ollama
   await setLanguage(window, "zh-CN");
   await expect(keyLine).toHaveText("不可用：已开启“所有内容都留在这台电脑上” · 关闭本地模式");
   await expect(choices.getByTestId("ollama-status")).toHaveText(
-    "这台电脑上没有运行 Ollama。可以免费获取。",
+    "如需在本机运行模型，请从 ollama.com 安装并启动 Ollama。",
   );
   await screenshot(settings, "why-unavailable-settings-zh");
   await setLanguage(window, "en");

@@ -1533,6 +1533,7 @@ export const zhCN = {
   "providers.ollama.checking": "正在查找本机的 Ollama…",
   "providers.ollama.detected":
     "Ollama 正在本机运行。使用本地模型时，你的问题和文档都不会离开这台电脑。",
+  "providers.ollama.notDetected": "如需在本机运行模型，请从 ollama.com 安装并启动 Ollama。",
   "providers.ollama.use": "使用本地模型（{model}，3.3 GB）",
   "providers.ollama.pulling": "正在下载 {model}（3.3 GB）…可能需要一些时间。",
   "providers.ollama.checkAgain": "重新检查",
