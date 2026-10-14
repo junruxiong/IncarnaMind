@@ -619,8 +619,12 @@ export const INCLUDE_IN_CONTEXT_ATTRIBUTE = "includeInContext";
  */
 export type ThirdPartySource = "imported" | "web-page" | "checked-document";
 
-/** Third-party text a Run reads itself: a saved web page a search found, or the document a check checks. */
-export type ReadThirdPartySource = Exclude<ThirdPartySource, "imported">;
+/**
+ * Third-party text a Run reads itself: a saved web page a search found, the
+ * document a check checks, or what another Mind holds that came from them
+ * (`read_mind`, #202).
+ */
+export type ReadThirdPartySource = ThirdPartySource;
 
 /**
  * Why a Run counts as having read third-party text: it read some itself, or
@@ -752,9 +756,11 @@ export interface AnswerToolCall {
    * search; "skill", the Skill Tools; "connector", one of the User's
    * Connectors (see `connector`); "sources", Find sources (`find_sources`,
    * `{ query, from_year?, to_year?, open_access_only? }`); "web", web search
-   * (`search_web`, `{ query }`, and `read_web_page`, `{ url, query }`; #128).
+   * (`search_web`, `{ query }`, and `read_web_page`, `{ url, query }`; #128);
+   * "minds", the Minds' Tools of an Answer in the assistant (#202:
+   * `read_mind`, `edit_mind`, `add_to_mind`, `create_mind`, see `mindChange`).
    */
-  source: "documents" | "skill" | "connector" | "sources" | "web";
+  source: "documents" | "skill" | "connector" | "sources" | "web" | "minds";
   /** A Connector's Tool: which Connector, with its name when the call was made. */
   connector?: { id: string; name: string };
   /** What the model asked, e.g. `{ query }` for a search, or the arguments sent to a Connector. */
@@ -809,6 +815,22 @@ export interface AnswerToolCall {
    * were left out of its text. Absent: none.
    */
   uncalculated?: number;
+  /** A Minds' Tool that changed a Mind or made one, once it ended (#202). Absent otherwise. */
+  mindChange?: MindChange;
+}
+
+/**
+ * What a call of a Minds' Tool did (#202): the changes it proposed in one
+ * Mind, which wait there for the User to accept or reject them.
+ */
+export interface MindChange {
+  mindId: string;
+  /** The call made the Mind. */
+  created: boolean;
+  /** The request its Proposals belong to (`ProposalRef.request`). */
+  request: string;
+  /** How many Proposals it made there. */
+  proposals: number;
 }
 
 /** What a call of `read_web_page` came to (see `AnswerToolCall.webPage`). */
@@ -985,6 +1007,8 @@ export interface WordFileCheck {
   origin: WordOrigin;
   /** Who wrote its tracked changes and comments, in the order they first appear. */
   authors: string[];
+  /** Its look is mostly what a Mind doesn't draw, so the import screen says it is kept (#735). */
+  layoutNotShown: boolean;
   /** Its tracked changes, of every kind (paragraph marks, formatting and moves too). */
   changes: number;
   comments: number;
@@ -1029,6 +1053,25 @@ export interface WordImportReport {
    * Absent on reports from before #108.
    */
   keptChanges?: Partial<Record<KeptChangeKind, number>>;
+  /** What the Mind doesn't draw of the file's look; absent from a report made before #735. */
+  layout?: WordLayout;
+}
+
+/**
+ * What a Word file's look holds that a Mind doesn't draw (#735), counted from
+ * the document's own formatting: paragraphs, runs and cells shaded;
+ * paragraphs with a border; tab stops set; tables with no borders, which
+ * place text; and how many text colours (other than black), fonts and sizes
+ * it sets.
+ */
+export interface WordLayout {
+  shading: number;
+  borders: number;
+  tabStops: number;
+  layoutTables: number;
+  colours: number;
+  fonts: number;
+  sizes: number;
 }
 
 /**
@@ -3836,14 +3879,25 @@ export type ClaimCheckResult =
       excluded: LeftOutDocument[];
     };
 
+/**
+ * What a sentence already cites: a Citation's quote, and its Document as it was cited. With
+ * `documentId` (or `contentHash`) the check names the Document as it is named now.
+ */
+export interface CitedQuote {
+  documentName: string;
+  quote: string;
+  documentId?: string;
+  contentHash?: string;
+}
+
 /** What the claim-check function checks (`checkClaim`). */
 export interface CheckClaimInput {
   /** The sentence, or claim, to check: the User's own words. */
   claim: string;
   /** The paragraph it is in, for what its words refer to. */
   context?: string;
-  /** What the sentence already cites, for Check against Documents: each Citation's Document and quote. */
-  cited?: { documentName: string; quote: string }[];
+  /** What the sentence already cites, for Check against Documents. */
+  cited?: CitedQuote[];
   /** Where to look. None: every Document. */
   scope?: SearchScope | null;
   /** The document being checked, which is never its own evidence (#97). */
