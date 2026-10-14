@@ -469,7 +469,6 @@ export function createCore(adapters: CoreAdapters): Core {
     changed: (mindId) => events.emit("checkpoints.changed", { mindId }),
     stopAnswer: (mindId, answerId) => answers.stop({ mindId, answerId }),
     settleAnswers: (mindId) => answers.settleOrphans(mindId),
-    say: (key) => translate(settings.get().language, key),
     reportError: (error) => console.error(error),
   });
   // Background work (automatic tagging, Organize's classification, saving cited pages): one
@@ -539,7 +538,6 @@ export function createCore(adapters: CoreAdapters): Core {
         retryMs: adapters.linkedFolders?.retryMs ?? 30_000,
         detectDataless: adapters.linkedFolders?.detectDatalessFiles ?? platform === "darwin",
       },
-      say: (key, params) => translate(settings.get().language, key, params),
     });
     citedPages = createCitedPages({
       db,
@@ -1065,6 +1063,11 @@ export function createCore(adapters: CoreAdapters): Core {
         return turn;
       },
       questionOf: (input) => conversations.questionOf(input),
+      clearScope: (questionId) => {
+        const question = conversations.clearScope(questionId);
+        if (question) events.emit("conversation.message", question);
+        return question;
+      },
       restartAnswer: (answerId, answerModel, read) => {
         const turn = conversations.restartAnswer(answerId, answerModel, read);
         events.emit("conversation.message", turn.answer);
@@ -1270,6 +1273,7 @@ export function createCore(adapters: CoreAdapters): Core {
     readText: (documentId) => documents.readText(documentId),
     createMind: (title, folderId) => makeMind({ title, kind: DEFAULT_MIND_KIND, folderId }),
     mindFolder: (mindId) => minds.get(mindId).folderId,
+    originalOf: (mindId) => wordImports.originalOf(mindId),
     defaultModel: () => settings.get().user.chatModel,
     chat,
     consent,
@@ -1486,7 +1490,7 @@ export function createCore(adapters: CoreAdapters): Core {
       }
     },
     async prepare({ classifier }) {
-      if (!classifier) throw new TaggingNotReadyError("Choose a classification model.");
+      if (!classifier) throw new TaggingNotReadyError({ key: "error.tagging.noModel" });
       if (classifier.kind === "auto") {
         let automatic = automaticClassifiers.get(classifier.baseUrl);
         if (!automatic) {
@@ -1505,18 +1509,18 @@ export function createCore(adapters: CoreAdapters): Core {
         });
       if (classifier.kind === "jev") {
         if (embedding.localOnly() && jev.service())
-          throw new TaggingNotReadyError("Cloud classification is paused in local mode.");
+          throw new TaggingNotReadyError({ key: "error.tagging.cloudPaused" });
         const prepared = await jev.prepareGroups();
         if (embedding.localOnly() && !prepared.local)
-          throw new TaggingNotReadyError("Cloud classification is paused in local mode.");
+          throw new TaggingNotReadyError({ key: "error.tagging.cloudPaused" });
         return prepared;
       }
       const ready = await chat.readiness(classifier.choice, "classification");
       if (embedding.localOnly() && "provider" in ready && ready.provider.service)
-        throw new TaggingNotReadyError("Cloud classification is paused in local mode.");
+        throw new TaggingNotReadyError({ key: "error.tagging.cloudPaused" });
       const prepared = await chat.prepareModel(classifier.choice, "classification");
       if (embedding.localOnly() && prepared.provider.service)
-        throw new TaggingNotReadyError("Cloud classification is paused in local mode.");
+        throw new TaggingNotReadyError({ key: "error.tagging.cloudPaused" });
       // prepareModel got consent for everything the classification flow sends, page images included.
       const images = readsImages(prepared.capabilities);
       return {
@@ -1584,6 +1588,14 @@ export function createCore(adapters: CoreAdapters): Core {
     content,
     minds,
     requireFolder: (folderId) => void library.folder(folderId),
+    async addOriginal(path, folderId) {
+      const added = await addDocuments([path], folderId === null ? {} : { groupId: folderId });
+      const [document] = added.documents;
+      if (!document) throw new Error(`The Library skipped it: ${added.skipped[0]?.reason}.`);
+      return document.id;
+    },
+    newVersion: (documentId, path) => documents.newVersionFrom(documentId, path),
+    documentChanged: (documentId) => events.emit("document.status", documents.get(documentId)),
     mindsChanged,
     now,
     log: adapters.log ?? silentLogger,
@@ -2024,8 +2036,12 @@ export function createCore(adapters: CoreAdapters): Core {
   // Async on purpose: the renderer reaches these over IPC, and a future hosted core may be remote.
   return {
     createMind: async (input) => makeMind(parseCreateMindInput(input)),
-    checkWordFile: async (path) => wordImports.check(path),
+    checkWordFile: async (path, folderId) => wordImports.check(path, folderId),
     importWordFile: async (input) => wordImports.import(input),
+    addWordOriginal: async (mindId, path) => {
+      const mind = writableMind(mindId);
+      return wordImports.addOriginal(mind.id, path);
+    },
     listMinds: async () => minds.list(),
     renameMind: async (mindId, title) => {
       const mind = minds.rename(mindId, title);
@@ -2069,6 +2085,10 @@ export function createCore(adapters: CoreAdapters): Core {
     askInConversation: async (input) =>
       answers.askInConversation(conversations.parseQuestion(input)),
     regenerateConversationAnswer: async (input) => answers.regenerateInConversation(input),
+    countScopeDocuments: async (scope) => {
+      const wanted = parseSearchScope(scope);
+      return documents.searchableCount((wanted ? resolveScope(wanted) : null) ?? undefined);
+    },
     stopConversationAnswer: async (input) => answers.stopInConversation(input),
     listConversations: async (options) => conversations.list(options),
     getConversation: async (conversationId) => conversations.content(conversationId),

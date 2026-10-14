@@ -19,6 +19,7 @@ import {
   type TextCount,
 } from "../../../shared/wordCount";
 import { CheckLineIcon } from "../components/lineIcons";
+import { ProblemMark } from "../components/ProblemLine";
 import { usePopoverMenu } from "../components/usePopoverMenu";
 import { useLanguage, useT } from "../i18n";
 import { countMind } from "./wordCountText";
@@ -237,6 +238,7 @@ export function WordCount({
               </button>
               {invalid && (
                 <p role="alert" className="count-target-problem">
+                  <ProblemMark />
                   {t("wordCount.target.invalid")}
                 </p>
               )}
