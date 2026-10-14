@@ -1,0 +1,183 @@
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { expect, type Page, test } from "@playwright/test";
+import type { CoreBridge } from "../src/core/api";
+import { encryptedOfficeFile } from "../tests/helpers/office";
+import { buildPdf } from "../tests/helpers/pdf";
+import {
+  useLocalChatModel as connectLocalChatModel,
+  createDataFolder,
+  dismissChatSetup,
+  launchApp,
+  pointAndClick,
+  removeDataFolder,
+  setLanguage,
+  setWindowSize,
+} from "./app";
+
+/**
+ * Files that need attention carry their fix (#763 item 21): each says why in
+ * plain words, with its next step as buttons. Organize says what it does
+ * before it runs, and what it needs when it has no model (item 20). English
+ * and Chinese.
+ */
+let dataDir: string;
+let library: string;
+test.beforeEach(async () => {
+  dataDir = await createDataFolder();
+  library = await createDataFolder();
+});
+test.afterEach(async () => {
+  await removeDataFolder(dataDir);
+  await removeDataFolder(library);
+});
+
+const FILES: Record<string, string | Uint8Array> = {
+  "Tides.txt": "Spring tides happen at new moon and at full moon.\n",
+  "Locked.docx": encryptedOfficeFile(),
+  "Scan.pdf": buildPdf([{ image: true }]),
+  "Broken.pdf": "%PDF-1.4 this is not a PDF",
+  "Empty.txt": "",
+};
+
+const bridge = <T>(window: Page, run: (core: CoreBridge) => Promise<T>) =>
+  window.evaluate(
+    (source) =>
+      new Function("core", `return (${source})(core)`)(
+        (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind,
+      ) as Promise<T>,
+    run.toString(),
+  );
+
+async function start(language: "en" | "zh-CN") {
+  for (const [name, contents] of Object.entries(FILES)) {
+    await mkdir(library, { recursive: true });
+    await writeFile(join(library, name), contents);
+  }
+  const { app, window } = await launchApp(dataDir, { fakeChat: true, home: library });
+  await setWindowSize(app, window, 1440, 900);
+  await dismissChatSetup(window);
+  await setLanguage(window, language);
+  await window.evaluate(async (path) => {
+    await (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.addLinkedFolder(path);
+  }, library);
+  await expect
+    .poll(() =>
+      window.evaluate(async () => {
+        const all = await (
+          globalThis as unknown as { incarnamind: CoreBridge }
+        ).incarnamind.listDocuments();
+        return (
+          all.length === 5 &&
+          all.every((each) => each.status !== "queued" && each.status !== "extracting")
+        );
+      }),
+    )
+    .toBe(true);
+  await window.getByTestId("open-library").click();
+  return { app, window };
+}
+
+const WORDS = {
+  en: {
+    fixes: [
+      [
+        "Broken",
+        "This file looks damaged. Open it in your PDF app, save a copy, then add the copy",
+        ["Open in default app", "Retry"],
+      ],
+      [
+        "Locked",
+        "This file is locked with a password. Remove the password in its app, then add the copy",
+        ["Open in default app", "Retry"],
+      ],
+      ["Scan", "A scan with no text yet", ["Open in default app", "Read it again"]],
+      ["Empty", "This file is empty", ["Retry"]],
+    ],
+  },
+  "zh-CN": {
+    fixes: [
+      [
+        "Broken",
+        "这个文件似乎已损坏。请用 PDF 应用打开，另存一份副本，再添加副本",
+        ["用默认应用打开", "重试"],
+      ],
+      [
+        "Locked",
+        "这个文件设有密码。请在它的应用中去掉密码，再添加副本",
+        ["用默认应用打开", "重试"],
+      ],
+      ["Scan", "这是扫描件，暂时没有文字", ["用默认应用打开", "重新读取"]],
+      ["Empty", "这个文件是空的", ["重试"]],
+    ],
+  },
+} as const;
+
+for (const language of ["en", "zh-CN"] as const) {
+  test(`each file that needs attention says why in plain words and offers its next step (${language})`, async () => {
+    test.setTimeout(120_000);
+    const { app, window } = await start(language);
+    const rows = window.getByTestId("library").getByTestId("library-document");
+    await expect(rows).toHaveCount(5);
+    for (const [name, reason, buttons] of WORDS[language].fixes) {
+      const row = rows.filter({ hasText: name });
+      const fix = row.getByTestId("library-fix");
+      await expect(fix.getByTestId("library-fix-reason")).toHaveText(reason);
+      await expect(fix.getByRole("button")).toHaveText([...buttons]);
+    }
+    // A file that read has none.
+    await expect(rows.filter({ hasText: "Tides" }).getByTestId("library-fix")).toHaveCount(0);
+
+    // Read again: the scan is read once more, and says the same until text is found in it.
+    const scan = rows.filter({ hasText: "Scan" });
+    await pointAndClick(window, scan.getByTestId("library-fix-retry"));
+    await expect(scan.getByTestId("library-fix-reason")).toHaveText(WORDS[language].fixes[2][1]);
+    await app.close();
+  });
+}
+
+for (const language of ["en", "zh-CN"] as const) {
+  test(`Organize says what it does, and with no model what it needs and the way on (${language})`, async () => {
+    const { app, window } = await launchApp(dataDir, { fakeChat: true, home: library });
+    await setWindowSize(app, window, 1440, 900);
+    await dismissChatSetup(window);
+    await setLanguage(window, language);
+    await writeFile(join(library, "Harbour.txt"), "Notes on the harbour.\n");
+    await window.evaluate(
+      async (path) => {
+        const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+        await core.addDocuments([path]);
+        await core.createLibraryGroup({ name: "Harbour", description: "" });
+      },
+      join(library, "Harbour.txt"),
+    );
+    await window.getByTestId("open-library").click();
+    const lib = window.getByTestId("library");
+    await expect(lib.getByTestId("library-organize-explain")).toHaveText(
+      language === "en"
+        ? "Suggests a Folder and Tags for each Document here. You accept or change each one."
+        : "为这里的每个文档建议文件夹和标签，由你接受或更改。",
+    );
+    await pointAndClick(window, lib.getByTestId("library-organize"));
+    const needs = lib.getByTestId("library-organize-needs-model");
+    await expect(needs).toContainText(
+      language === "en" ? "Organize needs an AI model" : "“整理”需要 AI 模型",
+    );
+    // No AI model is connected yet: only the way to set one up on this computer.
+    await expect(needs.getByTestId("library-organize-use")).toHaveCount(0);
+    await pointAndClick(window, needs.getByTestId("library-organize-set-up"));
+    await expect(window.getByTestId("settings")).toHaveAttribute("data-page", "models");
+    await window.keyboard.press("Escape");
+
+    // With an AI model connected, Organize can use its company.
+    await connectLocalChatModel(window);
+    await bridge(window, async (core) => {
+      await core.getLibrary();
+    });
+    await pointAndClick(window, lib.getByTestId("library-organize"));
+    await expect(needs.getByTestId("library-organize-use")).toHaveText(
+      language === "en" ? "Use Ollama" : "使用 Ollama",
+    );
+    await app.close();
+  });
+}

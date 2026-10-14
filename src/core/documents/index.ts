@@ -2236,7 +2236,8 @@ export function createDocuments(options: DocumentsOptions) {
       const id = parseId(idInput);
       const row = find(id);
       if (!row) throw new NotFoundError({ key: "error.document.notFound" });
-      if (!failedNow(row)) {
+      // A scan with no text is read again too (#763): its text recognition may now be ready.
+      if (!failedNow(row) && row.status !== "no-text") {
         throw new InvalidInputError({ key: "error.document.notFailed" });
       }
       if (row.file_status !== "available") {

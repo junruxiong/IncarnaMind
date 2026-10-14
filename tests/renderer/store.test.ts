@@ -769,3 +769,34 @@ describe("loading keeps a list the core pushed after reading it", () => {
     expect(folderIds()).toEqual(["mine", "examples"]);
   });
 });
+
+describe("Organize says what it did (#763)", () => {
+  test("once it has gone through the Documents it says how many got a Suggested Folder, and Undo puts each back", async () => {
+    const { sayWhenOrganized } = await import("../../src/renderer/src/organizeRun");
+    const { useUndo } = await import("../../src/renderer/src/undo");
+    const before = new Map([
+      ["a", assignment("a", "classified")],
+      ["b", assignment("b", "classified")],
+    ]);
+    sayWhenOrganized(["a", "b"], before);
+
+    useAppStore.setState({
+      library: snapshot([assignment("a", "pending"), assignment("b", "classifying")]),
+    });
+    const earlier = useUndo.getState().line;
+    expect(useUndo.getState().line).toBe(earlier);
+    const suggested = (id: string) => ({
+      ...assignment(id, "classified", "g"),
+      suggested: true,
+    });
+    useAppStore.setState({ library: snapshot([suggested("a"), suggested("b")]) });
+
+    const change = useUndo.getState().line?.change;
+    expect(change?.message).toBe("Organize suggested a Folder for 2 Documents");
+    await useUndo.getState().undo();
+    const restored = method("restoreAssignment");
+    expect(restored).toHaveBeenCalledTimes(2);
+    expect(restored.mock.calls[0]?.[0]).toBe("a");
+    expect(restored.mock.calls[0]?.[1]).toMatchObject({ groupId: null, suggested: false });
+  });
+});
