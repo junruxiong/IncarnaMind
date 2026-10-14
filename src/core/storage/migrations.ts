@@ -1658,7 +1658,7 @@ export const migrations: readonly Migration[] = [
     `,
   },
   {
-    version: 89,
+    version: 90,
     description: "A Mind imported from Word keeps the file's look (#746)",
     sql: `
       -- WORD_LOOK_VERSION the look was read with; NULL for imports from before it was kept.
