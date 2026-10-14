@@ -343,6 +343,8 @@ export interface AnswerRequest {
    * it, every call runs.
    */
   gate?(tool: Tool, call: GatedCall): Promise<GateDecision>;
+  /** Whether a Tool hears its calls' input as it comes (see `RunRequest.streamsInput`). Without it, none does. */
+  streamsInput?(tool: Tool): boolean;
   /** Which Tools the Run is offered. Absent: "answer", every Tool. */
   toolSet?: ToolSet;
   /**
@@ -1469,6 +1471,10 @@ async function* toolLoop(
         ? request.gate(tool, { ...call, tainted, thirdParty: [...thirdParty] })
         : RUN;
     },
+    streamsInput: (name) => {
+      const tool = offered.get(name);
+      return tool !== undefined && (request.streamsInput?.(tool) ?? false);
+    },
     window,
     // The Answer written beside `cite` or `calculate`, with all they were given taken, is complete:
     // another call would only write it again.
@@ -1493,6 +1499,19 @@ async function* toolLoop(
         if (stepText === "" && keptText !== "" && !/\s$/.test(keptText)) text = `\n\n${text}`;
         stepText += text;
         yield { type: "text-delta", text };
+        break;
+      }
+      case "tool-input-started": {
+        // A Tool that writes as its input comes (the Minds'): its card shows from the start.
+        const called = offered.get(event.tool);
+        if (!called || recording(called)) break;
+        yield {
+          type: "tool-call-started",
+          id: event.id,
+          provider: called.provider,
+          tool: called.providerTool,
+          input: {},
+        };
         break;
       }
       case "tool-call": {
