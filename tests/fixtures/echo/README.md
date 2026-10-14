@@ -1,4 +1,4 @@
-The echo canceller's test voices (`tests/core/echo.test.ts`) are four clips of Google's FLEURS dev split (CC BY 4.0; Conneau et al., "FLEURS: Few-shot Learning Evaluation of Universal Representations of Speech", 2022), from revision `70bb2e84b976b7e960aa89f1c648e09c59f894dd` on Hugging Face, fetched with `eval/transcription/fetch-fleurs.py`:
+The echo canceller's test voices (`tests/core/echo.test.ts`) are four clips of Google's FLEURS dev split (CC BY 4.0, https://creativecommons.org/licenses/by/4.0/; Conneau et al., "FLEURS: Few-shot Learning Evaluation of Universal Representations of Speech", 2022), from revision `70bb2e84b976b7e960aa89f1c648e09c59f894dd` on Hugging Face, fetched with `eval/transcription/fetch-fleurs.py`:
 
 | File | FLEURS clip | Speaker | What is said |
 |---|---|---|---|
