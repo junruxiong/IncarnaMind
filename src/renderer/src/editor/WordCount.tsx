@@ -14,15 +14,13 @@ import {
   type CountBasis,
   countFor,
   mostlyCjk,
-  NO_COUNT,
   parseTarget,
-  type TextCount,
 } from "../../../shared/wordCount";
 import { CheckLineIcon } from "../components/lineIcons";
 import { ProblemMark } from "../components/ProblemLine";
 import { usePopoverMenu } from "../components/usePopoverMenu";
 import { useLanguage, useT } from "../i18n";
-import { createMindCounter } from "./wordCountText";
+import { createMindCounter, type MindCount } from "./wordCountText";
 
 /**
  * How long the editor is left alone before the count is worked out. Counting
@@ -44,16 +42,16 @@ const BASIS_NAMES: Record<CountBasis, MessageKey> = {
   charactersNoSpaces: "wordCount.basis.charactersNoSpaces",
 };
 
-interface Counts {
-  total: TextCount;
-  selection: TextCount | null;
-}
-
-/** The Mind's counts, worked out a moment after the text or the selection last changed. */
-function useCounts(editor: Editor): Counts {
-  const [counts, setCounts] = useState<Counts>({ total: NO_COUNT, selection: null });
+/**
+ * The Mind's counts, worked out a moment after the text or the selection last
+ * changed; null until the Mind's first count is done, so a long Mind never
+ * shows "0 words" while it is counted.
+ */
+function useCounts(editor: Editor): MindCount | null {
+  const [counts, setCounts] = useState<MindCount | null>(null);
 
   useEffect(() => {
+    setCounts(null);
     const counter = createMindCounter();
     let timer: ReturnType<typeof setTimeout> | undefined;
     let idle: number | undefined;
@@ -69,7 +67,8 @@ function useCounts(editor: Editor): Counts {
         () => performance.now() > until,
       );
       if (counted) setCounts(counted);
-      else idle = requestIdleCallback(count);
+      // Not starved while the renderer is busy for long, as when an Answer streams.
+      else idle = requestIdleCallback(count, { timeout: 1000 });
     };
     const stop = () => {
       clearTimeout(timer);
@@ -130,6 +129,14 @@ export function WordCount({
   const menu = usePopoverMenu();
   const [draft, setDraft] = useState("");
   const [invalid, setInvalid] = useState(false);
+
+  if (!counts) {
+    return (
+      <div className="mind-count" data-testid="mind-count">
+        {children}
+      </div>
+    );
+  }
 
   const format = (value: number) => new Intl.NumberFormat(language).format(value);
   // Words, unless the writing is Chinese or Japanese (or the User asked for characters).
