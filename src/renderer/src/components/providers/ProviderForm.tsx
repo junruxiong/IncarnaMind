@@ -129,7 +129,7 @@ export function ProviderForm({
   const chip = (option: FormKind) => (
     <label
       key={option}
-      className={`inline-flex h-8 cursor-pointer items-center rounded-md border px-3 text-ui has-[:checked]:border-ink has-[:checked]:bg-wash has-[:focus-visible]:outline-2 ${
+      className={`inline-flex h-7 cursor-pointer items-center rounded-md border px-2.5 text-[13px] has-[:checked]:border-ink has-[:checked]:bg-wash has-[:focus-visible]:outline-2 ${
         kind === option ? "border-ink font-semibold text-ink" : "border-rule text-ink-secondary"
       }`}
     >
@@ -228,7 +228,7 @@ export function ProviderForm({
     <form data-testid="provider-form" onSubmit={submit} className="flex flex-col gap-3">
       <fieldset>
         <legend className={`mb-1.5 ${fieldLabelClass}`}>{t("providers.form.label")}</legend>
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-1">
           {[...rowKinds, ...(moreOpen ? underMore : [])].map(chip)}
           {underMore.length > 0 && !moreOpen && (
             <button
@@ -236,7 +236,7 @@ export function ProviderForm({
               data-testid="provider-more-toggle"
               aria-expanded={moreOpen}
               onClick={() => setMoreOpen(true)}
-              className={`${buttonClass} h-8`}
+              className={`${buttonClass} h-7 px-2.5`}
             >
               {t("providers.form.moreShort")}
             </button>

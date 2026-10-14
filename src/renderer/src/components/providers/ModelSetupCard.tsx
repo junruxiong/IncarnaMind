@@ -60,7 +60,9 @@ export function ModelSetupCard() {
         <h2 id="model-setup-title" className="text-[15px] leading-6 font-semibold text-ink">
           {t("setup.title")}
         </h2>
-        <p className="text-[13px] leading-5 text-ink-secondary">{t("setup.body")}</p>
+        {view === null && (
+          <p className="text-[13px] leading-5 text-ink-secondary">{t("setup.body")}</p>
+        )}
       </div>
 
       {chinese ? (
@@ -82,13 +84,13 @@ export function ModelSetupCard() {
           >
             {t("setup.how")}
           </button>
-          <p className={hintClass}>{t("setup.deepseek.line")}</p>
+          {view === null && <p className={hintClass}>{t("setup.deepseek.line")}</p>}
           {view === "deepseek" && (
             <ProviderForm providers={providers} onSaved={() => undefined} initialKind="deepseek" />
           )}
         </>
       ) : (
-        <ChatGptWay primary />
+        view === null && <ChatGptWay primary />
       )}
 
       <details
