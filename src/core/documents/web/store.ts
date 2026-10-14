@@ -161,15 +161,11 @@ export function showsPicture(db: Database, documentId: string, pictureHash: stri
   );
 }
 
-/** The pictures only Documents deleted permanently show: their files can go. */
-export function picturesOnlyPurgedShow(db: Database): { pictureHash: string; mediaType: string }[] {
-  return db
-    .all<{ picture_hash: string; media_type: string }>(
-      `SELECT p.picture_hash, max(p.media_type) AS media_type
-       FROM web_page_pictures p JOIN documents d ON d.id = p.document_id
-       WHERE p.deleted_at IS NULL
-       GROUP BY p.picture_hash
-       HAVING sum(d.purged_at IS NULL) = 0`,
-    )
-    .map((row) => ({ pictureHash: row.picture_hash, mediaType: row.media_type }));
+/** The pictures some version of a web page shows, live or in Recently deleted: their files stay. */
+export function keptPictureHashes(db: Database): Set<string> {
+  return new Set(
+    db
+      .all<{ picture_hash: string }>("SELECT DISTINCT picture_hash FROM web_page_pictures")
+      .map((row) => row.picture_hash),
+  );
 }

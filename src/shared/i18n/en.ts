@@ -857,6 +857,7 @@ export const en = {
   "viewer.markdown.imageMissing": "Image not found",
   "viewer.web.picturesLeftOut.one": "1 picture wasn't saved: over the limit for a page",
   "viewer.web.picturesLeftOut": "{count} pictures weren't saved: over the limit for a page",
+  "viewer.web.pictureNotSaved": "Not saved with the page",
   "viewer.docx.comment": "Comment by {author}",
 
   "location.page": "p. {range}",
@@ -1127,8 +1128,7 @@ export const en = {
   "status.skipped.one": "Skipped 1 file",
   "status.skipped.other": "Skipped {count} files",
   "webPages.add.title": "Add web pages",
-  "webPages.add.note":
-    "Paste an address, or several, one per line. Each page is fetched once, from this computer, and kept as a Document whose quotes can be checked. Its pictures aren't downloaded.",
+  "webPages.add.note": "Paste an address, or several, one per line. Each page is fetched once, from this computer, with the article's pictures, which may come from the site's image servers, and kept as a Document whose quotes can be checked. Nothing else on the page is loaded.",
   "webPages.add.label": "Addresses",
   "webPages.add.invalid": "Not a web address: {line}",
   "webPages.add.cancel": "Cancel",
