@@ -10,6 +10,7 @@ import {
   type SearchMatch,
   type LibrarySection as Section,
 } from "../../libraryPage";
+import { sayWhenOrganized } from "../../organizeRun";
 import { useRequests } from "../../requests";
 import { useAppStore } from "../../store";
 import { TREE_ROW } from "../../treeKeys";
@@ -255,17 +256,27 @@ function Organize({ documents }: { documents: readonly Document[] }) {
       };
     }),
   );
+  const [needsModel, setNeedsModel] = useState<readonly string[] | null>(null);
   const run = (ids: readonly string[]) => {
     const app = useAppStore.getState();
     if (!hasModel) {
-      app.openSettings("models");
+      setNeedsModel(ids);
       return;
     }
+    const before = new Map(
+      (app.library?.assignments ?? [])
+        .filter((item) => ids.includes(item.documentId))
+        .map((item) => [item.documentId, item]),
+    );
     core
       .classifyDocuments([...ids])
       .then(() => app.refreshLibrary())
+      .then(() => sayWhenOrganized(ids, before))
       .catch(app.reportError);
   };
+  if (needsModel && !hasModel) {
+    return <OrganizeNeedsModel ids={needsModel} onRun={run} onClose={() => setNeedsModel(null)} />;
+  }
   if (pending > 0) {
     return (
       <span
@@ -302,13 +313,104 @@ function Organize({ documents }: { documents: readonly Document[] }) {
   }
   if (!hasFolders || documents.length === 0) return null;
   return (
-    <button
-      type="button"
-      data-testid="library-organize"
-      onClick={() => run(documents.map((doc) => doc.id))}
-      className={quietButtonClass}
+    <span className="flex min-w-0 items-baseline gap-2">
+      <span
+        data-testid="library-organize-explain"
+        className="min-w-0 truncate text-[13px] text-ink-meta @max-[704px]/page:hidden"
+      >
+        {t("library.organize.explain")}
+      </span>
+      <button
+        type="button"
+        data-testid="library-organize"
+        title={t("library.organize.explain")}
+        onClick={() => run(documents.map((doc) => doc.id))}
+        className={quietButtonClass}
+      >
+        {t("library.classify")}
+      </button>
+    </span>
+  );
+}
+
+/**
+ * Organize with no model chosen (#763): says so where it was asked, with the
+ * way on: the AI model already connected, or one on this computer.
+ */
+function OrganizeNeedsModel({
+  ids,
+  onRun,
+  onClose,
+}: {
+  ids: readonly string[];
+  onRun(ids: readonly string[]): void;
+  onClose(): void;
+}) {
+  const t = useT();
+  const [company, setCompany] = useState<string | null>(null);
+  const chosen = useAppStore((state) => state.settings?.user.chatModel ?? null);
+  useEffect(() => {
+    if (!chosen) return;
+    let current = true;
+    core.listChatProviders().then(
+      (providers) => {
+        const provider = providers.find((each) => each.id === chosen.providerId);
+        if (current && provider) {
+          setCompany(provider.service?.name ?? t(`providers.kind.${provider.kind}`));
+        }
+      },
+      () => undefined,
+    );
+    return () => {
+      current = false;
+    };
+  }, [chosen, t]);
+  const use = () => {
+    if (!chosen) return;
+    core
+      .saveLibrarySettings({
+        classifier: { kind: "chat", choice: chosen },
+        automatic: false,
+      })
+      .then(() => useAppStore.getState().refreshLibrary())
+      .then(() => {
+        onClose();
+        onRun(ids);
+      })
+      .catch(useAppStore.getState().reportError);
+  };
+  return (
+    <span
+      role="status"
+      data-testid="library-organize-needs-model"
+      className="flex min-w-0 flex-wrap items-baseline gap-x-1 text-[13px] text-ink-meta"
     >
-      {t("library.classify")}
-    </button>
+      <span>{t("library.organize.needsModel")}</span>
+      {company && (
+        <>
+          <span aria-hidden="true">·</span>
+          <button
+            type="button"
+            data-testid="library-organize-use"
+            onClick={use}
+            className={quietButtonClass}
+          >
+            {t("library.organize.use", { company })}
+          </button>
+        </>
+      )}
+      <span aria-hidden="true">·</span>
+      <button
+        type="button"
+        data-testid="library-organize-set-up"
+        onClick={() => {
+          onClose();
+          useAppStore.getState().openSettings("models");
+        }}
+        className={quietButtonClass}
+      >
+        {t("library.organize.setUp")}
+      </button>
+    </span>
   );
 }

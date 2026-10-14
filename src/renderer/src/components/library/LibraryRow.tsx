@@ -24,6 +24,7 @@ import { ObjectMenu, useObjectMenu } from "../ObjectMenu";
 import { rowActionButtonClass } from "../sidebarRows";
 import { ReviewRing } from "../TagColour";
 import { useTabPlace } from "../tabs/tabItems";
+import { DocumentFix } from "./DocumentFix";
 import { documentsToMove, useDocumentMove } from "./DocumentMoveTo";
 import { RowTags } from "./RowTags";
 
@@ -269,6 +270,7 @@ export const LibraryRow = memo(function LibraryRow({
                 />
               )}
             </div>
+            <DocumentFix doc={doc} />
             {line && (
               <p
                 data-testid="library-found-text"
