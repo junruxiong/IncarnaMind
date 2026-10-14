@@ -182,9 +182,7 @@ export interface AppState extends LayoutSlice {
   skills: Skill[];
   /** The first-run example Mind and its Documents (onboarding). Null until loaded. */
   examples: Examples | null;
-  /** The other examples made (#123), each with its Mind and Documents. */
   otherExamples: Examples[];
-  /** An Answer to a Question of the User's own has arrived in this session (#123). */
   ownAnswerArrived: boolean;
   usageNotice: "auto" | "kept" | "answered";
   /**
@@ -258,7 +256,6 @@ export interface AppState extends LayoutSlice {
   openExamples(): Promise<void>;
   /** Opens another example in a new tab, making it first if it isn't there; the Mind in view stays. */
   openExample(group: ExampleGroup): Promise<void>;
-  /** Deletes every example Mind made, with its Documents. */
   removeExamples(): Promise<void>;
   /**
    * Ticks steps of the "Get started" checklist, or hides it. Only once it
@@ -1459,7 +1456,6 @@ const withExamples =
 const OTHER_EXAMPLE_GROUPS = EXAMPLE_GROUPS.filter((group) => group !== "tea");
 const isMade = (examples: Examples) => examples.mindId !== null || examples.linkedFolderId !== null;
 
-/** Every example the core has made, the first-run one and the others. */
 export const allExamples = (state: Pick<AppState, "examples" | "otherExamples">): Examples[] =>
   [state.examples, ...state.otherExamples].filter((each) => each !== null);
 
