@@ -720,9 +720,14 @@ test("an original the Library can't take is said under the Mind's line, and Add 
 
 test("From the original's menu, Open the original opens it beside the Mind at the paragraph the caret is in, in English and Chinese", async () => {
   const CAPPED = "Clause 9: each party's total liability is capped at a year's fees.";
+  // Every tenth crosses a page, as Word marks it: the viewer draws it as two paragraphs.
   const recitals = (from: number, count: number) =>
     Array.from({ length: count }, (_, index) =>
-      paragraph(`Recital ${from + index}: the parties record a fact of the background.`),
+      (from + index) % 10 === 0
+        ? paragraph(
+            `${run(`Recital ${from + index}: the parties record a fact `)}<w:r><w:lastRenderedPageBreak/><w:t xml:space="preserve">of the background.</w:t></w:r>`,
+          )
+        : paragraph(`Recital ${from + index}: the parties record a fact of the background.`),
     );
   const path = join(files, "Supply agreement.docx");
   await writeFile(
