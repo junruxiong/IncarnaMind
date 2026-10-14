@@ -95,8 +95,8 @@ export function AnswerView({ node, editor, getPos }: ReactNodeViewProps) {
     : null;
 
   // One the User edited comes back as changes over their version: nothing to confirm.
-  const writeAgain = () => {
-    if (answerId && questionId) void regenerate(mindId, answerId, questionId);
+  const writeAgain = async () => {
+    if (answerId && questionId) await regenerate(mindId, answerId, questionId);
   };
   const objectMenu = useObjectMenu({ kind: "answer", id: answerId ?? "" });
   const here = {

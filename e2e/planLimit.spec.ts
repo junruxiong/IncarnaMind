@@ -8,6 +8,7 @@ import {
   dismissChatSetup,
   launchApp,
   pointAndClick,
+  pointAt,
   removeDataFolder,
   setLanguage,
   setWindowSize,
@@ -18,7 +19,8 @@ import {
  * On a ChatGPT plan, a model whose usage limit is used up (#551): the Problem
  * line under the Answer names it and when it resets, and offers the plan's
  * next model with limit left; one click asks the same Question again in place
- * with it, and the model chip says which model answers, until when. Set
+ * with it, and the model chip says which model answers, until when. The
+ * limits last the session: reopened, the app says "for now". Set
  * INCARNAMIND_SCREENSHOTS to a folder to also save screenshots, narrow and
  * wide, in English and Chinese.
  */
@@ -32,11 +34,14 @@ const LUNA = "gpt-6-luna";
 const ASTRA = "gpt-6-astra";
 
 let dataDir: string;
+let home: string;
 test.beforeEach(async () => {
   dataDir = await createDataFolder();
+  home = await createDataFolder();
 });
 test.afterEach(async () => {
   await removeDataFolder(dataDir);
+  await removeDataFolder(home);
 });
 
 /** The plan refuses `model` for its usage limit, which resets in `hours`. */
@@ -69,7 +74,6 @@ async function shots(app: Parameters<typeof setWindowSize>[0], window: Page, nam
   await shot(window, `${name}-wide`);
 }
 
-/** Asks in the assistant as a person does, and waits for its Answer to fail. */
 async function askAndFail(window: Page, question: string): Promise<Locator> {
   const answers = assistantAnswers(window);
   const before = await answers.count();
@@ -81,20 +85,20 @@ async function askAndFail(window: Page, question: string): Promise<Locator> {
   return answers.last();
 }
 
-/** The time a Problem line says the limit resets, as the app wrote it. */
 async function resetTime(line: Locator, pattern: RegExp): Promise<string> {
   await expect(line).toHaveText(pattern);
   return pattern.exec((await line.textContent()) ?? "")?.[1] ?? "";
 }
 
-test("a used-up plan model offers the next one in one click, which answers in place and holds the chip until the reset, in English and Chinese", async () => {
+test("a used-up plan model offers the next one in one click, which answers in place and holds the chip until the reset, in English and Chinese; reopened, it says for now", async () => {
+  test.setTimeout(120_000);
   const openai = await createFakeOpenAI();
   openai.modelList = [
     { slug: SOL, display_name: "GPT-6.1 Sol", visibility: "list" },
     { slug: LUNA, display_name: "GPT-6 Luna", visibility: "list" },
     { slug: ASTRA, display_name: "GPT-6 Astra", visibility: "list" },
   ];
-  const { app, window } = await launchApp(dataDir, { chatGpt: openai.endpoints.issuer });
+  let { app, window } = await launchApp(dataDir, { chatGpt: openai.endpoints.issuer, home });
   try {
     await setWindowSize(app, window, WIDE.width, WIDE.height);
     await dismissChatSetup(window);
@@ -102,7 +106,6 @@ test("a used-up plan model offers the next one in one click, which answers in pl
     const chip = window.getByTestId("assistant").getByTestId("composer-model");
     await expect(chip).toHaveText("GPT-6.1 Sol");
 
-    // Sol's limit is used up: the line names it and its reset, and offers Luna.
     usedUp(openai, SOL, 2);
     const answer = await askAndFail(window, "What did the committee decide?");
     const line = answer.getByTestId("answer-error");
@@ -119,10 +122,8 @@ test("a used-up plan model offers the next one in one click, which answers in pl
     );
     await shots(app, window, "limit-zh");
     await setLanguage(window, "en");
-    // Nothing switched by itself.
     await expect(chip).toHaveText("GPT-6.1 Sol");
 
-    // One click asks the same Question again, in place, with Luna, and the chip holds it.
     await pointAndClick(window, line.getByTestId("answer-error-action"));
     await expect(assistantAnswers(window)).toHaveCount(1);
     await expect(answer).toHaveAttribute("data-status", "done");
@@ -138,7 +139,6 @@ test("a used-up plan model offers the next one in one click, which answers in pl
     await expect(chip).toHaveText(`GPT-6 Luna · ${zhTime} 前`);
     await shots(app, window, "answered-zh");
 
-    // In Chinese: Luna's limit is used up too; Sol is passed over, and Astra offered.
     usedUp(openai, LUNA, 1);
     const second = await askAndFail(window, "什么时候上线？");
     const secondLine = second.getByTestId("answer-error");
@@ -146,14 +146,15 @@ test("a used-up plan model offers the next one in one click, which answers in pl
       secondLine,
       /^你的套餐里 GPT-6 Luna 的额度已用完，(.+) 恢复。· 改用 GPT-6 Astra 回答$/,
     );
-    await pointAndClick(window, secondLine.getByTestId("answer-error-action"));
+    const action = await pointAt(window, secondLine.getByTestId("answer-error-action"));
+    await window.mouse.dblclick(action.x, action.y);
     await expect(second).toHaveAttribute("data-status", "done");
     await expect(second).toContainText(ANSWER);
-    expect(openai.responses().at(-1)?.body.model).toBe(ASTRA);
+    expect(openai.responses().filter((request) => request.body.model === ASTRA)).toHaveLength(1);
     // Astra stands in for Sol, the model the User chose, until Sol's reset.
     await expect(chip).toHaveText(`GPT-6 Astra · ${zhTime} 前`);
 
-    // None left: the line says when the first limit resets, with nothing to click.
+    // None left: Luna's limit resets first.
     usedUp(openai, ASTRA, 3);
     const third = await askAndFail(window, "谁负责？");
     await expect(third.getByTestId("answer-error")).toHaveText(
@@ -161,6 +162,32 @@ test("a used-up plan model offers the next one in one click, which answers in pl
     );
     await expect(third.getByTestId("answer-error-action")).toHaveCount(0);
     await shots(app, window, "none-left-zh");
+
+    // Quit and reopen: the limits are forgotten, so the stopped Answer says "for now" and offers
+    // the plan's first model again, which answers.
+    const conversation = (await window.getByTestId("assistant-title").textContent()) ?? "";
+    await app.close();
+    ({ app, window } = await launchApp(dataDir, { chatGpt: openai.endpoints.issuer, home }));
+    await setWindowSize(app, window, WIDE.width, WIDE.height);
+    await window.keyboard.press("ControlOrMeta+k");
+    await window.keyboard.type(conversation);
+    await pointAndClick(
+      window,
+      window.getByTestId("palette-item").filter({ hasText: conversation }).first(),
+    );
+    const reopened = assistantAnswers(window).last();
+    const reopenedLine = reopened.getByTestId("answer-error");
+    await expect(reopenedLine).toHaveText(
+      "你的套餐里 GPT-6 Astra 的额度暂时已用完。· 改用 GPT-6.1 Sol 回答",
+    );
+    openai.replyFor = {};
+    await pointAndClick(window, reopenedLine.getByTestId("answer-error-action"));
+    await expect(reopened).toHaveAttribute("data-status", "done");
+    await expect(reopened).toContainText(ANSWER);
+    expect(openai.responses().at(-1)?.body.model).toBe(SOL);
+    await expect(window.getByTestId("assistant").getByTestId("composer-model")).toHaveText(
+      "GPT-6.1 Sol",
+    );
   } finally {
     await app.close();
     await openai.close();

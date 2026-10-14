@@ -9,7 +9,6 @@ import type { ChatGptPlanLimits } from "../../api";
 import type { ChatLanguageModel } from "../models";
 import { classifyProviderError } from "../providerErrors";
 
-/** With no reset time from the plan, the chosen model is tried again this long after its last try. */
 const RETRY_WITHOUT_RESET_MS = 60 * 60_000;
 
 type Wrapped = Parameters<NonNullable<LanguageModelMiddleware["wrapStream"]>>[0];
@@ -28,7 +27,6 @@ export function createPlanLimits(options: {
   const usedUp = new Map<string, number | null>();
   let standIn: { insteadOf: string; modelId: string; triedAt: number } | null = null;
 
-  /** Forgets limits whose reset time has passed, and a stand-in whose model can answer again. */
   const expire = () => {
     for (const [modelId, resetsAt] of usedUp) {
       if (resetsAt !== null && now() >= resetsAt) usedUp.delete(modelId);

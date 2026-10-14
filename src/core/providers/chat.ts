@@ -400,7 +400,6 @@ export function createChat(options: {
     };
   };
 
-  /** A plan model tells the plan's limits each limit it meets and each answer it gives. */
   const watchedPlan = (kind: ChatProviderKind, model: ChatLanguageModel, modelId: string) =>
     kind === "chatgpt" ? chatGpt.limits.watch(model, modelId) : model;
 

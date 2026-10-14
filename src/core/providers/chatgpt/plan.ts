@@ -77,7 +77,6 @@ export function createChatGptPlan(options: {
   now: () => number;
   /** Its sign-in changed. */
   onChange: () => void;
-  /** What this session knows of its models' limits changed. */
   onLimitsChange: () => void;
   fetch?: typeof globalThis.fetch;
 }) {
