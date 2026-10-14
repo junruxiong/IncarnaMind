@@ -51,6 +51,22 @@ function Notice({ notice }: { notice: ErrorNoticeState }) {
           </p>
         </details>
       </div>
+      {notice.action && (
+        <button
+          type="button"
+          data-testid="error-notice-action"
+          onClick={() => {
+            const { action } = notice;
+            dismiss();
+            Promise.resolve(action?.run()).catch((error: unknown) =>
+              useNotices.getState().showError(error),
+            );
+          }}
+          className={buttonStyle("secondary", "sm")}
+        >
+          {notice.action.label}
+        </button>
+      )}
       <button
         type="button"
         data-testid="error-notice-dismiss"
