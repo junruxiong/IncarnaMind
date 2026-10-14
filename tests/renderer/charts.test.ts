@@ -15,12 +15,13 @@ import {
   chartOfSelection,
   chartOfTable,
   insertChart,
+  switchedChartIn,
   tableUpdate,
   toggledSeries,
   withKind,
 } from "../../src/renderer/src/editor/chartCommands";
 import { noteExtensions } from "../../src/renderer/src/editor/noteSchema";
-import { type ChartAttributes, readChart, switchedChart } from "../../src/shared/charts";
+import { type ChartAttributes, readChart } from "../../src/shared/charts";
 
 const text = (value: string): JSONContent => ({ type: "text", text: value });
 const paragraph = (...content: JSONContent[]): JSONContent => ({ type: "paragraph", content });
@@ -77,7 +78,9 @@ const QUARTERS: JSONContent = {
 /** The words of a row of a table, headings first when `header`. */
 const wordsRow = (header: boolean, ...values: string[]): JSONContent => ({
   type: "tableRow",
-  content: values.map((value) => cell(header ? "tableHeader" : "tableCell", text(value))),
+  content: values.map((value) =>
+    cell(header ? "tableHeader" : "tableCell", ...(value === "" ? [] : [text(value)])),
+  ),
 });
 
 /** A statement of accounts: the years across the top, a metric on each row. */
@@ -309,7 +312,7 @@ describe("changing a chart in place", () => {
     const editor = made();
     const node = () => editor.state.doc.nodeAt(chartAt(editor).pos);
     const { chart, pos } = chartAt(editor);
-    const switched = switchedChart(chart);
+    const switched = switchedChartIn(editor.state.doc, node()?.attrs ?? {}, "en");
     expect(switched).not.toBeNull();
     changeChart(editor, pos, switched ?? {});
 
@@ -330,11 +333,54 @@ describe("changing a chart in place", () => {
     expect(update?.rows.map((row) => row.label)).toEqual(["2024", "2025"]);
     expect(update?.rows[1]?.values[1]?.shown).toBe("365.0");
 
-    // And back again: the chart it was.
-    const back = switchedChart(chartAt(editor).chart);
+    // And back again: the values it had, kept until Update.
+    const back = switchedChartIn(editor.state.doc, node()?.attrs ?? {}, "en");
     changeChart(editor, chartAt(editor).pos, back ?? {});
     expect(chartAt(editor).chart.source).toEqual({ kind: "table", blockId: "table-1" });
-    expect(chartAt(editor).chart.data).toEqual(chart.data);
+    expect(chartAt(editor).chart.data.rows).toEqual(chart.data.rows);
+    expect(
+      tableUpdate(editor.state.doc, node()?.attrs ?? {}, "en")?.rows[1]?.values[1]?.shown,
+    ).toBe("365.0");
+  });
+
+  test("switched there and back, a row with no number is where it was, and the table hasn't changed", () => {
+    const editor = editorWith([
+      {
+        type: "table",
+        attrs: { id: "table-4" },
+        content: [
+          wordsRow(true, "Metric", "2023", "2024", "2025"),
+          wordsRow(false, "Revenue", "289.4", "301.2", "330.6"),
+          wordsRow(false, "Operating costs:", "", "", ""),
+          wordsRow(false, "Rent", "12.0", "12.5", "13.1"),
+        ],
+      },
+      paragraph(),
+    ]);
+    cursorIn(editor, "Revenue");
+    insertChart(editor, chartOfTable(editor.state, "en") as ChartAttributes);
+    const node = () => editor.state.doc.nodeAt(chartAt(editor).pos);
+    expect(chartAt(editor).chart.data.series).toEqual(["Revenue", "Rent"]);
+
+    changeChart(
+      editor,
+      chartAt(editor).pos,
+      switchedChartIn(editor.state.doc, node()?.attrs ?? {}, "en") ?? {},
+    );
+    expect(chartAt(editor).chart.data.rows.map((row) => row.label)).toEqual([
+      "Revenue",
+      "Operating costs:",
+      "Rent",
+    ]);
+    expect(tableUpdate(editor.state.doc, node()?.attrs ?? {}, "en")).toBeNull();
+
+    changeChart(
+      editor,
+      chartAt(editor).pos,
+      switchedChartIn(editor.state.doc, node()?.attrs ?? {}, "en") ?? {},
+    );
+    expect(chartAt(editor).chart.data.series).toEqual(["Revenue", "Rent"]);
+    expect(tableUpdate(editor.state.doc, node()?.attrs ?? {}, "en")).toBeNull();
   });
 
   test("knows when its table changed since, and what it would draw now", () => {

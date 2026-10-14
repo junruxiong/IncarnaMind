@@ -10,13 +10,7 @@
  * (exports, Question context) and the tests share it.
  */
 import type { CitationAttributes, CitationCheck } from "../core/api";
-import {
-  type Figure,
-  type FigureContext,
-  type FigureUnit,
-  figureContextOf,
-  readFigures,
-} from "./figures";
+import { type Figure, type FigureUnit, figureContextOf, readFigures } from "./figures";
 import type { MessageKey, MessageParams } from "./i18n";
 import { holdsPeriods } from "./periods";
 
@@ -297,18 +291,32 @@ export function chartPoints(chart: Pick<ChartAttributes, "kind" | "drawn" | "dat
   return points;
 }
 
+/** What a number measures, as a chart's value or a figure read from a cell holds it. */
+type Measured = Pick<ChartValue, "unit" | "scale">;
+
 /** Whether a value says what it counts: a unit ("$", "%", "吨") or a scale ("million", "亿"). */
-function saysUnit(value: ChartValue): boolean {
+function saysUnit(value: Measured): boolean {
   return (value.unit !== null && value.unit.kind !== "plain") || (value.scale ?? 1) !== 1;
 }
 
 /** One key per unit a column's numbers can share: "$" whatever its scale, "%", or a scale alone. */
-function unitKey(value: ChartValue): string {
+function unitKey(value: Measured): string {
   const { unit } = value;
   if (!unit || unit.kind === "plain") return "scale";
   if (unit.kind === "currency") return `currency:${unit.code}`;
   if (unit.kind === "other") return `other:${unit.word}`;
   return unit.kind;
+}
+
+/**
+ * How a run of numbers is measured: "none" when none says a unit; "one" when they all say the
+ * same one, or at least half do and the bare others are left out (`unitlessRows`); else "mixed".
+ */
+function unitsOf(values: readonly Measured[]): "none" | "one" | "mixed" {
+  const withUnit = values.filter(saysUnit);
+  const units = new Set(withUnit.map(unitKey)).size;
+  if (units === 0) return "none";
+  return units === 1 && withUnit.length * 2 >= values.length ? "one" : "mixed";
 }
 
 /**
@@ -323,11 +331,8 @@ export function unitlessRows(data: ChartData, series: number): Set<number> {
     const value = row.values[series];
     return value?.value != null ? [{ index, value }] : [];
   });
-  const withUnit = numbered.filter((each) => saysUnit(each.value));
-  const bare = numbered.filter((each) => !saysUnit(each.value));
-  const units = new Set(withUnit.map((each) => unitKey(each.value)));
-  return bare.length > 0 && units.size === 1 && withUnit.length >= bare.length
-    ? new Set(bare.map((each) => each.index))
+  return unitsOf(numbered.map((each) => each.value)) === "one"
+    ? new Set(numbered.filter((each) => !saysUnit(each.value)).map((each) => each.index))
     : new Set();
 }
 
@@ -413,12 +418,9 @@ export function chartSources(
 /** What a figure doesn't settle that changes its value: drawn, it would be a guess. */
 const UNSETTLED = new Set(["separator", "sign"]);
 
-/** The first figure in a text, with the value to draw, or null when it can't be read one way. */
-function figureIn(
-  shown: string,
-  context: ReturnType<typeof figureContextOf>,
-): { figure: Figure; value: number | null } | null {
-  const figure = readFigures(shown, context)[0];
+/** The first of a text's figures, with the value to draw, or null when it can't be read one way. */
+function figureIn(figures: readonly Figure[]): { figure: Figure; value: number | null } | null {
+  const [figure] = figures;
   if (!figure) return null;
   const unsettled = figure.ambiguous.some((each) => UNSETTLED.has(each.kind));
   return { figure, value: unsettled || !Number.isFinite(figure.value) ? null : figure.value };
@@ -456,7 +458,8 @@ interface TableReading {
   firstRow: number;
   dataRows: SourceGrid;
   columns: number;
-  context: FigureContext;
+  /** The figures in a cell's text, trimmed: each text read once, as a table is read twice. */
+  figuresOf(text: string): readonly Figure[];
 }
 
 function readTable(grid: SourceGrid, language: string): TableReading {
@@ -465,63 +468,92 @@ function readTable(grid: SourceGrid, language: string): TableReading {
     grid.flatMap((row) => row.map((cell) => cell?.text ?? "")).join("\n"),
     language,
   );
+  const read = new Map<string, readonly Figure[]>();
+  const figuresOf = (text: string) => {
+    const trimmed = text.trim();
+    let figures = read.get(trimmed);
+    if (!figures) {
+      figures = readFigures(trimmed, context);
+      read.set(trimmed, figures);
+    }
+    return figures;
+  };
   const headingRow =
     first.length > 0 &&
     (first.every((cell) => cell === null || cell.header) ||
-      first.slice(1).every((cell) => !cell || figureIn(cell.text, context) === null));
+      first.slice(1).every((cell) => !cell || figureIn(figuresOf(cell.text)) === null));
   return {
     first,
     headingRow,
     firstRow: headingRow ? 1 : 0,
     dataRows: headingRow ? grid.slice(1) : grid,
     columns: Math.max(0, ...grid.map((row) => row.length)),
-    context,
+    figuresOf,
   };
 }
 
-const MAX_APPROXIMATE_WORD = 6;
+/** The longest word that makes a figure approximate, which isn't part of its span. */
+const MAX_APPROXIMATE_WORD = "approximately".length;
 
 type CellKind = "number" | "calculation" | "words";
 
 /**
- * What a cell is: one figure and nothing else ("41.2%", "$1.2 million", "1.5亿"), words with
+ * What a cell is: one figure and nothing else ("41.2%", "$1.2 million", "约1.5亿"), words with
  * no figure in them, or a calculation, a figure among other things: a formula
  * ("(377.9−330.6)/330.6"), several figures or units ("10 kg + 5 lb"), a sentence with a figure.
  */
-function kindOfCell(text: string, context: FigureContext): CellKind {
-  const figures = readFigures(text, context);
+function readCell(
+  text: string,
+  figures: readonly Figure[],
+): { kind: CellKind; figure: Figure | null } {
   const [figure] = figures;
-  if (!figure) return "words";
-  if (figures.length > 1) return "calculation";
+  if (!figure) return { kind: "words", figure: null };
   const rest = `${text.slice(0, figure.start)}${text.slice(figure.end)}`.trim();
-  // The word that makes it approximate ("约", "about", "左右") isn't part of the figure's span.
-  return rest === "" || (figure.approximate && rest.length <= MAX_APPROXIMATE_WORD)
-    ? "number"
-    : "calculation";
+  const alone = rest === "" || (figure.approximate && rest.length <= MAX_APPROXIMATE_WORD);
+  return figures.length === 1 && alone
+    ? { kind: "number", figure }
+    : { kind: "calculation", figure: null };
 }
 
 /**
- * Whether a table is a series of numbers worth a chart (#704). In its body,
- * not the labels in its first column or its heading row, there are numbers (one
- * figure to a cell), at least as many as the cells of words, and more than the
- * calculations. So a table with a column of notes beside its figures is a
- * series, and a calculation's working table, with its formulas and its steps
- * in words, is not. Dashes and "n/a" count for nothing.
+ * Whether a table is a series of numbers worth a chart (#704). Its body (not its labels, the
+ * first column and the heading row) holds numbers, one figure to a cell: at least as many as
+ * the cells of words, and more than the calculations. And they measure one thing down each
+ * column, or along each row when two columns or more hold them (`unitsOf`). So a
+ * table with a column of notes beside its figures is a series, as is a table of years by
+ * metrics in dollars and percent; a calculation's working table, with its formulas, its steps
+ * in words or a column of dollars and percent, is not. Dashes and "n/a" count for nothing.
  */
 export const isNumericSeries = (grid: SourceGrid, language: string): boolean =>
   numericSeries(readTable(grid, language));
 
-function numericSeries({ dataRows, columns, context }: TableReading): boolean {
+function numericSeries({ dataRows, columns, figuresOf }: TableReading): boolean {
   const counts: Record<CellKind, number> = { number: 0, calculation: 0, words: 0 };
+  const down: Figure[][] = Array.from({ length: columns }, () => []);
+  const across: Figure[][] = [];
   for (const row of dataRows) {
+    const line: Figure[] = [];
     for (let column = 1; column < columns; column++) {
       const cell = row[column];
       const text = cell?.text.trim() ?? "";
       if (!cell || cell.continued || text === "" || NOTHING.test(text)) continue;
-      counts[kindOfCell(text, context)]++;
+      const { kind, figure } = readCell(text, figuresOf(text));
+      counts[kind]++;
+      if (figure) {
+        line.push(figure);
+        down[column]?.push(figure);
+      }
     }
+    across.push(line);
   }
-  return counts.number > 0 && counts.number >= counts.words && counts.number > counts.calculation;
+  const numberColumns = down.filter((column) => column.length > 0).length;
+  const oneThing = (line: readonly Figure[]) => unitsOf(line) !== "mixed";
+  return (
+    counts.number > 0 &&
+    counts.number >= counts.words &&
+    counts.number > counts.calculation &&
+    (down.every(oneThing) || (numberColumns > 1 && across.every(oneThing)))
+  );
 }
 
 /** A chart's data before it is cut to `MAX_CHART_VALUES`: all its rows. */
@@ -540,13 +572,13 @@ function cut(matrix: Matrix): ChartData {
 
 /**
  * The rows as series and the series as rows. A row with no number isn't a
- * series, as a column with none isn't. The heading stays: it is the table's
- * corner cell, which names the first column's labels whichever way they go.
+ * series, as a column with none isn't. The labels have no heading: the
+ * table's corner cell names the labels that become the series.
  */
 function transposed(matrix: Matrix): Matrix {
   const kept = matrix.rows.filter((row) => row.values.some((value) => value?.value != null));
   return {
-    labelHeading: matrix.labelHeading,
+    labelHeading: "",
     series: kept.map((row) => row.label),
     rows: matrix.series.map((name, series) => ({
       label: name,
@@ -576,14 +608,16 @@ export const canSwitch = (chart: Pick<ChartAttributes, "data" | "source">): bool
   chart.data.rows.length * chart.data.series.length > 1;
 
 /**
- * What a chart becomes with its rows and columns switched: all its columns
- * drawn again, and a bar chart where its kind can't draw the new data (a
- * scatter chart needs two series). Null when it can't be (`canSwitch`).
+ * What a chart becomes with its rows and columns switched: its data switched,
+ * or `fromTable`, its table read the other way round; all its series drawn
+ * again; and a bar chart where its kind can't draw the new data (a scatter
+ * chart needs two series). Null when it can't be (`canSwitch`).
  */
 export function switchedChart(
   chart: ChartAttributes,
+  fromTable: ChartData | null = null,
 ): Pick<ChartAttributes, "kind" | "drawn" | "data" | "source"> | null {
-  const data = canSwitch(chart) ? switchedData(chart.data) : null;
+  const data = canSwitch(chart) ? (fromTable ?? switchedData(chart.data)) : null;
   if (!data || chart.source.kind !== "table") return null;
   const { switched, ...source } = chart.source;
   return {
@@ -612,12 +646,12 @@ export function chartFromTable(
   options: FromTableOptions,
 ): ChartAttributes | null {
   const table = readTable(grid, options.language);
-  const { first, headingRow, firstRow, dataRows, columns, context } = table;
+  const { first, headingRow, firstRow, dataRows, columns, figuresOf } = table;
   if (!numericSeries(table)) return null;
 
   const valueAt = (cell: SourceCell | null, row: number, column: number): ChartValue | null => {
     if (!cell || cell.continued || cell.text.trim() === "") return null;
-    const read = figureIn(cell.text, context);
+    const read = figureIn(figuresOf(cell.text));
     return {
       shown: cell.text.trim(),
       value: read?.value ?? null,
@@ -686,7 +720,7 @@ export function chartFromFigures(
   const context = figureContextOf(lines.map((line) => line.text).join("\n"), options.language);
   const rows: ChartRow[] = [];
   lines.forEach((line, index) => {
-    const read = figureIn(line.text, context);
+    const read = figureIn(readFigures(line.text, context));
     if (!read) return;
     const { figure } = read;
     const before = line.text.slice(0, figure.start).replace(LABEL_END, "").replace(LABEL_START, "");
