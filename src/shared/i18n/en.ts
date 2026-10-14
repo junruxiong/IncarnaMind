@@ -2935,6 +2935,9 @@ export const en = {
   "approvals.thirdParty.read.webPage": "This Answer read a web page, so it asks you first.",
   "approvals.thirdParty.read.checkedDocument":
     "This Answer read the document being checked, so it asks you first.",
+  "approvals.thirdParty.task.webPage": "This Task read web pages, so it asks you first.",
+  "approvals.thirdParty.task.checkedDocument":
+    "This Task read the document being checked, so it asks you first.",
   "approvals.thirdParty.mind.imported": "This Mind contains imported text, so it asks you first.",
   "approvals.thirdParty.mind.webPage":
     "This Mind contains text from a web page, so it asks you first.",

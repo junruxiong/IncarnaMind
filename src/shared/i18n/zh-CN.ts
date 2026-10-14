@@ -2813,6 +2813,8 @@ export const zhCN = {
   "approvals.card.deny": "拒绝",
   "approvals.thirdParty.read.webPage": "这条回答读过网页，所以会先问你。",
   "approvals.thirdParty.read.checkedDocument": "这条回答读过正在核对的文档，所以会先问你。",
+  "approvals.thirdParty.task.webPage": "这个任务读过网页，所以会先问你。",
+  "approvals.thirdParty.task.checkedDocument": "这个任务读过正在核对的文档，所以会先问你。",
   "approvals.thirdParty.mind.imported": "这个 Mind 里有导入的文字，所以会先问你。",
   "approvals.thirdParty.mind.webPage": "这个 Mind 里有来自网页的文字，所以会先问你。",
   "approvals.thirdParty.mind.checkedDocument":

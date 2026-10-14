@@ -470,7 +470,7 @@ describe("Research", { timeout: 30_000 }, () => {
     expect(asked).toEqual([
       expect.objectContaining({
         taskId: task.id,
-        tool: "file_pages",
+        tool: "save_pages",
         title: "Save 1 web page to a new Folder",
         connector: { id: "library", name: "Library" },
         effects: [{ action: "write", scope: { kind: "documents" } }],

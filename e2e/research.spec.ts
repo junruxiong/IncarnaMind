@@ -248,6 +248,9 @@ test("Research… plans in the tray: the steps edited in place, the sources, whe
     timeout: 60_000,
   });
   await expect(ask.getByTestId("approval-card")).toContainText(`${folderNameOf(TOPIC)} (new)`);
+  await expect(ask.getByTestId("approval-third-party")).toHaveText(
+    "This Task read web pages, so it asks you first.",
+  );
   await expect(ask.getByTestId("approval-always-allow")).toHaveCount(0);
   await expect(progress.getByTestId("task-progress-waiting")).toHaveText(
     "Waiting for your approval below",
