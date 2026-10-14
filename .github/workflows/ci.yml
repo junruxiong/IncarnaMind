@@ -115,8 +115,8 @@ jobs:
 
   # Every pull request runs the smoke test on Linux, where runners are plentiful; macOS runs
   # it every night (nightly.yml), for what only macOS has, such as the traffic lights.
-  # The suite is split into four shards that run at once, each on two workers (the runner has four
-  # vCPUs, playwright.config.ts), balanced by how long each spec takes
+  # The suite is split into four shards that run at once, each running two parts at once (the runner has four
+  # vCPUs), balanced by how long each spec takes
   # (scripts/smoke-shard.mjs and e2e/durations.json): as one job it took about 20 minutes, and
   # pull requests merge one at a time, each up to date with main, so that time sets the pace.
   smoke-shard:
@@ -152,7 +152,24 @@ jobs:
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends fonts-noto-cjk
       # The app needs a display: a virtual one, bigger than the window the specs set
       # (e2e/app.ts), at full colour depth. xvfb-run's own default is 640 × 480 at 8 bits.
-      - run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" npm run test:smoke -- $(node scripts/smoke-shard.mjs ${{ matrix.shard }} 4)
+      # Two Playwright runs at once, one worker each, each on a display of its own: two apps on
+      # one display fight for the focus, and the hover and focus specs fail. This job's half of
+      # the suite is two of the eight time-balanced parts (scripts/smoke-shard.mjs).
+      - name: Run the specs, two at a time
+        shell: bash
+        run: |
+          npx electron-vite build --mode test
+          run() {
+            xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" \
+              npx playwright test $(node scripts/smoke-shard.mjs "$1" 8) --output "test-results/part-$1" 2>&1 \
+              | sed -u "s/^/[part $1] /"
+          }
+          run $((2 * ${{ matrix.shard }} - 1)) & first=$!
+          run $((2 * ${{ matrix.shard }})) & second=$!
+          status=0
+          wait $first || status=1
+          wait $second || status=1
+          exit $status
       - name: Upload Playwright traces
         if: failure()
         uses: actions/upload-artifact@v7
