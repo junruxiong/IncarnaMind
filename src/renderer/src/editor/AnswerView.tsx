@@ -235,6 +235,9 @@ export function AnswerView({ node, editor, getPos }: ReactNodeViewProps) {
 }
 
 /** Failures that can come of a model that can't answer, rather than of the connection. */
+/** Asked for once per run: while offline, asking again on every error would only fail again. */
+let modelsAsked = false;
+
 const WRONG_MODEL: ReadonlySet<ProviderErrorKind> = new Set([
   "model",
   "provider",
@@ -273,6 +276,8 @@ export function AnswerError({
     : t("answer.error.thisService");
   // Whose plan it was decides where its usage is managed.
   useEffect(() => {
+    if (modelsAsked) return;
+    modelsAsked = true;
     useAnswers.getState().loadModels();
   }, []);
   // A model the User added to the menu that then failed: one click takes it back out.

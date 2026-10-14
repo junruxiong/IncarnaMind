@@ -2764,8 +2764,8 @@ export const zhCN = {
   "approvals.settings.body":
     "可能修改内容的工具和技能脚本在每次运行前都会询问。这里列出你始终允许、设为每次询问或已关闭的每个工具，以及脚本始终运行的每个技能。撤销即可恢复默认。",
   "approvals.settings.empty": "没有设为始终允许、每次询问或关闭的工具，也没有脚本始终运行的技能。",
-  "approvals.settings.revoke": "停止允许",
-  "approvals.settings.revokeLabel": "停止允许 {name}",
+  "approvals.settings.revoke": "撤销",
+  "approvals.settings.revokeLabel": "撤销 {name} 的设置",
   "approvals.settings.skillScripts": "{skill} 的脚本",
   "approvals.policy.always": "始终允许",
   "approvals.policy.ask": "每次询问",

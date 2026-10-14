@@ -172,7 +172,7 @@ The year is left out when it is this year, except in a Date, and a time today is
 | English | Chinese | Notes |
 |---|---|---|
 | Recently deleted | 回收站 | As Feishu, Yuque, Tencent Docs, WPS, DingTalk, Obsidian and Zotero. Restore: 恢复. Delete permanently: 彻底删除. |
-| Revoke (an allowance) | 停止允许 | Not 撤销, which is Undo. On Settings' allowed services and approvals. |
+| Revoke (an allowed service) | 停止允许 | Not 撤销, which is Undo. For a service the User allowed to receive data (Privacy); approvals have their own words. |
 | Local mode | 所有内容都留在这台电脑上 | The one name, quoted: “所有内容都留在这台电脑上”; its button is 允许使用云端模型. Never 本地模式. |
 | Chat model | AI 模型 | In sentences and on Settings' labels. |
 | Embedding model | 搜索模型 · 按含义搜索 | "正在为搜索读取文档". Not 嵌入. |
