@@ -112,8 +112,10 @@ test("a used-up plan model offers the next one in one click, which answers in pl
     );
     await shots(app, window, "limit-en");
     await setLanguage(window, "zh-CN");
-    await expect(line).toHaveText(
-      `你的套餐里 GPT-6.1 Sol 的额度已用完，${time} 恢复。· 改用 GPT-6 Luna 回答`,
+    // A reset on another day names the day, which each language writes its own way.
+    const zhTime = await resetTime(
+      line,
+      /^你的套餐里 GPT-6\.1 Sol 的额度已用完，(.+) 恢复。· 改用 GPT-6 Luna 回答$/,
     );
     await shots(app, window, "limit-zh");
     await setLanguage(window, "en");
@@ -133,7 +135,7 @@ test("a used-up plan model offers the next one in one click, which answers in pl
     );
     await shots(app, window, "answered-en");
     await setLanguage(window, "zh-CN");
-    await expect(chip).toHaveText(`GPT-6 Luna · ${time} 前`);
+    await expect(chip).toHaveText(`GPT-6 Luna · ${zhTime} 前`);
     await shots(app, window, "answered-zh");
 
     // In Chinese: Luna's limit is used up too; Sol is passed over, and Astra offered.
@@ -149,7 +151,7 @@ test("a used-up plan model offers the next one in one click, which answers in pl
     await expect(second).toContainText(ANSWER);
     expect(openai.responses().at(-1)?.body.model).toBe(ASTRA);
     // Astra stands in for Sol, the model the User chose, until Sol's reset.
-    await expect(chip).toHaveText(`GPT-6 Astra · ${time} 前`);
+    await expect(chip).toHaveText(`GPT-6 Astra · ${zhTime} 前`);
 
     // None left: the line says when the first limit resets, with nothing to click.
     usedUp(openai, ASTRA, 3);
