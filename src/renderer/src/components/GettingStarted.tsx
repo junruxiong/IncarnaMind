@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { GettingStarted } from "../../../core/api";
 import { shortcutLabel } from "../commands/keymap";
 import { CheckMarkIcon } from "../editor/icons";
+import { firstOpenOf } from "../firstOpen";
 import { useGap, useT } from "../i18n";
 import { useAppStore } from "../store";
 import { useAddYourDocuments } from "./AddYourDocuments";
@@ -33,13 +34,12 @@ export function useGettingStarted(): Step[] | null {
 }
 
 function stepsOf(progress: GettingStarted): Step[] | null {
-  if (!progress.started || progress.hidden) return null;
-  const steps: Step[] = [
+  if (!firstOpenOf(progress)) return null;
+  return [
     { key: "citation", done: progress.citationChecked },
     { key: "documents", done: progress.indexed },
     { key: "question", done: progress.askedOwn },
   ];
-  return steps.every((step) => step.done) ? null : steps;
 }
 
 /** Whether a Mind is the example one. */
