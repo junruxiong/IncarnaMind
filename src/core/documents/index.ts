@@ -1196,6 +1196,11 @@ export function createDocuments(options: DocumentsOptions) {
         [at, at, list],
       );
       db.run(
+        `UPDATE web_page_pictures SET deleted_at = ?, updated_at = ?
+         WHERE document_id IN (SELECT value FROM json_each(?)) AND deleted_at IS NULL`,
+        [at, at, list],
+      );
+      db.run(
         `UPDATE document_pages SET deleted_at = ?, updated_at = ?
          WHERE document_id IN (SELECT value FROM json_each(?)) AND deleted_at IS NULL
            AND id NOT IN (SELECT value FROM json_each(?))`,
@@ -2204,6 +2209,10 @@ export function createDocuments(options: DocumentsOptions) {
         );
         db.run(
           "UPDATE web_pages SET deleted_at = NULL, updated_at = ? WHERE document_id = ? AND deleted_at = ?",
+          deleted,
+        );
+        db.run(
+          "UPDATE web_page_pictures SET deleted_at = NULL, updated_at = ? WHERE document_id = ? AND deleted_at = ?",
           deleted,
         );
         db.run(

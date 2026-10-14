@@ -9,7 +9,7 @@
  * written over, and shown by the snapshot from there.
  */
 import { randomUUID } from "node:crypto";
-import { access, mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { access, mkdir, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { normaliseAddress } from "../../../shared/webAddresses";
 import type { Document, SaveWebPageInput, WebPageResult } from "../../api";
@@ -22,7 +22,7 @@ import { type FetchedPicture, fetchPictures, type PictureLimits } from "./pictur
 import { type ShownPicture, type Snapshot, snapshotOf, withPictures } from "./snapshot";
 import {
   documentAtAddress,
-  picturesOnlyPurgedShow,
+  keptPictureHashes,
   recordPictures,
   recordVersion,
   type WebPagePicture,
@@ -57,6 +57,9 @@ export interface WebPagesOptions {
   pictureLimits?: PictureLimits;
   reportError?: (error: unknown) => void;
 }
+
+/** Longer than a save takes: a picture file younger than this may be one being saved. */
+const SAVING_MS = 60 * 60 * 1000;
 
 /** Where a picture's file is, as the snapshot names it beside itself. */
 const pictureName = (picture: { pictureHash: string; mediaType: string }) =>
@@ -229,10 +232,20 @@ export function createWebPages(options: WebPagesOptions) {
         "SELECT path FROM documents WHERE kind = 'web' AND purged_at IS NOT NULL",
       );
       await Promise.all(rows.map((row) => rm(row.path, { force: true })));
+      const kept = keptPictureHashes(db);
+      const files = await readdir(pictureFolder).catch(() => [] as string[]);
       await Promise.all(
-        picturesOnlyPurgedShow(db).map((picture) =>
-          rm(join(pictureFolder, pictureName(picture)), { force: true }),
-        ),
+        files
+          .filter((file) => !kept.has(file.split(".")[0] ?? ""))
+          .map(async (file) => {
+            const path = join(pictureFolder, file);
+            // A page being saved writes its pictures before it records them.
+            const written = await stat(path).then(
+              (info) => info.mtimeMs,
+              () => Date.now(),
+            );
+            if (Date.now() - written > SAVING_MS) await rm(path, { force: true });
+          }),
       );
     },
 

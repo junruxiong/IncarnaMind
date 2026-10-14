@@ -157,7 +157,7 @@ function draw(
               { width: count(node.attrs.width, 20_000), height: count(node.attrs.height, 20_000) },
               context,
             )
-          : placeholder(owner, alt, context.t("viewer.markdown.imageWeb"), context.t),
+          : placeholder(owner, alt, context.t("viewer.web.pictureNotSaved"), context.t),
       );
       continue;
     }
