@@ -5,7 +5,7 @@
 <h1 align="center">IncarnaMind</h1>
 
 <p align="center">
-  <b>The AI notebook that checks its own citations.</b><br>
+  <b>Catch the wrong number before you send it.</b><br>
   Write and ask in one place, with answers from your own files and the AI model you choose. Free and open source, on your computer.
 </p>
 
