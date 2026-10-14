@@ -123,3 +123,36 @@ describe("a pause while suggestions are on", () => {
     expect(suggestions.useSuggestionOffer.getState().shown).toBeNull();
   });
 });
+
+describe("the words a suggestion shows", () => {
+  const offered = {
+    suggestionId: "s",
+    text: "They rise.",
+    citation: {
+      passageId: "passage-1",
+      documentId: "tides",
+      documentName: "Tides",
+      contentHash: "v1",
+      pageFrom: 2,
+      pageTo: 2,
+      location: { kind: "page", from: 2, to: 2 },
+      quote: "Spring tides rise.",
+    },
+  } as unknown as Suggestion;
+  const live = (name: string) =>
+    [{ id: "tides", contentHash: "v1", name, title: null }] as unknown as ReturnType<
+      typeof useAppStore.getState
+    >["documents"];
+
+  test("name the Document as it is named now, and as it was cited once it can't be found", () => {
+    useAppStore.setState({ documents: live("Tides of the coast") });
+    expect(suggestions.describeSuggestion(offered).citation).toBe(
+      "From Tides of the coast, p. 2: “Spring tides rise.”",
+    );
+
+    useAppStore.setState({ documents: [] });
+    expect(suggestions.describeSuggestion(offered).citation).toBe(
+      "From Tides, p. 2: “Spring tides rise.”",
+    );
+  });
+});

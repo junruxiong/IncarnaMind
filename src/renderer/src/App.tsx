@@ -15,6 +15,7 @@ import { FileWriteDialog } from "./components/FileWriteDialog";
 import { HistoryView } from "./components/history/HistoryView";
 import { InfoPanel } from "./components/InfoPanel";
 import { MeetingNoticeDialog } from "./components/MeetingNoticeDialog";
+import { Peek } from "./components/Peek";
 import { ChatGptWelcomeDialog } from "./components/providers/ChatGptSignIn";
 import { RequestedDialogs } from "./components/RequestedDialogs";
 import { ResizeRod } from "./components/ResizeRod";
@@ -267,6 +268,7 @@ function Workspace() {
         <RequestedDialogs />
         <SortMenu />
         <InfoPanel />
+        <Peek />
         <AddWebPageDialog />
         <WordImportDialog />
         <ChatGptWelcomeDialog />
