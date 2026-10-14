@@ -47,12 +47,14 @@ export const hasQuestionsOption = (
 export const optionsFor = (
   format: ExportFormat,
   preferences: ExportPreferences,
-): ExportMindOptions =>
-  format === "docx"
-    ? { format, ...preferences.docx }
-    : hasQuestionsOption(format)
-      ? { format, includeQuestions: preferences[format].includeQuestions }
-      : { format };
+): ExportMindOptions => {
+  if (format === "docx") return { format, ...preferences.docx };
+  if (format === "source-pack") return { format };
+  const theirChanges = preferences.theirChanges ?? "shown";
+  return hasQuestionsOption(format)
+    ? { format, includeQuestions: preferences[format].includeQuestions, theirChanges }
+    : { format, theirChanges };
+};
 
 /** How the last export went, said in the Mind it exported (`ExportResultLine`). */
 export type ExportResult =

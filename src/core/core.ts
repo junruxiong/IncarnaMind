@@ -14,6 +14,7 @@ import {
 import { mindModelOf } from "../shared/mindModel";
 import { mindName } from "../shared/naming";
 import { paperFor } from "../shared/printDocument";
+import { wordFileOf } from "../shared/wordFiles";
 import { logActivity, silentLogger } from "./activityLog";
 import type { CoreAdapters } from "./adapters";
 import { agentSocketPath, createAgents } from "./agents";
@@ -126,7 +127,7 @@ import {
   parseIds,
   parseMindId,
 } from "./minds";
-import { firstLineOf, readBlocks } from "./mindText";
+import { firstLineOf, readBlocks, theirChangesReading } from "./mindText";
 import { createNoteAdding } from "./noteAdding";
 import { createOutputFiles } from "./outputFiles";
 import { createPrivacy, type NetworkTrafficRegistry } from "./privacy";
@@ -1993,8 +1994,16 @@ export function createCore(adapters: CoreAdapters): Core {
       mindMarkdown: (mindId, footnote) => {
         const mind = minds.get(mindId);
         const { language } = settings.get();
+        // Someone's changes from a Word file read as changes, as the assistant reads them (#734).
         const blocks = content.peek(mind.id, (fragment) =>
-          readBlocks(fragment, { includeQuestions: true, footnote, trimBeforeCitation: true }),
+          readBlocks(fragment, {
+            includeQuestions: true,
+            footnote,
+            trimBeforeCitation: true,
+            ...(fragment.doc && wordFileOf(fragment.doc)
+              ? { review: theirChangesReading(fragment.doc) }
+              : {}),
+          }),
         );
         return renderMarkdown(mind.title || mind.autoTitle, blocks, exportLabels(language));
       },
@@ -2758,6 +2767,7 @@ export function createCore(adapters: CoreAdapters): Core {
       const {
         fileName,
         fromWord: _,
+        theirChanges: _waiting,
         data,
         word,
         ...counts
