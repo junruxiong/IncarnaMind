@@ -1,12 +1,11 @@
 import { createCanvas, loadImage } from "@napi-rs/canvas";
-import type { PagePicture } from "../../adapters";
+import type { PagePicture, PictureRead, RecognizedLine } from "../../adapters";
 import { greys } from "./pages";
 
 // A chart's small print reads better a little larger, and a large photo needs no more than this.
 const SMALLEST_SIDE = 1000;
 const LARGEST_SIDE = 2000;
 
-/** A saved web page's picture, drawn on white in shades of grey, for reading. */
 export async function figurePicture(bytes: Uint8Array): Promise<PagePicture> {
   const image = await loadImage(Buffer.from(bytes));
   const longer = Math.max(image.width, image.height, 1);
@@ -20,4 +19,13 @@ export async function figurePicture(bytes: Uint8Array): Promise<PagePicture> {
   context.fillRect(0, 0, width, height);
   context.drawImage(image, 0, 0, width, height);
   return { width, height, pixels: greys(context.getImageData(0, 0, width, height).data) };
+}
+
+/** `TextRecognizer.readFile` for a model that reads drawn pictures: drawn here, then read. */
+export async function readDrawn(
+  file: Uint8Array,
+  read: (picture: PagePicture) => Promise<RecognizedLine[]>,
+): Promise<PictureRead> {
+  const picture = await figurePicture(file);
+  return { lines: await read(picture), width: picture.width, height: picture.height };
 }

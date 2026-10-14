@@ -95,16 +95,48 @@ function webpSize(bytes: Uint8Array): { width: number; height: number } | null {
   return null;
 }
 
-/** AVIF: the first `ispe` box, the image's spatial extents. */
+/**
+ * AVIF: the largest of its `ispe` boxes, the spatial extents of each image
+ * in it, so a small first one can't hide a large one the decoder draws.
+ */
 function avifSize(bytes: Uint8Array): { width: number; height: number } | null {
   const data = view(bytes);
   const limit = Math.min(bytes.length - 16, 64 * 1024);
+  let largest: { width: number; height: number } | null = null;
   for (let at = 4; at < limit; at++) {
-    if (bytes[at] === 0x69 && ascii(bytes, at, 4) === "ispe") {
-      return { width: data.getUint32(at + 8), height: data.getUint32(at + 12) };
-    }
+    if (bytes[at] !== 0x69 || ascii(bytes, at, 4) !== "ispe") continue;
+    const width = data.getUint32(at + 8);
+    const height = data.getUint32(at + 12);
+    if (!largest || width * height > largest.width * largest.height) largest = { width, height };
   }
-  return null;
+  return largest;
+}
+
+/**
+ * GIF: its screen, or its first frame where that reaches further, as the
+ * decoder draws the frame whole.
+ */
+function gifSize(bytes: Uint8Array): { width: number; height: number } | null {
+  if (bytes.length < 13) return null;
+  const data = view(bytes);
+  let width = data.getUint16(6, true);
+  let height = data.getUint16(8, true);
+  const packed = bytes[10] ?? 0;
+  let at = 13 + (packed & 0x80 ? 3 * 2 ** ((packed & 0x07) + 1) : 0);
+  while (at < bytes.length) {
+    const block = bytes[at];
+    if (block === 0x2c) {
+      if (at + 9 > bytes.length) return null;
+      width = Math.max(width, data.getUint16(at + 1, true) + data.getUint16(at + 5, true));
+      height = Math.max(height, data.getUint16(at + 3, true) + data.getUint16(at + 7, true));
+      return { width, height };
+    }
+    if (block !== 0x21) return { width, height };
+    at += 2;
+    while (at < bytes.length && bytes[at] !== 0) at += (bytes[at] ?? 0) + 1;
+    at += 1;
+  }
+  return { width, height };
 }
 
 /** A picture's size in pixels, from its header; null when it can't be read. */
@@ -120,9 +152,7 @@ export function pictureSize(
           ? { width: data.getUint32(16), height: data.getUint32(20) }
           : null;
       case "gif":
-        return bytes.length >= 10
-          ? { width: data.getUint16(6, true), height: data.getUint16(8, true) }
-          : null;
+        return gifSize(bytes);
       case "jpg":
         return jpegSize(bytes);
       case "webp":

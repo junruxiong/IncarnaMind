@@ -384,4 +384,40 @@ describe("Re-processing", { timeout: 30_000 }, () => {
     expect(counts()).toEqual({ total, embedded: total });
     expect(embedder.texts).toHaveLength(total - 2);
   });
+
+  // protects=a Document whose reading stopped the app isn't read again at every start, which could stop it again each time; fails_when=it is queued at start; no_claim=what stopped the app.
+  test("one being read when the app stopped, not closed in good order, waits for Retry, what was read before still found", async () => {
+    const dataDir = await createTempDataFolder();
+    const sources = await createSourceFolder();
+    const first = startCore(dataDir);
+    const [notes, other] = (await addAndProcess(first, [
+      await writeSourceFile(sources, "Notes.md", NOTES),
+      await writeSourceFile(sources, "Goals.md", GOALS),
+    ])) as [Document, Document];
+    first.close();
+    const db = openDatabase(join(dataDir, DATABASE_FILE));
+    try {
+      db.run("UPDATE documents SET status = 'extracting' WHERE id = ?", [notes.id]);
+    } finally {
+      db.close();
+    }
+
+    const second = startCore(dataDir);
+    const stopped = (await second.listDocuments()).find((each) => each.id === notes.id);
+    expect(stopped).toMatchObject({
+      status: "failed",
+      failure: {
+        reason: "processing-error",
+        message: "IncarnaMind stopped while reading this file.",
+      },
+    });
+    expect((await second.listDocuments()).find((each) => each.id === other.id)?.status).toBe(
+      "ready",
+    );
+    // What was read before is still found.
+    expect(await second.searchPassages("self-attention", { mode: "keyword" })).toHaveLength(1);
+    await second.retryDocument(notes.id);
+    const [again] = await waitForProcessing(second, [notes.id]);
+    expect(again?.failure).toBeNull();
+  });
 });
