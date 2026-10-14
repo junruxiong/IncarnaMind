@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import type { CitationAttributes } from "../../src/core";
 import {
+  CATEGORY_COUNT,
   type ChartAttributes,
   canSwitch,
   chartCells,
@@ -526,6 +527,21 @@ describe("which way round a chart from a table goes", () => {
     ]) as ChartAttributes;
     expect(neither.source).toEqual({ kind: "table", blockId: "table-1" });
     expect(neither.data.rows.map((row) => row.label)).toEqual(["Cloud", "Devices"]);
+  });
+
+  test("keeps the rows as the labels when they are more series than the key tells apart", () => {
+    const metrics = (count: number): SourceGrid => [
+      [head("Metric"), head("2024"), head("2025")],
+      ...Array.from({ length: count }, (_, index) => [
+        cell(`Metric ${index + 1}`),
+        cell(String(index + 1)),
+        cell(String(index + 2)),
+      ]),
+    ];
+    expect(fromTable(metrics(CATEGORY_COUNT))?.source).toMatchObject({ switched: true });
+    const many = fromTable(metrics(CATEGORY_COUNT + 1)) as ChartAttributes;
+    expect(many.source).toEqual({ kind: "table", blockId: "table-1" });
+    expect(many.data.series).toEqual(["2024", "2025"]);
   });
 
   test("goes the way it is told, whatever the periods say", () => {
