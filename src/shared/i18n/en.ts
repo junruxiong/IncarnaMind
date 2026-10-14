@@ -590,6 +590,8 @@ export const en = {
   "claim.fixSentence": "Fix the sentence",
   "claim.findSources": "Find sources",
   "claim.searchWeb": "Search the web",
+  "claim.webSearchOff": "Turn on web search to look this up.",
+  "claim.webSearchOff.action": "Open Settings",
   "claim.removeMark": "Remove the mark",
   "claim.webQuestion": "Search the web for sources that support or contradict this: “{sentence}”",
   "claim.searchAll": "Search all Documents",
