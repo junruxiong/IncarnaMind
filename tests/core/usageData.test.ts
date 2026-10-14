@@ -327,9 +327,10 @@ describe("Usage data: consent", { timeout: 30_000 }, () => {
     await core.createMind();
     expect(sent).toHaveLength(before);
     // It can't be turned on while local mode is on.
-    await expect(core.updatePrivacySettings({ usageData: true })).rejects.toThrow(
-      InvalidInputError,
-    );
+    await expect(core.updatePrivacySettings({ usageData: true })).rejects.toMatchObject({
+      name: "InvalidInputError",
+      wording: { key: "error.privacy.usageDataLocalMode" },
+    });
     expect(
       (await core.listNetworkTraffic()).find((each) => each.id === "usage-data"),
     ).toMatchObject({ enabled: false });
@@ -556,6 +557,7 @@ describe("Usage data: what the core derives from its events", () => {
       droppedRecords: 0,
       rejectedRecords: [],
       placedMarkers: 0,
+      citedAfterChecking: { count: 0, asked: false },
       citationSupport: null,
       quoteRetry: null,
       figures: [],

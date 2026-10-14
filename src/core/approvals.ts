@@ -73,9 +73,6 @@ export type CallToDecide = Pick<
   "subject" | "effects" | "tainted" | "thirdParty"
 >;
 
-const RISK_NOT_ACCEPTED =
-  "Always running a Skill's scripts needs the User to confirm the risk warning first (riskAccepted).";
-
 /** Whether options say the User confirmed the risk warning. */
 const riskAccepted = (options: unknown): boolean =>
   isRecord(options) && options.riskAccepted === true;
@@ -353,7 +350,7 @@ export function createApprovals(options: ApprovalsOptions) {
       const { subject } = entry.request;
       // "Always run" a Skill's scripts only once the User has confirmed the warning; it keeps waiting.
       if (subject.kind === "skill-script" && !riskAccepted(options)) {
-        throw new InvalidInputError(RISK_NOT_ACCEPTED);
+        throw new InvalidInputError({ key: "error.approval.riskNotAccepted" });
       }
       const stored = store(subject, "always");
       // Calls of the same Tool waiting elsewhere, e.g. in another Answer, are allowed too, unless
@@ -379,12 +376,12 @@ export function createApprovals(options: ApprovalsOptions) {
       }
       if (subject.kind === "skill-script") {
         if (!owners.skills().has(subject.skillId))
-          throw new NotFoundError("That Skill doesn't exist.");
+          throw new NotFoundError({ key: "error.skill.notFound" });
         if (policy === "ask" || policy === "off") {
           throw new InvalidInputError('A Skill\'s scripts always ask unless set to "always".');
         }
         if (policy === "always" && !riskAccepted(input)) {
-          throw new InvalidInputError(RISK_NOT_ACCEPTED);
+          throw new InvalidInputError({ key: "error.approval.riskNotAccepted" });
         }
       }
       if (store(subject, policy)) changed();
