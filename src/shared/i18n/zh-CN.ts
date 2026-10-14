@@ -1466,6 +1466,7 @@ export const zhCN = {
   "providers.test.too-long": "这个模型的上下文窗口太小，连很短的请求都放不下。",
   "providers.test.cost-cap": "未发送任何内容：已达到本月花费上限。可在“设置 → 通用”中更改。",
   "providers.test.no-answer": "模型没有回复。",
+  "providers.test.ollama-not-running": "Ollama 没有在这台电脑上运行。请先打开它，再测试一次。",
   "providers.test.unknown": "测试未通过。",
 
   "providers.secrets.plainText.title": "没有正在运行的密钥环",
@@ -1505,6 +1506,12 @@ export const zhCN = {
   "localMode.keep.list.last": "{rest} 和 {last}",
   "localMode.keep.agents.one": "1 个已连接的智能体",
   "localMode.keep.agents": "{count} 个已连接的智能体",
+  "localModel.title": "使用本地模型",
+  "localModel.installed": "这台电脑上有 Ollama，但它没有运行。",
+  "localModel.recommended": "推荐使用 {model}（3.3 GB），只需下载一次。",
+  "localModel.open": "打开 Ollama",
+  "localModel.opening": "正在打开 Ollama…",
+  "localModel.cancel": "取消",
 
   "providers.settings.title": "对话模型",
   "providers.settings.none": "尚未设置对话模型。",
@@ -1928,6 +1935,7 @@ export const zhCN = {
   "answer.error.local-mode":
     "已停止：已开启“所有内容都留在这台电脑上”，而 {model} 不在这台电脑上运行",
   "answer.error.useLocal": "改用本地模型",
+  "answer.error.ollama-not-running": "Ollama 没有在这台电脑上运行",
   "answer.error.too-long":
     "这个问题太长，即使不带前面的内容，也超出了模型的上下文窗口。请缩短问题，或换一个模型",
   "answer.error.no-answer": "模型没有给出回答",
@@ -2575,6 +2583,8 @@ export const zhCN = {
   "error.provider.urlScheme": "API 地址必须以 http:// 或 https:// 开头。",
   "error.provider.urlExtras":
     "API 地址不能包含用户名、密码、查询参数或片段。API 密钥请填在密钥栏中。",
+  "error.provider.ollamaNotRunning": "Ollama 没有在这台电脑上运行。",
+  "error.provider.ollamaCantOpen": "无法从这里打开 Ollama。请到 ollama.com 下载。",
   "error.provider.ollamaCloud":
     "{model} 在 ollama.com 上运行，不在这台电脑上。选择一个本地模型，或到模型菜单中选择。",
   "error.provider.rerankLocalMode":
