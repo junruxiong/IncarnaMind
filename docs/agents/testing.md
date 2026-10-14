@@ -55,16 +55,9 @@ A new kind of object needs a menu (`registerMenu`) and a stage in the e2e (how t
 
 ## Trying AI features by hand
 
-The scripted chat model (`fakeChat`) is for automated tests only: CI has no keys, and its runs must give the same result every time. Before you call an AI feature done (Answers, Citations, Organize, tagging, Tasks, anything a model does), use it by hand in the built app with real models from **several providers**, because they differ in how they follow instructions, cite and format:
+The scripted chat model (`fakeChat`) is for automated tests only: CI has no keys, and its runs must give the same result every time. Before you call an AI feature done (Answers, Citations, Organize, tagging, Tasks, anything a model does), use it by hand in the built app with **Claude Haiku 5.5** on an Anthropic API key. For a hard feature (labelled `complexity:hard`), or when Haiku fails at the task, use Claude Sonnet 5.5 instead. When the feature runs in Local mode, also try a small local model through Ollama, for example `qwen3.5:4b`, with the context at 8,192 tokens or less, one model loaded at a time, and unloaded afterwards.
 
-- **Anthropic:** Haiku first. Sonnet only when Haiku fails at the task or the feature needs the stronger model; say why in the pull request.
-- **OpenAI:** GPT-6 Luna, the newest small model, priced like Haiku. Not GPT-6 Sol or Astra unless the feature needs them. Use the ChatGPT plan's allowance, through the ChatGPT test profile below, instead of an API key.
-- **An Ollama cloud model** (its name ends in `-cloud`, for example a `gpt-oss` or `qwen3` cloud model). The app treats it as leaving the computer, which is fine for test Documents.
-- **A small local model through Ollama,** for example `qwen3.5:4b`, with the context at 8,192 tokens or less, one model loaded at a time, and unloaded afterwards. Required when the feature runs in Local mode.
-
-Use at least three of these, including one from Anthropic and one from OpenAI, and say where a model did worse than the others.
-
-**Before a release,** the first-class providers (ADR-0019) are each tried by hand once, with the cheapest model that answers: the ChatGPT plan, Anthropic, OpenAI, Google, OpenRouter, Ollama (a local model and a cloud model), and, for mainland China, DeepSeek, Qwen (Alibaba Cloud Model Studio) and SiliconFlow. Their `support` field in `src/core/providers/catalog/providers.ts` says which they are. Best-effort providers (Mistral, xAI, Kimi, GLM and an OpenAI-compatible server) have no release check. The rule above for an AI feature is unchanged: at least three providers, including Anthropic and OpenAI.
+**Before a release,** the first-class providers (ADR-0019) are each tried by hand once, with the cheapest model that answers: the ChatGPT plan (through the ChatGPT test profile below), Anthropic, OpenAI, Google, OpenRouter, Ollama (a local model and a cloud model), and, for mainland China, DeepSeek, Qwen (Alibaba Cloud Model Studio) and SiliconFlow. Their `support` field in `src/core/providers/catalog/providers.ts` says which they are. Best-effort providers (Mistral, xAI, Kimi, GLM and an OpenAI-compatible server) have no release check. Models differ in how they follow instructions, cite and format, so this pass is where a problem with one provider shows up; file each one as an issue.
 
 **Keep the bill small.** These keys are paid by the person, not a company. Use the cheapest model that answers the question, run each check once per model rather than many times, use short test Documents, and stop as soon as the result is clear. Large or "pro" models need a reason in the pull request.
 

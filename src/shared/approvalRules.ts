@@ -12,12 +12,17 @@ import type { Effect, ThirdPartyReason } from "../core/api";
  * web host is fetching an address the Run didn't write, such as a web
  * search's result (#128), so it sends nothing of the User's; a Tool that
  * fetches an address the model chose sends data, and says "network".
+ * Reading and writing a Mind: the Minds' Tools write only Proposals, which
+ * wait for the User to accept or reject them, as an outside agent's would
+ * (#202, ADR-0013), so the change itself is the approval.
  */
 export const runsByDefault = ({ action, scope }: Effect): boolean =>
   scope.kind === "service"
     ? action === "read" || action === "network"
-    : action === "read" &&
-      (scope.kind === "documents" || scope.kind === "skill" || scope.kind === "host");
+    : scope.kind === "mind"
+      ? action === "read" || action === "write"
+      : action === "read" &&
+        (scope.kind === "documents" || scope.kind === "skill" || scope.kind === "host");
 
 /** Changing something, or sending data off this computer. */
 const writesOrSends = ({ action }: Effect): boolean => action === "write" || action === "network";
