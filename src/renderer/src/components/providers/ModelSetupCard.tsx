@@ -54,10 +54,13 @@ export function ModelSetupCard() {
     <section
       data-testid="model-setup"
       aria-labelledby="model-setup-title"
-      className="flex max-h-[85vh] flex-col gap-3 overflow-y-auto px-4 py-3"
+      className="flex max-h-[85vh] flex-col gap-2.5 overflow-y-auto px-4 py-2.5"
     >
       <div className="flex flex-col gap-1">
-        <h2 id="model-setup-title" className="text-[15px] leading-6 font-semibold text-ink">
+        <h2
+          id="model-setup-title"
+          className={view === null ? "text-[15px] leading-6 font-semibold text-ink" : "sr-only"}
+        >
           {t("setup.title")}
         </h2>
         {view === null && (
@@ -100,7 +103,9 @@ export function ModelSetupCard() {
       >
         <summary
           data-testid="setup-other"
-          className="cursor-default text-[13px] leading-5 font-semibold text-ink-secondary"
+          className={`cursor-default text-[13px] leading-5 font-semibold text-ink-secondary ${
+            view !== null && view !== "deepseek" ? "sr-only" : ""
+          }`}
         >
           {t("setup.other")}
         </summary>

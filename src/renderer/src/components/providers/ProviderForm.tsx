@@ -227,7 +227,7 @@ export function ProviderForm({
   return (
     <form data-testid="provider-form" onSubmit={submit} className="flex flex-col gap-3">
       <fieldset>
-        <legend className={`mb-1.5 ${fieldLabelClass}`}>{t("providers.form.label")}</legend>
+        <legend className="sr-only">{t("providers.form.label")}</legend>
         <div className="flex flex-wrap gap-1">
           {[...rowKinds, ...(moreOpen ? underMore : [])].map(chip)}
           {underMore.length > 0 && !moreOpen && (
