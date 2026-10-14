@@ -13,6 +13,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { extname, join, relative } from "node:path";
 import { describe, expect, test } from "vitest";
+import { isAdHost } from "../../src/core/documents/web/adHosts";
 
 const root = join(__dirname, "../..");
 
@@ -107,6 +108,10 @@ const FORBIDDEN_IN_CODE = [
   /\breplayIntegration\b|\bbrowserTracingIntegration\b|\breplayCanvasIntegration\b/,
   /\btracesSampleRate\b|\bprofilesSampleRate\b|\btracesSampler\b/,
 ];
+
+/** The hosts a saved web page never fetches pictures from (#756) name analytics hosts to skip them. */
+const SKIP_LIST = "src/core/documents/web/adHosts.ts";
+const SKIPPED_HOSTS = ["www.google-analytics.com", "www.googletagmanager.com"];
 
 const isAnalytics = (name: string) =>
   ANALYTICS_PACKAGES.has(name) || ANALYTICS_SCOPES.some((scope) => name.startsWith(scope));
@@ -210,12 +215,16 @@ describe("Usage data only through its one door", () => {
   });
 
   test("the app's code names no analytics service or project, and sets up none of the usage features", () => {
+    const skipped = (name: string, pattern: RegExp) =>
+      name === SKIP_LIST && SKIPPED_HOSTS.some((host) => pattern.test(host));
     const offending = sourceFiles(join(root, "src")).flatMap((file) => {
+      const name = relative(root, file).replaceAll("\\", "/");
       const text = readFileSync(file, "utf8");
-      return FORBIDDEN_IN_CODE.filter((pattern) => pattern.test(text)).map(
-        (pattern) => `${relative(root, file)}: matches ${pattern}`,
-      );
+      return FORBIDDEN_IN_CODE.filter(
+        (pattern) => pattern.test(text) && !skipped(name, pattern),
+      ).map((pattern) => `${name}: matches ${pattern}`);
     });
     expect(offending).toEqual([]);
+    for (const host of SKIPPED_HOSTS) expect(isAdHost(host), host).toBe(true);
   });
 });
