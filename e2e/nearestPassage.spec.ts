@@ -38,7 +38,7 @@ test.afterEach(async () => {
 const TIDES = buildPdf([
   { lines: ["Harbour times", "Harbours publish the times of high water every 12 months."] },
 ]);
-const DIFFERENT = "Harbours print schedules once every 6 weeks.";
+const DIFFERENT = "Harbours publish forecasts monthly (6).";
 const UNRELATED = "Penguins nest on the harbour cliffs.";
 
 const WORDS = {
@@ -72,7 +72,7 @@ for (const language of ["en", "zh-CN"] as const) {
     await editor.click();
     await window.keyboard.type(`${DIFFERENT} ${UNRELATED}`);
     const line = editor.locator(":scope > p").first();
-    await slideSelect(window, line, "Harbours print", { line, words: "cliffs." });
+    await slideSelect(window, line, "Harbours publish", { line, words: "cliffs." });
     await pointAndClick(
       window,
       window.getByTestId("selection-menu").getByTestId("selection-action-find-support"),
@@ -90,6 +90,10 @@ for (const language of ["en", "zh-CN"] as const) {
     await expect(card.getByTestId("claim-nothing")).toHaveCount(0);
     await expect(card.getByTestId("claim-open")).toHaveText(words.open);
     await expect(card.getByTestId("claim-fix")).toHaveText(words.fix);
+    // The card keeps to what helps with this: no more ways to look, and the mark can go.
+    await expect(card.getByTestId("claim-find-sources")).toHaveCount(0);
+    await expect(card.getByTestId("claim-search-web")).toHaveCount(0);
+    await expect(card.getByTestId("claim-remove")).toBeVisible();
     // Open the page opens the Document beside the Mind, as a Citation does.
     await pointAndClick(window, card.getByTestId("claim-open"));
     await expect(window.getByTestId("viewer")).toBeVisible();
@@ -98,11 +102,13 @@ for (const language of ["en", "zh-CN"] as const) {
     await pointAndClick(window, window.getByTestId("claim-card").getByTestId("claim-fix"));
     await expect
       .poll(() => window.evaluate(() => globalThis.getSelection()?.toString() ?? ""))
-      .toContain("Harbours print schedules");
+      .toContain("Harbours publish forecasts");
 
     // An unrelated sentence keeps today's wording.
     await pointAndClick(window, marks.nth(1));
     await expect(card.getByTestId("claim-nothing")).toHaveText(words.nothing);
+    await expect(card.getByTestId("claim-find-sources")).toBeVisible();
+    await expect(card.getByTestId("claim-search-web")).toBeVisible();
     await expect(card.getByTestId("claim-differs")).toHaveCount(0);
     await app.close();
   });

@@ -29,7 +29,8 @@
  * number in it than the sentence's means it says something different (#770).
  *
  * A Question with "blank reply" in it gets a reply with no text at all. A model whose id ends
- * "-not-found" fails as one its provider doesn't know.
+ * "-not-found" fails as one its provider doesn't know when it answers; one ending "-claims-not-found"
+ * does when it finds or checks claims.
  *
  * A comparison table's cell (#98) cites its Document's line that shares the
  * most words with the Question and answers with its value ("Termination
@@ -1066,24 +1067,35 @@ export const createFakeChatModel: ChatModelFactory = (spec) =>
     modelId: spec.modelId,
     // Structured output (automatic tagging) gets its Tags as JSON; Edit with AI its new text;
     // anything else (a connection test) gets "OK".
-    doGenerate: async (options) => ({
-      content: [
-        {
-          type: "text",
-          text:
-            options.responseFormat?.type === "json"
-              ? fakeStructuredOutput(options)
-              : (fakeClaims(options) ??
-                fakeConfirm(options) ??
-                fakeSkillDraft(options) ??
-                fakeEdit(options) ??
-                "OK"),
-        },
-      ],
-      finishReason: { unified: "stop", raw: undefined },
-      usage: USAGE,
-      warnings: [],
-    }),
+    doGenerate: async (options) => {
+      // A model id ending "-claims-not-found" is one its provider doesn't know when it checks or finds claims (#764).
+      if (spec.modelId.endsWith("-claims-not-found")) {
+        throw new APICallError({
+          message: `The model ${spec.modelId} does not exist`,
+          url: "https://fake.invalid/chat",
+          requestBodyValues: {},
+          statusCode: 404,
+        });
+      }
+      return {
+        content: [
+          {
+            type: "text",
+            text:
+              options.responseFormat?.type === "json"
+                ? fakeStructuredOutput(options)
+                : (fakeClaims(options) ??
+                  fakeConfirm(options) ??
+                  fakeSkillDraft(options) ??
+                  fakeEdit(options) ??
+                  "OK"),
+          },
+        ],
+        finishReason: { unified: "stop", raw: undefined },
+        usage: USAGE,
+        warnings: [],
+      };
+    },
     doStream: async ({ prompt, tools, abortSignal }) => {
       // A model id ending "-not-found" is one its provider doesn't know, for a test of that Problem.
       if (spec.modelId.endsWith("-not-found")) {
