@@ -10,6 +10,7 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import type { TextUnit } from "../../shared/units";
 import type { PagePicture, RecognizedLine } from "../adapters";
 import type { DocumentFailureReason, DocumentKind } from "../api";
@@ -23,7 +24,7 @@ import { stripBoilerplate } from "./boilerplate";
 import { creationDate, pdfDate, w3cDate } from "./creationDate";
 import { ExtractionError, extractText, type PageReading, pdfMetadata } from "./extract";
 import { officeProperties } from "./formats/coreProperties";
-import { readWebPage } from "./formats/web";
+import { readWebPage, SAVED_PICTURE } from "./formats/web";
 import { isPackageKind, packageSizeError } from "./formats/zip";
 import { keywordText } from "./keywords";
 import { type BuiltPassage, buildPassages } from "./passages";
@@ -343,7 +344,14 @@ export async function processFile(
           ),
         }
       : null;
-  const { processed, firstPages } = await processBytes(job.kind, bytes, reading);
+  const readPicture =
+    job.kind === "web"
+      ? async (src: string) => {
+          if (!SAVED_PICTURE.test(src)) throw new Error("Not a picture saved with the page.");
+          return readFile(join(dirname(job.file), src));
+        }
+      : null;
+  const { processed, firstPages } = await processBytes(job.kind, bytes, reading, readPicture);
   if (reading?.signal.aborted) return { outcome: "stopped" };
   const firstUnit = processed.outcome === "ready" ? (processed.pages[0]?.text ?? null) : null;
   return {
@@ -452,9 +460,10 @@ async function processBytes(
   kind: DocumentKind,
   bytes: Uint8Array,
   reading: PageReading | null,
+  readPicture: ((src: string) => Promise<Uint8Array>) | null,
 ): Promise<{ processed: Processed; firstPages: string[] }> {
   try {
-    const extracted = await extractText(kind, bytes, reading);
+    const extracted = await extractText(kind, bytes, reading, readPicture);
     const firstPages = extracted.units.slice(0, REFERENCE_PAGES).map((unit) => unit.text);
     const pages = kind === "pdf" ? stripBoilerplate(extracted.units) : extracted.units;
     const { pageCount, unread } = extracted;

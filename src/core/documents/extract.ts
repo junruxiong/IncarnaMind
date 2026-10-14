@@ -12,8 +12,10 @@ import type { PagePicture, RecognizedLine } from "../adapters";
 import type { DocumentKind } from "../api";
 import { isRecord } from "../errors";
 import { ExtractionError, extractUnits } from "./formats";
+import { type FigureReading, readWebPage, webUnits } from "./formats/web";
 import { scannedUnit } from "./scan/layout";
 import { type CanvasFactory, isScanned, pagePicture } from "./scan/pages";
+import { figurePicture } from "./scan/picture";
 
 export { ExtractionError };
 
@@ -44,13 +46,67 @@ export interface ExtractedText {
   unread: { pages: number[]; message: string } | null;
 }
 
+/**
+ * `readPicture`: a saved web page's picture, by its path in the snapshot,
+ * whose text is read when `reading` is given.
+ */
 export async function extractText(
   kind: DocumentKind,
   bytes: Uint8Array,
   reading: PageReading | null = null,
+  readPicture: ((src: string) => Promise<Uint8Array>) | null = null,
 ): Promise<ExtractedText> {
   if (kind === "pdf") return extractPdf(bytes, reading);
+  if (kind === "web" && reading && readPicture) {
+    return { pageCount: null, units: await extractWeb(bytes, reading, readPicture), unread: null };
+  }
   return { pageCount: null, units: await extractUnits(kind, bytes), unread: null };
+}
+
+/**
+ * A web page's Units with its saved pictures' text read. A picture that
+ * can't be drawn keeps its description alone; once the model can't be had,
+ * neither can the pictures after, which are marked unread.
+ */
+async function extractWeb(
+  bytes: Uint8Array,
+  reading: PageReading,
+  readPicture: (src: string) => Promise<Uint8Array>,
+): Promise<TextUnit[]> {
+  const source = new TextDecoder().decode(bytes);
+  const readings = new Map<number, FigureReading>();
+  let unavailable = false;
+  for (const block of readWebPage(source).blocks) {
+    if (block.figure === undefined) continue;
+    reading.signal.throwIfAborted();
+    if (unavailable) {
+      readings.set(block.figure, { reader: reading.reader, text: "", lines: [], unread: true });
+      continue;
+    }
+    try {
+      const picture = await figurePicture(await readPicture(block.element.attrs.src ?? ""));
+      const lines = await reading.read(block.figure, picture);
+      const read = scannedUnit(block.figure, lines, picture, reading.reader);
+      const unsure = read.label?.scan?.unsure;
+      readings.set(block.figure, {
+        reader: reading.reader,
+        text: read.text,
+        lines: (read.anchors ?? []).map(({ start, end, quad }) => ({
+          start,
+          end,
+          quad: quad ?? [],
+        })),
+        ...(unsure && { unsure }),
+      });
+    } catch (error) {
+      reading.signal.throwIfAborted();
+      if (error instanceof ReadingUnavailable) {
+        unavailable = true;
+        readings.set(block.figure, { reader: reading.reader, text: "", lines: [], unread: true });
+      }
+    }
+  }
+  return webUnits(source, readings);
 }
 
 type PdfJs = typeof import("pdfjs-dist/legacy/build/pdf.mjs");

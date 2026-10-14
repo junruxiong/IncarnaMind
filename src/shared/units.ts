@@ -76,6 +76,8 @@ export interface UnitLabel {
   header?: boolean;
   /** page: a scanned page, whose text was read from its picture (#397), not taken from the PDF. */
   scan?: UnitScan;
+  /** section: a web page's pictures in it whose text was read on this computer (#756). */
+  figures?: UnitFigure[];
   /**
    * rows of a workbook: the number stored in each cell whose shown text isn't
    * that number written plainly, by cell ("C12": 0.04213 for a cell showing
@@ -100,6 +102,20 @@ export interface UnitScan {
    * It couldn't be read (the model couldn't be downloaded or failed on it):
    * the Unit has no text, and the Document names the page with Retry.
    */
+  unread?: boolean;
+}
+
+/**
+ * A web page's picture read on this computer (#756): its anchor is
+ * "figure{number}", and each line read "figure{number}.line{n}".
+ */
+export interface UnitFigure {
+  number: number;
+  /** As `UnitScan.reader`. */
+  reader: string;
+  /** [start, end) UTF-16 offsets into the Unit's text. */
+  unsure?: [number, number][];
+  /** It couldn't be read now: its description alone is its text. */
   unread?: boolean;
 }
 

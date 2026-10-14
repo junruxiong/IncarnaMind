@@ -622,7 +622,9 @@ export function createDocuments(options: DocumentsOptions) {
     scan:
       textRecognition && row.kind === "pdf"
         ? { reader: textRecognition.reader, keep: keptScans(row) }
-        : null,
+        : textRecognition && row.kind === "web"
+          ? { reader: textRecognition.reader, keep: null }
+          : null,
   });
 
   const setStatus = (id: string, status: DocumentStatus) =>
@@ -1349,8 +1351,12 @@ export function createDocuments(options: DocumentsOptions) {
     if (closed) return;
     for (const { id } of db.all<{ id: string }>(
       `SELECT id FROM documents
-       WHERE deleted_at IS NULL AND failure_reason = 'pages-unread' AND file_status = 'available'
+       WHERE deleted_at IS NULL AND file_status = 'available'
          AND status NOT IN ('queued', 'extracting')
+         AND (failure_reason = 'pages-unread' OR (kind = 'web' AND EXISTS (
+           SELECT 1 FROM document_pages dp, json_each(dp.label, '$.figures') figure
+           WHERE dp.document_id = documents.id AND dp.content_hash = documents.content_hash
+             AND dp.deleted_at IS NULL AND json_extract(figure.value, '$.unread') = 1)))
        ORDER BY created_at DESC, rowid DESC`,
     )) {
       process(id);
