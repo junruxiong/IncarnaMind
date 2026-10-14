@@ -204,10 +204,9 @@ export function observeWordFile(doc: Y.Doc, listener: () => void): () => void {
 
 /**
  * Attributes that don't change what a node is: its id, whether Questions read it, a Proposal on
- * it, its Word look (#746), which a Mind imported earlier gets later without being edited.
+ * it, its Word look (given later to earlier imports, which mustn't count as an edit).
  */
 const NOT_CONTENT = new Set(["id", "includeInContext", PROPOSAL_ATTRIBUTE, WORD_LOOK_ATTRIBUTE]);
-/** Marks that don't change what text is: its run's Word look. */
 const NOT_TEXT_CONTENT = new Set([WORD_RUN_MARK]);
 /** Mark attributes that are how a link opens, not where it leads. */
 const NOT_MARK_CONTENT = new Set(["target", "rel", "class"]);
@@ -237,7 +236,7 @@ function canonical(node: Y.XmlElement | Y.XmlText): unknown {
           .map((mark) => [mark, sorted(run.attributes?.[mark], NOT_MARK_CONTENT)]),
       );
       const last = runs.at(-1);
-      // Text the left-out marks alone split is one run, as it was before they were there.
+      // Rejoin text that only a left-out mark split, so adding the mark keeps the fingerprint.
       if (
         typeof run.insert === "string" &&
         last &&

@@ -182,15 +182,9 @@ export const InlineImage = Node.create({
   },
 });
 
-/** The node types a Word file's look is kept on (#746). */
 export const WORD_LOOK_TYPES = ["paragraph", "heading", "table", "tableCell", "tableHeader"];
 
-/**
- * A Word file's look on the Blocks of a Mind imported from it (#746): the key
- * of each paragraph's, heading's, table's and cell's style in the Mind's
- * `WordLook`. Enter keeps it, as Word gives a new paragraph the properties of
- * the one before.
- */
+/** `keepOnSplit`: Word gives a new paragraph the properties of the one before. */
 export const WordLookAttribute = Extension.create({
   name: "wordLookAttribute",
 
@@ -214,11 +208,7 @@ export const WordLookAttribute = Extension.create({
   },
 });
 
-/**
- * A run of text's look in a Mind imported from Word (#746): its style's key
- * in the Mind's `WordLook`. Inclusive, so what is typed at its end takes it,
- * as typing in Word takes the run's formatting.
- */
+/** Inclusive: text typed at a run's end takes its formatting, as in Word. */
 export const WordRun = Mark.create({
   name: WORD_RUN_MARK,
   inclusive: true,

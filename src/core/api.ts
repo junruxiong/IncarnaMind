@@ -139,11 +139,9 @@ export interface CreateMindInput {
  *   author and date. A version before 20 would take them for the
  *   assistant's, and count what accepting one keeps as AI text. Older
  *   content is version 20 content as it is: nothing is rewritten.
- * - 21: a Word file's look (#746): the `wordLook` attribute on paragraphs,
- *   headings, tables and cells, and the `wordRun` mark on text, naming
- *   styles in the Mind's `wordLook` map (`WordLook`). An older version would
- *   strip both. Older content is version 21 content as it is; a Mind
- *   imported before gets its look once, where its Blocks are as imported.
+ * - 21: a Word file's look (#746): the `wordLook` attribute and the
+ *   `wordRun` mark, which an older version's editor would strip. Older
+ *   content is version 21 content as it is.
  */
 export const CONTENT_SCHEMA_VERSION = 21;
 
@@ -1145,37 +1143,23 @@ export interface WordImportProgress {
 }
 
 /**
- * The name of the Y.Map, beside the Blocks of a Mind imported from a Word
- * file, that holds the file's look (#746, `WordLook`): each paragraph, run,
- * table and cell style the file uses, resolved, under a short key that the
- * Blocks' `WORD_LOOK_ATTRIBUTE` and the text's `WORD_RUN_MARK` name. A map
- * beside the Blocks, as `word` is, so the styles are stored once, not once
- * per Block.
+ * A Y.Map beside the Blocks of a Mind imported from Word, holding the file's
+ * styles (`WordLook`) once each; Blocks and text name them by key.
  */
 export const MIND_WORD_LOOK_FIELD = "wordLook";
 
-/** The attribute of a paragraph, heading, table or cell that names its look in the Mind's `WordLook`. */
+/** On paragraphs, headings, tables and cells: a key in the Mind's `WordLook`. */
 export const WORD_LOOK_ATTRIBUTE = "wordLook";
 
-/**
- * The mark on text that names its run's look in the Mind's `WordLook`
- * (`{ k }`). Inclusive: text typed at its end takes it, as Word's typing takes
- * the run's formatting.
- */
+/** A mark on text whose attribute `k` is a key in `WordLook.runs`. */
 export const WORD_RUN_MARK = "wordRun";
 
-/**
- * A Word file's look, as a Mind imported from it keeps it (#746): every style
- * its text uses, resolved from the defaults, the style's chain, the list
- * level and the direct formatting, so drawing it needs no XML. Lengths are in
- * points. Only what differs from nothing is kept.
- */
+/** Lengths are in points and colours hex "RRGGBB"; unset properties are left out. */
 export interface WordLook {
-  /** How it was read: a later version that reads more raises it. */
   version: number;
-  /** The size most of the text is in: drawn at the Mind's writing size, every other size in proportion. Null with no text. */
+  /** The most common run size; null with no text. */
   body: number | null;
-  /** How wide the text is on the file's first page; null when the file doesn't say. */
+  /** The text width on the first page; null when the file doesn't say. */
   width: number | null;
   paragraphs: Record<string, WordParagraphLook>;
   runs: Record<string, WordRunLook>;
@@ -1183,39 +1167,35 @@ export interface WordLook {
   cells: Record<string, WordCellLook>;
 }
 
-/** A line around a paragraph, a table or a cell: its style as Word names it ("single", "double"), width and colour. */
 export interface WordBorder {
+  /** As Word names it: "single", "double"… */
   style: string;
   width: number;
-  /** Hex, "RRGGBB"; null for automatic. */
+  /** Null for automatic. */
   color: string | null;
-  /** The gap between the line and the text. */
   space: number;
 }
 
 export interface WordRunLook {
-  /** The font for Latin text, and for Chinese and Japanese text. */
   font?: string;
   eastAsia?: string;
   size?: number;
-  /** Hex, "RRGGBB". */
   color?: string;
-  /** A highlight colour, as Word names it ("yellow"). */
+  /** As Word names it: "yellow"… */
   highlight?: string;
-  /** Shading behind the text, hex. */
   shade?: string;
   bold?: true;
   italic?: true;
-  /** The underline's style, as Word names it ("single", "double", "dotted"). */
+  /** As Word names it: "single", "dotted"… */
   underline?: string;
   strike?: true;
   doubleStrike?: true;
   caps?: true;
   smallCaps?: true;
   vertical?: "superscript" | "subscript";
-  /** Extra space between the characters. */
+  /** Extra space between characters. */
   spacing?: number;
-  /** The characters' width, as a percentage. */
+  /** Character width, in percent. */
   scale?: number;
   hidden?: true;
 }
@@ -1229,14 +1209,20 @@ export interface WordTabStop {
 export type WordBorders<Side extends string> = Partial<Record<Side, WordBorder>>;
 
 export interface WordParagraphLook {
+  /**
+   * The run look of the paragraph's text that has no `WORD_RUN_MARK`: the
+   * most common one, or the paragraph mark's when there is no text. Marking
+   * only the text that differs keeps long files quick to open.
+   */
+  run?: string;
   align?: "left" | "center" | "right" | "justify" | "distribute";
   left?: number;
   right?: number;
-  /** The first line's indent; negative for a hanging indent. */
+  /** Negative for a hanging indent. */
   firstLine?: number;
   before?: number;
   after?: number;
-  /** "auto": a multiple of the font's line; "exact" and "atLeast": a height. */
+  /** "auto": a multiple of the font's line height; "exact" and "atLeast": a height. */
   line?: { rule: "auto" | "exact" | "atLeast"; value: number };
   /** No space between paragraphs of the same style. */
   contextual?: true;
@@ -1259,11 +1245,10 @@ export interface WordTableLook {
   align?: "left" | "center" | "right";
   indent?: number;
   borders?: WordBorders<"top" | "bottom" | "left" | "right" | "insideH" | "insideV">;
-  /** The space inside each cell, unless a cell says otherwise. */
+  /** Cell padding, unless a cell has its own. */
   margins?: Partial<Record<"top" | "bottom" | "left" | "right", number>>;
-  /** Columns as wide as the file says, whatever their text. */
+  /** Column widths as given, whatever the text in them. */
   fixed?: true;
-  /** Each column's width. */
   columns?: number[];
 }
 

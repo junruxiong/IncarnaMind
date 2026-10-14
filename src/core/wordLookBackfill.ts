@@ -1,12 +1,7 @@
 /**
- * The Word look for a Mind imported before Minds kept it (#746): read again
- * from the package kept at import, and given to the Blocks that are still as
- * imported. A Block is found by the place its source names (`WordSource`) in
- * the package read again, and is still as imported when its fingerprint is
- * the one recorded then (`wordFingerprint` leaves the look out, so giving the
- * look changes no fingerprint). A Block the User changed keeps the Mind's
- * plain look. What would change is worked out first, then made in one change,
- * so a failure leaves the Mind as it was.
+ * A Block counts as unchanged when its fingerprint is the one recorded at
+ * import (the fingerprint ignores the look). Blocks the User changed keep the
+ * plain look. Planning makes no change, so a failure leaves the Mind as it was.
  */
 import * as Y from "yjs";
 import type { NodeJSON } from "../shared/blockJson";
@@ -14,19 +9,17 @@ import { wordFingerprint, wordSourceOf } from "../shared/wordFiles";
 import { BLOCK_ID_ATTRIBUTE, WORD_LOOK_ATTRIBUTE, WORD_RUN_MARK } from "./api";
 import type { WordStructure } from "./documents/formats/docxImport";
 
-/** One change the look makes: an attribute on an element, or a run's mark on a stretch of text. */
 type LookChange =
   | { kind: "attribute"; element: Y.XmlElement; value: string }
   | { kind: "run"; text: Y.XmlText; index: number; length: number; key: string };
 
 export interface LookPlan {
   changes: LookChange[];
-  /** Blocks given the look, and those left plain because the User changed them. */
   given: number;
+  /** Left plain because the User changed them. */
   skipped: number;
 }
 
-/** The nodes of the package read again, by the place their source names ("w:p#12"). */
 function nodesByPlace(structure: WordStructure): Map<string, NodeJSON> {
   const byPlace = new Map<string, NodeJSON>();
   const visit = (node: NodeJSON) => {
@@ -39,7 +32,7 @@ function nodesByPlace(structure: WordStructure): Map<string, NodeJSON> {
   return byPlace;
 }
 
-/** A node's content as the Mind stores it: runs of text together, other nodes each alone. */
+/** Adjacent text nodes, as one Y.XmlText holds them. */
 function grouped(content: readonly NodeJSON[]): (NodeJSON[] | NodeJSON)[] {
   const groups: (NodeJSON[] | NodeJSON)[] = [];
   for (const node of content) {
@@ -55,13 +48,12 @@ function grouped(content: readonly NodeJSON[]): (NodeJSON[] | NodeJSON)[] {
   return groups;
 }
 
-/** A text's characters, without its marks. */
 const plainText = (text: Y.XmlText): string =>
   (text.toDelta() as { insert: unknown }[])
     .map((run) => (typeof run.insert === "string" ? run.insert : ""))
     .join("");
 
-/** The look's changes for an element as imported, `node` being the same node read again. */
+/** False, planning nothing, when `element` no longer has `node`'s shape. */
 function changesFor(element: Y.XmlElement, node: NodeJSON, into: LookChange[]): boolean {
   if (element.nodeName !== node.type) return false;
   const key = node.attrs?.[WORD_LOOK_ATTRIBUTE];
@@ -96,7 +88,6 @@ function changesFor(element: Y.XmlElement, node: NodeJSON, into: LookChange[]): 
   return true;
 }
 
-/** What giving the look changes in a Mind: worked out, not made. */
 export function planLook(doc: Y.Doc, blocks: Y.XmlFragment, structure: WordStructure): LookPlan {
   const byPlace = nodesByPlace(structure);
   const plan: LookPlan = { changes: [], given: 0, skipped: 0 };
@@ -122,7 +113,6 @@ export function planLook(doc: Y.Doc, blocks: Y.XmlFragment, structure: WordStruc
   return plan;
 }
 
-/** Makes the plan's changes. Inside one transaction. */
 export function applyLook(plan: LookPlan): void {
   for (const change of plan.changes) {
     if (change.kind === "attribute") {
