@@ -17,7 +17,7 @@ export const tellable = (task: Task | undefined): task is Task =>
   task !== undefined && task.finishedAt === null && task.actions.includes("tell");
 
 /** The Mind's Tasks that read messages, the one started last first. */
-const tellableIn = (mindId: string) =>
+export const tellableIn = (mindId: string) =>
   Object.values(useTasks.getState().tasks)
     .filter((task) => task.mindId === mindId && tellable(task))
     .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
