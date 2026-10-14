@@ -6,10 +6,18 @@
  * a list of Sources. The plain text has the same markers and a Sources list.
  */
 import { getTextBetween, getTextSerializersFromSchema, type TextSerializer } from "@tiptap/core";
-import type { Fragment, Schema } from "@tiptap/pm/model";
-import { CITATION_NODE, type CitationAttributes, FOOTNOTE_NODE } from "../../../core/api";
+import { Fragment, type Node as ProseMirrorNode, type Schema } from "@tiptap/pm/model";
+import {
+  BLOCK_ID_ATTRIBUTE,
+  CHART_NODE,
+  CITATION_NODE,
+  type CitationAttributes,
+  FOOTNOTE_NODE,
+} from "../../../core/api";
+import { readChart } from "../../../shared/charts";
 import { translate } from "../../../shared/i18n";
 import { type SourceContext, sourceText } from "../../../shared/sources";
+import { tableText } from "./tableText";
 
 type Cited = Partial<CitationAttributes>;
 
@@ -118,28 +126,56 @@ export function addFootnotes(
   root.append(list);
 }
 
-/**
- * The text of a copied fragment with its Citations as numbered markers, "[1]", and the list of
- * Sources after it. "" when it holds no Citation, so the editor's own text stands.
- */
-export function textWithSources(
-  fragment: Fragment,
-  schema: Schema,
-  context: SourceContext,
-): string {
+const TABLE_NODE = "table";
+const TABLE_ROW_NODE = "tableRow";
+
+function tablesIn(fragment: Fragment): Set<unknown> {
+  const ids = new Set<unknown>();
+  fragment.descendants((node) => {
+    if (node.type.name === TABLE_NODE) ids.add(node.attrs[BLOCK_ID_ATTRIBUTE]);
+    return true;
+  });
+  return ids;
+}
+
+/** A chart of a table in the copy would write the table's values a second time. */
+function withoutChartsOf(fragment: Fragment, tables: Set<unknown>): Fragment {
+  const kept: ProseMirrorNode[] = [];
+  fragment.forEach((node) => {
+    const { source } = node.type.name === CHART_NODE ? readChart(node.attrs) : { source: null };
+    if (source?.kind !== "table" || !source.blockId || !tables.has(source.blockId)) kept.push(node);
+  });
+  return Fragment.fromArray(kept);
+}
+
+/** prosemirror-tables copies selected cells as their rows, without the table around them. */
+function withRowsAsTable(fragment: Fragment, schema: Schema): Fragment {
+  const table = schema.nodes[TABLE_NODE];
+  return table && fragment.firstChild?.type.name === TABLE_ROW_NODE
+    ? Fragment.from(table.create(null, fragment))
+    : fragment;
+}
+
+/** "" when the copy holds no table and no Citation, so the editor's own text stands. */
+export function copiedText(copy: Fragment, schema: Schema, context: SourceContext): string {
+  const fragment = withRowsAsTable(copy, schema);
   const citations = citationsIn(fragment);
-  if (citations.length === 0) return "";
+  const tables = tablesIn(fragment);
+  if (citations.length === 0 && tables.size === 0) return "";
   let number = 0;
   const textSerializers: Record<string, TextSerializer> = {
     ...getTextSerializersFromSchema(schema),
     [CITATION_NODE]: () => `[${++number}]`,
   };
-  const copied = schema.topNodeType.create(null, fragment);
+  textSerializers[TABLE_NODE] = ({ node }) => tableText(node, textSerializers);
+  const copied = schema.topNodeType.create(null, withoutChartsOf(fragment, tables));
+  // Not `trim()`: a table's last cell may be empty, and its row ends in a tab.
   const body = getTextBetween(
     copied,
     { from: 0, to: copied.content.size },
     { textSerializers },
-  ).trim();
+  ).replace(/^\n+|\n+$/g, "");
+  if (citations.length === 0) return body;
   const sources = citations
     .map((citation, index) => `[${index + 1}] ${sourceText(citation, context).text}`)
     .join("\n");

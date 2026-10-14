@@ -408,6 +408,8 @@ export interface DocumentsOptions {
    * scanned pages are left with the little text they have, as before.
    */
   textRecognition?: TextRecognitionModel;
+  /** The password kept for a locked PDF (./pdfPasswords, #763); undefined when none is. */
+  pdfPassword?(documentId: string): Promise<string | undefined>;
   linkedFolders: {
     watch: WatchFolder;
     stat: StatIdentity;
@@ -936,6 +938,7 @@ export function createDocuments(options: DocumentsOptions) {
       return textRecognition.read(picture, page);
     },
     isUnavailable: (error) => error instanceof TextRecognitionUnavailableError,
+    password: async (job) => options.pdfPassword?.(job.documentId),
     onResult(job, result) {
       scanProgress.delete(job.documentId);
       // Pages read by a job that stopped or crashed wait for the next; any other result has them.
