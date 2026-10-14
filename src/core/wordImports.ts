@@ -543,8 +543,10 @@ export function createWordImports(options: WordImportsOptions) {
         try {
           let bytes: Uint8Array;
           try {
+            if (!/^[0-9a-f]{64}$/.test(sha256)) throw new Error("No package.");
             bytes = await readFile(packagePath(sha256));
-          } catch {
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
             log.info("word.look.packageMissing", { mindId });
             continue;
           }

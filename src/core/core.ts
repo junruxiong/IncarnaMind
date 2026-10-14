@@ -1610,7 +1610,7 @@ export function createCore(adapters: CoreAdapters): Core {
   });
   wordImports.resume();
   wordImports.dropPurged().catch((error: unknown) => console.error(error));
-  void wordImports.addLooks();
+  wordImports.addLooks().catch((error: unknown) => console.error(error));
 
   const recentlyDeleted = createRecentlyDeleted({
     db,
