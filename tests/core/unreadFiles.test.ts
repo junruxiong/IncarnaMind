@@ -1,5 +1,8 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, test } from "vitest";
-import { createTempDataFolder, startCore } from "../helpers/core";
+import { createFakeTextRecognizer } from "../../src/core/documents/scan/fake";
+import { createTempDataFolder, NO_MODEL_FILES, startCore } from "../helpers/core";
 import { createSourceFolder, linkAndProcess, writeSourceFile } from "../helpers/documents";
 import { encryptedOfficeFile } from "../helpers/office";
 import { buildPdf } from "../helpers/pdf";
@@ -73,6 +76,33 @@ describe("listUnreadFiles", () => {
 
     // A Document alone names no file in a format not read.
     const notes = documents.find((each) => each.name === "Notes");
+    expect(
+      await core.listUnreadFiles({ folderIds: [], tagIds: [], documentIds: [notes?.id ?? ""] }),
+    ).toEqual([]);
+  });
+
+  test("a scan some of whose pages weren't read is named with those pages (#485)", async () => {
+    const picture = readFileSync(join(import.meta.dirname, "../fixtures/scans/en-clean.jpg"));
+    const recognizer = createFakeTextRecognizer({
+      script: { pages: { 1: { lines: ["Tariff schedule"] }, 3: { fail: "Failed on this page." } } },
+    });
+    const library = await createSourceFolder();
+    await writeSourceFile(library, "Notes.md", "Spring tides happen at new moon.\n");
+    await writeSourceFile(
+      library,
+      "Tariffs.pdf",
+      buildPdf([{ scan: picture }, { scan: picture }, { scan: picture }]),
+    );
+    const core = startCore(await createTempDataFolder(), {
+      textRecognizer: recognizer,
+      textRecognitionModelSource: NO_MODEL_FILES,
+    });
+    const documents = await linkAndProcess(core, library);
+    const notes = documents.find((each) => each.name === "Notes");
+
+    expect(await core.listUnreadFiles(null)).toMatchObject([
+      { name: "Tariffs.pdf", reason: "pages", pages: [3] },
+    ]);
     expect(
       await core.listUnreadFiles({ folderIds: [], tagIds: [], documentIds: [notes?.id ?? ""] }),
     ).toEqual([]);

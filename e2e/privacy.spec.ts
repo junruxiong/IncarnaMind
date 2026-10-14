@@ -9,6 +9,7 @@ import {
   launchApp,
   openPrivacySettings,
   removeDataFolder,
+  setLanguage,
 } from "./app";
 
 let dataDir: string;
@@ -51,8 +52,14 @@ test("the Privacy page lists the data flows and the update check, and offers no 
     "Allowed when you chose llm.example.com, ",
   );
 
-  // Revoked, it asks again next time; allowed from here, with the date.
-  await service.getByTestId("data-flow-revoke").click();
+  // Stop allowing it, and it asks again next time; allowed from here, with the date.
+  // Not "Revoke", which is 撤销 in Chinese, the same word as Undo (#763).
+  const revoke = service.getByTestId("data-flow-revoke");
+  await expect(revoke).toHaveText("Stop allowing");
+  await setLanguage(window, "zh-CN");
+  await expect(revoke).toHaveText("停止允许");
+  await setLanguage(window, "en");
+  await revoke.click();
   await expect(service).toHaveAttribute("data-consent", "not-asked");
   await service.getByTestId("data-flow-allow").click();
   await expect(service).toHaveAttribute("data-consent", "accepted");

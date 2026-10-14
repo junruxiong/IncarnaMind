@@ -66,6 +66,12 @@ const fileReason = (ctx: CommandContext) => {
 
 const onFiles = (ctx: CommandContext) => everyDocument(ctx, (document) => !document.web);
 
+/** The Mind a Word file was imported as (#720), while it is there. */
+const importedMindOf = (ctx: CommandContext) => {
+  const id = documentsOf(ctx)[0]?.importedAs;
+  return id ? store().minds.find((each) => each.id === id) : undefined;
+};
+
 export const mindCommands: readonly Command[] = [
   {
     id: "mind.open",
@@ -142,6 +148,18 @@ export const documentCommands: readonly Command[] = [
       store().openDocument({ documentId: idsOf(ctx, "document")[0] ?? "" }, { as: "here" }),
   },
   {
+    id: "document.openMind",
+    label: "document.openMind",
+    group: "open",
+    appliesTo: ["document"],
+    when: (ctx) => onlyOne(ctx) && importedMindOf(ctx) !== undefined,
+    reversible: true,
+    run(ctx) {
+      const mind = importedMindOf(ctx);
+      if (mind) store().openMind(mind.id);
+    },
+  },
+  {
     id: "document.ask",
     label: (ctx, t) =>
       many(ctx) ? t("library.ask.documents", { count: many(ctx) }) : t("documents.ask"),
@@ -184,11 +202,13 @@ export const documentCommands: readonly Command[] = [
         : t("documents.retryAction"),
     group: "main",
     appliesTo: ["document"],
-    // Only a failed one whose file is there to be read again.
+    // Only a failed one, or a scan with no text, whose file is there to be read again.
     when: (ctx) =>
       everyDocument(
         ctx,
-        (document) => document.status === "failed" && document.fileStatus === "available",
+        (document) =>
+          (document.status === "failed" || document.status === "no-text") &&
+          document.fileStatus === "available",
       ),
     reversible: true,
     run: async (ctx) => {

@@ -200,7 +200,8 @@ export function ScopeChoiceList({
   const groups = useAppStore((state) => state.library?.groups);
   const tags = useAppStore((state) => state.tags);
   const documents = useAppStore((state) => state.documents);
-  const library = { folders, groups, tags, documents };
+  const assignments = useAppStore((state) => state.library?.assignments);
+  const library = { folders, groups, tags, documents, assignments };
   const shown = scopeChoices(library, scope, query).filter(
     (choice) => !kinds || kinds.includes(choice.kind),
   );
@@ -287,12 +288,18 @@ export function ScopeChoiceList({
                   onMouseDown={(event) => event.preventDefault()}
                   onMouseEnter={() => setSelected(index)}
                   onClick={() => onChoose(item)}
-                  className="editor-menu-item"
+                  data-empty={item.count === 0 ? "true" : undefined}
+                  className={`editor-menu-item ${item.count === 0 ? "scope-picker-item--empty" : ""}`}
                 >
                   <span className="scope-picker-icon">
                     <ChoiceIcon choice={item} />
                   </span>
                   <span className="truncate">{item.name}</span>
+                  {item.count !== undefined && (
+                    <span data-testid="scope-choice-count" className="scope-picker-path">
+                      {item.count === 0 ? t("scope.picker.empty.hint") : item.count}
+                    </span>
+                  )}
                   {(item.path.length > 0 || item.sourceLocation) && (
                     <span className="scope-picker-path">
                       {[...(item.sourceLocation ? [t("library.sources")] : []), ...item.path].join(

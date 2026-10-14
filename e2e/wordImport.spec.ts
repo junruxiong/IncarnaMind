@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import { unzip } from "../tests/helpers/docx";
@@ -16,19 +16,24 @@ import {
   wordFile,
 } from "../tests/helpers/word";
 import {
+  askInAssistant,
   closeSettings,
   coreOf,
   createDataFolder,
   dismissChatSetup,
+  expectReadyDocuments,
+  importWordFromMenu,
   interceptOpenDialog,
   launchApp,
   motionSettled,
+  openDocumentMenu,
   openSettings,
   pointAndClick,
   removeDataFolder,
   setLanguage,
   setWindowSize,
   tabMenu,
+  useLocalChatModel,
   useOutputLocation,
 } from "./app";
 
@@ -36,8 +41,9 @@ import {
  * Importing a Word file as a Mind (#104): from the "+" menu and by a drop on a
  * Mind, the import screen that asks whose document it is, the Mind with what
  * is kept as is shown in place, someone else's tracked changes to accept or
- * reject (#108), a section break that asks before it goes, and a file refused
- * with the reason. Set INCARNAMIND_SCREENSHOTS to a folder to also save
+ * reject (#108), a section break that goes at once and comes back with ⌘Z, and
+ * a file refused with the reason; and the original also added as a Document that Answers
+ * cite (#720). Set INCARNAMIND_SCREENSHOTS to a folder to also save
  * screenshots there.
  */
 
@@ -103,15 +109,6 @@ function memo(): Buffer {
   });
 }
 
-/** "Import a Word file…" from the "+" menu; the test answers the system's open dialog. */
-async function importFromMenu(window: Page): Promise<Locator> {
-  await window.getByTestId("plus-menu").click();
-  await window.getByTestId("plus-import-word").click();
-  const dialog = window.getByTestId("word-import-dialog");
-  await expect(dialog).toBeVisible();
-  return dialog;
-}
-
 test("Import a Word file… asks whose it is, then opens the Mind with what is kept as is in place", async () => {
   const path = join(files, "Market entry memo (Velomark).docx");
   await writeFile(path, memo());
@@ -119,7 +116,7 @@ test("Import a Word file… asks whose it is, then opens the Mind with what is k
   await dismissChatSetup(window);
   await interceptOpenDialog(app, path);
 
-  const dialog = await importFromMenu(window);
+  const dialog = await importWordFromMenu(window);
   await expect(dialog.getByTestId("word-import-file")).toHaveText(
     "Market entry memo (Velomark).docx",
   );
@@ -156,6 +153,8 @@ test("Import a Word file… asks whose it is, then opens the Mind with what is k
   const box = editor.locator('[data-testid="word-atom"][data-kind="textBox"]');
   await expect(box).toContainText("At a glance");
   const label = box.locator(".word-atom-label");
+  // Away from where the import screen's Import button was, which may be over the box now.
+  await window.getByTestId("mind-title").hover();
   await expect(label).toHaveCSS("opacity", "0");
   await box.hover();
   await expect(label).toHaveText("Text box · kept as is");
@@ -189,7 +188,7 @@ test("a résumé laid out with tables, shading and tab stops says, before Import
   await setWindowSize(app, window, 1440, 900);
   await interceptOpenDialog(app, path);
 
-  const dialog = await importFromMenu(window);
+  const dialog = await importWordFromMenu(window);
   const note = dialog.getByTestId("word-import-layout");
   await expect(note).toHaveText(
     "This file’s layout (fonts, colours, shading and aligned columns) isn’t shown in the Mind. It’s kept, and comes back when you export to Word.",
@@ -257,7 +256,7 @@ test("someone else's tracked changes wait in place with who made them and when: 
   await mkdir(output);
   await useOutputLocation(window, output);
   await interceptOpenDialog(app, path);
-  const dialog = await importFromMenu(window);
+  const dialog = await importWordFromMenu(window);
   await dialog.getByTestId("word-import-confirm").click();
   await expect(dialog).toBeHidden();
 
@@ -346,7 +345,7 @@ test("someone else's tracked changes wait in place with who made them and when: 
   await app.close();
 });
 
-test("deleting a section break asks first: Keep it leaves it, Delete takes it", async () => {
+test("deleting a section break asks nothing, and ⌘Z brings it back", async () => {
   const path = join(files, "Two sections.docx");
   await writeFile(
     path,
@@ -362,7 +361,7 @@ test("deleting a section break asks first: Keep it leaves it, Delete takes it", 
   const { app, window } = await launchApp(dataDir, { home });
   await dismissChatSetup(window);
   await interceptOpenDialog(app, path);
-  const dialog = await importFromMenu(window);
+  const dialog = await importWordFromMenu(window);
   await expect(dialog.getByTestId("word-import-origin-own")).toBeChecked();
   await dialog.getByTestId("word-import-confirm").click();
 
@@ -377,25 +376,15 @@ test("deleting a section break asks first: Keep it leaves it, Delete takes it", 
     .poll(() => window.evaluate(() => getSelection()?.toString()))
     .toContain("Section one ends here.");
   await window.keyboard.press("Backspace");
-  const ask = window.getByTestId("section-break-dialog");
-  await expect(ask).toBeVisible();
-  await expect(ask).toContainText("Delete the section break?");
-  await screenshot(ask, "section-break-dialog");
-  await ask.getByRole("button", { name: "Keep it" }).click();
-  await expect(ask).toBeHidden();
-  await expect(sectionBreak).toHaveCount(1);
-  await expect(first).toHaveText("Section one ends here.");
-
-  await motionSettled(window);
-  await first.click();
-  await first.click({ clickCount: 3 });
-  await expect
-    .poll(() => window.evaluate(() => getSelection()?.toString()))
-    .toContain("Section one ends here.");
-  await window.keyboard.press("Backspace");
-  await ask.getByTestId("section-break-delete").click();
   await expect(sectionBreak).toHaveCount(0);
   await expect(editor).not.toContainText("Section one ends here.");
+  await expect(editor).toContainText("Section two.");
+  await expect(window.locator("dialog[open]")).toHaveCount(0);
+  await screenshot(window, "section-break-deleted");
+
+  await window.keyboard.press("ControlOrMeta+z");
+  await expect(sectionBreak).toHaveCount(1);
+  await expect(first).toHaveText("Section one ends here.");
   await expect(editor).toContainText("Section two.");
   await app.close();
 });
@@ -410,7 +399,7 @@ test("a file that can't be imported says why, and no Mind is made", async () => 
     (await coreOf(window)).evaluate((bridge) => bridge.listMinds().then((list) => list.length));
   const before = await minds();
 
-  const dialog = await importFromMenu(window);
+  const dialog = await importWordFromMenu(window);
   await expect(dialog.getByTestId("word-import-refusal")).toContainText(
     "“Old minutes.doc” is an older Word file (.doc). Save it as .docx in Word, then import that.",
   );
@@ -495,7 +484,7 @@ test("Export writes back into the Word file: the User's edits tracked under thei
   await closeSettings(window);
 
   await interceptOpenDialog(app, path);
-  const dialog = await importFromMenu(window);
+  const dialog = await importWordFromMenu(window);
   await dialog.getByTestId("word-import-confirm").click();
 
   // The paragraph with the comment goes.
@@ -581,5 +570,225 @@ test("Export writes back into the Word file: the User's edits tracked under thei
   expect(document).toContain("The end.");
   expect(document).not.toContain("First sales in");
   expect(document).not.toContain("comment");
+  await app.close();
+});
+
+const CAP =
+  "Each party's total liability is capped at the fees paid in the twelve months before the claim.";
+
+/** A counterparty's draft: two clauses, the liability cap in clause 9. */
+function contract(): Buffer {
+  return wordFile({
+    body: [
+      paragraph("Supply agreement", { style: "Title" }),
+      paragraph("Clause 8 Payment", { style: "Heading1" }),
+      paragraph("The Buyer pays each invoice within 30 days of receiving it."),
+      paragraph("Clause 9 Limitation of liability", { style: "Heading1" }),
+      paragraph(CAP),
+    ].join(""),
+  });
+}
+
+test("the original is also a Document: an Answer beside the Mind cites its clause, which opens there, and each finds the other", async () => {
+  const path = join(files, "Supply agreement.docx");
+  await writeFile(path, contract());
+  const { app, window } = await launchApp(dataDir, { home, fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await setWindowSize(app, window, 1440, 860);
+  await interceptOpenDialog(app, path);
+
+  const dialog = await importWordFromMenu(window);
+  const tick = dialog.getByTestId("word-import-add-original");
+  await expect(tick).toBeChecked();
+  await expect(tick.locator("xpath=..")).toHaveText(
+    "Also add the original to the Library, so Answers can cite it",
+  );
+  await expect(dialog.getByTestId("word-import-new-version")).toHaveCount(0);
+  await screenshot(dialog, "word-import-original");
+  await dialog.getByTestId("word-import-confirm").click();
+  await expect(dialog).toBeHidden();
+  await expect(window.getByTestId("mind-title")).toHaveValue("Supply agreement");
+  await expectReadyDocuments(window, 1);
+
+  // "From Supply agreement.docx" opens the original beside the Mind.
+  const from = window.getByTestId("mind-word-original");
+  await expect(window.getByTestId("mind-word-origin")).toHaveText(
+    "From Supply agreement.docx · Export keeps its styles",
+  );
+  await pointAndClick(window, from);
+  await expect(window.getByTestId("viewer-title")).toHaveText("Supply agreement");
+  await expect(window.getByTestId("mind-pane")).toBeVisible();
+
+  // A Question beside the Mind cites the clause, by its section.
+  const answer = await askInAssistant(window, "Is total liability capped?");
+  const chip = answer.getByTestId("citation-chip");
+  await expect(chip).toHaveAttribute(
+    "aria-label",
+    "Citation 1: Supply agreement, § Clause 9 Limitation of liability. Quote found in § Clause 9 Limitation of liability",
+  );
+  await pointAndClick(window, chip);
+  const card = window.getByTestId("citation-card");
+  if (await card.isVisible()) await card.getByTestId("citation-open").click();
+  const viewer = window.getByTestId("viewer");
+  await expect(window.getByTestId("viewer-title")).toHaveText("Supply agreement");
+  const docx = viewer.getByTestId("viewer-docx");
+  await expect(docx).toHaveAttribute("data-rendered", "yes");
+  await expect(docx.locator("[data-quote-highlight]").first()).toBeInViewport();
+  expect((await docx.locator("[data-quote-highlight]").allTextContents()).join("")).toContain(
+    "total liability is capped",
+  );
+  await expect(viewer.getByTestId("viewer-quote-mark-label")).toHaveText(
+    "§ Clause 9 Limitation of liability",
+  );
+  await motionSettled(window);
+  await screenshot(window, "word-original-cited");
+
+  // In the sidebar: Get info names its Mind, and its menu opens it.
+  const row = window.getByTestId("document-list-item").filter({ hasText: "Supply agreement" });
+  await row.getByTestId("open-document").focus();
+  await window.keyboard.press("ControlOrMeta+i");
+  const panel = window.getByTestId("info-panel");
+  await expect(panel.getByTestId("info-imported-as")).toContainText("Imported as a Mind");
+  await expect(panel.getByTestId("info-open-mind")).toHaveText("Supply agreement");
+  await screenshot(panel, "word-original-info");
+  await window.keyboard.press("Escape");
+  await expect(panel).toBeHidden();
+  const mindTab = window.getByTestId("mind-tab").filter({ hasText: "Supply agreement" });
+  await mindTab.hover();
+  await mindTab.getByTestId("tab-close").click();
+  await expect(window.getByTestId("mind-pane")).toHaveCount(0);
+  await openDocumentMenu(row);
+  const menu = row.getByTestId("document-file-actions");
+  await expect(menu.getByTestId("document.openMind")).toHaveText("Open its Mind");
+  await pointAndClick(window, menu.getByTestId("document.openMind"));
+  await expect(window.getByTestId("mind-title")).toHaveValue("Supply agreement");
+
+  await setLanguage(window, "zh-CN");
+  await expect(window.getByTestId("mind-word-original")).toHaveText("来自“Supply agreement.docx”");
+  await app.close();
+});
+
+test("an original the Library can't take is said under the Mind's line, and Add to Library takes it once it can", async () => {
+  test.skip(process.platform === "win32" || process.getuid?.() === 0, "needs file permissions");
+  const path = join(files, "Supply agreement.docx");
+  await writeFile(path, contract());
+  const { app, window } = await launchApp(dataDir, { home });
+  await dismissChatSetup(window);
+  await setWindowSize(app, window, 1200, 800);
+  await interceptOpenDialog(app, path);
+
+  const dialog = await importWordFromMenu(window);
+  await expect(dialog.getByTestId("word-import-confirm")).toBeEnabled();
+  // Read for the import screen, then not readable: the import goes on from what it read.
+  await chmod(path, 0o000);
+  await dialog.getByTestId("word-import-confirm").click();
+  await expect(dialog).toBeHidden();
+
+  const problem = window.getByTestId("mind-word-not-added");
+  await expect(problem).toHaveText(
+    "“Supply agreement.docx” couldn’t be added to the Library, so Answers can’t cite it. · Add to Library",
+  );
+  await expect(window.getByTestId("mind-word-original")).toHaveCount(0);
+  await motionSettled(window);
+  await screenshot(window.getByTestId("mind-pane"), "word-original-not-added");
+
+  await chmod(path, 0o644);
+  await pointAndClick(window, problem.getByTestId("mind-word-add-original"));
+  await expect(problem).toHaveCount(0);
+  await expect(window.getByTestId("mind-word-original")).toBeVisible();
+  await app.close();
+});
+
+test("From the original's menu, Open the original opens it beside the Mind at the paragraph the caret is in, in English and Chinese", async () => {
+  const CAPPED = "Clause 9: each party's total liability is capped at a year's fees.";
+  // Every tenth crosses a page, as Word marks it: the viewer draws it as two paragraphs.
+  const recitals = (from: number, count: number) =>
+    Array.from({ length: count }, (_, index) =>
+      (from + index) % 10 === 0
+        ? paragraph(
+            `${run(`Recital ${from + index}: the parties record a fact `)}<w:r><w:lastRenderedPageBreak/><w:t xml:space="preserve">of the background.</w:t></w:r>`,
+          )
+        : paragraph(`Recital ${from + index}: the parties record a fact of the background.`),
+    );
+  const path = join(files, "Supply agreement.docx");
+  await writeFile(
+    path,
+    wordFile({
+      body: [
+        paragraph("Supply agreement", { style: "Title" }),
+        // A text box Word saves twice: its newer copy isn't drawn, so the places shift by six.
+        paragraph(textBox(["At a glance", "Term", "Two years", "Cap", "A year's fees", "Law"])),
+        // Long enough that the pages scroll to it.
+        ...recitals(1, 150),
+        paragraph(CAPPED),
+        ...recitals(151, 150),
+      ].join(""),
+    }),
+  );
+  const { app, window } = await launchApp(dataDir, { home });
+  await dismissChatSetup(window);
+  await setWindowSize(app, window, 1440, 900);
+  await interceptOpenDialog(app, path);
+  const dialog = await importWordFromMenu(window);
+  await dialog.getByTestId("word-import-confirm").click();
+  await expect(dialog).toBeHidden();
+  await expectReadyDocuments(window, 1);
+
+  // The caret in clause 9, then From › Open the original.
+  const editor = window.getByTestId("mind-editor");
+  await editor.locator("p", { hasText: "Clause 9:" }).click();
+  await pointAndClick(window, window.getByTestId("mind-word-original-menu"));
+  const items = window.getByTestId("mind-word-original-items");
+  await expect(items.getByRole("menuitem")).toHaveText([
+    "Open the original",
+    /^Show in (Finder|folder)$/,
+  ]);
+  await motionSettled(window);
+  await screenshot(window, "word-original-menu");
+  await pointAndClick(window, items.getByTestId("mind-word-open-original"));
+
+  // Beside the Mind, at clause 9: a third of the way down the pages.
+  await expect(window.getByTestId("viewer-title")).toHaveText("Supply agreement");
+  await expect(window.getByTestId("mind-pane")).toBeVisible();
+  const pages = window.getByTestId("viewer-docx");
+  await expect(pages).toHaveAttribute("data-rendered", "yes");
+  const capped = pages.locator("section.docx > article p", { hasText: "Clause 9:" });
+  await expect(capped).toBeInViewport();
+  await expect
+    .poll(async () => {
+      const [line, view] = await Promise.all([capped.boundingBox(), pages.boundingBox()]);
+      return line && view ? Math.abs(line.y - view.y - view.height / 3) : Number.POSITIVE_INFINITY;
+    })
+    .toBeLessThan(24);
+  await motionSettled(window);
+  await screenshot(window, "word-original-at-caret");
+
+  // A right-click on the line opens the same menu, in Chinese.
+  await setLanguage(window, "zh-CN");
+  await window.getByTestId("mind-word-original").click({ button: "right" });
+  await expect(items.getByRole("menuitem")).toHaveText(["打开原文件", /^在(访达|文件夹)中显示$/]);
+  await window.keyboard.press("Escape");
+  await app.close();
+});
+
+test("unticked, the Word file is imported as a Mind alone", async () => {
+  const path = join(files, "Supply agreement.docx");
+  await writeFile(path, contract());
+  const { app, window } = await launchApp(dataDir, { home });
+  await dismissChatSetup(window);
+  await interceptOpenDialog(app, path);
+
+  const dialog = await importWordFromMenu(window);
+  await dialog.getByTestId("word-import-add-original").uncheck();
+  await dialog.getByTestId("word-import-confirm").click();
+  await expect(dialog).toBeHidden();
+
+  await expect(window.getByTestId("mind-word-origin")).toHaveText(
+    "From Supply agreement.docx · Export keeps its styles",
+  );
+  await expect(window.getByTestId("mind-word-original")).toHaveCount(0);
+  const documents = await (await coreOf(window)).evaluate((bridge) => bridge.listDocuments());
+  expect(documents).toEqual([]);
   await app.close();
 });

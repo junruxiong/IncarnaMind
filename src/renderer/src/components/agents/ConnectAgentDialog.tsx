@@ -1,15 +1,17 @@
 import { useEffect, useId, useState } from "react";
-import type {
-  AgentClient,
-  AgentSetupPreview,
-  LibraryGroup,
-  SecretStorageStatus,
+import {
+  type AgentClient,
+  type AgentSetupPreview,
+  NOT_IN_A_FOLDER_ID,
+  type SecretStorageStatus,
 } from "../../../../core/api";
 import { clientInSentence } from "../../../../shared/agentNames";
+import { onlyNotInAFolder } from "../../agentFolders";
 import { core } from "../../core";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
 import { InlinePath } from "../PathText";
+import { ProblemMark } from "../ProblemLine";
 import { SecretStorageNotice } from "../providers/ProviderForm";
 import { SLOT, Slotted } from "../Slotted";
 import {
@@ -26,6 +28,10 @@ import {
   primaryButtonClass,
 } from "../ui";
 import { useModal } from "../useModal";
+import { AgentFolderList, useAgentFolderRows } from "./AgentFolderList";
+
+const ALL_UNFILED: ReadonlySet<string> = new Set([NOT_IN_A_FOLDER_ID]);
+const NOTHING: ReadonlySet<string> = new Set();
 
 /**
  * The one confirmation before an agent is connected (#351), which is also the
@@ -37,14 +43,12 @@ import { useModal } from "../useModal";
  */
 export function ConnectAgentDialog({
   client,
-  folders,
   busy,
   problem,
   onAllow,
   onClose,
 }: {
   client: AgentClient | null;
-  folders: readonly LibraryGroup[];
   busy: boolean;
   /** Why the last try to connect failed, shown here, where it happened. */
   problem: string | null;
@@ -53,7 +57,9 @@ export function ConnectAgentDialog({
 }) {
   const t = useT();
   const dialog = useModal(client !== null, { focusDialog: true });
-  const [chosen, setChosen] = useState<ReadonlySet<string>>(new Set());
+  /** What the User has ticked; null until they tick or untick something. */
+  const [picked, setPicked] = useState<ReadonlySet<string> | null>(null);
+  const rows = useAgentFolderRows(client !== null);
   /** The name the User gives "Other agent". */
   const [name, setName] = useState("");
   const [preview, setPreview] = useState<AgentSetupPreview | null>(null);
@@ -63,9 +69,9 @@ export function ConnectAgentDialog({
   const titleId = useId();
   const clientId = client?.id ?? null;
 
-  // A new agent starts with no Folder chosen, and its own preview.
+  // A new agent starts with nothing picked, and its own preview.
   useEffect(() => {
-    setChosen(new Set());
+    setPicked(null);
     setName("");
     setPreview(null);
     if (!clientId) return;
@@ -83,12 +89,15 @@ export function ConnectAgentDialog({
   const canKeepKey = storage?.canSave !== false;
 
   const agent = client ? name.trim() || clientInSentence(client, t) : "";
+  // Not in a Folder alone is ticked: it is every Document, so there is nothing else to choose.
+  const chosen = picked ?? (onlyNotInAFolder(rows) ? ALL_UNFILED : NOTHING);
   const toggle = (folderId: string, on: boolean) => {
     const next = new Set(chosen);
     if (on) next.add(folderId);
     else next.delete(folderId);
-    setChosen(next);
+    setPicked(next);
   };
+  const allowed = rows.filter((row) => chosen.has(row.id)).map((row) => row.id);
 
   return (
     <dialog
@@ -121,33 +130,9 @@ export function ConnectAgentDialog({
             />
           </label>
         )}
-        <fieldset className="flex flex-col gap-1">
+        <fieldset className="flex min-w-0 flex-col gap-1">
           <legend className={fieldLabelClass}>{t("agents.connect.folders")}</legend>
-          {folders.length === 0 ? (
-            <p data-testid="connect-agent-no-folders" className={hintClass}>
-              {t("agents.connect.noFolders")}
-            </p>
-          ) : (
-            <div className="mt-1 flex max-h-48 flex-col overflow-y-auto">
-              {folders.map((folder) => (
-                <label
-                  key={folder.id}
-                  className="flex min-h-8 cursor-pointer items-center gap-2 text-ui text-ink"
-                >
-                  <input
-                    type="checkbox"
-                    data-testid="connect-agent-folder"
-                    checked={chosen.has(folder.id)}
-                    onChange={(event) => toggle(folder.id, event.target.checked)}
-                    className="size-4 shrink-0 accent-ink"
-                  />
-                  <span className="min-w-0 truncate" title={folder.name}>
-                    {folder.name}
-                  </span>
-                </label>
-              ))}
-            </div>
-          )}
+          <AgentFolderList rows={rows} agent={agent} chosen={chosen} onToggle={toggle} />
         </fieldset>
         {preview && (
           <div data-testid="connect-agent-change" className="flex flex-col gap-1">
@@ -175,7 +160,7 @@ export function ConnectAgentDialog({
             />
           </p>
         )}
-        {folders.length > 0 && chosen.size === 0 && (
+        {rows.length > 0 && allowed.length === 0 && (
           <p className={hintClass}>{t("agents.connect.pickOne")}</p>
         )}
         {storage && !storage.canSave && (
@@ -186,6 +171,7 @@ export function ConnectAgentDialog({
         )}
         {problem && (
           <p data-testid="connect-agent-problem" role="alert" className={errorTextClass}>
+            <ProblemMark />
             {problem}
           </p>
         )}
@@ -196,8 +182,8 @@ export function ConnectAgentDialog({
           <button
             type="button"
             data-testid="connect-agent-allow"
-            disabled={chosen.size === 0 || busy || !canKeepKey}
-            onClick={() => onAllow([...chosen], name)}
+            disabled={allowed.length === 0 || busy || !canKeepKey}
+            onClick={() => onAllow(allowed, name)}
             className={primaryButtonClass}
           >
             {t("agents.connect.allow")}
