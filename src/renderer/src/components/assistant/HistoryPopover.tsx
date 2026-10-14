@@ -1,4 +1,5 @@
 import { useRef } from "react";
+import { formatDateTime } from "../../../../shared/dates";
 import { conversationName } from "../../../../shared/naming";
 import { useConversations } from "../../conversations";
 import { Popover } from "../../editor/Popover";
@@ -17,7 +18,6 @@ export function HistoryPopover({ anchor, onClose }: { anchor: Element; onClose()
   const language = useLanguage();
   const close = useRef<HTMLButtonElement>(null);
   const conversations = useConversations((state) => state.list);
-  const when = new Intl.DateTimeFormat(language, { dateStyle: "medium", timeStyle: "short" });
   return (
     <Popover
       anchor={anchor}
@@ -60,7 +60,7 @@ export function HistoryPopover({ anchor, onClose }: { anchor: Element; onClose()
                     {name}
                   </span>
                   <time dateTime={conversation.updatedAt} className="shrink-0 text-ink-meta">
-                    {when.format(new Date(conversation.updatedAt))}
+                    {formatDateTime(conversation.updatedAt, language)}
                   </time>
                 </li>
               );
