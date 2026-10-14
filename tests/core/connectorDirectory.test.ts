@@ -50,6 +50,11 @@ describe("The directory that ships with the app", () => {
     expect(new Set(entries.map((each) => each.id)).size).toBe(entries.length);
     // Led by where the User's files are, as Browse shows it.
     expect(entries[0]?.group).toBe("files");
+    // A service that lists its Tools without a sign-in has them reviewed, to show before connecting.
+    expect(entries.find((each) => each.id === "pubmed")?.tools?.[0]).toEqual({
+      title: { en: "Search articles", "zh-CN": "搜索文章" },
+      changes: false,
+    });
   });
 
   test("refuses a broken list, naming what is wrong", () => {
@@ -63,6 +68,9 @@ describe("The directory that ships with the app", () => {
       connectorDirectory([entry(), entry({ url: "https://other.example/mcp" })]),
     ).toThrow(/Two Connector directory entries have the id "wiki"/);
     expect(() => connectorDirectory({ wiki: entry() })).toThrow(/must be a list/);
+    expect(() =>
+      connectorDirectory([entry({ tools: [{ title: { en: "Search", "zh-CN": "搜索" } }] })]),
+    ).toThrow(/must say whether it changes things/);
   });
 });
 

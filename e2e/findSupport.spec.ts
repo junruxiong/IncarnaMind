@@ -286,3 +286,30 @@ test("A figure the Documents don't state is worked out from theirs: a wrong mult
   await expect(working.getByTestId("claim-stated")).toHaveText("这句话写的是 1.1x。");
   await screenshot(window, "check-calculated-contradicted-zh");
 });
+
+test("A supported sentence's card names the Document as it is named now, after a rename in IncarnaMind", async () => {
+  const { app, window } = await launchWithTides();
+  await useLocalChatModel(window);
+  const { line } = await mindWithSentences(window, [SUPPORTED]);
+  await setWindowSize(app, window, 1440, 900);
+  await checkAll(window, line, "Spring tides", "full moon.", "find-support");
+  const supported = marks(window).and(window.locator('[data-check="supported"]'));
+  const card = window.getByTestId("claim-card");
+  await pointAt(window, supported);
+  await expect(card.getByTestId("claim-source")).toHaveText(/^Tides · /);
+
+  // Open goes to the Document, whose header renames it.
+  await pointAndClick(window, card.getByTestId("claim-open"));
+  const viewerTitle = window.getByTestId("viewer-title");
+  await expect(viewerTitle).toHaveText("Tides");
+  await expect(window.getByTestId("pdf-page-number")).toHaveValue("2");
+  await viewerTitle.dblclick();
+  const field = window.getByTestId("viewer-title-rename");
+  await expect(field).toBeFocused();
+  await field.fill("Tides of the coast");
+  await window.keyboard.press("Enter");
+  await expect(viewerTitle).toHaveText("Tides of the coast");
+
+  await pointAt(window, supported);
+  await expect(card.getByTestId("claim-source")).toHaveText(/^Tides of the coast · /);
+});
