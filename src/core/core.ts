@@ -12,6 +12,7 @@ import {
   setCitationStyle,
 } from "../shared/mindCitationStyle";
 import { mindModelOf } from "../shared/mindModel";
+import { mindName } from "../shared/naming";
 import { paperFor } from "../shared/printDocument";
 import { logActivity, silentLogger } from "./activityLog";
 import type { CoreAdapters } from "./adapters";
@@ -30,6 +31,7 @@ import {
   isCited,
 } from "./answers/citedVersions";
 import { createCiting } from "./answers/citing";
+import { readMind } from "./answers/context";
 import type { AnswerSearchOptions } from "./answers/engine";
 import {
   type AddDocumentsResult,
@@ -977,6 +979,7 @@ export function createCore(adapters: CoreAdapters): Core {
     prepareModel: (choice) => chat.prepareModel(choice),
     documents: {
       searchableCount: (documentIds) => documents.searchableCount(documentIds ?? undefined),
+      names: () => documents.names(),
       searchableNames: (documentIds, limit) =>
         documents.searchableNames(documentIds ?? undefined, limit),
       searchableLanguages: (documentIds) => documents.searchableLanguages(documentIds ?? undefined),
@@ -987,11 +990,55 @@ export function createCore(adapters: CoreAdapters): Core {
       documentDate: (documentId) => documents.documentDate(documentId),
     },
     toolProviders: [
-      { kind: "connector", tools: (signal) => connectors.tools(signal) },
+      {
+        kind: "connector",
+        tools: async (signal) =>
+          (await connectors.tools(signal)).filter(
+            (tool) =>
+              tool.provider.kind !== "connector" ||
+              !approvals.turnedOff({
+                kind: "tool",
+                connectorId: tool.provider.id,
+                tool: tool.providerTool,
+              }),
+          ),
+      },
       { kind: "sources", tools: async () => sources.tools() },
     ],
     connectorsNeedingSignIn: () => connectors.needingSignIn(),
     web: webSearch,
+    // The assistant changes Minds and makes them, as Proposals (#202).
+    minds: {
+      list: () =>
+        minds.list().flatMap((mind) =>
+          isKnownKind(mind.kind)
+            ? [
+                {
+                  id: mind.id,
+                  name: mindName(mind) || translate(settings.get().language, "mind.untitled"),
+                },
+              ]
+            : [],
+        ),
+      read: (mindId, look) => content.read(mindId, look),
+      edit: (mindId, change) => content.edit(mindId, change),
+      text: (mindId, name, tokens) => {
+        const section = content
+          .peek(mindId, (blocks) => readMind(blocks, name, null))
+          .section(tokens);
+        return { text: section.text, origins: section.origins };
+      },
+      checkpoint: (mindId) => {
+        checkpoints.save(mindId, "accept");
+      },
+      create: (title, folderId) => {
+        const mind = makeMind({ title, kind: DEFAULT_MIND_KIND, folderId });
+        return { id: mind.id, name: mindName(mind) || title };
+      },
+      folderName: (folderId) =>
+        library.folders().find((folder) => folder.id === folderId)?.name ?? null,
+      proposeInMind: (input) => edits.proposeInMind(input),
+    },
     approvals: {
       decide: (call) => approvals.decide(call),
       request: (call, signal) => approvals.request(call, signal),
@@ -1229,6 +1276,7 @@ export function createCore(adapters: CoreAdapters): Core {
     evidence,
     documents: {
       searchableCount: (documentIds) => documents.searchableCount(documentIds ?? undefined),
+      names: () => documents.names(),
       searchableLanguages: (documentIds) => documents.searchableLanguages(documentIds ?? undefined),
       citationSource: (passageId) => documents.citationSource(passageId),
       pageTexts: (documentId, contentHash, from, to) =>
@@ -1920,6 +1968,7 @@ export function createCore(adapters: CoreAdapters): Core {
       citing,
       recheck: (input) => recheckCitation(documents, input),
       minds: () => minds.list().filter((mind) => isKnownKind(mind.kind)),
+      liveDocuments: () => documents.names(),
       mindMarkdown: (mindId, footnote) => {
         const mind = minds.get(mindId);
         const { language } = settings.get();
@@ -2455,12 +2504,16 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     addLibraryStarterGroups: async (keys) => library.addStarters(keys),
     saveLibrarySettings: async (input) => {
+      const before = JSON.stringify(library.settings().classifier);
       const saved = library.saveSettings(input);
-      // Choosing the model that organizes Documents, where Settings says what goes, allows it (ADR-0022).
-      for (const service of await classificationServices()) {
-        consent.choose(["classification"], service);
+      // Choosing the model that organizes Documents, where Settings says what goes, allows it
+      // (ADR-0022). Saving the same one again, for another setting, isn't a new choice.
+      if (JSON.stringify(library.settings().classifier) !== before) {
+        for (const service of await classificationServices()) {
+          consent.choose(["classification"], service);
+        }
+        await dataFlowsChanged();
       }
-      await dataFlowsChanged();
       return saved;
     },
     classifyDocuments: async (ids) => {
@@ -2581,7 +2634,11 @@ export function createCore(adapters: CoreAdapters): Core {
     testJevConnection: (input) => loggingTest("jev")(jev.test(input)),
 
     listConnectors: async () => connectors.list(),
-    addConnector: (input) => connectors.add(input),
+    addConnector: async (input) => {
+      const connector = await connectors.add(input);
+      await dataFlowsChanged();
+      return connector;
+    },
     editConnector: (connectorId, input) => connectors.edit(connectorId, input),
     setConnectorEnabled: async (connectorId, enabled) =>
       connectors.setEnabled(connectorId, enabled),
@@ -2599,11 +2656,17 @@ export function createCore(adapters: CoreAdapters): Core {
     addConnectorFromDirectory: async (entryId, client) => {
       const entry = directory.find((each) => each.id === entryId);
       if (!entry) throw new NotFoundError({ key: "error.connector.notInDirectory" });
-      return connectors.addFromDirectory(entry, client);
+      const connector = await connectors.addFromDirectory(entry, client);
+      await dataFlowsChanged();
+      return connector;
     },
     searchConnectorRegistry: (query) => registry.search(query),
     previewConnectorImport: async (json) => connectors.previewImport(json),
-    importConnectors: (json) => connectors.import(json),
+    importConnectors: async (json) => {
+      const imported = await connectors.import(json);
+      await dataFlowsChanged();
+      return imported;
+    },
 
     listApprovalPolicies: async () => approvals.list(),
     setApprovalPolicy: async (input) => approvals.set(input),
