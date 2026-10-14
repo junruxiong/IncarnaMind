@@ -535,6 +535,20 @@ export function createLibrary(options: {
         )
         .map((row) => row.document_id);
     },
+    /**
+     * The live Documents in no live Folder now, the Library's "Not in a Folder": one with a
+     * suggested Folder waiting counts as in it, a Linked folder's Documents are in none
+     * until they are filed.
+     */
+    unfiledDocumentIds(): string[] {
+      return db
+        .all<{ id: string }>(
+          `SELECT d.id FROM documents d WHERE d.deleted_at IS NULL AND NOT EXISTS (
+             SELECT 1 FROM document_groups a JOIN library_groups g ON g.id = a.group_id
+             WHERE a.document_id = d.id AND a.deleted_at IS NULL AND g.deleted_at IS NULL)`,
+        )
+        .map((row) => row.id);
+    },
     snapshot(): LibrarySnapshot {
       const assignments = db
         .all<AssignmentRow>(

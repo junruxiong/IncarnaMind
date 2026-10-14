@@ -1,6 +1,6 @@
 import { existsSync, readdirSync } from "node:fs";
-import { mkdir, rename, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, realpath, rename, rm, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { type ElectronApplication, expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import type { FakeCapture } from "../src/core/meetings/fakeCapture";
@@ -8,6 +8,7 @@ import type { TestHooks } from "../src/shared/testHooks";
 import {
   closeSettings,
   createDataFolder,
+  DEFAULT_FOLDER_ZH,
   dismissChatSetup,
   launchApp,
   openDocumentAt,
@@ -303,7 +304,7 @@ test("Show transcript opens the live Transcript beside the meeting, Hide transcr
   const { app, window } = await launchApp(dataDir);
   await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
-  await useOutputLocation(window, sources);
+  // No Output location chosen: the Transcript goes to the default, Documents › IncarnaMind.
   await turnOnMeetings(window);
   const bar = await startRecording(window, await recordMeeting(window), { notice: true });
   const toggle = bar.getByTestId("meeting-transcript-toggle");
@@ -383,21 +384,40 @@ test("Show transcript opens the live Transcript beside the meeting, Hide transcr
   await shot(window, "meeting-transcript-narrow-zh");
   await setWindowSize(app, window, 1440, 900);
 
-  // At Stop it is finished and saved as WebVTT in the Output location; it opens from the Mind.
+  // At Stop it is finished and saved as WebVTT in the default Output location, without asking;
+  // the line says where, opens it, and changes the folder in Settings.
+  await bar.getByTestId("meeting-stop").click();
+  await expect(bar).toBeHidden();
+  const saved = window.getByTestId("meeting-transcript-line");
+  await expect(saved).toHaveText(
+    `转写稿已保存到“${DEFAULT_FOLDER_ZH}” · 打开转写稿 · 更改文件夹…`,
+    {
+      timeout: 20_000,
+    },
+  );
+  await shot(window, "meeting-transcript-saved-zh");
   await window.evaluate(async () =>
     (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
       user: { language: "en" },
     }),
   );
-  await bar.getByTestId("meeting-stop").click();
-  await expect(bar).toBeHidden();
-  const saved = window.getByTestId("meeting-transcript-line");
-  await expect(saved).toHaveText("Transcript saved · Open transcript", { timeout: 20_000 });
+  await expect(saved).toHaveText(
+    "Transcript saved in Documents › IncarnaMind · Open transcript · Change folder…",
+  );
+  await expect(window.getByTestId("file-write-dialog")).toBeHidden();
   await expect(window.getByTestId("transcript-live")).toHaveCount(0);
   const [stopped] = await bridge(window);
   expect(stopped?.transcript?.savedPath).toMatch(/Transcript · Meeting, .*\.vtt$/);
+  expect(dirname(stopped?.transcript?.savedPath ?? "")).toBe(
+    await realpath(join(dataDir, "Documents", "IncarnaMind")),
+  );
   expect(existsSync(stopped?.transcript?.savedPath ?? "")).toBe(true);
   await shot(window, "meeting-transcript-saved-en");
+  await saved.getByTestId("meeting-transcript-change-folder").click();
+  await expect(window.getByTestId("output-location-settings")).toBeInViewport();
+  await expect(window.getByTestId("output-location-change")).toBeFocused();
+  await window.keyboard.press("Escape");
+  await expect(window.getByTestId("settings")).toBeHidden();
 
   // Opened at a Citation, the quote is washed in the line it was said in.
   await openDocumentAt(window, {
@@ -417,7 +437,7 @@ test("notes during the call: typed lines get their time, Mark (⌘D) and Add to 
   const { app, window } = await launchApp(dataDir);
   await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
-  await useOutputLocation(window, sources);
+  // No Output location chosen: the Transcript goes to the default, Documents › IncarnaMind.
   await turnOnMeetings(window);
   const bar = await startRecording(window, await recordMeeting(window), { notice: true });
   const toggle = bar.getByTestId("meeting-transcript-toggle");

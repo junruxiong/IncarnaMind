@@ -39,6 +39,7 @@ const CITATION_KEYS: readonly (keyof CitationAttributes)[] = [
   "check",
   "checkReason",
   "verdict",
+  "quotedWords",
 ];
 
 function citationOf(node: ProseMirrorNode): CitationAttributes {

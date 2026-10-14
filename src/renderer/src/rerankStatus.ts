@@ -41,7 +41,7 @@ export function rerankingModelStatus(
       tone: "progress",
       short: t("status.rerankDownloading"),
       figure,
-      full: t("rerank.settings.downloading", { downloaded, total }),
+      full: t("status.rerankDownloading.full", { downloaded, total }),
       retry: false,
     };
   }

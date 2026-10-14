@@ -3,14 +3,13 @@ import type { UnreadFile } from "../../../core/api";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
 import { UNREAD_REASON_KEYS } from "../unreadFiles";
-import { ProblemActionButton, ProblemLine } from "./ProblemLine";
+import { LineAction, ProblemLine } from "./ProblemLine";
 
 /**
  * "3 files couldn't be read · Show" (#740; DESIGN.md, Problems): beside an
  * Answer, and in the Library, when a file in what was searched couldn't be
- * read. Show lists each with why and what to do: a locked PDF offers
- * Unlock…, which opens it where its password is asked for (#763). Nothing
- * when there are none: a line that always showed would be one nobody read.
+ * read. Show lists each with why and what to do. Nothing when there are none:
+ * a line that always showed would be one nobody read.
  */
 export function UnreadFilesLine({
   files,
@@ -24,12 +23,6 @@ export function UnreadFilesLine({
   const t = useT();
   const [open, setOpen] = useState(false);
   const listId = useId();
-  const documents = useAppStore((store) => store.documents);
-  const openDocument = useAppStore((store) => store.openDocument);
-  const lockedPdf = (file: UnreadFile) =>
-    file.reason === "password"
-      ? (documents.find((each) => each.id === file.documentId && each.kind === "pdf") ?? null)
-      : null;
   if (files.length === 0) return null;
   return (
     <div data-testid={testId} className={className}>
@@ -45,41 +38,79 @@ export function UnreadFilesLine({
       </ProblemLine>
       {open && (
         <ul id={listId} data-testid={`${testId}-list`} className="mt-1 flex flex-col gap-1">
-          {files.map((file) => {
-            const locked = lockedPdf(file);
-            return (
-              <li
-                key={file.id}
-                data-testid="unread-file"
-                data-reason={file.reason}
-                className="font-sans text-[13px] leading-5 break-words text-ink-meta"
-              >
-                {t("unread.file", {
-                  name: file.name,
-                  reason: locked
-                    ? t("unread.reason.passwordPdf")
-                    : t(UNREAD_REASON_KEYS[file.reason], { extension: file.extension ?? "" }),
-                })}
-                {locked?.fileStatus === "available" && (
-                  <>
-                    {" "}
-                    <span className="whitespace-nowrap">
-                      <span aria-hidden="true">· </span>
-                      <ProblemActionButton
-                        action={{
-                          label: t("documents.unlockAction"),
-                          testId: "unread-file-unlock",
-                          onClick: () => openDocument({ documentId: locked.id }),
-                        }}
-                      />
-                    </span>
-                  </>
-                )}
-              </li>
-            );
-          })}
+          {files.map((file) => (
+            <UnreadFileRow key={file.id} file={file} />
+          ))}
         </ul>
       )}
     </div>
+  );
+}
+
+/**
+ * A file that couldn't be read, and why. A Document's name opens it (#485). A
+ * scan some of whose pages weren't read can be read again: text recognition
+ * runs by itself, so "Read with OCR" is the Document's Retry, which reads
+ * those pages. A locked PDF offers Unlock…, which opens it where its password
+ * is asked for (#763).
+ */
+function UnreadFileRow({ file }: { file: UnreadFile }) {
+  const t = useT();
+  const { documentId } = file;
+  const openDocument = useAppStore((state) => state.openDocument);
+  const retryDocument = useAppStore((state) => state.retryDocument);
+  const retryable = useAppStore((state) =>
+    state.documents.some(
+      (each) =>
+        each.id === documentId && each.status === "failed" && each.fileStatus === "available",
+    ),
+  );
+  const lockedPdf = useAppStore((state) =>
+    file.reason === "password"
+      ? (state.documents.find((each) => each.id === documentId && each.kind === "pdf") ?? null)
+      : null,
+  );
+  return (
+    <li
+      data-testid="unread-file"
+      data-reason={file.reason}
+      className="font-sans text-[13px] leading-5 break-words text-ink-meta"
+    >
+      {documentId === null ? (
+        file.name
+      ) : (
+        <button
+          type="button"
+          data-testid="unread-file-open"
+          onClick={() => openDocument({ documentId })}
+          className="rounded-sm text-accent underline-offset-2 hover:underline"
+        >
+          {file.name}
+        </button>
+      )}
+      {t("unread.file.reason", {
+        reason: lockedPdf
+          ? t("unread.reason.passwordPdf")
+          : t(UNREAD_REASON_KEYS[file.reason], { extension: file.extension ?? "" }),
+      })}
+      {lockedPdf?.fileStatus === "available" && (
+        <LineAction
+          action={{
+            label: t("documents.unlockAction"),
+            testId: "unread-file-unlock",
+            onClick: () => openDocument({ documentId: lockedPdf.id }),
+          }}
+        />
+      )}
+      {file.reason === "pages" && retryable && documentId !== null && (
+        <LineAction
+          action={{
+            label: t("unread.ocr"),
+            testId: "unread-file-ocr",
+            onClick: () => void retryDocument(documentId),
+          }}
+        />
+      )}
+    </li>
   );
 }

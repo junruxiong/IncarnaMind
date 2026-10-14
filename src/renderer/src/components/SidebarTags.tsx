@@ -58,7 +58,6 @@ export function SidebarTags({
       object={objectOf}
       documents={byTag.get(value) ?? NONE}
       selected={tagFilter.includes(value)}
-      selectedAs="pressed"
       expanded={expanded.has(value)}
       onOpen={() => {
         const store = useAppStore.getState();
@@ -82,11 +81,11 @@ export function SidebarTags({
   );
 
   return (
-    <nav aria-label={t("tags.title")} data-testid="sidebar-tags">
+    <div data-testid="sidebar-tags">
       {tags.length === 0 ? (
         <p className="px-2 py-1 text-[13px] leading-5 text-ink-meta">{t("tags.menu.none")}</p>
       ) : (
-        <ul>
+        <ul role="none">
           {(byTag.has(NEEDS_REVIEW) || tagFilter.includes(NEEDS_REVIEW)) &&
             group(NEEDS_REVIEW, t("tags.filter.review"), <ReviewRing />)}
           {tags.map((tag) =>
@@ -104,6 +103,6 @@ export function SidebarTags({
           )}
         </ul>
       )}
-    </nav>
+    </div>
   );
 }

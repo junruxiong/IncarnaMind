@@ -17,10 +17,12 @@ export const EARLIEST_YEAR = 1900;
 
 /**
  * Midnight on 1 January of a clock's epoch (Excel's 1900, the classic Mac's
- * 1904, Unix's 1970, DOS and ZIP's 1980): what software writes when it has
- * no date. Never taken as a creation date.
+ * 1904, Unix's 1970, DOS and ZIP's 1980) or of 2000, which Office templates
+ * and document libraries write: what software writes when it has no date
+ * (#821). Never taken as a creation date.
  */
-const ZERO_DATE = /^(?:1900|1904|1970|1980)-01-01(?:T00:00(?::00(?:\.0+)?)?(?:Z|[+-]00:00)?)?$/;
+const ZERO_DATE =
+  /^(?:1900|1904|1970|1980|2000)-01-01(?:T00:00(?::00(?:\.0+)?)?(?:Z|[+-]00:00)?)?$/;
 
 /** A year standing alone: four digits, not part of a longer number, a decimal or a grouped one ("1,950"). */
 const YEAR = /(?<!\d)(?<!\d[.,])\d{4}(?!\d)(?![.,]\d)/g;
@@ -132,6 +134,9 @@ export function w3cDate(value: string): string | null {
       offset === undefined || offset === "Z" ? offset : `${offset.slice(0, 3)}:${offset.slice(-2)}`,
   });
 }
+
+/** Whether a date is one software writes when it has none, so it must not be shown as the Document's. */
+export const isPlaceholderDate = (date: string) => ZERO_DATE.test(date);
 
 /** Whether a date's year is from 1900 to this year, and it isn't a zero date. */
 const plausible = (date: string, thisYear: number) => {
