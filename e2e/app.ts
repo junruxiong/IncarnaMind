@@ -356,6 +356,15 @@ export async function showSourceLocations(window: Page): Promise<void> {
   await expect(button).toHaveAttribute("aria-pressed", "true");
 }
 
+/** Shows the sidebar's Folders view: the User's Folders with their Minds and Documents. */
+export async function showFolders(window: Page): Promise<void> {
+  const button = window
+    .getByTestId("browse-views")
+    .getByRole("button", { name: "Folders", exact: true });
+  await button.click();
+  await expect(button).toHaveAttribute("aria-pressed", "true");
+}
+
 /**
  * On a fresh data folder the first-run chat setup covers the window: choose
  * "set up later". The choice is remembered, so later launches don't show it.
