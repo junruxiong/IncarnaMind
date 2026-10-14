@@ -154,6 +154,17 @@ export interface FileShell {
 }
 
 /**
+ * The Ollama app on this computer. The desktop app looks for it and opens it
+ * through the OS (src/main/ollamaApp.ts); the core never starts a program itself.
+ */
+export interface OllamaApp {
+  /** Whether the app is here and can be opened from here: false where it isn't, and where this computer can't tell. */
+  installed(): Promise<boolean>;
+  /** Opens the app. It starts Ollama but doesn't wait for it. Rejects if the OS can't. */
+  open(): Promise<void>;
+}
+
+/**
  * Prints a document as a PDF, laid out in pages with each footnote at the foot of the page its
  * marker is on. The desktop app prints with Chromium in a hidden window that reaches nothing
  * outside the app (src/main/printPdf.ts).
@@ -682,6 +693,13 @@ export interface CoreAdapters {
    * Absent (tests that don't need it): both are refused.
    */
   shell?: FileShell;
+  /**
+   * Looks for the Ollama app and opens it. Absent (tests): it is never installed,
+   * so it can't be opened.
+   */
+  ollamaApp?: OllamaApp;
+  /** How long Open Ollama waits for Ollama to answer, in ms. Defaults to twenty seconds; tests shorten it. */
+  ollamaStartTimeoutMs?: number;
   /** Prints PDF exports. Absent (tests that don't export PDFs): a PDF export is refused. */
   printer?: Printer;
   /**
