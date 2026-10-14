@@ -15,18 +15,22 @@ import {
   useOpenConversation,
 } from "../../conversations";
 import { useT } from "../../i18n";
-import { useResearch } from "../../research";
+import { togglePlanView, useResearch } from "../../research";
 import { type ScopeChip, scopeChips } from "../../scope";
 import { useAppStore } from "../../store";
 import { interleave, type ThreadStart, threadTasks } from "../../taskGroups";
 import { loadTasks, useTasks } from "../../tasks";
+import { aimAt } from "../../taskTell";
 import { SearchIcon } from "../icons";
 import { PlanLineIcon, SearchLineIcon, SparkLineIcon } from "../lineIcons";
 import { AddToMindPicker } from "./AddToMindPicker";
 import { WritingLine } from "./AnswerActions";
 import { LiveLine } from "./AnswerSteps";
 import { type AnswerKeeping, AssistantAnswer } from "./AssistantAnswer";
-import { TaskProgress } from "./TaskProgress";
+import { TaskProgress, type TaskProgressActions } from "./TaskProgress";
+
+/** What a Task's progress offers beyond Pause and Stop: its plan, and Tell it… (#130). */
+const TASK_ACTIONS: TaskProgressActions = { plan: togglePlanView, tell: aimAt };
 
 /** How long an Answer a link back led to stays flashed. */
 const SOUGHT_MS = 1600;
@@ -157,10 +161,10 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
           return task.question ? (
             <div key={task.id} className="assistant-task">
               <QuestionBubble text={task.question} research />
-              <TaskProgress task={task} />
+              <TaskProgress task={task} actions={TASK_ACTIONS} />
             </div>
           ) : (
-            <TaskProgress key={task.id} task={task} />
+            <TaskProgress key={task.id} task={task} actions={TASK_ACTIONS} />
           );
         }
         const message = entry.message;

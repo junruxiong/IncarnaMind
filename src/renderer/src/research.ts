@@ -14,6 +14,7 @@ import type {
   ResearchSources,
   ResearchStartResult,
   ResearchTarget,
+  Task,
 } from "../../core/api";
 import { MAX_RESEARCH_STEPS } from "../../shared/research";
 import { searchesTheWeb } from "../../shared/webSearch";
@@ -74,9 +75,26 @@ export interface ResearchPlanCard {
 interface ResearchStore {
   /** The open plans, by the Mind the assistant read when each was asked. */
   plans: Readonly<Record<string, ResearchPlanCard>>;
+  /** A running Task's plan shown in the tray (Plan in its progress), by its Mind: the Task's id. */
+  viewing: Readonly<Record<string, string>>;
 }
 
-export const useResearch = create<ResearchStore>()(() => ({ plans: {} }));
+export const useResearch = create<ResearchStore>()(() => ({ plans: {}, viewing: {} }));
+
+/** Plan, in a running Research's progress: its plan shows in the tray, or goes again. */
+export function togglePlanView(task: Task): void {
+  const { mindId } = task;
+  if (!mindId) return;
+  if (useResearch.getState().viewing[mindId] === task.id) closePlanView(mindId);
+  else useResearch.setState((state) => ({ viewing: { ...state.viewing, [mindId]: task.id } }));
+}
+
+export function closePlanView(mindId: string): void {
+  useResearch.setState((state) => {
+    const { [mindId]: _closed, ...viewing } = state.viewing;
+    return { viewing };
+  });
+}
 
 export function updatePlan(mindId: string, change: Partial<ResearchPlanCard>): void {
   useResearch.setState((state) => {

@@ -40,6 +40,10 @@ export const resumeTask = (taskId: string) => core.resumeTask(taskId).then(put, 
 export const stopTask = (taskId: string) => core.stopTask(taskId).then(put, report);
 export const answerTaskAsk = (taskId: string, answer: TaskAskAnswer) =>
   core.answerTaskAsk(taskId, answer).then(put, report);
+/** Tell it…: rejects when the Task can't take it, for the composer to say why. */
+export const tellTask = (taskId: string, text: string) => core.tellTask(taskId, text).then(put);
+export const untellTask = (taskId: string, messageId: string) =>
+  core.untellTask(taskId, messageId).then(put);
 
 /** Frames to wait for a Mind just opened to draw the Block a Task works on. */
 const BLOCK_FRAMES = 60;

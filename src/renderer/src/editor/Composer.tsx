@@ -19,6 +19,7 @@ import { shortcutLabel } from "../commands/keymap";
 import { SearchIcon, StopIcon } from "../components/icons";
 import { SearchLineIcon, SparkLineIcon } from "../components/lineIcons";
 import { ProblemLine } from "../components/ProblemLine";
+import { answerAskFrom } from "../components/TaskTray";
 import { TypingTextarea } from "../components/TypingTextarea";
 import {
   chosenScope,
@@ -40,6 +41,7 @@ import {
 import { core } from "../core";
 import { carriesDocuments, droppedDocumentIds } from "../documentDrag";
 import { editFromComposer, stopEditing, useEdits } from "../editWithAi";
+import { errorMessage } from "../errors";
 import { useT } from "../i18n";
 import {
   cancelResearch,
@@ -52,6 +54,9 @@ import {
 import type { ScopeChoice } from "../scope";
 import { skillDescription } from "../skills";
 import { useAppStore } from "../store";
+import { tellTask, useTasks } from "../tasks";
+import { takeBackLast, tellable } from "../taskTell";
+import { taskName } from "../taskText";
 import { AnswerAnnouncer } from "./AnswerAnnouncer";
 import { AskProblem } from "./AskProblem";
 import { EditStatus } from "./EditStatus";
@@ -65,6 +70,7 @@ import { ScopeChips } from "./ScopeChips";
 import { type ChoiceListHandle, ScopeChoiceList } from "./ScopePicker";
 import { SkillChoiceList } from "./SkillChoiceList";
 import { SuggestionOffer } from "./SuggestionOffer";
+import { TaskTargetChip } from "./TaskTargetChip";
 
 /** In the composer, a long Search scope shows this many chips, then "+N more". */
 const CHIPS_SHOWN = 3;
@@ -142,6 +148,7 @@ export function Composer({
     setPicking(null);
     setExpanded(false);
     setViewing(null);
+    setTellProblem(null);
     if (before !== NO_MIND) return;
     const state = useComposer.getState();
     const loose = state.draft(NO_MIND);
@@ -181,6 +188,11 @@ export function Composer({
   /** The Research plan open in the tray (#130): what is typed changes it. */
   const plan = useResearch((state) => (mindId ? state.plans[mindId] : undefined));
   const researching = mind !== null && draft.research === true;
+  /** Tell it… (#130): the running Task what is typed goes to. */
+  const told = useTasks((state) => (draft.tell ? state.tasks[draft.tell] : undefined));
+  const target = mind && tellable(told) ? told : undefined;
+  /** Why the last message couldn't reach its Task. */
+  const [tellProblem, setTellProblem] = useState<string | null>(null);
   const chosenModel = useMindModel(mind?.doc ?? null);
   const webReach = useWebReach(chosenModel);
   const selection = useMindSelection(mind, editing !== undefined);
@@ -423,6 +435,21 @@ export function Composer({
       }
       return;
     }
+    const aimed = current.tell ? useTasks.getState().tasks[current.tell] : undefined;
+    if (mind && tellable(aimed)) {
+      const said = current.text.trim();
+      if (!said) return;
+      setTellProblem(null);
+      update({ text: "", tell: undefined });
+      try {
+        await tellTask(aimed.id, said);
+      } catch (error) {
+        setTellProblem(errorMessage(error, t));
+        // Its words come back, unless the User has typed anew meanwhile.
+        if (useComposer.getState().draft(key).text === "") update({ text: said, tell: aimed.id });
+      }
+      return;
+    }
     if (mind && (plan || current.research)) {
       const topic = current.text.trim();
       if (!topic) return;
@@ -503,6 +530,44 @@ export function Composer({
       void startResearch(mind.mindId, mindModelOf(mind.doc));
       return;
     }
+    // The waiting ask in the tray, nearest the keyboard: ⌘↵ allows, ⌘⌫ (with nothing typed) denies.
+    if (
+      mind &&
+      isCommand(event) &&
+      !event.shiftKey &&
+      !event.altKey &&
+      (event.key === "Enter" || (event.key === "Backspace" && draft.text === "")) &&
+      answerAskFrom(mind.mindId, event.key === "Enter")
+    ) {
+      event.preventDefault();
+      return;
+    }
+    if (
+      event.key === "ArrowUp" &&
+      mind &&
+      !event.shiftKey &&
+      !event.altKey &&
+      !event.metaKey &&
+      !event.ctrlKey &&
+      draft.text === "" &&
+      draft.pastes.length === 0
+    ) {
+      // ↑ takes back the last message the Task hasn't read yet, or aims at it.
+      const taking = takeBackLast(mind.mindId);
+      if (taking) {
+        event.preventDefault();
+        setTellProblem(null);
+        taking.catch((error: unknown) => setTellProblem(errorMessage(error, t)));
+        return;
+      }
+    }
+    if (event.key === "Escape" && target) {
+      // Back to asking; the next Esc is the plan card's or the assistant's.
+      event.preventDefault();
+      update({ tell: undefined });
+      setTellProblem(null);
+      return;
+    }
     if (event.key === "Escape" && plan && mind) {
       event.preventDefault();
       cancelResearch(mind.mindId);
@@ -532,6 +597,11 @@ export function Composer({
   /** An Answer is being written in the assistant, or on its way: the button is Stop meanwhile. */
   const answering = useAnswerBeingWritten() !== null;
   const activeOption = picking && option >= 0 ? `${listId}-${option}` : undefined;
+  const askLabel = editing
+    ? t("composer.edit.send")
+    : target
+      ? t("task.tell.send", { task: taskName(target, t) })
+      : t("composer.ask");
 
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: a drop target; "@" adds a Document without dragging.
@@ -577,6 +647,15 @@ export function Composer({
             void ask();
           }}
         />
+      )}
+      {tellProblem && (
+        <ProblemLine
+          testId="composer-tell-problem"
+          className="composer-problem"
+          action={{ label: t("composer.paste.close"), onClick: () => setTellProblem(null) }}
+        >
+          {tellProblem}
+        </ProblemLine>
       )}
       {saveFailed && (
         <ProblemLine
@@ -672,7 +751,16 @@ export function Composer({
             </button>
           </span>
         )}
-        {researching && (
+        {target && (
+          <TaskTargetChip
+            task={target}
+            onRemove={() => {
+              update({ tell: undefined });
+              field.current?.focus();
+            }}
+          />
+        )}
+        {researching && !target && (
           <span
             data-testid="composer-research"
             title={t("research.command.hint")}
@@ -717,11 +805,13 @@ export function Composer({
           placeholder={
             editing
               ? t("composer.edit.placeholder")
-              : plan
-                ? t("research.placeholder.change")
-                : researching
-                  ? t("research.placeholder")
-                  : t("composer.placeholder")
+              : target
+                ? t("task.tell.placeholder")
+                : plan
+                  ? t("research.placeholder.change")
+                  : researching
+                    ? t("research.placeholder")
+                    : t("composer.placeholder")
           }
           aria-autocomplete="list"
           aria-controls={picking ? listId : undefined}
@@ -781,8 +871,8 @@ export function Composer({
             <button
               type="button"
               data-testid="composer-ask"
-              aria-label={editing ? t("composer.edit.send") : t("composer.ask")}
-              title={editing ? t("composer.edit.send") : t("composer.ask")}
+              aria-label={askLabel}
+              title={askLabel}
               disabled={!canAsk}
               // The text keeps the focus.
               onMouseDown={(event) => event.preventDefault()}

@@ -8,13 +8,17 @@ import type { CoreBridge } from "../src/core/api";
 import {
   acceptPlainTextKeys,
   addDocuments,
+  clickNotification,
   createDataFolder,
   dismissChatSetup,
+  forceQuit,
   launchApp,
   motionSettled,
   newMind,
+  notificationsShown,
   ollamaListing,
   pointAndClick,
+  recordNotifications,
   removeDataFolder,
   setLanguage,
   setWindowSize,
@@ -26,9 +30,11 @@ import {
  * proposed, each edited in place, the sources, where it writes and an
  * estimate with the composer's model. Start makes it a Task whose progress
  * shows in the thread under its Question, as it searches the web and the
- * Library. A local server stands in for the web, and the scripted chat model
- * plans and searches. Set INCARNAMIND_SCREENSHOTS to a folder to also save
- * screenshots.
+ * Library; it asks in the tray before filing the pages it read, takes
+ * messages through Tell it…, stops at the monthly cap with what is left, and
+ * goes on after a quit. A local server stands in for the web, and the
+ * scripted chat model plans and searches. Set INCARNAMIND_SCREENSHOTS to a
+ * folder to also save screenshots.
  */
 
 const SCREENSHOTS = process.env.INCARNAMIND_SCREENSHOTS;
@@ -100,6 +106,9 @@ async function expectAboveComposer(window: Page, tray: Locator): Promise<void> {
   expect(trayBox.y + trayBox.height).toBeLessThanOrEqual(composerBox.y + 1);
   expect(Math.abs(trayBox.width - composerBox.width)).toBeLessThan(2);
 }
+
+/** The Folder a Research files its pages into: named for its plan's title. */
+const folderNameOf = (topic: string) => `What do the sources say about ${topic}`;
 
 const valuesOf = (fields: Locator) =>
   fields.evaluateAll((each) => each.map((field) => (field as HTMLTextAreaElement).value));
@@ -231,14 +240,35 @@ test("Research… plans in the tray: the steps edited in place, the sources, whe
     "Read “Tea - The Open Encyclopedia”",
   );
   await screenshot(window, "research-running-en-1600");
+
+  // Having read a web page, it asks in the tray before filing it; ⌘↵ in the composer allows.
+  const tray = window.getByTestId("task-tray");
+  const ask = tray.getByTestId("task-ask");
+  await expect(ask.getByTestId("approval-card")).toContainText("Save 1 web page to a new Folder", {
+    timeout: 60_000,
+  });
+  await expect(ask.getByTestId("approval-card")).toContainText(`${folderNameOf(TOPIC)} (new)`);
+  await expect(ask.getByTestId("approval-always-allow")).toHaveCount(0);
+  await expect(progress.getByTestId("task-progress-waiting")).toHaveText(
+    "Waiting for your approval below",
+  );
+  await expectAboveComposer(window, tray);
+  await screenshot(window, "research-ask-en-1600");
+  await window.keyboard.press("ControlOrMeta+j");
+  await expect(window.getByTestId("composer-input")).toBeFocused();
+  await window.keyboard.press("ControlOrMeta+Enter");
+  await expect(tray).toHaveCount(0);
   await expect(progress).toHaveAttribute("data-status", "done", { timeout: 60_000 });
   await expect(progress.getByTestId("task-progress-meta")).toHaveText(/^Done in \d+ min$/);
-  const folderName = `What do the sources say about ${TOPIC}`;
+  const folderName = folderNameOf(TOPIC);
   await expect(progress.getByTestId("task-progress-steps")).toContainText(
     `1 source saved in “${folderName}”`,
   );
   await expect(progress.getByTestId("task-progress-steps")).toContainText(
     "Wrote a cited draft as 2 changes in “Credit memo”",
+  );
+  await expect(progress.getByTestId("task-progress-summary")).toHaveText(
+    "1 source saved · 2 changes proposed",
   );
 
   // The page it read is a Document filed into a new Folder named for the research, with a Tag.
@@ -274,7 +304,7 @@ test("Research… plans in the tray: the steps edited in place, the sources, whe
   await app.close();
 });
 
-test("the plan card follows the composer's model chip, says when the web can't be searched, fits 900px in Chinese, and Esc puts the topic back; Stop ends a running Research", async () => {
+test("the plan card follows the composer's model chip, says when the web can't be searched, fits 900px in Chinese, and Esc puts the topic back; Tell it… sends a message the Task reads at its next step, taken back with ↑ or ✕; Stop ends it", async () => {
   test.setTimeout(120_000);
   const ollama = await ollamaListing(["fake-model", "other-model"]);
   try {
@@ -341,10 +371,81 @@ test("the plan card follows the composer's model chip, says when the web can't b
       /^已完成 0\/4 步 · \d+ 分钟$/,
     );
     await expect(progress.getByTestId("task-progress-actions").getByRole("button")).toHaveText([
+      "计划",
+      "告诉它…",
       "暂停",
       "停止",
     ]);
     await screenshot(window, "research-running-zh-900");
+
+    // Plan shows its plan in the tray as it runs; Esc puts it away.
+    await progress.getByTestId("task-progress-plan").focus();
+    await window.keyboard.press("Enter");
+    const view = window.getByTestId("research-plan-view");
+    await expect(view.getByTestId("research-plan-view-step")).toHaveCount(4);
+    await expect(view.getByTestId("research-plan-view-step").last()).toHaveText(
+      "4.撰写带引用的草稿",
+    );
+    await expect(view.getByTestId("research-plan-view-close")).toBeFocused();
+    await screenshot(window, "research-plan-view-zh-900");
+    await window.keyboard.press("Escape");
+    await expect(view).toHaveCount(0);
+
+    // Tell it…: the composer aims at the Task, and Enter sends there.
+    const input = window.getByTestId("composer-input");
+    const chip = window.getByTestId("composer-tell");
+    await progress.getByTestId("task-progress-tell").focus();
+    await window.keyboard.press("Enter");
+    await expect(input).toBeFocused();
+    await expect(chip).toHaveText("→ 研究");
+    await expect(input).toHaveAttribute("placeholder", "告诉它要改什么…");
+    // Paused, it starts no step, so what is sent waits in the tray.
+    await progress.getByTestId("task-progress-pause").focus();
+    await window.keyboard.press("Enter");
+    await expect(progress).toHaveAttribute("data-status", "paused");
+    await window.keyboard.press("ControlOrMeta+j");
+    await expect(chip).toBeVisible();
+    await window.keyboard.type("不要写折扣店");
+    await window.keyboard.press("Enter");
+    const queued = window.getByTestId("task-tray").getByTestId("task-queued-message");
+    await expect(queued).toHaveText("↳“不要写折扣店” · 下一步时读取");
+    await expect(chip).toHaveCount(0);
+    await expect(input).toHaveValue("");
+    await expectAboveComposer(window, window.getByTestId("task-tray"));
+    // ↑ in the empty composer takes the last one back to be edited, still aimed at the Task.
+    await window.keyboard.press("ArrowUp");
+    await expect(input).toHaveValue("不要写折扣店");
+    await expect(chip).toBeVisible();
+    await expect(queued).toHaveCount(0);
+    await window.keyboard.type("，也不要写咖啡，只比较欧洲最早的几条贸易路线和它们各自的年份");
+    await window.keyboard.press("Enter");
+    await expect(queued).toHaveText(
+      "↳“不要写折扣店，也不要写咖啡，只比较欧洲最早的几条贸易路线和它们各自的年份” · 下一步时读取",
+    );
+    // A long message wraps in the tray rather than being cut.
+    const [one, remove] = [
+      await queued.boundingBox(),
+      await queued.getByTestId("task-queued-remove").boundingBox(),
+    ];
+    if (!one || !remove) throw new Error("The queued message isn't on screen.");
+    expect(one.height).toBeGreaterThan(remove.height * 1.5);
+    await screenshot(window, "research-queued-zh-900");
+    // ✕ takes it back, and Undo tells it again.
+    await queued.getByTestId("task-queued-remove").focus();
+    await window.keyboard.press("Enter");
+    await expect(queued).toHaveCount(0);
+    await expect(window.getByTestId("undo-message")).toHaveText(
+      "已撤回“不要写折扣店，也不要写咖啡，只比较欧洲最早的几条贸易路线和它们各自的年份”",
+    );
+    await pointAndClick(window, window.getByTestId("undo-action"));
+    await expect(queued).toHaveCount(1);
+    // Resumed, it reads the message when its next step starts.
+    await progress.getByTestId("task-progress-resume").focus();
+    await window.keyboard.press("Enter");
+    await expect(progress).toHaveAttribute("data-status", "running");
+    await expect(queued).toHaveCount(0, { timeout: 30_000 });
+    await expect(window.getByTestId("task-tray")).toHaveCount(0);
+
     await progress.getByTestId("task-progress-stop").focus();
     await window.keyboard.press("Enter");
     await expect(progress).toHaveAttribute("data-status", "stopped");
@@ -353,4 +454,109 @@ test("the plan card follows the composer's model chip, says when the web can't b
   } finally {
     ollama.server.close();
   }
+});
+
+test("at the monthly cap a Research pauses and lists what it has still to do; Resumed, it goes on after a force-quit and, its Mind off screen, says in a notification what it did", async () => {
+  test.setTimeout(180_000);
+  const { app, window } = await launchApp(dataDir, { fakeChat: true, home });
+  await dismissChatSetup(window);
+  await setWindowSize(app, window, 1600, 900);
+  await useAnthropic(window);
+  const note = join(sources, "Tea trade.txt");
+  await writeFile(note, "Tea trade.\nDutch traders shipped tea to Amsterdam in 1610.\n");
+  await addDocuments(window, [note]);
+  await newMind(window);
+  await window.keyboard.type("Credit memo");
+
+  // The Library only, slowly, with this month's spending already at the cap.
+  const card = await research(window, `${TOPIC}, slowly`);
+  await pointAndClick(window, card.getByTestId("research-plan-web"));
+  await expect(card.getByTestId("research-plan-web")).toHaveAttribute("aria-pressed", "false");
+  await window.evaluate(async () => {
+    await (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
+      user: { monthlyCap: { amount: 0.000_001, currency: "USD" } },
+    });
+  });
+  await pointAndClick(window, card.getByTestId("research-plan-start"));
+  const progress = window.getByTestId("assistant-thread").getByTestId("task-progress");
+  await expect(progress).toHaveAttribute("data-status", "paused", { timeout: 30_000 });
+  const remaining = progress.getByTestId("task-progress-remaining");
+  await expect(remaining).toContainText("Still to do");
+  await expect(remaining.locator("li")).toHaveText([
+    "–Search the web and the Library for how tea reached Europe, slowly",
+    "–Read what the sources say about how tea reached Europe, slowly",
+    "–Compare what they found, slowly",
+    "–Write a cited draft",
+  ]);
+  await expect(progress.getByTestId("task-progress-actions").getByRole("button")).toHaveText([
+    "Plan",
+    "Change cap",
+    "Resume",
+    "Stop",
+  ]);
+  await screenshot(window, "research-cap-en-1600");
+
+  // The cap raised, Resume goes on from where it stopped.
+  await window.evaluate(async () => {
+    await (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
+      user: { monthlyCap: null },
+    });
+  });
+  await progress.getByTestId("task-progress-resume").focus();
+  await window.keyboard.press("Enter");
+  await expect(progress).toHaveAttribute("data-status", "running");
+  await expect(remaining).toHaveCount(0);
+  const taskId = (await progress.getAttribute("data-task")) ?? "";
+  const progressOf = () =>
+    window.evaluate(
+      async (id) =>
+        (await (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.listTasks()).find(
+          (task) => task.id === id,
+        )?.progress?.done ?? 0,
+      taskId,
+    );
+  await expect.poll(progressOf, { timeout: 60_000 }).toBeGreaterThan(0);
+  expect(await progressOf()).toBeLessThan(4);
+
+  // Force-quit halfway: at the next start it goes on by itself.
+  await window.keyboard.press("ControlOrMeta+t");
+  await expect(window.getByTestId("mind-title").last()).toBeFocused();
+  await window.keyboard.type("Notes");
+  await forceQuit(app);
+  const again = await launchApp(dataDir, { fakeChat: true, home });
+  await setWindowSize(again.app, again.window, 1600, 900);
+  await recordNotifications(again.app);
+  const notes = await again.window.evaluate(
+    async () =>
+      (await (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.listMinds()).find(
+        (mind) => mind.title === "Notes",
+      )?.id ?? "",
+  );
+  await again.window.evaluate(
+    (id) =>
+      (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.changeLayout("main", {
+        type: "open",
+        item: { kind: "mind", mindId: id },
+        where: { in: "place" },
+      }),
+    notes,
+  );
+  // Done while its Mind isn't on screen, it says so in a notification, with what it did.
+  await expect
+    .poll(() => notificationsShown(again.app), { timeout: 90_000 })
+    .toEqual([{ title: "Research finished", body: "Credit memo · 2 changes proposed" }]);
+  // Its click opens the Mind, with what it did under its Question.
+  await clickNotification(again.app, 0);
+  await expect(
+    again.window.getByTestId("mind-tab").filter({ hasText: "Credit memo" }),
+  ).toHaveAttribute("aria-selected", "true");
+  const done = again.window.getByTestId("assistant-thread").getByTestId("task-progress");
+  await expect(done).toHaveAttribute("data-status", "done");
+  await expect(done).toHaveAttribute("data-shown", "true");
+  await expect(done.getByTestId("task-progress-summary")).toHaveText("2 changes proposed");
+  await expect(again.window.getByTestId("proposals-count")).toHaveText(
+    "2 changes from the assistant",
+  );
+  await screenshot(again.window, "research-resumed-en-1600");
+  await again.app.close();
 });

@@ -1108,18 +1108,15 @@ export function createCore(adapters: CoreAdapters): Core {
           : "task.notify.finished",
       { task: name },
     );
-    let body = "";
+    let mind = "";
     try {
-      body = task.mindId ? minds.get(task.mindId).title : "";
+      mind = task.mindId ? minds.get(task.mindId).title : "";
     } catch {
-      body = "";
+      mind = "";
     }
+    const body = [mind, what === "finished" ? task.summary : null].filter(Boolean).join(" · ");
     notifications.show(
-      {
-        title,
-        body:
-          (what === "finished" && task.summary) || body || translate(language, "task.notify.body"),
-      },
+      { title, body: body || translate(language, "task.notify.body") },
       (windowIds) => mindShown(task.mindId, windowIds),
       () =>
         events.emit("task.shown", { taskId: task.id, mindId: task.mindId, blockId: task.blockId }),
