@@ -893,6 +893,30 @@ describe("Edit with AI as the model writes (#202)", () => {
     expect(places.at(-1)).toBeNull();
   });
 
+  // protects=quitting while the model writes stops the request without writing more as storage closes; fails_when=the request throws, or writes after the core has closed; no_claim=what the next start shows, which is what was stored.
+  test("quitting while it writes stops it, and nothing more is written", async () => {
+    const controlled = controlledModel();
+    const { core, mind, client } = await setUp(controlled.model);
+    const blocks = tidesNote();
+    writeMind(client, blocks);
+    await client.settled();
+
+    const editing = core.editWithAi(
+      across(
+        client,
+        mind.id,
+        blocks.map((block) => block.attrs.id),
+        "shorten",
+      ),
+    );
+    await controlled.requested();
+    controlled.push("The tides here are strong.\n\nThe moon is bright tonight.\n\nHarbours");
+    await vi.waitFor(() => expect(pendingProposals(client.blocks)).toHaveLength(2));
+    core.close();
+
+    expect(await editing).toEqual({ kind: "cancelled" });
+  });
+
   // protects=a reply that rewrites every paragraph (a translation) still comes in paragraph by paragraph, each paired with the one it translates; fails_when=nothing shows until the end, or a paragraph is added beside the one it translates; no_claim=languages the word comparison can't tell apart.
   test("a translation comes in paragraph by paragraph, each in place of the one it translates", async () => {
     const controlled = controlledModel();
