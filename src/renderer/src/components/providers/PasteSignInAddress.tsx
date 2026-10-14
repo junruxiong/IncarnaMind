@@ -1,7 +1,7 @@
 import { type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
 import type { ChatGptPastedAddressProblem } from "../../../../core/api";
 import { core } from "../../core";
-import { useT } from "../../i18n";
+import { useGap, useT } from "../../i18n";
 import { useAppStore } from "../../store";
 import { ProblemMark } from "../ProblemLine";
 import { buttonStyle, errorTextClass, fieldClass } from "../ui";
@@ -14,6 +14,7 @@ import { buttonStyle, errorTextClass, fieldClass } from "../ui";
  */
 export function PasteSignInAddress() {
   const t = useT();
+  const gap = useGap();
   const id = useId();
   const [open, setOpen] = useState(false);
   const [address, setAddress] = useState("");
@@ -31,10 +32,15 @@ export function PasteSignInAddress() {
     }
   }, [open]);
 
+  const question = t("chatgpt.paste.question");
+  const action = t("chatgpt.paste.open");
+  const between = gap(question, action);
+
   if (!open) {
     return (
       <p className="text-[13px] leading-5 text-ink-secondary">
-        {t("chatgpt.paste.question")}{" "}
+        {question}
+        {between}
         <button
           ref={opener}
           type="button"
@@ -42,7 +48,7 @@ export function PasteSignInAddress() {
           onClick={() => setOpen(true)}
           className="font-semibold text-accent underline-offset-2 hover:underline"
         >
-          {t("chatgpt.paste.open")}
+          {action}
         </button>
       </p>
     );
@@ -85,7 +91,9 @@ export function PasteSignInAddress() {
   return (
     <div data-testid="chatgpt-paste" className="flex w-full flex-col gap-1">
       <label htmlFor={id} className="text-[13px] leading-5 text-ink-secondary">
-        {t("chatgpt.paste.question")} {t("chatgpt.paste.open")}
+        {question}
+        {between}
+        {action}
       </label>
       <div className="flex w-full items-center gap-2">
         <input
