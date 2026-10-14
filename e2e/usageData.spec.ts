@@ -10,6 +10,7 @@ import {
   createDataFolder,
   flushUsageData,
   launchApp,
+  leaveFirstOpen,
   newMind,
   openPrivacySettings,
   removeDataFolder,
@@ -98,6 +99,8 @@ async function askOwnQuestion(window: Page, card: Locator): Promise<void> {
   });
   await expect(card).toBeHidden();
   await askInAssistant(window, "Where does tea come from?");
+  await expect(card).toBeHidden();
+  await leaveFirstOpen(window);
 }
 
 const releaseOptions = () => ({
@@ -184,6 +187,21 @@ test("a release build asks after the first Answer to the User's own Question, se
   await flushUsageData(second.app);
   expect(posthog.events()).toHaveLength(sent);
   await second.app.close();
+});
+
+test("a release waits for the steps: with them open the card comes at the next launch (#123)", async () => {
+  const first = await launchApp(dataDir, releaseOptions());
+  await useLocalChatModel(first.window);
+  await askInAssistant(first.window, "Where does tea come from?");
+  await expect(first.window.getByTestId("first-open-steps")).toBeVisible();
+  await expect(first.window.getByTestId("usage-data-card")).toBeHidden();
+  await flushUsageData(first.app);
+  expect(posthog.requests).toEqual([]);
+  await first.app.close();
+
+  const again = await launchApp(dataDir, releaseOptions());
+  await expect(again.window.getByTestId("usage-data-card")).toBeVisible();
+  await again.app.close();
 });
 
 test("nothing is sent or kept to send before Send; after it, an example opened carries its group only", async () => {

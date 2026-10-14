@@ -1,11 +1,27 @@
 import { describe, expect, test } from "vitest";
 import { chooseNudge } from "../../src/renderer/src/nudges";
 
+const OPEN = {
+  started: true,
+  hidden: false,
+  citationChecked: false,
+  indexed: false,
+  askedOwn: false,
+};
+const DONE = { ...OPEN, citationChecked: true, indexed: true, askedOwn: true };
+const CLOSED = { ...OPEN, hidden: true };
+
 const state = (
-  over: { usage?: object; notice?: string; ownAnswerArrived?: boolean; askedOwn?: boolean } = {},
+  over: {
+    steps?: object;
+    usage?: object;
+    notice?: string;
+    ownAnswerArrived?: boolean;
+    askedOwnAtLaunch?: boolean;
+  } = {},
 ) =>
   ({
-    settings: { device: { gettingStarted: { askedOwn: over.askedOwn ?? false } } },
+    settings: { device: { gettingStarted: over.steps ?? OPEN } },
     privacy: {
       usageData: {
         available: true,
@@ -17,16 +33,30 @@ const state = (
       },
     },
     ownAnswerArrived: over.ownAnswerArrived ?? false,
+    askedOwnAtLaunch: over.askedOwnAtLaunch ?? false,
     usageNotice: over.notice ?? "auto",
   }) as unknown as Parameters<typeof chooseNudge>[0];
 
 describe("the sidebar's one nudge (#123)", () => {
-  test("a release asks only after an own Answer arrives, and only until answered", () => {
-    expect(chooseNudge(state())).toBeNull();
-    expect(chooseNudge(state({ ownAnswerArrived: true }))).toBe("usage-data");
-    expect(chooseNudge(state({ askedOwn: true }))).toBe("usage-data");
-    expect(chooseNudge(state({ ownAnswerArrived: true, usage: { asked: true } }))).toBeNull();
-    expect(chooseNudge(state({ ownAnswerArrived: true, notice: "answered" }))).toBeNull();
+  test("a release waits for the first own Answer and for the steps to be done", () => {
+    expect(chooseNudge(state({ steps: DONE }))).toBeNull();
+    expect(chooseNudge(state({ steps: DONE, ownAnswerArrived: true }))).toBe("usage-data");
+  });
+
+  test("a release asks once the steps are closed, after the first own Answer", () => {
+    expect(chooseNudge(state({ steps: CLOSED }))).toBeNull();
+    expect(chooseNudge(state({ steps: CLOSED, ownAnswerArrived: true }))).toBe("usage-data");
+  });
+
+  test("with the steps still open it waits, until the next launch", () => {
+    expect(chooseNudge(state({ steps: OPEN, ownAnswerArrived: true }))).toBeNull();
+    expect(chooseNudge(state({ steps: OPEN, askedOwnAtLaunch: true }))).toBe("usage-data");
+  });
+
+  test("it goes once answered, and never returns after a choice", () => {
+    const ready = { steps: DONE, ownAnswerArrived: true };
+    expect(chooseNudge(state({ ...ready, notice: "answered" }))).toBeNull();
+    expect(chooseNudge(state({ ...ready, usage: { asked: true } }))).toBeNull();
   });
 
   test("a test build says so from the first run, and keeps it once the switch is used", () => {
@@ -41,7 +71,8 @@ describe("the sidebar's one nudge (#123)", () => {
   });
 
   test("nothing shows without a sender, or in local mode", () => {
-    expect(chooseNudge(state({ ownAnswerArrived: true, usage: { available: false } }))).toBeNull();
-    expect(chooseNudge(state({ ownAnswerArrived: true, usage: { localMode: true } }))).toBeNull();
+    const ready = { steps: DONE, ownAnswerArrived: true };
+    expect(chooseNudge(state({ ...ready, usage: { available: false } }))).toBeNull();
+    expect(chooseNudge(state({ ...ready, usage: { localMode: true } }))).toBeNull();
   });
 });

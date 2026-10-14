@@ -1,17 +1,23 @@
+import { firstOpenOf } from "../../shared/firstOpen";
 import type { AppState } from "./store";
 
 export type NudgeId = "usage-data";
 
-type NudgeState = Pick<AppState, "settings" | "privacy" | "ownAnswerArrived" | "usageNotice">;
+type NudgeState = Pick<
+  AppState,
+  "settings" | "privacy" | "ownAnswerArrived" | "askedOwnAtLaunch" | "usageNotice"
+>;
 
+// A newcomer meets one ask at a time: a release asks once the first own Answer has arrived and the
+// steps are done or closed, or at the next launch if they are still open.
 export function usageDataShown(state: NudgeState): boolean {
   const usageData = state.privacy?.usageData;
   if (!usageData?.available || usageData.localMode || state.usageNotice === "answered")
     return false;
   if (usageData.testerBuild) return !usageData.asked || state.usageNotice === "kept";
-  const ownAnswered =
-    state.ownAnswerArrived || state.settings?.device.gettingStarted.askedOwn === true;
-  return !usageData.asked && ownAnswered;
+  if (usageData.asked) return false;
+  const stepsOver = !firstOpenOf(state.settings?.device.gettingStarted);
+  return state.askedOwnAtLaunch || (state.ownAnswerArrived && stepsOver);
 }
 
 const ORDER: readonly { id: NudgeId; shown(state: NudgeState): boolean }[] = [
