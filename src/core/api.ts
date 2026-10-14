@@ -2745,11 +2745,11 @@ export type LinkedFolderStatus = "scanning" | "watching" | "paused" | "unavailab
 
 /**
  * The groups that have an example Mind (onboarding, see src/core/examples.ts):
- * "tea" is the first-run default; the others are one per pick of the first
- * run's question (Papers and research, Reports and analysis, Contracts and
- * legal work, Meetings and team notes).
+ * "tea" is the first-run default; the others are closer to a kind of work
+ * (papers, reports, contracts, meetings), and open from the default's banner.
  */
-export type ExampleGroup = "tea" | "papers" | "reports" | "contracts" | "meetings";
+export const EXAMPLE_GROUPS = ["tea", "papers", "reports", "contracts", "meetings"] as const;
+export type ExampleGroup = (typeof EXAMPLE_GROUPS)[number];
 
 /**
  * An example Mind (onboarding, see src/core/examples.ts): "Where tea comes
@@ -2767,6 +2767,8 @@ export interface Examples {
   linkedFolderId: string | null;
   /** The example Answer, written in advance, while the example Mind exists. */
   answerId: string | null;
+  /** The other examples this one's banner offers, in this install's order (random, then kept). */
+  more: ExampleGroup[];
 }
 
 /**
@@ -2821,7 +2823,8 @@ export interface UnsupportedFile {
  * Why a file in a search's scope wasn't read, and what the User can do:
  * - "format": a format not read yet (.doc, .xls, .ppt, .wps, .caj…): convert it;
  * - "scan": a scan in which text recognition found no text (handwriting, a picture);
- * - "password": password-protected: remove the password;
+ * - "password": password-protected: a PDF is unlocked with its password
+ *   (`unlockDocument`, #763); another kind needs its password removed;
  * - "damaged": the file is broken, or couldn't be read;
  * - "too-large": too large to open;
  * - "pages": a scan some of whose pages haven't been read yet.
@@ -3251,6 +3254,8 @@ export type ProviderErrorKind =
   | "consent-declined"
   /** "Keep everything on this computer" is on and the model isn't on this computer: nothing was sent, or the Answer was stopped. */
   | "local-mode"
+  /** The model is in Ollama on this computer, and Ollama isn't running: found before anything was sent. */
+  | "ollama-not-running"
   /** ChatGPT plan: there is no sign-in on this device, or it expired: sign in again. */
   | "not-signed-in"
   /** ChatGPT plan: the plan's usage limit, or the one the User set for IncarnaMind, is reached. */
@@ -3831,6 +3836,17 @@ export interface LeftOutDocument {
   documentName: string;
   reason: EvidenceExclusion;
 }
+
+/** A password-protected PDF Document, and the password to open it with (#763). */
+export interface UnlockDocumentInput {
+  documentId: string;
+  password: string;
+}
+
+/** What unlocking a locked PDF did (#763). */
+export type UnlockDocumentResult =
+  | { kind: "unlocked"; document: Document }
+  | { kind: "wrong-password" };
 
 /** What one claim check found: the claim-check function's result (`checkClaim`). */
 export type ClaimCheckResult =
@@ -4769,7 +4785,13 @@ export interface SecretStorageStatus {
 // Ollama
 
 export type OllamaStatus =
-  | { running: false; baseUrl: string }
+  | {
+      running: false;
+      baseUrl: string;
+      /** Whether `openOllama` can open its app: false too where this computer can't tell. */
+      installed: boolean;
+      recommendedModel: string;
+    }
   | {
       running: true;
       baseUrl: string;
@@ -6821,6 +6843,26 @@ export interface CoreApi {
    */
   retryDocument(id: string): Promise<Document>;
   /**
+   * Opens a password-protected PDF Document with `password` (#763). When it
+   * opens, the password is kept on this device, in the system's keychain, by
+   * Document, and the Document is read again with it. "wrong-password" when
+   * it doesn't open it: nothing is kept. Throws InvalidInputError for a
+   * Document that isn't a PDF, or one that opens without a password, and
+   * NotFoundError for an unknown one or one whose file isn't there.
+   */
+  unlockDocument(input: UnlockDocumentInput): Promise<UnlockDocumentResult>;
+  /** Forgets a Document's kept PDF password (#763); its text stays as it was read. */
+  forgetDocumentPassword(documentId: string): Promise<void>;
+  /**
+   * The kept password of a locked PDF Document, for the viewer to open it
+   * with and for nothing else; null for any other Document, when none is
+   * kept, or when the Document's file isn't being shown (opened with
+   * `openDocumentFile` now or in the last few seconds) (#763).
+   */
+  documentPasswordFor(documentId: string): Promise<string | null>;
+  /** The Documents whose PDF password is kept on this device, by id (#763). */
+  listDocumentPasswords(): Promise<string[]>;
+  /**
    * The text IncarnaMind kept of a Document's current version: what the
    * viewer shows when the file is missing or can't be reached. Throws
    * NotFoundError for an unknown or deleted Document.
@@ -7302,6 +7344,11 @@ export interface CoreApi {
 
   /** Looks for Ollama, on its default local port unless another URL is given. */
   detectOllama(input?: { baseUrl?: string }): Promise<OllamaStatus>;
+  /**
+   * Opens Ollama's app and waits, for up to twenty seconds, until Ollama answers; resolves with
+   * what `detectOllama` then finds. Rejects when the app can't be opened from here.
+   */
+  openOllama(input?: { baseUrl?: string }): Promise<OllamaStatus>;
   /**
    * One click "use local models": pulls the model if needed (progress arrives as
    * "ollama.pullProgress" events), saves Ollama as a provider and makes the model the default.
@@ -7843,6 +7890,8 @@ export interface CoreEvents {
   "documents.moved": Document[];
   /** Documents removed from the index, by the User or with their Linked folder: their ids. */
   "documents.removed": string[];
+  /** The Documents whose PDF password is kept changed (#763): their ids now. */
+  "documentPasswords.changed": string[];
   /** Folders appeared or went with the folders on disk: the list as `listFolders` now returns it. */
   "folders.changed": Folder[];
   /**
@@ -8014,6 +8063,10 @@ const methods: Record<CoreApiMethod, true> = {
   renameDocument: true,
   deleteDocument: true,
   retryDocument: true,
+  unlockDocument: true,
+  forgetDocumentPassword: true,
+  documentPasswordFor: true,
+  listDocumentPasswords: true,
   readDocumentText: true,
   readScannedText: true,
   readScannedQuote: true,
@@ -8095,6 +8148,7 @@ const methods: Record<CoreApiMethod, true> = {
   getSecretStorage: true,
   acceptPlainTextSecretStorage: true,
   detectOllama: true,
+  openOllama: true,
   selectOllama: true,
   getChatGptPlan: true,
   signInToChatGpt: true,

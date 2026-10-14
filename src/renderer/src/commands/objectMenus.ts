@@ -39,6 +39,7 @@ registerMenu("document", [
   "folder.newWith",
   "document.tags",
   "document.retry",
+  "document.unlock",
   "document.fetchAgain",
   "document.countAsEvidence",
   "document.leaveOutOfEvidence",
@@ -49,6 +50,7 @@ registerMenu("document", [
   "document.openLivePage",
   "document.copyAddress",
   "file.info",
+  "document.forgetPassword",
   "document.delete",
 ]);
 
@@ -108,6 +110,7 @@ registerMenu("chart", [
   "chart.kind.line",
   "chart.kind.pie",
   "chart.kind.scatter",
+  "chart.switch",
   "chart.update",
   "chart.rename",
   "block.delete",
