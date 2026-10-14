@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import {
   BUILT_IN_RERANKING_MODEL,
-  ConsentDeclinedError,
   type CoreAdapters,
   type CrossEncoder,
   DATABASE_FILE,
@@ -288,8 +287,8 @@ describe("Consent for rerank", { timeout: 30_000 }, () => {
     });
   });
 
-  test("a decline made before stays: choosing the service again keeps the built-in model and sends nothing", async () => {
-    const { core, rerankers, keychain, ask, dataDir } = await setUp();
+  test("choosing the service again is a new choice: it replaces a decline made before, and nothing asks", async () => {
+    const { core, rerankers, ask, dataDir } = await setUp();
     const db = openDatabase(join(dataDir, DATABASE_FILE));
     try {
       db.run(
@@ -301,14 +300,21 @@ describe("Consent for rerank", { timeout: 30_000 }, () => {
     } finally {
       db.close();
     }
+    const requests: string[] = [];
+    core.on("consent.requested", (request) => requests.push(request.flow.id));
 
-    await expect(core.saveRerankSettings({ kind: "cohere", apiKey: COHERE_KEY })).rejects.toThrow(
-      ConsentDeclinedError,
+    await core.saveRerankSettings({ kind: "cohere", apiKey: COHERE_KEY });
+    await ask();
+
+    expect(requests).toEqual([]);
+    expect(rerankers.calls).toHaveLength(1);
+    expect(await core.listDataFlows()).toContainEqual(
+      expect.objectContaining({
+        flow: expect.objectContaining({ id: "rerank", service: COHERE }),
+        consent: "accepted",
+        chosen: true,
+      }),
     );
-    expect(await core.getRerankSettings()).toMatchObject({ kind: "built-in", byDefault: true });
-    expect(keychain.secrets.has("rerank:api-key")).toBe(false);
-    expect((await ask())[0]?.document).toBe("Coast");
-    expect(rerankers.calls).toEqual([]);
   });
 
   test("revoked later, a search asks again; declining keeps search's order and sends nothing", async () => {
