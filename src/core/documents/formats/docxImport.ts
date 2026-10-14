@@ -1450,9 +1450,11 @@ class Reader {
     let run: string | null = null;
     if (characters.size === 0) {
       run = this.look.run(pPr && child(pPr, "w:rPr"), this.paragraphLook, 0);
+      if (run !== null && !this.look.canBeParagraphRun(run)) run = null;
     } else {
       let most = 0;
       for (const [key, count] of characters) {
+        if (key !== null && !this.look.canBeParagraphRun(key)) continue;
         if (count > most) {
           most = count;
           run = key;

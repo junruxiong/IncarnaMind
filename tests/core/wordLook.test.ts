@@ -213,6 +213,37 @@ describe("a Mind imported from Word keeps its look", () => {
     expect(look.runs[lookOf(2)?.run ?? ""]).toEqual({ size: 16 });
   });
 
+  test("underlined and shaded text keeps its mark, even where most of the paragraph has that look", async () => {
+    const shaded = (text: string) =>
+      `<w:r><w:rPr><w:shd w:val="clear" w:fill="FFF2CC"/></w:rPr><w:t>${text}</w:t></w:r>`;
+    const { client, look } = await imported(
+      wordFile({
+        body: [
+          paragraph(run("Mostly underlined, ", { u: true }) + run("then plain")),
+          paragraph(shaded("All of it shaded")),
+        ].join(""),
+      }),
+    );
+    const blocks = readMind(client);
+    const runsOf = (index: number) => {
+      const runs: unknown[] = [];
+      blocks.child(index).forEach((text) => {
+        const key = text.marks.find((each) => each.type.name === WORD_RUN_MARK)?.attrs.k;
+        runs.push(typeof key === "string" ? look.runs[key] : null);
+      });
+      return runs;
+    };
+    const paragraphRun = (index: number) => {
+      const key = blocks.child(index).attrs[WORD_LOOK_ATTRIBUTE] as string | null;
+      return key ? look.paragraphs[key]?.run : undefined;
+    };
+
+    expect(runsOf(0)).toEqual([{ underline: "single" }, null]);
+    expect(paragraphRun(0)).toBeUndefined();
+    expect(runsOf(1)).toEqual([{ shade: "FFF2CC" }]);
+    expect(paragraphRun(1)).toBeUndefined();
+  });
+
   test("the styles kept grow with the styles the file uses, never with its Blocks", async () => {
     const short = await imported(longContract(8));
     const long = await imported(longContract());

@@ -1212,7 +1212,9 @@ export interface WordParagraphLook {
   /**
    * The run look of the paragraph's text that has no `WORD_RUN_MARK`: the
    * most common one, or the paragraph mark's when there is no text. Marking
-   * only the text that differs keeps long files quick to open.
+   * only the text that differs keeps long files quick to open. Never one
+   * that is underlined, struck, highlighted, shaded or raised: drawn on the
+   * paragraph, those would cover text that doesn't have them.
    */
   run?: string;
   align?: "left" | "center" | "right" | "justify" | "distribute";
