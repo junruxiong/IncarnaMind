@@ -2338,9 +2338,9 @@ export const en = {
   "scripts.card.deny": "Deny",
   "scripts.alwaysRun.title": "Always run the scripts of {skill}?",
   "scripts.alwaysRun.body":
-    "From now on, every script of {skill} runs whenever an Answer wants it, without asking you. Scripts aren't sandboxed: they can read, change or delete your files, install software and send your data over the internet. Only do this for a Skill you trust completely. You can stop allowing it in Settings, under Approvals.",
+    "From now on, every script of {skill} runs whenever an Answer wants it, without asking you. Scripts aren't sandboxed: they can read, change or delete your files, install software and send your data over the internet. Only do this for a Skill you trust completely. You can reset it in Settings, under Approvals.",
   "scripts.alwaysRun.bodySandboxed":
-    "From now on, every script of {skill} runs whenever an Answer wants it, without asking you. Scripts run in a sandbox: they can't open your home folder or IncarnaMind's data, can only write in their own working folder, and have no internet. They can still read files elsewhere on this computer, such as on an external drive. Only do this for a Skill you trust. You can stop allowing it in Settings, under Approvals.",
+    "From now on, every script of {skill} runs whenever an Answer wants it, without asking you. Scripts run in a sandbox: they can't open your home folder or IncarnaMind's data, can only write in their own working folder, and have no internet. They can still read files elsewhere on this computer, such as on an external drive. Only do this for a Skill you trust. You can reset it in Settings, under Approvals.",
   "scripts.alwaysRun.confirm": "Always run {skill}'s scripts",
   "scripts.alwaysRun.cancel": "Cancel",
   "scripts.call.waiting": "Waiting for your approval: {script} ({skill})",
@@ -2941,7 +2941,7 @@ export const en = {
   "approvals.card.allowOnce": "Allow once",
   "approvals.card.alwaysAllow": "Always allow",
   "approvals.card.alwaysAllowHint":
-    "Run {tool} from now on without asking. You can stop allowing it in Settings, under Approvals.",
+    "Run {tool} from now on without asking. You can reset it in Settings, under Approvals.",
   "approvals.card.deny": "Deny",
   "approvals.thirdParty.read.imported":
     "This Answer read a Mind with imported text, so it asks you first.",
@@ -2969,11 +2969,11 @@ export const en = {
   "approvals.tools.off": "Off",
   "approvals.settings.title": "Approvals",
   "approvals.settings.body":
-    "Tools that may change something, and Skill scripts, ask before each run. Here is every Tool you always allow, set to ask every time or turned off, and every Skill whose scripts always run. Reset one to go back to asking every time.",
+    "Tools that may change something, and Skill scripts, ask before each run. Here is every Tool you always allow, set to ask every time or turned off, and every Skill whose scripts always run. Reset one to go back to its default.",
   "approvals.settings.empty":
     "No Tool is set to always allow, to ask every time or to stay off. No Skill's scripts always run.",
   "approvals.settings.revoke": "Reset",
-  "approvals.settings.revokeLabel": "Reset {name} to ask every time",
+  "approvals.settings.revokeLabel": "Reset {name} to its default",
   "approvals.settings.skillScripts": "Scripts of {skill}",
   "approvals.policy.always": "Always allow",
   "approvals.policy.ask": "Ask every time",
