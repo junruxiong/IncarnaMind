@@ -735,6 +735,7 @@ export function createCore(adapters: CoreAdapters): Core {
 
   // Sign-in changes can happen in the middle of a request (a refresh that fails), so they report through events.
   let chatGptChanged = () => {};
+  let chatGptLimitsChanged = () => {};
   const chatGptStore = adapters.chatGptStore;
   const chatGpt = createChatGptPlan({
     endpoints: { ...CHATGPT_PLAN_ENDPOINTS, ...adapters.chatGptPlan },
@@ -749,6 +750,7 @@ export function createCore(adapters: CoreAdapters): Core {
     browser: adapters.browser,
     now: () => (adapters.now?.() ?? new Date()).getTime(),
     onChange: () => chatGptChanged(),
+    onLimitsChange: () => chatGptLimitsChanged(),
   });
   // What the experimental ChatGPT provider left on this device goes (see migration 53).
   chatGpt.forgetCodexSignIn().catch((error: unknown) => {
@@ -982,7 +984,7 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     liveTranscript: (mindId) => liveTranscriptOf(mindId),
     providerExists: (providerId) => chat.exists(providerId),
-    readiness: (choice) => chat.readiness(choice),
+    readiness: async (choice) => chat.readiness(await chat.answeringModel(choice)),
     prepareModel: (choice) => chat.prepareModel(choice),
     documents: {
       searchableCount: (documentIds) => documents.searchableCount(documentIds ?? undefined),
@@ -1695,6 +1697,17 @@ export function createCore(adapters: CoreAdapters): Core {
     report().catch((error: unknown) => {
       if (!lifetime.signal.aborted) console.error(error);
     });
+  };
+  // Not a readiness change: the renderer keeps its model lists.
+  chatGptLimitsChanged = () => {
+    chatGpt.status().then(
+      (status) => {
+        if (!lifetime.signal.aborted) events.emit("chatGptPlan.changed", status);
+      },
+      (error: unknown) => {
+        if (!lifetime.signal.aborted) console.error(error);
+      },
+    );
   };
 
   // Tagging a quit interrupted starts again; Documents waiting for a chat model are checked.
@@ -2541,6 +2554,21 @@ export function createCore(adapters: CoreAdapters): Core {
     },
 
     getChatGptPlan: () => chatGpt.status(),
+    answerWithPlanModel: async (input) => {
+      if (!isRecord(input) || typeof input.insteadOf !== "string") {
+        throw new InvalidInputError("answerWithPlanModel expects { insteadOf, modelId }.");
+      }
+      const { insteadOf, modelId } = input;
+      if (!(await chatGpt.models()).some((model) => model.id === modelId)) {
+        throw new InvalidInputError(`"${modelId}" isn't a model of the ChatGPT plan.`);
+      }
+      chatGpt.limits.answerWith(insteadOf, modelId);
+      return chatGpt.status();
+    },
+    endPlanStandIn: async () => {
+      chatGpt.limits.endStandIn();
+      return chatGpt.status();
+    },
     signInToChatGpt: (input) =>
       chatGpt.signIn({ anotherAccount: isRecord(input) && input.anotherAccount === true }),
     cancelChatGptSignIn: () => chatGpt.cancelSignIn(),
