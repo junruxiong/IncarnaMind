@@ -2792,7 +2792,7 @@ export interface UnsupportedFile {
 /**
  * Why a file in a search's scope wasn't read, and what the User can do:
  * - "format": a format not read yet (.doc, .xls, .ppt, .wps, .caj…): convert it;
- * - "scan": a scan with no text yet: it needs text recognition;
+ * - "scan": a scan in which text recognition found no text (handwriting, a picture);
  * - "password": password-protected: remove the password;
  * - "damaged": the file is broken, or couldn't be read;
  * - "too-large": too large to open;
