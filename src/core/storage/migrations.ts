@@ -1657,6 +1657,16 @@ export const migrations: readonly Migration[] = [
       ALTER TABLE document_groups ADD COLUMN error_wording TEXT;
     `,
   },
+  {
+    version: 89,
+    description: "A Mind imported from Word keeps the file's look (#746)",
+    sql: `
+      -- The version of reading the look (WORD_LOOK_VERSION) the Mind's look was read with, so
+      -- the Minds imported before get it once, at a start, without each being read to find out.
+      -- NULL: not yet.
+      ALTER TABLE word_packages ADD COLUMN look_version INTEGER;
+    `,
+  },
 ];
 
 /**
