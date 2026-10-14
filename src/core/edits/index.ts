@@ -270,6 +270,8 @@ function placeOf(at: RewritePlace | null): WritingPlace | null {
 export function createEdits(options: EditsOptions) {
   const { chat, content } = options;
   const running = new Map<string, AbortController>();
+  /** The core is closing: a request stopped now writes nothing more, as the Mind's storage closes. */
+  let closing = false;
 
   options.consent.registry.register({
     id: "edits",
@@ -473,6 +475,7 @@ export function createEdits(options: EditsOptions) {
       if (stream) options.writing(mindId, null);
     }
 
+    if (signal.aborted && closing) return ended({ kind: "cancelled" });
     if (signal.aborted && !refused) {
       // Stopped: what is finished stays.
       if (stream) step(() => stream.stop());
@@ -686,6 +689,7 @@ export function createEdits(options: EditsOptions) {
 
     /** The core is closing: requests still waiting stop. */
     stopAll(): void {
+      closing = true;
       for (const controller of running.values()) controller.abort();
       running.clear();
     },
