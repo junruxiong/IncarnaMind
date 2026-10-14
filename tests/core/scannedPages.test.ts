@@ -99,9 +99,9 @@ describe("Scanned pages are read on this computer (#397)", { timeout: 60_000 }, 
 
     expect(document.status).toBe("ready");
     expect(read).toEqual([1, 2]);
-    expect(progress).toContainEqual({ pages: 2, read: 0 });
-    expect(progress).toContainEqual({ pages: 2, read: 1 });
-    expect(progress.at(-1)).toEqual({ pages: 2, read: 2 });
+    expect(progress).toContainEqual({ pages: 2, read: 0, of: "scanned-pages" });
+    expect(progress).toContainEqual({ pages: 2, read: 1, of: "scanned-pages" });
+    expect(progress.at(-1)).toEqual({ pages: 2, read: 2, of: "scanned-pages" });
     const [english] = await core.searchPassages("undisputed invoice", { mode: "keyword" });
     expect(english).toMatchObject({ documentId: document.id, pageFrom: 1 });
     const [chinese] = await core.searchPassages("押金", { mode: "keyword" });

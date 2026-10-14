@@ -896,6 +896,9 @@ export const en = {
   "documents.status.noText": "No text found",
   "documents.status.scanning.one": "Reading 1 scanned page…",
   "documents.status.scanning.other": "Reading {count} scanned pages… {read} read so far.",
+  "documents.status.readingPictures.one": "Reading the text in 1 picture…",
+  "documents.status.readingPictures.other":
+    "Reading the text in {count} pictures… {read} read so far.",
   "documents.statusShort.scanning": "Reading {read}/{count}",
   "documents.statusShort.pagesUnread": "Pages unread",
   "documents.statusShort.queued": "Queued",
