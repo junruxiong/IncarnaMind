@@ -969,8 +969,8 @@ function editedText(action: string, passage: string, asked: string): string {
       if (replace?.[1] && replace[2] !== undefined)
         return passage.split(replace[1]).join(replace[2]);
       if (/drop the citations|去掉引用/i.test(asked)) return passage.replace(/\s*\[\d+\]/g, "");
-      if (SHORTEN.test(asked)) return passage.replace(FILLER, "");
       if (/restructure|重新组织/i.test(asked)) return restructured(passage);
+      if (SHORTEN.test(asked)) return passage.replace(FILLER, "");
       return `${passage} (edited)`;
     }
   }

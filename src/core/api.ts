@@ -3379,7 +3379,7 @@ export interface TaskProgress {
   total: number;
 }
 
-/** What the User can ask of a Task from its progress in the thread, as its kind allows (D189). */
+/** What the User can ask of a Task from its progress in the thread, as its kind allows (#657). */
 export type TaskAction = "plan" | "tell" | "pause" | "stop";
 
 /**
