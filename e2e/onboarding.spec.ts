@@ -87,19 +87,22 @@ async function expectPlainWords(regions: Locator[]): Promise<void> {
   }
 }
 
-test("a first run opens on the example Mind: its Answer is written in advance, its Citations are checked against its Documents, and the chat setup waits", async () => {
-  const { window } = await launchApp(dataDir, { examples: true });
+test("a first run opens on the credit paper with no model set up: its Citations are found and open the PDF at the quote, and its wrong figure's card says what the results say", async () => {
+  const { app, window } = await launchApp(dataDir, { examples: true });
+  await setWindowSize(app, window, 1440, 900);
 
   const pane = window.getByTestId("mind-pane");
-  await expect(window.getByTestId("mind-title")).toHaveValue("Where tea comes from");
-  await expect(pane.getByTestId("example-banner")).toContainText("This is an example Mind.");
+  await expect(window.getByTestId("mind-title")).toHaveValue("Draft: credit committee paper");
+  const banner = pane.getByTestId("example-banner");
+  await expect(banner).toContainText("This is an example Mind.");
+  await expect(banner).toContainText("click the red mark beside it to see what the results say");
   // "Example" on the Mind and on its Documents' Linked folder; both Documents are listed.
   await expect(window.getByTestId("mind-list-item").getByTestId("example-chip")).toHaveText(
     "Example",
   );
   await expect(window.getByTestId("document-list-item")).toHaveText([
-    /Tea · Wikipedia|茶 · 维基百科/,
-    /Tea · Wikipedia|茶 · 维基百科/,
+    /Northwind Retail · (Q3 2026 results|Senior facilities agreement \(excerpt\))/,
+    /Northwind Retail · (Q3 2026 results|Senior facilities agreement \(excerpt\))/,
   ]);
   // No model needed: no setup over it, and no "set up a chat model" notice in it.
   await expect(window.getByTestId("chat-setup")).toBeHidden();
@@ -114,6 +117,10 @@ test("a first run opens on the example Mind: its Answer is written in advance, i
   await expect(checks).toHaveCount(2);
   await expect(checks.nth(0)).toHaveAttribute("data-check", "found", { timeout: 20_000 });
   await expect(checks.nth(1)).toHaveAttribute("data-check", "found", { timeout: 20_000 });
+  // The draft's wrong figure is already checked: contradicted.
+  const mark = pane.getByTestId("claim-mark");
+  await expect(mark).toHaveCount(1);
+  await expect(mark).toHaveAttribute("data-check", "contradicted");
 
   // The Linked folder's chip, as on disk, once its status (indexing) leaves the room for it.
   await showSourceLocations(window);
@@ -121,15 +128,39 @@ test("a first run opens on the example Mind: its Answer is written in advance, i
     timeout: 30_000,
   });
 
+  // The red mark's card says what the results say, and quotes them where they say it.
   await expect(progress(window)).toHaveText("· 0 of 3");
-  // Clicking a green check opens its card and the Document at the quote, and ticks the first step.
-  await pointAndClick(window, checks.nth(0));
-  await expect(window.getByTestId("citation-card")).toBeVisible();
-  await expect(window.getByTestId("viewer")).toBeVisible();
+  await pointAndClick(window, mark);
+  const card = window.getByTestId("claim-card");
+  await expect(card.getByTestId("claim-badge")).toHaveAttribute("data-check", "contradicted");
+  await expect(card.getByTestId("claim-says")).toHaveText(
+    "The Q3 results say gross margin was 38.6%, not 36.8%.",
+  );
+  await expect(card.getByTestId("claim-source")).toHaveText(
+    "Northwind Retail · Q3 2026 results · p. 1",
+  );
+  await expect(card.getByTestId("claim-quote")).toHaveText(
+    "Group gross margin was 38.6%, down from 40.3% a year earlier, with online the main drag.",
+  );
+  // Opening it ticks the first step.
   await expect(progress(window)).toHaveText("· 1 of 3");
   await expect(
     window.locator('[data-testid="get-started-step"][data-step="citation"] [data-done]'),
-  ).toContainText("Check a Citation in the example");
+  ).toContainText("Open a check in the example");
+  await window.keyboard.press("Escape");
+
+  // A Citation opens the results at the page it quotes, the quote highlighted.
+  await pointAndClick(window, checks.nth(0));
+  await expect(window.getByTestId("citation-card")).toBeVisible();
+  await expect(window.getByTestId("viewer-title")).toHaveText("Northwind Retail · Q3 2026 results");
+  await expect(window.getByTestId("pdf-page-number")).toHaveValue("1");
+  const highlight = window
+    .getByTestId("viewer")
+    .locator('[data-page-number="1"] [data-quote-highlight]');
+  await expect(highlight.first()).toBeInViewport();
+  await expect
+    .poll(async () => (await highlight.allTextContents()).join(""))
+    .toContain("Net debt to EBITDA was 3.1 times");
 
   // Moving on to a Mind of one's own: the chat setup is offered then.
   await window.keyboard.press("Escape");
@@ -163,7 +194,7 @@ test("removing the examples deletes the example Mind, its Documents and the copi
   const again = await launchApp(dataDir, { examples: true });
   await expect(again.window.getByTestId("mind-none-open")).toBeVisible();
   await expect(again.window.getByTestId("mind-list-item")).toHaveCount(0);
-  // "Check a Citation in the example" makes them again, and opens them.
+  // "Open a check in the example" makes them again, and opens them.
   await pointAndClick(
     again.window,
     again.window.locator('[data-testid="get-started-step"][data-step="citation"] button'),
@@ -283,7 +314,7 @@ test('Get started\'s "Add your Documents" opens Add files… and Link a folder�
   await expect(ways.getByRole("menuitem")).toHaveText(["Add files…", "Link a folder…"]);
   await expect(ways.getByRole("menuitem").first()).toBeFocused();
   // No Mind of its own first, and no model setup over it.
-  await expect(window.getByTestId("mind-title")).toHaveValue("Where tea comes from");
+  await expect(window.getByTestId("mind-title")).toHaveValue("Draft: credit committee paper");
   await expect(window.getByTestId("chat-setup")).toBeHidden();
   await window.keyboard.press("Escape");
   await expect(ways).toBeHidden();
@@ -343,7 +374,7 @@ test('"Ask your own Question" is ticked by an Answer that arrives, not by one th
   await expect(progress(window)).toHaveText("· 0 of 3");
 
   await window.getByTestId("composer-input").click();
-  await window.keyboard.type("Where does tea come from?");
+  await window.keyboard.type("What was gross margin in Q3?");
   await window.keyboard.press("Enter");
   await expect(assistantAnswers(window).last()).toHaveAttribute("data-status", "done", {
     timeout: 15_000,
@@ -379,9 +410,9 @@ test("the hint at the end of a Mind focuses the composer when its link is clicke
   await pointAndClick(window, hint.getByTestId("end-hint-ask"), { through: true });
   await expect(hint).toHaveAttribute("data-armed", "true");
   await expect(editor.getByTestId("question")).toHaveCount(1);
-  await window.keyboard.type("Green and black tea come from the same plant.");
+  await window.keyboard.type("Online margin should recover once Leeds opens.");
   const last = editor.locator(":scope > *").last();
-  await expect(last).toHaveText("Green and black tea come from the same plant.");
+  await expect(last).toHaveText("Online margin should recover once Leeds opens.");
   await expect(editor.getByTestId("question")).toHaveCount(1);
   // A Note at the end: no hint, as after an Answer only.
   await expect(hint).toHaveCount(0);
@@ -410,7 +441,7 @@ test("the hint at the end of a Mind focuses the composer when its link is clicke
   await pointAndClick(window, hint.getByTestId("end-hint-ask"));
   await expect(window.getByTestId("composer-input")).toBeFocused();
   await useLocalChatModel(window);
-  await window.keyboard.type("Which tea is drunk most in Britain?");
+  await window.keyboard.type("What was the online gross margin in Q3?");
   await window.keyboard.press("Enter");
   const answer = assistantAnswers(window).last();
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
@@ -433,6 +464,6 @@ test("the hint at the end of a Mind focuses the composer when its link is clicke
     );
   const at = order.lastIndexOf("answer");
   expect(order.slice(at - 1, at + 2)).toEqual(["question", "answer", "added"]);
-  expect(order.at(-1)).toBe("Green and black tea come from the same plant.");
+  expect(order.at(-1)).toBe("Online margin should recover once Leeds opens.");
   expect(order.slice(at + 1, -1).every((block) => block === "added")).toBe(true);
 });
