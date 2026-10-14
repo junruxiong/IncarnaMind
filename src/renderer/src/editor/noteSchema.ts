@@ -74,8 +74,6 @@ export interface NoteSchemaOptions {
   /** Draws what a Word import kept as it is (#104): in the text, and as Blocks. */
   wordAtomView?: NodeViewRenderer;
   wordBlockView?: NodeViewRenderer;
-  /** Asked before a change deletes a Word file's section break; `retry` makes it. */
-  onSectionBreakDelete?: (retry: () => void) => void;
 }
 
 /**
@@ -107,7 +105,6 @@ export function noteExtensions({
   comparisonViews,
   wordAtomView,
   wordBlockView,
-  onSectionBreakDelete,
 }: NoteSchemaOptions = {}): Extensions {
   const onClick = onEditMath && ((_node: unknown, pos: number) => onEditMath(pos));
   const CodeBlock = CodeBlockLowlight.extend({
@@ -154,10 +151,7 @@ export function noteExtensions({
     ComparisonTable.configure({ view: comparisonViews?.table ?? null }),
     ComparisonRow.configure({ view: comparisonViews?.row ?? null }),
     ComparisonCell.configure({ view: comparisonViews?.cell ?? null }),
-    WordAtom.configure({
-      view: wordAtomView ?? null,
-      onSectionBreakDelete: onSectionBreakDelete ?? null,
-    }),
+    WordAtom.configure({ view: wordAtomView ?? null }),
     WordBlock.configure({ view: wordBlockView ?? null }),
     InlineImage,
     QuestionContextFlag,

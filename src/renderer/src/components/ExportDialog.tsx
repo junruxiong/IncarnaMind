@@ -6,6 +6,7 @@ import {
   type Mind,
   type MindCitationStyle,
   type OutputSettings,
+  type TheirChangesShown,
   type WordExportPreferences,
 } from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
@@ -15,8 +16,7 @@ import { core } from "../core";
 import { errorMessage } from "../errors";
 import { exportPreferences, FORMAT_LABELS, hasQuestionsOption } from "../exports";
 import { useT } from "../i18n";
-import { folderName } from "../linkedFolders";
-import { chooseOutputLocation } from "../outputFiles";
+import { chooseOutputLocation, outputFolderLabel } from "../outputFiles";
 import { useAppStore } from "../store";
 import { ChevronDownLineIcon, CloseLineIcon } from "./lineIcons";
 import { ProblemLine } from "./ProblemLine";
@@ -131,6 +131,55 @@ function WordReviewRows({
 }
 
 /**
+ * How a PDF, an HTML file or Markdown shows someone's changes from a Word file
+ * still waiting (#734): marked as changes, as Word prints them, or as if each
+ * were accepted. Only for a Mind that has some.
+ */
+function TheirChangesRow({
+  count,
+  value,
+  onChange,
+}: {
+  count: number;
+  value: TheirChangesShown;
+  onChange(next: TheirChangesShown): void;
+}) {
+  const t = useT();
+  const id = useId();
+  return (
+    <div className="flex items-center justify-between gap-4 py-2">
+      <div className="flex min-w-0 flex-1 flex-col">
+        <label htmlFor={id} className="text-ui text-ink">
+          {t("export.theirChanges")}
+        </label>
+        <span id={`${id}-hint`} className={hintClass}>
+          {count === 1
+            ? t("export.theirChanges.hint.one")
+            : t("export.theirChanges.hint.other", { count })}
+        </span>
+      </div>
+      <span className="relative flex shrink-0">
+        <select
+          id={id}
+          data-testid="export-their-changes"
+          value={value}
+          aria-describedby={`${id}-hint`}
+          onChange={(event) => {
+            const chosen = event.target.value;
+            if (chosen === "shown" || chosen === "accepted") onChange(chosen);
+          }}
+          className="h-8 w-44 appearance-none rounded-sm border border-rule-strong bg-sheet pr-8 pl-2.5 text-ui text-ink focus:border-accent"
+        >
+          <option value="shown">{t("export.theirChanges.shown")}</option>
+          <option value="accepted">{t("export.theirChanges.accepted")}</option>
+        </select>
+        <ChevronDownLineIcon className="pointer-events-none absolute top-2.5 right-2.5 size-3.5 text-ink-meta" />
+      </span>
+    </div>
+  );
+}
+
+/**
  * The Mind's citation style (#289), which its export is written in, with the button that
  * changes it: the same picker as the References block's. It changes at once, not on Save.
  */
@@ -174,7 +223,7 @@ function CitationStyleRow({ mindId }: { mindId: string }) {
   );
 }
 
-/** Where exports go: the Output location, which the first export asks for, and how to change it. */
+/** Where exports go: the Output location, Documents › IncarnaMind until the User picks another, and how to change it. */
 function SaveToRow() {
   const t = useT();
   const [output, setOutput] = useState<OutputSettings | null>(null);
@@ -200,7 +249,7 @@ function SaveToRow() {
       setProblem(errorMessage(failure, t));
     }
   };
-  const location = output?.location ?? null;
+  const location = output ? (output.location ?? output.suggested) : null;
   return (
     <div className="flex flex-col gap-1 py-2">
       <div className={rowClass}>
@@ -211,11 +260,9 @@ function SaveToRow() {
             title={location ?? undefined}
             className="truncate text-[13px] leading-5 text-ink-meta"
           >
-            {output === null
+            {output === null || location === null
               ? "…"
-              : location
-                ? folderName(location)
-                : t("outputLocation.notChosen")}
+              : outputFolderLabel(location, output.suggested, t)}
           </span>
         </div>
         <button
@@ -224,7 +271,7 @@ function SaveToRow() {
           onClick={() => void change()}
           className={buttonClass}
         >
-          {t(location ? "outputLocation.change" : "outputLocation.choose")}
+          {t("outputLocation.change")}
         </button>
       </div>
       {problem && (
@@ -269,6 +316,7 @@ function ExportOptionsForm({ mind, onDone }: { mind: Mind; onDone(): void }) {
     questions: number;
     packCitations: number;
     fromWord: boolean;
+    theirChanges: number;
   } | null>(null);
   const [saving, setSaving] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -285,6 +333,7 @@ function ExportOptionsForm({ mind, onDone }: { mind: Mind; onDone(): void }) {
             questions: preview.questions,
             packCitations: preview.citations,
             fromWord: preview.fromWord,
+            theirChanges: preview.theirChanges,
           });
       },
       (error: unknown) => useAppStore.getState().reportError(error),
@@ -399,6 +448,15 @@ function ExportOptionsForm({ mind, onDone }: { mind: Mind; onDone(): void }) {
             )}
           </div>
         )}
+
+        {(format === "pdf" || format === "html" || format === "markdown") &&
+          (counts?.theirChanges ?? 0) > 0 && (
+            <TheirChangesRow
+              count={counts?.theirChanges ?? 0}
+              value={draft.theirChanges ?? "shown"}
+              onChange={(theirChanges) => setDraft({ ...draft, theirChanges })}
+            />
+          )}
 
         {format === "docx" && (
           <WordReviewRows
