@@ -1154,6 +1154,26 @@
     line-height: 20px;
     color: var(--color-ink-meta);
   }
+  .mind-word-original {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+  }
+  .mind-word-more {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 20px;
+    border-radius: 4px;
+    color: var(--color-ink-meta);
+
+    &:hover,
+    &[aria-expanded="true"] {
+      background: var(--color-hover);
+    }
+  }
   .mind-verify-from,
   .mind-word-from {
     display: flex;
@@ -5137,6 +5157,28 @@
     font-size: var(--text-ui);
     line-height: var(--text-ui--line-height);
     color: var(--color-ink-meta);
+  }
+  /* Quick asks about the call, in a new conversation while its meeting records (#144). */
+  .assistant-starters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .assistant-starter {
+    padding: 3px 10px;
+    border: 1px solid var(--color-rule);
+    border-radius: 999px;
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--color-ink-secondary);
+
+    &:hover {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
   }
 
   /*
