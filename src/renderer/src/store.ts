@@ -5,6 +5,7 @@ import type {
   Document,
   EmbeddingModelStatus,
   EmbeddingSettings,
+  ExampleGroup,
   Examples,
   Folder,
   FolderMove,
@@ -27,6 +28,7 @@ import type {
   Skill,
   Tag,
 } from "../../core/api";
+import { EXAMPLE_GROUPS } from "../../core/api";
 import { resolveLanguage } from "../../core/language";
 import type { UiUsageEvent } from "../../core/usageEvents";
 import { displayName } from "../../shared/documentNames";
@@ -178,8 +180,12 @@ interface AppState extends LayoutSlice {
   openLibrary(filter?: string, options?: { side?: boolean }): void;
   /** Every Skill, in name order, on or off. Set once loaded, then follows the core's event. */
   skills: Skill[];
-  /** The example Mind and its Documents (onboarding). Null until loaded. */
+  /** The first-run example Mind and its Documents (onboarding). Null until loaded. */
   examples: Examples | null;
+  /** The other examples made (#123), each with its Mind and Documents. */
+  otherExamples: Examples[];
+  /** An Answer to a Question of the User's own has arrived in this session (#123). */
+  ownAnswerArrived: boolean;
   /**
    * The privacy choices on this device: the first run asks about usage data
    * from them. Set once loaded, then follows the core's event.
@@ -247,9 +253,11 @@ interface AppState extends LayoutSlice {
    * sheet, whose first Block is a Question with the bridge's Search scope.
    */
   startMindFrom(bridge: LibraryBridge): Promise<Undoable | undefined>;
-  /** Opens the example Mind, making the examples again if they were removed. */
+  /** Opens the first-run example Mind, making the examples again if they were removed. */
   openExamples(): Promise<void>;
-  /** Deletes the example Mind and its Documents. */
+  /** Opens another example in a new tab, making it first if it isn't there; the Mind in view stays. */
+  openExample(group: ExampleGroup): Promise<void>;
+  /** Deletes every example Mind made, with its Documents. */
   removeExamples(): Promise<void>;
   /**
    * Ticks steps of the "Get started" checklist, or hides it. Only once it
@@ -716,6 +724,8 @@ export const useAppStore = create<AppState>()((set, get) => {
     },
     skills: [],
     examples: null,
+    otherExamples: [],
+    ownAnswerArrived: false,
     privacy: null,
     questionToStart: null,
 
@@ -739,6 +749,7 @@ export const useAppStore = create<AppState>()((set, get) => {
           linkedFolders,
           keptCitationTexts,
           examples,
+          otherExamples,
           connectors,
           rerank,
           privacy,
@@ -755,6 +766,7 @@ export const useAppStore = create<AppState>()((set, get) => {
           readList("linkedFolders", core.listLinkedFolders(), readAt),
           readList("keptCitationTexts", core.listKeptCitationTexts(), readAt),
           core.getExamples(),
+          Promise.all(OTHER_EXAMPLE_GROUPS.map((group) => core.getExamples(group))),
           core.listConnectors(),
           readList("rerank", core.getRerankSettings(), readAt),
           readList("privacy", core.getPrivacySettings(), readAt),
@@ -778,7 +790,13 @@ export const useAppStore = create<AppState>()((set, get) => {
         const fresh = Object.fromEntries(
           Object.entries(read).filter(([list]) => !pushedSince(list as PushedList, readAt)),
         ) as Partial<Pick<AppState, PushedList>>;
-        set({ ...fresh, documents, examples, status: { kind: "ready" } });
+        set({
+          ...fresh,
+          documents,
+          examples,
+          otherExamples: otherExamples.filter(isMade),
+          status: { kind: "ready" },
+        });
         await get().refreshLibrary();
         tickIndexed(connectors.length);
       } catch (error) {
@@ -835,11 +853,11 @@ export const useAppStore = create<AppState>()((set, get) => {
     questionStarted: () => set({ questionToStart: null }),
 
     async askAbout({ scope }) {
-      const { minds, layout, examples } = get();
+      const { minds, layout } = get();
       const mindId = mindToAskIn({
         minds,
         openMindId: currentMindIdOf(layout),
-        exampleMindId: examples?.mindId ?? null,
+        exampleMindIds: exampleMindIds(get()),
       });
       if (!mindId) return get().createMind({ startQuestion: true, scope });
       get().openMind(mindId);
@@ -996,17 +1014,26 @@ export const useAppStore = create<AppState>()((set, get) => {
         if (examples.mindId) get().openMind(examples.mindId);
       }),
 
-    // The core closes the Mind's tab; its Documents go with their Linked folder.
+    openExample: (group) =>
+      attempt(async () => {
+        const made = await core.createExamples(group);
+        if (made.mindId) get().openMind(made.mindId);
+        recordUsage({ event: "example_opened", fields: { group } });
+      }),
+
+    // The core closes each Mind's tab; its Documents go with their Linked folder.
     removeExamples: () =>
       attempt(async () => {
-        const group = get().examples?.group;
-        const remove = () => core.removeExamples(group);
+        const groups = madeExamples(get()).map((each) => each.group);
+        const remove = async () => {
+          for (const group of groups) await core.removeExamples(group);
+        };
         await remove();
         push({
           message: t("undo.examplesRemoved"),
           name: t("undo.name.removeExamples"),
           undo: async () => {
-            await core.createExamples(group);
+            for (const group of groups) await core.createExamples(group);
           },
           redo: remove,
         });
@@ -1411,13 +1438,40 @@ async function startGettingStarted(exampleMindId: string): Promise<void> {
 }
 
 /** A Document of the User's own: not one of the examples. */
-export const isOwnDocument = (document: Document, examples: Examples | null) =>
-  document.linkedFolderId === null || document.linkedFolderId !== examples?.linkedFolderId;
+export const isOwnDocument = (document: Document, examples: readonly Examples[]) =>
+  document.linkedFolderId === null ||
+  !examples.some((each) => each.linkedFolderId === document.linkedFolderId);
+
+const withExamples =
+  (examples: Examples) =>
+  (state: Pick<AppState, "otherExamples">): Partial<AppState> =>
+    examples.group === "tea"
+      ? { examples }
+      : {
+          otherExamples: [
+            ...state.otherExamples.filter((each) => each.group !== examples.group),
+            ...(isMade(examples) ? [examples] : []),
+          ],
+        };
+
+const OTHER_EXAMPLE_GROUPS = EXAMPLE_GROUPS.filter((group) => group !== "tea");
+const isMade = (examples: Examples) => examples.mindId !== null || examples.linkedFolderId !== null;
+
+/** Every example the core has made, the first-run one and the others. */
+export const allExamples = (state: Pick<AppState, "examples" | "otherExamples">): Examples[] =>
+  [state.examples, ...state.otherExamples].filter((each) => each !== null);
+
+const madeExamples = (state: Pick<AppState, "examples" | "otherExamples">): Examples[] =>
+  allExamples(state).filter(isMade);
+
+const exampleMindIds = (state: Pick<AppState, "examples" | "otherExamples">): string[] =>
+  allExamples(state).flatMap((each) => (each.mindId ? [each.mindId] : []));
 
 /** Ticks "Add your Documents" once there are Documents of the User's own, or Connectors. */
 function tickIndexed(connectors: number): void {
-  const { documents, examples, updateGettingStarted } = useAppStore.getState();
-  if (connectors > 0 || documents.some((each) => isOwnDocument(each, examples)))
+  const state = useAppStore.getState();
+  const { documents, updateGettingStarted } = state;
+  if (connectors > 0 || documents.some((each) => isOwnDocument(each, allExamples(state))))
     updateGettingStarted({ indexed: true });
 }
 
@@ -1431,14 +1485,16 @@ core.on("settings.changed", (settings) => {
 // A deleted Mind's tab closes in the core, which says so with "layout.changed".
 core.on("minds.changed", (minds) => {
   pushed("minds");
-  const { examples } = useAppStore.getState();
+  const state = useAppStore.getState();
   useAppStore.setState({ minds });
-  // The example Mind deleted like any other: no longer the examples.
-  if (examples?.mindId && !minds.some((mind) => mind.id === examples.mindId)) {
-    core.getExamples().then(
-      (current) => useAppStore.setState({ examples: current }),
-      () => undefined,
-    );
+  // An example Mind deleted like any other: no longer an example.
+  for (const examples of allExamples(state)) {
+    if (examples.mindId && !minds.some((mind) => mind.id === examples.mindId)) {
+      core.getExamples(examples.group).then(
+        (current) => useAppStore.setState(withExamples(current)),
+        () => undefined,
+      );
+    }
   }
 });
 
@@ -1447,29 +1503,18 @@ followLayout((partial) => useAppStore.setState(partial));
 // Processing happens in the background: follow each Document's status as the core reports it.
 core.on("document.status", (changed) => {
   documentUpdates.upsert([changed]);
-  const { examples, updateGettingStarted } = useAppStore.getState();
-  if (isOwnDocument(changed, examples)) updateGettingStarted({ indexed: true });
+  const state = useAppStore.getState();
+  if (isOwnDocument(changed, allExamples(state))) state.updateGettingStarted({ indexed: true });
 });
 
 // The examples made, opened again or removed: their Mind and Linked folder show "Example".
-// The screen shows the tea example; the groups' examples open from the first run's picks.
-core.on("examples.changed", (examples) => {
-  if (examples.group === "tea") useAppStore.setState({ examples });
-});
+core.on("examples.changed", (examples) => useAppStore.setState(withExamples(examples)));
 
-// Privacy choices change on the Privacy page, at the first run's question, or with local mode.
+// Privacy choices change on the Privacy page, in the usage data card, or with local mode.
 core.on("privacy.changed", (privacy) => {
   pushed("privacy");
   useAppStore.setState({ privacy });
 });
-
-/**
- * Whether the first run's question about usage data (in a test build, its
- * notice) is waiting: this copy can send usage data, the User hasn't
- * answered, and local mode isn't keeping it off.
- */
-export const usageDataQuestionWaiting = (privacy: PrivacySettings | null): boolean =>
-  privacy?.usageData.available === true && !privacy.usageData.asked && !privacy.usageData.localMode;
 
 /**
  * Usage data from the interface (see src/core/usageEvents.ts): the core
@@ -1484,9 +1529,10 @@ core.on("connectors.changed", (connectors) => tickIndexed(connectors.length));
 // An Answer to a Question of the User's own: anything but the example Answer, written again.
 // Only one that arrives: not one refused or failed (#766).
 core.on("answer.finished", ({ answerId, status }) => {
-  const { examples, updateGettingStarted } = useAppStore.getState();
-  if (status === "done" && answerId !== examples?.answerId) {
-    updateGettingStarted({ askedOwn: true });
+  const state = useAppStore.getState();
+  if (status === "done" && !allExamples(state).some((each) => each.answerId === answerId)) {
+    state.updateGettingStarted({ askedOwn: true });
+    useAppStore.setState({ ownAnswerArrived: true });
   }
 });
 
