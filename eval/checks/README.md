@@ -51,14 +51,14 @@ When a person changes a label or a quote, the test says which quote isn't found 
 
 `npm run eval` runs it when a chat model is given (`INCARNAMIND_EVAL_CHAT_*`, see `eval/README.md`); without one, or when `INCARNAMIND_EVAL_QUESTIONS` asks for a short run of the other sets, it says so and stops. `npm run eval -- eval/checks` runs it alone.
 
-1. A temporary data folder, as for the other evaluations. The Folder's files and the received documents are added and the web pages saved, then the Folder's Documents are moved into a Folder. Searches run as the app's do by default: keyword search's top 60, reranked by the built-in model, with embeddings off.
-2. **Find support:** each sentence is searched for in the Folder with the core's `searchEvidence`, and checked against the Passages found.
-3. **Verify:** each received document's stored text goes to claim extraction. Each claim extracted is searched for in the Folder, with the received document left out (`checked`), and checked.
+1. A temporary data folder, as for the other evaluations. The Folder's files and the received documents are added and the web pages saved, then the Folder's Documents are moved into a Folder. Searches run as the app's do by default: keyword search's top 60, reranked by the built-in model, with embeddings off. The chat model is saved as the app's, and setting the variables is the consent for the "checks" flow.
+2. **Find support:** each sentence is checked against the Folder by the app's claim check (`checkClaim`, #96), the check Run Find support runs.
+3. **Verify:** each received document's stored text goes to claim extraction. Each claim extracted is checked the same way, with the received document left out (`checked`).
 4. The results are scored and written to `eval/results/<start time>-checks/` (`report.md`, `report.json`), and a summary is printed.
 
-Claim extraction and the check are a baseline in `lib/pipeline.ts`, one model call each, until the claim-check function (#96) and verify's extraction (#97) exist. They then take its place, and the run's bars start to gate (`GATING` in `checks.eval.ts`). A model that fails, refuses or replies with no verdict leaves the sentence "not checked", which never counts as supported.
+The check is the app's (`corePipeline` in `lib/pipeline.ts`). Claim extraction is still a baseline of one model call (`baselinePipeline`), until verify's extraction (#97) can be called on its own; the run's bars gate then (`GATING` in `checks.eval.ts`). A model that fails, refuses or replies with no verdict leaves the sentence "not checked", which never counts as supported.
 
-Each run makes one call per received document and one per sentence or claim, about 375 in all, each with the Passages the search hands over.
+Each run makes one extraction call per received document, and a check Run per sentence or claim, about 375 in all: a few requests each (search, cite, the verdict, and the confirmation of a contradiction).
 
 ## Scoring
 
