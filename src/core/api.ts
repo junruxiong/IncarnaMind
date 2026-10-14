@@ -7308,6 +7308,15 @@ export interface CoreApi {
   /** Brings back what `clearAiUse` emptied at `clearedAt`. */
   restoreAiUse(clearedAt: string): Promise<AiUseStatus>;
   /**
+   * Makes the AI use statement of a Mind (#739) as a new Mind for the User to edit: in the
+   * Mind's Folder, in the interface language, named after it. It states, as counts drawn from
+   * what the Mind records, which models the AI wrote with and for what, how much AI text is in
+   * each section and what became of it, and the results of checking Citations and sentences. A
+   * figure the record doesn't hold is left out, and nothing is estimated. The Mind itself is
+   * left as it is. Throws NotFoundError for an unknown Mind.
+   */
+  createAiUseStatement(mindId: string): Promise<Mind>;
+  /**
    * The Folders of every Linked folder, as a flat list in name order (ignoring
    * case). Build the tree from each Folder's `parentId`; siblings keep the
    * list's order. Each Linked folder's own Folder has no parent.
@@ -8031,6 +8040,7 @@ const methods: Record<CoreApiMethod, true> = {
   getAiUseStatus: true,
   clearAiUse: true,
   restoreAiUse: true,
+  createAiUseStatement: true,
   listFolders: true,
   getLibrary: true,
   createLibraryGroup: true,
