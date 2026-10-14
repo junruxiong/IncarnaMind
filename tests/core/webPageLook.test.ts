@@ -163,7 +163,7 @@ describe("A web page kept as it looks", { timeout: 30_000 }, () => {
     expect(stand.asked).toHaveLength(2);
   });
 
-  test("one being made when the app quit is made at the next start", async () => {
+  test("one being made when the app quit is made at the next start, with the setting off, as that page asked", async () => {
     const site = await startSite();
     const dataDir = await createTempDataFolder();
     const first = startCore(dataDir, site.adapters);
