@@ -637,7 +637,7 @@ export const zhCN = {
   "verify.problem.error": "无法核对：{message}",
   "verify.tryAgain": "重试",
   "consent.flow.checks": "查找出处与核对文档",
-  "consent.flow.checks.purpose": "对照你的文档，核对你选中的句子和要核对的文档",
+  "consent.flow.checks.purpose": "对照你的文档，核对你选中的句子、整个 Mind 和要核对的文档",
   "aiText.markedAsMine": "已标为你写的",
   "edit.pending.improve": "正在润色…",
   "edit.pending.shorten": "正在缩写…",
