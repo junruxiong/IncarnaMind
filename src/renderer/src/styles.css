@@ -5723,6 +5723,7 @@
     color: var(--color-ink);
   }
   .assistant-answer-actions--added {
+    flex-wrap: nowrap;
     gap: 4px;
     margin-left: 0;
   }
