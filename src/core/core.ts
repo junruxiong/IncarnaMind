@@ -2073,6 +2073,8 @@ export function createCore(adapters: CoreAdapters): Core {
   // Where agents keep their settings and skills.
   const home = adapters.agents?.home ?? homedir();
   const agents = createAgents({
+    offered: adapters.agents?.offered ?? true,
+    log: adapters.log ?? silentLogger,
     db,
     now,
     clock: () => performance.now(),
