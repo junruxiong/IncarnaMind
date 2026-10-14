@@ -12,6 +12,7 @@
  * and defaults without the generated data (see ./index).
  */
 import type { ChatProviderKind } from "../../api";
+import { PRESETS } from "./presets";
 import type { CatalogProvider, Endpoint } from "./types";
 
 const GLOBAL = { en: "Global", zh: "全球" };
@@ -629,28 +630,56 @@ const PROVIDERS = [
 
 export type CatalogProviderId = (typeof PROVIDERS)[number]["id"];
 
-/** The providers, in the order the catalog lists them. */
-export const CATALOG_PROVIDERS: readonly CatalogProvider[] = PROVIDERS;
+/** The providers, in the order the catalog lists them: the presets before a server the User gives. */
+export const CATALOG_PROVIDERS: readonly CatalogProvider[] = PROVIDERS.flatMap(
+  (each): readonly CatalogProvider[] =>
+    each.id === "openai-compatible" ? [...PRESETS, each] : [each],
+);
 
 const byId = new Map<string, CatalogProvider>(CATALOG_PROVIDERS.map((each) => [each.id, each]));
+const presetIds = new Set(PRESETS.map((each) => each.id));
 
 /** The provider with this catalog id, if the catalog has it. */
 export const catalogProvider = (id: string | null | undefined): CatalogProvider | undefined =>
   id ? byId.get(id) : undefined;
 
 /**
- * The catalog provider a provider kind stands for: each kind is one today,
- * except the ChatGPT plan, which signs in instead (see ../chatgpt).
+ * The catalog provider a provider kind stands for: each kind is one, except
+ * the ChatGPT plan, which signs in instead (see ../chatgpt).
  */
 export const catalogProviderOfKind = (kind: ChatProviderKind): CatalogProvider | undefined =>
   catalogProvider(kind);
+
+export const isPreset = (provider: CatalogProvider | undefined): boolean =>
+  provider !== undefined && presetIds.has(provider.id);
+
+/** A saved provider's catalog row: its preset's, else its kind's. */
+export const catalogProviderOf = (
+  kind: ChatProviderKind,
+  catalogId: string | null | undefined,
+): CatalogProvider | undefined =>
+  (catalogId && presetIds.has(catalogId) ? catalogProvider(catalogId) : undefined) ??
+  catalogProviderOfKind(kind);
+
+/** The kind a provider of this catalog id is saved as: a preset's is "openai-compatible". */
+export const kindOfCatalogId = (id: string): ChatProviderKind =>
+  presetIds.has(id) ? "openai-compatible" : (id as ChatProviderKind);
+
+/**
+ * A preset whose Answers model hasn't passed the citing evaluation (#185): its
+ * models are labelled "Not yet tested for checked Citations" and it is never
+ * recommended, whatever else its row says.
+ */
+export const untestedForCitations = (provider: CatalogProvider | undefined): boolean =>
+  isPreset(provider) && provider?.citingTested === undefined;
 
 /**
  * The providers set up with a key or a server address, in catalog order: every
  * hosted provider, then a server the User gives. Ollama has its own card.
  */
 export const KEY_PROVIDER_KINDS: readonly ChatProviderKind[] = CATALOG_PROVIDERS.filter(
-  (each) => each.endpoints.length > 0 || each.id === "openai-compatible",
+  (each) =>
+    !presetIds.has(each.id) && (each.endpoints.length > 0 || each.id === "openai-compatible"),
 ).map((each) => each.id as ChatProviderKind);
 
 /**

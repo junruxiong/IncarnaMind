@@ -19,7 +19,7 @@ import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import type { LanguageModel } from "ai";
 import type { ChatProviderKind } from "../api";
 import { catalogFacts, modelsProviderOfKind } from "./catalog";
-import { catalogProviderOfKind } from "./catalog/providers";
+import { catalogProviderOf, catalogProviderOfKind } from "./catalog/providers";
 import { createPlanChatModel } from "./chatgpt/planEndpoint";
 import type { ChatGptCredentials } from "./chatgpt/signIn";
 import { endpointUrl } from "./kinds";
@@ -42,6 +42,8 @@ export interface ChatModelSpec {
   baseUrl: string | null;
   /** A hosted provider's endpoint id, to tell which region's models it is (its first when left out). */
   endpoint?: string | null;
+  /** A preset's catalog id, whose endpoint and request quirks it takes (#863). */
+  catalogId?: string | null;
   /**
    * "off": a small call that doesn't write the Answer (tagging, classifying),
    * which asks a model that thinks to skip it, where the provider lets it.
@@ -85,7 +87,7 @@ function requireBaseUrl(spec: ChatModelSpec): string {
 
 /** A hosted provider's API: the spec's endpoint, else the catalog's first for its kind. */
 const hostedUrl = (spec: ChatModelSpec): string =>
-  spec.baseUrl ?? endpointUrl(spec.kind) ?? requireBaseUrl(spec);
+  spec.baseUrl ?? endpointUrl(spec.kind, null, spec.catalogId) ?? requireBaseUrl(spec);
 
 /**
  * The AI SDK provider for each kind, with what every request to its provider
@@ -94,7 +96,7 @@ const hostedUrl = (spec: ChatModelSpec): string =>
  * for the Answer's, the request for a summary of the model's reasoning.
  */
 export const createAiSdkChatModel: ChatModelFactory = (spec) => {
-  const request = catalogProviderOfKind(spec.kind)?.request;
+  const request = catalogProviderOf(spec.kind, spec.catalogId)?.request;
   let model = providerModel(spec);
   if (request?.store === false) {
     model = withoutStorage(model, spec.kind === "xai" ? "xai" : "openai");
@@ -126,12 +128,12 @@ export const summarizesReasoning = (kind: ChatProviderKind): boolean =>
  * isn't turned on for one), or one the catalog knows doesn't reason.
  */
 export function reasoningSummaryOptions(
-  spec: Pick<ChatModelSpec, "kind" | "modelId" | "endpoint">,
+  spec: Pick<ChatModelSpec, "kind" | "modelId" | "endpoint" | "catalogId">,
 ): Record<string, Record<string, unknown>> | null {
   const summary = summaryQuirk(spec.kind);
   if (!summary) return null;
   if (summary.only && !summary.only.some((prefix) => spec.modelId.startsWith(prefix))) return null;
-  const set = modelsProviderOfKind(spec.kind, spec.endpoint);
+  const set = modelsProviderOfKind(spec.kind, spec.endpoint, spec.catalogId);
   return catalogFacts(set, spec.modelId)?.reasoning === false ? null : summary.options;
 }
 
@@ -142,7 +144,7 @@ function canSkipThinking(
 ): boolean {
   const { unless = [] } = request?.thinkingOff ?? {};
   if (unless.some((prefix) => spec.modelId.startsWith(prefix))) return false;
-  const set = modelsProviderOfKind(spec.kind, spec.endpoint);
+  const set = modelsProviderOfKind(spec.kind, spec.endpoint, spec.catalogId);
   return catalogFacts(set, spec.modelId)?.reasoning !== false;
 }
 
@@ -178,22 +180,19 @@ function providerModel(spec: ChatModelSpec): ChatLanguageModel {
         compatibility: "strict",
         extraBody: catalogProviderOfKind("openrouter")?.request?.body ?? {},
       })(spec.modelId);
-    case "siliconflow": {
-      const quirks = catalogProviderOfKind("siliconflow")?.request?.openAiCompatible;
+    case "siliconflow":
+    case "openai-compatible": {
+      // SiliconFlow, a preset or a server the User gives: one adapter, with the row's quirks.
+      const provider = catalogProviderOf(spec.kind, spec.catalogId);
+      const quirks = provider?.request?.openAiCompatible;
       return createOpenAICompatible({
-        name: "siliconflow",
+        name: provider?.id ?? spec.kind,
         baseURL: hostedUrl(spec),
-        apiKey: requireKey(spec),
+        apiKey: provider?.apiKey === "required" ? requireKey(spec) : (spec.apiKey ?? undefined),
         includeUsage: quirks?.includeUsage ?? false,
         supportsStructuredOutputs: quirks?.supportsStructuredOutputs ?? false,
       })(spec.modelId);
     }
-    case "openai-compatible":
-      return createOpenAICompatible({
-        name: "openai-compatible",
-        baseURL: requireBaseUrl(spec),
-        apiKey: spec.apiKey ?? undefined,
-      })(spec.modelId);
     case "ollama":
       // Ollama's own API, which sets the context window and refuses rather than cuts a
       // longer request (see ./ollamaChat). It holds a reply to a JSON schema too, which

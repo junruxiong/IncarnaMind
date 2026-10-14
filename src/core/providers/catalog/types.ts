@@ -135,6 +135,12 @@ export interface CatalogProvider {
    * under the key field. Left out where no plan does.
    */
   planCredits?: Localized & { url: string };
+  /**
+   * A preset only: when its Answers model passed the citing evaluation (#185),
+   * e.g. "#185, 2026-11-02". Until then it is labelled not yet tested and never
+   * recommended (see `untestedForCitations`).
+   */
+  citingTested?: string;
   /** When a person last checked this entry against the provider's own pages (YYYY-MM-DD). */
   checked: string;
 }

@@ -36,7 +36,10 @@ import {
 import {
   cannotAnswerReason,
   catalogFacts,
+  catalogProvider,
+  catalogProviderOf,
   catalogProviderOfKind,
+  isPreset,
   modelsProviderOfKind,
 } from "./catalog";
 import { billingOf, ollamaCloudPrice } from "./catalog/billing";
@@ -147,18 +150,34 @@ function parseServer(input: Record<string, unknown>): ParsedServer {
   if (!isChatProviderKind(input.kind)) {
     throw new InvalidInputError(`Unknown chat provider "${String(input.kind)}".`);
   }
-  const provider = catalogProviderOfKind(input.kind);
+  const catalogId = parseCatalogId(input.kind, input.catalogId);
   return {
     kind: input.kind,
-    baseUrl: baseUrlFor(input.kind, input.baseUrl),
-    endpoint: parseEndpoint(input.kind, input.endpoint),
-    catalogId: provider?.id ?? null,
+    baseUrl: baseUrlFor(input.kind, input.baseUrl, catalogId),
+    endpoint: parseEndpoint(input.kind, input.endpoint, catalogId),
+    catalogId,
   };
 }
 
+/** A preset's catalog id, which only the "openai-compatible" kind takes; else the kind's own row. */
+function parseCatalogId(kind: ChatProviderKind, value: unknown): string | null {
+  if (value === undefined || value === null || value === kind) {
+    return catalogProviderOfKind(kind)?.id ?? null;
+  }
+  const preset = typeof value === "string" ? catalogProvider(value) : undefined;
+  if (kind !== "openai-compatible" || !preset || !isPreset(preset)) {
+    throw new InvalidInputError(`Unknown chat provider "${String(value)}".`);
+  }
+  return preset.id;
+}
+
 /** A hosted provider's endpoint: the one given, which it must have, else its first. Null for a server the User gives. */
-function parseEndpoint(kind: ChatProviderKind, value: unknown): string | null {
-  const provider = catalogProviderOfKind(kind);
+function parseEndpoint(
+  kind: ChatProviderKind,
+  value: unknown,
+  catalogId: string | null,
+): string | null {
+  const provider = catalogProviderOf(kind, catalogId);
   const given = typeof value === "string" && value !== "" ? value : undefined;
   if (value !== undefined && value !== null && typeof value !== "string") {
     throw new InvalidInputError("The endpoint must be text.");
@@ -189,17 +208,22 @@ function parseModelId(value: unknown): string {
 }
 
 /** undefined: keep the stored key. null: remove it. Blank text counts as "keep". */
-function parseApiKey(value: unknown, kind: ChatProviderKind): string | null | undefined {
+function parseApiKey(
+  value: unknown,
+  { kind, catalogId }: { kind: ChatProviderKind; catalogId: string | null },
+): string | null | undefined {
   if (value === undefined || value === null) return value;
   if (typeof value !== "string") throw new InvalidInputError("The API key must be text.");
   const key = value.trim();
   if (key === "") return undefined;
-  if (!acceptsApiKey(kind)) throw new InvalidInputError("This provider doesn't take an API key.");
+  if (!acceptsApiKey(kind, catalogId)) {
+    throw new InvalidInputError("This provider doesn't take an API key.");
+  }
   return key;
 }
 
-const displayName = (kind: ChatProviderKind, baseUrl: string | null) =>
-  serviceFor(kind, baseUrl)?.name ?? baseUrl ?? kind;
+const displayName = ({ kind, baseUrl, endpoint, catalogId }: ParsedServer) =>
+  serviceFor(kind, baseUrl, endpoint, catalogId)?.name ?? baseUrl ?? kind;
 
 /** What chat providers need from the ChatGPT plan provider. */
 export type ChatGptPlanAccess = Pick<
@@ -279,10 +303,15 @@ export function createChat(options: {
 
   /** Where a request to the model goes: the server's service, else ollama.com for a cloud model in Ollama. Asks Ollama. */
   const remoteService = async (
-    server: { kind: ChatProviderKind; baseUrl: string | null; endpoint?: string | null },
+    server: {
+      kind: ChatProviderKind;
+      baseUrl: string | null;
+      endpoint?: string | null;
+      catalogId?: string | null;
+    },
     modelId: string,
   ): Promise<ExternalService | null> =>
-    serviceFor(server.kind, server.baseUrl, server.endpoint) ??
+    serviceFor(server.kind, server.baseUrl, server.endpoint, server.catalogId) ??
     ((await refreshRemote(server.kind, server.baseUrl, modelId)) ? OLLAMA_CLOUD : null);
 
   /** `remoteService` without asking: what was last learnt, else what the name says. */
@@ -332,7 +361,7 @@ export function createChat(options: {
 
   /** Where a row's requests go. */
   const rowService = (row: ProviderRow) =>
-    serviceFor(row.kind as ChatProviderKind, row.base_url, row.endpoint);
+    serviceFor(row.kind as ChatProviderKind, row.base_url, row.endpoint, row.catalog_id);
 
   /**
    * What is known of a model on a provider, by precedence (see ./capabilities):
@@ -347,7 +376,7 @@ export function createChat(options: {
     resolveCapabilities({
       server: server ?? modelLists.get(listKey(row))?.models.find((m) => m.id === modelId)?.facts,
       catalog: catalogFacts(
-        modelsProviderOfKind(row.kind as ChatProviderKind, row.endpoint),
+        modelsProviderOfKind(row.kind as ChatProviderKind, row.endpoint, row.catalog_id),
         modelId,
       ),
     });
@@ -359,7 +388,12 @@ export function createChat(options: {
    * defaults when Ollama couldn't say.
    */
   const specFor = (
-    server: { kind: ChatProviderKind; baseUrl: string | null; endpoint?: string | null },
+    server: {
+      kind: ChatProviderKind;
+      baseUrl: string | null;
+      endpoint?: string | null;
+      catalogId?: string | null;
+    },
     apiKey: string | null,
     modelId: string,
     profile: OllamaModelProfile | null = null,
@@ -376,7 +410,7 @@ export function createChat(options: {
         ...(thinking && { thinking }),
       };
     }
-    const baseUrl = endpointUrl(kind, server.endpoint) ?? server.baseUrl;
+    const baseUrl = endpointUrl(kind, server.endpoint, server.catalogId) ?? server.baseUrl;
     if (kind === "ollama") {
       return {
         kind,
@@ -393,16 +427,19 @@ export function createChat(options: {
       modelId,
       // Only a provider's other regions say which they are; its first is the default.
       ...(server.endpoint &&
-        server.endpoint !== catalogProviderOfKind(kind)?.endpoints[0]?.id && {
+        server.endpoint !== catalogProviderOf(kind, server.catalogId)?.endpoints[0]?.id && {
           endpoint: server.endpoint,
         }),
+      ...(server.catalogId &&
+        isPreset(catalogProvider(server.catalogId)) && { catalogId: server.catalogId }),
       ...(thinking && { thinking }),
     };
   };
 
   const toProvider = async (row: ProviderRow, modelId?: string): Promise<ChatProvider> => {
     const kind = row.kind as ChatProviderKind;
-    const hasApiKey = acceptsApiKey(kind) && (await secrets.tryGet(keyName(row.id))) !== null;
+    const hasApiKey =
+      acceptsApiKey(kind, row.catalog_id) && (await secrets.tryGet(keyName(row.id))) !== null;
     return {
       id: row.id,
       kind,
@@ -461,7 +498,7 @@ export function createChat(options: {
     if (flow === "chat" && provider.service && options.localOnly()) {
       return { ready: false, reason: "local-mode", provider, modelId };
     }
-    if (requiresApiKey(provider.kind) && !provider.hasApiKey) {
+    if (requiresApiKey(provider.kind, provider.catalogId) && !provider.hasApiKey) {
       return { ready: false, reason: "missing-api-key", provider, modelId };
     }
     if (provider.kind === "chatgpt" && !(await chatGpt.hasSignIn())) {
@@ -494,7 +531,7 @@ export function createChat(options: {
     async save(input: unknown): Promise<ChatProvider> {
       if (!isRecord(input)) throw new InvalidInputError("saveChatProvider expects an object.");
       const server = parseServer(input);
-      const apiKey = parseApiKey(input.apiKey, server.kind);
+      const apiKey = parseApiKey(input.apiKey, server);
       const modelId = parseModelId(input.modelId);
 
       const existing = rowByServer(server);
@@ -503,10 +540,10 @@ export function createChat(options: {
         apiKey === undefined
           ? existing !== undefined && (await secrets.tryGet(keyName(id))) !== null
           : apiKey !== null;
-      if (requiresApiKey(server.kind) && !keyAfterSave) {
+      if (requiresApiKey(server.kind, server.catalogId) && !keyAfterSave) {
         throw new InvalidInputError({
           key: "error.provider.keyMissing",
-          values: { provider: displayName(server.kind, server.baseUrl) },
+          values: { provider: displayName(server) },
         });
       }
 
@@ -654,12 +691,13 @@ export function createChat(options: {
               baseUrl: row.base_url,
               apiKey,
               endpoint: row.endpoint,
+              catalogId: row.catalog_id,
             });
             if (listed.length > 0) modelLists.set(cacheKey, { at: Date.now(), models: listed });
           }
           const defaultModel = chatModel?.providerId === row.id ? [chatModel.modelId] : [];
           const inMenu = listed.filter((each) => !each.other).map((each) => each.id);
-          const roles = catalogProviderOfKind(provider.kind)?.roles;
+          const roles = catalogProviderOf(provider.kind, row.catalog_id)?.roles;
           const roleModels = [roles?.answers, roles?.strongest, roles?.quickTasks];
           const addedIds = menuModelsOf(row.id);
           const other = listed.flatMap((each): OtherModel[] =>
@@ -711,7 +749,7 @@ export function createChat(options: {
       if (
         inMenu === true &&
         cannotAnswerReason(
-          modelsProviderOfKind(row.kind as ChatProviderKind, row.endpoint),
+          modelsProviderOfKind(row.kind as ChatProviderKind, row.endpoint, row.catalog_id),
           modelId,
         )
       ) {
@@ -743,15 +781,15 @@ export function createChat(options: {
       if (!isRecord(input)) throw new InvalidInputError("testChatConnection expects an object.");
       const server = parseServer(input);
       const modelId = parseModelId(input.modelId);
-      let apiKey = parseApiKey(input.apiKey, server.kind) ?? null;
-      if (apiKey === null && acceptsApiKey(server.kind)) {
+      let apiKey = parseApiKey(input.apiKey, server) ?? null;
+      if (apiKey === null && acceptsApiKey(server.kind, server.catalogId)) {
         const saved = rowByServer(server);
         if (saved) apiKey = await secrets.tryGet(keyName(saved.id));
       }
-      if (requiresApiKey(server.kind) && !apiKey) {
+      if (requiresApiKey(server.kind, server.catalogId) && !apiKey) {
         throw new InvalidInputError({
           key: "error.provider.keyMissing",
-          values: { provider: displayName(server.kind, server.baseUrl) },
+          values: { provider: displayName(server) },
         });
       }
       if (server.kind === "chatgpt" && !(await chatGpt.hasSignIn())) {
@@ -767,7 +805,10 @@ export function createChat(options: {
         const profile = await profileFor(server.kind, server.baseUrl, modelId);
         checkCanChat(profile, modelId);
         const facts = resolveCapabilities({
-          catalog: catalogFacts(modelsProviderOfKind(server.kind, server.endpoint), modelId),
+          catalog: catalogFacts(
+            modelsProviderOfKind(server.kind, server.endpoint, server.catalogId),
+            modelId,
+          ),
         });
         const model = meter.wrap(
           createModel(specFor(server, apiKey, modelId, profile)),
@@ -810,7 +851,9 @@ export function createChat(options: {
       if (!readiness.ready) throw new ChatNotReadyError(readiness);
       const { provider, modelId } = readiness;
       if (provider.service) await consent.ensure(flow, provider.service);
-      const apiKey = acceptsApiKey(provider.kind) ? await secrets.get(keyName(provider.id)) : null;
+      const apiKey = acceptsApiKey(provider.kind, provider.catalogId)
+        ? await secrets.get(keyName(provider.id))
+        : null;
       const profile = await profileFor(provider.kind, provider.baseUrl, modelId);
       checkCanChat(profile, modelId);
       // The calls that don't write the Answer (tagging, classifying) skip thinking where they can.

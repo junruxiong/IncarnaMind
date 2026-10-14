@@ -24,10 +24,14 @@ import {
   recommendedLocalModels,
 } from "../../src/core/providers/catalog";
 import { OVERRIDES } from "../../src/core/providers/catalog/overrides";
+import { PRESETS } from "../../src/core/providers/catalog/presets";
 import {
   catalogProvider,
+  isPreset,
   KEY_PROVIDER_KINDS,
   keyProviderGroups,
+  kindOfCatalogId,
+  untestedForCitations,
 } from "../../src/core/providers/catalog/providers";
 import { KNOWN_PLAN_MODELS } from "../../src/core/providers/chatgpt/planEndpoint";
 import {
@@ -61,6 +65,7 @@ describe("The provider catalog", () => {
       "glm",
       "siliconflow",
       "ollama",
+      "groq",
       "openai-compatible",
     ]);
     for (const provider of CATALOG_PROVIDERS) {
@@ -84,6 +89,8 @@ describe("The provider catalog", () => {
         expect(provider.serverUrl, where).toBeDefined();
       }
       // Each role names a model the catalog knows: a cloud model, or one recommended for Ollama.
+      // A preset's facts come from its own model list until the catalog maps its models.
+      if (isPreset(provider)) continue;
       for (const [role, modelId] of Object.entries(provider.roles)) {
         const known =
           provider.id === "ollama"
@@ -95,7 +102,9 @@ describe("The provider catalog", () => {
   });
 
   test("a hosted provider offers every role: a capable, cheaper Answers model, its strongest one click away, a cheap quick-tasks model and one that reads images", () => {
-    for (const provider of CATALOG_PROVIDERS.filter((each) => each.endpoints.length > 0)) {
+    for (const provider of CATALOG_PROVIDERS.filter(
+      (each) => each.endpoints.length > 0 && !isPreset(each),
+    )) {
       const { answers, strongest, quickTasks, images } = provider.roles;
       const model = (id: string | undefined) => {
         const found = id ? catalogModel(provider.id, id) : undefined;
@@ -470,7 +479,29 @@ describe("Support tiers (ADR-0019)", () => {
     const supportOf = (tier: string) =>
       CATALOG_PROVIDERS.filter((each) => each.support === tier).map((each) => each.id);
     expect(supportOf("first-class").sort()).toEqual([...FIRST_CLASS].sort());
-    expect(supportOf("best-effort").sort()).toEqual([...BEST_EFFORT, "openai-compatible"].sort());
+    expect(supportOf("best-effort").sort()).toEqual(
+      [...BEST_EFFORT, "openai-compatible", ...PRESETS.map((each) => each.id)].sort(),
+    );
+  });
+
+  test("a preset is a hosted OpenAI-compatible row with a key page and an Answers model, saved as that kind, and not yet tested is never first-class (#863)", () => {
+    expect(PRESETS.length).toBeGreaterThan(0);
+    for (const preset of PRESETS) {
+      const where = preset.id;
+      expect(isPreset(preset), where).toBe(true);
+      expect(chatProviderKinds as readonly string[], where).not.toContain(preset.id);
+      expect(preset.adapter, where).toBe("openai-compatible");
+      expect(kindOfCatalogId(preset.id), where).toBe("openai-compatible");
+      expect(preset.endpoints.length, where).toBeGreaterThan(0);
+      expect(preset.keyUrl ?? preset.endpoints[0]?.keyUrl, where).toMatch(/^https:\/\//);
+      expect(preset.roles.answers, where).toBeDefined();
+      expect(untestedForCitations(preset), where).toBe(preset.citingTested === undefined);
+      if (untestedForCitations(preset)) expect(preset.support, where).toBe("best-effort");
+    }
+    // Rows that aren't presets are never marked untested.
+    expect(
+      CATALOG_PROVIDERS.filter((each) => untestedForCitations(each) && !isPreset(each)),
+    ).toEqual([]);
   });
 
   test("the first-run list holds exactly the first-class providers that take a key", () => {

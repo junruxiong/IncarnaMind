@@ -3218,6 +3218,11 @@ export interface ChatProvider {
 export interface SaveChatProviderInput {
   kind: ChatProviderKind;
   /**
+   * A preset of the "openai-compatible" kind, by its catalog id (#863), e.g.
+   * "groq": its endpoint and name come from the catalog. Left out: the kind's own.
+   */
+  catalogId?: string;
+  /**
    * A hosted provider's endpoint (its region), by its id in the catalog, e.g.
    * "intl" for Qwen. Left out: its first. Each endpoint is its own provider
    * with its own key, as keys and model lists differ by region.
@@ -3233,6 +3238,8 @@ export interface SaveChatProviderInput {
 
 export interface TestChatConnectionInput {
   kind: ChatProviderKind;
+  /** A preset (see `SaveChatProviderInput`). */
+  catalogId?: string;
   /** The endpoint to test (see `SaveChatProviderInput`). */
   endpoint?: string;
   baseUrl?: string;
