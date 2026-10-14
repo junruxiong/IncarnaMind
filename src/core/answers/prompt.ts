@@ -95,6 +95,21 @@ export function mindInstructions(offered: boolean): string {
 }
 
 /**
+ * A Question asked while the meeting the User is in records (#144): the live transcript goes
+ * with it (see ./liveTranscript), and is what Questions about the call are answered from.
+ */
+export function meetingInstructions(listening: boolean): string {
+  if (!listening) return "";
+  return [
+    "The User is in a meeting that is being recorded, and asks this during the call.",
+    "Before their Question, <live-transcript> holds what has been said so far, newest last: Passages of the meeting's Transcript, each at its time in the call.",
+    "- Answer what they ask about the call from it, and cite its lines as you cite any Passage, by its id.",
+    '- "Just now", "the last few minutes" and "what was just said" mean its newest Passages.',
+    "- Search the User's Documents too when the Question needs them, for instance to check what was said against them.",
+  ].join("\n");
+}
+
+/**
  * Connectors that are on but can't be used until the User signs in to them
  * again: their Tools aren't offered, and the Answer says so if it needed them.
  */
