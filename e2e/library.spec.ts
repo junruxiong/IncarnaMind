@@ -292,6 +292,10 @@ test("onboarding offers starter folders, and Organize with no model chosen opens
     await window.getByTestId("library").getByRole("button", { name: "添加所选文件夹" }).click();
     await expect(sidebarFolder(window, "研究论文").getByTestId("folder-row")).toBeVisible();
     await pointAndClick(window, organize(window.getByTestId("library")));
+    await expect(window.getByTestId("library-organize-needs-model")).toContainText(
+      "“整理”需要 AI 模型",
+    );
+    await pointAndClick(window, window.getByTestId("library-organize-set-up"));
     await expect(window.getByTestId("settings-page-title")).toHaveText("模型");
     await expect(window.getByTestId("organization-settings")).toContainText("文档整理");
     await window.getByTestId("settings-close").click();
