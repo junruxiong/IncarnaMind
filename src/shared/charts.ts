@@ -20,6 +20,9 @@ export type ChartKind = (typeof CHART_KINDS)[number];
 /** At most this many values in a chart: a longer table is cut, and the chart says so. */
 export const MAX_CHART_VALUES = 500;
 
+/** How many series a chart's key tells apart by colour (`ChartInk`); past it, colours repeat. */
+export const CATEGORY_COUNT = 9;
+
 export type ChartValueOrigin =
   /** A cell of a table in the Mind: its row and column on the table's grid, from 0, the heading row included. */
   | { kind: "cell"; row: number; column: number }
@@ -444,7 +447,7 @@ export interface FromTableOptions {
   title: string;
   /** The Mind's language, a BCP 47 tag: how its numbers are written when its text doesn't say. */
   language: string;
-  /** Which way round: false, the first column is the labels; true, the first row. Undecided, the table's periods decide (`periodsAcross`). */
+  /** Which way round: false, the first column is the labels; true, the first row. Undecided, the table's periods decide (`chartFromTable`). */
   switched?: boolean;
 }
 
@@ -638,8 +641,10 @@ export function switchedChart(
  *
  * Periods go on the x axis (#704): when the first row holds periods ("2023",
  * "Q1 2025", "2024年") and the first column doesn't, the rows are the series
- * and the columns the labels, which is `source.switched`. Null when the
- * table isn't a series of numbers (`isNumericSeries`), or no column holds one.
+ * and the columns the labels, which is `source.switched`; unless the rows
+ * are more series than the key tells apart (`CATEGORY_COUNT`). Null when
+ * the table isn't a series of numbers (`isNumericSeries`), or no column
+ * holds one.
  */
 export function chartFromTable(
   grid: SourceGrid,
@@ -681,7 +686,10 @@ export function chartFromTable(
   };
   const periodsAcross = headingRow && holdsPeriods(first.slice(1).map((cell) => cell?.text ?? ""));
   const periodsDown = holdsPeriods(dataRows.map((row) => row[0]?.text ?? ""));
-  const switched = options.switched ?? (periodsAcross && !periodsDown);
+  const fewRows =
+    labelled.rows.filter((row) => row.values.some((value) => value?.value != null)).length <=
+    CATEGORY_COUNT;
+  const switched = options.switched ?? (periodsAcross && !periodsDown && fewRows);
   const matrix = switched ? transposed(labelled) : labelled;
   if (matrix.series.length === 0) return null;
   return {
