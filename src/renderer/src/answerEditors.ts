@@ -6,8 +6,10 @@
  */
 import type { Editor } from "@tiptap/core";
 import type { Node as ProseMirrorNode, Slice } from "@tiptap/pm/model";
-import { NOTE_BLOCK_TYPES } from "../../core/api";
+import { type ConversationAnswer, NOTE_BLOCK_TYPES } from "../../core/api";
 import type { NodeJSON } from "../../shared/blockJson";
+import { withoutFraming } from "../../shared/noteBlocks";
+import { answerBlocks } from "./answerBlocks";
 import { withoutCitationGlue } from "./editor/citationGlue";
 import { useAppStore } from "./store";
 
@@ -92,3 +94,10 @@ export async function copyAnswer(answerId: string): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * What Add to note puts in from an Answer: what is selected in it, as it is,
+ * or all of it without the model's lead-in and closing note.
+ */
+export const notesToAdd = (answer: ConversationAnswer): NodeJSON[] =>
+  selectedNotes(answer.id) ?? withoutFraming(answerBlocks({ ...answer, status: "done" }));

@@ -189,6 +189,19 @@ describe("suggestions as the User writes", () => {
     });
   });
 
+  test("a renamed Document is named as it is now, to the model and in the Citation", async () => {
+    const model = suggestingModel(SPRING);
+    const { core, mind, documents } = await setUp(model);
+    const tides = documents.find((each) => each.name === "Tides");
+    await core.renameDocument(tides?.id ?? "", "Tides of the coast");
+
+    const suggestion = suggestionOf(await core.suggestNext(requestFor(mind.id, ABOUT_TIDES)));
+
+    expect(suggestion.citation.documentName).toBe("Tides of the coast");
+    const [call] = suggestionCalls(model);
+    expect(JSON.stringify(call?.prompt)).toContain('document=\\"Tides of the coast\\"');
+  });
+
   test("a Chinese paragraph gets a Chinese suggestion from a Chinese Document", async () => {
     const model = suggestingModel({
       text: "这时太阳和月亮的引力叠加在一起。",
