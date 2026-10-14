@@ -1283,6 +1283,7 @@ export function createCore(adapters: CoreAdapters): Core {
   };
 
   const checks = createChecks({
+    language: () => settings.get().language,
     content,
     requireMind: (mindId) => {
       writableMind(mindId);
