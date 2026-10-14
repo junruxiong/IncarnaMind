@@ -730,7 +730,7 @@ test("From the original's menu, Open the original opens it beside the Mind at th
   await dismissChatSetup(window);
   await setWindowSize(app, window, 1440, 900);
   await interceptOpenDialog(app, path);
-  const dialog = await importFromMenu(window);
+  const dialog = await importWordFromMenu(window);
   await dialog.getByTestId("word-import-confirm").click();
   await expect(dialog).toBeHidden();
   await expectReadyDocuments(window, 1);
