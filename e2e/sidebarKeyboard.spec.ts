@@ -737,7 +737,10 @@ test("⌘⌫ (Delete on Windows and Linux) moves the row to Recently deleted wit
     await expect(line).toHaveText(translate("en", "object.deleted", { name: "Slides" }));
     await window.keyboard.press("ControlOrMeta+z");
     await expect(slides).toHaveCount(1);
-    await window.getByTestId("browse-views").getByRole("button", { name: "Folders" }).click();
+    await window
+      .getByTestId("browse-views")
+      .getByRole("button", { name: "Folders", exact: true })
+      .click();
 
     // In a field it is the field's: ⌘⌫ deletes a word of the name, not the row.
     await loose(firstLoose).focus();

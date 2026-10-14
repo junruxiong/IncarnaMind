@@ -1,4 +1,11 @@
-import { type ComponentType, type ReactNode, type SVGProps, useCallback, useMemo } from "react";
+import {
+  type ComponentType,
+  type ReactNode,
+  type SVGProps,
+  useCallback,
+  useEffect,
+  useMemo,
+} from "react";
 import { create } from "zustand";
 import type { Document, LinkedFolder } from "../../../core/api";
 import { buildFolderTree, type FolderNode } from "../folders";
@@ -10,6 +17,7 @@ import {
   rowStateLabel,
 } from "../linkedFolders";
 import type { ObjectRef } from "../objects";
+import { useRequests } from "../requests";
 import { sorted } from "../sort";
 import { useSort } from "../sortChoices";
 import { documentFields, folderFields } from "../sortFields";
@@ -34,6 +42,9 @@ import {
 } from "./sidebarRows";
 
 /** The "Other Documents" group's key among the folded. */
+/** How long a folder just linked stays washed. */
+const LINKED_WASH_MS = 1600;
+
 const OTHER_DOCUMENTS = "other-documents";
 
 interface FolderTreeState {
@@ -278,6 +289,16 @@ function LinkedFolderItem({
   const state = linkedFolderRowState(linked, hasContents);
   const label = rowStateLabel(state, t, language);
   const isExample = useAppStore((current) => current.examples?.linkedFolderId === linked.id);
+  const justLinked = useRequests((current) => current.showLinked === linked.id);
+  // Its row, once it shows: in sight, washed for a moment, then as any other (#763).
+  useEffect(() => {
+    if (!justLinked) return;
+    document
+      .querySelector(`[data-linked-folder-id="${linked.id}"][data-root]`)
+      ?.scrollIntoView({ block: "nearest" });
+    const timer = setTimeout(() => useRequests.getState().clear("showLinked"), LINKED_WASH_MS);
+    return () => clearTimeout(timer);
+  }, [justLinked, linked.id]);
   return (
     <GroupItem
       testId="folder-item"
@@ -308,6 +329,7 @@ function LinkedFolderItem({
         "data-state": state.kind,
         "data-status": linked.status,
         "data-layout": linked.layout,
+        ...(justLinked && { "data-just-linked": "true" }),
       }}
     >
       {children}
