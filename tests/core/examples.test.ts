@@ -7,11 +7,13 @@ import {
   CITATION_NODE,
   CLAIM_CHECK_MARK,
   type Core,
+  DATABASE_FILE,
   type ExampleGroup,
   QUESTION_BLOCK,
 } from "../../src/core";
 import { EXAMPLE_SETS } from "../../src/core/exampleSets";
 import type { Language } from "../../src/core/language";
+import { openDatabase } from "../../src/core/storage";
 import { createTempDataFolder, startCore } from "../helpers/core";
 import { appendParagraph, connectToMind } from "../helpers/mindClient";
 import { readMind } from "../helpers/minds";
@@ -21,12 +23,15 @@ const EXAMPLES = resolve(__dirname, "../../resources/examples");
 
 async function startWithExamples(language: Language = "en") {
   const dataDir = await createTempDataFolder();
-  const core = startCore(dataDir, {
+  return { core: startOn(dataDir, language), dataDir };
+}
+
+/** The core on a data folder, with the shipped examples. */
+const startOn = (dataDir: string, language: Language = "en") =>
+  startCore(dataDir, {
     paths: { dataDir, examples: EXAMPLES },
     systemLanguages: () => [language === "zh-CN" ? "zh-CN" : "en-US"],
   });
-  return { core, dataDir };
-}
 
 /** The example Mind as the editor would read it. */
 async function exampleMind(core: Core, mindId: string): Promise<ProseMirrorNode> {
@@ -186,6 +191,54 @@ describe("the example Mind", { timeout: 30_000 }, () => {
       again.linkedFolderId,
     ]);
     expect(await core.listMinds()).toHaveLength(1);
+  });
+
+  // protects=the tea example an earlier version made (alpha.1) is still shown and removed as the example, and the credit paper is offered once it is gone; fails_when=the old example is orphaned (no "Example", not removable) or the credit paper is never offered; no_claim=it is never remade or swapped, as its files no longer ship.
+  test("the tea example an earlier version made is still the example until removed, and then the credit paper is offered", async () => {
+    const { core, dataDir } = await startWithExamples();
+    const made = await core.offerExamples();
+    core.close();
+    // Stored as an earlier version stored it, under "examples": a Mind and Linked folder of its own.
+    const db = openDatabase(join(dataDir, DATABASE_FILE));
+    try {
+      db.run("UPDATE device_settings SET key = 'examples' WHERE key = 'examples.credit'");
+    } finally {
+      db.close();
+    }
+
+    const again = startOn(dataDir);
+    expect(await again.getExamples()).toEqual({
+      group: "tea",
+      available: true,
+      mindId: made?.mindId,
+      linkedFolderId: made?.linkedFolderId,
+      answerId: made?.answerId,
+    });
+    // Offered already: nothing is made while it is there, and a change of language leaves it be.
+    expect(await again.offerExamples()).toBeNull();
+    await again.updateSettings({ user: { language: "zh-CN" } });
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect((await again.listMinds()).map((mind) => mind.id)).toEqual([made?.mindId]);
+
+    // Remove the examples removes it, its Documents and its files.
+    await again.removeExamples();
+    expect(await again.getExamples()).toEqual({
+      group: "credit",
+      available: true,
+      mindId: null,
+      linkedFolderId: null,
+      answerId: null,
+    });
+    expect(await again.listMinds()).toEqual([]);
+    expect(await again.listLinkedFolders()).toEqual([]);
+    await expect(access(join(dataDir, "Examples"))).rejects.toThrow();
+
+    // The credit paper is offered then, as on a first run, in the language now chosen.
+    const offered = await again.offerExamples();
+    expect(offered).toMatchObject({ group: "credit", mindId: expect.any(String) });
+    expect((await again.listMinds()).map((mind) => mind.title)).toEqual([
+      EXAMPLE_SETS.credit["zh-CN"].title,
+    ]);
   });
 
   test("aren't offered when there are Minds already, nor when the app ships none", async () => {

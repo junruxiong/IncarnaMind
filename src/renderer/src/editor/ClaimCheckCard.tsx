@@ -126,7 +126,8 @@ export function ClaimMark({
         onClick={() => {
           setPinned(true);
           // "Open a check in the example", in Get started.
-          useAppStore.getState().updateGettingStarted({ citationChecked: true });
+          const { examples, updateGettingStarted } = useAppStore.getState();
+          if (examples?.mindId === mindId) updateGettingStarted({ citationChecked: true });
         }}
         onAnimationEnd={(event) => {
           if (event.target === event.currentTarget && reveal) onRevealed();
