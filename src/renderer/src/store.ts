@@ -995,7 +995,9 @@ export const useAppStore = create<AppState>()((set, get) => {
     // The core closes the Mind's tab; its Documents go with their Linked folder.
     removeExamples: () =>
       attempt(async () => {
-        const group = get().examples?.group;
+        const shown = get().examples?.group;
+        // The earlier version's tea example is removed as the default one; Undo makes the credit paper.
+        const group = shown === "tea" ? undefined : shown;
         const remove = () => core.removeExamples(group);
         await remove();
         push({
@@ -1450,7 +1452,7 @@ core.on("document.status", (changed) => {
 // The examples made, opened again or removed: their Mind and Linked folder show "Example".
 // The screen shows the credit paper; the groups' examples open from the first run's picks.
 core.on("examples.changed", (examples) => {
-  if (examples.group === "credit") useAppStore.setState({ examples });
+  if (examples.group === "credit" || examples.group === "tea") useAppStore.setState({ examples });
 });
 
 // Privacy choices change on the Privacy page, at the first run's question, or with local mode.

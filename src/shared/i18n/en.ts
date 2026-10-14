@@ -2999,6 +2999,8 @@ export const en = {
   "examples.banner.title": "This is an example Mind.",
   "examples.banner.body":
     "A Mind is a page where you write, and ask your Documents with every quote checked. This draft was checked against its two Documents, and one figure is wrong: click the red mark beside it to see what the results say.",
+  "examples.banner.body.tea":
+    "A Mind is a page where you write, and ask your Documents with every quote checked. You write here like in any document, ask Questions about your Documents, and every claim in an Answer links to the page it came from. Click a check to see the quote; green means it was found.",
   "examples.banner.addOwn": "Add your Documents or apps",
   "examples.banner.remove": "Remove the examples",
   "examples.answer": "Example Answer, written in advance: no model needed to try it",

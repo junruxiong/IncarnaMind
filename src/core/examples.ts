@@ -55,6 +55,12 @@ import type { Language } from "./language";
 
 /** The device values naming each example, once made, are `examples.<group>`. */
 const EXAMPLES_VALUE = "examples";
+/**
+ * The device value naming the example an earlier version made on a first run,
+ * "Where tea comes from", before the credit paper replaced it (#802). Its files
+ * no longer ship: it is only shown as the example, and removed, never remade.
+ */
+const LEGACY_VALUE = EXAMPLES_VALUE;
 /** Set once the examples were offered on a first run, so they aren't made again unasked. */
 const OFFERED_VALUE = "examplesOffered";
 
@@ -94,6 +100,8 @@ export interface ExamplesOptions {
   documentsIn(linkedFolderId: string): Document[];
   /** The Folder a Mind is in; null for none: where its checks searched. */
   mindFolder(mindId: string): string | null;
+  /** Now, ISO 8601 UTC. */
+  now(): string;
   recheck(input: RecheckCitationInput): CitationRecheck;
   /** Pushes "examples.changed". */
   changed(examples: Examples): void;
@@ -115,8 +123,13 @@ const hasText = (document: Document) =>
   !["queued", "extracting", "failed"].includes(document.status);
 
 export function createExamples(options: ExamplesOptions) {
-  const stored = (group: ExampleGroup): StoredExamples | null => {
-    const value = options.readValue(valueKey(group));
+  const stored = (group: ExampleGroup): StoredExamples | null => read(valueKey(group));
+
+  /** The earlier version's tea example, while it is the one shown (no credit paper made yet). */
+  const legacy = (): StoredExamples | null => (stored("credit") ? null : read(LEGACY_VALUE));
+
+  function read(key: string): StoredExamples | null {
+    const value = options.readValue(key);
     if (!value || typeof value !== "object") return null;
     const examples = value as Partial<StoredExamples>;
     return typeof examples.mindId === "string" &&
@@ -128,16 +141,21 @@ export function createExamples(options: ExamplesOptions) {
           language: examples.language === "zh-CN" ? "zh-CN" : "en",
         }
       : null;
-  };
+  }
 
-  /** Each part while it exists: the Mind can be deleted, or the folder unlinked, on its own. */
+  /**
+   * Each part while it exists: the Mind can be deleted, or the folder unlinked,
+   * on its own. The default is the earlier version's tea example while there is
+   * one and no credit paper.
+   */
   const status = (group: ExampleGroup = "credit"): Examples => {
-    const examples = stored(group);
+    const old = group === "credit" ? legacy() : null;
+    const examples = old ?? stored(group);
     const mind = examples && options.mindExists(examples.mindId) ? examples : null;
     const folder =
       examples && options.linkedFolderExists(examples.linkedFolderId) ? examples : null;
     return {
-      group,
+      group: old ? "tea" : group,
       available: options.source !== undefined,
       mindId: mind?.mindId ?? null,
       linkedFolderId: folder?.linkedFolderId ?? null,
@@ -220,7 +238,7 @@ export function createExamples(options: ExamplesOptions) {
           each.contentHash ? [{ documentId: each.id, contentHash: each.contentHash }] : [],
         ),
         excluded: [],
-        checkedAt: new Date().toISOString(),
+        checkedAt: options.now(),
       };
       markSentence(block, span.from, span.to, attributes);
       return;
@@ -299,13 +317,19 @@ export function createExamples(options: ExamplesOptions) {
     }
   };
 
-  /** Deletes an example Mind and unlinks its Documents, and the copies of their files. */
+  /**
+   * Deletes an example Mind and unlinks its Documents, and the copies of their
+   * files. The default is the earlier version's tea example while it is the one
+   * shown; once it is gone, the credit paper is offered as on a first run.
+   */
   const remove = async (group: ExampleGroup = "credit"): Promise<void> => {
-    const examples = stored(group);
+    const old = group === "credit" ? legacy() : null;
+    const examples = old ?? stored(group);
     if (!examples) return;
     if (options.mindExists(examples.mindId)) options.deleteMind(examples.mindId);
     await discardFiles(examples);
-    options.writeValue(valueKey(group), null);
+    options.writeValue(old ? LEGACY_VALUE : valueKey(group), null);
+    if (old) options.writeValue(OFFERED_VALUE, false);
     options.changed(status(group));
   };
 
@@ -367,7 +391,7 @@ export function createExamples(options: ExamplesOptions) {
     const source = options.source;
     if (!source) throw new Error("This copy of IncarnaMind has no examples.");
     // What is left of them (the Mind deleted, or the folder unlinked) goes first.
-    if (stored(group)) await remove(group);
+    if (stored(group) || (group === "credit" && legacy())) await remove(group);
     const language = options.language();
     const set = EXAMPLE_SETS[group][language];
 
@@ -471,8 +495,8 @@ export function createExamples(options: ExamplesOptions) {
     },
 
     /**
-     * On a first run (no Mind yet, examples never offered): makes the tea
-     * example, once. Returns it, or null when nothing was made.
+     * On a first run (no Mind yet, examples never offered): makes the credit
+     * paper, once. Returns it, or null when nothing was made.
      */
     async offer(hasMinds: boolean): Promise<Examples | null> {
       if (options.source === undefined || options.readValue(OFFERED_VALUE) === true) return null;
