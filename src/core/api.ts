@@ -615,9 +615,17 @@ export const INCLUDE_IN_CONTEXT_ATTRIBUTE = "includeInContext";
  *   carrying their tracked changes (#104);
  * - "web-page": a saved web page (#261): Passages a search found in one, or a
  *   quote added from one (#101);
- * - "checked-document": the document a check reads to check it (#97, #110).
+ * - "checked-document": the document a check reads to check it (#97, #110);
+ * - "transcript": a meeting's Transcript, the others' words in it: live with
+ *   a Question during the call (#144), or Passages a search found in a saved one;
+ * - "shared-screen": what someone shared on screen in a meeting (ADR-0024).
  */
-export type ThirdPartySource = "imported" | "web-page" | "checked-document";
+export type ThirdPartySource =
+  | "imported"
+  | "web-page"
+  | "checked-document"
+  | "transcript"
+  | "shared-screen";
 
 /**
  * Third-party text a Run reads itself: a saved web page a search found, the
@@ -1211,7 +1219,9 @@ export type CitationCheckReason =
   /** Can't check: the cited Units have no text, e.g. scanned pages. */
   | "no-text"
   /** Can't check: the Document was deleted. */
-  | "document-removed";
+  | "document-removed"
+  /** Can't check: a shared screen's Citation, whose screen was deleted when its Meeting stopped (ADR-0024). */
+  | "screen-deleted";
 
 /**
  * What to re-check a Citation with against its Document's current version
@@ -1277,12 +1287,17 @@ export const MAX_CITED_PAGES = 2;
  * - "lines": the lines the quote covers, or the cited block's.
  * - "time": in a Transcript, from the start of the cue the quote starts in to
  *   the end of the one it ends in, in ms from the Transcript's start (#136).
+ * - "screen": on a Meeting's shared screen (ADR-0024): when it was read (ISO
+ *   8601), which screen it was (`SharedScreenFrame.id`), and where the quote
+ *   is in its text, from `from` to `to`. Its text and picture are kept only
+ *   while the Meeting records, so its Citation has no quote of its own.
  */
 export type CitationLocation =
   | { kind: "page" | "slide"; from: number; to: number }
   | { kind: "rows"; sheet: string | null; from: number; to: number }
   | { kind: "lines"; from: number; to: number }
   | { kind: "time"; from: number; to: number }
+  | { kind: "screen"; at: string; screen: string; from: number; to: number }
   | {
       kind: "section";
       heading: string | null;
@@ -1553,6 +1568,11 @@ export interface DeviceSettings {
    * that the other people should be told. Recording waits for it.
    */
   meetingNoticeAccepted: boolean;
+  /**
+   * The meeting bar asks, when a recording starts, whether someone will
+   * share their screen, to read it for Answers during the call (ADR-0024).
+   */
+  meetingScreenAsk: boolean;
   /** How the window moves here (Settings → General → Motion): see `MotionPreference`. */
   motion: MotionPreference;
 }
@@ -4027,6 +4047,8 @@ export interface AnswerDelta extends AnswerPlace {
  */
 export type AnswerPhase =
   | "waiting-for-consent"
+  /** Asked during a call: the live transcript is brought up to now first (#144). */
+  | "listening"
   | "loading"
   | "searching"
   | "writing"
@@ -6077,6 +6099,8 @@ export interface Meeting {
   saveError: string | null;
   /** Its Transcript, made on this computer (#136); null before it starts, or where this copy can't transcribe. */
   transcript: MeetingTranscript | null;
+  /** Its shared screen (ADR-0024), while it records or is paused; null otherwise, or where this copy can't read one. */
+  screen: MeetingScreen | null;
   /** How well its capture went, so a bad recording can be explained (#161). */
   health: CaptureHealth;
   createdAt: string;
@@ -6213,6 +6237,75 @@ export interface MeetingAudio {
 
 /** How long a Meeting's audio is kept after its last recording, at most. */
 export const MEETING_AUDIO_KEPT_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * A Meeting's shared screen (ADR-0024), kept in memory only while it records
+ * or is paused:
+ * - "ask": the meeting bar asks whether someone will share their screen.
+ * - "off": nothing is read: the User said Not this time, Stop, or wasn't asked.
+ * - "choosing": the window picker is open.
+ * - "reading": `window` is read each time what it shows changes.
+ */
+export interface MeetingScreen {
+  state: "ask" | "off" | "choosing" | "reading";
+  /** The window being read, by its name ("Zoom Meeting"), while reading. */
+  window: string | null;
+  /** What stopped the last choice or reading, until the next one. */
+  problem: SharedScreenProblem | null;
+  /**
+   * The screens read so far are kept under this id, which starts each of
+   * theirs: a screen Citation whose screen doesn't start with it was deleted.
+   */
+  memory: string;
+  /** How many screens have been read. */
+  screens: number;
+  /**
+   * Whether IncarnaMind may capture a window: on macOS, the Screen Recording
+   * permission, which the first Choose window… asks for ("not-asked" until then).
+   */
+  permission: "granted" | "not-asked" | "denied";
+  /** The text recognition model, while it downloads before the first screen can be read, or failed to. */
+  model: EmbeddingModelStatus | null;
+}
+
+/**
+ * Why the shared screen isn't being read:
+ * - "whole-screen": a whole screen was chosen; only one window is read.
+ * - "denied": the system didn't allow IncarnaMind to capture the window.
+ * - "closed": the window closed, or its sharing was stopped from outside.
+ * - "failed": it couldn't be read: the text recognition model, say.
+ */
+export type SharedScreenProblem = "whole-screen" | "denied" | "closed" | "failed";
+
+/** A window the User can choose to read, in IncarnaMind's own picker. */
+export interface ShareableWindow {
+  id: string;
+  /** Its title, or its app's name. */
+  name: string;
+  /** A small picture of it, as a data: URL. */
+  thumbnail: string;
+}
+
+export interface ReadSharedScreenInput {
+  meetingId: string;
+  /** A window from `listShareableWindows`. */
+  windowId: string;
+}
+
+/** A screen read during a Meeting, as its Citation's card shows it while the Meeting records. */
+export interface SharedScreenFrame {
+  id: string;
+  /** When it was read (ISO 8601). */
+  at: string;
+  /** The window it was read from. */
+  window: string;
+  /** Its picture, as a JPEG data: URL. */
+  image: string;
+  /** The quote asked for, as read; "" when none was. */
+  quote: string;
+  /** The quote's lines on the picture, as fractions of its size: left, top, right, bottom. */
+  boxes: [number, number, number, number][];
+}
 
 export interface CreateMeetingInput {
   /** An empty Mind to hold it. Not given: a new Mind, named for the day. */
@@ -7646,6 +7739,27 @@ export interface CoreApi {
   retryTranscript(meetingId: string): Promise<Meeting>;
   /** Opens the system's settings where the User allows IncarnaMind to record this source. */
   openAudioSettings(source: AudioSource): Promise<void>;
+  /**
+   * The windows a recording Meeting can read (ADR-0024), for IncarnaMind's
+   * picker. On macOS the first call asks for the Screen Recording permission;
+   * null when it isn't given, which the Meeting's screen line then says.
+   */
+  listShareableWindows(meetingId: string): Promise<ShareableWindow[] | null>;
+  /** Reads one window of a recording Meeting, each time what it shows changes. */
+  readSharedScreen(input: ReadSharedScreenInput): Promise<Meeting>;
+  /** Not this time: the meeting bar stops asking, and offers "Read the shared screen…" instead. */
+  declineSharedScreen(meetingId: string): Promise<Meeting>;
+  /** Stops reading the shared screen. What was read stays until the Meeting stops. */
+  stopSharedScreen(meetingId: string): Promise<Meeting>;
+  /**
+   * A screen read during a Meeting that is still recording or paused, with
+   * the quote between `from` and `to` in its text; null once it was deleted.
+   */
+  getSharedScreen(input: {
+    screen: string;
+    from: number;
+    to: number;
+  }): Promise<SharedScreenFrame | null>;
 
   /** Outside agents (#351, experimental): the setting, what pauses them, and every pairing. */
   getAgents(): Promise<AgentSettings>;
@@ -8122,6 +8236,11 @@ const methods: Record<CoreApiMethod, true> = {
   deleteMeetingAudio: true,
   retryTranscript: true,
   openAudioSettings: true,
+  listShareableWindows: true,
+  readSharedScreen: true,
+  declineSharedScreen: true,
+  stopSharedScreen: true,
+  getSharedScreen: true,
   getAgents: true,
   setAgentsEnabled: true,
   connectAgent: true,

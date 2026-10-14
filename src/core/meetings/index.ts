@@ -54,6 +54,7 @@ import {
   writePart,
 } from "./audioFiles";
 import type { CaptureHealthRecords } from "./health";
+import type { SharedScreens } from "./screens";
 import type { Transcripts } from "./transcript";
 
 /** Samples arriving this much later than the ones before them could have: a new run starts where they belong. */
@@ -136,6 +137,8 @@ export interface MeetingsOptions {
   onCapturingChange(capturing: boolean): void;
   /** Transcribes Meetings (#136); absent where this copy can't. */
   transcripts?: Transcripts;
+  /** Reads the window the User shares (ADR-0024); absent where this copy can't. */
+  screens?: SharedScreens;
   health: CaptureHealthRecords;
   log: Logger;
 }
@@ -150,7 +153,7 @@ function lossCauseOf(code: string): AudioLossCause {
 }
 
 export function createMeetings(options: MeetingsOptions) {
-  const { db, now, capture, transcripts, health, log } = options;
+  const { db, now, capture, transcripts, screens, health, log } = options;
   const clock = () => Date.parse(now());
   const folderOf = (meetingId: string) => meetingFolder(options.dataDir, meetingId);
   let live: Live | null = null;
@@ -218,6 +221,10 @@ export function createMeetings(options: MeetingsOptions) {
       },
       saveError: current?.saveError ?? null,
       transcript: transcripts && row.status !== "ready" ? transcripts.of(row.id) : null,
+      screen:
+        screens && (row.status === "recording" || row.status === "paused")
+          ? screens.of(row.id)
+          : null,
       health: health.of(row.id),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
@@ -401,6 +408,7 @@ export function createMeetings(options: MeetingsOptions) {
     live = current;
     options.onCapturingChange(true);
     transcripts?.begin(row.id, period.offsetMs);
+    screens?.begin(row.id);
     current.session = capture.start(
       { systemAudio: systemAudio && capture.systemAudio },
       {
@@ -424,6 +432,7 @@ export function createMeetings(options: MeetingsOptions) {
         message: error instanceof Error ? error.message : String(error),
       });
     });
+    screens?.pause(current.meetingId);
     options.onCapturingChange(false);
     const audioEnd = Math.max(0, ...current.ends.values());
     const length = Math.max(
@@ -705,6 +714,7 @@ export function createMeetings(options: MeetingsOptions) {
         audio_expires_at: expiryOf(row.id, periods),
       });
       transcripts?.stop(row.id);
+      screens?.forget(row.id);
       log.info("meeting.stopped", { meetingId: row.id });
       changed();
       return toMeeting(rowOf(row.id));
@@ -744,6 +754,7 @@ export function createMeetings(options: MeetingsOptions) {
       for (const row of rows) {
         if (live?.meetingId === row.id) end(live);
         transcripts?.forget(row.id);
+        screens?.forget(row.id);
         health.forget(row.id);
         deleteAudio(row.id, "discarded");
         db.run("UPDATE meetings SET deleted_at = ?, updated_at = ? WHERE id = ?", [at, at, row.id]);
@@ -789,6 +800,7 @@ export function createMeetings(options: MeetingsOptions) {
     close(): void {
       clearInterval(sweeping);
       if (live) end(live);
+      screens?.close();
     },
   };
 }

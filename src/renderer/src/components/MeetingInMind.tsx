@@ -69,7 +69,11 @@ function MeetingStart({ meeting }: { meeting: Meeting }) {
 
   const copyNotice = async () => {
     try {
-      await navigator.clipboard.writeText(t("meetings.start.noticeText"));
+      // The shared screen is asked about at every meeting, unless the User turned that off.
+      const screen = useAppStore.getState().settings?.device.meetingScreenAsk;
+      await navigator.clipboard.writeText(
+        t(screen ? "meetings.start.noticeText.screen" : "meetings.start.noticeText"),
+      );
       setCopied(true);
     } catch (error) {
       useAppStore.getState().reportError(error);

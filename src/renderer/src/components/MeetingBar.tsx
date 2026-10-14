@@ -17,6 +17,7 @@ import {
   StopLineIcon,
 } from "./lineIcons";
 import { type ProblemAction, ProblemLine } from "./ProblemLine";
+import { SharedScreenLine } from "./SharedScreenLine";
 import { TranscriptLines } from "./TranscriptLines";
 import { useTabPlace } from "./tabs/tabItems";
 
@@ -24,8 +25,9 @@ import { useTabPlace } from "./tabs/tabItems";
  * The meeting bar, while the Mind's Meeting records or is paused: at the top
  * of the Mind, under its title, and kept in view as the notes scroll (the
  * owner's direction of 2026-10-11, in place of DESIGN.md's bar in the
- * composer). Its controls, then a line for each thing about the recording
- * the User should know, then whatever the Mind adds (its audio, once paused).
+ * composer). Its controls, the shared screen's line (ADR-0024), then a line
+ * for each thing about the recording the User should know, then whatever the
+ * Mind adds (its audio, once paused).
  */
 export function MeetingBar({ meeting, children }: { meeting: Meeting; children?: ReactNode }) {
   const t = useT();
@@ -37,6 +39,7 @@ export function MeetingBar({ meeting, children }: { meeting: Meeting; children?:
       className="meeting-bar"
     >
       <MeetingControls meeting={meeting} />
+      <SharedScreenLine meeting={meeting} />
       <MeetingLines meeting={meeting} />
       <TranscriptLines meeting={meeting} />
       {children}

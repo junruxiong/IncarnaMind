@@ -18,6 +18,7 @@ import {
   type FileShell,
   type Keychain,
   type Logger,
+  type ScreenCapture,
   type UsageDataSender,
 } from "../core";
 import { createFakeCapture, type FakeCapture } from "../core/meetings/fakeCapture";
@@ -26,6 +27,8 @@ import { createCitedPageCapture } from "./citedPageCapture";
 import { createSentryCrashReporter } from "./crashReports";
 import { createUtilityProcessEmbedder } from "./embedder";
 import { createElectronAudioCapture } from "./meetings/capture";
+import { type CaptureWindows, createCaptureWindows } from "./meetings/captureWindow";
+import { createElectronScreenCapture } from "./meetings/screen";
 import { createElectronPictures } from "./pictures";
 import { createElectronPrinter } from "./printPdf";
 import { createLoginShellProcesses } from "./processes";
@@ -398,7 +401,7 @@ function chatGptStandIn(): CoreAdapters["chatGptPlan"] {
  * sound allowed, denied or silent (INCARNAMIND_TEST_AUDIO_SYSTEM). They reach
  * it as `globalThis.incarnamindFakeAudio`, e.g. to change the microphone.
  */
-function audioCapture(log: Logger): AudioCapture {
+function audioCapture(log: Logger, windows: CaptureWindows): AudioCapture {
   if (import.meta.env.MODE === "test" && process.env.INCARNAMIND_TEST_AUDIO === "fake") {
     const system = process.env.INCARNAMIND_TEST_AUDIO_SYSTEM;
     const fake = createFakeCapture({
@@ -408,7 +411,20 @@ function audioCapture(log: Logger): AudioCapture {
     (globalThis as { incarnamindFakeAudio?: FakeCapture }).incarnamindFakeAudio = fake;
     return fake;
   }
-  return createElectronAudioCapture({ log, rendererUrl: process.env.ELECTRON_RENDERER_URL });
+  return createElectronAudioCapture(windows, log);
+}
+
+/**
+ * What reads the window the User shares during a Meeting (ADR-0024). A test
+ * build shares only the test page INCARNAMIND_TEST_SHARED_WINDOW names, and
+ * without one reads none, so no test ever captures a real window.
+ */
+function screenCapture(log: Logger, windows: CaptureWindows): ScreenCapture | undefined {
+  if (import.meta.env.MODE === "test") {
+    const testPage = process.env.INCARNAMIND_TEST_SHARED_WINDOW;
+    return testPage ? createElectronScreenCapture({ windows, log, testPage }) : undefined;
+  }
+  return createElectronScreenCapture({ windows, log });
 }
 
 /**
@@ -441,6 +457,11 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
   const chatGptPlan = chatGptStandIn();
   const web = webStandIn();
   const connectorDirectory = testConnectorDirectory();
+  const captureWindows = createCaptureWindows({
+    log,
+    rendererUrl: process.env.ELECTRON_RENDERER_URL,
+  });
+  const sharedScreen = screenCapture(log, captureWindows);
   return {
     ...(connectorDirectory !== undefined && { connectorDirectory }),
     ...(connectorRegistryUrl && { connectorRegistryUrl }),
@@ -466,7 +487,8 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
       },
     }),
     log,
-    audioCapture: audioCapture(log),
+    audioCapture: audioCapture(log, captureWindows),
+    ...(sharedScreen && { screenCapture: sharedScreen }),
     capturePage: createCitedPageCapture({ rendererUrl: process.env.ELECTRON_RENDERER_URL }),
     paths: {
       dataDir,

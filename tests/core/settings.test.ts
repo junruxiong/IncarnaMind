@@ -59,6 +59,7 @@ describe("Settings", () => {
         meetingsEnabled: false,
         meetingSystemAudio: true,
         meetingNoticeAccepted: false,
+        meetingScreenAsk: true,
         motion: "system",
       },
       language: "en",
@@ -153,6 +154,7 @@ describe("Settings", () => {
       meetingsEnabled: false,
       meetingSystemAudio: true,
       meetingNoticeAccepted: false,
+      meetingScreenAsk: true,
       motion: "system",
     });
   });
@@ -185,6 +187,7 @@ describe("Settings", () => {
       meetingsEnabled: true,
       meetingSystemAudio: false,
       meetingNoticeAccepted: true,
+      meetingScreenAsk: false,
       motion: "reduced" as const,
     };
     await before.updateSettings({

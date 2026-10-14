@@ -27,6 +27,7 @@
  * sections, the heading it sits under.
  */
 import { citationNode, type NodeJSON } from "../../shared/blockJson";
+import { formatTime } from "../../shared/dates";
 import {
   englishLocation,
   locationOf,
@@ -44,8 +45,10 @@ import {
   type CitationCheck,
   type CitationCheckReason,
   type CitationRecheck,
+  type DocumentKind,
   MAX_CITED_PAGES,
   type RejectedRecord,
+  type ThirdPartySource,
 } from "../api";
 import type { CitationSource } from "../documents";
 import type { PageText } from "../documents/passages";
@@ -59,6 +62,13 @@ import type {
   SearchResultForModel,
   UnfoundQuote,
 } from "./engine";
+import type { SharedScreenText } from "./liveTranscript";
+
+/** The kinds of Document someone other than the User wrote or said, and the third-party text each is. */
+const THIRD_PARTY_KINDS: ReadonlyMap<DocumentKind, ThirdPartySource> = new Map([
+  ["web", "web-page"],
+  ["transcript", "transcript"],
+]);
 
 /** How many times one Answer may search; later searches are refused, so the model answers. */
 const MAX_SEARCHES_PER_ANSWER = 5;
@@ -76,6 +86,9 @@ export const asksForFixes = (told: string): boolean => told.includes(FIX_THESE);
  */
 const LOCATION_MARK =
   /\[(?:p\.\s*\d+(?:[–-]\d+)?|slides?\s+\d+(?:[–-]\d+)?|(?:[^\]\n]{1,100},\s*)?rows?\s+\d+(?:[–-]\d+)?|lines?\s+\d+(?:[–-]\d+)?|§[^\]\n]{0,200}|speaker notes|comment(?: by [^\]\n]{1,100})?|\d{1,2}:\d{2}(?::\d{2})?(?: [^\]\n]{1,60})?)\]/gi;
+
+/** The marks around a figure the model is told may be misread ("⟦7a;45o⟧"), which aren't in the text. */
+const UNSURE_MARKS = /[⟦⟧]/g;
 
 /** Marks where a slide's speaker notes start, inside a Passage given to the model. */
 const NOTES_MARK = "[speaker notes]";
@@ -99,7 +112,7 @@ const QUOTE_PAIRS: readonly (readonly [string, string])[] = [
  * ellipses and quotation marks models put around a quote. Its words are left alone.
  */
 export function cleanQuote(raw: string): string {
-  let quote = raw.replace(LOCATION_MARK, " ").trim();
+  let quote = raw.replace(LOCATION_MARK, " ").replace(UNSURE_MARKS, "").trim();
   for (;;) {
     const before = quote;
     quote = quote
@@ -583,18 +596,33 @@ export interface Quoted {
   check(): CheckResult;
 }
 
-const toCitation = (record: Accepted, result: CheckResult | null): Citation => ({
-  passageId: record.source.passageId,
-  documentId: record.source.documentId,
-  documentName: record.source.documentName,
-  contentHash: record.source.contentHash,
-  pageFrom: record.range.pageFrom,
-  pageTo: record.range.pageTo,
-  location: record.location,
-  quote: record.quote,
-  check: result?.check ?? "checking",
-  checkReason: result?.checkReason ?? null,
-});
+const toCitation = (record: Accepted, result: CheckResult | null): Citation =>
+  record.location?.kind === "screen"
+    ? // A screen's Citation points at no Document and keeps no quote (ADR-0024).
+      {
+        passageId: "",
+        documentId: "",
+        documentName: "",
+        contentHash: "",
+        pageFrom: null,
+        pageTo: null,
+        location: record.location,
+        quote: "",
+        check: result?.check ?? "checking",
+        checkReason: result?.checkReason ?? null,
+      }
+    : {
+        passageId: record.source.passageId,
+        documentId: record.source.documentId,
+        documentName: record.source.documentName,
+        contentHash: record.source.contentHash,
+        pageFrom: record.range.pageFrom,
+        pageTo: record.range.pageTo,
+        location: record.location,
+        quote: record.quote,
+        check: result?.check ?? "checking",
+        checkReason: result?.checkReason ?? null,
+      };
 
 export interface CitationSessionEvents {
   /** The model gave a valid record for a marker (again: it replaces the earlier one). */
@@ -606,9 +634,40 @@ export interface CitationSessionEvents {
  * as "P3", which is what the model cites), the records it gave, and the Tools
  * the Answer engine offers the model.
  */
-export function createCitationSession(documents: AnswerDocuments, events: CitationSessionEvents) {
+export function createCitationSession(given: AnswerDocuments, events: CitationSessionEvents) {
+  /** The shared screens the model was given (ADR-0024), by the id they stand in for a Passage's with. */
+  const screens = new Map<string, SharedScreenText>();
+  /** Documents, with each screen as a Passage of a Document of its own: its one Unit is its text. */
+  const documents: AnswerDocuments = {
+    searchableCount: () => given.searchableCount(),
+    search: (query, signal, within, options) => given.search(query, signal, within, options),
+    citationSource(passageId) {
+      const screen = screens.get(passageId);
+      if (!screen) return given.citationSource(passageId);
+      return {
+        passageId,
+        text: screen.text,
+        pageFrom: null,
+        pageTo: null,
+        documentId: passageId,
+        documentName: "",
+        documentKind: "text",
+        contentHash: "",
+        documentDeleted: false,
+      };
+    },
+    pageTexts(documentId, contentHash, from, to) {
+      const screen = screens.get(documentId);
+      // Read as a slide's text: figures match however the quote writes them.
+      if (screen) return [{ page: null, kind: "slide", text: screen.text }];
+      return given.pageTexts(documentId, contentHash, from, to);
+    },
+    documentDate: (documentId) => (screens.has(documentId) ? null : given.documentDate(documentId)),
+  };
   const handles = new Map<string, string>();
   const handleOf = new Map<string, string>();
+  /** How many ids each kind has given out: "P" for Passages, "S" for screens. */
+  const counts = new Map<string, number>();
   /** Each Passage's text as the model was given it, by its short id. */
   const shownTexts = new Map<string, string>();
   const records = new Map<number, Accepted>();
@@ -621,10 +680,12 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
   /** Markers whose Citations went into a Mind rather than the Answer's text (#202). */
   const placedElsewhere = new Set<number>();
 
-  const handleFor = (passageId: string) => {
+  const handleFor = (passageId: string, kind: "P" | "S" = "P") => {
     let handle = handleOf.get(passageId);
     if (!handle) {
-      handle = `P${handleOf.size + 1}`;
+      const count = (counts.get(kind) ?? 0) + 1;
+      counts.set(kind, count);
+      handle = `${kind}${count}`;
       handleOf.set(passageId, handle);
       handles.set(handle.toLowerCase(), passageId);
     }
@@ -686,6 +747,17 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
 
   /** Where a record points, for its label: narrowed to its quote when the quote is there. */
   const locationFor = (record: Omit<Accepted, "location">): Citation["location"] => {
+    const screen = screens.get(record.source.passageId);
+    if (screen) {
+      const found = quoteInUnits(citedText(record), record.quote, {});
+      return {
+        kind: "screen",
+        at: screen.at,
+        screen: screen.id,
+        from: found?.[0]?.start ?? 0,
+        to: found?.at(-1)?.end ?? 0,
+      };
+    }
     if (record.range.pageFrom === null) return null;
     const units = citedText(record);
     if (units.length === 0) {
@@ -708,8 +780,8 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
   const loosely = (name: string): string => {
     const alone = /^\s*\[?\s*(?:passage\s*)?(\d{1,4})\s*\]?\s*$/i.exec(name);
     if (alone) return `P${alone[1]}`;
-    const id = /(?<![\p{L}\p{N}])P\s?(\d{1,4})(?!\p{N})/iu.exec(name);
-    return id ? `P${id[1]}` : name;
+    const id = /(?<![\p{L}\p{N}])([PS])\s?(\d{1,4})(?!\p{N})/iu.exec(name);
+    return id ? `${(id[1] as string).toUpperCase()}${id[2]}` : name;
   };
 
   /** The first Passage the model was given whose pages hold the quote word for word, or null. */
@@ -899,9 +971,12 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
       passageCount: found.length,
       passageIds: found.map((passage) => passage.passageId),
       ranks: found.map((passage, index) => passage.rank ?? index),
-      // Someone else wrote a saved web page: reading it makes the Run third-party (#78).
-      ...(found.some((passage) => passage.documentKind === "web") && {
-        thirdParty: ["web-page"] as const,
+      // Someone else wrote a saved web page, and said what a Transcript holds: reading either
+      // makes the Run third-party (#78).
+      ...(found.some((passage) => THIRD_PARTY_KINDS.has(passage.documentKind)) && {
+        thirdParty: [
+          ...new Set(found.flatMap((passage) => THIRD_PARTY_KINDS.get(passage.documentKind) ?? [])),
+        ],
       }),
     };
   }
@@ -944,9 +1019,31 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
     return formatPassages(formatted);
   }
 
+  /**
+   * The shared screens as the model reads them, each under the id it cites it by ("S1"), its
+   * figures that may be misread marked, and after it the Library Passages its text is from.
+   */
+  function showScreens(shown: readonly SharedScreenText[]): string {
+    return shown
+      .map((screen) => {
+        const passageId = `screen:${screen.id}`;
+        screens.set(passageId, screen);
+        const id = handleFor(passageId, "S");
+        shownTexts.set(id, screen.marked);
+        const library = screen.library.length > 0 ? show(screen.library) : "";
+        const same = screen.library.map((passage) => handleOf.get(passage.passageId) ?? "");
+        const time = formatTime(screen.at, "en", { twelveHour: false });
+        const matches = library ? ` same-as="${same.filter(Boolean).join(" ")}"` : "";
+        const block = `<shared-screen id="${id}" window="${attribute(screen.window)}" read="${time}"${matches}>\n${screen.marked}\n</shared-screen>`;
+        return library ? `${block}\n\n${library}` : block;
+      })
+      .join("\n\n");
+  }
+
   const tools: AnswerTools = {
+    // Passages given before any search, such as a meeting's shared screen, are cited the same way.
     get documentCount() {
-      return documents.searchableCount();
+      return Math.max(documents.searchableCount(), handleOf.size > 0 ? 1 : 0);
     },
 
     async searchDocuments(
@@ -1085,6 +1182,9 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
      * be cited as a search's are, and don't count as one of the Answer's searches.
      */
     show,
+
+    /** Gives the model a meeting's shared screens, citable as Passages are (ADR-0024). */
+    showScreens,
 
     quotes,
 

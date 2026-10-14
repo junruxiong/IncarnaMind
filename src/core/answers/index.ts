@@ -160,7 +160,7 @@ import type {
   GatedCall,
   ToolSet,
 } from "./engine";
-import { listenedTokens, newestWithin, withTranscript } from "./liveTranscript";
+import { type Listened, listenedTokens, newestWithin, withTranscript } from "./liveTranscript";
 import { markdownToBlocks } from "./markdown";
 import {
   answerInstructions,
@@ -168,6 +168,7 @@ import {
   documentInstructions,
   LISTED_DOCUMENTS,
   type ListedDocuments,
+  type Listening,
   languageInstruction,
   loadedSkillText,
   meetingInstructions,
@@ -330,10 +331,11 @@ export interface AnswersOptions {
    */
   readableMindName(mindId: string): string | null;
   /**
-   * The live Transcript of the Meeting a Mind records now (#144), indexed up to now: its
-   * Passages in reading order; null when the Mind's Meeting isn't recording or has no lines yet.
+   * What a Question from a Mind whose Meeting records now goes with (#144): its live
+   * Transcript, indexed up to now, and the screens read from its shared window that suit
+   * `question` (ADR-0024); null when the Mind's Meeting isn't recording.
    */
-  liveTranscript(mindId: string): Promise<WindowedPassage[] | null>;
+  listening(mindId: string, question: string): Promise<Listened | null>;
   providerExists(providerId: string): boolean;
   /** Whether Questions can be asked with this model (the default one when undefined). */
   readiness(choice: ChatModelChoice | undefined): Promise<ChatReadiness>;
@@ -667,9 +669,9 @@ export function createAnswers(options: AnswersOptions) {
     toolSet?: ToolSet;
     /**
      * Asked from a Mind whose Meeting may be recording (#144): its live Transcript, indexed up
-     * to now, to go with the Question. Absent: none.
+     * to now, and its shared screens, to go with the Question. Absent: none.
      */
-    listening?: () => Promise<WindowedPassage[] | null>;
+    listening?: () => Promise<Listened | null>;
     /** Written for a Task (#126), which gives way to Answers itself (see ../runs/tasks). */
     task?: boolean;
     /**
@@ -708,8 +710,8 @@ export function createAnswers(options: AnswersOptions) {
     let readShare = input.mind?.share ?? 1;
     let { messages } = context;
     let mindRequest = input.mind?.request;
-    /** It listened to a meeting's live transcript: the Question went with it. */
-    let listening = false;
+    /** It listened to a meeting's live transcript, or read its shared screen: the Question went with them. */
+    let listening: Listening = { transcript: false, screen: false, meeting: false };
     let timer: ReturnType<typeof setTimeout> | null = null;
     let finished = false;
     let support: CitationSupport | null = null;
@@ -1205,7 +1207,7 @@ export function createAnswers(options: AnswersOptions) {
       let consenting = input.consentNeeded;
       let activity: Extract<
         AnswerPhase,
-        "searching" | "writing" | "checking-quotes" | "checking-figures"
+        "listening" | "searching" | "writing" | "checking-quotes" | "checking-figures"
       > = "writing";
       let loading = false;
       let responded = false;
@@ -1241,17 +1243,34 @@ export function createAnswers(options: AnswersOptions) {
         if (read) read = within.request.text ? { ...read, partial: true } : null;
       }
       if (input.listening) {
-        let heard: WindowedPassage[] | null = null;
+        // Bringing the transcript up to now can take a few seconds: the meta line says so.
+        if (!consenting) {
+          activity = "listening";
+          showPhase();
+        }
+        let heard: Listened | null = null;
         try {
           heard = await input.listening();
         } catch (error) {
           options.reportError(error);
         }
+        activity = "writing";
         if (finished) return;
-        const kept = newestWithin(heard ?? [], listenedTokens(prepared.window));
-        if (kept.length > 0) {
-          messages = withTranscript(messages, session.show(kept));
-          listening = true;
+        if (heard) {
+          const screens = heard.screens.length > 0 ? session.showScreens(heard.screens) : "";
+          const budget = Math.max(0, listenedTokens(prepared.window) - estimateTokens(screens));
+          const kept = newestWithin(heard.transcript, budget);
+          messages = withTranscript(messages, kept.length > 0 ? session.show(kept) : "", screens);
+          listening = { transcript: kept.length > 0, screen: screens !== "", meeting: true };
+          // The others' words, and what they showed: third-party text (#78).
+          const heardFrom: ThirdPartySource[] = [
+            ...(kept.length > 0 ? (["transcript"] as const) : []),
+            ...(screens ? (["shared-screen"] as const) : []),
+          ];
+          for (const source of heardFrom) {
+            contextReasons.push({ via: "read", source });
+            textOrigin ??= source;
+          }
         }
       }
       // Stopped while waiting, e.g. for consent: send nothing.
@@ -1822,7 +1841,7 @@ export function createAnswers(options: AnswersOptions) {
       emptyScope,
       forcedSkill: question.forcedSkill,
       consentNeeded: ready.consentNeeded,
-      ...(mind && { listening: () => options.liveTranscript(mind.mindId) }),
+      ...(mind && { listening: () => options.listening(mind.mindId, question.text) }),
       assistant: {
         focused: mind && {
           mindId: mind.mindId,

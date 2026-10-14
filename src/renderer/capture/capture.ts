@@ -5,7 +5,8 @@
  * this window's own page as the video, stopped at once). Each track runs
  * through a 16 kHz AudioContext and the "pcm-frames" worklet, and its frames
  * go to the main process as 16-bit PCM. The microphone is opened again when
- * the default input changes or its device goes.
+ * the default input changes or its device goes. The shared window, when one
+ * is read, is captured here too (./screen, ADR-0024).
  */
 import type { AudioSource } from "../../core/api";
 import {
@@ -16,6 +17,7 @@ import {
   toPcm16,
 } from "../../shared/capture";
 import pcmFramesUrl from "./pcmFrames.ts?worker&url";
+import { serveScreen } from "./screen";
 
 const found = (window as unknown as Partial<Record<string, CaptureBridge>>)[CAPTURE_BRIDGE_KEY];
 if (!found) throw new Error("The capture window's preload didn't load.");
@@ -181,7 +183,11 @@ async function stop(): Promise<void> {
   running = false;
   await reopening;
   await Promise.all([close("microphone"), close("system")]);
-  if (context) await (await context).close();
+  // The page may stay open, for the shared window, and record again later.
+  const closing = context;
+  context = null;
+  sink = null;
+  if (closing) await (await closing).close();
   bridge.stopped();
 }
 
@@ -201,3 +207,4 @@ bridge.onStop(() => {
     bridge.stopped();
   });
 });
+serveScreen(bridge);

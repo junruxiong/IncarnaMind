@@ -115,6 +115,12 @@ export interface LaunchOptions {
    */
   scans?: string;
   /**
+   * An HTML file the app opens in a hidden window of its own and offers as the
+   * one window a Meeting can read (ADR-0024), captured as a tab is: no test
+   * captures a real window or screen. Without, a Meeting reads none.
+   */
+  sharedWindow?: string;
+  /**
    * The scripted Task that asks for approval and writes files (src/main/scriptedTask.ts),
    * started with `startScriptedTask`. Needs a test build.
    */
@@ -166,6 +172,7 @@ export async function launchApp(
     computerSound = "allowed",
     transcriber,
     scans,
+    sharedWindow,
     web,
     scriptedTasks = false,
   }: LaunchOptions = {},
@@ -190,6 +197,7 @@ export async function launchApp(
   delete env.INCARNAMIND_TEST_CHATGPT;
   delete env.INCARNAMIND_TEST_TRANSCRIBER_OPTIONS;
   delete env.INCARNAMIND_TEST_SCANS;
+  delete env.INCARNAMIND_TEST_SHARED_WINDOW;
   delete env.INCARNAMIND_TEST_WEB;
   delete env.INCARNAMIND_TEST_TASKS;
   // A test never uses the ChatGPT sign-in an agent's shell may point at for checks by hand.
@@ -212,6 +220,7 @@ export async function launchApp(
   env.INCARNAMIND_TEST_CONNECTOR_REGISTRY = connectorRegistry ?? "http://127.0.0.1:9";
   if (chatGpt) env.INCARNAMIND_TEST_CHATGPT = chatGpt;
   if (scans) env.INCARNAMIND_TEST_SCANS = scans;
+  if (sharedWindow) env.INCARNAMIND_TEST_SHARED_WINDOW = sharedWindow;
   if (web) env.INCARNAMIND_TEST_WEB = String(web);
   if (scriptedTasks) env.INCARNAMIND_TEST_TASKS = "1";
   env.INCARNAMIND_DATA_DIR = dataDir;

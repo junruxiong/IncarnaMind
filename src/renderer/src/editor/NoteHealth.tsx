@@ -9,6 +9,7 @@ import { checkSentences, dismissCheckProblem, stopCheck, useChecks } from "../ch
 import { ProblemLine } from "../components/ProblemLine";
 import { ReadinessExplanation, readinessAction } from "../components/providers/ChatReadinessNotice";
 import { useLanguage, useT } from "../i18n";
+import { useKeptScreens } from "../meetings";
 import { useAppStore } from "../store";
 import { coverageOf, sameCoverage, shownClaims } from "./claimChecks";
 import {
@@ -57,6 +58,7 @@ function useHealth(editor: Editor): Health {
     state.status.kind === "ready" ? state.documents : null,
   );
   const kept = useAppStore((state) => state.keptCitationTexts);
+  const screens = useKeptScreens();
   const [health, setHealth] = useState<Health>(NONE);
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -67,7 +69,8 @@ function useHealth(editor: Editor): Health {
         noteHealth(
           editor.state.doc,
           shownClaims(editor.state),
-          (attributes: CitationAttributes) => citationState(attributes, documents, kept).check,
+          (attributes: CitationAttributes) =>
+            citationState(attributes, documents, kept, screens).check,
         ),
       );
     };
@@ -81,7 +84,7 @@ function useHealth(editor: Editor): Health {
       clearTimeout(timer);
       editor.off("transaction", later);
     };
-  }, [editor, documents, kept]);
+  }, [editor, documents, kept, screens]);
   return health;
 }
 

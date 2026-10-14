@@ -8,6 +8,7 @@ import type {
 } from "../../../core/api";
 import { formatDate } from "../../../shared/dates";
 import { core } from "../core";
+import { dataKindKey } from "../dataKinds";
 import { useLanguage, useT } from "../i18n";
 import { useAppStore } from "../store";
 import { AiUseSettings } from "./AiUseSettings";
@@ -162,6 +163,12 @@ export function PrivacySettings() {
         <p className={`mt-0.5 ${rowTextClass}`}>{t("privacy.skills.body")}</p>
       </section>
 
+      {/* What a Meeting reads from a shared window, and where it goes (ADR-0024). */}
+      <section data-testid="shared-screen-note" role="note" className="flex flex-col">
+        <h4 className={sectionTitleClass}>{t("privacy.screen.title")}</h4>
+        <p className={`mt-0.5 ${rowTextClass}`}>{t("privacy.screen.body")}</p>
+      </section>
+
       <AiUseSettings />
 
       {/* Only a copy built with a crash-report address can send reports, so only it offers them. */}
@@ -274,7 +281,7 @@ function ServiceDecision({
           className="list-disc pl-4 text-[13px] leading-5 text-ink-secondary"
         >
           {sends.map((kind) => (
-            <li key={kind}>{t(`consent.data.${kind}`)}</li>
+            <li key={kind}>{t(dataKindKey(flow.id, kind))}</li>
           ))}
         </ul>
       </div>

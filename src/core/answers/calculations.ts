@@ -378,15 +378,21 @@ export function createCalculationSession(options: CalculationSessionOptions) {
       const quoted = quotes.recorded(given.citation);
       if (!quoted)
         return `[^${given.citation}] isn't recorded; record it with cite first, or give passage, location and quote.`;
-      return unreadable(quoted, given.citation) ?? quoted;
+      return onScreen(quoted) ?? unreadable(quoted, given.citation) ?? quoted;
     }
     if (!given.record)
       return "give citation (the marker of a record you gave cite), or passage, location and quote.";
     // Read as structured output's records are, wherever it is in its Passage: only the number matters here.
     const quoted = quotes.quote(given.record, { structured: true });
     if ("problem" in quoted) return quoted.problem;
-    return unreadable(quoted, null) ?? quoted;
+    return onScreen(quoted) ?? unreadable(quoted, null) ?? quoted;
   }
+
+  /** A shared screen's figure: nothing of the screen is kept to check it by after the meeting (ADR-0024). */
+  const onScreen = (quoted: Quoted): string | null =>
+    quoted.citation.location?.kind === "screen"
+      ? `${quoted.passage} is the shared screen, which is deleted when the meeting ends, so its figures can't be inputs; write the figure as the screen shows it and cite it.`
+      : null;
 
   /** The cell of a workbook's rows a figure of a quote is in, and the number the cell stores. */
   function cellOf(quoted: Quoted, figure: Figure, context: FigureContext): FigureInput["cell"] {

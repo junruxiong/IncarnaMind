@@ -55,7 +55,7 @@ export type CitedPlace = Pick<
 >;
 
 /** What a Location's picture shows: a sheet's cited rows, or else all of its Units. */
-function areaOf(location: CitationLocation): PageArea {
+function areaOf(location: Exclude<CitationLocation, { kind: "screen" }>): PageArea {
   return location.kind === "rows"
     ? { kind: "rows", sheet: location.sheet, from: location.from, to: location.to }
     : { kind: location.kind };
@@ -80,6 +80,8 @@ function placeOf(citation: CitationFields): Place | null {
   if (typeof documentId !== "string" || documentId === "" || !isUnit(pageFrom)) return null;
   const to = isUnit(pageTo) ? pageTo : pageFrom;
   const location = parseLocation(citation.location);
+  // A shared screen's picture is deleted with its Meeting (ADR-0024): there is no page to keep.
+  if (location?.kind === "screen") return null;
   return {
     documentId,
     contentHash: typeof contentHash === "string" && contentHash !== "" ? contentHash : null,

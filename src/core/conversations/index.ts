@@ -181,6 +181,7 @@ const isErrorKind = (value: string | null): value is ProviderErrorKind =>
 
 const PHASES: Record<AnswerPhase, true> = {
   "waiting-for-consent": true,
+  listening: true,
   loading: true,
   searching: true,
   writing: true,

@@ -30,6 +30,7 @@ import { ObjectMenu, useObjectMenu } from "../components/ObjectMenu";
 import { useTabPlace } from "../components/tabs/tabItems";
 import { useGap, useLanguage, useT } from "../i18n";
 import { groupsMerged } from "../layoutSlice";
+import { useKeptScreens } from "../meetings";
 import type { ObjectRef } from "../objects";
 import { openCited as openCitedPlace, quoteSaysSo } from "../openCited";
 import { recordUsage, useAppStore } from "../store";
@@ -42,10 +43,11 @@ import {
 } from "./citationClusters";
 import { citationNumberOf } from "./citationNumbers";
 import { QuoteWithUnsureWords, ScanLine, useScannedQuote } from "./citationScan";
-import { CheckMarkIcon, CheckStateIcon } from "./icons";
+import { CheckStateIcon, CitationMarkIcon } from "./icons";
 import { InFootnoteContext, MindIdContext, RegenerateAnswerContext } from "./mindContext";
 import { Popover } from "./Popover";
 import { onPeek, peekCitation } from "./peek";
+import { ScreenCitationCard } from "./ScreenCitationCard";
 import { StyledRuns, StyledRunView } from "./StyledRuns";
 import { runsText } from "./styledText";
 
@@ -103,18 +105,22 @@ export function CitationView({
     state.status.kind === "ready" ? state.documents : null,
   );
   const kept = useAppStore((state) => state.keptCitationTexts);
+  const screens = useKeptScreens();
+  const language = useLanguage();
   /** The Mind's group: the Document opens in the group to its right. */
   const place = useTabPlace();
-  const state = citationState(attributes, documents, kept);
+  const state = citationState(attributes, documents, kept, screens);
   const shown = withShownName(attributes, documents);
   const location = citationLocation(attributes);
-  const where = location ? formatLocation(location, t) : null;
+  /** A shared screen's (ADR-0024): its card shows the screen while kept, and it opens nothing. */
+  const onScreen = location?.kind === "screen" ? location : null;
+  const where = location ? formatLocation(location, t, language) : null;
   const badge = badgeMessage(state, shown, t);
   const badgeText = t(badge.key, badge.params);
   const number = citationNumberOf(decorations);
   // In a footnote's text it is part of the footnote: it shows where it points, not a number.
   const inFootnote = useContext(InFootnoteContext);
-  const pointsTo = citationSource(shown, t).text;
+  const pointsTo = citationSource(shown, t, language).text;
   /** Clicked: the card stays until it is dismissed. */
   const [pinned, setPinned] = useState(false);
   /** Hovered or focused, with the card, the marker or its mark. */
@@ -156,7 +162,7 @@ export function CitationView({
    */
   const openCited = (withQuote: boolean, keep = false) => {
     const documentId = state.documentId ?? attributes.documentId;
-    if (!documentId) return;
+    if (!documentId || onScreen) return;
     openCitedPlace(
       { ...attributes, documentId },
       { check: state.check, withQuote, number, label: where, from: place?.groupId, keep },
@@ -196,9 +202,10 @@ export function CitationView({
   const menuId = useId();
   const objectMenu = useObjectMenu({ kind: "citation", id: menuId });
   const here = {
-    ...(state.reason !== "document-removed" && {
-      "citation.open": () => openFromCardRef.current(),
-    }),
+    ...(state.reason !== "document-removed" &&
+      !onScreen && {
+        "citation.open": () => openFromCardRef.current(),
+      }),
     // Not where the text can't be changed, such as an Answer in the assistant.
     ...(editor.isEditable && {
       "citation.remove": () => {
@@ -279,7 +286,11 @@ export function CitationView({
           else onClick();
         }}
       >
-        <CheckMarkIcon check={state.check} className="citation-marker-icon" />
+        <CitationMarkIcon
+          check={state.check}
+          gone={state.reason === "screen-deleted"}
+          className="citation-marker-icon"
+        />
         {inFootnote ? (
           <span>{pointsTo}</span>
         ) : styled.kind === "runs" ? (
@@ -288,7 +299,7 @@ export function CitationView({
             checks={members.map((member) =>
               member.attributes === attributes
                 ? state.check
-                : citationState(member.attributes, documents, kept).check,
+                : citationState(member.attributes, documents, kept, screens).check,
             )}
           />
         ) : styled.kind === "joined" ? null : (
@@ -323,41 +334,52 @@ export function CitationView({
             onFocus={() => hold("card-focus", true)}
             onBlur={() => hold("card-focus", false)}
           >
-            <CitationCard
-              state={state}
-              attributes={shown}
-              badgeText={badgeText}
-              onOpen={(withQuote) => {
-                openCited(withQuote, true);
-                dismiss();
-                if (!groupsMerged()) editor.view.focus();
-              }}
-              onRemove={
-                editor.isEditable
-                  ? () => {
-                      dismiss();
-                      deleteNode();
-                    }
-                  : null
-              }
-              onRegenerate={() => {
-                dismiss();
-                if (regenerateHere) {
-                  regenerateHere();
-                  return;
+            {onScreen ? (
+              <ScreenCitationCard
+                location={onScreen}
+                state={state}
+                badgeText={badgeText}
+                menu={{ target: { kind: "citation", id: menuId }, here }}
+              />
+            ) : (
+              <CitationCard
+                state={state}
+                attributes={shown}
+                badgeText={badgeText}
+                onOpen={(withQuote) => {
+                  openCited(withQuote, true);
+                  dismiss();
+                  if (!groupsMerged()) editor.view.focus();
+                }}
+                onRemove={
+                  editor.isEditable
+                    ? () => {
+                        dismiss();
+                        deleteNode();
+                      }
+                    : null
                 }
-                const answer = answerAround(editor, getPos());
-                if (answer && mindId) {
-                  void useAnswers.getState().regenerate(mindId, answer.answerId, answer.questionId);
+                onRegenerate={() => {
+                  dismiss();
+                  if (regenerateHere) {
+                    regenerateHere();
+                    return;
+                  }
+                  const answer = answerAround(editor, getPos());
+                  if (answer && mindId) {
+                    void useAnswers
+                      .getState()
+                      .regenerate(mindId, answer.answerId, answer.questionId);
+                  }
+                }}
+                inAnswer={
+                  regenerateHere !== null ||
+                  (mindId !== null && answerAround(editor, getPos()) !== null)
                 }
-              }}
-              inAnswer={
-                regenerateHere !== null ||
-                (mindId !== null && answerAround(editor, getPos()) !== null)
-              }
-              menu={{ target: { kind: "citation", id: menuId }, here }}
-              note={noteOf(formatting, inCluster)}
-            />
+                menu={{ target: { kind: "citation", id: menuId }, here }}
+                note={noteOf(formatting, inCluster)}
+              />
+            )}
           </Popover>,
           document.body,
         )}

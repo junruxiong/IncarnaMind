@@ -847,6 +847,7 @@ export const en = {
   "location.lines.one": "line {range}",
   "location.lines.other": "lines {range}",
 
+  "location.screen": "Shared screen {time}",
   "documents.add": "Add Documents",
   "documents.add.files": "Files…",
   "documents.add.findSources": "Find sources…",
@@ -1604,6 +1605,8 @@ export const en = {
   "consent.data.blocks":
     "The Mind you're in: its text, your Notes and earlier Answers, except Notes you've excluded",
   "consent.data.passages": "Passages from your Documents that match the Question",
+  "consent.data.chat.passages":
+    "Passages from your Documents that match the Question; asked during a recorded meeting, the latest of its transcript, and the text of the window you chose to read",
   "consent.data.tool-results":
     "Results of the Tools an Answer uses, such as Connectors and Skill scripts",
   "consent.flow.tagging": "Automatic Tags",
@@ -1807,6 +1810,9 @@ export const en = {
   "privacy.skills.title": "Skill scripts",
   "privacy.skills.body":
     "Skill scripts run on this computer and can make their own network requests, sending anything they can read. This page doesn't control them: the approval you give before each run does, and you can turn them off in Settings, under Skills.",
+  "privacy.screen.title": "Shared screen",
+  "privacy.screen.body":
+    "During a meeting, the one window you choose to share is read on this computer. Only its text goes to your model, and only when you ask during the call. No picture of it is sent, and everything from it is deleted when the meeting stops.",
   "privacy.aiUse.title": "AI use record",
   "privacy.aiUse.body":
     "IncarnaMind keeps a record of what the AI wrote into your Minds and whether you kept, edited or deleted it, so you can say how you used AI. It holds no text of yours or the AI's, stays on this computer, and is never sent anywhere, whatever you choose about usage data.",
@@ -1949,6 +1955,7 @@ export const en = {
   "answer.label": "Answer",
   "answer.status.streaming": "Writing…",
   "answer.phase.waiting-for-consent": "Waiting for your permission to send",
+  "answer.phase.listening": "Listening…",
   "answer.phase.loading": "Loading the model…",
   "answer.phase.searching": "Searching your Documents…",
   "answer.phase.writing": "Writing…",
@@ -2135,6 +2142,13 @@ export const en = {
   "citation.badge.notFound.document": "Quote not found in {document}",
   "citation.badge.found.transcript": "Quote found in the transcript at {location}",
   "citation.badge.notFound.transcript": "Quote not found in the transcript at {location}",
+  "citation.badge.found.screen": "Read from the shared screen",
+  "citation.badge.notFound.screen": "Quote not found on the shared screen",
+  "citation.screen.deleted": "Deleted after the meeting",
+  "citation.screen.window": "{window} window",
+  "citation.screen.kept":
+    "Read on this computer. Nothing from the screen is kept after the meeting.",
+  "citation.screen.picture": "The shared screen at {time}",
   "citation.badge.cantCheck": "Can't check",
   "citation.badge.unsupported": "Unsupported by your Documents",
   "citation.badge.contradicted": "Contradicted",
@@ -2145,6 +2159,8 @@ export const en = {
     "A Citation can cite one page, slide, section, or block of rows or lines, or two in a row.",
   "citation.reason.no-text": "The place it cites has no text to check, e.g. a scanned page.",
   "citation.reason.document-removed": "The Document has been deleted.",
+  "citation.reason.screen-deleted":
+    "Nothing from the shared screen is kept after the meeting, so there is nothing to open.",
   "citation.reason.checking": "The quote is checked when the Answer is finished.",
   "citation.where": "{document}, {location}",
   "citation.scan": "Text read from a scan",
@@ -2633,6 +2649,9 @@ export const en = {
   "error.meeting.off": "Meetings are turned off in Settings.",
   "error.meeting.otherRecording": "Another Meeting is being recorded. Stop it first.",
   "error.meeting.noticeUnread": "Read the recording notice before recording a Meeting.",
+  "error.meeting.noSharedScreen": "This copy of IncarnaMind can’t read a shared screen.",
+  "error.meeting.noWindow": "Choose the window to read.",
+  "error.meeting.screenNotKept": "That screen from the meeting isn’t kept any more.",
   "error.meeting.cantDiscard": "Only a Meeting that hasn't started can be discarded.",
   "error.meeting.alreadyStarted": "That Meeting has started already.",
   "error.meeting.notRecording": "That Meeting isn't recording.",
@@ -2961,17 +2980,29 @@ export const en = {
   "approvals.thirdParty.read.webPage": "This Answer read a web page, so it asks you first.",
   "approvals.thirdParty.read.checkedDocument":
     "This Answer read the document being checked, so it asks you first.",
+  "approvals.thirdParty.read.transcript":
+    "This Answer read what was said in a meeting, so it asks you first.",
+  "approvals.thirdParty.read.sharedScreen":
+    "This Answer read a shared screen, so it asks you first.",
   "approvals.thirdParty.mind.imported": "This Mind contains imported text, so it asks you first.",
   "approvals.thirdParty.mind.webPage":
     "This Mind contains text from a web page, so it asks you first.",
   "approvals.thirdParty.mind.checkedDocument":
     "This Mind contains text from the document being checked, so it asks you first.",
+  "approvals.thirdParty.mind.transcript":
+    "This Mind contains text from a meeting transcript, so it asks you first.",
+  "approvals.thirdParty.mind.sharedScreen":
+    "This Mind contains text from a shared screen, so it asks you first.",
   "approvals.thirdParty.conversation.imported":
     "This conversation contains imported text, so it asks you first.",
   "approvals.thirdParty.conversation.webPage":
     "This conversation contains text from a web page, so it asks you first.",
   "approvals.thirdParty.conversation.checkedDocument":
     "This conversation contains text from the document being checked, so it asks you first.",
+  "approvals.thirdParty.conversation.transcript":
+    "This conversation contains text from a meeting transcript, so it asks you first.",
+  "approvals.thirdParty.conversation.sharedScreen":
+    "This conversation contains text from a shared screen, so it asks you first.",
   "approvals.call.waiting": "Waiting for your approval: {connector}: {tool}",
   "approvals.call.denied": "Not allowed: {connector}: {tool}",
   "approvals.call.allowed": "Asked {connector} with your approval: {tool}",
@@ -3054,6 +3085,8 @@ export const en = {
   "meetings.start.copied": "Copied",
   "meetings.start.noticeText":
     "I’m recording this meeting with IncarnaMind to take notes. The recording stays on my computer.",
+  "meetings.start.noticeText.screen":
+    "I’m recording this meeting with IncarnaMind to take notes, and what is shared on screen, read only to answer questions during the call and deleted when it ends. The recording stays on my computer.",
   "meetings.start.kept.mac": "Audio stays on this Mac and is deleted within a day.",
   "meetings.start.kept.other": "Audio stays on this computer and is deleted within a day.",
   "meetings.start.dismiss": "Don’t record; keep this as a note (Esc)",
@@ -3117,6 +3150,35 @@ export const en = {
     "The transcript wasn’t saved: no folder was chosen for new files.",
   "meetings.transcript.retry": "Try again",
   "meetings.transcript.save": "Save it",
+  "meetings.screen.ask": "Will someone share their screen? Read it to answer your questions",
+  "meetings.screen.choose": "Choose window…",
+  "meetings.screen.decline": "Not this time",
+  "meetings.screen.explain":
+    "To read the shared screen, macOS asks to let IncarnaMind record the screen. Only the window you choose is read, and nothing is kept.",
+  "meetings.screen.continue": "Continue",
+  "meetings.screen.offer": "Read the shared screen…",
+  "meetings.screen.choosing": "Starting to read the window…",
+  "meetings.screen.reading": "Reading the “{window}” window",
+  "meetings.screen.readingShared": "Reading the shared window",
+  "meetings.screen.downloading":
+    "Reading the “{window}” window · getting text recognition ready, {percent}% of {size}",
+  "meetings.screen.downloadingShared":
+    "Reading the shared window · getting text recognition ready, {percent}% of {size}",
+  "meetings.screen.stop": "Stop",
+  "meetings.screen.wholeScreen":
+    "Only one window is read, never a whole screen. Choose the meeting app’s window or the call’s browser window.",
+  "meetings.screen.denied":
+    "IncarnaMind isn’t allowed to record the screen, so the shared screen isn’t read.",
+  "meetings.screen.closed": "The shared window was closed.",
+  "meetings.screen.failed": "The shared screen couldn’t be read.",
+  "meetings.screen.retry": "Try again",
+  "meetings.screen.picker.title": "Choose the window to read",
+  "meetings.screen.picker.body":
+    "The meeting app’s window, or the browser window with the call. Its text is read on this computer and deleted when the meeting stops.",
+  "meetings.screen.picker.loading": "Finding windows…",
+  "meetings.screen.picker.none": "No windows to read. Open the meeting, then try again.",
+  "meetings.screen.picker.read": "Read this window",
+  "meetings.screen.picker.cancel": "Cancel",
   "transcript.live": "Live",
   "transcript.recording": "Recording…",
   "transcript.lines.one": "{count} line",
@@ -3182,6 +3244,9 @@ export const en = {
   "meetings.settings.what": "What is recorded",
   "meetings.settings.whatBoth": "Your microphone and the other people (the computer’s sound).",
   "meetings.settings.whatMe": "Only your microphone.",
+  "meetings.settings.screen": "Ask to read the shared screen when a meeting starts",
+  "meetings.settings.screenBody":
+    "When someone shares a window, IncarnaMind can read its text on this computer to answer your questions during the call, and deletes it when the meeting stops.",
   "meetings.settings.kept.mac":
     "Audio stays on this Mac and is deleted a day after each meeting at the latest.",
   "meetings.settings.kept.other":
@@ -3429,6 +3494,7 @@ export const en = {
   "steps.searched": "Searched {scope} · {sources}",
   "steps.searchedWeb": "Searched the web · {sources}",
   "steps.listened": "Listened to the live transcript · {sources}",
+  "steps.listened.screen": "Read the shared screen and the live transcript · {sources}",
   "steps.sources": "{count} sources",
   "steps.sources.one": "1 source",
   "steps.sources.none": "no sources",

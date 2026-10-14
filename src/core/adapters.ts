@@ -6,6 +6,7 @@
  * imports Electron (ADR-0004, ADR-0006).
  */
 import type { ChildProcess } from "node:child_process";
+import { SCREEN_THUMBNAIL_WIDTH } from "../shared/capture";
 import type { DrawnPage, PageCaptureRequest } from "../shared/citedPage";
 import type { PrintDocument } from "../shared/printDocument";
 import type { AgentLauncher } from "./agents";
@@ -16,6 +17,7 @@ import type {
   ExternalService,
   SandboxLevel,
   SecretProtection,
+  ShareableWindow,
   TranscriptionEngine,
 } from "./api";
 import type { StatIdentity } from "./documents/files";
@@ -563,6 +565,72 @@ export interface AudioCapture {
   openSettings(source: AudioSource): Promise<void>;
 }
 
+/** A frame of the shared window, as the core reads it: in grey to read, and as the Citation card shows it. */
+export { SCREEN_THUMBNAIL_WIDTH };
+
+export interface ScreenFrame {
+  picture: PagePicture;
+  /** The frame as a JPEG, smaller than the picture when it is large. */
+  image: Uint8Array;
+}
+
+/** Where a shared window's capture delivers what it sees. */
+export interface ScreenSink {
+  /** About once a second: the window, drawn small, in grey (`SCREEN_THUMBNAIL_WIDTH` wide). */
+  sample(thumbnail: PagePicture): void;
+  /** It stopped by itself: the window closed, or its sharing was stopped from outside. */
+  ended(): void;
+}
+
+/** One shared window being captured, from `ScreenCapture.start`. */
+export interface ScreenSession {
+  /** The window's name, as the system gives it ("Zoom Meeting"). */
+  readonly name: string;
+  /** The window as it is now, at full size. Rejects once the capture has ended. */
+  grab(): Promise<ScreenFrame>;
+  /** Stops capturing. Nothing of the window is kept. */
+  stop(): void;
+}
+
+/** Why a window couldn't be captured (see `ScreenCapture.start`). */
+export class ScreenCaptureError extends Error {
+  override name = "ScreenCaptureError";
+  constructor(
+    readonly reason: "whole-screen" | "denied" | "closed",
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+/**
+ * Whether IncarnaMind may capture a window: on macOS, the Screen Recording
+ * permission, which macOS asks for the first time the windows are listed
+ * ("not-asked" until then). Elsewhere always "granted".
+ */
+export type ScreenPermission = "granted" | "not-asked" | "denied";
+
+/**
+ * Captures one window the User chose during a Meeting, video only, to read
+ * its text (ADR-0024). The desktop app captures in the meeting capture window
+ * (src/main/meetings), from the windows IncarnaMind's own picker lists; tests
+ * pass a fake that shows what they script. Frames stay in memory.
+ */
+export interface ScreenCapture {
+  permission(): ScreenPermission;
+  /**
+   * The windows IncarnaMind's picker offers: never IncarnaMind's own, never a
+   * whole screen. On macOS the first call asks for the permission. Rejects
+   * with `ScreenCaptureError` "denied" when it isn't given.
+   */
+  windows(): Promise<ShareableWindow[]>;
+  /**
+   * Starts capturing a window from `windows()`. Rejects with
+   * `ScreenCaptureError` when it can't be captured, or is a whole screen.
+   */
+  start(window: string, sink: ScreenSink): Promise<ScreenSession>;
+}
+
 /**
  * Draws a cited page with the Document viewer's view for its kind, off
  * screen, so it can be saved (#133): every kind but PDF, whose pages the core
@@ -882,6 +950,11 @@ export interface CoreAdapters {
    * Meetings): Meetings can't start.
    */
   audioCapture?: AudioCapture;
+  /**
+   * Captures the window the User shares during a Meeting (see
+   * `ScreenCapture`). Absent: the meeting bar doesn't offer to read one.
+   */
+  screenCapture?: ScreenCapture;
   /**
    * Draws cited pages other than PDFs' (see `CapturePage`). The desktop app
    * draws them in a hidden window (src/main/citedPageCapture.ts). Absent

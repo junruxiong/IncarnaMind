@@ -13,6 +13,7 @@ import type {
   Document,
   KeptCitationText,
 } from "../core/api";
+import type { Language } from "../core/language";
 import { displayName } from "./documentNames";
 import type { MessageKey } from "./i18n";
 import {
@@ -157,9 +158,22 @@ export function citationState(
   attributes: Partial<CitationAttributes>,
   documents: readonly LiveDocument[] | null,
   kept: readonly KeptCitationText[] = [],
+  screens: readonly string[] = [],
 ): CitationState {
   const check = attributes.check ?? "checking";
   const reason = attributes.checkReason ?? null;
+  const location = citationLocation(attributes);
+  if (location?.kind === "screen") {
+    // Its check stands while its screen is kept; then nothing is left to check (ADR-0024).
+    return screenKept(location.screen, screens) || check === "checking"
+      ? { check, reason, documentId: null, changedAfterCited: false }
+      : {
+          check: "cant-check",
+          reason: "screen-deleted",
+          documentId: null,
+          changedAfterCited: false,
+        };
+  }
   const own = attributes.documentId ?? null;
   if (documents === null) return { check, reason, documentId: own, changedAfterCited: false };
   const live = liveDocumentOf(attributes, documents);
@@ -181,6 +195,13 @@ export function citationState(
 }
 
 /**
+ * Whether a shared screen is still kept: `screens` are the memories of the
+ * Meetings that record now (`MeetingScreen.memory`), which start their screens' ids.
+ */
+export const screenKept = (screen: string, screens: readonly string[]): boolean =>
+  screens.some((memory) => screen.startsWith(`${memory}/`));
+
+/**
  * A Citation's short Location label in a language ("p. 3", "slide 4",
  * "Revenue, rows 12–14", "§ 2.1 Sensitivity", "lines 120–134"); null for a
  * whole TXT or Markdown file cited before Locations.
@@ -200,10 +221,15 @@ export function citedLocation(
 export function citationSource(
   attributes: Partial<CitationAttributes>,
   t: Translate,
+  language: Language = "en",
 ): { name: string; where: string | null; text: string } {
   const name = attributes.documentName ?? "";
   const location = citationLocation(attributes);
   if (!location) return { name, where: null, text: name };
+  if (location.kind === "screen") {
+    const where = formatLocation(location, t, language);
+    return { name: where, where, text: where };
+  }
   const sameName = (sheet: string) =>
     sheet.toLowerCase() === name.toLowerCase().replace(/\.[^.]+$/, "") ||
     sheet.toLowerCase() === name.toLowerCase();
@@ -217,9 +243,10 @@ export function citationSource(
 
 /** A Citation as plain text, e.g. "[Attention Is All You Need, p. 3]", for copying as text. */
 export function citationReference(attributes: Partial<CitationAttributes>): string {
+  const location = citationLocation(attributes);
+  if (location?.kind === "screen") return `[${englishLocation(location)}]`;
   const name = attributes.documentName;
   if (!name) return "";
-  const location = citationLocation(attributes);
   return location ? `[${name}, ${englishLocation(location)}]` : `[${name}]`;
 }
 
@@ -234,15 +261,17 @@ export function badgeMessage(
   const params: Record<string, string> = location
     ? { location: formatLocation(location, t) }
     : { document };
-  // A Transcript's is labelled so, so its check isn't taken for a page's.
+  // A Transcript's is labelled so, so its check isn't taken for a page's; a shared screen's too.
   const where =
     location === null
       ? "document"
-      : isTranscriptLocation(location)
-        ? "transcript"
-        : readsIn(location)
-          ? "in"
-          : "on";
+      : location.kind === "screen"
+        ? "screen"
+        : isTranscriptLocation(location)
+          ? "transcript"
+          : readsIn(location)
+            ? "in"
+            : "on";
   switch (state.check) {
     case "checking":
       return { key: "citation.badge.checking" };
@@ -251,7 +280,9 @@ export function badgeMessage(
     case "not-found":
       return { key: `citation.badge.notFound.${where}`, params };
     case "cant-check":
-      return { key: "citation.badge.cantCheck" };
+      return state.reason === "screen-deleted"
+        ? { key: "citation.screen.deleted" }
+        : { key: "citation.badge.cantCheck" };
     case "unsupported":
       return { key: "citation.badge.unsupported" };
     case "contradicted":

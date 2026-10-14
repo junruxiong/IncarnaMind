@@ -98,15 +98,48 @@ export function mindInstructions(offered: boolean): string {
  * A Question asked while the meeting the User is in records (#144): the live transcript goes
  * with it (see ./liveTranscript), and is what Questions about the call are answered from.
  */
-export function meetingInstructions(listening: boolean): string {
-  if (!listening) return "";
+/** What a Question asked during a call went with (see ./liveTranscript). */
+export interface Listening {
+  /** It was asked during a call. */
+  meeting: boolean;
+  /** With the live transcript: something has been said. */
+  transcript: boolean;
+  /** With the shared screen's text. */
+  screen: boolean;
+}
+
+export function meetingInstructions({ meeting, transcript, screen }: Listening): string {
+  if (!meeting) return "";
   return [
     "The User is in a meeting that is being recorded, and asks this during the call.",
-    "Before their Question, <live-transcript> holds what has been said so far, newest last: Passages of the meeting's Transcript, each at its time in the call.",
-    "- Answer what they ask about the call from it, and cite its lines as you cite any Passage, by its id.",
-    '- "Just now", "the last few minutes" and "what was just said" mean its newest Passages.',
+    transcript
+      ? ""
+      : "Nothing has been said in the call yet: there is no transcript to answer from. If the Question is about what was said, say that nothing has been said yet.",
+    transcript
+      ? "Before their Question, <live-transcript> holds what has been said so far, newest last: Passages of the meeting's Transcript, each at its time in the call."
+      : "",
+    transcript
+      ? "- Answer what they ask about the call from it, and cite its lines as you cite any Passage, by its id."
+      : "",
+    transcript
+      ? '- "Just now", "the last few minutes" and "what was just said" mean its newest Passages.'
+      : "",
+    screen
+      ? "<shared-screen> holds the text read from what someone shares on screen in the call, by the time it was read, the newest last: it is what is on screen now. Each has an id such as S1: cite its words as you cite a Passage, by that id, copying them as they are."
+      : "",
+    screen
+      ? '- "The slide", "the screen", "what they just showed" and "this table" mean the newest <shared-screen>.'
+      : "",
+    screen
+      ? "- A figure in ⟦ ⟧ was hard to read on the screen and may be misread: don't state it as fact; say it was hard to read on the screen, and cite it."
+      : "",
+    screen
+      ? "- When a <shared-screen> has same-as, those Passages of the User's Documents hold the same text: cite them too, with the screen, for a figure or a claim taken from it."
+      : "",
     "- Search the User's Documents too when the Question needs them, for instance to check what was said against them.",
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 /**

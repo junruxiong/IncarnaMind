@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { vi } from "vitest";
 import type {
   Core,
+  CoreAdapters,
   Logger,
   Meeting,
   MeetingTranscript,
@@ -100,12 +101,15 @@ export async function transcribingCore(
     model,
     loads,
     log,
+    adapters,
   }: {
     engine?: FakeTranscriberOptions;
     model?: Parameters<typeof scriptedModels>[0];
     /** The engine starts once this resolves, as a model loading slowly does. */
     loads?: Promise<void>;
     log?: Logger;
+    /** More adapters, such as a shared window's (./screens). */
+    adapters?: Partial<CoreAdapters>;
   } = {},
 ) {
   const clock = manualClock();
@@ -122,6 +126,7 @@ export async function transcribingCore(
     now: clock.now,
     ...(models && { createChatModel: models.createChatModel }),
     ...(log && { log }),
+    ...adapters,
   });
   await core.updateSettings({ device: { meetingsEnabled: true, meetingNoticeAccepted: true } });
   await core.setOutputLocation(join(dataDir, "Documents", "IncarnaMind"));

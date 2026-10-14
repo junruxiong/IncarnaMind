@@ -12,7 +12,13 @@
 import type * as Y from "yjs";
 import { MIND_TEXT_ORIGINS_FIELD, type ThirdPartySource } from "../core/api";
 
-const SOURCES: readonly ThirdPartySource[] = ["imported", "web-page", "checked-document"];
+const SOURCES: readonly ThirdPartySource[] = [
+  "imported",
+  "web-page",
+  "checked-document",
+  "transcript",
+  "shared-screen",
+];
 
 /** A stored source, or null for none, or one this version doesn't know. */
 export const parseThirdPartySource = (value: unknown): ThirdPartySource | null =>
