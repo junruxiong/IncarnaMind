@@ -66,7 +66,7 @@ import { InvalidInputError, isRecord, MindReadOnlyError } from "./errors";
 import type { MindContent } from "./mindContent";
 import { type createMinds, parseFolderChoice } from "./minds";
 import type { Database } from "./storage";
-import { applyLook, type LookPlan, planLook } from "./wordLookBackfill";
+import { applyLook, clearLook, type LookPlan, planLook } from "./wordLookBackfill";
 
 /** The folder in the data folder that keeps imported Word packages. */
 export const WORD_PACKAGES_FOLDER = "Word imports";
@@ -408,6 +408,9 @@ export function createWordImports(options: WordImportsOptions) {
           setWordLook(blocks.doc, structure.look);
         }
       });
+      if (structure.lookUnreadable.length > 0) {
+        log.warn("word.look.partsUnreadable", { parts: structure.lookUnreadable.join(", ") });
+      }
       log.info("word.import.started", {
         blocks: structure.blocks.length,
         paragraphs: structure.report.paragraphs,
@@ -553,7 +556,10 @@ export function createWordImports(options: WordImportsOptions) {
             // Planned inside the edit so it applies to the content it was planned on.
             plan = content.edit(mindId, (blocks) => {
               const doc = blocks.doc;
-              if (!doc || wordLookOf(doc)) return null;
+              if (!doc) return null;
+              const look = wordLookOf(doc);
+              if (look && look.version >= WORD_LOOK_VERSION) return null;
+              if (look) clearLook(doc, blocks);
               const planned = planLook(doc, blocks, structure);
               applyLook(doc, planned);
               setWordLook(doc, structure.look);

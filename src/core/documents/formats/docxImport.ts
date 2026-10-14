@@ -81,6 +81,8 @@ export interface WordStructure {
   /** Someone's tracked changes read as Proposals (#108), by their request: who made each, and when. */
   changes: Map<string, WordChangeRequest>;
   look: WordLook;
+  /** Parts the look couldn't read (a broken `settings.xml`): it went on without them. */
+  lookUnreadable: string[];
 }
 
 /** Reads a Word package's main document as Blocks. Throws `WordRefusedError` for one that can't be read. */
@@ -818,6 +820,7 @@ class Reader {
       report: this.report,
       changes: this.changes,
       look: this.look.look(),
+      lookUnreadable: this.look.unreadable,
     };
   }
 
@@ -1462,7 +1465,7 @@ class Reader {
     return main;
   }
 
-  /** Text with the paragraph's main run look loses its mark; text with no look gets one. */
+  /** Unmarked text gets the plain mark, or the paragraph's run would draw on it. */
   private markOnlyOtherRuns(content: NodeJSON[], main: string): void {
     const plain = content.some((node) => node.type === "text" && runLookOf(node) === null)
       ? this.look.plainRun()
