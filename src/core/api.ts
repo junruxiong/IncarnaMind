@@ -1012,6 +1012,11 @@ export interface WordFileCheck {
   /** Its tracked changes, of every kind (paragraph marks, formatting and moves too). */
   changes: number;
   comments: number;
+  /**
+   * An earlier file of the same name imported into the same Folder whose original is a
+   * Document (#720), which this one can become a new version of; null for none.
+   */
+  earlierDraft: { documentId: string; name: string } | null;
 }
 
 export interface ImportWordFileInput {
@@ -1020,6 +1025,16 @@ export interface ImportWordFileInput {
   origin: WordOrigin;
   /** The Folder to make the Mind in; none, or null: Not in a Folder. */
   folderId?: string | null;
+  /**
+   * Also adds the original file to the Library as a Document, in the Mind's Folder, so
+   * Answers can cite it (#720). Absent: false, the Mind alone.
+   */
+  addOriginal?: boolean;
+  /**
+   * With `addOriginal`, makes the file a new version of this Document (the check's
+   * `earlierDraft`) instead of a Document of its own; one that can't take it is added as new.
+   */
+  newVersionOf?: string | null;
 }
 
 /**
@@ -1028,7 +1043,15 @@ export interface ImportWordFileInput {
  * no Mind made.
  */
 export type ImportWordFileResult =
-  | { ok: true; mind: Mind }
+  | {
+      ok: true;
+      mind: Mind;
+      /**
+       * With `addOriginal`: whether the original became a Document. False when the Library
+       * couldn't take it, which the User is told, with a way to try again (`addWordOriginal`).
+       */
+      originalAdded?: boolean;
+    }
   | { ok: false; refusal: WordRefusalReason };
 
 /**
@@ -1106,6 +1129,8 @@ export interface WordFileInfo {
   size: number;
   /** The package's main document part: "word/document.xml". */
   part: string;
+  /** The Document the original was also added as (#720); null or absent: none. */
+  documentId?: string | null;
 }
 
 /** How far an import has got, in top-level Blocks. While `done` is under `total`, the Mind can't be edited. */
@@ -2003,6 +2028,11 @@ export interface Document {
   ownFile: OwnFile | null;
   /** Where its text came from, when Find sources added it (#296); null for any other Document. */
   found: DocumentFoundSource | null;
+  /**
+   * The Mind this file was last imported as, still there (#720): the User's working copy of
+   * it, which is never cited. Null for a file never imported.
+   */
+  importedAs: string | null;
   /** When the Document was added to IncarnaMind. ISO 8601, UTC. */
   createdAt: string;
   /** ISO 8601, UTC. */
@@ -6476,10 +6506,11 @@ export interface CoreApi {
   /** Makes a Mind, in a Folder if given (it must exist), and returns it. */
   createMind(input?: CreateMindInput): Promise<Mind>;
   /**
-   * Reads a Word file for the import screen (#104): whether it can be imported, and
-   * whose document it looks like. Keeps nothing, and changes nothing.
+   * Reads a Word file for the import screen (#104): whether it can be imported, whose
+   * document it looks like, and an earlier draft of it imported into the Folder (none, or
+   * null: Not in a Folder). Keeps nothing, and changes nothing.
    */
-  checkWordFile(path: string): Promise<WordFileCheck>;
+  checkWordFile(path: string, folderId?: string | null): Promise<WordFileCheck>;
   /**
    * Imports a .docx as a new Mind (#104), titled after the file, keeping a copy of its
    * package in the data folder to export back into (#105), so the file may move or go.
@@ -6489,6 +6520,13 @@ export interface CoreApi {
    * next start). Someone else's document makes every Block third-party text (#78).
    */
   importWordFile(input: ImportWordFileInput): Promise<ImportWordFileResult>;
+  /**
+   * Adds the original of a Mind imported from Word to the Library, in the Mind's Folder,
+   * and links the two, as importing with `addOriginal` does (#720): for when that failed.
+   * Returns whether it was added. Throws NotFoundError for an unknown Mind, and
+   * InvalidInputError for one not imported from Word.
+   */
+  addWordOriginal(mindId: string, path: string): Promise<boolean>;
   /** Minds that are not deleted, most recently updated first. Editing a Mind's content updates it. */
   listMinds(): Promise<Mind[]>;
   /** Changes a Mind's title (trimmed; empty means "Untitled") and returns the Mind. */
@@ -7843,6 +7881,7 @@ const methods: Record<CoreApiMethod, true> = {
   createMind: true,
   checkWordFile: true,
   importWordFile: true,
+  addWordOriginal: true,
   listMinds: true,
   renameMind: true,
   deleteMind: true,

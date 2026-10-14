@@ -234,6 +234,7 @@ export const en = {
   "mind.count": "{count} Minds",
   "mind.moveTo": "Move to…",
   "document.openTab": "Open in a new tab",
+  "document.openMind": "Open its Mind",
   "document.peek": "Peek",
   "object.copy": "Copy",
   "document.tags": "Tags…",
@@ -945,6 +946,8 @@ export const en = {
   "info.from.linked": "Linked folder “{name}”",
   "info.from.own": "Other Documents",
   "info.folder": "Folder",
+  "info.mind": "Mind",
+  "info.importedAs": "Imported as a Mind",
   "info.tags": "Tags",
   "info.created": "Created",
   "info.createdValue": "{date} (the file’s own date)",
@@ -2514,6 +2517,8 @@ export const en = {
   "error.folder.nameTaken": "A folder with this name already exists.",
   "error.folder.limit": "The Library supports up to 100 folders.",
   "error.mind.notFound": "That Mind doesn't exist or has been deleted.",
+  "error.mind.notFromWord":
+    "This Mind wasn’t imported from a Word file, so it has no original to add.",
   "error.mind.newerVersion": "A newer version of IncarnaMind made this. Update to open it.",
   "error.mind.newerVersionEdit":
     "A newer version of IncarnaMind wrote this Mind. Update IncarnaMind to edit it.",
@@ -3685,6 +3690,8 @@ export const en = {
   "wordImport.othersMore": "{count} more",
   "wordImport.keeps":
     "IncarnaMind keeps a copy of the file, so export can write your changes back into it.",
+  "wordImport.addOriginal": "Also add the original to the Library, so Answers can cite it",
+  "wordImport.newerDraft": "A newer draft of “{name}”? Keep both as versions",
   "wordImport.layoutNotShown":
     "This file’s layout (fonts, colours, shading and aligned columns) isn’t shown in the Mind. It’s kept, and comes back when you export to Word.",
   "wordImport.import": "Import",
@@ -3707,6 +3714,9 @@ export const en = {
     "“{name}” couldn’t be read. It may have moved, or IncarnaMind isn’t allowed to open it.",
   "wordImport.from": "From {name}",
   "wordImport.keepsStyles": "Export keeps its styles",
+  "wordImport.from.open": "Open {name} beside it",
+  "wordImport.notAdded": "“{name}” couldn’t be added to the Library, so Answers can’t cite it.",
+  "wordImport.addToLibrary": "Add to Library",
   "wordImport.from.tooltip":
     "Opened from a Word file. Export writes your changes back into it and keeps its styles, numbering, headers and footers.",
   "wordImport.progress": "Importing “{name}” · {percent}%",

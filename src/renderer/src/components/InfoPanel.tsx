@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import type { Document, LinkedFolder } from "../../../core/api";
 import { displayName } from "../../../shared/documentNames";
+import { mindName } from "../../../shared/naming";
 import { copyText } from "../copied";
 import { files } from "../core";
 import { useDocumentFolder, useUnitCount } from "../documentFacts";
@@ -218,6 +219,9 @@ function DocumentInfo({ document }: { document: Document }) {
     const linked = state.linkedFolders.find((each) => each.id === document.linkedFolderId);
     return linked && folderName(linked.path);
   });
+  const importedAs = useAppStore((state) =>
+    document.importedAs ? state.minds.find((each) => each.id === document.importedAs) : undefined,
+  );
   const units = useUnitCount(document);
   const chips = chipsOf(document.tags, tags);
   const file = !document.web;
@@ -255,6 +259,20 @@ function DocumentInfo({ document }: { document: Document }) {
         <Row label={t("info.folder")} testId="info-folder">
           {folder?.name ?? t("library.unsorted")}
         </Row>
+        {importedAs && (
+          <Row label={t("info.mind")} testId="info-imported-as">
+            <span className="block">{t("info.importedAs")}</span>
+            <button
+              type="button"
+              data-testid="info-open-mind"
+              title={t("document.openMind")}
+              onClick={() => useAppStore.getState().openMind(importedAs.id)}
+              className="rounded-sm text-left text-accent underline-offset-2 hover:underline"
+            >
+              {mindName(importedAs) || t("mind.untitled")}
+            </button>
+          </Row>
+        )}
         {chips.length > 0 && (
           <Row label={t("info.tags")} testId="info-tags">
             <span className="flex flex-wrap gap-x-3 gap-y-0.5">
