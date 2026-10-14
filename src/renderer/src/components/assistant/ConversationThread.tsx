@@ -39,7 +39,7 @@ const AT_FOOT_PX = 24;
  * the moment it is sent, with its Answer's first step and Stop under it
  * before the core has checked the model, so asking never looks like nothing
  * happened. The Tasks of the Mind it reads show their progress where each
- * started, by time among the messages (D189). It keeps up with an Answer
+ * started, by time among the messages (#657). It keeps up with an Answer
  * being written while the User is at its foot, and brings an Answer a link
  * back led to into view, flashed.
  */
