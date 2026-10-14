@@ -213,7 +213,7 @@ for (const { width, label } of [
       }, long);
       await window.getByTestId("browse-views").getByRole("button", { name: "标签" }).click();
       const moons = window.getByTestId("sidebar-tag").filter({ hasText: "Moons" });
-      await moons.getByRole("button").first().focus();
+      await moons.getByRole("treeitem").first().focus();
       await window.keyboard.press("F2");
       await window.getByTestId("sidebar-tags").getByRole("textbox").fill(long);
       await window.keyboard.press("Enter");
