@@ -14,8 +14,8 @@ import {
 /*
  * A table in a Mind and its chart (#704): "Chart from table" puts the years of a table of years
  * by metrics on the x axis, with the metrics as its series; "Switch rows and columns" swaps them,
- * from the chart's menu and from its right-click menu, and ⌘Z puts them back; a calculation's
- * working table is offered no chart, in its menu or in ⌘K; and a plain-text copy of a Mind with
+ * from the chart's kind menu, from ⌘K and from its right-click menu, twice, and ⌘Z puts them
+ * back; a calculation's working table is offered no chart; and a plain-text copy of a Mind with
  * a table and its chart has the table once, tab-separated, while the HTML copy keeps both. In
  * English and Chinese, at a wide and a narrow window. Set INCARNAMIND_SCREENSHOTS to a folder to
  * also save screenshots.
@@ -46,6 +46,7 @@ const WORDS = {
     years2: ["2023", "2024", "2025"],
     chartFromTable: "Chart from table",
     switch: "Switch rows and columns",
+    rows: "Rows",
     lead: "Revenue by year",
   },
   "zh-CN": {
@@ -68,6 +69,7 @@ const WORDS = {
     years2: ["2023年", "2024年", "2025年"],
     chartFromTable: "用表格生成图表",
     switch: "行列互换",
+    rows: "数据行",
     lead: "按年度列出的营业收入",
   },
 } as const;
@@ -138,21 +140,13 @@ for (const [language, width] of [
     await setWindowSize(app, window, width, 660);
     const { editor, grid } = await mindWithTable(window, words.lead, words.years);
 
-    // ⌘K finds Chart from table with the cursor in the table, and the table's menu makes the chart
-    // after the table.
-    const cell = grid.locator("td").filter({ hasText: words.firstMetric });
-    await pointAndClick(window, cell);
-    await window.keyboard.press("ControlOrMeta+k");
-    await expect(window.getByTestId("palette")).toBeVisible();
-    await window.keyboard.type(words.chartFromTable);
-    await expect(window.getByTestId("palette-item").first()).toContainText(words.chartFromTable);
-    await window.keyboard.press("Escape");
-    await expect(window.getByTestId("palette")).toBeHidden();
-    await pointAndClick(window, cell);
+    // The table's menu makes the chart, after the table.
+    await pointAndClick(window, grid.locator("td").filter({ hasText: words.firstMetric }));
     await pointAndClick(window, window.getByTestId("table-menu"));
     const chartItem = window.getByTestId("table-chart");
     await expect(chartItem).toHaveText(words.chartFromTable);
     await pointAndClick(window, chartItem);
+    await expect(window.getByTestId("table-actions")).toBeHidden();
     const chart = editor.getByTestId("chart");
     await expect(chart).toHaveCount(1);
     await expect(chart.getByTestId("chart-point")).toHaveCount(6);
@@ -170,9 +164,11 @@ for (const [language, width] of [
     // Switch rows and columns, in the chart's menu: the metrics are along the axis, the years the series.
     await pointAndClick(window, chart.getByTestId("chart-kind"));
     const menu = window.getByTestId("chart-kind-menu");
+    await expect(menu).toContainText(words.rows);
     const switchItem = menu.getByTestId("chart-switch");
     await expect(switchItem).toHaveText(words.switch);
     await pointAndClick(window, switchItem);
+    await expect(menu).toBeHidden();
     await expect(chart.getByTestId("chart-point")).toHaveCount(6);
     await expect.poll(() => axisLabels(chart)).toEqual(expect.arrayContaining([...words.metrics]));
     expect(await axisLabels(chart)).not.toContain(words.years2[0]);
@@ -193,13 +189,35 @@ for (const [language, width] of [
       new RegExp(`^${words.years2[0]} · ${words.metrics[0]}`),
     );
 
-    // The same from the right-click menu, among the chart's own actions, and again: a second one.
-    await chart.locator(".chart-head").click({ button: "right", position: { x: 4, y: 4 } });
-    const actions = window.getByTestId("chart-actions");
-    await expect(actions).toBeVisible();
-    const fromMenu = actions.getByRole("menuitem", { name: new RegExp(`^${words.switch}`) });
-    await pointAndClick(window, fromMenu);
-    await expect(actions).toBeHidden();
+    // From ⌘K, with the focus on the chart.
+    await window.keyboard.press("ControlOrMeta+k");
+    await expect(window.getByTestId("palette")).toBeVisible();
+    await window.keyboard.type(words.switch);
+    const command = window.locator('[data-testid="palette-item"][data-kind="command"]').first();
+    await expect(command).toContainText(words.switch);
+    await window.keyboard.press("Enter");
+    await expect(window.getByTestId("palette")).toBeHidden();
+    await expect.poll(() => axisLabels(chart)).toEqual(expect.arrayContaining([...words.metrics]));
+    await window.keyboard.press("ControlOrMeta+z");
+    await expect.poll(() => axisLabels(chart)).toEqual(expect.arrayContaining([...words.years2]));
+
+    // From the right-click menu, among the chart's own actions, twice: back as it was, and each
+    // switch is a step of its own that ⌘Z takes back.
+    const switchFromMenu = async () => {
+      await chart.locator(".chart-head").click({ button: "right", position: { x: 4, y: 4 } });
+      const actions = window.getByTestId("chart-actions");
+      await expect(actions).toBeVisible();
+      await pointAndClick(
+        window,
+        actions.getByRole("menuitem", { name: new RegExp(`^${words.switch}`) }),
+      );
+      await expect(actions).toBeHidden();
+    };
+    await switchFromMenu();
+    await expect.poll(() => axisLabels(chart)).toEqual(expect.arrayContaining([...words.metrics]));
+    await switchFromMenu();
+    await expect.poll(() => axisLabels(chart)).toEqual(expect.arrayContaining([...words.years2]));
+    await window.keyboard.press("ControlOrMeta+z");
     await expect.poll(() => axisLabels(chart)).toEqual(expect.arrayContaining([...words.metrics]));
     await window.keyboard.press("ControlOrMeta+z");
     await expect.poll(() => axisLabels(chart)).toEqual(expect.arrayContaining([...words.years2]));
@@ -220,7 +238,7 @@ for (const [language, width] of [
     await app.close();
   });
 
-  test(`a calculation's working table is offered no chart, in its menu or in ⌘K (${language}, ${width}px)`, async () => {
+  test(`a calculation's working table is offered no chart (${language}, ${width}px)`, async () => {
     const words = WORDS[language];
     const { app, window } = await launchApp(dataDir);
     await dismissChatSetup(window);
@@ -235,14 +253,6 @@ for (const [language, width] of [
     await expect(window.getByTestId("table-chart")).toHaveCount(0);
     await window.keyboard.press("Escape");
     await expect(window.getByTestId("table-actions")).toBeHidden();
-
-    await window.keyboard.press("ControlOrMeta+k");
-    await expect(window.getByTestId("palette")).toBeVisible();
-    await window.keyboard.type(words.chartFromTable);
-    await expect(window.getByTestId("palette-empty")).toBeVisible();
-    await expect(window.getByTestId("palette-item")).toHaveCount(0);
-    await window.keyboard.press("Escape");
-    await expect(window.getByTestId("palette")).toBeHidden();
     await app.close();
   });
 }
