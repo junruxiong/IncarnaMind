@@ -93,7 +93,11 @@ const OPENALEX_WORKS: OpenAlexWork[] = [
 /** A core whose Crossref is the stand-in, with a Mind whose reference list holds `entries`. */
 async function setUp(
   entries: readonly string[],
-  { localOnly = false, works = [LSTM, DEEP] }: { localOnly?: boolean; works?: CrossrefWork[] } = {},
+  {
+    localOnly = false,
+    works = [LSTM, DEEP],
+    openalex = OPENALEX_WORKS,
+  }: { localOnly?: boolean; works?: CrossrefWork[]; openalex?: OpenAlexWork[] } = {},
 ) {
   const services = await startReferenceServices({
     works,
@@ -102,7 +106,7 @@ async function setUp(
       "10.48550/arXiv.1706.03762": "datacite",
       "10.5281/zenodo.123456": "datacite",
     },
-    openalex: OPENALEX_WORKS,
+    openalex,
     arxiv: { "1706.03762": recordedAnswer("arxiv-attention.xml") },
   });
   onTestFinished(() => services.close());
@@ -281,6 +285,39 @@ describe("Checking a reference list (#711)", { timeout: 30_000 }, () => {
     expect(await offline.checkReferences(mind.id)).toMatchObject({
       kind: "checked",
       references: [{ mark: "not-checked", reason: "unreachable" }],
+    });
+  });
+
+  // protects=a Crossref record of another edition (a later year) gives way to OpenAlex's record of the one cited, while a year OpenAlex doesn't confirm stays a mismatch; fails_when=Crossref's other edition makes a real reference "doesn't match", or a wrong year is let through; no_claim=none beyond protects.
+  test("when Crossref's record differs, OpenAlex's closer record is kept", async () => {
+    const reprint: CrossrefWork = {
+      DOI: "10.5555/attention.2025",
+      title: ["Attention Is All You Need"],
+      author: [{ family: "Vaswani", given: "Ashish" }],
+      issued: { "date-parts": [[2025]] },
+    };
+    const original: OpenAlexWork = {
+      id: "https://openalex.org/W2963403868",
+      doi: "https://doi.org/10.48550/arxiv.1706.03762",
+      display_name: "Attention Is All You Need",
+      publication_date: "2017-06-12",
+      authorships: [{ author: { display_name: "Ashish Vaswani" } }],
+    };
+    const cited =
+      "Vaswani, A., et al. (2017). Attention is all you need. Advances in Neural Information Processing Systems, 30.";
+    const wrongYear =
+      "Vaswani, A., et al. (2019). Attention is all you need. Advances in Neural Information Processing Systems, 30.";
+    const { core, mindId } = await setUp([cited, wrongYear], {
+      works: [reprint],
+      openalex: [original],
+    });
+
+    expect(await core.checkReferences(mindId)).toMatchObject({
+      kind: "checked",
+      references: [
+        { mark: "found", service: "openalex", record: { year: 2017 } },
+        { mark: "mismatch", service: "crossref", differences: [{ field: "year" }] },
+      ],
     });
   });
 

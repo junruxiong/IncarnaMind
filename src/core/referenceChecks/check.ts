@@ -1,8 +1,10 @@
 /**
  * One reference checked (#711). By its DOI (or arXiv number) in Crossref
- * when it gives one, else by Crossref's matching of the reference as
- * written; when Crossref has no record of it, in OpenAlex, by the DOI or by
- * its title; a preprint OpenAlex has no record of either, on arXiv.
+ * when it gives one, and in OpenAlex when Crossref has no record of it; a
+ * preprint neither has, on arXiv. Else by Crossref's matching of the
+ * reference as written, and, when Crossref has no record of it or only one
+ * that differs from it, by its title in OpenAlex, keeping the record that
+ * differs least (Crossref's on a tie).
  *
  * It is found (the work exists, as written), doesn't match (a record exists,
  * but its title, year or first author differ), isn't found (its DOI or arXiv
@@ -169,13 +171,22 @@ export async function checkReference(
     "crossref",
     false,
   );
-  if (inCrossref) return inCrossref;
+  if (inCrossref?.mark === "found") return inCrossref;
+  // Crossref's record may be another edition's (a reprint, a later year): OpenAlex may hold the one cited.
   const title = titleOf(cited.text) ?? cited.text;
-  const inOpenAlex = bestOf(
-    cited,
-    await ask(run, "openalex", signal, () => openalex.search(title, signal)),
-    "openalex",
-    true,
-  );
+  let searched: WorkRecord[];
+  try {
+    searched = await ask(run, "openalex", signal, () => openalex.search(title, signal));
+  } catch (error) {
+    if (inCrossref && error instanceof ServiceFailure) return inCrossref;
+    throw error;
+  }
+  const inOpenAlex = bestOf(cited, searched, "openalex", true);
+  if (
+    inCrossref &&
+    (!inOpenAlex || inOpenAlex.differences.length >= inCrossref.differences.length)
+  ) {
+    return inCrossref;
+  }
   return inOpenAlex ?? unmatched("not-listed", null);
 }
