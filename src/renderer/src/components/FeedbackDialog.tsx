@@ -12,10 +12,6 @@ import {
 } from "./ui";
 import { useModal } from "./useModal";
 
-/**
- * Help › Send feedback: opens the issue tracker's new-issue page in the
- * browser, and says first that it is public. The app sends nothing itself.
- */
 export function FeedbackDialog() {
   const t = useT();
   const id = useId();

@@ -9,7 +9,6 @@ interface FeedbackState {
   close(): void;
 }
 
-/** Help › Send feedback: whether its dialog is open. */
 export const useFeedback = create<FeedbackState>((set) => ({
   open: false,
   show: () => set({ open: true }),

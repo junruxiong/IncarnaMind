@@ -6,26 +6,15 @@ import { useAppStore } from "../store";
 import { CloseLineIcon } from "./lineIcons";
 import { buttonStyle } from "./ui";
 
-/** Every event and field usage data can hold, for people to read. */
 export const USAGE_DATA_DETAILS_URL =
   "https://github.com/IncarnaMind/IncarnaMind/blob/main/docs/privacy.md#usage-data";
 
-/** What usage data looks like, in words. */
 const EXAMPLES: readonly MessageKey[] = [
   "usageData.example.question",
   "usageData.example.answer",
   "usageData.example.documents",
 ];
 
-/**
- * Usage data (DESIGN.md, First run), in a card at the bottom of the sidebar
- * where Get started was, shown only by a copy that can send it. A release
- * build asks once, when the first Answer to the User's own Question arrives,
- * and sends nothing unless the User chooses Send. A test build says from the
- * first run that it sends usage data, as testers agreed, with the switch to
- * turn it off and a button to hide the notice. Either way the choice lives in
- * Settings → Privacy.
- */
 export function UsageDataCard() {
   const t = useT();
   const gap = useGap();
