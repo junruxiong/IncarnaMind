@@ -21,7 +21,7 @@ import {
   checkClaims,
   dismissVerifyOutcome,
   findClaims,
-  openVerified,
+  openDocumentBeside,
   stopVerify,
   useVerify,
 } from "../verify";
@@ -139,7 +139,7 @@ export function VerifyLine({
     // The PDF beside it turns to the claim's page.
     const id: unknown = place.parent.attrs.id;
     const page = typeof id === "string" ? verification.pages[id] : undefined;
-    if (page !== undefined) openVerified(verification.documentId, page);
+    if (page !== undefined) openDocumentBeside(verification.documentId, page);
   };
 
   const stop = (
@@ -277,7 +277,7 @@ export function VerifyLine({
           data-testid="verify-from"
           className="mind-verify-from"
           title={t("verify.from.title", { name })}
-          onClick={() => openVerified(verification.documentId)}
+          onClick={() => openDocumentBeside(verification.documentId)}
         >
           <DocumentLineIcon kind="pdf" className="size-3.5 shrink-0" />
           <span className="min-w-0 truncate">{t("verify.from", { name })}</span>

@@ -1625,7 +1625,20 @@ export const migrations: readonly Migration[] = [
     `,
   },
   {
-    // 85 and 86 are held by work in progress.
+    // 85 is reserved by work in progress.
+    version: 86,
+    description: "A Word file imported as a Mind is also a Document (#720)",
+    sql: `
+      -- The Document the original file was also added as, so the Mind can say where it came
+      -- from and leave it out of its own checks, and the Document can open its Mind. NULL: the
+      -- User left it out of the Library, or the import was made before. No foreign key: a
+      -- later sync may deliver a row before its Document.
+      ALTER TABLE word_packages ADD COLUMN document_id TEXT;
+      CREATE INDEX word_packages_by_document ON word_packages (document_id)
+        WHERE document_id IS NOT NULL AND deleted_at IS NULL;
+    `,
+  },
+  {
     version: 87,
     description: "A data flow allowed when the User chose its service says so (ADR-0022, #718)",
     sql: `
@@ -1633,6 +1646,15 @@ export const migrations: readonly Migration[] = [
       -- (first-run setup, Settings, a plan sign-in); 0: allowed in a dialog or in Settings ›
       -- Privacy, as every decision made before this. A declined flow is always 0.
       ALTER TABLE data_flow_consents ADD COLUMN chosen INTEGER NOT NULL DEFAULT 0;
+    `,
+  },
+  {
+    version: 88,
+    description: "Organize: a waiting or failed Document's problem as a wording (#654)",
+    sql: `
+      -- The problem in error_message as a key of the dictionary and its values (JSON), so the
+      -- window says it in the interface language; NULL when the core gave only its sentence.
+      ALTER TABLE document_groups ADD COLUMN error_wording TEXT;
     `,
   },
 ];

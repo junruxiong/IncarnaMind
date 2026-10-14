@@ -113,6 +113,7 @@ import {
   translateQueryPrompt,
 } from "./prompt";
 import { retryQuotes } from "./quoteRetry";
+import { citeUnmarked } from "./unmarkedQuotes";
 import { createWindowBudget, SEARCH_RESERVE_TOKENS, type WindowBudget } from "./window";
 
 /** One message of Question context. */
@@ -219,6 +220,13 @@ export interface AnswerTools {
   cite(records: readonly CitationRecordInput[], options?: CiteOptions): string;
   /** Whether a valid record was taken for this marker: the engine places its marker if the model left it out. */
   hasRecord?(marker: number): boolean;
+  /** The Passages the model was given in this Answer, by the id it cites them by, as it read them. */
+  shownPassages?(): readonly { id: string; text: string }[];
+  /**
+   * Whether the Citation check would find `quote` in the Passage named `passage`
+   * ("P3"), read as structured output's records are (see `CiteOptions`).
+   */
+  quoteFound?(passage: string, quote: string): boolean;
   /**
    * The records taken whose quotes the check doesn't find on the pages they
    * cite, by marker: what structured output's one request for exact quotes
@@ -384,6 +392,11 @@ export type AnswerEngineEvent =
     }
   /** The engine put in `count` Citation markers the model left out of its text (see ./markerPlacement). */
   | { type: "markers-placed"; count: number }
+  /**
+   * Citations the engine added for sentences the Answer wrote without markers
+   * (see ./unmarkedQuotes), and whether the model was asked once more for them.
+   */
+  | { type: "cited-after-checking"; count: number; asked: boolean }
   /** The model's window holds only part of the Mind read with the Question: this share of it (0: none). */
   | { type: "mind-cut"; share: number }
   /** The model was asked once more for exact quotes (see ./quoteRetry), and what that gave. */
@@ -1576,7 +1589,10 @@ async function* toolLoop(
           keptText = unmarked;
           yield { type: "text-delta", text: unmarked };
         }
-        yield* missingMarkerEvents(keptText, cited, request.documents);
+        {
+          const placed = yield* missingMarkerEvents(keptText, cited, request.documents);
+          yield* citeUnmarked(request, placed, temperature, budget);
+        }
         yield { type: "finished" };
         return;
     }
@@ -1685,8 +1701,10 @@ async function* structured(
   yield* emit(answer);
   if (typeof answer === "string") {
     // A small model often gives the records but leaves their markers out.
-    const placed = yield* missingMarkerEvents(emitted, records, request.documents);
-    if (budget) yield* retryQuotes(request, placed, temperature, budget);
+    const marked = yield* missingMarkerEvents(emitted, records, request.documents);
+    if (budget) yield* retryQuotes(request, marked, temperature, budget);
+    if (signal.aborted) return;
+    const placed = yield* citeUnmarked(request, marked, temperature, budget);
     if (signal.aborted) return;
     // Worked out once the quotes are as good as they will be, since figures read their numbers there.
     const calculations = givenList((value as { calculations?: unknown } | undefined)?.calculations);

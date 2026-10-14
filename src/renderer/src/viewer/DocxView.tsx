@@ -2,6 +2,7 @@ import { renderAsync } from "docx-preview";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Document } from "../../../core/api";
 import { type DocxResult, extractDocx } from "../../../core/documents/formats/docx";
+import { ProblemMark } from "../components/ProblemLine";
 import { useT } from "../i18n";
 import type { ViewerTarget } from "../store";
 import { useCitedArea, useCitedAreaFailure } from "./citedArea";
@@ -376,7 +377,8 @@ function DocxPages({ loaded, target }: { loaded: Loaded; target: ViewerTarget })
           className="viewer-backdrop relative min-w-0 flex-1 overflow-auto"
         >
           {rendered === "failed" && (
-            <p role="alert" className="px-6 py-8 text-center text-ui text-danger">
+            <p role="alert" className="px-6 py-8 text-center text-ui text-ink">
+              <ProblemMark />
               {failure}
             </p>
           )}

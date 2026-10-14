@@ -363,7 +363,7 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
     );
 
     // Its Mind is Not in a Folder now: it searches everything; the Answer asked, which had no
-    // Documents to search in the Folder, still says only the Mind it was asked from.
+    // Documents to search in the Folder, read the Mind it was asked from (#748).
     await expect(renamed).toHaveCount(0);
     await expect(notInAFolder(window).getByTestId("mind-list-item")).toHaveText("Shortlist");
     await expect(composer.getByTestId("composer-scope-all")).toBeVisible();

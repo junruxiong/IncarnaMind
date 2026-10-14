@@ -350,7 +350,7 @@ describe("A Search scope with no Documents", { timeout: 30_000 }, () => {
     const [first] = model.doStreamCalls;
     expect(first?.tools?.map((each) => each.name)).not.toContain("search_documents");
     expect(JSON.stringify(first?.prompt)).toContain(
-      "The Question's Search scope has no Documents, so there is nothing to search or cite.",
+      "holds no Documents, so there is nothing to search",
     );
     await client.settled();
     expect(pendingProposals(client.blocks).length).toBe(2);
