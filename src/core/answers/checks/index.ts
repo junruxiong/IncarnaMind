@@ -472,7 +472,8 @@ export function createChecks(options: ChecksOptions) {
       });
     },
 
-    planMindCheck: async (mindId: unknown, mode: unknown) => mindCheck.planMindCheck(mindId, mode),
+    planMindCheck: async (mindId: unknown, mode: unknown, allDocuments?: unknown) =>
+      mindCheck.planMindCheck(mindId, mode, allDocuments === true),
 
     checkMind: (input: unknown) => mindCheck.checkMind(input),
 

@@ -127,10 +127,10 @@ export function createMindCheck(options: MindCheckOptions) {
     });
   }
 
-  function plan(mindId: string, mode: CheckMindMode): MindCheckPlan {
+  function plan(mindId: string, mode: CheckMindMode, allDocuments: boolean): MindCheckPlan {
     const { fresh, again } = sending(mindId, mode);
     if (fresh.length + again.length === 0) return { kind: "nothing" };
-    const { searchable, folderId } = options.scopeOf(mindId, false);
+    const { searchable, folderId } = options.scopeOf(mindId, allDocuments);
     if (searchable === 0) return { kind: "no-documents", folderId };
     return {
       kind: "ready",
@@ -230,10 +230,10 @@ export function createMindCheck(options: MindCheckOptions) {
 
   return {
     /** See `CoreApi.planMindCheck`. */
-    planMindCheck(mindId: unknown, mode: unknown): MindCheckPlan {
+    planMindCheck(mindId: unknown, mode: unknown, allDocuments: boolean): MindCheckPlan {
       const id = parseMindId(mindId);
       options.requireMind(id);
-      return plan(id, parseMode(mode));
+      return plan(id, parseMode(mode), allDocuments);
     },
 
     /** See `CoreApi.checkMind`. */

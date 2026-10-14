@@ -160,13 +160,29 @@ test("Check this Mind from ⌘K: the estimate first on a cloud model, then every
   await expect(marks(window)).toHaveCount(15);
 });
 
-test("In Chinese and a narrow window, from the Mind's tab menu: a model on this computer checks at once, and Check all checks a sentence written since", async () => {
+test("In Chinese and a narrow window, from the Mind's tab menu: a model on this computer checks at once; a Folder that holds too little offers all Documents; Check all checks a sentence written since", async () => {
   await writeFile(join(sources, "Tides.pdf"), TIDES);
+  await writeFile(
+    join(sources, "Garden.pdf"),
+    buildPdf([{ lines: ["Garden notes", "Roses like a sunny wall and rich soil."] }]),
+  );
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
   await useLocalChatModel(window);
-  await addDocuments(window, [join(sources, "Tides.pdf")]);
+  await addDocuments(window, [join(sources, "Tides.pdf"), join(sources, "Garden.pdf")]);
   await harbourNotes(window);
+  // The Mind's Folder holds only the garden notes; the Tides PDF is outside it.
+  await window.evaluate(async () => {
+    const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    const folder = await core.createLibraryGroup({ name: "Garden", description: "" });
+    const garden = (await core.listDocuments()).filter((each) => each.name === "Garden");
+    const mind = (await core.listMinds()).filter((each) => each.title === "Harbour notes");
+    await core.moveToFolder({
+      documentIds: garden.map((each) => each.id),
+      mindIds: mind.map((each) => each.id),
+      folderId: folder.id,
+    });
+  });
   await setLanguage(window, "zh-CN");
   await setWindowSize(app, window, 900, 720);
 
@@ -175,7 +191,19 @@ test("In Chinese and a narrow window, from the Mind's tab menu: a model on this 
   await expect(window.getByTestId("mind-check-ask")).toHaveCount(0);
   const health = window.getByTestId("mind-health");
   await expect(health.getByTestId("health-checked-all")).toContainText("已核对 15 句，");
+  await expect(marks(window).and(window.locator('[data-check="unsupported"]'))).toHaveCount(15);
+
+  // Nothing in the Folder says any of it: checked against every Document, the Tides PDF does.
+  const widen = health.getByTestId("health-check-all-documents");
+  await expect(widen).toHaveText("对照全部文档核对");
+  await pointAndClick(window, widen);
+  await expect(window.getByTestId("checks-running")).toHaveCount(0);
+  await expect(health.getByTestId("health-checked-all")).toBeVisible();
+  await expect(marks(window).and(window.locator('[data-check="supported"]'))).toHaveCount(3);
+  await expect(marks(window).and(window.locator('[data-check="contradicted"]'))).toHaveCount(1);
+  await expect(widen).toHaveCount(0);
   await expect(marks(window)).toHaveCount(15);
+  await expect(health.getByTestId("health-unsupported")).toHaveText("11 句无依据");
   await screenshot(window, "mind-check-done-zh-narrow");
 
   // A sentence written since: "全部核对" checks it, and the rest stay as they were.

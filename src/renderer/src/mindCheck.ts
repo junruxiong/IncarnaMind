@@ -25,10 +25,20 @@ import { useAppStore } from "./store";
 
 interface MindCheckState {
   /** By Mind: the question asked before a run billed per token, with its estimate. */
-  asking: Readonly<
-    Record<string, { mode: CheckMindMode; sentences: number; inFolder: boolean; estimate: string }>
-  >;
+  asking: Readonly<Record<string, Asking>>;
 }
+
+interface Asking {
+  mode: CheckMindMode;
+  allDocuments: boolean;
+  sentences: number;
+  /** Checked against the Mind's Folder: the question names it. */
+  inFolder: boolean;
+  estimate: string;
+}
+
+/** A run that only checks again asks first, with the estimate, when it checks this many or more. */
+const ASK_FROM = 10;
 
 export const useMindCheck = create<MindCheckState>()(() => ({ asking: {} }));
 
@@ -49,15 +59,19 @@ export function useMindCheckRun(doc: Y.Doc): MindCheckRun | null {
   return run;
 }
 
-/** Checks the Mind now, as `mode` says. */
-export async function checkMind(mindId: string, mode: CheckMindMode): Promise<void> {
+/** Checks the Mind now, as `mode` says: against its Folder, or every Document. */
+export async function checkMind(
+  mindId: string,
+  mode: CheckMindMode,
+  { allDocuments = false }: { allDocuments?: boolean } = {},
+): Promise<void> {
   if (useChecks.getState().running[mindId]) return;
   dismissMindCheck(mindId);
   dismissCheckProblem(mindId);
   const requestId = crypto.randomUUID();
   setCheckRunning(mindId, { requestId, action: "whole-mind" });
   try {
-    const result = await core.checkMind({ requestId, mindId, mode });
+    const result = await core.checkMind({ requestId, mindId, mode, allDocuments });
     if (result.kind === "checked") setCheckSmallModel(mindId, result.smallModel);
     else if (result.kind === "failed") {
       setCheckProblem(mindId, { kind: "find-failed", error: result.error });
@@ -71,28 +85,40 @@ export async function checkMind(mindId: string, mode: CheckMindMode): Promise<vo
 }
 
 /**
- * Shows the Mind, then asks first with the estimate when the model names
- * the claims and is billed per token, or checks at once.
+ * Shows the Mind, then asks first with the estimate when the run names the
+ * claims, or checks many again, on a model billed per token; or checks at once.
  */
-export async function startMindCheck(mindId: string, mode: CheckMindMode): Promise<void> {
+export async function startMindCheck(
+  mindId: string,
+  mode: CheckMindMode,
+  { allDocuments = false }: { allDocuments?: boolean } = {},
+): Promise<void> {
   const { openMind, minds } = useAppStore.getState();
   await openMind(mindId);
   if (useChecks.getState().running[mindId]) return;
-  const plan = await core.planMindCheck(mindId, mode);
+  const plan = await core.planMindCheck(mindId, mode, allDocuments);
   if (plan.kind !== "ready") {
     dismissMindCheck(mindId);
     setCheckProblem(mindId, plan.kind === "nothing" ? { kind: "no-claims" } : plan);
     return;
   }
-  if (!plan.findsClaims) return checkMind(mindId, mode);
+  if (!plan.findsClaims && plan.sentences < ASK_FROM)
+    return checkMind(mindId, mode, { allDocuments });
   const estimate = await core
     .estimateRun({ items: plan.sentences, ...(plan.model && { model: plan.model }) })
     .then((result) => estimateText(result, translateNow, languageNow()))
-    .catch(() => null);
-  if (estimate === null) return checkMind(mindId, mode);
-  const inFolder = (minds.find((each) => each.id === mindId)?.folderId ?? null) !== null;
+    .catch((error: unknown) => {
+      console.warn(`Couldn't estimate checking Mind ${mindId}; it checks without asking.`, error);
+      return null;
+    });
+  if (estimate === null) return checkMind(mindId, mode, { allDocuments });
+  const inFolder =
+    !allDocuments && (minds.find((each) => each.id === mindId)?.folderId ?? null) !== null;
   dismissCheckProblem(mindId);
   useMindCheck.setState((state) => ({
-    asking: { ...state.asking, [mindId]: { mode, sentences: plan.sentences, inFolder, estimate } },
+    asking: {
+      ...state.asking,
+      [mindId]: { mode, allDocuments, sentences: plan.sentences, inFolder, estimate },
+    },
   }));
 }

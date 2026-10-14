@@ -2376,7 +2376,7 @@ export function createCore(adapters: CoreAdapters): Core {
     verifyClaims: (input) => checks.verifyClaims(input),
     planContradictionCheck: (mindId) => checks.planContradictionCheck(mindId),
     checkContradictions: (input) => checks.checkContradictions(input),
-    planMindCheck: (mindId, mode) => checks.planMindCheck(mindId, mode),
+    planMindCheck: (mindId, mode, allDocuments) => checks.planMindCheck(mindId, mode, allDocuments),
     checkMind: (input) => checks.checkMind(input),
 
     getSecretStorage: async () => secrets.status(),
