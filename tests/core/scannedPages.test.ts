@@ -158,6 +158,7 @@ describe("Scanned pages are read on this computer (#397)", { timeout: 60_000 }, 
     expect(await quoted("The harbour floor is mostly sand.")).toBeNull();
     expect(await quoted("Mean water temperature rose to 9.4 degrees Celsius")).toEqual({
       unsure: [],
+      from: "scan",
     });
 
     // Without a model to read them, a scanned page is left as it was before.
@@ -255,7 +256,7 @@ describe("Scanned pages are read on this computer (#397)", { timeout: 60_000 }, 
         pageTo: 1,
         quote,
       }),
-    ).toEqual({ unsure: ["convenience"] });
+    ).toEqual({ unsure: ["convenience"], from: "scan" });
     expect(
       await core.readScannedQuote({
         documentId: citation.documentId as string,
@@ -264,7 +265,7 @@ describe("Scanned pages are read on this computer (#397)", { timeout: 60_000 }, 
         pageTo: 1,
         quote: "Business Days and certify the deletion",
       }),
-    ).toEqual({ unsure: [] });
+    ).toEqual({ unsure: [], from: "scan" });
     // A quote that isn't on the page says nothing of the scan: the check says it wasn't found.
     expect(
       await core.readScannedQuote({
