@@ -27,7 +27,7 @@ export const SAVE_STEP = "save";
 const ASK_STEP = `${RECORD_PREFIX}approve:save`;
 /** What the approval card names: the Library, and filing pages into it. */
 const LIBRARY_TOOLS = "library";
-const FILE_TOOL = "file_pages";
+const FILE_TOOL = "save_pages";
 export const DRAFT_STEP = "draft";
 const FOLDER_RECORD = `${RECORD_PREFIX}folder`;
 const MIND_RECORD = `${RECORD_PREFIX}mind`;
