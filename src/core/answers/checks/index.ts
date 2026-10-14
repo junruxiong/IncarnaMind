@@ -23,6 +23,7 @@
  */
 import { randomUUID } from "node:crypto";
 import type * as Y from "yjs";
+import { type LiveDocument, withShownName } from "../../../shared/citations";
 import { judgesUnreliably } from "../../../shared/smallModel";
 import {
   type ChatModelChoice,
@@ -31,6 +32,7 @@ import {
   type CheckSentencesResult,
   type Citation,
   type CitationAttributes,
+  type CitedQuote,
   type ClaimCheckAction,
   type ClaimCheckAttributes,
   type ClaimCheckResult,
@@ -87,7 +89,10 @@ export interface ChecksOptions
   localOnly(): boolean;
   resolveScope(scope: SearchScope): string[] | null;
   evidence: Pick<Evidence, "scope" | "search">;
-  documents: ClaimCheckDependencies["documents"];
+  documents: ClaimCheckDependencies["documents"] & {
+    /** Every live Document's names: what the Citations a sentence already has are named by. */
+    names(): readonly LiveDocument[];
+  };
   engine: AnswerEngine;
   retention: Pick<VersionRetention, "retain">;
   now(): Date;
@@ -128,10 +133,17 @@ function parseClaim(input: unknown) {
   if (claim === "") throw new InvalidInputError("A claim to check must be some text.");
   if (claim.length > MAX_CLAIM_CHARACTERS)
     throw new InvalidInputError("The claim is too long to check.");
-  const cited = Array.isArray(input.cited)
+  const cited: CitedQuote[] = Array.isArray(input.cited)
     ? input.cited.flatMap((each: unknown) =>
         isRecord(each) && typeof each.quote === "string"
-          ? [{ documentName: String(each.documentName ?? ""), quote: each.quote }]
+          ? [
+              {
+                documentName: String(each.documentName ?? ""),
+                quote: each.quote,
+                ...(typeof each.documentId === "string" && { documentId: each.documentId }),
+                ...(typeof each.contentHash === "string" && { contentHash: each.contentHash }),
+              },
+            ]
           : [],
       )
     : [];
@@ -248,6 +260,15 @@ export function createChecks(options: ChecksOptions) {
     options.retention.retain("check-result", mindId, versions);
   }
 
+  /** What a sentence cites, each Document named as it is now. */
+  function citedNow(cited: readonly CitedQuote[]): { documentName: string; quote: string }[] {
+    const live = options.documents.names();
+    return cited.map((each) => ({
+      documentName: withShownName(each, live).documentName,
+      quote: each.quote,
+    }));
+  }
+
   /** Marks a request's sentences not checked yet "stopped". */
   function settleStopped(mindId: string, request: string): void {
     const ids = content.read(mindId, (blocks) =>
@@ -330,7 +351,7 @@ export function createChecks(options: ChecksOptions) {
       const result = await claimCheck({
         claim: sentence.claim,
         context: sentence.context,
-        cited: input.action === "check-against-documents" ? sentence.cited : [],
+        cited: input.action === "check-against-documents" ? citedNow(sentence.cited) : [],
         scope: evidenceScope,
         model: ready.prepared,
         cacheKey: mindId,
@@ -415,7 +436,7 @@ export function createChecks(options: ChecksOptions) {
       return claimCheck({
         claim: parsed.claim,
         context: parsed.context,
-        cited: parsed.cited,
+        cited: citedNow(parsed.cited),
         scope,
         model: ready.prepared,
         // Reading the document being checked makes the Run third-party (#78).

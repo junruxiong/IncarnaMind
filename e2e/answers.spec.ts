@@ -69,11 +69,15 @@ test("a Question asked in the assistant gets an Answer that streams in there, an
   await expect(editor.locator("strong")).toHaveText("scripted");
   await first.app.close();
 
-  // Reopened: the link back opens the conversation, its Answer as it was.
+  // Reopened: the Block menu opens the conversation, its Answer as it was.
   const second = await launchApp(dataDir, { fakeChat: true });
   await second.window.getByTestId("mind-list-item").click();
   await expect(second.window.getByTestId("assistant-empty")).toBeVisible();
-  await pointAndClick(second.window, second.window.getByTestId("conversation-link"));
+  const added = second.window
+    .getByTestId("mind-editor")
+    .locator(":scope > p", { hasText: "scripted" });
+  await (await slideToHandle(second.window, added.first())).click();
+  await pointAndClick(second.window, second.window.getByTestId("block-menu-open-conversation"));
   const restored = assistantAnswers(second.window).first();
   await expect(restored).toHaveAttribute("data-status", "done");
   await expect(restored).toContainText("That is all.");

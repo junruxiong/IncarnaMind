@@ -19,7 +19,7 @@ import {
   unfinishedSentence,
 } from "../../src/core/suggestions/prompt";
 import { setUpWithDocuments } from "../helpers/citations";
-import { createTempDataFolder, nextEvent, startCore } from "../helpers/core";
+import { createTempDataFolder, nextEvent, saveProviderUnasked, startCore } from "../helpers/core";
 import { addAndProcess, writeSourceFile } from "../helpers/documents";
 import { scriptedModels } from "../helpers/models";
 
@@ -187,6 +187,19 @@ describe("suggestions as the User writes", () => {
       today: { shown: 1, accepted: 0 },
       paused: null,
     });
+  });
+
+  test("a renamed Document is named as it is now, to the model and in the Citation", async () => {
+    const model = suggestingModel(SPRING);
+    const { core, mind, documents } = await setUp(model);
+    const tides = documents.find((each) => each.name === "Tides");
+    await core.renameDocument(tides?.id ?? "", "Tides of the coast");
+
+    const suggestion = suggestionOf(await core.suggestNext(requestFor(mind.id, ABOUT_TIDES)));
+
+    expect(suggestion.citation.documentName).toBe("Tides of the coast");
+    const [call] = suggestionCalls(model);
+    expect(JSON.stringify(call?.prompt)).toContain('document=\\"Tides of the coast\\"');
   });
 
   test("a Chinese paragraph gets a Chinese suggestion from a Chinese Document", async () => {
@@ -389,22 +402,21 @@ describe("suggestions and consent", () => {
       });
     });
 
-  /** A core with a cloud chat model, a Document and a Mind; nothing allowed yet. */
-  async function setUpCloud() {
+  /**
+   * A core with a cloud chat model, a Document and a Mind. Chosen, the
+   * provider's flows are allowed (ADR-0022); otherwise nothing is, as for a
+   * provider chosen before that.
+   */
+  async function setUpCloud({ chosen = true } = {}) {
     const model = suggestingModel(SPRING);
     const models = scriptedModels(model);
     const core = startCore(await createTempDataFolder(), {
       createChatModel: models.createChatModel,
     });
-    // Automatic tagging asks too, with a cloud model: not what these tests are about.
-    core.on("consent.requested", (request) => {
-      if (request.flow.id === "tagging") void core.respondToConsent(request.requestId, false);
-    });
-    const provider = await core.saveChatProvider({
-      kind: "openai",
-      apiKey: "sk-test",
-      modelId: "gpt-test",
-    });
+    const input = { kind: "openai", apiKey: "sk-test", modelId: "gpt-test" } as const;
+    const provider = chosen
+      ? await core.saveChatProvider(input)
+      : await saveProviderUnasked(core, input);
     const sources = await createTempDataFolder();
     await addAndProcess(core, [await writeSourceFile(sources, TIDES.name, TIDES.contents)]);
     const mind = await core.createMind({ title: "Tides" });
@@ -425,8 +437,23 @@ describe("suggestions and consent", () => {
     return (await turned).user.suggestWhileWriting;
   }
 
-  test("turning them on asks to send to the provider, and declining keeps them off with nothing sent", async () => {
+  test("with the provider chosen, turning them on asks nothing: choosing it allowed them", async () => {
     const { core, model, mind } = await setUpCloud();
+    const asked = vi.fn();
+    core.on("consent.requested", asked);
+
+    const settings = await core.updateSettings({ user: { suggestWhileWriting: true } });
+
+    expect(settings.user.suggestWhileWriting).toBe(true);
+    expect(asked).not.toHaveBeenCalled();
+    expect(suggestionOf(await core.suggestNext(requestFor(mind.id, ABOUT_TIDES))).text).toBe(
+      SPRING.text,
+    );
+    expect(suggestionCalls(model)).toHaveLength(1);
+  });
+
+  test("for a provider chosen before, turning them on asks, and declining keeps them off with nothing sent", async () => {
+    const { core, model, mind } = await setUpCloud({ chosen: false });
 
     expect(await turnOn(core, false)).toBe(false);
     expect(await core.suggestNext(requestFor(mind.id, ABOUT_TIDES))).toMatchObject({ kind: "off" });
@@ -441,7 +468,7 @@ describe("suggestions and consent", () => {
 
   test("with the flow revoked, a pause neither asks nor sends, and Settings says why", async () => {
     const { core, model, mind, provider } = await setUpCloud();
-    expect(await turnOn(core, true)).toBe(true);
+    await core.updateSettings({ user: { suggestWhileWriting: true } });
     const service = provider.service;
     if (!service) throw new Error("A cloud provider has a service.");
     await core.revokeConsent("suggestions", service.id);
@@ -458,7 +485,7 @@ describe("suggestions and consent", () => {
 
   test("in local mode only a model on this computer is used", async () => {
     const { core, model, mind } = await setUpCloud();
-    expect(await turnOn(core, true)).toBe(true);
+    await core.updateSettings({ user: { suggestWhileWriting: true } });
     await core.setLocalOnly(true);
 
     expect(await core.suggestNext(requestFor(mind.id, ABOUT_TIDES))).toEqual({ kind: "none" });
