@@ -1,8 +1,11 @@
+import type { BlockOrigin } from "../../../core/api";
 import { signInAgain } from "../chatGptSignIn";
 import { useCitationStylePicker } from "../citationStylePicker";
 import { startContradictionCheck } from "../contradictions";
 import { blockMenuOpeners } from "../editor/blockMenuOpeners";
-import { noteHolding } from "../editor/noteKeymap";
+import { originOf } from "../editor/blockOrigins";
+import { blockAt, noteHolding } from "../editor/noteKeymap";
+import { openOrigin } from "../editor/originActions";
 import { useFindSources } from "../findSources";
 import { useHistory } from "../history";
 import { currentTabOf } from "../layoutSlice";
@@ -24,7 +27,7 @@ import { evidenceCommands } from "./evidence";
 import { exportCommands } from "./exports";
 import { fileCommands } from "./fileInfo";
 import { footnoteCommands } from "./footnotes";
-import { citationHandle, findHandle, sidebarHandle } from "./handles";
+import { citationHandle, findHandle, readMindHandle, sidebarHandle } from "./handles";
 import { linkCommands } from "./links";
 import { meetingCommands } from "./meetings";
 import { newFolderCommands } from "./newFolder";
@@ -38,6 +41,7 @@ import {
   tagCommands,
 } from "./objects";
 import { paletteCommands } from "./palette";
+import { peekCommands } from "./peek";
 import { proposalCommands } from "./proposals";
 import { sortCommands } from "./sort";
 import "./objectMenus";
@@ -54,6 +58,18 @@ import { webPageCommands } from "./webPages";
 function blockMenuFor(blockId: string) {
   const editor = noteHolding(blockId);
   return (editor && blockMenuOpeners.get(editor)) ?? null;
+}
+
+/** Where the Block a menu names, or else the one the cursor is in, was added from; null if nowhere. */
+function originShown(ctx: CommandContext): BlockOrigin | null {
+  if (ctx.focus?.kind === "block") {
+    const editor = noteHolding(ctx.focus.id);
+    return editor && originOf(editor.state, ctx.focus.id);
+  }
+  const editor = readMindHandle.current?.editor;
+  if (!editor || editor.isDestroyed) return null;
+  const block = blockAt(editor.state.selection);
+  return block ? originOf(editor.state, block.id) : null;
 }
 
 /** The Mind in the tab the User is in, if that tab holds one. */
@@ -106,6 +122,7 @@ const appCommands: readonly Command[] = [
   ...selectionCommands,
   ...mindCommands,
   ...documentCommands,
+  ...peekCommands,
   ...folderCommands,
   ...newFolderCommands,
   ...tagCommands,
@@ -285,6 +302,18 @@ const appCommands: readonly Command[] = [
     when: (ctx) => ctx.focus?.kind === "block" && blockMenuFor(ctx.focus.id) !== null,
     run(ctx) {
       if (ctx.focus?.kind === "block") blockMenuFor(ctx.focus.id)?.(ctx.focus.id);
+    },
+  },
+  {
+    id: "block.openSource",
+    label: "origin.open",
+    group: "open",
+    // Opening a conversation changes nothing.
+    reversible: true,
+    when: (ctx) => originShown(ctx) !== null,
+    run(ctx) {
+      const origin = originShown(ctx);
+      if (origin) void openOrigin(origin);
     },
   },
   {
