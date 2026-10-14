@@ -4,7 +4,7 @@
  */
 import { mkdirSync, readFileSync } from "node:fs";
 import { connect } from "node:net";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { app, safeStorage, shell } from "electron";
 import {
@@ -473,7 +473,9 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
       builtInSkills: builtInSkillsFolder(),
       examples: examplesFolder(),
       citationStyles: citationStylesFolder(),
-      home: app.getPath("home"),
+      // Node's, not app.getPath("home"): on macOS that ignores HOME, which the smoke tests point
+      // at a temporary folder, and their agents' settings would land in the real one.
+      home: homedir(),
       documents: documentsFolder(dataDir),
     },
     systemLanguages: () => app.getPreferredSystemLanguages(),

@@ -38,8 +38,8 @@ function pathOf(value: unknown): string | null {
 }
 
 export function createHomeGuard(realHome: string, writable: readonly string[]): HomeGuard {
-  // A writable folder that holds the home folder, as the temporary folder holds a temporary HOME
-  // a run was started with, would let every write in it through.
+  // Left out: a writable folder that holds the home folder, as the temporary folder holds the
+  // temporary HOME a run may be started with, would let every write in the home folder through.
   const inHome = writable.filter((folder) => !within(folder, realHome));
   const refused: string[] = [];
   return {
@@ -68,8 +68,7 @@ const WRITE_FLAGS =
 const opensToWrite = (flags: unknown) =>
   typeof flags === "number" ? (flags & WRITE_FLAGS) !== 0 : /[wa+]/.test(String(flags ?? "r"));
 
-/** The `fs` functions that create, change or remove files, and which of their arguments they write. */
-const WRITES: Record<string, (args: unknown[]) => unknown[]> = {
+const PATHS_WRITTEN_BY: Record<string, (args: unknown[]) => unknown[]> = {
   appendFile: first,
   copyFile: second,
   cp: second,
@@ -100,7 +99,7 @@ export function installHomeGuard(guard: HomeGuard): void {
     [fs, ["", "Sync"], false],
     [fs.promises, [""], true],
   ] as const) {
-    for (const [name, targets] of Object.entries(WRITES)) {
+    for (const [name, pathsWritten] of Object.entries(PATHS_WRITTEN_BY)) {
       for (const suffix of suffixes) {
         const original: unknown = Reflect.get(module, `${name}${suffix}`);
         if (typeof original !== "function") continue;
@@ -109,7 +108,7 @@ export function installHomeGuard(guard: HomeGuard): void {
           `${name}${suffix}`,
           function guarded(this: unknown, ...args: unknown[]) {
             try {
-              for (const target of targets(args)) guard.check(target);
+              for (const path of pathsWritten(args)) guard.check(path);
             } catch (error) {
               if (rejects) return Promise.reject(error);
               throw error;
