@@ -700,6 +700,7 @@ export function createTasks(options: TasksOptions) {
         throw new InvalidInputError({ key: "error.task.message", values: { max: MAX_MESSAGE } });
       }
       journal.keep(record.id, MESSAGE_PREFIX + randomUUID(), { text: said });
+      announce(journal.get(record.id));
       return current(record.id);
     },
 
@@ -709,6 +710,7 @@ export function createTasks(options: TasksOptions) {
       const message = messagesOf(record.id).find((each) => each.id === messageId);
       if (message?.status === "started") {
         journal.settled(record.id, MESSAGE_PREFIX + message.id, "skipped", { text: message.text });
+        announce(journal.get(record.id));
       }
       return current(record.id);
     },
