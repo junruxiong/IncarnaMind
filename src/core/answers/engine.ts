@@ -1471,6 +1471,19 @@ async function* toolLoop(
         yield { type: "text-delta", text };
         break;
       }
+      case "tool-input-started": {
+        // A Tool that writes as its input comes (the Minds'): its card shows from the start.
+        const called = offered.get(event.tool);
+        if (!called || recording(called)) break;
+        yield {
+          type: "tool-call-started",
+          id: event.id,
+          provider: called.provider,
+          tool: called.providerTool,
+          input: {},
+        };
+        break;
+      }
       case "tool-call": {
         const called = offered.get(event.tool);
         if (!called) break;

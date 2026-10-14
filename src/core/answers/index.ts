@@ -924,8 +924,16 @@ export function createAnswers(options: AnswersOptions) {
     const base = answerInstructions();
     const language = languageInstruction(context.question);
     const callStarted = (call: AnswerToolCall) => {
-      // A call that asks the User first may already be there (see `ask`).
-      if (toolCalls.some((each) => each.id === call.id)) return;
+      // A call that asks the User first may already be there (see `ask`), and one whose input
+      // streams in is there from its start (#202): it now has all of its input.
+      const there = toolCalls.find((each) => each.id === call.id);
+      if (there) {
+        if (Object.keys(there.input).length === 0) {
+          there.input = call.input;
+          writeSoon();
+        }
+        return;
+      }
       toolCalls.push(call);
       announce("answer.toolCallStarted", { ...place, answerId, call: { ...call } });
       writeSoon();
