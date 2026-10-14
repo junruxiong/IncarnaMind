@@ -526,7 +526,8 @@ export function createDocuments(options: DocumentsOptions) {
               message: row.tagging_error_message ?? "",
             }
           : null,
-      creationDate: row.creation_date,
+      creationDate:
+        row.creation_date && !isPlaceholderDate(row.creation_date) ? row.creation_date : null,
       modifiedAt: row.file_mtime_ms === null ? null : new Date(row.file_mtime_ms).toISOString(),
       title: row.title,
       web: row.kind === "web" ? webPageInfo(db, row.id) : null,
@@ -1861,9 +1862,9 @@ export function createDocuments(options: DocumentsOptions) {
       if (row.creation_date && !isPlaceholderDate(row.creation_date)) {
         return row.creation_date.slice(0, 10);
       }
-      return row.file_mtime_ms === null
-        ? null
-        : new Date(row.file_mtime_ms).toISOString().slice(0, 10);
+      if (row.file_mtime_ms === null) return null;
+      const modified = new Date(row.file_mtime_ms).toISOString().slice(0, 10);
+      return isPlaceholderDate(modified) ? null : modified;
     },
 
     /**
