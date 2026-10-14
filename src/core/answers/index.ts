@@ -126,6 +126,7 @@ import {
   contentHash,
   createElement,
   findBlock,
+  isEdited,
   type NodeJSON,
   syncContent,
   textAttribute,
@@ -522,12 +523,6 @@ function pickedModel(question: Y.XmlElement): ChatModelChoice | null {
 /** The Skill forced on a Question, if any. */
 const forcedSkillOf = (question: Y.XmlElement): string | null =>
   textAttribute(question, "forcedSkill") || null;
-
-/** The User has changed the Answer since it was written. */
-function isEdited(answer: Y.XmlElement): boolean {
-  const hash = textAttribute(answer, "generatedHash");
-  return hash !== null && hash !== contentHash(answer);
-}
 
 function setAttributes(element: Y.XmlElement, attributes: Partial<AnswerAttributes>): void {
   for (const [key, value] of Object.entries(attributes)) {
