@@ -1,4 +1,19 @@
-import { Fragment, type ReactNode } from "react";
+import type { ReactNode } from "react";
+import { ExclamationIcon } from "../viewer/icons";
+
+/**
+ * The amber "!" that leads the words of an error (DESIGN.md, Colors: Red,
+ * sparingly). Left alone it sits in the text, before its first word; pass a
+ * `className` to place it as a flex item instead.
+ */
+export function ProblemMark({ className = "mr-1.5 inline align-[-2px]" }: { className?: string }) {
+  return (
+    <ExclamationIcon
+      viewBox="10 4 4 17"
+      className={`h-3 w-auto shrink-0 text-warning ${className}`}
+    />
+  );
+}
 
 /** The one action a problem offers. */
 export interface ProblemAction {
@@ -7,6 +22,24 @@ export interface ProblemAction {
   testId?: string;
   /** Not while it is already running. */
   disabled?: boolean;
+}
+
+/** An action after a line's words: " · Show". */
+export function LineAction({ action }: { action: ProblemAction }) {
+  return (
+    <>
+      <span aria-hidden="true"> · </span>
+      <button
+        type="button"
+        data-testid={action.testId}
+        disabled={action.disabled}
+        onClick={action.onClick}
+        className="rounded-sm font-semibold text-accent underline-offset-2 hover:underline disabled:opacity-50 disabled:hover:no-underline"
+      >
+        {action.label}
+      </button>
+    </>
+  );
 }
 
 /**
@@ -45,23 +78,7 @@ export function ProblemLine({
       className={`font-sans text-[13px] leading-5 break-words text-ink-meta ${className}`}
     >
       <span>{children}</span>
-      {[action, also].map(
-        (each) =>
-          each && (
-            <Fragment key={each.label}>
-              <span aria-hidden="true"> · </span>
-              <button
-                type="button"
-                data-testid={each.testId}
-                disabled={each.disabled}
-                onClick={each.onClick}
-                className="rounded-sm font-semibold text-accent underline-offset-2 hover:underline disabled:opacity-50 disabled:hover:no-underline"
-              >
-                {each.label}
-              </button>
-            </Fragment>
-          ),
-      )}
+      {[action, also].map((each) => each && <LineAction key={each.label} action={each} />)}
     </p>
   );
 }

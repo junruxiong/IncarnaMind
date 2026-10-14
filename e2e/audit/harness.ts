@@ -368,13 +368,16 @@ export async function focusWalk(
       const accent = getComputedStyle(probe).color;
       probe.remove();
       // The ring may be drawn on the element, on its ::before or ::after, or on a child
-      // (a tab draws it on its inner shape); a divider turns accent instead.
+      // (a tab draws it on its inner shape), or on the row a sidebar row's main button is
+      // in; a divider turns accent instead.
       const style = getComputedStyle(el);
+      const row = el.matches(".row-main") ? el.closest(".group") : null;
       const styles = [
         style,
         getComputedStyle(el, "::before"),
         getComputedStyle(el, "::after"),
         ...[...el.children].slice(0, 4).map((child) => getComputedStyle(child)),
+        ...(row ? [getComputedStyle(row)] : []),
       ];
       const ringed = styles.find(
         (s) => s.outlineStyle !== "none" && Number.parseFloat(s.outlineWidth) > 0,

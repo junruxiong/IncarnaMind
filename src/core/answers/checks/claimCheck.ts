@@ -35,6 +35,7 @@ import {
   answerTemperature,
   type DocumentLanguage,
 } from "../engine";
+import { nearestLine } from "./nearest";
 import {
   CONFIRM_INSTRUCTIONS,
   checkInstructions,
@@ -42,6 +43,7 @@ import {
   confirmPrompt,
   EVIDENCE_INSTRUCTIONS,
   evidencePrompt,
+  NEAREST_INSTRUCTIONS,
   type ReadVerdict,
   readEvidence,
   readJudgement,
@@ -179,7 +181,10 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
     const verdict = readVerdict(reply);
     if (!verdict) return notChecked(readsAsRefusal(reply) ? "refused" : "malformed");
     if (verdict.verdict === "unsupported") {
-      return { verdict: "unsupported", evidence: null, says: null, ...facts() };
+      session.check();
+      const nearest = await nearestDifferent(request, session, signal);
+      if (signal.aborted) return notChecked("stopped");
+      return { verdict: "unsupported", evidence: nearest, says: null, ...facts() };
     }
     session.check();
     const evidence =
@@ -191,7 +196,10 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       const judged = await confirmContradiction(request, evidence, session, signal);
       if (signal.aborted) return notChecked("stopped");
       if (judged === "neither") {
-        return { verdict: "unsupported", evidence: null, says: null, ...facts() };
+        // The Passage is about something else: what is nearest may still say something different.
+        const nearest = await nearestDifferent(request, session, signal);
+        if (signal.aborted) return notChecked("stopped");
+        return { verdict: "unsupported", evidence: nearest, says: null, ...facts() };
       }
       if (judged === "same") return { verdict: "supported", evidence, says: null, ...facts() };
     }
@@ -251,13 +259,14 @@ async function confirmContradiction(
   evidence: Citation,
   session: ReturnType<typeof createCitationSession>,
   signal: AbortSignal,
+  instructions = CONFIRM_INSTRUCTIONS,
 ): Promise<"conflict" | "same" | "neither" | null> {
   const passage = session.shownPassages().find((each) => each.passageId === evidence.passageId);
   const { model } = request;
   try {
     const { text } = await generateText({
       model: model.model,
-      instructions: CONFIRM_INSTRUCTIONS,
+      instructions,
       prompt: confirmPrompt({
         claim: request.claim,
         quote: evidence.quote,
@@ -276,7 +285,44 @@ async function confirmContradiction(
   }
 }
 
+/**
+ * For a sentence found unsupported: the nearest line of what the Run read, as
+ * a Citation whose quote the check found, when judged alone it states another
+ * value for the very thing the sentence says (30 days of leave against the
+ * Document's 27). Never "contradicted": the verdict stays unsupported, and the
+ * card shows what the Document says. Null when nothing read is near enough, or
+ * the nearest line doesn't differ.
+ */
+async function nearestDifferent(
+  request: ClaimCheckRequest,
+  session: ReturnType<typeof createCitationSession>,
+  signal: AbortSignal,
+): Promise<Citation | null> {
+  const line = nearestLine(request.claim, session.shownPassages());
+  if (!line) return null;
+  session.tools.cite(
+    [{ marker: NEAREST_MARKER, passage: line.id, location: null, quote: line.text }],
+    {
+      structured: true,
+    },
+  );
+  session.check();
+  const citation = session.finalCitation(NEAREST_MARKER);
+  if (citation?.check !== "found") return null;
+  const judged = await confirmContradiction(
+    request,
+    citation,
+    session,
+    signal,
+    NEAREST_INSTRUCTIONS,
+  );
+  return judged === "conflict" ? citation : null;
+}
+
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
+/** The marker the nearest line is recorded under: apart from the model's and the evidence's. */
+const NEAREST_MARKER = 98;
 
 /** The marker the record asked for once more is given: apart from any the model gave. */
 const EVIDENCE_MARKER = 99;
