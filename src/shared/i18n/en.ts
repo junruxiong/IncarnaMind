@@ -1605,6 +1605,8 @@ export const en = {
   "providers.ollama.checking": "Looking for Ollama on this computer…",
   "providers.ollama.detected":
     "Ollama is running on this computer. With a local model, your Questions and Documents stay on it.",
+  "providers.ollama.notDetected":
+    "To run models on this computer, install Ollama from ollama.com and start it.",
   "providers.ollama.use": "Use local models ({model}, 3.3 GB)",
   "providers.ollama.pulling": "Downloading {model} (3.3 GB)… This can take a while.",
   "providers.ollama.checkAgain": "Check again",
