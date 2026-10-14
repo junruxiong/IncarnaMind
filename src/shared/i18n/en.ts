@@ -560,6 +560,8 @@ export const en = {
   "claim.cited": "Cited in this sentence",
   "claim.unsupported.inFolder": "Nothing in “{folder}” says this.",
   "claim.unsupported.anywhere": "Nothing in your Documents says this.",
+  "claim.unsupported.differs": "Your Documents say something different:",
+  "claim.fixSentence": "Fix the sentence",
   "claim.searchAll": "Search all Documents",
   "claim.checkAgain": "Check again",
   "claim.reason.refused": "The model declined to check it.",

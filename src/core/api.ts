@@ -3775,7 +3775,9 @@ export type ClaimCheckResult =
       verdict: ClaimVerdict;
       /**
        * For "supported" and "contradicted": the Passage that decides it, as a
-       * Citation whose quote the Citation check found. Null for "unsupported".
+       * Citation whose quote the Citation check found. For "unsupported": null,
+       * or the nearest line when it states another value for the very thing
+       * the sentence says: "the Documents say something different" (#770).
        */
       evidence: Citation | null;
       /** For "supported" and "contradicted": what the Document says, in one plain sentence. */

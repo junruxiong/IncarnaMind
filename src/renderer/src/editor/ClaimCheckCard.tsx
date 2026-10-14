@@ -158,6 +158,14 @@ export function ClaimMark({
                 done();
               }}
               onOpen={done}
+              onFix={() => {
+                editor
+                  .chain()
+                  .focus()
+                  .setTextSelection({ from: claim.sentence.from, to: claim.sentence.to })
+                  .run();
+                done();
+              }}
             />
           </Popover>,
           document.body,
@@ -180,17 +188,22 @@ function ClaimCard({
   onAdd,
   onCheckAgain,
   onOpen,
+  onFix,
 }: {
   claim: ShownClaim;
   addable: boolean;
   onAdd(): void;
   onCheckAgain(allDocuments?: boolean): void;
   onOpen(): void;
+  onFix(): void;
 }) {
   const t = useT();
   const { shown, check } = claim;
   const state = shown.state;
-  const evidence = state === "supported" || state === "contradicted" ? check.evidence : null;
+  // An unsupported sentence keeps the nearest line when it says something different (#770).
+  const differs = state === "unsupported" && check.evidence !== null;
+  const evidence =
+    state === "supported" || state === "contradicted" || differs ? check.evidence : null;
   const location = evidence ? citationLocation(evidence) : null;
   const where = location ? formatLocation(location, t) : null;
   const folderName = useAppStore((store) =>
@@ -219,6 +232,11 @@ function ClaimCard({
             {check.says}
           </p>
         )}
+        {differs && (
+          <p data-testid="claim-differs" className="claim-card-says">
+            {t("claim.unsupported.differs")}
+          </p>
+        )}
         {evidence && (
           <p data-testid="claim-source" className="citation-card-source">
             {[shownDocumentName(evidence, documents), where].filter(Boolean).join(" · ")}
@@ -235,7 +253,7 @@ function ClaimCard({
           </blockquote>
         </figure>
       )}
-      {state === "unsupported" && (
+      {state === "unsupported" && !differs && (
         <p data-testid="claim-nothing" className="citation-card-note">
           {searchedFolder
             ? t("claim.unsupported.inFolder", { folder: folderName })
@@ -283,6 +301,16 @@ function ClaimCard({
             }}
           >
             {t(`citation.open.${openKind(location)}`)}
+          </button>
+        )}
+        {differs && (
+          <button
+            type="button"
+            data-testid="claim-fix"
+            className="citation-card-action"
+            onClick={onFix}
+          >
+            {t("claim.fixSentence")}
           </button>
         )}
         {state === "unsupported" && searchedFolder && (
