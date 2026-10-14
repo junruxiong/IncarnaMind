@@ -481,8 +481,8 @@ describe("changing a Linked folder", () => {
     method("setLinkedFolderPaused").mockResolvedValue({ ...linked, status: "paused" });
     const change = await useAppStore.getState().setLinkedFolderPaused("l", true);
     expect(change).toBe(top());
-    expect(change?.message).toBe("Paused indexing in “Papers”");
-    expect(change?.name).toBe("Pause indexing");
+    expect(change?.message).toBe("Paused reading in “Papers”");
+    expect(change?.name).toBe("Pause reading");
     expect(useAppStore.getState().linkedFolders[0]?.status).toBe("paused");
     method("setLinkedFolderPaused").mockResolvedValue(linked);
     await useUndo.getState().undo();
@@ -491,7 +491,7 @@ describe("changing a Linked folder", () => {
     method("setLinkedFolderPaused").mockResolvedValue({ ...linked, status: "paused" });
     await useUndo.getState().redo();
     expect(method("setLinkedFolderPaused")).toHaveBeenLastCalledWith("l", true);
-    expect(top()?.message).toBe("Paused indexing in “Papers”");
+    expect(top()?.message).toBe("Paused reading in “Papers”");
   });
 
   test("resuming says so, and pausing what is paused already offers nothing to undo", async () => {
@@ -500,8 +500,8 @@ describe("changing a Linked folder", () => {
     expect(await useAppStore.getState().setLinkedFolderPaused("l", true)).toBeUndefined();
     method("setLinkedFolderPaused").mockResolvedValue({ ...linked, status: "scanning" });
     const change = await useAppStore.getState().setLinkedFolderPaused("l", false);
-    expect(change?.message).toBe("Resumed indexing in “Papers”");
-    expect(change?.name).toBe("Resume indexing");
+    expect(change?.message).toBe("Resumed reading in “Papers”");
+    expect(change?.name).toBe("Resume reading");
   });
 
   test("a layout is undone by the one it had and done again by the new one", async () => {
@@ -520,8 +520,8 @@ describe("changing a Linked folder", () => {
     useAppStore.setState({ settings: { language: "zh-CN" } as never });
     method("setLinkedFolderPaused").mockResolvedValue({ ...linked, status: "paused" });
     await useAppStore.getState().setLinkedFolderPaused("l", true);
-    expect(top()?.message).toBe("已暂停“Papers”的索引");
-    expect(top()?.name).toBe("暂停索引");
+    expect(top()?.message).toBe("已暂停读取“Papers”");
+    expect(top()?.name).toBe("暂停读取");
     method("setLinkedFolderLayout").mockResolvedValue({ ...linked, layout: "flat" });
     await useAppStore.getState().setLinkedFolderLayout("l", "flat");
     expect(top()?.message).toBe("已将“Papers”显示为平铺列表");
