@@ -8,7 +8,7 @@ import { currentTabOf } from "../layoutSlice";
 import { useMindStatus } from "../mindStatus";
 import { selectedOn, useSelectable } from "../selection";
 import { useAppStore } from "../store";
-import { isMoveToKey, TREE_ROW } from "../treeKeys";
+import { isMoveToKey, useTreeItem } from "../treeKeys";
 import { useRename } from "../useRename";
 import { ExampleChip, useIsExample } from "./GettingStarted";
 import { InlineName } from "./InlineName";
@@ -50,6 +50,7 @@ export function MindRow({ mind, depth }: { mind: Mind; depth: number }) {
   const objectMenu = useObjectMenu({ kind: "mind", id: mind.id });
   const select = useSelectable({ kind: "mind", id: mind.id }, "sidebar", () => openMind(mind.id));
   const lit = isOpen || select.selected;
+  const treeItem = useTreeItem({ depth, selected: select.selected });
   /** The Minds a drag or "Move to…" from this row takes: all those selected, if it is one of them. */
   const mindIdsHere = () => {
     const chosen = selectedOn("sidebar").flatMap((each) => (each.kind === "mind" ? [each.id] : []));
@@ -84,13 +85,12 @@ export function MindRow({ mind, depth }: { mind: Mind; depth: number }) {
   };
 
   return (
-    // biome-ignore lint/a11y/useFocusableInteractive: the row's own button takes the focus, and the arrow keys move between them.
     <li
       data-testid="mind-row"
       data-mind-id={mind.id}
       data-folder-id={mind.folderId ?? ""}
-      role="treeitem"
-      {...select.rowProps}
+      role="none"
+      {...select.refProps}
       draggable
       onDragStart={(event) => startMoveDrag(event, { mindIds: mindIdsHere() })}
       {...objectMenu.rowProps}
@@ -100,7 +100,7 @@ export function MindRow({ mind, depth }: { mind: Mind; depth: number }) {
       <button
         {...rename.nameProps}
         type="button"
-        {...TREE_ROW}
+        {...treeItem}
         data-testid="mind-list-item"
         data-mind-id={mind.id}
         aria-current={isOpen ? "page" : undefined}
@@ -142,6 +142,7 @@ export function MindRow({ mind, depth }: { mind: Mind; depth: number }) {
         <ObjectMenu
           target={{ kind: "mind", id: mind.id }}
           label={t("mind.more", { title })}
+          tabIndex={-1}
           here={{
             "mind.rename": rename.start,
             "mind.citationStyle": () =>
