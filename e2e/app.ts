@@ -1206,7 +1206,10 @@ export async function tabTo(window: Page, target: Locator, max = 40): Promise<vo
   await expect(target).toBeFocused();
 }
 
-/** Whether the focused control shows DESIGN.md's ring: a solid 2px accent outline. */
+/**
+ * Whether the focused control shows DESIGN.md's ring: a solid 2px accent outline, its own or,
+ * for the main button of a sidebar row, its row's.
+ */
 export const focusRingShows = (window: Page) =>
   window.evaluate(() => {
     const element = document.activeElement as HTMLElement | null;
@@ -1216,12 +1219,18 @@ export const focusRingShows = (window: Page) =>
     document.body.append(probe);
     const accent = getComputedStyle(probe).color;
     probe.remove();
-    const style = getComputedStyle(element);
+    const rings = (holder: Element | null) => {
+      if (!holder) return false;
+      const style = getComputedStyle(holder);
+      return (
+        style.outlineStyle === "solid" &&
+        Number.parseFloat(style.outlineWidth) >= 2 &&
+        style.outlineColor === accent
+      );
+    };
     return (
       element.matches(":focus-visible") &&
-      style.outlineStyle === "solid" &&
-      Number.parseFloat(style.outlineWidth) >= 2 &&
-      style.outlineColor === accent
+      (rings(element) || (element.matches(".row-main") && rings(element.closest(".group"))))
     );
   });
 

@@ -140,6 +140,63 @@ const tabStops = (window: Page) =>
     return { rows: rows.length, others: stops.length - rows.length };
   });
 
+/**
+ * The focused row has one ring (DESIGN.md, Focus): 2px, just inside the whole row and drawn by the
+ * row, none on its main button; its actions sit inside it, clear of it, on the row's own fill.
+ */
+async function expectOneRing(window: Page): Promise<void> {
+  await expect(async () => {
+    const look = await window.evaluate(() => {
+      const item = document.activeElement;
+      const row = item?.closest(".group");
+      if (!(item instanceof HTMLElement) || !row) return null;
+      const probe = document.createElement("span");
+      probe.style.color = "var(--color-accent)";
+      document.body.append(probe);
+      const accent = getComputedStyle(probe).color;
+      probe.remove();
+      const ring = (element: Element) => {
+        const style = getComputedStyle(element);
+        return {
+          drawn: style.outlineStyle !== "none" && Number.parseFloat(style.outlineWidth) > 0,
+          width: Number.parseFloat(style.outlineWidth),
+          color: style.outlineColor,
+          offset: Number.parseFloat(style.outlineOffset),
+        };
+      };
+      const box = (element: Element) => element.getBoundingClientRect();
+      const actions = row.querySelector(".row-actions");
+      return {
+        accent,
+        focusVisible: item.matches(":focus-visible"),
+        item: ring(item),
+        row: ring(row),
+        rowBox: box(row),
+        itemBox: box(item),
+        actionsBox: actions && box(actions),
+        actionsFill: actions && getComputedStyle(actions).backgroundColor,
+        rowFill: getComputedStyle(row).backgroundColor,
+      };
+    });
+    if (!look) throw new Error("The focus isn't on a row's main button.");
+    expect(look.focusVisible).toBe(true);
+    expect(look.item.drawn, "the main button has no ring of its own").toBe(false);
+    expect(look.row).toEqual({ drawn: true, width: 2, color: look.accent, offset: -2 });
+    // The button is in the row, as tall as it, so the ring is the row's edge.
+    expect(look.itemBox.top).toBeCloseTo(look.rowBox.top, 0);
+    expect(look.itemBox.bottom).toBeCloseTo(look.rowBox.bottom, 0);
+    expect(look.itemBox.left).toBeGreaterThanOrEqual(look.rowBox.left);
+    if (look.actionsBox) {
+      // The actions don't cover the ring, and their fill is the row's.
+      expect(look.actionsBox.top).toBeGreaterThanOrEqual(look.rowBox.top + 2 - 0.5);
+      expect(look.actionsBox.bottom).toBeLessThanOrEqual(look.rowBox.bottom - 2 + 0.5);
+      expect(look.actionsBox.right).toBeLessThanOrEqual(look.rowBox.right - 2 + 0.5);
+      expect(look.actionsFill).toBe(look.rowFill);
+      expect(look.rowFill).not.toBe("rgba(0, 0, 0, 0)");
+    }
+  }).toPass();
+}
+
 /** What is typed within a pause of the last key joins it: tried again, a pause later, until the letters stand alone. */
 const afterAPause = (attempt: () => Promise<void>) =>
   expect(attempt).toPass({ intervals: [TYPE_AHEAD_MS + 200], timeout: 15_000 });
@@ -212,6 +269,45 @@ for (const language of LANGUAGES) {
       await app.close();
     }
   });
+}
+
+for (const language of LANGUAGES) {
+  for (const width of [900, 1600]) {
+    test(`the focused row of every kind has one ring just inside the whole row, with its fill under the actions (${language}, ${width}px)`, async () => {
+      const { app, window } = await launchApp(dataDir);
+      try {
+        await setWindowSize(app, window, width, 800);
+        await dismissChatSetup(window);
+        const names = await seed(window, language);
+        const document = row(window, new RegExp(`^(${names.inFolder.join("|")})`)).first();
+
+        // A Folder, a Mind, and a Document, which is also open and selected.
+        await tabIntoTree(window);
+        await expectOneRing(window);
+        await window.keyboard.press("ArrowRight");
+        await window.keyboard.press("ArrowDown");
+        await expect(row(window, names.mind)).toBeFocused();
+        await expectOneRing(window);
+        await window.keyboard.press("ArrowDown");
+        await expect(document).toBeFocused();
+        await expectOneRing(window);
+        await window.keyboard.press("Enter");
+        await expect(document).toHaveAttribute("aria-selected", "true");
+        await tabBackTo(window, document);
+        await expectOneRing(window);
+
+        // A Tag, in the Tags view.
+        await window
+          .getByTestId("browse-views")
+          .getByRole("button", { name: translate(language, "tags.title") })
+          .click();
+        await tabBackTo(window, row(window, /^Report|^报告/).first());
+        await expectOneRing(window);
+      } finally {
+        await app.close();
+      }
+    });
+  }
 }
 
 test("↑ ↓ Home and End walk the rows, → and ← unfold, fold, step in and step out, in Folders and in Not in a Folder", async () => {
@@ -352,10 +448,13 @@ test("a Linked folder's subfolders, however deep, are rows of the tree: each a l
 
     await tabIntoTree(window);
     await expect(linked).toBeFocused();
+    // The Linked folder's row has actions, its subfolders' none: each has one ring.
+    await expectOneRing(window);
     // → steps in, one level at a time, to the first row of each folder.
     for (const next of [a, b, c, deep]) {
       await window.keyboard.press("ArrowRight");
       await expect(next).toBeFocused();
+      await expectOneRing(window);
     }
     // ← steps out of the Document to C, folds C, steps out to B, folds B, and so on.
     await window.keyboard.press("ArrowLeft");
