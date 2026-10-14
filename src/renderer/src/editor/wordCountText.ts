@@ -6,7 +6,7 @@ import {
   QUESTION_BLOCK,
 } from "../../../core/api";
 import { readProposalAttribute } from "../../../shared/proposals";
-import { countText, type TextCount } from "../../../shared/wordCount";
+import { countText, NO_COUNT, type TextCount } from "../../../shared/wordCount";
 
 /**
  * The top-level Block types the count leaves out. Questions are what the User
@@ -78,16 +78,67 @@ export interface MindCount {
   selection: TextCount | null;
 }
 
-/** Counts the Mind and, if the selection holds text, the selection. */
-export function countMind(
-  doc: ProseMirrorNode,
-  selection: { from: number; to: number },
-  uncounted: readonly string[] = UNCOUNTED_BLOCKS,
-): MindCount {
-  const selected =
-    selection.from === selection.to ? null : countText(countableText(doc, selection, uncounted));
+const add = (a: TextCount, b: TextCount): TextCount => ({
+  words: a.words + b.words,
+  cjk: a.cjk + b.cjk,
+  characters: a.characters + b.characters,
+  charactersNoSpaces: a.charactersNoSpaces + b.charactersNoSpaces,
+});
+
+/**
+ * Counts a Mind Block by Block (#812), keeping each Block's count, so the
+ * count after an edit reads only the Blocks the edit changed: an unchanged
+ * Block is the same node in the next document. Blocks are joined by a line
+ * break, which ends a word and is no character, so the Blocks' counts add up
+ * to the count of the Mind's text in one go (`countableText`).
+ */
+export function createMindCounter(uncounted: readonly string[] = UNCOUNTED_BLOCKS) {
+  const counts = new WeakMap<ProseMirrorNode, TextCount>();
+  let read = 0;
+
   return {
-    total: countText(countableText(doc, null, uncounted)),
-    selection: selected && selected.characters > 0 ? selected : null,
+    /**
+     * The Mind's count and the selection's, or null when `stop` said to stop
+     * before every Block was counted: the Blocks counted are kept, so the
+     * next call goes on from there. At least one Block is counted per call.
+     */
+    count(
+      doc: ProseMirrorNode,
+      selection: { from: number; to: number },
+      stop: () => boolean = () => false,
+    ): MindCount | null {
+      read = 0;
+      let total = NO_COUNT;
+      let selected = NO_COUNT;
+      const { from, to } = selection;
+      let stopped = false;
+      doc.forEach((block, start) => {
+        if (stopped || uncounted.includes(block.type.name) || proposed(block)) return;
+        const end = start + block.nodeSize;
+        let count = counts.get(block);
+        if (!count) {
+          if (read > 0 && stop()) {
+            stopped = true;
+            return;
+          }
+          count = countText(visibleText(doc, start, end));
+          counts.set(block, count);
+          read++;
+        }
+        total = add(total, count);
+        if (from >= to || to <= start || from >= end) return;
+        selected = add(
+          selected,
+          from <= start && to >= end
+            ? count
+            : countText(visibleText(doc, Math.max(from, start), Math.min(to, end))),
+        );
+      });
+      if (stopped) return null;
+      return { total, selection: selected.characters > 0 ? selected : null };
+    },
+
+    /** How many Blocks the last count read, not having their count yet. */
+    blocksRead: () => read,
   };
 }

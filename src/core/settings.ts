@@ -61,15 +61,24 @@ const isWordOption = (value: unknown) =>
     isBoolean(value.includeQuestions) &&
     WORD_CHOICES.every((choice) => isBoolean(value[choice])));
 
-/** HTML came after the others: choices saved before it have no `html`, and read as the default. */
-const isExportPreferences = (value: unknown): value is ExportPreferences =>
-  isRecord(value) &&
-  (Object.hasOwn(value, "html")
-    ? hasOnly(value, ["format", "docx", "pdf", "html"]) && isQuestionsOption(value.html)
-    : hasOnly(value, ["format", "docx", "pdf"])) &&
-  EXPORT_FORMATS.some((format) => format === value.format) &&
-  isWordOption(value.docx) &&
-  isQuestionsOption(value.pdf);
+/**
+ * HTML came after the others, and how someone's changes are shown (#734) after HTML: choices
+ * saved before them have neither, and read as the defaults.
+ */
+const isExportPreferences = (value: unknown): value is ExportPreferences => {
+  if (!isRecord(value)) return false;
+  const later = ["html", "theirChanges"].filter((key) => Object.hasOwn(value, key));
+  return (
+    hasOnly(value, ["format", "docx", "pdf", ...later]) &&
+    EXPORT_FORMATS.some((format) => format === value.format) &&
+    isWordOption(value.docx) &&
+    isQuestionsOption(value.pdf) &&
+    (!Object.hasOwn(value, "html") || isQuestionsOption(value.html)) &&
+    (!Object.hasOwn(value, "theirChanges") ||
+      value.theirChanges === "shown" ||
+      value.theirChanges === "accepted")
+  );
+};
 
 /** The Word choices on by default (#107), so a file says what IncarnaMind changed and wrote. */
 const WORD_DEFAULTS: Omit<WordExportPreferences, "includeQuestions"> = {

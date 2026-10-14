@@ -6,9 +6,11 @@ import { CITATION_NODE, type CitationAttributes, type ClaimCalculation } from ".
 import { shownDocumentName } from "../../../shared/citations";
 import { formulaText } from "../../../shared/formula";
 import { citationLocation, formatLocation, openKind } from "../../../shared/locations";
-import { addAsCitation, checkAgain } from "../checks";
+import { addAsCitation, checkAgain, removeClaimMark } from "../checks";
 import { CountItLine } from "../components/CountItLine";
-import { useT } from "../i18n";
+import { askInAssistant } from "../conversations";
+import { useFindSources } from "../findSources";
+import { translateNow, useT } from "../i18n";
 import { groupsMerged } from "../layoutSlice";
 import { openCited } from "../openCited";
 import { useAppStore } from "../store";
@@ -44,6 +46,26 @@ function citesEvidence(editor: Editor, claim: ShownClaim): boolean {
     return false;
   });
   return cited;
+}
+
+/** The words of the sentence a check is about. */
+const sentenceOf = (editor: Editor, claim: ShownClaim) =>
+  editor.state.doc.textBetween(claim.sentence.from, claim.sentence.to, " ", " ").trim();
+
+/**
+ * Asks the assistant to look for the sentence on the web (#128), which a model
+ * that can search does; with web search off, Settings shows where to turn it on.
+ */
+function searchTheWeb(mindId: string, sentence: string): void {
+  const { settings, openSettings } = useAppStore.getState();
+  if (!settings?.user.webSearch) {
+    openSettings("search");
+    return;
+  }
+  void askInAssistant({
+    text: translateNow("claim.webQuestion", { sentence }),
+    mindId,
+  });
 }
 
 /**
@@ -160,6 +182,26 @@ export function ClaimMark({
                 done();
               }}
               onOpen={done}
+              onFix={() => {
+                editor
+                  .chain()
+                  .focus()
+                  .setTextSelection({ from: claim.sentence.from, to: claim.sentence.to })
+                  .run();
+                done();
+              }}
+              onFindSources={() => {
+                useFindSources.getState().show({ query: sentenceOf(editor, claim) });
+                done();
+              }}
+              onSearchWeb={() => {
+                searchTheWeb(mindId, sentenceOf(editor, claim));
+                done();
+              }}
+              onRemove={() => {
+                removeClaimMark(editor, claim);
+                done();
+              }}
             />
           </Popover>,
           document.body,
@@ -240,12 +282,20 @@ function ClaimCard({
   onAdd,
   onCheckAgain,
   onOpen,
+  onFix,
+  onFindSources,
+  onSearchWeb,
+  onRemove,
 }: {
   claim: ShownClaim;
   addable: boolean;
   onAdd(): void;
   onCheckAgain(allDocuments?: boolean): void;
   onOpen(): void;
+  onFix(): void;
+  onFindSources(): void;
+  onSearchWeb(): void;
+  onRemove(): void;
 }) {
   const t = useT();
   const { shown, check } = claim;
@@ -254,7 +304,9 @@ function ClaimCard({
   const calculation = decided ? check.calculation : null;
   // A figure that agrees can sit beside a Passage that contradicts the rest of the sentence.
   const fromPassage = !calculation || (state === "contradicted" && calculation.agrees);
-  const evidence = decided && fromPassage ? check.evidence : null;
+  // An unsupported sentence keeps the nearest line when it says something different (#770).
+  const differs = state === "unsupported" && check.evidence !== null;
+  const evidence = (decided && fromPassage) || differs ? check.evidence : null;
   const location = evidence ? citationLocation(evidence) : null;
   const where = location ? formatLocation(location, t) : null;
   const folderName = useAppStore((store) =>
@@ -283,6 +335,11 @@ function ClaimCard({
             {check.says}
           </p>
         )}
+        {differs && (
+          <p data-testid="claim-differs" className="claim-card-says">
+            {t("claim.unsupported.differs")}
+          </p>
+        )}
         {evidence && (
           <p data-testid="claim-source" className="citation-card-source">
             {[shownDocumentName(evidence, documents), where].filter(Boolean).join(" · ")}
@@ -300,7 +357,7 @@ function ClaimCard({
         </figure>
       )}
       {calculation && <Working calculation={calculation} onOpen={onOpen} />}
-      {state === "unsupported" && (
+      {state === "unsupported" && !differs && (
         <p data-testid="claim-nothing" className="citation-card-note">
           {searchedFolder
             ? t("claim.unsupported.inFolder", { folder: folderName })
@@ -350,6 +407,16 @@ function ClaimCard({
             {t(`citation.open.${openKind(location)}`)}
           </button>
         )}
+        {differs && (
+          <button
+            type="button"
+            data-testid="claim-fix"
+            className="citation-card-action"
+            onClick={onFix}
+          >
+            {t("claim.fixSentence")}
+          </button>
+        )}
         {state === "unsupported" && searchedFolder && (
           <button
             type="button"
@@ -358,6 +425,37 @@ function ClaimCard({
             onClick={() => onCheckAgain(true)}
           >
             {t("claim.searchAll")}
+          </button>
+        )}
+        {/* Where the Documents say something different the card has Open the page and Fix the sentence already, so it offers no more ways to look. */}
+        {state === "unsupported" && !differs && (
+          <>
+            <button
+              type="button"
+              data-testid="claim-find-sources"
+              className="citation-card-action"
+              onClick={onFindSources}
+            >
+              {t("claim.findSources")}
+            </button>
+            <button
+              type="button"
+              data-testid="claim-search-web"
+              className="citation-card-action"
+              onClick={onSearchWeb}
+            >
+              {t("claim.searchWeb")}
+            </button>
+          </>
+        )}
+        {state === "unsupported" && (
+          <button
+            type="button"
+            data-testid="claim-remove"
+            className="citation-card-action"
+            onClick={onRemove}
+          >
+            {t("claim.removeMark")}
           </button>
         )}
         {(state === "not-checked" || state === "needs-recheck") && (
