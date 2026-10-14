@@ -59,6 +59,8 @@ export interface LibraryOptions {
    */
   reranker?: CrossEncoder;
   documents: readonly EvalDocument[];
+  /** Web pages saved by their address from the HTML given, as `saveWebPage` saves a page open in the app: nothing is fetched. */
+  webPages?: readonly EvalWebPage[];
   /** Looks up models in Ollama instead of the app's own lookup (see `evalOllamaModels`). */
   ollamaModels?: OllamaModels;
   /** Keep the data folder afterwards, also when opening fails. */
@@ -83,6 +85,12 @@ export interface LibraryOptions {
   answerSearch?: Pick<AnswerSearchTuning, "rerankDepth" | "maxPassages">;
   /** Time each step of the Answers asked (see ./timing); nothing sent to the model changes. */
   recordTimings?: boolean;
+}
+
+export interface EvalWebPage {
+  key: string;
+  address: string;
+  html: string;
 }
 
 export interface Library {
@@ -307,7 +315,17 @@ export async function openLibrary(options: LibraryOptions): Promise<Library> {
     }
     // The Documents come in the order of the files given, without those skipped.
     const skippedPaths = new Set(skipped.map((file) => file.path));
-    const kept = options.documents.filter((document) => !skippedPaths.has(document.path));
+    const kept: { key: string }[] = options.documents.filter(
+      (document) => !skippedPaths.has(document.path),
+    );
+    for (const page of options.webPages ?? []) {
+      const saved = await core.saveWebPage({ address: page.address, html: page.html });
+      if (saved.outcome !== "saved") {
+        throw new Error(`The web page ${page.address} wasn't saved: ${saved.failure.message}`);
+      }
+      added.push(saved.document);
+      kept.push(page);
+    }
     const done = await processed(
       core,
       added.map((document) => document.id),
