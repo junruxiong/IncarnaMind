@@ -98,6 +98,10 @@ async function askOwnQuestion(window: Page, card: Locator): Promise<void> {
   });
   await expect(card).toBeHidden();
   await askInAssistant(window, "Where does tea come from?");
+  // One nudge at a time: Get started keeps the place until it is done or hidden.
+  await expect(window.getByTestId("get-started")).toBeVisible();
+  await expect(card).toBeHidden();
+  await window.getByTestId("get-started-hide").click();
 }
 
 const releaseOptions = () => ({
@@ -222,6 +226,10 @@ test("a test build says so from the first run, in the sidebar, with the switch, 
   });
 
   const card = window.getByTestId("usage-data-card");
+  // One nudge at a time: the notice takes Get started's place once it is hidden.
+  await expect(window.getByTestId("get-started")).toBeVisible();
+  await expect(card).toBeHidden();
+  await window.getByTestId("get-started-hide").click();
   await expect(card).toBeVisible();
   await expect(card).toHaveAttribute("data-tester", "true");
   await expect(card).toContainText("This test version sends usage data");

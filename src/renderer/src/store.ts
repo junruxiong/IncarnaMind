@@ -112,7 +112,7 @@ export interface OpenDocumentHow {
   stay?: boolean;
 }
 
-interface AppState extends LayoutSlice {
+export interface AppState extends LayoutSlice {
   status: Status;
   minds: Mind[];
   /**
@@ -186,6 +186,11 @@ interface AppState extends LayoutSlice {
   otherExamples: Examples[];
   /** An Answer to a Question of the User's own has arrived in this session (#123). */
   ownAnswerArrived: boolean;
+  /**
+   * The usage data card in this session: "kept" while a test build's notice
+   * stays up after its switch was used, "answered" once the User answered.
+   */
+  usageNotice: "auto" | "kept" | "answered";
   /**
    * The privacy choices on this device: the first run asks about usage data
    * from them. Set once loaded, then follows the core's event.
@@ -726,6 +731,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     examples: null,
     otherExamples: [],
     ownAnswerArrived: false,
+    usageNotice: "auto",
     privacy: null,
     questionToStart: null,
 
