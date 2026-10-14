@@ -194,6 +194,7 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
   expect(documentMenu).toEqual([
     "document.open",
     "document.openTab",
+    "document.peek",
     "—",
     "document.ask",
     "document.startMind",
