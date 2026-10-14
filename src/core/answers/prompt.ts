@@ -95,6 +95,15 @@ export function mindInstructions(offered: boolean): string {
 }
 
 /**
+ * A Search scope with no Documents, with the Minds' Tools offered (#202): a
+ * request to change a Mind still works, and a Question about the Documents
+ * gets `answer`, which says why there is nothing to search.
+ */
+export function emptyScopeInstructions(answer: string): string {
+  return `The Question's Search scope has no Documents, so there is nothing to search or cite. If the User asks about their Documents, reply with just this: "${answer}"`;
+}
+
+/**
  * Connectors that are on but can't be used until the User signs in to them
  * again: their Tools aren't offered, and the Answer says so if it needed them.
  */

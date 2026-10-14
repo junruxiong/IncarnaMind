@@ -164,6 +164,7 @@ import {
   answerInstructions,
   connectorInstructions,
   documentInstructions,
+  emptyScopeInstructions,
   LISTED_DOCUMENTS,
   type ListedDocuments,
   languageInstruction,
@@ -255,8 +256,12 @@ export interface AnswerConversations {
    * written, which reads `read`.
    */
   add(input: QuestionInput, answerModel: ChatModelChoice | null, read: AnswerRead | null): Turn;
-  /** The Question of an Answer, to write the Answer again. */
-  questionOf(input: unknown): { answerId: string; question: ConversationQuestion };
+  /** The Question of an Answer, and the Tool calls it made, to write the Answer again. */
+  questionOf(input: unknown): {
+    answerId: string;
+    question: ConversationQuestion;
+    toolCalls: AnswerToolCall[];
+  };
   /** Empties an Answer, where it is, to write it again, reading `read`. */
   restartAnswer(
     answerId: string,
@@ -350,6 +355,12 @@ export interface AnswersOptions {
    * Proposals (#202, ../tools/minds); absent: it changes none.
    */
   minds?: MindsForTools;
+  /**
+   * Takes back the changes an Answer proposed in Minds, before it is written
+   * again (#202): those still waiting are rejected, and a Mind it made goes
+   * once nothing else is in it.
+   */
+  withdrawChanges?(changes: readonly MindChange[]): void;
   /** Asking the User before a Connector Tool or a Skill script runs. */
   approvals: AnswerApprovals;
   /** Running Skill scripts. */
@@ -616,6 +627,11 @@ export function createAnswers(options: AnswersOptions) {
     documentIds: string[] | null;
     /** The Search scope has no Documents to search: the Answer says so, and nothing is sent. */
     emptyScope: boolean;
+    /**
+     * The Search scope has no Documents to search, but the model is asked
+     * anyway (#202): with no Documents, it is told to say so for a Question.
+     */
+    scopeHasNone?: boolean;
     /** The Skill the Question forces, loaded up front; null if none. */
     forcedSkill: string | null;
     /** The User has yet to allow the chat flow to the model's service: they are asked first. */
@@ -1398,6 +1414,7 @@ export function createAnswers(options: AnswersOptions) {
             sourcesInstructions(sourceTools),
             webInstructions(withWebTools),
             mindInstructions(withMindTools),
+            input.scopeHasNone ? emptyScopeInstructions(options.emptyScopeAnswer()) : "",
             signInNeededInstructions(signInNeeded.map((connector) => connector.name)),
             language,
           ]
@@ -1726,6 +1743,9 @@ export function createAnswers(options: AnswersOptions) {
     const { context, origins } = conversationContextOf(turn.earlier, question.text, {
       mind: section,
     });
+    // With the Minds' Tools, a Search scope with no Documents still reaches the model: a request
+    // to change a Mind needs none, and a Question about the Documents is told the scope is empty.
+    const scopeHasNone = emptyScope && options.minds !== undefined;
     const requestOf = (reading: MindReading, kept: MindCut): RequestMind => ({
       text: kept.text,
       selection: kept.selection,
@@ -1760,8 +1780,9 @@ export function createAnswers(options: AnswersOptions) {
             },
           },
         }),
-      documentIds,
-      emptyScope,
+      documentIds: scopeHasNone ? [] : documentIds,
+      emptyScope: emptyScope && !scopeHasNone,
+      scopeHasNone,
       forcedSkill: question.forcedSkill,
       consentNeeded: ready.consentNeeded,
       assistant: {
@@ -1932,33 +1953,33 @@ export function createAnswers(options: AnswersOptions) {
       if ("asked" in ready) return ready;
       // From here on nothing awaits, so the conversation and the Mind can't change underneath.
       const { documentIds, emptyScope } = scopeNow(question.scope);
-      // No model writes an Answer that says the Search scope is empty, and it reads nothing.
-      const mind = emptyScope
+      const canned = emptyScope && !options.minds;
+      // No model writes an Answer that only says the Search scope is empty, and it reads nothing.
+      const mind = canned
         ? null
         : mindToRead(question.mind?.id ?? null, question.focus, question.text);
-      const turn = options.conversations.add(
-        question,
-        emptyScope ? null : ready.model,
-        readOf(mind),
-      );
+      const turn = options.conversations.add(question, canned ? null : ready.model, readOf(mind));
       return startInConversation(turn, ready, documentIds, emptyScope, mind);
     },
 
     /** Writes an Answer of a conversation again, in place (see `CoreApi.regenerateConversationAnswer`). */
     async regenerateInConversation(input: unknown): Promise<ConversationAskResult> {
-      const { answerId, question } = options.conversations.questionOf(input);
+      const { answerId, question, toolCalls } = options.conversations.questionOf(input);
       const ready = await readyModel(question.model, question.forcedSkill);
       if ("asked" in ready) return ready;
       active.get(answerId)?.finish({ status: "stopped" });
+      // Written again, it proposes its changes again: those still waiting from before go.
+      options.withdrawChanges?.(toolCalls.flatMap((call) => call.mindChange ?? []));
       const { documentIds, emptyScope } = scopeNow(question.scope);
+      const canned = emptyScope && !options.minds;
       const from = question.askedFrom;
       const mind =
-        emptyScope || !from || from.deleted
+        canned || !from || from.deleted
           ? null
           : mindToRead(from.mindId, question.focus, question.text);
       const turn = options.conversations.restartAnswer(
         answerId,
-        emptyScope ? null : ready.model,
+        canned ? null : ready.model,
         readOf(mind),
       );
       return startInConversation(turn, ready, documentIds, emptyScope, mind);

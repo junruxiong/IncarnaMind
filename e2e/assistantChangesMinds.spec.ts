@@ -1,7 +1,9 @@
 import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
+import type { Editor } from "@tiptap/core";
 import {
   askInAssistant,
+  assistantAnswers,
   createDataFolder,
   dismissChatSetup,
   enterContent,
@@ -89,7 +91,7 @@ test("a request for a new note makes a Mind beside the one in focus, its text as
   await setWindowSize(app, window, 1440, 900);
   await writeMind(window, "第三季度", ["销售非常好。"]);
 
-  const answer = await askInAssistant(window, "新建一篇叫“田野计划”的笔记");
+  const answer = await askInAssistant(window, "新建一篇叫“田野计划”的笔记，写上三个步骤");
 
   const tab = window.getByTestId("mind-tab").filter({ hasText: "田野计划" });
   await expect(tab).toBeVisible();
@@ -173,4 +175,77 @@ test("one Mind changed: the card says how many changes wait there, Review goes t
   await window.keyboard.press("ControlOrMeta+z");
   await expect(card.getByTestId("mind-changes-title")).toHaveText("“第三季度”中有 2 处修订");
   await expect(window.getByTestId("proposals-count")).toHaveText("来自助手的 2 处修订");
+});
+
+test("“Create a new note called Fieldwork plan” makes an empty Mind at once, with the cursor in its text and no Answer", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await setLanguage(window, "en");
+  await setWindowSize(app, window, 1440, 900);
+  await writeMind(window, "Q3 review", ["The quarter was good."]);
+  const answers = assistantAnswers(window);
+  const before = await answers.count();
+
+  await window.keyboard.press("ControlOrMeta+j");
+  await expect(window.getByTestId("composer-input")).toBeFocused();
+  await window.keyboard.type("Create a new note called Fieldwork plan");
+  await window.keyboard.press("Enter");
+
+  await expect(window.getByTestId("mind-tab").filter({ hasText: "Fieldwork plan" })).toBeVisible();
+  await expect(window.getByTestId("mind-title")).toHaveValue("Fieldwork plan");
+  const editor = window.getByTestId("mind-editor");
+  await expect(editor).toBeFocused();
+  await window.keyboard.type("First visit: the roastery.");
+  await expect(editor.locator("p")).toHaveText(["First visit: the roastery."]);
+  await expect(answers).toHaveCount(before);
+  await expect(window.getByTestId("composer-input")).toHaveValue("");
+});
+
+test("with no Mind open, a request to change one says so and offers New Mind", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await setLanguage(window, "en");
+  await setWindowSize(app, window, 1440, 900);
+  await expect(window.getByTestId("mind-tab")).toHaveCount(0);
+
+  const answer = await askInAssistant(window, "Shorten the summary");
+  await expect(answer.getByTestId("assistant-answer-text")).toContainText("No Mind is open");
+  const offer = answer.getByTestId("mind-changes-no-mind");
+  await expect(offer).toContainText("No Mind was open to change.");
+  await pointAndClick(window, offer.getByTestId("mind-changes-new-mind"));
+  await expect(window.getByTestId("mind-tab")).toHaveCount(1);
+  await expect(window.getByTestId("mind-title")).toBeFocused();
+});
+
+test("changes stay in their Mind when the User moves to another and back, and go out of date once their words are edited", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await setLanguage(window, "en");
+  await setWindowSize(app, window, 1440, 900);
+  await writeMind(window, "Q3 review", ["Sales were really strong, and margins were very high."]);
+  await askInAssistant(window, "Shorten the summary");
+  const count = window.getByTestId("proposals-count");
+  await expect(count).toHaveText("2 changes from the assistant");
+
+  await writeMind(window, "Project plan", ["Hire a designer."]);
+  await expect(count).toHaveCount(0);
+  await pointAndClick(window, window.getByTestId("mind-tab").filter({ hasText: "Q3 review" }));
+  await expect(count).toHaveText("2 changes from the assistant");
+
+  const editor = window.getByTestId("mind-editor");
+  await editor.focus();
+  await editor.evaluate((dom) => {
+    const { view, commands } = (dom as unknown as { editor: Editor }).editor;
+    let at = -1;
+    view.state.doc.descendants((node, pos) => {
+      const removed = node.marks.some((mark) => mark.type.name === "proposalDelete");
+      if (at < 0 && node.isText && removed) at = pos + 2;
+    });
+    commands.setTextSelection(at);
+  });
+  await window.keyboard.type("l");
+  await expect(window.getByTestId("change-out-of-date")).toHaveCount(1);
 });

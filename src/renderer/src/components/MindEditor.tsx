@@ -550,6 +550,14 @@ function MindEditorView({
     };
   }, [asksHere, editor, doc, mindId]);
 
+  // A Mind just made with its title given ("Create a new note called …", #202): its text has the cursor.
+  const bodyHere = useAppStore((state) => state.bodyToFocus === mindId);
+  useEffect(() => {
+    if (!bodyHere || editor.isDestroyed) return;
+    editor.commands.focus("start");
+    useAppStore.getState().bodyFocused();
+  }, [bodyHere, editor]);
+
   // A Question asked for from outside the editor, e.g. "Ask your own Question" in Get
   // started, or "Ask about this Folder" in the Library, which gives its Search scope:
   // the composer takes the focus, the Question to go at the end of the Mind.

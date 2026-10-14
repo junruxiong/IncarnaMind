@@ -3376,6 +3376,7 @@ export const en = {
   "mindChanges.row.one": "· 1 change",
   "mindChanges.row.none": "· none waiting",
   "mindChanges.open": "Open",
+  "mindChanges.noMind": "No Mind was open to change.",
   "mindCall.thisMind": "this Mind",
   "mindCall.reading": "Reading “{mind}”…",
   "mindCall.editing": "Changing “{mind}”…",

@@ -5402,6 +5402,17 @@
       color: var(--color-accent-strong);
     }
   }
+  .mind-changes-no-mind {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin: 8px 0 2px;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--color-ink-secondary);
+  }
   .mind-changes-foot {
     display: flex;
     align-items: center;

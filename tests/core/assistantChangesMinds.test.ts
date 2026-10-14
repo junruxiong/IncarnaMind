@@ -290,6 +290,74 @@ describe("The assistant changes Minds as Proposals", { timeout: 30_000 }, () => 
   });
 });
 
+describe("Written again", { timeout: 30_000 }, () => {
+  // protects=Regenerate on an Answer that changed Minds takes back what still waits from it first, so nothing is proposed twice and a Mind it made, still empty of the User's words, goes; fails_when=the changes double, or the first new Mind stays beside the second; no_claim=what the User has accepted, which stays.
+  test("regenerating takes back its changes still waiting, and the Mind it made", async () => {
+    const model = scriptedModel(
+      ({ results }): ScriptedReply =>
+        results.length === 0
+          ? {
+              calls: [
+                { tool: "edit_mind", input: { instruction: "Shorten it" } },
+                { tool: "create_mind", input: { title: "Notes", content: "One line." } },
+              ],
+            }
+          : { text: "Done." },
+      { generate: shortened },
+    );
+    const { core, mind, client } = await setUp(model);
+    const first = await ask(core, { text: "Shorten it and make notes", mindId: mind.id });
+    const made = changesIn(first).find((change) => change.created)?.mindId;
+    await client.settled();
+    expect(pendingProposals(client.blocks)).toHaveLength(2);
+
+    const result = await core.regenerateConversationAnswer({
+      conversationId: first.conversationId,
+      answerId: first.id,
+    });
+    if (!result.asked) throw new Error("Not asked again.");
+    await answerEnded(core, result.answerId);
+
+    await client.settled();
+    expect(pendingProposals(client.blocks)).toHaveLength(2);
+    expect(shownWithChanges(client)).toEqual([
+      "Summary",
+      "The quarter was [-very -]good, and sales were [-really -]strong.",
+    ]);
+    const notes = (await core.listMinds()).filter((each) => each.title === "Notes");
+    expect(notes).toHaveLength(1);
+    expect(notes[0]?.id).not.toBe(made);
+  });
+});
+
+describe("A Search scope with no Documents", { timeout: 30_000 }, () => {
+  // protects=a request to change a Mind in a Folder with no Documents still changes it, and the model is told the scope is empty; fails_when=the canned empty-scope Answer comes instead, or search is offered; no_claim=what a real model says to a Question there.
+  test("a Mind in a Folder with no Documents can still be changed, and the model knows the scope is empty", async () => {
+    const model = toolModel(
+      { tool: "edit_mind", input: { instruction: "Shorten it" } },
+      "Shortened the summary.",
+    );
+    const { core, mind, client } = await setUp(model);
+    const folder = await core.createLibraryGroup({ name: "Empty", description: "" });
+
+    const answer = await ask(core, {
+      text: "Shorten the summary",
+      mindId: mind.id,
+      scope: { folderIds: [folder.id], tagIds: [], documentIds: [] },
+    });
+
+    expect(answer.text).toBe("Shortened the summary.");
+    expect(answer.model).not.toBeNull();
+    const [first] = model.doStreamCalls;
+    expect(first?.tools?.map((each) => each.name)).not.toContain("search_documents");
+    expect(JSON.stringify(first?.prompt)).toContain(
+      "The Question's Search scope has no Documents, so there is nothing to search or cite.",
+    );
+    await client.settled();
+    expect(pendingProposals(client.blocks).length).toBe(2);
+  });
+});
+
 describe("The Minds' Tools find what the model names", { timeout: 30_000 }, () => {
   // protects=edit_mind with a section's heading changes that section only, to the next heading as high; fails_when=the rest of the Mind is rewritten, or a lower heading ends the section; no_claim=none beyond protects.
   test("a section named by its heading is what changes", async () => {

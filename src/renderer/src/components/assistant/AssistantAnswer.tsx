@@ -13,7 +13,7 @@ import { UnreadFilesLine } from "../UnreadFilesLine";
 import { AnswerActions } from "./AnswerActions";
 import { AnswerSteps } from "./AnswerSteps";
 import { AnswerText } from "./AnswerText";
-import { MindChangesCard } from "./MindChangesCard";
+import { MindChangesCard, NoMindLine, wantedAMind } from "./MindChangesCard";
 
 /** What adding an Answer needs from the thread around it. */
 export interface AnswerKeeping {
@@ -89,6 +89,7 @@ export function AssistantAnswer({
         />
       )}
       <MindChangesCard answer={answer} streaming={streaming} />
+      {!streaming && question && !question.askedFrom && wantedAMind(answer) && <NoMindLine />}
       {!streaming && uncalculated > 0 && <UncalculatedLine count={uncalculated} />}
       {!streaming && status !== "failed" && <UnreadFilesLine files={unread} />}
       {!streaming && status === "failed" && (

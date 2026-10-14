@@ -3215,6 +3215,7 @@ export const zhCN = {
   "mindChanges.row.one": "· 1 处修订",
   "mindChanges.row.none": "· 没有待处理的修订",
   "mindChanges.open": "打开",
+  "mindChanges.noMind": "没有打开的 Mind 可以修改。",
   "mindCall.thisMind": "这个 Mind",
   "mindCall.reading": "正在读“{mind}”…",
   "mindCall.editing": "正在修改“{mind}”…",
