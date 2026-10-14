@@ -73,7 +73,9 @@
  *
  * Find support and Check against Documents (`checkReply`): a sentence that shares
  * three words with a Passage's line is supported, or contradicted when it has a
- * number the line doesn't; otherwise unsupported.
+ * number the line doesn't; otherwise unsupported. Offered calculate, a sentence
+ * that states a multiple ("1.1x") has it worked out as the line's first number
+ * over its second (#707).
  *
  * Verify (`fakeClaims`): every sentence of a document claims something, but a
  * question or thanks. Its claims are checked as above.
@@ -513,7 +515,7 @@ function scriptNamed(
  */
 function nextReply(prompt: Prompt, tools: readonly OfferedTool[]): Reply {
   const names = tools.map((tool) => tool.name);
-  if (CHECK_RUN.test(systemOf(prompt))) return checkReply(prompt);
+  if (CHECK_RUN.test(systemOf(prompt))) return checkReply(prompt, names);
   const question = lastQuestion(prompt);
   if (/blank reply/i.test(question)) return { text: "" };
   /** What the calls made first said, in order. */
@@ -873,8 +875,9 @@ const checkWords = (text: string): string[] => [
  * support it, unless the sentence has a number the line doesn't while the
  * line has numbers: that contradicts it. Fewer leave it unsupported. A
  * sentence with "blank reply" gets an empty reply, and one with "refuse" a refusal.
+ * Offered calculate, a sentence that states a multiple has it worked out first.
  */
-function checkReply(prompt: Prompt): Reply {
+function checkReply(prompt: Prompt, tools: readonly string[]): Reply {
   const sentence = /<sentence>\n([\s\S]*?)\n<\/sentence>/.exec(lastUserText(prompt))?.[1] ?? "";
   if (/blank reply/i.test(sentence)) return { text: "" };
   if (/\brefuse\b/i.test(sentence)) return { text: "I'm sorry, I can't help with that." };
@@ -894,6 +897,30 @@ function checkReply(prompt: Prompt): Reply {
     lineNumbers.length > 0 && words.some((word) => /\d/.test(word) && !lineNumbers.includes(word));
   if (toolResults(prompt, "cite").length === 0) {
     return { tool: "cite", input: { citations: [best.record] } };
+  }
+  const multiple = /\d+(?:\.\d+)?x\b/.exec(sentence)?.[0];
+  if (tools.includes("calculate") && multiple && toolResults(prompt, "calculate").length === 0) {
+    const inputs = [1, 2].map((position) => ({
+      name: `n${position}`,
+      label: position === 1 ? "First" : "Second",
+      citation: 1,
+      position,
+    }));
+    return {
+      tool: "calculate",
+      input: {
+        figures: [
+          {
+            marker: 1,
+            label: "Multiple",
+            inputs,
+            formula: "n1 / n2",
+            as: "times",
+            stated: multiple,
+          },
+        ],
+      },
+    };
   }
   return {
     text: contradicted
