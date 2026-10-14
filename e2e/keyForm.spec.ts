@@ -53,6 +53,8 @@ test("at 900px high the key form shows provider, key, Model and its button witho
   const { app, window } = await launchApp(dataDir);
   try {
     await setWindowSize(app, window, 1100, 900);
+    // Linux in CI has no keyring: its notice is accepted first, as a User does once.
+    await acceptPlainTextKeys(window);
     for (const value of ["en", "zh-CN"] as const) {
       await language(window, value);
       const card = await openKeyForm(window);
@@ -78,13 +80,45 @@ test("at 900px high the key form shows provider, key, Model and its button witho
   }
 });
 
+test("a way that can't be used yet says why, with the next step: Ollama not running, and Use this key before a key is pasted, in English and Chinese", async () => {
+  // Nothing answers where Ollama would be.
+  const { app, window } = await launchApp(dataDir, { ollama: "http://127.0.0.1:9" });
+  try {
+    await setWindowSize(app, window, 1100, 900);
+    await acceptPlainTextKeys(window);
+    const card = await openKeyForm(window);
+    await card.getByTestId("setup-other").click();
+    const local = card.getByTestId("way-local");
+    await expect(local).toContainText("Ollama isn't running on this computer. It's free to get.");
+    await expect(local.locator("xpath=..").getByRole("link", { name: /Get Ollama/ })).toBeVisible();
+    await language(window, "zh-CN");
+    await expect(local).toContainText("这台电脑上没有运行 Ollama。可以免费获取。");
+    await language(window, "en");
+    await card.getByTestId("way-key").click();
+    const form = card.getByTestId("provider-form");
+    await expect(form.getByTestId("provider-use-key")).toBeDisabled();
+    await expect(form.getByTestId("provider-use-key-why")).toHaveText("Paste the key first.");
+    await form.getByLabel(/^API key/).fill("sk-something");
+    await expect(form.getByTestId("provider-use-key-why")).toHaveCount(0);
+    await expect(form.getByTestId("provider-use-key")).toBeEnabled();
+    await form.getByLabel(/^API key/).fill("");
+
+    await language(window, "zh-CN");
+    await expect(form.getByTestId("provider-use-key-why")).toHaveText("请先粘贴密钥。");
+    if (process.env.INCARNAMIND_SCREENSHOTS) {
+      await window.screenshot({
+        path: `${process.env.INCARNAMIND_SCREENSHOTS}/why-unavailable-zh-CN.png`,
+      });
+    }
+  } finally {
+    await app.close();
+  }
+});
+
 /** An OpenAI-compatible server that refuses one key and answers with the other. */
 async function server(): Promise<{ server: Server; url: string }> {
   const http = createServer((request, response) => {
-    let body = "";
-    request.on("data", (chunk) => {
-      body += chunk;
-    });
+    request.resume();
     request.on("end", () => {
       const good = request.headers.authorization === "Bearer good-key";
       response.writeHead(good ? 200 : 401, { "content-type": "application/json" });
