@@ -45,6 +45,7 @@ import type * as Y from "yjs";
 import { asGenerated } from "../../shared/aiText";
 import { runsByDefault } from "../../shared/approvalRules";
 import { citationNode, withCitations } from "../../shared/blockJson";
+import type { LiveDocument } from "../../shared/citations";
 import { withFigures, withFigureText } from "../../shared/figureMarkers";
 import { recordProposalRequest, resolveProposals } from "../../shared/proposals";
 import { searchScopeOf } from "../../shared/searchScope";
@@ -471,6 +472,8 @@ const messageOf = (error: unknown) => (error instanceof Error ? error.message : 
 export interface DocumentsForAnswers
   extends Pick<AnswerDocuments, "citationSource" | "pageTexts" | "documentDate"> {
   searchableCount(documentIds: readonly string[] | null): number;
+  /** Every live Document's names: what a Citation in the Question context names its Document by. */
+  names(): readonly LiveDocument[];
   /** How many Documents there are to search, and the names of the `limit` most recently added, newest first. */
   searchableNames(documentIds: readonly string[] | null, limit: number): ListedDocuments;
   /** The languages the Documents to search are in, the most common first, with how many are in each. */
@@ -1725,7 +1728,8 @@ export function createAnswers(options: AnswersOptions) {
     if (mindId === null) return null;
     const name = options.readableMindName(mindId);
     if (name === null) return null;
-    const reading = content.peek(mindId, (blocks) => readMind(blocks, name, focus));
+    const documents = options.documents.names();
+    const reading = content.peek(mindId, (blocks) => readMind(blocks, name, focus, documents));
     return { mindId, reading, section: reading.section(MIND_TOKEN_LIMIT, question) };
   }
 
@@ -1757,8 +1761,10 @@ export function createAnswers(options: AnswersOptions) {
       mind && turn.earlier.length > 0
         ? mind.reading.section(MIND_TOKEN_LIMIT, asking)
         : mind?.section;
+    const documents = options.documents.names();
     const { context, origins } = conversationContextOf(turn.earlier, question.text, {
       mind: section,
+      documents,
     });
     // With the Minds' Tools, a Search scope with no Documents still reaches the model: a request
     // to change a Mind needs none, and a Question about the Documents is told the scope is empty.
@@ -1789,8 +1795,10 @@ export function createAnswers(options: AnswersOptions) {
                 return null;
               const smaller = mind.reading.section(tokens, asking);
               return {
-                context: conversationContextOf(turn.earlier, question.text, { mind: smaller })
-                  .context,
+                context: conversationContextOf(turn.earlier, question.text, {
+                  mind: smaller,
+                  documents,
+                }).context,
                 request: requestOf(mind.reading, smaller),
                 share: smaller.share,
               };
@@ -1870,7 +1878,12 @@ export function createAnswers(options: AnswersOptions) {
       (blocks): { answerId: string; edited: boolean } & Asked => {
         const question = findBlock(blocks, QUESTION_BLOCK, questionId);
         if (!question) throw new NotFoundError({ key: "error.question.notInMind" });
-        const { context, origins } = questionContextOf(blocks, question.index);
+        const { context, origins } = questionContextOf(
+          blocks,
+          question.index,
+          QUESTION_CONTEXT_TOKEN_BUDGET,
+          options.documents.names(),
+        );
         const asked = {
           ...askedWith(context, question.element),
           contextReasons: origins.map((source) => ({ via: "context" as const, source })),
