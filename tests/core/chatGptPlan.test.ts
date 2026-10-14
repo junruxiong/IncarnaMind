@@ -976,7 +976,6 @@ describe("A model's usage limit, used up", { timeout: 30_000 }, () => {
     expect(again.answer.model?.modelId).toBe(ASTRA);
     expect(lastModel(fake)).toBe(ASTRA);
 
-    // The conversation goes on with it.
     const followUp = await settled(
       core,
       core.askInConversation({ text: "And transformers?", conversationId: failed.conversationId }),

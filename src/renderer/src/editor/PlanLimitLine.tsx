@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { firstReset, nextPlanModel } from "../../../shared/planLimits";
 import { ProblemLine } from "../components/ProblemLine";
 import { core } from "../core";
@@ -22,9 +23,11 @@ export function PlanLimitLine({
   modelId: string;
   providerId: string | null;
   details: string | null;
-  onAnswerAgain(): void;
+  /** Asks the Question again; resolves once it is asked, or refused. */
+  onAnswerAgain(): Promise<void>;
 }) {
   const t = useT();
+  const [asking, setAsking] = useState(false);
   const language = useLanguage();
   const nameOf = useModelNames();
   const plan = usePlanLimits();
@@ -46,10 +49,15 @@ export function PlanLimitLine({
   const answerWith = next && {
     label: t("answer.error.answerWith", { model: name(next.id) }),
     testId: "answer-error-action",
-    onClick: () =>
-      void core
+    disabled: asking,
+    onClick: () => {
+      setAsking(true);
+      core
         .answerWithPlanModel({ insteadOf: modelId, modelId: next.id })
-        .then(onAnswerAgain, useAppStore.getState().reportError),
+        .then(onAnswerAgain)
+        .catch(useAppStore.getState().reportError)
+        .finally(() => setAsking(false));
+    },
   };
   return (
     <div contentEditable={false} data-testid="answer-error" data-error-kind="plan-limit">

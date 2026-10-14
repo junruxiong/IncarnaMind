@@ -139,7 +139,7 @@ export function AssistantAnswer({
           modelId={planModel}
           providerId={answer.model?.providerId ?? null}
           details={answer.errorMessage}
-          onAnswerAgain={regenerate}
+          onAnswerAgain={() => regenerateAnswer(answer.id)}
         />
       )}
       {problem && (
