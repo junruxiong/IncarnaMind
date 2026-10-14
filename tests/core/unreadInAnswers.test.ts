@@ -79,7 +79,9 @@ describe("The search Tool's reply says which Documents in scope couldn't be read
     expect(reply).toContain(
       `${NOTE}, so no Passage comes from that text: "Harbour tariff notice.pdf" (a scan with no text).`,
     );
-    expect(reply).toContain("don't give another Document's figure as the answer");
+    expect(reply).toContain(
+      "If the Passages don't clearly answer the Question and it may be about one of them, say in one sentence that it couldn't be read, so the answer may be there, rather than taking another Document's figure for it.",
+    );
     expect(reply).not.toContain("Tariffs 2024.md");
   });
 

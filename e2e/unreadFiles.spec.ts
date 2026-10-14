@@ -86,7 +86,7 @@ const WORDS = {
     reasons: [
       ["Contract.doc", /Format not read yet \(\.doc\)/],
       ["Locked.docx", /Password-protected/],
-      ["Scan.pdf", /A scan with no text yet/],
+      ["Scan.pdf", /A scan with no text that could be recognized/],
     ],
   },
   "zh-CN": {
@@ -94,7 +94,7 @@ const WORDS = {
     reasons: [
       ["Contract.doc", /暂不支持此格式（\.doc）/],
       ["Locked.docx", /已设置密码/],
-      ["Scan.pdf", /扫描件，还没有文字/],
+      ["Scan.pdf", /扫描件，未识别出文字/],
     ],
   },
 } as const;

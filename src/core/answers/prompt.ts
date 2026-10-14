@@ -228,7 +228,7 @@ export function unreadDocumentsNote(unread: readonly UnreadFile[]): string {
     .slice(0, NAMED_UNREAD)
     .map((file) => `"${listedName(file.name)}" (${UNREAD_WORDS[file.reason](file.pages)})`);
   const more = unread.length - named.length;
-  return `IncarnaMind couldn't read the text of some Documents in the search, so no Passage comes from that text: ${named.join(", ")}${more > 0 ? `, and ${more} more` : ""}. If the Question may be about one of them, say in one sentence that it couldn't be read, so the answer may be there, and don't give another Document's figure as the answer.`;
+  return `IncarnaMind couldn't read the text of some Documents in the search, so no Passage comes from that text: ${named.join(", ")}${more > 0 ? `, and ${more} more` : ""}. If the Passages don't clearly answer the Question and it may be about one of them, say in one sentence that it couldn't be read, so the answer may be there, rather than taking another Document's figure for it.`;
 }
 
 /**

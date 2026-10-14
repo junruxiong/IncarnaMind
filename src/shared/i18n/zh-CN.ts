@@ -40,7 +40,7 @@ export const zhCN = {
   "unread.hide": "收起",
   "unread.reason.format":
     "暂不支持此格式（{extension}）。请转换为 PDF、Word、PowerPoint 或 Excel。",
-  "unread.reason.scan": "扫描件，还没有文字。请用文字识别（OCR）生成带文字的副本，再添加。",
+  "unread.reason.scan": "扫描件，未识别出文字（可能是手写内容或图片）。",
   "unread.reason.password": "已设置密码。请去掉密码后重新添加。",
   "unread.reason.damaged": "文件已损坏，或无法打开。",
   "unread.reason.too-large": "文件太大，无法打开。",

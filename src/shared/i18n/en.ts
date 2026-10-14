@@ -43,7 +43,8 @@ export const en = {
   "unread.hide": "Hide",
   "unread.reason.format":
     "Format not read yet ({extension}). Convert it to PDF, Word, PowerPoint or Excel.",
-  "unread.reason.scan": "A scan with no text yet. Make a copy with text (OCR) and add it.",
+  "unread.reason.scan":
+    "A scan with no text that could be recognized (handwriting or a picture, say).",
   "unread.reason.password": "Password-protected. Remove the password and add it again.",
   "unread.reason.damaged": "The file is damaged or couldn't be opened.",
   "unread.reason.too-large": "Too large to open.",
