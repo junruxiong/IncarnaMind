@@ -10,6 +10,7 @@ import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
+import { ProblemMark } from "../ProblemLine";
 import {
   buttonClass,
   errorTextClass,
@@ -287,6 +288,7 @@ function JevForm({
       {test && <TestResult result={test} />}
       {error && (
         <p role="alert" className={errorTextClass}>
+          <ProblemMark />
           {error}
         </p>
       )}

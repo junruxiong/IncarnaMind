@@ -300,6 +300,36 @@ test("onboarding offers starter folders, and Organize with no model chosen opens
   }
 });
 
+test("a Document waiting for Ollama says why in the interface language, in its info", async () => {
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await dismissChatSetup(window);
+    await makeFolders(window, [{ name: "Papers", description: "Scientific papers" }]);
+    // A port nothing listens on: Auto finds no Ollama, and the Document waits.
+    await (await coreOf(window)).evaluate((core) =>
+      core.saveLibrarySettings({
+        classifier: { kind: "auto", baseUrl: "http://127.0.0.1:9" },
+        automatic: true,
+      }),
+    );
+    await window.evaluate(async () =>
+      (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
+        user: { language: "zh-CN" },
+      }),
+    );
+    const path = join(sources, "Tides.txt");
+    await writeFile(path, "Spring tides happen at new moon and at full moon.");
+    await addDocuments(window, [path]);
+    await window.getByTestId("open-library").click();
+    const info = await infoOf(window, rowOf(window.getByTestId("library"), "Tides"));
+    const organized = info.getByTestId("info-organize");
+    await expect(organized).toContainText("启动 Ollama 后，才能使用本地自动分类。");
+    await expect(organized).not.toContainText("Start Ollama");
+  } finally {
+    await app.close();
+  }
+});
+
 /** Real HTTP protocol and PDF rendering; only inference is deterministic here. */
 test("Auto routes text and scans with tags, reports failures, retries and preserves overrides", async () => {
   const requests: { model: string; images?: string[] }[] = [];
