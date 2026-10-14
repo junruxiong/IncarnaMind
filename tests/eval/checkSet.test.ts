@@ -80,9 +80,9 @@ describe("The checks evaluation's labels", () => {
     },
   );
 
-  test("Find support has 200 sentences in English and Chinese, at least 100 supported, over every kind of Document", () => {
+  test("Find support has 208 sentences in English and Chinese, at least 100 supported, over every kind of Document", () => {
     const sentences = set.items.filter((item) => item.set === "find-support");
-    expect(sentences).toHaveLength(200);
+    expect(sentences).toHaveLength(208);
     expect(sentences.filter((item) => item.label === "supported").length).toBeGreaterThanOrEqual(
       100,
     );

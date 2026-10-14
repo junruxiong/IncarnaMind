@@ -1,3 +1,4 @@
+import type { ProviderError } from "../../core/api";
 import type { ErrorWording } from "../../core/errors";
 import { takeWording } from "../../shared/errorWording";
 import type { MessageKey, MessageParams } from "../../shared/i18n";
@@ -63,4 +64,12 @@ export function errorMessage(
 ): string {
   const { message, wording } = describeError(error);
   return wording ? t(wording.key, wording.values) : message;
+}
+
+/** What a provider's error says, in the interface language when the core worded it. */
+export function providerErrorText(
+  error: ProviderError,
+  t: (key: MessageKey, params?: MessageParams) => string,
+): string {
+  return error.wording ? t(error.wording.key, error.wording.values) : error.message;
 }
