@@ -1517,6 +1517,11 @@ export interface UserSettings {
    * pages they use as Documents (#128): off until the User turns it on.
    */
   webSearch: boolean;
+  /**
+   * Web pages are kept as they look when saved (`WebPageLook`), unless the
+   * save says otherwise: off until the User turns it on.
+   */
+  keepWebPageLook: boolean;
 }
 
 /**
@@ -2147,6 +2152,8 @@ export interface WebPageInfo {
    * (#756): over 60, over 5 MB, or past 25 MB for the page.
    */
   picturesLeftOut: number;
+  /** The last fetch kept as it looks; null when it wasn't asked to be. */
+  look: WebPageLook | null;
 }
 
 /** What `saveWebPage` takes. */
@@ -2157,7 +2164,33 @@ export interface SaveWebPageInput {
   html?: string;
   /** The Library Folder to file a new Document in; none or null: Unsorted. */
   folderId?: string | null;
+  /**
+   * Keep the page as it looks too (see `WebPageLook`), whose full load may
+   * reach the other sites the page draws from. Absent: as
+   * `UserSettings.keepWebPageLook` says. Ignored with `html`.
+   */
+  keepLook?: boolean;
 }
+
+/**
+ * A web page's version kept as it looks (#756): a PDF of the page as a
+ * browser showed it, made once, in the background, in a hidden window that
+ * reaches no Node, other pages, cookies or files.
+ * - "saving": being made.
+ * - "saved": made at `savedAt` (ISO 8601, UTC), served at
+ *   `documentImageUrl(documentId, path)`.
+ * - "failed": it couldn't be made.
+ */
+export type WebPageLook =
+  | { status: "saving" }
+  | { status: "saved"; savedAt: string; path: string }
+  | { status: "failed"; failure: WebPageLookFailure };
+
+/**
+ * Why a page's look couldn't be kept: "timed-out", it didn't load in 30
+ * seconds; "unreachable", it couldn't be loaded; "failed", anything else.
+ */
+export type WebPageLookFailure = "timed-out" | "unreachable" | "failed";
 
 /**
  * Why a web page wasn't saved, or wasn't fetched again:
@@ -6788,12 +6821,20 @@ export interface CoreApi {
    * navigation, ads or scripts, kept as a snapshot that Citations point at
    * and the check reads, named by the page's title. The page is fetched from
    * this computer, with a time and size limit, unless `html` is given (a
-   * page the app has open). Its images aren't fetched. An address saved
-   * already gives its Document, as it is. "document.status" events report
-   * its processing. A page that can't be fetched, or that is mostly not text,
-   * isn't saved: the result says why.
+   * page the app has open), with its article's pictures (#756). Kept as it
+   * looks too, if asked, in the background (`WebPageInfo.look`). An address
+   * saved already gives its Document, as it is. "document.status" events
+   * report its processing. A page that can't be fetched, or that is mostly
+   * not text, isn't saved: the result says why.
    */
   saveWebPage(input: SaveWebPageInput): Promise<WebPageResult>;
+  /**
+   * Keeps a web page Document's last version as it looks (`WebPageLook`),
+   * again after it failed, in the background: the User's click is the
+   * consent to its full load. Throws NotFoundError for an unknown Document,
+   * and InvalidInputError for one that isn't a web page.
+   */
+  keepWebPageLook(documentId: string): Promise<Document>;
   /**
    * "Fetch again" on a web page Document: its address is fetched anew, and a
    * page that changed becomes a new version. Citations keep pointing at the
@@ -8005,6 +8046,7 @@ const methods: Record<CoreApiMethod, true> = {
   changeLayout: true,
   addDocuments: true,
   saveWebPage: true,
+  keepWebPageLook: true,
   fetchWebPageAgain: true,
   saveTextAsDocument: true,
   listDocuments: true,

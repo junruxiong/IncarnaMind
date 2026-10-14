@@ -23,7 +23,7 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, renameSync } from "node:fs";
 import { rm, stat } from "node:fs/promises";
-import { isAbsolute, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import type { LiveDocument } from "../../shared/citations";
 import { quoteInUnits } from "../../shared/locations";
 import {
@@ -122,7 +122,7 @@ import { detectLanguage, languageList, type TextLanguage } from "./textLanguage"
 import { createVectorIndex } from "./vectors";
 import type { WatchFolder } from "./watcher";
 import type { SnapshotFile } from "./web";
-import { showsPicture, webPageInfo } from "./web/store";
+import { currentLookHash, lookName, showsPicture, webPageInfo } from "./web/store";
 
 const DEFAULT_SEARCH_LIMIT = 20;
 const MAX_SEARCH_LIMIT = 200;
@@ -2101,6 +2101,9 @@ export function createDocuments(options: DocumentsOptions) {
     /** Looks at a file again now, as when it is opened: a new version is processed. */
     check: (path: string) => library.check([path]),
 
+    /** Tells the windows a Document changed besides its processing, such as a web page's look. */
+    announce,
+
     /**
      * Points a Document added on its own at a copy IncarnaMind just saved of
      * its file, elsewhere: a Transcript saved at Stop to the Output location
@@ -2338,14 +2341,23 @@ export function createDocuments(options: DocumentsOptions) {
     /**
      * Opens a picture a live Markdown Document shows from beside it, by the
      * path written in the file (see `openImageBeside`), or one a saved web
-     * page's versions show, by its path in the snapshot. Anything else is
-     * refused (NotFoundError).
+     * page's versions show, by its path in the snapshot, or the PDF of how
+     * its last version looked (`WebPageLook.path`). Anything else is refused
+     * (NotFoundError).
      */
     async openImage(idInput: unknown, path: unknown): Promise<DocumentImage> {
       if (typeof path !== "string" || path.length > 2048) {
         throw new InvalidInputError("An image's path must be text.");
       }
       const row = await openablePath(idInput);
+      const look = row.kind === "web" ? currentLookHash(db, row.id) : null;
+      if (look && path === `looks/${lookName(look)}`) {
+        try {
+          return { ...(await openFile(join(dirname(row.path), path))), type: "application/pdf" };
+        } catch (error) {
+          throw new NotFoundError({ key: "error.webPage.lookGone" }, { cause: error });
+        }
+      }
       if (row.kind === "web") {
         // A saved web page's picture: one of the files its versions show, and nothing else (#756).
         const hash = /^pictures\/([0-9a-f]{64})\.(?:png|jpg|gif|webp|avif)$/.exec(path)?.[1];
