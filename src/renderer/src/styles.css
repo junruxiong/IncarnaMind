@@ -346,8 +346,9 @@
   /*
    * The sidebar's panel (#219). Shown, it has no box of its own (the sidebar
    * is a flex item as before). Hidden, it is out to the left of the window,
-   * and slides over the content (peeking) when the pointer touches the left
-   * edge or keyboard focus is in it; with reduced motion it fades instead.
+   * and comes out over the content (peeking) when the pointer touches the left
+   * edge or keyboard focus is in it. The sidebar inside it is what moves or
+   * fades (slideSidebar in motion.ts, #855), so the panel paints nothing itself.
    */
   .sidebar-panel {
     display: contents;
@@ -359,14 +360,12 @@
     z-index: 30;
     display: flex;
     width: var(--sidebar-width);
-    background: var(--color-frame);
     transform: translateX(-100%);
-    transition:
-      transform 160ms ease-out,
-      box-shadow 160ms ease-out;
 
     &[data-open] {
       transform: none;
+    }
+    &[data-open] > aside {
       box-shadow: var(--shadow-popover);
     }
   }
@@ -374,7 +373,6 @@
     transform: none;
     opacity: 0;
     pointer-events: none;
-    transition: opacity 80ms linear;
   }
   :root:not([data-motion="on"]) .sidebar-panel:is([data-hidden][data-open]) {
     opacity: 1;

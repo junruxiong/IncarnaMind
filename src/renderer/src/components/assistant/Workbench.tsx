@@ -1,4 +1,12 @@
-import { type CSSProperties, type ReactNode, useLayoutEffect, useMemo, useState } from "react";
+import {
+  type CSSProperties,
+  type ReactNode,
+  type RefObject,
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useState,
+} from "react";
 import { type AssistantPlace, DEFAULT_ASSISTANT } from "../../../../core/api";
 import {
   BOTTOM_MIN,
@@ -43,9 +51,11 @@ import { useAssistantDrag } from "./useAssistantDrag";
  * the groups share what it is given (`useGroupsMerged`).
  */
 export function Workbench({
+  ref,
   sidebarHidden,
   cardOverlay,
 }: {
+  ref: RefObject<HTMLDivElement | null>;
   sidebarHidden: boolean;
   /** Drawn over the card, such as where dropped links go. */
   cardOverlay: ReactNode;
@@ -61,6 +71,13 @@ export function Workbench({
   const side = isSide(dock);
   const { folded } = shown;
   const [area, setArea] = useState<HTMLDivElement | null>(null);
+  const holdArea = useCallback(
+    (element: HTMLDivElement | null) => {
+      ref.current = element;
+      setArea(element);
+    },
+    [ref],
+  );
   const room = useContentSize(area);
   const [card, setCard] = useState<HTMLDivElement | null>(null);
   useMeasuredCard(card);
@@ -105,7 +122,7 @@ export function Workbench({
 
   return (
     <div
-      ref={setArea}
+      ref={holdArea}
       data-testid="workbench"
       data-dock={dock}
       data-folded={folded || undefined}
