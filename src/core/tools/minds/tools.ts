@@ -321,7 +321,7 @@ export function mindTools(options: MindToolsOptions): Tool[] {
   const effectOn =
     (action: "read" | "write") =>
     (input: Record<string, unknown>): Effect[] => {
-      const mind = found(targetOf(input));
+      const mind = targetOf(input);
       return [{ action, scope: { kind: "mind", mindId: typeof mind === "string" ? "" : mind.id } }];
     };
 

@@ -69,7 +69,9 @@ export function MindCall({ call }: { call: AnswerToolCall }) {
       className="answer-call"
     >
       <span className="answer-call-summary answer-call-summary--static">
-        <MindLineIcon className={`answer-call-icon ${running ? "animate-pulse" : ""}`} />
+        <MindLineIcon
+          className={`answer-call-icon ${running ? "motion-safe:animate-pulse" : ""}`}
+        />
         <span className="answer-call-text" title={text}>
           {text}
         </span>
