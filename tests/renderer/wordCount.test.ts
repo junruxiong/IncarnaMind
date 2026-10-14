@@ -3,7 +3,7 @@ import { describe, expect, test } from "vitest";
 import * as Y from "yjs";
 import { CITATION_NODE, FOOTNOTE_NODE } from "../../src/core/api";
 import { noteExtensions } from "../../src/renderer/src/editor/noteSchema";
-import { countMind } from "../../src/renderer/src/editor/wordCountText";
+import { createMindCounter } from "../../src/renderer/src/editor/wordCountText";
 import {
   countBasisOf,
   setCountBasis,
@@ -25,6 +25,17 @@ const question = (value: string): JSONContent => ({ type: "question", content: [
 const docOf = (...blocks: JSONContent[]) => schema.nodeFromJSON({ type: "doc", content: blocks });
 
 const words = (value: string) => countFor(countText(value), "words");
+
+/** Counts the Mind and the selection, every Block at once. */
+function countMind(
+  doc: ReturnType<typeof docOf>,
+  selection: { from: number; to: number },
+  uncounted?: readonly string[],
+) {
+  const counted = createMindCounter(uncounted).count(doc, selection);
+  if (!counted) throw new Error("The count stopped before the end.");
+  return counted;
+}
 
 describe("counting text", () => {
   test("English is counted in words", () => {

@@ -21,6 +21,7 @@ import { translate } from "../../shared/i18n";
 import type { Translate } from "../../shared/locations";
 import { mindName } from "../../shared/naming";
 import type { PrintPaper } from "../../shared/printDocument";
+import { pendingProposals } from "../../shared/proposals";
 import type { SourceDocument } from "../../shared/sources";
 import { wordFileOf, wordImportProgressOf } from "../../shared/wordFiles";
 import type { Logger, Pictures, Printer } from "../adapters";
@@ -36,6 +37,7 @@ import {
   type Mind,
   type MindExport,
   type MindExportPreview,
+  WORD_CHANGE_ID,
 } from "../api";
 import { InvalidInputError, isRecord } from "../errors";
 import { safeFileName } from "../fileNames";
@@ -49,7 +51,9 @@ import {
   type ReadOptions,
   readBlocks,
   reviewReading,
+  theirChangesReading,
 } from "../mindText";
+import { withChangesAccepted } from "../shownChanges";
 import { addSources, styleCitations } from "./citations";
 import { renderDocx } from "./docx";
 import { renderHtml } from "./html";
@@ -157,16 +161,25 @@ export function createExports(deps: ExportsDependencies) {
       comparisonText: (key, params) => translate(language, key, params),
       documentRemoved: (documentId) => !live.has(documentId),
     };
-    const { blocks, questions, word } = deps.read(mind.id, (fragment) => {
+    const { read, questions, word, theirChanges } = deps.read(mind.id, (fragment) => {
       const { doc } = fragment;
-      // A Word file shows what is waiting as tracked changes, and can mark AI text (#107).
+      const fromWord = doc !== null && wordFileOf(doc) !== null;
+      // A Word file shows what is waiting as tracked changes, and can mark AI text (#107); the
+      // others show someone's changes from the Word file as changes, or accepted (#734).
       if (format === "docx") readOptions.review = reviewReading(fragment);
+      else if (doc && fromWord && format !== "source-pack")
+        readOptions.review = theirChangesReading(doc);
       return {
-        blocks: readBlocks(fragment, readOptions),
+        read: readBlocks(fragment, readOptions),
         questions: countQuestions(fragment),
-        word: doc && wordFileOf(doc) ? { importing: wordImportProgressOf(doc) !== null } : null,
+        word: doc && fromWord ? { importing: wordImportProgressOf(doc) !== null } : null,
+        theirChanges: fromWord
+          ? pendingProposals(fragment).filter((each) => each.id.startsWith(WORD_CHANGE_ID)).length
+          : 0,
       };
     });
+    const blocks =
+      format !== "docx" && options.theirChanges === "accepted" ? withChangesAccepted(read) : read;
     // A source pack holds the Citations the Mind numbers; the others, every footnote.
     const footnotes =
       format === "source-pack"
@@ -179,6 +192,7 @@ export function createExports(deps: ExportsDependencies) {
       unverifiedCitations: footnotes.filter((each) => each.unverified).length,
       questions,
       fromWord: word !== null,
+      theirChanges,
     };
     return {
       format,
@@ -390,7 +404,7 @@ async function withPictures(
 
 function parseExportOptions(input: unknown): Required<ExportMindOptions> {
   if (!isRecord(input)) throw new InvalidInputError("Export options must be an object.");
-  const { format, includeQuestions, accept } = input;
+  const { format, includeQuestions, accept, theirChanges } = input;
   const choice = (name: "trackChanges" | "markAiText" | "commentFailedChecks") => {
     const value = input[name];
     if (value !== undefined && typeof value !== "boolean") {
@@ -406,6 +420,9 @@ function parseExportOptions(input: unknown): Required<ExportMindOptions> {
   if (includeQuestions !== undefined && typeof includeQuestions !== "boolean") {
     throw new InvalidInputError("includeQuestions must be true or false.");
   }
+  if (theirChanges !== undefined && theirChanges !== "shown" && theirChanges !== "accepted") {
+    throw new InvalidInputError({ key: "error.export.theirChanges" });
+  }
   if (
     accept !== undefined &&
     !(Array.isArray(accept) && accept.every((key) => typeof key === "string"))
@@ -420,6 +437,7 @@ function parseExportOptions(input: unknown): Required<ExportMindOptions> {
     trackChanges: choice("trackChanges"),
     markAiText: choice("markAiText"),
     commentFailedChecks: choice("commentFailedChecks"),
+    theirChanges: theirChanges ?? "shown",
   };
 }
 
