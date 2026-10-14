@@ -18,7 +18,6 @@ import { MeetingNoticeDialog } from "./components/MeetingNoticeDialog";
 import { Peek } from "./components/Peek";
 import { ProblemMark } from "./components/ProblemLine";
 import { ChatGptWelcomeDialog } from "./components/providers/ChatGptSignIn";
-import { ChatSetupDialog } from "./components/providers/ChatSetupDialog";
 import { RequestedDialogs } from "./components/RequestedDialogs";
 import { ResizeRod } from "./components/ResizeRod";
 import { SettingsDialog } from "./components/SettingsDialog";
@@ -274,7 +273,6 @@ function Workspace() {
         <Peek />
         <AddWebPageDialog />
         <WordImportDialog />
-        <ChatSetupDialog />
         <ChatGptWelcomeDialog />
         <UsageDataDialog />
         <CitationStylePickerHost />
