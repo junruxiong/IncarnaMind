@@ -64,7 +64,8 @@ export function ScopeChips({
       ? 0
       : (state.library?.assignments.filter((each) => each.groupId === ownFolderId).length ?? 0),
   );
-  const chips = scopeChips({ folders, groups, deletedGroups, tags, documents }, scope);
+  const assignments = useAppStore((state) => state.library?.assignments);
+  const chips = scopeChips({ folders, groups, deletedGroups, tags, documents, assignments }, scope);
   const [expanded, setExpanded] = useState(false);
   const long = chips.length > most;
   const shown = long && !expanded ? chips.slice(0, most - 1) : chips;
@@ -94,6 +95,12 @@ export function ScopeChips({
         ) : (
           <span className="truncate">{name}</span>
         );
+        const emptyHint =
+          !deleted && chip.count === 0 ? (
+            <span data-testid="scope-chip-empty" className="scope-chip-empty">
+              {t("scope.chip.empty")}
+            </span>
+          ) : null;
         return (
           <li
             key={`${chip.kind}:${chip.id}`}
@@ -115,9 +122,13 @@ export function ScopeChips({
               >
                 <ChipIcon chip={chip} />
                 {label}
+                {emptyHint}
               </button>
             ) : (
-              label
+              <>
+                {label}
+                {emptyHint}
+              </>
             )}
             <button
               type="button"

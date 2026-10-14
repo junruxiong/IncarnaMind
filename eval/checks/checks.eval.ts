@@ -1,6 +1,6 @@
 /**
  * The checks evaluation (eval/checks/README.md, #86), part of `npm run eval`:
- * Find support's 200 sentences and verify's 10 received documents, run end to
+ * Find support's 208 sentences and verify's 10 received documents, run end to
  * end against one Folder of Documents and scored against the labels.
  *
  * It needs a chat model (INCARNAMIND_EVAL_CHAT_*), and skips without one or
@@ -9,8 +9,8 @@
  * pages and the received documents, searched as the app searches by default
  * (keyword search reranked by the built-in model, embeddings off). Each
  * received document's claims are extracted from its stored text, and every
- * claim and sentence is searched for in the Folder, the document itself left
- * out, and checked.
+ * claim and sentence is checked against the Folder by the app's claim check,
+ * the document itself left out.
  */
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -23,7 +23,7 @@ import { openLibrary } from "../lib/library";
 import { createLog } from "../lib/log";
 import { createWorkerCrossEncoder } from "../lib/rerank";
 import { chatGenerate } from "../lib/rewrites";
-import { baselinePipeline } from "./lib/pipeline";
+import { corePipeline } from "./lib/pipeline";
 import { type ChecksReport, summaryLines, writeChecksReport } from "./lib/report";
 import {
   gates,
@@ -36,7 +36,7 @@ import { type FindSupportItem, readChecksSet, type VerifyItem } from "./lib/set"
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
 
-/** The bars gate once the claim check (#96) and verify's extraction (#97) replace the baseline. */
+/** The bars gate once verify's extraction (#97) replaces the baseline's too. */
 const GATING = false;
 
 test("checks evaluation: Find support and verify", async () => {
@@ -104,11 +104,25 @@ test("checks evaluation: Find support and verify", async () => {
       folderId: folder.id,
     });
     const names = new Map([...documents].map(([name, document]) => [document.id, name]));
-    const pipeline = baselinePipeline({
+    const { chat } = config;
+    // Setting the variables is the consent to send the sentences and Passages to the chat model.
+    core.on("consent.requested", (request) => {
+      core
+        .respondToConsent(request.requestId, request.flow.id === "checks")
+        .catch((error: unknown) => console.error(error));
+    });
+    await core.saveChatProvider({
+      kind: chat.kind,
+      modelId: chat.modelId,
+      ...(chat.apiKey !== null && { apiKey: chat.apiKey }),
+      ...(chat.baseUrl !== null && { baseUrl: chat.baseUrl }),
+    });
+    const pipeline = corePipeline({
       core,
-      generate: chatGenerate(config.chat),
+      generate: chatGenerate(chat),
       scope: { folderIds: [folder.id], tagIds: [], documentIds: [] },
       nameOf: (passage) => names.get(passage.documentId) ?? passage.documentName,
+      citedName: (citation) => names.get(citation.documentId) ?? citation.documentName,
     });
 
     const sentences: SentenceResult[] = [];
@@ -149,7 +163,8 @@ test("checks evaluation: Find support and verify", async () => {
         seconds: (Date.now() - started.getTime()) / 1000,
         commit: commitOf(root),
         model: `${config.chat.kind}/${config.chat.modelId}`,
-        pipeline: "the evaluation's baseline (eval/checks/lib/pipeline.ts)",
+        pipeline:
+          "the app's claim check (checkClaim); claim extraction: the evaluation's baseline (eval/checks/lib/pipeline.ts)",
       },
       set: {
         findSupport: findSupport.length,

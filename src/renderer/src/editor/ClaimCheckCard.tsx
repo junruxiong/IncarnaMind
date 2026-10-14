@@ -5,9 +5,11 @@ import type * as Y from "yjs";
 import { CITATION_NODE, type CitationAttributes } from "../../../core/api";
 import { shownDocumentName } from "../../../shared/citations";
 import { citationLocation, formatLocation, openKind } from "../../../shared/locations";
-import { addAsCitation, checkAgain } from "../checks";
+import { addAsCitation, checkAgain, removeClaimMark } from "../checks";
 import { CountItLine } from "../components/CountItLine";
-import { useT } from "../i18n";
+import { askInAssistant } from "../conversations";
+import { useFindSources } from "../findSources";
+import { translateNow, useT } from "../i18n";
 import { groupsMerged } from "../layoutSlice";
 import { openCited } from "../openCited";
 import { useAppStore } from "../store";
@@ -43,6 +45,26 @@ function citesEvidence(editor: Editor, claim: ShownClaim): boolean {
     return false;
   });
   return cited;
+}
+
+/** The words of the sentence a check is about. */
+const sentenceOf = (editor: Editor, claim: ShownClaim) =>
+  editor.state.doc.textBetween(claim.sentence.from, claim.sentence.to, " ", " ").trim();
+
+/**
+ * Asks the assistant to look for the sentence on the web (#128), which a model
+ * that can search does; with web search off, Settings shows where to turn it on.
+ */
+function searchTheWeb(mindId: string, sentence: string): void {
+  const { settings, openSettings } = useAppStore.getState();
+  if (!settings?.user.webSearch) {
+    openSettings("search");
+    return;
+  }
+  void askInAssistant({
+    text: translateNow("claim.webQuestion", { sentence }),
+    mindId,
+  });
 }
 
 /**
@@ -158,6 +180,18 @@ export function ClaimMark({
                 done();
               }}
               onOpen={done}
+              onFindSources={() => {
+                useFindSources.getState().show({ query: sentenceOf(editor, claim) });
+                done();
+              }}
+              onSearchWeb={() => {
+                searchTheWeb(mindId, sentenceOf(editor, claim));
+                done();
+              }}
+              onRemove={() => {
+                removeClaimMark(editor, claim);
+                done();
+              }}
             />
           </Popover>,
           document.body,
@@ -180,12 +214,18 @@ function ClaimCard({
   onAdd,
   onCheckAgain,
   onOpen,
+  onFindSources,
+  onSearchWeb,
+  onRemove,
 }: {
   claim: ShownClaim;
   addable: boolean;
   onAdd(): void;
   onCheckAgain(allDocuments?: boolean): void;
   onOpen(): void;
+  onFindSources(): void;
+  onSearchWeb(): void;
+  onRemove(): void;
 }) {
   const t = useT();
   const { shown, check } = claim;
@@ -294,6 +334,34 @@ function ClaimCard({
           >
             {t("claim.searchAll")}
           </button>
+        )}
+        {state === "unsupported" && (
+          <>
+            <button
+              type="button"
+              data-testid="claim-find-sources"
+              className="citation-card-action"
+              onClick={onFindSources}
+            >
+              {t("claim.findSources")}
+            </button>
+            <button
+              type="button"
+              data-testid="claim-search-web"
+              className="citation-card-action"
+              onClick={onSearchWeb}
+            >
+              {t("claim.searchWeb")}
+            </button>
+            <button
+              type="button"
+              data-testid="claim-remove"
+              className="citation-card-action"
+              onClick={onRemove}
+            >
+              {t("claim.removeMark")}
+            </button>
+          </>
         )}
         {(state === "not-checked" || state === "needs-recheck") && (
           <button
