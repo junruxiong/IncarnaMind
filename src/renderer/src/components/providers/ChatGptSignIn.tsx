@@ -18,6 +18,7 @@ import {
 } from "../ui";
 import { useModal } from "../useModal";
 import { ChatGptMark } from "./ChatGptMark";
+import { PasteSignInAddress } from "./PasteSignInAddress";
 import { SecretStorageNotice } from "./ProviderForm";
 
 /** The ChatGPT plan provider's status, kept up to date with the core's event. */
@@ -177,7 +178,7 @@ export function ChatGptSignInState({
   if (sign.waiting) {
     const link = "font-semibold text-accent underline-offset-2 hover:underline";
     return (
-      <div className="flex flex-col gap-1 text-[13px] leading-5 text-ink-secondary">
+      <div className="flex w-full flex-col gap-1 text-[13px] leading-5 text-ink-secondary">
         <p className="flex flex-wrap items-center gap-x-2">
           {late ? (
             <span data-testid="chatgpt-late">{t("chatgpt.late")}</span>
@@ -197,6 +198,7 @@ export function ChatGptSignInState({
           </button>
         </p>
         <p className="text-ink-meta">{t("chatgpt.nothingExtra")}</p>
+        <PasteSignInAddress />
       </div>
     );
   }

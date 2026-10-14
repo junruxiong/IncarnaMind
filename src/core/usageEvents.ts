@@ -21,6 +21,7 @@ import type {
   ConnectorErrorKind,
   DocumentFailureReason,
   DocumentKind,
+  ExampleGroup,
   ExportFormat,
   ProviderErrorKind,
 } from "./api";
@@ -56,6 +57,7 @@ type Exactly<List extends readonly string[], T extends string> = [T] extends [Li
   : never;
 
 const LANGUAGES = ["en", "zh-CN"] as const;
+const EXAMPLE_GROUPS = ["tea", "papers", "reports", "contracts", "meetings"] as const;
 const PROVIDER_KINDS = [
   "openai",
   "anthropic",
@@ -114,6 +116,7 @@ const ANSWER_ERRORS = [
   "provider",
   "consent-declined",
   "local-mode",
+  "ollama-not-running",
   "not-signed-in",
   "plan-limit",
   "blocked",
@@ -158,6 +161,7 @@ export const DOCUMENT_FORMATS = [
 // The lists above follow their types: a new kind fails the type-check until it is listed.
 const _inStep: [
   Exactly<typeof LANGUAGES, Language>,
+  Exactly<typeof EXAMPLE_GROUPS, ExampleGroup>,
   Exactly<typeof PROVIDER_KINDS, ChatProviderKind>,
   Exactly<typeof CITATION_CHECKS, CitationCheck>,
   Exactly<typeof EXPORT_FORMATS, ExportFormat>,
@@ -165,7 +169,7 @@ const _inStep: [
   Exactly<typeof DOCUMENT_ERRORS, DocumentFailureReason>,
   Exactly<typeof CONNECTOR_ERRORS, ConnectorErrorKind>,
   Exactly<typeof DOCUMENT_FORMATS, DocumentKind>,
-] = [true, true, true, true, true, true, true, true];
+] = [true, true, true, true, true, true, true, true, true];
 void _inStep;
 
 /**
@@ -175,19 +179,8 @@ void _inStep;
 export const USAGE_EVENTS = {
   /** IncarnaMind started. `language`: the interface language. */
   app_opened: { language: oneOf(LANGUAGES) },
-  /**
-   * The first run's "What will you use IncarnaMind for?" (#123): which
-   * answers were picked. Sent once, when the question exists.
-   */
-  onboarding_picked: {
-    papers_research: flag,
-    reports_analysis: flag,
-    contracts_legal: flag,
-    meetings_notes: flag,
-    everything: flag,
-    something_else: flag,
-    skipped: flag,
-  },
+  /** The User opened another example from an example's banner (#123): which group, nothing else. */
+  example_opened: { group: oneOf(EXAMPLE_GROUPS) },
   /** The User made a Mind (not the example Mind). */
   mind_created: {},
   /** An Answer started: the kind of provider of its model, and whether the model runs on this computer. */
@@ -248,7 +241,7 @@ export const USAGE_EVENTS = {
 
 /** The events the interface sends (`CoreApi.recordUsage`); the core sends the others itself. */
 export const UI_USAGE_EVENTS = [
-  "onboarding_picked",
+  "example_opened",
   "citation_opened",
   "settings_page_viewed",
 ] as const satisfies readonly (keyof typeof USAGE_EVENTS)[];
