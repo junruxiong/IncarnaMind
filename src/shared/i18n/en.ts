@@ -2145,6 +2145,8 @@ export const en = {
     "A Citation can cite one page, slide, section, or block of rows or lines, or two in a row.",
   "citation.reason.no-text": "The place it cites has no text to check, e.g. a scanned page.",
   "citation.reason.document-removed": "The Document has been deleted.",
+  "citation.reason.quoted-words-not-on-pages":
+    "The words in quotation marks aren’t in the text of the place it cites.",
   "citation.reason.checking": "The quote is checked when the Answer is finished.",
   "citation.where": "{document}, {location}",
   "citation.scan": "Text read from a scan",
@@ -2152,6 +2154,13 @@ export const en = {
   "citation.scan.unsure.other": "Text read from a scan · {count} words may be misread",
   "citation.scan.unsureWord": "May be misread: check it on the page",
   "citation.quote": "The quote:",
+  "citation.quoted.answer": "In the Answer",
+  "citation.closest.on": "Closest words on {location}",
+  "citation.closest.in": "Closest words in {location}",
+  "citation.closest.document": "Closest words in {document}",
+  "citation.closest.transcript": "Closest words in the transcript at {location}",
+  "citation.quoted.why":
+    "Quotation marks promise the Document’s exact words, so IncarnaMind checks them too.",
   "citation.meaning":
     "“Quote found” means these words are where it cites. It doesn’t mean they support the sentence.",
   "citation.open.page": "Open the page",

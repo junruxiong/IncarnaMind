@@ -175,6 +175,7 @@ import {
   sourcesInstructions,
   webInstructions,
 } from "./prompt";
+import { quotedWordsIn } from "./quotedWords";
 
 export type { AnswerDocuments } from "./citations";
 export { createAiSdkAnswerEngine } from "./engine";
@@ -873,6 +874,7 @@ export function createAnswers(options: AnswersOptions) {
       try {
         session.check();
         figures.check();
+        session.checkQuotedWords(quotedWordsIn(withoutFootnoteDefinitions(markdown)));
       } catch (error) {
         options.reportError(error);
       }
