@@ -21,6 +21,7 @@ import { UnreadFilesLine } from "../UnreadFilesLine";
 import { AnswerActions } from "./AnswerActions";
 import { AnswerSteps, useStepsScopeOf } from "./AnswerSteps";
 import { AnswerText } from "./AnswerText";
+import { MindChangesCard, NoMindLine, wantedAMind } from "./MindChangesCard";
 
 /** What adding an Answer needs from the thread around it. */
 export interface AnswerKeeping {
@@ -34,8 +35,8 @@ export interface AnswerKeeping {
  * An Answer in the assistant (#201): no box, as an Answer in a Mind has none
  * (DESIGN.md, Answer), in the assistant's reading sizes. Its steps first
  * (#391), folded to one line; its text with its Citations and their checks
- * in the margin; what went wrong, and the approvals it waits for, under it;
- * then its actions (`AnswerActions`).
+ * in the margin; the card of the Minds it changed (#202); what went wrong,
+ * and the approvals it waits for, under it; then its actions (`AnswerActions`).
  */
 export function AssistantAnswer({
   answer,
@@ -97,6 +98,10 @@ export function AssistantAnswer({
           label={t("answer.label")}
           regenerate={regenerate}
         />
+      )}
+      <MindChangesCard answer={answer} streaming={streaming} />
+      {!streaming && question && !question.askedFrom && wantedAMind(answer) && (
+        <NoMindLine question={question} />
       )}
       {!streaming && scopeEmpty && (
         <ProblemLine

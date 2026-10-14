@@ -365,6 +365,8 @@ export type ProposalRequest =
       action?: EditAction;
       /** What the User asked for ("translate", "instruction"); "" for none. */
       instruction?: string;
+      /** Why the model changed the text, in its few words (#202); absent when it didn't say. */
+      reason?: string;
     })
   | (ProposalMaker & { source: "answer"; answerId: string })
   | (ProposalMaker & { source: "answer-added" })
@@ -817,6 +819,19 @@ export interface AnswerToolCall {
   uncalculated?: number;
   /** A Minds' Tool that changed a Mind or made one, once it ended (#202). Absent otherwise. */
   mindChange?: MindChange;
+}
+
+/**
+ * Where the assistant writes next in a Mind, as its changes come in (#202):
+ * a new Block after the Block `after` (null: at the Mind's end), or the
+ * paragraph or heading `over`, which it is writing anew.
+ */
+export type WritingPlace = { after: string | null } | { over: string };
+
+/** Where the assistant is writing a Mind's changes as they come (#202); `place` null once it has stopped. */
+export interface MindWriting {
+  mindId: string;
+  place: WritingPlace | null;
 }
 
 /**
@@ -7860,6 +7875,8 @@ export interface CoreEvents {
   "examples.changed": Examples;
   /** A Mind's content changed. Clients editing that Mind apply the update to their `Y.Doc`. */
   "mind.update": MindUpdate;
+  /** The assistant is writing changes into a Mind as they come (#202), or has stopped. */
+  "mind.writing": MindWriting;
   /** A Mind's Checkpoints changed: one was saved, kept for good, or thinned out. Read `listCheckpoints` again. */
   "checkpoints.changed": { mindId: string };
   /**
