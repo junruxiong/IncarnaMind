@@ -19,11 +19,12 @@ import {
 import { DocumentLineIcon } from "../components/lineIcons";
 import { useObjectMenu } from "../components/ObjectMenu";
 import { ProblemLine } from "../components/ProblemLine";
-import { menuClass, menuItemClass } from "../components/ui";
+import { menuClass, menuItemClass, menuItemUnavailableClass } from "../components/ui";
 import { usePopoverMenu } from "../components/usePopoverMenu";
 import { files } from "../core";
 import { showFileLabelKey } from "../fileInfo";
 import { useLanguage, useT } from "../i18n";
+import { fileStatusLabel } from "../linkedFolders";
 import { useAppStore } from "../store";
 import { openDocumentBeside } from "../verify";
 import { useWordImport } from "../wordImport";
@@ -182,6 +183,7 @@ function OriginalLink({
     menu.close();
     action();
   };
+  const away = fileStatusLabel(original.fileStatus);
   return (
     <span className="mind-word-original" {...row.rowProps}>
       <button
@@ -225,15 +227,17 @@ function OriginalLink({
               type="button"
               role="menuitem"
               data-testid="mind-word-show-original"
-              disabled={original.fileStatus !== "available"}
-              onClick={() =>
+              aria-disabled={away ? true : undefined}
+              title={away ? t(away.reason) : undefined}
+              onClick={() => {
+                if (away) return;
                 choose(() => {
                   files
                     .showDocumentInFolder(original.id)
                     .catch((error) => useAppStore.getState().reportError(error));
-                })
-              }
-              className={menuItemClass}
+                });
+              }}
+              className={`${menuItemClass} ${menuItemUnavailableClass}`}
             >
               {t(showFileLabelKey(navigator.platform))}
             </button>

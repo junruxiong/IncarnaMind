@@ -20,7 +20,7 @@ import { CitationMark, quoteMarkOf, quoteTone } from "./quoteMark";
 import { OutlineButton, type OutlineEntry, UnitOutline } from "./UnitOutline";
 import { useDocumentFile } from "./useDocumentFile";
 import { ViewerHeader } from "./ViewerHeader";
-import { drawnIndexOf } from "./wordPlaces";
+import { confirmDrawn, type DrawnTarget, drawnTargetOf } from "./wordPlaces";
 
 /** docx-preview's class prefix: a paragraph in style "Heading2" is `p.docx_heading2`. */
 const CLASS_NAME = "docx";
@@ -81,15 +81,18 @@ export function DocxView({ document, target }: { document: Document; target: Vie
 }
 
 /**
- * The drawn paragraph or table at a place in a Word file ("w:p#12"), by its place among
- * those drawn (`drawnIndexOf`): docx-preview draws each in order in the pages' articles,
- * headers and footers apart.
+ * The drawn paragraph or table at a place in a Word file ("w:p#12"), found by its place
+ * among those drawn and confirmed by its text (`drawnTargetOf`, `confirmDrawn`):
+ * docx-preview draws each in order in the pages' articles, headers and footers apart.
  */
-function drawnAt(body: HTMLElement, place: string, index: number): HTMLElement | null {
+function drawnAt(body: HTMLElement, place: string, target: DrawnTarget): HTMLElement | null {
   const tag = place.startsWith("w:tbl#") ? "table" : "p";
-  return (
-    body.querySelectorAll<HTMLElement>(`section.${CLASS_NAME} > article ${tag}`)[index] ?? null
+  const drawn = [...body.querySelectorAll<HTMLElement>(`section.${CLASS_NAME} > article ${tag}`)];
+  const index = confirmDrawn(
+    drawn.map((each) => each.textContent ?? ""),
+    target,
   );
+  return index === null ? null : (drawn[index] ?? null);
 }
 
 interface MarkPlace {
@@ -116,14 +119,14 @@ function DocxPages({ loaded, target }: { loaded: Loaded; target: ViewerTarget })
   const t = useT();
   const { docx } = loaded;
   // Where the paragraph a Mind's caret was in is among those drawn (#736).
-  const [placed, setPlaced] = useState<{ place: string; index: number | null } | null>(null);
+  const [placed, setPlaced] = useState<{ place: string; target: DrawnTarget | null } | null>(null);
   useEffect(() => {
     const place = target.wordPlace;
     if (!place) return;
     let current = true;
-    drawnIndexOf(loaded.bytes, place).then(
-      (index) => {
-        if (current) setPlaced({ place, index });
+    drawnTargetOf(loaded.bytes, place).then(
+      (drawn) => {
+        if (current) setPlaced({ place, target: drawn });
       },
       (error: unknown) => console.error("viewer.docx.wordPlace", error),
     );
@@ -302,8 +305,8 @@ function DocxPages({ loaded, target }: { loaded: Loaded; target: ViewerTarget })
     const container = scroller.current;
     if (!container) return;
     const at =
-      placed && placed.place === target.wordPlace && placed.index !== null
-        ? drawnAt(body, placed.place, placed.index)
+      placed && placed.place === target.wordPlace && placed.target
+        ? drawnAt(body, placed.place, placed.target)
         : null;
     const anchor = found?.[0] ?? section?.heading ?? at;
     if (anchor) {
