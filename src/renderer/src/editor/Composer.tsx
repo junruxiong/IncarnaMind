@@ -41,6 +41,7 @@ import { core } from "../core";
 import { carriesDocuments, droppedDocumentIds } from "../documentDrag";
 import { editFromComposer, stopEditing, useEdits } from "../editWithAi";
 import { useT } from "../i18n";
+import { newNoteTitle } from "../newNoteRequest";
 import type { ScopeChoice } from "../scope";
 import { skillDescription } from "../skills";
 import { useAppStore } from "../store";
@@ -414,6 +415,18 @@ export function Composer({
       .filter((part) => part !== "")
       .join("\n\n");
     if (!text) return;
+    // "Create a new note called …": an empty Mind with that title, at once, with no AI step (#202).
+    const title = current.pastes.length === 0 && !current.skill ? newNoteTitle(typed) : null;
+    if (title) {
+      update({ text: "" });
+      const scope = composerScope(current, folderId);
+      const scopeFolder =
+        scope.folderIds.length === 1 && scope.tagIds.length + scope.documentIds.length === 0
+          ? (scope.folderIds[0] ?? null)
+          : null;
+      void useAppStore.getState().createMind({ title, folderId: scopeFolder, focusBody: true });
+      return;
+    }
     useAnswers.getState().dismiss(composerKey(mindId));
     if (said === undefined) update({ text: "", skill: null, pastes: [] });
     setExpanded(false);
