@@ -2545,6 +2545,8 @@ export function createCore(adapters: CoreAdapters): Core {
       chatGpt.signIn({ anotherAccount: isRecord(input) && input.anotherAccount === true }),
     cancelChatGptSignIn: () => chatGpt.cancelSignIn(),
     signOutOfChatGpt: () => chatGpt.signOut(),
+    pasteChatGptSignInAddress: async (address) =>
+      chatGpt.pasteSignInAddress(typeof address === "string" ? address : ""),
 
     listDataFlows: () => consent.list(),
     listConsentRequests: async () => consent.requests(),
