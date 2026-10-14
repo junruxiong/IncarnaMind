@@ -92,6 +92,17 @@ test("a refused key: Check the key opens its field with the refusal, and once a 
 
   const answer = await ask(window, "What is in my Documents?");
   await expect(answer).toHaveAttribute("data-status", "failed");
+
+  // Settings › Models says it under the default model: the attention dot, the line and its fix.
+  const models = await openSettings(window, "models");
+  const health = models.getByTestId("model-health");
+  await expect(health).toHaveText("The key for Claude Haiku 5.5 was refused · Check the key");
+  await screenshot(models, "model-health-refused");
+  await setLanguage(window, "zh-CN");
+  await expect(health).toHaveText("Claude Haiku 5.5 的密钥被拒绝了 · 检查密钥");
+  await setLanguage(window, "en");
+  await closeSettings(window);
+
   const error = answer.getByTestId("answer-error");
   await expect(error).toContainText("The key for Claude Haiku 5.5 was refused");
   const action = error.getByTestId("answer-error-action");
@@ -125,6 +136,8 @@ test("a refused key: Check the key opens its field with the refusal, and once a 
   const answered = assistantAnswers(window).last();
   await expect(answered).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await expect(answered.getByTestId("assistant-answer-text")).not.toBeEmpty();
+  await openSettings(window, "models");
+  await expect(window.getByTestId("model-health")).toHaveCount(0);
   await app.close();
 });
 
