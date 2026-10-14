@@ -72,8 +72,14 @@ test("first run: choosing a provider with a key is the consent, so no dialog com
   const consentAsked = await recordConsentRequests(window);
 
   // The line above the button says what goes to the provider.
-  const setup = window.getByTestId("chat-setup");
-  await setup.getByTestId("chat-choice-api-key").check();
+  await newMind(window);
+  await window.getByTestId("mind-editor").click();
+  await window.keyboard.press("ControlOrMeta+j");
+  await window.keyboard.type("What is due?");
+  await window.keyboard.press("Enter");
+  const setup = window.getByTestId("model-setup");
+  await setup.getByTestId("setup-other").click();
+  await setup.getByTestId("way-key").click();
   const form = setup.getByTestId("provider-form");
   await form.getByRole("radio", { name: "OpenAI", exact: true }).check();
   await expect(form.getByTestId("provider-sends")).toHaveText(SENDS_EN);
