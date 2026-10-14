@@ -1,13 +1,14 @@
 /**
- * A saved web page's pictures are read on this computer (#756): a chart's text
- * is found by search, cited as "§ Results, figure 1" and checked against what
- * was read, and its card says it was read from a picture. A picture that
- * can't be read keeps its description alone.
+ * A saved web page's pictures are read on this computer (#756), saying how
+ * far it is: a chart's text is found by search, cited as "§ Results, figure
+ * 1" and checked against what was read, and its card says it was read from a
+ * picture. A picture that can't be read keeps its description alone.
  */
 import { readFileSync } from "node:fs";
 import { createCanvas } from "@napi-rs/canvas";
 import { describe, expect, test } from "vitest";
 import type { TextRecognizer } from "../../src/core/adapters";
+import type { Document } from "../../src/core/api";
 import { createFakeTextRecognizer } from "../../src/core/documents/scan/fake";
 import { BUILT_IN_TEXT_RECOGNITION_MODEL } from "../../src/core/documents/scan/model";
 import { translate } from "../../src/shared/i18n";
@@ -68,10 +69,16 @@ describe("A web page's pictures, read", { timeout: 30_000 }, () => {
         textRecognitionModelSource: NO_MODEL_FILES,
       },
     );
+    const progress: Document["scan"][] = [];
+    core.on("document.status", (document) => {
+      if (document.scan) progress.push(document.scan);
+    });
     const result = await core.saveWebPage({ address: `http://127.0.0.1:${web.port}/report` });
     if (result.outcome !== "saved") throw new Error(JSON.stringify(result));
     const [page] = await waitForProcessing(core, [result.document.id]);
     if (!page) throw new Error("It went.");
+    expect(progress).toContainEqual({ pages: 2, read: 0, of: "pictures" });
+    expect(progress.at(-1)).toEqual({ pages: 2, read: 2, of: "pictures" });
 
     // The chart's text is in its section, after its description, each line where it is on the picture.
     const units = queryDatabase<{ text: string; label: string; anchors: string }>(

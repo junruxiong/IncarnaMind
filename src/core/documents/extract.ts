@@ -65,8 +65,8 @@ export async function extractText(
 
 /**
  * A web page's Units with its saved pictures' text read. A picture that
- * can't be drawn keeps its description alone; once the model can't be had,
- * neither can the pictures after, which are marked unread.
+ * can't be drawn, or that the model fails on, keeps its description alone;
+ * once the model can't be had, the pictures left are marked unread.
  */
 async function extractWeb(
   bytes: Uint8Array,
@@ -75,38 +75,59 @@ async function extractWeb(
 ): Promise<TextUnit[]> {
   const source = new TextDecoder().decode(bytes);
   const readings = new Map<number, FigureReading>();
+  const figures = readWebPage(source).blocks.flatMap((block) =>
+    block.figure === undefined
+      ? []
+      : [{ number: block.figure, src: block.element.attrs.src ?? "" }],
+  );
+  const unread: FigureReading = { reader: reading.reader, text: "", lines: [], unread: true };
   let unavailable = false;
-  for (const block of readWebPage(source).blocks) {
-    if (block.figure === undefined) continue;
+  if (figures.length > 0) reading.progress(0, figures.length, null);
+  for (const [index, figure] of figures.entries()) {
     reading.signal.throwIfAborted();
     if (unavailable) {
-      readings.set(block.figure, { reader: reading.reader, text: "", lines: [], unread: true });
+      readings.set(figure.number, unread);
       continue;
     }
     try {
-      const picture = await figurePicture(await readPicture(block.element.attrs.src ?? ""));
-      const lines = await reading.read(block.figure, picture);
-      const read = scannedUnit(block.figure, lines, picture, reading.reader);
-      const unsure = read.label?.scan?.unsure;
-      readings.set(block.figure, {
-        reader: reading.reader,
-        text: read.text,
-        lines: (read.anchors ?? []).map(({ start, end, quad }) => ({
-          start,
-          end,
-          quad: quad ?? [],
-        })),
-        ...(unsure && { unsure }),
-      });
+      const read = await readFigure(figure.number, figure.src, reading, readPicture);
+      if (read) readings.set(figure.number, read);
     } catch (error) {
       reading.signal.throwIfAborted();
       if (error instanceof ReadingUnavailable) {
         unavailable = true;
-        readings.set(block.figure, { reader: reading.reader, text: "", lines: [], unread: true });
+        readings.set(figure.number, unread);
+      } else {
+        // Marked unread, it would be read again at every start, and fail again.
+        console.error(`A saved web page's picture ${figure.src} couldn't be read:`, error);
       }
     }
+    reading.progress(index + 1, figures.length, null);
   }
   return webUnits(source, readings);
+}
+
+async function readFigure(
+  number: number,
+  src: string,
+  reading: PageReading,
+  readPicture: (src: string) => Promise<Uint8Array>,
+): Promise<FigureReading | null> {
+  let picture: PagePicture;
+  try {
+    picture = await figurePicture(await readPicture(src));
+  } catch {
+    // Its bytes were checked as a picture when saved; one the canvas can't decode has only its description.
+    return null;
+  }
+  const read = scannedUnit(number, await reading.read(number, picture), picture, reading.reader);
+  const unsure = read.label?.scan?.unsure;
+  return {
+    reader: reading.reader,
+    text: read.text,
+    lines: (read.anchors ?? []).map(({ start, end, quad }) => ({ start, end, quad: quad ?? [] })),
+    ...(unsure && { unsure }),
+  };
 }
 
 type PdfJs = typeof import("pdfjs-dist/legacy/build/pdf.mjs");

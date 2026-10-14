@@ -860,6 +860,8 @@ export const zhCN = {
   "documents.status.noText": "未找到文字",
   "documents.status.scanning.one": "正在识别 1 页扫描件…",
   "documents.status.scanning.other": "正在识别 {count} 页扫描件…已识别 {read} 页。",
+  "documents.status.readingPictures.one": "正在识别 1 张图片中的文字…",
+  "documents.status.readingPictures.other": "正在识别 {count} 张图片中的文字…已识别 {read} 张。",
   "documents.statusShort.scanning": "识别中 {read}/{count}",
   "documents.statusShort.pagesUnread": "页未识别",
   "documents.statusShort.queued": "排队中",

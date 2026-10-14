@@ -17,17 +17,23 @@ export function pageList(pages: readonly number[], language: Language): string {
     : new Intl.ListFormat(language, { type: "conjunction" }).format(numbers);
 }
 
-/** The row's short status and its full words, while scanned pages are read. */
+const SCANNING_KEYS = {
+  "scanned-pages": {
+    one: "documents.status.scanning.one",
+    other: "documents.status.scanning.other",
+  },
+  pictures: {
+    one: "documents.status.readingPictures.one",
+    other: "documents.status.readingPictures.other",
+  },
+} as const satisfies Record<DocumentScanProgress["of"], Record<"one" | "other", MessageKey>>;
+
+/** The row's short status and its full words, while scanned pages or a web page's pictures are read. */
 export function scanningStatus(scan: DocumentScanProgress, t: Translate) {
+  const keys = SCANNING_KEYS[scan.of];
   return {
     short: t("documents.statusShort.scanning", { read: scan.read, count: scan.pages }),
-    full: t(
-      scan.pages === 1 ? "documents.status.scanning.one" : "documents.status.scanning.other",
-      {
-        count: scan.pages,
-        read: scan.read,
-      },
-    ),
+    full: t(scan.pages === 1 ? keys.one : keys.other, { count: scan.pages, read: scan.read }),
   };
 }
 

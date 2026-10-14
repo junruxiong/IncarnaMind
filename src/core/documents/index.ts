@@ -921,7 +921,11 @@ export function createDocuments(options: DocumentsOptions) {
       announce(job.documentId);
     },
     onProgress(job, { contentHash, read, of, unit }) {
-      scanProgress.set(job.documentId, { pages: of, read });
+      scanProgress.set(job.documentId, {
+        pages: of,
+        read,
+        of: job.kind === "web" ? "pictures" : "scanned-pages",
+      });
       if (unit) {
         let partial = partialScans.get(job.documentId);
         if (partial?.contentHash !== contentHash) {
