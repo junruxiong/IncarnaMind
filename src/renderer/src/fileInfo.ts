@@ -21,6 +21,12 @@ export const KIND_LABELS: Record<Document["kind"], MessageKey> = {
 export const showFileLabelKey = (platform: string): MessageKey =>
   /Mac|iPhone|iPad/.test(platform) ? "file.showInFinder" : "file.showInFolder";
 
+/** The default Output location as the system names Documents: 文稿 on macOS, 文档 on Windows and Linux, in Chinese. */
+export const defaultFolderLabelKey = (platform: string): MessageKey =>
+  /Mac|iPhone|iPad/.test(platform)
+    ? "outputLocation.defaultName"
+    : "outputLocation.defaultName.other";
+
 /** "Get info" is "Properties" on Windows and Linux, in Chinese. */
 export const infoLabelKey = (platform: string): MessageKey =>
   /Mac|iPhone|iPad/.test(platform) ? "info.get" : "info.get.other";

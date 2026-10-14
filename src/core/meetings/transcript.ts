@@ -85,6 +85,8 @@ interface Saved {
   /** Stretches to transcribe once the Meeting stops. */
   pending: Range[];
   savedPath: string | null;
+  /** Its save took the default Output location (`SavedFile.defaulted`). */
+  savedDefaulted?: boolean;
   /** Stopped with nothing transcribed. */
   empty?: boolean;
 }
@@ -261,6 +263,7 @@ export function createTranscripts(options: TranscriptsOptions) {
       doneMs: state.doneMs,
       pending: state.pending,
       savedPath: state.savedPath,
+      ...(state.savedDefaulted && { savedDefaulted: true }),
       ...(state.state === "empty" && { empty: true }),
     };
     try {
@@ -663,6 +666,7 @@ export function createTranscripts(options: TranscriptsOptions) {
     if (document) await documents.moveFile(document.id, saved.path);
     rmSync(vttPath(state.meetingId), { force: true });
     state.savedPath = saved.path;
+    state.savedDefaulted = saved.defaulted;
     state.state = "saved";
     state.problem = null;
     log.info("transcript.saved", { meetingId: state.meetingId, lines: state.cues.length });
@@ -728,6 +732,7 @@ export function createTranscripts(options: TranscriptsOptions) {
             ? status
             : null,
         savedPath: state.savedPath,
+        savedDefaulted: state.savedDefaulted === true,
         problem:
           state.problem ??
           (status.state === "failed" && (state.state === "preparing" || state.state === "finishing")

@@ -14,6 +14,7 @@ import {
 import { mindModelOf } from "../shared/mindModel";
 import { mindName } from "../shared/naming";
 import { paperFor } from "../shared/printDocument";
+import { wordFileOf } from "../shared/wordFiles";
 import { logActivity, silentLogger } from "./activityLog";
 import type { CoreAdapters } from "./adapters";
 import { agentSocketPath, createAgents } from "./agents";
@@ -48,6 +49,7 @@ import {
   type Meeting,
   type Mind,
   type MindCitationStyle,
+  NOT_IN_A_FOLDER_ID,
   type OwnFileKind,
   type ProviderError,
   type SavedExport,
@@ -125,7 +127,7 @@ import {
   parseIds,
   parseMindId,
 } from "./minds";
-import { firstLineOf, readBlocks } from "./mindText";
+import { firstLineOf, readBlocks, theirChangesReading } from "./mindText";
 import { createNoteAdding } from "./noteAdding";
 import { createOutputFiles } from "./outputFiles";
 import { createPrivacy, type NetworkTrafficRegistry } from "./privacy";
@@ -981,6 +983,7 @@ export function createCore(adapters: CoreAdapters): Core {
       searchableNames: (documentIds, limit) =>
         documents.searchableNames(documentIds ?? undefined, limit),
       searchableLanguages: (documentIds) => documents.searchableLanguages(documentIds ?? undefined),
+      unread: (documentIds) => findUnreadDocuments(documents.unread(documentIds ?? undefined)),
       search: searchDocuments,
       citationSource: (passageId) => documents.citationSource(passageId),
       pageTexts: (documentId, contentHash, from, to) =>
@@ -1836,6 +1839,7 @@ export function createCore(adapters: CoreAdapters): Core {
     documentsIn: (linkedFolderId) => documents.list({ linkedFolderId }),
     mindFolder: (mindId) => minds.get(mindId).folderId,
     now,
+    checksRelyOn: (documentIds) => retention.isRetained("check-result", documentIds),
     recheck: (input) => recheckCitation(documents, input),
     changed: (value) => events.emit("examples.changed", value),
   });
@@ -1970,10 +1974,16 @@ export function createCore(adapters: CoreAdapters): Core {
     access: {
       say: (key, params) => translate(settings.get().language, key, params),
       folders: () => library.folders().map((folder) => ({ id: folder.id, name: folder.name })),
-      documentsIn: (folderIds) =>
-        folderIds.length === 0
-          ? []
-          : (resolveScope({ folderIds: [...folderIds], tagIds: [], documentIds: [] }) ?? []),
+      documentsIn: (folderIds) => {
+        const folders = folderIds.filter((id) => id !== NOT_IN_A_FOLDER_ID);
+        const filed =
+          folders.length === 0
+            ? []
+            : (resolveScope({ folderIds: folders, tagIds: [], documentIds: [] }) ?? []);
+        return folders.length === folderIds.length
+          ? filed
+          : [...new Set([...filed, ...library.unfiledDocumentIds()])];
+      },
       // Without the reranker: it costs about a second a search (ADR-0009), and an agent's
       // search must answer in well under 100 ms.
       search: (query, documentIds, parameters, signal) =>
@@ -1987,8 +1997,16 @@ export function createCore(adapters: CoreAdapters): Core {
       mindMarkdown: (mindId, footnote) => {
         const mind = minds.get(mindId);
         const { language } = settings.get();
+        // Someone's changes from a Word file read as changes, as the assistant reads them (#734).
         const blocks = content.peek(mind.id, (fragment) =>
-          readBlocks(fragment, { includeQuestions: true, footnote, trimBeforeCitation: true }),
+          readBlocks(fragment, {
+            includeQuestions: true,
+            footnote,
+            trimBeforeCitation: true,
+            ...(fragment.doc && wordFileOf(fragment.doc)
+              ? { review: theirChangesReading(fragment.doc) }
+              : {}),
+          }),
         );
         return renderMarkdown(mind.title || mind.autoTitle, blocks, exportLabels(language));
       },
@@ -2250,10 +2268,7 @@ export function createCore(adapters: CoreAdapters): Core {
     listUnreadFiles: async (scope) => {
       const wanted = parseSearchScope(scope);
       const inScope = wanted ? resolveScope(wanted) : null;
-      const kept = inScope === null ? null : new Set(inScope);
-      const unread = findUnreadDocuments(
-        documents.list().filter((each) => kept === null || kept.has(each.id)),
-      );
+      const unread = findUnreadDocuments(documents.unread(inScope ?? undefined));
       // Files in a format not read belong to Folders only: a Tag or a Document can't name them.
       // A Folder holds those in it and under it, even where no Document is.
       const named = wanted
@@ -2279,6 +2294,7 @@ export function createCore(adapters: CoreAdapters): Core {
             reason: "format",
             extension: file.extension,
             documentId: null,
+            pages: [],
           }),
         );
       return [...unread, ...files];
@@ -2752,6 +2768,7 @@ export function createCore(adapters: CoreAdapters): Core {
       const {
         fileName,
         fromWord: _,
+        theirChanges: _waiting,
         data,
         word,
         ...counts

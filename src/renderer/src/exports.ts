@@ -47,12 +47,14 @@ export const hasQuestionsOption = (
 export const optionsFor = (
   format: ExportFormat,
   preferences: ExportPreferences,
-): ExportMindOptions =>
-  format === "docx"
-    ? { format, ...preferences.docx }
-    : hasQuestionsOption(format)
-      ? { format, includeQuestions: preferences[format].includeQuestions }
-      : { format };
+): ExportMindOptions => {
+  if (format === "docx") return { format, ...preferences.docx };
+  if (format === "source-pack") return { format };
+  const theirChanges = preferences.theirChanges ?? "shown";
+  return hasQuestionsOption(format)
+    ? { format, includeQuestions: preferences[format].includeQuestions, theirChanges }
+    : { format, theirChanges };
+};
 
 /** How the last export went, said in the Mind it exported (`ExportResultLine`). */
 export type ExportResult =
@@ -66,6 +68,8 @@ export type ExportResult =
       unverified: number;
       /** The header and footer kept in a Word file though deleted from the Mind (#105). */
       kept: ("header" | "footer")[];
+      /** The first save, which took Documents › IncarnaMind: the line says where (D209). */
+      defaulted: boolean;
     }
   /** Not saved yet: what a Word file can't keep, for the User to see first (#105). */
   | { mindId: string; state: "review"; format: ExportFormat; word: WordExportReport }
@@ -143,6 +147,7 @@ export async function exportMind(
         name: saved.file.name,
         unverified: saved.unverifiedCitations,
         kept: saved.word?.keptFurniture ?? [],
+        defaulted: saved.file.defaulted,
       });
     } else if (saved.status === "review") {
       settle({ mindId, state: "review", format: chosen, word: saved.word });
