@@ -275,7 +275,7 @@ export function createReferenceImport(options: ReferenceImportOptions) {
 
     undo(importId: unknown): Set<string> {
       const session = typeof importId === "string" ? sessions.get(importId) : undefined;
-      if (!session) throw new NotFoundError("That import can't be undone any more.");
+      if (!session) throw new NotFoundError({ key: "error.import.undoGone" });
       sessions.delete(importId as string);
       undoImported(db, session.steps, now());
       // The Documents whose records the import touched.
@@ -294,7 +294,7 @@ export function createReferenceImport(options: ReferenceImportOptions) {
 
     async addFiles(importId: unknown): Promise<ReferenceFilesResult> {
       const session = typeof importId === "string" ? sessions.get(importId) : undefined;
-      if (!session) throw new NotFoundError("That import's files can't be added any more.");
+      if (!session) throw new NotFoundError({ key: "error.import.filesGone" });
       const documents: Document[] = [];
       const skipped: ReferenceFilesResult["skipped"] = [];
       const wanted = [...session.files.entries()];
@@ -319,10 +319,10 @@ export function createReferenceImport(options: ReferenceImportOptions) {
         throw new InvalidInputError("A reference and a file are needed.");
       }
       if (!unlinkedRecords(db).some((record) => record.id === recordId))
-        throw new NotFoundError("There is no such reference without a Document.");
+        throw new NotFoundError({ key: "error.import.noSuchReference" });
       const added = await options.addDocuments([path]);
       const document = added.documents[0];
-      if (!document) throw new InvalidInputError("That file can't be added as a Document.");
+      if (!document) throw new InvalidInputError({ key: "error.import.fileNotAdded" });
       db.transaction(() => linkImported(db, recordId, document.id, now()));
       announce([document.id]);
       return options.document(document.id);

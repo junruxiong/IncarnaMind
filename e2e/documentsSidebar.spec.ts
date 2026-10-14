@@ -223,14 +223,14 @@ test("a right-click on a row opens its menu, without selecting its name; a selec
   expect(await window.evaluate(() => document.getSelection()?.toString() ?? "")).toBe("");
   await window.keyboard.press("Escape");
 
-  // Selected (open in the viewer) and pointed at: its actions sit inside its 1px outline.
+  // Selected (open in the viewer) and pointed at: its actions sit inside its outline, and clear of a focus ring's 2px.
   await item.getByTestId("open-document").click();
   await item.hover();
   const row = await item.boundingBox();
   const actions = await item.locator(":scope > div").boundingBox();
   if (!row || !actions) throw new Error("The row isn't visible.");
-  expect(actions.y).toBeCloseTo(row.y + 1, 0);
-  expect(actions.x + actions.width).toBeCloseTo(row.x + row.width - 1, 0);
+  expect(actions.y).toBeCloseTo(row.y + 2, 0);
+  expect(actions.x + actions.width).toBeCloseTo(row.x + row.width - 2, 0);
   await screenshot(window.getByTestId("sidebar"), "selected-row-hover");
   await app.close();
 });

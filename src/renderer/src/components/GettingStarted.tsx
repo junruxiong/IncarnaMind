@@ -5,9 +5,10 @@ import { CheckMarkIcon } from "../editor/icons";
 import { useGap, useT } from "../i18n";
 import { useAppStore } from "../store";
 import { AskIcon, PlugIcon } from "./icons";
-import { ChevronRightLineIcon, CloseLineIcon } from "./lineIcons";
+import { ChevronRightLineIcon, CloseLineIcon, FolderPlusLineIcon, PlusLineIcon } from "./lineIcons";
 import { SLOT, Slotted } from "./Slotted";
-import { buttonStyle } from "./ui";
+import { buttonStyle, menuClass, menuItemClass } from "./ui";
+import { usePopoverMenu } from "./usePopoverMenu";
 
 /**
  * Onboarding (DESIGN.md, First run): the example Mind ("Example" chips, its
@@ -85,7 +86,8 @@ function StepMark({ number, done, next }: { number: number; done: boolean; next:
 /**
  * "Get started · N of 3", at the bottom of the sidebar: each step ticks
  * itself as the User does it, and the next one to do takes them there. It can
- * be hidden, and goes once all three are done.
+ * be hidden, and goes once all three are done. "Add your Documents" is a menu
+ * of the two ways, Add files… and Link a folder… (#766).
  */
 export function GetStartedCard() {
   const t = useT();
@@ -93,17 +95,21 @@ export function GetStartedCard() {
   const steps = useGettingStarted();
   const updateGettingStarted = useAppStore((state) => state.updateGettingStarted);
   const openExamples = useAppStore((state) => state.openExamples);
-  const createMind = useAppStore((state) => state.createMind);
   const startQuestion = useAppStore((state) => state.startQuestion);
+  const picking = useAppStore((state) => state.pickingDocuments);
+  const addMenu = usePopoverMenu({ focus: "first" });
   if (!steps) return null;
 
   const done = steps.filter((step) => step.done).length;
   const next = steps.find((step) => !step.done)?.key;
-  const go: Record<StepKey, () => void> = {
+  const go: Record<Exclude<StepKey, "documents">, () => void> = {
     citation: () => void openExamples(),
-    // A Mind of their own, which shows the ways to add Documents or connect apps.
-    documents: () => void createMind(),
     question: startQuestion,
+  };
+  /** Closes the menu, then does it. */
+  const choose = (action: () => void) => () => {
+    addMenu.close();
+    action();
   };
 
   return (
@@ -150,8 +156,8 @@ export function GetStartedCard() {
                 </span>
               ) : step.key === next ? (
                 <button
+                  {...(step.key === "documents" ? addMenu.buttonProps : { onClick: go[step.key] })}
                   type="button"
-                  onClick={go[step.key]}
                   className={`${rowClass} font-semibold text-ink hover:bg-hover focus-visible:outline-offset-0`}
                 >
                   {mark}
@@ -171,6 +177,35 @@ export function GetStartedCard() {
           );
         })}
       </ol>
+      <div
+        {...addMenu.menuProps}
+        role="menu"
+        aria-label={t("gettingStarted.step.documents")}
+        data-testid="get-started-add-items"
+        className={menuClass}
+      >
+        <button
+          type="button"
+          role="menuitem"
+          data-testid="get-started-add-files"
+          disabled={picking}
+          onClick={choose(() => void useAppStore.getState().pickDocuments())}
+          className={`${menuItemClass} pl-2`}
+        >
+          <PlusLineIcon className="size-4 shrink-0 text-ink-meta" />
+          <span className="flex-1">{t("startGuide.documents.addFiles")}</span>
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          data-testid="get-started-link-folder"
+          onClick={choose(() => void useAppStore.getState().addLinkedFolder())}
+          className={`${menuItemClass} pl-2`}
+        >
+          <FolderPlusLineIcon className="size-4 shrink-0 text-ink-meta" />
+          <span className="flex-1">{t("startGuide.documents.linkFolder")}</span>
+        </button>
+      </div>
       <button
         type="button"
         data-testid="onboarding-groups"
