@@ -428,6 +428,11 @@ export function mindTools(options: MindToolsOptions): Tool[] {
    * be written yet, or its input says nothing that streams.
    */
   const streams = new Map<string, { writer: Writer | null; created: boolean; breaks: number }>();
+  /**
+   * Calls already made: input the engine still hands over after the call ran
+   * (it reads the stream behind the call) writes nothing more.
+   */
+  const ended = new Set<string>();
 
   options.signal.addEventListener("abort", () => {
     for (const stream of streams.values()) {
@@ -446,7 +451,7 @@ export function mindTools(options: MindToolsOptions): Tool[] {
     text: string,
     open: (fields: ReturnType<typeof partialFields>) => { writer: Writer; created: boolean } | null,
   ): void => {
-    if (options.signal.aborted) return;
+    if (options.signal.aborted || ended.has(toolCallId)) return;
     const fields = partialFields(text);
     const content = fields.get("content");
     if (!content) return;
@@ -484,6 +489,7 @@ export function mindTools(options: MindToolsOptions): Tool[] {
   ): { change: MindChange; notFound: number; unrecorded: number } => {
     const stream = streams.get(toolCallId);
     streams.delete(toolCallId);
+    ended.add(toolCallId);
     let writer = stream?.writer ?? null;
     if (writer && (writer.mind.id !== mind.id || writer.named !== after)) {
       withdraw(writer);
@@ -624,7 +630,7 @@ export function mindTools(options: MindToolsOptions): Tool[] {
   const contentProperty = {
     type: "string",
     description:
-      "The text, in Markdown, cited as an Answer is, with markers like [^1] for Citations recorded with cite. A new section starts with its heading.",
+      "The text, in Markdown, cited as an Answer is, with markers like [^1] for Citations recorded with cite. A new section starts with its heading. Write it last, after the other fields.",
   };
 
   const add: Tool = {
@@ -651,11 +657,13 @@ export function mindTools(options: MindToolsOptions): Tool[] {
     untrustedResult: false,
     streamInput(toolCallId, input) {
       streamContent(toolCallId, input, (fields) => {
-        // A model writes its fields in order: those before the content are whole, or left out.
-        const mind = targetOf({ mind: fields.get("mind")?.value });
+        // Only once the Mind and the place it names are whole: a name cut short could mean another.
+        const named = fields.get("mind");
+        const place = fields.get("after");
+        if ((named && !named.done) || (place && !place.done)) return null;
+        const mind = targetOf({ mind: named?.value });
         if (typeof mind === "string") return null;
-        const after = optional(fields.get("after")?.value);
-        return { writer: writerFor(mind, after, false), created: false };
+        return { writer: writerFor(mind, optional(place?.value), false), created: false };
       });
     },
     async call(input, { toolCallId }) {

@@ -89,7 +89,9 @@ export function AssistantAnswer({
         />
       )}
       <MindChangesCard answer={answer} streaming={streaming} />
-      {!streaming && question && !question.askedFrom && wantedAMind(answer) && <NoMindLine />}
+      {!streaming && question && !question.askedFrom && wantedAMind(answer) && (
+        <NoMindLine question={question} />
+      )}
       {!streaming && uncalculated > 0 && <UncalculatedLine count={uncalculated} />}
       {!streaming && status !== "failed" && <UnreadFilesLine files={unread} />}
       {!streaming && status === "failed" && (
