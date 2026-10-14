@@ -10,13 +10,13 @@ Every label is in `labels.json`. A sentence or claim is labelled as `CONTEXT.md`
 
 | Set | Language | Supported | Contradicted | Unsupported | All |
 |---|---|---|---|---|---|
-| Find support | English | 55 | 25 | 20 | 100 |
+| Find support | English | 59 | 29 | 20 | 108 |
 | Find support | Chinese | 55 | 25 | 20 | 100 |
 | Verify | English | 22 | 27 | 36 | 85 |
 | Verify | Chinese | 20 | 25 | 35 | 80 |
 
-- **Find support:** 200 sentences as a User might write them about the Folder's Documents, in their own words. The contradicted ones change a figure, date, party or outcome a Document states, often to one that appears nearby for something else (Bag B's weight for Bag A's, the roof package's completion date for the children's library's). The unsupported ones are near misses: about something a Document covers, saying what none of them says. Each has a `note` on what the Folder does say.
-- **Find support by the kind of Document** (supported, contradicted, unsupported): Word 18, 8, 6; PDF 20, 8, 7; PowerPoint 16, 7, 5; Excel 13, 7, 4; web page 12, 4, 5; Transcript 9, 4, 3; Markdown 8, 4, 4; plain text 8, 4, 4; CSV 6, 4, 2.
+- **Find support:** 208 sentences as a User might write them about the Folder's Documents, in their own words. The contradicted ones change a figure, date, party or outcome a Document states, often to one that appears nearby for something else (Bag B's weight for Bag A's, the roof package's completion date for the children's library's). The unsupported ones are near misses: about something a Document covers, saying what none of them says. Each has a `note` on what the Folder does say. Eight state a figure no Document states but their numbers give (#707): a share, a fall, a sum and a difference, each right and wrong (`fs-201` to `fs-208`); their evidence is the Passage with the figures, and their `note` the working.
+- **Find support by the kind of Document** (supported, contradicted, unsupported): Word 21, 11, 6; PDF 20, 8, 7; PowerPoint 16, 7, 5; Excel 14, 8, 4; web page 12, 4, 5; Transcript 9, 4, 3; Markdown 8, 4, 4; plain text 8, 4, 4; CSV 6, 4, 2.
 - **Verify:** 10 documents someone else might send, each about the subject of one or two Folder Documents (see `ATTRIBUTION.md`): five in English and five in Chinese, five PDFs, four Word files and a deck. Each claim is a sentence of its document, quoted as the app extracts its text. The few sentences that claim nothing (thanks, requests, an opinion) have no label. Every contradicted claim has both quotes: the Folder's (`evidence`) and the document's own conflicting words (`contradiction`).
 
 ## The Folder
@@ -51,20 +51,20 @@ When a person changes a label or a quote, the test says which quote isn't found 
 
 `npm run eval` runs it when a chat model is given (`INCARNAMIND_EVAL_CHAT_*`, see `eval/README.md`); without one, or when `INCARNAMIND_EVAL_QUESTIONS` asks for a short run of the other sets, it says so and stops. `npm run eval -- eval/checks` runs it alone.
 
-1. A temporary data folder, as for the other evaluations. The Folder's files and the received documents are added and the web pages saved, then the Folder's Documents are moved into a Folder. Searches run as the app's do by default: keyword search's top 60, reranked by the built-in model, with embeddings off.
-2. **Find support:** each sentence is searched for in the Folder with the core's `searchEvidence`, and checked against the Passages found.
-3. **Verify:** each received document's stored text goes to claim extraction. Each claim extracted is searched for in the Folder, with the received document left out (`checked`), and checked.
+1. A temporary data folder, as for the other evaluations. The Folder's files and the received documents are added and the web pages saved, then the Folder's Documents are moved into a Folder. Searches run as the app's do by default: keyword search's top 60, reranked by the built-in model, with embeddings off. The chat model is saved as the app's, and setting the variables is the consent for the "checks" flow.
+2. **Find support:** each sentence is checked against the Folder by the app's claim check (`checkClaim`, #96), the check Run Find support runs.
+3. **Verify:** each received document's stored text goes to claim extraction. Each claim extracted is checked the same way, with the received document left out (`checked`).
 4. The results are scored and written to `eval/results/<start time>-checks/` (`report.md`, `report.json`), and a summary is printed.
 
-Claim extraction and the check are a baseline in `lib/pipeline.ts`, one model call each, until the claim-check function (#96) and verify's extraction (#97) exist. They then take its place, and the run's bars start to gate (`GATING` in `checks.eval.ts`). A model that fails, refuses or replies with no verdict leaves the sentence "not checked", which never counts as supported.
+The check is the app's (`corePipeline` in `lib/pipeline.ts`). Claim extraction is still a baseline of one model call (`baselinePipeline`), until verify's extraction (#97) can be called on its own; the run's bars gate then (`GATING` in `checks.eval.ts`). A model that fails, refuses or replies with no verdict leaves the sentence "not checked", which never counts as supported.
 
-Each run makes one call per received document and one per sentence or claim, about 375 in all, each with the Passages the search hands over.
+Each run makes one extraction call per received document, and a check Run per sentence or claim, about 375 in all: a few requests each (search, cite, the verdict, and the confirmation of a contradiction).
 
 ## Scoring
 
 `lib/scoring.ts`, tested in `tests/eval/checkScoring.test.ts` and, through a core with a scripted model, `tests/eval/checkPipeline.test.ts`.
 
-- **Find support:** precision and recall of "supported" over the 200 sentences, in all, per language and per kind of Document. "Contradicted" is reported too, and how many of the sentences rightly found supported rest on the labelled Passage (its Document and Units).
+- **Find support:** precision and recall of "supported" over the 208 sentences, in all, per language and per kind of Document. "Contradicted" is reported too, and how many of the sentences rightly found supported rest on the labelled Passage (its Document and Units).
 - **Verify:** an extracted claim is matched to the labelled claim most like it, by its quoted source or its own words: the Dice coefficient of their character pairs, after the check's normalisation and with traditional characters read as simplified, at least 0.5. A labelled claim with no match wasn't extracted.
   - Claims extracted: the share of labelled claims matched.
   - "Contradicted" recall is over the labelled contradicted claims, and a claim that wasn't extracted is a miss. Precision is over the claims a check called contradicted, each labelled claim once; a claim that matches no label counts against it.
