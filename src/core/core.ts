@@ -20,6 +20,7 @@ import type { CoreAdapters } from "./adapters";
 import { agentSocketPath, createAgents } from "./agents";
 import { createAgentSetup, skillInstalled } from "./agents/setup";
 import { createAiUse } from "./aiUse";
+import { createAiUseStatement } from "./aiUseStatement";
 import { createAiSdkAnswerEngine, createAnswers } from "./answers";
 import { createChecks } from "./answers/checks";
 import { recheckCitation, recheckKept } from "./answers/citations";
@@ -42,6 +43,7 @@ import {
   type CreateMindInput,
   DEFAULT_MIND_KIND,
   type Document,
+  type DocumentStatus,
   type EmbeddingModelStatus,
   type EmbeddingSettings,
   type ExportMindOptions,
@@ -81,6 +83,7 @@ import { statIdentity } from "./documents/files";
 import { createOwnFiles } from "./documents/ownFiles";
 import { createVersionRetention, type VersionRetention } from "./documents/retention";
 import { BUILT_IN_TEXT_RECOGNITION_MODEL, createTextRecognitionModel } from "./documents/scan";
+import type { WindowedPassage } from "./documents/search";
 import { tunedSearch } from "./documents/searchTuning";
 import { findUnreadDocuments } from "./documents/unread";
 import { fsWatchFolder } from "./documents/watcher";
@@ -128,7 +131,7 @@ import {
   parseMindId,
 } from "./minds";
 import { firstLineOf, readBlocks, theirChangesReading } from "./mindText";
-import { createNoteAdding } from "./noteAdding";
+import { createNoteAdding, insertBlocks } from "./noteAdding";
 import { createOutputFiles } from "./outputFiles";
 import { createPrivacy, type NetworkTrafficRegistry } from "./privacy";
 import { readsImages } from "./providers/capabilities";
@@ -284,6 +287,9 @@ export interface Core extends CoreApi, CoreEventSource {
   /** Closes the database and drops all listeners. The core can't be used afterwards. Safe to call twice. */
   close(): void;
 }
+
+/** How long a Question asked during a call waits for the live transcript's newest lines to be indexed (#144). */
+const LIVE_TRANSCRIPT_WAIT_MS = 3_000;
 
 /**
  * Opens (or creates) the data folder and its database, brings the schema up to
@@ -974,6 +980,7 @@ export function createCore(adapters: CoreAdapters): Core {
       if (!found || found.deletedAt !== null) return null;
       return isKnownKind(minds.get(mindId).kind) ? found.name : null;
     },
+    liveTranscript: (mindId) => liveTranscriptOf(mindId),
     providerExists: (providerId) => chat.exists(providerId),
     readiness: (choice) => chat.readiness(choice),
     prepareModel: (choice) => chat.prepareModel(choice),
@@ -1303,6 +1310,20 @@ export function createCore(adapters: CoreAdapters): Core {
     recheck: (input) => recheckCitation(documents, input),
     recordAiUse: (inputs) => void aiUse.record(inputs),
     now: () => adapters.now?.() ?? new Date(),
+  });
+
+  // The AI use statement (#739): a new Mind, made from what the Mind records.
+  const aiUseStatement = createAiUseStatement({
+    mind: (mindId) => minds.get(mindId),
+    read: (mindId, look) => content.peek(mindId, look),
+    entries: (mindId) => aiUse.list(mindId),
+    providers: () => chat.list(),
+    documents: () => documents.list(),
+    keptCitationTexts: () => documents.keptCitationTexts(),
+    language: () => settings.get().language,
+    createMind: makeMind,
+    write: (mindId, blocks) => content.edit(mindId, (note) => void insertBlocks(note, blocks)),
+    now,
   });
 
   // The fingerprints of the files IncarnaMind writes (#80). A Document already indexed with
@@ -1854,6 +1875,8 @@ export function createCore(adapters: CoreAdapters): Core {
 
   // Transcripts (#136): a Meeting is transcribed on this computer as it records, where this copy can.
   let listMeetings: (() => Meeting[]) | undefined;
+  /** See `AnswersOptions.liveTranscript`; set once Meetings are. */
+  let liveTranscriptOf = async (_mindId: string): Promise<WindowedPassage[] | null> => null;
   const meetingsChanged = () => {
     if (listMeetings) events.emit("meetings.changed", listMeetings());
   };
@@ -1953,6 +1976,44 @@ export function createCore(adapters: CoreAdapters): Core {
     log: adapters.log ?? silentLogger,
   });
   listMeetings = () => meetings.list();
+  /** Resolves once a Document's newest version has its Passages, or after `ms` with the last version's. */
+  const extracted = (documentId: string, ms: number) =>
+    new Promise<void>((resolve) => {
+      const busy = (status: DocumentStatus | null) =>
+        status === "queued" || status === "extracting";
+      let status: DocumentStatus | null = null;
+      try {
+        status = documents.get(documentId).status;
+      } catch {
+        // Deleted meanwhile: there is nothing to wait for.
+      }
+      if (!busy(status)) {
+        resolve();
+        return;
+      }
+      const done = () => {
+        clearTimeout(timer);
+        stop();
+        resolve();
+      };
+      const timer = setTimeout(done, ms);
+      const stop = events.on("document.status", (document) => {
+        if (document.id === documentId && !busy(document.status)) done();
+      });
+    });
+  liveTranscriptOf = async (mindId) => {
+    const meeting = meetings
+      .list()
+      .find(
+        (each) =>
+          each.mindId === mindId && (each.status === "recording" || each.status === "paused"),
+      );
+    const documentId = meeting?.transcript?.documentId;
+    if (!meeting || !documentId || !transcripts) return null;
+    await transcripts.refresh(meeting.id);
+    await extracted(documentId, LIVE_TRANSCRIPT_WAIT_MS);
+    return documents.passagesBetween(documentId, 0, Number.MAX_SAFE_INTEGER);
+  };
 
   // Outside agents (#351): the User's own agent, paired in Settings, reads its Folders over the
   // socket and gets Citations IncarnaMind minted and checked. Off until the User turns it on.
@@ -2159,11 +2220,6 @@ export function createCore(adapters: CoreAdapters): Core {
       }
       const languageWas = settings.get().language;
       const updated = settings.update(change);
-      if (updated.language !== languageWas) {
-        examples
-          .followLanguage()
-          .catch((error) => console.error("The example Minds didn't follow the language:", error));
-      }
       if (!updated.user.suggestWhileWriting) suggestions.stop();
       events.emit("settings.changed", updated);
       // Skill scripts turned off: none runs any more, and none waits to.
@@ -2173,6 +2229,12 @@ export function createCore(adapters: CoreAdapters): Core {
       }
       const flowChanged = syncChatFlow();
       if (chatModel !== undefined || flowChanged) await readinessChanged();
+      // The examples follow the new language before this returns, so whoever awaits it can rely on it.
+      if (updated.language !== languageWas) {
+        await examples
+          .followLanguage()
+          .catch((error) => console.error("The example Minds didn't follow the language:", error));
+      }
       return updated;
     },
     addDocuments,
@@ -2517,6 +2579,7 @@ export function createCore(adapters: CoreAdapters): Core {
     getAiUseStatus: async () => aiUse.status(),
     clearAiUse: async () => aiUse.clear(),
     restoreAiUse: async (clearedAt) => aiUse.restore(clearedAt),
+    createAiUseStatement: async (mindId) => aiUseStatement.create(mindId),
 
     listFolders: async () => folders.list(),
 
