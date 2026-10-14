@@ -2780,7 +2780,7 @@ export const zhCN = {
   "examples.banner.title": "这是一个示例 Mind。",
   "examples.banner.body":
     "Mind 是你写作的页面，也可以在这里就你的文档提问，每条引文都会核对。你可以像在普通文档里一样在这里写作，并就你的文档提问；回答中的每个说法都链接到出处所在的页面。点击勾号查看引文，绿色表示找到了这段引文。",
-  "examples.banner.addOwn": "添加你的文档或应用",
+  "examples.banner.addOwn": "添加你的文档",
   "examples.banner.remove": "移除示例",
   "examples.answer": "预先写好的示例回答，无需模型即可体验",
   "gettingStarted.title": "开始使用",
