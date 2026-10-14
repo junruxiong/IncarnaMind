@@ -3,10 +3,8 @@ import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { TableMap } from "@tiptap/pm/tables";
 
 /**
- * A table as plain text, the way a spreadsheet takes it: a line for each row,
- * its cells apart by a tab (#704). A cell's own line breaks become spaces,
- * so it stays one cell, and a slot a merged cell covers is left empty, so the
- * columns keep their places. `serializers` write what is inside a cell.
+ * As a spreadsheet pastes it: a cell's own line breaks become spaces so it stays one cell, and
+ * a slot a merged cell covers is left empty so the columns keep their places.
  */
 export function tableText(
   table: ProseMirrorNode,

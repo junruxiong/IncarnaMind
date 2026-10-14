@@ -372,7 +372,7 @@ describe("a number with no unit (#579)", () => {
     const bare = fromTable(QUARTERS) as ChartAttributes;
     expect(chartPoints(bare)).toHaveLength(8);
     expect(chartSources(bare).noUnit).toBe(0);
-    // From selected figures: a table of these isn't charted (`isNumericSeries`).
+    // A table of these isn't charted (`isNumericSeries`).
     const mixed = chartFromFigures(
       [
         { text: "Revenue: $1.2 million", citation: null },
@@ -421,7 +421,6 @@ describe("a number with no unit (#579)", () => {
   });
 });
 
-/** A statement of accounts: the years across, a metric on each row. */
 const YEARS_BY_METRICS: SourceGrid = [
   [head("Metric"), head("2023"), head("2024"), head("2025")],
   [cell("Revenue", cited(22)), cell("289.4", cited(22)), cell("301.2"), cell("330.6")],
@@ -440,7 +439,6 @@ describe("which way round a chart from a table goes", () => {
       [301.2, 45],
       [330.6, 52.3],
     ]);
-    // Each value is still the cell it was read from, and keeps the Citation in it.
     expect(chart.data.rows[1]?.values[1]?.from).toEqual({ kind: "cell", row: 2, column: 2 });
     expect(chart.data.rows[0]?.values[0]?.citation?.pageFrom).toBe(22);
     expect(chart.data.cutFrom).toBeNull();
@@ -666,7 +664,9 @@ describe("a table that is a series of numbers", () => {
         "en",
       ),
     ).toBe(true);
-    // A bare number among numbers in one unit is left out of the drawing (#579), not a mix.
+  });
+
+  test("doesn't take a bare number among numbers in one unit for a mix: it isn't drawn (#579)", () => {
     expect(
       isNumericSeries(
         rows(

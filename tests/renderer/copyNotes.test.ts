@@ -113,8 +113,7 @@ const table = (id: string, ...rows: JSONContent[]): JSONContent => ({
   content: rows,
 });
 const words = (value: string) => (value === "" ? paragraph() : paragraph(text(value)));
-/** A table of these words, its first row the headings. */
-const tableOf = (id: string, ...rows: string[][]): JSONContent =>
+const tableWithHeadings = (id: string, ...rows: string[][]): JSONContent =>
   table(
     id,
     ...rows.map((each, index) =>
@@ -123,7 +122,7 @@ const tableOf = (id: string, ...rows: string[][]): JSONContent =>
   );
 
 describe("copying a table as text", () => {
-  const sales = tableOf("t1", ["Year", "Revenue"], ["2023", "289.4"], ["2024", "301.2"]);
+  const sales = tableWithHeadings("t1", ["Year", "Revenue"], ["2023", "289.4"], ["2024", "301.2"]);
 
   test("is one row to a line, its cells apart by tabs, and the table once", () => {
     const copied = copiedText(fragmentOf(sales), schema, context);
@@ -143,7 +142,9 @@ describe("copying a table as text", () => {
 
   test("in Chinese", () => {
     const copied = copiedText(
-      fragmentOf(tableOf("t1", ["指标", "2024年", "2025年"], ["营业收入", "1.5亿元", "1.8亿元"])),
+      fragmentOf(
+        tableWithHeadings("t1", ["指标", "2024年", "2025年"], ["营业收入", "1.5亿元", "1.8亿元"]),
+      ),
       schema,
       { ...context, language: "zh-CN" },
     );
@@ -152,7 +153,7 @@ describe("copying a table as text", () => {
 
   test("keeps an empty cell in its column", () => {
     const copied = copiedText(
-      fragmentOf(tableOf("t1", ["A", "B", "C"], ["1", "", "3"], ["", "", ""])),
+      fragmentOf(tableWithHeadings("t1", ["A", "B", "C"], ["1", "", "3"], ["", "", ""])),
       schema,
       context,
     );
@@ -184,7 +185,7 @@ describe("copying a table as text", () => {
     const doc = schema.nodeFromJSON({
       type: "doc",
       content: [
-        tableOf(
+        tableWithHeadings(
           "t1",
           ["Year", "Revenue", "Cost"],
           ["2023", "289.4", "100"],
@@ -254,7 +255,6 @@ describe("copying a table as text", () => {
   });
 });
 
-/** A chart of a table, holding one year's revenue. */
 function chartOf(tableId: string): JSONContent {
   return {
     type: CHART_NODE,

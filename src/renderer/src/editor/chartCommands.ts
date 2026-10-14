@@ -250,9 +250,9 @@ export function tableUpdate(
 }
 
 /**
- * A chart with its rows and columns switched (`switchedChart`). While it draws what its table
- * holds, the table is read again the other way round, so a row with no number that one way
- * leaves out comes back the other way, and the table isn't taken to have changed.
+ * While the chart draws what its table holds, the table is read again the other way round: a
+ * row with no number, left out one way, comes back the other, and the table isn't taken to
+ * have changed.
  */
 export function switchedChartIn(
   doc: ProseMirrorNode,
