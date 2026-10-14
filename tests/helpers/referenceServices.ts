@@ -1,7 +1,9 @@
 /**
  * A local stand-in for Look up's two services (#286): Crossref's
  * `GET /works/{doi}` and arXiv's `GET /api/query?id_list=…`, answering from
- * recorded answers (tests/fixtures/references/). It records every request, so
+ * recorded answers (tests/fixtures/references/), and, for checking reference
+ * lists (#711), Crossref's `GET /works?query.bibliographic=…` over a few
+ * works, best match first by the words they share. It records every request, so
  * a test can check that nothing was sent, or only the identifier. No test
  * reaches the real services. Free of the test runner, so the smoke tests use
  * it too.
@@ -34,14 +36,44 @@ export interface ReferenceServices {
 export const recordedAnswer = (name: string) =>
   readFileSync(join(__dirname, "../fixtures/references", name), "utf8");
 
+/** A work as Crossref's JSON gives it, for the stand-in's searches and DOIs. */
+export interface CrossrefWork {
+  DOI: string;
+  title: string[];
+  author: { family: string; given: string }[];
+  issued: { "date-parts": number[][] };
+  "container-title"?: string[];
+  type?: string;
+}
+
+const wordsOf = (text: string) => new Set(text.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []);
+
+/** The works whose titles share the most words with `query`, at most five, as Crossref answers a search. */
+function searched(works: readonly CrossrefWork[], query: string): string {
+  const asked = wordsOf(query);
+  const items = works
+    .map((work) => {
+      let shared = 0;
+      for (const word of wordsOf(work.title[0] ?? "")) if (asked.has(word)) shared++;
+      return { work, shared };
+    })
+    .filter(({ shared }) => shared > 0)
+    .sort((a, b) => b.shared - a.shared)
+    .slice(0, 5)
+    .map(({ work, shared }) => ({ ...work, score: shared }));
+  return JSON.stringify({ status: "ok", message: { items } });
+}
+
 /**
  * Starts the stand-in. `crossref` maps DOIs to recorded Crossref answers (as
- * JSON text); `arxiv` maps arXiv ids to recorded Atom feeds. Anything else
- * is a 404, as the real services answer an unknown DOI or id.
+ * JSON text); `arxiv` maps arXiv ids to recorded Atom feeds; `works` are
+ * searched, and answer their DOIs too. Anything else is a 404, as the real
+ * services answer an unknown DOI or id.
  */
 export async function startReferenceServices(answers: {
   crossref?: Readonly<Record<string, string>>;
   arxiv?: Readonly<Record<string, string>>;
+  works?: readonly CrossrefWork[];
 }): Promise<ReferenceServices> {
   const requests: ServiceRequest[] = [];
   let failure: number | null = null;
@@ -62,9 +94,21 @@ export async function startReferenceServices(answers: {
         ? decodeURIComponent(url.pathname.slice("/works/".length))
         : null;
       const id = url.pathname === "/api/query" ? url.searchParams.get("id_list") : null;
-      const crossref = doi === null ? undefined : answers.crossref?.[doi];
+      const work =
+        doi === null
+          ? undefined
+          : answers.works?.find((each) => each.DOI.toLowerCase() === doi.toLowerCase());
+      const crossref =
+        doi === null
+          ? undefined
+          : (answers.crossref?.[doi] ?? (work && JSON.stringify({ status: "ok", message: work })));
       const arxiv = id === null ? undefined : answers.arxiv?.[id];
-      if (crossref !== undefined) {
+      const query = url.pathname === "/works" ? url.searchParams.get("query.bibliographic") : null;
+      if (query !== null) {
+        response
+          .writeHead(200, { "content-type": "application/json" })
+          .end(searched(answers.works ?? [], query));
+      } else if (crossref !== undefined) {
         response.writeHead(200, { "content-type": "application/json" }).end(crossref);
       } else if (arxiv !== undefined) {
         response.writeHead(200, { "content-type": "application/atom+xml" }).end(arxiv);
