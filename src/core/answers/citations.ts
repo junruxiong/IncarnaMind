@@ -961,6 +961,17 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
 
     hasRecord: (marker) => records.has(marker),
 
+    shownPassages: () =>
+      [...handleOf.values()].flatMap((id) => {
+        const text = shownTexts.get(id);
+        return text === undefined ? [] : [{ id, text }];
+      }),
+
+    quoteFound(passage: string, quote: string): boolean {
+      const taken = takeQuote({ passage, quote }, 0, { structured: true });
+      return taken.ok && !!taken.record.quote && check(taken.record).check === "found";
+    },
+
     unfoundQuotes(): UnfoundQuote[] {
       return [...records.values()]
         .filter((record) => check(record).check === "not-found")

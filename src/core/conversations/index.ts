@@ -205,7 +205,7 @@ function storedSteps(value: string | null): AnswerSteps | null {
   }
   if (!isRecord(parsed)) return null;
   const phases = Array.isArray(parsed.phases) ? parsed.phases.filter(isRecord) : [];
-  const { reasoning, readShare } = parsed;
+  const { reasoning, readShare, citedAfterChecking } = parsed;
   return {
     sentAt: timeOrNull(parsed.sentAt),
     finishedAt: timeOrNull(parsed.finishedAt),
@@ -223,6 +223,9 @@ function storedSteps(value: string | null): AnswerSteps | null {
         ? { summary: reasoning.summary, ms: reasoning.ms }
         : null,
     ...(typeof readShare === "number" && readShare >= 0 && readShare <= 1 && { readShare }),
+    ...(typeof citedAfterChecking === "number" &&
+      Number.isInteger(citedAfterChecking) &&
+      citedAfterChecking > 0 && { citedAfterChecking }),
   };
 }
 

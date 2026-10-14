@@ -369,6 +369,7 @@ function citationsSection(report: HardReport): string[] {
       d === "disagreeing" ? ofAnswers(of(d)?.namesOlder ?? 0, d) : "–",
     ),
     "",
+    ...citedAfterCheckingSection(citations),
     ...answerRulesSection(citations),
     ...timingSection(
       columns.map((difficulty) => ({ label: difficulty, ...of(difficulty) })),
@@ -389,6 +390,38 @@ function citationsSection(report: HardReport): string[] {
           "",
         ]
       : []),
+  ];
+}
+
+/** What #760's check of sentences written without markers did, over the finished Answers. */
+export function citedAfterCheckingCounts(citations: HardCitations) {
+  const finished = citations.run.answers.filter((answer) => answer.status === "done");
+  const added = (answer: (typeof finished)[number]) => answer.citedAfterChecking?.count ?? 0;
+  const noneOwn = finished.filter((answer) => answer.citations.length - added(answer) === 0);
+  return {
+    answers: finished.length,
+    /** No Citation of the model's own: what the Answer was before #760. */
+    noneOwn: noneOwn.length,
+    /** Of those, Answers quoting text in quotation marks. */
+    noneOwnQuoting: noneOwn.filter((answer) => /["“「『][^"”」』\n]{8,}["”」』]/u.test(answer.text))
+      .length,
+    /** No Citation even after the check. */
+    stillNone: finished.filter((answer) => answer.citations.length === 0).length,
+    added: finished.reduce((sum, answer) => sum + added(answer), 0),
+    asked: finished.filter((answer) => answer.citedAfterChecking?.asked).length,
+  };
+}
+
+function citedAfterCheckingSection(citations: HardCitations): string[] {
+  const counts = citedAfterCheckingCounts(citations);
+  if (counts.answers === 0) return [];
+  return [
+    "Sentences written without markers (#760): finished Answers with no Citation of the model's own (of them, quoting in quotation marks), with none even after the check matched their sentences to the Passages read, the Citations it added, and the Answers that asked the model once more.",
+    "",
+    "| Answers | No Citation of its own (quoting) | None after the check | Citations added | Asked once more |",
+    "|---|---|---|---|---|",
+    `| ${counts.answers} | ${counts.noneOwn} (${counts.noneOwnQuoting}) | ${counts.stillNone} | ${counts.added} | ${counts.asked} |`,
+    "",
   ];
 }
 
@@ -530,6 +563,10 @@ export function hardSummary(report: HardReport, reportDir: string, root: string)
         .join(
           ", ",
         )}${unanswerable ? `; unanswerable: ${unanswerable.declines}/${unanswerable.answers} decline, ${unanswerable.withoutCitation}/${unanswerable.answers} answered without a Citation` : ""}`,
+    );
+    const checked = citedAfterCheckingCounts(citations);
+    lines.push(
+      `  Without markers (${citations.run.model}): ${checked.noneOwn}/${checked.answers} Answers had no Citation of their own (${checked.noneOwnQuoting} quoting), ${checked.stillNone} after the check; ${checked.added} Citations added, ${checked.asked} asked once more`,
     );
     if (premise || disagreeing) {
       lines.push(

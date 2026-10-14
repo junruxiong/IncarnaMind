@@ -90,7 +90,7 @@ export function wordsOf(text: string): Set<string> {
 }
 
 /** How alike two sets of words are: the shared words, and their Dice similarity. */
-function likeness(
+export function likeness(
   a: ReadonlySet<string>,
   b: ReadonlySet<string>,
 ): { shared: number; score: number } {
@@ -147,6 +147,22 @@ function paragraphsOf(text: string): Paragraph[] {
     if (text.slice(from, end).trim()) current.sentences.push({ start: from, end });
   }
   return paragraphs.filter((paragraph) => paragraph.sentences.length > 0);
+}
+
+/**
+ * The Answer's sentences, outside code, headings, math and footnote
+ * definitions, by offset in `text`: each one's text and the markers in it.
+ */
+export function answerSentences(
+  text: string,
+): { start: number; end: number; text: string; markers: number[] }[] {
+  return paragraphsOf(text).flatMap((paragraph) =>
+    paragraph.sentences.map((span) => {
+      const sentence = text.slice(span.start, span.end);
+      const markers = [...sentence.matchAll(MARKER)].map((found) => Number(found[1]));
+      return { ...span, text: sentence.trim(), markers };
+    }),
+  );
 }
 
 /**

@@ -3985,6 +3985,11 @@ export interface AnswerSteps {
    * to 1, when that was part of it (#564).
    */
   readShare?: number;
+  /**
+   * How many of its Citations were added after it was written, for sentences
+   * it wrote without markers that match the Passages it read (#760).
+   */
+  citedAfterChecking?: number;
 }
 
 /** A Tool call of an Answer started, or finished (see `call.status`). */
@@ -4030,6 +4035,12 @@ export interface AnswerFinished extends AnswerPlace {
   rejectedRecords: RejectedRecord[];
   /** Markers the model left out of its text for records it gave, which the engine put in. */
   placedMarkers: number;
+  /**
+   * Citations added for sentences the Answer wrote without markers, matched
+   * to the Passages it read (#760), and whether the model was asked once
+   * more for its Citations. The evaluation counts these.
+   */
+  citedAfterChecking: { count: number; asked: boolean };
   /** How the model could give Citations; null when there were no Documents to search. */
   citationSupport: CitationSupport | null;
   /**
