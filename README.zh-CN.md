@@ -5,8 +5,8 @@
 <h1 align="center">IncarnaMind</h1>
 
 <p align="center">
-  <b>会自己核对引文的 AI 笔记本。</b><br>
-  写作和提问在同一个地方，回答来自你自己的文件和你选的 AI 模型。免费开源，在你自己的电脑上运行。
+  <b>你的文件，你的 AI：写作、提问、核对、批量比较，都在一个地方。</b><br>
+  每一句话、每一个数字都对照你自己的文档核对过，用你选的 AI 模型。免费开源，在你自己的电脑上运行。
 </p>
 
 <p align="center"><a href="https://tally.so/r/LZA5aG?ref=readme-zh"><img src="docs/images/notify-zh.svg" width="187" height="40" alt="alpha 上线时通知我"></a></p>
