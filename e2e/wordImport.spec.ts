@@ -40,8 +40,8 @@ import {
  * Importing a Word file as a Mind (#104): from the "+" menu and by a drop on a
  * Mind, the import screen that asks whose document it is, the Mind with what
  * is kept as is shown in place, someone else's tracked changes to accept or
- * reject (#108), a section break that asks before it goes, and a file refused
- * with the reason; and the original also added as a Document that Answers
+ * reject (#108), a section break that goes at once and comes back with ⌘Z, and
+ * a file refused with the reason; and the original also added as a Document that Answers
  * cite (#720). Set INCARNAMIND_SCREENSHOTS to a folder to also save
  * screenshots there.
  */
@@ -353,7 +353,7 @@ test("someone else's tracked changes wait in place with who made them and when: 
   await app.close();
 });
 
-test("deleting a section break asks first: Keep it leaves it, Delete takes it", async () => {
+test("deleting a section break asks nothing, and ⌘Z brings it back", async () => {
   const path = join(files, "Two sections.docx");
   await writeFile(
     path,
@@ -384,25 +384,15 @@ test("deleting a section break asks first: Keep it leaves it, Delete takes it", 
     .poll(() => window.evaluate(() => getSelection()?.toString()))
     .toContain("Section one ends here.");
   await window.keyboard.press("Backspace");
-  const ask = window.getByTestId("section-break-dialog");
-  await expect(ask).toBeVisible();
-  await expect(ask).toContainText("Delete the section break?");
-  await screenshot(ask, "section-break-dialog");
-  await ask.getByRole("button", { name: "Keep it" }).click();
-  await expect(ask).toBeHidden();
-  await expect(sectionBreak).toHaveCount(1);
-  await expect(first).toHaveText("Section one ends here.");
-
-  await motionSettled(window);
-  await first.click();
-  await first.click({ clickCount: 3 });
-  await expect
-    .poll(() => window.evaluate(() => getSelection()?.toString()))
-    .toContain("Section one ends here.");
-  await window.keyboard.press("Backspace");
-  await ask.getByTestId("section-break-delete").click();
   await expect(sectionBreak).toHaveCount(0);
   await expect(editor).not.toContainText("Section one ends here.");
+  await expect(editor).toContainText("Section two.");
+  await expect(window.locator("dialog[open]")).toHaveCount(0);
+  await screenshot(window, "section-break-deleted");
+
+  await window.keyboard.press("ControlOrMeta+z");
+  await expect(sectionBreak).toHaveCount(1);
+  await expect(first).toHaveText("Section one ends here.");
   await expect(editor).toContainText("Section two.");
   await app.close();
 });

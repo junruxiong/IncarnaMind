@@ -65,7 +65,6 @@ import { askInEditor, QuestionCommands } from "../editor/questionCommands";
 import { QuestionFold } from "../editor/questionFold";
 import { ReferencesBlock } from "../editor/ReferencesBlock";
 import { ScopePicker } from "../editor/ScopePicker";
-import { SectionBreakDialog } from "../editor/SectionBreakDialog";
 import { type SelectionAction, SelectionMenu } from "../editor/SelectionMenu";
 import { SlashMenu } from "../editor/SlashMenu";
 import { compareSlashItem, noteSlashItems, skillSlashItems } from "../editor/slashItems";
@@ -318,8 +317,6 @@ function MindEditorView({
       : t("editor.footnote.label", { number });
   /** The position of the formula whose LaTeX is being edited. */
   const [editingMath, setEditingMath] = useState<number | null>(null);
-  /** A change that would delete a Word file's section break, waiting for the User to say (#104). */
-  const [sectionBreakRetry, setSectionBreakRetry] = useState<(() => void) | null>(null);
   /** A Mind still filling in from a Word file can't be edited until it has (#104). */
   const importing = useWordFile(doc).progress !== null;
   /** The Mind's citation style, followed as it changes (#289). */
@@ -346,7 +343,6 @@ function MindEditorView({
           chartView,
           wordAtomView,
           wordBlockView,
-          onSectionBreakDelete: (retry) => setSectionBreakRetry(() => retry),
         }),
         // Footnotes are numbered as the Mind's citation style counts its Citations (#289).
         CitationNumbers.configure({ form: () => citationStyle(styleRef.current).form }),
@@ -651,7 +647,6 @@ function MindEditorView({
           </>,
           countSlot,
         )}
-      <SectionBreakDialog retry={sectionBreakRetry} onClose={() => setSectionBreakRetry(null)} />
       {readOnly && <MindNotice kind="read-only" />}
       <div ref={frame} className={`mind-editor-frame ${guide ? "mind-editor-frame--guide" : ""}`}>
         {!readOnly && <ProposalBars editor={editor} mindId={mindId} />}
