@@ -5,6 +5,7 @@ import { copyText } from "../copied";
 import { files } from "../core";
 import { useDocumentFolder, useUnitCount } from "../documentFacts";
 import { documentStatusText } from "../documentStatus";
+import { providerErrorText } from "../errors";
 import { addedDate, documentSummary, fileDate, showFileLabelKey } from "../fileInfo";
 import { useLanguage, useT } from "../i18n";
 import { useInfo } from "../info";
@@ -287,7 +288,7 @@ function DocumentInfo({ document }: { document: Document }) {
             <span className="block text-ink-meta">{organizeModel(assignment.model, t)}</span>
           )}
           {assignment?.error && (
-            <span className="block text-ink-meta">{assignment.error.message}</span>
+            <span className="block text-ink-meta">{providerErrorText(assignment.error, t)}</span>
           )}
         </Row>
       </Rows>
