@@ -5,7 +5,7 @@
  * after it failed or the app quit, and gone with the page. The window that
  * makes it stands in here.
  */
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { type Core, DATABASE_FILE } from "../../src/core";
@@ -61,7 +61,7 @@ const settled = (core: Core, id: string) =>
   });
 
 describe("A web page kept as it looks", { timeout: 30_000 }, () => {
-  test("off by default: a page saved, fetched again or found by web search is never loaded for its look", async () => {
+  test("off by default: a page saved or fetched again is never loaded for its look", async () => {
     const site = await startSite();
     const stand = standInLook();
     const core = startCore(await createTempDataFolder(), {
@@ -181,6 +181,76 @@ describe("A web page kept as it looks", { timeout: 30_000 }, () => {
     await settled(second, id);
     expect((await lookOf(second, id))?.status).toBe("saved");
     expect(stand.asked).toEqual([site.address]);
+  });
+
+  test("one made again after a quit, which the app quit during again, is given up, saying why", async () => {
+    const site = await startSite();
+    const dataDir = await createTempDataFolder();
+    const first = startCore(dataDir, site.adapters);
+    const id = await saved(first, { address: site.address });
+    first.close();
+    const db = openDatabase(join(dataDir, DATABASE_FILE));
+    try {
+      db.run("UPDATE web_pages SET look_status = 'saving', look_failure = 'resumed'");
+    } finally {
+      db.close();
+    }
+
+    const stand = standInLook();
+    const second = startCore(dataDir, { ...site.adapters, pageLook: stand.look });
+    expect(await lookOf(second, id)).toEqual({ status: "failed", failure: "stopped" });
+    expect(stand.asked).toEqual([]);
+  });
+
+  test("fetched again, a page keeps the choice made at its save, whatever the setting says now", async () => {
+    const site = await startSite();
+    const stand = standInLook();
+    const core = startCore(await createTempDataFolder(), {
+      ...site.adapters,
+      pageLook: stand.look,
+    });
+    const id = await saved(core, { address: site.address, keepLook: false });
+    await core.updateSettings({ user: { keepWebPageLook: true } });
+    site.change();
+    await core.fetchWebPageAgain(id);
+    await waitForProcessing(core, [id]);
+    expect(await lookOf(core, id)).toBeNull();
+    expect(stand.asked).toEqual([]);
+  });
+
+  test("deleted while its look is made: deleted permanently, the PDF isn't left behind; restored, it shows how it went", async () => {
+    const site = await startSite();
+    const dataDir = await createTempDataFolder();
+    const releases: (() => void)[] = [];
+    const pageLook: PageLook = {
+      render: (address) =>
+        new Promise((resolve) => {
+          releases.push(() => resolve({ pdf: new TextEncoder().encode(`%PDF-1.7 ${address}`) }));
+        }),
+    };
+    const core = startCore(dataDir, { ...site.adapters, pageLook });
+    const looks = join(dataDir, "Web pages", "looks");
+
+    const restored = await saved(core, { address: site.address, keepLook: true });
+    await expect.poll(() => releases.length).toBe(1);
+    await core.deleteDocument(restored);
+    releases.shift()?.();
+    await expect.poll(() => (existsSync(looks) ? readdirSync(looks).length : 0)).toBe(1);
+    await core.restore([{ kind: "document", id: restored }]);
+    expect((await lookOf(core, restored))?.status).toBe("saved");
+
+    const other = await startWeb({ "/other": () => ({ status: 200, body: REPORT }) });
+    const purged = await saved(core, {
+      address: `http://127.0.0.1:${other.port}/other`,
+      keepLook: true,
+    });
+    await expect.poll(() => releases.length).toBe(1);
+    await core.deleteDocument(purged);
+    await core.deletePermanently([{ kind: "document", id: purged }]);
+    releases.shift()?.();
+    await expect
+      .poll(() => readdirSync(looks).filter((name) => name.endsWith(".pdf")))
+      .toHaveLength(1);
   });
 
   test("deleted permanently, its PDF goes with it", async () => {

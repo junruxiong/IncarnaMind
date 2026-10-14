@@ -6,7 +6,7 @@ import { useLanguage, useT } from "../i18n";
 import { useAppStore } from "../store";
 
 /**
- * Under a saved web page's byline, its look (#756): being saved, saved with
+ * Under a saved web page's byline, its look: being saved, saved with
  * "Show as it looked", or why it wasn't, with Try again.
  */
 export function WebLookLine({ document, onShow }: { document: Document; onShow(): void }) {
@@ -55,7 +55,6 @@ export function WebLookLine({ document, onShow }: { document: Document; onShow()
   }
 }
 
-/** Over the PDF of how a page looked: when, and the way back to its text. */
 export function WebLookBar({
   look,
   onShowText,

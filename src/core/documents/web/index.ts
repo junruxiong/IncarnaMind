@@ -91,7 +91,6 @@ interface PageToWrite {
   leftOut: number;
 }
 
-/** Writes a file named by its content, unless it is there already: whole or not at all. */
 async function writeOnce(path: string, bytes: Uint8Array): Promise<void> {
   const there = await access(path).then(
     () => true,
@@ -273,11 +272,20 @@ export function createWebPages(options: WebPagesOptions) {
         }));
         if ("pdf" in made) {
           const lookHash = hashBytes(made.pdf);
+          const file = join(lookFolder, lookName(lookHash));
           hold([lookHash], 1);
           try {
-            await writeOnce(join(lookFolder, lookName(lookHash)), made.pdf);
+            await writeOnce(file, made.pdf);
             const at = now();
-            recordLook(db, documentId, contentHash, { status: "saved", lookHash, savedAt: at }, at);
+            const recorded = recordLook(
+              db,
+              documentId,
+              contentHash,
+              { status: "saved", lookHash, savedAt: at },
+              at,
+            );
+            // Deleted permanently while it was made: nothing shows it, unless another page does.
+            if (!recorded && !keptLookHashes(db).has(lookHash)) rmSync(file, { force: true });
           } finally {
             hold([lookHash], -1);
           }
@@ -303,8 +311,22 @@ export function createWebPages(options: WebPagesOptions) {
     queueLook(documentId, contentHash, address);
   };
 
-  // Looks being made when the app last quit were asked for: they are made now.
-  for (const each of looksUnderWay(db)) queueLook(each.documentId, each.contentHash, each.address);
+  // Looks being made when the app last quit were asked for: they are made now, once. One that
+  // was made again already and didn't finish may be what stopped the app: it is given up.
+  for (const each of looksUnderWay(db)) {
+    if (each.resumed) {
+      recordLook(
+        db,
+        each.documentId,
+        each.contentHash,
+        { status: "failed", failure: "stopped" },
+        now(),
+      );
+      continue;
+    }
+    recordLook(db, each.documentId, each.contentHash, { status: "saving", resumed: true }, now());
+    queueLook(each.documentId, each.contentHash, each.address);
+  }
 
   /** Records a version written, and the pictures it shows. */
   const record = (documentId: string, file: SnapshotFile, address: string, page: PageToWrite) => {
@@ -416,7 +438,8 @@ export function createWebPages(options: WebPagesOptions) {
             const file = await write(current.path, page.xhtml);
             record(current.id, file, info.address, page);
             const look = webPageInfo(db, current.id)?.look ?? null;
-            const wanted = info.look !== null || options.keepLookByDefault();
+            // The page's own choice at its save, whatever the setting says now.
+            const wanted = info.look !== null;
             if (wanted && (look === null || look.status === "failed")) {
               startLook(current.id, file.contentHash, info.address);
             }

@@ -9,7 +9,6 @@ import {
   sectionTitleClass,
 } from "./ui";
 
-/** Settings → Search → Saved web pages (#756): whether saving a page keeps it as it looks, off by default. */
 export function SavedWebPagesSettings() {
   const t = useT();
   const on = useAppStore((state) => state.settings?.user.keepWebPageLook);

@@ -958,7 +958,8 @@ export function createCore(adapters: CoreAdapters): Core {
     enabled: () => settings.get().user.webSearch && !embedding.localOnly(),
     readiness: (model) => chat.readiness(model),
     prepare: (model) => chat.prepareModel(model, "web-search", "off"),
-    savePage: (address, fetch) => webPages.save({ address }, undefined, fetch),
+    // A page an Answer saves is never loaded whole: that is for the User to ask for, page by page.
+    savePage: (address, fetch) => webPages.save({ address, keepLook: false }, undefined, fetch),
     folderOf: (place) => {
       try {
         if (place.mindId !== null) return minds.get(place.mindId).folderId;

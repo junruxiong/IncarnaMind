@@ -109,7 +109,7 @@ export interface LaunchOptions {
    * build honours it.
    */
   web?: number;
-  /** How long keeping a page as it looks may take, in milliseconds (#756). A test build honours it. */
+  /** How long keeping a page as it looks may take, in milliseconds. A test build honours it. */
   lookLimit?: number;
   /**
    * What the fake text recognition model reads on each scanned page (#397):

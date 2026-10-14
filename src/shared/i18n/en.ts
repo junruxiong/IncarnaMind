@@ -865,6 +865,10 @@ export const en = {
   "viewer.web.look.failed.timed-out":
     "The page as it looks wasn't kept: it didn't finish loading in 30 seconds.",
   "viewer.web.look.failed.unreachable": "The page as it looks wasn't kept: it couldn't be loaded.",
+  "viewer.web.look.failed.too-large":
+    "The page as it looks wasn't kept: its PDF would be over 50 MB.",
+  "viewer.web.look.failed.stopped":
+    "The page as it looks wasn't kept: IncarnaMind stopped while making it.",
   "viewer.web.look.failed.failed": "The page as it looks wasn't kept.",
   "viewer.web.pictureNotSaved": "Not saved with the page",
   "viewer.docx.comment": "Comment by {author}",

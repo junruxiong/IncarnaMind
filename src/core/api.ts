@@ -2173,9 +2173,9 @@ export interface SaveWebPageInput {
 }
 
 /**
- * A web page's version kept as it looks (#756): a PDF of the page as a
- * browser showed it, made once, in the background, in a hidden window that
- * reaches no Node, other pages, cookies or files.
+ * A web page's version kept as it looks: a PDF of the page as a browser
+ * showed it, made once, in the background, in a hidden page that reaches
+ * only the public internet (src/main/pageLook.ts).
  * - "saving": being made.
  * - "saved": made at `savedAt` (ISO 8601, UTC), served at
  *   `documentImageUrl(documentId, path)`.
@@ -2188,9 +2188,11 @@ export type WebPageLook =
 
 /**
  * Why a page's look couldn't be kept: "timed-out", it didn't load in 30
- * seconds; "unreachable", it couldn't be loaded; "failed", anything else.
+ * seconds; "unreachable", it couldn't be loaded; "too-large", its PDF is over
+ * 50 MB; "stopped", IncarnaMind stopped while making it, twice; "failed",
+ * anything else.
  */
-export type WebPageLookFailure = "timed-out" | "unreachable" | "failed";
+export type WebPageLookFailure = "timed-out" | "unreachable" | "too-large" | "stopped" | "failed";
 
 /**
  * Why a web page wasn't saved, or wasn't fetched again:

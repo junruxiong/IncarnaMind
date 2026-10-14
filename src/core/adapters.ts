@@ -166,8 +166,8 @@ export interface Printer {
 
 /**
  * Makes a PDF of a web page as a browser shows it, for "Keep the page as it
- * looks" (#756). The desktop app loads it once in a hidden window that
- * reaches no Node, other pages, cookies or files (src/main/pageLook.ts).
+ * looks". The desktop app loads it once in a hidden page that reaches only
+ * the public internet (src/main/pageLook.ts).
  */
 export interface PageLook {
   render(
