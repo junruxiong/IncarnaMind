@@ -5,8 +5,8 @@ import { errorMessage } from "../../errors";
 import { useLanguage, useT } from "../../i18n";
 import { giveUpWaiting, useModelSetup } from "../../modelSetup";
 import { useAppStore } from "../../store";
-import { buttonStyle, hintClass } from "../ui";
 import { ChevronRightLineIcon } from "../lineIcons";
+import { buttonStyle, hintClass } from "../ui";
 import { ChatGptMark } from "./ChatGptMark";
 import {
   ChatGptSignInState,
