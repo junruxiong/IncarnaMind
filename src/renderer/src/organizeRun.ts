@@ -1,3 +1,4 @@
+import { create } from "zustand";
 import type { DocumentGroupAssignment } from "../../core/api";
 import { core } from "./core";
 import { translateNow as t } from "./i18n";
@@ -64,3 +65,14 @@ export function sayWhenOrganized(
     else if (sawWorking) finish();
   });
 }
+
+/** The Documents Organize was asked for with no model chosen: what the row under the head says it needs. */
+export const useOrganizeAsk = create<{
+  ids: readonly string[] | null;
+  ask(ids: readonly string[]): void;
+  close(): void;
+}>()((set) => ({
+  ids: null,
+  ask: (ids) => set({ ids }),
+  close: () => set({ ids: null }),
+}));
