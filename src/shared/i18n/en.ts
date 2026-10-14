@@ -639,6 +639,7 @@ export const en = {
   "checks.problem.local-mode":
     "Local mode is on, and the model isn't on this computer, so nothing was checked.",
   "checks.problem.chooseModel": "Choose a model",
+  "checks.tryAgain": "Try again",
   "checks.problem.failed": "Couldn't check: {message}",
   "verify.command": "Verify a document…",
   "verify.command.keywords": "verify check PDF claims fact-check received draft someone else",
@@ -647,6 +648,7 @@ export const en = {
   "verify.refused.unreadable": "Couldn't read that PDF.",
   "verify.refused.no-text":
     "That PDF has no text to check. If it's a scan, its pages couldn't be read.",
+  "verify.mindTitle": "Checking: {name}",
   "verify.from": "From {name}",
   "verify.from.title": "Someone else wrote this text. Open {name} beside it",
   "verify.finding": "Finding the claims to check…",
