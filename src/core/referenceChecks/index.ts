@@ -59,7 +59,6 @@ export function createReferenceChecks(options: ReferenceChecksOptions) {
   const notChecked = (reference: string, reason: ReferenceCheckReason): ReferenceCheck => ({
     reference,
     mark: "not-checked",
-    by: null,
     record: null,
     differences: [],
     reason,
@@ -108,8 +107,10 @@ export function createReferenceChecks(options: ReferenceChecksOptions) {
             } catch (error) {
               if (signal.aborted) return { kind: "cancelled" };
               result = notChecked(entry.cited.text, reasonOf(error));
-              // Crossref asked to slow down: the rest wait for another check.
-              if (result.reason === "rate-limited") stopped = "rate-limited";
+              // Offline, or asked to slow down: the rest wait for another check rather than each failing.
+              if (result.reason === "rate-limited" || result.reason === "unreachable") {
+                stopped = result.reason;
+              }
             }
           }
           references.push({ blockId: entry.blockId, ...result });

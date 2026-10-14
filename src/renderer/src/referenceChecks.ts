@@ -8,6 +8,8 @@
 import { create } from "zustand";
 import type { CheckReferencesResult } from "../../core/api";
 import { core } from "./core";
+import { errorMessage } from "./errors";
+import { translateNow } from "./i18n";
 
 export type ReferenceCheckState =
   | { kind: "checking"; done: number; total: number }
@@ -42,7 +44,7 @@ export async function checkReferences(mindId: string, total: number): Promise<vo
     const result = await core.checkReferences(mindId);
     set(mindId, result.kind === "checked" ? result : null);
   } catch (error) {
-    set(mindId, { kind: "error", message: error instanceof Error ? error.message : String(error) });
+    set(mindId, { kind: "error", message: errorMessage(error, translateNow) });
   }
 }
 

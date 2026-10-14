@@ -3,16 +3,15 @@ import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { TextSelection } from "@tiptap/pm/state";
 import { useEditorState } from "@tiptap/react";
 import { useState } from "react";
-import type { ReferenceCheck } from "../../../core/api";
-import type { Language } from "../../../core/language";
+import type { ReferenceCheckReason } from "../../../core/api";
 import { checkableReferences, type ListBlock } from "../../../shared/referenceList";
-import { formatNames } from "../../../shared/references";
 import { ProblemLine } from "../components/ProblemLine";
 import { buttonStyle } from "../components/ui";
 import { useLanguage, useT } from "../i18n";
 import { turnOffLocalMode } from "../localMode";
 import { checkReferences, stopReferenceCheck, useReferenceChecks } from "../referenceChecks";
 import { useAppStore } from "../store";
+import { NEEDS_A_LOOK, ReferenceCheckList } from "./ReferenceCheckList";
 
 /** The Mind's text Blocks, as the reference list is read from them. */
 function blocksOf(doc: ProseMirrorNode): ListBlock[] {
@@ -28,75 +27,19 @@ function blocksOf(doc: ProseMirrorNode): ListBlock[] {
   return blocks;
 }
 
-const NEEDS_A_LOOK: ReadonlySet<ReferenceCheck["mark"]> = new Set([
-  "not-found",
-  "mismatch",
-  "not-checked",
-]);
-
-/** How many of a found work's authors its record line names before "et al.". */
-const AUTHORS_SHOWN = 3;
-
 /** A part of the line with the dot before it, so a wrapped line never ends on a dot. */
 const AFTER_DOT = "inline-flex items-center gap-2";
 
-/** The dot each mark shows, in DESIGN.md's status colours. */
-const MARK_DOT: Record<ReferenceCheck["mark"], string> = {
-  found: "bg-success",
-  mismatch: "bg-attention",
-  "not-found": "bg-danger",
-  "not-checked": "bg-ink-placeholder",
-};
-
-/**
- * The record a checked reference matched, under it: for one found, its
- * title, authors and year; for any, its DOI, which opens the work.
- */
-function RecordLine({
-  record,
-  found,
-  language,
-}: {
-  record: NonNullable<ReferenceCheck["record"]>;
-  found: boolean;
-  language: Language;
-}) {
-  const t = useT();
-  const names = formatNames(record.authors.slice(0, AUTHORS_SHOWN), language);
-  const parts = found
-    ? [
-        record.title,
-        record.authors.length > AUTHORS_SHOWN ? t("references.record.etAl", { names }) : names,
-        record.year === null ? "" : String(record.year),
-      ].filter(Boolean)
-    : [];
-  if (parts.length === 0 && !record.doi) return null;
-  return (
-    <p data-testid="reference-record" className="mind-reference-record">
-      {parts.join(" · ")}
-      {parts.length > 0 && record.doi && " · "}
-      {record.doi && (
-        <a
-          href={`https://doi.org/${record.doi}`}
-          target="_blank"
-          rel="noreferrer"
-          data-testid="reference-doi"
-          className="mind-reference-link"
-        >
-          {record.doi}
-        </a>
-      )}
-    </p>
-  );
-}
+/** Why a check stopped before asking about the rest: offline, or asked to slow down. */
+const STOPPED: ReadonlySet<ReferenceCheckReason | null> = new Set(["unreachable", "rate-limited"]);
 
 /**
  * The line under a verified document's claims (#711) when its Mind has a
  * reference list: what looking its references up sends, by the button that
  * does it, so clicking it is the consent (ADR-0022); how far a check is,
- * with Stop; then what it found, each reference listed below with its mark,
- * those that need a look first (open at once when there are any). In local
- * mode it says why it can't run, with the way out.
+ * with Stop; then what it found, its references listed below
+ * (ReferenceCheckList), or, offline or slowed down, one problem with Try
+ * again. In local mode it says why it can't run, with the way out.
  */
 export function ReferencesLine({ editor, mindId }: { editor: Editor; mindId: string }) {
   const t = useT();
@@ -150,34 +93,57 @@ export function ReferencesLine({ editor, mindId }: { editor: Editor; mindId: str
     );
   }
 
-  if (state?.kind === "checked") {
-    const tally = (mark: ReferenceCheck["mark"]) =>
-      state.references.filter((reference) => reference.mark === mark).length;
+  const stoppedBy =
+    state?.kind === "checked"
+      ? (state.references.find((reference) => STOPPED.has(reference.reason))?.reason ?? null)
+      : null;
+  const looked =
+    state?.kind === "checked"
+      ? state.references.filter((reference) => !STOPPED.has(reference.reason))
+      : [];
+  // Offline or slowed down, the entries it didn't ask about are one problem, not a row each.
+  const stopped = stoppedBy && (
+    <ProblemLine
+      testId="references-stopped"
+      className="mind-verify-problem"
+      action={{
+        label: t("verify.tryAgain"),
+        testId: "references-try-again",
+        onClick: () => void checkReferences(mindId, count),
+      }}
+    >
+      {t(
+        stoppedBy === "rate-limited"
+          ? "references.stopped.rate-limited"
+          : "references.stopped.unreachable",
+      )}
+    </ProblemLine>
+  );
+
+  if (state?.kind === "checked" && looked.length > 0) {
+    const total = state.references.length;
     const parts = (
       [
         ["not-found", "references.notFound"],
+        ["not-in-crossref", "references.notInCrossref"],
         ["mismatch", "references.mismatch"],
         ["not-checked", "references.notChecked"],
       ] as const
     ).flatMap(([mark, key]) => {
-      const n = tally(mark);
+      const n = looked.filter((reference) => reference.mark === mark).length;
       return n === 0 ? [] : [t(n === 1 ? `${key}.one` : key, { count: format(n) })];
     });
-    const needLook = state.references.filter((reference) => NEEDS_A_LOOK.has(reference.mark));
-    const listed = [
-      ...needLook,
-      ...state.references.filter((reference) => !NEEDS_A_LOOK.has(reference.mark)),
-    ];
-    const open = shown ?? needLook.length > 0;
-    const total = state.references.length;
+    const open = shown ?? looked.some((reference) => NEEDS_A_LOOK.has(reference.mark));
     return (
       <>
         <div className="mind-verify" data-testid="references-line">
           <span data-testid="references-done" className="mind-verify-done">
             <span>
-              {t(total === 1 ? "references.checked.one" : "references.checked", {
-                count: format(total),
-              })}
+              {looked.length < total
+                ? t("references.checkedOf", { done: format(looked.length), total: format(total) })
+                : t(total === 1 ? "references.checked.one" : "references.checked", {
+                    count: format(total),
+                  })}
             </span>
             {parts.map((part) => (
               <span key={part} className={AFTER_DOT}>
@@ -186,20 +152,18 @@ export function ReferencesLine({ editor, mindId }: { editor: Editor; mindId: str
               </span>
             ))}
           </span>
-          {total > 0 && (
-            <span className={AFTER_DOT}>
-              {dot}
-              <button
-                type="button"
-                data-testid="references-toggle"
-                aria-expanded={open}
-                className="mind-verify-link"
-                onClick={() => setShown(!open)}
-              >
-                {t(open ? "references.hide" : "references.show")}
-              </button>
-            </span>
-          )}
+          <span className={AFTER_DOT}>
+            {dot}
+            <button
+              type="button"
+              data-testid="references-toggle"
+              aria-expanded={open}
+              className="mind-verify-link"
+              onClick={() => setShown(!open)}
+            >
+              {t(open ? "references.hide" : "references.show")}
+            </button>
+          </span>
           <span className={AFTER_DOT}>
             {dot}
             <button
@@ -212,63 +176,8 @@ export function ReferencesLine({ editor, mindId }: { editor: Editor; mindId: str
             </button>
           </span>
         </div>
-        {open && total > 0 && (
-          <ul
-            data-testid="references-list"
-            aria-label={t("references.listLabel")}
-            className="mind-references"
-          >
-            {listed.map((reference) => (
-              <li key={`${reference.blockId}\n${reference.reference}`}>
-                <button
-                  type="button"
-                  data-testid="reference-check"
-                  data-mark={reference.mark}
-                  className="mind-reference"
-                  onClick={() => show(reference.blockId)}
-                >
-                  <span className="mind-reference-mark">
-                    <span
-                      aria-hidden="true"
-                      className={`size-1.5 shrink-0 rounded-full ${MARK_DOT[reference.mark]}`}
-                    />
-                    {reference.mark === "not-checked" && reference.reason
-                      ? t(`references.reason.${reference.reason}`)
-                      : t(`references.mark.${reference.mark}`)}
-                  </span>
-                  <span className="mind-reference-text">{reference.reference}</span>
-                  {reference.mark === "not-found" && reference.by && (
-                    <span className="mind-reference-detail">
-                      {t(`references.notFound.${reference.by}`)}
-                    </span>
-                  )}
-                  {reference.differences.map((difference) => (
-                    <span key={difference.field} className="mind-reference-detail">
-                      {difference.field === "year"
-                        ? t("references.difference.year.cited", {
-                            cited: difference.cited ?? "",
-                            found: difference.found,
-                          })
-                        : t(
-                            difference.field === "title"
-                              ? "references.difference.title"
-                              : "references.difference.authors",
-                            { found: difference.found },
-                          )}
-                    </span>
-                  ))}
-                </button>
-                {reference.record && (
-                  <RecordLine
-                    record={reference.record}
-                    found={reference.mark === "found"}
-                    language={language}
-                  />
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
+        {stopped}
+        {open && <ReferenceCheckList references={looked} onShow={show} />}
       </>
     );
   }
@@ -315,6 +224,7 @@ export function ReferencesLine({ editor, mindId }: { editor: Editor; mindId: str
           {t("references.problem", { message: state.message })}
         </ProblemLine>
       )}
+      {stopped}
     </>
   );
 }

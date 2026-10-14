@@ -172,9 +172,9 @@
     },
     {
       "id": "invented-09",
-      "reference": "Haddad, S., Kim, Y., & Rossi, P. (2019). Graph neural operators for turbulent flow closure in stratified oceans. Journal of Fluid Mechanics, 873, 210–239.",
+      "reference": "Haddad, S., Kim, Y., & Rossi, P. (2019). Graph neural operators for turbulent flow closure in stratified oceans. arXiv preprint arXiv:1907.99871.",
       "expected": "not-found",
-      "note": "invented, plausible"
+      "note": "invented, with an invented arXiv number"
     },
     {
       "id": "invented-10",
@@ -202,9 +202,9 @@
     },
     {
       "id": "invented-14",
-      "reference": "Kowalski, P. (2021). Atmospheric lensing as a probe of exoplanet magnetospheres. The Astrophysical Journal, 912(2), 88.",
+      "reference": "Kowalski, P. (2021). Atmospheric lensing as a probe of exoplanet magnetospheres. The Astrophysical Journal, 912(2), 88. https://doi.org/10.3847/1538-4357/abq7z31",
       "expected": "not-found",
-      "note": "invented, plausible"
+      "note": "invented, with an invented DOI"
     },
     {
       "id": "invented-15",

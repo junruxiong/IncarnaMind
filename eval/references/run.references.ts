@@ -1,10 +1,13 @@
 /**
  * The reference check (#711) against Crossref itself: each of the 50
  * references in references.json checked as the app checks one, and its mark
- * compared with what it should be. Reports, for "not found" and "doesn't
- * match", precision (of the references marked so, how many should be) and
- * recall (of those that should be, how many are), and every reference marked
- * otherwise than expected. Writes eval/results/<time>-references.md.
+ * compared with what it should be. An invented reference ("expected":
+ * "not-found") is caught when it is marked "not-found" (red: its DOI leads
+ * nowhere) or "not-in-crossref" (amber: nothing like it in Crossref). Reports
+ * precision (of the references marked so, how many should be) and recall (of
+ * those that should be, how many are) for those two together, for red alone
+ * and for "doesn't match", and every reference marked otherwise than
+ * expected. Writes eval/results/<time>-references.md.
  */
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -23,9 +26,14 @@ const root = fileURLToPath(new URL("../..", import.meta.url));
 interface Expected {
   id: string;
   reference: string;
-  expected: Exclude<ReferenceCheckMark, "not-checked">;
+  expected: "found" | "not-found" | "mismatch";
   note: string;
 }
+
+/** The marks that catch an invented reference. */
+const MISSING: ReadonlySet<ReferenceCheckMark> = new Set(["not-found", "not-in-crossref"]);
+const caught = (expected: Expected["expected"], mark: ReferenceCheckMark) =>
+  expected === "not-found" ? MISSING.has(mark) : expected === mark;
 
 const percent = (hits: number, total: number) =>
   total === 0 ? "–" : `${hits}/${total} (${Math.round((100 * hits) / total)}%)`;
@@ -45,7 +53,6 @@ test("references against Crossref", async () => {
       check = {
         reference: item.reference,
         mark: "not-checked",
-        by: null,
         record: null,
         differences: [],
         reason: "service-error",
@@ -62,11 +69,18 @@ test("references against Crossref", async () => {
     "| Mark | Precision | Recall |",
     "|---|---|---|",
   ];
-  for (const mark of ["not-found", "mismatch"] as const) {
-    const marked = results.filter(({ check }) => check.mark === mark);
-    const should = results.filter(({ item }) => item.expected === mark);
-    const right = marked.filter(({ item }) => item.expected === mark).length;
-    lines.push(`| ${mark} | ${percent(right, marked.length)} | ${percent(right, should.length)} |`);
+  const rows: [string, Expected["expected"], ReadonlySet<ReferenceCheckMark>][] = [
+    ["Not found or not in Crossref", "not-found", MISSING],
+    ["Not found (red) alone", "not-found", new Set(["not-found"])],
+    ["Doesn't match", "mismatch", new Set(["mismatch"])],
+  ];
+  for (const [label, expected, marks] of rows) {
+    const marked = results.filter(({ check }) => marks.has(check.mark));
+    const should = results.filter(({ item }) => item.expected === expected);
+    const right = marked.filter(({ item }) => item.expected === expected).length;
+    lines.push(
+      `| ${label} | ${percent(right, marked.length)} | ${percent(right, should.length)} |`,
+    );
   }
   const found = results.filter(({ item }) => item.expected === "found");
   lines.push(
@@ -76,7 +90,7 @@ test("references against Crossref", async () => {
     "Marked otherwise than expected:",
     "",
     ...results
-      .filter(({ item, check }) => item.expected !== check.mark)
+      .filter(({ item, check }) => !caught(item.expected, check.mark))
       .map(
         ({ item, check }) =>
           `- ${item.id} (${item.note}): expected ${item.expected}, marked ${check.mark}${check.record ? `; Crossref: “${check.record.title}”, ${check.record.year ?? "no year"}, ${formatNames(check.record.authors.slice(0, 2), "en")}` : ""}${check.differences.length > 0 ? `; differs in ${check.differences.map((each) => each.field).join(", ")}` : ""}`,

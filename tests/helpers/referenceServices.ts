@@ -10,7 +10,7 @@
  * it too.
  */
 import { readFileSync } from "node:fs";
-import { createServer } from "node:http";
+import { createServer, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 
@@ -28,8 +28,16 @@ export interface ReferenceServices {
   readonly url: string;
   /** Every request, in order. */
   readonly requests: ServiceRequest[];
-  /** Answers every request with this status from now on (null: answer again). */
-  fail(status: number | null): void;
+  /**
+   * Answers every request with this status from now on, or drops the
+   * connection unanswered, as offline ("unreachable"); null: answer again.
+   */
+  fail(status: number | "unreachable" | null): void;
+  /**
+   * Holds every answer from now on until `release`, as a slow service would;
+   * `reached` settles when the first held request comes in.
+   */
+  pause(): { reached: Promise<void>; release(): void };
   close(): Promise<void>;
 }
 
@@ -79,7 +87,8 @@ export async function startReferenceServices(answers: {
   registered?: Readonly<Record<string, string>>;
 }): Promise<ReferenceServices> {
   const requests: ServiceRequest[] = [];
-  let failure: number | null = null;
+  let failure: number | "unreachable" | null = null;
+  let held: { arrived(): void; waiting: (() => void)[] } | null = null;
   const server = createServer((request, response) => {
     let bodyLength = 0;
     request.on("data", (chunk: Buffer) => {
@@ -88,60 +97,74 @@ export async function startReferenceServices(answers: {
     request.on("end", () => {
       const path = request.url ?? "/";
       requests.push({ method: request.method ?? "", path, bodyLength });
-      if (failure !== null) {
-        response.writeHead(failure).end();
+      if (held) {
+        const { waiting } = held;
+        held.arrived();
+        waiting.push(() => answer(path, response));
         return;
       }
-      const url = new URL(path, "http://localhost");
-      const agencyOf = /^\/works\/(.+)\/agency$/.exec(url.pathname)?.[1];
-      if (agencyOf !== undefined) {
-        const asked = decodeURIComponent(agencyOf).toLowerCase();
-        const agency =
-          answers.works?.some((work) => work.DOI.toLowerCase() === asked) ||
-          Object.keys(answers.crossref ?? {}).some((doi) => doi.toLowerCase() === asked)
-            ? "crossref"
-            : Object.entries(answers.registered ?? {}).find(
-                ([doi]) => doi.toLowerCase() === asked,
-              )?.[1];
-        if (agency) {
-          response.writeHead(200, { "content-type": "application/json" }).end(
-            JSON.stringify({
-              status: "ok",
-              message: { DOI: asked, agency: { id: agency, label: agency } },
-            }),
-          );
-        } else {
-          response.writeHead(404, { "content-type": "text/plain" }).end("Resource not found.");
-        }
-        return;
-      }
-      const doi = url.pathname.startsWith("/works/")
-        ? decodeURIComponent(url.pathname.slice("/works/".length))
-        : null;
-      const id = url.pathname === "/api/query" ? url.searchParams.get("id_list") : null;
-      const work =
-        doi === null
-          ? undefined
-          : answers.works?.find((each) => each.DOI.toLowerCase() === doi.toLowerCase());
-      const crossref =
-        doi === null
-          ? undefined
-          : (answers.crossref?.[doi] ?? (work && JSON.stringify({ status: "ok", message: work })));
-      const arxiv = id === null ? undefined : answers.arxiv?.[id];
-      const query = url.pathname === "/works" ? url.searchParams.get("query.bibliographic") : null;
-      if (query !== null) {
-        response
-          .writeHead(200, { "content-type": "application/json" })
-          .end(searched(answers.works ?? [], query));
-      } else if (crossref !== undefined) {
-        response.writeHead(200, { "content-type": "application/json" }).end(crossref);
-      } else if (arxiv !== undefined) {
-        response.writeHead(200, { "content-type": "application/atom+xml" }).end(arxiv);
+      answer(path, response);
+    });
+  });
+  function answer(path: string, response: ServerResponse) {
+    if (failure === "unreachable") {
+      // The connection drops with no answer, as when the computer is offline.
+      response.socket?.destroy();
+      return;
+    }
+    if (failure !== null) {
+      response.writeHead(failure).end();
+      return;
+    }
+    const url = new URL(path, "http://localhost");
+    const agencyOf = /^\/works\/(.+)\/agency$/.exec(url.pathname)?.[1];
+    if (agencyOf !== undefined) {
+      const asked = decodeURIComponent(agencyOf).toLowerCase();
+      const agency =
+        answers.works?.some((work) => work.DOI.toLowerCase() === asked) ||
+        Object.keys(answers.crossref ?? {}).some((doi) => doi.toLowerCase() === asked)
+          ? "crossref"
+          : Object.entries(answers.registered ?? {}).find(
+              ([doi]) => doi.toLowerCase() === asked,
+            )?.[1];
+      if (agency) {
+        response.writeHead(200, { "content-type": "application/json" }).end(
+          JSON.stringify({
+            status: "ok",
+            message: { DOI: asked, agency: { id: agency, label: agency } },
+          }),
+        );
       } else {
         response.writeHead(404, { "content-type": "text/plain" }).end("Resource not found.");
       }
-    });
-  });
+      return;
+    }
+    const doi = url.pathname.startsWith("/works/")
+      ? decodeURIComponent(url.pathname.slice("/works/".length))
+      : null;
+    const id = url.pathname === "/api/query" ? url.searchParams.get("id_list") : null;
+    const work =
+      doi === null
+        ? undefined
+        : answers.works?.find((each) => each.DOI.toLowerCase() === doi.toLowerCase());
+    const crossref =
+      doi === null
+        ? undefined
+        : (answers.crossref?.[doi] ?? (work && JSON.stringify({ status: "ok", message: work })));
+    const arxiv = id === null ? undefined : answers.arxiv?.[id];
+    const query = url.pathname === "/works" ? url.searchParams.get("query.bibliographic") : null;
+    if (query !== null) {
+      response
+        .writeHead(200, { "content-type": "application/json" })
+        .end(searched(answers.works ?? [], query));
+    } else if (crossref !== undefined) {
+      response.writeHead(200, { "content-type": "application/json" }).end(crossref);
+    } else if (arxiv !== undefined) {
+      response.writeHead(200, { "content-type": "application/atom+xml" }).end(arxiv);
+    } else {
+      response.writeHead(404, { "content-type": "text/plain" }).end("Resource not found.");
+    }
+  }
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const { port } = server.address() as AddressInfo;
   return {
@@ -149,6 +172,21 @@ export async function startReferenceServices(answers: {
     requests,
     fail(status) {
       failure = status;
+    },
+    pause() {
+      let arrived = () => {};
+      const reached = new Promise<void>((resolve) => {
+        arrived = resolve;
+      });
+      const waiting: (() => void)[] = [];
+      held = { arrived, waiting };
+      return {
+        reached,
+        release() {
+          held = null;
+          for (const each of waiting.splice(0)) each();
+        },
+      };
     },
     close: () => new Promise<void>((resolve) => server.close(() => resolve())),
   };

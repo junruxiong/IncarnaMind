@@ -1,6 +1,12 @@
 import { describe, expect, onTestFinished, test } from "vitest";
 import type { Core, CoreEvents } from "../../src/core";
-import { citedReference, differences, titleCoverage } from "../../src/core/referenceChecks/match";
+import {
+  citedReference,
+  differences,
+  holdsTitle,
+  titleCoverage,
+} from "../../src/core/referenceChecks/match";
+import { checkableReferences } from "../../src/shared/referenceList";
 import { createTempDataFolder, startCore } from "../helpers/core";
 import { connectToMind } from "../helpers/mindClient";
 import { heading, note, writeMind } from "../helpers/minds";
@@ -79,7 +85,7 @@ async function setUp(
 }
 
 describe("Checking a reference list (#711)", { timeout: 30_000 }, () => {
-  // protects=each mark: found by search and by DOI, not found (invented, or a DOI or arXiv number leading nowhere), doesn't match (year, author), not checked when another agency holds the DOI; a web page isn't looked up; only the reference is sent; checking again asks nothing twice; fails_when=a mark is wrong, a preprint reads as not found, more than the reference goes, or a reference is asked about again; no_claim=Crossref's real matching (the evaluation, eval/references).
+  // protects=each mark: found by search and by DOI, not in Crossref (searched, nothing like it), not found (a DOI or arXiv number leading nowhere), doesn't match (year, author), not checked when another agency holds the DOI; a web page isn't looked up; only the reference is sent; checking again asks nothing twice; fails_when=a mark is wrong, a search miss reads as an invented reference, a preprint reads as not found, more than the reference goes, or a reference is asked about again; no_claim=Crossref's real matching (the evaluation, eval/references).
   test("every entry gets its mark, and only the reference is sent", async () => {
     const entries = [
       REAL,
@@ -99,15 +105,15 @@ describe("Checking a reference list (#711)", { timeout: 30_000 }, () => {
     const result = await core.checkReferences(mindId);
 
     if (result.kind !== "checked") throw new Error(`Not checked: ${result.kind}`);
-    expect(result.references.map(({ mark, by, reason }) => [mark, by, reason])).toEqual([
-      ["found", "search", null],
-      ["found", "doi", null],
-      ["not-found", "search", null],
-      ["mismatch", "search", null],
-      ["mismatch", "doi", null],
-      ["not-found", "doi", null],
-      ["not-checked", "doi", "registered-elsewhere"],
-      ["not-found", "doi", null],
+    expect(result.references.map(({ mark, reason }) => [mark, reason])).toEqual([
+      ["found", null],
+      ["found", null],
+      ["not-in-crossref", null],
+      ["mismatch", null],
+      ["mismatch", null],
+      ["not-found", null],
+      ["not-checked", "registered-elsewhere"],
+      ["not-found", null],
     ]);
     const [real, byDoi, , wrongYear, wrongAuthor] = result.references;
     expect(real?.record).toEqual({
@@ -187,7 +193,7 @@ describe("Checking a reference list (#711)", { timeout: 30_000 }, () => {
     expect(services.requests).toEqual([]);
   });
 
-  // protects=a failing or unreachable Crossref leaves entries not checked with the reason, never "not found"; fails_when=a failure reads as not found; no_claim=none beyond protects.
+  // protects=a failing or unreachable Crossref leaves entries not checked with the reason, never "not found"; offline, one request fails and the rest aren't sent; fails_when=a failure reads as not found, or every entry is tried offline; no_claim=none beyond protects.
   test("when Crossref fails or can't be reached, entries are not checked, never not found", async () => {
     const failing = await setUp([REAL, INVENTED]);
     failing.services.fail(500);
@@ -196,6 +202,25 @@ describe("Checking a reference list (#711)", { timeout: 30_000 }, () => {
       references: [
         { mark: "not-checked", reason: "service-error" },
         { mark: "not-checked", reason: "service-error" },
+      ],
+    });
+
+    const dropped = await setUp([REAL, INVENTED, WRONG_YEAR, DEAD_DOI]);
+    dropped.services.fail("unreachable");
+    expect(await dropped.core.checkReferences(dropped.mindId)).toMatchObject({
+      kind: "checked",
+      references: Array.from({ length: 4 }, () => ({ mark: "not-checked", reason: "unreachable" })),
+    });
+    expect(dropped.services.requests).toHaveLength(1);
+    // Back online, Try again checks them all.
+    dropped.services.fail(null);
+    expect(await dropped.core.checkReferences(dropped.mindId)).toMatchObject({
+      kind: "checked",
+      references: [
+        { mark: "found" },
+        { mark: "not-in-crossref" },
+        { mark: "mismatch" },
+        { mark: "not-found" },
       ],
     });
 
@@ -212,7 +237,7 @@ describe("Checking a reference list (#711)", { timeout: 30_000 }, () => {
     });
   });
 
-  // protects=a Mind with no reference list says so and sends nothing; a stopped check gives "cancelled"; fails_when=either sends or hangs; no_claim=none beyond protects.
+  // protects=a Mind with no reference list says so and sends nothing; Stop gives "cancelled" and nothing more is sent; fails_when=either sends, hangs, or a stopped check goes on asking; no_claim=none beyond protects.
   test("no reference list sends nothing; Stop cancels a check under way", async () => {
     const services = await startReferenceServices({ works: [LSTM] });
     onTestFinished(() => services.close());
@@ -227,9 +252,13 @@ describe("Checking a reference list (#711)", { timeout: 30_000 }, () => {
     expect(services.requests).toEqual([]);
 
     const busy = await setUp([REAL, INVENTED, WRONG_YEAR, DEAD_DOI]);
+    const slow = busy.services.pause();
     const checking = busy.core.checkReferences(busy.mindId);
+    await slow.reached;
     await busy.core.stopReferenceCheck(busy.mindId);
     expect(await checking).toEqual({ kind: "cancelled" });
+    slow.release();
+    expect(busy.services.requests).toHaveLength(1);
   });
 });
 
@@ -243,6 +272,32 @@ describe("Reading a reference as written", () => {
     expect(
       citedReference("Wu, L. (2021). 深度学习综述. 计算机学报. https://doi.org/10.1234/2019.5"),
     ).toMatchObject({ doi: "10.1234/2019.5", year: 2021 });
+  });
+
+  // protects=a list ends at the first paragraph that isn't a reference, so an appendix after it isn't looked up; fails_when=the appendix's text is taken for a reference; no_claim=none beyond protects.
+  test("its list ends where the references do", () => {
+    const blocks = [
+      { id: "a", heading: false, text: "Recurrent networks remember (1997)." },
+      { id: "b", heading: true, text: "参考文献" },
+      { id: "c", heading: false, text: REAL },
+      { id: "d", heading: false, text: `[2] ${BY_DOI}` },
+      {
+        id: "e",
+        heading: false,
+        text: "The survey asked forty people about their reading habits.",
+      },
+      { id: "f", heading: false, text: INVENTED },
+    ];
+    expect(checkableReferences(blocks).map((entry) => entry.blockId)).toEqual(["c", "d"]);
+  });
+
+  // protects=a short title must stand alone in the reference, so a record titled "Introduction" isn't a longer title's work; a short real title still is; fails_when=either is wrong; no_claim=none beyond protects.
+  test("a short title stands alone", () => {
+    const longer = "Smith, J. (2020). Introduction to quantum widgets. Widget Letters, 3.";
+    expect(holdsTitle(longer, "Introduction")).toBe(false);
+    expect(holdsTitle(longer, "Introduction to Quantum Widgets")).toBe(true);
+    expect(holdsTitle(BY_DOI, "Deep learning")).toBe(true);
+    expect(holdsTitle(REAL, "Deep learning")).toBe(false);
   });
 
   // protects=a title matches in any case, with accents and in Chinese; another title doesn't; fails_when=either is wrong; no_claim=none beyond protects.

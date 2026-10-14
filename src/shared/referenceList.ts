@@ -1,7 +1,8 @@
 /**
  * A reference list in a Mind's Blocks (#711): the Blocks after a heading
- * such as "References", "Bibliography" or "参考文献", until the next heading,
- * each entry as written. A Block holding several numbered entries ("[1] …
+ * such as "References", "Bibliography" or "参考文献", until the next heading
+ * or the first paragraph that isn't a reference (an appendix's text), each
+ * entry as written. A Block holding several numbered entries ("[1] …
  * [2] …"), as a PDF's list can come out, is split at their numbers. Read by
  * the core to check the list, and by the editor to offer the check.
  */
@@ -17,6 +18,19 @@ export const DOI_IN_TEXT = /(?:doi\.org\/|doi\s*[:：]?\s*)?(10\.\d{4,9}\/[^\s"<
 /** An arXiv number as a reference writes it: "arXiv:1706.03762", or in an arxiv.org address. */
 export const ARXIV_IN_TEXT = new RegExp(
   `(?:arxiv\\s*[:：]\\s*|arxiv\\.org/(?:abs|pdf)/)${ARXIV_ID.source}`,
+  "i",
+);
+/** A year a reference names: four digits from 1500 to 2099. */
+export const YEAR_IN_TEXT = /(?<!\d)(1[5-9]\d\d|20\d\d)(?!\d)/;
+/** What every reference holds one of: a year, a DOI, an arXiv number, a web address or its number in the list. */
+const REFERENCE_SIGN = new RegExp(
+  [
+    YEAR_IN_TEXT.source,
+    DOI_IN_TEXT.source,
+    ARXIV_IN_TEXT.source,
+    "https?://",
+    "^\\[\\d{1,3}\\]",
+  ].join("|"),
   "i",
 );
 /** Fewer title words than this, and a reference says too little to look up. */
@@ -97,8 +111,13 @@ function referenceEntries(blocks: readonly ListBlock[]): ListedReference[] {
       continue;
     }
     if (!listing || !text) continue;
-    for (const part of text.split(NUMBERED)) {
-      if (part.trim()) entries.push({ blockId: block.id, text: part.trim() });
+    for (const part of text.split(NUMBERED).map((each) => each.trim())) {
+      if (!part) continue;
+      if (!REFERENCE_SIGN.test(part)) {
+        listing = false;
+        break;
+      }
+      entries.push({ blockId: block.id, text: part });
     }
   }
   return entries;

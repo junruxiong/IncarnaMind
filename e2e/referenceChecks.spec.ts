@@ -125,15 +125,17 @@ test("a verified document's references are looked up, and the invented one is fl
   await screenshot(window, "references-start-en");
   await pointAndClick(window, line.getByTestId("references-check"));
 
-  await expect(line.getByTestId("references-done")).toHaveText("Checked 3 references·1 not found");
+  await expect(line.getByTestId("references-done")).toHaveText(
+    "Checked 3 references·1 not in Crossref",
+  );
   // The one that needs a look comes first, saying how much its mark can say.
   const listed = window.getByTestId("reference-check");
   await expect(listed).toHaveCount(3);
   const flagged = listed.first();
-  await expect(flagged).toHaveAttribute("data-mark", "not-found");
-  await expect(flagged).toContainText("We couldn't find this work");
+  await expect(flagged).toHaveAttribute("data-mark", "not-in-crossref");
+  await expect(flagged).toContainText("Not in Crossref");
   await expect(flagged).toContainText("Quantum gradient folding");
-  await expect(flagged).toContainText("Crossref has no record like it.");
+  await expect(flagged).toContainText("so the work may still exist");
   // The found ones follow, each with the record it matched and its DOI, which opens the work.
   await expect(listed.nth(1)).toHaveAttribute("data-mark", "found");
   const record = window.getByTestId("reference-record").first();
@@ -176,8 +178,10 @@ test("in Chinese and a narrow window, and in local mode, where it says why and o
     "在 Crossref 中查找列表里的 3 条参考文献，只发送每条参考文献的原文。",
   );
   await pointAndClick(window, line.getByTestId("references-check"));
-  await expect(line.getByTestId("references-done")).toHaveText("已核对 3 条参考文献·1 条未找到");
-  await expect(window.getByTestId("reference-check").first()).toContainText("找不到这部作品");
+  await expect(line.getByTestId("references-done")).toHaveText(
+    "已核对 3 条参考文献·1 条不在 Crossref 中",
+  );
+  await expect(window.getByTestId("reference-check").first()).toContainText("不在 Crossref 中");
   await screenshot(window, "references-flagged-zh");
   // Narrow, the line wraps rather than overflowing the Mind.
   const lineBox = await line.boundingBox();
@@ -185,5 +189,38 @@ test("in Chinese and a narrow window, and in local mode, where it says why and o
   expect((lineBox?.x ?? 0) + (lineBox?.width ?? 0)).toBeLessThanOrEqual(
     (editorBox?.x ?? 0) + (editorBox?.width ?? 0) + 1,
   );
+  await app.close();
+});
+
+test("Stop ends a check; offline, it stops at the first failure with one problem and Try again", async () => {
+  const { app, window } = await verifyPaper(1440);
+  const line = window.getByTestId("references-line");
+
+  // A slow Crossref: Stop ends the check where it is, and nothing more is asked.
+  const slow = services.pause();
+  await pointAndClick(window, line.getByTestId("references-check"));
+  await expect(line.getByTestId("references-progress")).toBeVisible();
+  await slow.reached;
+  await pointAndClick(window, line.getByTestId("references-stop"));
+  await expect(line.getByTestId("references-check")).toBeVisible();
+  slow.release();
+  expect(services.requests).toHaveLength(1);
+
+  // Offline: one request fails, the rest aren't sent, and one problem says so.
+  services.fail("unreachable");
+  await pointAndClick(window, line.getByTestId("references-check"));
+  const stopped = window.getByTestId("references-stopped");
+  await expect(stopped).toContainText("Crossref couldn't be reached.");
+  await expect(window.getByTestId("reference-check")).toHaveCount(0);
+  expect(services.requests).toHaveLength(2);
+  await screenshot(window, "references-offline-en");
+
+  // Back online, Try again checks them.
+  services.fail(null);
+  await pointAndClick(window, stopped.getByTestId("references-try-again"));
+  await expect(line.getByTestId("references-done")).toHaveText(
+    "Checked 3 references·1 not in Crossref",
+  );
+  await expect(stopped).toHaveCount(0);
   await app.close();
 });
