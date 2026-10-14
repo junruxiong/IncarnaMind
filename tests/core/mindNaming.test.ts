@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { type Core, messageReference } from "../../src/core";
 import { createTempDataFolder, startCore } from "../helpers/core";
 import { appendParagraph, connectToMind, typeInto } from "../helpers/mindClient";
 
@@ -82,5 +83,75 @@ describe("a Mind without a title", () => {
 
     const deleted = (await core.listDeleted()).find((item) => item.id === mind.id);
     expect(deleted?.name).toBe("Tides and the moon");
+  });
+});
+
+describe("a Mind whose first Note was added from an Answer (#769)", () => {
+  const addAnswer = (core: Core, mindId: string, question: string, answer: string) =>
+    core.addToNote({
+      mindId,
+      blocks: [{ type: "paragraph", content: [{ type: "text", text: answer }] }],
+      origin: { from: messageReference("conversation-1", "answer-1"), question },
+      model: null,
+    });
+  const nameOf = async (core: Core) => (await core.listMinds())[0]?.autoTitle;
+
+  test("is named by the Question, cut at a clause, not by the Answer's first line", async () => {
+    const core = startCore(await createTempDataFolder());
+    const mind = await core.createMind();
+    await addAnswer(
+      core,
+      mind.id,
+      "How many days of holiday does the employee get, and how much notice after probation?",
+      "The employee gets 27 days of paid holiday per year, plus bank holidays, and the notice after probation is one month.",
+    );
+
+    expect(await nameOf(core)).toBe("How many days of holiday does the employee get");
+  });
+
+  test("is named by a Chinese Question, cut cleanly", async () => {
+    const core = startCore(await createTempDataFolder());
+    const mind = await core.createMind();
+    await addAnswer(
+      core,
+      mind.id,
+      "员工每年享有多少天带薪年假，试用期结束后需要提前多久通知公司解除劳动合同，以及需要支付哪些补偿，还有哪些情形下公司可以不提前通知直接解除合同？",
+      "员工每年享有二十七天带薪年假，另外还享有法定节假日，试用期结束后双方需要提前一个月书面通知对方。",
+    );
+
+    expect(await nameOf(core)).toBe(
+      "员工每年享有多少天带薪年假，试用期结束后需要提前多久通知公司解除劳动合同，以及需要支付哪些补偿",
+    );
+  });
+
+  test("keeps the name of a line the User wrote above it", async () => {
+    const core = startCore(await createTempDataFolder());
+    const mind = await core.createMind();
+    const client = await connectToMind(core, mind.id);
+    appendParagraph(client, "Holiday rules");
+    await client.settled();
+    await addAnswer(core, mind.id, "How many days of holiday?", "Twenty-seven days.");
+
+    expect(await nameOf(core)).toBe("Holiday rules");
+  });
+
+  test("never replaces a title the User typed", async () => {
+    const core = startCore(await createTempDataFolder());
+    const mind = await core.createMind({ title: "My title" });
+    await addAnswer(core, mind.id, "How many days of holiday?", "Twenty-seven days.");
+
+    const [listed] = await core.listMinds();
+    expect(listed?.title).toBe("My title");
+  });
+
+  test("goes again when the Note is taken out", async () => {
+    const core = startCore(await createTempDataFolder());
+    const mind = await core.createMind();
+    const added = await addAnswer(core, mind.id, "How many days of holiday?", "Twenty-seven days.");
+    expect(await nameOf(core)).toBe("How many days of holiday");
+
+    await core.undoAddToNote({ mindId: mind.id, blockIds: added.blockIds });
+
+    expect(await nameOf(core)).toBe("");
   });
 });

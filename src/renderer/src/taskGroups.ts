@@ -47,7 +47,7 @@ export interface ThreadStart {
 
 /**
  * The Tasks a conversation's thread shows for the Mind the assistant reads
- * (D189): those still going, those it showed going, the one a click asked to
+ * (#657): those still going, those it showed going, the one a click asked to
  * show, and those started since the thread began; oldest first.
  */
 export function threadTasks(

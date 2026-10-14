@@ -374,7 +374,7 @@ export function createAgentSetup(options: AgentSetupOptions) {
       const client = clientDefinition(input.client);
       if (!client) throw new InvalidInputError("Unknown agent.");
       if (!Array.isArray(input.folderIds) || input.folderIds.length === 0) {
-        throw new InvalidInputError("Choose at least one Folder for the agent to read.");
+        throw new InvalidInputError({ key: "error.agent.noFolders" });
       }
       // Before pairing, so the settings the pairing announces already show it.
       // The agent still works without it, from the server's instructions.
@@ -409,7 +409,10 @@ export function createAgentSetup(options: AgentSetupOptions) {
       const files = written.get(pairingId) ?? [];
       for (const file of files) {
         if ((await readText(file.path)) !== file.after) {
-          throw new InvalidInputError(t("agents.setup.undoChanged", { path: file.path }));
+          throw new InvalidInputError({
+            key: "error.agent.undoChanged",
+            values: { path: file.path },
+          });
         }
       }
       for (const file of files) {
@@ -425,7 +428,7 @@ export function createAgentSetup(options: AgentSetupOptions) {
 
     async settingsFor(pairingId: unknown) {
       const pairing = options.agents.settings().pairings.find((each) => each.id === pairingId);
-      if (!pairing) throw new NotFoundError("That agent isn't connected.");
+      if (!pairing) throw new NotFoundError({ key: "error.agent.notConnected" });
       const launch = await options.agents.launch(pairing.id);
       const token = launch.env[AGENT_TOKEN_ENV] ?? "";
       if (pairing.client === "claude-code") {

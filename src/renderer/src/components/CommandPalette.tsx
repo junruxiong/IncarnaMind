@@ -46,6 +46,8 @@ import {
   SparkLineIcon,
 } from "./lineIcons";
 import { Marked } from "./Marked";
+import { ProblemMark } from "./ProblemLine";
+import { errorTextClass } from "./ui";
 
 /** How long typing pauses before the words inside are searched for. */
 const WORDS_DELAY_MS = 120;
@@ -287,11 +289,8 @@ function Palette() {
           </Group>
         ))}
         {problem !== undefined ? (
-          <p
-            id={`${id}-status`}
-            role="alert"
-            className="px-2 pt-3 text-[13px] leading-5 break-words text-danger"
-          >
+          <p id={`${id}-status`} role="alert" className={`px-2 pt-3 ${errorTextClass}`}>
+            <ProblemMark />
             {problem}
           </p>
         ) : (

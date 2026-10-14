@@ -57,6 +57,8 @@ async function pressTab(window: Page): Promise<Stop | null> {
     const shows =
       caret ||
       ringOn(element, field ? 1 : 2) ||
+      // A sidebar row's main button leaves its ring to the row, which draws it round the whole row.
+      (element.matches(".row-main") && ringOn(element.closest(".group"), 2)) ||
       // A tab draws its ring on its inner shape.
       (element.matches(".tab") && ringOn(element.querySelector(".tab-inner"), 2)) ||
       // A pane's divider, a 1px rule, turns blue and shows its grip; the 8px gap before the
