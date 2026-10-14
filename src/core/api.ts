@@ -6229,6 +6229,12 @@ export interface StartMeetingInput {
 // Outside agents (#351, experimental)
 
 /**
+ * Stands for Not in a Folder where a Folder's id goes in a pairing's scope and in an
+ * agent's `folderIds`. A Folder's id is a random UUID, so it can't be one.
+ */
+export const NOT_IN_A_FOLDER_ID = "not-in-a-folder";
+
+/**
  * An outside agent the User connected: an AI agent they run themselves, such
  * as Claude Code or Codex, that uses IncarnaMind as an MCP server. One pairing
  * per agent, on this device only: the agent runs on this computer.
@@ -6237,7 +6243,11 @@ export interface AgentPairing {
   id: string;
   /** What the User calls it, e.g. "Claude Code". Unique among pairings, ignoring case. */
   name: string;
-  /** The Folders it may search and read, with their Minds. None until the User picks some. */
+  /**
+   * The Folders it may search and read, with their Minds, and `NOT_IN_A_FOLDER_ID` for the
+   * Documents in no Folder at the time of each call, without their Minds. None until the
+   * User picks some.
+   */
   folderIds: string[];
   /** The agent it was set up in, e.g. "codex"; null for one set up by hand. */
   client: string | null;
@@ -6262,7 +6272,7 @@ export interface AgentSettings {
 export interface ConnectAgentInput {
   /** Trimmed; must not be empty, nor another pairing's name (ignoring case). */
   name: string;
-  /** Folders (by id) it may read; none by default. */
+  /** Folders (by id, or `NOT_IN_A_FOLDER_ID`) it may read; none by default. */
   folderIds?: string[];
   /** The agent it is set up in, e.g. "codex": lower-case letters, digits and hyphens. */
   client?: string;

@@ -5,7 +5,9 @@
  * checked here, not in the transport: the pairing must still exist,
  * connecting agents be on, Local mode off and the User's consent in place,
  * and it reaches only the Documents in the pairing's Folders and those
- * Folders' Minds. Nothing here changes the User's Documents or Minds.
+ * Folders' Minds, and, if Not in a Folder is one of them, the Documents in no
+ * Folder at the time of each call (never a Mind). Nothing here changes the
+ * User's Documents or Minds.
  *
  * Only IncarnaMind mints a Citation (./citations): a quote is checked first,
  * by the Citation check Answers use, and gets a token only once found. A
@@ -19,16 +21,17 @@ import type { MessageKey, MessageParams } from "../../shared/i18n/types";
 import type { OutsideAnswer } from "../answers";
 import type { Citing } from "../answers/citing";
 import { matchingTerms } from "../answers/citing";
-import type {
-  AgentActivity,
-  AgentCitationShown,
-  AgentProblem,
-  AgentToolName,
-  Citation,
-  CitationLocation,
-  CitationRecheck,
-  Effect,
-  Mind,
+import {
+  type AgentActivity,
+  type AgentCitationShown,
+  type AgentProblem,
+  type AgentToolName,
+  type Citation,
+  type CitationLocation,
+  type CitationRecheck,
+  type Effect,
+  type Mind,
+  NOT_IN_A_FOLDER_ID,
 } from "../api";
 import { keywordTerms } from "../documents/keywords";
 import type { WindowedPassage } from "../documents/search";
@@ -253,7 +256,7 @@ export interface AgentAccessDeps {
   admit(pairingId: string): AdmittedPairing;
   /** The live Folders. */
   folders(): { id: string; name: string }[];
-  /** The ids of the live Documents in these Folders. */
+  /** The ids of the live Documents in these Folders; `NOT_IN_A_FOLDER_ID` stands for those in no Folder now. */
   documentsIn(folderIds: readonly string[]): string[];
   /** The search Answers use, without reranking, over these Documents. */
   search(
@@ -734,7 +737,7 @@ export function createAgentAccess(deps: AgentAccessDeps, pairingId: string): Age
           throw new AgentRefusedError("no-folders", t("agents.problem.no-folders"));
         }
         const minds = deps.minds();
-        const folders = deps
+        const folders: AgentMindList["folders"] = deps
           .folders()
           .filter((folder) => pairing.folderIds.includes(folder.id))
           .map((folder) => ({
@@ -749,6 +752,14 @@ export function createAgentAccess(deps: AgentAccessDeps, pairingId: string): Age
                 updatedAt: mind.updatedAt,
               })),
           }));
+        if (pairing.folderIds.includes(NOT_IN_A_FOLDER_ID)) {
+          folders.push({
+            id: NOT_IN_A_FOLDER_ID,
+            name: t("library.unsorted"),
+            documents: deps.documentsIn([NOT_IN_A_FOLDER_ID]).length,
+            minds: [],
+          });
+        }
         return {
           result: { folders },
           count: folders.reduce((sum, folder) => sum + folder.minds.length, 0),
