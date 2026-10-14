@@ -1273,7 +1273,13 @@ export function createCore(adapters: CoreAdapters): Core {
     document: (documentId) => documents.get(documentId),
     onStatus: (listener) => events.on("document.status", listener),
     readText: (documentId) => documents.readText(documentId),
-    createMind: (title, folderId) => makeMind({ title, kind: DEFAULT_MIND_KIND, folderId }),
+    // Named so it doesn't share its Document's name in ⌘K and the sidebar.
+    createMind: (title, folderId) =>
+      makeMind({
+        title: translate(settings.get().language, "verify.mindTitle", { name: title }),
+        kind: DEFAULT_MIND_KIND,
+        folderId,
+      }),
     mindFolder: (mindId) => minds.get(mindId).folderId,
     originalOf: (mindId) => wordImports.originalOf(mindId),
     defaultModel: () => settings.get().user.chatModel,
