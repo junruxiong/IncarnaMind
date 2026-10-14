@@ -1026,7 +1026,11 @@ export function createCore(adapters: CoreAdapters): Core {
       folderName: (folderId) =>
         library.folders().find((folder) => folder.id === folderId)?.name ?? null,
       writing: (mindId, place) =>
-        events.emit("mind.writing", { mindId, after: place?.after ?? null, writing: place !== null }),
+        events.emit("mind.writing", {
+          mindId,
+          after: place?.after ?? null,
+          writing: place !== null,
+        }),
       proposeInMind: (input) => edits.proposeInMind(input),
     },
     withdrawChanges: (changes) => {
