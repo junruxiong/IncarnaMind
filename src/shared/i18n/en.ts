@@ -3621,8 +3621,11 @@ export const en = {
   "agents.connect.name": "Name",
   "agents.connect.namePlaceholder": "My agent",
   "agents.connect.folders": "Folders it may read",
-  "agents.connect.noFolders":
-    "You don’t have any folders yet. Make one in the Library, then come back.",
+  "agents.connect.allUnfiled":
+    "Your Documents aren’t in Folders yet, so these are all of them. To share only some, put them in a Folder in the Library first.",
+  "agents.connect.empty.title": "Nothing to read yet",
+  "agents.connect.empty.body":
+    "Add the Documents you want {agent} to read. They’ll appear here, ready to choose.",
   "agents.connect.pickOne": "Choose at least one folder.",
   "agents.connect.fileChange": "IncarnaMind adds these lines to {path}:",
   "agents.connect.skill":

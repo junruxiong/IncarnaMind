@@ -787,6 +787,20 @@ async function resizeContent(
   );
 }
 
+/** What the page copies goes to `copied` instead of the machine's clipboard. */
+export async function catchCopies(window: Page): Promise<void> {
+  await window.evaluate(() => {
+    const caught = globalThis as unknown as { copied?: string };
+    navigator.clipboard.writeText = async (text: string) => {
+      caught.copied = text;
+    };
+  });
+}
+
+/** What the page last copied since `catchCopies`. */
+export const copied = (window: Page) =>
+  window.evaluate(() => (globalThis as unknown as { copied?: string }).copied ?? "");
+
 /** Switches the interface's language, as Settings does. */
 export function setLanguage(window: Page, language: "en" | "zh-CN"): Promise<unknown> {
   return window.evaluate(
