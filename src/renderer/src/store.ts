@@ -206,6 +206,8 @@ interface AppState extends LayoutSlice {
     scope?: SearchScope | null;
     folderId?: string | null;
     groupId?: string;
+    /** Runs once it is made and shown, with its id. */
+    made?(mindId: string): void;
   }): Promise<Undoable | undefined>;
   /**
    * Moves Minds and Documents into a Folder, or out of every Folder (null):
@@ -814,6 +816,7 @@ export const useAppStore = create<AppState>()((set, get) => {
               : { titleToFocus: mind.id },
         );
         await get().showNewMind(mind, options?.groupId);
+        options?.made?.(mind.id);
       });
       return made;
     },

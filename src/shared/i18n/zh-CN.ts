@@ -3223,7 +3223,7 @@ export const zhCN = {
   "answer.add": "添加到笔记",
   "answer.add.to": "添加到“{mind}”（{shortcut}）",
   "answer.add.choose": "选择要添加到的 Mind",
-  "mindChanges.minds": "修改了 {count} 个 Mind",
+  "mindChanges.minds": "已修改的 Mind（{count}）",
   "mindChanges.one": "“{mind}”中有 {count} 处修订",
   "mindChanges.one.one": "“{mind}”中有 1 处修订",
   "mindChanges.one.none": "“{mind}”中没有待处理的修订",

@@ -9,7 +9,8 @@
  *
  * The card reads and changes each Mind through a copy of its document in this
  * window (./mindCopies), the editor's or not: its counts follow every change
- * made anywhere, and what Accept all or Reject all did is undone there.
+ * made anywhere, and what Accept all or Reject all did is undone there. Only
+ * the last few of those steps keep their copies, and can be undone.
  */
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import * as Y from "yjs";
@@ -22,7 +23,7 @@ import { pendingIn } from "./editor/proposalReview";
 import { translateNow as t } from "./i18n";
 import { openMindCopy } from "./mindCopies";
 import { useAppStore } from "./store";
-import { answerUndoPlace, useUndo } from "./undo";
+import { answerUndoPlace, type Undoable, useUndo } from "./undo";
 
 /** A copy of a Mind's document, shared by everything in the window that reads it through here. */
 interface Held {
@@ -173,6 +174,8 @@ interface Done {
   count: number;
   undo(): Promise<void>;
   redo(): Promise<void>;
+  /** It can't be undone any more: what it kept for that goes. */
+  forget(): void;
 }
 
 /** Whether a Mind's copy holds nothing: only empty lines. */
@@ -206,6 +209,7 @@ async function rejectMade(row: ChangedMind): Promise<Done | null> {
       await rejected.redo();
       await core.deleteMind(row.mindId);
     },
+    forget: rejected.forget,
   };
 }
 
@@ -220,7 +224,14 @@ async function resolveRow(row: ChangedMind, outcome: "accept" | "reject"): Promi
     return null;
   }
   // A Checkpoint of the Mind before an AI change goes in (#113).
-  if (outcome === "accept") await core.saveCheckpoint(row.mindId, "accept");
+  if (outcome === "accept") {
+    try {
+      await core.saveCheckpoint(row.mindId, "accept");
+    } catch (error) {
+      release(row.mindId);
+      throw error;
+    }
+  }
   const origin = { mindChanges: row.mindId };
   const steps = new Y.UndoManager(blocks, { trackedOrigins: new Set([origin]) });
   let resolved: ReturnType<typeof resolveProposals> = [];
@@ -239,7 +250,25 @@ async function resolveRow(row: ChangedMind, outcome: "accept" | "reject"): Promi
     redo: async () => {
       steps.redo();
     },
+    forget: () => {
+      steps.destroy();
+      release(row.mindId);
+    },
   };
+}
+
+/** How many Accept all and Reject all steps keep their Minds' copies, to be undone: an older one leaves the Undo stack. */
+const KEPT_STEPS = 5;
+
+const kept: { change: Undoable; done: readonly Done[] }[] = [];
+
+/** Keeps what a step needs to be undone, and lets go of the oldest step's beyond `KEPT_STEPS`. */
+function keep(change: Undoable, done: readonly Done[]): void {
+  kept.push({ change, done });
+  for (const oldest of kept.splice(0, Math.max(0, kept.length - KEPT_STEPS))) {
+    useUndo.getState().withdraw(oldest.change);
+    for (const step of oldest.done) step.forget();
+  }
 }
 
 /**
@@ -276,7 +305,7 @@ export async function resolveAllChanges(
       : count === 1
         ? t("proposal.rejected.one")
         : t("proposal.rejected", { count });
-  useUndo.getState().push({
+  const change: Undoable = {
     message,
     shownAt: answerUndoPlace(answerId),
     undo: async () => {
@@ -285,5 +314,7 @@ export async function resolveAllChanges(
     redo: async () => {
       for (const step of done) await step.redo();
     },
-  });
+  };
+  useUndo.getState().push(change);
+  keep(change, done);
 }
