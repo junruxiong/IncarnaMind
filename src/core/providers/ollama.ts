@@ -48,7 +48,6 @@ const DETECT_TIMEOUT_MS = 2_000;
 /** How long Open Ollama waits for Ollama to answer: its app takes a few seconds to start. */
 export const OLLAMA_START_TIMEOUT_MS = 20_000;
 
-/** Ollama's list of models at `baseUrl`, asked with a short timeout and no retry; null when nothing answers. */
 async function askOllama(baseUrl: string): Promise<Response | null> {
   try {
     return await fetch(`${baseUrl}/api/tags`, { signal: AbortSignal.timeout(DETECT_TIMEOUT_MS) });
@@ -57,17 +56,13 @@ async function askOllama(baseUrl: string): Promise<Response | null> {
   }
 }
 
-/** Whether anything answers at `baseUrl`, in whatever words, asked as `detectOllama` asks. */
+/** Whether anything answers at `baseUrl`, whatever the status: the request itself then says what is wrong. */
 export async function ollamaAnswers(baseUrl: string): Promise<boolean> {
   const response = await askOllama(baseUrl);
   await response?.body?.cancel().catch(() => undefined);
   return response !== null;
 }
 
-/**
- * Looks for Ollama at `baseUrl`, with a short timeout and no retry. When it isn't
- * running, `installed` says whether its app is on this computer (it isn't, by default).
- */
 export async function detectOllama(
   baseUrl: string,
   installed: () => Promise<boolean> = async () => false,
@@ -104,10 +99,7 @@ export async function detectOllama(
   }
 }
 
-/**
- * Waits for Ollama to answer, as it does after its app is opened: asks again every
- * `everyMs` until it does or `timeoutMs` has gone by, and gives what it found last.
- */
+/** Resolves with the last status once `timeoutMs` has passed, rather than failing. */
 export async function waitForOllama(
   baseUrl: string,
   installed: () => Promise<boolean>,

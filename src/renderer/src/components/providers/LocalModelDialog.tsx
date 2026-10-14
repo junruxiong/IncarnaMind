@@ -13,12 +13,6 @@ import { OllamaAction } from "./ChatProviderChoices";
 import { GetOllamaButton } from "./GetOllama";
 import { type Ollama, OllamaProgress, ollamaDescription, useOllama } from "./OllamaCard";
 
-/**
- * Where "Keep everything on this computer" refused a Question and no model is on
- * this computer: the choice of a local model, in place over the Mind. Ollama
- * says whether it's here, with Get Ollama or Open Ollama when it isn't running,
- * and one click downloads the recommended model and uses it.
- */
 export function LocalModelDialog({ open, onClose }: { open: boolean; onClose(): void }) {
   const dialog = useModal(open);
   return (
@@ -29,7 +23,7 @@ export function LocalModelDialog({ open, onClose }: { open: boolean; onClose(): 
       aria-labelledby="local-model-title"
       className={`${dialogClass} w-[28rem]`}
     >
-      {/* Looks for Ollama each time it opens. */}
+      {/* Mounted only while open, so it looks for Ollama each time. */}
       {open && <LocalModelChoice onClose={onClose} />}
     </dialog>
   );
@@ -67,7 +61,6 @@ function LocalModelChoice({ onClose }: { onClose(): void }) {
   );
 }
 
-/** Use the recommended model once Ollama runs; until then, open it or get it, and check again. */
 function LocalModelActions({ ollama }: { ollama: Ollama }) {
   const t = useT();
   const { status, opening } = ollama;

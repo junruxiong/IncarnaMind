@@ -4742,12 +4742,8 @@ export type OllamaStatus =
   | {
       running: false;
       baseUrl: string;
-      /**
-       * Ollama's app can be opened from here (`openOllama`). False when it isn't on this
-       * computer, and when this computer can't tell: the User is then offered to get it.
-       */
+      /** Whether `openOllama` can open its app: false too where this computer can't tell. */
       installed: boolean;
-      /** The model one click pulls and selects. */
       recommendedModel: string;
     }
   | {

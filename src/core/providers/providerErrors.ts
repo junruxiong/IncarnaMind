@@ -18,7 +18,6 @@ export class LocalModelError extends Error {
   }
 }
 
-/** The model is in Ollama on this computer and Ollama doesn't answer: found before the request, which wasn't sent. */
 export class OllamaNotRunningError extends TranslatableError {
   override name = "OllamaNotRunningError";
   constructor() {

@@ -9,11 +9,7 @@ import { ProblemMark } from "../ProblemLine";
 import { errorTextClass } from "../ui";
 import { useKeepLocal } from "./KeepLocalChoice";
 
-/**
- * Whether Ollama runs on its default port, looked for as it opens and again on
- * `detect`; and `open`, which opens its app and waits for it (null when it
- * couldn't be opened, which is reported).
- */
+/** `open` resolves null when Ollama's app couldn't be opened; that failure is already reported. */
 export function useOllamaStatus() {
   const [status, setStatus] = useState<OllamaStatus | null>(null);
   const [opening, setOpening] = useState(false);

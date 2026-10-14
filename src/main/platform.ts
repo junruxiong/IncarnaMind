@@ -102,11 +102,8 @@ const fileShell: FileShell = {
 };
 
 /**
- * Test-only launch flag: the Ollama app is on this computer ("installed") or isn't
- * ("missing"), and opening it only counts (see ./ollamaApp). Set, Ollama itself is
- * really asked for, at OLLAMA_HOST; without it, the scripted chat model's Ollama
- * always runs, so a test that saves an Ollama provider needs no server. Only a test
- * build honours it, and a test build never opens the real app.
+ * Test-only launch flag ("installed" or "missing"). Without it, the scripted chat model's
+ * Ollama always runs, so a test that saves an Ollama provider needs no server.
  */
 const testOllamaApp =
   import.meta.env.MODE === "test" ? process.env.INCARNAMIND_TEST_OLLAMA_APP : undefined;

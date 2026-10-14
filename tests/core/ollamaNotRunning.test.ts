@@ -1,7 +1,3 @@
-/**
- * Ollama not running is found before anything is sent: an Answer says so at once, with Try again
- * once it is, and the Ollama card learns whether to offer Open Ollama or Get Ollama (#763).
- */
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { describe, expect, onTestFinished, test, vi } from "vitest";
@@ -23,7 +19,6 @@ import { connectToMind } from "../helpers/mindClient";
 import { scriptedModel, scriptedModels } from "../helpers/models";
 import { startOllamaStub, unusedLocalUrl } from "../helpers/ollama";
 
-/** An Ollama that is down until `up` is set: the probe, faked. */
 function switchableOllama() {
   const state = { up: false, asked: [] as string[] };
   const ollamaModels: CoreAdapters["ollamaModels"] = {
@@ -169,7 +164,6 @@ describe("Looking for Ollama", () => {
 });
 
 describe("Open Ollama", () => {
-  /** An Ollama app that, once opened, starts answering at `baseUrl`. */
   async function startsWhenOpened(baseUrl: string) {
     const { port } = new URL(baseUrl);
     let server: Server | undefined;

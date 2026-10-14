@@ -7,7 +7,6 @@ import { type ProblemAction, ProblemLine } from "../ProblemLine";
 import { getOllama } from "./GetOllama";
 import { useOllamaStatus } from "./OllamaCard";
 
-/** A failed Answer's one line under it, as `AnswerError` draws it. */
 function AnswerProblem({
   kind,
   details,
@@ -23,7 +22,6 @@ function AnswerProblem({
     <div contentEditable={false} data-testid="answer-error" data-error-kind={kind}>
       <ProblemLine
         action={action && { ...action, testId: "answer-error-action" }}
-        // The provider's own words, for whoever wants them.
         title={details ?? undefined}
         className="mt-1 select-none"
       >
@@ -33,10 +31,6 @@ function AnswerProblem({
   );
 }
 
-/**
- * "Keep everything on this computer" stopped an Answer whose model isn't on this
- * computer: Use a local model opens the choice in place, never a company's settings.
- */
 export function LocalModelRefusedLine({
   model,
   details,
@@ -59,11 +53,6 @@ export function LocalModelRefusedLine({
   );
 }
 
-/**
- * The Answer's model is in Ollama, which isn't running. Looks again as it shows:
- * Open Ollama when its app is here, which asks the Question again once Ollama
- * answers; Get Ollama when it isn't; Try again when it runs by now.
- */
 export function OllamaNotRunningLine({
   details,
   onRetry,
