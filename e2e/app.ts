@@ -929,10 +929,16 @@ export async function expectReadyDocuments(window: Page, count: number): Promise
     .toBe(count);
 }
 
-/** Ends the first open (hides Get started), so the shell shows everything, as it does for a returning User. */
+/** Ends the first open (hides its steps), so the shell shows everything, as it does for a returning User. */
 export async function leaveFirstOpen(window: Page): Promise<void> {
-  await window.getByTestId("get-started-hide").click();
-  await expect(window.getByTestId("get-started")).toHaveCount(0);
+  await window.evaluate(async () => {
+    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    const { device } = await bridge.getSettings();
+    await bridge.updateSettings({
+      device: { gettingStarted: { ...device.gettingStarted, hidden: true } },
+    });
+  });
+  await expect(window.getByTestId("first-open-steps")).toHaveCount(0);
 }
 
 /** The id of the Document listed in the sidebar under `name`. */

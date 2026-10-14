@@ -112,7 +112,7 @@ test("a release build asks after the first Answer to the User's own Question, se
 
   // A first run asks nothing before the example, nor does an Answer that fails.
   const card = window.getByTestId("usage-data-card");
-  await expect(window.getByTestId("example-banner")).toBeVisible();
+  await expect(window.getByTestId("first-open-steps")).toBeVisible();
   await expect(card).toBeHidden();
   await useLocalChatModel(window);
   await askOwnQuestion(window, card);
@@ -189,7 +189,7 @@ test("a release build asks after the first Answer to the User's own Question, se
 test("nothing is sent or kept to send before Send; after it, an example opened carries its group only", async () => {
   const { app, window } = await launchApp(dataDir, releaseOptions());
   const card = window.getByTestId("usage-data-card");
-  const banner = window.getByTestId("example-banner");
+  const banner = window.getByTestId("first-open-steps");
 
   // An example opened before the question: its event is neither sent nor kept.
   await banner.locator('[data-testid="example-more-link"][data-group="meetings"]').click();
@@ -258,7 +258,7 @@ test("a test build says so from the first run, in the sidebar, with the switch, 
     usageData: { host: posthog.host, testerBuild: true },
     examples: true,
   });
-  await expect(again.window.getByTestId("example-banner")).toBeVisible();
+  await expect(again.window.getByTestId("first-open-steps")).toBeVisible();
   await expect(again.window.getByTestId("usage-data-card")).toBeHidden();
   await again.app.close();
 });

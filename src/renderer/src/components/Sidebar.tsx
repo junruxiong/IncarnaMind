@@ -11,7 +11,6 @@ import { useAppStore } from "../store";
 import { linksIn, useWebPages } from "../webPages";
 import { CopiedLine } from "./CopiedLine";
 import { DocumentsSection } from "./DocumentsSection";
-import { GetStartedCard } from "./GettingStarted";
 import {
   AppMark,
   DocumentLineIcon,
@@ -70,7 +69,6 @@ export function Sidebar({ width, onOpenSettings }: { width: number; onOpenSettin
         </div>
       </div>
 
-      <GetStartedCard />
       <UsageDataCard />
       <UndoLine />
       <CopiedLine />

@@ -1,0 +1,211 @@
+import type { ReactNode } from "react";
+import type { CommandId } from "../../../shared/commands";
+import type { MessageKey } from "../../../shared/i18n";
+import { shortcutLabel } from "../commands/keymap";
+import { type CommandContext, commands, offered } from "../commands/registry";
+import { CheckMarkIcon } from "../editor/icons";
+import { useT } from "../i18n";
+import { useAppStore } from "../store";
+import { ExampleBanner, OtherExamples } from "./GettingStarted";
+import { CloseLineIcon } from "./lineIcons";
+import { buttonStyle } from "./ui";
+
+type StepKey = "citation" | "question" | "files";
+
+const NEXT: readonly { id: CommandId; label: MessageKey }[] = [
+  { id: "comparison.start", label: "firstOpen.next.compare" },
+  { id: "meeting.record", label: "firstOpen.next.meeting" },
+  { id: "mind.export", label: "firstOpen.next.export" },
+];
+
+const HERE: CommandContext = { selection: [], focus: null, surface: "mind" };
+
+function Mark({ number, state }: { number: number; state: "open" | "later" | "done" }) {
+  if (state === "done") {
+    return (
+      <span
+        aria-hidden="true"
+        className="flex size-[18px] shrink-0 items-center justify-center rounded-full bg-success text-white"
+      >
+        <CheckMarkIcon check="found" className="size-2.5" />
+      </span>
+    );
+  }
+  return (
+    <span
+      aria-hidden="true"
+      className={`flex size-[18px] shrink-0 items-center justify-center rounded-full text-[10px] leading-none font-bold ${
+        state === "open" ? "bg-ink text-white" : "border-[1.5px] border-tab-divider text-ink-meta"
+      }`}
+    >
+      {number}
+    </span>
+  );
+}
+
+function Step({
+  step,
+  number,
+  state,
+  children,
+}: {
+  step: StepKey;
+  number: number;
+  state: "open" | "later" | "done";
+  children?: ReactNode;
+}) {
+  const t = useT();
+  const tone =
+    state === "open"
+      ? "font-semibold text-ink"
+      : "text-ink-meta" + (state === "done" ? " line-through" : "");
+  return (
+    <li
+      data-testid="first-open-step"
+      data-step={step}
+      data-state={state}
+      className="flex flex-col gap-1"
+    >
+      <div className="flex items-center gap-2.5 text-[14px] leading-5">
+        <Mark number={number} state={state} />
+        <span className={tone}>
+          {state === "done" && <span className="sr-only">{t("gettingStarted.done")}</span>}
+          {t(`firstOpen.step.${step}.${state === "done" ? "done" : "title"}`)}
+        </span>
+      </div>
+      {state === "open" && <div className="flex flex-col gap-2 pl-7">{children}</div>}
+    </li>
+  );
+}
+
+/**
+ * The first open's three steps, at the top of the example page: only the step in hand is open,
+ * a finished one folds into a grey ticked line, and when all three are done "You're set up."
+ * says what to try next.
+ */
+export function FirstOpenSteps({ mindId }: { mindId: string }) {
+  const t = useT();
+  const progress = useAppStore((state) => state.settings?.device.gettingStarted);
+  const pickDocuments = useAppStore((state) => state.pickDocuments);
+  const addLinkedFolder = useAppStore((state) => state.addLinkedFolder);
+  const updateGettingStarted = useAppStore((state) => state.updateGettingStarted);
+  const removeExamples = useAppStore((state) => state.removeExamples);
+  if (!progress) return null;
+
+  const done: Record<StepKey, boolean> = {
+    citation: progress.citationChecked,
+    question: progress.askedOwn,
+    files: progress.indexed,
+  };
+  const order: StepKey[] = ["citation", "question", "files"];
+  const current = order.find((key) => !done[key]);
+  const stateOf = (key: StepKey): "open" | "later" | "done" =>
+    done[key] ? "done" : key === current ? "open" : "later";
+  const allDone = current === undefined;
+
+  return (
+    <section
+      aria-labelledby={`first-open-${mindId}`}
+      data-testid="first-open-steps"
+      className="mb-6 rounded-lg bg-sheet p-4 font-sans shadow-[inset_0_0_0_1px_var(--color-rule)]"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <h2 id={`first-open-${mindId}`} className="text-[15px] leading-6 font-semibold text-ink">
+          {t(allDone ? "firstOpen.done.title" : "firstOpen.title")}
+        </h2>
+        {allDone && (
+          <button
+            type="button"
+            data-testid="first-open-hide"
+            aria-label={t("firstOpen.hide")}
+            title={t("firstOpen.hide")}
+            onClick={() => updateGettingStarted({ hidden: true })}
+            className="inline-flex size-[22px] items-center justify-center rounded-md text-ink-meta hover:bg-chip hover:text-ink focus-visible:outline-offset-0"
+          >
+            <CloseLineIcon strokeWidth={2.5} className="size-3" />
+          </button>
+        )}
+      </div>
+      {allDone ? (
+        <p className="pt-1 text-[13px] leading-5 text-ink-secondary">
+          {t("firstOpen.next.lead")}{" "}
+          {NEXT.flatMap(({ id, label }) => {
+            const command = commands.get(id);
+            return command && offered(command, HERE) ? [{ id, label }] : [];
+          }).map(({ id, label }, index) => (
+            <span key={id}>
+              {index > 0 && " · "}
+              <button
+                type="button"
+                data-testid="first-open-next"
+                data-command={id}
+                onClick={() => void commands.run(id)}
+                className="rounded-sm text-accent-strong underline-offset-2 hover:underline focus-visible:outline-offset-0"
+              >
+                {t(label)}
+              </button>
+            </span>
+          ))}
+        </p>
+      ) : (
+        <>
+          <p className="pb-3 text-[13px] leading-5 text-ink-secondary">{t("firstOpen.lead")}</p>
+          <ol className="flex flex-col gap-3">
+            <Step step="citation" number={1} state={stateOf("citation")}>
+              <p className="text-[13px] leading-5 text-ink-secondary">
+                {t("firstOpen.step.citation.body")}
+              </p>
+            </Step>
+            <Step step="question" number={2} state={stateOf("question")}>
+              <p className="text-[13px] leading-5 text-ink-secondary">
+                {t("firstOpen.step.question.body", { shortcut: shortcutLabel("composer.focus") })}
+              </p>
+            </Step>
+            <Step step="files" number={3} state={stateOf("files")}>
+              <p className="text-[13px] leading-5 text-ink-secondary">
+                {t("firstOpen.step.files.body")}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  data-testid="first-open-add-files"
+                  onClick={() => void pickDocuments()}
+                  className={buttonStyle("primary", "sm")}
+                >
+                  {t("startGuide.documents.addFiles")}
+                </button>
+                <button
+                  type="button"
+                  data-testid="first-open-link-folder"
+                  onClick={() => void addLinkedFolder()}
+                  className={buttonStyle("secondary", "sm")}
+                >
+                  {t("startGuide.documents.linkFolder")}
+                </button>
+              </div>
+            </Step>
+          </ol>
+        </>
+      )}
+      <div className="mt-3 flex items-baseline justify-between gap-3 border-t border-rule pt-1">
+        <OtherExamples mindId={mindId} />
+        <button
+          type="button"
+          data-testid="first-open-remove"
+          onClick={() => void removeExamples()}
+          className="shrink-0 rounded-sm text-[13px] leading-5 text-ink-meta underline-offset-2 hover:text-ink hover:underline focus-visible:outline-offset-0"
+        >
+          {t("firstOpen.remove")}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+export function ExampleIntro({ mindId }: { mindId: string }) {
+  const stepsShown = useAppStore((state) => {
+    const progress = state.settings?.device.gettingStarted;
+    return state.examples?.mindId === mindId && progress?.started === true && !progress.hidden;
+  });
+  return stepsShown ? <FirstOpenSteps mindId={mindId} /> : <ExampleBanner mindId={mindId} />;
+}

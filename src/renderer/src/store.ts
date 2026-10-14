@@ -255,6 +255,8 @@ interface AppState extends LayoutSlice {
   startMindFrom(bridge: LibraryBridge): Promise<Undoable | undefined>;
   /** Opens the first-run example Mind, making the examples again if they were removed. */
   openExamples(): Promise<void>;
+  /** Makes the first-run example again and opens it, with Undo. */
+  showExamples(): Promise<void>;
   /** Opens another example in a new tab, making it first if it isn't there; the Mind in view stays. */
   openExample(group: ExampleGroup): Promise<void>;
   /** Deletes every example Mind made, with its Documents. */
@@ -1012,6 +1014,19 @@ export const useAppStore = create<AppState>()((set, get) => {
           set({ examples });
         }
         if (examples.mindId) get().openMind(examples.mindId);
+      }),
+
+    showExamples: () =>
+      attempt(async () => {
+        await get().openExamples();
+        push({
+          message: t("undo.examplesShown"),
+          name: t("undo.name.showExamples"),
+          undo: () => core.removeExamples(),
+          redo: async () => {
+            await core.createExamples();
+          },
+        });
       }),
 
     openExample: (group) =>
