@@ -67,7 +67,7 @@ describe("The reranking model's download in the sidebar's status row", () => {
       testId: "reranking-model-failed",
       tone: "error",
       short: "Couldn't get search ready",
-      full: "The reranking model couldn't be downloaded: check your internet connection.\nfetch failed",
+      full: "The model that orders search results couldn't be downloaded: check your internet connection.\nfetch failed",
       retry: true,
     });
     expect(

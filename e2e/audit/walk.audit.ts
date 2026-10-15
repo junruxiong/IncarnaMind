@@ -170,7 +170,7 @@ test("A1 first run: the example Mind and its Citation card", async () => {
     const { window } = app;
     await sealShell(app.app);
     await step(T, "example mind", async () => {
-      await expect(window.getByTestId("mind-title")).toHaveValue("Where tea comes from", {
+      await expect(window.getByTestId("mind-title")).toHaveValue("Draft: credit committee paper", {
         timeout: 20_000,
       });
       await expect(window.getByTestId("margin-check")).toHaveCount(2, { timeout: 20_000 });
@@ -780,7 +780,7 @@ test("A6 window sizes, the three steps, the @ and / menus, hover states", async 
     const { window } = app;
     await sealShell(app.app);
     await step(T, "three steps in an empty Mind (Get started showing)", async () => {
-      await expect(window.getByTestId("mind-title")).toHaveValue("Where tea comes from", {
+      await expect(window.getByTestId("mind-title")).toHaveValue("Draft: credit committee paper", {
         timeout: 20_000,
       });
       await click(window, window.getByTestId("new-tab"));
@@ -848,9 +848,9 @@ test("A6 window sizes, the three steps, the @ and / menus, hover states", async 
       // Back to the example Mind, with a Citation's page open beside it.
       await click(
         window,
-        window.getByTestId("mind-list-item").filter({ hasText: "Where tea comes from" }),
+        window.getByTestId("mind-list-item").filter({ hasText: "Draft: credit committee paper" }),
       );
-      await expect(window.getByTestId("mind-title")).toHaveValue("Where tea comes from");
+      await expect(window.getByTestId("mind-title")).toHaveValue("Draft: credit committee paper");
       await click(window, window.getByTestId("citation-chip").first());
       await window.waitForTimeout(600);
       const open = window.getByTestId("citation-card").getByTestId("citation-open");

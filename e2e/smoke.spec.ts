@@ -219,7 +219,7 @@ test("first run asks for no model; the first own Question waits while the setup 
   await expect(card.getByTestId("setup-chatgpt-sends")).toHaveText(
     "Plus or Pro · No key needed · Your Questions, the Mind you're in, Passages from your Documents, and Document text for Tags go to OpenAI under your ChatGPT account.",
   );
-  // The card says what the Mind's "needs a chat model" line would, so that line steps aside.
+  // The card says what the Mind's "needs an AI model" line would, so that line steps aside.
   await expect(window.getByTestId("chat-readiness")).toHaveCount(0);
   // The other ways are folded under the one recommended button.
   await expect(card.getByTestId("way-key")).toBeHidden();
