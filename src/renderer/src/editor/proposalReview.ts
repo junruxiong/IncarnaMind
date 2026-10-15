@@ -66,14 +66,10 @@ export interface PendingProposal {
 }
 
 interface ReviewState {
-  /** Those waiting for the User: all but the ones of requests applying (`applying`). */
+  /** Waiting for the User: all but those of requests `applying`. */
   proposals: readonly PendingProposal[];
-  /**
-   * The requests whose Proposals an edit the User asked for is applying
-   * (#880): drawn as the text they make, and not waiting for anyone.
-   */
+  /** Requests of edits applying (#880), drawn as the text they make. */
   applying: ReadonlySet<string>;
-  /** Their Proposals. */
   applied: readonly PendingProposal[];
   /** The Proposal under the pointer, by id. */
   hovered: string | null;
@@ -86,7 +82,7 @@ type Meta =
   | { hovered: string | null }
   | { target: { from: number; to: number } | null }
   | { applying: ReadonlySet<string> }
-  /** Changes an applied edit made, shown again as changes (#880): theirs, not the User's. */
+  /** An applied edit's changes shown again (#880): not the User's typing. */
   | { shownAgain: true };
 
 export const proposalReviewKey = new PluginKey<ReviewState>("proposalReview");
@@ -331,13 +327,11 @@ export function shownProposal(state: EditorState): PendingProposal | null {
 /** The text waiting for Edit with AI, or being edited from the composer. */
 export const editTarget = (state: EditorState) => proposalReviewKey.getState(state)?.target ?? null;
 
-/** Draws the Proposals of these requests as the text they make, not as changes waiting (#880). */
 export function setApplying(editor: Editor, applying: ReadonlySet<string>): void {
   if (editor.isDestroyed) return;
   editor.view.dispatch(editor.state.tr.setMeta(proposalReviewKey, { applying } satisfies Meta));
 }
 
-/** The requests whose Proposals are drawn as applied. */
 export const applyingIn = (state: EditorState): ReadonlySet<string> =>
   proposalReviewKey.getState(state)?.applying ?? new Set();
 
@@ -370,7 +364,7 @@ function bringsProposals(tr: Transaction): boolean {
 }
 
 /** A change that came from the Mind's document (the core, another window, Undo), not the User typing here. */
-const fromDocument = (tr: Transaction) => !!tr.getMeta(ySyncPluginKey)?.isChangeOrigin;
+export const fromDocument = (tr: Transaction) => !!tr.getMeta(ySyncPluginKey)?.isChangeOrigin;
 
 const shownAgain = (tr: Transaction) => {
   const meta = tr.getMeta(proposalReviewKey) as Meta | undefined;

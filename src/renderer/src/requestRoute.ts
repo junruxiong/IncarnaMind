@@ -1,13 +1,8 @@
-/**
- * Whether what the User typed asks for an answer, for new text, or for a
- * change to text already in a Mind; "unclear" when it can't be told, and
- * then nothing applies at once (#880). In English and Chinese.
- */
+/** "unclear": nothing applies at once (#880). */
 export type RequestKind = "answer" | "write" | "edit" | "unclear";
 
 export interface RequestRoute {
   kind: RequestKind;
-  /** It asks for a new page, note or document. */
   newMind: boolean;
 }
 

@@ -1,13 +1,7 @@
 /**
- * Edits the User asked for on the text apply at once (#880; DESIGN.md, AI
- * edits), the window's side. The core writes such an edit as Proposals and
- * names the updates that carry them (`EditCause`); the editor that asked takes
- * them in as its own change, draws them as the text they make while they
- * stream in, and accepts them once the edit is done: one step of its Undo.
- * The line over the edit then offers Undo and Review changes, which shows
- * them again as changes, each to restore. An edit the core holds back (it
- * would remove most of the selection, and can't be mapped onto it) waits as
- * Proposals, with Apply and Discard.
+ * Edits the User asked for apply at once (#880), the window's side: the
+ * editor that asked takes the core's updates in as its own change, then
+ * accepts them, all one step of its Undo.
  */
 import type { Editor } from "@tiptap/core";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
@@ -44,14 +38,12 @@ import { translateNow as t } from "./i18n";
 import { EDIT_FROM_CORE, takeEditUpdates } from "./mindCopies";
 import { useAppStore } from "./store";
 
-/** Marks the editor's own change that accepts an edit's Proposals: its Undo takes it back, and it goes to the core. */
+// An origin the editor's Undo tracks, and its copy sends to the core.
 class AcceptingEdit {}
 
-/** The top-level Blocks an edit changed, as they were with its Proposals, between the Blocks around them. */
+/** The top-level Blocks an edit changed, with its Proposals, between the Blocks around them (null: the Mind's edge). */
 interface Changed {
-  /** The Block before them; null at the Mind's start. */
   after: string | null;
-  /** The Block after them; null at the Mind's end. */
   until: string | null;
   blocks: readonly ProseMirrorNode[];
 }
@@ -61,11 +53,9 @@ export interface Applying {
   mindId: string;
   editor: Editor;
   doc: Y.Doc;
-  /** The core's request its Proposals name, from its first update. */
   request: string | null;
-  /** The editor's Undo step that holds the edit, once it has one. */
   step: unknown;
-  /** Steps after it that belong to it: removing what it left out. */
+  /** Later steps that belong to it: removing what it left out. */
   more: unknown[];
   changed: Changed | null;
   leftOut: readonly LeftOutPart[];
@@ -73,13 +63,9 @@ export interface Applying {
   forget(): void;
 }
 
-/** By editor, the edit the User asked for last there. */
 const latest = new WeakMap<Editor, Applying>();
 
-/**
- * Runs `change` as part of the edit's step of Undo, kept apart from what the
- * User types before and after it, however long the edit takes to stream in.
- */
+/** One step of Undo for the whole edit, however long it streams, apart from the User's typing. */
 function asEditStep(edit: Applying, change: () => void): void {
   const stack = undoStackOf(edit.editor);
   if (stack && edit.step !== null && stack.undoStack.at(-1) === edit.step) {
@@ -105,11 +91,7 @@ function drawApplying(editor: Editor, request: string, applying: boolean): void 
   setApplying(editor, next);
 }
 
-/**
- * Starts taking in an edit the User asked for in this editor, before it is
- * asked for, so none of its updates is missed; any line over the last edit
- * goes. Null when the editor isn't bound to the Mind yet.
- */
+/** Before the edit is asked for, so none of its updates is missed. Null before the editor is bound. */
 export function startApplying(editor: Editor, mindId: string, requestId: string): Applying | null {
   const doc = editorDoc(editor);
   const stack = undoStackOf(editor);
@@ -151,7 +133,7 @@ export function startApplying(editor: Editor, mindId: string, requestId: string)
 const holds = (state: EditorState, request: string) =>
   proposalsIn(state.doc).some((each) => each.request === request);
 
-/** Waits until the editor holds the request's Proposals, which come before the reply; false after a while. */
+/** The Proposals come with the core's updates, before its reply: this is a backstop. */
 function whenHeld(editor: Editor, request: string): Promise<boolean> {
   return new Promise((resolve) => {
     if (editor.isDestroyed || holds(editor.state, request)) {
@@ -177,7 +159,7 @@ const idOf = (node: ProseMirrorNode | null): string | null | undefined => {
   return typeof id === "string" && id !== "" ? id : undefined;
 };
 
-/** The top-level Blocks holding the request's Proposals, as they are now; null when a Block around them has no id. */
+/** For Review changes; null when a Block around them has no id to find them by. */
 function changedBlocks(doc: ProseMirrorNode, request: string): Changed | null {
   const indexes = proposalsIn(doc)
     .filter((each) => each.request === request)
@@ -194,7 +176,6 @@ function changedBlocks(doc: ProseMirrorNode, request: string): Changed | null {
   return { after, until, blocks };
 }
 
-/** Where the changed Blocks are now: from the end of the Block before them to the start of the one after. */
 function placeOfChanged(
   doc: ProseMirrorNode,
   changed: Changed,
@@ -208,7 +189,6 @@ function placeOfChanged(
   return from <= to ? { from, to } : null;
 }
 
-/** The first Block between `from` and `to` with an id, or the one after them; null at the Mind's end. */
 function firstBlockIn(
   doc: ProseMirrorNode,
   place: { from: number; to: number },
@@ -236,7 +216,6 @@ function keptLineOf(leftOut: readonly LeftOutPart[]): KeptLine | null {
   };
 }
 
-/** Accepts the edit's Proposals, as part of its step of Undo, and records what the AI wrote (#292). */
 function accept(edit: Applying, request: string): number {
   const blocks = edit.doc.getXmlFragment(MIND_CONTENT_FIELD);
   edit.changed = changedBlocks(edit.editor.state.doc, request);
@@ -252,7 +231,6 @@ function accept(edit: Applying, request: string): number {
   return resolved.length;
 }
 
-/** Applies the edit's Proposals at once, with the line over them. Returns how many places changed. */
 function apply(edit: Applying, request: string): number {
   const places = accept(edit, request);
   if (places === 0 || edit.editor.isDestroyed) return places;
@@ -271,15 +249,10 @@ function apply(edit: Applying, request: string): number {
   return places;
 }
 
-/** What a screen reader hears once an edit applied. */
 export const appliedMessage = (places: number) =>
   places === 1 ? t("edit.applied.one") : t("edit.applied", { count: places });
 
-/**
- * The edit is back: its Proposals apply, or, held back by the core, wait
- * for the User; after anything else, nothing it wrote is drawn as applying.
- * Says which, with how many places an applied one changed.
- */
+/** Applies the edit once it is back, or leaves it waiting when the core held it back. */
 export async function finishApplying(
   edit: Applying,
   result: EditWithAiResult,
@@ -307,7 +280,7 @@ export async function finishApplying(
   return { applied: apply(edit, result.request) };
 }
 
-/** The main line's Undo: the whole edit, what was done to what it left out included. */
+/** The whole edit, with what was done since to what it left out. */
 function undoEdit(editor: Editor): void {
   const edit = latest.get(editor);
   const stack = undoStackOf(editor);
@@ -319,7 +292,6 @@ function undoEdit(editor: Editor): void {
   setAppliedLine(editor, null);
 }
 
-/** Review changes: the edit's changes are shown again as changes, each with Restore original. */
 function review(editor: Editor): void {
   const edit = latest.get(editor);
   const changed = edit?.changed;
@@ -336,7 +308,6 @@ function review(editor: Editor): void {
   tr.setMeta(proposalReviewKey, { shownAgain: true });
   tr.setMeta(appliedLineKey, line);
   asOneStep(editor, () => editor.view.dispatch(tr));
-  // Into the first change, so its bar shows Restore original.
   const first = pendingIn(editor.state).find((each) => each.request === request);
   if (first && !editor.isDestroyed) {
     const at = first.block ? first.from + 1 : first.from;
@@ -355,7 +326,6 @@ const ofRequest = (editor: Editor, request: string) =>
       .map((each) => each.id),
   );
 
-/** "Undo all" and "Done" while reviewing, "Apply" and "Discard" for an edit held back. */
 function resolveShown(editor: Editor, outcome: "accept" | "reject"): void {
   const line = appliedLineIn(editor.state);
   if (!line || line.kind === "applied") return;
@@ -382,7 +352,6 @@ function resolveShown(editor: Editor, outcome: "accept" | "reject"): void {
   }
 }
 
-/** "Remove them": what the edit left out and kept goes after all, one step of Undo. */
 function removeKept(editor: Editor): void {
   const edit = latest.get(editor);
   const line = appliedLineIn(editor.state);
@@ -406,7 +375,6 @@ function removeKept(editor: Editor): void {
   offerEditorUndo(editor, t("edit.kept.removed"));
 }
 
-/** What the buttons on the lines over an edit do (`data-applied-action`). */
 export function actOnAppliedEdit(editor: Editor, action: string): void {
   if (action === "undo") undoEdit(editor);
   else if (action === "review") review(editor);

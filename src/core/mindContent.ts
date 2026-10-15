@@ -44,9 +44,8 @@ interface LoadedMind {
   doc: Y.Doc;
   /** Rows stored for this Mind, a compacted one included. */
   storedRows: number;
-  /** Updates the document emitted that aren't stored yet, with the edit that wrote each, if one did. */
+  /** Updates the document emitted that aren't stored yet. */
   outbox: { update: Uint8Array; cause: EditCause | undefined }[];
-  /** The edit whose update is being applied now. */
   cause: EditCause | undefined;
 }
 
@@ -179,7 +178,6 @@ export function createMindContent(
       }
     },
 
-    /** Applies an update to the Mind; `cause` names the edit the User asked for that wrote it (#880). */
     apply(mindId: string, update: unknown, cause?: EditCause): void {
       if (!(update instanceof Uint8Array) || update.byteLength === 0) {
         throw new InvalidInputError("A Mind update must be a non-empty Uint8Array.");

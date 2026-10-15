@@ -1,27 +1,16 @@
 /**
- * The lines over an edit the User asked for (#880; DESIGN.md, AI edits), in
- * the Mind's text, above the Block they are about:
- *
- * - over the first Block it changed, "Changed 3 places · Undo ⌘Z · Review
- *   changes", its reason on hover; while its changes are reviewed, "3 changes
- *   made by Edit with AI · Undo all · Done"; and for an edit waiting for the
- *   User, "This edit would remove most of what you selected, so it's waiting
- *   for you · Apply · Discard";
- * - over the first paragraph it left out and kept, "Kept 2 paragraphs the
- *   edit left out · Remove them".
- *
- * Their buttons are handled where the Mind is known (`AppliedEditActions`),
- * by `data-applied-action`. The lines go once the User edits the text.
+ * The lines over an edit the User asked for (#880; DESIGN.md, AI edits),
+ * drawn in the text above the Block they are about. ProposalBars handles
+ * their buttons, by `data-applied-action`. They go once the User edits.
  */
 import { type Editor, Extension } from "@tiptap/core";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
-import { type EditorState, Plugin, PluginKey, type Transaction } from "@tiptap/pm/state";
+import { type EditorState, Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
-import { ySyncPluginKey } from "@tiptap/y-tiptap";
 import type { Language } from "../../../core/language";
 import type { MessageKey, MessageParams } from "../../../shared/i18n";
 import { SPARK_PATH } from "../components/iconPaths";
-import { proposalsIn } from "./proposalReview";
+import { fromDocument, proposalsIn } from "./proposalReview";
 import { blockAt } from "./writingPlace";
 
 export type AppliedAction =
@@ -33,29 +22,27 @@ export type AppliedAction =
   | "discard"
   | "remove-kept";
 
-/** The paragraphs an edit left out and kept: the first one's Block, and how many. */
 export interface KeptLine {
   blockId: string;
   count: number;
-  /** Of more than one kind (paragraphs, headings, list items): named Blocks, not paragraphs. */
+  /** Of more than one kind: named Blocks, not paragraphs. */
   mixed: boolean;
 }
 
 export type AppliedLine = (
   | {
       kind: "applied";
-      /** The first Block it changed; null at the Mind's end. */
+      /** Null at the Mind's end. */
       blockId: string | null;
       places: number;
       reason: string | null;
-      /** Whether its changes can be shown again as changes (Review changes). */
       reviewable: boolean;
       kept: KeptLine | null;
     }
   | { kind: "review"; blockId: string | null; request: string }
   | { kind: "held"; blockId: string | null; request: string }
 ) & {
-  /** The interface language it was last drawn in, once that changed. */
+  /** The language it was last drawn in, once that changed. */
   language?: Language;
 };
 
@@ -68,7 +55,6 @@ type Translate = (key: MessageKey, params?: MessageParams) => string;
 
 interface Options {
   translate: Translate;
-  /** ⌘Z as this system writes it. */
   undoKeys(): string;
 }
 
@@ -130,7 +116,6 @@ function text(className: string, words: string, testId?: string): HTMLSpanElemen
   return span;
 }
 
-/** How many of the request's changes still wait in the text. */
 const waitingOf = (doc: ProseMirrorNode, request: string) =>
   proposalsIn(doc).filter((each) => each.request === request).length;
 
@@ -191,7 +176,6 @@ function keptLine(kept: KeptLine, t: Translate): HTMLElement {
   ]);
 }
 
-/** Where a line over this Block goes: just before it, or at the Mind's end. */
 function placeOf(doc: ProseMirrorNode, blockId: string | null): number | null {
   if (blockId === null) return doc.content.size;
   return blockAt(doc, blockId)?.pos ?? null;
@@ -224,9 +208,6 @@ function decorations(doc: ProseMirrorNode, line: AppliedLine, options: Options):
   }
   return DecorationSet.create(doc, marks);
 }
-
-/** A change from the Mind's document (the core, Undo, an edit applying), not the User typing here. */
-const fromDocument = (tr: Transaction) => !!tr.getMeta(ySyncPluginKey)?.isChangeOrigin;
 
 export const AppliedEditLine = Extension.create<Options>({
   name: "appliedEditLine",
@@ -268,17 +249,14 @@ export const AppliedEditLine = Extension.create<Options>({
   },
 });
 
-/** The line over the edit the User asked for last, if it shows. */
 export const appliedLineIn = (state: EditorState): AppliedLine | null =>
   appliedLineKey.getState(state)?.line ?? null;
 
-/** Shows a line over an edit, or takes it away (null). */
 export function setAppliedLine(editor: Editor, line: AppliedLine | null): void {
   if (editor.isDestroyed) return;
   editor.view.dispatch(editor.state.tr.setMeta(appliedLineKey, line));
 }
 
-/** Draws the lines again, in the interface language `language` now is. */
 export function redrawAppliedLine(editor: Editor, language: Language): void {
   const line = appliedLineIn(editor.state);
   if (line && line.language !== language) setAppliedLine(editor, { ...line, language });

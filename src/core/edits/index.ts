@@ -109,7 +109,7 @@ export interface EditsOptions {
   recheck(attributes: Attributes): Attributes | null;
   /** Says where a request writes next in a Mind as its changes come in (#202); null once it has stopped. */
   writing(mindId: string, place: WritingPlace | null): void;
-  /** Saves a Checkpoint of the Mind just before an edit that applies at once writes to it (#113, #880). */
+  /** A Checkpoint just before an edit that applies at once writes (#113). */
   checkpoint(mindId: string): void;
   now(): Date;
 }
@@ -156,10 +156,7 @@ interface Hooks {
   beforeWriting?(): void;
   /** More of the request's Proposals are in the Mind: how many there are now. */
   written?(request: string, count: number): void;
-  /**
-   * An edit the User asked for on the text (#880), by the id their window
-   * chose: its updates name it, for that window to apply at once.
-   */
+  /** An edit the User asked for (#880): its updates name it. */
   requestId?: string;
 }
 
@@ -388,11 +385,9 @@ export function createEdits(options: EditsOptions) {
                 : "remove",
           },
         );
-    /** The edit can't be mapped onto the selection and would remove most of it: it waits for the User. */
     let held = false;
-    /** How many Proposals the request wrote: an edit the User asked for is accepted as it comes. */
+    // Counted as written: the window accepts an edit the User asked for, so the Mind no longer holds them.
     let proposed = 0;
-    /** Some of them were in the Mind once merged: not all went with text the User deleted meanwhile. */
     let landed = false;
     const made: Extract<ProposalRequest, { source: "edit-with-ai" }> = {
       source: "edit-with-ai",
@@ -427,11 +422,6 @@ export function createEdits(options: EditsOptions) {
         ...(leftOut.length > 0 && { leftOut }),
       };
     };
-    /**
-     * Whether the window that asked applies the changes so far at once: while
-     * the new text doesn't yet map onto the selection, they wait for the end,
-     * where `held` decides.
-     */
     const appliesNow = () =>
       explain || ask.action === "translate" || (stream?.extent().mapped ?? false);
     let wrote = false;
