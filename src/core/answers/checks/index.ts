@@ -198,6 +198,7 @@ function withResult(
         detail: null,
         evidence: evidenceOf(result.evidence),
         says: result.says,
+        calculation: result.calculation,
       };
 }
 
@@ -249,21 +250,31 @@ export function createChecks(options: ChecksOptions) {
     }
   }
 
-  /** Keeps the text of the evidence every check in the Mind shows, and lets go of the rest (#79). */
+  /**
+   * Keeps the text of the evidence every check in the Mind shows, a worked-out
+   * figure's inputs included, and lets go of the rest (#79).
+   */
   function retainEvidence(mindId: string): void {
     const versions = content.read(mindId, (blocks) =>
       markedSentences(blocks).flatMap(({ check }): RetainVersion[] => {
-        const evidence = check.evidence;
-        if (!evidence?.documentId || !evidence.contentHash) return [];
-        return [
-          {
-            documentId: evidence.documentId,
-            contentHash: evidence.contentHash,
-            pageFrom: evidence.pageFrom,
-            pageTo: evidence.pageTo,
-            location: evidence.location,
-          },
+        const inputs = check.calculation?.figure.inputs ?? [];
+        const shown = [
+          check.evidence,
+          ...inputs.flatMap((input) => [input.citation, input.unitStatement?.citation ?? null]),
         ];
+        return shown.flatMap((evidence) =>
+          evidence?.documentId && evidence.contentHash
+            ? [
+                {
+                  documentId: evidence.documentId,
+                  contentHash: evidence.contentHash,
+                  pageFrom: evidence.pageFrom,
+                  pageTo: evidence.pageTo,
+                  location: evidence.location,
+                },
+              ]
+            : [],
+        );
       }),
     );
     options.retention.retain("check-result", mindId, versions);
@@ -339,6 +350,7 @@ export function createChecks(options: ChecksOptions) {
           text: sentence.text,
           evidence: null,
           says: null,
+          calculation: null,
           scope,
           versions: [],
           excluded: [],
@@ -437,7 +449,14 @@ export function createChecks(options: ChecksOptions) {
       );
       // Nothing to check against: nothing backs it, and nothing is sent.
       if (options.documents.searchableCount(scope.documentIds) === 0) {
-        return { verdict: "unsupported", evidence: null, says: null, versions: [], excluded: [] };
+        return {
+          verdict: "unsupported",
+          evidence: null,
+          says: null,
+          calculation: null,
+          versions: [],
+          excluded: [],
+        };
       }
       const checksDocument =
         (parsed.checked.documentIds?.length ?? 0) + (parsed.checked.contentHashes?.length ?? 0) > 0;

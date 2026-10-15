@@ -79,25 +79,42 @@ function importDone(client: MindClient): Promise<void> {
   });
 }
 
-/** The Mind's top-level Blocks as the editor reads them, each node's id left out. */
+/** The Mind's top-level Blocks as the editor reads them, ids and the Word look left out. */
 function blocksOf(client: MindClient): JSONContent[] {
   const strip = (node: JSONContent): JSONContent => {
     const attrs = Object.fromEntries(
       Object.entries(node.attrs ?? {}).filter(
-        ([key, value]) => value !== null && !["id", "includeInContext", "proposal"].includes(key),
+        ([key, value]) =>
+          value !== null && !["id", "includeInContext", "proposal", "wordLook"].includes(key),
       ),
     );
+    const marks = node.marks?.map((mark) => mark.type).filter((mark) => mark !== "wordRun");
     return {
       type: node.type,
       ...(Object.keys(attrs).length > 0 && { attrs }),
       ...(node.text !== undefined && { text: node.text }),
-      ...(node.marks && {
-        marks: node.marks.map((mark) => mark.type) as unknown as JSONContent["marks"],
-      }),
-      ...(node.content && { content: node.content.map(strip) }),
+      ...(marks && marks.length > 0 && { marks: marks as unknown as JSONContent["marks"] }),
+      ...(node.content && { content: joinTexts(node.content.map(strip)) }),
     };
   };
   return (readMind(client).toJSON().content ?? []).map(strip);
+}
+
+function joinTexts(content: JSONContent[]): JSONContent[] {
+  const joined: JSONContent[] = [];
+  for (const node of content) {
+    const last = joined.at(-1);
+    if (
+      node.type === "text" &&
+      last?.type === "text" &&
+      JSON.stringify(last.marks ?? []) === JSON.stringify(node.marks ?? [])
+    ) {
+      joined[joined.length - 1] = { ...last, text: `${last.text ?? ""}${node.text ?? ""}` };
+    } else {
+      joined.push(node);
+    }
+  }
+  return joined;
 }
 
 /** Every atom in the Mind, in order: inline and as Blocks. */

@@ -346,8 +346,8 @@
   /*
    * The sidebar's panel (#219). Shown, it has no box of its own (the sidebar
    * is a flex item as before). Hidden, it is out to the left of the window,
-   * and slides over the content (peeking) when the pointer touches the left
-   * edge or keyboard focus is in it; with reduced motion it fades instead.
+   * and comes out over the content (peeking) when the pointer touches the left
+   * edge or keyboard focus is in it. It paints nothing: the sidebar moves inside it.
    */
   .sidebar-panel {
     display: contents;
@@ -359,14 +359,12 @@
     z-index: 30;
     display: flex;
     width: var(--sidebar-width);
-    background: var(--color-frame);
     transform: translateX(-100%);
-    transition:
-      transform 160ms ease-out,
-      box-shadow 160ms ease-out;
 
     &[data-open] {
       transform: none;
+    }
+    &[data-open] > aside {
       box-shadow: var(--shadow-popover);
     }
   }
@@ -374,7 +372,6 @@
     transform: none;
     opacity: 0;
     pointer-events: none;
-    transition: opacity 80ms linear;
   }
   :root:not([data-motion="on"]) .sidebar-panel:is([data-hidden][data-open]) {
     opacity: 1;
@@ -2694,6 +2691,19 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  /* Where the assistant's next Block goes while it writes them into the Mind (#202). */
+  .mind-writing {
+    margin-block: 4px;
+    font-family: var(--font-sans);
+    font-size: var(--text-meta);
+    line-height: var(--text-meta--line-height);
+    color: var(--color-ink-meta);
+    user-select: none;
+  }
+  /* The paragraph the assistant is writing anew, until its change is in (#202). */
+  .mind-rewriting {
+    color: var(--color-ink-meta);
+  }
   /* Being written: a pulsing accent dot. Waiting for approval: an attention dot. */
   .answer-writing {
     display: inline-flex;
@@ -3360,8 +3370,7 @@
     position: fixed;
     z-index: 30;
     display: flex;
-    align-items: center;
-    gap: 6px;
+    flex-direction: column;
     max-width: min(420px, calc(100vw - 16px));
     padding: 2px 8px;
     border-radius: 6px;
@@ -3372,6 +3381,18 @@
     line-height: 20px;
     color: var(--color-ink-meta);
     white-space: nowrap;
+  }
+  .change-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+  /* Why the assistant made the change (#202), under the bar while the cursor is in it. */
+  .change-bar-why {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--color-ink-secondary);
   }
   .change-bar-position {
     min-width: 0;
@@ -4056,6 +4077,49 @@
   .claim-card-says {
     padding-left: 22px;
     color: var(--color-ink-secondary);
+  }
+  /* A figure a check worked out (#707): how, then each input's Citation. */
+  .claim-card-working {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .claim-card-figure {
+    padding-left: 22px;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-ink);
+    overflow-wrap: break-word;
+  }
+  .claim-card-inputs {
+    display: flex;
+    flex-direction: column;
+    margin: 4px 0 0;
+    padding: 0 0 0 16px;
+    list-style: none;
+  }
+  .claim-card-input {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    padding: 4px 6px;
+    border-radius: 6px;
+    text-align: left;
+
+    &:hover {
+      background: var(--color-frame);
+    }
+  }
+  .claim-card-input-figure {
+    color: var(--color-ink);
+    overflow-wrap: break-word;
+  }
+  .claim-card-input-source {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--text-meta);
+    line-height: 18px;
+    color: var(--color-ink-meta);
   }
   .citation-card-note {
     padding-left: 22px;
@@ -5238,6 +5302,10 @@
   .assistant-answer[data-sought] {
     animation: block-just-added 1600ms ease-in both;
   }
+  /* A folder just linked is washed the same way, where it now shows in the sidebar. */
+  [data-just-linked] {
+    animation: block-just-added 1600ms ease-in both;
+  }
   .assistant-answer-frame {
     position: relative;
     /* Room at the right for the Citations' checks. */
@@ -5328,6 +5396,118 @@
       font-size: 10px;
       line-height: 16px;
       vertical-align: 1px;
+    }
+  }
+  /*
+   * The card of the Minds an Answer changed or made (#202; the board
+   * Asst-Changes): a head on the frame, a ruled row for each Mind, then
+   * Accept all · Reject all.
+   */
+  .mind-changes {
+    margin: 8px 0 2px;
+    overflow: hidden;
+    border: 1px solid var(--color-rule-strong);
+    border-radius: 8px;
+    background: var(--color-sheet);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--color-ink);
+    user-select: none;
+  }
+  .mind-changes-head,
+  .mind-changes-row {
+    display: flex;
+    align-items: center;
+    min-height: 34px;
+    border-bottom: 1px solid var(--color-rule);
+  }
+  .mind-changes-head {
+    gap: 6px;
+    padding: 6px 10px;
+    background: var(--color-frame);
+    font-weight: 600;
+  }
+  .mind-changes-head:last-child {
+    border-bottom: 0;
+  }
+  .mind-changes-row {
+    gap: 8px;
+    padding: 4px 6px 4px 10px;
+  }
+  .mind-changes-icon {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    color: var(--color-ink-meta);
+  }
+  .mind-changes-title,
+  .mind-changes-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mind-changes-dot,
+  .mind-changes-count {
+    flex-shrink: 0;
+    font-weight: 400;
+    color: var(--color-ink-meta);
+  }
+  .mind-changes-review {
+    flex-shrink: 0;
+    padding: 0 2px;
+    border-radius: 4px;
+    font-weight: 600;
+    color: var(--color-accent);
+
+    &:hover {
+      color: var(--color-accent-strong);
+    }
+  }
+  .mind-changes-no-mind {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin: 8px 0 2px;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--color-ink-secondary);
+  }
+  .mind-changes-foot {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px;
+  }
+  .mind-changes-action,
+  .mind-changes-accept {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    height: 24px;
+    padding: 0 8px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-ink-secondary);
+
+    &:hover {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
+  }
+  .mind-changes-accept {
+    height: 26px;
+    padding: 0 10px;
+    background: var(--color-sheet);
+    box-shadow: inset 0 0 0 1px var(--color-rule-strong);
+    color: var(--color-ink);
+
+    &:hover {
+      background: var(--color-frame);
     }
   }
   /*
@@ -7628,7 +7808,8 @@
 }
 /* Washed while it lasts, with no fade. */
 :root:not([data-motion="on"]) .mind-editor > .block-just-added,
-:root:not([data-motion="on"]) .assistant-answer[data-sought] {
+:root:not([data-motion="on"]) .assistant-answer[data-sought],
+:root:not([data-motion="on"]) [data-just-linked] {
   animation: none;
   background: var(--color-frame);
   box-shadow: 0 0 0 6px var(--color-frame);
