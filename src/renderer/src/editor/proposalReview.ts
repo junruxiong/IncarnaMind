@@ -17,6 +17,7 @@ import {
   PROPOSAL_ATTRIBUTE,
   PROPOSAL_DELETE_MARK,
   PROPOSAL_INSERT_MARK,
+  type TextPlace,
   WORD_CHANGE_ID,
 } from "../../../core/api";
 import { citationState } from "../../../shared/citations";
@@ -310,38 +311,34 @@ const goesOnAccept = (node: ProseMirrorNode) =>
   node.marks.some((mark) => mark.type.name === PROPOSAL_DELETE_MARK);
 
 /**
- * Where the text between `from` and `to` that stays once the changes there
- * are accepted will start and end, counted in that text; null when they
- * leave none. What a change removes goes, and a Block it removes goes whole.
- * A Block's places, unlike positions in the editor, hold through a change
- * the core or another device makes (`positionOf`).
+ * Where a place in a paragraph or heading will be once the changes there are
+ * accepted, counted in the text that stays; null when a change removes its
+ * Block. Unlike a position in the editor, it holds through the accept, which
+ * comes back from Yjs as a new document.
  */
-export function keptOnAccept(
-  doc: ProseMirrorNode,
-  from: number,
-  to: number,
-): { from: BlockPlace; to: BlockPlace } | null {
-  let first: BlockPlace | null = null;
-  let last: BlockPlace | null = null;
-  doc.nodesBetween(from, to, (node, pos) => {
-    if (readProposalAttribute(node.attrs[PROPOSAL_ATTRIBUTE])?.kind === "delete") return false;
+export function placeOnAccept(doc: ProseMirrorNode, place: TextPlace): BlockPlace | null {
+  let found: BlockPlace | null = null;
+  doc.descendants((node, pos) => {
+    if (found) return false;
     if (!node.isTextblock) return true;
-    const blockId: unknown = node.attrs.id;
-    if (typeof blockId !== "string") return false;
-    let offset = 0;
-    node.forEach((child, at) => {
-      if (goesOnAccept(child)) return;
-      const start = pos + 1 + at;
-      const end = start + child.nodeSize;
-      if (end > from && start < to) {
-        first ??= { blockId, offset: offset + (child.isText ? Math.max(from - start, 0) : 0) };
-        last = { blockId, offset: offset + (child.isText ? Math.min(to, end) - start : 1) };
+    if (node.attrs.id !== place.blockId) return false;
+    const $pos = doc.resolve(pos + 1);
+    for (let depth = $pos.depth; depth > 0; depth--) {
+      if (readProposalAttribute($pos.node(depth).attrs[PROPOSAL_ATTRIBUTE])?.kind === "delete") {
+        return false;
       }
-      offset += child.isText ? child.nodeSize : 1;
+    }
+    let left = place.offset;
+    let offset = 0;
+    node.forEach((child) => {
+      const part = Math.min(child.isText ? child.nodeSize : 1, Math.max(left, 0));
+      if (!goesOnAccept(child)) offset += part;
+      left -= part;
     });
+    found = { blockId: place.blockId, offset };
     return false;
   });
-  return first && last ? { from: first, to: last } : null;
+  return found;
 }
 
 /** Where a Block's place is in the editor now; null when the Block is gone. */

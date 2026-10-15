@@ -5,7 +5,13 @@ import { Fragment, useEffect, useState } from "react";
 import type * as Y from "yjs";
 import type { CitationAttributes } from "../../../core/api";
 import { citationState } from "../../../shared/citations";
-import { checkSentences, dismissCheckProblem, stopCheck, useChecks } from "../checks";
+import {
+  acceptAndCheck,
+  checkSentences,
+  dismissCheckProblem,
+  stopCheck,
+  useChecks,
+} from "../checks";
 import { ProblemLine } from "../components/ProblemLine";
 import { ReadinessExplanation, readinessAction } from "../components/providers/ChatReadinessNotice";
 import { useLanguage, useT } from "../i18n";
@@ -238,7 +244,7 @@ export function NoteHealth({
             coverage.canWiden && coverage.range && coverage.action
               ? () =>
                   void checkSentences(editor, mindId, doc, coverage.action ?? "find-support", {
-                    ...(coverage.range && { range: coverage.range }),
+                    ...(coverage.range && { ranges: [coverage.range] }),
                     allDocuments: true,
                   })
               : undefined
@@ -270,14 +276,14 @@ export function NoteHealth({
             testId: "checks-accept-and-check",
             onClick: () => {
               dismissCheckProblem(mindId);
-              problem.acceptAndCheck();
+              void acceptAndCheck(editor, mindId, doc, problem);
             },
           }}
           also={close}
         >
-          {problem.sentences === 1
+          {problem.count === 1
             ? t("checks.waiting.one")
-            : t("checks.waiting", { count: format(problem.sentences) })}
+            : t("checks.waiting", { count: format(problem.count) })}
         </ProblemLine>
       )}
       {!running &&

@@ -17,7 +17,7 @@ import {
   PROPOSAL_ATTRIBUTE,
   PROPOSAL_DELETE_MARK,
   PROPOSAL_INSERT_MARK,
-  type TextPlace,
+  type TextStretch,
   type WaitingSentences,
 } from "../../api";
 import { layout, textBlocks } from "../../proposals/write";
@@ -64,7 +64,6 @@ function textOf(element: Y.XmlElement): string {
     .join("");
 }
 
-/** The changes still waiting in `from`..`to` of a Block, or on the Block, by id. */
 function changesIn(element: Y.XmlElement, from: number, to: number): string[] {
   const found = new Set<string>();
   const add = (ref: { id: string } | null) => {
@@ -112,50 +111,59 @@ function citedIn(element: Y.XmlElement, from: number, to: number): CitedQuote[] 
 }
 
 /**
- * The sentences from `from` to `to`, each whole: a sentence the selection
- * only touches is checked all the same. Headings aren't checked.
+ * The sentences each stretch touches, each whole and once: a sentence a
+ * stretch only touches is checked all the same. Headings aren't checked.
  */
 export function selectedSentences(
   blocks: Y.XmlFragment,
-  from: TextPlace,
-  to: TextPlace,
+  stretches: readonly TextStretch[],
 ): SelectedSentences {
   const all = textBlocks(blocks);
   const idOf = (element: Y.XmlElement) => element.getAttribute(BLOCK_ID_ATTRIBUTE);
-  const first = all.findIndex(({ element }) => idOf(element) === from.blockId);
-  const last = all.findIndex(({ element }) => idOf(element) === to.blockId);
-  if (first < 0 || last < first) return { ok: false, reason: "nothing" };
   const sentences: SelectedSentence[] = [];
-  const waiting: WaitingSentences = { sentences: 0, changes: [] };
-  for (const [index, { element, busy }] of all.slice(first, last + 1).entries()) {
-    if (busy || element.nodeName !== "paragraph") continue;
-    const blockId = idOf(element);
-    if (typeof blockId !== "string") continue;
-    const text = textOf(element);
-    const start = index === 0 ? from.offset : 0;
-    const end = index === last - first ? to.offset : text.length;
-    for (const span of sentenceSpans(text)) {
-      const touched =
-        start === end ? span.from <= start && start <= span.to : span.from < end && span.to > start;
-      if (!touched) continue;
-      const changes = changesIn(element, span.from, span.to);
-      if (changes.length > 0) {
-        waiting.sentences++;
-        waiting.changes.push(...changes.filter((id) => !waiting.changes.includes(id)));
-        continue;
+  const waiting: WaitingSentences = { sentences: [], changeIds: [] };
+  const seen = new Set<string>();
+  for (const { from, to } of stretches) {
+    const first = all.findIndex(({ element }) => idOf(element) === from.blockId);
+    const last = all.findIndex(({ element }) => idOf(element) === to.blockId);
+    if (first < 0 || last < first) continue;
+    for (const [index, { element, busy }] of all.slice(first, last + 1).entries()) {
+      if (busy || element.nodeName !== "paragraph") continue;
+      const blockId = idOf(element);
+      if (typeof blockId !== "string") continue;
+      const text = textOf(element);
+      const start = index === 0 ? from.offset : 0;
+      const end = index === last - first ? to.offset : text.length;
+      for (const span of sentenceSpans(text)) {
+        const touched =
+          start === end
+            ? span.from <= start && start <= span.to
+            : span.from < end && span.to > start;
+        const key = `${blockId}:${span.from}`;
+        if (!touched || seen.has(key)) continue;
+        seen.add(key);
+        const changes = changesIn(element, span.from, span.to);
+        if (changes.length > 0) {
+          waiting.sentences.push({
+            from: { blockId, offset: span.from },
+            to: { blockId, offset: span.to },
+          });
+          waiting.changeIds.push(...changes.filter((id) => !waiting.changeIds.includes(id)));
+          continue;
+        }
+        sentences.push({
+          element,
+          blockId,
+          from: span.from,
+          to: span.to,
+          text: text.slice(span.from, span.to),
+          context: text,
+          cited: citedIn(element, span.from, span.to),
+        });
       }
-      sentences.push({
-        element,
-        blockId,
-        from: span.from,
-        to: span.to,
-        text: text.slice(span.from, span.to),
-        context: text,
-        cited: citedIn(element, span.from, span.to),
-      });
     }
   }
-  return sentences.length + waiting.sentences > 0
+  return sentences.length + waiting.sentences.length > 0
     ? { ok: true, sentences, waiting }
     : { ok: false, reason: "nothing" };
 }
