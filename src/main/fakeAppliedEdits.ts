@@ -6,8 +6,8 @@
 /** The second paragraph, made formal as Claude Haiku 5.5 made it, word for word kept where it could. */
 const formal = (paragraph: string) =>
   paragraph
-    .replace(/\bIt's\b/g, "It is")
-    .replace(/\bdon't\b/g, "do not")
+    .replace(/\bIt['’]s\b/g, "It is")
+    .replace(/\bdon['’]t\b/g, "do not")
     .replace(/\ba lot of\b/g, "a great many")
     .replace(/\bbig\b/g, "considerable");
 

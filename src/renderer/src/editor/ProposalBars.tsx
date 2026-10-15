@@ -8,7 +8,7 @@ import { PencilLineIcon, SparkLineIcon } from "../components/lineIcons";
 import { regenerateChange, resolveProposalsIn, speak, useEdits } from "../editWithAi";
 import { useLanguage, useT } from "../i18n";
 import { useAppStore } from "../store";
-import { appliedLineIn } from "./appliedEditLine";
+import { appliedLineIn, redrawAppliedLine } from "./appliedEditLine";
 import {
   changeReason,
   clearHovered,
@@ -99,6 +99,9 @@ export function ProposalBars({ editor, mindId }: { editor: Editor; mindId: strin
       dom.removeEventListener("click", click);
     };
   }, [editor, mindId]);
+  // The lines over an applied edit are drawn outside React: drawn again once the language changes.
+  const language = useLanguage();
+  useEffect(() => redrawAppliedLine(editor, language), [editor, language]);
   return (
     <>
       <ProposalsBar editor={editor} mindId={mindId} />
@@ -347,12 +350,17 @@ function ChangeBar({ editor, mindId }: { editor: Editor; mindId: string }) {
     };
     const place = () => {
       if (editor.isDestroyed) return;
-      // Never over the Mind's bar of changes, which stays at the top as the Mind scrolls: under the line then.
+      // Never over the Mind's bar of changes, which stays at the top as the Mind scrolls, nor over
+      // the line of an applied edit just above the change: under the change's line then.
       const covered = editor.view.dom
         .closest(".mind-editor-frame")
         ?.querySelector(".proposals-bar")
         ?.getBoundingClientRect().bottom;
-      const top = Math.max(8, covered ?? 0);
+      const changeTop = reference.getBoundingClientRect().top;
+      const lines = [...editor.view.dom.querySelectorAll(".applied-line")]
+        .map((line) => line.getBoundingClientRect().bottom)
+        .filter((bottom) => bottom <= changeTop + 1);
+      const top = Math.max(8, covered ?? 0, ...lines);
       void computePosition(reference, element, {
         placement: "top-start",
         strategy: "fixed",

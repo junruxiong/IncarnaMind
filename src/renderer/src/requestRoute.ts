@@ -14,7 +14,7 @@ export interface RequestRoute {
 const QUESTION =
   /[?？]\s*$|^(?:what|why|how|who|when|where|which|is|are|does|do|did|can|could|should|would)\b/i;
 const EDIT =
-  /^(?:please\s+)?(?:make|shorten|lengthen|expand|rewrite|rephrase|reword|translate|fix|correct|tighten|simplify|polish|improve|edit|change|turn|remove|delete|cut|trim|condense|clarify)\b/i;
+  /^(?:please\s+)?(?:make|replace|shorten|lengthen|expand|rewrite|rephrase|reword|translate|fix|correct|tighten|simplify|polish|improve|edit|change|turn|remove|delete|cut|trim|condense|clarify)\b/i;
 const EDIT_ZH =
   /^(?:请|帮我)?(?:(?:把|将).+?(?:改|缩短|精简|扩写|重写|翻译|润色|删|去掉|简化)|缩短|精简|扩写|重写|改写|翻译|润色|删除|删掉|去掉|简化|改得)/u;
 
