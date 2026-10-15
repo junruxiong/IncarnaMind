@@ -57,6 +57,8 @@ const page = (
   report.push("storage:" + stored);
   window.print();
   report.push("print:returned");
+  const worker = new Worker(URL.createObjectURL(new Blob(['postMessage("worker:ran")'], { type: "text/javascript" })));
+  report.push(await new Promise((resolve) => { worker.onmessage = (event) => resolve(event.data); }));
   const probe = (address) => fetch(address, { mode: "no-cors" }).catch(() => undefined);
   await Promise.all([
     probe("http://localhost.:${port}/probe-localhost"),
@@ -197,7 +199,9 @@ test("asked, the page as it looked opens in the PDF view and back to its text; i
   await expect(viewer.getByTestId("viewer-web-look-bar")).toContainText("As it looked on");
   const pdfText = viewer.locator('[data-page-number="1"] .textLayer');
   await expect(pdfText).toContainText("Harbour trade in 2026");
-  await expect(pdfText).toContainText("Sandbox node:none cookie:none storage:none print:returned");
+  await expect(pdfText).toContainText(
+    "Sandbox node:none cookie:none storage:none print:returned worker:ran",
+  );
   if (SCREENSHOTS) await window.screenshot({ path: join(SCREENSHOTS, "look-shown-en.png") });
 
   await setLanguage(window, "zh-CN");
@@ -213,7 +217,9 @@ test("asked, the page as it looked opens in the PDF view and back to its text; i
   await add(window, "/again", "Harbour trade, again", true);
   await expect(line).toHaveAttribute("data-status", "saved", { timeout: 30_000 });
   await viewer.getByTestId("viewer-web-show-look").click();
-  await expect(pdfText).toContainText("Sandbox node:none cookie:none storage:none print:returned");
+  await expect(pdfText).toContainText(
+    "Sandbox node:none cookie:none storage:none print:returned worker:ran",
+  );
 
   const paths = heard.map((each) => each.path);
   expect(paths.filter((path) => path === "/beacon")).toHaveLength(2);
@@ -226,6 +232,26 @@ test("asked, the page as it looked opens in the PDF view and back to its text; i
     undefined,
     undefined,
   ]);
+  await app.close();
+});
+
+test("no window of the app gives a site a certificate of the User's, and none asks", async () => {
+  const { app } = await launchApp(dataDir, { home, web: port });
+  const answered = await app.evaluate(
+    ({ app: electron }) =>
+      new Promise<{ prevented: boolean; certificate: unknown }>((resolve) => {
+        let prevented = false;
+        electron.emit(
+          "select-client-certificate",
+          { preventDefault: () => (prevented = true) },
+          null,
+          "https://bank.example/",
+          [{ subjectName: "Priya Raman", issuerName: "Corporate MDM" }],
+          (certificate?: unknown) => resolve({ prevented, certificate: certificate ?? null }),
+        );
+      }),
+  );
+  expect(answered).toEqual({ prevented: true, certificate: null });
   await app.close();
 });
 

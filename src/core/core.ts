@@ -896,7 +896,8 @@ export function createCore(adapters: CoreAdapters): Core {
       }
     },
     async savePage(address, folderId, added) {
-      const result = await webPages.save({ address }, added);
+      // A found source's copy is the text the User asked for, not how its page looks.
+      const result = await webPages.save({ address, keepLook: false }, added);
       if (result.outcome === "failed") return null;
       if (!result.existing && folderId !== null) library.assign(result.document.id, folderId);
       return { document: documents.get(result.document.id), existing: result.existing };
