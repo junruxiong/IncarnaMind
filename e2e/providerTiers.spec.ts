@@ -26,19 +26,21 @@ test.afterEach(async () => {
 const LANGUAGES = [
   {
     language: "en",
-    more: "More providers",
-    first: ["Anthropic", "OpenAI", "Google", "OpenRouter", "DeepSeek", "Qwen", "SiliconFlow"],
+    more: "More…",
+    first: ["Anthropic", "OpenAI", "Google", "DeepSeek", "Qwen"],
+    folded: ["OpenRouter", "SiliconFlow"],
     setUp: "Mistral",
     rest: ["xAI", "Kimi", "GLM", "OpenAI-compatible server"],
-    guide: "How do I get one?",
+    link: "Where do I find it?",
   },
   {
     language: "zh-CN",
-    more: "更多提供商",
-    first: ["Anthropic", "OpenAI", "Google", "OpenRouter", "DeepSeek", "通义千问", "硅基流动"],
+    more: "更多…",
+    first: ["Anthropic", "OpenAI", "Google", "DeepSeek", "通义千问"],
+    folded: ["OpenRouter", "硅基流动"],
     setUp: "Mistral",
     rest: ["xAI", "Kimi", "智谱 GLM", "OpenAI 兼容服务器"],
-    guide: "如何获取密钥？",
+    link: "在哪里找到密钥？",
   },
 ] as const;
 
@@ -58,7 +60,7 @@ async function setUpMistral(window: Page): Promise<void> {
   });
 }
 
-for (const { language, more, first, setUp, rest, guide } of LANGUAGES) {
+for (const { language, more, first, folded, setUp, rest, link } of LANGUAGES) {
   test(`Models lists first-class providers first, the rest under "${more}", and keeps a set-up one (${language})`, async () => {
     const { app, window } = await launchApp(dataDir, { fakeChat: true });
     await dismissChatSetup(window);
@@ -81,37 +83,25 @@ for (const { language, more, first, setUp, rest, guide } of LANGUAGES) {
       await settings.getByTestId("chat-choice-api-key").check();
 
       const form = settings.getByTestId("provider-form");
-      // First-class providers first, then the one already set up; the rest are folded away.
-      await expect(form.getByRole("radio")).toHaveCount(first.length + 1);
-      await expect(form.getByTestId("provider-more")).toHaveCount(0);
-      const labels = await form
-        .getByRole("radio")
-        .evaluateAll((radios) => radios.map((each) => each.closest("label")?.textContent?.trim()));
-      expect(labels).toEqual([...first.map((each) => expect.stringContaining(each)), setUp]);
+      // One row of the likeliest providers, one chosen; the rest are behind More…
+      const radios = form.getByRole("radio");
+      await expect(radios).toHaveCount(first.length);
+      const labels = await radios.evaluateAll((all) =>
+        all.map((each) => each.closest("label")?.textContent?.trim()),
+      );
+      expect(labels).toEqual(first.map((each) => expect.stringContaining(each)));
+      await expect(form.getByRole("radio", { checked: true })).toHaveCount(1);
 
       const toggle = form.getByTestId("provider-more-toggle");
       await expect(toggle).toHaveText(more);
-      await expect(toggle).toHaveAttribute("aria-expanded", "false");
       await toggle.click();
-      await expect(toggle).toHaveAttribute("aria-expanded", "true");
-      const folded = form.getByTestId("provider-more").getByRole("radio");
-      await expect(folded).toHaveCount(rest.length);
-      for (const name of rest) {
-        await expect(form.getByTestId("provider-more").getByText(name)).toBeVisible();
+      // The folded ones, the one already set up and the rest, join the row.
+      for (const name of [...folded, setUp, ...rest]) {
+        await expect(form.getByText(name, { exact: false }).first()).toBeVisible();
       }
-      // The folded group sits under the first-class ones.
-      const groupTop = (await form.getByTestId("provider-more").boundingBox())?.y ?? 0;
-      const lastFirst = await form.getByRole("radio").nth(first.length).boundingBox();
-      expect(groupTop).toBeGreaterThan(lastFirst?.y ?? Number.POSITIVE_INFINITY);
 
-      // A first-class provider has a key guide; a best-effort one has only its key link.
-      await form.getByRole("radio").first().check();
-      await expect(form.getByTestId("provider-key-guide")).toContainText(guide);
-      await form.getByTestId("provider-key-guide").locator("summary").click();
-      await expect(form.getByTestId("provider-key-guide").getByRole("listitem")).toHaveCount(3);
-      await folded.first().check();
-      await expect(form.getByTestId("provider-key-guide")).toHaveCount(0);
-      await expect(form.getByRole("link", { name: /Get a key|获取密钥/ })).toBeVisible();
+      // Every provider has its key link.
+      await expect(form.getByRole("link", { name: link })).toBeVisible();
 
       await settings.getByRole("button", { name: /^(Cancel|取消)$/ }).click();
       await settings.getByRole("button", { name: /^(Close Settings|关闭设置)$/ }).click();

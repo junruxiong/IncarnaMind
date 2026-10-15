@@ -131,7 +131,8 @@ test("a first run opens on the example Mind: its Answer is written in advance, i
     window.locator('[data-testid="get-started-step"][data-step="citation"] [data-done]'),
   ).toContainText("Check a Citation in the example");
 
-  // The banner's way on: adding one's own Documents, in place, as Get started's step does (#766).
+  // The banner's way on: adding one's own Documents, in place, as Get started's step does (#766),
+  // asking for no model: that waits for the first own Question.
   await window.keyboard.press("Escape");
   const addOwn = pane.getByTestId("example-add-own");
   await expect(addOwn).toHaveText("Add your Documents");
@@ -140,7 +141,7 @@ test("a first run opens on the example Mind: its Answer is written in advance, i
   await expect(ways.getByRole("menuitem")).toHaveText(["Add files…", "Link a folder…"]);
   await expect(ways.getByRole("menuitem").first()).toBeFocused();
   await expect(window.getByTestId("mind-title")).toHaveValue("Where tea comes from");
-  await expect(window.getByTestId("chat-setup")).toBeHidden();
+  await expect(window.getByTestId("chat-setup")).toHaveCount(0);
   await window.keyboard.press("Escape");
   await expect(addOwn).toBeFocused();
   await setLanguage(window, "zh-CN");
