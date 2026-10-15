@@ -15,19 +15,12 @@ import { core } from "./core";
 /** Marks changes that came from the core, so they aren't sent back to it. */
 const FROM_CORE = Symbol("from the core");
 
-/**
- * Marks the core's changes from an edit the User asked for in this window
- * (#880): not sent back to the core either, but its window's Undo takes
- * them back.
- */
+/** The core's changes from an edit asked for here (#880): not sent back, but this window's Undo takes them back. */
 export const EDIT_FROM_CORE = Symbol("an edit asked for here, from the core");
 
 const takers = new Map<string, { doc: Y.Doc; take(update: Uint8Array, cause: EditCause): void }>();
 
-/**
- * Hands the updates of the edit with this `EditCause.requestId` to `take`
- * instead of applying them, in the copy `doc` only. Returns what stops it.
- */
+/** Hands the updates of this edit to `take`, in the copy `doc` only. Returns what stops it. */
 export function takeEditUpdates(
   requestId: string,
   doc: Y.Doc,

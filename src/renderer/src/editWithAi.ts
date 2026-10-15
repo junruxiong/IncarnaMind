@@ -151,9 +151,9 @@ const failure = (error: unknown): EditWithAiResult => ({
  * Asks the core to change the selected text (or `range`) as `action` says.
  * While the AI works the text is marked and the composer says so, with Stop;
  * the selection closes at its end, so the User can write on. The change
- * applies at once, with a line over it to undo or review it (#880); one held
- * back waits as Proposals, which take the cursor, if it is still where it
- * was, so their bar shows. Anything else is one line in the composer.
+ * applies at once (#880); one held back waits as Proposals, which take the
+ * cursor, if it is still where it was, so their bar shows; anything else is
+ * one line in the composer.
  */
 export async function requestEdit(
   editor: Editor,
@@ -211,12 +211,11 @@ export async function requestEdit(
 }
 
 /**
- * What a request gave, once it is back: an edit the User asked for applies
- * (`applying`), even once stopped, as far as it came, and a screen reader
- * hears how many places changed. Proposals take the cursor, unless the User
- * has moved it or edited meanwhile (`movedOn`), so their bar shows, and a
- * screen reader hears how many came and how many are out of date; anything
- * else is one line in the composer, `retry` trying again.
+ * What a request gave, once it is back: an edit applying (`applying`)
+ * applies, stopped or not, as far as it came. Proposals take the cursor,
+ * unless the User has moved it or edited meanwhile (`movedOn`), so their bar
+ * shows, and a screen reader hears how many came and how many are out of
+ * date; anything else is one line in the composer, `retry` trying again.
  */
 async function arrived(
   editor: Editor,
@@ -230,7 +229,7 @@ async function arrived(
   const edits = useEdits.getState();
   const stopped = edits.pending[mindId]?.requestId !== requestId;
   if (stopped) {
-    // Nothing waits on the text any more, unless another request or the composer does.
+    // Stopped: nothing waits on the text any more, unless another request or the composer does.
     if (!edits.pending[mindId] && !edits.editing[mindId] && !editor.isDestroyed) {
       setEditTarget(editor, null);
     }

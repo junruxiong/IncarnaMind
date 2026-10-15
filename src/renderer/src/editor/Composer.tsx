@@ -461,7 +461,7 @@ export function Composer({
       else openResearch(mind.mindId, topic, mindModelOf(mind.doc), webReach === "ready");
       return;
     }
-    // A change asked for in the selected text: it applies there at once, with Undo (#880).
+    // A change to the selected text is Edit with AI's, and applies at once (#880).
     if (
       said === undefined &&
       mind &&

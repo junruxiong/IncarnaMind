@@ -991,10 +991,7 @@ function joinsAcross(tokens: readonly OldToken[]) {
 /** What a Proposal that removes these tokens records as the text it changes. */
 const targetOf = (tokens: readonly OldToken[]) => tokens.map((token) => token.target).join("");
 
-/**
- * What Proposals remove and add: the Citations, by marker, to count those
- * removed and added back nowhere; and how many characters.
- */
+/** The Citations Proposals remove and add, by marker, to count those removed and added back nowhere. */
 interface CitationNotes {
   removed: Set<string>;
   added: Set<string>;
@@ -1007,7 +1004,6 @@ const notesOf = (): CitationNotes => ({
   characters: { removed: 0, added: 0 },
 });
 
-/** How many characters tokens hold, an inline node counting as one. */
 const lengthOf = (tokens: readonly { text?: string }[]) =>
   tokens.reduce((sum, token) => sum + (token.text?.length ?? 1), 0);
 
@@ -1263,12 +1259,9 @@ export function createRewriteStream(
   let unlike = 0;
   /** Two were like none: the text is written anew, and each pairs in order. */
   let anew = false;
-  /** Some paragraph of the new text is like the selection's it pairs with: the text maps onto it. */
   let mapped = false;
-  /** The selection's paragraphs the new text left out, kept as they were (`leftOut: "keep"`). */
   const kept: Segment[] = [];
 
-  /** Takes out the selection's paragraphs, each whole one with its Block. */
   const remove = (gone: readonly Segment[]) => {
     const blocks: Y.XmlElement[] = [];
     for (const segment of gone) {
@@ -1282,7 +1275,7 @@ export function createRewriteStream(
     }
   };
 
-  /** The selection's paragraphs before `to` not paired go, or are kept as left out. */
+  /** The selection's paragraphs before `to` not paired go, or are kept. */
   const removeUpTo = (to: number) => {
     const passed = segments.slice(at, to).filter((segment) => segment.tokens.length > 0);
     if (onLeftOut === "keep") kept.push(...passed);
@@ -1410,11 +1403,7 @@ export function createRewriteStream(
     /** The Proposals written so far. */
     written: (): Written => ({ proposals: [...proposals], droppedCitations: droppedOf(notes) }),
 
-    /**
-     * What the new text does to the selection so far: whether it maps onto
-     * it, and how many characters its Proposals remove and add, with those of
-     * the paragraphs it left out counted as removed.
-     */
+    /** Characters removed count the paragraphs it left out. */
     extent: () => ({
       mapped,
       removed:
@@ -1422,7 +1411,6 @@ export function createRewriteStream(
       added: notes.characters.added,
     }),
 
-    /** The parts of the selection the new text left out, kept as they were. */
     leftOut: (): LeftOutPart[] =>
       kept.flatMap((segment) => {
         const blockId = segment.element.getAttribute(BLOCK_ID_ATTRIBUTE);
@@ -1439,7 +1427,6 @@ export function createRewriteStream(
           : [];
       }),
 
-    /** The paragraphs kept as left out go after all, as Proposals. Returns whether any did. */
     removeLeftOut: (): boolean =>
       wrote(() => {
         remove(kept.splice(0));

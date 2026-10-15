@@ -99,7 +99,7 @@ export function ProposalBars({ editor, mindId }: { editor: Editor; mindId: strin
       dom.removeEventListener("click", click);
     };
   }, [editor, mindId]);
-  // The lines over an applied edit are drawn outside React: drawn again once the language changes.
+  // The applied edit's lines are drawn outside React: again once the language changes.
   const language = useLanguage();
   useEffect(() => redrawAppliedLine(editor, language), [editor, language]);
   return (
@@ -130,7 +130,7 @@ function ProposalsBar({ editor, mindId }: { editor: Editor; mindId: string }) {
       const theirs = new Map<string | null, Group>();
       const assistant: Group = { ids: [], stale: false };
       const line = appliedLineIn(current.state);
-      // An edit the User asked for, reviewed or held back, has its own line over it.
+      // A reviewed or held edit has its own line.
       const ownLine = line && line.kind !== "applied" ? line.request : null;
       for (const each of pendingIn(current.state)) {
         if (each.request === ownLine) continue;
@@ -274,7 +274,7 @@ interface Shown {
   reason: string | null;
   /** The cursor is in it, not only the pointer on it. */
   focused: boolean;
-  /** It is one of an applied edit's changes, shown again to restore (#880). */
+  /** One of an applied edit's changes, shown again to restore (#880). */
   reviewed: boolean;
 }
 
@@ -350,8 +350,8 @@ function ChangeBar({ editor, mindId }: { editor: Editor; mindId: string }) {
     };
     const place = () => {
       if (editor.isDestroyed) return;
-      // Never over the Mind's bar of changes, which stays at the top as the Mind scrolls, nor over
-      // the line of an applied edit just above the change: under the change's line then.
+      // Never over the Mind's bar of changes, which stays at the top as the Mind scrolls, nor an
+      // applied edit's line above the change: under the change's line then.
       const covered = editor.view.dom
         .closest(".mind-editor-frame")
         ?.querySelector(".proposals-bar")

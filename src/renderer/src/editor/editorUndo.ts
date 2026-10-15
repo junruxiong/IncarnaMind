@@ -4,10 +4,9 @@ import { type Undoable, useUndo } from "../undo";
 
 type StackEvent = "stack-item-added" | "stack-item-popped";
 
-/** The editor's Yjs Undo manager, as far as it is used here. */
 export interface UndoStack {
   undoStack: unknown[];
-  /** When the last change it took in was; a change soon after joins its step. */
+  /** A change soon after the last one joins its step. */
   lastChange: number;
   stopCapturing(): void;
   addTrackedOrigin(origin: unknown): void;

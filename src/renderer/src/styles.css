@@ -3385,14 +3385,7 @@
       color: var(--color-ink-secondary);
     }
   }
-  /*
-   * An edit the User asked for applies at once (#880; DESIGN.md, AI edits):
-   * while it streams in, its changes read as the text they make; then a line
-   * over the first Block it changed, "Changed 3 places · Undo ⌘Z · Review
-   * changes", in accent-strong with the sparkle, and over the paragraphs it
-   * left out and kept, a quieter one in ink-meta. The lines wrap whole at
-   * any width.
-   */
+  /* An edit applying as it streams in reads as the text it makes (#880; DESIGN.md, AI edits). */
   .mind-editor del.proposal-delete:has(.proposal-applying),
   .mind-editor .proposal-node--delete.proposal-applying {
     display: none;

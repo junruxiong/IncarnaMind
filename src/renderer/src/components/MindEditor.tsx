@@ -19,6 +19,7 @@ import { chosenScope, useComposer } from "../composer";
 import { core } from "../core";
 import { AnswerView } from "../editor/AnswerView";
 import { holdsAiText } from "../editor/aiText";
+import { AppliedEditLine } from "../editor/appliedEditLine";
 import { BlockHandle } from "../editor/BlockHandle";
 import { BlockCommands } from "../editor/blockCommands";
 import { BlockOrigins } from "../editor/blockOrigins";
@@ -60,7 +61,6 @@ import {
 import { NoteHealth } from "../editor/NoteHealth";
 import { NoteKeymap } from "../editor/noteKeymap";
 import { noteExtensions } from "../editor/noteSchema";
-import { AppliedEditLine } from "../editor/appliedEditLine";
 import { ProposalBars } from "../editor/ProposalBars";
 import { ProposalReview } from "../editor/proposalReview";
 import { QuestionView } from "../editor/QuestionView";
