@@ -2052,6 +2052,8 @@ export function createCore(adapters: CoreAdapters): Core {
     linkedFolderExists: (linkedFolderId) =>
       documents.linkedFolders.list().some((folder) => folder.id === linkedFolderId),
     documentsIn: (linkedFolderId) => documents.list({ linkedFolderId }),
+    mindFolder: (mindId) => minds.get(mindId).folderId,
+    now,
     checksRelyOn: (documentIds) => retention.isRetained("check-result", documentIds),
     recheck: (input) => recheckCitation(documents, input),
     changed: (value) => events.emit("examples.changed", value),

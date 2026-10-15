@@ -2894,20 +2894,25 @@ export type LinkedFolderStatus = "scanning" | "watching" | "paused" | "unavailab
 
 /**
  * The groups that have an example Mind (onboarding, see src/core/examples.ts):
- * "tea" is the first-run default; the others are closer to a kind of work
- * (papers, reports, contracts, meetings), and open from the default's banner.
+ * "credit", a credit committee paper, is the first-run default (#802); the
+ * others are closer to a kind of work (papers, reports, contracts, meetings),
+ * and open from the default's banner.
  */
-export const EXAMPLE_GROUPS = ["tea", "papers", "reports", "contracts", "meetings"] as const;
+export const EXAMPLE_GROUPS = ["credit", "papers", "reports", "contracts", "meetings"] as const;
 export type ExampleGroup = (typeof EXAMPLE_GROUPS)[number];
 
 /**
- * An example Mind (onboarding, see src/core/examples.ts): "Where tea comes
- * from", or one of a group, with its example Documents in their own Linked
- * folder, written in advance so it works before any chat model is set up.
+ * An example Mind (onboarding, see src/core/examples.ts): "Draft: credit
+ * committee paper", or one of a group, with its example Documents in their own
+ * Linked folder, written in advance so it works before any chat model is set up.
  */
 export interface Examples {
-  /** Which example this is. */
-  group: ExampleGroup;
+  /**
+   * Which example this is. "tea": "Where tea comes from", which a first run of
+   * an earlier version made; it is shown as the example, and removed, while
+   * there is no credit paper, but no longer made (#802).
+   */
+  group: ExampleGroup | "tea";
   /** Whether this copy of IncarnaMind ships the examples. */
   available: boolean;
   /** The example Mind, while it exists. */
@@ -3369,6 +3374,11 @@ export interface ChatProvider {
 export interface SaveChatProviderInput {
   kind: ChatProviderKind;
   /**
+   * A preset of the "openai-compatible" kind, by its catalog id, e.g. "groq":
+   * its endpoint and name come from the catalog. Left out: the kind's own.
+   */
+  catalogId?: string;
+  /**
    * A hosted provider's endpoint (its region), by its id in the catalog, e.g.
    * "intl" for Qwen. Left out: its first. Each endpoint is its own provider
    * with its own key, as keys and model lists differ by region.
@@ -3384,6 +3394,7 @@ export interface SaveChatProviderInput {
 
 export interface TestChatConnectionInput {
   kind: ChatProviderKind;
+  catalogId?: string;
   /** The endpoint to test (see `SaveChatProviderInput`). */
   endpoint?: string;
   baseUrl?: string;
@@ -7442,7 +7453,7 @@ export interface CoreApi {
    */
   addFoundSource(input: AddFoundSourceInput): Promise<AddFoundSourceResult>;
 
-  /** An example Mind and its Documents, if made (see `Examples`); the tea example by default. */
+  /** An example Mind and its Documents, if made (see `Examples`); the credit paper by default. */
   getExamples(group?: ExampleGroup): Promise<Examples>;
   /**
    * On a first run (no Mind yet, examples never offered before), makes the
@@ -7452,8 +7463,8 @@ export interface CoreApi {
   /**
    * Makes the example Mind and its Documents (copies of the shipped files in
    * the data folder, linked), or returns them if they exist. Its Citations
-   * are checked once the Documents have been read. "examples.changed" follows.
-   * The tea example by default.
+   * are checked once the Documents have been read, and so are its draft's
+   * checks, already made. "examples.changed" follows. The credit paper by default.
    */
   createExamples(group?: ExampleGroup): Promise<Examples>;
   /** Deletes the example Mind, and unlinks the example Documents and deletes their copies. */

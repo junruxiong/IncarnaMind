@@ -3,10 +3,14 @@ import { join } from "node:path";
 import { describe, expect, onTestFinished, test, vi } from "vitest";
 import { type Core, DATABASE_FILE } from "../../src/core";
 import { ANSWER_TEMPERATURE } from "../../src/core/answers/engine";
-import type { ChatProviderKind } from "../../src/core/api";
 import { givesStructuredOutput, readsImages } from "../../src/core/providers/capabilities";
 import { catalogMenu } from "../../src/core/providers/catalog";
-import { keyProviderGroups } from "../../src/core/providers/catalog/providers";
+import {
+  catalogProvider,
+  isPreset,
+  keyProviderGroups,
+  kindOfCatalogId,
+} from "../../src/core/providers/catalog/providers";
 import { anthropicModelFacts } from "../../src/core/providers/modelLists";
 import { migrate, openDatabase } from "../../src/core/storage";
 import { migrations } from "../../src/core/storage/migrations";
@@ -372,9 +376,14 @@ describe("The key form's Model list (#890)", () => {
     onTestFinished(() => fetch.mockRestore());
   }
 
-  async function settingsMenu(kind: ChatProviderKind, modelId: string): Promise<string[]> {
+  async function settingsMenu(catalogId: string, modelId: string): Promise<string[]> {
     const core = startCore(await createTempDataFolder());
-    const saved = await core.saveChatProvider({ kind, modelId, apiKey: "sk-test" });
+    const saved = await core.saveChatProvider({
+      kind: kindOfCatalogId(catalogId),
+      ...(isPreset(catalogProvider(catalogId)) && { catalogId }),
+      modelId,
+      apiKey: "sk-test",
+    });
     if (saved.service) await core.allowDataFlow("chat", saved.service.id);
     const [group] = await core.listChatModels();
     return group?.models ?? [];
@@ -383,12 +392,12 @@ describe("The key form's Model list (#890)", () => {
   test("for each first-class company, it holds what Settings' Default model menu lists once the key is saved, in that order", async () => {
     const firstClass = keyProviderGroups().main;
     expect(firstClass).toEqual(expect.arrayContaining(["anthropic", "openai", "deepseek"]));
-    for (const kind of firstClass) {
-      const form = catalogMenu(kind);
+    for (const catalogId of firstClass) {
+      const form = catalogMenu(catalogId);
       const recommended = form[0];
-      if (!recommended) throw new Error(`${kind} offers no model.`);
+      if (!recommended) throw new Error(`${catalogId} offers no model.`);
       listing(form);
-      expect(await settingsMenu(kind, recommended), kind).toEqual(form);
+      expect(await settingsMenu(catalogId, recommended), catalogId).toEqual(form);
     }
   });
 
