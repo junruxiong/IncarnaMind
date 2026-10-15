@@ -156,6 +156,12 @@ test("two Word Minds side by side each keep their own look", async () => {
   const clause = contract.locator("p", { hasText: "Prices are fixed" });
   await expect(clause).toHaveCSS("text-align", "justify");
   expect(await fontOf(clause)).toMatch(/^"Book Antiqua"/);
+  // The bullets' style has contextual spacing: no space between two of them, its space after the last.
+  await expect(resume.locator("li p", { hasText: "跟踪 12 家" })).toHaveCSS("margin-bottom", "0px");
+  await expect(resume.locator("li p", { hasText: "整理行业数据库" })).not.toHaveCSS(
+    "margin-bottom",
+    "0px",
+  );
   if (SCREENSHOTS) {
     await window.screenshot({ path: join(SCREENSHOTS, "word-look-side-by-side.png") });
   }
@@ -215,6 +221,19 @@ test("in a red Arial run, ⌘B and ⌘I toggle its words and keep its colour, �
   expect(before).toMatchObject({ weight: 400, style: "normal", color: RED });
   expect(before.font).toMatch(/^Arial/);
 
+  // The heading's bold comes from its Word style, and ⌘B takes it off like any bold.
+  const heading = editor.locator("p", { hasText: "Payment terms" });
+  await expect(heading.locator("strong")).toHaveText("Payment terms");
+  await slideSelect(window, heading, "Payment terms");
+  await window.keyboard.press("ControlOrMeta+B");
+  await expect(heading.locator("strong")).toHaveCount(0);
+  expect((await lookOf(heading, "Payment terms")).weight).toBe(before.weight);
+  await window.keyboard.press("ControlOrMeta+Z");
+  await expect(heading.locator("strong")).toHaveText("Payment terms");
+  // The selection menu, under the heading, would cover the next line.
+  await window.keyboard.press("ArrowRight");
+  await expect(window.getByTestId("selection-menu")).toBeHidden();
+
   await slideSelect(window, line, "thirty days");
   await window.keyboard.press("ControlOrMeta+B");
   await expect(line.locator("strong")).toHaveText("thirty days");
@@ -230,16 +249,6 @@ test("in a red Arial run, ⌘B and ⌘I toggle its words and keep its colour, �
     color: RED,
     font: before.font,
   });
-
-  // The heading's bold comes from its Word style, and ⌘B takes it off like any bold.
-  const heading = editor.locator("p", { hasText: "Payment terms" });
-  await expect(heading.locator("strong")).toHaveText("Payment terms");
-  await slideSelect(window, heading, "Payment terms");
-  await window.keyboard.press("ControlOrMeta+B");
-  await expect(heading.locator("strong")).toHaveCount(0);
-  expect((await lookOf(heading, "Payment terms")).weight).toBe(before.weight);
-  await window.keyboard.press("ControlOrMeta+Z");
-  await expect(heading.locator("strong")).toHaveText("Payment terms");
 
   await slideSelect(window, line, "delivery");
   await window.keyboard.press("ControlOrMeta+E");
@@ -260,6 +269,7 @@ test("in a red Arial run, ⌘B and ⌘I toggle its words and keep its colour, �
   expect(linkLook.color).not.toBe(RED);
   expect((await lookOf(line, "within")).color).toBe(linkLook.color);
   if (SCREENSHOTS) {
+    await motionSettled(window);
     await window.screenshot({ path: join(SCREENSHOTS, "word-look-marks.png") });
   }
   await app.close();
@@ -342,6 +352,9 @@ test("a Mind written in the app, beside a Word Mind, keeps the app's look and ha
   const sizeOf = (target: Locator) =>
     target.evaluate((element) => getComputedStyle(element).fontSize);
   expect(await sizeOf(clause)).toBe(await sizeOf(line));
+  if (SCREENSHOTS) {
+    await window.screenshot({ path: join(SCREENSHOTS, "word-look-beside-native.png") });
+  }
 
   await pointAndClick(window, second.getByTestId("group-menu"));
   const groupMenu = second.getByTestId("group-menu-items");
@@ -367,9 +380,6 @@ test("a Mind written in the app, beside a Word Mind, keeps the app's look and ha
   await pointAndClick(window, wordMenu.getByTestId("mind.look.plain"));
   await expect(clause).toHaveCSS("text-align", "start");
   await expect(line).toHaveCSS("text-align", "start");
-  if (SCREENSHOTS) {
-    await window.screenshot({ path: join(SCREENSHOTS, "word-look-beside-native.png") });
-  }
   await app.close();
 });
 
