@@ -729,6 +729,16 @@ describe("making a Folder", () => {
 });
 
 describe("loading keeps a list the core pushed after reading it", () => {
+  beforeEach(() => {
+    method("getExamples").mockResolvedValue({
+      group: "tea",
+      available: false,
+      mindId: null,
+      linkedFolderId: null,
+      answerId: null,
+      more: [],
+    });
+  });
   const folder = (id: string) => ({ id, name: id }) as unknown as Folder;
   const folderIds = () => useAppStore.getState().folders.map((each) => each.id);
   const later = <T>() => {
