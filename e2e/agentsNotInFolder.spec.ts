@@ -2,6 +2,7 @@ import { mkdir, realpath, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
+import { SHOW_AGENT_CONNECTION } from "../src/shared/agentConnection";
 import {
   acceptPlainTextKeys,
   catchCopies,
@@ -15,6 +16,11 @@ import {
   setWindowSize,
   showSettingsPage,
 } from "./app";
+
+test.skip(
+  !SHOW_AGENT_CONNECTION,
+  "Settings › Agents is hidden while SHOW_AGENT_CONNECTION is false.",
+);
 
 /*
  * Connecting an agent when the Library has no Folders, or no Documents (#507): the dialog offers

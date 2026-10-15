@@ -4,6 +4,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { expect, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
+import { SHOW_AGENT_CONNECTION } from "../src/shared/agentConnection";
 import {
   acceptPlainTextKeys,
   catchCopies,
@@ -18,6 +19,11 @@ import {
   setWindowSize,
   showSettingsPage,
 } from "./app";
+
+test.skip(
+  !SHOW_AGENT_CONNECTION,
+  "Settings › Agents is hidden while SHOW_AGENT_CONNECTION is false.",
+);
 
 /*
  * Settings → Agents (#351): turned on, an agent is connected after one plain
