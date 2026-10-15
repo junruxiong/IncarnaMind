@@ -9,6 +9,7 @@
  * written over, and shown by the snapshot from there.
  */
 import { randomUUID } from "node:crypto";
+import { rmSync } from "node:fs";
 import { access, mkdir, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { normaliseAddress } from "../../../shared/webAddresses";
@@ -263,16 +264,20 @@ export function createWebPages(options: WebPagesOptions) {
         "SELECT path FROM documents WHERE kind = 'web' AND purged_at IS NOT NULL",
       );
       await Promise.all(rows.map((row) => rm(row.path, { force: true })));
-      const kept = keptPictureHashes(db);
       const files = await readdir(pictureFolder).catch(() => [] as string[]);
-      await Promise.all(
-        files
-          .filter((file) => {
-            const hash = file.split(".")[0] ?? "";
-            return !kept.has(hash) && !saving.has(hash);
-          })
-          .map((file) => rm(join(pictureFolder, file), { force: true })),
-      );
+      // Checked and removed in one turn, with nothing awaited between: a save that holds a
+      // picture, or has recorded it, meanwhile keeps it; one that holds it after finds it gone
+      // and writes it again.
+      const kept = keptPictureHashes(db);
+      for (const file of files) {
+        const hash = file.split(".")[0] ?? "";
+        if (kept.has(hash) || saving.has(hash)) continue;
+        try {
+          rmSync(join(pictureFolder, file), { force: true });
+        } catch (error) {
+          options.reportError?.(error);
+        }
+      }
     },
 
     /**

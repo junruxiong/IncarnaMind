@@ -1435,6 +1435,8 @@ export type CitationLocation =
       notes?: boolean;
       comment?: { author: string | null };
       paragraphs?: { from: number; to: number };
+      /** A web page's picture the quote was read from, numbered in the page from 1. */
+      figure?: number;
     };
 
 /** A stretch of words, and whether the Document has it where the Answer's quoted words were looked for. */
@@ -1814,6 +1816,8 @@ export interface DocumentPlace {
    * TXT or Markdown file.
    */
   quote?: string;
+  /** A saved web page's picture the quote was read from, numbered in the page from 1: it is outlined. */
+  figure?: number;
   /** The Citation this was opened from, if a Citation opened it. */
   citation?: TabCitation;
   /**
@@ -2031,7 +2035,12 @@ export type DocumentFailureReason =
    * couldn't be downloaded or failed on them. The pages that were read are
    * searched; Retry reads the others.
    */
-  | "pages-unread";
+  | "pages-unread"
+  /**
+   * The app stopped while it was being read, not closed in good order: it
+   * isn't read again by itself, as it could stop the app again. Retry reads it.
+   */
+  | "app-stopped";
 
 export interface DocumentFailure {
   reason: DocumentFailureReason;
@@ -2041,12 +2050,13 @@ export interface DocumentFailure {
   pages?: number[];
 }
 
-/** Where reading a PDF's scanned pages is (#397), while it is processed. */
+/** Where reading a PDF's scanned pages, or a saved web page's pictures, is while it is processed. */
 export interface DocumentScanProgress {
-  /** How many of its pages are scans to read. */
+  /** How many of its pages are scans to read, or of a saved web page's pictures. */
   pages: number;
   /** How many of them are read so far. */
   read: number;
+  of: "scanned-pages" | "pictures";
 }
 
 /**
@@ -2802,6 +2812,7 @@ export interface ScannedText {
  */
 export interface ScannedQuote {
   unsure: string[];
+  from: "scan" | "picture";
 }
 
 /** A Citation's quote, as `readScannedQuote` looks it up: its Document, version, Units and quote. */
@@ -4226,6 +4237,8 @@ export interface CheckSentencesInput {
   /** Where the selection starts, and where it ends: each sentence it touches is checked, whole. */
   from: TextPlace;
   to: TextPlace;
+  /** More stretches checked with `from`..`to`, each sentence once. */
+  more?: TextStretch[];
   action: ClaimCheckAction;
   /** Search every Document, not the Mind's Folder ("Search all Documents"). */
   allDocuments?: boolean;
@@ -4240,7 +4253,14 @@ export type CheckSentencesResult =
    * checked. `smallModel`: a model on this computer too small to judge
    * reliably made the verdicts (#680), so they carry a notice.
    */
-  | { kind: "checked"; sentences: number; checked: number; smallModel: boolean }
+  | {
+      kind: "checked";
+      sentences: number;
+      checked: number;
+      smallModel: boolean;
+      /** Sentences left out because they hold changes still waiting; absent when none. */
+      waiting?: WaitingSentences;
+    }
   /** Nothing was sent: the model can't be used now, and `readiness` says why. */
   | { kind: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
   /** Nothing was sent: local mode is on, and the model isn't on this computer. */
@@ -4249,8 +4269,8 @@ export type CheckSentencesResult =
   | { kind: "no-documents"; folderId: string | null }
   /** The selection holds no sentence to check, or isn't in the Mind any more. */
   | { kind: "nothing" }
-  /** Nothing was sent: the selection holds changes still waiting. */
-  | { kind: "has-proposals" }
+  /** Nothing was sent: every sentence of the selection holds changes still waiting. */
+  | { kind: "waiting"; waiting: WaitingSentences }
   /** The User stopped it (`cancelCheck`): the sentences not checked yet say "stopped". */
   | { kind: "cancelled" }
   /** Contradiction watch, nothing sent: the Mind is in no Folder, so there is none to check against. */
@@ -4276,7 +4296,7 @@ export type ContradictionCheckPlan =
   | { kind: "ready"; claims: number; model: ChatModelChoice | null }
   | Extract<
       CheckSentencesResult,
-      { kind: "no-folder" | "only-cited" | "no-documents" | "nothing" | "has-proposals" }
+      { kind: "no-folder" | "only-cited" | "no-documents" | "nothing" }
     >;
 
 /** What a check for contradictions found, on demand or after a new version (`ContradictionWatchRun`). */
@@ -4297,7 +4317,7 @@ export interface ContradictionCheckOutcome {
 /** What `checkContradictions` did. */
 export type CheckContradictionsResult =
   | ({ kind: "checked" } & ContradictionCheckOutcome)
-  | Exclude<CheckSentencesResult, { kind: "checked" }>;
+  | Exclude<CheckSentencesResult, { kind: "checked" | "waiting" }>;
 
 /**
  * The last check for contradictions a new version of a Document in the Mind's
@@ -4340,7 +4360,7 @@ export type MindCheckPlan =
       /** The Mind's own model; null for the default. */
       model: ChatModelChoice | null;
     }
-  | Extract<CheckSentencesResult, { kind: "no-documents" | "nothing" | "has-proposals" }>;
+  | Extract<CheckSentencesResult, { kind: "no-documents" | "nothing" }>;
 
 export type CheckMindResult =
   /**
@@ -4357,7 +4377,7 @@ export type CheckMindResult =
     }
   /** The model couldn't name the claims: nothing was checked. */
   | { kind: "failed"; error: ProviderError }
-  | Exclude<CheckSentencesResult, { kind: "checked" | "no-folder" | "only-cited" }>;
+  | Exclude<CheckSentencesResult, { kind: "checked" | "no-folder" | "only-cited" | "waiting" }>;
 
 /**
  * The last whole-Mind check (#737), in the Mind's settings
@@ -4400,9 +4420,19 @@ export interface VerifyClaimsInput {
   model?: ChatModelChoice | null;
 }
 
+export interface WaitingSentences {
+  sentences: TextStretch[];
+  changeIds: string[];
+}
+
+export interface TextStretch {
+  from: TextPlace;
+  to: TextPlace;
+}
+
 /** Why finding or checking a document's claims sent nothing. */
 type VerifyRefusal =
-  | Exclude<CheckSentencesResult, { kind: "checked" } | { kind: "has-proposals" }>
+  | Exclude<CheckSentencesResult, { kind: "checked" } | { kind: "waiting" }>
   /** Another document's claims are being found or checked, in that Mind: one run at a time. */
   | { kind: "busy"; mindId: string };
 

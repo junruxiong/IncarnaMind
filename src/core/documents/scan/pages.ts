@@ -166,16 +166,20 @@ export async function pagePicture(
     const context = surface.canvas.getContext("2d");
     if (!context) throw new Error("The page couldn't be drawn.");
     const { data } = context.getImageData(0, 0, width, height);
-    const pixels = new Uint8Array(width * height);
-    for (let index = 0; index < pixels.length; index++) {
-      pixels[index] = Math.round(
-        0.299 * (data[index * 4] as number) +
-          0.587 * (data[index * 4 + 1] as number) +
-          0.114 * (data[index * 4 + 2] as number),
-      );
-    }
-    return { width, height, pixels };
+    return { width, height, pixels: greys(data) };
   } finally {
     factory.destroy(surface);
   }
+}
+
+export function greys(data: Uint8ClampedArray): Uint8Array {
+  const pixels = new Uint8Array(data.length / 4);
+  for (let index = 0; index < pixels.length; index++) {
+    pixels[index] = Math.round(
+      0.299 * (data[index * 4] as number) +
+        0.587 * (data[index * 4 + 1] as number) +
+        0.114 * (data[index * 4 + 2] as number),
+    );
+  }
+  return pixels;
 }
