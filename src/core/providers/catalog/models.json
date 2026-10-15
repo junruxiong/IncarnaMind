@@ -12176,6 +12176,200 @@
       ],
       "cannotAnswer": {},
       "nonChat": []
+    },
+    "groq": {
+      "models": [
+        {
+          "id": "allam-2-7b",
+          "name": "ALLaM-2-7b",
+          "input": ["text"],
+          "tools": false,
+          "reasoning": false,
+          "temperature": true,
+          "context": 4096,
+          "maxOutput": 4096,
+          "price": {
+            "currency": "USD",
+            "input": 0,
+            "output": 0
+          }
+        },
+        {
+          "id": "groq/compound",
+          "name": "Compound",
+          "input": ["text"],
+          "tools": false,
+          "reasoning": false,
+          "temperature": true,
+          "context": 131072,
+          "maxOutput": 8192
+        },
+        {
+          "id": "groq/compound-mini",
+          "name": "Compound Mini",
+          "input": ["text"],
+          "tools": false,
+          "reasoning": false,
+          "temperature": true,
+          "context": 131072,
+          "maxOutput": 8192
+        },
+        {
+          "id": "llama-3.1-8b-instant",
+          "name": "Llama 3.1 8B",
+          "input": ["text"],
+          "tools": true,
+          "reasoning": false,
+          "temperature": true,
+          "context": 131072,
+          "maxOutput": 131072,
+          "price": {
+            "currency": "USD",
+            "input": 0.05,
+            "output": 0.08
+          }
+        },
+        {
+          "id": "llama-3.3-70b-versatile",
+          "name": "Llama 3.3 70B",
+          "input": ["text"],
+          "tools": true,
+          "reasoning": false,
+          "temperature": true,
+          "context": 131072,
+          "maxOutput": 32768,
+          "price": {
+            "currency": "USD",
+            "input": 0.59,
+            "output": 0.79
+          }
+        },
+        {
+          "id": "meta-llama/llama-prompt-guard-2-22m",
+          "name": "Llama Prompt Guard 2 22M",
+          "input": ["text"],
+          "tools": false,
+          "reasoning": false,
+          "temperature": false,
+          "context": 512,
+          "maxOutput": 512,
+          "price": {
+            "currency": "USD",
+            "input": 0.03,
+            "output": 0.03
+          },
+          "status": "preview"
+        },
+        {
+          "id": "meta-llama/llama-prompt-guard-2-86m",
+          "name": "Prompt Guard 2 86M",
+          "input": ["text"],
+          "tools": false,
+          "reasoning": false,
+          "temperature": false,
+          "context": 512,
+          "maxOutput": 512,
+          "price": {
+            "currency": "USD",
+            "input": 0.04,
+            "output": 0.04
+          },
+          "status": "preview"
+        },
+        {
+          "id": "openai/gpt-oss-120b",
+          "name": "GPT OSS 120B",
+          "input": ["text"],
+          "tools": true,
+          "structuredOutput": "json_schema",
+          "reasoning": true,
+          "temperature": true,
+          "context": 131072,
+          "maxOutput": 65536,
+          "price": {
+            "currency": "USD",
+            "input": 0.15,
+            "output": 0.6,
+            "cacheRead": 0.075
+          }
+        },
+        {
+          "id": "openai/gpt-oss-20b",
+          "name": "GPT OSS 20B",
+          "input": ["text"],
+          "tools": true,
+          "structuredOutput": "json_schema",
+          "reasoning": true,
+          "temperature": true,
+          "context": 131072,
+          "maxOutput": 65536,
+          "price": {
+            "currency": "USD",
+            "input": 0.075,
+            "output": 0.3,
+            "cacheRead": 0.0375
+          }
+        },
+        {
+          "id": "openai/gpt-oss-safeguard-20b",
+          "name": "Safety GPT OSS 20B",
+          "input": ["text"],
+          "tools": true,
+          "structuredOutput": "json_schema",
+          "reasoning": true,
+          "temperature": true,
+          "context": 131072,
+          "maxOutput": 65536,
+          "price": {
+            "currency": "USD",
+            "input": 0.075,
+            "output": 0.3
+          },
+          "status": "preview"
+        },
+        {
+          "id": "qwen/qwen3.6-27b",
+          "name": "Qwen3.6 27B",
+          "input": ["text", "image"],
+          "tools": true,
+          "structuredOutput": "json_schema",
+          "reasoning": true,
+          "temperature": true,
+          "context": 131072,
+          "maxOutput": 16384,
+          "price": {
+            "currency": "USD",
+            "input": 0.6,
+            "output": 3,
+            "cacheRead": 0.3
+          }
+        },
+        {
+          "id": "qwen/qwen3.8-27b",
+          "name": "Qwen3.8 27B",
+          "input": ["text", "image"],
+          "tools": true,
+          "structuredOutput": "json_schema",
+          "reasoning": true,
+          "temperature": true,
+          "context": 131042,
+          "maxOutput": 16384,
+          "price": {
+            "currency": "USD",
+            "input": 0.8,
+            "output": 4
+          }
+        }
+      ],
+      "cannotAnswer": {},
+      "nonChat": [
+        "canopylabs/orpheus-arabic-saudi",
+        "canopylabs/orpheus-v1-english",
+        "orpheus-arabic-saudi",
+        "orpheus-v1-english",
+        "whisper-large-v3",
+        "whisper-large-v3-turbo"
+      ]
     }
   }
 }
