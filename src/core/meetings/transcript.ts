@@ -27,6 +27,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { EngineSwitch, Logger, SpeechSegment, Transcriber } from "../adapters";
 import type {
+  AudioSource,
   Document,
   MeetingTranscript,
   SavedFile,
@@ -589,7 +590,11 @@ export function createTranscripts(options: TranscriptsOptions) {
           const first = Math.max(0, Math.round((from - part.offsetMs) * SAMPLE_RATE_MS));
           const last = Math.min(samples.length, Math.round((to - part.offsetMs) * SAMPLE_RATE_MS));
           if (last > first) {
-            mixer.put(samples.subarray(first, last), part.offsetMs + first / SAMPLE_RATE_MS);
+            mixer.put(
+              part.source,
+              samples.subarray(first, last),
+              part.offsetMs + first / SAMPLE_RATE_MS,
+            );
           }
         }
         const audio = mixer.flush();
@@ -780,9 +785,9 @@ export function createTranscripts(options: TranscriptsOptions) {
     },
 
     /** Samples from a source, starting at `atMs` in the Meeting's time. */
-    hear(meetingId: string, samples: Int16Array, atMs: number): void {
+    hear(meetingId: string, source: AudioSource, samples: Int16Array, atMs: number): void {
       const state = states.get(meetingId);
-      if (state?.live) feed(state, state.live.mixer.add(samples, atMs));
+      if (state?.live) feed(state, state.live.mixer.add(source, samples, atMs));
     },
 
     /** Audio stopped being captured, at `endMs` in the Meeting's time: paused, asleep or stopped. */
