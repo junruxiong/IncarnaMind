@@ -1,13 +1,6 @@
 /**
- * What a web page to share shows for each Citation (#72): its check as it stood when the page
- * was made, and only the cited part of its Document, read from the stored text of the version
- * the Citation quotes, never the whole Document:
- * - a Word or Markdown file, a web page or plain text: the paragraph the quote is in, the quote
- *   washed, and a web page's address;
- * - a sheet: the cited cells as a small table, with their column headings and row labels;
- * - a Transcript: the lines the quote covers, with their times (never its audio);
- * - a PDF's page, a scan or a slide: the quote as text.
- * A Document whose text is gone shows only the quote the Mind holds.
+ * A card holds only the cited part of its Document, read from the stored text of the version the
+ * Citation quotes, never the whole Document: anyone the page is sent to can read it.
  */
 import {
   badgeMessage,
@@ -30,7 +23,6 @@ import {
 import type { CitationAttributes, CitationCheck, KeptCitationText } from "../api";
 import { looksLikeHeader } from "../documents/formats/grid";
 
-/** A run of a card's text: part of the quote, washed, or the words around it. */
 export interface CardRun {
   text: string;
   quote: boolean;
@@ -159,7 +151,6 @@ function contentOf(
   }
 }
 
-/** Splits `text` into runs, the parts in `ranges` (offsets into it) washed. */
 function runsOf(text: string, ranges: readonly TextRange[]): CardRun[] {
   const runs: CardRun[] = [];
   let at = 0;
@@ -293,7 +284,6 @@ function cellsOf(
   };
 }
 
-/** The Transcript's lines a quote covers, each with when it was said and who said it, where known. */
 function linesOf(units: readonly UnitText[], ranges: readonly TextRange[]): CardContent | null {
   const { starts } = joinUnits(units);
   const lines: { time: string; speaker: string | null; runs: CardRun[] }[] = [];

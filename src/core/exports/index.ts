@@ -242,9 +242,8 @@ export function createExports(deps: ExportsDependencies) {
   };
 
   /**
-   * A web page to share (#72): its Citations numbered as in Numbered whatever the Mind's style,
-   * since its readers click a number for each, with the Bibliography only where a Numbered Mind
-   * shows one; each Citation's card is made from its Document's stored text.
+   * A shared page numbers its Citations whatever the Mind's style, since its readers click a
+   * number for each; the Bibliography comes only where a Numbered Mind shows one.
    */
   const sharePage = async (prepared: Prepared): Promise<string> => {
     const { title, language, documents, preview } = prepared;
