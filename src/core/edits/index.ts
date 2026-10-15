@@ -67,6 +67,7 @@ import {
 } from "../proposals/write";
 import type { PreparedChatModel } from "../providers/chat";
 import { classifyProviderError } from "../providers/providerErrors";
+import { asksToRemove, waitsForUser } from "./applies";
 import {
   EDIT_INSTRUCTIONS,
   EXPLAIN_INSTRUCTIONS,
@@ -153,6 +154,11 @@ interface Hooks {
   beforeWriting?(): void;
   /** More of the request's Proposals are in the Mind: how many there are now. */
   written?(request: string, count: number): void;
+  /**
+   * An edit the User asked for on the text (#880), by the id their window
+   * chose: its updates name it, for that window to apply at once.
+   */
+  requestId?: string;
 }
 
 export function parsePlace(value: unknown, what: string): TextPlace {
@@ -364,6 +370,7 @@ export function createEdits(options: EditsOptions) {
 
     const request = randomUUID();
     const blocks = fork.getXmlFragment(MIND_CONTENT_FIELD);
+    const { requestId } = hooks;
     // Explain's few sentences go in once they are all there.
     const stream = explain
       ? null
@@ -372,7 +379,19 @@ export function createEdits(options: EditsOptions) {
           request,
           randomUUID,
           freshCitations(selection, options.recheck),
+          {
+            leftOut:
+              requestId !== undefined && !asksToRemove(ask.action, ask.instruction)
+                ? "keep"
+                : "remove",
+          },
         );
+    /** The edit can't be mapped onto the selection and would remove most of it: it waits for the User. */
+    let held = false;
+    /** How many Proposals the request wrote: an edit the User asked for is accepted as it comes. */
+    let proposed = 0;
+    /** Some of them were in the Mind once merged: not all went with text the User deleted meanwhile. */
+    let landed = false;
     const made: Extract<ProposalRequest, { source: "edit-with-ai" }> = {
       source: "edit-with-ai",
       providerId: prepared.provider.id,
@@ -393,15 +412,26 @@ export function createEdits(options: EditsOptions) {
         const waiting = mine(mind);
         return { count: waiting.length, outOfDate: waiting.filter((each) => stale.has(each.id)) };
       });
-      if (now.count === 0) return { kind: "changed" };
+      const count = requestId === undefined ? now.count : landed ? proposed : 0;
+      if (count === 0) return { kind: "changed" };
+      const leftOut = held ? [] : (stream?.leftOut() ?? []);
       return {
         kind: "proposed",
         request,
-        proposals: now.count,
+        proposals: count,
         droppedCitations: stream?.written().droppedCitations ?? 0,
         outOfDate: now.outOfDate.length,
+        ...(held && { held: true as const }),
+        ...(leftOut.length > 0 && { leftOut }),
       };
     };
+    /**
+     * Whether the window that asked applies the changes so far at once: while
+     * the new text doesn't yet map onto the selection, they wait for the end,
+     * where `held` decides.
+     */
+    const appliesNow = () =>
+      explain || ask.action === "translate" || (stream?.extent().mapped ?? false);
     let wrote = false;
     let refused = false;
     /**
@@ -424,8 +454,15 @@ export function createEdits(options: EditsOptions) {
         refused = true;
         return;
       }
-      content.apply(mindId, update);
-      hooks.written?.(request, content.read(mindId, mine).length);
+      proposed = explain ? proposed : (stream?.written().proposals.length ?? proposed);
+      content.apply(
+        mindId,
+        update,
+        requestId === undefined ? undefined : { requestId, request, apply: appliesNow() },
+      );
+      const inMind = content.read(mindId, mine).length;
+      landed ||= inMind > 0;
+      hooks.written?.(request, inMind);
     };
     /** What was written goes again: the request failed, or its changes can't be merged. */
     const takeBackWritten = () => {
@@ -509,11 +546,22 @@ export function createEdits(options: EditsOptions) {
     const reason = explain ? null : reasonOf(raw);
     if (reason) made.reason = reason;
     step(() => {
-      if (!stream)
-        return proposeAfter(blocks, selection, reply, request, randomUUID).proposals.length > 0;
+      if (!stream) {
+        proposed = proposeAfter(blocks, selection, reply, request, randomUUID).proposals.length;
+        return proposed > 0;
+      }
       const more = stream.write(reply, true);
+      const finished = stream.finish();
+      if (requestId !== undefined) {
+        held = waitsForUser({
+          action: ask.action,
+          ...stream.extent(),
+          selected: selection.characters,
+        });
+        if (held) stream.removeLeftOut();
+      }
       // Written before the reason came: recorded again with it.
-      return stream.finish() || more || (wrote && reason !== null);
+      return finished || more || held || (wrote && reason !== null);
     });
     if (refused) {
       takeBackWritten();
@@ -550,7 +598,7 @@ export function createEdits(options: EditsOptions) {
     try {
       if (draft.selection.plain !== input.text) return { kind: "changed" };
       if (draft.selection.text === "") return { kind: "unchanged" };
-      return await run(input, draft, signal);
+      return await run(input, draft, signal, { requestId: input.requestId });
     } finally {
       draft.fork.destroy();
     }
@@ -594,7 +642,7 @@ export function createEdits(options: EditsOptions) {
         },
         { mindId: input.mindId, base, fork, selection: read.selection },
         signal,
-        { settle: withdraw },
+        { settle: withdraw, requestId: input.requestId },
       );
     } finally {
       fork.destroy();

@@ -41,6 +41,7 @@ import {
   CITATION_NODE,
   FOOTNOTE_NODE,
   GENERATED_MARK,
+  type LeftOutPart,
   PROPOSAL_ATTRIBUTE,
   PROPOSAL_DELETE_MARK,
   PROPOSAL_INSERT_MARK,
@@ -990,11 +991,25 @@ function joinsAcross(tokens: readonly OldToken[]) {
 /** What a Proposal that removes these tokens records as the text it changes. */
 const targetOf = (tokens: readonly OldToken[]) => tokens.map((token) => token.target).join("");
 
-/** The Citations Proposals remove and add, by marker, to count those removed and added back nowhere. */
+/**
+ * What Proposals remove and add: the Citations, by marker, to count those
+ * removed and added back nowhere; and how many characters.
+ */
 interface CitationNotes {
   removed: Set<string>;
   added: Set<string>;
+  characters: { removed: number; added: number };
 }
+
+const notesOf = (): CitationNotes => ({
+  removed: new Set(),
+  added: new Set(),
+  characters: { removed: 0, added: 0 },
+});
+
+/** How many characters tokens hold, an inline node counting as one. */
+const lengthOf = (tokens: readonly { text?: string }[]) =>
+  tokens.reduce((sum, token) => sum + (token.text?.length ?? 1), 0);
 
 const noteCitation = (into: Set<string>, token: { key: string }) => {
   const marker = markerOf(token);
@@ -1059,6 +1074,8 @@ function writeHunks(
     if (removed.length > 0) markRemoved(segment.element, removed[0]?.from ?? end, end, ref);
     for (const token of removed) noteCitation(notes.removed, token);
     for (const token of added) noteCitation(notes.added, token);
+    notes.characters.removed += lengthOf(removed);
+    notes.characters.added += lengthOf(added);
   }
 }
 
@@ -1224,9 +1241,10 @@ export function createRewriteStream(
   request: string,
   newId: () => string,
   fresh: (text: string) => ReadonlyMap<number, Attributes>,
+  { leftOut: onLeftOut = "remove" }: { leftOut?: "keep" | "remove" } = {},
 ) {
   const { proposals, next } = proposalsOf(request, newId);
-  const notes: CitationNotes = { removed: new Set(), added: new Set() };
+  const notes = notesOf();
   // Only the paragraphs the model was shown: an empty one between two isn't in its text.
   const segments = selection.segments.filter((segment) => segment.shown);
   const first = segments[0];
@@ -1245,25 +1263,37 @@ export function createRewriteStream(
   let unlike = 0;
   /** Two were like none: the text is written anew, and each pairs in order. */
   let anew = false;
+  /** Some paragraph of the new text is like the selection's it pairs with: the text maps onto it. */
+  let mapped = false;
+  /** The selection's paragraphs the new text left out, kept as they were (`leftOut: "keep"`). */
+  const kept: Segment[] = [];
 
-  /** The selection's paragraphs before `to` not paired go, each whole one with its Block. */
-  const removeUpTo = (to: number) => {
-    const gone: Y.XmlElement[] = [];
-    for (const segment of segments.slice(at, to)) {
-      if (segment.tokens.length === 0) continue;
-      if (segment.whole) gone.push(removedWith(segment.element));
+  /** Takes out the selection's paragraphs, each whole one with its Block. */
+  const remove = (gone: readonly Segment[]) => {
+    const blocks: Y.XmlElement[] = [];
+    for (const segment of gone) {
+      if (segment.whole) blocks.push(removedWith(segment.element));
       else markRemoved(segment.element, segment.start, segment.end, next(targetOf(segment.tokens)));
       for (const token of segment.tokens) noteCitation(notes.removed, token);
+      notes.characters.removed += lengthOf(segment.tokens);
     }
-    for (const removed of wholeWrappers(gone)) {
+    for (const removed of wholeWrappers(blocks)) {
       setProposal(removed, { ...refOf(next(targetText(removed))), kind: "delete" });
     }
+  };
+
+  /** The selection's paragraphs before `to` not paired go, or are kept as left out. */
+  const removeUpTo = (to: number) => {
+    const passed = segments.slice(at, to).filter((segment) => segment.tokens.length > 0);
+    if (onLeftOut === "keep") kept.push(...passed);
+    else remove(passed);
     at = Math.max(at, to);
   };
 
   const pairWith = (paragraph: NewParagraph, index: number) => {
     const segment = segments[index];
     if (!segment) return;
+    if (likeness(segment.tokens, paragraph.tokens) >= UNKNOWN_KIND_LIKENESS) mapped = true;
     removeUpTo(index);
     writeHunks(segment, paragraph.tokens, next, newId, notes);
     place = { element: segment.element, kind: segment.kind, side: "after" };
@@ -1274,6 +1304,7 @@ export function createRewriteStream(
     if (!place) return;
     const kind = paragraph.kind ?? kindByLikeness(segments, paragraph);
     for (const token of paragraph.tokens) noteCitation(notes.added, token);
+    notes.characters.added += lengthOf(paragraph.tokens);
     const added = addBlock(place, kind, paragraph.tokens, next(""), newId);
     place = { element: added, kind, side: "after" };
   };
@@ -1378,6 +1409,41 @@ export function createRewriteStream(
 
     /** The Proposals written so far. */
     written: (): Written => ({ proposals: [...proposals], droppedCitations: droppedOf(notes) }),
+
+    /**
+     * What the new text does to the selection so far: whether it maps onto
+     * it, and how many characters its Proposals remove and add, with those of
+     * the paragraphs it left out counted as removed.
+     */
+    extent: () => ({
+      mapped,
+      removed:
+        notes.characters.removed + kept.reduce((sum, segment) => sum + lengthOf(segment.tokens), 0),
+      added: notes.characters.added,
+    }),
+
+    /** The parts of the selection the new text left out, kept as they were. */
+    leftOut: (): LeftOutPart[] =>
+      kept.flatMap((segment) => {
+        const blockId = segment.element.getAttribute(BLOCK_ID_ATTRIBUTE);
+        return typeof blockId === "string"
+          ? [
+              {
+                blockId,
+                from: segment.start,
+                to: segment.end,
+                whole: segment.whole,
+                kind: kindOf(segment.element),
+              },
+            ]
+          : [];
+      }),
+
+    /** The paragraphs kept as left out go after all, as Proposals. Returns whether any did. */
+    removeLeftOut: (): boolean =>
+      wrote(() => {
+        remove(kept.splice(0));
+      }),
 
     /** Where the next paragraph goes; null with no place for any. */
     writingAt(): RewritePlace | null {
@@ -1535,7 +1601,7 @@ export function proposeBlocks(
   newId: () => string,
 ): Written {
   const { proposals, next } = proposalsOf(request, newId);
-  const notes: CitationNotes = { removed: new Set(), added: new Set() };
+  const notes = notesOf();
   const old = container.toArray().filter((child) => child instanceof Y.XmlElement);
   const hunks = hunksOf(diffSteps(old.map(elementKey), content.map(jsonKey)), () => false);
 

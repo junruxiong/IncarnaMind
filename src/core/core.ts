@@ -378,8 +378,8 @@ export function createCore(adapters: CoreAdapters): Core {
   // The assistant's conversations (ADR-0017); Answers a quit left being written are settled now.
   const conversations = createConversations(db, now);
   const conversationsChanged = () => events.emit("conversations.changed", null);
-  const content = createMindContent(db, now, (mindId, update) => {
-    events.emit("mind.update", { mindId, update });
+  const content = createMindContent(db, now, (mindId, update, cause) => {
+    events.emit("mind.update", { mindId, update, ...(cause && { cause }) });
     // Only notes the change; what became of AI text is worked out once the Mind is quiet.
     aiUse.contentStored(mindId);
     checkpoints.edited(mindId);

@@ -465,7 +465,7 @@ describe("Edit with AI", () => {
     ]);
   });
 
-  test("paragraphs the new text drops are Proposals on their whole Blocks, and those it adds are new Blocks", async () => {
+  test("a paragraph the new text leaves out stays as it was, unless the User asked for text to go; paragraphs it adds are new Blocks", async () => {
     const { core, mind, client } = await setUp(
       editingModel(({ passage }) =>
         passage.includes("Second") ? "First and second, together." : "One line.\n\nAnother line.",
@@ -476,28 +476,50 @@ describe("Edit with AI", () => {
     const third = paragraph(text("Single line."));
     writeMind(client, [first, second, third]);
     await client.settled();
-
-    await core.editWithAi({
-      requestId: "edit-join",
+    const both = (action: EditWithAiInput["action"], instruction?: string): EditWithAiInput => ({
+      requestId: `edit-join-${action}`,
       mindId: mind.id,
       from: { blockId: first.attrs.id, offset: 0 },
       to: { blockId: second.attrs.id, offset: "Second paragraph.".length },
       text: "First paragraph.\nSecond paragraph.",
-      action: "shorten",
+      action,
+      ...(instruction !== undefined && { instruction }),
+    });
+
+    expect(await core.editWithAi(both("shorten"))).toMatchObject({
+      kind: "proposed",
+      leftOut: [
+        {
+          blockId: second.attrs.id,
+          from: 0,
+          to: "Second paragraph.".length,
+          whole: true,
+          kind: "paragraph",
+        },
+      ],
     });
     await core.editWithAi(wholeParagraph(client, mind.id, third.attrs.id, "instruction", "Split"));
-
     expect(shownWithChanges(client)).toEqual([
       "First [-paragraph-]{+and second, together+}.",
-      "- Second paragraph.",
+      "Second paragraph.",
       "[-Single-]{+One+} line.",
       "+ Another line.",
     ]);
     await resolveChanges(client, "accept");
     expect(shownWithChanges(client)).toEqual([
       "First and second, together.",
+      "Second paragraph.",
       "One line.",
       "Another line.",
+    ]);
+
+    writeMind(client, [first, second]);
+    await client.settled();
+    const asked = await core.editWithAi(both("instruction", "Join them and delete the rest"));
+    expect(asked).not.toHaveProperty("leftOut");
+    expect(shownWithChanges(client)).toEqual([
+      "First [-paragraph-]{+and second, together+}.",
+      "- Second paragraph.",
     ]);
   });
 
