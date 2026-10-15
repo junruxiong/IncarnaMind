@@ -236,6 +236,7 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
       /^Export as PDF$/,
       /^Export as Source pack \(PDF\)$/,
       /^Export as HTML$/,
+      /^Export as Web page to share \(\.html\)$/,
       /^Export as Markdown \(\.md\)$/,
       /^Export options…$/,
       /^Export AI use statement$/,
