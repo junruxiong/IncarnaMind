@@ -1095,17 +1095,19 @@ function fakeStructuredOutput(options: GenerateOptions): string {
   return JSON.stringify({ tags: fakeTags(options.prompt, offeredTags(options)) });
 }
 
-/** Finding a verified document's claims (#97, src/core/answers/checks/claims.ts). */
-const FIND_CLAIMS = /^You sort the sentences of a document someone else wrote/m;
+/** Finding the claims of a verified document (#97) or of the User's own draft (#737), src/core/answers/checks/claims.ts. */
+const FIND_CLAIMS =
+  /^You sort the sentences of (?:a document someone else wrote|the User's own draft)/m;
 
-/** The numbers of the listed sentences ("[3] …") that claim something: all but questions and thanks. */
+/** The numbers of the listed sentences ("[3] …") that claim something: all but questions, thanks and opinions. */
 function fakeClaims(options: GenerateOptions): string | null {
   if (!FIND_CLAIMS.test(systemOf(options.prompt))) return null;
   const claims = lastUserText(options.prompt)
     .split("\n")
     .flatMap((line) => {
       const listed = /^\[(\d+)\] (.*)$/.exec(line);
-      return listed?.[2] === undefined || /[?？]$|thank|谢/i.test(listed[2])
+      return listed?.[2] === undefined ||
+        /[?？]$|thank|谢|\b(?:we|I) (?:think|believe)\b|我们认为|我认为/i.test(listed[2])
         ? []
         : [Number(listed[1])];
     });

@@ -84,6 +84,21 @@ export function useMindModel(doc: Y.Doc | null): ChatModelChoice | null {
   return doc ? choice : withoutMind;
 }
 
+/** The model a run in the Mind uses: the Mind's own, else the default the composer shows. */
+export function useRunModel(doc: Y.Doc | null): {
+  providerId: string | null;
+  modelId: string | null;
+} {
+  const own = useMindModel(doc);
+  const providerId = useAppStore((state) =>
+    state.chatReadiness?.ready ? state.chatReadiness.provider.id : null,
+  );
+  const modelId = useAppStore((state) =>
+    state.chatReadiness?.ready ? state.chatReadiness.modelId : null,
+  );
+  return own ?? { providerId, modelId };
+}
+
 function chooseModel(doc: Y.Doc | null, choice: ChatModelChoice): void {
   if (doc) setMindModel(doc, choice);
   else useComposer.setState({ modelWithoutMind: choice });
