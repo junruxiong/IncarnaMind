@@ -76,7 +76,8 @@ async function refusingServer() {
 test("a failed Answer says so under itself with one action: the key's page in Settings, or trying again; and says it in Chinese", async () => {
   const model = await refusingServer();
   try {
-    const { app, window } = await launchApp(dataDir);
+    // Ollama is looked for at the test's server, not at one this computer may run.
+    const { app, window } = await launchApp(dataDir, { ollama: model.url, ollamaApp: "missing" });
     await dismissChatSetup(window);
     await window.evaluate(async (baseUrl) => {
       await (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.saveChatProvider({
@@ -146,14 +147,17 @@ test("a failed Answer says so under itself with one action: the key's page in Se
     await expect(error.getByTestId("answer-error-action")).toHaveText("重试");
     await screenshot(window, "answer-provider-problem-zh");
 
-    // Offline: the line names the company and says what to check, in both languages.
+    // Ollama stopped: it isn't running on this computer, which no connection can fix (#843).
     await new Promise<void>((resolve) => model.server.close(() => resolve()));
     await error.getByTestId("answer-error-action").click();
-    await expect(error).toContainText("无法连接 Ollama，请检查网络连接", { timeout: 60_000 });
-    await expect(error.getByTestId("answer-error-action")).toHaveText("重试");
+    await expect(error).toHaveAttribute("data-error-kind", "ollama-not-running", {
+      timeout: 60_000,
+    });
+    await expect(error).toContainText("Ollama 没有在这台电脑上运行");
+    await expect(error.getByTestId("answer-error-action")).toHaveText("下载 Ollama ↗");
     await bridge(window).settings("en");
-    await expect(error).toContainText("Couldn't reach Ollama. Check your internet connection");
-    await expect(error.getByTestId("answer-error-action")).toHaveText("Try again");
+    await expect(error).toContainText("Ollama isn't running on this computer");
+    await expect(error.getByTestId("answer-error-action")).toHaveText("Get Ollama ↗");
     await app.close();
   } finally {
     model.server.close();
