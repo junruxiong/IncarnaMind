@@ -731,7 +731,7 @@ describe("making a Folder", () => {
 describe("loading keeps a list the core pushed after reading it", () => {
   beforeEach(() => {
     method("getExamples").mockResolvedValue({
-      group: "tea",
+      group: "credit",
       available: false,
       mindId: null,
       linkedFolderId: null,
