@@ -164,14 +164,9 @@ export function modelsProviderOfKind(
   return regional && MODELS.has(regional) ? regional : set;
 }
 
-/** The most models a provider's menu shows. */
 export const MAX_MENU_MODELS = 100;
 
-/**
- * A provider's model menu, as Settings' Default model and the key form show
- * it: its Answers, strongest and quick models first, where `inMenu` has them,
- * then the rest of `inMenu` in its order.
- */
+/** One order for Settings' Default model menu and the key form's list, so the two agree (#890). */
 export const withRolesFirst = (
   roles: Partial<Record<Role, string>> | undefined,
   inMenu: readonly string[],
@@ -184,12 +179,7 @@ export const withRolesFirst = (
   ]),
 ];
 
-/**
- * What a provider's menu will hold once its key is saved, before its own list
- * can be asked for: the catalog's ids that `otherModel` keeps, a dated
- * snapshot giving way to its model (a provider lists one of the two), in the
- * menu's order. A preset without a model set of its own offers its role models.
- */
+/** Before a key is saved its provider can't be asked for its list, so the catalog stands in for it. */
 export function catalogMenu(catalogId: string, endpoint?: string | null): string[] {
   const provider = catalogProvider(catalogId);
   if (!provider) return [];
@@ -200,6 +190,7 @@ export function catalogMenu(catalogId: string, endpoint?: string | null): string
     ? [...ids]
         .filter((id) => {
           const base = withoutDateSuffix(id);
+          // A provider lists a model or its dated snapshot, never both.
           return !(base !== id && ids.has(base)) && !otherModel(providerId, id, ids);
         })
         .sort((a, b) => a.localeCompare(b))

@@ -275,7 +275,6 @@ export function SparkLineIcon(props: IconProps) {
   );
 }
 
-/** A key: pasting an API key. */
 export function KeyLineIcon(props: IconProps) {
   return (
     <LineIcon {...props}>
