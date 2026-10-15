@@ -22,6 +22,7 @@ import {
 import type { FakeTranscriberOptions } from "../src/core/transcription/fake";
 import type { DocumentLocation } from "../src/shared/documentViewer";
 import type { TestHooks } from "../src/shared/testHooks";
+import { homeEnv } from "../tests/helpers/home";
 
 const appDir = resolve(__dirname, "..");
 
@@ -217,7 +218,7 @@ export async function launchApp(
     if (usageData.testerBuild) env.INCARNAMIND_TEST_TESTER_BUILD = "1";
   }
   const appHome = home ?? (await mkdtemp(join(tmpdir(), "incarnamind-home-")));
-  env.HOME = appHome;
+  Object.assign(env, homeEnv(appHome));
   if (referenceLookup) env.INCARNAMIND_TEST_REFERENCE_LOOKUP = referenceLookup;
   if (sources) env.INCARNAMIND_TEST_SOURCES = sources;
   if (connectorDirectory) env.INCARNAMIND_TEST_CONNECTOR_DIRECTORY = connectorDirectory;

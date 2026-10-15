@@ -4,7 +4,7 @@
  */
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { connect } from "node:net";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { app, safeStorage, shell } from "electron";
 import {
@@ -239,6 +239,13 @@ function citationStylesFolder(): string {
     ? join(process.resourcesPath, "citation-styles")
     : join(app.getAppPath(), "resources", "citation-styles");
 }
+
+/**
+ * The home folder the core gets. Node's, not `app.getPath("home")`: on macOS
+ * that ignores HOME, which the smoke tests point at a temporary folder, and
+ * their agents' settings would land in the real one.
+ */
+export const homeFolder = (): string => homedir();
 
 /**
  * The User's Documents folder, where the first save offers to put the Output
@@ -505,6 +512,7 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
       builtInSkills: builtInSkillsFolder(),
       examples: examplesFolder(),
       citationStyles: citationStylesFolder(),
+      home: homeFolder(),
       documents: documentsFolder(dataDir),
     },
     systemLanguages: () => app.getPreferredSystemLanguages(),
