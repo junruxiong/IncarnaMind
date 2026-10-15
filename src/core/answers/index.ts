@@ -1384,7 +1384,7 @@ export function createAnswers(options: AnswersOptions) {
           : [];
       // The Minds' Tools, for an Answer in the assistant (#202).
       const minds = outside ? undefined : options.minds;
-      const fromMinds: Tool[] =
+      const mindsTools =
         minds && input.assistant
           ? mindTools({
               minds,
@@ -1394,15 +1394,18 @@ export function createAnswers(options: AnswersOptions) {
                 let found = 0;
                 let notFound = 0;
                 let unrecorded = 0;
-                const cited = withCitations(
-                  markdownToBlocks(withoutFootnoteDefinitions(text)),
-                  (marker) => {
-                    const node = session.checkedNode(marker);
-                    if (!node) unrecorded++;
-                    else if (node.attrs?.check === "not-found") notFound++;
-                    else found++;
-                    return node;
-                  },
+                let firstUnrecorded = -1;
+                const cited = markdownToBlocks(withoutFootnoteDefinitions(text)).flatMap(
+                  (block, index) =>
+                    withCitations([block], (marker) => {
+                      const node = session.checkedNode(marker);
+                      if (!node) {
+                        unrecorded++;
+                        if (firstUnrecorded < 0) firstUnrecorded = index;
+                      } else if (node.attrs?.check === "not-found") notFound++;
+                      else found++;
+                      return node;
+                    }),
                 );
                 const blocks = asGenerated(
                   calculating
@@ -1413,7 +1416,13 @@ export function createAnswers(options: AnswersOptions) {
                       )
                     : cited,
                 );
-                return { blocks, cited: found + notFound, notFound, unrecorded };
+                return {
+                  blocks,
+                  cited: found + notFound,
+                  notFound,
+                  unrecorded,
+                  firstUnrecorded,
+                };
               },
               changed: (toolCallId, change) => {
                 mindChanges.set(toolCallId, change);
@@ -1428,7 +1437,7 @@ export function createAnswers(options: AnswersOptions) {
               signal: controller.signal,
               now: () => new Date(),
             })
-          : [];
+          : null;
       const documents: AnswerTools = {
         get documentCount() {
           return session.tools.documentCount;
@@ -1444,6 +1453,8 @@ export function createAnswers(options: AnswersOptions) {
         correctQuote: (marker, quote) => session.tools.correctQuote?.(marker, quote) ?? false,
         shownPassages: () => session.tools.shownPassages?.() ?? [],
         quoteFound: (passage, quote) => session.tools.quoteFound?.(passage, quote) ?? false,
+        wroteIntoMind: () =>
+          [...mindChanges.values()].some((change) => change.proposals > 0 || change.revised),
         ...(calculating && {
           calculate: (given: readonly unknown[], calculateOptions?: CiteOptions) =>
             figures.calculate(given, calculateOptions),
@@ -1542,7 +1553,7 @@ export function createAnswers(options: AnswersOptions) {
         question: context.question,
         model: prepared.model,
         documents,
-        tools: [...provided, ...fromSkills, ...fromWeb, ...fromMinds],
+        tools: [...provided, ...fromSkills, ...fromWeb, ...(mindsTools?.tools ?? [])],
         gate,
         streamsInput,
         toolSet: input.toolSet,
@@ -1671,6 +1682,7 @@ export function createAnswers(options: AnswersOptions) {
             break;
         }
       }
+      mindsTools?.settle();
       finish(outcome);
     };
     run().catch((error: unknown) => {
