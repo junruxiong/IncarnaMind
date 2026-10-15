@@ -380,7 +380,7 @@ test("a Linked folder shows its Folders as on disk, and files added on their own
     await addDocuments(window, [loose]);
     const looseItem = documents.filter({ hasText: "Loose notes" });
     await expect(looseItem).toHaveAttribute("data-depth", "0");
-    // As they are on disk: Source locations.
+    // As they are on disk: Folders on disk.
     await showSourceLocations(window);
     await expect(looseItem).toHaveAttribute("data-depth", "0");
     await expect(others).toHaveCount(0);

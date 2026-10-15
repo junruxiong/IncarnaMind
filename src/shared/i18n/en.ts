@@ -80,7 +80,7 @@ export const en = {
   "library.drop.formats": "PDF, Word, PowerPoint, Excel, Markdown, text",
   "library.drop.stay": "Your files stay where they are.",
   "library.review": "Review",
-  "library.sources": "Source locations",
+  "library.sources": "Folders on disk",
   "library.browse": "Browse Documents",
   "library.collapse": "Collapse {name}",
   "library.expand": "Expand {name}",

@@ -71,7 +71,7 @@ export const zhCN = {
   "library.drop.formats": "PDF、Word、PowerPoint、Excel、Markdown 和文本",
   "library.drop.stay": "文件保留在原处。",
   "library.review": "查看",
-  "library.sources": "文件位置",
+  "library.sources": "磁盘上的文件夹",
   "library.browse": "浏览文档",
   "library.collapse": "收起 {name}",
   "library.expand": "展开 {name}",

@@ -536,7 +536,7 @@ test("organized folders remain separate from source locations and follow changes
     const row = rowOf(library, "Membrane separation");
     await moveRow(window, row, "Finance");
     await expect(rowOf(section(library, "Finance"), "Membrane separation")).toHaveCount(1);
-    await window.getByRole("button", { name: "Source locations", exact: true }).click();
+    await window.getByRole("button", { name: "Folders on disk", exact: true }).click();
     await expect(window.getByTestId("folder-item")).toHaveCount(1);
     await window.getByRole("button", { name: "Folders", exact: true }).click();
     await expect(window.getByTestId("library-folders")).toBeVisible();
@@ -765,8 +765,8 @@ test("a bulk Organize leaves the Library's sections, filters and sidebar as the 
       .click({ position: { x: 120, y: 12 } });
     await expect(library.getByTestId("library-filter")).toHaveCount(0);
 
-    // Source locations: every Document's row, each done.
-    await browse.getByRole("button", { name: "Source locations", exact: true }).click();
+    // Folders on disk: every Document's row, each done.
+    await browse.getByRole("button", { name: "Folders on disk", exact: true }).click();
     const rows = window.getByTestId("sidebar").getByTestId("document-list-item");
     await expect(rows).toHaveCount(count);
     await expect(rows.and(window.locator('[data-tagging="tagged"]'))).toHaveCount(count);
