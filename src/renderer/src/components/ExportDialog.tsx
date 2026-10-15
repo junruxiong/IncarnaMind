@@ -6,6 +6,7 @@ import {
   type Mind,
   type MindCitationStyle,
   type OutputSettings,
+  type SharePagePreferences,
   type TheirChangesShown,
   type WordExportPreferences,
 } from "../../../core/api";
@@ -37,6 +38,7 @@ const FORMAT_NOTES: Readonly<Record<ExportFormat, MessageKey>> = {
   pdf: "export.options.pdf",
   "source-pack": "export.options.source-pack",
   html: "export.options.html",
+  "share-page": "export.options.share-page",
   markdown: "export.options.markdown",
 };
 
@@ -126,6 +128,40 @@ function WordReviewRows({
         onChange={(commentFailedChecks) => onChange({ ...draft, commentFailedChecks })}
         testId="export-comment-failed-checks"
       />
+    </>
+  );
+}
+
+/**
+ * A web page to share's own choices (#72): whether readers open each Citation, and, when they
+ * do, the quiet line at its foot, off unless the User asks for it.
+ */
+function SharePageRows({
+  draft,
+  onChange,
+}: {
+  draft: SharePagePreferences;
+  onChange(next: SharePagePreferences): void;
+}) {
+  const t = useT();
+  return (
+    <>
+      <SwitchRow
+        label={t("export.share.cards")}
+        hint={t("export.share.cards.hint")}
+        checked={draft.citationCards}
+        onChange={(citationCards) => onChange({ ...draft, citationCards })}
+        testId="export-citation-cards"
+      />
+      {draft.citationCards && (
+        <SwitchRow
+          label={t("export.share.checkedLine")}
+          hint={t("export.share.checkedLine.hint")}
+          checked={draft.checkedLine}
+          onChange={(checkedLine) => onChange({ ...draft, checkedLine })}
+          testId="export-checked-line"
+        />
+      )}
     </>
   );
 }
@@ -417,6 +453,13 @@ function ExportOptionsForm({ mind, onDone }: { mind: Mind; onDone(): void }) {
           </p>
         )}
 
+        {format === "share-page" && (
+          <SharePageRows
+            draft={draft["share-page"]}
+            onChange={(sharePage) => setDraft({ ...draft, "share-page": sharePage })}
+          />
+        )}
+
         {hasQuestionsOption(format) && (
           <div>
             <div className={rowClass}>
@@ -449,7 +492,10 @@ function ExportOptionsForm({ mind, onDone }: { mind: Mind; onDone(): void }) {
           </div>
         )}
 
-        {(format === "pdf" || format === "html" || format === "markdown") &&
+        {(format === "pdf" ||
+          format === "html" ||
+          format === "share-page" ||
+          format === "markdown") &&
           (counts?.theirChanges ?? 0) > 0 && (
             <TheirChangesRow
               count={counts?.theirChanges ?? 0}
@@ -466,7 +512,8 @@ function ExportOptionsForm({ mind, onDone }: { mind: Mind; onDone(): void }) {
           />
         )}
 
-        <CitationStyleRow mindId={mind.id} />
+        {/* A shared page numbers its Citations whatever the style: its readers click a number for each. */}
+        {format !== "share-page" && <CitationStyleRow mindId={mind.id} />}
         <SaveToRow />
       </div>
 
