@@ -1698,6 +1698,57 @@ describe("An edit the User asked for (#880)", () => {
     expect(shownWithChanges(client)).toEqual([FIRST, FORMAL, THIRD]);
   });
 
+  test("what it leaves out of a selection that starts and ends inside paragraphs is kept as those parts, and a heading left out is named as one", async () => {
+    const { core, mind, client } = await setUp(editingModel(() => FORMAL));
+    const heading: JSONContent & { attrs: { id: string } } = {
+      type: "heading",
+      attrs: { id: `block-${++ids}`, level: 2 },
+      content: [text("Harbours")],
+    };
+    const blocks = [
+      paragraph(text(FIRST)),
+      heading,
+      paragraph(text(SECOND)),
+      paragraph(text(THIRD)),
+    ];
+    writeMind(client, blocks);
+    await client.settled();
+    const start = "Tides rise ".length;
+    const end = "The harbour office".length;
+
+    const result = await core.editWithAi({
+      requestId: `asked-${++ids}`,
+      mindId: mind.id,
+      from: { blockId: blocks[0]?.attrs.id ?? "", offset: start },
+      to: { blockId: blocks[3]?.attrs.id ?? "", offset: end },
+      text: [FIRST.slice(start), "Harbours", SECOND, THIRD.slice(0, end)].join("\n"),
+      action: "instruction",
+      instruction: "make the second paragraph more formal",
+    });
+
+    expect(result).toMatchObject({
+      kind: "proposed",
+      leftOut: [
+        { blockId: blocks[0]?.attrs.id, from: start, to: FIRST.length, whole: false },
+        {
+          blockId: heading.attrs.id,
+          from: 0,
+          to: "Harbours".length,
+          whole: true,
+          kind: "heading:2",
+        },
+        { blockId: blocks[3]?.attrs.id, from: 0, to: end, whole: false },
+      ],
+    });
+    expect(result).not.toHaveProperty("held");
+    expect(shownWithChanges(client)).toEqual([
+      FIRST,
+      "Harbours",
+      expect.stringContaining("{+"),
+      THIRD,
+    ]);
+  });
+
   test('an explicit "delete…" takes out what the new text leaves out, and applies', async () => {
     const { core, client, asked } = await threeParagraphs(() => [FIRST, THIRD].join("\n\n"));
 
