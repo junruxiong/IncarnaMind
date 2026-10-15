@@ -1,8 +1,9 @@
 import { type ReactNode, useId } from "react";
 import type { ChatProvider, ChatProviderKind } from "../../../../core/api";
-import { keyProviderGroups } from "../../../../core/providers/catalog/providers";
+import type { Language } from "../../../../core/language";
+import { keyProviderGroups, kindOfCatalogId } from "../../../../core/providers/catalog/providers";
 import { CHATGPT_SERVICE } from "../../../../core/providers/chatgpt/service";
-import { useT } from "../../i18n";
+import { useLanguage, useT } from "../../i18n";
 import type { KeyRefusal } from "../../keyRefusals";
 import { OnThisComputer } from "../OnThisComputer";
 import {
@@ -23,6 +24,7 @@ import {
 import { KeepLocalChoice } from "./KeepLocalChoice";
 import { type Ollama, OllamaProgress, ollamaDescription } from "./OllamaCard";
 import { ProviderForm, ProviderSendsLine } from "./ProviderForm";
+import { keyProviderName } from "./shared";
 
 const SHORT_NAMES: Partial<
   Record<ChatProviderKind, "providers.kind.short.qwen" | "providers.kind.short.deepseek">
@@ -63,12 +65,13 @@ export function ChatProviderChoices(props: ChatProviderChoicesProps) {
   const { ollamaActionInRow = false, includeChatGpt = false, withMoreProviders = false } = props;
   const { refused = null } = props;
   const t = useT();
+  const language = useLanguage();
   const name = useId();
 
   const apiKeyBody = withMoreProviders
     ? t("providers.choice.apiKey.body")
     : t("providers.choice.apiKey.firstRun.body", {
-        providers: providerList(keyProviderGroups().main, t),
+        providers: providerList(keyProviderGroups().main, t, language),
       });
 
   const radio = (value: ChatProviderChoice) => (
@@ -244,10 +247,14 @@ export function OllamaAction({ ollama, large = false }: { ollama: Ollama; large?
 }
 
 /** The providers by their short names, in the language's list: "Anthropic, OpenAI or Google". */
-function providerList(kinds: readonly ChatProviderKind[], t: ReturnType<typeof useT>): string {
-  const names = kinds.map((kind) => {
-    const short = SHORT_NAMES[kind];
-    return t(short ?? `providers.kind.${kind}`);
+function providerList(
+  ids: readonly string[],
+  t: ReturnType<typeof useT>,
+  language: Language,
+): string {
+  const names = ids.map((id) => {
+    const short = SHORT_NAMES[kindOfCatalogId(id)];
+    return short ? t(short) : keyProviderName(id, t, language);
   });
   const last = names.pop();
   if (last === undefined) return "";
