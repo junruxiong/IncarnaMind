@@ -444,7 +444,6 @@ test("Export options remembers the format and its options; Export and ⇧⌘E us
   const out = await createDataFolder();
   await useOutputLocation(window, out);
 
-  // Export's menu lists the last format first, with ⇧⌘E: Word to begin with.
   const exportButton = window.getByTestId("export-mind");
   await expect(exportButton).toHaveAttribute("data-format", "docx");
   const exportMenu = window.getByTestId("export-menu");

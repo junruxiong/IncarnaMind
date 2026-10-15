@@ -314,12 +314,11 @@ test("A supported sentence's card names the Document as it is named now, after a
   await expect(card.getByTestId("claim-source")).toHaveText(/^Tides of the coast · /);
 });
 
-test("A check reads the text as it stands and says which sentences with changes waiting it left out; Accept all and check checks them, in English and Chinese (#767)", async () => {
+test("A check reads the text as it stands and says which sentences with changes waiting it left out; Accept all and check checks them, in English and Chinese", async () => {
   const { app, window } = await launchWithTides();
   await useLocalChatModel(window);
   const { line } = await mindWithSentences(window, [SUPPORTED, UNSUPPORTED, CONTRADICTED]);
   await setWindowSize(app, window, 1440, 900);
-  // Changes waiting in two sentences: one written anew, one word changed in the other.
   const ask = async (sentence: string, instruction: string) => {
     await slideSelect(window, line, sentence);
     await window.keyboard.press("ControlOrMeta+j");

@@ -26,6 +26,7 @@ import {
   pathsOpened,
   pathsShown,
   pointAndClick,
+  pointAt,
   removeDataFolder,
   setWindowSize,
   showFolders,
@@ -76,7 +77,7 @@ test.afterEach(async () => {
   await removeDataFolder(sources);
 });
 
-test("Export opens a short menu: Word and PDF, the last one used first with ⇧⌘E, the rest under More formats, by mouse and keyboard, in Chinese too", async () => {
+test("Export opens a short menu: Word and PDF, the last one used first with ⇧⌘E, the rest under More formats, which moving to another item closes, by mouse and keyboard, in Chinese too", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
   await setWindowSize(app, window, WINDOW_SIZE.width, WINDOW_SIZE.height);
@@ -105,7 +106,6 @@ test("Export opens a short menu: Word and PDF, the last one used first with ⇧�
   await pointAndClick(window, menu.getByTestId("export-as-docx"));
   await expect(done).toHaveText("Saved Tides.docx");
 
-  // PDF exports, and is first the next time.
   await exportFromMenu(window, "pdf");
   await expect(done).toHaveText("Saved Tides.pdf");
   await pointAndClick(window, window.getByTestId("export-mind"));
@@ -116,28 +116,45 @@ test("Export opens a short menu: Word and PDF, the last one used first with ⇧�
     "Export options…",
   ]);
 
-  // More formats opens beside it, from the keyboard too; Markdown exports from there.
+  const moreItem = menu.getByTestId("export-more");
   await window.keyboard.press("ArrowDown");
   await window.keyboard.press("ArrowDown");
-  await expect(menu.getByTestId("export-more")).toBeFocused();
+  await expect(moreItem).toBeFocused();
   await window.keyboard.press("ArrowRight");
   const more = window.getByTestId("export-more-menu");
   await expect(more.getByRole("menuitem")).toHaveText([
-    "Markdown (.md)",
-    "HTML",
     "Source pack (PDF)",
+    "HTML",
+    "Markdown (.md)",
   ]);
-  await expect(more.getByTestId("export-as-markdown")).toBeFocused();
+  await expect(more.getByTestId("export-as-source-pack")).toBeFocused();
   await motionSettled(window);
   await screenshot(window, "export-more-en");
+  await window.keyboard.press("End");
+  await expect(more.getByTestId("export-as-markdown")).toBeFocused();
+  await window.keyboard.press("Home");
+  await expect(more.getByTestId("export-as-source-pack")).toBeFocused();
   await window.keyboard.press("ArrowLeft");
   await expect(more).toBeHidden();
-  await expect(menu.getByTestId("export-more")).toBeFocused();
+  await expect(moreItem).toBeFocused();
+
+  await pointAt(window, moreItem);
+  await expect(more).toBeVisible();
+  await pointAt(window, menu.getByTestId("export-as-pdf"));
+  await expect(more).toBeHidden();
+  await pointAt(window, moreItem);
+  await expect(more).toBeVisible();
+  await window.keyboard.press("ArrowUp");
+  await expect(more).toBeHidden();
+  await expect(menu.getByTestId("export-as-docx")).toBeFocused();
+  await expect(menu).toBeVisible();
+
+  await window.keyboard.press("ArrowDown");
   await window.keyboard.press("ArrowRight");
+  await window.keyboard.press("End");
   await window.keyboard.press("Enter");
   await expect(done).toHaveText("Saved Tides.md");
 
-  // In Chinese.
   await bridge(window).language("zh-CN");
   await pointAndClick(window, window.getByTestId("export-mind"));
   await expect(items).toHaveText([
