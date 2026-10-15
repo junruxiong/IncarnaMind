@@ -12,12 +12,14 @@
  *    the claim-check function, against the Mind's Folder, the PDF, its earlier
  *    versions and its copies left out (#80), in Runs third-party from their
  *    start. Each claim's mark shows its result as it comes; the monthly cap or
- *    a plan's limit stops the run, and the claims after it say so (#83).
+ *    a plan's limit stops the run, and the claims after it say so (#83). What
+ *    the scope couldn't read as the run started is kept with it (#740).
  *
  * One verify run, finding or checking, goes at a time.
  */
 import { randomUUID } from "node:crypto";
 import { generateText } from "ai";
+import type * as Y from "yjs";
 import { isClaim } from "../../../shared/sentences";
 import { setTextOrigin } from "../../../shared/textOrigins";
 import {
@@ -37,6 +39,8 @@ import {
   MIND_SETTINGS_FIELD,
   type Mind,
   type ProviderError,
+  type SearchScope,
+  type UnreadFile,
   type VerifyClaimsResult,
   type VerifyDocumentResult,
 } from "../../api";
@@ -102,6 +106,10 @@ export interface VerifyOptions {
   ): ClaimCheckAttributes;
   /** Keeps the text of the evidence the Mind's checks show (#79). */
   retainEvidence(mindId: string): void;
+  /** The files in a Search scope that couldn't be read, as `listUnreadFiles` lists them; null for every Document. */
+  unread(scope: SearchScope | null): UnreadFile[];
+  /** Records what a request's scope couldn't read (#740), once its marks are on. */
+  recordUnread(blocks: Y.XmlFragment, request: string, files: readonly UnreadFile[]): void;
   /** Marks a request's sentences not checked yet "stopped". */
   settleStopped(mindId: string, request: string): void;
   /** Records a request as running, so `cancelCheck` stops it; `done` when it ends. */
@@ -113,6 +121,8 @@ export interface VerifyOptions {
 export interface CheckScope {
   scope: ClaimCheckRequest["scope"];
   marked: ClaimCheckAttributes["scope"];
+  /** The Search scope it was asked for; null for every Document. */
+  wanted: SearchScope | null;
 }
 
 function parseRequest(input: unknown) {
@@ -270,9 +280,10 @@ export function createVerify(options: VerifyOptions) {
 
     const startedAt = options.now().toISOString();
     const claims = verification.claims;
+    const unread = options.unread(check.wanted);
     const queued = content.edit(mindId, (blocks) => {
       const sentences = everySentence(blocks);
-      return claims.flatMap((claim) => {
+      const marked = claims.flatMap((claim) => {
         const sentence = sentences.find(
           (each) => each.blockId === claim.blockId && each.text === claim.text,
         );
@@ -296,6 +307,8 @@ export function createVerify(options: VerifyOptions) {
         markSentence(sentence.element, sentence.from, sentence.to, marked);
         return [{ id: marked.id, claim: sentence.text, context: sentence.context }];
       });
+      if (marked.length > 0) options.recordUnread(blocks, requestId, unread);
+      return marked;
     });
     if (queued.length === 0) return { kind: "nothing" };
 

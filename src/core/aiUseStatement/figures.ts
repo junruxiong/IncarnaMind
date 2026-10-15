@@ -3,7 +3,8 @@
  * already records and nothing else: the AI use record (`ai_use`, #292) for the
  * models and what became of each insertion, the AI text marks in the Mind's
  * text (#95), its Answers' models and Tool calls, and the results of its
- * Citation checks and sentence checks (#96). A figure none of these holds is
+ * Citation checks and sentence checks (#96), with the files those checks
+ * couldn't read when they started (#740). A figure none of these holds is
  * not here, and nothing is estimated.
  */
 import * as Y from "yjs";
@@ -11,6 +12,7 @@ import { citationState, type LiveDocument } from "../../shared/citations";
 import { claimCheckShown } from "../../shared/claimChecks";
 import { readProposalAttribute } from "../../shared/proposals";
 import { toolCallsOf } from "../../shared/toolCalls";
+import { checkUnreadOf } from "../../shared/unreadFiles";
 import { countFor, countText } from "../../shared/wordCount";
 import { isEdited, textAttribute } from "../answers/blocks";
 import { checkedSentences } from "../answers/checks/sentences";
@@ -23,6 +25,7 @@ import {
   type KeptCitationText,
   PROPOSAL_ATTRIBUTE,
   QUESTION_BLOCK,
+  type UnreadFile,
 } from "../api";
 import {
   type Block,
@@ -104,6 +107,8 @@ export interface AiUseFigures {
   removed: number;
   citations: CitationCounts;
   sentences: SentenceCounts;
+  /** The files the sentences' checks couldn't read when they started. */
+  unread: UnreadFile[];
 }
 
 export interface FigureSources {
@@ -296,7 +301,9 @@ export function readFigures(sources: FigureSources): AiUseFigures {
     notChecked: 0,
   };
   const versions = new Map(documents.map((document) => [document.id, document.contentHash]));
+  const requests: string[] = [];
   for (const { check, sentence } of checkedSentences(fragment)) {
+    requests.push(check.request);
     const shown = claimCheckShown(check, { text: sentence, versions, folderId: sources.folderId });
     if (shown.state === "supported") sentences.supported++;
     else if (shown.state === "unsupported") sentences.unsupported++;
@@ -318,5 +325,6 @@ export function readFigures(sources: FigureSources): AiUseFigures {
     removed,
     citations,
     sentences,
+    unread: fragment.doc ? checkUnreadOf(fragment.doc, requests) : [],
   };
 }

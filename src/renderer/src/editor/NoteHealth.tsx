@@ -8,8 +8,10 @@ import { citationState } from "../../../shared/citations";
 import { checkSentences, dismissCheckProblem, stopCheck, useChecks } from "../checks";
 import { ProblemLine } from "../components/ProblemLine";
 import { ReadinessExplanation, readinessAction } from "../components/providers/ChatReadinessNotice";
+import { UnreadFilesLine } from "../components/UnreadFilesLine";
 import { useLanguage, useT } from "../i18n";
 import { useAppStore } from "../store";
+import { useCheckUnread } from "../unreadFiles";
 import { coverageOf, sameCoverage, shownClaims } from "./claimChecks";
 import {
   HEALTH_PARTS,
@@ -89,9 +91,10 @@ function useHealth(editor: Editor): Health {
  * The Mind's health under its title (#96): "✓ 1 Citation found · ! 1
  * unsupported · ≠ 1 contradicted · 3 with no Citation", then those that need
  * a re-check or weren't checked. Each part is a button that moves to the
- * next such sentence or Citation, round to the first. Under it, while
- * sentences are checked, what is happening with Stop; or why a check gave
- * nothing, with the one thing that helps.
+ * next such sentence or Citation, round to the first. Then the files the
+ * checks couldn't read, if any. Under it, while sentences are checked, what
+ * is happening with Stop; or why a check gave nothing, with the one thing
+ * that helps.
  */
 export function NoteHealth({
   editor,
@@ -105,6 +108,7 @@ export function NoteHealth({
   const t = useT();
   const language = useLanguage();
   const health = useHealth(editor);
+  const unread = useCheckUnread(editor, doc);
   const coverage = useEditorState({
     editor,
     selector: ({ editor: current }) => coverageOf(shownClaims(current.state)),
@@ -191,6 +195,7 @@ export function NoteHealth({
           {t("checks.smallModel")}
         </p>
       )}
+      <UnreadFilesLine files={unread} testId="checks-unread" className="mind-health-unread" />
       {running && (
         <ProblemLine
           role="status"

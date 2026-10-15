@@ -12,11 +12,13 @@ import { DocumentLineIcon, VerifyLineIcon } from "../components/lineIcons";
 import { ProblemLine } from "../components/ProblemLine";
 import { ReadinessExplanation, readinessAction } from "../components/providers/ChatReadinessNotice";
 import { buttonStyle } from "../components/ui";
+import { UnreadFilesLine } from "../components/UnreadFilesLine";
 import { core } from "../core";
 import { estimateText, runStopText } from "../cost";
 import { useLanguage, useT } from "../i18n";
 import { enter } from "../motion";
 import { useAppStore } from "../store";
+import { useCheckUnread } from "../unreadFiles";
 import {
   checkClaims,
   dismissVerifyOutcome,
@@ -63,7 +65,8 @@ function claimMarks(editor: Editor, pages: Verification["pages"]) {
  * against this Folder's Documents? [Check 24 claims]" with the estimate on a
  * cloud model, "Checking 12 of 24…" with Stop, then "Checked 24 claims · 2
  * need a look", which moves to the next such claim and fades in once as the
- * run finishes; or why there is nothing to check.
+ * run finishes; or why there is nothing to check. Under it, the files the
+ * checks couldn't read, if any.
  */
 export function VerifyLine({
   editor,
@@ -105,6 +108,7 @@ export function VerifyLine({
       a.needLook.length === b.needLook.length &&
       a.needLook.every((at, index) => at === b.needLook[index]),
   });
+  const unread = useCheckUnread(editor, doc);
   const claims = verification.claims;
   const total = claims?.length ?? 0;
   const asking = claims !== null && total > 0 && marks.marked === 0 && running === null;
@@ -307,6 +311,7 @@ export function VerifyLine({
         {dot}
         {state}
       </div>
+      <UnreadFilesLine files={unread} testId="verify-unread" className="mind-verify-problem" />
       {running === null && marks.marked > 0 && marks.coverage.mostlyUncovered && (
         <UncoveredLine
           className="mind-verify-problem"
