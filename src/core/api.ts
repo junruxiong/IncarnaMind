@@ -3851,6 +3851,23 @@ export interface LeftOutDocument {
   reason: EvidenceExclusion;
 }
 
+/**
+ * How a check worked out a figure the sentence states but the Documents don't
+ * (#707): the figure, calculated from numbers they state (ADR-0021), and the
+ * number the sentence writes for it. They agree to the sentence's rounding,
+ * and the sentence is supported, or they don't, and it is contradicted.
+ */
+export interface ClaimCalculation {
+  figure: CalculatedFigure;
+  /** The number as the sentence writes it: "1.1x". */
+  stated: string;
+  /**
+   * Whether they agree. One that doesn't contradicts the sentence; one that
+   * does settles only that number, and a Passage may still contradict the rest.
+   */
+  agrees: boolean;
+}
+
 /** A password-protected PDF Document, and the password to open it with (#763). */
 export interface UnlockDocumentInput {
   documentId: string;
@@ -3868,13 +3885,16 @@ export type ClaimCheckResult =
       verdict: ClaimVerdict;
       /**
        * For "supported" and "contradicted": the Passage that decides it, as a
-       * Citation whose quote the Citation check found. For "unsupported": null,
-       * or the nearest line when it states another value for the very thing
-       * the sentence says: "the Documents say something different" (#770).
+       * Citation whose quote the Citation check found; for a figure worked out,
+       * its first input's. For "unsupported": null, or the nearest line when it
+       * states another value for the very thing the sentence says: "the
+       * Documents say something different" (#770).
        */
       evidence: Citation | null;
       /** For "supported" and "contradicted": what the Document says, in one plain sentence. */
       says: string | null;
+      /** A figure worked out that decided it; null when a Passage did. */
+      calculation: ClaimCalculation | null;
       /** The versions of the Documents it read, each once. */
       versions: CheckedVersion[];
       excluded: LeftOutDocument[];
@@ -3948,6 +3968,8 @@ export interface ClaimCheckAttributes {
   evidence: CitationAttributes | null;
   /** "supported" and "contradicted": what the Document says, in one plain sentence. */
   says: string | null;
+  /** A figure worked out that decided it; null when a Passage did. */
+  calculation: ClaimCalculation | null;
   scope: ClaimCheckScope;
   versions: CheckedVersion[];
   excluded: LeftOutDocument[];

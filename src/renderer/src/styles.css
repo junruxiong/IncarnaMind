@@ -346,8 +346,8 @@
   /*
    * The sidebar's panel (#219). Shown, it has no box of its own (the sidebar
    * is a flex item as before). Hidden, it is out to the left of the window,
-   * and slides over the content (peeking) when the pointer touches the left
-   * edge or keyboard focus is in it; with reduced motion it fades instead.
+   * and comes out over the content (peeking) when the pointer touches the left
+   * edge or keyboard focus is in it. It paints nothing: the sidebar moves inside it.
    */
   .sidebar-panel {
     display: contents;
@@ -359,14 +359,12 @@
     z-index: 30;
     display: flex;
     width: var(--sidebar-width);
-    background: var(--color-frame);
     transform: translateX(-100%);
-    transition:
-      transform 160ms ease-out,
-      box-shadow 160ms ease-out;
 
     &[data-open] {
       transform: none;
+    }
+    &[data-open] > aside {
       box-shadow: var(--shadow-popover);
     }
   }
@@ -374,7 +372,6 @@
     transform: none;
     opacity: 0;
     pointer-events: none;
-    transition: opacity 80ms linear;
   }
   :root:not([data-motion="on"]) .sidebar-panel:is([data-hidden][data-open]) {
     opacity: 1;
@@ -4086,6 +4083,49 @@
   .claim-card-says {
     padding-left: 22px;
     color: var(--color-ink-secondary);
+  }
+  /* A figure a check worked out (#707): how, then each input's Citation. */
+  .claim-card-working {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .claim-card-figure {
+    padding-left: 22px;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-ink);
+    overflow-wrap: break-word;
+  }
+  .claim-card-inputs {
+    display: flex;
+    flex-direction: column;
+    margin: 4px 0 0;
+    padding: 0 0 0 16px;
+    list-style: none;
+  }
+  .claim-card-input {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    padding: 4px 6px;
+    border-radius: 6px;
+    text-align: left;
+
+    &:hover {
+      background: var(--color-frame);
+    }
+  }
+  .claim-card-input-figure {
+    color: var(--color-ink);
+    overflow-wrap: break-word;
+  }
+  .claim-card-input-source {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--text-meta);
+    line-height: 18px;
+    color: var(--color-ink-meta);
   }
   .citation-card-note {
     padding-left: 22px;

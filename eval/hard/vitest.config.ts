@@ -1,6 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
-import { nodeWorkers } from "../../vitest.config";
+import { HOME_GUARD, nodeWorkers } from "../../vitest.config";
+import { evalCache } from "../lib/cache";
 
 /**
  * `npm run eval:hard` (eval/hard/README.md): the hard tier, with the same
@@ -13,6 +14,8 @@ export default defineConfig({
   test: {
     include: ["eval/hard/**/*.hard.ts"],
     environment: "node",
+    setupFiles: [HOME_GUARD],
+    env: { INCARNAMIND_EVAL_CACHE: evalCache() },
     disableConsoleIntercept: true,
     reporters: [["default", { summary: false }]],
     // Fetching the library, embedding tens of thousands of Passages and, with a chat model, an Answer per Question.

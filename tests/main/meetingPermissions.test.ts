@@ -1,18 +1,10 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
+import { section } from "../helpers/electronBuilder";
 
 const REPO_ROOT = join(__dirname, "..", "..");
 const read = (path: string) => readFile(join(REPO_ROOT, path), "utf8");
-
-/** A top-level section of electron-builder.yml: its key's line and the indented lines under it. */
-function section(yaml: string, key: string): string {
-  const lines = yaml.split(/\r?\n/);
-  const start = lines.indexOf(`${key}:`);
-  if (start < 0) return "";
-  const end = lines.findIndex((line, index) => index > start && /^\S/.test(line));
-  return lines.slice(start, end < 0 ? undefined : end).join("\n");
-}
 
 describe("The macOS build may record a meeting (ADR-0015)", () => {
   test("it says why it asks for the microphone and the computer's sound, in English and Chinese", async () => {
