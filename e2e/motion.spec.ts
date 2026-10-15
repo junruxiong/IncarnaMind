@@ -216,6 +216,9 @@ test("the Citation card grows from its Citation and goes back toward it", async 
   await expect(pane.getByTestId("citation").first()).toHaveAttribute("data-check", "found", {
     timeout: 20_000,
   });
+  // Below the example's draft at this height: in view before it is pointed at, so the Mind
+  // isn't still scrolling under the pointer when the card would open.
+  await citation.scrollIntoViewIfNeeded();
   await motionSettled(window);
   await setMotionSpeed(window, 0.2);
 
