@@ -20,6 +20,7 @@ import { core } from "../core";
 import { useT } from "../i18n";
 import { useModelMenuRequests } from "../modelMenu";
 import { useModelNames } from "../modelNames";
+import { usePlanStandIn } from "../planLimits";
 import { useAppStore } from "../store";
 import { ChevronDownSmallIcon } from "./icons";
 
@@ -83,6 +84,21 @@ export function useMindModel(doc: Y.Doc | null): ChatModelChoice | null {
   return doc ? choice : withoutMind;
 }
 
+/** The model a run in the Mind uses: the Mind's own, else the default the composer shows. */
+export function useRunModel(doc: Y.Doc | null): {
+  providerId: string | null;
+  modelId: string | null;
+} {
+  const own = useMindModel(doc);
+  const providerId = useAppStore((state) =>
+    state.chatReadiness?.ready ? state.chatReadiness.provider.id : null,
+  );
+  const modelId = useAppStore((state) =>
+    state.chatReadiness?.ready ? state.chatReadiness.modelId : null,
+  );
+  return own ?? { providerId, modelId };
+}
+
 function chooseModel(doc: Y.Doc | null, choice: ChatModelChoice): void {
   if (doc) setMindModel(doc, choice);
   else useComposer.setState({ modelWithoutMind: choice });
@@ -117,6 +133,7 @@ export function ModelChip({
   const groups = useAnswers((state) => state.models);
   const loadModels = useAnswers((state) => state.loadModels);
   const nameOf = useModelNames();
+  const standIn = usePlanStandIn();
   const [query, setQuery] = useState("");
   const search = useRef<HTMLInputElement>(null);
   // Over the composer, not on it.
@@ -169,13 +186,34 @@ export function ModelChip({
   };
   const via = provider ? t(VIA[groupOf(provider, isCloud(provider.id, current.modelId))]) : null;
   const shown = nameOf(current.modelId, current.providerId);
+  const answering =
+    standIn && provider?.kind === "chatgpt" && standIn.insteadOf === current.modelId
+      ? { name: nameOf(standIn.modelId, current.providerId).name, until: standIn.untilTime }
+      : null;
+  const chipText = answering?.until
+    ? t("composer.model.standIn", { model: answering.name, time: answering.until })
+    : (answering?.name ?? shown.name);
   const named = shown.id ? `${shown.name} · ${shown.id}` : shown.name;
-  const title = via ? `${named} · ${via}` : named;
+  const title = answering
+    ? answering.until
+      ? t("composer.model.standIn.title", {
+          chosen: shown.name,
+          model: answering.name,
+          time: answering.until,
+        })
+      : t("composer.model.standIn.titleForNow", { chosen: shown.name, model: answering.name })
+    : via
+      ? `${named} · ${via}`
+      : named;
   const label = via
-    ? t("composer.model.label", { model: shown.name, via })
-    : t("composer.model.labelPlain", { model: shown.name });
+    ? t("composer.model.label", { model: chipText, via })
+    : t("composer.model.labelPlain", { model: chipText });
 
   const choose = (choice: ChatModelChoice) => {
+    // The User's own pick wins over a stand-in, for the model it stood in for too.
+    if (answering || (standIn && choice.modelId === standIn.insteadOf)) {
+      core.endPlanStandIn().catch(useAppStore.getState().reportError);
+    }
     chooseModel(doc, choice);
     menu.close();
     onChosen();
@@ -208,13 +246,14 @@ export function ModelChip({
         type="button"
         {...menu.buttonProps}
         data-testid="composer-model"
+        data-stand-in={answering ? "" : undefined}
         aria-label={label}
         title={title}
         onPointerEnter={loadModels}
         onFocus={loadModels}
         className="composer-chip composer-model"
       >
-        <span className="truncate">{shown.name}</span>
+        <span className="truncate">{chipText}</span>
         <ChevronDownSmallIcon className="composer-model-chevron" />
       </button>
       <div
@@ -235,7 +274,7 @@ export function ModelChip({
                   !event.metaKey &&
                   !event.ctrlKey &&
                   !event.altKey &&
-                  event.target !== search.current
+                  !(event.target instanceof HTMLInputElement)
                 ) {
                   search.current?.focus();
                 }

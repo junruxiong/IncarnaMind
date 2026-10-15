@@ -188,3 +188,20 @@ Importing a .docx as a Mind also adds the original file to the Library as a Docu
 
 - **What a model reads:** a Question beside the Mind or in it, and an outside agent's `read_mind`, read them inline, "[deleted by Priya Nair, 2026-10-02: …]" and "[inserted by …: …]" (CriticMarkup for `read_mind`, which is Markdown). No line is added to the instructions, which would make every request longer: in a hand check, Claude Haiku 5.5, GPT-6 Luna and gpt-oss read the marks correctly without one, and answered what the counterparty changed. An author's name can't close a mark or open another (brackets and line breaks go, and it is cut at 80 characters), and text that reads like a mark, or like CriticMarkup's delimiters, is escaped.
 - **Exports:** a PDF and an HTML file mark them as Word prints All Markup, inserted words underlined and deleted ones struck, each change with a note of who made it and when ("Deleted by Priya Nair, 2 Oct 2026"; a word replaced is one change, "Replaced by"). Markdown writes them as CriticMarkup, `{--…--}{++…++}{>>Replaced by …<<}`. The export options sheet has a row for a Mind that has some, "Tracked changes": "With changes shown", the default, or "As if accepted", their changes applied (`ExportPreferences.theirChanges`, no migration: settings are rows of JSON). A Word file keeps them as tracked changes, as before.
+
+## Amendment: a saved web page keeps its article's pictures (2026-10-14, #756)
+
+The amendment for #261 said a web page loads nothing it embeds. A chart, a table drawn as a picture or a scanned exhibit was then lost: it couldn't be shown, read or cited. Now the article's own pictures are saved with the page.
+
+- **Which pictures:** those inside the article Readability finds (`<img>`, and the widest size up to 1600 px a `srcset` offers), from any http or https host. Left out:
+  - anything outside the article (a site's logo, its navigation);
+  - a picture smaller than 64 px on a side, by its stated size or, once fetched, by its own (tracking pixels and icons);
+  - one named as an avatar, an author's, a logo, an icon or an emoji;
+  - one from a known ad or tracker host, from a short built-in list in one file (`src/core/documents/web/adHosts.ts`), easy to extend.
+  - SVG, which can carry scripts and links, is left out for now; so is a `data:` picture.
+- **How they are fetched:** once, with the page, from this computer, anonymously (no cookies, no Referer), through the fetcher that reaches only the public internet (the amendment for #128): never this computer, a local network or `file:`. All a page's pictures share one 20-second limit. What a picture is comes from its first bytes (PNG, JPEG, GIF, WebP or AVIF), never from what the server says; anything else is left out.
+- **Caps:** 5 MB a picture, and 25 MB and 60 pictures a page. A page over them keeps the first pictures, and says how many it left out.
+- **Consent:** adding the page is the consent (ADR-0022). The add dialog says the article's pictures come with it, and may come from the site's image servers.
+- **Where they are kept:** in the data folder's `Web pages/pictures/`, as files named by their SHA-256, so a page's versions share them and none is ever written over. A row per picture per version says which files that version shows (migration 89), so a Citation of an older version still has its pictures. A picture goes when no version of any page, live or in Recently deleted, shows it. The snapshot shows a picture by its file (`<img src="pictures/<hash>.png" width height alt>`), never by its web address.
+- **Shown:** the Document protocol serves a web page only the picture files its versions show, as images; the viewer turns them into `data:` URLs, so the Content-Security-Policy is unchanged. A picture not saved stays a box with its description, "Not saved with the page".
+- **Still to come (#756):** each picture's text read on this computer, with its description and caption, to be searched and cited as "§ Results, figure 2"; and keeping the page as it looked, as a PDF.

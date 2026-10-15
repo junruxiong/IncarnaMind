@@ -346,8 +346,8 @@
   /*
    * The sidebar's panel (#219). Shown, it has no box of its own (the sidebar
    * is a flex item as before). Hidden, it is out to the left of the window,
-   * and slides over the content (peeking) when the pointer touches the left
-   * edge or keyboard focus is in it; with reduced motion it fades instead.
+   * and comes out over the content (peeking) when the pointer touches the left
+   * edge or keyboard focus is in it. It paints nothing: the sidebar moves inside it.
    */
   .sidebar-panel {
     display: contents;
@@ -359,14 +359,12 @@
     z-index: 30;
     display: flex;
     width: var(--sidebar-width);
-    background: var(--color-frame);
     transform: translateX(-100%);
-    transition:
-      transform 160ms ease-out,
-      box-shadow 160ms ease-out;
 
     &[data-open] {
       transform: none;
+    }
+    &[data-open] > aside {
       box-shadow: var(--shadow-popover);
     }
   }
@@ -374,7 +372,6 @@
     transform: none;
     opacity: 0;
     pointer-events: none;
-    transition: opacity 80ms linear;
   }
   :root:not([data-motion="on"]) .sidebar-panel:is([data-hidden][data-open]) {
     opacity: 1;
@@ -1254,6 +1251,12 @@
       outline-offset: 1px;
     }
   }
+  /* When the whole Mind was last checked (#737): text, not a part to go to. */
+  .mind-health-when {
+    padding: 0 3px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
   .mind-health-icon {
     box-sizing: border-box;
     width: 12px;
@@ -1817,6 +1820,20 @@
     width: 12px;
     height: 12px;
     flex-shrink: 0;
+  }
+  /*
+   * Another model answers while the chosen one's plan limit is used up: filled, so it reads as a
+   * state. "All Documents" beside it gives up its room first, down to its icon, so the time shows:
+   * with no flex basis it only takes the room left, and the model chip shrinks only after it.
+   */
+  .composer-model[data-stand-in]:not(:hover, [aria-expanded="true"]) {
+    background: var(--color-hover);
+    color: var(--color-ink-secondary);
+  }
+  .composer-controls:has([data-stand-in]) > .composer-scope-all {
+    flex: 1 1 0;
+    min-width: 22px;
+    max-width: max-content;
   }
   .composer-model-anchor {
     display: flex;
@@ -2694,6 +2711,19 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  /* Where the assistant's next Block goes while it writes them into the Mind (#202). */
+  .mind-writing {
+    margin-block: 4px;
+    font-family: var(--font-sans);
+    font-size: var(--text-meta);
+    line-height: var(--text-meta--line-height);
+    color: var(--color-ink-meta);
+    user-select: none;
+  }
+  /* The paragraph the assistant is writing anew, until its change is in (#202). */
+  .mind-rewriting {
+    color: var(--color-ink-meta);
+  }
   /* Being written: a pulsing accent dot. Waiting for approval: an attention dot. */
   .answer-writing {
     display: inline-flex;
@@ -3360,8 +3390,7 @@
     position: fixed;
     z-index: 30;
     display: flex;
-    align-items: center;
-    gap: 6px;
+    flex-direction: column;
     max-width: min(420px, calc(100vw - 16px));
     padding: 2px 8px;
     border-radius: 6px;
@@ -3372,6 +3401,18 @@
     line-height: 20px;
     color: var(--color-ink-meta);
     white-space: nowrap;
+  }
+  .change-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+  /* Why the assistant made the change (#202), under the bar while the cursor is in it. */
+  .change-bar-why {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--color-ink-secondary);
   }
   .change-bar-position {
     min-width: 0;
@@ -4056,6 +4097,49 @@
   .claim-card-says {
     padding-left: 22px;
     color: var(--color-ink-secondary);
+  }
+  /* A figure a check worked out (#707): how, then each input's Citation. */
+  .claim-card-working {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .claim-card-figure {
+    padding-left: 22px;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-ink);
+    overflow-wrap: break-word;
+  }
+  .claim-card-inputs {
+    display: flex;
+    flex-direction: column;
+    margin: 4px 0 0;
+    padding: 0 0 0 16px;
+    list-style: none;
+  }
+  .claim-card-input {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    padding: 4px 6px;
+    border-radius: 6px;
+    text-align: left;
+
+    &:hover {
+      background: var(--color-frame);
+    }
+  }
+  .claim-card-input-figure {
+    color: var(--color-ink);
+    overflow-wrap: break-word;
+  }
+  .claim-card-input-source {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--text-meta);
+    line-height: 18px;
+    color: var(--color-ink-meta);
   }
   .citation-card-note {
     padding-left: 22px;
@@ -4931,7 +5015,8 @@
     flex-direction: column;
     min-width: 0;
     min-height: 0;
-    overflow: hidden;
+    /* Clip, not hidden: a picker wider than the composer mustn't scroll the panel sideways as it scrolls its choice into view. */
+    overflow: clip;
     border-radius: 10px;
     background: var(--color-sheet);
     container: assistant / inline-size;
@@ -5238,6 +5323,10 @@
   .assistant-answer[data-sought] {
     animation: block-just-added 1600ms ease-in both;
   }
+  /* A folder just linked is washed the same way, where it now shows in the sidebar. */
+  [data-just-linked] {
+    animation: block-just-added 1600ms ease-in both;
+  }
   .assistant-answer-frame {
     position: relative;
     /* Room at the right for the Citations' checks. */
@@ -5328,6 +5417,118 @@
       font-size: 10px;
       line-height: 16px;
       vertical-align: 1px;
+    }
+  }
+  /*
+   * The card of the Minds an Answer changed or made (#202; the board
+   * Asst-Changes): a head on the frame, a ruled row for each Mind, then
+   * Accept all · Reject all.
+   */
+  .mind-changes {
+    margin: 8px 0 2px;
+    overflow: hidden;
+    border: 1px solid var(--color-rule-strong);
+    border-radius: 8px;
+    background: var(--color-sheet);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--color-ink);
+    user-select: none;
+  }
+  .mind-changes-head,
+  .mind-changes-row {
+    display: flex;
+    align-items: center;
+    min-height: 34px;
+    border-bottom: 1px solid var(--color-rule);
+  }
+  .mind-changes-head {
+    gap: 6px;
+    padding: 6px 10px;
+    background: var(--color-frame);
+    font-weight: 600;
+  }
+  .mind-changes-head:last-child {
+    border-bottom: 0;
+  }
+  .mind-changes-row {
+    gap: 8px;
+    padding: 4px 6px 4px 10px;
+  }
+  .mind-changes-icon {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    color: var(--color-ink-meta);
+  }
+  .mind-changes-title,
+  .mind-changes-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mind-changes-dot,
+  .mind-changes-count {
+    flex-shrink: 0;
+    font-weight: 400;
+    color: var(--color-ink-meta);
+  }
+  .mind-changes-review {
+    flex-shrink: 0;
+    padding: 0 2px;
+    border-radius: 4px;
+    font-weight: 600;
+    color: var(--color-accent);
+
+    &:hover {
+      color: var(--color-accent-strong);
+    }
+  }
+  .mind-changes-no-mind {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin: 8px 0 2px;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--color-ink-secondary);
+  }
+  .mind-changes-foot {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px;
+  }
+  .mind-changes-action,
+  .mind-changes-accept {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    height: 24px;
+    padding: 0 8px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-ink-secondary);
+
+    &:hover {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
+  }
+  .mind-changes-accept {
+    height: 26px;
+    padding: 0 10px;
+    background: var(--color-sheet);
+    box-shadow: inset 0 0 0 1px var(--color-rule-strong);
+    color: var(--color-ink);
+
+    &:hover {
+      background: var(--color-frame);
     }
   }
   /*
@@ -5530,6 +5731,22 @@
   }
   .task-progress-dot {
     color: var(--color-ink-placeholder);
+  }
+  /* Done, what it made, before Review: "1 source saved · 2 changes proposed". */
+  .task-progress-summary {
+    color: var(--color-ink);
+  }
+  /* Stopped at a limit, the steps it has still to do (#130). */
+  .task-progress-remaining {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    color: var(--color-ink-secondary);
+  }
+  .task-progress-remaining-label {
+    font-size: 12.5px;
+    line-height: 18px;
+    color: var(--color-ink-meta);
   }
 
   /*
@@ -6077,6 +6294,311 @@
     }
     .approval-button--primary {
       padding: 0 10px;
+    }
+  }
+  /* A Research Task in the thread: its topic as the Question, its progress under it (#130). */
+  .assistant-task {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  /*
+   * Research's plan card (#130; DESIGN.md, Task tray › Plan card): the steps,
+   * sources and where it writes scroll inside the tray; the estimate, Cancel
+   * and Start stay pinned at its foot.
+   */
+  .research-plan {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+
+    & + * {
+      border-top: 1px solid var(--color-rule);
+    }
+  }
+  .research-plan-body {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 12px 12px 4px;
+  }
+  /* At the foot of the steps as they scroll, so Sources and Write into stay in view while there is room. */
+  .research-plan-settings {
+    position: sticky;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: auto;
+    padding-top: 4px;
+    background: var(--color-sheet);
+  }
+  .research-plan-kind {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    font-size: 12.5px;
+    line-height: 16px;
+    color: var(--color-ink-meta);
+  }
+  .research-plan-title {
+    margin: 0;
+    font-size: var(--text-ui);
+    line-height: var(--text-ui--line-height);
+    font-weight: 600;
+    overflow-wrap: break-word;
+  }
+  .research-plan-planning {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    color: var(--color-ink-meta);
+  }
+  .research-plan-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .research-plan-step {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    border-radius: 4px;
+
+    &:hover,
+    &:focus-within {
+      background: var(--color-frame);
+    }
+    &:hover .research-plan-remove,
+    &:focus-within .research-plan-remove {
+      opacity: 1;
+    }
+  }
+  .research-plan-step--fixed:hover {
+    background: none;
+  }
+  .research-plan-number {
+    flex: none;
+    min-width: 18px;
+    padding: 2px 0 2px 2px;
+    color: var(--color-ink-meta);
+    font-variant-numeric: tabular-nums;
+  }
+  .research-plan-field {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 2px 0;
+    border: 0;
+    background: transparent;
+    resize: none;
+    field-sizing: content;
+    font: inherit;
+    color: var(--color-ink);
+    overflow-wrap: break-word;
+
+    &:focus {
+      outline: none;
+    }
+    &:disabled {
+      color: var(--color-ink-meta);
+    }
+  }
+  .research-plan-fixed {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 2px 0;
+    color: var(--color-ink-meta);
+    overflow-wrap: break-word;
+  }
+  .research-plan-remove {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    margin-top: -1px;
+    border-radius: 4px;
+    color: var(--color-ink-meta);
+    opacity: 0;
+
+    &:hover {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
+    &:focus-visible {
+      opacity: 1;
+    }
+  }
+  .research-plan-add {
+    display: inline-flex;
+    align-self: flex-start;
+    align-items: center;
+    gap: 6px;
+    height: 22px;
+    padding: 0 6px 0 2px;
+    border-radius: 4px;
+    color: var(--color-ink-meta);
+
+    &:hover {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
+  }
+  .research-plan-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 10px;
+    min-width: 0;
+  }
+  .research-plan-label {
+    flex: none;
+    min-width: 64px;
+    font-size: 12.5px;
+    color: var(--color-ink-meta);
+  }
+  .research-plan-sources {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .research-plan-source {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 24px;
+    padding: 0 8px;
+    border: 1px solid var(--color-rule);
+    border-radius: 6px;
+    background: var(--color-sheet);
+    font-size: 12.5px;
+    color: var(--color-ink-secondary);
+
+    &[aria-pressed="true"] {
+      border-color: var(--color-rule-strong);
+      background: var(--color-frame);
+      color: var(--color-ink);
+    }
+    &:hover:not(:disabled) {
+      background: var(--color-hover);
+    }
+    &:disabled {
+      color: var(--color-ink-placeholder);
+    }
+  }
+  .research-plan-target {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    max-width: 100%;
+    height: 24px;
+    padding: 0 6px;
+    margin-left: -6px;
+    border-radius: 6px;
+    font-weight: 600;
+
+    &:hover,
+    &[aria-expanded="true"] {
+      background: var(--color-hover);
+    }
+  }
+  .research-plan-note {
+    margin: -2px 0 0;
+    font-size: 12.5px;
+    line-height: 16px;
+    color: var(--color-ink-meta);
+  }
+  .research-plan-problem {
+    flex: none;
+    padding: 4px 12px 0;
+  }
+  .research-plan-foot {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 8px 8px 12px;
+  }
+  .research-plan-estimate {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 12.5px;
+    line-height: 16px;
+    color: var(--color-ink-meta);
+    overflow-wrap: break-word;
+  }
+  /* A running plan's steps read as text, not as fields to edit. */
+  .research-plan-fixed--ink {
+    color: var(--color-ink);
+  }
+  .research-plan-view-mind {
+    min-width: 0;
+    font-weight: 600;
+    overflow-wrap: break-word;
+  }
+  /*
+   * What the User told a Task that it hasn't read yet (#130; DESIGN.md, Task
+   * tray › Queued messages), nearest the composer, wrapping rather than cut.
+   */
+  .task-queued {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    margin: 0;
+    padding: 4px 4px 4px 10px;
+    list-style: none;
+
+    & + * {
+      border-top: 1px solid var(--color-rule);
+    }
+  }
+  .task-queued-message {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    min-height: 24px;
+    padding: 3px 0;
+  }
+  .task-queued-arrow {
+    flex: none;
+    color: var(--color-ink-meta);
+  }
+  .task-queued-text {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    word-break: normal;
+  }
+  .task-queued-when {
+    color: var(--color-ink-meta);
+  }
+  .task-queued-remove {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    margin-top: -1px;
+    border-radius: 4px;
+    color: var(--color-ink-meta);
+
+    &:hover {
+      background: var(--color-hover);
+      color: var(--color-ink);
     }
   }
   .task-ask-count {
@@ -7628,7 +8150,8 @@
 }
 /* Washed while it lasts, with no fade. */
 :root:not([data-motion="on"]) .mind-editor > .block-just-added,
-:root:not([data-motion="on"]) .assistant-answer[data-sought] {
+:root:not([data-motion="on"]) .assistant-answer[data-sought],
+:root:not([data-motion="on"]) [data-just-linked] {
   animation: none;
   background: var(--color-frame);
   box-shadow: 0 0 0 6px var(--color-frame);
