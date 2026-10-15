@@ -66,7 +66,6 @@ const withUnreadFiles = () =>
     "Scan.pdf": buildPdf([{ image: true }]),
   });
 
-/** A Mind in the Folder whose one paragraph is these sentences, with a client. */
 async function mindOf(core: Core, folderId: string | null, sentences: readonly string[]) {
   const mind = await core.createMind({ title: "Harbour", folderId });
   const client = await connectToMind(core, mind.id);
@@ -91,7 +90,6 @@ async function mindOf(core: Core, folderId: string | null, sentences: readonly s
   return { mind, client, check };
 }
 
-/** What the Mind's checks couldn't read, as the line beside them reads it. */
 async function unreadOfChecks(client: MindClient): Promise<UnreadFile[]> {
   await client.settled();
   const requests = claimSpans(readMind(client)).map((span) => span.check.request);

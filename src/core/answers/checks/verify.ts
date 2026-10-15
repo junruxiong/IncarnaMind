@@ -13,7 +13,7 @@
  *    versions and its copies left out (#80), in Runs third-party from their
  *    start. Each claim's mark shows its result as it comes; the monthly cap or
  *    a plan's limit stops the run, and the claims after it say so (#83). What
- *    the scope couldn't read as the run started is kept with it (#740).
+ *    the scope couldn't read as the run started is kept with it.
  *
  * One verify run, finding or checking, goes at a time.
  */
@@ -94,9 +94,9 @@ export interface VerifyOptions {
   ): ClaimCheckAttributes;
   /** Keeps the text of the evidence the Mind's checks show (#79). */
   retainEvidence(mindId: string): void;
-  /** The files in a Search scope that couldn't be read, as `listUnreadFiles` lists them; null for every Document. */
+  /** The files `listUnreadFiles` lists for a Search scope; null for every Document. */
   unread(scope: SearchScope | null): UnreadFile[];
-  /** Records what a request's scope couldn't read (#740), once its marks are on. */
+  /** Runs inside the edit that adds the request's marks: what it keeps goes when no mark names it. */
   recordUnread(blocks: Y.XmlFragment, request: string, files: readonly UnreadFile[]): void;
   /** Marks a request's sentences not checked yet "stopped". */
   settleStopped(mindId: string, request: string): void;
@@ -109,7 +109,6 @@ export interface VerifyOptions {
 export interface CheckScope {
   scope: ClaimCheckRequest["scope"];
   marked: ClaimCheckAttributes["scope"];
-  /** The Search scope it was asked for; null for every Document. */
   wanted: SearchScope | null;
 }
 

@@ -47,11 +47,7 @@ export function useUnreadFiles(scope: SearchScope | null): UnreadFile[] {
   return files;
 }
 
-/**
- * The files the Mind's checks couldn't read when they started (#740), as the
- * Mind recorded them for each request its marks name: what was unread then,
- * not now. Empty when every check read everything in its scope.
- */
+/** What was unread when the checks the Mind's marks name started, not what is unread now. */
 export function useCheckUnread(editor: Editor, doc: Y.Doc): UnreadFile[] {
   const requests = useEditorState({
     editor,

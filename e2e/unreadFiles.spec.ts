@@ -170,7 +170,6 @@ for (const language of ["en", "zh-CN"] as const) {
   });
 }
 
-/** Rows of a list of files that couldn't be read, each with its reason, and inside `frame` across. */
 async function expectReasons(
   list: Locator,
   frame: Locator,
@@ -219,7 +218,6 @@ for (const language of ["en", "zh-CN"] as const) {
     await expect(window.getByTestId("claim-mark")).not.toHaveAttribute("data-check", "checking");
     await expect(window.getByTestId("checks-running")).toHaveCount(0);
 
-    // On the line under the title, after the counts; its list under them.
     await expect(unread).toContainText(WORDS[language].count);
     await expect(unread.getByTestId("unread-file")).toHaveCount(0);
     const count = window.getByTestId("mind-count");

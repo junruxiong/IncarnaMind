@@ -4,7 +4,7 @@
  * models and what became of each insertion, the AI text marks in the Mind's
  * text (#95), its Answers' models and Tool calls, and the results of its
  * Citation checks and sentence checks (#96), with the files those checks
- * couldn't read when they started (#740). A figure none of these holds is
+ * couldn't read when they started. A figure none of these holds is
  * not here, and nothing is estimated.
  */
 import * as Y from "yjs";
@@ -107,7 +107,6 @@ export interface AiUseFigures {
   removed: number;
   citations: CitationCounts;
   sentences: SentenceCounts;
-  /** The files the sentences' checks couldn't read when they started. */
   unread: UnreadFile[];
 }
 
