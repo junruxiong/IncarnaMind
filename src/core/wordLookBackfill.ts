@@ -17,7 +17,7 @@ import {
   WORD_RUN_MARK,
   type WordSource,
 } from "./api";
-import type { WordStructure } from "./documents/formats/docxImport";
+import { nodesByPlace, type WordStructure } from "./documents/formats/docxImport";
 
 /** The look's mark, and formatting the import reads with styles resolved. */
 const GIVEN_MARKS: ReadonlySet<string> = new Set([
@@ -44,18 +44,6 @@ export interface LookPlan {
   changes: LookChange[];
   given: number;
   editedSinceImport: number;
-}
-
-function nodesByPlace(structure: WordStructure): Map<string, NodeJSON> {
-  const byPlace = new Map<string, NodeJSON>();
-  const visit = (node: NodeJSON) => {
-    const id = node.attrs?.[BLOCK_ID_ATTRIBUTE];
-    const source = typeof id === "string" ? structure.sources.get(id) : undefined;
-    if (source) byPlace.set(source.n, node);
-    for (const each of node.content ?? []) visit(each);
-  };
-  for (const block of structure.blocks) visit(block);
-  return byPlace;
 }
 
 function grouped(content: readonly NodeJSON[]): (NodeJSON[] | NodeJSON)[] {

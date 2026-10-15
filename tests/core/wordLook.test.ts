@@ -6,6 +6,7 @@ import * as Y from "yjs";
 import {
   CONTENT_SCHEMA_VERSION,
   CONTENT_SCHEMA_VERSION_KEY,
+  type Core,
   type CoreAdapters,
   MIND_CONTENT_FIELD,
   MIND_SETTINGS_FIELD,
@@ -18,6 +19,7 @@ import {
 import { WORD_LOOK_VERSION } from "../../src/core/documents/formats/docxLook";
 import { WORD_PACKAGES_FOLDER } from "../../src/core/wordImports";
 import { WORD_LOOK_TYPES } from "../../src/renderer/src/editor/wordSchema";
+import { pendingProposals } from "../../src/shared/proposals";
 import {
   wordFileOf,
   wordFingerprint,
@@ -26,11 +28,11 @@ import {
 } from "../../src/shared/wordFiles";
 import { wordLookOf } from "../../src/shared/wordLook";
 import { createTempDataFolder, queryDatabase, startCore } from "../helpers/core";
-import { unzip } from "../helpers/docx";
+import { acceptedParagraphs, unzip } from "../helpers/docx";
 import { recordingLog } from "../helpers/log";
 import { longContract } from "../helpers/longContract";
 import { connectToMind, type MindClient } from "../helpers/mindClient";
-import { readMind } from "../helpers/minds";
+import { readMind, resolveChanges } from "../helpers/minds";
 import { paragraph, run, wordFile } from "../helpers/word";
 import { contractFile, RESUME_TEXT_WIDTH_TWIPS, resumeFile } from "../helpers/wordLookFiles";
 import { importWordBytes } from "../helpers/wordMinds";
@@ -389,6 +391,12 @@ describe("a Mind imported from Word keeps its look", () => {
     expect(look.paragraphs[String(next)]).not.toHaveProperty("keepNext");
   });
 
+  test("a paragraph with someone's removed line break has its look, and accepted or rejected the break goes back resolved", async () => {
+    const bytes = await readFile(join(BEFORE, "changes-before.docx"));
+    const { core, mindId, client } = await imported(bytes);
+    await brokenOffResolved(core, mindId, client, bytes);
+  });
+
   test("an empty Word file imports with nothing to draw", async () => {
     const { client, look } = await imported(wordFile({ body: "" }));
     expect(look.body).toBeNull();
@@ -469,15 +477,25 @@ describe("a Mind imported from Word keeps its look", () => {
 const BEFORE = join(__dirname, "../fixtures/word-look");
 
 /**
- * Imports look-before.docx, then stores its Mind as the version before the
- * look wrote it: look-before.yjs is that version's Mind of the same file.
+ * Imports `fixture`.docx, then stores its Mind as an earlier version wrote it:
+ * `mind`.yjs, that version's Mind of the same file. changes-before.docx holds
+ * someone's removed line breaks in three paragraphs; changes-as-is.yjs is its
+ * Mind as written by the version before changes were read, which kept them as they were.
  */
-async function importedBefore(change?: (doc: Y.Doc) => void) {
-  const bytes = await readFile(join(BEFORE, "look-before.docx"));
+async function importedBefore({
+  fixture = "look-before",
+  mind = fixture,
+  change,
+}: {
+  fixture?: string;
+  mind?: string;
+  change?: (doc: Y.Doc) => void;
+} = {}) {
+  const bytes = await readFile(join(BEFORE, `${fixture}.docx`));
   const { dataDir, core, mindId } = await imported(bytes);
   core.close();
   const before = new Y.Doc();
-  Y.applyUpdate(before, await readFile(join(BEFORE, "look-before.yjs")));
+  Y.applyUpdate(before, await readFile(join(BEFORE, `${mind}.yjs`)));
   change?.(before);
   const at = new Date().toISOString();
   queryDatabase(dataDir, "DELETE FROM mind_updates WHERE mind_id = ?", [mindId]);
@@ -490,6 +508,39 @@ async function importedBefore(change?: (doc: Y.Doc) => void) {
     mindId,
   ]);
   return { dataDir, mindId, before, bytes };
+}
+
+/**
+ * changes-before.docx's three paragraphs have their look, and with someone's removed line
+ * break accepted in the first and rejected in the second, export writes both resolved and
+ * the third, still waiting, as it was (#858).
+ */
+async function brokenOffResolved(core: Core, mindId: string, client: MindClient, bytes: Buffer) {
+  const look = wordLookOf(client.doc) as WordLook;
+  expect(styled(client, look).filter((node) => node.type === "paragraph")).toMatchObject([
+    { text: "First linesecond line", look: { align: "justify" } },
+    { text: "Keptapart", look: { align: "justify" } },
+    { text: "Leftwaiting", look: { align: "justify" } },
+    { text: "Plain words." },
+  ]);
+  const [first, kept, left] = pendingProposals(client.blocks).map((change) => change.id);
+  expect(left).toBeDefined();
+  await resolveChanges(client, "accept", (id) => id === first);
+  await resolveChanges(client, "reject", (id) => id === kept);
+
+  const result = await core.exportMind(mindId, { format: "docx", trackChanges: true });
+  const document = unzip(result.data).get("word/document.xml")?.toString("utf8") ?? "";
+  expect(acceptedParagraphs(document)).toEqual([
+    "First linesecond line",
+    "Kept\napart",
+    "Leftwaiting",
+    "Plain words.",
+  ]);
+  const original = unzip(bytes).get("word/document.xml")?.toString("utf8") ?? "";
+  const waiting = /<w:p>(?:(?!<\/w:p>).)*>Left<(?:(?!<\/w:p>).)*<\/w:p>/.exec(original)?.[0];
+  expect(waiting).toContain("<w:del ");
+  expect(document).toContain(waiting);
+  expect(document.match(/<w:del /g)).toHaveLength(1);
 }
 
 function findText(blocks: Y.XmlFragment, text: string): Y.XmlText {
@@ -671,10 +722,51 @@ describe("a Mind imported before gets its look once", () => {
     ).toEqual([]);
   });
 
+  test("a Mind from before, with someone's removed line breaks, gets the look on their paragraphs, and accepted or rejected each goes back resolved", async () => {
+    const { dataDir, mindId, before, bytes } = await importedBefore({ fixture: "changes-before" });
+    expect(wordLookOf(before)).toBeNull();
+    expect(pendingProposals(before.getXmlFragment(MIND_CONTENT_FIELD))).toHaveLength(3);
+
+    const { log, entries } = recordingLog();
+    const restarted = startCore(dataDir, { log });
+    const after = await connectToMind(restarted, mindId);
+    await vi.waitFor(() =>
+      expect(entries).toContainEqual(expect.objectContaining({ event: "word.look.done" })),
+    );
+    expect(entries).toContainEqual(
+      expect.objectContaining({
+        event: "word.look.added",
+        fields: { mindId, given: 4, editedSinceImport: 0 },
+      }),
+    );
+    await brokenOffResolved(restarted, mindId, after, bytes);
+  });
+
+  test("a Mind from before someone's changes were read exports them as they were, with no edit of the User's tracked", async () => {
+    const { dataDir, mindId, before, bytes } = await importedBefore({
+      fixture: "changes-before",
+      mind: "changes-as-is",
+    });
+    expect(pendingProposals(before.getXmlFragment(MIND_CONTENT_FIELD))).toEqual([]);
+
+    const { log, entries } = recordingLog();
+    const restarted = startCore(dataDir, { log });
+    await connectToMind(restarted, mindId);
+    await vi.waitFor(() =>
+      expect(entries).toContainEqual(expect.objectContaining({ event: "word.look.done" })),
+    );
+    const result = await restarted.exportMind(mindId, { format: "docx", trackChanges: true });
+    expect(unzip(result.data).get("word/document.xml")?.toString("utf8")).toBe(
+      unzip(bytes).get("word/document.xml")?.toString("utf8"),
+    );
+  });
+
   test("a table edited before the look keeps the plain look; its paragraphs the User didn't change get theirs", async () => {
-    const { dataDir, mindId } = await importedBefore((doc) => {
-      const cell = findText(doc.getXmlFragment(MIND_CONTENT_FIELD), "Flour and fats");
-      cell.insert(cell.length, ", edited");
+    const { dataDir, mindId } = await importedBefore({
+      change: (doc) => {
+        const cell = findText(doc.getXmlFragment(MIND_CONTENT_FIELD), "Flour and fats");
+        cell.insert(cell.length, ", edited");
+      },
     });
 
     const { log, entries } = recordingLog();
