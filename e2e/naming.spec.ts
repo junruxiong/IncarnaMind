@@ -5,6 +5,7 @@ import {
   createDataFolder,
   dismissChatSetup,
   enterContent,
+  exportFromMenu,
   launchApp,
   newMind,
   removeDataFolder,
@@ -163,7 +164,7 @@ for (const { language, width, question, name } of FROM_QUESTION) {
     expect(oneLine).toBe(true);
 
     // The exported file is named by it, and ends at the same clean cut.
-    await window.getByTestId("export-mind").click();
+    await exportFromMenu(window);
     const done = window.getByTestId("export-result").getByTestId("export-done");
     await expect(done).toContainText(`${name}.docx`, { timeout: 30_000 });
     await app.close();
