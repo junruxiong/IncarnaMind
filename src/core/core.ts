@@ -1510,7 +1510,7 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     signal: lifetime.signal,
   });
-  // The one Tagging setting (#180): the model automatic tagging and Organize use.
+  // The one Tagging setting (#180): the model automatic tagging uses, and Organize when picked by hand.
   const tagging = createTagging({
     setting: () => library.settings().classifier,
     chat: {
