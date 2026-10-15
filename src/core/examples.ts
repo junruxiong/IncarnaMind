@@ -264,6 +264,7 @@ export function createExamples(options: ExamplesOptions) {
         text: check.sentence,
         evidence,
         says: check.says,
+        calculation: null,
         scope: { folderId, widened: false },
         versions: documents.flatMap((each) =>
           each.contentHash ? [{ documentId: each.id, contentHash: each.contentHash }] : [],
