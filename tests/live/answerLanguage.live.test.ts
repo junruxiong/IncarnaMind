@@ -1,16 +1,11 @@
 /**
- * The language of an Answer against real models (#892): it follows the
- * Question's language, whatever language the Documents are in, and what it
- * puts in quotation marks stays in the Documents' own words, so every quote is
- * found. A Question that is only a Document's name or a figure follows the
- * interface language. Each model runs only when its key is in the
- * environment, and is skipped otherwise, so `npx vitest run` makes no request
- * without one.
+ * The language of Answers and their quotes against real models (#892). A model
+ * runs only when its key is in the environment, so `npx vitest run` makes no
+ * request without one.
  *
  *   INCARNAMIND_LIVE_ANTHROPIC_KEY   Claude (INCARNAMIND_LIVE_ANTHROPIC_MODEL, Haiku by default)
  *   INCARNAMIND_LIVE_OPENAI_KEY      OpenAI (INCARNAMIND_LIVE_OPENAI_MODEL, its quick-tasks model by default)
- *
- * Set INCARNAMIND_LIVE_REPORT to a file to keep what each model wrote.
+ *   INCARNAMIND_LIVE_REPORT          a file to keep what each model wrote
  */
 import { appendFile } from "node:fs/promises";
 import { describe, expect, onTestFinished, test } from "vitest";
@@ -47,7 +42,6 @@ const GRADIENT = {
     "# 梯度下降\n\n梯度下降法是一种一阶迭代优化算法，用于寻找可微函数的局部最小值。每一步都沿着当前点梯度的反方向移动。",
 };
 
-/** What an Answer puts in quotation marks that is long enough to be a quote. */
 const QUOTE = /[“"「]([^”"」]{12,})[”"」]/gu;
 
 /** Which language an Answer is written in, by what most of its words outside quotation marks are in. */
@@ -64,10 +58,8 @@ interface Case {
   name: string;
   documents: { name: string; contents: string }[];
   question: string;
-  /** The interface language the User has chosen. */
   interfaceLanguage: "en" | "zh-CN";
   expected: "en" | "zh-CN";
-  /** Every quote is in the Documents' own words, and every Citation found. */
   quotesFound?: boolean;
 }
 
@@ -150,7 +142,6 @@ const LIVE: Live[] = [
   },
 ];
 
-/** Asks in a new conversation and waits until its Answer has ended. */
 async function ask(core: Core, text: string, mindId: string) {
   const result = await core.askInConversation({ conversationId: null, text, mindId });
   if (!result.asked) throw new Error(`Not asked: ${JSON.stringify(result)}`);
@@ -170,7 +161,6 @@ async function ask(core: Core, text: string, mindId: string) {
   return answer;
 }
 
-/** The checks of the Citations in the Blocks given, in order. */
 function checksIn(blocks: readonly { type?: string; content?: unknown[] }[]) {
   const checks: string[] = [];
   const visit = (node: { type?: string; attrs?: Record<string, unknown>; content?: unknown[] }) => {

@@ -1,10 +1,4 @@
-/**
- * The language an Answer is written in (#892): the Question's, whatever the
- * Documents' (the interface's when the Question is only a name or a figure),
- * and the words it puts in quotation marks stay the Document's own, never a
- * translation of them. First what the model is told, then what happens to a
- * translation it quotes anyway.
- */
+// #892: the Answer follows the Question's language, and quoted words are never a translation.
 import { describe, expect, test } from "vitest";
 import { documentInstructions, mindInstructions } from "../../src/core/answers/prompt";
 import {
@@ -28,7 +22,6 @@ const CHAOXI = {
   contents: "# 潮汐\n\n大潮出现在新月和满月前后，这时太阳和月亮的引力叠加在一起。\n",
 };
 
-/** The language line, the last of the instructions a Question is sent with, as the Documents and the interface are. */
 async function languageLineOf(
   question: string,
   documents: readonly { name: string; contents: string }[],
@@ -92,7 +85,6 @@ describe("The language the model is told to answer in", () => {
   );
 });
 
-/** Asks one Question over `file`, citing `quote`, and writing `answer`. */
 async function askQuoting(
   file: { name: string; contents: string },
   question: string,
