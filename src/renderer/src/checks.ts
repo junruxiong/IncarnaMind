@@ -21,10 +21,13 @@ import { mindModelOf } from "../../shared/mindModel";
 import { core } from "./core";
 import type { ShownClaim } from "./editor/claimChecks";
 import { selectionForEdit } from "./editor/editSelection";
+import { type BlockPlace, pendingIn, placeOnAccept, positionOf } from "./editor/proposalReview";
+import { resolveProposalsIn } from "./editWithAi";
 
-/** Why a check gave no marks, for the line under the Mind's title. */
+/** Why a check gave no marks, or what it left out, for the line under the Mind's title. */
 export type CheckProblem =
-  | Exclude<CheckSentencesResult, { kind: "checked" } | { kind: "cancelled" }>
+  | Exclude<CheckSentencesResult, { kind: "checked" } | { kind: "cancelled" } | { kind: "waiting" }>
+  | LeftOut
   /** Worded when shown, so it reads in the interface language (#627). */
   | { kind: "failed"; error: unknown; retry?: () => void }
   /** Check for contradictions in a Mind with no cited claims (#112). */
@@ -37,6 +40,19 @@ export type CheckProblem =
 export interface CheckRunning {
   requestId: string;
   action: ClaimCheckAction | "whole-mind";
+}
+
+/**
+ * Sentences a check left out, as they hold changes still waiting: the
+ * changes, and where each sentence will be once they are accepted.
+ */
+export interface LeftOut {
+  kind: "waiting";
+  changeIds: string[];
+  sentences: { from: BlockPlace; to: BlockPlace }[];
+  count: number;
+  action: ClaimCheckAction;
+  allDocuments: boolean;
 }
 
 interface ChecksState {
@@ -82,10 +98,10 @@ export const setCheckProblem = (mindId: string, problem: CheckProblem) =>
   setFor("problems", mindId, problem);
 
 /**
- * Checks the sentences the selection (or `range`) touches, each whole, as
- * `action` says. Their marks come with the core's updates; anything that
- * stops it is one line under the Mind's title. One request runs per Mind:
- * asking again while it runs does nothing.
+ * Checks the sentences the selection (or `ranges`) touches, each whole and
+ * once, as `action` says. Their marks come with the core's updates; anything
+ * that stops it is one line under the Mind's title. One request runs per
+ * Mind: asking again while it runs does nothing.
  */
 export async function checkSentences(
   editor: Editor,
@@ -93,12 +109,16 @@ export async function checkSentences(
   doc: Y.Doc,
   action: ClaimCheckAction,
   {
-    range,
+    ranges,
     allDocuments = false,
-  }: { range?: { from: number; to: number }; allDocuments?: boolean } = {},
+  }: { ranges?: readonly { from: number; to: number }[]; allDocuments?: boolean } = {},
 ): Promise<void> {
   if (editor.isDestroyed || useChecks.getState().running[mindId]) return;
-  const selection = selectionForEdit(editor.state, range);
+  const stretches = (ranges ?? [editor.state.selection]).flatMap((range) => {
+    const read = selectionForEdit(editor.state, range);
+    return read ? [read] : [];
+  });
+  const [selection, ...more] = stretches;
   if (!selection) return;
   // The selection closes at its end, as for Edit with AI: its sentences show their marks, and the User writes on.
   const { selection: now } = editor.state;
@@ -110,13 +130,14 @@ export async function checkSentences(
   const requestId = crypto.randomUUID();
   setFor("problems", mindId, null);
   setFor("running", mindId, { requestId, action });
-  let result: CheckProblem | CheckSentencesResult;
+  let result: CheckSentencesResult | Extract<CheckProblem, { kind: "failed" }>;
   try {
     result = await core.checkSentences({
       requestId,
       mindId,
       from: selection.from,
       to: selection.to,
+      ...(more.length > 0 && { more: more.map(({ from, to }) => ({ from, to })) }),
       action,
       allDocuments,
       model: mindModelOf(doc),
@@ -127,15 +148,65 @@ export async function checkSentences(
       error,
       retry: () =>
         void checkSentences(editor, mindId, doc, action, {
-          range: { from: selection.range.from, to: selection.range.to },
+          ranges: stretches.map((each) => each.range),
           allDocuments,
         }),
     };
   } finally {
     setFor("running", mindId, null);
   }
-  if (result.kind !== "checked" && result.kind !== "cancelled") setFor("problems", mindId, result);
+  const waiting =
+    result.kind === "waiting" || result.kind === "checked" ? result.waiting : undefined;
+  if (waiting && !editor.isDestroyed) {
+    const { doc: now } = editor.state;
+    setFor("problems", mindId, {
+      kind: "waiting",
+      changeIds: waiting.changeIds,
+      sentences: waiting.sentences.flatMap(({ from, to }) => {
+        const start = placeOnAccept(now, from);
+        const end = placeOnAccept(now, to);
+        return start && end ? [{ from: start, to: end }] : [];
+      }),
+      count: waiting.sentences.length,
+      action,
+      allDocuments,
+    });
+  } else if (
+    result.kind !== "checked" &&
+    result.kind !== "cancelled" &&
+    result.kind !== "waiting"
+  ) {
+    setFor("problems", mindId, result);
+  }
   if (result.kind === "checked") setFor("smallModel", mindId, result.smallModel ? true : null);
+}
+
+/**
+ * Accept all and check: accepts the changes a check left out that are still
+ * waiting, then checks the sentences they were in, as they read now. One out
+ * of date can't be accepted, so its sentence is left out again.
+ */
+export function acceptAndCheck(
+  editor: Editor,
+  mindId: string,
+  doc: Y.Doc,
+  leftOut: LeftOut,
+): Promise<void> {
+  if (editor.isDestroyed) return Promise.resolve();
+  const waiting = pendingIn(editor.state)
+    .filter((each) => leftOut.changeIds.includes(each.id) && !each.outOfDate)
+    .map((each) => each.id);
+  if (waiting.length > 0) resolveProposalsIn(editor, mindId, waiting, "accept");
+  const ranges = leftOut.sentences.flatMap(({ from, to }) => {
+    const start = positionOf(editor.state.doc, from);
+    const end = positionOf(editor.state.doc, to);
+    return start !== null && end !== null && start < end ? [{ from: start, to: end }] : [];
+  });
+  if (ranges.length === 0) return Promise.resolve();
+  return checkSentences(editor, mindId, doc, leftOut.action, {
+    ranges,
+    allDocuments: leftOut.allDocuments,
+  });
 }
 
 /** Stops the Mind's check: the sentences not checked yet say "stopped". */
@@ -153,7 +224,7 @@ export function checkAgain(
   allDocuments = claim.check.scope.widened,
 ): Promise<void> {
   return checkSentences(editor, mindId, doc, claim.check.action, {
-    range: { from: claim.from, to: claim.to },
+    ranges: [{ from: claim.from, to: claim.to }],
     allDocuments,
   });
 }

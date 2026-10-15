@@ -23,6 +23,7 @@ const failureMessages: Record<DocumentFailureReason, MessageKey> = {
   "processing-error": "documents.failure.processingError",
   // Worded with its pages (see `unreadPages`).
   "pages-unread": "documents.failure.pagesUnread.all",
+  "app-stopped": "documents.failure.appStopped",
 };
 
 /**
