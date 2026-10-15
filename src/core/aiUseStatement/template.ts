@@ -7,8 +7,8 @@
 import { formatDate } from "../../shared/dates";
 import { type MessageKey, translate } from "../../shared/i18n";
 import { UNREAD_REASON_KEYS } from "../../shared/unreadFiles";
-import type { UnreadFile } from "../api";
 import type { NodeJSON } from "../answers/blocks";
+import type { UnreadFile } from "../api";
 import type { Language } from "../language";
 import {
   type AiUseFigures,
