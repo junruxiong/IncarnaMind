@@ -179,4 +179,103 @@ export const PRESETS: readonly CatalogProvider[] = [
     },
     checked: "2026-10-15",
   },
+  {
+    id: "bedrock",
+    name: { en: "Amazon Bedrock", zh: "Amazon Bedrock" },
+    support: "best-effort",
+    group: "international",
+    adapter: "openai-compatible",
+    endpoints: [
+      {
+        id: "global",
+        label: { en: "Global", zh: "全球" },
+        baseUrl: "https://bedrock-mantle.{region}.api.aws/v1",
+        field: {
+          name: "region",
+          label: { en: "Region", zh: "区域" },
+          choices: [
+            {
+              value: "us-east-1",
+              label: { en: "US East (N. Virginia)", zh: "美国东部（弗吉尼亚北部）" },
+            },
+            { value: "us-east-2", label: { en: "US East (Ohio)", zh: "美国东部（俄亥俄）" } },
+            { value: "us-west-2", label: { en: "US West (Oregon)", zh: "美国西部（俄勒冈）" } },
+            { value: "eu-central-1", label: { en: "Europe (Frankfurt)", zh: "欧洲（法兰克福）" } },
+            { value: "eu-north-1", label: { en: "Europe (Stockholm)", zh: "欧洲（斯德哥尔摩）" } },
+            { value: "eu-south-1", label: { en: "Europe (Milan)", zh: "欧洲（米兰）" } },
+            { value: "eu-west-1", label: { en: "Europe (Ireland)", zh: "欧洲（爱尔兰）" } },
+            { value: "eu-west-2", label: { en: "Europe (London)", zh: "欧洲（伦敦）" } },
+            {
+              value: "ap-northeast-1",
+              label: { en: "Asia Pacific (Tokyo)", zh: "亚太地区（东京）" },
+            },
+            { value: "ap-south-1", label: { en: "Asia Pacific (Mumbai)", zh: "亚太地区（孟买）" } },
+            {
+              value: "ap-southeast-2",
+              label: { en: "Asia Pacific (Sydney)", zh: "亚太地区（悉尼）" },
+            },
+            {
+              value: "ap-southeast-3",
+              label: { en: "Asia Pacific (Jakarta)", zh: "亚太地区（雅加达）" },
+            },
+            {
+              value: "sa-east-1",
+              label: { en: "South America (São Paulo)", zh: "南美洲（圣保罗）" },
+            },
+          ],
+        },
+      },
+    ],
+    apiKey: "required",
+    keyUrl: "https://console.aws.amazon.com/bedrock/home#/api-keys",
+    docsUrl: "https://docs.aws.amazon.com/bedrock/latest/userguide/bedrock-mantle.html",
+    request: { openAiCompatible: { includeUsage: false, supportsStructuredOutputs: false } },
+    roles: { answers: "openai.gpt-oss-120b", quickTasks: "openai.gpt-oss-20b" },
+    dataUse: {
+      training: "no",
+      summary: {
+        en: "Amazon Bedrock doesn't use your prompts and replies to train models, and the models' makers can't see them.",
+        zh: "Amazon Bedrock 不会用你的提示和回复训练模型，模型的开发方也看不到它们。",
+      },
+      url: "https://docs.aws.amazon.com/bedrock/latest/userguide/data-protection.html",
+    },
+    checked: "2026-10-15",
+  },
+  {
+    id: "cloudflare",
+    name: { en: "Cloudflare Workers AI", zh: "Cloudflare Workers AI" },
+    support: "best-effort",
+    group: "international",
+    adapter: "openai-compatible",
+    endpoints: [
+      {
+        id: "global",
+        label: { en: "Global", zh: "全球" },
+        baseUrl: "https://api.cloudflare.com/client/v4/accounts/{account}/ai/v1",
+        field: {
+          name: "account",
+          label: { en: "Account ID", zh: "账户 ID" },
+          pattern: "[0-9a-f]{32}",
+        },
+      },
+    ],
+    apiKey: "required",
+    keyUrl: "https://dash.cloudflare.com/profile/api-tokens",
+    docsUrl: "https://developers.cloudflare.com/workers-ai/configuration/open-ai-compatibility/",
+    request: { openAiCompatible: { includeUsage: false, supportsStructuredOutputs: false } },
+    roles: {
+      answers: "@cf/zai-org/glm-5.3-flash",
+      strongest: "@cf/zai-org/glm-5.3",
+      quickTasks: "@cf/zai-org/glm-4.7-flash",
+    },
+    dataUse: {
+      training: "no",
+      summary: {
+        en: "Cloudflare doesn't use what you send to Workers AI to train any model.",
+        zh: "Cloudflare 不会用你发送给 Workers AI 的内容训练任何模型。",
+      },
+      url: "https://developers.cloudflare.com/workers-ai/platform/data-usage/",
+    },
+    checked: "2026-10-15",
+  },
 ];

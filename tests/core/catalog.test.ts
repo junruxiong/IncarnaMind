@@ -16,6 +16,7 @@ import {
   catalogFacts,
   catalogModel,
   catalogModels,
+  type EndpointField,
   isNonChatModel,
   LOCAL_MODEL_TIERS,
   LOCAL_MODELS,
@@ -27,6 +28,8 @@ import { OVERRIDES } from "../../src/core/providers/catalog/overrides";
 import { PRESETS } from "../../src/core/providers/catalog/presets";
 import {
   catalogProvider,
+  fieldAccepts,
+  fieldUrl,
   isPreset,
   KEY_PROVIDERS,
   keyProviderGroups,
@@ -44,6 +47,10 @@ import { en } from "../../src/shared/i18n/en";
 import { zhCN } from "../../src/shared/i18n/zh-CN";
 
 const GIB = 1024 ** 3;
+
+/** A value a field takes: its first choice, or one its pattern accepts. */
+const sampleFieldValue = (field: EndpointField): string =>
+  field.choices?.[0]?.value ?? (field.name === "account" ? "0123456789abcdef0123456789abcdef" : "");
 const REPO_ROOT = resolve(__dirname, "../..");
 
 /** What the catalog alone says of a model on a provider kind. */
@@ -71,6 +78,8 @@ describe("The provider catalog", () => {
       "cerebras",
       "cohere",
       "venice",
+      "bedrock",
+      "cloudflare",
       "openai-compatible",
     ]);
     for (const provider of CATALOG_PROVIDERS) {
@@ -87,8 +96,14 @@ describe("The provider catalog", () => {
       // A hosted provider has its API; a server the User gives has a URL rule instead.
       if (provider.endpoints.length > 0) {
         for (const endpoint of provider.endpoints) {
-          expect(new URL(endpoint.baseUrl).protocol, where).toBe("https:");
+          const value = endpoint.field ? sampleFieldValue(endpoint.field) : "";
+          expect(new URL(fieldUrl(endpoint, value)).protocol, where).toBe("https:");
           expect(endpoint.label.en && endpoint.label.zh, where).toBeTruthy();
+          if (endpoint.field) {
+            expect(endpoint.baseUrl, where).toContain(`{${endpoint.field.name}}`);
+            expect(fieldAccepts(endpoint.field, value), where).toBe(true);
+            expect(fieldAccepts(endpoint.field, "elsewhere.example.com/x"), where).toBe(false);
+          }
         }
       } else {
         expect(provider.serverUrl, where).toBeDefined();
@@ -147,7 +162,9 @@ describe("The provider catalog", () => {
   test("the generated facts cover the hosted providers, with unique ids, and their sources' licences ship with the app", async () => {
     expect(providersWithModels().sort()).toEqual([
       "anthropic",
+      "bedrock",
       "cerebras",
+      "cloudflare",
       "cohere",
       "deepseek",
       "fireworks",
