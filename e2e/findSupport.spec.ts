@@ -326,11 +326,12 @@ async function askForChange(
   await window.keyboard.type(instruction);
   await window.keyboard.press("Enter");
   await expect(window.getByTestId("edit-pending")).toHaveCount(0);
+  await pointAndClick(window, window.getByTestId("applied-review"));
 }
 
 const GULLS = "Gulls breed there.";
 
-/** Rewrites the unsupported sentence as GULLS and changes "the" in the contradicted one, both waiting. */
+/** Rewrites the unsupported sentence as GULLS and changes "the" in the contradicted one, both shown again as changes waiting. */
 async function askForTwoChanges(window: Page, line: Locator) {
   await askForChange(
     window,
