@@ -191,7 +191,7 @@ test("a résumé laid out with tables, shading and tab stops says, before Import
   const dialog = await importWordFromMenu(window);
   const note = dialog.getByTestId("word-import-layout");
   await expect(note).toHaveText(
-    "This file’s layout (fonts, colours, shading and aligned columns) isn’t shown in the Mind. It’s kept, and comes back when you export to Word.",
+    "Some of this file’s layout (table lines and aligned columns) isn’t shown in the Mind yet. It’s kept, and comes back when you export to Word.",
   );
   // Before Import, in one place: above the buttons.
   const noteBox = await note.boundingBox();
@@ -201,7 +201,10 @@ test("a résumé laid out with tables, shading and tab stops says, before Import
   await dialog.getByTestId("word-import-confirm").click();
   await expect(dialog).toBeHidden();
   const origin = window.getByTestId("mind-word-origin");
-  await expect(origin).toHaveAttribute("title", /This file’s layout .* isn’t shown in the Mind/);
+  await expect(origin).toHaveAttribute(
+    "title",
+    /Some of this file’s layout .* isn’t shown in the Mind/,
+  );
   await screenshot(window.getByTestId("mind-pane"), "word-import-layout-mind");
 
   await setLanguage(window, "zh-CN");
@@ -211,14 +214,14 @@ test("a résumé laid out with tables, shading and tab stops says, before Import
   await window.getByTestId("plus-menu").click();
   await window.getByTestId("plus-import-word").click();
   await expect(dialog.getByTestId("word-import-layout")).toHaveText(
-    "这份文件的版式（字体、颜色、底色和对齐）在 Mind 里不显示，会保留，导出 Word 时原样还原。",
+    "这份文件的部分版式（表格边框和对齐的列）在 Mind 里暂不显示，会保留，导出 Word 时原样还原。",
   );
   await screenshot(dialog, "word-import-layout-zh");
   await dialog.getByTestId("word-import-confirm").click();
   await expect(dialog).toBeHidden();
   await expect(window.locator('[data-testid="mind-word-origin"]:visible')).toHaveAttribute(
     "title",
-    /这份文件的版式/,
+    /这份文件的部分版式/,
   );
   await app.close();
 });

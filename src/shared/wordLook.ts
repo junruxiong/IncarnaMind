@@ -6,6 +6,7 @@
  */
 import type * as Y from "yjs";
 import {
+  MIND_SETTINGS_FIELD,
   MIND_WORD_LOOK_FIELD,
   WORD_RUN_MARK,
   type WordBorder,
@@ -210,5 +211,30 @@ export function wordLookOf(doc: Y.Doc): WordLook | null {
     runs: styles(map.get("runs"), runLook),
     tables: styles(map.get("tables"), tableLook),
     cells: styles(map.get("cells"), cellLook),
+  };
+}
+
+export type MindLook = "word" | "plain";
+
+const MIND_LOOK_KEY = "look";
+
+export const mindLookOf = (doc: Y.Doc): MindLook =>
+  doc.getMap<unknown>(MIND_SETTINGS_FIELD).get(MIND_LOOK_KEY) === "plain" ? "plain" : "word";
+
+export function setMindLook(doc: Y.Doc, look: MindLook): void {
+  doc.getMap<unknown>(MIND_SETTINGS_FIELD).set(MIND_LOOK_KEY, look);
+}
+
+export function observeWordLook(doc: Y.Doc, listener: () => void): () => void {
+  const looks = lookMap(doc);
+  const settings = doc.getMap<unknown>(MIND_SETTINGS_FIELD);
+  const onSettings = (event: Y.YMapEvent<unknown>) => {
+    if (event.keysChanged.has(MIND_LOOK_KEY)) listener();
+  };
+  looks.observe(listener);
+  settings.observe(onSettings);
+  return () => {
+    looks.unobserve(listener);
+    settings.unobserve(onSettings);
   };
 }
