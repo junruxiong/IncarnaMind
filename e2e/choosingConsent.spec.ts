@@ -31,7 +31,7 @@ async function screenshot(window: Page, name: string): Promise<void> {
 }
 
 const SENDS_EN =
-  "Your Questions, the Mind you're in, Passages from your Documents, and Document text for Tags go to OpenAI when you use it.";
+  "Your Questions, the Mind you're in, passages from your Documents, and Document text for Tags go to OpenAI when you use it.";
 const SENDS_ZH =
   "你的问题、当前 Mind、文档中的相关段落，以及用于打标签的文档文字，会在使用时发送给 OpenAI。";
 
@@ -72,16 +72,25 @@ test("first run: choosing a provider with a key is the consent, so no dialog com
   const consentAsked = await recordConsentRequests(window);
 
   // The line above the button says what goes to the provider.
-  const setup = window.getByTestId("chat-setup");
-  await setup.getByTestId("chat-choice-api-key").check();
+  await newMind(window);
+  await window.getByTestId("mind-editor").click();
+  await window.keyboard.press("ControlOrMeta+j");
+  await window.keyboard.type("What is due?");
+  await window.keyboard.press("Enter");
+  const setup = window.getByTestId("model-setup");
+  await setup.getByTestId("setup-other").click();
+  await setup.getByTestId("way-key").click();
   const form = setup.getByTestId("provider-form");
-  await form.getByRole("radio", { name: "OpenAI", exact: true }).check();
+  await form
+    .locator("label")
+    .filter({ hasText: /^OpenAI$/ })
+    .click();
   await expect(form.getByTestId("provider-sends")).toHaveText(SENDS_EN);
   await acceptPlainTextKeys(window, form);
   await form.getByLabel(/^API key/).fill("sk-not-a-real-key");
   await form.getByTestId("provider-sends").scrollIntoViewIfNeeded();
   await screenshot(window, "choosing-line-setup-en");
-  await form.getByRole("button", { name: "Use this provider" }).click();
+  await form.getByTestId("provider-use-key").click();
   await expect(setup).toBeHidden();
 
   // A Document is tagged without asking.
@@ -162,14 +171,17 @@ test("in Chinese, Settings › Models says what goes to the provider above its b
 
   await settings.getByTestId("chat-choice-api-key").check();
   const form = settings.getByTestId("provider-form");
-  await form.getByRole("radio", { name: "OpenAI", exact: true }).check();
+  await form
+    .locator("label")
+    .filter({ hasText: /^OpenAI$/ })
+    .click();
 
   const line = form.getByTestId("provider-sends");
   await expect(line).toHaveText(SENDS_ZH);
   await line.scrollIntoViewIfNeeded();
   // Right above the button it is said for.
   const lineBox = await line.boundingBox();
-  const buttonBox = await form.getByRole("button", { name: "使用此提供商" }).boundingBox();
+  const buttonBox = await form.getByTestId("provider-use-key").boundingBox();
   expect(lineBox && buttonBox && lineBox.y + lineBox.height <= buttonBox.y).toBe(true);
   await screenshot(window, "choosing-line-settings-zh");
   await app.close();

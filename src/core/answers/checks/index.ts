@@ -29,6 +29,7 @@ import { judgesUnreliably } from "../../../shared/smallModel";
 import {
   type ChatModelChoice,
   type ChatReadiness,
+  type CheckContradictionsResult,
   type CheckedDocument,
   type CheckSentencesResult,
   type Citation,
@@ -38,7 +39,9 @@ import {
   type ClaimCheckAttributes,
   type ClaimCheckResult,
   type ClaimCheckScope,
+  type ContradictionCheckPlan,
   claimCheckActions,
+  type Document,
   type ExternalService,
   type SearchScope,
   type TextPlace,
@@ -56,14 +59,17 @@ import type { PreparedChatModel } from "../../providers/chat";
 import { parseSearchScope } from "../../scope";
 import type { AnswerEngine } from "../engine";
 import { type ClaimCheckDependencies, createClaimCheck } from "./claimCheck";
+import { createMindCheck } from "./mindCheck";
 import { markedSentences, markSentence, selectedSentences, updateCheck } from "./sentences";
 import { createVerify, type VerifyOptions } from "./verify";
+import { createContradictionWatch, type WatchOptions } from "./watch";
 
 /**
  * What the "checks" flow sends: the sentences checked, with their paragraphs,
- * the Passages found, and a verified document's sentences, to find its claims (#97).
+ * the Passages found, a verified document's sentences, to find its claims
+ * (#97), and a Mind's sentences when the whole Mind is checked (#737).
  */
-export const CHECKS_FLOW_SENDS = ["selection", "passages", "verified-document"] as const;
+export const CHECKS_FLOW_SENDS = ["selection", "passages", "verified-document", "blocks"] as const;
 
 /** The longest claim one check takes, in characters: a sentence, not a page. */
 const MAX_CLAIM_CHARACTERS = 2_000;
@@ -75,7 +81,12 @@ export interface ChecksOptions
   > {
   /** The interface language: what a check's sentence is written in. */
   language(): Language;
-  content: Pick<MindContent, "read" | "edit" | "readSettings">;
+  content: Pick<MindContent, "read" | "edit" | "readSettings" | "editSettings">;
+  /** What contradiction watch needs besides (#112). */
+  watch: Pick<
+    WatchOptions,
+    "minds" | "documentVersions" | "background" | "runCost" | "delayMs" | "claimTimeLimitMs" | "log"
+  >;
   /** Throws unless the Mind exists and this version may write to it. */
   requireMind(mindId: string): void;
   /** The Folder the Mind is in; null for none. */
@@ -198,6 +209,7 @@ function withResult(
         detail: null,
         evidence: evidenceOf(result.evidence),
         says: result.says,
+        calculation: result.calculation,
       };
 }
 
@@ -249,21 +261,31 @@ export function createChecks(options: ChecksOptions) {
     }
   }
 
-  /** Keeps the text of the evidence every check in the Mind shows, and lets go of the rest (#79). */
+  /**
+   * Keeps the text of the evidence every check in the Mind shows, a worked-out
+   * figure's inputs included, and lets go of the rest (#79).
+   */
   function retainEvidence(mindId: string): void {
     const versions = content.read(mindId, (blocks) =>
       markedSentences(blocks).flatMap(({ check }): RetainVersion[] => {
-        const evidence = check.evidence;
-        if (!evidence?.documentId || !evidence.contentHash) return [];
-        return [
-          {
-            documentId: evidence.documentId,
-            contentHash: evidence.contentHash,
-            pageFrom: evidence.pageFrom,
-            pageTo: evidence.pageTo,
-            location: evidence.location,
-          },
+        const inputs = check.calculation?.figure.inputs ?? [];
+        const shown = [
+          check.evidence,
+          ...inputs.flatMap((input) => [input.citation, input.unitStatement?.citation ?? null]),
         ];
+        return shown.flatMap((evidence) =>
+          evidence?.documentId && evidence.contentHash
+            ? [
+                {
+                  documentId: evidence.documentId,
+                  contentHash: evidence.contentHash,
+                  pageFrom: evidence.pageFrom,
+                  pageTo: evidence.pageTo,
+                  location: evidence.location,
+                },
+              ]
+            : [],
+        );
       }),
     );
     options.retention.retain("check-result", mindId, versions);
@@ -339,6 +361,7 @@ export function createChecks(options: ChecksOptions) {
           text: sentence.text,
           evidence: null,
           says: null,
+          calculation: null,
           scope,
           versions: [],
           excluded: [],
@@ -387,6 +410,47 @@ export function createChecks(options: ChecksOptions) {
     };
   }
 
+  const track = (requestId: string, mindId: string) => {
+    const controller = new AbortController();
+    running.set(requestId, { controller, mindId });
+    return { signal: controller.signal, done: () => running.delete(requestId) };
+  };
+
+  /** The model, when it can be used now without asking the User: never in the background. */
+  async function prepareQuietly(choice: ChatModelChoice | null): Promise<PreparedChatModel | null> {
+    const readiness = await chat.readiness(choice ?? undefined, "checks");
+    if (!readiness.ready) return null;
+    const { service } = readiness.provider;
+    if (
+      service &&
+      (options.localOnly() || options.consent.status("checks", service) !== "accepted")
+    ) {
+      return null;
+    }
+    try {
+      return await chat.prepareModel(choice ?? undefined, "checks");
+    } catch (error) {
+      if (error instanceof ChatNotReadyError || error instanceof ConsentDeclinedError) return null;
+      throw error;
+    }
+  }
+
+  const watch = createContradictionWatch({
+    ...options,
+    ...options.watch,
+    folderDocuments: (folderId) =>
+      options.resolveScope({ folderIds: [folderId], tagIds: [], documentIds: [] }) ?? [],
+    evidenceScope: (documentIds, citedIds) =>
+      options.evidence.scope(documentIds, { documentIds: [...citedIds] }),
+    searchableCount: (documentIds) => options.documents.searchableCount(documentIds),
+    prepare,
+    prepareQuietly,
+    claimCheck,
+    withResult,
+    retainEvidence,
+    track,
+  });
+
   const verify = createVerify({
     ...options,
     prepare,
@@ -396,11 +460,20 @@ export function createChecks(options: ChecksOptions) {
     withResult,
     retainEvidence,
     settleStopped,
-    track(requestId, mindId) {
-      const controller = new AbortController();
-      running.set(requestId, { controller, mindId });
-      return { signal: controller.signal, done: () => running.delete(requestId) };
-    },
+    track,
+  });
+
+  const mindCheck = createMindCheck({
+    ...options,
+    documentVersions: options.watch.documentVersions,
+    prepare,
+    scopeOf: (mindId, allDocuments) => scopeOf(mindId, allDocuments),
+    isRunning: (requestId) => running.has(requestId),
+    claimCheck,
+    withResult,
+    retainEvidence,
+    settleStopped,
+    track,
   });
 
   return {
@@ -412,14 +485,46 @@ export function createChecks(options: ChecksOptions) {
       if (running.has(parsed.requestId)) {
         throw new InvalidInputError(`The check ${parsed.requestId} is already running.`);
       }
-      const controller = new AbortController();
-      running.set(parsed.requestId, { controller, mindId: parsed.mindId });
+      const tracked = track(parsed.requestId, parsed.mindId);
       try {
-        return await checkSentences(parsed, controller.signal);
+        return parsed.action === "contradiction-watch"
+          ? await watch.checkSentences(parsed, tracked.signal)
+          : await checkSentences(parsed, tracked.signal);
       } finally {
-        running.delete(parsed.requestId);
+        tracked.done();
       }
     },
+
+    async planContradictionCheck(mindId: unknown): Promise<ContradictionCheckPlan> {
+      return watch.planContradictionCheck(parseMindId(mindId));
+    },
+
+    async checkContradictions(input: unknown): Promise<CheckContradictionsResult> {
+      if (!isRecord(input) || typeof input.requestId !== "string" || input.requestId === "") {
+        throw new InvalidInputError({ key: "error.contradictions.request" });
+      }
+      const mindId = parseMindId(input.mindId);
+      options.requireMind(mindId);
+      if (running.has(input.requestId)) {
+        throw new InvalidInputError({ key: "error.contradictions.request" });
+      }
+      return watch.checkContradictions({
+        requestId: input.requestId,
+        mindId,
+        model: parseModel(input.model),
+      });
+    },
+
+    planMindCheck: async (mindId: unknown, mode: unknown, allDocuments?: unknown) =>
+      mindCheck.planMindCheck(mindId, mode, allDocuments === true),
+
+    checkMind: (input: unknown) => mindCheck.checkMind(input),
+
+    /** A Document's status changed: a new version has its Folder's Minds checked for contradictions. */
+    documentChanged: (document: Document) => watch.documentChanged(document),
+
+    /** Starts watching for new versions of Documents. */
+    startWatching: () => watch.start(),
 
     async checkClaim(input: unknown): Promise<ClaimCheckResult> {
       const parsed = parseClaim(input);
@@ -437,7 +542,14 @@ export function createChecks(options: ChecksOptions) {
       );
       // Nothing to check against: nothing backs it, and nothing is sent.
       if (options.documents.searchableCount(scope.documentIds) === 0) {
-        return { verdict: "unsupported", evidence: null, says: null, versions: [], excluded: [] };
+        return {
+          verdict: "unsupported",
+          evidence: null,
+          says: null,
+          calculation: null,
+          versions: [],
+          excluded: [],
+        };
       }
       const checksDocument =
         (parsed.checked.documentIds?.length ?? 0) + (parsed.checked.contentHashes?.length ?? 0) > 0;
@@ -477,6 +589,7 @@ export function createChecks(options: ChecksOptions) {
 
     /** Stops every request, as IncarnaMind quits: their sentences not checked yet say "stopped". */
     stopAll(): void {
+      watch.close();
       for (const [requestId, { controller, mindId }] of running) {
         controller.abort();
         try {

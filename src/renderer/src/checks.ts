@@ -10,26 +10,38 @@ import { TextSelection } from "@tiptap/pm/state";
 import type * as Y from "yjs";
 import { create } from "zustand";
 import {
+  type CheckMindMode,
   type CheckSentencesResult,
   CITATION_NODE,
   CLAIM_CHECK_MARK,
   type ClaimCheckAction,
+  type ProviderError,
 } from "../../core/api";
 import { mindModelOf } from "../../shared/mindModel";
 import { core } from "./core";
 import type { ShownClaim } from "./editor/claimChecks";
 import { selectionForEdit } from "./editor/editSelection";
-import { errorMessage } from "./errors";
-import { translateNow } from "./i18n";
 
 /** Why a check gave no marks, for the line under the Mind's title. */
 export type CheckProblem =
   | Exclude<CheckSentencesResult, { kind: "checked" } | { kind: "cancelled" }>
-  | { kind: "failed"; message: string };
+  /** Worded when shown, so it reads in the interface language (#627). */
+  | { kind: "failed"; error: unknown; retry?: () => void }
+  /** Check for contradictions in a Mind with no cited claims (#112). */
+  | { kind: "no-cited" }
+  /** Check this Mind (#737), in a Mind with no sentence to check. */
+  | { kind: "no-claims" }
+  /** Check this Mind (#737): the model couldn't name the claims. */
+  | { kind: "find-failed"; error: ProviderError; mode: CheckMindMode; allDocuments: boolean };
+
+export interface CheckRunning {
+  requestId: string;
+  action: ClaimCheckAction | "whole-mind";
+}
 
 interface ChecksState {
-  /** By Mind: the request checking its sentences now, and how many. */
-  running: Readonly<Record<string, { requestId: string; action: ClaimCheckAction }>>;
+  /** By Mind: the request checking its sentences now, and how: an action's, or Check this Mind (#737). */
+  running: Readonly<Record<string, CheckRunning>>;
   /** By Mind: why the last request gave no marks. */
   problems: Readonly<Record<string, CheckProblem>>;
   /** By Mind: its last verdicts came from a model too small to judge reliably (#680). */
@@ -56,6 +68,18 @@ function setFor<K extends keyof ChecksState>(
 }
 
 export const dismissCheckProblem = (mindId: string) => setFor("problems", mindId, null);
+
+/** Records a check of a Mind as running, or as no longer running (null). */
+export const setCheckRunning = (mindId: string, running: CheckRunning | null) =>
+  setFor("running", mindId, running);
+
+/** Records whether a Mind's last verdicts came from a model too small to judge reliably (#680). */
+export const setCheckSmallModel = (mindId: string, small: boolean) =>
+  setFor("smallModel", mindId, small ? true : null);
+
+/** Says why a check of a Mind gave no marks, under its title. */
+export const setCheckProblem = (mindId: string, problem: CheckProblem) =>
+  setFor("problems", mindId, problem);
 
 /**
  * Checks the sentences the selection (or `range`) touches, each whole, as
@@ -86,7 +110,7 @@ export async function checkSentences(
   const requestId = crypto.randomUUID();
   setFor("problems", mindId, null);
   setFor("running", mindId, { requestId, action });
-  let result: CheckSentencesResult | { kind: "failed"; message: string };
+  let result: CheckProblem | CheckSentencesResult;
   try {
     result = await core.checkSentences({
       requestId,
@@ -98,7 +122,15 @@ export async function checkSentences(
       model: mindModelOf(doc),
     });
   } catch (error) {
-    result = { kind: "failed", message: errorMessage(error, translateNow) };
+    result = {
+      kind: "failed",
+      error,
+      retry: () =>
+        void checkSentences(editor, mindId, doc, action, {
+          range: { from: selection.range.from, to: selection.range.to },
+          allDocuments,
+        }),
+    };
   } finally {
     setFor("running", mindId, null);
   }
