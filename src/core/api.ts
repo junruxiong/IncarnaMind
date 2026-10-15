@@ -4885,6 +4885,29 @@ export interface ChatGptPlanStatus {
    * account's own list once signed in, else the ones OpenAI usually offers.
    */
   models: ChatGptPlanModel[];
+  limits: ChatGptPlanLimits;
+}
+
+/**
+ * What this session knows of the plan's usage limits, kept in memory
+ * only: the models whose limit is used up, and the model Questions go to
+ * meanwhile, which only the User's click on "Answer with …" sets.
+ */
+export interface ChatGptPlanLimits {
+  /** `resetsAt` (ISO 8601) when the plan said; null: it lasts until the model answers again. */
+  usedUp: { modelId: string; resetsAt: string | null }[];
+  /**
+   * Questions for `insteadOf` are answered by `modelId` until `insteadOf`'s
+   * limit resets (`until`, ISO 8601). With no reset time (`until` null),
+   * `insteadOf` is tried again once an hour, and answers again once it can.
+   */
+  standIn: { insteadOf: string; modelId: string; until: string | null } | null;
+}
+
+/** "Answer with {model}" on an Answer stopped by the plan's limit: `insteadOf` is the model that stopped it. */
+export interface AnswerWithPlanModelInput {
+  insteadOf: string;
+  modelId: string;
 }
 
 export type ChatGptSignInErrorKind =
@@ -7527,8 +7550,16 @@ export interface CoreApi {
    */
   selectOllama(input?: SelectOllamaInput): Promise<ChatProvider>;
 
-  /** The ChatGPT plan provider: the sign-in and the account's models. */
+  /** The ChatGPT plan provider: the sign-in, the account's models and their limits this session. */
   getChatGptPlan(): Promise<ChatGptPlanStatus>;
+  /**
+   * The User clicked "Answer with {model}" on an Answer the plan's limit
+   * stopped: Questions for that model (or for the one it stands in for) go
+   * to `modelId` until its limit resets. Nothing else ever switches model.
+   */
+  answerWithPlanModel(input: AnswerWithPlanModelInput): Promise<ChatGptPlanStatus>;
+  /** The User chose a model in the chip: Questions no longer go to a stand-in. */
+  endPlanStandIn(): Promise<ChatGptPlanStatus>;
   /**
    * "Continue with ChatGPT": opens Sign in with ChatGPT in the User's
    * browser and waits, for a few minutes at most, until they finish.
@@ -8334,6 +8365,8 @@ const methods: Record<CoreApiMethod, true> = {
   openOllama: true,
   selectOllama: true,
   getChatGptPlan: true,
+  answerWithPlanModel: true,
+  endPlanStandIn: true,
   signInToChatGpt: true,
   cancelChatGptSignIn: true,
   reopenChatGptSignIn: true,
