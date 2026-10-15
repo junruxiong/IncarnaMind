@@ -116,6 +116,7 @@ import { APICallError } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import type { ChatModelFactory, ChatModelSpec } from "../core";
 import { EXCERPT_END, EXCERPT_START } from "../core/tags/classify";
+import { appliedEditReply } from "./fakeAppliedEdits";
 
 type StreamResult = Awaited<ReturnType<MockLanguageModelV4["doStream"]>>;
 type StreamPart = StreamResult["stream"] extends ReadableStream<infer Part> ? Part : never;
@@ -1009,6 +1010,8 @@ function editedText(action: string, passage: string, asked: string): string {
       return `This passage says: ${words}…`;
     }
     default: {
+      const applied = appliedEditReply(passage, asked);
+      if (applied !== null) return applied;
       const replace =
         /replace\s+[“"]?(.+?)[”"]?\s+with\s+[“"]?(.+?)[”"]?\.?$/i.exec(asked) ??
         /把\s*[“"]?(.+?)[”"]?\s*换成\s*[“"]?(.+?)[”"]?。?$/u.exec(asked);
