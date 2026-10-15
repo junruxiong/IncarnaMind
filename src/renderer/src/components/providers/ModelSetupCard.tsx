@@ -6,7 +6,7 @@ import { errorMessage } from "../../errors";
 import { useLanguage, useT } from "../../i18n";
 import { giveUpWaiting, useModelSetup } from "../../modelSetup";
 import { useAppStore } from "../../store";
-import { ChevronRightLineIcon } from "../lineIcons";
+import { ChevronRightLineIcon, KeyLineIcon } from "../lineIcons";
 import { ProblemLine } from "../ProblemLine";
 import { buttonStyle, hintClass } from "../ui";
 import { ChatGptMark } from "./ChatGptMark";
@@ -122,7 +122,7 @@ export function ModelSetupCard() {
             onClick={() => setView(null)}
             className="self-start text-[13px] font-semibold text-accent underline-offset-2 hover:underline"
           >
-            ‹ {t("setup.other")}
+            ‹ {t("setup.back")}
           </button>
           {view === "key" && (
             <ProviderForm providers={providers} onSaved={() => undefined} standalone />
@@ -162,7 +162,7 @@ function LeadingWays({
 }) {
   const t = useT();
   const storage = useChatGptStorage();
-  const lineClass = "text-[13px] leading-5 text-ink-secondary";
+  const lineClass = "text-[12px] leading-[18px] text-ink-meta";
   const plan = (
     <div key="plan" className="flex min-w-0 flex-col gap-1">
       <ChatGptStorageNotice storage={storage} />
@@ -176,11 +176,8 @@ function LeadingWays({
         <ChatGptMark className="size-4" />
         {t("setup.chatgpt.use")}
       </button>
-      <p data-testid="setup-chatgpt-for" className={lineClass}>
-        {t(chinese ? "setup.chatgpt.for.china" : "setup.chatgpt.for")}
-      </p>
-      <p data-testid="setup-chatgpt-sends" className={`${hintClass} mt-0`}>
-        {t("setup.chatgpt.line")}
+      <p data-testid="setup-chatgpt-sends" className={lineClass}>
+        {t(chinese ? "setup.chatgpt.line.china" : "setup.chatgpt.line")}
       </p>
     </div>
   );
@@ -192,6 +189,7 @@ function LeadingWays({
         onClick={onKey}
         className={`w-full ${buttonStyle(chinese ? "primary" : "secondary", "lg")}`}
       >
+        <KeyLineIcon className="size-4" />
         {t("setup.key.use")}
       </button>
       <p data-testid="setup-key-for" className={lineClass}>

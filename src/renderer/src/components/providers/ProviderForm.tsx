@@ -51,18 +51,18 @@ const ROW: readonly FormKind[] = ["anthropic", "openai", "google", "deepseek", "
 /** The "Another model…" choice of the model list. */
 const OTHER_MODEL = "\u0000other";
 
-/** Beside a model the catalog picked for a job, what it is good for; the recommended one has its own line. */
+/** Beside a model the catalog picked for a job, in the Model list: what it is good for. */
 const ROLE_HINTS = {
+  answers: "providers.form.hint.answers",
   strongest: "providers.form.hint.strongest",
   quickTasks: "providers.form.hint.quickTasks",
   images: "providers.form.hint.images",
-} as const satisfies Partial<Record<Role, MessageKey>>;
+} as const satisfies Record<Role, MessageKey>;
 
 function roleHint(kind: FormKind, modelId: string): MessageKey | undefined {
   const roles = catalogProviderOfKind(kind)?.roles;
-  if (!roles || roles.answers === modelId) return undefined;
-  const role = (["strongest", "quickTasks", "images"] as const).find(
-    (each) => roles[each] === modelId,
+  const role = (["answers", "strongest", "quickTasks", "images"] as const).find(
+    (each) => roles?.[each] === modelId,
   );
   return role && ROLE_HINTS[role];
 }
@@ -263,7 +263,6 @@ export function ProviderForm({
   const site = siteOf(endpoint?.keyUrl ?? catalog?.keyUrl);
   const providerName = kind ? t(`providers.kind.${kind}`) : "";
   const choices = kind && kind !== "openai-compatible" ? catalogMenu(kind, endpoint?.id) : [];
-  const recommended = choices[0];
   const shownName = (id: string) =>
     modelName(id, { kind: kind ?? undefined, endpoint: endpoint?.id });
   const optionName = (id: string) => {
@@ -273,7 +272,17 @@ export function ProviderForm({
       : shownName(id);
   };
   const example = catalog?.roles.answers;
-  const typedModel = kind === "openai-compatible" || otherModel || choices.length === 0;
+  const modelIdField = (
+    <input
+      required
+      value={modelId}
+      onChange={(event) => setModelId(event.target.value)}
+      spellCheck={false}
+      placeholder={example && t("providers.form.modelExample", { model: example })}
+      data-testid="provider-model-text"
+      className={inputClass}
+    />
+  );
   const rowKinds = ROW.filter((each) => main.includes(each) || more.includes(each));
   const underMore = [...main, ...more].filter((each) => !rowKinds.includes(each));
 
@@ -389,48 +398,43 @@ export function ProviderForm({
             <SecretStorageNotice status={secretStorage} onAccept={() => void acceptPlainText()} />
           )}
 
-          {typedModel ? (
+          {choices.length === 0 ? (
             <label className={fieldLabelClass}>
               {t("providers.form.model")}
-              <input
-                required
-                value={modelId}
-                onChange={(event) => setModelId(event.target.value)}
-                spellCheck={false}
-                placeholder={example && t("providers.form.modelExample", { model: example })}
-                data-testid="provider-model-text"
-                className={inputClass}
-              />
+              {modelIdField}
             </label>
           ) : (
-            <label className={fieldLabelClass}>
-              {t("providers.form.model")}
-              <select
-                data-testid="provider-model"
-                value={choices.includes(modelId) ? modelId : OTHER_MODEL}
-                onChange={(event) => {
-                  if (event.target.value === OTHER_MODEL) {
-                    setOtherModel(true);
-                    setModelId("");
-                  } else setModelId(event.target.value);
-                  setTest(null);
-                  setError(null);
-                }}
-                className={inputClass}
-              >
-                {choices.map((id) => (
-                  <option key={id} value={id} title={id}>
-                    {optionName(id)}
-                  </option>
-                ))}
-                <option value={OTHER_MODEL}>{t("providers.form.anotherModel")}</option>
-              </select>
-              {recommended && modelId === recommended && (
-                <span data-testid="provider-model-reason" className={hintClass}>
-                  {t("providers.form.recommended", { model: shownName(recommended) })}
-                </span>
+            <div>
+              <label className={fieldLabelClass}>
+                {t("providers.form.model")}
+                <select
+                  data-testid="provider-model"
+                  value={!otherModel && choices.includes(modelId) ? modelId : OTHER_MODEL}
+                  onChange={(event) => {
+                    const chosen = event.target.value;
+                    setOtherModel(chosen === OTHER_MODEL);
+                    setModelId(chosen === OTHER_MODEL ? "" : chosen);
+                    setTest(null);
+                    setError(null);
+                  }}
+                  className={inputClass}
+                >
+                  {choices.map((id) => (
+                    <option key={id} value={id} title={id}>
+                      {optionName(id)}
+                    </option>
+                  ))}
+                  <option value={OTHER_MODEL}>{t("providers.form.anotherModel")}</option>
+                </select>
+              </label>
+              {otherModel && (
+                <label className={`mt-2 ${fieldLabelClass}`}>
+                  <span className="sr-only">{t("providers.form.modelId")}</span>
+                  {modelIdField}
+                  <span className={hintClass}>{t("providers.form.modelIdHint")}</span>
+                </label>
               )}
-            </label>
+            </div>
           )}
 
           <ProviderSendsLine

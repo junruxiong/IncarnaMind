@@ -76,12 +76,12 @@ async function askFirstQuestion(window: Page) {
 
 const WHO = {
   en: {
-    chatgpt: "If you pay for ChatGPT Plus or Pro",
-    key: "From OpenAI, Anthropic, Google, DeepSeek and more, yours or your company's",
+    chatgpt: "If you pay for ChatGPT Plus or Pro · No key needed · ",
+    key: "From OpenAI, Anthropic, Google, DeepSeek and more, yours or your company's.",
   },
   "zh-CN": {
-    chatgpt: "如果你订阅了 ChatGPT Plus 或 Pro（中国大陆无法使用）",
-    key: "来自 OpenAI、Anthropic、Google、DeepSeek 等，你自己的或公司的",
+    chatgpt: "如果你订阅了 ChatGPT Plus 或 Pro（中国大陆无法使用）· 无需密钥 · ",
+    key: "来自 OpenAI、Anthropic、Google、DeepSeek 等，你自己的或公司的。",
   },
 } as const;
 
@@ -99,7 +99,7 @@ for (const [width, height] of [
         await setLanguage(window, language);
         const plan = card.getByTestId("setup-chatgpt");
         const key = card.getByTestId("setup-key");
-        await expect(card.getByTestId("setup-chatgpt-for")).toHaveText(WHO[language].chatgpt);
+        await expect(card.getByTestId("setup-chatgpt-sends")).toContainText(WHO[language].chatgpt);
         await expect(card.getByTestId("setup-key-for")).toHaveText(WHO[language].key);
         await expect(plan).toBeInViewport({ ratio: 1 });
         await expect(key).toBeInViewport({ ratio: 1 });
@@ -137,10 +137,7 @@ test("a newcomer pastes a key from the card in two clicks, picks Claude Sonnet 5
     await window.keyboard.insertText("sk-ant-a-key-from-the-company");
 
     const model = form.getByTestId("provider-model");
-    await expect(model.locator("option").first()).toHaveText("Claude Haiku 5.5");
-    await expect(form.getByTestId("provider-model-reason")).toHaveText(
-      "Recommended: Claude Haiku 5.5",
-    );
+    await expect(model.locator("option").first()).toHaveText("Claude Haiku 5.5 · Recommended");
     const options = await model.locator("option").allTextContents();
     expect(options).toEqual(
       expect.arrayContaining([
@@ -182,11 +179,15 @@ test("the key step's title follows the company picked at once, and Another model
     await expect(title).toHaveText("Paste your Anthropic key");
     await chip("OpenAI").click();
     await expect(title).toHaveText("Paste your OpenAI key");
-    await form.getByTestId("provider-model").selectOption({ label: "Another model…" });
+    const model = form.getByTestId("provider-model");
+    await model.selectOption({ label: "Another model…" });
     await expect(form.getByTestId("provider-model-text")).toHaveAttribute(
       "placeholder",
       "e.g. gpt-6-luna",
     );
+    // The list stays, so a model in it can still be picked instead.
+    await model.selectOption({ index: 0 });
+    await expect(form.getByTestId("provider-model-text")).toHaveCount(0);
 
     await card.getByTestId("setup-back").click();
     await setLanguage(window, "zh-CN");
@@ -195,7 +196,7 @@ test("the key step's title follows the company picked at once, and Another model
     await expect(title).toHaveText("粘贴你的 DeepSeek 密钥");
     await chip("Anthropic").click();
     await expect(title).toHaveText("粘贴你的 Anthropic 密钥");
-    await form.getByTestId("provider-model").selectOption({ label: "其他模型…" });
+    await model.selectOption({ label: "其他模型…" });
     await expect(form.getByTestId("provider-model-text")).toHaveAttribute(
       "placeholder",
       "例如 claude-haiku-5-5",
