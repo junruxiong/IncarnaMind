@@ -28,7 +28,9 @@ a.cite{box-sizing:border-box;display:inline-flex;align-items:center;justify-cont
 a.cite[data-check=not-found],a.cite[data-check=unsupported]{background:var(--warning-wash);color:var(--warning)}
 a.cite[data-check=contradicted]{border:1px solid var(--error);background:none;color:var(--error)}
 a.cite[aria-expanded=true]{outline:2px solid var(--accent);outline-offset:1px}
-a.cite:focus-visible,.card:focus-visible,.card-close:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+a.cite:focus-visible,.card-close:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.card:focus{outline:none}
+.date{white-space:nowrap}
 .shared-foot{max-width:42rem;margin:0 auto;padding:0 1.25rem 3rem;font-family:var(--sans);font-size:.72rem;line-height:1.5;color:var(--ink-meta)}
 .shared-foot p{margin:0 0 .3rem}
 .scrim{position:fixed;inset:0;z-index:9;background:rgba(23,25,28,.25)}
@@ -239,12 +241,12 @@ export function renderSharePage(page: SharePage): string {
     },
   });
   const head = [
-    `<p class="shared-from">${escapeHtml(t("share.page.shared", { date }))}</p>`,
+    `<p class="shared-from">${withDate(t("share.page.shared", { date }), date)}</p>`,
     page.title ? `<h1 class="mind-title">${escapeHtml(page.title)}</h1>` : "",
     `<p class="shared-about">${escapeHtml(t("share.page.about"))}</p>`,
   ].join("");
   const foot = [
-    `<p>${escapeHtml(t("share.page.foot", { date }))}</p>`,
+    `<p>${withDate(t("share.page.foot", { date }), date)}</p>`,
     page.checkedLine
       ? `<p><a href="${escapeHtml(HOW_CHECKS_WORK[language])}" rel="noreferrer">${escapeHtml(t("share.page.checkedLine"))}</a></p>`
       : "",
@@ -266,9 +268,13 @@ export function renderSharePage(page: SharePage): string {
   });
 }
 
+/** A date never breaks across lines, in Chinese least of all, where any character can end one. */
+const withDate = (text: string, date: string) =>
+  escapeHtml(text).replace(escapeHtml(date), `<span class="date">${escapeHtml(date)}</span>`);
+
 function cardHtml(number: number, card: CitationCard, date: string, t: Translate): string {
   const label = t("share.card.label", { number, source: card.spoken });
-  const source = card.dated ? `${card.source} · ${t("share.card.checked", { date })}` : card.source;
+  const checked = card.dated ? ` · ${withDate(t("share.card.checked", { date }), date)}` : "";
   const close = t("share.card.close");
   return [
     `<section class="card check-${card.check}" id="card-${number}" role="dialog" aria-label="${escapeHtml(label)}" tabindex="-1" hidden>`,
@@ -278,7 +284,7 @@ function cardHtml(number: number, card: CitationCard, date: string, t: Translate
     `<span class="card-heading">${escapeHtml(card.heading)}</span>`,
     `<button type="button" class="card-close" aria-label="${escapeHtml(close)}" title="${escapeHtml(close)}">×</button>`,
     "</div>",
-    `<p class="card-source">${escapeHtml(source)}</p>`,
+    `<p class="card-source">${escapeHtml(card.source)}${checked}</p>`,
     card.verdict ? `<p class="card-verdict">${escapeHtml(card.verdict)}</p>` : "",
     "</div>",
     contentHtml(card.content, t),
