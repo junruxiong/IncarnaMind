@@ -20,6 +20,8 @@ interface Requests {
   manageTag: { id: string } | null;
   /** The Folder just made, whose name field the sidebar opens in its row. */
   nameFolder: string | null;
+  /** The Linked folder just linked: the sidebar shows where it is, and its row is washed for a moment (#763). */
+  showLinked: string | null;
   ask(request: Partial<Omit<Requests, "ask" | "clear">>): void;
   clear(key: keyof Omit<Requests, "ask" | "clear">): void;
 }
@@ -32,6 +34,7 @@ export const useRequests = create<Requests>((set) => ({
   editFolder: null,
   manageTag: null,
   nameFolder: null,
+  showLinked: null,
   ask: (request) => set(request),
   clear: (key) => set({ [key]: null }),
 }));

@@ -26,6 +26,16 @@ On Linux with no desktop, run the smoke test on a virtual display, as CI does: `
 
 Installers for testers come from CI only: pushing a version tag builds them on a clean checkout (see [releasing.md](releasing.md)). Don't hand out a local `npm run dist` build. `npm run dist:dir` is for checking your own packaging changes; follow it with `npm run check:package`, which fails when `app.asar` holds anything but `out/`, `node_modules/` and `package.json`, or when a size is over its budget.
 
+## App icon
+
+The icon's drawings are the SVGs in `build/icon/svg/`. The rest of `build/icon/` is generated from them and committed, so packaging needs no extra tools. After changing a drawing, run
+
+```
+npm run icons
+```
+
+on macOS with Xcode 26 and Playwright's Chromium (`npx playwright install chromium`), and commit what changed. It writes `icon.icns`, `Assets.car` (compiled from the Icon Composer icon `AppIcon.icon`: macOS 26's Default and Dark), `icon.ico`, the Linux PNGs in `png/` and the development build's Dock icons. Run again with the same drawings, it gives the same files, except `Assets.car`, which actool stamps.
+
 ## Embeddings
 
 Embeddings are off by default: document search is keyword search, reranked. Turned on in Settings, it runs a built-in embedding model, multilingual-e5-small (int8 ONNX, 135 MB), on your CPU in an Electron utility process. The app downloads it from Hugging Face into the data folder (`models/`) the first time a Document needs it, and checks each file's SHA-256; after that, indexing works offline. The tests use a deterministic fake instead. `INCARNAMIND_REAL_MODEL=1 npm test` also runs one test with the real model, downloading it unless `INCARNAMIND_MODEL_DIR` points at a folder holding its files. On Linux x64, set `ONNXRUNTIME_NODE_INSTALL=skip` when you run `npm install`, or onnxruntime-node also downloads its CUDA libraries, which the app doesn't use.

@@ -10,6 +10,7 @@ import { create } from "zustand";
 import type { DocumentPlace, FindClaimsResult, VerifyClaimsResult } from "../../core/api";
 import { mindModelOf } from "../../shared/mindModel";
 import { core, files } from "./core";
+import { errorMessage } from "./errors";
 import { translateNow } from "./i18n";
 import { currentMindIdOf } from "./layoutSlice";
 import { useAppStore } from "./store";
@@ -28,8 +29,6 @@ interface VerifyState {
 }
 
 export const useVerify = create<VerifyState>()(() => ({ running: null, outcomes: {} }));
-
-const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 function settle(mindId: string, outcome: VerifyOutcome | null) {
   useVerify.setState((state) => {
@@ -67,7 +66,7 @@ async function runStep<R extends FindClaimsResult | VerifyClaimsResult>(
   try {
     result = await step(requestId);
   } catch (error) {
-    settle(mindId, { kind: "error", message: messageOf(error) });
+    settle(mindId, { kind: "error", message: errorMessage(error, translateNow) });
     return;
   }
   if (result.kind === "busy") {

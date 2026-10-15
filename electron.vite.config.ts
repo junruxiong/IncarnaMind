@@ -114,6 +114,15 @@ export default defineConfig({
     },
   },
   renderer: {
+    define: {
+      __APP_VERSION__: JSON.stringify(
+        (
+          JSON.parse(readFileSync(resolve(__dirname, "package.json"), "utf8")) as {
+            version: string;
+          }
+        ).version,
+      ),
+    },
     plugins: [react(), tailwindcss(), pdfjsData(), fontLicences()],
     // electron-vite leaves the renderer unminified; minified, its JavaScript is half the size
     // to load and parse at every launch.

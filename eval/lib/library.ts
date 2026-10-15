@@ -236,7 +236,7 @@ export async function openLibrary(options: LibraryOptions): Promise<Library> {
     await symlink(options.modelCache, modelsLink, "junction");
   }
   const adapters: CoreAdapters = {
-    paths: { dataDir },
+    paths: { dataDir, home: join(dataDir, "home"), documents: join(dataDir, "Documents") },
     systemLanguages: () => ["en-US"],
     keychain: memoryKeychain(),
     browser: {

@@ -1,6 +1,6 @@
 # Connect your AI agent to IncarnaMind
 
-*Experimental.* [中文版](agents.zh-CN.md)
+*Experimental, and hidden in the alpha builds while we decide its future.* [中文版](agents.zh-CN.md)
 
 If you already use an AI agent, such as Claude, ChatGPT, Codex, Cursor or Antigravity, you can let it search the folders you choose in IncarnaMind and quote them. Every quote it gets from IncarnaMind is checked against your Document, and you can open any of them in IncarnaMind to see it in place.
 

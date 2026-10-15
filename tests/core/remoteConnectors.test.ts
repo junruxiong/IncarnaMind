@@ -8,7 +8,6 @@ import type {
   Connector,
   ConnectorState,
   Core,
-  CoreAdapters,
   RemoteConnector,
 } from "../../src/core";
 import { createFileKeychain, SECRETS_FILE } from "../../src/main/secretsFile";
@@ -23,6 +22,7 @@ import {
   nextEvent,
   queryDatabase,
   startCore,
+  type TestAdapters,
 } from "../helpers/core";
 import { connectToMind } from "../helpers/mindClient";
 import { answerIn, answerText } from "../helpers/minds";
@@ -63,7 +63,7 @@ interface Setup {
 
 /** A core with a local chat model (no chat consent) and a fresh fake service, with a fake browser. */
 async function setUp(
-  overrides: Partial<CoreAdapters> = {},
+  overrides: TestAdapters = {},
   model: MockLanguageModelV4 = wikiModel(),
 ): Promise<Setup> {
   const fake = await startFakeRemote();
@@ -98,7 +98,7 @@ async function addWiki(setup: Setup) {
 }
 
 /** Adds the fake service and signs in to it. */
-async function signedIn(overrides: Partial<CoreAdapters> = {}, model?: MockLanguageModelV4) {
+async function signedIn(overrides: TestAdapters = {}, model?: MockLanguageModelV4) {
   const setup = await setUp(overrides, model);
   const added = await addWiki(setup);
   const result = await setup.core.signInToConnector(added.id);

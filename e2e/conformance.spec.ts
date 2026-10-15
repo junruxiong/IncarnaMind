@@ -134,7 +134,7 @@ const registryOf = (window: Page): Promise<Registry> =>
   });
 
 async function showView(window: Page, name: "Folders" | "Tags"): Promise<void> {
-  const button = window.getByTestId("browse-views").getByRole("button", { name });
+  const button = window.getByTestId("browse-views").getByRole("button", { name, exact: true });
   // Folders is what the sidebar shows until there is something else to switch to.
   if (name === "Folders" && (await button.count()) === 0) return;
   if ((await button.getAttribute("aria-pressed")) !== "true") await button.click();

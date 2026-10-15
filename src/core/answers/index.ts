@@ -261,8 +261,12 @@ export interface AnswerConversations {
    * written, which reads `read`.
    */
   add(input: QuestionInput, answerModel: ChatModelChoice | null, read: AnswerRead | null): Turn;
-  /** The Question of an Answer, to write the Answer again. */
-  questionOf(input: unknown): { answerId: string; question: ConversationQuestion };
+  /** The Question of an Answer, and the Tool calls it made, to write the Answer again. */
+  questionOf(input: unknown): {
+    answerId: string;
+    question: ConversationQuestion;
+    toolCalls: AnswerToolCall[];
+  };
   /** Takes the Search scope off a Question: its Answers search every Document (#748). */
   clearScope(questionId: string): ConversationQuestion | null;
   /** Empties an Answer, where it is, to write it again, reading `read`. */
@@ -367,6 +371,12 @@ export interface AnswersOptions {
    * Proposals (#202, ../tools/minds); absent: it changes none.
    */
   minds?: MindsForTools;
+  /**
+   * Takes back the changes an Answer proposed in Minds, before it is written
+   * again (#202): those still waiting are rejected, and a Mind it made goes
+   * once nothing else is in it.
+   */
+  withdrawChanges?(changes: readonly MindChange[]): void;
   /** Asking the User before a Connector Tool or a Skill script runs. */
   approvals: AnswerApprovals;
   /** Running Skill scripts. */
@@ -937,8 +947,16 @@ export function createAnswers(options: AnswersOptions) {
     const base = answerInstructions();
     const language = languageInstruction(context.question);
     const callStarted = (call: AnswerToolCall) => {
-      // A call that asks the User first may already be there (see `ask`).
-      if (toolCalls.some((each) => each.id === call.id)) return;
+      // A call that asks the User first may already be there (see `ask`), and one whose input
+      // streams in is there from its start (#202): it now has all of its input.
+      const there = toolCalls.find((each) => each.id === call.id);
+      if (there) {
+        if (Object.keys(there.input).length === 0) {
+          there.input = call.input;
+          writeSoon();
+        }
+        return;
+      }
       toolCalls.push(call);
       announce("answer.toolCallStarted", { ...place, answerId, call: { ...call } });
       writeSoon();
@@ -1115,6 +1133,19 @@ export function createAnswers(options: AnswersOptions) {
       }
       return denied === null ? { run: true } : { run: false, result: denied };
     };
+
+    /**
+     * Whether a Tool may act on a call's input as it comes, before the gate
+     * (#202): only when the gate lets every call of it through. A Connector's
+     * Tool and a Skill's scripts never do: the User's "ask" and "off" are
+     * theirs, and they ask by default. Any other Tool does when each of its
+     * Effects runs without asking, whatever the input: the Minds' Tools, whose
+     * only write is a Proposal.
+     */
+    const streamsInput = (tool: Tool): boolean =>
+      tool.provider.kind !== "connector" &&
+      tool.name !== SKILL_TOOLS.runScript &&
+      tool.effects({}).every(runsByDefault);
 
     /**
      * `run_skill_script`'s call, once the gate let it through: runs the script
@@ -1353,7 +1384,16 @@ export function createAnswers(options: AnswersOptions) {
                 );
                 return { blocks, notFound, unrecorded };
               },
-              changed: (toolCallId, change) => mindChanges.set(toolCallId, change),
+              changed: (toolCallId, change) => {
+                mindChanges.set(toolCallId, change);
+                // On its card at once: a Mind changes while the call is still being written.
+                const call = toolCalls.find((each) => each.id === toolCallId);
+                if (call && !finished) {
+                  call.mindChange = change;
+                  writeSoon();
+                }
+              },
+              signal: controller.signal,
               now: () => new Date(),
             })
           : [];
@@ -1460,6 +1500,7 @@ export function createAnswers(options: AnswersOptions) {
         documents,
         tools: [...provided, ...fromSkills, ...fromWeb, ...fromMinds],
         gate,
+        streamsInput,
         toolSet: input.toolSet,
         thirdParty: contextReasons,
         support: startingSupport(prepared.support, supportByModel.get(learntKey)),
@@ -2007,10 +2048,12 @@ export function createAnswers(options: AnswersOptions) {
       if (isRecord(input) && input.clearScope === true) {
         options.conversations.clearScope(asked.question.id);
       }
-      const { answerId, question } = options.conversations.questionOf(input);
+      const { answerId, question, toolCalls } = options.conversations.questionOf(input);
       const ready = await readyModel(question.model, question.forcedSkill);
       if ("asked" in ready) return ready;
       active.get(answerId)?.finish({ status: "stopped" });
+      // Written again, it proposes its changes again: those still waiting from before go.
+      options.withdrawChanges?.(toolCalls.flatMap((call) => call.mindChange ?? []));
       const { documentIds, emptyScope } = scopeNow(question.scope);
       const from = question.askedFrom;
       const mind =

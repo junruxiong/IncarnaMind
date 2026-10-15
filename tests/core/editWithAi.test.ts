@@ -1,7 +1,7 @@
 import type { JSONContent } from "@tiptap/core";
 import { APICallError } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import * as Y from "yjs";
 import {
   type ConsentRequest,
@@ -10,6 +10,7 @@ import {
   type EditWithAiInput,
   MIND_PROPOSAL_REQUESTS_FIELD,
   PROPOSAL_ATTRIBUTE,
+  type WritingPlace,
 } from "../../src/core";
 import {
   aiUseOfAccepted,
@@ -22,7 +23,7 @@ import { setUpWithDocuments } from "../helpers/citations";
 import { createTempDataFolder, nextEvent, saveProviderUnasked, startCore } from "../helpers/core";
 import { connectToMind, type MindClient } from "../helpers/mindClient";
 import { readMind, resolveChanges, shownWithChanges, writeMind } from "../helpers/minds";
-import { scriptedModels } from "../helpers/models";
+import { controlledModel, scriptedModels, streamedReply } from "../helpers/models";
 
 const TIDES = {
   name: "Tides.md",
@@ -48,7 +49,7 @@ interface EditCall {
   system: string;
 }
 
-type Prompt = MockLanguageModelV4["doGenerateCalls"][number]["prompt"];
+type Prompt = MockLanguageModelV4["doStreamCalls"][number]["prompt"];
 
 const textOf = (prompt: Prompt, role: "user" | "system") =>
   prompt
@@ -60,21 +61,19 @@ const textOf = (prompt: Prompt, role: "user" | "system") =>
     )
     .join("\n");
 
-/** A model that rewrites each passage with `edit`; automatic tagging gets no Tags. */
+/** A model that rewrites each passage with `edit`, streamed a few characters at a time; automatic tagging gets no Tags. */
 function editingModel(
   edit: (call: EditCall) => string | Promise<string>,
   calls: EditCall[] = [],
 ): MockLanguageModelV4 {
   return new MockLanguageModelV4({
-    doGenerate: async ({ prompt, responseFormat }) => {
-      if (responseFormat?.type === "json") {
-        return {
-          content: [{ type: "text", text: JSON.stringify({ tags: [] }) }],
-          finishReason: { unified: "stop", raw: undefined },
-          usage: USAGE,
-          warnings: [],
-        };
-      }
+    doGenerate: async () => ({
+      content: [{ type: "text", text: JSON.stringify({ tags: [] }) }],
+      finishReason: { unified: "stop", raw: undefined },
+      usage: USAGE,
+      warnings: [],
+    }),
+    doStream: async ({ prompt, abortSignal }) => {
       const text = textOf(prompt, "user");
       const call = {
         passage: /<passage>\n([\s\S]*?)\n<\/passage>/.exec(text)?.[1] ?? "",
@@ -83,12 +82,7 @@ function editingModel(
         system: textOf(prompt, "system"),
       };
       calls.push(call);
-      return {
-        content: [{ type: "text", text: await edit(call) }],
-        finishReason: { unified: "stop", raw: undefined },
-        usage: USAGE,
-        warnings: [],
-      };
+      return { stream: streamedReply(await edit(call), abortSignal) };
     },
   });
 }
@@ -591,7 +585,7 @@ describe("Edit with AI", () => {
   test("a request can be stopped, and one still waiting when the app quits writes nothing", async () => {
     let asked = () => {};
     const hanging = new MockLanguageModelV4({
-      doGenerate: async ({ prompt, abortSignal }) => {
+      doStream: async ({ prompt, abortSignal }) => {
         if (textOf(prompt, "user").includes("<passage>")) asked();
         return new Promise((_resolve, reject) => {
           abortSignal?.addEventListener("abort", () =>
@@ -629,7 +623,7 @@ describe("Edit with AI", () => {
   test("a model that fails says why, and nothing is written", async () => {
     const { core, mind, client } = await setUp(
       new MockLanguageModelV4({
-        doGenerate: async () => {
+        doStream: async () => {
           throw new APICallError({
             message: "Too many requests",
             url: "http://127.0.0.1:11434/v1/chat/completions",
@@ -664,11 +658,8 @@ describe("Edit with AI", () => {
     await first.settled();
     await core.editWithAi(wholeParagraph(first, mind.id, note.attrs.id, "shorten"));
     // A whole new Block too.
-    model.doGenerate = async () => ({
-      content: [{ type: "text", text: "The Moon pulls the sea." }],
-      finishReason: { unified: "stop", raw: undefined },
-      usage: USAGE,
-      warnings: [],
+    model.doStream = async ({ abortSignal }) => ({
+      stream: streamedReply("The Moon pulls the sea.", abortSignal),
     });
     await core.editWithAi(wholeParagraph(first, mind.id, extra.attrs.id, "explain"));
     const pending = shownWithChanges(first);
@@ -787,6 +778,282 @@ describe("Edit with AI", () => {
 });
 
 /** The Mind's paragraphs and headings with what kind of Block each is: "h2", "•" a bullet, "1." a numbered item, "p". */
+/** Edit with AI over the whole of several paragraphs, first to last. */
+function across(
+  client: MindClient,
+  mindId: string,
+  blockIds: readonly string[],
+  action: EditWithAiInput["action"],
+  instruction?: string,
+): EditWithAiInput {
+  const first = blockIds[0] as string;
+  const last = blockIds.at(-1) as string;
+  return {
+    requestId: `edit-${++ids}`,
+    mindId,
+    from: { blockId: first, offset: 0 },
+    to: { blockId: last, offset: plainOf(client, last).length },
+    text: blockIds.map((id) => plainOf(client, id)).join("\n"),
+    action,
+    ...(instruction !== undefined && { instruction }),
+  };
+}
+
+/** Where the core says Edit with AI writes next in each Mind, the latest last. */
+function writingPlaces(core: Core): (WritingPlace | null)[] {
+  const seen: (WritingPlace | null)[] = [];
+  core.on("mind.writing", ({ place }) => seen.push(place));
+  return seen;
+}
+
+describe("Edit with AI as the model writes (#202)", () => {
+  const tidesNote = () => [
+    paragraph(text("The tides here are very strong.")),
+    paragraph(text("The moon is really bright tonight.")),
+    paragraph(text("Harbours are quite busy in spring.")),
+  ];
+
+  // protects=each paragraph the model finishes is in the Mind as changes at once, with Writing… on the paragraph it writes next, and the reason it gives is kept with the changes; fails_when=nothing shows until the reply ends, a paragraph is written twice, Writing… stays, or the reason is lost or shows in the text; no_claim=how a real provider chunks its text.
+  test("each finished paragraph is in the Mind as changes while the rest comes, with Writing… on the next, and the reason is kept", async () => {
+    const controlled = controlledModel();
+    const { core, mind, client } = await setUp(controlled.model);
+    const blocks = tidesNote();
+    writeMind(client, blocks);
+    await client.settled();
+    const places = writingPlaces(core);
+
+    const editing = core.editWithAi(
+      across(
+        client,
+        mind.id,
+        blocks.map((block) => block.attrs.id),
+        "shorten",
+      ),
+    );
+    await controlled.requested();
+    controlled.push("The tides here are strong.\n\nThe moon is");
+    await vi.waitFor(() =>
+      expect(shownWithChanges(client)).toEqual([
+        "The tides here are [-very -]strong.",
+        "The moon is really bright tonight.",
+        "Harbours are quite busy in spring.",
+      ]),
+    );
+    expect(places.at(-1)).toEqual({ over: blocks[1]?.attrs.id });
+
+    controlled.push(
+      " bright tonight.\n\nHarbours are busy in spring.\n<why>Shorter: the filler words are gone.</why>",
+    );
+    controlled.finish();
+    const result = await editing;
+
+    expect(result).toMatchObject({ kind: "proposed", proposals: 3 });
+    await client.settled();
+    expect(shownWithChanges(client)).toEqual([
+      "The tides here are [-very -]strong.",
+      "The moon is [-really -]bright tonight.",
+      "Harbours are [-quite -]busy in spring.",
+    ]);
+    expect(places.at(-1)).toBeNull();
+    const request = result.kind === "proposed" ? result.request : "";
+    expect(proposalRequestOf(client.doc, request)).toMatchObject({
+      source: "edit-with-ai",
+      reason: "Shorter: the filler words are gone.",
+    });
+  });
+
+  // protects=Stop keeps the changes of the paragraphs already finished and leaves the rest of the selection as it was; fails_when=Stop takes back what was written, writes the half-finished paragraph, or removes the paragraphs not reached; no_claim=the renderer's Stop button.
+  test("Stop keeps the finished paragraphs' changes and leaves the rest as it was", async () => {
+    const controlled = controlledModel();
+    const { core, mind, client } = await setUp(controlled.model);
+    const blocks = tidesNote();
+    writeMind(client, blocks);
+    await client.settled();
+    const places = writingPlaces(core);
+
+    const input = across(
+      client,
+      mind.id,
+      blocks.map((block) => block.attrs.id),
+      "shorten",
+    );
+    const editing = core.editWithAi(input);
+    await controlled.requested();
+    controlled.push("The tides here are strong.\n\nThe moon");
+    await vi.waitFor(() => expect(pendingProposals(client.blocks)).toHaveLength(1));
+    await core.cancelEdit(input.requestId);
+
+    expect(await editing).toMatchObject({ kind: "proposed", proposals: 1 });
+    await client.settled();
+    expect(shownWithChanges(client)).toEqual([
+      "The tides here are [-very -]strong.",
+      "The moon is really bright tonight.",
+      "Harbours are quite busy in spring.",
+    ]);
+    expect(places.at(-1)).toBeNull();
+  });
+
+  // protects=quitting while the model writes stops the request without writing more as storage closes; fails_when=the request throws, or writes after the core has closed; no_claim=what the next start shows, which is what was stored.
+  test("quitting while it writes stops it, and nothing more is written", async () => {
+    const controlled = controlledModel();
+    const { core, mind, client } = await setUp(controlled.model);
+    const blocks = tidesNote();
+    writeMind(client, blocks);
+    await client.settled();
+
+    const editing = core.editWithAi(
+      across(
+        client,
+        mind.id,
+        blocks.map((block) => block.attrs.id),
+        "shorten",
+      ),
+    );
+    await controlled.requested();
+    controlled.push("The tides here are strong.\n\nThe moon is bright tonight.\n\nHarbours");
+    await vi.waitFor(() => expect(pendingProposals(client.blocks)).toHaveLength(2));
+    core.close();
+
+    expect(await editing).toEqual({ kind: "cancelled" });
+  });
+
+  // protects=Stop writes a paragraph held for its place as a new Block where the text had got to, and removes none of the selection's, a heading the model never reached included; fails_when=Stop proposes deleting a heading, or writes the held paragraph over the paragraph after it; no_claim=what a later paragraph would have been.
+  test("Stop with a paragraph held writes it as a new Block, and removes nothing the model never reached", async () => {
+    const controlled = controlledModel();
+    const { core, mind, client } = await setUp(controlled.model);
+    const first = paragraph(text("Spring tides are strong at new moon."));
+    const heading: JSONContent & { attrs: { id: string } } = {
+      type: "heading",
+      attrs: { id: `block-${++ids}`, level: 2 },
+      content: [text("Harbours")],
+    };
+    const last = paragraph(text("Harbours publish the times of high water every year."));
+    writeMind(client, [first, heading, last]);
+    await client.settled();
+
+    const input = across(
+      client,
+      mind.id,
+      [first.attrs.id, heading.attrs.id, last.attrs.id],
+      "instruction",
+      "Add an opening line about the coast road",
+    );
+    const editing = core.editWithAi(input);
+    await controlled.requested();
+    // The first paragraph is kept, much changed; the second is like none of the selection's, so it is held.
+    controlled.push(
+      "Spring tides are strong at new moon and at full moon.\n\nA new opening line about the coast road.\n\n## Harb",
+    );
+    await vi.waitFor(() => expect(pendingProposals(client.blocks).length).toBeGreaterThan(0));
+    await core.cancelEdit(input.requestId);
+    await editing;
+    await client.settled();
+
+    const shown = shownWithChanges(client);
+    expect(shown[0]).toContain("{+");
+    expect(shown.slice(1)).toEqual([
+      "+ A new opening line about the coast road.",
+      "Harbours",
+      "Harbours publish the times of high water every year.",
+    ]);
+  });
+
+  // protects=a reply that rewrites every paragraph (a translation) still comes in paragraph by paragraph, each paired with the one it translates; fails_when=nothing shows until the end, or a paragraph is added beside the one it translates; no_claim=languages the word comparison can't tell apart.
+  test("a translation comes in paragraph by paragraph, each in place of the one it translates", async () => {
+    const controlled = controlledModel();
+    const { core, mind, client } = await setUp(controlled.model);
+    const blocks = tidesNote();
+    writeMind(client, blocks);
+    await client.settled();
+
+    const editing = core.editWithAi(
+      across(
+        client,
+        mind.id,
+        blocks.map((block) => block.attrs.id),
+        "translate",
+        "French",
+      ),
+    );
+    await controlled.requested();
+    controlled.push("Les marées sont fortes ici.\n\nLa lune brille ce soir.\n\nLes ports");
+    await vi.waitFor(() =>
+      expect(shownWithChanges(client)).toEqual([
+        "[-The tides here are very strong-]{+Les marées sont fortes ici+}.",
+        "[-The moon is really bright tonight-]{+La lune brille ce soir+}.",
+        "Harbours are quite busy in spring.",
+      ]),
+    );
+    controlled.push(" sont animés au printemps.");
+    controlled.finish();
+    await editing;
+    await client.settled();
+    expect(shownWithChanges(client)).toHaveLength(3);
+    expect(shownWithChanges(client)[2]).toBe(
+      "[-Harbours are quite busy in spring-]{+Les ports sont animés au printemps+}.",
+    );
+  });
+
+  // protects=a model that fails partway leaves the Mind as it was, so the request can be tried again; fails_when=half a change stays behind with the failure; no_claim=which providers fail this way.
+  test("a model that fails partway takes back what it wrote, and says why", async () => {
+    type Part =
+      Awaited<ReturnType<MockLanguageModelV4["doStream"]>>["stream"] extends ReadableStream<
+        infer Each
+      >
+        ? Each
+        : never;
+    const parts: Part[] = [
+      { type: "stream-start", warnings: [] },
+      { type: "text-start", id: "edit" },
+      { type: "text-delta", id: "edit", delta: "The tides here are strong.\n\nThe moon" },
+    ];
+    const model = new MockLanguageModelV4({
+      doStream: async () => {
+        let sent = 0;
+        return {
+          stream: new ReadableStream({
+            pull(controller) {
+              const part = parts[sent++];
+              if (part) controller.enqueue(part);
+              else
+                controller.error(
+                  new APICallError({
+                    message: "Overloaded",
+                    url: "http://127.0.0.1:11434/v1/chat/completions",
+                    requestBodyValues: {},
+                    statusCode: 529,
+                    isRetryable: false,
+                  }),
+                );
+            },
+          }),
+        };
+      },
+    });
+    const { core, mind, client } = await setUp(model);
+    const blocks = tidesNote();
+    writeMind(client, blocks);
+    await client.settled();
+
+    const result = await core.editWithAi(
+      across(
+        client,
+        mind.id,
+        blocks.map((block) => block.attrs.id),
+        "shorten",
+      ),
+    );
+
+    expect(result).toMatchObject({ kind: "failed" });
+    await client.settled();
+    expect(shownWithChanges(client)).toEqual([
+      "The tides here are very strong.",
+      "The moon is really bright tonight.",
+      "Harbours are quite busy in spring.",
+    ]);
+  });
+});
+
 function structure(client: MindClient): string[] {
   const lines: string[] = [];
   readMind(client).descendants((node, _position, parent) => {
@@ -978,6 +1245,40 @@ describe("Edit with AI over Blocks of several kinds", () => {
     await resolveChanges(client, "accept");
 
     expect(structure(client)).toEqual(RESTRUCTURED);
+  });
+
+  // protects=a section the model adds in the middle, streamed in, is added as new Blocks before the heading it comes before, which stays as it was; fails_when=the new heading is written over the next one as a word change; no_claim=a section added at the very start.
+  test("a section added in the middle comes in as new Blocks, and the section after it stays as it was", async () => {
+    const { core, mind, client } = await setUp(
+      editingModel(() =>
+        [
+          "## Findings",
+          "Spring tides are strongest at new moon.",
+          "## Risks",
+          "Gauges may fail in storms.",
+          "## Decisions",
+          "Publish the tide tables in March.",
+        ].join("\n\n"),
+      ),
+    );
+    writeMind(client, [
+      heading("Findings"),
+      paragraph(text("Spring tides are strongest at new moon.")),
+      heading("Decisions"),
+      paragraph(text("Publish the tide tables in March.")),
+    ]);
+    await client.settled();
+
+    await core.editWithAi(whole(client, mind.id));
+
+    expect(shownWithChanges(client)).toEqual([
+      "Findings",
+      "Spring tides are strongest at new moon.",
+      "+ Risks",
+      "+ Gauges may fail in storms.",
+      "Decisions",
+      "Publish the tide tables in March.",
+    ]);
   });
 
   test("a Block the model marks as another kind becomes that kind", async () => {

@@ -13,6 +13,7 @@ import {
   openLinkedFolderMenu,
   previewLink,
   removeDataFolder,
+  showFolders,
   showSourceLocations,
   turnOnEmbeddings,
   useLocalChatModel,
@@ -247,7 +248,7 @@ test("sidebar rows share one text edge, in the Folders view and on disk, a folde
   const settings = window.getByTestId("sidebar-footer").getByRole("button", { name: "Settings" });
   expect((await boxOf(settings.locator("svg"))).x - sidebarLeft).toBeCloseTo(16, 0);
   expect((await textLeft(settings.locator("span"))) - sidebarLeft).toBeCloseTo(40, 0);
-  await window.getByTestId("browse-views").getByRole("button", { name: "Folders" }).click();
+  await showFolders(window);
   const notInAFolder = window.getByTestId("not-in-a-folder-toggle").locator("span");
   expect((await textLeft(notInAFolder)) - sidebarLeft).toBeCloseTo(16, 0);
   await showSourceLocations(window);

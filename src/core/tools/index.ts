@@ -82,6 +82,14 @@ export interface Tool {
   shownInput?(input: Record<string, unknown>): Record<string, unknown>;
   /** Calls it; resolves with what the model reads, rejects when it fails (the model is told why). */
   call(input: Record<string, unknown>, context: ToolCallContext): Promise<string>;
+  /**
+   * Hears a call's input while the model is still writing it, as the JSON text
+   * so far, before `call`: for a Tool that shows its work as it goes, such as
+   * the Minds' Tools writing a Mind's new text (#202). Only for a Tool whose
+   * Effects run without asking; a provider that doesn't stream Tool inputs
+   * never calls it.
+   */
+  streamInput?(toolCallId: string, text: string): void;
 }
 
 /** Hands out Tools to a Run: the User's Connectors now; later Files, a Browser, a Shell. */

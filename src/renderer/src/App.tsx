@@ -35,6 +35,7 @@ import { useMeetings } from "./meetings";
 import { setMotionPreference } from "./motion";
 import { importReferenceFile, isReferenceFile } from "./referenceImport";
 import { useAppStore } from "./store";
+import { useSidebarSlide } from "./useSidebarSlide";
 import { useWindowWidth } from "./useWindowWidth";
 import { useWebPages } from "./webPages";
 
@@ -81,7 +82,7 @@ export function App() {
  * (the "sidebar.toggle" command; the menu's label follows), the title bar's
  * button, and dragging the divider shut. The User's choice is remembered.
  */
-function useSidebarControl(userHidden: boolean) {
+function useSidebarControl(userHidden: boolean, beforeSlide: (shows: boolean) => void) {
   const previewLayout = useAppStore((state) => state.previewLayout);
   const updateSettings = useAppStore((state) => state.updateSettings);
   const hidden = userHidden;
@@ -92,11 +93,12 @@ function useSidebarControl(userHidden: boolean) {
   const setHidden = useCallback(
     (next: boolean) => {
       if (next === state.current.hidden) return;
+      beforeSlide(!next);
       // Updated here before the core confirms, so the sidebar answers at once.
       previewLayout({ sidebarHidden: next });
       void updateSettings({ device: { sidebarHidden: next } });
     },
-    [previewLayout, updateSettings],
+    [previewLayout, updateSettings, beforeSlide],
   );
   const toggle = useCallback(() => {
     const active = document.activeElement;
@@ -125,7 +127,7 @@ function useSidebarControl(userHidden: boolean) {
  * pointer touches the window's left edge or keyboard focus goes into it, and
  * slides back when the pointer leaves and focus is out.
  */
-function useSidebarPeek(hidden: boolean) {
+function useSidebarPeek(hidden: boolean, beforeSlide: (shows: boolean) => void) {
   const [pointer, setPointer] = useState(false);
   const [focus, setFocus] = useState(false);
   useEffect(() => {
@@ -135,21 +137,27 @@ function useSidebarPeek(hidden: boolean) {
     }
   }, [hidden]);
   const peeking = hidden && (pointer || focus);
+  const hold = (by: { pointer?: boolean; focus?: boolean }) => {
+    const next = hidden && ((by.pointer ?? pointer) || (by.focus ?? focus));
+    if (next !== peeking) beforeSlide(next);
+    if (by.pointer !== undefined) setPointer(by.pointer);
+    if (by.focus !== undefined) setFocus(by.focus);
+  };
   return {
     peeking,
-    onEdge: () => setPointer(true),
+    onEdge: () => hold({ pointer: true }),
     panel: {
       onPointerLeave: (event: React.PointerEvent<HTMLElement>) => {
         // A menu or dialog the sidebar opened keeps it out until it is closed.
         if (event.currentTarget.querySelector(":popover-open, dialog[open]")) return;
-        setPointer(false);
+        hold({ pointer: false });
       },
       // Focus the keyboard moved in (not a click's) shows it, and leaving hides it again.
       onFocus: (event: React.FocusEvent<HTMLElement>) => {
-        if (event.target.matches(":focus-visible")) setFocus(true);
+        if (event.target.matches(":focus-visible")) hold({ focus: true });
       },
       onBlur: (event: React.FocusEvent<HTMLElement>) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) setFocus(false);
+        if (!event.currentTarget.contains(event.relatedTarget)) hold({ focus: false });
       },
     },
   };
@@ -190,8 +198,10 @@ function Workspace() {
   useEditMenu();
   useEscapeToDismiss();
   useRememberSidebarWidth(device?.sidebarWidth);
-  const sidebar = useSidebarControl(device?.sidebarHidden ?? false);
-  const peek = useSidebarPeek(sidebar.hidden);
+  const workbench = useRef<HTMLDivElement>(null);
+  const beforeSlide = useSidebarSlide(workbench);
+  const sidebar = useSidebarControl(device?.sidebarHidden ?? false, beforeSlide);
+  const peek = useSidebarPeek(sidebar.hidden, beforeSlide);
   const [announcement, setAnnouncement] = useState("");
   const announced = useRef(sidebar.hidden);
   useEffect(() => {
@@ -258,6 +268,7 @@ function Workspace() {
           />
         )}
         <Workbench
+          ref={workbench}
           sidebarHidden={sidebar.hidden}
           // Links dropped become web pages, so the card is where they go (#261).
           cardOverlay={fileDrop.active && fileDrop.links ? <DropOverlay links /> : null}

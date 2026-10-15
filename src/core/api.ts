@@ -139,8 +139,11 @@ export interface CreateMindInput {
  *   author and date. A version before 20 would take them for the
  *   assistant's, and count what accepting one keeps as AI text. Older
  *   content is version 20 content as it is: nothing is rewritten.
+ * - 21: a Word file's look (#746): the `wordLook` attribute and the
+ *   `wordRun` mark, which an older version's editor would strip. Older
+ *   content is version 21 content as it is.
  */
-export const CONTENT_SCHEMA_VERSION = 20;
+export const CONTENT_SCHEMA_VERSION = 21;
 
 /**
  * The key, in the Mind's settings map (`MIND_SETTINGS_FIELD`), of the content
@@ -365,6 +368,8 @@ export type ProposalRequest =
       action?: EditAction;
       /** What the User asked for ("translate", "instruction"); "" for none. */
       instruction?: string;
+      /** Why the model changed the text, in its few words (#202); absent when it didn't say. */
+      reason?: string;
     })
   | (ProposalMaker & { source: "answer"; answerId: string })
   | (ProposalMaker & { source: "answer-added" })
@@ -820,6 +825,19 @@ export interface AnswerToolCall {
 }
 
 /**
+ * Where the assistant writes next in a Mind, as its changes come in (#202):
+ * a new Block after the Block `after` (null: at the Mind's end), or the
+ * paragraph or heading `over`, which it is writing anew.
+ */
+export type WritingPlace = { after: string | null } | { over: string };
+
+/** Where the assistant is writing a Mind's changes as they come (#202); `place` null once it has stopped. */
+export interface MindWriting {
+  mindId: string;
+  place: WritingPlace | null;
+}
+
+/**
  * What a call of a Minds' Tool did (#202): the changes it proposed in one
  * Mind, which wait there for the User to accept or reject them.
  */
@@ -1137,6 +1155,127 @@ export interface WordFileInfo {
 export interface WordImportProgress {
   done: number;
   total: number;
+}
+
+/**
+ * A Y.Map beside the Blocks of a Mind imported from Word, holding the file's
+ * styles (`WordLook`) once each; Blocks and text name them by key.
+ */
+export const MIND_WORD_LOOK_FIELD = "wordLook";
+
+/** On paragraphs, headings, tables and cells: a key in the Mind's `WordLook`. */
+export const WORD_LOOK_ATTRIBUTE = "wordLook";
+
+/** A mark on text whose attribute `k` is a key in `WordLook.runs`. */
+export const WORD_RUN_MARK = "wordRun";
+
+/** Lengths are in points and colours hex "RRGGBB"; unset properties are left out. */
+export interface WordLook {
+  version: number;
+  /** The most common run size; null with no text. */
+  body: number | null;
+  /** The text width on the first page; null when the file doesn't say. */
+  width: number | null;
+  paragraphs: Record<string, WordParagraphLook>;
+  runs: Record<string, WordRunLook>;
+  tables: Record<string, WordTableLook>;
+  cells: Record<string, WordCellLook>;
+}
+
+export interface WordBorder {
+  /** As Word names it: "single", "double"… */
+  style: string;
+  width: number;
+  /** Null for automatic. */
+  color: string | null;
+  space: number;
+}
+
+export interface WordRunLook {
+  font?: string;
+  eastAsia?: string;
+  size?: number;
+  color?: string;
+  /** As Word names it: "yellow"… */
+  highlight?: string;
+  shade?: string;
+  bold?: true;
+  italic?: true;
+  /** As Word names it: "single", "dotted"… */
+  underline?: string;
+  strike?: true;
+  doubleStrike?: true;
+  caps?: true;
+  smallCaps?: true;
+  vertical?: "superscript" | "subscript";
+  letterSpacing?: number;
+  widthPercent?: number;
+  hidden?: true;
+}
+
+export interface WordTabStop {
+  at: number;
+  align: "left" | "center" | "right" | "decimal" | "bar";
+  leader: "none" | "dot" | "hyphen" | "underscore" | "heavy" | "middleDot";
+}
+
+export type WordBorders<Side extends string> = Partial<Record<Side, WordBorder>>;
+
+export interface WordParagraphLook {
+  /**
+   * The run look of the paragraph's text that has no `WORD_RUN_MARK`: the
+   * most common one, or the paragraph mark's when there is no text. Marking
+   * only the text that differs keeps long files quick to open. Never one
+   * that is underlined, struck, highlighted, shaded or raised: drawn on the
+   * paragraph, those would cover text that doesn't have them.
+   */
+  run?: string;
+  /** The paragraph look Enter gives the paragraph after, when the style names another (`w:next`). */
+  next?: string;
+  align?: "left" | "center" | "right" | "justify" | "distribute";
+  left?: number;
+  right?: number;
+  /** Negative for a hanging indent. */
+  firstLine?: number;
+  before?: number;
+  after?: number;
+  /** "auto": a multiple of the font's line height; "exact" and "atLeast": a height. */
+  line?: { rule: "auto" | "exact" | "atLeast"; value: number };
+  /** No space between paragraphs of the same style. */
+  contextual?: true;
+  tabs?: WordTabStop[];
+  shade?: string;
+  borders?: WordBorders<"top" | "bottom" | "left" | "right" | "between">;
+  keepNext?: true;
+  keepLines?: true;
+  pageBreakBefore?: true;
+  widowControl?: boolean;
+}
+
+export interface WordWidth {
+  value: number;
+  unit: "pt" | "percent";
+}
+
+export interface WordTableLook {
+  width?: WordWidth;
+  align?: "left" | "center" | "right";
+  indent?: number;
+  borders?: WordBorders<"top" | "bottom" | "left" | "right" | "insideH" | "insideV">;
+  /** Cell padding, unless a cell has its own. */
+  margins?: Partial<Record<"top" | "bottom" | "left" | "right", number>>;
+  /** Column widths as given, whatever the text in them. */
+  fixed?: true;
+  columns?: number[];
+}
+
+export interface WordCellLook {
+  width?: WordWidth;
+  shade?: string;
+  borders?: WordBorders<"top" | "bottom" | "left" | "right">;
+  vertical?: "top" | "center" | "bottom";
+  margins?: Partial<Record<"top" | "bottom" | "left" | "right", number>>;
+  noWrap?: true;
 }
 
 /**
@@ -2767,7 +2906,6 @@ export interface Examples {
   linkedFolderId: string | null;
   /** The example Answer, written in advance, while the example Mind exists. */
   answerId: string | null;
-  /** The other examples this one's banner offers, in this install's order (random, then kept). */
   more: ExampleGroup[];
 }
 
@@ -3837,6 +3975,23 @@ export interface LeftOutDocument {
   reason: EvidenceExclusion;
 }
 
+/**
+ * How a check worked out a figure the sentence states but the Documents don't
+ * (#707): the figure, calculated from numbers they state (ADR-0021), and the
+ * number the sentence writes for it. They agree to the sentence's rounding,
+ * and the sentence is supported, or they don't, and it is contradicted.
+ */
+export interface ClaimCalculation {
+  figure: CalculatedFigure;
+  /** The number as the sentence writes it: "1.1x". */
+  stated: string;
+  /**
+   * Whether they agree. One that doesn't contradicts the sentence; one that
+   * does settles only that number, and a Passage may still contradict the rest.
+   */
+  agrees: boolean;
+}
+
 /** A password-protected PDF Document, and the password to open it with (#763). */
 export interface UnlockDocumentInput {
   documentId: string;
@@ -3854,13 +4009,16 @@ export type ClaimCheckResult =
       verdict: ClaimVerdict;
       /**
        * For "supported" and "contradicted": the Passage that decides it, as a
-       * Citation whose quote the Citation check found. For "unsupported": null,
-       * or the nearest line when it states another value for the very thing
-       * the sentence says: "the Documents say something different" (#770).
+       * Citation whose quote the Citation check found; for a figure worked out,
+       * its first input's. For "unsupported": null, or the nearest line when it
+       * states another value for the very thing the sentence says: "the
+       * Documents say something different" (#770).
        */
       evidence: Citation | null;
       /** For "supported" and "contradicted": what the Document says, in one plain sentence. */
       says: string | null;
+      /** A figure worked out that decided it; null when a Passage did. */
+      calculation: ClaimCalculation | null;
       /** The versions of the Documents it read, each once. */
       versions: CheckedVersion[];
       excluded: LeftOutDocument[];
@@ -3934,6 +4092,8 @@ export interface ClaimCheckAttributes {
   evidence: CitationAttributes | null;
   /** "supported" and "contradicted": what the Document says, in one plain sentence. */
   says: string | null;
+  /** A figure worked out that decided it; null when a Passage did. */
+  calculation: ClaimCalculation | null;
   scope: ClaimCheckScope;
   versions: CheckedVersion[];
   excluded: LeftOutDocument[];
@@ -7862,6 +8022,8 @@ export interface CoreEvents {
   "examples.changed": Examples;
   /** A Mind's content changed. Clients editing that Mind apply the update to their `Y.Doc`. */
   "mind.update": MindUpdate;
+  /** The assistant is writing changes into a Mind as they come (#202), or has stopped. */
+  "mind.writing": MindWriting;
   /** A Mind's Checkpoints changed: one was saved, kept for good, or thinned out. Read `listCheckpoints` again. */
   "checkpoints.changed": { mindId: string };
   /**

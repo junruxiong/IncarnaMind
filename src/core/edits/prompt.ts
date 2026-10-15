@@ -16,7 +16,8 @@ export const EDIT_INSTRUCTIONS = [
   "The paragraphs it sits in are between <context> and </context>: they are there for meaning only.",
   "When the passage is part of a sentence, the words just before it are between <before> and </before>, and the words just after it between <after> and </after>. They stay as they are.",
   "",
-  "Reply with the new text of the passage and nothing else: no preamble, no explanation, no quotation marks around it, no code fence, no Markdown formatting but the paragraph marks below.",
+  "Reply with the new text of the passage. Then, on a last line of its own, say in a few words what is better now, for the reader, in the passage's language, between <why> and </why>, such as <why>Shorter, with the same facts and sources.</why> Don't mention markers there.",
+  "Nothing else: no preamble, no other explanation, no quotation marks around the text, no code fence, no Markdown formatting but the paragraph marks below.",
   "- The new text must fit between the words before and after it. Never repeat those words in it.",
   "- Keep every Citation marker, such as [1], and every footnote marker, such as [^1], right after the words it belongs to. Never add a marker the passage doesn't have, and never change a marker's number. Leave a marker out only if the words it belongs to are gone.",
   "- Keep each formula written as $…$ exactly as it is.",
@@ -80,6 +81,28 @@ export function editPrompt(input: {
   ].join("\n");
 }
 
+const withoutThinking = (reply: string) => reply.replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, "");
+
+/** The reason the model gives for its change, after the new text. */
+const WHY = /<why>([\s\S]*?)(?:<\/why>|$)/i;
+
+/** The most of a reason kept, in characters: a few words, for the change's bar. */
+const MAX_REASON_CHARACTERS = 160;
+
+/** Why the model changed the passage, as it says in a few words, without markers; null when it doesn't. */
+export function reasonOf(reply: string): string | null {
+  const said =
+    WHY.exec(withoutThinking(reply))?.[1]
+      ?.replace(/\s*\[\^?\d+\]/g, "")
+      .replace(/\s+/g, " ")
+      .trim() ?? "";
+  if (said === "") return null;
+  const characters = [...said];
+  return characters.length > MAX_REASON_CHARACTERS
+    ? `${characters.slice(0, MAX_REASON_CHARACTERS - 1).join("")}…`
+    : said;
+}
+
 const QUOTES: readonly [string, string][] = [
   ['"', '"'],
   ["“", "”"],
@@ -90,13 +113,11 @@ const QUOTES: readonly [string, string][] = [
 /**
  * The passage's new text in the model's reply: without thinking, a code
  * fence, the passage's tags, or quotation marks around all of it that the
- * passage didn't have. Empty when it gave nothing.
+ * passage didn't have, nor the reason for the change. Empty when it gave
+ * nothing.
  */
 export function readEditReply(reply: string, passage: string): string {
-  let text = reply
-    .replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, "")
-    .replace(/\r\n?/g, "\n")
-    .trim();
+  let text = withoutThinking(reply).replace(WHY, "").replace(/\r\n?/g, "\n").trim();
   const fence = /^```[^\n]*\n([\s\S]*?)\n?```$/.exec(text);
   if (fence) text = (fence[1] ?? "").trim();
   const tags = /^<passage>\s*([\s\S]*?)\s*<\/passage>$/.exec(text);
@@ -118,3 +139,24 @@ export function readEditReply(reply: string, passage: string): string {
 /** Two texts that read the same once their spaces are made alike: the model changed nothing. */
 export const sameText = (a: string, b: string) =>
   a.replace(/\s+/g, " ").trim() === b.replace(/\s+/g, " ").trim();
+
+/**
+ * The passage's new text so far, as the model writes it (#202): without
+ * thinking, a code fence's first line or the passage's tag before it, and
+ * up to the reason. Null while that can't be told yet: the model is still
+ * thinking or opening a tag, or it starts with a quotation mark the passage
+ * doesn't, which may go round all of it.
+ */
+export function passageSoFar(reply: string, passage: string): string | null {
+  let text = withoutThinking(reply).replace(/\r\n?/g, "\n").trimStart();
+  if (text.startsWith("```")) {
+    const line = text.indexOf("\n");
+    if (line < 0) return null;
+    text = text.slice(line + 1);
+  }
+  if (text.startsWith("<") && !text.includes(">")) return null;
+  if (text.startsWith("<passage>")) text = text.slice("<passage>".length).trimStart();
+  if (QUOTES.some(([open]) => text.startsWith(open) && !passage.startsWith(open))) return null;
+  const why = text.search(/<why>/i);
+  return why < 0 ? text : text.slice(0, why);
+}

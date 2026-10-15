@@ -23,6 +23,7 @@ const ATTRIBUTES: readonly (keyof ClaimCheckAttributes)[] = [
   "text",
   "evidence",
   "says",
+  "calculation",
   "scope",
   "versions",
   "excluded",
@@ -189,8 +190,9 @@ export function coverageOf(claims: readonly ShownClaim[]): Coverage {
 }
 
 /** Whether two readings of the coverage say the same. */
-export const sameCoverage = (a: Coverage, b: Coverage | null): boolean =>
+export const sameCoverage = (a: Coverage, b: Coverage | null | undefined): boolean =>
   b !== null &&
+  b !== undefined &&
   a.mostlyUncovered === b.mostlyUncovered &&
   a.canWiden === b.canWiden &&
   a.range?.from === b.range?.from &&

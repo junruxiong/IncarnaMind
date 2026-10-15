@@ -323,6 +323,7 @@ export function proposalRequestOf(doc: Y.Doc, request: string): ProposalRequest 
     source,
     ...(action && { action }),
     ...(typeof record.instruction === "string" && { instruction: record.instruction }),
+    ...(isText(record.reason) && { reason: record.reason }),
   };
 }
 

@@ -170,6 +170,10 @@ test("most sentences unsupported says so once; an unsupported card offers its th
   await expect(card.getByTestId("claim-find-sources")).toHaveText("Find sources");
   await expect(card.getByTestId("claim-search-web")).toHaveText("Search the web");
   await expect(card.getByTestId("claim-remove")).toHaveText("Remove the mark");
+  // With web search off (the default) Search the web says why, and where to turn it on.
+  await pointAndClick(window, card.getByTestId("claim-search-web"));
+  await expect(card.getByTestId("claim-web-off")).toContainText("Turn on web search");
+  await expect(card.getByTestId("claim-web-off-settings")).toBeVisible();
   await pointAndClick(window, card.getByTestId("claim-remove"));
   await expect(marks).toHaveCount(1);
   await app.close();

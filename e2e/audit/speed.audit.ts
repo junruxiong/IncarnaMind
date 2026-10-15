@@ -912,11 +912,11 @@ test("B3 2,000 Documents: linking, the sidebar, the Library, Organize, and a war
       record("speed.scale.sidebarHover", await stopHover());
     }
 
-    // Switch the sidebar between Folders and Source locations (re-renders every row). With
-    // Folders in the Library the sidebar opens on Folders: start from Source locations.
+    // Switch the sidebar between Folders and Folders on disk (re-renders every row). With
+    // Folders in the Library the sidebar opens on Folders: start from Folders on disk.
     const views = window.getByTestId("browse-views");
     const folders = views.getByRole("button", { name: "Folders", exact: true });
-    const sources = views.getByRole("button", { name: "Source locations", exact: true });
+    const sources = views.getByRole("button", { name: "Folders on disk", exact: true });
     const sourcesShown = '[data-testid="folder-item"][data-root="true"]';
     if (await folders.count()) {
       if ((await sources.getAttribute("aria-pressed")) !== "true") await click(window, sources);

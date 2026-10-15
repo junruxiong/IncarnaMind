@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { readEditReply, sameText } from "../../src/core/edits/prompt";
+import { passageSoFar, readEditReply, reasonOf, sameText } from "../../src/core/edits/prompt";
 import { diffSteps, hunksOf, splitWords } from "../../src/core/proposals/diff";
 
 /** The hunks of two texts as "old → new" pairs, joining across kept runs of `join` characters or fewer. */
@@ -72,6 +72,31 @@ describe("Reading the model's new text", () => {
     expect(readEditReply('"Tides," she said.', '"Tides," she said, "rise."')).toBe(
       '"Tides," she said.',
     );
+  });
+
+  test("the reason after the new text is read apart from it, without markers, a few words long", () => {
+    const reply = "Tides are strong.\n<why>Shorter, citation [1] kept [^2].</why>";
+    expect(readEditReply(reply, "x")).toBe("Tides are strong.");
+    expect(reasonOf(reply)).toBe("Shorter, citation kept.");
+    expect(reasonOf("```\nTides.\n```\n<why>Clearer.</why>")).toBe("Clearer.");
+    expect(readEditReply("```\nTides.\n```\n<why>Clearer.</why>", "x")).toBe("Tides.");
+    expect(reasonOf("Tides are strong.")).toBeNull();
+    expect([...(reasonOf(`x<why>${"word ".repeat(80)}</why>`) ?? "")]).toHaveLength(160);
+  });
+
+  test("the new text so far is read as it streams: up to the reason, and only once it can be told", () => {
+    expect(passageSoFar("Tides are strong.\n\nThe Moon", "x")).toBe(
+      "Tides are strong.\n\nThe Moon",
+    );
+    expect(passageSoFar("Tides.\n<why>Short", "x")).toBe("Tides.\n");
+    expect(passageSoFar("```text\nTides.", "x")).toBe("Tides.");
+    expect(passageSoFar("```te", "x")).toBeNull();
+    expect(passageSoFar("<passage>\nTides.", "x")).toBe("Tides.");
+    expect(passageSoFar("<pass", "x")).toBeNull();
+    expect(passageSoFar("<think>Hmm, shorter", "x")).toBe("");
+    // A quotation mark the passage doesn't start with may go round all of it: wait for the end.
+    expect(passageSoFar("“Tides are", "Tides are very strong.")).toBeNull();
+    expect(passageSoFar("“Tides are", "“Tides,” she said.")).toBe("“Tides are");
   });
 
   test("a text given back with only its spaces changed is the same", () => {

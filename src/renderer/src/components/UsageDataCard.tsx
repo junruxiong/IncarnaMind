@@ -6,58 +6,35 @@ import { useAppStore } from "../store";
 import { CloseLineIcon } from "./lineIcons";
 import { buttonStyle } from "./ui";
 
-/** Every event and field usage data can hold, for people to read. */
 export const USAGE_DATA_DETAILS_URL =
   "https://github.com/IncarnaMind/IncarnaMind/blob/main/docs/privacy.md#usage-data";
 
-/** What usage data looks like, in words. */
 const EXAMPLES: readonly MessageKey[] = [
   "usageData.example.question",
   "usageData.example.answer",
   "usageData.example.documents",
 ];
 
-/**
- * Usage data (DESIGN.md, First run), in a card at the bottom of the sidebar
- * where Get started was, shown only by a copy that can send it. A release
- * build asks once, when the first Answer to the User's own Question arrives,
- * and sends nothing unless the User chooses Send. A test build says from the
- * first run that it sends usage data, as testers agreed, with the switch to
- * turn it off and a button to hide the notice. Either way the choice lives in
- * Settings → Privacy.
- */
 export function UsageDataCard() {
   const t = useT();
   const gap = useGap();
   const id = useId();
-  const privacy = useAppStore((state) => state.privacy);
-  const ownAnswered = useAppStore(
-    (state) => state.ownAnswerArrived || state.settings?.device.gettingStarted.askedOwn === true,
-  );
+  const usageData = useAppStore((state) => state.privacy?.usageData);
   const [what, setWhat] = useState(false);
-  /** Gone as soon as the User answers, before the core confirms it. */
-  const [answered, setAnswered] = useState(false);
-  /** A test build's notice stays until hidden, even once the switch has been used. */
-  const [kept, setKept] = useState(false);
-  const usageData = privacy?.usageData;
   const tester = usageData?.testerBuild === true;
   const waiting = usageData?.available === true && !usageData.asked && !usageData.localMode;
+  // A test build's notice stays until hidden, even once the switch has been used.
   useEffect(() => {
-    if (tester && waiting) setKept(true);
+    if (tester && waiting) useAppStore.setState({ usageNotice: "kept" });
   }, [tester, waiting]);
-  const shown =
-    usageData?.available === true &&
-    !usageData.localMode &&
-    !answered &&
-    (tester ? waiting || kept : waiting && ownAnswered);
-  if (!usageData || !shown) return null;
+  if (!usageData) return null;
 
   const answer = async (agree: boolean) => {
-    setAnswered(true);
+    useAppStore.setState({ usageNotice: "answered" });
     try {
       await core.updatePrivacySettings({ usageData: agree });
     } catch (failure) {
-      setAnswered(false);
+      useAppStore.setState({ usageNotice: "auto" });
       useAppStore.getState().reportError(failure);
     }
   };
@@ -68,10 +45,7 @@ export function UsageDataCard() {
       useAppStore.getState().reportError(failure);
     }
   };
-  const hide = async () => {
-    setKept(false);
-    await answer(usageData.enabled);
-  };
+  const hide = () => answer(usageData.enabled);
 
   const title = t(tester ? "usageData.card.tester.title" : "usageData.card.title");
   return (

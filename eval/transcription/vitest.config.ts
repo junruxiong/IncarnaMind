@@ -1,5 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
+import { HOME_GUARD } from "../../vitest.config";
+import { evalCache } from "../lib/cache";
 
 /**
  * `npm run eval:transcription` (eval/transcription/README.md): the real
@@ -11,6 +13,8 @@ export default defineConfig({
   test: {
     include: ["eval/transcription/**/*.transcription.ts"],
     environment: "node",
+    setupFiles: [HOME_GUARD],
+    env: { INCARNAMIND_EVAL_CACHE: evalCache() },
     disableConsoleIntercept: true,
     reporters: [["default", { summary: false }]],
     // Loading the model, then each language's stream at the pace it was spoken.

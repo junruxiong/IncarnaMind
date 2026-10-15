@@ -4,14 +4,14 @@
  * from OPENAI_API_KEY and the like, so a key set for other tools can't make a
  * run spend money by accident.
  */
-import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import {
   type ChatProviderKind,
   type CitationSupport,
   chatProviderKinds,
   type RerankingModelDefinition,
 } from "../../src/core";
+import { evalCache } from "./cache";
 import { RERANKING_MODEL_CANDIDATES } from "./rerankingModels";
 
 /** The chat model the Citation part asks Questions with. */
@@ -272,7 +272,7 @@ function dumpSets(env: Env): DumpSet[] {
 export function readConfig(root: string, env: Env = process.env): EvalConfig {
   return {
     root,
-    cacheDir: resolve(value(env, "CACHE") ?? join(homedir(), ".cache", "incarnamind-eval")),
+    cacheDir: evalCache(env),
     resultsDir: join(root, "eval", "results"),
     keepData: value(env, "KEEP_DATA") === "1",
     chat: chatSettings(env),

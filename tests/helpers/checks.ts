@@ -15,6 +15,16 @@ export interface Plan {
   reply?: ScriptedReply;
   /** What it says when asked to confirm a contradiction it found. */
   judgement?: "conflict" | "same" | "neither";
+  /**
+   * A figure it works out with calculate before its verdict (#707), each
+   * input from the Passage that holds its quote, as marker 1.
+   */
+  calculation?: {
+    inputs: { name: string; label: string; quote: string; number: string }[];
+    formula: string;
+    as?: string;
+    stated: string;
+  };
 }
 
 const SENTENCE = /<sentence>\n([\s\S]*?)\n<\/sentence>/;
@@ -60,11 +70,32 @@ export function checkingModel(
         return { calls: [{ tool: "search_documents", input: { query: sentenceOf(call) } }] };
       }
       if (plan.reply) return plan.reply;
+      const shown = shownPassages(searches.at(-1)?.text ?? "");
+      const { calculation } = plan;
+      if (calculation && !call.results.some((result) => result.tool === "calculate")) {
+        const { inputs, ...figure } = calculation;
+        const passageOf = (quote: string) => shown.find((each) => each.text.includes(quote))?.id;
+        return {
+          calls: [
+            {
+              tool: "calculate",
+              input: {
+                figures: [
+                  {
+                    marker: 1,
+                    label: "The sentence's figure",
+                    ...figure,
+                    inputs: inputs.map((input) => ({ ...input, passage: passageOf(input.quote) })),
+                  },
+                ],
+              },
+            },
+          ],
+        };
+      }
       const { quote } = plan;
       if (quote && !call.results.some((result) => result.tool === "cite")) {
-        const passage =
-          shownPassages(searches.at(-1)?.text ?? "").find((each) => each.text.includes(quote)) ??
-          shownPassages(searches.at(-1)?.text ?? "")[0];
+        const passage = shown.find((each) => each.text.includes(quote)) ?? shown[0];
         return {
           calls: [
             { tool: "cite", input: { citations: [{ marker: 1, passage: passage?.id, quote }] } },

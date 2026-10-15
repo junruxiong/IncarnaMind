@@ -48,11 +48,27 @@ const QUOTE =
 
 const RECORD = `the Passage's id, where the quote is as the Passage names it (its pages or location, and marks like [p. 4], [slide 4], [§ 2.1 Sensitivity], [Revenue, rows 2–41] or [lines 51–100]), and ${QUOTE}`;
 
-/** The instructions of a check Run, for a way of citing; `passages`: what the one search found, for a model without Tools. */
+/**
+ * What a model offered `calculate` is told of a figure the sentence states
+ * that no Passage does (#707): IncarnaMind works it out and compares.
+ */
+const CALCULATE = [
+  "A figure the sentence states that no Passage states, but that numbers in the Passages give (a ratio, a growth rate or other change, a share, a sum or a difference), isn't judged in your head:",
+  "- find the numbers it comes from, for the same thing, period and units as the sentence;",
+  '- call calculate with one figure, marker 1: its inputs, a formula that gives the figure as the sentence states it (for "fell 5%", the fall: (a - b) / a), and stated, the number as the sentence writes it ("1.1x");',
+  "- IncarnaMind works it out and compares it with the sentence's number, to its rounding. Then reply as below.",
+].join("\n");
+
+/**
+ * The instructions of a check Run, for a way of citing; `passages`: what the
+ * one search found, for a model without Tools; `calculate`: the model is
+ * offered `calculate`, for a figure no Passage states.
+ */
 export function checkInstructions(
   mode: CitationSupport | "no-documents",
   language: Language,
   passages = "",
+  calculate = false,
 ): string {
   const REPLY = reply(language);
   switch (mode) {
@@ -62,6 +78,7 @@ export function checkInstructions(
         "",
         "Search the Documents with search_documents for what the sentence claims, in the Documents' language. Search again with other words if the Passages don't decide it; three searches at most.",
         `For supported or contradicted, before you reply call cite once with one record, marker 1: ${RECORD}.`,
+        ...(calculate ? ["", CALCULATE] : []),
         "",
         REPLY,
       ].join("\n");
@@ -215,7 +232,7 @@ export interface ReadVerdict {
   says: string | null;
 }
 
-const MARKERS = /\s*\[\^?\d{1,4}\]/g;
+const MARKERS = /\s*\[[\^=]?\d{1,4}\]/g;
 const THINKING = /<think>[\s\S]*?(?:<\/think>|$)/gi;
 /** "Verdict: supported", in bold or quoted too, on a line of its own. */
 const LABELLED =

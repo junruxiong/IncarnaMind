@@ -1,6 +1,6 @@
 /**
  * `npm run eval:word:fetch` (eval/word/README.md): puts the extended set in a cache folder,
- * `INCARNAMIND_WORD_CACHE` or ~/.cache/incarnamind-eval/word-extended.
+ * `INCARNAMIND_WORD_CACHE` or `word-extended` in the evaluation's cache (~/.cache/incarnamind-eval).
  *
  * - Real files are downloaded from the commit-pinned URL in extended.json and checked against
  *   their SHA-256. One that doesn't match is not kept: the run fails and says which.
@@ -24,9 +24,14 @@ interface Entry {
 }
 
 const here = dirname(fileURLToPath(import.meta.url));
+// The folder eval/lib/cache.ts names: plain Node runs this script, and can't import a .ts file
+// without the extension, which TypeScript doesn't allow here.
 const cache =
   process.env.INCARNAMIND_WORD_CACHE ??
-  join(homedir(), ".cache", "incarnamind-eval", "word-extended");
+  join(
+    process.env.INCARNAMIND_EVAL_CACHE?.trim() || join(homedir(), ".cache", "incarnamind-eval"),
+    "word-extended",
+  );
 const entries = JSON.parse(readFileSync(join(here, "extended.json"), "utf8")) as Entry[];
 const sha256 = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 

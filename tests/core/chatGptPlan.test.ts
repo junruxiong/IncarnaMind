@@ -6,7 +6,6 @@ import {
   ChatNotReadyError,
   ConsentDeclinedError,
   type Core,
-  type CoreAdapters,
   type CoreEventName,
   type CoreEvents,
   createAiSdkChatModel,
@@ -36,6 +35,7 @@ import {
   nextEvent,
   saveProviderUnasked,
   startCore,
+  type TestAdapters,
 } from "../helpers/core";
 
 const CHATGPT_SERVICE = { id: "chatgpt-plan", name: "ChatGPT" };
@@ -51,7 +51,7 @@ interface Setup {
 }
 
 /** A core whose ChatGPT plan provider talks to a fresh fake OpenAI through the real adapter. */
-async function setUp(overrides: Partial<CoreAdapters> = {}): Promise<Setup> {
+async function setUp(overrides: TestAdapters = {}): Promise<Setup> {
   const clock = manualClock();
   const fake = await startFakeOpenAI({ now: () => clock.now().getTime() });
   const browser = createFakeBrowser(fake);
@@ -73,7 +73,7 @@ function acceptConsentAutomatically(core: Core): void {
 }
 
 /** Signs in, accepts the chat flow and makes the plan the default chat model. */
-async function signedIn(overrides: Partial<CoreAdapters> = {}): Promise<Setup> {
+async function signedIn(overrides: TestAdapters = {}): Promise<Setup> {
   const setup = await setUp(overrides);
   const result = await setup.core.signInToChatGpt();
   expect(result.ok).toBe(true);

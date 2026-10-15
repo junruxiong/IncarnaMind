@@ -40,6 +40,7 @@ import {
   wordImportDone,
   wordOriginOf,
 } from "../shared/wordFiles";
+import { setWordLook, wordLookOf } from "../shared/wordLook";
 import type { Logger } from "./adapters";
 import { createElement } from "./answers/blocks";
 import {
@@ -53,6 +54,7 @@ import {
   type WordRefusalReason,
 } from "./api";
 import { readWordStructure, type WordStructure } from "./documents/formats/docxImport";
+import { WORD_LOOK_VERSION } from "./documents/formats/docxLook";
 import {
   openWordPackage,
   refusalOf,
@@ -60,10 +62,11 @@ import {
   type WordReview,
 } from "./documents/formats/docxPackage";
 import { packageSizeError } from "./documents/formats/zip";
-import { InvalidInputError, isRecord } from "./errors";
+import { InvalidInputError, isRecord, MindReadOnlyError } from "./errors";
 import type { MindContent } from "./mindContent";
 import { type createMinds, parseFolderChoice } from "./minds";
 import type { Database } from "./storage";
+import { applyLook, clearLook, type LookPlan, planLook } from "./wordLookBackfill";
 
 /** The folder in the data folder that keeps imported Word packages. */
 export const WORD_PACKAGES_FOLDER = "Word imports";
@@ -374,9 +377,19 @@ export function createWordImports(options: WordImportsOptions) {
           const made = minds.create({ title, kind: DEFAULT_MIND_KIND, folderId });
           db.run(
             `INSERT INTO word_packages (id, mind_id, sha256, file_name, size, document_id,
-               created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [randomUUID(), made.id, sha256, fileName, bytes.byteLength, documentId, at, at],
+               look_version, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+              randomUUID(),
+              made.id,
+              sha256,
+              fileName,
+              bytes.byteLength,
+              documentId,
+              WORD_LOOK_VERSION,
+              at,
+              at,
+            ],
           );
           return made;
         });
@@ -392,8 +405,12 @@ export function createWordImports(options: WordImportsOptions) {
             structure.report,
             structure.blocks.length,
           );
+          setWordLook(blocks.doc, structure.look);
         }
       });
+      if (structure.lookUnreadable.length > 0) {
+        log.warn("word.look.partsUnreadable", { parts: structure.lookUnreadable.join(", ") });
+      }
       log.info("word.import.started", {
         blocks: structure.blocks.length,
         paragraphs: structure.report.paragraphs,
@@ -499,6 +516,76 @@ export function createWordImports(options: WordImportsOptions) {
         ...(row.document_id !== null && { documentIds: [row.document_id] }),
         contentHashes: [row.sha256],
       };
+    },
+
+    /** Not an Undo step: it is the core's change, and the editor undoes only its own. */
+    async addLooks(): Promise<void> {
+      const imported = db.all<{ id: string; mind_id: string; sha256: string }>(
+        `SELECT p.id, p.mind_id, p.sha256 FROM word_packages p JOIN minds m ON m.id = p.mind_id
+         WHERE p.completed_at IS NOT NULL AND p.deleted_at IS NULL AND m.deleted_at IS NULL
+           AND (p.look_version IS NULL OR p.look_version < ?)
+         ORDER BY p.created_at, p.rowid`,
+        [WORD_LOOK_VERSION],
+      );
+      const recorded = (rowId: string) =>
+        db.run("UPDATE word_packages SET look_version = ?, updated_at = ? WHERE id = ?", [
+          WORD_LOOK_VERSION,
+          options.now(),
+          rowId,
+        ]);
+      for (const { id: rowId, mind_id: mindId, sha256 } of imported) {
+        if (closed) return;
+        // Yields between Minds so start-up work isn't held up.
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        try {
+          let bytes: Uint8Array;
+          try {
+            if (!/^[0-9a-f]{64}$/.test(sha256)) throw new Error("No package.");
+            bytes = await readFile(packagePath(sha256));
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+            log.info("word.look.packageMissing", { mindId });
+            continue;
+          }
+          const pkg = await openWordPackage(bytes);
+          const structure = await readWordStructure(pkg, await reviewOf(pkg));
+          if (closed) return;
+          const wasLoaded = content.isLoaded(mindId);
+          let plan: LookPlan | null;
+          try {
+            // Planned inside the edit so it applies to the content it was planned on.
+            plan = content.edit(mindId, (blocks) => {
+              const doc = blocks.doc;
+              if (!doc) return null;
+              const look = wordLookOf(doc);
+              if (look && look.version >= WORD_LOOK_VERSION) return null;
+              if (look) clearLook(doc, blocks);
+              const planned = planLook(doc, blocks, structure);
+              applyLook(doc, planned);
+              setWordLook(doc, structure.look);
+              return planned;
+            });
+          } finally {
+            if (!wasLoaded) content.close(mindId);
+          }
+          recorded(rowId);
+          if (plan) {
+            log.info("word.look.added", {
+              mindId,
+              given: plan.given,
+              editedSinceImport: plan.editedSinceImport,
+            });
+          }
+        } catch (error) {
+          if (error instanceof MindReadOnlyError) continue;
+          log.error("word.look.failed", {
+            mindId,
+            error: error instanceof Error ? error.name : "unknown",
+            message: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+      log.info("word.look.done", { minds: imported.length });
     },
 
     /** Stops writing Blocks: each import goes on from where it got to at the next start. */

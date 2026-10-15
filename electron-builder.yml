@@ -10,9 +10,6 @@ productName: IncarnaMind
 
 directories:
   output: dist
-  # TODO(icon): there's no app icon in the repo yet, so builds use Electron's default icon.
-  # Add a 1024x1024 build/icon.png: electron-builder derives the macOS .icns, Windows .ico
-  # and Linux icons from it.
   buildResources: build
 
 # Only the bundled app goes in. The production dependencies in node_modules are added
@@ -54,7 +51,8 @@ extraResources:
     filter:
       - "**/*"
   # The licence notices: what the model catalog is generated from (scripts/catalogModels.ts),
-  # and the citation-style engine's crates and the CSL styles and locales.
+  # the citation-style engine's crates and the CSL styles and locales, and the Speex code the
+  # Meetings echo canceller is derived from.
   - from: resources/notices
     to: notices
     filter:
@@ -80,14 +78,23 @@ artifactName: ${productName}-${version}-${os}-${arch}.${ext}
 
 mac:
   category: public.app-category.productivity
+  # The app icon, written by `npm run icons`. macOS 26 shows the Icon Composer icon compiled
+  # into Assets.car (below), in Default and Dark, cut to the system's shape; icon.icns, which
+  # has the 16 and 32 px drawings, is the fallback and the dmg's volume icon. electron-builder
+  # could compile build/icon/AppIcon.icon itself, but would then scale its .icns from the
+  # master, and every Mac that packages would need Xcode 26.
+  icon: build/icon/icon.icns
   # Meetings (ADR-0015): what macOS says when IncarnaMind first asks to record, in English here
   # and in Chinese from zh_CN.lproj (tests/main/meetingPermissions.test.ts checks both).
   extendInfo:
     NSMicrophoneUsageDescription: "When you record a meeting, IncarnaMind records your microphone. The audio stays on this Mac."
     NSAudioCaptureUsageDescription: "When you record a meeting, IncarnaMind records the computer's sound: the other people in the meeting. The audio stays on this Mac."
+    CFBundleIconName: AppIcon
   extraResources:
     - from: build/zh_CN.lproj
       to: zh_CN.lproj
+    - from: build/icon/Assets.car
+      to: Assets.car
   # electron-builder's default entitlements, and the microphone, which a hardened-runtime build
   # can't open without it.
   entitlements: build/entitlements.mac.plist
@@ -116,6 +123,7 @@ dmg:
   writeUpdateInfo: false
 
 win:
+  icon: build/icon/icon.ico
   files:
     - out/**/*
     - "!**/node_modules/**/*.map"
@@ -136,6 +144,8 @@ nsis:
 
 linux:
   category: Office
+  # electron-builder reads each PNG's size from its name (16x16.png).
+  icon: build/icon/png
   files:
     - out/**/*
     - "!**/node_modules/**/*.map"

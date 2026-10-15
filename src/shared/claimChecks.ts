@@ -5,8 +5,10 @@
  * that have changed since needs a re-check.
  */
 import {
+  type CalculatedFigure,
   type CheckedVersion,
   type CitationAttributes,
+  type ClaimCalculation,
   type ClaimCheckAction,
   type ClaimCheckAttributes,
   type ClaimCheckFailure,
@@ -67,6 +69,20 @@ function excludedOf(value: unknown): LeftOutDocument[] {
   });
 }
 
+/** A figure worked out that decided a check (#707), as its mark keeps it. */
+function calculationOf(value: unknown): ClaimCalculation | null {
+  if (!isRecord(value) || !isRecord(value.figure)) return null;
+  const stated = text(value.stated);
+  const { figure } = value;
+  if (stated === null || !Array.isArray(figure.inputs) || typeof figure.shown !== "string")
+    return null;
+  return {
+    figure: figure as unknown as CalculatedFigure,
+    stated,
+    agrees: value.agrees === true,
+  };
+}
+
 function scopeOf(value: unknown): ClaimCheckScope {
   if (!isRecord(value)) return { folderId: null, widened: false };
   return { folderId: text(value.folderId), widened: value.widened === true };
@@ -90,6 +106,7 @@ export function readClaimCheck(value: unknown): ClaimCheckAttributes | null {
     text: text(value.text) ?? "",
     evidence: isRecord(value.evidence) ? (value.evidence as unknown as CitationAttributes) : null,
     says: text(value.says),
+    calculation: calculationOf(value.calculation),
     scope: scopeOf(value.scope),
     versions: versionsOf(value.versions),
     excluded: excludedOf(value.excluded),

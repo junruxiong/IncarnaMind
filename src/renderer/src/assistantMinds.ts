@@ -1,7 +1,7 @@
 /**
  * A Mind the assistant makes (#202) opens in the window whose Question asked
  * for it: in a new tab beside the focused one, as Add to note's New Mind does,
- * once the call that made it has ended. Other windows showing the same
+ * as soon as the call that makes it has made it. Other windows showing the same
  * conversation leave their tabs as they are.
  */
 import { core } from "./core";
@@ -20,7 +20,9 @@ export function watchMindsMadeBy(answerId: string): void {
 core.on("conversation.message", (message) => {
   if (message.kind !== "answer" || !askedHere.has(message.id)) return;
   for (const call of message.toolCalls) {
-    const made = call.status === "done" && call.mindChange?.created ? call.mindChange.mindId : null;
+    // As soon as it is made: its text may still be coming in (#202).
+    const made =
+      call.status !== "failed" && call.mindChange?.created ? call.mindChange.mindId : null;
     if (!made || opened.has(made)) continue;
     opened.add(made);
     useAppStore

@@ -62,13 +62,11 @@ Windows 版将通过 SignPath Foundation 为开源项目提供的免费签名服
 
 **查找和添加资料。** 在 OpenAlex、arXiv 和 PubMed 里搜索论文，开放获取的直接添加为文档；输入网址保存网页，像文件一样引用和核对；还能从 Zotero 或任何 CSL JSON、BibTeX、RIS 文件导入引用信息。
 
-**AI 帮你写，改不改由你定。** 选中文字，选“用 AI 编辑…”，改动以修订的形式回来，由你接受或拒绝。开启写作建议后，你停下来时会出现灰色的续写，只在你的文档支持时出现，并且总带着引用；按 Tab 采纳。
+**AI 帮你写，改不改由你定。** 告诉助手要改什么（“把摘要缩短”“把今天的决定加到项目计划里”“把这些论文整理成一篇新笔记”），它就直接修改 Mind，或新建一个 Mind，边写边一段段出现，每处改动都以修订的形式等你接受或拒绝；提问仍然得到回答。也可以选中文字，选“用 AI 编辑…”，每处修订都会说明为什么这样改。开启写作建议后，你停下来时会出现灰色的续写，只在你的文档支持时出现，并且总带着引用；按 Tab 采纳。
 
 **文档再多也不乱。** 标签会自动添加，IncarnaMind 还会给每个文档推荐文件夹，由你确认；你自己做的选择都会保留。
 
 **模型由你来选。** 可以用你自己的 OpenAI、Anthropic、Google、DeepSeek、通义千问、硅基流动、OpenRouter 密钥，还有更多可选，例如 Kimi、智谱 GLM、Mistral、xAI，或任何兼容 OpenAI 接口的服务。已经订阅了 ChatGPT Plus 或 Pro，也可以使用 ChatGPT 登录，直接用订阅提问。
-
-**在你已经在用的 AI 智能体里提问**（实验功能，默认关闭）。在**设置 → 智能体**里连接 Claude、Codex、Cursor 等，用的是它们自己的订阅：它们只能读你选定的文件夹，从 IncarnaMind 拿到的每条引文都经过核对；它们读到的内容会按其服务条款发给它们的 AI 服务。[各个智能体的连接方法](docs/agents.zh-CN.md)。
 
 **写完就能交。** 把 Mind 导出为 Word 或 Markdown，引用和参考文献按你选的引用格式排好：APA、MLA、Chicago、Harvard、IEEE、Vancouver、GB/T 7714，或 IncarnaMind 自己的编号格式。没通过核对的引用会标上“[未核实]”。也可以把 Word 文件打开成 Mind，再导出回同一个文件：没改动的部分原样保留，你的修改可以作为修订写回去。
 
@@ -90,7 +88,7 @@ Windows 版将通过 SignPath Foundation 为开源项目提供的免费签名服
 <summary><b>常见问题</b></summary>
 
 - **要花钱吗？** 不用。IncarnaMind 开源免费（Apache 2.0 许可证）。AI 模型由它的提供商收费：用你自己的 API 密钥按用量付费，或用你已有的 ChatGPT 订阅。
-- **一定要有 API 密钥吗？** 需要一个 AI 模型，最省事的是填一个 DeepSeek 密钥（设置里有“如何获取？”）。也可以填通义千问、硅基流动、OpenAI、Anthropic、Google、OpenRouter 的密钥；“设置”中还有更多提供商，例如 Kimi、智谱 GLM、Mistral、xAI，或任何兼容 OpenAI 接口的服务。订阅了 ChatGPT Plus 或 Pro，可以使用 ChatGPT 登录；订阅了 Claude，可以在**设置 → 智能体**里连接 Claude 应用（实验功能），在 Claude 里问你的文档。
+- **一定要有 API 密钥吗？** 需要一个 AI 模型，最省事的是填一个 DeepSeek 密钥（设置里有“如何获取？”）。也可以填通义千问、硅基流动、OpenAI、Anthropic、Google、OpenRouter 的密钥；“设置”中还有更多提供商，例如 Kimi、智谱 GLM、Mistral、xAI，或任何兼容 OpenAI 接口的服务。订阅了 ChatGPT Plus 或 Pro，可以使用 ChatGPT 登录。
 - **是 NotebookLM（现名 Gemini Notebook）的替代品吗？** 是。IncarnaMind 在你的电脑上运行，文件在原处读取，不需要账号；模型由你来选（你自己的密钥或 ChatGPT 订阅）；每条引用都和原文所在页逐一核对，你自己写的句子也能核对；Mind 还能导出为带引用的 Word。
 - **能用我的 ChatGPT 订阅吗？** 能，需要 ChatGPT Plus 或 Pro。在**设置 → 模型**里选**使用 ChatGPT 继续**，在浏览器里完成登录即可：之后的提问会以你的账号发给 OpenAI，计入订阅的用量上限，不需要密钥。
 - **能离线用吗？** 读取文件和搜索可以离线。回答和核对需要 AI 模型，大多数人要联网。通过 [Ollama](https://ollama.com) 运行的本地模型可以离线回答，但比云端模型慢，也没那么可靠。按含义搜索（嵌入）是可选功能，默认关闭。
@@ -102,7 +100,7 @@ Windows 版将通过 SignPath Foundation 为开源项目提供的免费签名服
 
 ## 即将推出
 
-下面是计划中的功能，现在还不能用，也没有具体日期（见[路线图](https://github.com/IncarnaMind/IncarnaMind/issues/74)）：会议进行中直接提问，回答引用实时转写；助手直接修改你的 Mind，每处修改都等你接受；在审阅栏里逐条查看别人在 Word 文件里的修订；在后台运行的研究任务。
+下面是计划中的功能，现在还不能用，也没有具体日期（见[路线图](https://github.com/IncarnaMind/IncarnaMind/issues/74)）：会议进行中直接提问，回答引用实时转写；在审阅栏里逐条查看别人在 Word 文件里的修订；在后台运行的研究任务。
 
 ## 参与贡献
 

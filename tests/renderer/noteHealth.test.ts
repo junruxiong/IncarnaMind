@@ -46,6 +46,7 @@ function checked(
     text: sentence,
     evidence: null,
     says: null,
+    calculation: null,
     scope: { folderId: null, widened: false },
     versions: [],
     excluded: [],

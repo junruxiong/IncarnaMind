@@ -7,7 +7,7 @@
  * check's matcher.
  */
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { homedir, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "vitest";
@@ -17,14 +17,13 @@ import { createOnnxTextRecognizer } from "../../src/core/documents/scan/onnx";
 import { downloadModel, isModelDownloaded } from "../../src/core/embedding/download";
 import { findQuote } from "../../src/shared/quoteMatch";
 import { buildPdf } from "../../tests/helpers/pdf";
+import { evalCache } from "../lib/cache";
 import { createLog } from "../lib/log";
 import { quotesOf, type SetPage } from "./lib/score";
 
 const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const setDir = join(root, "tests/fixtures/scans");
-const cacheDir = resolve(
-  process.env.INCARNAMIND_EVAL_CACHE ?? join(homedir(), ".cache", "incarnamind-eval"),
-);
+const cacheDir = evalCache();
 const wanted = process.env.INCARNAMIND_OCR_ENGINES?.split(",").map((each) => each.trim());
 
 test.runIf(!wanted || wanted.includes("pipeline"))(

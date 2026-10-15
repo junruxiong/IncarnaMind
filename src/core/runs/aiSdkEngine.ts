@@ -396,10 +396,27 @@ async function* run(request: RunRequest): AsyncGenerator<RunEvent> {
 
   let produced = false;
   const reasoning = reasoningReader();
+  /** Inputs being written, by call: their Tool, and their JSON text so far. */
+  const inputs = new Map<string, { tool: RunTool; text: string }>();
   try {
     for await (const part of result.fullStream) {
       if (signal.aborted || part.type === "abort") return;
       switch (part.type) {
+        case "tool-input-start": {
+          const tool = request.tools.find((each) => each.name === part.toolName);
+          if (!tool?.streamInput || !request.streamsInput?.(tool.name)) break;
+          produced = true;
+          inputs.set(part.id, { tool, text: "" });
+          yield { type: "tool-input-started", id: part.id, tool: part.toolName };
+          break;
+        }
+        case "tool-input-delta": {
+          const input = inputs.get(part.id);
+          if (!input) break;
+          input.text += part.delta;
+          input.tool.streamInput?.(part.id, input.text);
+          break;
+        }
         case "text-delta":
           if (!part.text) break;
           produced = true;

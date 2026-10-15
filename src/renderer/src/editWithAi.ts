@@ -28,6 +28,7 @@ import {
   pendingIn,
   resolveInEditor,
   setEditTarget,
+  watchMovedOn,
 } from "./editor/proposalReview";
 import { errorMessage } from "./errors";
 import { translateNow } from "./i18n";
@@ -176,7 +177,7 @@ export async function requestEdit(
       editor.state.tr.setSelection(TextSelection.create(editor.state.doc, selection.range.to)),
     );
   }
-  const caret = editor.state.selection.head;
+  const watch = watchMovedOn(editor);
 
   let result: EditWithAiResult;
   try {
@@ -193,14 +194,15 @@ export async function requestEdit(
   } catch (error) {
     result = failure(error);
   }
-  await arrived(editor, mindId, requestId, caret, result, () =>
+  watch.stop();
+  await arrived(editor, mindId, requestId, watch.movedOn(), result, () =>
     requestEdit(editor, mindId, doc, action, instruction, range ?? selection.range),
   );
 }
 
 /**
- * What a request gave, once it is back: the Proposals take the cursor, if it
- * is still where it was (or at the end of the text worked on), so their bar
+ * What a request gave, once it is back: the Proposals take the cursor,
+ * unless the User has moved it or edited meanwhile (`movedOn`), so their bar
  * shows, and a screen reader hears how many came and how many are out of
  * date; anything else is one line in the composer, `retry` trying again.
  */
@@ -208,7 +210,7 @@ async function arrived(
   editor: Editor,
   mindId: string,
   requestId: string,
-  caret: number,
+  movedOn: boolean,
   result: EditWithAiResult,
   retry: () => Promise<void>,
 ): Promise<void> {
@@ -221,7 +223,6 @@ async function arrived(
     return;
   }
   set("pending", mindId, null);
-  const target = editor.isDestroyed ? null : editTarget(editor.state);
   if (!editor.isDestroyed) setEditTarget(editor, null);
 
   if (result.kind === "proposed") {
@@ -238,8 +239,7 @@ async function arrived(
           : t("proposal.arrived.outOfDate", { count: result.outOfDate });
     speak(mindId, stale ? `${count} ${stale}` : count);
     // Into the first change, unless the User has moved on meanwhile.
-    const { selection: at } = editor.state;
-    if (first && !editor.isDestroyed && at.empty && (at.head === caret || at.head === target?.to)) {
+    if (first && !editor.isDestroyed && editor.state.selection.empty && !movedOn) {
       const pos = first.block ? first.from + 1 : first.from;
       editor
         .chain()
@@ -294,7 +294,7 @@ export async function regenerateChange(
     language: action === "translate" ? (made.instruction ?? null) : null,
   });
   setEditTarget(editor, { from: proposal.from, to: proposal.to });
-  const caret = editor.state.selection.head;
+  const watch = watchMovedOn(editor);
   let result: EditWithAiResult;
   try {
     result = await core.regenerateProposal({
@@ -306,7 +306,8 @@ export async function regenerateChange(
   } catch (error) {
     result = failure(error);
   }
-  await arrived(editor, mindId, requestId, caret, result, async () => {
+  watch.stop();
+  await arrived(editor, mindId, requestId, watch.movedOn(), result, async () => {
     const still = pendingIn(editor.state).find((each) => each.id === proposal.id);
     if (still) await regenerateChange(editor, mindId, doc, still);
   });

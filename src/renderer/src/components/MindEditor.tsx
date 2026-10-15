@@ -5,8 +5,8 @@ import { Selection } from "@tiptap/pm/state";
 import { EditorContent, ReactNodeViewRenderer, useEditor, useEditorState } from "@tiptap/react";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import * as Y from "yjs";
-import { ANSWER_BLOCK, MIND_CONTENT_FIELD, type MindAccess } from "../../../core/api";
+import type * as Y from "yjs";
+import { ANSWER_BLOCK, MIND_CONTENT_FIELD } from "../../../core/api";
 import { writingTime } from "../../../shared/blockTimes";
 import { citationStyle } from "../../../shared/citationStyles";
 import { translate } from "../../../shared/i18n";
@@ -76,12 +76,15 @@ import { useVerification, VerifyLine } from "../editor/VerifyLine";
 import { wordAtomView, wordBlockView } from "../editor/WordAtomView";
 import { WordCount } from "../editor/WordCount";
 import { OriginalNotAdded, useWordFile, WordOrigin } from "../editor/WordOrigin";
+import { setWritingPlace, WritingPlace } from "../editor/writingPlace";
 import { requestEdit, startEditing, TRANSLATE_LANGUAGES } from "../editWithAi";
 import { translateNow, useT } from "../i18n";
 import { markSelectionAsMine } from "../markAsMine";
 import { useMeetingOf, useMeetings } from "../meetings";
+import { type OpenedCopy, openMindCopy } from "../mindCopies";
 import { isWritingIn } from "../mindStatus";
 import { useMindTools } from "../mindTools";
+import { onMindWriting, writingPlaceOf } from "../mindWriting";
 import { skillDescription } from "../skills";
 import { useAppStore } from "../store";
 import { askForSuggestion, describeSuggestion } from "../suggestions";
@@ -93,62 +96,23 @@ import { MindNotice } from "./MindNotice";
 /** Stands in for the hint's button in its translated words, which are split around it. */
 const ASK = "\uE000";
 
-/** Marks changes that came from the core, so they aren't sent back to it. */
-const FROM_CORE = Symbol("from the core");
-
-interface OpenedDocument {
-  access: MindAccess;
-  /** Null when the Mind isn't shown in the editor ("update-required"). */
-  doc: Y.Doc | null;
-}
-
 /**
- * A local copy of the Mind's Yjs document, kept in step with the core's: it
- * starts from the core's full state, sends every local change to the core, and
- * applies the changes the core pushes. Null until the state has arrived.
+ * A local copy of the Mind's Yjs document, kept in step with the core's
+ * (../mindCopies). Null until the state has arrived.
  *
  * A Mind the core opens read-only (a newer version wrote it) is only a copy to
  * look at: the editor's binding deletes what its schema doesn't know from the
  * copy, and nothing is ever sent from it.
  */
-function useMindDocument(mindId: string): OpenedDocument | null {
-  const [opened, setOpened] = useState<OpenedDocument | null>(null);
+function useMindDocument(mindId: string): OpenedCopy | null {
+  const [opened, setOpened] = useState<OpenedCopy | null>(null);
   const reportError = useAppStore((state) => state.reportError);
 
   useEffect(() => {
-    const local = new Y.Doc();
-    let active = true;
-    let editable = false;
-    // Listen before opening, so nothing pushed in between is missed. Yjs merges in any order.
-    const stopListening = core.on("mind.update", ({ mindId: changed, update }) => {
-      if (changed === mindId) Y.applyUpdate(local, update, FROM_CORE);
-    });
-    const send = (update: Uint8Array, origin: unknown) => {
-      if (origin !== FROM_CORE && editable) core.applyMindUpdate(mindId, update).catch(reportError);
-    };
-    local.on("update", send);
-    core.openMind(mindId).then(
-      ({ state, access }) => {
-        if (!active) return;
-        if (access === "update-required") {
-          setOpened({ access, doc: null });
-          return;
-        }
-        editable = access === "edit";
-        Y.applyUpdate(local, state, FROM_CORE);
-        setOpened({ access, doc: local });
-      },
-      (error: unknown) => {
-        if (active) reportError(error);
-      },
-    );
-
+    const close = openMindCopy(mindId, setOpened, reportError);
     return () => {
-      active = false;
-      stopListening();
-      local.off("update", send);
+      close();
       setOpened(null);
-      core.closeMind(mindId).catch(() => undefined);
     };
   }, [mindId, reportError]);
 
@@ -404,6 +368,7 @@ function MindEditorView({
         }),
         QuestionFold.configure({ mindId }),
         ProposalReview.configure({ translate: translateNow }),
+        WritingPlace.configure({ label: () => translateNow("mind.writing") }),
         Suggestions.configure({
           request: (request) => askForSuggestion(mindId, doc, request),
           cancel: (requestId) =>
@@ -590,6 +555,22 @@ function MindEditorView({
       if (useComposer.getState().seat?.mindId === mindId) useComposer.setState({ seat: null });
     };
   }, [asksHere, editor, doc, mindId]);
+
+  // The assistant writing changes into this Mind as they come (#202): "Writing…" where the next goes.
+  useEffect(() => {
+    setWritingPlace(editor, writingPlaceOf(mindId));
+    return onMindWriting(({ mindId: changed, place }) => {
+      if (changed === mindId) setWritingPlace(editor, place);
+    });
+  }, [editor, mindId]);
+
+  // A Mind just made with its title given ("Create a new note called …", #202): its text has the cursor.
+  const bodyHere = useAppStore((state) => state.bodyToFocus === mindId);
+  useEffect(() => {
+    if (!bodyHere || editor.isDestroyed) return;
+    editor.commands.focus("start");
+    useAppStore.getState().bodyFocused();
+  }, [bodyHere, editor]);
 
   // A Question asked for from outside the editor, e.g. "Ask your own Question" in Get
   // started, or "Ask about this Folder" in the Library, which gives its Search scope:

@@ -211,11 +211,11 @@ test("the Tags tab lists every Tag with its colour and count, lists its Document
       await core.classifyDocuments();
     }, `http://127.0.0.1:${port}`);
 
-    // Folders | Tags | Source locations, Folders first.
+    // Folders | Tags | Folders on disk, Folders first.
     const browse = window.getByTestId("browse-views");
     await expect(browse).toHaveAccessibleName("Browse Documents");
     const views = browse.locator("button[aria-pressed]");
-    await expect(views).toHaveText(["Folders", "Tags", "Source locations"]);
+    await expect(views).toHaveText(["Folders", "Tags", "Folders on disk"]);
     await expect(views.first()).toHaveAttribute("aria-pressed", "true");
     // In the Folders view, the rows show their Tags' colours too: Organize files
     // Attention in Reports & presentations, which opens in place.
@@ -415,7 +415,7 @@ test("the Tags tab lists every Tag with its colour and count, lists its Document
     // In Chinese.
     await setLanguage(window, "zh-CN");
     await expect(browse).toHaveAccessibleName("浏览文档");
-    await expect(views).toHaveText(["文件夹", "标签", "文件位置"]);
+    await expect(views).toHaveText(["文件夹", "标签", "磁盘上的文件夹"]);
     await expect(byName("待确认")).toHaveCount(1);
     await slideAndClick(window, tagList.getByRole("button", { name: "展开 Report" }));
     await expect(tagList.getByRole("button", { name: "收起 Report" })).toBeVisible();
@@ -540,7 +540,7 @@ test("a Document row shows up to three Tag colours and +N after its name, names 
     await slideAndClick(
       window,
       window.getByTestId("browse-views").getByRole("button", {
-        name: "Source locations",
+        name: "Folders on disk",
       }),
     );
     await tabIntoRow(window, attention);

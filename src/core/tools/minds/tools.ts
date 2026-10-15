@@ -25,7 +25,11 @@
 import { randomUUID } from "node:crypto";
 import * as Y from "yjs";
 import { setOrigins } from "../../../shared/blockOrigins";
-import { pendingProposals, recordProposalRequest } from "../../../shared/proposals";
+import {
+  pendingProposals,
+  recordProposalRequest,
+  resolveProposals,
+} from "../../../shared/proposals";
 import { countFor, countText, mostlyCjk } from "../../../shared/wordCount";
 import type { NodeJSON } from "../../answers/blocks";
 import {
@@ -36,12 +40,14 @@ import {
   type MindChange,
   type TextPlace,
   type ThirdPartySource,
+  type WritingPlace,
 } from "../../api";
 import { plainText } from "../../mindText";
 import { insertBlocks } from "../../noteAdding";
 import { layout, textBlocks } from "../../proposals/write";
 import type { PreparedChatModel } from "../../providers/chat";
 import { MIND_TOOLS, type Tool, type ToolProviderInfo } from "..";
+import { partialFields } from "../partialInput";
 
 const PROVIDER: ToolProviderInfo = { kind: "minds", id: "minds", name: "Minds" };
 
@@ -78,6 +84,8 @@ export interface MindsForTools {
   create(title: string, folderId: string | null): ChangeableMind;
   /** The name of a Folder, or null when there is none by that id. */
   folderName(folderId: string): string | null;
+  /** Says where a call is writing a Mind's new Blocks as they come (#202); `place` null once it has stopped. */
+  writing(mindId: string, place: WritingPlace | null): void;
   /** Edit with AI over a stretch of a Mind (../../edits, `proposeInMind`). */
   proposeInMind(input: {
     mindId: string;
@@ -86,9 +94,15 @@ export interface MindsForTools {
     instruction: string;
     prepared: PreparedChatModel;
     signal: AbortSignal;
-    /** Runs once the change is known, just before its Proposals are written. */
+    /** Runs just before the change's first Proposals are written. */
     beforeWriting(): void;
-  }): Promise<{ result: EditWithAiResult; length: { before: string; after: string } | null }>;
+    /** More of its Proposals are in the Mind, as they come. */
+    written(request: string, count: number): void;
+  }): Promise<{
+    result: EditWithAiResult;
+    length: { before: string; after: string } | null;
+    reason: string | null;
+  }>;
 }
 
 export interface MindToolsOptions {
@@ -107,8 +121,10 @@ export interface MindToolsOptions {
    * of its Citations weren't found and how many markers had no Citation.
    */
   blocksOf(markdown: string): { blocks: NodeJSON[]; notFound: number; unrecorded: number };
-  /** A call changed a Mind: its card says so. */
+  /** A call changed a Mind: its card says so, as soon as it does, also while it writes. */
   changed(toolCallId: string, change: MindChange): void;
+  /** The Answer's: once it aborts, calls still writing stop. */
+  signal: AbortSignal;
   now(): Date;
 }
 
@@ -275,7 +291,7 @@ function lengths(before: string, after: string): string {
 const changes = (count: number) => (count === 1 ? "1 change" : `${count} changes`);
 
 const WAITING =
-  "They wait in the Mind for the User to accept or reject them; until then nothing in it has changed.";
+  "They wait in the Mind for the User to accept or reject them; until then nothing in it has changed, and they can't be changed again.";
 
 /** What `edit_mind`'s model reads of a result that proposed nothing, or why it failed. */
 function notProposed(result: EditWithAiResult, name: string): string {
@@ -321,52 +337,177 @@ export function mindTools(options: MindToolsOptions): Tool[] {
   const effectOn =
     (action: "read" | "write") =>
     (input: Record<string, unknown>): Effect[] => {
-      const mind = found(targetOf(input));
+      const mind = targetOf(input);
       return [{ action, scope: { kind: "mind", mindId: typeof mind === "string" ? "" : mind.id } }];
     };
 
   /**
-   * Blocks the model wrote, as Proposals of one request in a Mind, linked
-   * back to the Answer; a Checkpoint first, unless the Mind was just made.
+   * Where a call's Blocks go in a Mind: Proposals of one request, linked back
+   * to the Answer, each written after the last (`writeMore`), from the place
+   * the call named; a Checkpoint first, unless the call made the Mind.
    */
-  const propose = (
-    mindId: string,
-    markdown: string,
-    { after = null, made = false }: { after?: string | null; made?: boolean } = {},
-  ): { change: Omit<MindChange, "created">; notFound: number; unrecorded: number } => {
-    const place = minds.read(mindId, (note) => placeAfter(note, after));
+  interface Writer {
+    mind: ChangeableMind;
+    /** The `after` the call named, for telling a different place. */
+    named: string | null;
+    request: string;
+    /** The top-level Block the next ones go after; null: the Mind's end. */
+    anchor: string | null;
+    /** How many of the call's Blocks are in. */
+    written: number;
+    made: boolean;
+  }
+
+  const writerFor = (mind: ChangeableMind, after: string | null, made: boolean): Writer => {
+    const place = minds.read(mind.id, (note) => placeAfter(note, after));
     if (typeof place === "string") {
       throw new Error(`Nothing was added: ${place}. Don't add it to another Mind instead.`);
     }
-    const { blocks, notFound, unrecorded } = options.blocksOf(markdown);
-    const request = randomUUID();
-    if (!made) minds.checkpoint(mindId);
-    const proposals = minds.edit(mindId, (note) => {
+    return {
+      mind,
+      named: after,
+      request: randomUUID(),
+      anchor: place.after,
+      written: 0,
+      made,
+    };
+  };
+
+  /** Writes those of `blocks` the writer hasn't yet, after the ones it has. */
+  const writeMore = (writer: Writer, blocks: readonly NodeJSON[]): void => {
+    const fresh = blocks.slice(writer.written);
+    if (fresh.length === 0) return;
+    const first = writer.written === 0;
+    if (first && !writer.made) minds.checkpoint(writer.mind.id);
+    minds.edit(writer.mind.id, (note) => {
       const anchor = note
         .toArray()
         .find(
           (each): each is Y.XmlElement =>
-            each instanceof Y.XmlElement && place.after !== null && idOf(each) === place.after,
+            each instanceof Y.XmlElement && writer.anchor !== null && idOf(each) === writer.anchor,
         );
-      const ids = insertBlocks(note, blocks, { after: anchor ?? null, request });
+      const ids = insertBlocks(note, fresh, { after: anchor ?? null, request: writer.request });
+      writer.anchor = ids.at(-1) ?? writer.anchor;
       const doc = note.doc;
-      if (doc) {
-        setOrigins(doc, ids, options.origin);
-        recordProposalRequest(doc, request, {
+      if (!doc) return;
+      setOrigins(doc, ids, options.origin);
+      if (first) {
+        recordProposalRequest(doc, writer.request, {
           source: "answer-added",
           providerId: options.prepared.provider.id,
           modelId: options.prepared.modelId,
           createdAt: options.now().toISOString(),
         });
       }
-      return pendingProposals(note).filter((each) => each.request === request).length;
     });
-    return { change: { mindId, request, proposals }, notFound, unrecorded };
+    writer.written = blocks.length;
+  };
+
+  const changeOf = (writer: Writer, created: boolean): MindChange => ({
+    mindId: writer.mind.id,
+    created,
+    request: writer.request,
+    proposals: minds.read(
+      writer.mind.id,
+      (note) => pendingProposals(note).filter((each) => each.request === writer.request).length,
+    ),
+  });
+
+  /** Takes back what a writer wrote: the call ended up meaning another Mind, or another place. */
+  const withdraw = (writer: Writer): void => {
+    if (writer.written === 0) return;
+    minds.edit(writer.mind.id, (note) => {
+      resolveProposals(note, (each) => each.request === writer.request, "reject");
+    });
+  };
+
+  /**
+   * Calls of `add_to_mind` and `create_mind` whose content is coming in as the
+   * model writes it (`streamInput`), by id: each finished Block is written at
+   * once, and "Writing…" stands where the next one goes. Null: the call can't
+   * be written yet, or its input says nothing that streams.
+   */
+  const streams = new Map<string, { writer: Writer | null; created: boolean; breaks: number }>();
+  /**
+   * Calls already made: input the engine still hands over after the call ran
+   * (it reads the stream behind the call) writes nothing more.
+   */
+  const ended = new Set<string>();
+
+  options.signal.addEventListener("abort", () => {
+    for (const stream of streams.values()) {
+      if (stream.writer) minds.writing(stream.writer.mind.id, null);
+    }
+    streams.clear();
+  });
+
+  /**
+   * More of a call's content: the Blocks it has finished (all but the one
+   * being written) go in. `open` gives the writer once the fields before the
+   * content say where; null while they don't yet.
+   */
+  const streamContent = (
+    toolCallId: string,
+    text: string,
+    open: (fields: ReturnType<typeof partialFields>) => { writer: Writer; created: boolean } | null,
+  ): void => {
+    if (options.signal.aborted || ended.has(toolCallId)) return;
+    const fields = partialFields(text);
+    const content = fields.get("content");
+    if (!content) return;
+    let stream = streams.get(toolCallId);
+    if (!stream) {
+      stream = { writer: null, created: false, breaks: 0 };
+      streams.set(toolCallId, stream);
+    }
+    // Only once a paragraph has ended is there a Block more to write.
+    const breaks = content.value.split("\n\n").length - 1;
+    if (breaks === stream.breaks) return;
+    stream.breaks = breaks;
+    if (!stream.writer) {
+      const opened = open(fields);
+      if (!opened) return;
+      stream.writer = opened.writer;
+      stream.created = opened.created;
+    }
+    const { writer } = stream;
+    writeMore(writer, options.blocksOf(content.value).blocks.slice(0, -1));
+    minds.writing(writer.mind.id, { after: writer.anchor });
+    if (writer.written > 0) options.changed(toolCallId, changeOf(writer, stream.created));
+  };
+
+  /**
+   * A call of `add_to_mind` or `create_mind` with all its input: the rest of
+   * its Blocks, after any written as it came, into `mind` after `after`.
+   */
+  const finishContent = (
+    toolCallId: string,
+    mind: ChangeableMind,
+    after: string | null,
+    markdown: string,
+    made: boolean,
+  ): { change: MindChange; notFound: number; unrecorded: number } => {
+    const stream = streams.get(toolCallId);
+    streams.delete(toolCallId);
+    ended.add(toolCallId);
+    let writer = stream?.writer ?? null;
+    if (writer && (writer.mind.id !== mind.id || writer.named !== after)) {
+      withdraw(writer);
+      minds.writing(writer.mind.id, null);
+      writer = null;
+    }
+    writer ??= writerFor(mind, after, made);
+    const { blocks, notFound, unrecorded } = options.blocksOf(markdown);
+    writeMore(writer, blocks);
+    minds.writing(writer.mind.id, null);
+    const change = changeOf(writer, made);
+    options.changed(toolCallId, change);
+    return { change, notFound, unrecorded };
   };
 
   /** What the model reads of Blocks it added: how many, and what of their Citations didn't hold. */
   const added = (
-    { change, notFound, unrecorded }: ReturnType<typeof propose>,
+    { change, notFound, unrecorded }: ReturnType<typeof finishContent>,
     where: string,
   ): string =>
     [
@@ -447,13 +588,15 @@ export function mindTools(options: MindToolsOptions): Tool[] {
       if (typeof stretch === "string") {
         throw new Error(`Nothing was changed in “${mind.name}”: ${stretch}.`);
       }
-      const { result, length } = await minds.proposeInMind({
+      const { result, length, reason } = await minds.proposeInMind({
         mindId: mind.id,
         ...stretch,
         instruction,
         prepared: options.prepared,
         signal,
         beforeWriting: () => minds.checkpoint(mind.id),
+        written: (request, proposals) =>
+          options.changed(toolCallId, { mindId: mind.id, created: false, request, proposals }),
       });
       if (result.kind !== "proposed") {
         const why = notProposed(result, mind.name);
@@ -469,6 +612,7 @@ export function mindTools(options: MindToolsOptions): Tool[] {
       const went = length ? ` (${lengths(length.before, length.after)})` : "";
       return [
         `Proposed ${changes(result.proposals)} in “${mind.name}”${went}. ${WAITING}`,
+        ...(reason ? [`Why, as the rewrite says: ${reason}`] : []),
         ...(result.droppedCitations > 0
           ? [
               `${result.droppedCitations === 1 ? "1 Citation" : `${result.droppedCitations} Citations`} would be removed with the words they belong to; the User sees that on the change: say so.`,
@@ -486,7 +630,7 @@ export function mindTools(options: MindToolsOptions): Tool[] {
   const contentProperty = {
     type: "string",
     description:
-      "The text, in Markdown, cited as an Answer is, with markers like [^1] for Citations recorded with cite. A new section starts with its heading.",
+      "The text, in Markdown, cited as an Answer is, with markers like [^1] for Citations recorded with cite. A new section starts with its heading. Write it last, after the other fields.",
   };
 
   const add: Tool = {
@@ -511,12 +655,22 @@ export function mindTools(options: MindToolsOptions): Tool[] {
     providerTool: MIND_TOOLS.add,
     effects: effectOn("write"),
     untrustedResult: false,
+    streamInput(toolCallId, input) {
+      streamContent(toolCallId, input, (fields) => {
+        // Only once the Mind and the place it names are whole: a name cut short could mean another.
+        const named = fields.get("mind");
+        const place = fields.get("after");
+        if ((named && !named.done) || (place && !place.done)) return null;
+        const mind = targetOf({ mind: named?.value });
+        if (typeof mind === "string") return null;
+        return { writer: writerFor(mind, optional(place?.value), false), created: false };
+      });
+    },
     async call(input, { toolCallId }) {
       const markdown = text(input.content, "content");
       const mind = found(targetOf(input));
       const after = optional(input.after);
-      const written = propose(mind.id, markdown, { after });
-      options.changed(toolCallId, { ...written.change, created: false });
+      const written = finishContent(toolCallId, mind, after, markdown, false);
       return added(written, `in “${mind.name}”, ${after ? `after “${after}”` : "at its end"}`);
     },
   };
@@ -542,10 +696,20 @@ export function mindTools(options: MindToolsOptions): Tool[] {
     // The Mind it writes to isn't made yet.
     effects: () => [{ action: "write", scope: { kind: "mind", mindId: "" } }],
     untrustedResult: false,
+    streamInput(toolCallId, input) {
+      streamContent(toolCallId, input, (fields) => {
+        const title = fields.get("title");
+        if (!title?.done || title.value.trim() === "") return null;
+        const mind = minds.create(title.value.trim(), options.folderId);
+        return { writer: writerFor(mind, null, true), created: true };
+      });
+    },
     async call(input, { toolCallId }) {
       const title = text(input.title, "title");
       const markdown = optional(input.content);
-      const mind = minds.create(title, options.folderId);
+      // Made already, as its content came in.
+      const streamed = streams.get(toolCallId)?.writer?.mind;
+      const mind = streamed ?? minds.create(title, options.folderId);
       const folder = options.folderId === null ? null : minds.folderName(options.folderId);
       const made = `Made the Mind “${mind.name}”${folder ? ` in the Folder “${folder}”` : ""}, open beside the User's Mind`;
       if (markdown === null) {
@@ -557,8 +721,7 @@ export function mindTools(options: MindToolsOptions): Tool[] {
         });
         return `${made}. It is empty.`;
       }
-      const written = propose(mind.id, markdown, { made: true });
-      options.changed(toolCallId, { ...written.change, created: true });
+      const written = finishContent(toolCallId, mind, null, markdown, true);
       return `${made}. ${added(written, "in it")}`;
     },
   };

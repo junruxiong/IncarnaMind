@@ -355,7 +355,7 @@ test("A3 a working session: a Linked folder, Answers with Citations, the viewer,
       record("walk.formats.states", states);
       await window.waitForTimeout(1500);
       await shot(window.getByTestId("sidebar"), "A22-sidebar-folders");
-      const sources = window.getByRole("button", { name: "Source locations", exact: true });
+      const sources = window.getByRole("button", { name: "Folders on disk", exact: true });
       if (await sources.count()) {
         await click(window, sources);
         await window.waitForTimeout(300);
