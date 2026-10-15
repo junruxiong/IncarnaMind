@@ -7296,7 +7296,7 @@ export interface CoreApi {
    * navigation, ads or scripts, kept as a snapshot that Citations point at
    * and the check reads, named by the page's title. The page is fetched from
    * this computer, with a time and size limit, unless `html` is given (a
-   * page the app has open), with its article's pictures (#756). Kept as it
+   * page the app has open), with its article's pictures. Kept as it
    * looks too, if asked, in the background (`WebPageInfo.look`). An address
    * saved already gives its Document, as it is. "document.status" events
    * report its processing. A page that can't be fetched, or that is mostly

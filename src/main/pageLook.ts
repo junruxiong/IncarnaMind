@@ -63,10 +63,11 @@ async function prepareDebugger(contents: WebContents, log: Logger): Promise<void
     (_event, method, params: { sessionId?: string; targetInfo?: { type?: string } }) => {
       if (method !== "Target.attachedToTarget" || !params.sessionId) return;
       const { sessionId } = params;
+      const target = params.targetInfo?.type ?? "unknown";
       // A frame of another site gets the page's script too; a worker has no window to print.
       // Each waits for the debugger, so it is let run whatever happened.
       const prepared =
-        params.targetInfo?.type === "iframe"
+        target === "iframe"
           ? Promise.all([
               tools.sendCommand("Page.enable", {}, sessionId),
               tools.sendCommand(
@@ -84,13 +85,16 @@ async function prepareDebugger(contents: WebContents, log: Logger): Promise<void
       prepared
         .catch((error: unknown) => {
           if (!contents.isDestroyed())
-            log.warn("webPages.lookFrame", { message: messageOf(error) });
+            log.warn("webPages.lookFrame", { target, message: messageOf(error) });
         })
         .finally(() => {
           if (contents.isDestroyed()) return;
           tools
             .sendCommand("Runtime.runIfWaitingForDebugger", {}, sessionId)
-            .catch(() => undefined);
+            .catch((error: unknown) => {
+              if (!contents.isDestroyed())
+                log.warn("webPages.lookResume", { target, message: messageOf(error) });
+            });
         });
     },
   );
@@ -142,7 +146,6 @@ export function createPageLook({
         },
         async (contents) => {
           contents.setWebRTCIPHandlingPolicy("disable_non_proxied_udp");
-          // Only the page's own proxy is signed in to; a site's sign-in is cancelled.
           contents.on("login", (event, _details, authInfo, callback) => {
             event.preventDefault();
             if (authInfo.isProxy && authInfo.host === proxy.host && authInfo.port === proxy.port) {

@@ -10,6 +10,7 @@
  * this proxy's own secret. It serves one page's look, and is closed after it.
  */
 import { randomBytes, timingSafeEqual } from "node:crypto";
+import type { LookupAddress } from "node:dns";
 import { createServer, type IncomingMessage, request, type ServerResponse } from "node:http";
 import { connect, type Socket } from "node:net";
 import type { Duplex } from "node:stream";
@@ -35,7 +36,10 @@ export const LOOK_PROXY_USER = "look";
 export interface LookProxyOptions {
   resolve: Resolve;
   log: Logger;
-  /** Test builds: where every checked connection goes, the local server standing in for the web. */
+  /**
+   * Test builds: the port of the local server standing in for the web. Each
+   * checked address is this computer's instead, in the same family.
+   */
   standIn?: number;
 }
 
@@ -55,16 +59,10 @@ const bareHost = (host: string) =>
     .replace(/\.+$/, "")
     .toLowerCase();
 
-function connectTo(target: { host: string; port: number }): Promise<Socket> {
-  return new Promise((resolve, reject) => {
-    const socket = connect(target);
-    socket.once("connect", () => {
-      socket.off("error", reject);
-      resolve(socket);
-    });
-    socket.once("error", reject);
-  });
-}
+const standInFor = ({ family }: LookupAddress): LookupAddress => ({
+  address: family === 6 ? "::1" : "127.0.0.1",
+  family,
+});
 
 export async function startLookProxy(options: LookProxyOptions): Promise<LookProxy> {
   const secret = randomBytes(24).toString("base64url");
@@ -76,42 +74,45 @@ export async function startLookProxy(options: LookProxyOptions): Promise<LookPro
     return given.length === expected.length && timingSafeEqual(given, expected);
   };
   let closed = false;
+  const sockets = new Set<Duplex>();
+  const track = (socket: Duplex) => {
+    sockets.add(socket);
+    socket.once("close", () => sockets.delete(socket));
+  };
 
-  /** Connects to `host`, if it is on the public internet, at an address the guard checked. */
+  function connectTo(addresses: readonly LookupAddress[], port: number): Promise<Socket> {
+    return new Promise((resolve, reject) => {
+      const socket = connect({
+        // Any name: net.connect skips `lookup`, which gives it the checked addresses, for an IP.
+        host: "checked.invalid",
+        port,
+        lookup: (_name, _options, callback) => callback(null, [...addresses]),
+        // Moves on from an address that doesn't answer, rather than spending the page's time on it.
+        autoSelectFamily: true,
+      });
+      track(socket);
+      const stopped = () => reject(new Error("The proxy is closed."));
+      socket.once("error", reject);
+      socket.once("close", stopped);
+      socket.once("connect", () => {
+        socket.off("error", reject);
+        socket.off("close", stopped);
+        resolve(socket);
+      });
+    });
+  }
+
   async function open(host: string, port: number): Promise<Socket> {
     const name = bareHost(host);
     if (!name || LOCAL_NAME.test(name) || !Number.isInteger(port) || port <= 0 || port > 65_535) {
       throw new Error(`${host} isn't on the public internet.`);
     }
     const checked = await publicAddresses(name, options.resolve);
-    let failure: unknown = new Error(`${host} has no address.`);
-    for (const each of checked) {
-      let socket: Socket;
-      try {
-        socket = await connectTo(
-          options.standIn
-            ? { host: "127.0.0.1", port: options.standIn }
-            : { host: each.address, port },
-        );
-      } catch (error) {
-        failure = error;
-        continue;
-      }
-      // The page is done and its proxy closed while this connected: nothing is let through.
-      if (closed) {
-        socket.destroy();
-        throw new Error("The proxy is closed.");
-      }
-      return socket;
-    }
-    throw failure;
+    if (closed) throw new Error("The proxy is closed.");
+    return options.standIn
+      ? connectTo(checked.map(standInFor), options.standIn)
+      : connectTo(checked, port);
   }
-
-  const sockets = new Set<Duplex>();
-  const track = (socket: Duplex) => {
-    sockets.add(socket);
-    socket.once("close", () => sockets.delete(socket));
-  };
   const askToSignIn = { "Proxy-Authenticate": `Basic realm="${LOOK_PROXY_USER}"` };
 
   const server = createServer((incoming: IncomingMessage, outgoing: ServerResponse) => {
@@ -120,13 +121,12 @@ export async function startLookProxy(options: LookProxyOptions): Promise<LookPro
       return;
     }
     const url = URL.parse(incoming.url ?? "");
-    if (!url || url.protocol !== "http:") {
+    if (url?.protocol !== "http:") {
       outgoing.writeHead(400).end();
       return;
     }
     open(url.hostname, Number(url.port || 80)).then(
       (socket) => {
-        track(socket);
         const headers = Object.fromEntries(
           Object.entries(incoming.headers).filter(([name]) => !HOP_BY_HOP.has(name)),
         );
@@ -167,7 +167,6 @@ export async function startLookProxy(options: LookProxyOptions): Promise<LookPro
     const port = Number((incoming.url ?? "").slice(at + 1));
     open(host, port).then(
       (socket) => {
-        track(socket);
         socket.on("error", () => client.destroy());
         client.write("HTTP/1.1 200 Connection Established\r\n\r\n");
         if (head.length > 0) socket.write(head);
@@ -181,7 +180,13 @@ export async function startLookProxy(options: LookProxyOptions): Promise<LookPro
     options.log.error("webPages.lookProxy", { message: error.message }),
   );
 
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      server.off("error", reject);
+      resolve();
+    });
+  });
   const listening = server.address();
   if (!listening || typeof listening === "string") throw new Error("The proxy isn't listening.");
   return {
