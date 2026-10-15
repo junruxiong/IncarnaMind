@@ -835,6 +835,9 @@ export const zhCN = {
   "viewer.markdown.image": "图片",
   "viewer.markdown.imageWeb": "不加载网络图片",
   "viewer.markdown.imageMissing": "找不到图片",
+  "viewer.web.picturesLeftOut.one": "有 1 张图片超出单页上限，未保存",
+  "viewer.web.picturesLeftOut": "有 {count} 张图片超出单页上限，未保存",
+  "viewer.web.pictureNotSaved": "未随网页保存",
   "viewer.docx.comment": "{author} 的批注",
 
   "location.page": "第 {range} 页",
@@ -1097,7 +1100,7 @@ export const zhCN = {
   "status.skipped.other": "已跳过 {count} 个文件",
   "webPages.add.title": "添加网页",
   "webPages.add.note":
-    "粘贴网址，多个网址每行一个。每个网页从这台电脑抓取一次，保存为文档，引文可以核对。不下载网页中的图片。",
+    "粘贴网址，多个网址每行一个。每个网页连同正文中的图片从这台电脑抓取一次，图片可能来自网站的图片服务器；网页保存为文档，引文可以核对。网页上的其他内容一概不加载。",
   "webPages.add.label": "网址",
   "webPages.add.invalid": "不是网址：{line}",
   "webPages.add.cancel": "取消",
@@ -2696,6 +2699,7 @@ export const zhCN = {
   "error.document.fileUnavailable": "暂时无法访问这个文档的文件。",
   "error.document.fileGone": "这个文档的文件已不在原处，无法读取。",
   "error.document.fileCantOpen": "无法打开这个文档的文件。",
+  "error.document.noSuchPicture": "文档中没有这张图片。",
   "error.document.notFailed": "只有处理失败的文档才能重试。",
   "error.document.notPdf": "只有 PDF 可以用密码打开。",
   "error.document.passwordMissing": "输入这个 PDF 的密码才能打开它。",
