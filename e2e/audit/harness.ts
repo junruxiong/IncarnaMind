@@ -17,6 +17,7 @@ import {
 } from "@playwright/test";
 // Vite's own source-map reader (the audit adds no dependency of its own).
 import { SourceMapConsumer } from "source-map-js";
+import { homeEnv } from "../../tests/helpers/home";
 
 const appDir = resolve(__dirname, "..", "..");
 
@@ -99,7 +100,7 @@ export async function launch(
   env.INCARNAMIND_DATA_DIR = dataDir;
   env.INCARNAMIND_TEST_HOOKS = "1";
   env.INCARNAMIND_TEST_EMBEDDER = "fake";
-  env.HOME = home;
+  Object.assign(env, homeEnv(home));
   Object.assign(env, extraEnv);
 
   const launchMs = Date.now();
