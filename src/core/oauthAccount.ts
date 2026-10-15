@@ -16,10 +16,11 @@
  */
 import type { Browser } from "./adapters";
 import type { PastedAddressProblem, PastedAddressResult } from "./api";
-import { SecretStorageError } from "./errors";
+import { isRecord, SecretStorageError } from "./errors";
 import {
   authorizeInBrowser,
   type BrowserAuthorizationOptions,
+  nonEmptyText,
   type OAuthPage,
   OAuthTokenError,
   type OAuthTokens,
@@ -29,7 +30,6 @@ import {
 } from "./oauth";
 import type { Secrets } from "./secrets";
 
-/** Refresh this long before the access token expires. */
 const REFRESH_WINDOW_MS = 5 * 60_000;
 
 /** When neither the server nor the token says how long it lasts. */
@@ -72,16 +72,17 @@ export interface OAuthAccountRecord {
   ended: SignInEnded | null;
 }
 
-const text = (value: unknown) => (typeof value === "string" && value !== "" ? value : null);
-
-/** The tokens and their end from a stored record, as `OAuthAccountRecord`. */
 export function parseAccountRecord(record: Record<string, unknown>): OAuthAccountRecord {
-  const tokens = record.tokens as Record<string, unknown> | null | undefined;
-  const accessToken = tokens ? text(tokens.accessToken) : null;
+  const tokens = isRecord(record.tokens) ? record.tokens : null;
+  const accessToken = tokens ? nonEmptyText(tokens.accessToken) : null;
   return {
     tokens:
       tokens && accessToken && typeof tokens.expiresAt === "number"
-        ? { accessToken, refreshToken: text(tokens.refreshToken), expiresAt: tokens.expiresAt }
+        ? {
+            accessToken,
+            refreshToken: nonEmptyText(tokens.refreshToken),
+            expiresAt: tokens.expiresAt,
+          }
         : null,
     ended:
       record.ended === "expired" ? "expired" : record.ended === "signed-out" ? "signed-out" : null,
@@ -116,7 +117,6 @@ const PASTE_PROBLEMS: Record<Exclude<PastedRedirect, "accepted">, PastedAddressP
   finished: "finished",
 };
 
-/** What became of a pasted address, as the core's interface says it. */
 export const pastedAddressResult = (pasted: PastedRedirect): PastedAddressResult =>
   pasted === "accepted" ? { ok: true } : { ok: false, problem: PASTE_PROBLEMS[pasted] };
 
@@ -170,7 +170,6 @@ export interface OAuthCredentials {
   access(options?: { rejected?: string }): Promise<{ accessToken: string }>;
 }
 
-/** The browser sign-in, with everything this module fills in left out. */
 export type Authorize = (
   request: Omit<
     BrowserAuthorizationOptions,
@@ -179,7 +178,6 @@ export type Authorize = (
 ) => Promise<OAuthTokens>;
 
 export function createOAuthAccount<A extends OAuthAccountRecord>(options: {
-  /** The record's name in the secret store. */
   secretName: string;
   /** Where the sign-in is kept: the device's secret store, or a shared one (see `RefreshLock`). */
   secrets: Secrets;
@@ -192,7 +190,6 @@ export function createOAuthAccount<A extends OAuthAccountRecord>(options: {
   signInTimeoutMs: number;
   /** Milliseconds since the epoch. */
   now(): number;
-  /** Trades the refresh token for new tokens at the provider. */
   renew(account: A, refreshToken: string, signal: AbortSignal): Promise<OAuthTokens>;
   /** What else an account forgets when its refresh is refused for good. Defaults to nothing. */
   expired?(account: A, refusal: RefreshRefusal): A;
@@ -391,6 +388,8 @@ export function createOAuthAccount<A extends OAuthAccountRecord>(options: {
       generation += 1;
       signingOut = true;
       try {
+        // A refresh already under way would otherwise save its tokens after these are forgotten.
+        await refreshing?.catch(() => undefined);
         const stored = await load();
         if (!stored?.tokens) return { revoked: true };
         const { refreshToken } = stored.tokens;

@@ -1570,7 +1570,7 @@ export const zhCN = {
   "claudeAccount.problem.signInCancelled": "已取消登录 Claude，未保存任何内容",
   "claudeAccount.problem.signedOut": "你还没有登录 Claude",
   "claudeAccount.problem.signInExpired": "Claude 登录已过期",
-  "claudeAccount.problem.refused": "Anthropic 不允许 IncarnaMind 使用你的 Claude 订阅",
+  "claudeAccount.problem.refused": "Claude 拒绝了这次登录",
   "claudeAccount.problem.planLimit": "Claude 订阅的用量已达上限",
   "claudeAccount.problem.planLimitUntil": "Claude 订阅的用量已达上限，{time} 恢复",
   "claudeAccount.problem.unexpectedResponse": "Claude 返回了 IncarnaMind 无法识别的内容",

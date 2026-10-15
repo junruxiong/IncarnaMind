@@ -22,7 +22,7 @@
  */
 import { randomBytes, randomUUID } from "node:crypto";
 import type { Browser } from "../../adapters";
-import { type OAuthPage, type OAuthTokens, refreshOAuthTokens } from "../../oauth";
+import { nonEmptyText, type OAuthPage, type OAuthTokens, refreshOAuthTokens } from "../../oauth";
 import {
   type Authorize,
   createOAuthAccount,
@@ -91,18 +91,16 @@ interface StoredAccount extends OAuthAccountRecord {
   planRefused: boolean;
 }
 
-const text = (value: unknown) => (typeof value === "string" && value !== "" ? value : null);
-
 function parseStored(record: Record<string, unknown>): StoredAccount | null {
-  const hostId = text(record.hostId);
+  const hostId = nonEmptyText(record.hostId);
   if (!hostId) return null;
   return {
     ...parseAccountRecord(record),
     hostId,
-    clientId: text(record.clientId),
-    subject: text(record.subject),
-    email: text(record.email),
-    idToken: text(record.idToken),
+    clientId: nonEmptyText(record.clientId),
+    subject: nonEmptyText(record.subject),
+    email: nonEmptyText(record.email),
+    idToken: nonEmptyText(record.idToken),
     planRefused: record.planRefused === true,
   };
 }

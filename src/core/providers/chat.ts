@@ -42,7 +42,7 @@ import {
 import { billingOf, ollamaCloudPrice } from "./catalog/billing";
 import { endpointOf } from "./catalog/providers";
 import type { ChatGptPlan } from "./chatgpt/plan";
-import type { ClaudeAccount } from "./claudeAccount/account";
+import type { ClaudeSignIn } from "./claudeAccount/account";
 import {
   acceptsApiKey,
   baseUrlFor,
@@ -208,9 +208,8 @@ export type ChatGptPlanAccess = Pick<
   "hasSignIn" | "credentials" | "apiBaseUrl" | "models"
 >;
 
-/** What chat providers need from the Claude account route. */
 export type ClaudeAccountAccess = Pick<
-  ClaudeAccount,
+  ClaudeSignIn,
   "hasSignIn" | "credentials" | "apiBaseUrl" | "request"
 >;
 
@@ -243,7 +242,6 @@ export function createChat(options: {
     meter,
   } = options;
 
-  /** Whether a provider of this kind signs in instead of taking a key, and has no sign-in now. */
   const needsSignIn = async (kind: ChatProviderKind) =>
     (kind === "chatgpt" && !(await chatGpt.hasSignIn())) ||
     (kind === "claude-account" && !(await claudeAccount.hasSignIn()));

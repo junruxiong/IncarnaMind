@@ -1838,9 +1838,16 @@ export function createCore(adapters: CoreAdapters): Core {
     listed: () => chatGpt.used(),
   });
   if (claudeProfile) {
+    const { authorizeUrl, tokenUrl, revokeUrl } = claudeProfile;
+    const signInHosts = new Map(
+      [authorizeUrl, tokenUrl, revokeUrl]
+        .filter((url): url is string => url !== undefined)
+        .map((url) => new URL(url))
+        .map((url) => [url.origin, url.host]),
+    );
     privacy.traffic.register({
       id: "claude-sign-in",
-      service: { id: new URL(claudeProfile.authorizeUrl).origin, name: "Anthropic" },
+      services: () => [...signInHosts].map(([id, name]) => ({ id, name })),
       listed: () => claudeAccount.used(),
     });
   }

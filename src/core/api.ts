@@ -4813,7 +4813,7 @@ export type ClaudeAccount =
  */
 export interface ClaudeAccountStatus {
   available: boolean;
-  /** An experimental sign-in route: the provider may refuse or block it, which the User is told first. */
+  /** An experimental sign-in route, which the User is told about before signing in. */
   experimental: boolean;
   account: ClaudeAccount;
   /** A browser sign-in is waiting for the User. */

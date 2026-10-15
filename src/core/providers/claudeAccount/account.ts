@@ -49,7 +49,7 @@ function signInError(error: unknown): { kind: ClaudeSignInErrorKind; message: st
   return { kind: "failed", message };
 }
 
-export type ClaudeAccount = ReturnType<typeof createClaudeAccount>;
+export type ClaudeSignIn = ReturnType<typeof createClaudeAccount>;
 
 export function createClaudeAccount(options: {
   /** The route's client profile; null where this build has none, and the route isn't offered. */
@@ -171,6 +171,7 @@ export function createClaudeAccount(options: {
             ...(config.authorizeParams && { authorizeParams: config.authorizeParams }),
             tokenFormat: format,
             stateInExchange: config.tokenRequest?.stateInExchange ?? false,
+            ...(config.stateBytes !== undefined && { stateBytes: config.stateBytes }),
           });
           await account.commit({ tokens: account.storedTokens(tokens, null), ended: null });
         });
