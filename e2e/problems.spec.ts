@@ -10,6 +10,7 @@ import {
   createDataFolder,
   dismissChatSetup,
   documentIdOf,
+  exportFromMenu,
   interceptOpenDialog,
   interceptShowItemInFolder,
   launchApp,
@@ -297,7 +298,7 @@ test("an export that can't be saved says why in the Mind, and Change output loca
   await chmod(readOnly, 0o555);
   await useOutputLocation(window, readOnly);
   await interceptShowItemInFolder(app);
-  await window.getByTestId("export-mind").click();
+  await exportFromMenu(window);
   const result = window.getByTestId("export-result");
 
   // The folder is read-only: the line says so, in the Mind, with its one action, and nothing pops up.
@@ -332,7 +333,7 @@ test("an export that can't be saved says why in the Mind, and Change output loca
   // The same two lines in Chinese; the file saved before stays, and this one takes the next name.
   await bridge(window).settings("zh-CN");
   await useOutputLocation(window, readOnly);
-  await window.getByTestId("export-mind").click();
+  await exportFromMenu(window);
   await expect(problem).toHaveText("无法保存：这个文件夹是只读的 · 更改保存位置…");
   await screenshot(result, "export-cant-save-zh");
   await result.getByTestId("export-change-location").click();

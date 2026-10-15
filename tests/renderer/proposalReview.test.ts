@@ -8,10 +8,13 @@ import { selectionForEdit } from "../../src/renderer/src/editor/editSelection";
 import { noteExtensions } from "../../src/renderer/src/editor/noteSchema";
 import {
   acceptedSlice,
+  type BlockPlace,
   editTarget,
+  keptOnAccept,
   ProposalReview,
   pendingAtSelection,
   pendingIn,
+  positionOf,
   proposalReviewKey,
   proposalsAt,
   sourcesRemoved,
@@ -253,6 +256,57 @@ describe("Proposals in the editor", () => {
     const [wash] = proposalReviewKey.getState(note.state)?.decorations.find() ?? [];
     expect(wash).toMatchObject({ from: target?.from, to: target?.to });
     expect(classOf(wash)).toBe("proposal-target");
+  });
+});
+
+describe("Text that stays once changes are accepted", () => {
+  test("is what they add and the words around them, not what they remove or a Block they remove, and its place holds through the accept", () => {
+    const pier = { type: "paragraph", content: [text("The pier is closed.")] };
+    const fog = { type: "paragraph", content: [text("Fog is thick.")] };
+    const removedBlock = (block: JSONContent, id: string) => ({
+      ...block,
+      attrs: { [PROPOSAL_ATTRIBUTE]: { id, request: "r1", kind: "delete" } },
+    });
+    const tides = (content: JSONContent[]) => ({
+      type: "paragraph",
+      attrs: { id: "tides" },
+      content,
+    });
+    const note = noteWith([
+      removedBlock(pier, "c1"),
+      tides([
+        text("Tides are "),
+        text("very ", [removed("c2")]),
+        citation("Spring tides"),
+        text(" strong", [inserted("c3")]),
+        text(" today."),
+      ]),
+      removedBlock(fog, "c4"),
+    ]);
+    const { doc } = note.state;
+    const kept = keptOnAccept(doc, 0, doc.content.size);
+    expect(kept).toEqual({
+      from: { blockId: "tides", offset: 0 },
+      to: { blockId: "tides", offset: "Tides are ￼ strong today.".length },
+    });
+    expect(keptOnAccept(doc, note.after("Tides are "), note.after("very "))).toBeNull();
+    expect(keptOnAccept(doc, 0, note.after("closed."))).toBeNull();
+    const strong = keptOnAccept(doc, note.after("very "), note.after(" strong"));
+    expect(strong).toEqual({
+      from: { blockId: "tides", offset: "Tides are ".length },
+      to: { blockId: "tides", offset: "Tides are ￼ strong".length },
+    });
+
+    const accepted = noteWith([
+      tides([text("Tides are "), citation("Spring tides"), text(" strong today.")]),
+    ]).state.doc;
+    const at = (place: BlockPlace | undefined) => (place ? positionOf(accepted, place) : null);
+    const from = at(kept?.from);
+    const to = at(kept?.to);
+    expect(from !== null && to !== null && accepted.textBetween(from, to, "", "￼")).toBe(
+      "Tides are ￼ strong today.",
+    );
+    expect(positionOf(accepted, { blockId: "gone", offset: 0 })).toBeNull();
   });
 });
 

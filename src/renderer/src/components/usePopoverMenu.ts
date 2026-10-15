@@ -30,14 +30,16 @@ function sourceOf(button: HTMLElement | null): Element | Box | null {
 }
 
 /**
- * Below the button, or above it if the window is too short. A popover that
- * isn't showing yet isn't laid out (it has no size), so it is laid out for a
- * moment to measure it as it will show. Returns where it put it.
+ * Below the button, or above it if the window is too short, its left edge by
+ * the button's, or with `end` its right edge. A popover that isn't showing
+ * yet isn't laid out (it has no size), so it is laid out for a moment to
+ * measure it as it will show. Returns where it put it.
  */
 function place(
   button: HTMLElement | null,
   menu: HTMLElement | null,
-  around: HTMLElement | null = null,
+  around: HTMLElement | null,
+  align: "start" | "end",
 ): Box | null {
   const point = pointOf(button);
   const atPoint = point !== null;
@@ -53,7 +55,9 @@ function place(
   const outer = around?.getBoundingClientRect();
   const anchor = outer
     ? { left: box.right + GAP_PX - width, top: outer.top, bottom: outer.bottom }
-    : box;
+    : align === "end" && !atPoint
+      ? { left: box.right - width, top: box.top, bottom: box.bottom }
+      : box;
   // At the pointer the menu overlaps it by 1px, so letting go of the button lands inside the menu
   // and doesn't dismiss it.
   const gap = atPoint ? -1 : GAP_PX;
@@ -144,13 +148,17 @@ export function openMenuFromRightClick(
  * below rather than covering it (e.g. the composer, for its model chip).
  * `focus: "first"` focuses the first item even when one is checked: for a
  * menu of actions with a switch among them, rather than a choice of options.
+ * `align: "end"` lines its right edge up with the button's, for a button at
+ * the right of what it sits in.
  */
 export function usePopoverMenu({
   around,
   focus = "checked",
+  align = "start",
 }: {
   around?: (button: HTMLElement) => HTMLElement | null;
   focus?: "checked" | "first";
+  align?: "start" | "end";
 } = {}) {
   const id = useId();
   const button = useRef<HTMLButtonElement>(null);
@@ -177,13 +185,18 @@ export function usePopoverMenu({
       return;
     }
     const anchor = button.current;
-    const box = place(anchor, menu.current, anchor && outer.current ? outer.current(anchor) : null);
+    const box = place(
+      anchor,
+      menu.current,
+      anchor && outer.current ? outer.current(anchor) : null,
+      align,
+    );
     // Once each time it opens: a menu that stays open is never animated again.
     if (menu.current && box && !entered.current) enterFrom(menu.current, sourceOf(anchor), box);
     entered.current = true;
     if (menu.current?.matches(":popover-open")) focusFirst(menu.current, first);
     else autofocusFirst(menu.current, first);
-  }, [open, first]);
+  }, [open, first, align]);
 
   // Items that come after it opened, such as models still being listed then: placed again for
   // the menu's new size, and the checked one focused, as it would have been had it been there.
@@ -192,12 +205,12 @@ export function usePopoverMenu({
     if (!open || !element) return;
     const observer = new MutationObserver(() => {
       const anchor = button.current;
-      place(anchor, element, anchor && outer.current ? outer.current(anchor) : null);
+      place(anchor, element, anchor && outer.current ? outer.current(anchor) : null, align);
       if (!touched.current && element.matches(":popover-open")) focusFirst(element, first);
     });
     observer.observe(element, { childList: true, subtree: true });
     return () => observer.disconnect();
-  }, [open, first]);
+  }, [open, first, align]);
 
   const onKeyDown = (event: KeyboardEvent) => {
     touched.current = true;

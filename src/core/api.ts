@@ -3998,7 +3998,14 @@ export type CheckSentencesResult =
    * checked. `smallModel`: a model on this computer too small to judge
    * reliably made the verdicts (#680), so they carry a notice.
    */
-  | { kind: "checked"; sentences: number; checked: number; smallModel: boolean }
+  | {
+      kind: "checked";
+      sentences: number;
+      checked: number;
+      smallModel: boolean;
+      /** Sentences left out because they hold changes still waiting; absent when none. */
+      waiting?: WaitingSentences;
+    }
   /** Nothing was sent: the model can't be used now, and `readiness` says why. */
   | { kind: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
   /** Nothing was sent: local mode is on, and the model isn't on this computer. */
@@ -4007,8 +4014,8 @@ export type CheckSentencesResult =
   | { kind: "no-documents"; folderId: string | null }
   /** The selection holds no sentence to check, or isn't in the Mind any more. */
   | { kind: "nothing" }
-  /** Nothing was sent: the selection holds changes still waiting. */
-  | { kind: "has-proposals" }
+  /** Nothing was sent: every sentence of the selection holds changes still waiting. */
+  | { kind: "waiting"; waiting: WaitingSentences }
   /** The User stopped it (`cancelCheck`): the sentences not checked yet say "stopped". */
   | { kind: "cancelled" };
 
@@ -4038,9 +4045,15 @@ export interface VerifyClaimsInput {
   model?: ChatModelChoice | null;
 }
 
+/** Sentences a check left out, as they hold changes still waiting: how many, and those changes' ids. */
+export interface WaitingSentences {
+  sentences: number;
+  changes: string[];
+}
+
 /** Why finding or checking a document's claims sent nothing. */
 type VerifyRefusal =
-  | Exclude<CheckSentencesResult, { kind: "checked" } | { kind: "has-proposals" }>
+  | Exclude<CheckSentencesResult, { kind: "checked" } | { kind: "waiting" }>
   /** Another document's claims are being found or checked, in that Mind: one run at a time. */
   | { kind: "busy"; mindId: string };
 

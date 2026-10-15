@@ -19,12 +19,15 @@ import { mindModelOf } from "../../shared/mindModel";
 import { core } from "./core";
 import type { ShownClaim } from "./editor/claimChecks";
 import { selectionForEdit } from "./editor/editSelection";
+import { keptOnAccept, pendingIn, positionOf } from "./editor/proposalReview";
+import { resolveProposalsIn } from "./editWithAi";
 import { errorMessage } from "./errors";
 import { translateNow } from "./i18n";
 
 /** Why a check gave no marks, for the line under the Mind's title. */
 export type CheckProblem =
-  | Exclude<CheckSentencesResult, { kind: "checked" } | { kind: "cancelled" }>
+  | Exclude<CheckSentencesResult, { kind: "checked" } | { kind: "cancelled" } | { kind: "waiting" }>
+  | { kind: "waiting"; sentences: number; acceptAndCheck(): void }
   | { kind: "failed"; message: string; retry?: () => void };
 
 interface ChecksState {
@@ -86,7 +89,7 @@ export async function checkSentences(
   const requestId = crypto.randomUUID();
   setFor("problems", mindId, null);
   setFor("running", mindId, { requestId, action });
-  let result: CheckProblem | CheckSentencesResult;
+  let result: CheckSentencesResult | Extract<CheckProblem, { kind: "failed" }>;
   try {
     result = await core.checkSentences({
       requestId,
@@ -110,8 +113,50 @@ export async function checkSentences(
   } finally {
     setFor("running", mindId, null);
   }
-  if (result.kind !== "checked" && result.kind !== "cancelled") setFor("problems", mindId, result);
+  const waiting =
+    result.kind === "waiting" || result.kind === "checked" ? result.waiting : undefined;
+  if (waiting) {
+    setFor("problems", mindId, {
+      kind: "waiting",
+      sentences: waiting.sentences,
+      acceptAndCheck: () =>
+        void acceptAndCheck(editor, mindId, doc, action, allDocuments, waiting.changes),
+    });
+  } else if (
+    result.kind !== "checked" &&
+    result.kind !== "cancelled" &&
+    result.kind !== "waiting"
+  ) {
+    setFor("problems", mindId, result);
+  }
   if (result.kind === "checked") setFor("smallModel", mindId, result.smallModel ? true : null);
+}
+
+function acceptAndCheck(
+  editor: Editor,
+  mindId: string,
+  doc: Y.Doc,
+  action: ClaimCheckAction,
+  allDocuments: boolean,
+  ids: readonly string[],
+): Promise<void> {
+  const waiting = pendingIn(editor.state).filter((each) => ids.includes(each.id));
+  if (editor.isDestroyed || waiting.length === 0) return Promise.resolve();
+  const kept = keptOnAccept(
+    editor.state.doc,
+    Math.min(...waiting.map((each) => each.from)),
+    Math.max(...waiting.map((each) => each.to)),
+  );
+  resolveProposalsIn(
+    editor,
+    mindId,
+    waiting.map((each) => each.id),
+    "accept",
+  );
+  const from = kept && positionOf(editor.state.doc, kept.from);
+  const to = kept && positionOf(editor.state.doc, kept.to);
+  if (typeof from !== "number" || typeof to !== "number") return Promise.resolve();
+  return checkSentences(editor, mindId, doc, action, { range: { from, to }, allDocuments });
 }
 
 /** Stops the Mind's check: the sentences not checked yet say "stopped". */

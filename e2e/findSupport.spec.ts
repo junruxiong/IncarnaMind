@@ -313,3 +313,42 @@ test("A supported sentence's card names the Document as it is named now, after a
   await pointAt(window, supported);
   await expect(card.getByTestId("claim-source")).toHaveText(/^Tides of the coast · /);
 });
+
+test("A check reads the text as it stands and says which sentences with changes waiting it left out; Accept all and check checks them, in English and Chinese (#767)", async () => {
+  const { app, window } = await launchWithTides();
+  await useLocalChatModel(window);
+  const { line } = await mindWithSentences(window, [SUPPORTED, UNSUPPORTED, CONTRADICTED]);
+  await setWindowSize(app, window, 1440, 900);
+  // Changes waiting in two sentences: one written anew, one word changed in the other.
+  const ask = async (sentence: string, instruction: string) => {
+    await slideSelect(window, line, sentence);
+    await window.keyboard.press("ControlOrMeta+j");
+    await window.keyboard.type(instruction);
+    await window.keyboard.press("Enter");
+    await expect(window.getByTestId("edit-pending")).toHaveCount(0);
+  };
+  await ask(UNSUPPORTED, `replace “${UNSUPPORTED}” with “Gulls breed there.”`);
+  await ask(CONTRADICTED, "replace the with a");
+  await expect(line.locator("ins.proposal-insert")).toHaveText(["Gulls breed there", "a"]);
+
+  await checkAll(window, line, "Spring tides", "6 months.", "find-support");
+
+  const waiting = window.getByTestId("checks-waiting");
+  await expect(waiting).toContainText("2 sentences with changes waiting weren't checked");
+  await expect(marks(window)).toHaveCount(1);
+  await expect(marks(window)).toHaveAttribute("data-check", "supported");
+  await screenshot(window, "check-waiting-en");
+  await setLanguage(window, "zh-CN");
+  await expect(waiting).toContainText("有 2 句含待处理的修订，未核对");
+  const acceptAndCheck = waiting.getByTestId("checks-accept-and-check");
+  await expect(acceptAndCheck).toHaveText("全部接受并核对");
+  await screenshot(window, "check-waiting-zh");
+
+  await pointAndClick(window, acceptAndCheck);
+  await expect(window.getByTestId("proposals-bar")).toHaveCount(0);
+  await expect(line).toHaveText(
+    `${SUPPORTED} Gulls breed there. Harbours publish a times of high water every 6 months.`,
+  );
+  await expect(marks(window)).toHaveCount(3);
+  await expect(waiting).toHaveCount(0);
+});
