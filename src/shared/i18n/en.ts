@@ -801,6 +801,8 @@ export const en = {
   "edit.review.undoAll": "Undo all",
   "edit.review.done": "Done",
   "edit.review.restore": "Restore original",
+  "edit.review.restored": "Restored {count} places",
+  "edit.review.restored.one": "Restored the original",
   "edit.held": "This edit would remove most of what you selected, so it's waiting for you",
   "edit.held.apply": "Apply",
   "edit.held.discard": "Discard",

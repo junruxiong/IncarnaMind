@@ -20,6 +20,7 @@ import { aiUseOfAccepted, proposalRequestOf } from "../../shared/proposals";
 import { useAnswers } from "./answers";
 import { type Applying, appliedMessage, finishApplying, startApplying } from "./appliedEdits";
 import { core } from "./core";
+import { appliedLineIn } from "./editor/appliedEditLine";
 import { offerEditorUndo } from "./editor/editorUndo";
 import { selectionForEdit } from "./editor/editSelection";
 import {
@@ -416,6 +417,12 @@ export function resolveProposalsIn(
     core.saveCheckpoint(mindId, "accept").catch(useAppStore.getState().reportError);
   }
   const picked = pendingIn(editor.state).filter((each) => ids === "all" || ids.includes(each.id));
+  const line = appliedLineIn(editor.state);
+  const reviewed =
+    outcome === "reject" &&
+    line?.kind === "review" &&
+    picked.length > 0 &&
+    picked.every((each) => each.request === line.request);
   const resolved = resolveInEditor(editor, ids === "all" ? ids : new Set(ids), outcome);
   if (resolved.length === 0) {
     // Only changes out of date were picked: they can't be accepted, and the User hears why.
@@ -432,8 +439,11 @@ export function resolveProposalsIn(
     }
   }
   const count = resolved.length;
-  const message =
-    outcome === "accept"
+  const message = reviewed
+    ? count === 1
+      ? t("edit.review.restored.one")
+      : t("edit.review.restored", { count })
+    : outcome === "accept"
       ? count === 1
         ? t("proposal.accepted.one")
         : t("proposal.accepted", { count })
