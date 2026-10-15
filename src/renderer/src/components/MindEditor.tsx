@@ -60,6 +60,7 @@ import {
 import { NoteHealth } from "../editor/NoteHealth";
 import { NoteKeymap } from "../editor/noteKeymap";
 import { noteExtensions } from "../editor/noteSchema";
+import { AppliedEditLine } from "../editor/appliedEditLine";
 import { ProposalBars } from "../editor/ProposalBars";
 import { ProposalReview } from "../editor/proposalReview";
 import { QuestionView } from "../editor/QuestionView";
@@ -370,6 +371,10 @@ function MindEditorView({
         }),
         QuestionFold.configure({ mindId }),
         ProposalReview.configure({ translate: translateNow }),
+        AppliedEditLine.configure({
+          translate: translateNow,
+          undoKeys: () => shortcutLabel("edit.undo"),
+        }),
         WritingPlace.configure({ label: () => translateNow("mind.writing") }),
         Suggestions.configure({
           request: (request) => askForSuggestion(mindId, doc, request),

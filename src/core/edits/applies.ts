@@ -1,5 +1,5 @@
 /**
- * When an edit the User asked for on the text applies at once (#880, D220),
+ * When an edit the User asked for on the text applies at once (#880),
  * and what it leaves for them to decide:
  *
  * - Paragraphs of the selection the new text left out stay as they were,

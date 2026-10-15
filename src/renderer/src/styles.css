@@ -3385,6 +3385,53 @@
       color: var(--color-ink-secondary);
     }
   }
+  /*
+   * An edit the User asked for applies at once (#880; DESIGN.md, AI edits):
+   * while it streams in, its changes read as the text they make; then a line
+   * over the first Block it changed, "Changed 3 places · Undo ⌘Z · Review
+   * changes", in accent-strong with the sparkle, and over the paragraphs it
+   * left out and kept, a quieter one in ink-meta. The lines wrap whole at
+   * any width.
+   */
+  .mind-editor del.proposal-delete:has(.proposal-applying),
+  .mind-editor .proposal-node--delete.proposal-applying {
+    display: none;
+  }
+  .mind-editor ins.proposal-insert:has(.proposal-applying),
+  .mind-editor .proposal-node--insert.proposal-applying:not(.citation-marker) {
+    text-decoration: none;
+  }
+  .mind-editor .proposal-node--insert.proposal-applying .citation-marker,
+  .mind-editor .citation-marker.proposal-node--insert.proposal-applying {
+    box-shadow: none;
+  }
+  .mind-editor .applied-line,
+  .mind-editor .applied-kept-line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 6px;
+    min-width: 0;
+    margin-block: 4px;
+    font-family: var(--font-sans);
+    font-size: 12px;
+    line-height: 20px;
+    user-select: none;
+    white-space: normal;
+  }
+  .mind-editor .applied-line {
+    color: var(--color-accent-strong);
+  }
+  .mind-editor .applied-kept-line {
+    color: var(--color-ink-meta);
+
+    & .proposal-action {
+      color: var(--color-ink-secondary);
+    }
+  }
+  .mind-editor .applied-keys {
+    color: var(--color-ink-meta);
+  }
   /* One change's own bar, over its first line: "Change 1 of 3 · Accept · Reject". */
   .change-bar {
     position: fixed;

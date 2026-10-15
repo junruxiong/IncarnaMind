@@ -66,7 +66,15 @@ export interface PendingProposal {
 }
 
 interface ReviewState {
+  /** Those waiting for the User: all but the ones of requests applying (`applying`). */
   proposals: readonly PendingProposal[];
+  /**
+   * The requests whose Proposals an edit the User asked for is applying
+   * (#880): drawn as the text they make, and not waiting for anyone.
+   */
+  applying: ReadonlySet<string>;
+  /** Their Proposals. */
+  applied: readonly PendingProposal[];
   /** The Proposal under the pointer, by id. */
   hovered: string | null;
   /** Text waiting for Edit with AI to come back, or the selection the composer is editing. */
@@ -74,7 +82,12 @@ interface ReviewState {
   decorations: DecorationSet;
 }
 
-type Meta = { hovered: string | null } | { target: { from: number; to: number } | null };
+type Meta =
+  | { hovered: string | null }
+  | { target: { from: number; to: number } | null }
+  | { applying: ReadonlySet<string> }
+  /** Changes an applied edit made, shown again as changes (#880): theirs, not the User's. */
+  | { shownAgain: true };
 
 export const proposalReviewKey = new PluginKey<ReviewState>("proposalReview");
 
@@ -318,6 +331,16 @@ export function shownProposal(state: EditorState): PendingProposal | null {
 /** The text waiting for Edit with AI, or being edited from the composer. */
 export const editTarget = (state: EditorState) => proposalReviewKey.getState(state)?.target ?? null;
 
+/** Draws the Proposals of these requests as the text they make, not as changes waiting (#880). */
+export function setApplying(editor: Editor, applying: ReadonlySet<string>): void {
+  if (editor.isDestroyed) return;
+  editor.view.dispatch(editor.state.tr.setMeta(proposalReviewKey, { applying } satisfies Meta));
+}
+
+/** The requests whose Proposals are drawn as applied. */
+export const applyingIn = (state: EditorState): ReadonlySet<string> =>
+  proposalReviewKey.getState(state)?.applying ?? new Set();
+
 /** Marks text as waiting for Edit with AI, or clears it (null). */
 export function setEditTarget(editor: Editor, target: { from: number; to: number } | null): void {
   if (editor.isDestroyed) return;
@@ -348,6 +371,11 @@ function bringsProposals(tr: Transaction): boolean {
 
 /** A change that came from the Mind's document (the core, another window, Undo), not the User typing here. */
 const fromDocument = (tr: Transaction) => !!tr.getMeta(ySyncPluginKey)?.isChangeOrigin;
+
+const shownAgain = (tr: Transaction) => {
+  const meta = tr.getMeta(proposalReviewKey) as Meta | undefined;
+  return meta !== undefined && "shownAgain" in meta;
+};
 
 /**
  * Watches for the User moving the cursor or editing the Mind from now on;
@@ -417,11 +445,21 @@ type Translate = (key: MessageKey, params?: MessageParams) => string;
 function decorationsFor(
   doc: ProseMirrorNode,
   proposals: readonly PendingProposal[],
+  applied: readonly PendingProposal[],
   current: string | null,
   target: { from: number; to: number } | null,
   t: Translate,
 ): DecorationSet {
   const decorations: Decoration[] = [];
+  for (const range of applied.flatMap((proposal) => proposal.ranges)) {
+    decorations.push(
+      range.node
+        ? Decoration.node(range.from, range.to, {
+            class: `proposal-node proposal-node--${range.node} proposal-applying`,
+          })
+        : Decoration.inline(range.from, range.to, { class: "proposal-applying" }),
+    );
+  }
   for (const [index, proposal] of proposals.entries()) {
     const stale = proposal.outOfDate ? " proposal-stale" : "";
     for (const range of proposal.ranges) {
@@ -495,11 +533,14 @@ export const ProposalReview = Extension.create<{ translate: Translate }>({
             const proposals = proposalsIn(state.doc);
             return {
               proposals,
+              applying: new Set(),
+              applied: [],
               hovered: null,
               target: null,
               decorations: decorationsFor(
                 state.doc,
                 proposals,
+                [],
                 proposalsAt(proposals, state.selection)[0]?.id ?? null,
                 null,
                 t,
@@ -508,13 +549,16 @@ export const ProposalReview = Extension.create<{ translate: Translate }>({
           },
           apply(tr, value, oldState, state): ReviewState {
             const meta = tr.getMeta(proposalReviewKey) as Meta | undefined;
-            let { proposals, hovered, target } = value;
-            // Typing brings no Proposal, only moves or removes one: a Mind with none stays without.
-            if (
+            let { proposals, applying, applied, hovered, target } = value;
+            const found =
               tr.docChanged &&
-              (proposals.length > 0 || fromDocument(tr) || bringsProposals(tr))
-            ) {
-              proposals = proposalsIn(state.doc);
+              (proposals.length + applied.length > 0 || fromDocument(tr) || bringsProposals(tr));
+            if (meta && "applying" in meta) applying = meta.applying;
+            // Typing brings no Proposal, only moves or removes one: a Mind with none stays without.
+            if (found || applying !== value.applying) {
+              const all = found ? proposalsIn(state.doc) : [...proposals, ...applied];
+              proposals = all.filter((each) => !applying.has(each.request));
+              applied = all.filter((each) => applying.has(each.request));
             }
             if (target && tr.docChanged) {
               const from = tr.mapping.map(target.from, 1);
@@ -527,23 +571,29 @@ export const ProposalReview = Extension.create<{ translate: Translate }>({
             const current = proposalsAt(proposals, state.selection)[0]?.id ?? null;
             const unchanged =
               proposals === value.proposals &&
+              applied === value.applied &&
               target === value.target &&
               current === (proposalsAt(value.proposals, oldState.selection)[0]?.id ?? null);
             return {
               proposals,
+              applying,
+              applied,
               hovered,
               target,
               decorations: unchanged
                 ? value.decorations.map(tr.mapping, tr.doc)
-                : decorationsFor(state.doc, proposals, current, target, t),
+                : decorationsFor(state.doc, proposals, applied, current, target, t),
             };
           },
         },
 
         // What the User types or pastes into a Proposal's words is theirs, not the Proposal's.
         appendTransaction(transactions, before, after) {
-          if (pendingIn(before).length === 0) return null;
-          const typed = transactions.filter((tr) => tr.docChanged && !fromDocument(tr));
+          const review = proposalReviewKey.getState(before);
+          if (!review || review.proposals.length + review.applied.length === 0) return null;
+          const typed = transactions.filter(
+            (tr) => tr.docChanged && !fromDocument(tr) && !shownAgain(tr),
+          );
           if (typed.length === 0) return null;
           const marks = proposalMarks(after);
           const ranges: { from: number; to: number }[] = [];
@@ -652,7 +702,8 @@ export function changeReason(
  * of its Undo (⌘Z takes it back), the same way the core does anywhere
  * (`resolveProposals`). The change reaches the core as the User's edits do.
  * `"all"` takes every Proposal the Mind holds when it runs, ones an Undo has
- * just brought back included, rather than a list read earlier.
+ * just brought back included, rather than a list read earlier, but those an
+ * edit is applying.
  */
 export function resolveInEditor(
   editor: Editor,
@@ -666,11 +717,12 @@ export function resolveInEditor(
   )?.undoManager;
   undo?.stopCapturing();
   let resolved: ResolvedProposal[] = [];
+  const applying = applyingIn(editor.state);
   // As the editor's own change, so its Undo takes it back.
   binding.doc.transact(() => {
     resolved = resolveProposals(
       binding.type,
-      (proposal) => ids === "all" || ids.has(proposal.id),
+      (proposal) => (ids === "all" ? !applying.has(proposal.request) : ids.has(proposal.id)),
       outcome,
     );
   }, ySyncPluginKey);

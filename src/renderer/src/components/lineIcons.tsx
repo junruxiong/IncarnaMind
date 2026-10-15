@@ -1,5 +1,6 @@
 import type { ReactNode, SVGProps } from "react";
 import type { DocumentKind } from "../../../core/api";
+import { SPARK_PATH } from "./iconPaths";
 
 type IconProps = SVGProps<SVGSVGElement>;
 
@@ -270,7 +271,7 @@ export function MergeLineIcon(props: IconProps) {
 export function SparkLineIcon(props: IconProps) {
   return (
     <LineIcon strokeWidth={2} {...props}>
-      <path d="M12 3c.6 4.6 3.4 7.4 8 8-4.6.6-7.4 3.4-8 8-.6-4.6-3.4-7.4-8-8 4.6-.6 7.4-3.4 8-8z" />
+      <path d={SPARK_PATH} />
     </LineIcon>
   );
 }

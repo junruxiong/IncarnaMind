@@ -1405,6 +1405,9 @@ export function createCore(adapters: CoreAdapters): Core {
     localOnly: () => embedding.localOnly(),
     recheck: (attributes) => recheckKept(documents, attributes),
     writing: (mindId, place) => events.emit("mind.writing", { mindId, place }),
+    checkpoint: (mindId) => {
+      checkpoints.save(mindId, "accept");
+    },
     now: () => adapters.now?.() ?? new Date(),
   });
 

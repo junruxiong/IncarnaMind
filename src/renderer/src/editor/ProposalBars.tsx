@@ -3,10 +3,12 @@ import { type Editor, isMacOS, posToDOMRect } from "@tiptap/core";
 import { useEditorState } from "@tiptap/react";
 import { type MouseEvent as ReactMouseEvent, useEffect, useLayoutEffect, useRef } from "react";
 import { formatDate } from "../../../shared/dates";
+import { actOnAppliedEdit } from "../appliedEdits";
 import { PencilLineIcon, SparkLineIcon } from "../components/lineIcons";
 import { regenerateChange, resolveProposalsIn, speak, useEdits } from "../editWithAi";
 import { useLanguage, useT } from "../i18n";
 import { useAppStore } from "../store";
+import { appliedLineIn } from "./appliedEditLine";
 import {
   changeReason,
   clearHovered,
@@ -60,7 +62,9 @@ export function ProposalBars({ editor, mindId }: { editor: Editor; mindId: strin
     const dom = editor.view.dom;
     const buttonOf = (event: Event) =>
       event.target instanceof Element
-        ? event.target.closest<HTMLElement>("[data-proposal-regenerate], [data-proposal-reject]")
+        ? event.target.closest<HTMLElement>(
+            "[data-proposal-regenerate], [data-proposal-reject], [data-applied-action]",
+          )
         : null;
     // The text keeps the focus and its selection.
     const press = (event: MouseEvent) => {
@@ -70,6 +74,12 @@ export function ProposalBars({ editor, mindId }: { editor: Editor; mindId: strin
       const button = buttonOf(event);
       if (!button || repeated(event)) return;
       event.preventDefault();
+      const applied = button.dataset.appliedAction;
+      if (applied) {
+        actOnAppliedEdit(editor, applied);
+        if (!editor.isDestroyed) editor.commands.focus();
+        return;
+      }
       const rejected = button.dataset.proposalReject;
       if (rejected) {
         resolveProposalsIn(editor, mindId, [rejected], "reject");
@@ -116,7 +126,11 @@ function ProposalsBar({ editor, mindId }: { editor: Editor; mindId: string }) {
     selector: ({ editor: current }): Group[] => {
       const theirs = new Map<string | null, Group>();
       const assistant: Group = { ids: [], stale: false };
+      const line = appliedLineIn(current.state);
+      // An edit the User asked for, reviewed or held back, has its own line over it.
+      const ownLine = line && line.kind !== "applied" ? line.request : null;
       for (const each of pendingIn(current.state)) {
+        if (each.request === ownLine) continue;
         let group = assistant;
         if (each.theirs) {
           const author = theirChange(current, each)?.author ?? null;
@@ -257,6 +271,13 @@ interface Shown {
   reason: string | null;
   /** The cursor is in it, not only the pointer on it. */
   focused: boolean;
+  /** It is one of an applied edit's changes, shown again to restore (#880). */
+  reviewed: boolean;
+}
+
+function reviewedIn(state: Editor["state"], proposal: PendingProposal): boolean {
+  const line = appliedLineIn(state);
+  return line?.kind === "review" && line.request === proposal.request;
 }
 
 function ChangeBar({ editor, mindId }: { editor: Editor; mindId: string }) {
@@ -282,6 +303,7 @@ function ChangeBar({ editor, mindId }: { editor: Editor; mindId: string }) {
         made: proposal.theirs ? theirChange(current, proposal) : null,
         reason: proposal.theirs ? null : changeReason(current, proposal),
         focused: pendingAtSelection(current.state).some((each) => each.id === proposal.id),
+        reviewed: reviewedIn(current.state, proposal),
       };
     },
   });
@@ -400,29 +422,44 @@ function ChangeBar({ editor, mindId }: { editor: Editor; mindId: string }) {
             {t("proposal.sourceRemoved")}
           </span>
         )}
-        <button
-          type="button"
-          data-testid="change-accept"
-          title={`${t("proposal.accept")} (${keys.accept})`}
-          aria-keyshortcuts={isMacOS() ? "Meta+Enter" : "Control+Enter"}
-          onClick={(event) => resolve(event, "accept")}
-          className="proposal-action"
-        >
-          {t("proposal.accept")}
-        </button>
-        <span aria-hidden="true" className="proposal-dot">
-          ·
-        </span>
-        <button
-          type="button"
-          data-testid="change-reject"
-          title={`${t("proposal.reject")} (${keys.reject})`}
-          aria-keyshortcuts={isMacOS() ? "Meta+Backspace" : "Control+Backspace"}
-          onClick={(event) => resolve(event, "reject")}
-          className="proposal-action"
-        >
-          {t("proposal.reject")}
-        </button>
+        {shown.reviewed ? (
+          <button
+            type="button"
+            data-testid="change-restore"
+            title={`${t("edit.review.restore")} (${keys.reject})`}
+            aria-keyshortcuts={isMacOS() ? "Meta+Backspace" : "Control+Backspace"}
+            onClick={(event) => resolve(event, "reject")}
+            className="proposal-action"
+          >
+            {t("edit.review.restore")}
+          </button>
+        ) : (
+          <>
+            <button
+              type="button"
+              data-testid="change-accept"
+              title={`${t("proposal.accept")} (${keys.accept})`}
+              aria-keyshortcuts={isMacOS() ? "Meta+Enter" : "Control+Enter"}
+              onClick={(event) => resolve(event, "accept")}
+              className="proposal-action"
+            >
+              {t("proposal.accept")}
+            </button>
+            <span aria-hidden="true" className="proposal-dot">
+              ·
+            </span>
+            <button
+              type="button"
+              data-testid="change-reject"
+              title={`${t("proposal.reject")} (${keys.reject})`}
+              aria-keyshortcuts={isMacOS() ? "Meta+Backspace" : "Control+Backspace"}
+              onClick={(event) => resolve(event, "reject")}
+              className="proposal-action"
+            >
+              {t("proposal.reject")}
+            </button>
+          </>
+        )}
       </div>
       {why && shown.focused && (
         <div data-testid="change-bar-why" className="change-bar-why">
