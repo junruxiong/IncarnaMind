@@ -149,14 +149,9 @@ function canSkipThinking(
   return catalogFacts(set, spec.modelId)?.reasoning !== false;
 }
 
-/** The form of thinking off each model's refusal named this session, by provider and model. */
 const namedByRefusal = new Map<string, ProviderOptions>();
 
-/**
- * A small call's model, asked not to think: in the form the catalog has for the
- * model, else its provider's. A model that refuses its provider's form is asked
- * once more in the form the refusal names, which its later calls then use.
- */
+// A model the catalog doesn't know yet may refuse the provider's form; its refusal names the one it takes (#907).
 function withThinkingOff(
   model: ChatLanguageModel,
   spec: ChatModelSpec,

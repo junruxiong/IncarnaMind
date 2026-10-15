@@ -17,12 +17,11 @@ import type { CatalogProvider, Endpoint, ProviderOptions } from "./types";
 
 const GLOBAL = { en: "Global", zh: "全球" };
 
-/** The least thinking a Claude model takes that refuses `disabled`: none before it answers (#907)… */
 export const CLAUDE_BETWEEN_TOOLS: ProviderOptions = {
   anthropic: { thinking: { type: "between_tools" } },
 };
 
-/** …or, on a model that always thinks adaptively, the lowest effort. */
+// A model that always thinks adaptively can only be asked for less (#907).
 export const CLAUDE_LOW_EFFORT: ProviderOptions = {
   anthropic: { thinking: { type: "adaptive" }, effort: "low" },
 };

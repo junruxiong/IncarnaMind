@@ -75,8 +75,7 @@ export const OVERRIDES: CatalogOverrides = {
   },
   models: {
     anthropic: {
-      // `thinking: disabled` returns 400 on these four (measured 2026-10-15, #907), and a forced
-      // Tool choice ("any" or a named Tool) on those with `forcedToolChoice: false`.
+      // Measured 2026-10-15 (#907): these refuse `thinking: disabled`, and some a forced Tool choice.
       "claude-fable-5": { thinkingOff: CLAUDE_LOW_EFFORT },
       "claude-fable-5-1": { forcedToolChoice: false, thinkingOff: CLAUDE_LOW_EFFORT },
       "claude-opus-5-5": { forcedToolChoice: false, thinkingOff: CLAUDE_LOW_EFFORT },
