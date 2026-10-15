@@ -27,6 +27,7 @@ import { CitationStylePrompt } from "../editor/CitationStylePrompt";
 import { CitationView } from "../editor/CitationView";
 import { CodeBlockView } from "../editor/CodeBlockView";
 import { ComparisonTableView } from "../editor/ComparisonTableView";
+import { ContradictionLine } from "../editor/ContradictionLine";
 import { CitationClusters } from "../editor/citationClusters";
 import { CitationNumbers, redrawFootnotes, setCitationForm } from "../editor/citationNumbers";
 import { ClaimChecks, setClaimContext } from "../editor/claimChecks";
@@ -47,6 +48,7 @@ import { HeldSelection } from "../editor/heldSelection";
 import { LinkBubble } from "../editor/LinkBubble";
 import { MarginChecks } from "../editor/MarginChecks";
 import { MathEditing, MathEditor } from "../editor/MathEditor";
+import { MindCheckAsk } from "../editor/MindCheckLine";
 import { MindOutline } from "../editor/MindOutline";
 import { MeetingNotes } from "../editor/meetingNotes";
 import {
@@ -631,7 +633,9 @@ function MindEditorView({
               <VerifyLine editor={editor} doc={doc} mindId={mindId} verification={verification} />
             ) : (
               <WordCount editor={editor} doc={doc}>
-                <NoteHealth editor={editor} mindId={mindId} doc={doc} />
+                <NoteHealth editor={editor} doc={doc} mindId={mindId} />
+                <ContradictionLine doc={doc} mindId={mindId} />
+                <MindCheckAsk mindId={mindId} />
               </WordCount>
             )}
           </>,

@@ -140,7 +140,12 @@ describe("Web search in an Answer", { timeout: 30_000 }, () => {
     });
     expect(finished.citations.map((each) => each.check)).toEqual(["found"]);
     // The made-up address was never fetched; the page behind a sign-in was, and wasn't saved.
-    expect(web.heard).toEqual(["encyclopedia.example/tea", "news.example/members"]);
+    // The saved page's picture was asked for, from its image server (#756).
+    expect([...web.heard].sort()).toEqual([
+      "encyclopedia.example/tea",
+      "images.example/tea-plantation.jpg",
+      "news.example/members",
+    ]);
     expect(toolCalls(client, answerId)).toEqual([
       expect.objectContaining({
         tool: "search_web",
