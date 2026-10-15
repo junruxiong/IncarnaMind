@@ -38,15 +38,22 @@ function gif(screen: number, frame: number): Uint8Array {
   return bytes;
 }
 
-/** An AVIF's first bytes: its `ftyp`, then an `ispe` box for each size given, in order. */
-function avif(...sizes: number[]): Uint8Array {
-  const bytes = new Uint8Array(16 + 20 * sizes.length + 16);
+/**
+ * An AVIF's first bytes: its `ftyp`, a `colr` box of `padding` bytes, then an
+ * `ispe` box for each size given, in order.
+ */
+function avif(sizes: number[], padding = 0): Uint8Array {
+  const bytes = new Uint8Array(16 + padding + 20 * sizes.length + 16);
   const text = new TextEncoder();
   const view = new DataView(bytes.buffer);
   view.setUint32(0, 16);
   bytes.set(text.encode("ftypavif"), 4);
+  if (padding > 0) {
+    view.setUint32(16, padding);
+    bytes.set(text.encode("colr"), 20);
+  }
   sizes.forEach((size, index) => {
-    const at = 16 + index * 20;
+    const at = 16 + padding + index * 20;
     view.setUint32(at, 20);
     bytes.set(text.encode("ispe"), at + 4);
     view.setUint32(at + 12, size);
@@ -87,15 +94,17 @@ describe("fetching a page's pictures", () => {
     expect(20_000 * 20_000).toBeGreaterThan(PICTURE_LIMITS.maxPixels);
   });
 
-  test("a GIF whose first frame reaches past its screen, or an AVIF with a larger image after a small one, is as large as what is drawn", () => {
+  test("a GIF whose first frame reaches past its screen, or an AVIF with a larger image after a small one or a large box, is as large as what is drawn", () => {
     const sizeOf = (bytes: Uint8Array) => {
       const type = pictureType(bytes);
       return type && pictureSize(bytes, type);
     };
     expect(sizeOf(gif(100, 100))).toEqual({ width: 100, height: 100 });
     expect(sizeOf(gif(100, 20_000))).toEqual({ width: 20_000, height: 20_000 });
-    expect(sizeOf(avif(100))).toEqual({ width: 100, height: 100 });
-    expect(sizeOf(avif(64, 20_000))).toEqual({ width: 20_000, height: 20_000 });
+    expect(sizeOf(avif([100]))).toEqual({ width: 100, height: 100 });
+    expect(sizeOf(avif([64, 20_000]))).toEqual({ width: 20_000, height: 20_000 });
+    // Its main image past a large colour profile is found too.
+    expect(sizeOf(avif([20_000], 200_000))).toEqual({ width: 20_000, height: 20_000 });
     expect(20_000 * 20_000).toBeGreaterThan(PICTURE_LIMITS.maxPixels);
   });
 });

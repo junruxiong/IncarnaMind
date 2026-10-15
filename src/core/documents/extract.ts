@@ -8,7 +8,7 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { CJK } from "../../shared/text";
 import type { TextUnit } from "../../shared/units";
-import type { PagePicture, PictureRead, RecognizedLine } from "../adapters";
+import type { LogFields, PagePicture, PictureRead, RecognizedLine } from "../adapters";
 import type { DocumentKind } from "../api";
 import { isRecord } from "../errors";
 import { ExtractionError, extractUnits } from "./formats";
@@ -29,8 +29,8 @@ export interface PageReading {
   read(page: number, picture: PagePicture): Promise<RecognizedLine[]>;
   /** As `read`, for a picture file, decoded where the model runs. */
   readFile(page: number, file: Uint8Array): Promise<PictureRead>;
-  /** For the log. */
-  documentId: string;
+  /** Logs in the core, with the Document's id: the worker's own console reaches no log. */
+  log(event: string, fields: LogFields): void;
   /** `read` of `of` scanned pages are read; `unit` is the one just read. */
   progress(read: number, of: number, unit: TextUnit | null): void;
   /** Aborted when the job is stopped: no further page is read. */
@@ -103,10 +103,10 @@ async function extractWeb(
         readings.set(figure.number, unread);
       } else {
         // Marked unread, it would be read again at every start, and fail again.
-        console.error(
-          `Document ${reading.documentId}: its picture ${figure.src} couldn't be read:`,
-          error,
-        );
+        reading.log("documents.pictureNotRead", {
+          picture: figure.src,
+          message: error instanceof Error ? error.message : String(error),
+        });
       }
     }
     reading.progress(index + 1, figures.length, null);
@@ -124,9 +124,10 @@ async function readFigure(
   const type = pictureType(file);
   const size = type && pictureSize(file, type);
   if (!size || size.width * size.height > PICTURE_LIMITS.maxPixels) {
-    console.error(
-      `Document ${reading.documentId}: its picture ${src} isn't one to read, or is too large`,
-    );
+    reading.log("documents.pictureNotRead", {
+      picture: src,
+      message: size ? `${size.width} × ${size.height} pixels` : "not a picture",
+    });
     return null;
   }
   const picture = await reading.readFile(number, file);

@@ -35,6 +35,8 @@ import {
   type UnitLabel,
   type UnitText,
 } from "../../shared/units";
+import { silentLogger } from "../activityLog";
+import type { Logger } from "../adapters";
 import { cleanQuote } from "../answers/citations";
 import type { CitedUnits } from "../answers/citedVersions";
 import type {
@@ -418,6 +420,7 @@ export interface DocumentsOptions {
     detectDataless: boolean;
   };
   reportError?: (error: unknown) => void;
+  log?: Logger;
 }
 
 /** Which Documents `list` returns. Every condition given must match. */
@@ -437,6 +440,7 @@ export interface DocumentFilter {
 export function createDocuments(options: DocumentsOptions) {
   const { db, dataDir, now, model, emitStatus } = options;
   const reportError = options.reportError ?? ((error: unknown) => console.error(error));
+  const log = options.log ?? silentLogger;
   const vectors = createVectorIndex(db, model);
   const legacyFolder = join(dataDir, "documents");
   const { textRecognition } = options;
@@ -944,6 +948,9 @@ export function createDocuments(options: DocumentsOptions) {
       }
       return textRecognition.read(picture, page);
     },
+    onLog(job, { event, fields }) {
+      log.warn(event, { documentId: job.documentId, ...fields });
+    },
     readFile(_job, page, file) {
       if (!textRecognition) {
         return Promise.reject(new TextRecognitionUnavailableError("Pictures can't be read."));
@@ -1410,18 +1417,11 @@ export function createDocuments(options: DocumentsOptions) {
   }
   for (const row of unfinished) {
     if (row.status === "extracting") {
-      // Its reading stopped the app last time: read again at every start, it could again.
-      // It waits for the User's Retry.
-      // A version read before stays searchable, as after a crash of the worker alone.
+      // Read again by itself, what stopped the app could stop it again, at every start.
       db.run(
-        `UPDATE documents SET status = ?, failure_reason = 'processing-error',
+        `UPDATE documents SET status = ?, failure_reason = 'app-stopped',
            failure_message = ?, updated_at = ? WHERE id = ?`,
-        [
-          indexedStatus(row) ?? "failed",
-          "IncarnaMind stopped while reading this file.",
-          now(),
-          row.id,
-        ],
+        [indexedStatus(row) ?? "failed", "The app stopped while it was being read.", now(), row.id],
       );
       continue;
     }

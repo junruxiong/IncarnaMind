@@ -7,7 +7,7 @@
  */
 import type { Worker } from "node:worker_threads";
 import type { TextUnit } from "../../shared/units";
-import type { PagePicture, PictureRead, RecognizedLine } from "../adapters";
+import type { LogFields, PagePicture, PictureRead, RecognizedLine } from "../adapters";
 import type {
   MetadataJob,
   MetadataResult,
@@ -40,6 +40,8 @@ export interface ProcessorHandlers {
   read(job: ProcessingJob, page: number, picture: PagePicture): Promise<RecognizedLine[]>;
   /** As `read`, for a picture file (`TextRecognizer.readFile`). */
   readFile(job: ProcessingJob, page: number, file: Uint8Array): Promise<PictureRead>;
+  /** What a job logs. */
+  onLog(job: ProcessingJob, entry: { event: string; fields: LogFields }): void;
   /** Whether an error from `read` means no page can be read now. */
   isUnavailable(error: unknown): boolean;
 }
@@ -136,6 +138,11 @@ export function createProcessor(
       if ("result" in response) finish(response.id, response.result);
       else if ("picture" in response || "file" in response) {
         read(started, response.id, response.request, response.page, response);
+      } else if ("log" in response) {
+        if (current?.id === response.id && current.job.task === "process") {
+          const { job } = current;
+          call(() => handlers.onLog(job, response.log));
+        }
       } else if (current?.id === response.id && current.job.task === "process") {
         const { job } = current;
         call(() => handlers.onProgress(job, response.progress));
