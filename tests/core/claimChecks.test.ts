@@ -239,20 +239,26 @@ describe("Find support", () => {
         to: { blockId: block.attrs.id, offset: length },
       });
 
+    const leftOut = {
+      sentences: [
+        {
+          from: { blockId: block.attrs.id, offset: SUPPORTED.length + 1 },
+          to: { blockId: block.attrs.id, offset: length },
+        },
+      ],
+      changeIds: ["change-1"],
+    };
     expect(await check(0)).toEqual({
       kind: "checked",
       sentences: 1,
       checked: 1,
       smallModel: false,
-      waiting: { sentences: 1, changes: ["change-1"] },
+      waiting: leftOut,
     });
     expect((await shownChecks(core, client)).map((each) => each.sentence)).toEqual([SUPPORTED]);
 
     calls.length = 0;
-    expect(await check(SUPPORTED.length + 1)).toEqual({
-      kind: "waiting",
-      waiting: { sentences: 1, changes: ["change-1"] },
-    });
+    expect(await check(SUPPORTED.length + 1)).toEqual({ kind: "waiting", waiting: leftOut });
     expect(calls).toEqual([]);
   });
 

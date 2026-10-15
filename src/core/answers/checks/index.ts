@@ -129,10 +129,12 @@ interface ParsedCheck {
 
 function parseStretches(value: unknown): TextStretch[] {
   if (value === undefined) return [];
-  if (!Array.isArray(value)) throw new InvalidInputError("more must be a list of stretches.");
-  return value.map((each: unknown) => {
-    if (!isRecord(each)) throw new InvalidInputError("Each stretch needs a from and a to.");
-    return { from: parsePlace(each.from, "from"), to: parsePlace(each.to, "to") };
+  return (Array.isArray(value) ? value : [value]).map((each: unknown) => {
+    const stretch = isRecord(each) ? each : {};
+    return {
+      from: parsePlace(stretch.from, "more's from"),
+      to: parsePlace(stretch.to, "more's to"),
+    };
   });
 }
 
