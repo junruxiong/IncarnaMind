@@ -33,6 +33,7 @@ import { asOneStep, offerEditorUndo, undoStackOf } from "./editor/editorUndo";
 import {
   applyingIn,
   editorDoc,
+  pendingIn,
   proposalReviewKey,
   proposalsIn,
   resolveInEditor,
@@ -335,6 +336,16 @@ function review(editor: Editor): void {
   tr.setMeta(proposalReviewKey, { shownAgain: true });
   tr.setMeta(appliedLineKey, line);
   asOneStep(editor, () => editor.view.dispatch(tr));
+  // Into the first change, so its bar shows Restore original.
+  const first = pendingIn(editor.state).find((each) => each.request === request);
+  if (first && !editor.isDestroyed) {
+    const at = first.block ? first.from + 1 : first.from;
+    editor
+      .chain()
+      .setTextSelection(Math.min(at, editor.state.doc.content.size))
+      .scrollIntoView()
+      .run();
+  }
 }
 
 const ofRequest = (editor: Editor, request: string) =>
@@ -355,8 +366,20 @@ function resolveShown(editor: Editor, outcome: "accept" | "reject"): void {
       return;
     }
   }
-  resolveInEditor(editor, ofRequest(editor, line.request), outcome);
+  const count = resolveInEditor(editor, ofRequest(editor, line.request), outcome).length;
   setAppliedLine(editor, null);
+  if (count > 0 && outcome === "reject") {
+    offerEditorUndo(
+      editor,
+      line.kind === "review"
+        ? count === 1
+          ? t("edit.review.restored.one")
+          : t("edit.review.restored", { count })
+        : count === 1
+          ? t("proposal.rejected.one")
+          : t("proposal.rejected", { count }),
+    );
+  }
 }
 
 /** "Remove them": what the edit left out and kept goes after all, one step of Undo. */

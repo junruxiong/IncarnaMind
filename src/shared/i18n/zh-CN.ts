@@ -765,6 +765,8 @@ export const zhCN = {
   "edit.review.undoAll": "全部撤销",
   "edit.review.done": "完成",
   "edit.review.restore": "恢复原文",
+  "edit.review.restored": "恢复了 {count} 处原文",
+  "edit.review.restored.one": "已恢复原文",
   "edit.held": "这次修改会删掉你选中的大部分内容，所以先等你确认",
   "edit.held.apply": "应用",
   "edit.held.discard": "放弃",
