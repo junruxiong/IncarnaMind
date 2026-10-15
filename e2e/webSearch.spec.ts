@@ -89,7 +89,7 @@ test("asked to search the web, an Answer saves the page it reads as a Document a
   await pointAndClick(window, toggle);
   await expect(toggle).toBeChecked();
   await expect(section.getByTestId("web-search-status")).toHaveText(
-    `${MODEL_NAME} searches through Anthropic.`,
+    `${MODEL_NAME} searches the web through Anthropic.`,
   );
   await expect(section.getByTestId("web-search-route")).toHaveText("The model's own search");
   await section.scrollIntoViewIfNeeded();

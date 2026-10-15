@@ -435,7 +435,7 @@ describe("The candidates a reranker sees, through the core", { timeout: 30_000 }
     // Hybrid search is keyword search, and vector search is refused: nothing is embedded.
     expect(await core.searchPassages(query, { limit: 20 })).toEqual(keyword);
     await expect(core.searchPassages(query, { mode: "vector" })).rejects.toThrow(
-      /embeddings, which are off/,
+      /Search by meaning is off/,
     );
   });
 
