@@ -48,7 +48,6 @@ import { zhCN } from "../../src/shared/i18n/zh-CN";
 
 const GIB = 1024 ** 3;
 
-/** A value a field takes: its first choice, or one its pattern accepts. */
 const sampleFieldValue = (field: EndpointField): string =>
   field.choices?.[0]?.value ?? (field.name === "account" ? "0123456789abcdef0123456789abcdef" : "");
 const REPO_ROOT = resolve(__dirname, "../..");
