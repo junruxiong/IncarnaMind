@@ -15,6 +15,7 @@ import {
 } from "../../conversations";
 import { useT } from "../../i18n";
 import { isLive, useMeetings } from "../../meetings";
+import { useModelSetup } from "../../modelSetup";
 import { togglePlanView, useResearch } from "../../research";
 import { type ScopeChip, scopeChips } from "../../scope";
 import { useAppStore } from "../../store";
@@ -53,6 +54,7 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
   const t = useT();
   const messages = useConversations((state) => state.messages);
   const asking = useConversations((state) => state.asking);
+  const waitingQuestion = useModelSetup((state) => state.waiting);
   const askingQuote = useConversations((state) => state.askingQuote);
   const onItsWay = useAnswerOnItsWay();
   const stopWanted = useConversations((state) => state.stopWanted);
@@ -150,18 +152,22 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
       data-testid="assistant-log"
       className="assistant-log"
     >
-      {messages.length === 0 && asking === null && !plan && !tasks.some(asked) && (
-        <>
-          <p data-testid="assistant-reads" title={reads} className="assistant-reads">
-            <SearchIcon aria-hidden="true" className="assistant-reads-icon" />
-            <span className="assistant-reads-text">{reads}</span>
-          </p>
-          <p data-testid="assistant-empty" className="assistant-empty">
-            {t("assistant.empty")}
-          </p>
-          {listening && <MeetingStarters />}
-        </>
-      )}
+      {messages.length === 0 &&
+        asking === null &&
+        !waitingQuestion &&
+        !plan &&
+        !tasks.some(asked) && (
+          <>
+            <p data-testid="assistant-reads" title={reads} className="assistant-reads">
+              <SearchIcon aria-hidden="true" className="assistant-reads-icon" />
+              <span className="assistant-reads-text">{reads}</span>
+            </p>
+            <p data-testid="assistant-empty" className="assistant-empty">
+              {t("assistant.empty")}
+            </p>
+            {listening && <MeetingStarters />}
+          </>
+        )}
       {interleave(messages, tasks).map((entry) => {
         if (entry.kind === "task") {
           const { task } = entry;
@@ -188,6 +194,14 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
         );
       })}
       {asking !== null && <QuestionBubble text={asking} quote={askingQuote} />}
+      {waitingQuestion && (
+        <>
+          <QuestionBubble text={waitingQuestion.text} quote="" />
+          <p data-testid="assistant-waiting-model" className="assistant-empty">
+            {t("setup.waiting")}
+          </p>
+        </>
+      )}
       {plan && (
         <>
           <QuestionBubble text={plan.topic} research />

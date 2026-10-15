@@ -245,6 +245,22 @@ describe("Recording a Meeting", () => {
     await core.stopMeeting(id);
     expect(partsOf(dataDir, id)).toEqual(["microphone@0+6", "microphone@8+10", "microphone@18+2"]);
   });
+
+  test("a microphone opened again after a moment goes on where its audio belongs, not before", async () => {
+    const dataDir = await createTempDataFolder();
+    const { core, clock, capture, record } = await meetingCore(dataDir);
+    const { id } = await core.createMeeting();
+    await core.startMeeting({ meetingId: id, systemAudio: false });
+    record(6 * SECOND, ["microphone"]);
+
+    // The capture opens the new default microphone, which says so and sends its first samples 400 ms on.
+    clock.advance(400);
+    capture.report("microphone", "recording");
+    record(4 * SECOND, ["microphone"]);
+
+    await core.stopMeeting(id);
+    expect(partsOf(dataDir, id)).toEqual(["microphone@0+6", "microphone@6.4+4"]);
+  });
 });
 
 describe("The computer's sound", () => {
