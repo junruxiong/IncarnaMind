@@ -5,7 +5,13 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import type * as Y from "yjs";
 import type { CitationAttributes } from "../../../core/api";
 import { citationState } from "../../../shared/citations";
-import { checkSentences, dismissCheckProblem, stopCheck, useChecks } from "../checks";
+import {
+  acceptAndCheck,
+  checkSentences,
+  dismissCheckProblem,
+  stopCheck,
+  useChecks,
+} from "../checks";
 import { ProblemLine } from "../components/ProblemLine";
 import { ReadinessExplanation, readinessAction } from "../components/providers/ChatReadinessNotice";
 import { UnreadFilesLine } from "../components/UnreadFilesLine";
@@ -289,7 +295,7 @@ export function NoteHealth({
                 : coverage.range && coverage.action
                   ? () =>
                       void checkSentences(editor, mindId, doc, coverage.action ?? "find-support", {
-                        ...(coverage.range && { range: coverage.range }),
+                        ...(coverage.range && { ranges: [coverage.range] }),
                         allDocuments: true,
                       })
                   : undefined
@@ -312,6 +318,25 @@ export function NoteHealth({
             : t("checks.problem.no-documents.all")}
         </ProblemLine>
       )}
+      {!running && problem?.kind === "waiting" && (
+        <ProblemLine
+          testId="checks-waiting"
+          className="mind-health-line"
+          action={{
+            label: t("checks.acceptAndCheck"),
+            testId: "checks-accept-and-check",
+            onClick: () => {
+              dismissCheckProblem(mindId);
+              void acceptAndCheck(editor, mindId, doc, problem);
+            },
+          }}
+          also={close}
+        >
+          {problem.count === 1
+            ? t("checks.waiting.one")
+            : t("checks.waiting", { count: format(problem.count) })}
+        </ProblemLine>
+      )}
       {!running && problem?.kind === "find-failed" && (
         <AnswerError
           kind={problem.error.kind}
@@ -330,6 +355,7 @@ export function NoteHealth({
         problem.kind !== "not-ready" &&
         problem.kind !== "local-mode" &&
         problem.kind !== "no-documents" &&
+        problem.kind !== "waiting" &&
         problem.kind !== "find-failed" && (
           <ProblemLine
             testId="checks-problem"

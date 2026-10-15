@@ -102,7 +102,7 @@ const WORD_PLACE = /^w:(p|tbl)#\d+$/;
 function parsePlace(value: unknown): DocumentPlace {
   if (!isRecord(value)) throw new InvalidInputError("A place in a Document is an object.");
   const place: DocumentPlace = {};
-  for (const key of ["pageFrom", "pageTo"] as const) {
+  for (const key of ["pageFrom", "pageTo", "figure"] as const) {
     if (value[key] === undefined) continue;
     if (!isUnit(value[key])) throw new InvalidInputError("Units count from 1.");
     place[key] = value[key];

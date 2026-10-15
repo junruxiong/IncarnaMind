@@ -22,6 +22,7 @@ import {
   createDataFolder,
   dismissChatSetup,
   expectReadyDocuments,
+  exportFromMenu,
   importWordFromMenu,
   interceptOpenDialog,
   launchApp,
@@ -331,7 +332,7 @@ test("someone else's tracked changes wait in place with who made them and when: 
   await expect(counts).toHaveText(["1 change from Priya Nair"]);
 
   // Export: what was resolved leaves no trace; what waits is in the file as it was.
-  await window.getByTestId("export-mind").click();
+  await exportFromMenu(window);
   const result = window.getByTestId("export-result");
   await expect(result.getByTestId("export-done")).toHaveText("Saved Lease redline.docx");
   const document =
@@ -513,7 +514,7 @@ test("Export writes back into the Word file: the User's edits tracked under thei
 
   // Export: the deleted paragraph stays as Priya's deletion, the comment with it; nothing to say first.
   const result = window.getByTestId("export-result");
-  await window.getByTestId("export-mind").click();
+  await exportFromMenu(window);
   await expect(result.getByTestId("export-done")).toHaveText("Saved Memo.docx");
   const tracked =
     unzip(await readFile(join(output, "Memo.docx")))
@@ -532,7 +533,7 @@ test("Export writes back into the Word file: the User's edits tracked under thei
   await expect(track).not.toBeChecked();
   await sheet.getByTestId("export-save").click();
   await expect(sheet).toBeHidden();
-  await window.getByTestId("export-mind").click();
+  await exportFromMenu(window);
   await expect(result.getByTestId("export-review")).toHaveText(
     "1 thing in the Word file can't be kept: Marcus Hale's comment “Is spring realistic?” is on text you deleted · Export anyway",
   );

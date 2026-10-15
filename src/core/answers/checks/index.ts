@@ -47,6 +47,7 @@ import {
   type ExternalService,
   type SearchScope,
   type TextPlace,
+  type TextStretch,
   type UnreadFile,
 } from "../../api";
 import type { Consent } from "../../consent";
@@ -123,9 +124,21 @@ interface ParsedCheck {
   mindId: string;
   from: TextPlace;
   to: TextPlace;
+  more: TextStretch[];
   action: ClaimCheckAction;
   allDocuments: boolean;
   model: ChatModelChoice | null;
+}
+
+function parseStretches(value: unknown): TextStretch[] {
+  if (value === undefined) return [];
+  return (Array.isArray(value) ? value : [value]).map((each: unknown) => {
+    const stretch = isRecord(each) ? each : {};
+    return {
+      from: parsePlace(stretch.from, "more's from"),
+      to: parsePlace(stretch.to, "more's to"),
+    };
+  });
 }
 
 function parseCheck(input: unknown): ParsedCheck {
@@ -141,6 +154,7 @@ function parseCheck(input: unknown): ParsedCheck {
     mindId: parseMindId(input.mindId),
     from: parsePlace(input.from, "from"),
     to: parsePlace(input.to, "to"),
+    more: parseStretches(input.more),
     action: known,
     allDocuments: input.allDocuments === true,
     model: parseModel(input.model),
@@ -344,7 +358,8 @@ export function createChecks(options: ChecksOptions) {
     signal: AbortSignal,
   ): Promise<CheckSentencesResult> {
     const { mindId } = input;
-    const read = content.read(mindId, (blocks) => selectedSentences(blocks, input.from, input.to));
+    const stretches = [{ from: input.from, to: input.to }, ...input.more];
+    const read = content.read(mindId, (blocks) => selectedSentences(blocks, stretches));
     if (!read.ok) return { kind: read.reason };
 
     const original = options.originalOf(mindId) ?? undefined;
@@ -355,12 +370,15 @@ export function createChecks(options: ChecksOptions) {
     const ready = await prepare(input.model ?? options.defaultModel());
     if (!ready.ok) return ready.result;
     if (signal.aborted) return { kind: "cancelled" };
+    if (read.sentences.length === 0) return { kind: "waiting", waiting: read.waiting };
 
     const startedAt = options.now().toISOString();
     const unread = options.unread(check.wanted);
+    let { waiting } = read;
     const queued = content.edit(mindId, (blocks: Y.XmlFragment) => {
-      const again = selectedSentences(blocks, input.from, input.to);
+      const again = selectedSentences(blocks, stretches);
       if (!again.ok) return [];
+      waiting = again.waiting;
       const marked = again.sentences.map((sentence) => {
         const check: ClaimCheckAttributes = {
           id: randomUUID(),
@@ -389,7 +407,9 @@ export function createChecks(options: ChecksOptions) {
       if (marked.length > 0) recordUnread(blocks, input.requestId, unread);
       return marked;
     });
-    if (queued.length === 0) return { kind: "nothing" };
+    if (queued.length === 0) {
+      return waiting.sentences.length > 0 ? { kind: "waiting", waiting } : { kind: "nothing" };
+    }
 
     let checked = 0;
     for (const sentence of queued) {
@@ -420,6 +440,7 @@ export function createChecks(options: ChecksOptions) {
       sentences: queued.length,
       checked,
       smallModel: judgesUnreliably(ready.prepared),
+      ...(waiting.sentences.length > 0 && { waiting }),
     };
   }
 

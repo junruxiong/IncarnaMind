@@ -47,6 +47,7 @@ function countingRecognizer(script: FakeScanScript, fail: ReadonlySet<number> = 
       if (fail.has(page)) throw new Error("The model failed on this page.");
       return fake.read(picture, page);
     },
+    readFile: (file, page) => fake.readFile(file, page),
     close: () => fake.close(),
   };
   return { recognizer, read };
@@ -99,9 +100,9 @@ describe("Scanned pages are read on this computer (#397)", { timeout: 60_000 }, 
 
     expect(document.status).toBe("ready");
     expect(read).toEqual([1, 2]);
-    expect(progress).toContainEqual({ pages: 2, read: 0 });
-    expect(progress).toContainEqual({ pages: 2, read: 1 });
-    expect(progress.at(-1)).toEqual({ pages: 2, read: 2 });
+    expect(progress).toContainEqual({ pages: 2, read: 0, of: "scanned-pages" });
+    expect(progress).toContainEqual({ pages: 2, read: 1, of: "scanned-pages" });
+    expect(progress.at(-1)).toEqual({ pages: 2, read: 2, of: "scanned-pages" });
     const [english] = await core.searchPassages("undisputed invoice", { mode: "keyword" });
     expect(english).toMatchObject({ documentId: document.id, pageFrom: 1 });
     const [chinese] = await core.searchPassages("押金", { mode: "keyword" });
@@ -158,6 +159,7 @@ describe("Scanned pages are read on this computer (#397)", { timeout: 60_000 }, 
     expect(await quoted("The harbour floor is mostly sand.")).toBeNull();
     expect(await quoted("Mean water temperature rose to 9.4 degrees Celsius")).toEqual({
       unsure: [],
+      from: "scan",
     });
 
     // Without a model to read them, a scanned page is left as it was before.
@@ -255,7 +257,7 @@ describe("Scanned pages are read on this computer (#397)", { timeout: 60_000 }, 
         pageTo: 1,
         quote,
       }),
-    ).toEqual({ unsure: ["convenience"] });
+    ).toEqual({ unsure: ["convenience"], from: "scan" });
     expect(
       await core.readScannedQuote({
         documentId: citation.documentId as string,
@@ -264,7 +266,7 @@ describe("Scanned pages are read on this computer (#397)", { timeout: 60_000 }, 
         pageTo: 1,
         quote: "Business Days and certify the deletion",
       }),
-    ).toEqual({ unsure: [] });
+    ).toEqual({ unsure: [], from: "scan" });
     // A quote that isn't on the page says nothing of the scan: the check says it wasn't found.
     expect(
       await core.readScannedQuote({
@@ -459,6 +461,7 @@ describe("Scanned pages are read on this computer (#397)", { timeout: 60_000 }, 
         read.push(page);
         return fake.read(picture, page);
       },
+      readFile: (file, page) => fake.readFile(file, page),
       close: () => fake.close(),
     };
     const core = startCore(dataDir, scanning(recognizer));
