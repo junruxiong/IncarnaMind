@@ -15,8 +15,7 @@ export const settingsPages = [
 
 export type SettingsPage = (typeof settingsPages)[number];
 
-/** The pages the dialog's list and ⌘K offer: Agents only while connecting agents is. */
-export const shownSettingsPages: readonly SettingsPage[] = settingsPages.filter(
+export const offeredSettingsPages: readonly SettingsPage[] = settingsPages.filter(
   (page) => page !== "agents" || SHOW_AGENT_CONNECTION,
 );
 
@@ -36,7 +35,7 @@ export const settingsPageLabels: Record<SettingsPage, MessageKey> = {
 const movedPages: Record<string, SettingsPage> = { tools: "privacy", notifications: "general" };
 
 export const resolveSettingsPage = (page: unknown): SettingsPage =>
-  isSettingsPage(page) && shownSettingsPages.includes(page)
+  isSettingsPage(page) && offeredSettingsPages.includes(page)
     ? page
     : typeof page === "string"
       ? (movedPages[page] ?? "general")

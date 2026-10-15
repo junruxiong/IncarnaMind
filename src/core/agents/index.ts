@@ -79,7 +79,6 @@ export interface AgentLauncher {
 }
 
 export interface AgentsOptions {
-  /** See `CoreAdapters.agents.offered`. */
   offered: boolean;
   log: Logger;
   db: Database;

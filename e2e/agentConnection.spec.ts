@@ -31,7 +31,6 @@ test.afterEach(async () => {
   await removeDataFolder(dataDir);
 });
 
-/** The actions ⌘K lists for `query`, by their text. */
 async function actionsFor(window: Page, query: string): Promise<string[]> {
   await window.keyboard.press("ControlOrMeta+k");
   const palette = window.getByTestId("palette");
