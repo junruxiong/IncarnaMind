@@ -1545,7 +1545,7 @@ export const zhCN = {
   "providers.form.modelExample": "例如 {model}",
   "providers.form.modelId": "模型 ID",
   "providers.form.modelIdHint": "模型的 ID，按该公司文档中的写法填写。",
-  "providers.form.title": "粘贴你的 {provider} 密钥",
+  "providers.form.title": "粘贴{provider}密钥",
   "providers.form.title.server": "连接 OpenAI 兼容服务器",
   "providers.form.useKey": "使用这个密钥",
   "providers.untested": "尚未测试引用核对",
