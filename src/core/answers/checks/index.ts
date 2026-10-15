@@ -12,7 +12,7 @@
  *    and the scope, so it shows "needs re-check" once any of them changes
  *    (src/shared/claimChecks.ts). A mark whose sentence was deleted meanwhile
  *    is simply gone. What the scope couldn't read as the request started is
- *    kept beside the Mind's Blocks for the request (src/shared/unreadFiles.ts, #740).
+ *    kept beside the Mind's Blocks, by request (src/shared/unreadFiles.ts).
  *
  * The evidence of a Mind's checks is retained (#79) under the Mind, so its
  * text stays for the cards and "Add as Citation" after the Document changes.
@@ -330,7 +330,6 @@ export function createChecks(options: ChecksOptions) {
     });
   }
 
-  /** Records what a request's scope couldn't read, beside the Blocks its marks are now in. */
   function recordUnread(blocks: Y.XmlFragment, request: string, files: readonly UnreadFile[]) {
     if (!blocks.doc) return;
     const requests = new Set(markedSentences(blocks).map(({ check }) => check.request));
