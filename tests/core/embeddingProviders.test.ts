@@ -715,14 +715,14 @@ describe("Local mode", { timeout: 30_000 }, () => {
         apiKey: OPENAI_KEY,
         modelId: "text-embedding-3-small",
       }),
-    ).rejects.toThrow(/Local mode/);
+    ).rejects.toThrow(/Keep everything on this computer/);
     await expect(
       core.testEmbeddingConnection({
         kind: "openai",
         apiKey: OPENAI_KEY,
         modelId: "text-embedding-3-small",
       }),
-    ).rejects.toThrow(/Local mode/);
+    ).rejects.toThrow(/Keep everything on this computer/);
     expect(embeddings.calls).toHaveLength(sent);
 
     // Turning it off changes nothing by itself.

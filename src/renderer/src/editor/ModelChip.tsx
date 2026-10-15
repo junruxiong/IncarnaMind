@@ -22,6 +22,7 @@ import { useModelMenuRequests } from "../modelMenu";
 import { useModelNames } from "../modelNames";
 import { usePlanStandIn } from "../planLimits";
 import { useAppStore } from "../store";
+import { untestedHintKey } from "../untestedModels";
 import { ChevronDownSmallIcon } from "./icons";
 
 /** Where a model runs, as the menu groups them (DESIGN.md, Composer › Model). */
@@ -82,6 +83,21 @@ export function useMindModel(doc: Y.Doc | null): ChatModelChoice | null {
     return observeMindModel(doc, () => setChoice(mindModelOf(doc)));
   }, [doc]);
   return doc ? choice : withoutMind;
+}
+
+/** The model a run in the Mind uses: the Mind's own, else the default the composer shows. */
+export function useRunModel(doc: Y.Doc | null): {
+  providerId: string | null;
+  modelId: string | null;
+} {
+  const own = useMindModel(doc);
+  const providerId = useAppStore((state) =>
+    state.chatReadiness?.ready ? state.chatReadiness.provider.id : null,
+  );
+  const modelId = useAppStore((state) =>
+    state.chatReadiness?.ready ? state.chatReadiness.modelId : null,
+  );
+  return own ?? { providerId, modelId };
 }
 
 function chooseModel(doc: Y.Doc | null, choice: ChatModelChoice): void {
@@ -327,7 +343,7 @@ export function ModelChip({
                           key={`${each.id}\n${modelId}`}
                           provider={each}
                           modelId={modelId}
-                          hint={t(HINTS[group])}
+                          hint={t(untestedHintKey(each) ?? HINTS[group])}
                           onThisComputer={group === "local"}
                           checked={same({ providerId: each.id, modelId }, current)}
                           // Local mode: only a model on this computer can be asked.

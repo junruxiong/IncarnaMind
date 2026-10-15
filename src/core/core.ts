@@ -27,6 +27,7 @@ import { createAiUseStatement } from "./aiUseStatement";
 import { createAiSdkAnswerEngine, createAnswers } from "./answers";
 import { topLevelBlocks } from "./answers/blocks";
 import { createChecks } from "./answers/checks";
+import { AFTER_NEW_VERSION_MS, CLAIM_TIME_LIMIT_MS } from "./answers/checks/watch";
 import { recheckCitation, recheckKept } from "./answers/citations";
 import {
   addCitedUnits,
@@ -1486,6 +1487,16 @@ export function createCore(adapters: CoreAdapters): Core {
         kind: DEFAULT_MIND_KIND,
         folderId,
       }),
+    watch: {
+      minds: () => minds.list().map((mind) => ({ id: mind.id, folderId: mind.folderId })),
+      documentVersions: () =>
+        new Map(documents.list().map((document) => [document.id, document.contentHash])),
+      background,
+      runCost: (runId) => meter.taskCost(runId),
+      delayMs: adapters.contradictionWatch?.delayMs ?? AFTER_NEW_VERSION_MS,
+      claimTimeLimitMs: adapters.contradictionWatch?.claimTimeLimitMs ?? CLAIM_TIME_LIMIT_MS,
+      log: adapters.log ?? silentLogger,
+    },
     mindFolder: (mindId) => minds.get(mindId).folderId,
     originalOf: (mindId) => wordImports.originalOf(mindId),
     defaultModel: () => settings.get().user.chatModel,
@@ -2086,11 +2097,16 @@ export function createCore(adapters: CoreAdapters): Core {
     linkedFolderExists: (linkedFolderId) =>
       documents.linkedFolders.list().some((folder) => folder.id === linkedFolderId),
     documentsIn: (linkedFolderId) => documents.list({ linkedFolderId }),
+    mindFolder: (mindId) => minds.get(mindId).folderId,
+    now,
     checksRelyOn: (documentIds) => retention.isRetained("check-result", documentIds),
     recheck: (input) => recheckCitation(documents, input),
     changed: (value) => events.emit("examples.changed", value),
   });
   events.on("document.status", () => examples.documentChanged());
+  // A new version of a Document in a Folder: its Minds' cited claims are checked for contradictions (#112).
+  checks.startWatching();
+  events.on("document.status", (document) => checks.documentChanged(document));
   // Linked folders and single files are compared with the disk, then watched.
   documents.start();
 
@@ -2733,6 +2749,10 @@ export function createCore(adapters: CoreAdapters): Core {
     verifyDocument: (input) => checks.verifyDocument(input),
     findClaims: (input) => checks.findClaims(input),
     verifyClaims: (input) => checks.verifyClaims(input),
+    planContradictionCheck: (mindId) => checks.planContradictionCheck(mindId),
+    checkContradictions: (input) => checks.checkContradictions(input),
+    planMindCheck: (mindId, mode, allDocuments) => checks.planMindCheck(mindId, mode, allDocuments),
+    checkMind: (input) => checks.checkMind(input),
 
     getSecretStorage: async () => secrets.status(),
     acceptPlainTextSecretStorage: async () => secrets.acceptPlainText(),

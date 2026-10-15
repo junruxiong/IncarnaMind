@@ -1,6 +1,6 @@
 import type { ChatReadiness } from "../../../../core/api";
 import { signInAgain } from "../../chatGptSignIn";
-import { useT } from "../../i18n";
+import { useLanguage, useT } from "../../i18n";
 import { turnOffLocalMode } from "../../localMode";
 import { useModelSetup } from "../../modelSetup";
 import { useRequests } from "../../requests";
@@ -57,7 +57,8 @@ export function ReadinessExplanation({
   inLine?: boolean;
 }) {
   const t = useT();
-  const service = "provider" in readiness ? serviceName(readiness.provider, t) : "";
+  const language = useLanguage();
+  const service = "provider" in readiness ? serviceName(readiness.provider, t, language) : "";
   const words = t(readinessKey(readiness.reason), { service });
   return <>{inLine ? words.replace(/[.。]$/, "") : words}</>;
 }
@@ -83,6 +84,7 @@ export function ReadinessLine({
   refused?: boolean;
 }) {
   const t = useT();
+  const language = useLanguage();
   const openSettings = useAppStore((state) => state.openSettings);
   if (readiness.reason === "local-mode") {
     return (
@@ -103,7 +105,7 @@ export function ReadinessLine({
         }}
       >
         {refused ? (
-          <>{t("localMode.refused", { service: serviceName(readiness.provider, t) })}</>
+          <>{t("localMode.refused", { service: serviceName(readiness.provider, t, language) })}</>
         ) : (
           <ReadinessExplanation readiness={readiness} inLine />
         )}
