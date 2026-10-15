@@ -13,12 +13,11 @@ import { type Session, session, type WebContents } from "electron";
 import type { Logger, PageLook, WebPageLookFailure } from "../core";
 import type { Resolve } from "../core/tools/web/addresses";
 import { onHiddenPage } from "./hiddenPage";
-import { startLookProxy } from "./lookProxy";
+import { LOOK_PROXY_USER, startLookProxy } from "./lookProxy";
 
 /** Not "persist:": the session lives in memory only. */
 const PARTITION = "page-look";
 const LIMIT_MS = 30_000;
-/** How long to wait for the page to finish loading before printing what has. */
 const LOAD_MS = 20_000;
 /** For what a page draws after it has loaded. */
 const SETTLE_MS = 1_000;
@@ -56,30 +55,45 @@ function prepare(): Session {
   return lookSession;
 }
 
-/**
- * Before the page loads: its print disabled in every frame, a frame of
- * another site's included once it is attached, and its styles for the screen.
- */
 async function prepareDebugger(contents: WebContents, log: Logger): Promise<void> {
   const tools = contents.debugger;
   tools.attach("1.3");
-  tools.on("message", (_event, method, params: { sessionId?: string }) => {
-    if (method !== "Target.attachedToTarget" || !params.sessionId) return;
-    const { sessionId } = params;
-    Promise.all([
-      tools.sendCommand("Page.enable", {}, sessionId),
-      tools.sendCommand("Page.addScriptToEvaluateOnNewDocument", { source: NO_PRINT }, sessionId),
-      tools.sendCommand(
-        "Target.setAutoAttach",
-        { autoAttach: true, waitForDebuggerOnStart: true, flatten: true },
-        sessionId,
-      ),
-    ])
-      .then(() => tools.sendCommand("Runtime.runIfWaitingForDebugger", {}, sessionId))
-      .catch((error: unknown) => {
-        if (!contents.isDestroyed()) log.warn("webPages.lookFrame", { message: messageOf(error) });
-      });
-  });
+  tools.on(
+    "message",
+    (_event, method, params: { sessionId?: string; targetInfo?: { type?: string } }) => {
+      if (method !== "Target.attachedToTarget" || !params.sessionId) return;
+      const { sessionId } = params;
+      // A frame of another site gets the page's script too; a worker has no window to print.
+      // Each waits for the debugger, so it is let run whatever happened.
+      const prepared =
+        params.targetInfo?.type === "iframe"
+          ? Promise.all([
+              tools.sendCommand("Page.enable", {}, sessionId),
+              tools.sendCommand(
+                "Page.addScriptToEvaluateOnNewDocument",
+                { source: NO_PRINT },
+                sessionId,
+              ),
+              tools.sendCommand(
+                "Target.setAutoAttach",
+                { autoAttach: true, waitForDebuggerOnStart: true, flatten: true },
+                sessionId,
+              ),
+            ])
+          : Promise.resolve();
+      prepared
+        .catch((error: unknown) => {
+          if (!contents.isDestroyed())
+            log.warn("webPages.lookFrame", { message: messageOf(error) });
+        })
+        .finally(() => {
+          if (contents.isDestroyed()) return;
+          tools
+            .sendCommand("Runtime.runIfWaitingForDebugger", {}, sessionId)
+            .catch(() => undefined);
+        });
+    },
+  );
   await tools.sendCommand("Page.enable");
   await tools.sendCommand("Page.addScriptToEvaluateOnNewDocument", { source: NO_PRINT });
   await tools.sendCommand("Target.setAutoAttach", {
@@ -108,10 +122,13 @@ export function createPageLook({
   let previous: Promise<unknown> = Promise.resolve();
 
   async function render(address: string): Promise<Made> {
-    if (!URL.parse(address)) return failed("unreachable", "Not a web address.");
+    const protocol = URL.parse(address)?.protocol;
+    if (protocol !== "http:" && protocol !== "https:") {
+      return failed("unreachable", "Not a web address.");
+    }
     lookSession ??= prepare();
     const own = lookSession;
-    const proxy = await startLookProxy({ resolve, ...(standIn ? { standIn } : {}) });
+    const proxy = await startLookProxy({ resolve, log, ...(standIn ? { standIn } : {}) });
     try {
       // Loopback too goes through the proxy, which refuses it: Chromium bypasses it there otherwise.
       await own.setProxy({ proxyRules: proxy.address, proxyBypassRules: "<-loopback>" });
@@ -125,6 +142,13 @@ export function createPageLook({
         },
         async (contents) => {
           contents.setWebRTCIPHandlingPolicy("disable_non_proxied_udp");
+          // Only the page's own proxy is signed in to; a site's sign-in is cancelled.
+          contents.on("login", (event, _details, authInfo, callback) => {
+            event.preventDefault();
+            if (authInfo.isProxy && authInfo.host === proxy.host && authInfo.port === proxy.port) {
+              callback(LOOK_PROXY_USER, proxy.secret);
+            } else callback();
+          });
           // Some sites turn away a browser that names itself Electron.
           contents.setUserAgent(
             contents.getUserAgent().replace(/\s(?:incarnamind|Electron)\/\S+/gi, ""),
