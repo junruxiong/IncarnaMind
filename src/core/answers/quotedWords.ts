@@ -123,11 +123,14 @@ function sentencesOf(text: string, spans: readonly Span[]): Span[] {
   return sentences;
 }
 
-/** The words quoted in one block of text, with the markers of each one's sentence. */
-function quotedIn(text: string): QuotedSentence[] {
+interface QuotedSpan extends QuotedSentence {
+  span: Span;
+}
+
+function quotedSpansIn(text: string): QuotedSpan[] {
   const spans = spansOf(text);
   if (spans.length === 0) return [];
-  const found: QuotedSentence[] = [];
+  const found: QuotedSpan[] = [];
   for (const sentence of sentencesOf(text, spans)) {
     const markers = [...text.slice(sentence.start, sentence.end).matchAll(MARKER)].map((match) =>
       Number(match[1]),
@@ -143,7 +146,7 @@ function quotedIn(text: string): QuotedSentence[] {
       )
         .replace(/\s+/g, " ")
         .replace(TRAILING_PUNCTUATION, "");
-      if (isQuote(words)) found.push({ words, markers });
+      if (isQuote(words)) found.push({ words, markers, span });
     }
   }
   return found;
@@ -155,17 +158,14 @@ const SKIPPED_LINE = /^\s*(?:\[\^\d{1,4}\]:|(?:-{3,}|\*{3,}|_{3,})\s*$)/;
 const TABLE_ROW = /^\s*\|/;
 const TABLE_RULE = /^:?-{3,}:?$/;
 
-/**
- * The words an Answer's Markdown puts in quotation marks, each with the
- * Citation markers of its sentence; none in code, and none in a sentence
- * without a marker. A table's cell is a sentence of its own, and a quote may
- * run across a line break.
- */
-export function quotedWordsIn(markdown: string): QuotedSentence[] {
-  const found: QuotedSentence[] = [];
-  let paragraph: string[] = [];
+// `change` must return as many lines as it is given.
+function mapBlocks(markdown: string, change: (text: string) => string): string {
+  const out: string[] = [];
+  let paragraph: { prefix: string; text: string }[] = [];
   const closeParagraph = () => {
-    if (paragraph.length > 0) found.push(...quotedIn(paragraph.join("\n")));
+    if (paragraph.length === 0) return;
+    const lines = change(paragraph.map((line) => line.text).join("\n")).split("\n");
+    for (const [at, line] of paragraph.entries()) out.push(`${line.prefix}${lines[at] ?? ""}`);
     paragraph = [];
   };
   let fenced = false;
@@ -177,16 +177,56 @@ export function quotedWordsIn(markdown: string): QuotedSentence[] {
     if (mathFence) math = !math;
     if (fence || mathFence || fenced || math || SKIPPED_LINE.test(line) || line.trim() === "") {
       closeParagraph();
+      out.push(line);
     } else if (TABLE_ROW.test(line)) {
       closeParagraph();
-      for (const cell of line.split("|")) {
-        const trimmed = cell.trim();
-        if (trimmed !== "" && !TABLE_RULE.test(trimmed)) found.push(...quotedIn(trimmed));
-      }
+      out.push(
+        line
+          .split("|")
+          .map((cell) => {
+            const trimmed = cell.trim();
+            return trimmed === "" || TABLE_RULE.test(trimmed)
+              ? cell
+              : cell.replace(trimmed, () => change(trimmed));
+          })
+          .join("|"),
+      );
     } else {
-      paragraph.push(line.replace(/^\s*#{1,6}\s+/, ""));
+      const heading = /^\s*#{1,6}\s+/.exec(line)?.[0] ?? "";
+      paragraph.push({ prefix: heading, text: line.slice(heading.length) });
     }
   }
   closeParagraph();
+  return out.join("\n");
+}
+
+/**
+ * The words an Answer's Markdown puts in quotation marks, each with the
+ * Citation markers of its sentence; none in code, and none in a sentence
+ * without a marker. A table's cell is a sentence of its own, and a quote may
+ * run across a line break.
+ */
+export function quotedWordsIn(markdown: string): QuotedSentence[] {
+  const found: QuotedSentence[] = [];
+  mapBlocks(markdown, (text) => {
+    for (const { words, markers } of quotedSpansIn(text)) found.push({ words, markers });
+    return text;
+  });
   return found;
+}
+
+/**
+ * The Markdown with the quotation marks taken off the given words (as
+ * `quotedWordsIn` read them): what the Answer put in them was not the
+ * Document's, so it stands as the Answer's own sentence.
+ */
+export function withoutQuotationMarks(markdown: string, words: ReadonlySet<string>): string {
+  return mapBlocks(markdown, (text) => {
+    let changed = text;
+    for (const { words: quoted, span } of quotedSpansIn(text).reverse()) {
+      if (!words.has(quoted)) continue;
+      changed = `${changed.slice(0, span.start)}${changed.slice(span.start + 1, span.end - 1)}${changed.slice(span.end)}`;
+    }
+    return changed;
+  });
 }
