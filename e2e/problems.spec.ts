@@ -76,7 +76,8 @@ async function refusingServer() {
 test("a failed Answer says so under itself with one action: the key's page in Settings, or trying again; and says it in Chinese", async () => {
   const model = await refusingServer();
   try {
-    const { app, window } = await launchApp(dataDir);
+    // Ollama is looked for at the test's server, not at one this computer may run.
+    const { app, window } = await launchApp(dataDir, { ollama: model.url, ollamaApp: "missing" });
     await dismissChatSetup(window);
     await window.evaluate(async (baseUrl) => {
       await (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.saveChatProvider({
@@ -127,7 +128,7 @@ test("a failed Answer says so under itself with one action: the key's page in Se
     model.state.status = 500;
     await openSteps(window, answer);
     await answer.getByTestId("answer-regenerate").click();
-    await expect(error).toContainText("The provider ran into a problem", { timeout: 60_000 });
+    await expect(error).toContainText("Ollama ran into a problem", { timeout: 60_000 });
     await expect(error.getByTestId("answer-error-action")).toHaveText("Try again");
     const asked = model.state.requests;
     // By keyboard: the focus ring shows on the action, and Enter asks again.
@@ -138,59 +139,70 @@ test("a failed Answer says so under itself with one action: the key's page in Se
     await expect(error.getByTestId("answer-error-action")).toHaveCSS("outline-style", "solid");
     await window.keyboard.press("Enter");
     await expect.poll(() => model.state.requests).toBeGreaterThan(asked);
-    await expect(error).toContainText("The provider ran into a problem", { timeout: 60_000 });
+    await expect(error).toContainText("Ollama ran into a problem", { timeout: 60_000 });
 
     // The same line in Chinese.
     await bridge(window).settings("zh-CN");
-    await expect(error).toContainText("提供商出错");
+    await expect(error).toContainText("Ollama 出错了");
     await expect(error.getByTestId("answer-error-action")).toHaveText("重试");
     await screenshot(window, "answer-provider-problem-zh");
+
+    // Ollama stopped: it isn't running on this computer, which no connection can fix (#843).
+    await new Promise<void>((resolve) => model.server.close(() => resolve()));
+    await error.getByTestId("answer-error-action").click();
+    await expect(error).toHaveAttribute("data-error-kind", "ollama-not-running", {
+      timeout: 60_000,
+    });
+    await expect(error).toContainText("Ollama 没有在这台电脑上运行");
+    await expect(error.getByTestId("answer-error-action")).toHaveText("下载 Ollama ↗");
+    await bridge(window).settings("en");
+    await expect(error).toContainText("Ollama isn't running on this computer");
+    await expect(error.getByTestId("answer-error-action")).toHaveText("Get Ollama ↗");
     await app.close();
   } finally {
     model.server.close();
   }
 });
 
-test("asking without a chat model says what to set up, in the composer's row and at the top of the Mind, and its action opens Models", async () => {
+test("asking without a chat model says what to set up at the top of the Mind, and the first Question waits for the setup card, which takes that line's place", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   await newMind(window);
 
   // At the top of the Mind: one line and one action, read as a status.
   const top = window.getByTestId("chat-readiness");
-  await expect(top).toContainText("Asking Questions needs a chat model");
+  await expect(top).toContainText("Asking Questions needs an AI model");
   await expect(top.getByRole("button")).toHaveText("Set up");
   await expect(window.getByRole("status").filter({ has: top })).toHaveCount(0);
   await screenshot(window, "needs-chat-model-en");
 
-  // In the composer's row, where it was asked; the Question waits there, not in the note.
-  await window.getByTestId("mind-editor").click();
-  await window.keyboard.press("ControlOrMeta+j");
-  await window.keyboard.type("Is anyone there?");
-  await window.keyboard.press("Enter");
-  const composer = window.getByTestId("composer");
-  const notReady = composer.getByTestId("composer-not-ready");
-  await expect(notReady).toContainText("Asking Questions needs a chat model");
-  await expect(notReady.getByRole("button")).toHaveCount(1);
-  await expect(notReady).toHaveCSS("color", "rgb(101, 107, 116)");
-  await expect(composer.getByTestId("composer-input")).toHaveValue("Is anyone there?");
-  await expect(window.getByTestId("mind-editor").getByTestId("question")).toHaveCount(0);
-  await expect(window.locator("dialog[open]")).toHaveCount(0);
-  await screenshot(window, "needs-chat-model-composer-en");
-
-  // By keyboard: Tab reaches the action, Enter opens Settings on Models.
-  await notReady.getByRole("button").focus();
-  await expect(notReady.getByRole("button")).toHaveCSS("outline-style", "solid");
+  // The notice's action opens Settings on Models, by keyboard too.
+  await window.getByTestId("mind-title").fill("Tides");
+  await window.keyboard.press("End");
+  await top.getByRole("button").focus();
+  await expect(top.getByRole("button")).toHaveCSS("outline-style", "solid");
   await window.keyboard.press("Enter");
   await expect(window.getByTestId("settings")).toHaveAttribute("data-page", "models");
   await window.keyboard.press("Escape");
 
   // In Chinese.
   await bridge(window).settings("zh-CN");
-  await expect(top).toContainText("提问需要先设置对话模型");
+  await expect(top).toContainText("提问需要先设置 AI 模型");
   await expect(top.getByRole("button")).toHaveText("去设置");
-  await expect(notReady).toContainText("提问需要先设置对话模型");
   await screenshot(window, "needs-chat-model-zh");
+  await bridge(window).settings("en");
+
+  // Asked from the composer, the Question waits in the conversation and the composer becomes the
+  // setup card, not a line; nothing is written into the note, and the line above steps aside.
+  await window.getByTestId("mind-editor").click();
+  await window.keyboard.press("ControlOrMeta+j");
+  await window.keyboard.type("Is anyone there?");
+  await window.keyboard.press("Enter");
+  await expect(window.getByTestId("model-setup")).toBeVisible();
+  await expect(window.getByTestId("mind-editor").getByTestId("question")).toHaveCount(0);
+  await expect(window.locator("dialog[open]")).toHaveCount(0);
+  await expect(top).toHaveCount(0);
+  await screenshot(window, "needs-chat-model-composer-en");
   await app.close();
 });
 

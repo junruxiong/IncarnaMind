@@ -5,7 +5,7 @@ import { modelName } from "../../../../shared/modelName";
 import { useAnswers } from "../../answers";
 import { core } from "../../core";
 import { ChevronDownSmallIcon, ChevronRightSmallIcon } from "../../editor/icons";
-import { useT } from "../../i18n";
+import { useLanguage, useT } from "../../i18n";
 import { useAppStore } from "../../store";
 import { rowStatusClass, rowTitleClass, ruledListClass } from "../ui";
 import { providerLabel } from "./shared";
@@ -45,6 +45,7 @@ const rowsOf = (group: ChatModelGroup): OtherModel[] => [
  */
 export function OtherModelsSettings() {
   const t = useT();
+  const language = useLanguage();
   const readiness = useAppStore((state) => state.chatReadiness);
   const [groups, setGroups] = useState<ChatModelGroup[]>([]);
   const [open, setOpen] = useState(false);
@@ -89,7 +90,7 @@ export function OtherModelsSettings() {
           </span>
           <span className={rowStatusClass}>
             {shown.length === 1 && shown[0]
-              ? t("models.other.sub", { provider: providerLabel(shown[0].provider, t) })
+              ? t("models.other.sub", { provider: providerLabel(shown[0].provider, t, language) })
               : t("models.other.subMany")}
           </span>
         </span>
@@ -121,10 +122,11 @@ function ProviderRows({
   onToggle(providerId: string, modelId: string, inMenu: boolean): void;
 }) {
   const t = useT();
+  const language = useLanguage();
   const rows = rowsOf(group);
   return (
     <div className="flex flex-col gap-3">
-      {named && <p className={rowTitleClass}>{providerLabel(group.provider, t)}</p>}
+      {named && <p className={rowTitleClass}>{providerLabel(group.provider, t, language)}</p>}
       {WHYS.map((why) => {
         const inGroup = rows.filter((row) => row.why === why);
         if (inGroup.length === 0) return null;

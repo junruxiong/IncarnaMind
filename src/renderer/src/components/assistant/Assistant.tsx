@@ -21,6 +21,7 @@ import { files } from "../../core";
 import { Composer } from "../../editor/Composer";
 import { useT } from "../../i18n";
 import { useAssistantWaiting } from "../../mindStatus";
+import { useModelSetup } from "../../modelSetup";
 import { useAppStore } from "../../store";
 import { GripIcon } from "../icons";
 import {
@@ -32,6 +33,7 @@ import {
   HistoryLineIcon,
   PlusLineIcon,
 } from "../lineIcons";
+import { ModelSetupCard } from "../providers/ModelSetupCard";
 import { TaskTray } from "../TaskTray";
 import { AssistantMenu } from "./AssistantMenu";
 import { ConversationThread } from "./ConversationThread";
@@ -274,6 +276,7 @@ function AssistantMain({
   // in the Mind in focus once that Mind's editor is open, and of every Document until then.
   const seat = useComposer((state) => state.seat);
   const mind = seat !== null && seat.mindId === readMindId ? seat : null;
+  const waiting = useModelSetup((state) => state.waiting !== null);
   const thread = useRef<HTMLDivElement>(null);
   useKeepInView(thread);
   /** Where the conversation was scrolled to, put back when it shows again. */
@@ -295,7 +298,7 @@ function AssistantMain({
       </div>
       <div ref={onComposerSlot} data-testid="assistant-composer" className="assistant-composer">
         {mind && <TaskTray mindId={mind.mindId} />}
-        <Composer mind={mind} />
+        {waiting ? <ModelSetupCard /> : <Composer mind={mind} />}
       </div>
     </div>
   );
