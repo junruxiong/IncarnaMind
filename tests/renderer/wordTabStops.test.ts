@@ -15,6 +15,8 @@ describe("a tab's stop and width", () => {
     expect(tabStopAfter(0, { tabs: [{ at: 50, align: "bar", leader: "none" }] })).toMatchObject({
       at: 36,
     });
+    // A file's own default stops: two characters apart, as Chinese Word sets them.
+    expect(tabStopAfter(30, {}, 21)).toMatchObject({ at: 42, align: "left" });
   });
 
   test("reaches its stop, less what a right, centred or decimal stop lines up after it", () => {

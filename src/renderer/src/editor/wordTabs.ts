@@ -195,7 +195,7 @@ class TabMeasurer {
         const span = item.spans[item.next];
         if (!span) return [];
         const x = (span.getBoundingClientRect().left - item.origin) / item.scale;
-        const stop = tabStopAfter(x / ptToPx, item.look);
+        const stop = tabStopAfter(x / ptToPx, item.look, look.defaultTab ?? undefined);
         const after = following(span, item.spans[item.next + 1], item.paragraph);
         const width = tabWidth(stop, {
           x,

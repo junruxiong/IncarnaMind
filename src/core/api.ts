@@ -1193,6 +1193,8 @@ export interface WordLook {
   body: number | null;
   /** The text width on the first page; null when the file doesn't say. */
   width: number | null;
+  /** How far apart Word's default tab stops are (`w:defaultTabStop`); null when the file doesn't say. */
+  defaultTab: number | null;
   paragraphs: Record<string, WordParagraphLook>;
   runs: Record<string, WordRunLook>;
   tables: Record<string, WordTableLook>;

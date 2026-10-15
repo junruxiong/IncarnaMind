@@ -805,16 +805,19 @@ export class LookReader {
   private readonly theme: ThemeFonts;
   private readonly levels = new Map<string, Map<number, { pPr?: XmlElement; rPr?: XmlElement }>>();
   private readonly width: number | null;
+  private readonly defaultTab: number | null;
   /** Parts the look would read but couldn't parse; the look goes on without them. */
   readonly unreadable: string[] = [];
 
   constructor(parts: LookParts) {
-    const language = this.readable(
-      "settings",
-      parts.settings,
-      (root) => child(root, "w:themeFontLang")?.attrs["w:eastAsia"],
-    );
-    this.theme = this.readable("theme", parts.theme, (root) => readTheme(root, language)) ?? {
+    const settings = this.readable("settings", parts.settings, (root) => ({
+      language: child(root, "w:themeFontLang")?.attrs["w:eastAsia"],
+      defaultTab: points(child(root, "w:defaultTabStop")?.attrs["w:val"]),
+    }));
+    this.defaultTab = settings?.defaultTab ?? null;
+    this.theme = this.readable("theme", parts.theme, (root) =>
+      readTheme(root, settings?.language),
+    ) ?? {
       major: {},
       minor: {},
     };
@@ -1146,6 +1149,7 @@ export class LookReader {
       version: WORD_LOOK_VERSION,
       body,
       width: this.width,
+      defaultTab: this.defaultTab,
       paragraphs: this.paragraphs.entries,
       runs: this.runs.entries,
       tables: this.tables.entries,
