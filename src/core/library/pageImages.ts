@@ -4,7 +4,7 @@ import type { DocumentPageImage } from "./pdfImages";
 
 /** Runs one job on a disposable worker thread, off Electron's main thread, within a minute. */
 function onWorker<T>(
-  workerData: { file: string; contentHash: string; pages?: number[] },
+  workerData: { file: string; contentHash: string; pages?: number[]; password?: string },
   signal: AbortSignal,
   take: (result: { images?: DocumentPageImage[]; page?: DrawnPage }) => T | undefined,
   timeout: string,
@@ -51,9 +51,10 @@ export function documentPageImages(
   file: string,
   contentHash: string,
   signal: AbortSignal,
+  password?: string,
 ): Promise<DocumentPageImage[]> {
   return onWorker(
-    { file, contentHash },
+    { file, contentHash, ...(password !== undefined && { password }) },
     signal,
     (result) => result.images,
     "PDF page previews took too long. Turn off page images to classify its text.",
@@ -66,9 +67,10 @@ export function documentCitedPages(
   contentHash: string,
   pages: readonly number[],
   signal: AbortSignal,
+  password?: string,
 ): Promise<DrawnPage> {
   return onWorker(
-    { file, contentHash, pages: [...pages] },
+    { file, contentHash, pages: [...pages], ...(password !== undefined && { password }) },
     signal,
     (result) => result.page,
     "Drawing the cited PDF pages took too long.",

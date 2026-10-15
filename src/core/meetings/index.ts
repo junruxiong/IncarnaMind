@@ -343,7 +343,7 @@ export function createMeetings(options: MeetingsOptions) {
         });
       }
     }
-    transcripts?.hear(current.meetingId, samples, run.startMs + msOf(run.samples));
+    transcripts?.hear(current.meetingId, source, samples, run.startMs + msOf(run.samples));
     run.waiting.push(samples);
     run.waitingSamples += samples.length;
     run.samples += samples.length;
@@ -371,7 +371,9 @@ export function createMeetings(options: MeetingsOptions) {
 
   function heardState(current: Live, source: AudioSource, state: CaptureState): void {
     if (live !== current) return;
-    if (state !== "recording") endRun(current, source);
+    // "Recording" again is a new track (the default microphone changed): its samples start a run
+    // where they arrive, however short the gap, to stay in step with the computer's sound (#846).
+    endRun(current, source);
     if (state === "recording" && current.sources[source] === "silent") return;
     setSource(current, source, state);
   }

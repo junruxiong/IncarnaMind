@@ -13,12 +13,15 @@ interface Requests {
   deletePermanently: { items: readonly DeletedItem[]; empty: boolean } | null;
   /** The Meeting whose audio the User is asked about, on that Meeting's line. */
   deleteAudio: { meetingId: string } | null;
+  chooseLocalModel: true | null;
   /** The Folder whose name and description the Library opens to edit. */
   editFolder: string | null;
   /** The Tag Manage Tags opens on, to rename. */
   manageTag: { id: string } | null;
   /** The Folder just made, whose name field the sidebar opens in its row. */
   nameFolder: string | null;
+  /** The Linked folder just linked: the sidebar shows where it is, and its row is washed for a moment (#763). */
+  showLinked: string | null;
   ask(request: Partial<Omit<Requests, "ask" | "clear">>): void;
   clear(key: keyof Omit<Requests, "ask" | "clear">): void;
 }
@@ -27,9 +30,11 @@ export const useRequests = create<Requests>((set) => ({
   unlink: null,
   deletePermanently: null,
   deleteAudio: null,
+  chooseLocalModel: null,
   editFolder: null,
   manageTag: null,
   nameFolder: null,
+  showLinked: null,
   ask: (request) => set(request),
   clear: (key) => set({ [key]: null }),
 }));

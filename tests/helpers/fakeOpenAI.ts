@@ -154,6 +154,8 @@ export interface FakeOpenAI {
   expiresIn: number;
   /** Milliseconds each refresh takes. */
   refreshDelayMs: number;
+  /** When set, a code exchange is answered only once this settles. */
+  holdCodeExchange: Promise<unknown> | null;
   /** When set, refreshes are refused with this status and body. */
   refreshRefusal: { status: number; body: unknown } | null;
   /** How the revocation endpoint answers. */
@@ -265,6 +267,7 @@ export async function createFakeOpenAI(
       return;
     }
     if (form.grant_type === "authorization_code") {
+      await fake.holdCodeExchange;
       const pending = codes.get(form.code ?? "");
       codes.delete(form.code ?? "");
       const challenge = createHash("sha256")
@@ -451,6 +454,7 @@ export async function createFakeOpenAI(
     clients: [],
     expiresIn: 3600,
     refreshDelayMs: 0,
+    holdCodeExchange: null,
     refreshRefusal: null,
     revokeStatus: 200,
     modelList: ACCOUNT_MODELS,

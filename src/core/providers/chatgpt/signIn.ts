@@ -27,9 +27,11 @@ import type { Browser } from "../../adapters";
 import { SecretStorageError } from "../../errors";
 import {
   authorizeWithLoopback,
+  type LoopbackRedirect,
   type OAuthPage,
   OAuthTokenError,
   type OAuthTokens,
+  type PastedRedirect,
   refreshOAuthTokens,
   revokeOAuthToken,
 } from "../../oauth";
@@ -236,7 +238,13 @@ export function createChatGptSignIn(options: {
   /** Bumped by every sign-in and sign-out, so a refresh that finishes afterwards changes nothing. */
   let generation = 0;
   let refreshing: Promise<StoredAccount> | null = null;
-  let running: { controller: AbortController; done: Promise<unknown> } | null = null;
+  let running: {
+    controller: AbortController;
+    done: Promise<unknown>;
+    /** The address the browser was last sent to, for opening the page again. */
+    pageUrl?: string;
+  } | null = null;
+  let pasteRedirect: LoopbackRedirect["paste"] | null = null;
   let signingOut = false;
 
   const load = async () => parseStored(await secrets.tryGet(ACCOUNT_SECRET));
@@ -382,6 +390,7 @@ export function createChatGptSignIn(options: {
     /** The client the code is for: the registered one, or the one OpenAI issues now. */
     let clientId = registered;
     let tokens: OAuthTokens;
+    let paste: LoopbackRedirect["paste"] | null = null;
     try {
       tokens = await authorizeWithLoopback({
         authorizeUrl: endpoints.authorizeUrl,
@@ -420,7 +429,14 @@ export function createChatGptSignIn(options: {
           }
         },
         exchangeClientId: () => clientId ?? DYNAMIC_CLIENT,
-        openBrowser: (url) => options.browser.open(url),
+        openBrowser: (url) => {
+          if (running) running.pageUrl = url;
+          return options.browser.open(url);
+        },
+        onWaiting(waiting) {
+          paste = waiting;
+          pasteRedirect = waiting;
+        },
         pages: options.pages(),
         timeoutMs: endpoints.signInTimeoutMs,
         signal,
@@ -432,6 +448,8 @@ export function createChatGptSignIn(options: {
         await save({ ...account, clientId, subject: null, idToken: null });
       }
       throw error;
+    } finally {
+      if (pasteRedirect === paste) pasteRedirect = null;
     }
     const issued = clientId ?? DYNAMIC_CLIENT;
     if (!tokens.idToken) throw new Error("OpenAI's sign-in returned no ID token.");
@@ -518,6 +536,14 @@ export function createChatGptSignIn(options: {
 
     cancelSignIn: cancel,
 
+    /** Opens the sign-in page again, for a User who closed its tab: true if one is waiting. */
+    async reopenSignInPage(): Promise<boolean> {
+      const url = running?.pageUrl;
+      if (!url) return false;
+      await options.browser.open(url);
+      return true;
+    },
+
     /**
      * Stops using the sign-in, ends its session at OpenAI and forgets its
      * tokens; the registration stays for the next sign-in. `revoked` is false
@@ -540,6 +566,14 @@ export function createChatGptSignIn(options: {
         onChange();
       }
     },
+
+    /**
+     * The address the browser ended on, pasted when it couldn't come back to
+     * IncarnaMind: the waiting sign-in goes on with it as with the browser's
+     * own redirect (see `LoopbackRedirect.paste`). "finished" when no
+     * sign-in is waiting.
+     */
+    pasteAddress: (text: string): PastedRedirect => pasteRedirect?.(text) ?? "finished",
   };
 }
 
