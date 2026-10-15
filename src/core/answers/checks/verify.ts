@@ -238,6 +238,7 @@ export function createVerify(options: VerifyOptions) {
           text: sentence.text,
           evidence: null,
           says: null,
+          calculation: null,
           scope: check.marked,
           versions: [],
           excluded: [],

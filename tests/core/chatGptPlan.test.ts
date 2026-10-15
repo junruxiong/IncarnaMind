@@ -6,7 +6,6 @@ import {
   ChatNotReadyError,
   ConsentDeclinedError,
   type Core,
-  type CoreAdapters,
   type CoreEventName,
   type CoreEvents,
   createAiSdkChatModel,
@@ -36,6 +35,7 @@ import {
   nextEvent,
   saveProviderUnasked,
   startCore,
+  type TestAdapters,
 } from "../helpers/core";
 
 const CHATGPT_SERVICE = { id: "chatgpt-plan", name: "ChatGPT" };
@@ -51,7 +51,7 @@ interface Setup {
 }
 
 /** A core whose ChatGPT plan provider talks to a fresh fake OpenAI through the real adapter. */
-async function setUp(overrides: Partial<CoreAdapters> = {}): Promise<Setup> {
+async function setUp(overrides: TestAdapters = {}): Promise<Setup> {
   const clock = manualClock();
   const fake = await startFakeOpenAI({ now: () => clock.now().getTime() });
   const browser = createFakeBrowser(fake);
@@ -73,7 +73,7 @@ function acceptConsentAutomatically(core: Core): void {
 }
 
 /** Signs in, accepts the chat flow and makes the plan the default chat model. */
-async function signedIn(overrides: Partial<CoreAdapters> = {}): Promise<Setup> {
+async function signedIn(overrides: TestAdapters = {}): Promise<Setup> {
   const setup = await setUp(overrides);
   const result = await setup.core.signInToChatGpt();
   expect(result.ok).toBe(true);
@@ -324,6 +324,22 @@ describe("Continue with ChatGPT", () => {
     expect((await core.getChatGptPlan()).signingIn).toBe(false);
     const redirect = new URL(browser.opened[0] ?? "").searchParams.get("redirect_uri") ?? "";
     await expect(fetch(redirect)).rejects.toThrow();
+  });
+
+  test("a waiting sign-in's page can be opened again, and nothing is opened when none waits", async () => {
+    const { core, browser } = await setUp();
+    expect(await core.reopenChatGptSignIn()).toBe(false);
+    browser.behaviour = "ignore";
+
+    const result = core.signInToChatGpt();
+    await expect.poll(() => browser.opened).toHaveLength(1);
+    expect(await core.reopenChatGptSignIn()).toBe(true);
+
+    expect(browser.opened).toHaveLength(2);
+    expect(browser.opened[1]).toBe(browser.opened[0]);
+    await core.cancelChatGptSignIn();
+    await result;
+    expect(await core.reopenChatGptSignIn()).toBe(false);
   });
 
   test("starting again replaces a sign-in still waiting, e.g. after the User closed the tab", async () => {

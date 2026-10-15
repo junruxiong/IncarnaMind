@@ -104,7 +104,7 @@ test("a refused key: Check the key opens its field with the refusal, and once a 
   await screenshot(window, "key-refused-settings");
 
   await window.keyboard.type("sk-ant-new-key");
-  await form.getByRole("button", { name: "Use this provider" }).click();
+  await form.getByTestId("provider-use-key").click();
   await expect(form).toBeHidden();
   await window.keyboard.press("Escape");
   await expect(settings).toBeHidden();
@@ -151,15 +151,21 @@ test("a model that can't add Citations says so under its Answer, and Choose anot
   await app.close();
 });
 
-test("with no Ollama on this computer, the first-run choice offers Get Ollama before Check again", async () => {
+test("with no Ollama on this computer, the setup card's local way says so, and opened offers Get Ollama before Check again", async () => {
   const { app, window } = await launchApp(dataDir, { ollama: NO_OLLAMA });
   await interceptOpenExternal(app);
   await setWindowSize(app, window, 1200, 860);
-  const setup = window.getByTestId("chat-setup");
+  await newMind(window);
+  await window.getByTestId("mind-editor").click();
+  await window.keyboard.press("ControlOrMeta+j");
+  await window.keyboard.type("What is in my Documents?");
+  await window.keyboard.press("Enter");
+  const setup = window.getByTestId("model-setup");
   await expect(setup).toBeVisible();
-  const ollama = setup.locator("label").filter({ has: window.getByTestId("chat-choice-ollama") });
-  await expect(ollama).toContainText("On this computer (free)");
-  await setup.getByTestId("chat-choice-ollama").check();
+  await setup.getByTestId("setup-other").click();
+  const local = setup.getByTestId("way-local");
+  await expect(local).toContainText("Ollama isn't running on this computer. It's free to get.");
+  await local.click();
   await expect(setup.getByTestId("ollama-status")).toHaveText(
     "To run models on this computer, install Ollama from ollama.com and start it.",
   );

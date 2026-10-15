@@ -63,10 +63,16 @@ export interface Paths {
    */
   citationStyles?: string;
   /**
-   * The User's Documents folder: the first save offers "IncarnaMind" in it as
-   * the Output location. Defaults to "Documents" in the home folder.
+   * The User's home folder, where outside agents keep their settings and
+   * Skills (`~/.codex`, `~/.claude`, …). Required, with no fallback, so a
+   * test or the evaluation can't reach the real one by leaving it out.
    */
-  documents?: string;
+  home: string;
+  /**
+   * The User's Documents folder: the first save offers "IncarnaMind" in it as
+   * the Output location. Required for the same reason as `home`.
+   */
+  documents: string;
   /**
    * Where each program a Tool runs (a Skill script) gets its own temporary
    * working folder from the local `Executor`, removed when the run ends.
@@ -737,11 +743,9 @@ export interface CoreAdapters {
     /** The shim's script, built (`out/main/agentShim.js`): Claude's install file carries a copy. */
     shimScript?: string;
     /**
-     * Where agents keep their settings (the User's home folder) and where apps
-     * are installed, to tell which agents are on this computer. Default to the
-     * home folder and, on macOS, the Applications folders.
+     * Where apps are installed, to tell which agents are on this computer.
+     * Defaults, on macOS, to the Applications folders.
      */
-    home?: string;
     applications?: readonly string[];
     /** Opens an agent's install link (Cursor's) in its app. */
     openLink?(url: string): Promise<void>;
