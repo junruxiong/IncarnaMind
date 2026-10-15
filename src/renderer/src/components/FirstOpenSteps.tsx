@@ -58,7 +58,7 @@ function Step({
   const tone =
     state === "open"
       ? "font-semibold text-ink"
-      : "text-ink-meta" + (state === "done" ? " line-through" : "");
+      : `text-ink-meta${state === "done" ? " line-through" : ""}`;
   return (
     <li
       data-testid="first-open-step"
