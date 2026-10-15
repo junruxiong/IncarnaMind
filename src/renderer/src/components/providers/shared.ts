@@ -33,19 +33,19 @@ export function readinessKey(
     : `providers.readiness.${reason}`;
 }
 
-/** A key provider's name by its catalog id: a preset's own, else its kind's. */
 export function keyProviderName(id: string, t: Translate, language: Language): string {
   const preset = catalogProvider(id);
-  if (preset && isPreset(preset)) return preset.name[language === "zh-CN" ? "zh" : "en"];
+  if (isPreset(preset)) return preset.name[language === "zh-CN" ? "zh" : "en"];
   return t(`providers.kind.${kindOfCatalogId(id)}`);
 }
 
 /** "OpenAI","OpenAI-compatible server · api.deepseek.com", "Ollama · on this computer". */
-export function providerLabel(provider: ChatProvider, t: Translate): string {
+export function providerLabel(provider: ChatProvider, t: Translate, language: Language): string {
   if (provider.kind === "chatgpt") return t("chatgpt.title");
   const catalog = catalogProviderOf(provider.kind, provider.catalogId);
-  const kind =
-    isPreset(catalog) && catalog ? catalog.name.en : t(`providers.kind.${provider.kind}`);
+  const kind = isPreset(catalog)
+    ? keyProviderName(catalog.id, t, language)
+    : t(`providers.kind.${provider.kind}`);
   if (catalog && catalog.endpoints.length > 0) {
     // A hosted provider: its name, and its region when it has more than one.
     if (catalog.endpoints.length === 1) return kind;
@@ -61,8 +61,8 @@ export function providerLabel(provider: ChatProvider, t: Translate): string {
 }
 
 /** Who receives the data, for messages like "You chose not to send data to {service}". */
-export const serviceName = (provider: ChatProvider, t: Translate) =>
-  provider.service?.name ?? providerLabel(provider, t);
+export const serviceName = (provider: ChatProvider, t: Translate, language: Language) =>
+  provider.service?.name ?? providerLabel(provider, t, language);
 
 /** The host of a server address, or null while it isn't one yet. */
 function hostOf(baseUrl: string): string | null {

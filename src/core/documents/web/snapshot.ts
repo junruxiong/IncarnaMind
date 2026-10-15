@@ -2,14 +2,18 @@
  * A web page's readable article (Readability, in a linkedom DOM) written as
  * our own XHTML (#261). Only a few elements are kept, and of attributes only
  * a link's http(s) address, a picture's description and a cell's span, so
- * nothing in a snapshot runs or loads.
+ * nothing in a snapshot runs or loads. The article's pictures are listed for
+ * the save to fetch (#756), each marked in place by its number in the list;
+ * a picture's address is never written into the snapshot.
  */
 import { Readability } from "@mozilla/readability";
 import { parseHTML } from "linkedom";
 import { CJK } from "../../../shared/text";
 import { escapeXml } from "../../exports/wordml";
 import { BLOCK_ELEMENTS, readWebPage } from "../formats/web";
+import { isAdHost } from "./adHosts";
 import { WebPageError } from "./errors";
+import { PICTURE_LIMITS, type PictureCandidate } from "./pictures";
 
 /** As much of the DOM as this reads: core code doesn't build against the DOM's types. */
 interface DomNode {
@@ -34,11 +38,13 @@ interface DomDocument {
 }
 
 export interface Snapshot {
+  /** Each picture to fetch is an `img` with `data-picture`, its index in `pictures`. */
   xhtml: string;
   title: string;
   siteName: string;
   author: string | null;
   published: string | null;
+  pictures: PictureCandidate[];
 }
 
 const ELEMENT = 1;
@@ -144,6 +150,63 @@ function isReferenceMark(sup: DomElement): boolean {
   );
 }
 
+/** What a picture is, by its own name: an author's face, a site's logo or an icon, not the article's. */
+const NOT_THE_ARTICLES = /avatar|author|byline|profile|logo|icon|emoji|sprite|badge|gravatar/i;
+
+/** The widest a picture is fetched at, of the sizes a `srcset` offers. */
+const PREFERRED_WIDTH = 1600;
+
+/** The address in a `srcset` of the widest size up to `PREFERRED_WIDTH`, else of the narrowest. */
+function fromSrcset(srcset: string): string | null {
+  const sizes = srcset
+    .split(/,\s+(?=\S)/)
+    .map((entry) => entry.trim().split(/\s+/))
+    .flatMap(([address, descriptor]) => {
+      if (!address) return [];
+      const width = /^(\d+)w$/.exec(descriptor ?? "")?.[1];
+      const density = /^([\d.]+)x$/.exec(descriptor ?? "")?.[1];
+      return [{ address, width: width ? Number(width) : density ? Number(density) * 800 : 800 }];
+    })
+    .sort((a, b) => a.width - b.width);
+  const within = sizes.filter((size) => size.width <= PREFERRED_WIDTH);
+  return (within.at(-1) ?? sizes[0])?.address ?? null;
+}
+
+/**
+ * Where to fetch an article's picture from, or null for one that isn't kept:
+ * smaller than an icon by its own size, named as an avatar, a logo or an
+ * icon, not on the web, or from an ad server or a tracker.
+ */
+function pictureAddress(img: DomElement, base: string): string | null {
+  for (const side of ["width", "height"]) {
+    const size = Number.parseInt(img.getAttribute(side) ?? "", 10);
+    if (Number.isInteger(size) && size < PICTURE_LIMITS.minSide) return null;
+  }
+  const names = ["class", "id", "src"].map((name) => img.getAttribute(name) ?? "").join(" ");
+  if (NOT_THE_ARTICLES.test(names)) return null;
+  const srcset = img.getAttribute("srcset") ?? img.getAttribute("data-srcset");
+  const raw =
+    (srcset && fromSrcset(srcset)) ??
+    img.getAttribute("data-src") ??
+    img.getAttribute("data-original") ??
+    img.getAttribute("src");
+  if (!raw || raw.startsWith("data:")) return null;
+  const url = URL.parse(raw, base);
+  if (!url || (url.protocol !== "https:" && url.protocol !== "http:")) return null;
+  return isAdHost(url.hostname) ? null : url.href;
+}
+
+/** The pictures an article shows, in order, for the save to fetch. */
+class Pictures {
+  readonly list: PictureCandidate[] = [];
+
+  add(address: string): number {
+    const index = this.list.length;
+    this.list.push({ index, address });
+    return index;
+  }
+}
+
 class InlineWriter {
   private parts: string[] = [];
   private pendingSpace = false;
@@ -153,7 +216,10 @@ class InlineWriter {
   text = 0;
   images = 0;
 
-  constructor(private readonly base: string) {}
+  constructor(
+    private readonly base: string,
+    private readonly pictures: Pictures,
+  ) {}
 
   get xhtml(): string {
     return this.parts.join("");
@@ -211,7 +277,13 @@ class InlineWriter {
         Number(node.getAttribute("width") ?? "2") * Number(node.getAttribute("height") ?? "2");
       if (size <= 1) return; // a tracking pixel
       const alt = (node.getAttribute("alt") ?? "").replace(/\s+/g, " ").trim();
-      this.parts.push(`<img alt="${escapeXml(alt)}"/>`);
+      const address = pictureAddress(node, this.base);
+      const index = address === null ? null : this.pictures.add(address);
+      this.parts.push(
+        index === null
+          ? `<img alt="${escapeXml(alt)}"/>`
+          : `<img alt="${escapeXml(alt)}" data-picture="${index}"/>`,
+      );
       this.images++;
       return;
     }
@@ -237,11 +309,12 @@ class InlineWriter {
 
 class BlockWriter {
   readonly parts: string[] = [];
+  readonly pictures = new Pictures();
 
   constructor(private readonly base: string) {}
 
   private inline(nodes: readonly DomNode[], flattenBlocks = false): InlineWriter {
-    const writer = new InlineWriter(this.base);
+    const writer = new InlineWriter(this.base, this.pictures);
     for (const node of nodes) writer.node(node, flattenBlocks);
     return writer;
   }
@@ -473,5 +546,29 @@ export function snapshotOf(html: string, url: string, address: string): Snapshot
   );
   if (count < MIN_READABLE || (video && count < MIN_BEHIND_SIGN_IN)) refuse(count);
   if (signIn && count < MIN_BEHIND_SIGN_IN) refuse(count);
-  return { xhtml, title, siteName, author, published };
+  return { xhtml, title, siteName, author, published, pictures: writer.pictures.list };
+}
+
+/** A kept picture as the snapshot shows it: its file beside the snapshot, and its size. */
+export interface ShownPicture {
+  /** Relative to the snapshot's folder: "pictures/<hash>.png". */
+  src: string;
+  width: number;
+  height: number;
+}
+
+/**
+ * The snapshot with its pictures in place (#756): a kept one gets its file
+ * and size, every other one stays its description only.
+ */
+export function withPictures(xhtml: string, kept: ReadonlyMap<number, ShownPicture>): string {
+  return xhtml.replace(
+    /<img alt="([^"]*)" data-picture="(\d+)"\/>/g,
+    (_whole, alt: string, index: string) => {
+      const picture = kept.get(Number(index));
+      return picture
+        ? `<img alt="${alt}" src="${escapeXml(picture.src)}" width="${picture.width}" height="${picture.height}"/>`
+        : `<img alt="${alt}"/>`;
+    },
+  );
 }

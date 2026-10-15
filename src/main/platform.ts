@@ -4,7 +4,7 @@
  */
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { connect } from "node:net";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { app, safeStorage, shell } from "electron";
 import {
@@ -24,6 +24,7 @@ import {
 } from "../core";
 import { createFakeCapture, type FakeCapture } from "../core/meetings/fakeCapture";
 import type { FakeTranscriberOptions } from "../core/transcription/fake";
+import { SHOW_AGENT_CONNECTION } from "../shared/agentConnection";
 import { createCitedPageCapture } from "./citedPageCapture";
 import { createSentryCrashReporter } from "./crashReports";
 import { createUtilityProcessEmbedder } from "./embedder";
@@ -239,6 +240,13 @@ function citationStylesFolder(): string {
     ? join(process.resourcesPath, "citation-styles")
     : join(app.getAppPath(), "resources", "citation-styles");
 }
+
+/**
+ * The home folder the core gets. Node's, not `app.getPath("home")`: on macOS
+ * that ignores HOME, which the smoke tests point at a temporary folder, and
+ * their agents' settings would land in the real one.
+ */
+export const homeFolder = (): string => homedir();
 
 /**
  * The User's Documents folder, where the first save offers to put the Output
@@ -505,6 +513,7 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
       builtInSkills: builtInSkillsFolder(),
       examples: examplesFolder(),
       citationStyles: citationStylesFolder(),
+      home: homeFolder(),
       documents: documentsFolder(dataDir),
     },
     systemLanguages: () => app.getPreferredSystemLanguages(),
@@ -525,6 +534,7 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
     // An outside agent starts the shim (#351) the same way: this app's binary, as plain Node,
     // running the shim built beside this file (inside app.asar, which Node mode reads).
     agents: {
+      offered: SHOW_AGENT_CONNECTION,
       launcher: {
         command: process.execPath,
         args: [join(__dirname, "agentShim.js")],

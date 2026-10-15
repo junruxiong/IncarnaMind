@@ -1,9 +1,9 @@
-import { settingsPageLabels, settingsPages } from "../settingsPages";
+import { offeredSettingsPages, settingsPageLabels } from "../settingsPages";
 import { useAppStore } from "../store";
 import type { Command } from "./registry";
 
 /** Each Settings page but General, which is Settings… itself, opened from ⌘K. */
-export const settingsPageCommands: readonly Command[] = settingsPages
+export const settingsPageCommands: readonly Command[] = offeredSettingsPages
   .filter((page) => page !== "general")
   .map((page) => ({
     id: `settings.${page}`,

@@ -1193,45 +1193,202 @@ export function proposeRewrite(
   newId: () => string,
   fresh: ReadonlyMap<number, Attributes> = new Map(),
 ): Written {
-  const paragraphs = newParagraphs(text, selection, fresh);
+  const rewrite = createRewriteStream(selection, request, newId, () => fresh);
+  rewrite.write(text, true);
+  rewrite.finish();
+  return rewrite.written();
+}
+
+/** How many of the selection's paragraphs a new one may pass over to pair with one much like it: those it passes go. */
+const LOOKAHEAD = 2;
+
+/** Where the next of the new text's paragraphs goes: anew over this paragraph of the selection, or after this one. */
+export type RewritePlace = { over: Y.XmlElement } | { after: Y.XmlElement };
+
+/**
+ * `proposeRewrite`, as the model's text comes in (#202): each paragraph is
+ * written once it is finished and its place is known, and nothing written
+ * is written again, so nothing moves under the User. A paragraph much like
+ * one of the selection's a little further on pairs with it at once, and those
+ * it passes over go. Any other waits for the next that is (or the end), and
+ * those between are paired as `pairUp` pairs them, so a section added in the
+ * middle is added, not written over the one after it, and one moved up is
+ * added where it now goes. When two are like none of the selection's before
+ * any is much like one (a translation), each pairs in order as it comes.
+ * `finish` takes out the selection's paragraphs the text never reached; a
+ * request stopped before leaves them. Call each in a Yjs transaction on the
+ * document `selection` was read from.
+ */
+export function createRewriteStream(
+  selection: Selection,
+  request: string,
+  newId: () => string,
+  fresh: (text: string) => ReadonlyMap<number, Attributes>,
+) {
   const { proposals, next } = proposalsOf(request, newId);
   const notes: CitationNotes = { removed: new Set(), added: new Set() };
   // Only the paragraphs the model was shown: an empty one between two isn't in its text.
   const segments = selection.segments.filter((segment) => segment.shown);
   const first = segments[0];
-  if (!first) return { proposals, droppedCitations: 0 };
-  const paired = pairUp(segments, paragraphs);
+  let place: Place | null = first
+    ? { element: first.element, kind: first.kind, side: "before" }
+    : null;
+  /** The selection's next paragraph not yet paired or gone. */
+  let at = 0;
+  /** How many of the new text's paragraphs are taken: written, or held. */
+  let taken = 0;
+  /** Paragraphs like none of the selection's, waiting for their place. */
+  const held: NewParagraph[] = [];
+  /** A paragraph much like one of the selection's was paired: the text is mostly kept. */
+  let anchored = false;
+  /** Paragraphs like none of the selection's at all, before any was much like one. */
+  let unlike = 0;
+  /** Two were like none: the text is written anew, and each pairs in order. */
+  let anew = false;
 
-  // In the new text's order, so each new Block goes after the one before it.
-  let place: Place = { element: first.element, kind: first.kind, side: "before" };
-  for (const [index, paragraph] of paragraphs.entries()) {
-    const segment = segments[paired[index] ?? -1];
-    if (segment) {
-      writeHunks(segment, paragraph.tokens, next, newId, notes);
-      place = { element: segment.element, kind: segment.kind, side: "after" };
-      continue;
+  /** The selection's paragraphs before `to` not paired go, each whole one with its Block. */
+  const removeUpTo = (to: number) => {
+    const gone: Y.XmlElement[] = [];
+    for (const segment of segments.slice(at, to)) {
+      if (segment.tokens.length === 0) continue;
+      if (segment.whole) gone.push(removedWith(segment.element));
+      else markRemoved(segment.element, segment.start, segment.end, next(targetOf(segment.tokens)));
+      for (const token of segment.tokens) noteCitation(notes.removed, token);
     }
+    for (const removed of wholeWrappers(gone)) {
+      setProposal(removed, { ...refOf(next(targetText(removed))), kind: "delete" });
+    }
+    at = Math.max(at, to);
+  };
+
+  const pairWith = (paragraph: NewParagraph, index: number) => {
+    const segment = segments[index];
+    if (!segment) return;
+    removeUpTo(index);
+    writeHunks(segment, paragraph.tokens, next, newId, notes);
+    place = { element: segment.element, kind: segment.kind, side: "after" };
+    at = index + 1;
+  };
+
+  const addNew = (paragraph: NewParagraph) => {
+    if (!place) return;
     const kind = paragraph.kind ?? kindByLikeness(segments, paragraph);
     for (const token of paragraph.tokens) noteCitation(notes.added, token);
     const added = addBlock(place, kind, paragraph.tokens, next(""), newId);
     place = { element: added, kind, side: "after" };
-  }
+  };
 
-  // The selection's paragraphs the new text has none for go: a whole one with its Block.
-  const kept = new Set(paired);
-  const gone: Y.XmlElement[] = [];
-  for (const [index, segment] of segments.entries()) {
-    if (kept.has(index) || segment.tokens.length === 0) continue;
-    if (segment.whole) gone.push(removedWith(segment.element));
-    else markRemoved(segment.element, segment.start, segment.end, next(targetOf(segment.tokens)));
-    for (const token of segment.tokens) noteCitation(notes.removed, token);
-  }
-  for (const removed of wholeWrappers(gone)) {
-    setProposal(removed, { ...refOf(next(targetText(removed))), kind: "delete" });
-  }
+  /** The paragraphs held, written: paired with the selection's from `at` to `to` as `pairUp` pairs them. */
+  const writeHeld = (to: number) => {
+    const from = at;
+    const paired = pairUp(segments.slice(from, to), held);
+    for (const [index, paragraph] of held.entries()) {
+      const pair = paired[index];
+      if (pair === null || pair === undefined) addNew(paragraph);
+      else pairWith(paragraph, from + pair);
+    }
+    held.length = 0;
+  };
 
-  return { proposals, droppedCitations: droppedOf(notes) };
+  /** The first of the selection's paragraphs from `at` much like `paragraph`, or null. */
+  const muchLike = (paragraph: NewParagraph): number | null => {
+    for (let index = at; index < segments.length; index++) {
+      const segment = segments[index] as Segment;
+      if (paragraph.kind !== null && paragraph.kind !== segment.kind) continue;
+      if (likeness(segment.tokens, paragraph.tokens) >= MOVED_LIKENESS) return index;
+    }
+    return null;
+  };
+
+  const take = (paragraph: NewParagraph) => {
+    const like = muchLike(paragraph);
+    if (like !== null && like - at <= LOOKAHEAD + held.length) {
+      writeHeld(like);
+      pairWith(paragraph, like);
+      anchored = true;
+      return;
+    }
+    held.push(paragraph);
+    if (like === null && !anchored) unlike++;
+    if (unlike >= 2) anew = true;
+    if (at >= segments.length) writeHeld(at);
+    else if (anew) writeHeld(Math.min(segments.length, at + held.length + LOOKAHEAD));
+  };
+
+  /** Runs `write`, and says whether it wrote any Proposal. */
+  const wrote = (write: () => void): boolean => {
+    const before = proposals.length;
+    write();
+    return proposals.length > before;
+  };
+
+  return {
+    /**
+     * The model's text so far: the paragraphs it has finished (all but the
+     * last, or all of them once `done`) are written, or held until their
+     * place is known. All at once, they pair as `pairUp` pairs them.
+     * Returns whether any Proposal was written.
+     */
+    write: (text: string, done = false): boolean =>
+      wrote(() => {
+        const paragraphs = newParagraphs(text, selection, fresh(text));
+        if (done && taken === 0) {
+          held.push(...paragraphs);
+          taken = paragraphs.length;
+        }
+        const finished = done ? paragraphs.length : paragraphs.length - 1;
+        for (; taken < finished; taken++) {
+          const paragraph = paragraphs[taken];
+          if (paragraph) take(paragraph);
+        }
+        if (done) writeHeld(segments.length);
+      }),
+
+    /**
+     * Stopped: the paragraphs held are written, each into the selection's
+     * next one when much like it, else as a new Block where the text has got
+     * to. Nothing the model never reached goes, so none of the selection's
+     * paragraphs is removed.
+     */
+    stop: (): boolean =>
+      wrote(() => {
+        for (const paragraph of held) {
+          const segment = segments[at];
+          const alike =
+            segment !== undefined &&
+            (paragraph.kind === null || paragraph.kind === segment.kind) &&
+            likeness(segment.tokens, paragraph.tokens) >= MOVED_LIKENESS;
+          if (!alike) {
+            addNew(paragraph);
+            continue;
+          }
+          writeHunks(segment, paragraph.tokens, next, newId, notes);
+          place = { element: segment.element, kind: segment.kind, side: "after" };
+          at += 1;
+        }
+        held.length = 0;
+      }),
+
+    /** The model is done: the selection's paragraphs it never reached go. */
+    finish: (): boolean =>
+      wrote(() => {
+        writeHeld(segments.length);
+        removeUpTo(segments.length);
+      }),
+
+    /** The Proposals written so far. */
+    written: (): Written => ({ proposals: [...proposals], droppedCitations: droppedOf(notes) }),
+
+    /** Where the next paragraph goes; null with no place for any. */
+    writingAt(): RewritePlace | null {
+      const ahead = segments[at];
+      if (ahead) return { over: ahead.element };
+      return place ? { after: place.element } : null;
+    },
+  };
 }
+
+export type RewriteStream = ReturnType<typeof createRewriteStream>;
 
 /**
  * Adds `text` under the selection, as new paragraphs after the top-level

@@ -350,6 +350,22 @@ function bringsProposals(tr: Transaction): boolean {
 const fromDocument = (tr: Transaction) => !!tr.getMeta(ySyncPluginKey)?.isChangeOrigin;
 
 /**
+ * Watches for the User moving the cursor or editing the Mind from now on;
+ * changes that come from the Mind's document, as an AI change streaming in
+ * does (#202), don't count. `stop` ends the watch.
+ */
+export function watchMovedOn(editor: Editor): { movedOn(): boolean; stop(): void } {
+  let moved = false;
+  const look = ({ transaction }: { transaction: Transaction }) => {
+    if (!fromDocument(transaction) && (transaction.selectionSet || transaction.docChanged)) {
+      moved = true;
+    }
+  };
+  editor.on("transaction", look);
+  return { movedOn: () => moved, stop: () => editor.off("transaction", look) };
+}
+
+/**
  * The line under a change out of date (DESIGN.md, AI edits): "Out of date ·
  * Regenerate · Reject", its only bar. Its buttons are handled where the Mind
  * is known (`ProposalBars`), by `data-proposal-regenerate` and
@@ -619,6 +635,16 @@ export function theirChange(
   const doc = editorDoc(editor);
   const made = doc ? proposalRequestOf(doc, proposal.request) : null;
   return made?.source === "word-change" ? { author: made.author, date: made.date } : null;
+}
+
+/** Why the assistant made a change, in the model's few words (#202); null when it didn't say. */
+export function changeReason(
+  editor: Editor,
+  proposal: Pick<PendingProposal, "request">,
+): string | null {
+  const doc = editorDoc(editor);
+  const made = doc ? proposalRequestOf(doc, proposal.request) : null;
+  return made?.source === "edit-with-ai" ? (made.reason ?? null) : null;
 }
 
 /**

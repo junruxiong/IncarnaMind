@@ -11,7 +11,11 @@ registerHooks({
       if (error?.code !== "ERR_MODULE_NOT_FOUND" || !relative || /\.[cm]?[jt]s$/.test(specifier)) {
         throw error;
       }
-      return nextResolve(`${specifier}.ts`, context);
+      try {
+        return nextResolve(`${specifier}.ts`, context);
+      } catch {
+        throw error;
+      }
     }
   },
 });

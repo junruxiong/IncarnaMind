@@ -1,7 +1,7 @@
 import { useId } from "react";
 import { modelName } from "../../../shared/modelName";
 import { searchesTheWeb } from "../../../shared/webSearch";
-import { useT } from "../i18n";
+import { useLanguage, useT } from "../i18n";
 import { useAppStore } from "../store";
 import { providerLabel } from "./providers/shared";
 import {
@@ -22,6 +22,7 @@ import {
  */
 export function WebSearchSettings() {
   const t = useT();
+  const language = useLanguage();
   const on = useAppStore((state) => state.settings?.user.webSearch);
   const localOnly = useAppStore((state) => state.embedding?.localOnly === true);
   const readiness = useAppStore((state) => state.chatReadiness);
@@ -36,7 +37,7 @@ export function WebSearchSettings() {
     : provider && model
       ? t(searchesTheWeb(provider.kind) ? "web.settings.supported" : "web.settings.unsupported", {
           model: modelName(model, { kind: provider.kind, endpoint: provider.endpoint }),
-          provider: providerLabel(provider, t),
+          provider: providerLabel(provider, t, language),
         })
       : null;
 

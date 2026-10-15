@@ -34,26 +34,25 @@ import {
 } from "../ui";
 import { keyProviderName, testErrorKey, useProviderKey } from "./shared";
 
-/** A key provider's catalog id: a kind's own, or a preset's. */
-type FormKind = string;
+type CatalogId = string;
 
 /**
  * Prefilled when a provider is picked: its Answers model in the catalog, none
  * for a server. The User can type any model their account has.
  */
-const suggestedModel = (kind: FormKind): string => catalogProvider(kind)?.roles.answers ?? "";
+const suggestedModel = (kind: CatalogId): string => catalogProvider(kind)?.roles.answers ?? "";
 
 const isSuggestion = (model: string) =>
   KEY_PROVIDERS.some((kind) => suggestedModel(kind) === model);
 
 /** The providers shown as one row of choices; the rest are under "More…". */
-const ROW: readonly FormKind[] = ["anthropic", "openai", "google", "deepseek", "qwen"];
+const ROW: readonly CatalogId[] = ["anthropic", "openai", "google", "deepseek", "qwen"];
 
 /** The "Another model…" choice of the model list. */
 const OTHER_MODEL = "\u0000other";
 
 /** A provider's current models from our own list: the recommended one first, then its other roles. */
-function modelChoices(kind: FormKind): string[] {
+function modelChoices(kind: CatalogId): string[] {
   const roles = catalogProvider(kind)?.roles;
   return [...new Set([roles?.answers, roles?.strongest, roles?.quickTasks])].filter(
     (id): id is string => id !== undefined,
@@ -69,7 +68,7 @@ const hostOf = (url: string): string | null => {
   }
 };
 
-const sameServer = (provider: ChatProvider, kind: FormKind, endpoint: string, baseUrl: string) =>
+const sameServer = (provider: ChatProvider, kind: CatalogId, endpoint: string, baseUrl: string) =>
   (provider.catalogId ?? provider.kind) === kind &&
   (kind === "openai-compatible"
     ? provider.baseUrl === baseUrl.trim().replace(/\/+$/, "")
@@ -92,18 +91,18 @@ export function ProviderForm({
   /** Settings lists the best-effort providers too, under "More providers"; first run only the first-class ones. */
   withMoreProviders?: boolean;
   /** The provider chosen when the form opens: the one the User came from. DeepSeek in Chinese, else Anthropic. */
-  initialKind?: FormKind;
+  initialKind?: CatalogId;
   /** A key its provider refused: the form opens on that provider, says so by the key, and focuses it. */
   refused?: KeyRefusal | null;
 }) {
   const t = useT();
   const id = useId();
   const language = useLanguage();
-  const first: FormKind =
-    refused?.kind ?? initialKind ?? (language === "zh-CN" ? "deepseek" : "anthropic");
-  const [kind, setKind] = useState<FormKind | null>(first);
+  const first: CatalogId =
+    refused?.catalogId ?? initialKind ?? (language === "zh-CN" ? "deepseek" : "anthropic");
+  const [kind, setKind] = useState<CatalogId | null>(first);
   const [otherModel, setOtherModel] = useState(
-    refused !== null && !modelChoices(refused.kind).includes(refused.modelId),
+    refused !== null && !modelChoices(refused.catalogId).includes(refused.modelId),
   );
   const [moreOpen, setMoreOpen] = useState(false);
   /** The region of a provider that has several; its first otherwise. */
@@ -124,14 +123,14 @@ export function ProviderForm({
   const { main, more } = keyProviderGroups(
     withMoreProviders ? providers.map((each) => each.catalogId ?? each.kind) : [],
   );
-  const refusedHere = refused !== null && refused.kind === kind;
+  const refusedHere = refused !== null && refused.catalogId === kind;
   const keyField = useRef<HTMLInputElement>(null);
   // A refused key's field is where "Check the key" leads: in view, focused, and under "More
   // providers" opened when its provider is listed there.
   // biome-ignore lint/correctness/useExhaustiveDependencies: once, as the form opens on it.
   useEffect(() => {
     if (!refused) return;
-    if (more.includes(refused.kind)) setMoreOpen(true);
+    if (more.includes(refused.catalogId)) setMoreOpen(true);
     keyField.current?.scrollIntoView({ block: "center" });
     keyField.current?.focus({ preventScroll: true });
   }, []);
@@ -156,7 +155,7 @@ export function ProviderForm({
             : null;
   const complete = kind !== null && missing === null;
 
-  const chip = (option: FormKind) => (
+  const chip = (option: CatalogId) => (
     <label
       key={option}
       className={`inline-flex h-7 cursor-pointer items-center rounded-md border px-2.5 text-[13px] has-[:checked]:border-ink has-[:checked]:bg-wash has-[:focus-visible]:outline-2 ${
@@ -179,7 +178,7 @@ export function ProviderForm({
     </label>
   );
 
-  const choose = (next: FormKind) => {
+  const choose = (next: CatalogId) => {
     // A key typed for one provider is never sent to another.
     if (next !== kind) key.clear();
     setKind(next);
@@ -254,8 +253,10 @@ export function ProviderForm({
   const shownName = (id: string) =>
     modelName(id, { kind: kind ? kindOfCatalogId(kind) : undefined, endpoint: endpoint?.id });
   const typedModel = kind === "openai-compatible" || otherModel || choices.length === 0;
-  const rowKinds = ROW.filter((each) => main.includes(each) || more.includes(each));
-  const underMore = [...main, ...more].filter((each) => !rowKinds.includes(each));
+  // First run offers only the first-class providers (ADR-0019); Settings offers them all.
+  const offered = withMoreProviders ? [...main, ...more] : main;
+  const rowKinds = ROW.filter((each) => offered.includes(each));
+  const underMore = offered.filter((each) => !rowKinds.includes(each));
 
   return (
     <form data-testid="provider-form" onSubmit={submit} className="flex flex-col gap-3">
@@ -444,7 +445,7 @@ export function ProviderForm({
 function KeyRefusedLine({ id, refused }: { id: string; refused: KeyRefusal }) {
   const t = useT();
   const language = useLanguage();
-  const provider = keyProviderName(refused.kind, t, language);
+  const provider = keyProviderName(refused.catalogId, t, language);
   const when = refused.at ? dayOf(new Date(refused.at), new Date(), language, t) : null;
   return (
     <span id={id} data-testid="provider-key-refused" role="status" className={hintClass}>

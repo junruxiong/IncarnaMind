@@ -493,7 +493,7 @@ describe("Support tiers (ADR-0019)", () => {
     );
   });
 
-  test("a preset is a hosted OpenAI-compatible row with a key page and an Answers model, saved as that kind, and not yet tested is never first-class (#863)", () => {
+  test("a preset is a hosted OpenAI-compatible row with a key page and an Answers model, saved as that kind, and not yet tested is never first-class", () => {
     expect(PRESETS.length).toBeGreaterThan(0);
     for (const preset of PRESETS) {
       const where = preset.id;
