@@ -34,12 +34,14 @@ import { useLanguage, useT } from "../i18n";
 import { useKeyRefusals, useKeySavedSince } from "../keyRefusals";
 import { requestModelMenu } from "../modelMenu";
 import { useModelNames } from "../modelNames";
+import { useStoppedByPlanLimit } from "../planLimits";
 import { ANSWER_PROBLEMS, answerProblem } from "../problems";
 import type { SettingsPage } from "../settingsPages";
 import { useAppStore } from "../store";
 import { reasonKey } from "../webPages";
 import { ChevronRightSmallIcon, RegenerateSmallIcon } from "./icons";
 import { useMindId } from "./mindContext";
+import { PlanLimitLine } from "./PlanLimitLine";
 import { ThirdPartyLine } from "./ThirdPartyLine";
 
 const text = (value: unknown) => (typeof value === "string" ? value : null);
@@ -89,10 +91,16 @@ export function AnswerView({ node, editor, getPos }: ReactNodeViewProps) {
   const waiting = useApprovals((state) => state.waiting);
   const approvals = useMemo(() => waitingFor(waiting, answerId), [waiting, answerId]);
   const isExample = useIsExampleAnswer(answerId);
+  const planModel = useStoppedByPlanLimit(
+    status === "failed" && isErrorKind(node.attrs.errorKind) ? node.attrs.errorKind : null,
+    text(node.attrs.providerId),
+  )
+    ? modelId
+    : null;
 
   // One the User edited comes back as changes over their version: nothing to confirm.
-  const writeAgain = () => {
-    if (answerId && questionId) void regenerate(mindId, answerId, questionId);
+  const writeAgain = async () => {
+    if (answerId && questionId) await regenerate(mindId, answerId, questionId);
   };
   const objectMenu = useObjectMenu({ kind: "answer", id: answerId ?? "" });
   const here = {
@@ -166,7 +174,7 @@ export function AnswerView({ node, editor, getPos }: ReactNodeViewProps) {
         </div>
       )}
 
-      {!streaming && status === "failed" && (
+      {!streaming && status === "failed" && !planModel && (
         <AnswerError
           kind={isErrorKind(node.attrs.errorKind) ? node.attrs.errorKind : "unknown"}
           modelId={modelId}
@@ -175,6 +183,14 @@ export function AnswerView({ node, editor, getPos }: ReactNodeViewProps) {
           details={text(node.attrs.errorMessage)}
           onRetry={questionId ? () => writeAgain() : undefined}
           onOpenSettings={openSettings}
+        />
+      )}
+      {!streaming && status === "failed" && planModel && (
+        <PlanLimitLine
+          modelId={planModel}
+          providerId={text(node.attrs.providerId)}
+          details={text(node.attrs.errorMessage)}
+          onAnswerAgain={writeAgain}
         />
       )}
 

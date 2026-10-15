@@ -112,7 +112,7 @@ export interface OpenDocumentHow {
   stay?: boolean;
 }
 
-interface AppState extends LayoutSlice {
+export interface AppState extends LayoutSlice {
   status: Status;
   minds: Mind[];
   /**
@@ -184,10 +184,9 @@ interface AppState extends LayoutSlice {
   skills: Skill[];
   /** The first-run example Mind and its Documents (onboarding). Null until loaded. */
   examples: Examples | null;
-  /** The other examples made (#123), each with its Mind and Documents. */
   otherExamples: Examples[];
-  /** An Answer to a Question of the User's own has arrived in this session (#123). */
   ownAnswerArrived: boolean;
+  usageNotice: "auto" | "kept" | "answered";
   /**
    * The privacy choices on this device: the first run asks about usage data
    * from them. Set once loaded, then follows the core's event.
@@ -265,7 +264,6 @@ interface AppState extends LayoutSlice {
   openExamples(): Promise<void>;
   /** Opens another example in a new tab, making it first if it isn't there; the Mind in view stays. */
   openExample(group: ExampleGroup): Promise<void>;
-  /** Deletes every example Mind made, with its Documents. */
   removeExamples(): Promise<void>;
   /**
    * Ticks steps of the "Get started" checklist, or hides it. Only once it
@@ -735,6 +733,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     examples: null,
     otherExamples: [],
     ownAnswerArrived: false,
+    usageNotice: "auto",
     privacy: null,
     questionToStart: null,
 
@@ -1151,7 +1150,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     },
 
     showSettingsPage(page) {
-      set({ settingsPage: page });
+      set({ settingsPage: resolveSettingsPage(page) });
     },
 
     closeSettings() {
@@ -1290,7 +1289,11 @@ export const useAppStore = create<AppState>()((set, get) => {
         if (!preview) return;
         const linked = await core.addLinkedFolder(preview.path);
         // Inside a Linked folder already: nothing was linked, so its layout stays as the User set it.
-        if (preview.insideLinkedFolderId !== null) return;
+        if (preview.insideLinkedFolderId !== null) {
+          useRequests.getState().ask({ showLinked: preview.insideLinkedFolderId });
+          return;
+        }
+        useRequests.getState().ask({ showLinked: linked.id });
         // Set now, before its first scan ends, so the scan's own suggestion doesn't replace it.
         const shown = await core.setLinkedFolderLayout(linked.id, layout);
         set((state) => ({ linkedFolders: replaceLinked(state.linkedFolders, shown) }));
@@ -1470,7 +1473,6 @@ const withExamples =
 const OTHER_EXAMPLE_GROUPS = EXAMPLE_GROUPS.filter((group) => group !== "tea");
 const isMade = (examples: Examples) => examples.mindId !== null || examples.linkedFolderId !== null;
 
-/** Every example the core has made, the first-run one and the others. */
 export const allExamples = (state: Pick<AppState, "examples" | "otherExamples">): Examples[] =>
   [state.examples, ...state.otherExamples].filter((each) => each !== null);
 
