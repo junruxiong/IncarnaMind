@@ -78,8 +78,7 @@ test("first run: choosing a provider with a key is the consent, so no dialog com
   await window.keyboard.type("What is due?");
   await window.keyboard.press("Enter");
   const setup = window.getByTestId("model-setup");
-  await setup.getByTestId("setup-other").click();
-  await setup.getByTestId("way-key").click();
+  await setup.getByTestId("setup-key").click();
   const form = setup.getByTestId("provider-form");
   await form
     .locator("label")
