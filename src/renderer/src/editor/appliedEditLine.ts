@@ -18,6 +18,7 @@ import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { type EditorState, Plugin, PluginKey, type Transaction } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import { ySyncPluginKey } from "@tiptap/y-tiptap";
+import type { Language } from "../../../core/language";
 import type { MessageKey, MessageParams } from "../../../shared/i18n";
 import { SPARK_PATH } from "../components/iconPaths";
 import { proposalsIn } from "./proposalReview";
@@ -40,7 +41,7 @@ export interface KeptLine {
   mixed: boolean;
 }
 
-export type AppliedLine =
+export type AppliedLine = (
   | {
       kind: "applied";
       /** The first Block it changed; null at the Mind's end. */
@@ -52,7 +53,11 @@ export type AppliedLine =
       kept: KeptLine | null;
     }
   | { kind: "review"; blockId: string | null; request: string }
-  | { kind: "held"; blockId: string | null; request: string };
+  | { kind: "held"; blockId: string | null; request: string }
+) & {
+  /** The interface language it was last drawn in, once that changed. */
+  language?: Language;
+};
 
 interface LineState {
   line: AppliedLine | null;
@@ -201,7 +206,8 @@ function decorations(doc: ProseMirrorNode, line: AppliedLine, options: Options):
     marks.push(
       Decoration.widget(at, () => mainLine(doc, line, options), {
         ...shared,
-        key: `applied:${line.kind}:${line.kind === "applied" ? line.places : count}:${line.blockId}`,
+        // Drawn again in the interface language once it changes.
+        key: `applied:${line.kind}:${line.kind === "applied" ? line.places : count}:${line.blockId}:${options.translate("edit.applied.undo")}`,
       }),
     );
   }
@@ -212,7 +218,7 @@ function decorations(doc: ProseMirrorNode, line: AppliedLine, options: Options):
       Decoration.widget(keptAt, () => keptLine(kept, options.translate), {
         ...shared,
         side: -2,
-        key: `applied-kept:${kept.blockId}:${kept.count}`,
+        key: `applied-kept:${kept.blockId}:${kept.count}:${options.translate("edit.kept.remove")}`,
       }),
     );
   }
@@ -270,4 +276,10 @@ export const appliedLineIn = (state: EditorState): AppliedLine | null =>
 export function setAppliedLine(editor: Editor, line: AppliedLine | null): void {
   if (editor.isDestroyed) return;
   editor.view.dispatch(editor.state.tr.setMeta(appliedLineKey, line));
+}
+
+/** Draws the lines again, in the interface language `language` now is. */
+export function redrawAppliedLine(editor: Editor, language: Language): void {
+  const line = appliedLineIn(editor.state);
+  if (line && line.language !== language) setAppliedLine(editor, { ...line, language });
 }
