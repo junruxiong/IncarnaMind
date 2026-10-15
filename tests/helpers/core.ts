@@ -125,6 +125,13 @@ export function startCore(dataDir: string, overrides: TestAdapters = {}): Core {
       ecfr: NOWHERE,
       govinfo: NOWHERE,
     },
+    // The public internet's fetcher (web search, a saved page's pictures) reaches no host from a
+    // test: a test that fetches gives its stand-in web (../helpers/web).
+    web: {
+      resolve: async (host) => {
+        throw new Error(`Tests reach no host: ${host}.`);
+      },
+    },
     ...rest,
     // A home and a Documents folder of its own, so a test never reads or writes the User's.
     paths: {

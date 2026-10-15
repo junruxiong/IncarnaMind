@@ -85,6 +85,10 @@
  * new text streams in word by word, slowly when the instruction says
  * "slowly", then a line saying why (#202).
  *
+ * Research (`fakePlan`): a plan of three steps about the topic; each step is
+ * then answered as a Question that asks for the web is, and the pages it saved
+ * are tagged with their names' first words (`fakeResearchTags`).
+ *
  * Make this a Skill (`fakeSkillDraft`): a draft whose "when to use it" and first
  * step quote the Mind's last Question, so a test sees that the Mind was read.
  *
@@ -1018,6 +1022,48 @@ function editedText(action: string, passage: string, asked: string): string {
   }
 }
 
+/** Research's planner (#130, src/core/research/prompt.ts). */
+const PLANNER = /^You plan research for IncarnaMind/m;
+
+/**
+ * A Research plan (#130): three steps about the topic, "slowly" kept in
+ * them so the Task takes its time too; asked to change it, the change
+ * becomes a step after the others.
+ */
+function fakePlan(options: GenerateOptions): string | null {
+  if (!PLANNER.test(systemOf(options.prompt))) return null;
+  const request = userText(options.prompt.find((message) => message.role === "user"));
+  const topic = (/^Topic: (.*)$/m.exec(request)?.[1] ?? "").replace(/^research\s+/i, "");
+  const slowly = SLOWLY.test(topic) ? ", slowly" : "";
+  const subject = topic.replace(/,?\s*slowly\b/i, "").replace(/[?？.。]$/, "");
+  const change = /^Change it as the User asks: (.*)$/m.exec(request)?.[1];
+  const steps = [
+    `Search the web and the Library for ${subject}${slowly}`,
+    `Read what the sources say about ${subject}${slowly}`,
+    `Compare what they found${slowly}`,
+    ...(change ? [change] : []),
+  ];
+  return [
+    `TITLE: What do the sources say about ${subject}?`,
+    ...steps.map((step, index) => `${index + 1}. ${step}`),
+  ].join("\n");
+}
+
+/** Research's tagger (#130, src/core/research/prompt.ts). */
+const RESEARCH_TAGGER = /^You tag the web pages a research Task saved/m;
+
+/** Tags for the pages Research saved: each page's first word, the pages that share it under it. */
+function fakeResearchTags(options: GenerateOptions): string | null {
+  if (!RESEARCH_TAGGER.test(systemOf(options.prompt))) return null;
+  const request = userText(options.prompt.find((message) => message.role === "user"));
+  const pages = new Map<string, number[]>();
+  for (const [, number, name] of request.matchAll(/^(\d+)\. (.+)$/gm)) {
+    const word = /\p{L}+/u.exec(name ?? "")?.[0];
+    if (word) pages.set(word, [...(pages.get(word) ?? []), Number(number)]);
+  }
+  return [...pages].map(([word, numbers]) => `${word}: ${numbers.join(", ")}`).join("\n");
+}
+
 /** Test-only classifier: chooses a group whose name appears in the excerpt. */
 function fakeStructuredOutput(options: GenerateOptions): string {
   const format = options.responseFormat;
@@ -1270,7 +1316,9 @@ export const createFakeChatModel: ChatModelFactory = (spec) =>
             text:
               options.responseFormat?.type === "json"
                 ? fakeStructuredOutput(options)
-                : (fakeClaims(options) ??
+                : (fakePlan(options) ??
+                  fakeResearchTags(options) ??
+                  fakeClaims(options) ??
                   fakeConfirm(options) ??
                   fakeSkillDraft(options) ??
                   fakeEdit(options.prompt)?.text ??

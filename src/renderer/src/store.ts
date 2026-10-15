@@ -1153,7 +1153,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     },
 
     showSettingsPage(page) {
-      set({ settingsPage: page });
+      set({ settingsPage: resolveSettingsPage(page) });
     },
 
     closeSettings() {
@@ -1292,7 +1292,11 @@ export const useAppStore = create<AppState>()((set, get) => {
         if (!preview) return;
         const linked = await core.addLinkedFolder(preview.path);
         // Inside a Linked folder already: nothing was linked, so its layout stays as the User set it.
-        if (preview.insideLinkedFolderId !== null) return;
+        if (preview.insideLinkedFolderId !== null) {
+          useRequests.getState().ask({ showLinked: preview.insideLinkedFolderId });
+          return;
+        }
+        useRequests.getState().ask({ showLinked: linked.id });
         // Set now, before its first scan ends, so the scan's own suggestion doesn't replace it.
         const shown = await core.setLinkedFolderLayout(linked.id, layout);
         set((state) => ({ linkedFolders: replaceLinked(state.linkedFolders, shown) }));
