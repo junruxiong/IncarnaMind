@@ -9,6 +9,7 @@ const EXPORTS = [
   "mind.exportAs.pdf",
   "mind.exportAs.source-pack",
   "mind.exportAs.html",
+  "mind.exportAs.share-page",
   "mind.exportAs.markdown",
   "mind.exportOptions",
   "mind.aiUseStatement",

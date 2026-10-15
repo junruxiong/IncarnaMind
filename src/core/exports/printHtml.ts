@@ -23,6 +23,12 @@ export interface PrintHtml {
   notes: string[];
 }
 
+/** How a web page to share (./sharePage) writes a Citation outside a note: its note, and its marker. */
+export interface CitationWriter {
+  note(footnote: Footnote): string;
+  marker(footnote: Footnote, number: number): string;
+}
+
 const ESCAPES: Readonly<Record<string, string>> = {
   "&": "&amp;",
   "<": "&lt;",
@@ -42,7 +48,10 @@ export function renderPrintHtml(
   title: string,
   blocks: readonly Block[],
   labels: PrintLabels,
-  { linkNotes = false }: { linkNotes?: boolean } = {},
+  {
+    linkNotes = false,
+    citations = null,
+  }: { linkNotes?: boolean; citations?: CitationWriter | null } = {},
 ): PrintHtml {
   const notes: string[] = [];
   const writer = new PrintWriter(
@@ -52,6 +61,7 @@ export function renderPrintHtml(
       return notes.length;
     },
     linkNotes,
+    citations,
   );
   const parts: string[] = [];
   if (title) parts.push(`<h1 class="mind-title">${escapeHtml(title)}</h1>`);
@@ -81,7 +91,7 @@ const unverifiedHtml = (labels: PrintLabels) =>
   ` <span class="unverified">${escapeHtml(labels.unverified)}</span>`;
 
 /** A Citation's source, as its footnote says it; a web page's address is a link. */
-function sourceHtml(footnote: Footnote, labels: PrintLabels): string {
+export function sourceHtml(footnote: Footnote, labels: PrintLabels): string {
   const link = footnote.link;
   let html = escapeHtml(footnote.source);
   if (safeLink(link) && footnote.source.includes(link)) {
@@ -130,6 +140,7 @@ class PrintWriter {
     private readonly number: (note: string) => number,
     /** Markers link to their notes, and carry the id the note links back to. */
     private readonly linkNotes: boolean,
+    private readonly citations: CitationWriter | null,
   ) {}
 
   blocks(blocks: readonly Block[]): string {
@@ -275,6 +286,9 @@ class PrintWriter {
           if (inNote) {
             if (/\S$/.test(html)) html += " ";
             html += sourceHtml(item.footnote, this.labels);
+          } else if (this.citations) {
+            const number = this.number(this.citations.note(item.footnote));
+            html += this.citations.marker(item.footnote, number);
           } else {
             html += this.marker(sourceHtml(item.footnote, this.labels));
           }

@@ -1421,6 +1421,12 @@ export function createCore(adapters: CoreAdapters): Core {
     bibliography: (mindId) => content.readSettings(mindId, bibliographyShown),
     formatCitations: (request) => citationStyles.format(request),
     citedPage: (citation) => citedPages.image(citation),
+    citedUnits: ({ documentId, contentHash, pageFrom, pageTo }) => {
+      if (!documentId || !contentHash) return [];
+      const from = typeof pageFrom === "number" ? pageFrom : null;
+      const to = from === null ? null : Math.max(from, typeof pageTo === "number" ? pageTo : from);
+      return documents.pageTexts(documentId, contentHash, from, to);
+    },
     printer: adapters.printer ?? null,
     paper: () => paperFor(systemRegion(adapters.systemRegion?.(), adapters.systemLanguages())),
     ...(adapters.pictures && { pictures: adapters.pictures }),
