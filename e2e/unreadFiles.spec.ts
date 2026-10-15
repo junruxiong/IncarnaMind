@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge, DocumentStatus } from "../src/core/api";
 import { encryptedOfficeFile } from "../tests/helpers/office";
 import { buildPdf } from "../tests/helpers/pdf";
@@ -10,21 +10,30 @@ import {
   useLocalChatModel as connectLocalChatModel,
   createDataFolder,
   dismissChatSetup,
+  interceptOpenDialog,
   launchApp,
   newMind,
+  pointAndClick,
   removeDataFolder,
   setGroupBeside,
   setLanguage,
   setWindowSize,
+  slideSelect,
 } from "./app";
 
 /**
- * Every Answer says which files in its scope couldn't be read, and why (#740):
- * a Folder with a .doc, a password-protected .docx and a scan, besides a file
- * that reads. "3 files couldn't be read · Show" lists each with its reason,
- * and the Library shows the file in a format not read. Nothing shows when
- * everything was read. English and Chinese.
+ * Every Answer, check and Verify run says which files in its scope couldn't
+ * be read, and why (#740): a Folder with a .doc, a password-protected .docx
+ * and a scan, besides a file that reads. "3 files couldn't be read · Show"
+ * lists each with its reason, and the Library shows the file in a format not
+ * read. Nothing shows when everything was read. English and Chinese. Set
+ * INCARNAMIND_SCREENSHOTS to a folder to also save screenshots.
  */
+const SCREENSHOTS = process.env.INCARNAMIND_SCREENSHOTS;
+const screenshot = async (window: Page, name: string) => {
+  if (SCREENSHOTS) await window.screenshot({ path: join(SCREENSHOTS, `${name}.png`) });
+};
+
 let dataDir: string;
 let library: string;
 test.beforeEach(async () => {
@@ -155,6 +164,100 @@ for (const language of ["en", "zh-CN"] as const) {
   });
 }
 
+/** Rows of a list of files that couldn't be read, each with its reason, and inside `frame` across. */
+async function expectReasons(
+  list: Locator,
+  frame: Locator,
+  language: "en" | "zh-CN",
+  app: Awaited<ReturnType<typeof start>>["app"],
+  window: Page,
+  name: string,
+) {
+  const rows = list.getByTestId("unread-file");
+  await expect(rows).toHaveCount(3);
+  for (const [file, reason] of WORDS[language].reasons) {
+    await expect(rows.filter({ hasText: file })).toHaveText(reason);
+  }
+  for (const width of [900, 1600]) {
+    await setWindowSize(app, window, width, 900);
+    const box = await frame.boundingBox();
+    for (const row of await rows.all()) {
+      const rowBox = await row.boundingBox();
+      expect(
+        rowBox && box && rowBox.x >= box.x - 1 && rowBox.x + rowBox.width <= box.x + box.width + 1,
+      ).toBe(true);
+    }
+    await screenshot(window, `${name}-${language}-${width}`);
+  }
+}
+
+const SENTENCE = "Spring tides happen at new and full moon.";
+
+for (const language of ["en", "zh-CN"] as const) {
+  test(`Find support says which files in its scope couldn't be read, and why (${language})`, async () => {
+    test.setTimeout(120_000);
+    const { app, window } = await start(language);
+    const editor = window.getByTestId("mind-editor");
+    await editor.click();
+    await window.keyboard.type(SENTENCE);
+    const line = editor.locator(":scope > p").first();
+    await expect(line).toHaveText(SENTENCE);
+    const unread = window.getByTestId("checks-unread");
+    await expect(unread).toHaveCount(0);
+
+    await slideSelect(window, line, "Spring tides", { line, words: "full moon." });
+    await pointAndClick(
+      window,
+      window.getByTestId("selection-menu").getByTestId("selection-action-find-support"),
+    );
+    await expect(window.getByTestId("claim-mark")).not.toHaveAttribute("data-check", "checking");
+    await expect(window.getByTestId("checks-running")).toHaveCount(0);
+
+    // On the line under the title, after the counts; its list under them.
+    await expect(unread).toContainText(WORDS[language].count);
+    await expect(unread.getByTestId("unread-file")).toHaveCount(0);
+    const count = window.getByTestId("mind-count");
+    const shown = unread.getByTestId("checks-unread-show");
+    const showBox = await shown.boundingBox();
+    const countBox = await count.boundingBox();
+    expect(
+      showBox && countBox && showBox.y >= countBox.y && showBox.y < countBox.y + countBox.height,
+    ).toBe(true);
+    await pointAndClick(window, shown);
+    await expectReasons(unread, count, language, app, window, "check");
+    const titleBox = await window.getByTestId("mind-title").boundingBox();
+    const lineBox = await line.boundingBox();
+    const listBox = await unread.getByTestId("checks-unread-list").boundingBox();
+    expect(listBox && titleBox && listBox.y >= titleBox.y + titleBox.height).toBe(true);
+    expect(listBox && lineBox && listBox.y + listBox.height <= lineBox.y).toBe(true);
+    await app.close();
+  });
+}
+
+test("a Verify run says which files in its scope couldn't be read, and why", async () => {
+  test.setTimeout(120_000);
+  const outside = await createDataFolder();
+  try {
+    const report = join(outside, "Harbour report.pdf");
+    await writeFile(report, buildPdf([{ lines: ["Harbour report", SENTENCE] }]));
+    const { app, window } = await start("en");
+    await interceptOpenDialog(app, report);
+    await pointAndClick(window, window.getByTestId("plus-menu"));
+    await pointAndClick(window, window.getByTestId("plus-verify-document"));
+    const line = window.getByTestId("verify-line");
+    await pointAndClick(window, line.getByTestId("verify-check"));
+    await expect(line.getByTestId("verify-done")).toContainText("Checked 1 claim");
+
+    const unread = window.getByTestId("verify-unread");
+    await expect(unread).toContainText(WORDS.en.count);
+    await pointAndClick(window, unread.getByTestId("verify-unread-show"));
+    await expectReasons(unread, line, "en", app, window, "verify");
+    await app.close();
+  } finally {
+    await removeDataFolder(outside);
+  }
+});
+
 /** What the stand-in for the text recognition model reads: page 1 of a scan, but not page 2. */
 async function scanScript(folder: string): Promise<string> {
   const script = join(folder, "scans.json");
@@ -215,5 +318,17 @@ test("nothing shows when everything in scope was read", async () => {
   const { app, window } = await start("en", { "Tides.txt": FILES["Tides.txt"] as string });
   const answer = await askInAssistant(window, "What do tides do?");
   await expect(answer.getByTestId("unread-files")).toHaveCount(0);
+
+  const editor = window.getByTestId("mind-editor");
+  await editor.click();
+  await window.keyboard.type(SENTENCE);
+  const line = editor.locator(":scope > p").first();
+  await slideSelect(window, line, "Spring tides", { line, words: "full moon." });
+  await pointAndClick(
+    window,
+    window.getByTestId("selection-menu").getByTestId("selection-action-find-support"),
+  );
+  await expect(window.getByTestId("claim-mark")).toHaveCount(1);
+  await expect(window.getByTestId("checks-unread")).toHaveCount(0);
   await app.close();
 });
