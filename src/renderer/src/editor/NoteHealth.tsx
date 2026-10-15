@@ -101,8 +101,8 @@ function useHealth(editor: Editor, skipped: ReadonlySet<string>): Health {
  * a re-check or weren't checked. Each part is a button that moves to the
  * next such sentence or Citation, round to the first. Under it, while
  * sentences are checked, what is happening with Stop; or why a check gave
- * nothing, with the one thing that helps. Last, the files the checks
- * couldn't read, if any, whose list opens below the rest.
+ * nothing, with the one thing that helps. Last on the line, the files the
+ * checks couldn't read, if any, whose list opens below it.
  */
 export function NoteHealth({
   editor,
@@ -355,7 +355,7 @@ export function NoteHealth({
                 : t(`checks.problem.${problem.kind}`)}
           </ProblemLine>
         )}
-      <UnreadFilesLine files={unread} testId="checks-unread" className="mind-health-unread" />
+      <UnreadFilesLine files={unread} testId="checks-unread" className="mind-unread" />
     </>
   );
 }

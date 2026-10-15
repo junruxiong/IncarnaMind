@@ -65,8 +65,8 @@ function claimMarks(editor: Editor, pages: Verification["pages"]) {
  * against this Folder's Documents? [Check 24 claims]" with the estimate on a
  * cloud model, "Checking 12 of 24…" with Stop, then "Checked 24 claims · 2
  * need a look", which moves to the next such claim and fades in once as the
- * run finishes; or why there is nothing to check. Under it, the files the
- * checks couldn't read, if any.
+ * run finishes; or why there is nothing to check. Last on the line, the files
+ * the checks couldn't read, if any.
  */
 export function VerifyLine({
   editor,
@@ -304,8 +304,8 @@ export function VerifyLine({
         </button>
         {dot}
         {state}
+        <UnreadFilesLine files={unread} testId="verify-unread" className="mind-unread" />
       </div>
-      <UnreadFilesLine files={unread} testId="verify-unread" className="mind-verify-problem" />
       {running === null && marks.marked > 0 && marks.coverage.mostlyUncovered && (
         <UncoveredLine
           className="mind-verify-problem"

@@ -1278,13 +1278,13 @@
     color: var(--color-danger);
   }
   .mind-health-line::before,
-  .mind-health-unread > p::before {
+  .mind-unread > p::before {
     content: "·";
     margin-right: 8px;
     color: var(--color-rule-strong);
   }
-  /* The files the checks couldn't read sit on the count's line; Show's list takes a line of its own under it. */
-  .mind-health-unread {
+  /* The files the checks couldn't read sit on the line of the checks' state, never a line of their own; Show's list opens under it. */
+  .mind-unread {
     display: contents;
 
     & > ul {
