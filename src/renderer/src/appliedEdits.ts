@@ -284,10 +284,13 @@ export async function finishApplying(
 function undoEdit(editor: Editor): void {
   const edit = latest.get(editor);
   const stack = undoStackOf(editor);
-  if (!edit || !stack) return;
+  if (!edit || !stack || edit.step === null) return;
   const steps = [edit.step, ...edit.more];
-  while (!editor.isDestroyed && steps.includes(stack.undoStack.at(-1) ?? null)) {
+  let top = stack.undoStack.at(-1);
+  while (!editor.isDestroyed && top !== undefined && steps.includes(top)) {
     editor.commands.undo();
+    if (stack.undoStack.at(-1) === top) break;
+    top = stack.undoStack.at(-1);
   }
   setAppliedLine(editor, null);
 }
