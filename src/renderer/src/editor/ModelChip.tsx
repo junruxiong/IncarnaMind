@@ -235,7 +235,7 @@ export function ModelChip({
                   !event.metaKey &&
                   !event.ctrlKey &&
                   !event.altKey &&
-                  event.target !== search.current
+                  !(event.target instanceof HTMLInputElement)
                 ) {
                   search.current?.focus();
                 }

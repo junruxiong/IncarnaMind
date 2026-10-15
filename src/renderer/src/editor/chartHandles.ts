@@ -5,6 +5,8 @@ export interface ChartHandle {
   kind(): ChartKind;
   fits(kind: ChartKind): boolean;
   setKind(kind: ChartKind): void;
+  canSwitch(): boolean;
+  switchRowsAndColumns(): void;
   asTable(): boolean;
   toggleTable(): void;
   canUpdate(): boolean;
