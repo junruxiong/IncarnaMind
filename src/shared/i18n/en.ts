@@ -123,7 +123,7 @@ export const en = {
     "Start with the folders you need. Rename them or add your own at any time.",
   "library.addSelected": "Add selected folders",
   "library.modelHint":
-    "Choose the model that assigns folders and tags. This can be different from your chat model. A cloud model receives your document text, folder names and tag definitions, and, if it can read images, the first pages of scanned PDFs.",
+    "Choose the model that assigns folders and tags. This can be different from your AI model. A cloud model receives your document text, folder names and tag definitions, and, if it can read images, the first pages of scanned PDFs.",
   "library.connection": "Connection",
   "library.manualOnly": "Organize manually",
   "library.jev": "Jev · saved connection",
@@ -649,7 +649,7 @@ export const en = {
   "checks.problem.nothing": "There's no sentence to check in what you selected.",
   "checks.problem.has-proposals": "Accept or reject the changes in it before checking it.",
   "checks.problem.local-mode":
-    "Local mode is on, and the model isn't on this computer, so nothing was checked.",
+    "“Keep everything on this computer” is on, and the model isn't on this computer, so nothing was checked.",
   "checks.problem.chooseModel": "Choose a model",
   "checks.tryAgain": "Try again",
   "checks.problem.failed": "Couldn't check: {message}",
@@ -729,7 +729,7 @@ export const en = {
     "The selection holds changes that are waiting: accept or reject them first.",
   "edit.problem.too-long": "That is more text than the model can take at once: select less.",
   "edit.problem.local-mode":
-    "Local mode is on, so Edit with AI uses only a model on this computer.",
+    "“Keep everything on this computer” is on, so Edit with AI uses only a model on this computer.",
   "edit.problem.chooseModel": "Choose a model",
   "edit.problem.failed": "Edit with AI didn't work: {message}",
   "edit.problem.retry": "Try again",
@@ -1234,11 +1234,11 @@ export const en = {
 
   "embeddingProviders.settings.title": "Document search",
   "embeddingProviders.settings.body":
-    "Documents are searched by their words, and the best matches are reranked. An embedding model also searches by meaning: it finds Passages worded differently from your Question, but indexing is slower, and the built-in model is a 135 MB download. A cloud model may find more, but it receives the text of every Document.",
-  "embeddingProviders.settings.current": "Embedding model: ",
+    "Documents are searched by their words, with the best matches first. A search model also finds meaning: passages worded differently from your Question, but reading Documents takes longer, and the built-in model is a 135 MB download. A cloud model may find more, but it receives the text of every Document.",
+  "embeddingProviders.settings.current": "Search model: ",
   "embeddingProviders.settings.off": "Off",
   "embeddingProviders.settings.offNote":
-    "Documents are searched by their words, and the best matches reranked. Nothing leaves this computer.",
+    "Documents are searched by their words, with the best matches first. Nothing leaves this computer.",
   "embeddingProviders.settings.turnOn": "Turn on…",
   "embeddingProviders.settings.builtIn": "Built-in ({model})",
   "embeddingProviders.settings.sendsTo":
@@ -1254,28 +1254,28 @@ export const en = {
   "embeddingProviders.kind.google": "Google",
   "embeddingProviders.kind.openai-compatible": "OpenAI-compatible server",
   "embeddingProviders.kind.ollama": "Ollama",
-  "embeddingProviders.form.label": "Embedding model",
+  "embeddingProviders.form.label": "Search model",
   "embeddingProviders.form.tradeOff":
-    "An embedding model also finds Passages worded differently from your Question, at the cost of slower indexing and, for the built-in model, a 135 MB download.",
+    "A search model also finds passages worded differently from your Question, at the cost of slower reading and, for the built-in model, a 135 MB download.",
   "embeddingProviders.form.offHint":
-    "Documents are searched by their words, reranked, as soon as they are read. Nothing is downloaded.",
+    "Documents are searched by their words, best matches first, as soon as they are read. Nothing is downloaded.",
   "embeddingProviders.form.localOnly":
-    "Local mode is on, so only models on this computer can be chosen.",
+    "“Keep everything on this computer” is on, so only models on this computer can be chosen.",
   "embeddingProviders.form.localOnlyServer":
-    "Local mode is on, and this server isn’t on this computer: use one at localhost or 127.0.0.1, or turn off “Keep everything on this computer” above.",
+    "“Keep everything on this computer” is on, and this server isn’t on this computer: use one at localhost or 127.0.0.1, or turn off “Keep everything on this computer” above.",
   "embeddingProviders.form.builtInHint":
     "multilingual-e5-small: about 135 MB, downloaded once, and runs on this computer. English and Chinese.",
   "embeddingProviders.form.ollamaUrl": "Ollama URL (optional)",
   "embeddingProviders.form.ollamaHint":
     "Leave it empty for Ollama on this computer. Pull the model in Ollama first, e.g. ollama pull bge-m3.",
-  "embeddingProviders.form.model": "Embedding model name",
+  "embeddingProviders.form.model": "Model name",
   "embeddingProviders.form.switch": "Switch…",
   "embeddingProviders.form.turnOn": "Turn on…",
   "embeddingProviders.form.turnOff": "Turn off…",
   "embeddingProviders.test.ok": "Connected: the model made a vector of {dimensions} numbers.",
   "embeddingProviders.confirm.title": "Switch to {provider}?",
   "embeddingProviders.confirm.reprocess":
-    "Every Document ({count} in all) will be processed again with the new model, which can take a while. Until each one is done, search finds its Passages by their words only.",
+    "Every Document ({count} in all) will be processed again with the new model, which can take a while. Until each one is done, search finds its passages by their words only.",
   "embeddingProviders.confirm.cloud":
     "{service} will receive the full text of all your Documents, and every search you make.",
   "embeddingProviders.confirm.local": "Everything stays on this computer.",
@@ -1283,57 +1283,60 @@ export const en = {
   "embeddingProviders.confirm.switch": "Switch and process again",
   "embeddingProviders.confirm.onTitle": "Turn on {provider}?",
   "embeddingProviders.confirm.embed":
-    "Every Document ({count} in all) will be embedded in the background, which can take a while. Until each one is done, search finds its Passages by their words.",
+    "Every Document ({count} in all) will be read for search in the background, which can take a while. Until each one is done, search finds its passages by their words.",
   "embeddingProviders.confirm.turnOn": "Turn on",
-  "embeddingProviders.confirm.offTitle": "Turn embeddings off?",
+  "embeddingProviders.confirm.offTitle": "Turn off search by meaning?",
   "embeddingProviders.confirm.off":
-    "Search will find Passages by their words, reranked, and new Documents are ready as soon as they are read. The vectors made so far are kept, should you turn embeddings on again.",
+    "Search will find passages by their words, best matches first, and new Documents are ready as soon as they are read. What the search model has read so far is kept, should you turn it on again.",
   "embeddingProviders.confirm.turnOff": "Turn off",
   "embeddingProviders.localOnly.label": "Keep everything on this computer",
   "embeddingProviders.localOnly.body":
-    "Embeddings, when on, use the built-in model or Ollama, search results aren't sent for reranking, Questions are asked only of a model on this computer, and no usage data is sent. Turning it on switches a cloud embedding model back to the built-in one, and processes your Documents again.",
+    "Search by meaning uses the built-in model or Ollama, search results aren't sent anywhere to be ordered, Questions are asked only of a model on this computer, and no usage data is sent. Turning it on switches a cloud search model back to the built-in one, and reads your Documents again.",
   "embeddingProviders.localOnly.cloudChat":
-    "Your chat model is on {service}, so Questions aren't sent while this is on: choose a local model under Chat model to ask them.",
-  "embeddingProviders.rebuild.title": "Embedding Documents for search: {done} of {total}",
+    "Your AI model is on {service}, so Questions aren't sent while this is on: choose a local model under AI model to ask them.",
+  "embeddingProviders.rebuild.title": "Reading Documents for search: {done} of {total}",
   "embeddingProviders.rebuild.localMode":
     "To keep everything on this computer, search now uses the built-in model.",
   "embeddingProviders.rebuild.note":
-    "Search finds Passages by their words until each Document is done.",
+    "Search finds passages by their words until each Document is done.",
   "embeddingProviders.error.notice": "Search can't use {provider}. {reason}",
 
-  "rerank.settings.title": "Reranking",
+  "rerank.settings.title": "Best results first",
   "rerank.settings.body":
-    "Document search reorders its best matches with a reranking model, so the most relevant Passages come first. It is on by default, with the built-in model, which runs on this computer; Cohere and Voyage AI need a key. You can turn it off. It applies to an Answer from a model that searches once, to Suggest as I write, and to checks and comparison tables. A model that calls Tools searches without it and searches again when the Passages don't answer.",
-  "rerank.settings.inUse": "{service} reranks search results ({model}).",
-  "rerank.settings.sends": "Each search and the Passages it found are sent to {service}.",
-  "rerank.settings.builtInUse": "The built-in model reranks search results ({model}).",
+    "Search puts the most relevant passages first, using a small model. It is on by default, with the built-in model, which runs on this computer; Cohere and Voyage AI need a key. You can turn it off. It applies to an Answer from a model that searches once, to Suggest as I write, and to checks and comparison tables. A model that searches by itself doesn't use it, and searches again when the passages don't answer.",
+  "rerank.settings.inUse": "{service} puts the best search results first ({model}).",
+  "rerank.settings.sends": "Each search and the passages it found are sent to {service}.",
+  "rerank.settings.builtInUse": "The built-in model puts the best search results first ({model}).",
   "rerank.settings.builtInDefault":
-    "By default, the built-in model reranks search results ({model}).",
+    "By default, the built-in model puts the best search results first ({model}).",
   "rerank.settings.notDownloaded":
     "It downloads once ({total} MB) when there are Documents to search. Until then, search keeps its own order.",
   "rerank.settings.builtInNote": "Nothing leaves this computer. Each search takes a little longer.",
   "rerank.settings.runsOn": "On this computer · {device}",
   "rerank.settings.downloading":
-    "Downloading the reranking model: {downloaded} of {total} MB. Until it's ready, search keeps its own order.",
-  "rerank.settings.failed": "The reranking model couldn't be downloaded: {reason}.",
-  "rerank.settings.loadFailed": "The reranking model couldn't start on this computer.",
+    "Downloading the model that orders search results: {downloaded} of {total} MB. Until it's ready, search keeps its own order.",
+  "rerank.settings.failed":
+    "The model that orders search results couldn't be downloaded: {reason}.",
+  "rerank.settings.loadFailed":
+    "The model that orders search results couldn't start on this computer.",
   "rerank.settings.retry": "Try again",
-  "rerank.settings.paused": "Paused: local mode keeps search results on this computer.",
+  "rerank.settings.paused":
+    "Paused while “Keep everything on this computer” is on: search results stay on this computer.",
   "rerank.settings.keyMissing":
-    "No key for {service} can be read on this device, so nothing is reranked. Enter the key again.",
-  "rerank.settings.setUp": "Set up reranking…",
+    "No key for {service} can be read on this device, so results aren't reordered. Enter the key again.",
+  "rerank.settings.setUp": "Set up…",
   "rerank.settings.localOnly":
-    "Local mode is on: Cohere and Voyage AI would receive search matches, so only the built-in model can be chosen.",
+    "“Keep everything on this computer” is on: Cohere and Voyage AI would receive search matches, so only the built-in model can be chosen.",
   "rerank.settings.change": "Change",
-  "rerank.settings.remove": "Stop reranking",
+  "rerank.settings.remove": "Turn off",
   "rerank.kind.built-in": "On this computer (built-in model)",
   "rerank.kind.cohere": "Cohere",
   "rerank.kind.voyage": "Voyage AI",
-  "rerank.form.label": "Rerank with",
+  "rerank.form.label": "Order results with",
   "rerank.form.builtInNote":
     "Downloads {model} ({size} MB) once. Your searches and Documents stay on this computer.",
   "rerank.form.model": "Model (optional)",
-  "rerank.form.save": "Use for reranking",
+  "rerank.form.save": "Use for ordering results",
 
   "folders.label": "Folders",
 
@@ -1409,7 +1412,7 @@ export const en = {
   "tags.state.tagging": "Tagging…",
   "tags.state.failed": "Tagging failed. Re-tag to try again.",
   "tags.dialog.body":
-    "Organize gives each Document a Folder and Tags, going by these names and descriptions, with the model chosen in Settings → Organization: your connected chat model, Auto · local models (Tev1 on this computer, and Clef-Flash for PDFs that are mostly images), or a local model you name, such as Clef-Flash. Tags you add to or remove from a Document are never changed automatically.",
+    "Organize gives each Document a Folder and Tags, going by these names and descriptions, with the model chosen in Settings → Organization: your connected AI model, Auto · local models (Tev1 on this computer, and Clef-Flash for PDFs that are mostly images), or a local model you name, such as Clef-Flash. Tags you add to or remove from a Document are never changed automatically.",
   "tags.dialog.preset": "Preset",
   "tags.dialog.empty": "No Tags yet. Add one below.",
   "tags.dialog.name": "Name",
@@ -1436,7 +1439,7 @@ export const en = {
   "jev.chip.confirm": "Confirm {tag} on {name}",
   "jev.settings.title": "Automatic tagging",
   "jev.settings.body":
-    "Documents are tagged with your chat model. With a TypeSafe Jev key, Jev tags them instead: it is quicker and cheaper, and says how likely each Tag is. Tags it isn't sure about are marked for you to review.",
+    "Documents are tagged with your AI model. With a TypeSafe Jev key, Jev tags them instead: it is quicker and cheaper, and says how likely each Tag is. Tags it isn't sure about are marked for you to review.",
   "jev.settings.inUse": "TypeSafe Jev tags your Documents.",
   "jev.settings.server": "Server: {server}",
   "jev.settings.hosted": "TypeSafe",
@@ -1510,7 +1513,7 @@ export const en = {
 
   "providers.setup.title": "Where should Answers come from?",
   "providers.setup.body":
-    "Asking Questions needs a chat model. Notes and Documents work without one, and you can change this later in Settings.",
+    "Asking Questions needs an AI model. Notes and Documents work without one, and you can change this later in Settings.",
   "providers.setup.later": "Set up later",
   "setup.title": "Choose where Answers come from",
   "setup.body": "Your Question waits here and is answered as soon as you pick.",
@@ -1553,13 +1556,13 @@ export const en = {
   "plans.google.line": "Use IncarnaMind in Antigravity, where your plan pays.",
   "plans.google.connect": "Connect Antigravity",
   "plans.google.credits": "Google’s page on developer credits",
-  "providers.choice.label": "Chat model",
+  "providers.choice.label": "AI model",
   "providers.choice.local": "Stays on this computer",
   "providers.choice.apiKey": "An API key",
   "providers.choice.apiKey.body":
-    "OpenAI, Anthropic, Google, DeepSeek, Qwen, Kimi, GLM, Mistral, xAI, OpenRouter, SiliconFlow, or an OpenAI-compatible server. Your Question and the Passages found for it are sent to that service.",
+    "OpenAI, Anthropic, Google, DeepSeek, Qwen, Kimi, GLM, Mistral, xAI, OpenRouter, SiliconFlow, or an OpenAI-compatible server. Your Question and the passages found for it are sent to that service.",
   "providers.choice.apiKey.firstRun.body":
-    "{providers}. More providers are in Settings. Your Question and the Passages found for it are sent to that service.",
+    "{providers}. More providers are in Settings. Your Question and the passages found for it are sent to that service.",
   "providers.list.separator": ", ",
   "providers.list.last": "{rest} or {last}",
   "providers.kind.short.qwen": "Qwen",
@@ -1581,7 +1584,7 @@ export const en = {
   "providers.kind.ollama": "Ollama",
   "providers.kind.chatgpt": "ChatGPT plan",
 
-  "providers.form.label": "Chat provider",
+  "providers.form.label": "Service",
   "providers.form.apiKey": "API key",
   "providers.form.apiKeyOptional": "API key (optional)",
   "providers.form.apiKeySaved": "A key is saved. Leave this empty to keep it.",
@@ -1590,7 +1593,7 @@ export const en = {
   "providers.form.region": "Region",
   "providers.region.cn": "China",
   "providers.region.intl": "International",
-  "providers.form.more": "More providers",
+  "providers.form.more": "More services",
   "providers.form.keyGuide": "How do I get one?",
   "providers.form.getKey": "Get a key",
   "providers.form.planCredits": "Learn more",
@@ -1601,9 +1604,9 @@ export const en = {
   "providers.form.model": "Model",
   "providers.form.test": "Test connection",
   "providers.form.testing": "Testing…",
-  "providers.form.save": "Use this provider",
+  "providers.form.save": "Use this service",
   "providers.sends":
-    "Your Questions, the Mind you're in, Passages from your Documents, and Document text for Tags go to {provider} when you use it.",
+    "Your Questions, the Mind you're in, passages from your Documents, and Document text for Tags go to {provider} when you use it.",
   "providers.form.saving": "Saving…",
   "providers.form.moreShort": "More…",
   "providers.form.whereKey": "Where do I find it?",
@@ -1619,6 +1622,7 @@ export const en = {
   "providers.form.title": "Paste your {provider} key",
   "providers.form.title.server": "Connect an OpenAI-compatible server",
   "providers.form.useKey": "Use this key",
+  "providers.untested": "Not yet tested for checked Citations",
   "providers.form.checking": "Checking the key…",
   "providers.form.needsKey": "Paste the key first.",
   "providers.form.needsAddress": "Enter the server's address first.",
@@ -1663,7 +1667,7 @@ export const en = {
   "providers.ollama.get": "Get Ollama",
 
   "providers.readiness.no-provider":
-    "Asking Questions needs a chat model. Notes and Documents work without one.",
+    "Asking Questions needs an AI model. Notes and Documents work without one.",
   "providers.readiness.missing-api-key":
     "The API key for {service} isn't saved on this device. Add it in Settings to ask Questions.",
   "providers.readiness.consent-declined":
@@ -1674,7 +1678,7 @@ export const en = {
   "localMode.refused":
     "“Keep everything on this computer” is on, so this Question wasn't sent to {service}",
   "localMode.useLocal": "Use a local model",
-  "localMode.turnOff": "Turn off local mode",
+  "localMode.turnOff": "Allow cloud models",
   "localMode.turnedOff": "Turned off “Keep everything on this computer”",
   "localMode.turnedOn": "Turned on “Keep everything on this computer”",
   "localMode.keep.label": "Also keep everything on this computer",
@@ -1690,14 +1694,14 @@ export const en = {
   "localModel.opening": "Opening Ollama…",
   "localModel.cancel": "Cancel",
 
-  "providers.settings.title": "Chat model",
-  "providers.settings.none": "No chat model is set up yet.",
-  "providers.settings.provider": "Provider",
+  "providers.settings.title": "AI model",
+  "providers.settings.none": "No AI model is set up yet.",
+  "providers.settings.provider": "Service",
   "providers.settings.local": "on this computer",
   "providers.settings.cloud": "cloud, on ollama.com",
   "providers.settings.defaultModel": "Default model",
   "providers.settings.saveModel": "Save",
-  "providers.settings.change": "Change provider",
+  "providers.settings.change": "Change service",
   "providers.settings.cancel": "Cancel",
   "providers.settings.remove": "Remove",
 
@@ -1773,7 +1777,7 @@ export const en = {
   "consent.flow.chat.purpose": "answer your Questions",
   "consent.data.blocks":
     "The Mind you're in: its text, your Notes and earlier Answers, except Notes you've excluded",
-  "consent.data.passages": "Passages from your Documents that match the Question",
+  "consent.data.passages": "passages from your Documents that match the Question",
   "consent.data.tool-results":
     "Results of the Tools an Answer uses, such as Connectors and Skill scripts",
   "consent.flow.tagging": "Automatic Tags",
@@ -1792,7 +1796,7 @@ export const en = {
   "consent.flow.suggestions": "Writing suggestions",
   "consent.flow.suggestions.purpose": "suggest how your writing goes on",
   "consent.data.writing": "The paragraph you're writing, each time you pause at its end",
-  "consent.data.writing-passages": "Up to 8 Passages from your Documents that match it",
+  "consent.data.writing-passages": "Up to 8 passages from your Documents that match it",
   "consent.flow.rerank": "Reranking",
   "consent.flow.rerank.purpose": "put the best search results first",
   "consent.flow.connectors": "Connectors",
@@ -1959,9 +1963,9 @@ export const en = {
   "privacy.traffic.text-recognition-model": "Text recognition model download",
   "privacy.traffic.text-recognition-model.description":
     "The built-in text recognition model is downloaded once, the first time a scanned page needs reading. Scans are read on this computer: nothing of them is sent.",
-  "privacy.traffic.reranking-model": "Reranking model download",
+  "privacy.traffic.reranking-model": "Result-ordering model download",
   "privacy.traffic.reranking-model.description":
-    "The built-in reranking model is downloaded once, when there are Documents to search, unless reranking is off or uses a service. On a computer with a GPU it can use, its GPU version is downloaded too.",
+    "The built-in model that puts the best search results first is downloaded once, when there are Documents to search, unless that is off or uses a service. On a computer with a GPU it can use, its GPU version is downloaded too.",
   "privacy.traffic.transcription-model": "Speech model download",
   "privacy.traffic.transcription-model.description":
     "The speech model that transcribes meetings on this computer is downloaded once, when a meeting is first transcribed. Nothing you say is sent.",
@@ -2140,10 +2144,11 @@ export const en = {
   "answer.more": "More for this Answer",
   "answer.error.thisModel": "this model",
   "answer.error.auth": "The key for {model} was refused",
-  "answer.error.model": "The provider doesn't know {model}",
-  "answer.error.rate-limit": "The provider is limiting requests right now",
-  "answer.error.network": "Couldn't reach the provider",
-  "answer.error.provider": "The provider ran into a problem",
+  "answer.error.thisService": "This service",
+  "answer.error.model": "{service} doesn't know {model}",
+  "answer.error.rate-limit": "{service} is limiting requests right now",
+  "answer.error.network": "Couldn't reach {service}. Check your internet connection",
+  "answer.error.provider": "{service} ran into a problem",
   "answer.error.consent-declined": "Nothing was sent: you chose not to send data to this service",
   "answer.error.local-mode":
     "Stopped: “Keep everything on this computer” was turned on, and {model} isn't on this computer",
@@ -2198,7 +2203,7 @@ export const en = {
   "comparison.cell.rateLimit": "provider busy",
   "comparison.cell.network": "provider unreachable",
   "comparison.cell.consentDeclined": "not sent",
-  "comparison.cell.localMode": "not sent: local mode",
+  "comparison.cell.localMode": "not sent: kept on this computer",
   "comparison.cell.tooLong": "too long for the model",
   "comparison.cell.failed": "couldn't be written",
   "comparison.filling": "{done} of {total} cells",
@@ -2455,8 +2460,8 @@ export const en = {
   "search.failed": "Searching your Documents failed",
   "search.count": "{count} searches",
   "search.query": "“{query}”",
-  "search.results": "{count} Passages",
-  "search.results.one": "1 Passage",
+  "search.results": "{count} passages",
+  "search.results.one": "1 passage",
   "search.noResults": "nothing found",
   "search.details": "What was searched",
 
@@ -2598,11 +2603,11 @@ export const en = {
   "suggestions.settings.body":
     "When you pause at the end of a paragraph, grey text shows how it could go on: only when your Documents support it, always with a Citation. Tab accepts, Esc dismisses.",
   "suggestions.settings.today": "Today: {shown} suggested, {accepted} accepted",
-  "suggestions.settings.paused.no-model": "Paused until a chat model is set up, in Models.",
+  "suggestions.settings.paused.no-model": "Paused until an AI model is set up, in Models.",
   "suggestions.settings.paused.consent":
     "Paused until you allow sending your writing to {service}.",
   "suggestions.settings.paused.local-mode":
-    "Paused in local mode: your chat model isn't on this computer.",
+    "Paused while “Keep everything on this computer” is on: your AI model isn't on this computer.",
   "suggestions.settings.allow": "Allow…",
   "scripts.card.title": "{skill} wants to run {script}",
   "scripts.card.skill": "Skill",
@@ -2914,9 +2919,10 @@ export const en = {
   "error.files.notSaved.show": "Only a file IncarnaMind saved can be shown.",
   "error.files.notSaved.open": "Only a file IncarnaMind saved can be opened.",
   "error.provider.modelMissing": "Enter a model name.",
+  "error.provider.unknown": "IncarnaMind doesn't know the provider “{provider}”.",
   "error.chatgpt.notPlanModel": "That model isn't on your ChatGPT plan.",
-  "error.provider.embeddingModelMissing": "Enter an embedding model name.",
-  "error.provider.rerankModelMissing": "Enter a reranking model name.",
+  "error.provider.embeddingModelMissing": "Enter a search model name.",
+  "error.provider.rerankModelMissing": "Enter a model name for ordering results.",
   "error.provider.keyMissing": "Enter an API key for {provider}.",
   "error.provider.urlMissing": "Enter the server's URL.",
   "error.provider.urlInvalid": "“{url}” isn't a valid server URL.",
@@ -2929,11 +2935,10 @@ export const en = {
   "error.provider.ollamaCloud":
     "{model} runs on ollama.com, not on this computer. Choose a local model, or pick it in the model menu.",
   "error.provider.rerankLocalMode":
-    "Local mode is on: search results aren't sent to a reranking service. Turn it off in Settings first.",
+    "“Keep everything on this computer” is on: search results aren't sent to a reranking service. Turn it off in Settings first.",
   "error.provider.embeddingLocalMode":
-    "Local mode is on: Document search keeps everything on this computer. Turn it off in Settings to use a cloud embedding provider.",
-  "error.provider.embeddingsOff":
-    "Vector search needs embeddings, which are off: turn them on in Settings → Search.",
+    "“Keep everything on this computer” is on: Document search keeps everything on this computer. Turn it off in Settings to use a cloud embedding provider.",
+  "error.provider.embeddingsOff": "Search by meaning is off: turn it on in Settings → Search.",
   "error.secrets.plainText":
     "No keyring is running, so API keys would be stored in plain text. Start GNOME Keyring or KWallet, or accept plain-text storage in Settings.",
   "error.secrets.unencrypted": "This system can't encrypt API keys, so they can't be saved.",
@@ -3153,7 +3158,8 @@ export const en = {
     "Searched only because you typed. Community connectors haven't been reviewed; check what they can do before you connect one.",
   "connectors.registry.searching": "Searching the MCP Registry…",
   "connectors.registry.none": "Nothing in the MCP Registry matches “{query}”.",
-  "connectors.registry.failed.local-mode": "Local mode is on, so the MCP Registry isn't searched.",
+  "connectors.registry.failed.local-mode":
+    "“Keep everything on this computer” is on, so the MCP Registry isn't searched.",
   "connectors.registry.failed.declined":
     "You chose not to send your search to the MCP Registry. You can change that in Privacy.",
   "connectors.registry.failed.unreachable":
@@ -3202,7 +3208,7 @@ export const en = {
   "connectors.directory.tool.changes": "May change things",
   "connectors.directory.where": "Where your data goes",
   "connectors.directory.where.body":
-    "Once you connect it, what the assistant asks {name} for, such as words from your Question, goes to {name}. What it returns goes to your chat model, as your Documents do.",
+    "Once you connect it, what the assistant asks {name} for, such as words from your Question, goes to {name}. What it returns goes to your AI model, as your Documents do.",
   "connectors.directory.how": "How it signs in",
   "connectors.directory.how.browser":
     "Sign in with {name} in your browser. Your sign-in is kept in your keychain.",
@@ -3395,11 +3401,13 @@ export const en = {
   "examples.banner.label": "About this example",
   "examples.banner.title": "This is an example Mind.",
   "examples.banner.body":
+    "A Mind is a page where you write, and ask your Documents with every quote checked. This draft was checked against its two Documents, and one figure is wrong: click the red mark beside it to see what the results say.",
+  "examples.banner.body.tea":
     "A Mind is a page where you write, and ask your Documents with every quote checked. You write here like in any document, ask Questions about your Documents, and every claim in an Answer links to the page it came from. Click a check to see the quote; green means it was found.",
   "examples.banner.addOwn": "Add your Documents",
   "examples.banner.remove": "Remove the examples",
   "examples.banner.more": "Try an example closer to your work:",
-  "examples.group.tea": "Tea",
+  "examples.group.credit": "Credit paper",
   "examples.group.papers": "Papers",
   "examples.group.reports": "Reports",
   "examples.group.contracts": "Contracts",
@@ -3409,7 +3417,7 @@ export const en = {
   "gettingStarted.count": "· {done} of {total}",
   "gettingStarted.hide": "Hide Get started",
   "gettingStarted.done": "Done: ",
-  "gettingStarted.step.citation": "Check a Citation in the example",
+  "gettingStarted.step.citation": "Open a check in the example",
   "gettingStarted.step.documents": "Add your Documents",
   "gettingStarted.step.question": "Ask your own Question",
   "startGuide.title": "Start in three steps",
@@ -3697,7 +3705,7 @@ export const en = {
   "web.settings.route.model": "The model's own search",
   "web.settings.route.hint":
     "Your model's own web search, through its provider. You're asked before the first search is sent.",
-  "web.settings.supported": "{model} searches through {provider}.",
+  "web.settings.supported": "{model} searches the web through {provider}.",
   "web.settings.unsupported":
     "{provider} has no web search of its own, so Questions asked with {model} don't search the web. Claude, OpenAI and ChatGPT models do.",
   "web.settings.localMode": "Off while “Keep everything on this computer” is on.",
@@ -3962,9 +3970,9 @@ export const en = {
   "agents.problem.not-found":
     "There’s no such Passage, Document, Mind or Citation in the folders shared with this agent.",
   "agents.problem.chat-not-ready":
-    "IncarnaMind has no chat model ready to answer. Set one up in IncarnaMind, in Settings → Models, or search and cite instead.",
+    "IncarnaMind has no AI model ready to answer. Set one up in IncarnaMind, in Settings → Models, or search and cite instead.",
   "agents.problem.chat-consent":
-    "IncarnaMind’s chat model isn’t allowed yet. Ask one Question in IncarnaMind to allow it, or search and cite instead.",
+    "IncarnaMind’s AI model isn’t allowed yet. Ask one Question in IncarnaMind to allow it, or search and cite instead.",
   "agents.problem.answer-failed": "IncarnaMind couldn’t answer: {message}",
   "agents.problem.invalid": "IncarnaMind couldn’t read that request.",
   "agents.problem.failed": "Something went wrong in IncarnaMind. Try again.",
@@ -4024,7 +4032,7 @@ export const en = {
   "agents.pairing.env": "Environment",
   "agents.activity.empty": "No calls yet.",
   "agents.activity.search": "Searched “{text}”",
-  "agents.activity.read_passages": "Read Passages",
+  "agents.activity.read_passages": "Read passages",
   "agents.activity.cite": "Cited “{text}”",
   "agents.activity.check_citations": "Checked its Citations",
   "agents.activity.show_citation": "Showed you a Citation",
@@ -4042,7 +4050,7 @@ export const en = {
   "agents.reason.no-folders": "it had no folders to read",
   "agents.reason.outside-scope": "a folder not shared with it",
   "agents.reason.not-found": "nothing like that in its folders",
-  "agents.reason.chat-not-ready": "no chat model was ready",
+  "agents.reason.chat-not-ready": "no AI model was ready",
   "agents.reason.invalid": "a request IncarnaMind couldn’t read",
   "agents.reason.failed": "something went wrong",
   "agents.connect.title": "Let {agent} read your Documents?",
