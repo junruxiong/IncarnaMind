@@ -66,6 +66,11 @@ describe("The provider catalog", () => {
       "siliconflow",
       "ollama",
       "groq",
+      "together",
+      "fireworks",
+      "cerebras",
+      "cohere",
+      "venice",
       "openai-compatible",
     ]);
     for (const provider of CATALOG_PROVIDERS) {
@@ -89,8 +94,6 @@ describe("The provider catalog", () => {
         expect(provider.serverUrl, where).toBeDefined();
       }
       // Each role names a model the catalog knows: a cloud model, or one recommended for Ollama.
-      // A preset's facts come from its own model list until the catalog maps its models.
-      if (isPreset(provider)) continue;
       for (const [role, modelId] of Object.entries(provider.roles)) {
         const known =
           provider.id === "ollama"
@@ -144,10 +147,14 @@ describe("The provider catalog", () => {
   test("the generated facts cover the hosted providers, with unique ids, and their sources' licences ship with the app", async () => {
     expect(providersWithModels().sort()).toEqual([
       "anthropic",
+      "cerebras",
+      "cohere",
       "deepseek",
+      "fireworks",
       "glm",
       "glm/intl",
       "google",
+      "groq",
       "kimi",
       "kimi/intl",
       "mistral",
@@ -157,6 +164,8 @@ describe("The provider catalog", () => {
       "qwen/intl",
       "siliconflow",
       "siliconflow/intl",
+      "together",
+      "venice",
       "xai",
     ]);
     for (const providerId of providersWithModels()) {
@@ -495,6 +504,13 @@ describe("Support tiers (ADR-0019)", () => {
       expect(preset.endpoints.length, where).toBeGreaterThan(0);
       expect(preset.keyUrl ?? preset.endpoints[0]?.keyUrl, where).toMatch(/^https:\/\//);
       expect(preset.roles.answers, where).toBeDefined();
+      // An Answers model that calls Tools, and quick tasks that cost no more.
+      const output = (id: string | undefined) =>
+        id ? catalogModel(preset.id, id)?.price?.output : undefined;
+      expect(catalogModel(preset.id, preset.roles.answers ?? "")?.tools, where).toBe(true);
+      expect(output(preset.roles.quickTasks) ?? Number.NaN, where).toBeLessThanOrEqual(
+        output(preset.roles.answers) ?? Number.NaN,
+      );
       expect(untestedForCitations(preset), where).toBe(preset.citingTested === undefined);
       if (untestedForCitations(preset)) expect(preset.support, where).toBe("best-effort");
     }

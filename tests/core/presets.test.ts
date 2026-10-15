@@ -1,11 +1,12 @@
 /**
  * Presets (#863): hosted services that speak OpenAI's API, each one catalog row
- * on the shared "openai-compatible" kind. Groq is the first; a second row is
+ * on the shared "openai-compatible" kind. Beside the catalog's, a row is
  * added here only to show that a row is all a preset needs.
  */
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { InvalidInputError } from "../../src/core";
 import type { CatalogProvider } from "../../src/core/providers/catalog";
+import { PRESETS as REAL_AND_TEST_PRESETS } from "../../src/core/providers/catalog/presets";
 import { catalogProvider } from "../../src/core/providers/catalog/providers";
 import { createAiSdkChatModel } from "../../src/core/providers/models";
 import { askAndFinish, citationsIn, setUpWithDocuments } from "../helpers/citations";
@@ -40,10 +41,11 @@ const TIDES = buildPdf([
 ]);
 const SPRING = "Spring tides happen at new moon and at full moon.";
 
-const PRESETS = [
-  { catalogId: "groq", origin: "https://api.groq.com", base: "https://api.groq.com/openai/v1" },
-  { catalogId: "tide-cloud", origin: "https://api.tide.test", base: "https://api.tide.test/v1" },
-] as const;
+/** Each preset in the catalog, with the test's own, by where its requests go. */
+const PRESETS = REAL_AND_TEST_PRESETS.map((each) => {
+  const base = each.endpoints[0]?.baseUrl ?? "";
+  return { catalogId: each.id, origin: new URL(base).origin, base };
+});
 
 const posts = (requests: RecordedRequest[]) => requests.filter((each) => each.method === "POST");
 
@@ -84,7 +86,7 @@ describe("Presets on the shared OpenAI-compatible path", () => {
         answer: "Spring tides come at new and full moon [^1].",
       });
       const group = (await core.listChatModels()).find((each) => each.provider.id === saved.id);
-      expect(group?.models).toEqual(expect.arrayContaining([modelId, "another-model"]));
+      expect(group?.models).toContain(modelId);
       const listing = requests.find((request) => request.method === "GET");
       expect(listing?.url).toBe(`${base}/models`);
       expect(listing?.headers.authorization).toBe(`Bearer key-for-${catalogId}`);

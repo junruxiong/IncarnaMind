@@ -23,7 +23,7 @@ test.afterEach(async () => {
   await removeDataFolder(dataDir);
 });
 
-test("Groq is a chip under More…, with its key page and its model marked not yet tested for checked Citations, in English and Chinese", async () => {
+test("each preset is a chip under More…; Groq's has its key page and its model marked not yet tested for checked Citations, in English and Chinese", async () => {
   // Nothing answers where Ollama would be, so this computer's own Ollama isn't asked.
   const { app, window } = await launchApp(dataDir, { ollama: "http://127.0.0.1:9" });
   try {
@@ -34,6 +34,9 @@ test("Groq is a chip under More…, with its key page and its model marked not y
     await settings.getByTestId("chat-choice-api-key").check();
     const form = settings.getByTestId("provider-form");
     await form.getByTestId("provider-more-toggle").click();
+    for (const name of ["Groq", "Together AI", "Fireworks AI", "Cerebras", "Cohere", "Venice"]) {
+      await expect(form.getByRole("radio", { name, exact: true })).toHaveCount(1);
+    }
     // The provider chips are labels around visually hidden radios.
     await form.getByRole("radio", { name: "Groq", exact: true }).locator("xpath=..").click();
     await expect(form.getByRole("radio", { name: "Groq", exact: true })).toBeChecked();
