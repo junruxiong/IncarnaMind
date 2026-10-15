@@ -82,7 +82,7 @@ describe("the Word look's stylesheet", () => {
     expect(Object.getPrototypeOf(look.runs)).toBe(Object.prototype);
     expect(look.paragraphs).toEqual({ p1: {}, p2: { run: "constructor" } });
     const css = wordLookCss("mind", look);
-    expect(css).not.toContain("display");
+    expect(css).not.toContain("display: none");
     expect(css).not.toContain("Polluted");
     // A run key that names no run of this look, only an object's own property, draws no run.
     expect(rulesOf(css).find((rule) => rule.includes('"p2"'))).not.toContain("text-transform");

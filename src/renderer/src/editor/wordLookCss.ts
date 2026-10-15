@@ -2,7 +2,18 @@ import type { WordLook, WordParagraphLook, WordRunLook } from "../../../core/api
 import { attribute, border, pt, rule } from "./wordCss";
 import { wordLookZoomCss } from "./wordLookZoom";
 import { WORD_LOOK_DOM_ATTRIBUTE, WORD_RUN_DOM_ATTRIBUTE } from "./wordSchema";
+import { alignsColumns } from "./wordTabStops";
+import { WORD_TAB_DOM_ATTRIBUTE } from "./wordTabs";
 import { wordTableCss } from "./wordTableCss";
+
+const LEADERS = [
+  ["dot", "."],
+  ["hyphen", "-"],
+  ["underscore", "_"],
+  ["heavy", "_"],
+  ["middleDot", "·"],
+] as const;
+const LEADER_LENGTH = 400;
 
 /** Word's single line spacing for common fonts. */
 const SINGLE_LINE = 1.15;
@@ -119,6 +130,12 @@ export function wordLookCss(mindId: string, look: WordLook): string {
     look.width ? `${scope} { max-width: ${pt(look.width)}; }` : "",
     // A list draws its own indents.
     `${scope} li > [${WORD_LOOK_DOM_ATTRIBUTE}] { margin-left: 0; margin-right: 0; text-indent: 0; }`,
+    // Until measured, a tab takes one default stop. clip-path clips without moving the baseline, as overflow would.
+    `${scope} [${WORD_TAB_DOM_ATTRIBUTE}] { display: inline-block; width: ${pt(36)}; white-space: pre; text-indent: 0; clip-path: inset(0); }`,
+    ...LEADERS.map(
+      ([leader, character]) =>
+        `${scope} [${WORD_TAB_DOM_ATTRIBUTE}][data-leader="${leader}"]::before { content: "${character.repeat(LEADER_LENGTH)}"; }`,
+    ),
   ];
   for (const [key, paragraph] of Object.entries(look.paragraphs)) {
     const run =
@@ -129,6 +146,15 @@ export function wordLookCss(mindId: string, look: WordLook): string {
     rules.push(
       rule(selector, [...paragraphDeclarations(paragraph), ...(run ? runDeclarations(run) : [])]),
     );
+    if (alignsColumns(paragraph)) {
+      rules.push(
+        rule(`${selector}:has([${WORD_TAB_DOM_ATTRIBUTE}])`, [
+          "white-space: pre",
+          "overflow-x: auto",
+          "overflow-y: hidden",
+        ]),
+      );
+    }
     if (paragraph.contextual) {
       const same = attribute(WORD_LOOK_DOM_ATTRIBUTE, key);
       rules.push(

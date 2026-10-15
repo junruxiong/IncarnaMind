@@ -40,6 +40,7 @@ import {
   WORD_CHANGE_ID,
   WORD_LOOK_ATTRIBUTE,
   WORD_RUN_MARK,
+  WORD_TAB_MARK,
   type WordAtomInfo,
   type WordAtomKind,
   type WordChangeRequest,
@@ -393,6 +394,8 @@ function formattingMarks(look: WordRunLook): MarkJSON[] {
     (look.strike || look.doubleStrike) && { type: "strike" },
   ].filter((mark): mark is MarkJSON => Boolean(mark));
 }
+
+const TAB: MarkJSON = { type: WORD_TAB_MARK };
 
 /** The editor's marks for a run's own formatting. */
 export function runMarks(rPr: XmlElement | undefined): MarkJSON[] {
@@ -874,7 +877,7 @@ class Reader {
             break;
           case "w:tab":
           case "w:ptab":
-            this.text("\t", own, out);
+            this.text("\t", [...own, TAB], out);
             break;
           case "w:noBreakHyphen":
             this.text("‑", own, out);
@@ -1554,7 +1557,7 @@ class Reader {
         break;
       case "w:tab":
       case "w:ptab":
-        this.text("\t", marks, out);
+        this.text("\t", [...marks, TAB], out);
         break;
       case "w:noBreakHyphen":
         this.text("‑", marks, out);

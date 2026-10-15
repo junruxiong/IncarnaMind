@@ -15,14 +15,17 @@ import {
   MIND_WORD_LOOK_FIELD,
   WORD_LOOK_ATTRIBUTE,
   WORD_RUN_MARK,
+  WORD_TAB_MARK,
   type WordSource,
 } from "./api";
 import { nodesByPlace, type WordStructure } from "./documents/formats/docxImport";
 import { CONDITIONAL_FORMATTING_VERSION } from "./documents/formats/docxLook";
 
-/** The look's mark, and formatting the import reads with styles resolved. */
+/** Marks only the look gives, which an earlier version's look takes away with it. */
+const LOOK_MARKS: ReadonlySet<string> = new Set([WORD_RUN_MARK, WORD_TAB_MARK]);
+/** The look's marks, and formatting the import reads with styles resolved. */
 const GIVEN_MARKS: ReadonlySet<string> = new Set([
-  WORD_RUN_MARK,
+  ...LOOK_MARKS,
   "bold",
   "italic",
   "underline",
@@ -250,8 +253,10 @@ export function clearLook(doc: Y.Doc, blocks: Y.XmlFragment): void {
         let at = 0;
         for (const run of child.toDelta() as { insert: unknown; attributes?: object }[]) {
           const length = typeof run.insert === "string" ? run.insert.length : 1;
-          if (run.attributes && WORD_RUN_MARK in run.attributes) {
-            child.format(at, length, { [WORD_RUN_MARK]: null });
+          const attributes = run.attributes ?? {};
+          const looks = Object.keys(attributes).filter((mark) => LOOK_MARKS.has(mark));
+          if (looks.length > 0) {
+            child.format(at, length, Object.fromEntries(looks.map((mark) => [mark, null])));
           }
           at += length;
         }
