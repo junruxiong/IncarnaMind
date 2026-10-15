@@ -312,7 +312,6 @@ test("work still running is set aside apart from what was spent, and the set-asi
     await shot(window, "set-aside-models-narrow-en");
     await closeSettings(window);
 
-    // The work ends: its reservation becomes what it cost, and nothing is set aside any more.
     db.run("UPDATE model_requests SET status = 'settled', cost = 0.01 WHERE id = 'open-1'");
     db.close();
     await openSettings(window, "models");

@@ -32,7 +32,6 @@ export function formatSpent(
   return second ? t("cost.and", { first, second }) : first;
 }
 
-/** What is set aside for work still running: "$1.28 set aside for work in progress"; null when nothing is. */
 export function setAsideText(
   setAside: readonly Money[],
   t: Translate,
@@ -72,8 +71,7 @@ export const notCheckedKey = (stop: RunStop): MessageKey =>
 /**
  * The line before a large run on a model billed per token, shown and never
  * asked: "About 24 calls, 310K tokens, $0.40 · $12.40 of $20 used this month".
- * What is set aside for running work follows, when there is any. Null for a
- * plan or a model on this computer, which show nothing.
+ * Null for a plan or a model on this computer, which show nothing.
  */
 export function estimateText(
   estimate: RunEstimate,

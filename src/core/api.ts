@@ -3472,7 +3472,7 @@ export interface ProviderCost {
   requests: number;
   /** What its settled requests cost, in each currency they were priced in. */
   spent: Money[];
-  /** What is still reserved for its requests that are open, per currency; none when none is. */
+  /** Reserved for its open requests, per currency. */
   setAside: Money[];
   /** Tokens of requests to models with no known price: counted here, not toward the cap. */
   unpricedTokens: number;
@@ -3486,11 +3486,11 @@ export interface CostSummary {
   monthStart: string;
   /** What per-token requests cost this month once settled, per currency. */
   spent: Money[];
-  /** What is still reserved for requests that are open, per currency; none when none is. */
+  /** Reserved for open requests, per currency. */
   setAside: Money[];
   /** `spent` in the cap's currency (the other at a fixed rate), when a cap is set. */
   spentTowardCap: Money | null;
-  /** `setAside` in the cap's currency: it counts against the cap with `spentTowardCap`. */
+  /** `setAside` in the cap's currency; it counts against the cap too. */
   setAsideTowardCap: Money | null;
   cap: MonthlyCap | null;
   /** The providers used this month. */
@@ -3756,7 +3756,6 @@ export type RunEstimate =
       tokens: number;
       /** Null for a model with no known price. */
       cost: Money | null;
-      /** The month's settled spending and what is set aside for open requests, as in `CostSummary`. */
       spentTowardCap: Money | null;
       setAsideTowardCap: Money | null;
       cap: MonthlyCap | null;
