@@ -482,6 +482,7 @@ export function createChecks(options: ChecksOptions) {
     documentVersions: options.watch.documentVersions,
     prepare,
     scopeOf: (mindId, allDocuments) => scopeOf(mindId, allDocuments),
+    recordUnread,
     isRunning: (requestId) => running.has(requestId),
     claimCheck,
     withResult,

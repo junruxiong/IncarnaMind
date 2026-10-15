@@ -15,7 +15,7 @@ import { buildPdf } from "../helpers/pdf";
 
 /*
  * Checks say which files in their scope couldn't be read, and why (#740):
- * Find support, Check against Documents and Verify keep, with the request
+ * Find support, Check against Documents, Check this Mind and Verify keep, with the request
  * that made their marks, the files their scope couldn't read as it started,
  * which the line beside them and the AI use statement read back.
  */
@@ -172,6 +172,17 @@ describe("What a check couldn't read", () => {
     expect(
       await core.verifyClaims({ requestId: randomUUID(), mindId: verified.mind.id }),
     ).toMatchObject({ kind: "checked", claims: 2, checked: 2 });
+
+    expect(named(await unreadOfChecks(client))).toEqual(UNREAD);
+  });
+
+  test("Check this Mind names the same three", async () => {
+    const { core, folderId } = await withUnreadFiles();
+    const { mind, client } = await mindOf(core, folderId, [SUPPORTED, UNSUPPORTED]);
+
+    expect(
+      await core.checkMind({ requestId: randomUUID(), mindId: mind.id, mode: "all" }),
+    ).toMatchObject({ kind: "checked", sentences: 2, checked: 2 });
 
     expect(named(await unreadOfChecks(client))).toEqual(UNREAD);
   });
