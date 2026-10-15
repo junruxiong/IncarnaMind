@@ -73,6 +73,7 @@ const SOURCES: Record<
   "glm/intl": { modelsDev: "zai", litellm: "zai" },
   siliconflow: { modelsDev: "siliconflow-cn", litellm: "siliconflow", prices: false },
   "siliconflow/intl": { modelsDev: "siliconflow", litellm: "siliconflow" },
+  groq: { modelsDev: "groq", litellm: "groq" },
 };
 
 const MIT = (copyright: string) =>

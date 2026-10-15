@@ -3221,8 +3221,8 @@ export interface ChatProvider {
 export interface SaveChatProviderInput {
   kind: ChatProviderKind;
   /**
-   * A preset of the "openai-compatible" kind, by its catalog id (#863), e.g.
-   * "groq": its endpoint and name come from the catalog. Left out: the kind's own.
+   * A preset of the "openai-compatible" kind, by its catalog id, e.g. "groq":
+   * its endpoint and name come from the catalog. Left out: the kind's own.
    */
   catalogId?: string;
   /**
@@ -3241,7 +3241,6 @@ export interface SaveChatProviderInput {
 
 export interface TestChatConnectionInput {
   kind: ChatProviderKind;
-  /** A preset (see `SaveChatProviderInput`). */
   catalogId?: string;
   /** The endpoint to test (see `SaveChatProviderInput`). */
   endpoint?: string;

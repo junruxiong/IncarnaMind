@@ -93,6 +93,13 @@ interface ProviderRow {
 
 const ROW_COLUMNS = "id, kind, base_url, catalog_id, endpoint";
 
+/** A row of a kind this version knows, and of a preset it knows: a newer version's isn't used. */
+const isKnownRow = (row: ProviderRow): row is ProviderRow & { kind: ChatProviderKind } =>
+  isChatProviderKind(row.kind) &&
+  (row.catalog_id === null ||
+    row.catalog_id === row.kind ||
+    isPreset(catalogProvider(row.catalog_id)));
+
 interface ParsedServer {
   kind: ChatProviderKind;
   baseUrl: string | null;
@@ -159,7 +166,6 @@ function parseServer(input: Record<string, unknown>): ParsedServer {
   };
 }
 
-/** A preset's catalog id, which only the "openai-compatible" kind takes; else the kind's own row. */
 function parseCatalogId(kind: ChatProviderKind, value: unknown): string | null {
   if (value === undefined || value === null || value === kind) {
     return catalogProviderOfKind(kind)?.id ?? null;
@@ -353,14 +359,14 @@ export function createChat(options: {
       [catalogId ?? kind, baseUrl ?? "", endpoint ?? ""],
     );
 
-  /** Rows of a kind this version knows; rows from a newer version are left alone. */
+  /** Rows of a kind, and a preset, this version knows; rows from a newer version are left alone. */
   const knownRows = () =>
     db
       .all<ProviderRow>(
         `SELECT ${ROW_COLUMNS} FROM chat_providers WHERE deleted_at IS NULL
          ORDER BY created_at, rowid`,
       )
-      .filter((row) => isChatProviderKind(row.kind));
+      .filter(isKnownRow);
 
   /** Where a row's requests go. */
   const rowService = (row: ProviderRow) =>
@@ -479,7 +485,7 @@ export function createChat(options: {
   const defaultRow = () => {
     const choice = settings.get().user.chatModel;
     const row = choice && rowById(choice.providerId);
-    return row && isChatProviderKind(row.kind) ? row : undefined;
+    return row && isKnownRow(row) ? row : undefined;
   };
 
   /**
@@ -491,7 +497,7 @@ export function createChat(options: {
     flow: DataFlowId,
   ): Promise<ChatReadiness> => {
     const row = choice && rowById(choice.providerId);
-    if (!choice || !row || !isChatProviderKind(row.kind)) {
+    if (!choice || !row || !isKnownRow(row)) {
       return { ready: false, reason: "no-provider" };
     }
     const { modelId } = choice;
@@ -603,7 +609,7 @@ export function createChat(options: {
     metered(choice?: ChatModelChoice): MeteredModel | null {
       const chosen = choice ?? settings.get().user.chatModel;
       const row = chosen && rowById(chosen.providerId);
-      if (!chosen || !row || !isChatProviderKind(row.kind)) return null;
+      if (!chosen || !row || !isKnownRow(row)) return null;
       return meteredModel(
         { kind: row.kind, service: knownService(row, chosen.modelId) },
         row.id,
@@ -617,7 +623,7 @@ export function createChat(options: {
     /** A provider's kind, and whether its model runs on this computer (it sends to no service); null when it's gone. */
     describe(id: string): { kind: ChatProviderKind; local: boolean } | null {
       const row = rowById(id);
-      if (!row || !isChatProviderKind(row.kind)) return null;
+      if (!row || !isKnownRow(row)) return null;
       const choice = settings.get().user.chatModel;
       const service =
         choice?.providerId === row.id ? knownService(row, choice.modelId) : rowService(row);
@@ -630,9 +636,7 @@ export function createChat(options: {
      */
     readsImages(choice: ChatModelChoice): boolean {
       const row = rowById(choice.providerId);
-      return (
-        !!row && isChatProviderKind(row.kind) && readsImages(capabilitiesOf(row, choice.modelId))
-      );
+      return !!row && isKnownRow(row) && readsImages(capabilitiesOf(row, choice.modelId));
     },
 
     /**

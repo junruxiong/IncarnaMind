@@ -42,7 +42,7 @@ export interface ChatModelSpec {
   baseUrl: string | null;
   /** A hosted provider's endpoint id, to tell which region's models it is (its first when left out). */
   endpoint?: string | null;
-  /** A preset's catalog id, whose endpoint and request quirks it takes (#863). */
+  /** A preset's catalog id, whose endpoint and request quirks it takes. */
   catalogId?: string | null;
   /**
    * "off": a small call that doesn't write the Answer (tagging, classifying),

@@ -39,6 +39,7 @@ const MODELS_UNDO_PLACE = "settings:models";
  */
 export function ChatModelSettings() {
   const t = useT();
+  const language = useLanguage();
   const readiness = useAppStore((state) => state.chatReadiness);
   const chatModel = useAppStore((state) => state.settings?.user.chatModel ?? null);
   const updateSettings = useAppStore((state) => state.updateSettings);
@@ -130,7 +131,7 @@ export function ChatModelSettings() {
             <div className="flex min-w-0 flex-col gap-0.5">
               <span className={rowTitleClass}>{t("providers.settings.provider")}</span>
               <span data-testid="chat-provider-current" className="text-ui text-ink-secondary">
-                {providerLabel(current, t)}
+                {providerLabel(current, t, language)}
               </span>
               <ProviderCostLine providerId={current.id} />
             </div>

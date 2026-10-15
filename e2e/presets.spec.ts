@@ -11,8 +11,8 @@ import {
 } from "./app";
 
 /*
- * Presets (#863): a hosted service that speaks OpenAI's API is one chip under More…, with its own
- * name and key page, and until its model passes the citing evaluation it says so.
+ * Presets: a hosted service that speaks OpenAI's API is one chip under More…, with its own name
+ * and key page, and until its model passes the citing evaluation it says so.
  */
 
 let dataDir: string;

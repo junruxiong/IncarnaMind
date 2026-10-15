@@ -2,7 +2,6 @@ import { isMacOS } from "@tiptap/core";
 import { Children, type ReactNode, useEffect, useRef, useState } from "react";
 import type * as Y from "yjs";
 import type { ChatGptPlanStatus, ChatModelChoice, ChatProvider } from "../../../core/api";
-import { catalogProviderOf, untestedForCitations } from "../../../core/providers/catalog/providers";
 import { isCloudModelName } from "../../../core/providers/ollamaCloud";
 import type { MessageKey } from "../../../shared/i18n";
 import { mindModelOf, observeMindModel, setMindModel } from "../../../shared/mindModel";
@@ -22,6 +21,7 @@ import { useT } from "../i18n";
 import { useModelMenuRequests } from "../modelMenu";
 import { useModelNames } from "../modelNames";
 import { useAppStore } from "../store";
+import { untestedHintKey } from "../untestedModels";
 import { ChevronDownSmallIcon } from "./icons";
 
 /** Where a model runs, as the menu groups them (DESIGN.md, Composer › Model). */
@@ -304,11 +304,7 @@ export function ModelChip({
                           key={`${each.id}\n${modelId}`}
                           provider={each}
                           modelId={modelId}
-                          hint={
-                            untestedForCitations(catalogProviderOf(each.kind, each.catalogId))
-                              ? t("providers.untested")
-                              : t(HINTS[group])
-                          }
+                          hint={t(untestedHintKey(each) ?? HINTS[group])}
                           onThisComputer={group === "local"}
                           checked={same({ providerId: each.id, modelId }, current)}
                           // Local mode: only a model on this computer can be asked.
