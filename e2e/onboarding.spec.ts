@@ -162,7 +162,8 @@ test("a first run opens on the credit paper with no model set up: its Citations 
     .poll(async () => (await highlight.allTextContents()).join(""))
     .toContain("Net debt to EBITDA was 3.1 times");
 
-  // The banner's way on: adding one's own Documents, in place, as Get started's step does (#766).
+  // The banner's way on: adding one's own Documents, in place, as Get started's step does (#766),
+  // asking for no model: that waits for the first own Question.
   await window.keyboard.press("Escape");
   const addOwn = pane.getByTestId("example-add-own");
   await expect(addOwn).toHaveText("Add your Documents");
@@ -171,7 +172,7 @@ test("a first run opens on the credit paper with no model set up: its Citations 
   await expect(ways.getByRole("menuitem")).toHaveText(["Add files…", "Link a folder…"]);
   await expect(ways.getByRole("menuitem").first()).toBeFocused();
   await expect(window.getByTestId("mind-title")).toHaveValue("Draft: credit committee paper");
-  await expect(window.getByTestId("chat-setup")).toBeHidden();
+  await expect(window.getByTestId("chat-setup")).toHaveCount(0);
   await window.keyboard.press("Escape");
   await expect(addOwn).toBeFocused();
   await setLanguage(window, "zh-CN");

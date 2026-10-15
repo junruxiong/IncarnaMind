@@ -118,6 +118,9 @@ function purge(
     documentText(ids);
     db.run(`DELETE FROM document_tags WHERE document_id ${IN}`, [list]);
     db.run(`DELETE FROM web_pages WHERE document_id ${IN} AND deleted_at IS NOT NULL`, [list]);
+    db.run(`DELETE FROM web_page_pictures WHERE document_id ${IN} AND deleted_at IS NOT NULL`, [
+      list,
+    ]);
   }
   if (kind === "tag") db.run(`DELETE FROM document_tags WHERE tag_id ${IN}`, [list]);
   if (kind === "folder") db.run(`DELETE FROM deleted_folder_items WHERE folder_id ${IN}`, [list]);

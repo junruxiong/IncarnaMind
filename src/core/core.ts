@@ -16,6 +16,7 @@ import { mindModelOf } from "../shared/mindModel";
 import { mindName } from "../shared/naming";
 import { paperFor } from "../shared/printDocument";
 import { resolveProposals } from "../shared/proposals";
+import { RESEARCH_TASK } from "../shared/research";
 import { wordFileOf } from "../shared/wordFiles";
 import { logActivity, silentLogger } from "./activityLog";
 import type { CoreAdapters } from "./adapters";
@@ -168,6 +169,7 @@ import {
 } from "./referenceRecords";
 import { parseReference } from "./references";
 import { BUILT_IN_RERANKING_MODEL, createRerankingModel } from "./reranking";
+import { createResearch } from "./research";
 import { createTasks, type TaskKind, type TaskNotice } from "./runs/tasks";
 import { parseSearchScope, resolveSearchScope } from "./scope";
 import { createSecrets } from "./secrets";
@@ -181,11 +183,12 @@ import { createPace, realTimers } from "./sources/pace";
 import { createSourceProviders, sourceKeySecret } from "./sources/providers";
 import { migrate, openDatabase } from "./storage";
 import { createSuggestions } from "./suggestions";
-import { createTags } from "./tags";
+import { createTags, tagsOfDocument } from "./tags";
 import { chatClassifier } from "./tags/classify";
 import { createJevTagging } from "./tags/jev";
 import { createTagger, TAGGING_FLOW_SENDS } from "./tags/tagger";
 import { createWebSearch, WEB_SEARCH_SENDS } from "./tools/web";
+import { createPublicFetch } from "./tools/web/fetcher";
 import {
   createTranscriptionModel,
   QWEN3_ASR_0_6B,
@@ -211,9 +214,11 @@ export interface Core extends CoreApi, CoreEventSource {
   openDocumentFile(documentId: string): Promise<DocumentFile>;
   /**
    * Opens a picture a live Markdown Document shows from beside it, by the
-   * relative path written in the file ("figures/map.png"), for the host to
-   * serve to the viewer: only images, only from the file's folder or below
-   * it. Throws NotFoundError for anything else.
+   * relative path written in the file ("figures/map.png"), or one a saved web
+   * page shows, by its path in the snapshot ("pictures/<hash>.png", #756),
+   * for the host to serve to the viewer: only images, only from the file's
+   * folder or below it, only those the page's versions show. Throws
+   * NotFoundError for anything else.
    */
   openDocumentImage(documentId: string, path: string): Promise<DocumentImage>;
   /**
@@ -643,6 +648,8 @@ export function createCore(adapters: CoreAdapters): Core {
     db.close();
     throw error;
   }
+  // A saved page's pictures may come from any host: only the public internet is reached (#756).
+  const pictureFetcher = createPublicFetch(adapters.web);
   const webPages = createWebPages({
     db,
     dataDir,
@@ -650,6 +657,8 @@ export function createCore(adapters: CoreAdapters): Core {
     documents,
     languages: () =>
       settings.get().language === "zh-CN" ? ["zh-CN", "zh;q=0.9", "en;q=0.8"] : ["en", "*;q=0.5"],
+    pictureFetch: pictureFetcher.fetch,
+    reportError: (error) => console.error("A web page's picture couldn't be fetched:", error),
     ...adapters.webPages,
   });
   webPages.dropPurged().catch((error: unknown) => console.error(error));
@@ -780,6 +789,7 @@ export function createCore(adapters: CoreAdapters): Core {
 
   // Sign-in changes can happen in the middle of a request (a refresh that fails), so they report through events.
   let chatGptChanged = () => {};
+  let chatGptLimitsChanged = () => {};
   const chatGptStore = adapters.chatGptStore;
   const chatGpt = createChatGptPlan({
     endpoints: { ...CHATGPT_PLAN_ENDPOINTS, ...adapters.chatGptPlan },
@@ -794,6 +804,7 @@ export function createCore(adapters: CoreAdapters): Core {
     browser: adapters.browser,
     now: () => (adapters.now?.() ?? new Date()).getTime(),
     onChange: () => chatGptChanged(),
+    onLimitsChange: () => chatGptLimitsChanged(),
   });
   // What the experimental ChatGPT provider left on this device goes (see migration 53).
   chatGpt.forgetCodexSignIn().catch((error: unknown) => {
@@ -1027,7 +1038,7 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     liveTranscript: (mindId) => liveTranscriptOf(mindId),
     providerExists: (providerId) => chat.exists(providerId),
-    readiness: (choice) => chat.readiness(choice),
+    readiness: async (choice) => chat.readiness(await chat.answeringModel(choice)),
     prepareModel: (choice) => chat.prepareModel(choice),
     documents: {
       searchableCount: (documentIds) => documents.searchableCount(documentIds ?? undefined),
@@ -1188,7 +1199,11 @@ export function createCore(adapters: CoreAdapters): Core {
   const taskName = (kind: string) =>
     translate(
       settings.get().language,
-      kind === COMPARISON_TASK ? "task.kind.comparison" : "task.kind.other",
+      kind === COMPARISON_TASK
+        ? "task.kind.comparison"
+        : kind === RESEARCH_TASK
+          ? "task.kind.research"
+          : "task.kind.other",
     );
   /** Whether a Mind is the tab shown in a group of one of these windows. */
   const mindShown = (mindId: string | null, windowIds: readonly string[]) =>
@@ -1219,12 +1234,13 @@ export function createCore(adapters: CoreAdapters): Core {
           : "task.notify.finished",
       { task: name },
     );
-    let body = "";
+    let mind = "";
     try {
-      body = task.mindId ? minds.get(task.mindId).title : "";
+      mind = task.mindId ? minds.get(task.mindId).title : "";
     } catch {
-      body = "";
+      mind = "";
     }
+    const body = [mind, what === "finished" ? task.summary : null].filter(Boolean).join(" · ");
     notifications.show(
       { title, body: body || translate(language, "task.notify.body") },
       (windowIds) => mindShown(task.mindId, windowIds),
@@ -1232,8 +1248,75 @@ export function createCore(adapters: CoreAdapters): Core {
         events.emit("task.shown", { taskId: task.id, mindId: task.mindId, blockId: task.blockId }),
     );
   };
-  // Tasks (#126): their journal survives a force-quit; comparison tables fill as one.
-  const taskKinds: TaskKind[] = [comparisons.taskKind, ...(adapters.taskKinds ?? [])];
+  const research = createResearch({
+    requireMind: (mindId) => writableMind(mindId).id,
+    mindExists,
+    mindName: (mindId) => (mindExists(mindId) ? mindName(minds.get(mindId)) || null : null),
+    folderOfMind: (mindId) => (mindExists(mindId) ? minds.get(mindId).folderId : null),
+    createMind: (title, folderId) => makeMind({ title, kind: DEFAULT_MIND_KIND, folderId }).id,
+    documents: {
+      webPagesSince: (ids, since) =>
+        documents
+          .getMany(ids)
+          .filter((document) => document.kind === "web" && document.createdAt >= since)
+          .map((document) => ({ id: document.id, name: document.name })),
+      live: (ids) => documents.getMany(ids).map((document) => document.id),
+    },
+    library: {
+      folderExists: (folderId) => library.folders().some((folder) => folder.id === folderId),
+      folderNames: () => library.folders().map((folder) => folder.name),
+      createFolder: (name, description) => library.create({ name, description }).id,
+      file: (documentIds, folderId) => {
+        db.transaction(() => library.move(documentIds, folderId));
+        library.moved([...documentIds]);
+      },
+    },
+    tags: {
+      list: () => tags.list().map((tag) => ({ id: tag.id, name: tag.name })),
+      create: (name, description) => {
+        const tag = tags.create({ name, description });
+        tagsChanged();
+        return tag.id;
+      },
+      apply: (documentId, tagIds) => {
+        const kept = tagsOfDocument(db, documentId)
+          .filter((link) => link.source === "automatic")
+          .map((link) => link.tagId);
+        const decided = [...new Set([...kept, ...tagIds])].map((tagId) => ({
+          tagId,
+          confidence: null,
+          needsReview: false,
+        }));
+        if (tags.applyAutomatic(documentId, decided)) announceTagged([documentId]);
+      },
+    },
+    notes: {
+      proposed: (mindId, request) => noteAdding.proposed(mindId, request),
+      propose: (mindId, blocks, request, made) => noteAdding.propose(mindId, blocks, request, made),
+    },
+    now: () => adapters.now?.() ?? new Date(),
+    reportError: (error) => console.error(error),
+    chat: {
+      providerExists: (providerId) => chat.exists(providerId),
+      readiness: (choice) => chat.readiness(choice),
+      prepareModel: (choice) => chat.prepareModel(choice),
+      runsLocally: (choice) => chat.metered(choice)?.billing === "free",
+    },
+    answers,
+    resolveScope,
+    tasks: {
+      start: (kind, mindId, input) => tasks.start(kind, mindId, input),
+      get: (taskId) => tasks.record(taskId),
+      steps: (taskId) => tasks.steps(taskId),
+    },
+    say: (key, params) => translate(settings.get().language, key, params),
+  });
+  // Tasks (#126): their journal survives a force-quit; comparison tables fill as one, and Research is one.
+  const taskKinds: TaskKind[] = [
+    comparisons.taskKind,
+    research.taskKind,
+    ...(adapters.taskKinds ?? []),
+  ];
   const tasks = createTasks({
     db,
     now,
@@ -1708,6 +1791,12 @@ export function createCore(adapters: CoreAdapters): Core {
   });
   wordImports.resume();
   wordImports.dropPurged().catch((error: unknown) => console.error(error));
+  wordImports.addLooks().catch((error: unknown) =>
+    (adapters.log ?? silentLogger).error("word.look.failed", {
+      error: error instanceof Error ? error.name : "unknown",
+      message: error instanceof Error ? error.message : String(error),
+    }),
+  );
 
   const recentlyDeleted = createRecentlyDeleted({
     db,
@@ -1778,6 +1867,17 @@ export function createCore(adapters: CoreAdapters): Core {
     report().catch((error: unknown) => {
       if (!lifetime.signal.aborted) console.error(error);
     });
+  };
+  // Not a readiness change: the renderer keeps its model lists.
+  chatGptLimitsChanged = () => {
+    chatGpt.status().then(
+      (status) => {
+        if (!lifetime.signal.aborted) events.emit("chatGptPlan.changed", status);
+      },
+      (error: unknown) => {
+        if (!lifetime.signal.aborted) console.error(error);
+      },
+    );
   };
 
   // Tagging a quit interrupted starts again; Documents waiting for a chat model are checked.
@@ -2103,6 +2203,8 @@ export function createCore(adapters: CoreAdapters): Core {
   // socket and gets Citations IncarnaMind minted and checked. Off until the User turns it on.
   const { home } = adapters.paths;
   const agents = createAgents({
+    offered: adapters.agents?.offered ?? true,
+    log: adapters.log ?? silentLogger,
     db,
     now,
     clock: () => performance.now(),
@@ -2569,16 +2671,24 @@ export function createCore(adapters: CoreAdapters): Core {
     getCostSummary: async () => meter.summary(),
     estimateRun: async (input) => {
       if (!isRecord(input)) throw new InvalidInputError("estimateRun expects an object.");
-      const { items, model } = input;
+      const { items, model, searches = 0 } = input;
       if (typeof items !== "number" || !Number.isInteger(items) || items < 0 || items > 100_000) {
         throw new InvalidInputError("items must be a whole number from 0 to 100,000.");
       }
       if (model !== undefined && !isChatModelChoice(model)) {
         throw new InvalidInputError("model must be a provider and a model.");
       }
+      if (
+        typeof searches !== "number" ||
+        !Number.isInteger(searches) ||
+        searches < 0 ||
+        searches > 1_000
+      ) {
+        throw new InvalidInputError({ key: "error.estimate.searches", values: { max: 1_000 } });
+      }
       const metered = chat.metered(model);
       if (!metered) throw new InvalidInputError("There is no model to estimate for.");
-      return meter.estimate(metered, items);
+      return meter.estimate(metered, items, searches);
     },
     compareDocuments: (input) => comparisons.compareDocuments(input),
     fillComparisonTable: (input) => comparisons.fillComparisonTable(input),
@@ -2590,6 +2700,11 @@ export function createCore(adapters: CoreAdapters): Core {
     stopTask: (taskId) => tasks.stop(taskId),
     answerTaskAsk: (taskId, answer) => tasks.answer(taskId, answer),
     listTaskSteps: async (taskId) => tasks.listSteps(taskId),
+    tellTask: async (taskId, text) => tasks.tell(taskId, text),
+    untellTask: async (taskId, messageId) => tasks.untell(taskId, messageId),
+    getResearchPlan: async (taskId) => research.planView(taskId),
+    planResearch: (input) => research.plan(input),
+    startResearch: (input) => research.start(input),
 
     askQuestion: async (input) => answers.ask(input),
     regenerateAnswer: async (input) =>
@@ -2652,9 +2767,26 @@ export function createCore(adapters: CoreAdapters): Core {
     },
 
     getChatGptPlan: () => chatGpt.status(),
+    answerWithPlanModel: async (input) => {
+      const models = await chatGpt.models();
+      if (
+        !isRecord(input) ||
+        typeof input.insteadOf !== "string" ||
+        !models.some((model) => model.id === input.modelId)
+      ) {
+        throw new InvalidInputError({ key: "error.chatgpt.notPlanModel" });
+      }
+      chatGpt.limits.answerWith(input.insteadOf, input.modelId);
+      return chatGpt.status();
+    },
+    endPlanStandIn: async () => {
+      chatGpt.limits.endStandIn();
+      return chatGpt.status();
+    },
     signInToChatGpt: (input) =>
       chatGpt.signIn({ anotherAccount: isRecord(input) && input.anotherAccount === true }),
     cancelChatGptSignIn: () => chatGpt.cancelSignIn(),
+    reopenChatGptSignIn: () => chatGpt.reopenSignInPage(),
     signOutOfChatGpt: () => chatGpt.signOut(),
     pasteChatGptSignInAddress: async (address) =>
       chatGpt.pasteSignInAddress(typeof address === "string" ? address : ""),
@@ -3079,6 +3211,7 @@ export function createCore(adapters: CoreAdapters): Core {
       // the User's approval are denied, and Skill scripts running are stopped.
       answers.stopAll();
       void webSearch.close().catch((error: unknown) => console.error(error));
+      void pictureFetcher.close().catch((error: unknown) => console.error(error));
       suggestions.stop();
       edits.stopAll();
       checks.stopAll();

@@ -15,6 +15,7 @@ import {
   pointAndClick,
   pointAt,
   removeDataFolder,
+  showFolders,
 } from "./app";
 
 /*
@@ -260,7 +261,8 @@ test("filters by year, format, status and Folder with counts, and asks about the
     await expect(input).toBeFocused();
     await window.keyboard.type(" Which harbour?");
     await expect(input).toHaveValue("What was observed in 2023? Which harbour?");
-    // Only the one Mind: nothing new was made.
+    // Only the one Mind: nothing new was made. Linking left the sidebar on the folders on disk.
+    await showFolders(window);
     await expect(window.getByTestId("mind-list-item")).toHaveCount(1);
   } finally {
     await app.close();
@@ -350,7 +352,6 @@ test("with no Mind yet, asking about many Documents chosen makes one, and their 
       library.getByRole("button", { name: "Ask about these 10 Documents" }),
     );
 
-    await expect(window.getByTestId("mind-list-item")).toHaveCount(1);
     await expect(window.getByTestId("mind-title")).toHaveValue("");
     // The composer's Search scope: its first chips, then "+N more".
     const composer = composerOf(window);
@@ -367,6 +368,8 @@ test("with no Mind yet, asking about many Documents chosen makes one, and their 
     await expect(input).toBeFocused();
     await window.keyboard.type("How high were the tides?");
     await expect(input).toHaveValue("How high were the tides?");
+    await showFolders(window);
+    await expect(window.getByTestId("mind-list-item")).toHaveCount(1);
   } finally {
     await app.close();
   }

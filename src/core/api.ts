@@ -139,8 +139,11 @@ export interface CreateMindInput {
  *   author and date. A version before 20 would take them for the
  *   assistant's, and count what accepting one keeps as AI text. Older
  *   content is version 20 content as it is: nothing is rewritten.
+ * - 21: a Word file's look (#746): the `wordLook` attribute and the
+ *   `wordRun` mark, which an older version's editor would strip. Older
+ *   content is version 21 content as it is.
  */
-export const CONTENT_SCHEMA_VERSION = 20;
+export const CONTENT_SCHEMA_VERSION = 21;
 
 /**
  * The key, in the Mind's settings map (`MIND_SETTINGS_FIELD`), of the content
@@ -355,8 +358,8 @@ export const MIND_PROPOSAL_REQUESTS_FIELD = "proposalRequests";
  * so a change can be made again (regenerated) once it is out of date;
  * Regenerate of an Answer the User had edited (#94); an Answer from the
  * assistant added to a new Mind, as changes to accept (#201); or Compare
- * Documents, whose comparison table is one change (#98). The assistant
- * (#202) and Enhance (#114) add theirs.
+ * Documents, whose comparison table is one change (#98); or a Research
+ * Task's cited draft (#130). The assistant (#202) and Enhance (#114) add theirs.
  */
 export type ProposalRequest =
   | (ProposalMaker & {
@@ -371,6 +374,7 @@ export type ProposalRequest =
   | (ProposalMaker & { source: "answer"; answerId: string })
   | (ProposalMaker & { source: "answer-added" })
   | (ProposalMaker & { source: "comparison-table"; tableId: string })
+  | (ProposalMaker & { source: "research"; taskId: string })
   | WordChangeRequest;
 
 /** The start of the id of someone's tracked change imported from a Word file (`WordChangeRequest`). */
@@ -1152,6 +1156,127 @@ export interface WordFileInfo {
 export interface WordImportProgress {
   done: number;
   total: number;
+}
+
+/**
+ * A Y.Map beside the Blocks of a Mind imported from Word, holding the file's
+ * styles (`WordLook`) once each; Blocks and text name them by key.
+ */
+export const MIND_WORD_LOOK_FIELD = "wordLook";
+
+/** On paragraphs, headings, tables and cells: a key in the Mind's `WordLook`. */
+export const WORD_LOOK_ATTRIBUTE = "wordLook";
+
+/** A mark on text whose attribute `k` is a key in `WordLook.runs`. */
+export const WORD_RUN_MARK = "wordRun";
+
+/** Lengths are in points and colours hex "RRGGBB"; unset properties are left out. */
+export interface WordLook {
+  version: number;
+  /** The most common run size; null with no text. */
+  body: number | null;
+  /** The text width on the first page; null when the file doesn't say. */
+  width: number | null;
+  paragraphs: Record<string, WordParagraphLook>;
+  runs: Record<string, WordRunLook>;
+  tables: Record<string, WordTableLook>;
+  cells: Record<string, WordCellLook>;
+}
+
+export interface WordBorder {
+  /** As Word names it: "single", "double"… */
+  style: string;
+  width: number;
+  /** Null for automatic. */
+  color: string | null;
+  space: number;
+}
+
+export interface WordRunLook {
+  font?: string;
+  eastAsia?: string;
+  size?: number;
+  color?: string;
+  /** As Word names it: "yellow"… */
+  highlight?: string;
+  shade?: string;
+  bold?: true;
+  italic?: true;
+  /** As Word names it: "single", "dotted"… */
+  underline?: string;
+  strike?: true;
+  doubleStrike?: true;
+  caps?: true;
+  smallCaps?: true;
+  vertical?: "superscript" | "subscript";
+  letterSpacing?: number;
+  widthPercent?: number;
+  hidden?: true;
+}
+
+export interface WordTabStop {
+  at: number;
+  align: "left" | "center" | "right" | "decimal" | "bar";
+  leader: "none" | "dot" | "hyphen" | "underscore" | "heavy" | "middleDot";
+}
+
+export type WordBorders<Side extends string> = Partial<Record<Side, WordBorder>>;
+
+export interface WordParagraphLook {
+  /**
+   * The run look of the paragraph's text that has no `WORD_RUN_MARK`: the
+   * most common one, or the paragraph mark's when there is no text. Marking
+   * only the text that differs keeps long files quick to open. Never one
+   * that is underlined, struck, highlighted, shaded or raised: drawn on the
+   * paragraph, those would cover text that doesn't have them.
+   */
+  run?: string;
+  /** The paragraph look Enter gives the paragraph after, when the style names another (`w:next`). */
+  next?: string;
+  align?: "left" | "center" | "right" | "justify" | "distribute";
+  left?: number;
+  right?: number;
+  /** Negative for a hanging indent. */
+  firstLine?: number;
+  before?: number;
+  after?: number;
+  /** "auto": a multiple of the font's line height; "exact" and "atLeast": a height. */
+  line?: { rule: "auto" | "exact" | "atLeast"; value: number };
+  /** No space between paragraphs of the same style. */
+  contextual?: true;
+  tabs?: WordTabStop[];
+  shade?: string;
+  borders?: WordBorders<"top" | "bottom" | "left" | "right" | "between">;
+  keepNext?: true;
+  keepLines?: true;
+  pageBreakBefore?: true;
+  widowControl?: boolean;
+}
+
+export interface WordWidth {
+  value: number;
+  unit: "pt" | "percent";
+}
+
+export interface WordTableLook {
+  width?: WordWidth;
+  align?: "left" | "center" | "right";
+  indent?: number;
+  borders?: WordBorders<"top" | "bottom" | "left" | "right" | "insideH" | "insideV">;
+  /** Cell padding, unless a cell has its own. */
+  margins?: Partial<Record<"top" | "bottom" | "left" | "right", number>>;
+  /** Column widths as given, whatever the text in them. */
+  fixed?: true;
+  columns?: number[];
+}
+
+export interface WordCellLook {
+  width?: WordWidth;
+  shade?: string;
+  borders?: WordBorders<"top" | "bottom" | "left" | "right">;
+  vertical?: "top" | "center" | "bottom";
+  margins?: Partial<Record<"top" | "bottom" | "left" | "right", number>>;
+  noWrap?: true;
 }
 
 /**
@@ -2157,6 +2282,11 @@ export interface WebPageInfo {
   fetchedAt: string;
   /** When each version kept was last fetched, for the Citations that quote an older one. */
   versions: { contentHash: string; fetchedAt: string }[];
+  /**
+   * The article's pictures the last fetch didn't keep because of the caps
+   * (#756): over 60, over 5 MB, or past 25 MB for the page.
+   */
+  picturesLeftOut: number;
 }
 
 /** What `saveWebPage` takes. */
@@ -3479,6 +3609,13 @@ export interface Task {
   mindId: string | null;
   /** The Block in that Mind it works on (a comparison table), if any: where opening it goes. */
   blockId: string | null;
+  /** What the User asked it, in their words (a Research Task's topic): its Question in the thread. */
+  question: string | null;
+  /**
+   * Where Review opens when it isn't the Task's own place: the Mind it wrote
+   * into, at the first change it proposed there (a Research Task's draft).
+   */
+  review: { mindId: string; proposalId: string | null } | null;
   status: TaskStatus;
   pausedReason: TaskPausedReason | null;
   /** "plan-limit": when the plan's limit resets (ISO 8601), when the provider says. */
@@ -3495,6 +3632,12 @@ export interface Task {
   steps: TaskStep[];
   /** How many steps it has started in all. */
   stepCount: number;
+  /** What the User told it that it hasn't read yet (`tellTask`), oldest first: read when its next step starts. */
+  queued: TaskMessage[];
+  /** Paused at a limit (the monthly cap, a plan's), the steps it has still to do, in its kind's words. */
+  remaining: string[];
+  /** Done, what it did in a few words ("3 sources saved · 2 changes proposed"); null otherwise. */
+  summary: string | null;
   startedAt: string;
   finishedAt: string | null;
   updatedAt: string;
@@ -3502,6 +3645,76 @@ export interface Task {
 
 /** What answering a Task's "unknown-outcome" ask does: the step again, or on without it. */
 export type TaskAskAnswer = "redo" | "skip";
+
+/** Something the User told a running Task (Tell it…), waiting for its next step. */
+export interface TaskMessage {
+  id: string;
+  text: string;
+}
+
+/** A Research Task's plan as it runs (Plan): each step with how far it is. */
+export interface ResearchPlanView {
+  title: string;
+  steps: { text: string; status: "waiting" | "running" | "done" | "failed" }[];
+  sources: ResearchSources;
+  /** The Mind it writes into, or null for a new one. */
+  writeInto: string | null;
+}
+
+/** Where a Research Task looks (#130): the web, and the Library within the composer's Search scope. */
+export interface ResearchSources {
+  web: boolean;
+  library: boolean;
+}
+
+/** What to plan a Research Task for. */
+export interface PlanResearchInput {
+  /** The Mind the assistant reads, where the Task will be. */
+  mindId: string;
+  topic: string;
+  /** Where it will look, as the plan card's toggles stand. */
+  sources: ResearchSources;
+  /** The composer's model; the default model when left out. */
+  model?: ChatModelChoice | null;
+  /** "Change the plan…": the steps as they stand, and what the User said to change in them. */
+  change?: { steps: string[]; text: string } | null;
+}
+
+/** A Research Task's plan: its topic as a question, and the steps it takes before it writes. */
+export interface ResearchPlan {
+  title: string;
+  steps: string[];
+}
+
+/** What planning did: a plan, or why there is none (nothing was sent unless it failed). */
+export type ResearchPlanResult =
+  | { planned: true; plan: ResearchPlan }
+  | { planned: false; reason: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
+  | { planned: false; reason: "consent-declined" }
+  | { planned: false; reason: "failed"; error: ProviderError };
+
+/** Where a Research Task writes its cited draft: a Mind, or a new one it makes. */
+export type ResearchTarget = { mindId: string } | { newMind: true };
+
+/** A Research Task to start, from its plan card. */
+export interface StartResearchInput {
+  /** The Mind the assistant reads: the Task shows in its thread. */
+  mindId: string;
+  topic: string;
+  plan: ResearchPlan;
+  sources: ResearchSources;
+  writeInto: ResearchTarget;
+  /** What the Library is searched within: the composer's Search scope. */
+  scope: SearchScope;
+  /** The composer's model; the default model when left out. */
+  model?: ChatModelChoice | null;
+}
+
+/** What starting a Research Task did: it runs, or nothing was sent and why. */
+export type ResearchStartResult =
+  | { started: true; task: Task }
+  | { started: false; reason: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
+  | { started: false; reason: "consent-declined" };
 
 /** Open a Task's place: its Mind, with its progress in the thread (`showTask`, a notification's click). */
 export interface TaskShown {
@@ -3513,6 +3726,8 @@ export interface TaskShown {
 /** A large run to estimate: so many items (a comparison table's cells, verify's sentences…), each about an Answer. */
 export interface RunEstimateInput {
   items: number;
+  /** The web searches it makes (#128), each billed by the model's provider, on top of its items. */
+  searches?: number;
   /** The model it would use; the default model when left out. */
   model?: ChatModelChoice;
 }
@@ -4766,6 +4981,29 @@ export interface ChatGptPlanStatus {
    * account's own list once signed in, else the ones OpenAI usually offers.
    */
   models: ChatGptPlanModel[];
+  limits: ChatGptPlanLimits;
+}
+
+/**
+ * What this session knows of the plan's usage limits, kept in memory
+ * only: the models whose limit is used up, and the model Questions go to
+ * meanwhile, which only the User's click on "Answer with …" sets.
+ */
+export interface ChatGptPlanLimits {
+  /** `resetsAt` (ISO 8601) when the plan said; null: it lasts until the model answers again. */
+  usedUp: { modelId: string; resetsAt: string | null }[];
+  /**
+   * Questions for `insteadOf` are answered by `modelId` until `insteadOf`'s
+   * limit resets (`until`, ISO 8601). With no reset time (`until` null),
+   * `insteadOf` is tried again once an hour, and answers again once it can.
+   */
+  standIn: { insteadOf: string; modelId: string; until: string | null } | null;
+}
+
+/** "Answer with {model}" on an Answer stopped by the plan's limit: `insteadOf` is the model that stopped it. */
+export interface AnswerWithPlanModelInput {
+  insteadOf: string;
+  modelId: string;
 }
 
 export type ChatGptSignInErrorKind =
@@ -7288,6 +7526,28 @@ export interface CoreApi {
   answerTaskAsk(taskId: string, answer: TaskAskAnswer): Promise<Task>;
   /** Every step of a Task, in the order each first started. */
   listTaskSteps(taskId: string): Promise<TaskStep[]>;
+  /**
+   * Tell it…: a message for a running Task whose kind reads them (`actions`
+   * has "tell"), queued until its next step starts, which reads it.
+   */
+  tellTask(taskId: string, text: string): Promise<Task>;
+  /** Takes back a message the Task hasn't read yet; one it read stays. */
+  untellTask(taskId: string, messageId: string): Promise<Task>;
+  /** A Research Task's plan, each step with how far it is (Plan). */
+  getResearchPlan(taskId: string): Promise<ResearchPlanView>;
+  /**
+   * Research (#130): the steps the composer's model proposes for a topic,
+   * before it writes, in the topic's language; or, with `change`, the steps
+   * redone as the User said. Only the topic (and the steps) are sent, once
+   * the User has allowed the chat flow to the model's service.
+   */
+  planResearch(input: PlanResearchInput): Promise<ResearchPlanResult>;
+  /**
+   * Starts a Research Task from its plan: each step searches the Library
+   * and, with Web on, the web, as an Answer does, saving the web pages it
+   * reads as Documents. It shows in the thread of the Mind it started from.
+   */
+  startResearch(input: StartResearchInput): Promise<ResearchStartResult>;
 
   /**
    * Asks a Question: its Answer is written into the Mind right after it, as the
@@ -7408,8 +7668,16 @@ export interface CoreApi {
    */
   selectOllama(input?: SelectOllamaInput): Promise<ChatProvider>;
 
-  /** The ChatGPT plan provider: the sign-in and the account's models. */
+  /** The ChatGPT plan provider: the sign-in, the account's models and their limits this session. */
   getChatGptPlan(): Promise<ChatGptPlanStatus>;
+  /**
+   * The User clicked "Answer with {model}" on an Answer the plan's limit
+   * stopped: Questions for that model (or for the one it stands in for) go
+   * to `modelId` until its limit resets. Nothing else ever switches model.
+   */
+  answerWithPlanModel(input: AnswerWithPlanModelInput): Promise<ChatGptPlanStatus>;
+  /** The User chose a model in the chip: Questions no longer go to a stand-in. */
+  endPlanStandIn(): Promise<ChatGptPlanStatus>;
   /**
    * "Continue with ChatGPT": opens Sign in with ChatGPT in the User's
    * browser and waits, for a few minutes at most, until they finish.
@@ -7420,6 +7688,8 @@ export interface CoreApi {
   signInToChatGpt(input?: { anotherAccount?: boolean }): Promise<ChatGptSignInResult>;
   /** Stops waiting for a browser sign-in. */
   cancelChatGptSignIn(): Promise<void>;
+  /** Opens the waiting sign-in's page in the browser again; false when none is waiting. */
+  reopenChatGptSignIn(): Promise<boolean>;
   /**
    * Ends the ChatGPT sign-in at OpenAI and deletes its tokens from this
    * device. A saved ChatGPT provider then needs a new sign-in.
@@ -8191,6 +8461,11 @@ const methods: Record<CoreApiMethod, true> = {
   stopTask: true,
   answerTaskAsk: true,
   listTaskSteps: true,
+  tellTask: true,
+  untellTask: true,
+  getResearchPlan: true,
+  planResearch: true,
+  startResearch: true,
   askQuestion: true,
   regenerateAnswer: true,
   stopAnswer: true,
@@ -8213,8 +8488,11 @@ const methods: Record<CoreApiMethod, true> = {
   openOllama: true,
   selectOllama: true,
   getChatGptPlan: true,
+  answerWithPlanModel: true,
+  endPlanStandIn: true,
   signInToChatGpt: true,
   cancelChatGptSignIn: true,
+  reopenChatGptSignIn: true,
   signOutOfChatGpt: true,
   pasteChatGptSignInAddress: true,
   listDataFlows: true,
