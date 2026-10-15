@@ -41,7 +41,7 @@ export interface RunningApp {
 
 export interface LaunchOptions {
   /**
-   * Every chat model is the scripted one in `src/main/fakeChatModel.ts`, so
+   * Every chat model is the scripted one in `src/main/fakeChat/`, so
    * Questions are answered with no network or keys. Needs a test build
    * (`npm run test:smoke` makes one).
    */
