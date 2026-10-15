@@ -3,41 +3,60 @@
  * network through: only with its own secret, so no other program on this
  * computer can use it, and only to the public internet.
  */
-import { createServer, request, type Server } from "node:http";
+import { once } from "node:events";
+import { createServer, type IncomingHttpHeaders, request, Server } from "node:http";
 import { connect } from "node:net";
-import { afterEach, describe, expect, test } from "vitest";
+import { describe, expect, onTestFinished, test, vi } from "vitest";
+import type { Resolve } from "../../src/core/tools/web/addresses";
 import { LOOK_PROXY_USER, type LookProxy, startLookProxy } from "../../src/main/lookProxy";
 
 const log = { info: () => undefined, warn: () => undefined, error: () => undefined };
 
-let site: Server;
-let proxy: LookProxy | undefined;
-const heard: string[] = [];
+const publicResolve: Resolve = async (host) =>
+  host === "rebind.example"
+    ? [{ address: "127.0.0.1", family: 4 }]
+    : [{ address: "93.184.215.14", family: 4 }];
 
-async function start(): Promise<LookProxy> {
+let site: Server;
+let sitePort = 0;
+let connections = 0;
+const heard: string[] = [];
+const heardHeaders: IncomingHttpHeaders[] = [];
+
+/** The site, standing in for every public address, on this computer's IPv4 address only. */
+async function start(resolve: Resolve = publicResolve): Promise<LookProxy> {
   heard.length = 0;
+  heardHeaders.length = 0;
+  connections = 0;
   site = createServer((incoming, outgoing) => {
     heard.push(`${incoming.headers.host}${incoming.url}`);
+    heardHeaders.push(incoming.headers);
     outgoing.end("A page.");
   });
-  await new Promise<void>((resolve) => site.listen(0, "127.0.0.1", resolve));
+  site.on("connection", () => connections++);
+  await new Promise<void>((listening) => site.listen(0, "127.0.0.1", listening));
   const address = site.address();
   if (!address || typeof address === "string") throw new Error("No port.");
-  proxy = await startLookProxy({
-    resolve: async (host) =>
-      host === "rebind.example"
-        ? [{ address: "127.0.0.1", family: 4 }]
-        : [{ address: "93.184.215.14", family: 4 }],
-    log,
-    standIn: address.port,
+  sitePort = address.port;
+  const proxy = await startLookProxy({ resolve, log, standIn: sitePort });
+  const closing = site;
+  onTestFinished(async () => {
+    await proxy.close();
+    closing.closeAllConnections();
+    await new Promise((closed) => closing.close(closed));
   });
   return proxy;
 }
 
-afterEach(async () => {
-  await proxy?.close();
-  await new Promise((resolve) => site.close(resolve));
-});
+/** The connections the site has had, made before one made now. */
+async function connectionsBefore(): Promise<number> {
+  // A server takes connections in the order they were made: once this one is in, any before it are.
+  const accepted = once(site, "connection");
+  const control = connect(sitePort, "127.0.0.1");
+  await accepted;
+  control.destroy();
+  return connections - 1;
+}
 
 const signIn = (secret: string) =>
   `Basic ${Buffer.from(`${LOOK_PROXY_USER}:${secret}`).toString("base64")}`;
@@ -117,5 +136,70 @@ describe("the proxy of the hidden page that keeps a web page as it looks", () =>
     expect(await tunnel(open, "localhost.:443", secret)).toMatch(/^HTTP\/1\.1 403 /);
     expect(await tunnel(open, "news.example:443", secret)).toMatch(/^HTTP\/1\.1 200 /);
     expect(heard).toEqual(["news.example/page"]);
+  });
+
+  test("the site never sees the proxy's secret", async () => {
+    const open = await start();
+
+    expect((await through(open, "http://news.example/page", signIn(open.secret))).status).toBe(200);
+
+    expect(heardHeaders).toHaveLength(1);
+    expect(heardHeaders[0]).not.toHaveProperty("proxy-authorization");
+    expect(JSON.stringify(heardHeaders[0])).not.toContain(open.secret);
+  });
+
+  test("a host's next checked address is reached when the first can't be", async () => {
+    // The IPv6 address stands in as this computer's, where the site doesn't listen.
+    const open = await start(async () => [
+      { address: "2606:2800:21f:cb07:6820:80da:af6b:8b2c", family: 6 },
+      { address: "93.184.215.14", family: 4 },
+    ]);
+
+    expect((await through(open, "http://two.example/page", signIn(open.secret))).status).toBe(200);
+    expect(heard).toEqual(["two.example/page"]);
+  });
+
+  test("once it is closed, a request it was looking up a name for goes nowhere", async () => {
+    let looking: () => void = () => undefined;
+    const lookingUp = new Promise<void>((resolve) => {
+      looking = resolve;
+    });
+    let answer: () => void = () => undefined;
+    const answered = new Promise<void>((resolve) => {
+      answer = resolve;
+    });
+    const open = await start(async (host) => {
+      looking();
+      await answered;
+      return publicResolve(host);
+    });
+    const asked = through(open, "http://slow.example/page", signIn(open.secret)).catch(
+      () => "closed",
+    );
+    await lookingUp;
+
+    await open.close();
+    answer();
+
+    expect(await asked).toBe("closed");
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(await connectionsBefore()).toBe(0);
+    expect(heard).toEqual([]);
+  });
+
+  test("one that can't listen says so, rather than never starting", async () => {
+    const listen = vi.spyOn(Server.prototype, "listen").mockImplementationOnce(function (
+      this: Server,
+    ) {
+      process.nextTick(() =>
+        this.emit("error", Object.assign(new Error("Too many open files."), { code: "EMFILE" })),
+      );
+      return this;
+    });
+    onTestFinished(() => listen.mockRestore());
+
+    await expect(startLookProxy({ resolve: publicResolve, log })).rejects.toThrow(
+      "Too many open files.",
+    );
   });
 });
