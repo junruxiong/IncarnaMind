@@ -18,6 +18,13 @@ export class LocalModelError extends Error {
   }
 }
 
+export class OllamaNotRunningError extends TranslatableError {
+  override name = "OllamaNotRunningError";
+  constructor() {
+    super({ key: "error.provider.ollamaNotRunning" });
+  }
+}
+
 /** A request could pass the User's monthly cap, so it wasn't sent (see ../cost/meter). */
 export class CostCapError extends Error {
   override name = "CostCapError";
@@ -124,6 +131,13 @@ export function classifyProviderError(error: unknown): ProviderError {
 
   if (cause instanceof ConsentDeclinedError) return { kind: "consent-declined", message };
   if (cause instanceof LocalModelError) return { kind: cause.kind, message };
+  if (cause instanceof OllamaNotRunningError) {
+    return {
+      kind: "ollama-not-running",
+      message,
+      ...(cause.wording && { wording: cause.wording }),
+    };
+  }
   if (contextOverflow(cause)) return { kind: "too-long", message };
   if (cause instanceof JevRequestError) return { kind: cause.kind, message };
   if (cause instanceof ChatGptSignInRequiredError) return { kind: "not-signed-in", message };

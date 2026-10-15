@@ -3,7 +3,7 @@ import type { LanguagePreference } from "../../../core/language";
 import type { MessageKey } from "../../../shared/i18n";
 import { files } from "../core";
 import { useT } from "../i18n";
-import { type SettingsPage, settingsPageLabels, settingsPages } from "../settingsPages";
+import { offeredSettingsPages, type SettingsPage, settingsPageLabels } from "../settingsPages";
 import { recordUsage, useAppStore } from "../store";
 import { AuthorNameSettings } from "./AuthorNameSettings";
 import { AgentsSettings } from "./agents/AgentsSettings";
@@ -20,6 +20,7 @@ import { ChatModelSettings } from "./providers/ChatModelSettings";
 import { EmbeddingSettingsSection } from "./providers/EmbeddingSettings";
 import { JevSettingsSection } from "./providers/JevSettings";
 import { OtherModelsSettings } from "./providers/OtherModelsSettings";
+import { PlansSettings } from "./providers/PlansSettings";
 import { RerankSettingsSection } from "./providers/RerankSettings";
 import { SavedWebPagesSettings } from "./SavedWebPagesSettings";
 import { SkillScriptsSettings, SkillsSettings } from "./SkillsSettings";
@@ -86,7 +87,7 @@ export function SettingsDialog() {
               {t("settings.title")}
             </h2>
           </div>
-          {settingsPages.map((each) => (
+          {offeredSettingsPages.map((each) => (
             <button
               key={each}
               type="button"
@@ -164,6 +165,7 @@ function PageContent({ page }: { page: SettingsPage }) {
             <ChatModelSettings />
           </Titled>
           <OtherModelsSettings />
+          <PlansSettings />
           <ChatGptPlanSettings />
           <JevSettingsSection />
           <Titled title="library.settingsTitle" testId="organization-settings">

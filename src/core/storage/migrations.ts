@@ -1688,6 +1688,15 @@ export const migrations: readonly Migration[] = [
     `,
   },
   {
+    version: 90,
+    description: "A Mind imported from Word keeps the file's look (#746)",
+    sql: `
+      -- WORD_LOOK_VERSION the look was read with; NULL for imports from before it was kept.
+      -- Lets start-up find Minds needing it without loading each one.
+      ALTER TABLE word_packages ADD COLUMN look_version INTEGER;
+    `,
+  },
+  {
     version: 91,
     description: "Web pages kept as they look: a PDF of each version, when the User asks (#756)",
     // The PDF is a file named by its content, beside the snapshots (src/core/documents/web).

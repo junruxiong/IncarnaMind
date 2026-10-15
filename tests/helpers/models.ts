@@ -61,6 +61,39 @@ const finishParts = (): StreamPart[] => [
   { type: "finish", finishReason: { unified: "stop", raw: undefined }, usage: STREAM_USAGE },
 ];
 
+/** A reply as a provider streams it: chunks of `chunkSize` characters, sent `delayMs` apart. */
+export function streamedReply(
+  reply: string,
+  abortSignal: AbortSignal | undefined,
+  { chunkSize = 4, delayMs = 0 }: { chunkSize?: number; delayMs?: number } = {},
+): ReadableStream<StreamPart> {
+  const parts: StreamPart[] = [
+    { type: "stream-start", warnings: [] },
+    { type: "text-start", id: "answer" },
+  ];
+  for (let at = 0; at < reply.length; at += chunkSize) {
+    parts.push({ type: "text-delta", id: "answer", delta: reply.slice(at, at + chunkSize) });
+  }
+  parts.push(...finishParts());
+  return new ReadableStream<StreamPart>({
+    async pull(controller) {
+      const part = parts.shift();
+      if (!part) {
+        controller.close();
+        return;
+      }
+      if (delayMs > 0 && part.type === "text-delta") {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+      if (abortSignal?.aborted) {
+        controller.error(new DOMException("The request was aborted.", "AbortError"));
+        return;
+      }
+      controller.enqueue(part);
+    },
+  });
+}
+
 /**
  * A chat model that streams each reply in turn, one per request (the last one
  * again after that), split into chunks of `chunkSize` characters sent
@@ -68,40 +101,14 @@ const finishParts = (): StreamPart[] => [
  */
 export function streamingModel(
   replies: string | readonly string[],
-  { chunkSize = 4, delayMs = 0 }: { chunkSize?: number; delayMs?: number } = {},
+  chunks: { chunkSize?: number; delayMs?: number } = {},
 ): MockLanguageModelV4 {
   const all = typeof replies === "string" ? [replies] : replies;
   let calls = 0;
   return new MockLanguageModelV4({
-    doStream: async ({ abortSignal }) => {
-      const reply = all[Math.min(calls++, all.length - 1)] ?? "";
-      const parts: StreamPart[] = [
-        { type: "stream-start", warnings: [] },
-        { type: "text-start", id: "answer" },
-      ];
-      for (let at = 0; at < reply.length; at += chunkSize) {
-        parts.push({ type: "text-delta", id: "answer", delta: reply.slice(at, at + chunkSize) });
-      }
-      parts.push(...finishParts());
-      const stream = new ReadableStream<StreamPart>({
-        async pull(controller) {
-          const part = parts.shift();
-          if (!part) {
-            controller.close();
-            return;
-          }
-          if (delayMs > 0 && part.type === "text-delta") {
-            await new Promise((resolve) => setTimeout(resolve, delayMs));
-          }
-          if (abortSignal?.aborted) {
-            controller.error(new DOMException("The request was aborted.", "AbortError"));
-            return;
-          }
-          controller.enqueue(part);
-        },
-      });
-      return { stream };
-    },
+    doStream: async ({ abortSignal }) => ({
+      stream: streamedReply(all[Math.min(calls++, all.length - 1)] ?? "", abortSignal, chunks),
+    }),
   });
 }
 
@@ -220,6 +227,8 @@ export interface ModelCall {
   json: boolean;
   /** The system prompt. */
   system: string;
+  /** The rest of the prompt's text: each message's, a blank line apart. */
+  prompt: string;
   /** The results of the Tool calls so far, oldest first: their Tool's name and text. */
   results: { tool: string; text: string }[];
   options: CallOptions;
@@ -243,12 +252,28 @@ export type ScriptedReply =
       /** What the model reasons before it replies, as its provider streams it. */
       reasoning?: string;
       text?: string;
-      calls?: { tool: string; input: unknown }[];
-      /** Stops streaming once `after` characters of the text are out, until `until` resolves. */
+      /** With `streamInput`, the call's input streams in chunks first, as a provider that streams Tool inputs sends it. */
+      calls?: { tool: string; input: unknown; streamInput?: boolean }[];
+      /**
+       * Stops streaming once `after` characters of the text, or of a streamed
+       * input, are out, until `until` resolves.
+       */
       pause?: { after: number; until: Promise<void> };
     }
   /** The provider refuses the request with an HTTP error. */
   | { error: { status: number; message: string } };
+
+/** A prompt's text but the system prompt: each message's, a blank line apart. */
+function promptText(prompt: CallOptions["prompt"]): string {
+  return prompt
+    .filter((message) => message.role !== "system")
+    .map((message) =>
+      typeof message.content === "string"
+        ? message.content
+        : message.content.map((part) => ("text" in part ? part.text : "")).join(""),
+    )
+    .join("\n\n");
+}
 
 function resultsOf(options: CallOptions): ModelCall["results"] {
   const results: ModelCall["results"] = [];
@@ -314,14 +339,7 @@ export function scriptedModel(
       if (!generate) throw new Error("This scripted model only streams.");
       const reply = generate({
         system: systemOf(options.prompt),
-        prompt: options.prompt
-          .filter((message) => message.role !== "system")
-          .map((message) =>
-            typeof message.content === "string"
-              ? message.content
-              : message.content.map((part) => ("text" in part ? part.text : "")).join(""),
-          )
-          .join("\n\n"),
+        prompt: promptText(options.prompt),
         options,
       });
       if ("error" in reply) throw providerError(reply.error);
@@ -338,6 +356,7 @@ export function scriptedModel(
         tools: (options.tools ?? []).map((each) => each.name),
         json: options.responseFormat?.type === "json",
         system: systemOf(options.prompt),
+        prompt: promptText(options.prompt),
         results: resultsOf(options),
         options,
       };
@@ -364,12 +383,20 @@ export function scriptedModel(
         parts.push({ type: "text-end", id: "answer" });
       }
       (reply.calls ?? []).forEach((each, number) => {
-        parts.push({
-          type: "tool-call",
-          toolCallId: `call-${call.index}-${number}`,
-          toolName: each.tool,
-          input: JSON.stringify(each.input),
-        });
+        const toolCallId = `call-${call.index}-${number}`;
+        const input = JSON.stringify(each.input);
+        if (each.streamInput) {
+          parts.push({ type: "tool-input-start", id: toolCallId, toolName: each.tool });
+          for (let at = 0; at < input.length; at += chunkSize) {
+            parts.push({
+              type: "tool-input-delta",
+              id: toolCallId,
+              delta: input.slice(at, at + chunkSize),
+            });
+          }
+          parts.push({ type: "tool-input-end", id: toolCallId });
+        }
+        parts.push({ type: "tool-call", toolCallId, toolName: each.tool, input });
       });
       parts.push({
         type: "finish",
@@ -391,7 +418,9 @@ export function scriptedModel(
           if (pause && streamed >= pause.after && part.type !== "stream-start") {
             await pause.until;
           }
-          if (part.type === "text-delta") streamed += part.delta.length;
+          if (part.type === "text-delta" || part.type === "tool-input-delta") {
+            streamed += part.delta.length;
+          }
           if (options.abortSignal?.aborted) {
             controller.error(new DOMException("The request was aborted.", "AbortError"));
             return;

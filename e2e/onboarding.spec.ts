@@ -131,7 +131,8 @@ test("a first run opens on the example Mind: its Answer is written in advance, i
     window.locator('[data-testid="get-started-step"][data-step="citation"] [data-done]'),
   ).toContainText("Check a Citation in the example");
 
-  // The banner's way on: adding one's own Documents, in place, as Get started's step does (#766).
+  // The banner's way on: adding one's own Documents, in place, as Get started's step does (#766),
+  // asking for no model: that waits for the first own Question.
   await window.keyboard.press("Escape");
   const addOwn = pane.getByTestId("example-add-own");
   await expect(addOwn).toHaveText("Add your Documents");
@@ -140,7 +141,7 @@ test("a first run opens on the example Mind: its Answer is written in advance, i
   await expect(ways.getByRole("menuitem")).toHaveText(["Add files…", "Link a folder…"]);
   await expect(ways.getByRole("menuitem").first()).toBeFocused();
   await expect(window.getByTestId("mind-title")).toHaveValue("Where tea comes from");
-  await expect(window.getByTestId("chat-setup")).toBeHidden();
+  await expect(window.getByTestId("chat-setup")).toHaveCount(0);
   await window.keyboard.press("Escape");
   await expect(addOwn).toBeFocused();
   await setLanguage(window, "zh-CN");
@@ -453,4 +454,67 @@ test("the hint at the end of a Mind focuses the composer when its link is clicke
   expect(order.slice(at - 1, at + 2)).toEqual(["question", "answer", "added"]);
   expect(order.at(-1)).toBe("Green and black tea come from the same plant.");
   expect(order.slice(at + 1, -1).every((block) => block === "added")).toBe(true);
+});
+
+/** The banner's links to the other examples, by the group each opens, in the order shown. */
+const moreLinks = (window: Page) =>
+  window.getByTestId("example-banner").getByTestId("example-more-link");
+const groupsShown = (window: Page) =>
+  moreLinks(window).evaluateAll((links) => links.map((link) => link.getAttribute("data-group")));
+
+test("the banner offers the other examples in an order picked once per install; each opens in a new tab and is made once (#123)", async () => {
+  const first = await launchApp(dataDir, { examples: true });
+  const { app, window } = first;
+  await setWindowSize(app, window, 1100, 720);
+  const banner = window.getByTestId("example-banner");
+  await expect(banner).toBeVisible();
+
+  // Nothing is asked before the example; its last line offers the three others.
+  await expect(banner.getByTestId("example-more")).toContainText(
+    "Try an example closer to your work:",
+  );
+  const order = await groupsShown(window);
+  expect([...order].sort()).toEqual(["contracts", "meetings", "papers"]);
+  const tabs = window.getByTestId("tab-title");
+  await expect(tabs).toHaveText(["Where tea comes from"]);
+
+  // Contracts opens beside the first example, which stays in its own tab.
+  await moreLinks(window).and(window.locator('[data-group="contracts"]')).click();
+  await expect(tabs).toHaveCount(2);
+  await expect(tabs.first()).toHaveText("Where tea comes from");
+  await expect(window.getByTestId("mind-list-item")).toHaveCount(2);
+  // Its banner lists the others, the first example included.
+  const contracts = await groupsShown(window);
+  expect(contracts[0]).toBe("tea");
+  expect([...contracts].sort()).toEqual(["meetings", "papers", "tea"]);
+
+  // From the first example again, Contracts shows the one made, not a second.
+  await tabs.first().click();
+  await expect(moreLinks(window).first()).toBeVisible();
+  await moreLinks(window).and(window.locator('[data-group="contracts"]')).click();
+  await expect(window.getByTestId("mind-list-item")).toHaveCount(2);
+  await expect(tabs).toHaveCount(2);
+  await app.close();
+
+  // The same order after a restart.
+  const again = await launchApp(dataDir, { examples: true });
+  const tea = again.window.getByTestId("tab-title").first();
+  await expect(tea).toHaveText("Where tea comes from");
+  await tea.click();
+  await expect(again.window.getByTestId("example-banner")).toBeVisible();
+  expect(await groupsShown(again.window)).toEqual(order);
+  await again.app.close();
+});
+
+test("Remove the examples removes every example Mind made, and Undo brings them back (#123)", async () => {
+  const { app, window } = await launchApp(dataDir, { examples: true });
+  await moreLinks(window).and(window.locator('[data-group="papers"]')).click();
+  await expect(window.getByTestId("mind-list-item")).toHaveCount(2);
+
+  await window.getByTestId("example-remove").click();
+  await expect(window.getByTestId("mind-list-item")).toHaveCount(0);
+  await dismissChatSetup(window);
+  await window.getByTestId("undo-line").getByTestId("undo-action").click();
+  await expect(window.getByTestId("mind-list-item")).toHaveCount(2);
+  await app.close();
 });

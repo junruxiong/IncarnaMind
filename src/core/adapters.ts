@@ -65,10 +65,16 @@ export interface Paths {
    */
   citationStyles?: string;
   /**
-   * The User's Documents folder: the first save offers "IncarnaMind" in it as
-   * the Output location. Defaults to "Documents" in the home folder.
+   * The User's home folder, where outside agents keep their settings and
+   * Skills (`~/.codex`, `~/.claude`, …). Required, with no fallback, so a
+   * test or the evaluation can't reach the real one by leaving it out.
    */
-  documents?: string;
+  home: string;
+  /**
+   * The User's Documents folder: the first save offers "IncarnaMind" in it as
+   * the Output location. Required for the same reason as `home`.
+   */
+  documents: string;
   /**
    * Where each program a Tool runs (a Skill script) gets its own temporary
    * working folder from the local `Executor`, removed when the run ends.
@@ -153,6 +159,14 @@ export interface FileShell {
   openPath(path: string): Promise<void>;
   /** Shows a file selected in the system's file manager (Finder, Explorer). */
   showItemInFolder(path: string): void;
+}
+
+/** Opened through the OS by the desktop app (src/main/ollamaApp.ts): the core never starts a program itself. */
+export interface OllamaApp {
+  /** False where it isn't, and where this computer can't tell. */
+  installed(): Promise<boolean>;
+  /** Doesn't wait for Ollama to answer. Rejects if the OS can't open it. */
+  open(): Promise<void>;
 }
 
 /**
@@ -707,6 +721,10 @@ export interface CoreAdapters {
    * Absent (tests that don't need it): both are refused.
    */
   shell?: FileShell;
+  /** Absent (tests): it is never installed, so it can't be opened. */
+  ollamaApp?: OllamaApp;
+  /** How long Open Ollama waits for Ollama to answer, in ms (default 20 s). */
+  ollamaStartTimeoutMs?: number;
   /** Prints PDF exports. Absent (tests that don't export PDFs): a PDF export is refused. */
   printer?: Printer;
   /** Keeps web pages as they look. Absent (tests that aren't about it): none is kept. */
@@ -746,17 +764,21 @@ export interface CoreAdapters {
    * src/core/agents/socket.ts), and the version the server names itself with.
    */
   agents?: {
+    /**
+     * Whether connecting agents is offered at all (the desktop app's
+     * `SHOW_AGENT_CONNECTION`). Not offered, the socket never listens and
+     * Privacy lists no agents, whatever an earlier build saved. Defaults to offered.
+     */
+    offered?: boolean;
     launcher?: AgentLauncher;
     socketPath?: string;
     version?: string;
     /** The shim's script, built (`out/main/agentShim.js`): Claude's install file carries a copy. */
     shimScript?: string;
     /**
-     * Where agents keep their settings (the User's home folder) and where apps
-     * are installed, to tell which agents are on this computer. Default to the
-     * home folder and, on macOS, the Applications folders.
+     * Where apps are installed, to tell which agents are on this computer.
+     * Defaults, on macOS, to the Applications folders.
      */
-    home?: string;
     applications?: readonly string[];
     /** Opens an agent's install link (Cursor's) in its app. */
     openLink?(url: string): Promise<void>;

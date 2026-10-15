@@ -1,0 +1,189 @@
+/**
+ * What Research asks its model (#130): a plan for a topic, and each step of
+ * it as an Answer's Question. A step's framing goes before the step in the
+ * User's message, so the step alone is what decides the Answer's language.
+ */
+import { MAX_RESEARCH_STEP, MAX_RESEARCH_STEPS } from "../../shared/research";
+import type { QuestionContext } from "../answers/context";
+import type { ResearchPlan, ResearchSources } from "../api";
+
+/** The most of each earlier step's notes a step reads, in characters. */
+const NOTES_PER_STEP = 1_500;
+
+export const PLAN_INSTRUCTIONS = [
+  "You plan research for IncarnaMind, a notebook that answers from the User's Documents. A research Task works in the background: it searches, reads what it finds, and at the end writes a cited draft into the User's notebook.",
+  "Reply with the plan only, in this form:",
+  "TITLE: the topic as one clear question",
+  "1. a step",
+  "2. a step",
+  "",
+  "- Give 3 to 5 steps in the order to take them, each one short line of about 12 words that says what to look for, read or compare.",
+  '- The User reads the plan: call their own Documents "the Library".',
+  "- Leave out writing the draft and saving the pages: those come last on their own.",
+  "- Write in the language the topic is written in.",
+].join("\n");
+
+const where = (sources: ResearchSources) =>
+  sources.web && sources.library
+    ? "the web and the User's Documents"
+    : sources.web
+      ? "the web"
+      : "the User's Documents";
+
+const library = (sources: ResearchSources) =>
+  sources.web && sources.library
+    ? "the web and the Library"
+    : sources.web
+      ? "the web"
+      : "the Library";
+
+export function planPrompt(
+  topic: string,
+  sources: ResearchSources,
+  change: { steps: readonly string[]; text: string } | null,
+): string {
+  const lines = [`It will search ${library(sources)}.`, "", `Topic: ${topic}`];
+  if (change) {
+    lines.push(
+      "",
+      "The plan now:",
+      ...change.steps.map((step, index) => `${index + 1}. ${step}`),
+      "",
+      `Change it as the User asks: ${change.text}`,
+    );
+  }
+  return lines.join("\n");
+}
+
+const clean = (text: string) =>
+  text
+    .replace(/\*\*|__|`/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+/** A plan in a model's reply: its title (the topic when it gives none) and its numbered steps; null with no step. */
+export function readPlan(reply: string, topic: string): ResearchPlan | null {
+  const lines = reply.split("\n").map((line) => line.trim());
+  const titled = lines.find((line) => /^(?:\*\*)?title(?:\*\*)?\s*[:：]/i.test(line));
+  const title = clean(titled?.replace(/^(?:\*\*)?title(?:\*\*)?\s*[:：]/i, "") ?? "");
+  const steps = lines
+    .map((line) => /^(?:\d+\s*[.)、．]|[-*•])\s*(.+)$/.exec(line)?.[1])
+    .filter((step): step is string => step !== undefined)
+    .map((step) => clean(step).slice(0, MAX_RESEARCH_STEP))
+    .filter((step) => step !== "")
+    .slice(0, MAX_RESEARCH_STEPS);
+  if (steps.length === 0) return null;
+  return { title: (title || clean(topic)).slice(0, MAX_RESEARCH_STEP), steps };
+}
+
+/** One step of a plan as an Answer's Question, with the plan and what the steps before it found. */
+export function stepContext(input: {
+  topic: string;
+  plan: ResearchPlan;
+  index: number;
+  sources: ResearchSources;
+  notes: readonly string[];
+  /** What the User told it while it worked (Tell it…). */
+  said: readonly string[];
+}): QuestionContext {
+  const { plan, index } = input;
+  const step = plan.steps[index] ?? "";
+  const found = input.notes
+    .map((note, at) => (note.trim() ? `Step ${at + 1}: ${note.slice(0, NOTES_PER_STEP)}` : ""))
+    .filter(Boolean);
+  const framing = [
+    `This is step ${index + 1} of ${plan.steps.length} of research the User asked for, done in the background.`,
+    `The research question: ${plan.title}`,
+    `The User asked: ${input.topic}`,
+    "The plan:",
+    ...plan.steps.map((each, at) => `${at + 1}. ${each}`),
+    ...(found.length > 0 ? ["", "What the steps before found:", ...found] : []),
+    ...told(input.said),
+    "",
+    `Do only this step. Search ${where(input.sources)} for what it needs${input.sources.web ? ", read the few most useful pages" : ""}, and cite what you use. Then write short notes of what you found, a few sentences or a short list, each claim with its citation marker. Say plainly what you couldn't find.`,
+  ].join("\n");
+  return { messages: [{ role: "user", content: `${framing}\n\n${step}` }], question: step };
+}
+
+/** What the User told the research while it worked, for it to follow from then on. */
+const told = (said: readonly string[]) =>
+  said.length > 0
+    ? [
+        "",
+        "While it worked, the User told it this; follow it in this step and those after:",
+        ...said.map((each) => `- ${each}`),
+      ]
+    : [];
+
+/** A step's notes as later steps read them: its Citation markers left out. */
+export const notesOf = (markdown: string) =>
+  markdown
+    .replace(/\s*\[\^\d+\]/g, "")
+    .replace(/\s*\[=\d+\]/g, "")
+    .trim();
+
+/** The most Tags the sources are filed with, and the longest a Tag's name is. */
+const MAX_TAGS = 3;
+const MAX_TAG_NAME = 40;
+
+export const TAG_INSTRUCTIONS = [
+  "You tag the web pages a research Task saved into a Folder of the User's Library, so they can find them by subject.",
+  'Reply with 1 to 3 Tags, one a line, each with the numbers of the pages it fits: "Results: 1, 3".',
+  "- A Tag is one or two words that name what pages are about, such as a company, a place or a kind of figure.",
+  "- Use one of the User's Tags only when it names the same thing.",
+  "- Write in the language of the research question.",
+].join("\n");
+
+export function tagPrompt(
+  title: string,
+  pages: readonly string[],
+  existing: readonly string[],
+): string {
+  return [
+    `Research question: ${title}`,
+    `The User's Tags: ${existing.length > 0 ? existing.join(", ") : "none yet"}`,
+    "The pages:",
+    ...pages.map((name, index) => `${index + 1}. ${name}`),
+  ].join("\n");
+}
+
+/** The Tags in a model's reply, each with the pages it fits, by their number from 1; pages out of range are left out. */
+export function readTags(reply: string, pages: number): { name: string; pages: number[] }[] {
+  const tags: { name: string; pages: number[] }[] = [];
+  for (const line of reply.split("\n")) {
+    const match = /^[-*•\d.)\s]*([^:：]+)[:：]\s*([\d,，、\s]+)$/.exec(line.trim());
+    const name = clean(match?.[1] ?? "").slice(0, MAX_TAG_NAME);
+    const numbers = (match?.[2] ?? "")
+      .split(/[,，、\s]+/)
+      .map(Number)
+      .filter((each) => Number.isInteger(each) && each >= 1 && each <= pages);
+    if (!name || numbers.length === 0 || tags.some((tag) => tag.name === name)) continue;
+    tags.push({ name, pages: [...new Set(numbers)] });
+    if (tags.length === MAX_TAGS) break;
+  }
+  return tags;
+}
+
+/** The cited draft as an Answer's Question: what to write, from what the steps found. */
+export function draftContext(input: {
+  topic: string;
+  plan: ResearchPlan;
+  notes: readonly string[];
+  said: readonly string[];
+}): QuestionContext {
+  const found = input.notes
+    .map((note, at) => (note.trim() ? `Step ${at + 1}: ${note.slice(0, NOTES_PER_STEP)}` : ""))
+    .filter(Boolean);
+  const framing = [
+    "Write a cited draft for the User's notebook from research done in the background.",
+    `The User asked: ${input.topic}`,
+    ...(found.length > 0 ? ["What the research found:", ...found, ""] : []),
+    ...told(input.said),
+    "Search the Documents for what supports each point and cite it. Start with a short heading, then a few short paragraphs or a list. Leave out what no Document supports, and say what is still open.",
+    "Write for the notebook's reader: don't mention these notes, the research steps or the User.",
+  ].join("\n");
+  return {
+    messages: [{ role: "user", content: `${framing}\n\n${input.plan.title}` }],
+    question: input.plan.title,
+  };
+}
