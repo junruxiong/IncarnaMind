@@ -189,7 +189,6 @@ export function createMeter(options: {
       [since],
     );
 
-  /** What per-token requests cost this month once settled, and what is reserved for open ones, in `currency`. */
   const monthIn = (currency: Currency, since: string) => {
     let settled = 0;
     let setAside = 0;
@@ -201,7 +200,6 @@ export function createMeter(options: {
     return { settled, setAside };
   };
 
-  /** What counts against the cap: what is settled and what is set aside, together. */
   const againstCap = (currency: Currency, since: string) => {
     const { settled, setAside } = monthIn(currency, since);
     return settled + setAside;
@@ -463,7 +461,7 @@ export function createMeter(options: {
       return open.count;
     },
 
-    /** This month so far: what per-token requests cost once settled, what is set aside for open ones, and each provider's use. */
+    /** This month so far: what was spent, what is set aside, and each provider's use. */
     summary(): CostSummary {
       const since = monthStart(now());
       const rows = monthRows(since);
@@ -508,9 +506,8 @@ export function createMeter(options: {
     },
 
     /**
-     * What a Task's model requests billed per token have cost once settled,
-     * in the currency of most of it (the other at the fixed rate); null when
-     * none was priced. A request still open adds when it settles.
+     * What a Task's settled model requests billed per token have cost, in the
+     * currency of most of it (the other at the fixed rate); null when none was priced.
      */
     taskCost(taskId: string): Money | null {
       const rows = db.all<{ currency: Currency; amount: number }>(

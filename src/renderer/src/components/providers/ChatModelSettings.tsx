@@ -242,9 +242,8 @@ export function ChatModelSettings() {
 
 /**
  * What a provider billed per token cost this month, in its own currency
- * ("This month: $3.20 spent"), once it has been used, with what is set aside
- * for its running work beside it. A plan's line is in its own section, and a
- * model on this computer costs nothing.
+ * ("This month: $3.20 spent"), once it has been used. A plan's line is in its
+ * own section, and a model on this computer costs nothing.
  */
 function ProviderCostLine({ providerId }: { providerId: string }) {
   const t = useT();
