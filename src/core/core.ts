@@ -2107,6 +2107,8 @@ export function createCore(adapters: CoreAdapters): Core {
   // socket and gets Citations IncarnaMind minted and checked. Off until the User turns it on.
   const { home } = adapters.paths;
   const agents = createAgents({
+    offered: adapters.agents?.offered ?? true,
+    log: adapters.log ?? silentLogger,
     db,
     now,
     clock: () => performance.now(),

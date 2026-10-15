@@ -737,6 +737,12 @@ export interface CoreAdapters {
    * src/core/agents/socket.ts), and the version the server names itself with.
    */
   agents?: {
+    /**
+     * Whether connecting agents is offered at all (the desktop app's
+     * `SHOW_AGENT_CONNECTION`). Not offered, the socket never listens and
+     * Privacy lists no agents, whatever an earlier build saved. Defaults to offered.
+     */
+    offered?: boolean;
     launcher?: AgentLauncher;
     socketPath?: string;
     version?: string;

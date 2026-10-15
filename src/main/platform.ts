@@ -24,6 +24,7 @@ import {
 } from "../core";
 import { createFakeCapture, type FakeCapture } from "../core/meetings/fakeCapture";
 import type { FakeTranscriberOptions } from "../core/transcription/fake";
+import { SHOW_AGENT_CONNECTION } from "../shared/agentConnection";
 import { createCitedPageCapture } from "./citedPageCapture";
 import { createSentryCrashReporter } from "./crashReports";
 import { createUtilityProcessEmbedder } from "./embedder";
@@ -533,6 +534,7 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
     // An outside agent starts the shim (#351) the same way: this app's binary, as plain Node,
     // running the shim built beside this file (inside app.asar, which Node mode reads).
     agents: {
+      offered: SHOW_AGENT_CONNECTION,
       launcher: {
         command: process.execPath,
         args: [join(__dirname, "agentShim.js")],
