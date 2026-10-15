@@ -2442,10 +2442,8 @@ export const zhCN = {
   "aiStatement.sentences.contradicted": "与文档矛盾",
   "aiStatement.sentences.recheck": "需重新核对",
   "aiStatement.sentences.notChecked": "未核对",
-  "aiStatement.unread.one":
-    "核对这些说法时，有 1 个文件未能读取，因此没有检索这个文件：",
-  "aiStatement.unread":
-    "核对这些说法时，有 {count} 个文件未能读取，因此没有检索这些文件：",
+  "aiStatement.unread.one": "核对这些说法时，有 1 个文件未能读取，因此没有检索这个文件：",
+  "aiStatement.unread": "核对这些说法时，有 {count} 个文件未能读取，因此没有检索这些文件：",
   "aiStatement.note":
     "各学校对 AI 使用声明另有格式要求，请以学校提供的表格为准，可据此处的统计数字填写。",
   "export.questionsLeftOut.one": "有 1 个问题不会导出。",

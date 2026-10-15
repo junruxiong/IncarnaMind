@@ -47,7 +47,14 @@ const everything: AiUseFigures = {
       documentId: null,
       pages: [],
     },
-    { id: "scan", name: "Scan.pdf", reason: "scan", extension: null, documentId: "scan", pages: [] },
+    {
+      id: "scan",
+      name: "Scan.pdf",
+      reason: "scan",
+      extension: null,
+      documentId: "scan",
+      pages: [],
+    },
   ],
 };
 const nothing: AiUseFigures = {

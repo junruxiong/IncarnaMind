@@ -11,8 +11,8 @@ import {
 import { DocumentLineIcon, VerifyLineIcon } from "../components/lineIcons";
 import { ProblemLine } from "../components/ProblemLine";
 import { ReadinessExplanation, readinessAction } from "../components/providers/ChatReadinessNotice";
-import { buttonStyle } from "../components/ui";
 import { UnreadFilesLine } from "../components/UnreadFilesLine";
+import { buttonStyle } from "../components/ui";
 import { core } from "../core";
 import { estimateText, runStopText } from "../cost";
 import { useLanguage, useT } from "../i18n";
