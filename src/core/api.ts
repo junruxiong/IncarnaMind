@@ -139,8 +139,11 @@ export interface CreateMindInput {
  *   author and date. A version before 20 would take them for the
  *   assistant's, and count what accepting one keeps as AI text. Older
  *   content is version 20 content as it is: nothing is rewritten.
+ * - 21: a Word file's look (#746): the `wordLook` attribute and the
+ *   `wordRun` mark, which an older version's editor would strip. Older
+ *   content is version 21 content as it is.
  */
-export const CONTENT_SCHEMA_VERSION = 20;
+export const CONTENT_SCHEMA_VERSION = 21;
 
 /**
  * The key, in the Mind's settings map (`MIND_SETTINGS_FIELD`), of the content
@@ -1152,6 +1155,127 @@ export interface WordFileInfo {
 export interface WordImportProgress {
   done: number;
   total: number;
+}
+
+/**
+ * A Y.Map beside the Blocks of a Mind imported from Word, holding the file's
+ * styles (`WordLook`) once each; Blocks and text name them by key.
+ */
+export const MIND_WORD_LOOK_FIELD = "wordLook";
+
+/** On paragraphs, headings, tables and cells: a key in the Mind's `WordLook`. */
+export const WORD_LOOK_ATTRIBUTE = "wordLook";
+
+/** A mark on text whose attribute `k` is a key in `WordLook.runs`. */
+export const WORD_RUN_MARK = "wordRun";
+
+/** Lengths are in points and colours hex "RRGGBB"; unset properties are left out. */
+export interface WordLook {
+  version: number;
+  /** The most common run size; null with no text. */
+  body: number | null;
+  /** The text width on the first page; null when the file doesn't say. */
+  width: number | null;
+  paragraphs: Record<string, WordParagraphLook>;
+  runs: Record<string, WordRunLook>;
+  tables: Record<string, WordTableLook>;
+  cells: Record<string, WordCellLook>;
+}
+
+export interface WordBorder {
+  /** As Word names it: "single", "double"… */
+  style: string;
+  width: number;
+  /** Null for automatic. */
+  color: string | null;
+  space: number;
+}
+
+export interface WordRunLook {
+  font?: string;
+  eastAsia?: string;
+  size?: number;
+  color?: string;
+  /** As Word names it: "yellow"… */
+  highlight?: string;
+  shade?: string;
+  bold?: true;
+  italic?: true;
+  /** As Word names it: "single", "dotted"… */
+  underline?: string;
+  strike?: true;
+  doubleStrike?: true;
+  caps?: true;
+  smallCaps?: true;
+  vertical?: "superscript" | "subscript";
+  letterSpacing?: number;
+  widthPercent?: number;
+  hidden?: true;
+}
+
+export interface WordTabStop {
+  at: number;
+  align: "left" | "center" | "right" | "decimal" | "bar";
+  leader: "none" | "dot" | "hyphen" | "underscore" | "heavy" | "middleDot";
+}
+
+export type WordBorders<Side extends string> = Partial<Record<Side, WordBorder>>;
+
+export interface WordParagraphLook {
+  /**
+   * The run look of the paragraph's text that has no `WORD_RUN_MARK`: the
+   * most common one, or the paragraph mark's when there is no text. Marking
+   * only the text that differs keeps long files quick to open. Never one
+   * that is underlined, struck, highlighted, shaded or raised: drawn on the
+   * paragraph, those would cover text that doesn't have them.
+   */
+  run?: string;
+  /** The paragraph look Enter gives the paragraph after, when the style names another (`w:next`). */
+  next?: string;
+  align?: "left" | "center" | "right" | "justify" | "distribute";
+  left?: number;
+  right?: number;
+  /** Negative for a hanging indent. */
+  firstLine?: number;
+  before?: number;
+  after?: number;
+  /** "auto": a multiple of the font's line height; "exact" and "atLeast": a height. */
+  line?: { rule: "auto" | "exact" | "atLeast"; value: number };
+  /** No space between paragraphs of the same style. */
+  contextual?: true;
+  tabs?: WordTabStop[];
+  shade?: string;
+  borders?: WordBorders<"top" | "bottom" | "left" | "right" | "between">;
+  keepNext?: true;
+  keepLines?: true;
+  pageBreakBefore?: true;
+  widowControl?: boolean;
+}
+
+export interface WordWidth {
+  value: number;
+  unit: "pt" | "percent";
+}
+
+export interface WordTableLook {
+  width?: WordWidth;
+  align?: "left" | "center" | "right";
+  indent?: number;
+  borders?: WordBorders<"top" | "bottom" | "left" | "right" | "insideH" | "insideV">;
+  /** Cell padding, unless a cell has its own. */
+  margins?: Partial<Record<"top" | "bottom" | "left" | "right", number>>;
+  /** Column widths as given, whatever the text in them. */
+  fixed?: true;
+  columns?: number[];
+}
+
+export interface WordCellLook {
+  width?: WordWidth;
+  shade?: string;
+  borders?: WordBorders<"top" | "bottom" | "left" | "right">;
+  vertical?: "top" | "center" | "bottom";
+  margins?: Partial<Record<"top" | "bottom" | "left" | "right", number>>;
+  noWrap?: true;
 }
 
 /**
