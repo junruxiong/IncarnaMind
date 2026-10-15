@@ -975,6 +975,39 @@ export function createCore(adapters: CoreAdapters): Core {
       organizedFolderDocuments: (folderId) => library.documentIds(folderId),
       documentIds: (filter) => documents.ids(filter),
     });
+  const unreadIn = (wanted: SearchScope | null): UnreadFile[] => {
+    const inScope = wanted ? resolveScope(wanted) : null;
+    const unread = findUnreadDocuments(documents.unread(inScope ?? undefined));
+    // Files in a format not read belong to Folders only: a Tag or a Document can't name them.
+    // A Folder holds those in it and under it, even where no Document is.
+    const named = wanted
+      ? folders.list().filter((folder) => wanted.folderIds.includes(folder.id))
+      : null;
+    const files = documents.linkedFolders
+      .unsupportedFiles()
+      .filter(
+        (file) =>
+          named === null ||
+          named.some(
+            (folder) =>
+              folder.linkedFolderId === file.linkedFolderId &&
+              (folder.relativePath === "" ||
+                file.relativeFolder === folder.relativePath ||
+                file.relativeFolder.startsWith(`${folder.relativePath}/`)),
+          ),
+      )
+      .map(
+        (file): UnreadFile => ({
+          id: file.path,
+          name: file.name,
+          reason: "format",
+          extension: file.extension,
+          documentId: null,
+          pages: [],
+        }),
+      );
+    return [...unread, ...files];
+  };
   // What checks and comparison tables search (#80): as Answers do, without IncarnaMind's own
   // files and the document being checked. Answers themselves search everything, as before.
   const evidence = createEvidence({
@@ -1366,6 +1399,7 @@ export function createCore(adapters: CoreAdapters): Core {
     consent,
     localOnly: () => embedding.localOnly(),
     resolveScope,
+    unread: unreadIn,
     evidence,
     documents: {
       searchableCount: (documentIds) => documents.searchableCount(documentIds ?? undefined),
@@ -2423,40 +2457,7 @@ export function createCore(adapters: CoreAdapters): Core {
       return { ...linked, batchId };
     },
     listLinkedFolders: async () => documents.linkedFolders.list(),
-    listUnreadFiles: async (scope) => {
-      const wanted = parseSearchScope(scope);
-      const inScope = wanted ? resolveScope(wanted) : null;
-      const unread = findUnreadDocuments(documents.unread(inScope ?? undefined));
-      // Files in a format not read belong to Folders only: a Tag or a Document can't name them.
-      // A Folder holds those in it and under it, even where no Document is.
-      const named = wanted
-        ? folders.list().filter((folder) => wanted.folderIds.includes(folder.id))
-        : null;
-      const files = documents.linkedFolders
-        .unsupportedFiles()
-        .filter(
-          (file) =>
-            named === null ||
-            named.some(
-              (folder) =>
-                folder.linkedFolderId === file.linkedFolderId &&
-                (folder.relativePath === "" ||
-                  file.relativeFolder === folder.relativePath ||
-                  file.relativeFolder.startsWith(`${folder.relativePath}/`)),
-            ),
-        )
-        .map(
-          (file): UnreadFile => ({
-            id: file.path,
-            name: file.name,
-            reason: "format",
-            extension: file.extension,
-            documentId: null,
-            pages: [],
-          }),
-        );
-      return [...unread, ...files];
-    },
+    listUnreadFiles: async (scope) => unreadIn(parseSearchScope(scope)),
     locateLinkedFolder: (linkedFolderId, path) =>
       documents.linkedFolders.locate(linkedFolderId, path),
     removeLinkedFolder: async (linkedFolderId) => unlinkFolder(linkedFolderId),

@@ -6,6 +6,8 @@
  */
 import { formatDate } from "../../shared/dates";
 import { type MessageKey, translate } from "../../shared/i18n";
+import { UNREAD_REASON_KEYS } from "../../shared/unreadFiles";
+import type { UnreadFile } from "../api";
 import type { NodeJSON } from "../answers/blocks";
 import type { Language } from "../language";
 import {
@@ -58,6 +60,11 @@ const heading = (value: string): NodeJSON => ({
   content: [text(value)],
 });
 
+const bulletList = (items: readonly string[]): NodeJSON => ({
+  type: "bulletList",
+  content: items.map((item) => ({ type: "listItem", content: [paragraph(item)] })),
+});
+
 /** A table of text, its first row the heading row; the columns from `numbers` on hold counts, set right. */
 function table(head: string[], rows: string[][], numbers: number): NodeJSON {
   const row = (cells: string[], type: "tableHeader" | "tableCell"): NodeJSON => ({
@@ -83,7 +90,7 @@ export function statementBlocks(
   const t = (key: MessageKey, params?: Record<string, string | number>) =>
     translate(language, key, params);
   const number = new Intl.NumberFormat(language === "zh-CN" ? "zh-CN" : "en").format;
-  const { uses, sections, removed, citations, sentences } = figures;
+  const { uses, sections, removed, citations, sentences, unread } = figures;
   const citationTotal = totalCitations(citations);
   const sentenceTotal = totalSentences(sentences);
   const intro = paragraph(t("aiStatement.intro", { date: formatDate(date, language) }));
@@ -162,6 +169,21 @@ export function statementBlocks(
     rows
       .filter(([key]) => counts[key] > 0 || always.includes(key))
       .map(([key, label]) => [t(label), number(counts[key])]);
+  const unreadRow = (file: UnreadFile) =>
+    `${file.name}${t("unread.file.reason", {
+      reason: t(UNREAD_REASON_KEYS[file.reason], { extension: file.extension ?? "" }),
+    })}`;
+  const unreadPart =
+    unread.length === 0
+      ? []
+      : [
+          paragraph(
+            unread.length === 1
+              ? t("aiStatement.unread.one")
+              : t("aiStatement.unread", { count: number(unread.length) }),
+          ),
+          bulletList(unread.map(unreadRow)),
+        ];
   const checksPart =
     citationTotal === 0 && sentenceTotal === 0
       ? [paragraph(t("aiStatement.checks.none"))]
@@ -192,6 +214,7 @@ export function statementBlocks(
                   resultRows(sentences, SENTENCE_ROWS, []),
                   1,
                 ),
+                ...unreadPart,
               ]),
         ];
 

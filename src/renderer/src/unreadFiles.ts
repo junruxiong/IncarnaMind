@@ -1,18 +1,12 @@
+import type { Editor } from "@tiptap/core";
+import { useEditorState } from "@tiptap/react";
 import { useEffect, useState } from "react";
-import type { SearchScope, UnreadFile, UnreadReason } from "../../core/api";
-import type { MessageKey } from "../../shared/i18n";
+import type * as Y from "yjs";
+import type { SearchScope, UnreadFile } from "../../core/api";
+import { checkUnreadOf, observeCheckUnread } from "../../shared/unreadFiles";
 import { core } from "./core";
+import { shownClaims } from "./editor/claimChecks";
 import { useAppStore } from "./store";
-
-/** What each reason says, and what to do about it (#740). */
-export const UNREAD_REASON_KEYS: Record<UnreadReason, MessageKey> = {
-  format: "unread.reason.format",
-  scan: "unread.reason.scan",
-  password: "unread.reason.password",
-  damaged: "unread.reason.damaged",
-  "too-large": "unread.reason.too-large",
-  pages: "unread.reason.pages",
-};
 
 /**
  * The files in a Search scope that couldn't be read (#740): asked of the core,
@@ -50,5 +44,28 @@ export function useUnreadFiles(scope: SearchScope | null): UnreadFile[] {
       current = false;
     };
   }, [wanted, state]);
+  return files;
+}
+
+/**
+ * The files the Mind's checks couldn't read when they started (#740), as the
+ * Mind recorded them for each request its marks name: what was unread then,
+ * not now. Empty when every check read everything in its scope.
+ */
+export function useCheckUnread(editor: Editor, doc: Y.Doc): UnreadFile[] {
+  const requests = useEditorState({
+    editor,
+    selector: ({ editor: current }) =>
+      [...new Set(shownClaims(current.state).map((claim) => claim.check.request))]
+        .filter((request) => request !== "")
+        .sort()
+        .join(" "),
+  });
+  const [files, setFiles] = useState<UnreadFile[]>([]);
+  useEffect(() => {
+    const read = () => setFiles(checkUnreadOf(doc, requests.split(" ")));
+    read();
+    return observeCheckUnread(doc, read);
+  }, [doc, requests]);
   return files;
 }
