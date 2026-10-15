@@ -76,17 +76,19 @@ async function start(
   }, library);
   // Found and read to the end: the scan has no text, the .docx wants a password.
   await expect
-    .poll(() =>
-      window.evaluate(async () => {
-        const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
-        const [linked] = await bridge.listLinkedFolders();
-        const documents = await bridge.listDocuments();
-        return (
-          linked?.status === "watching" &&
-          documents.length > 0 &&
-          documents.every((each) => each.status !== "queued" && each.status !== "extracting")
-        );
-      }),
+    .poll(
+      () =>
+        window.evaluate(async () => {
+          const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+          const [linked] = await bridge.listLinkedFolders();
+          const documents = await bridge.listDocuments();
+          return (
+            linked?.status === "watching" &&
+            documents.length > 0 &&
+            documents.every((each) => each.status !== "queued" && each.status !== "extracting")
+          );
+        }),
+      { timeout: 60_000 },
     )
     .toBe(true);
   await newMind(window);
@@ -238,29 +240,41 @@ for (const language of ["en", "zh-CN"] as const) {
   });
 }
 
-test("a Verify run says which files in its scope couldn't be read, and why", async () => {
-  test.setTimeout(120_000);
-  const outside = await createDataFolder();
-  try {
-    const report = join(outside, "Harbour report.pdf");
-    await writeFile(report, buildPdf([{ lines: ["Harbour report", SENTENCE] }]));
-    const { app, window } = await start("en");
-    await interceptOpenDialog(app, report);
-    await pointAndClick(window, window.getByTestId("plus-menu"));
-    await pointAndClick(window, window.getByTestId("plus-verify-document"));
-    const line = window.getByTestId("verify-line");
-    await pointAndClick(window, line.getByTestId("verify-check"));
-    await expect(line.getByTestId("verify-done")).toContainText("Checked 1 claim");
+for (const language of ["en", "zh-CN"] as const) {
+  test(`a Verify run says which files in its scope couldn't be read, and why (${language})`, async () => {
+    test.setTimeout(120_000);
+    const outside = await createDataFolder();
+    try {
+      const report = join(outside, "Harbour report.pdf");
+      await writeFile(report, buildPdf([{ lines: ["Harbour report", SENTENCE] }]));
+      const { app, window } = await start(language);
+      await interceptOpenDialog(app, report);
+      await pointAndClick(window, window.getByTestId("plus-menu"));
+      await pointAndClick(window, window.getByTestId("plus-verify-document"));
+      const line = window.getByTestId("verify-line");
+      await pointAndClick(window, line.getByTestId("verify-check"));
+      await expect(line.getByTestId("verify-done")).toContainText(
+        language === "en" ? "Checked 1 claim" : "已核对 1 条说法",
+      );
 
-    const unread = window.getByTestId("verify-unread");
-    await expect(unread).toContainText(WORDS.en.count);
-    await pointAndClick(window, unread.getByTestId("verify-unread-show"));
-    await expectReasons(unread, line, "en", app, window, "verify");
-    await app.close();
-  } finally {
-    await removeDataFolder(outside);
-  }
-});
+      const unread = line.getByTestId("verify-unread");
+      await expect(unread).toContainText(WORDS[language].count);
+      const lineBox = await line.boundingBox();
+      const showBox = await unread.getByTestId("verify-unread-show").boundingBox();
+      expect(
+        showBox &&
+          lineBox &&
+          showBox.y >= lineBox.y &&
+          showBox.y + showBox.height <= lineBox.y + lineBox.height,
+      ).toBe(true);
+      await pointAndClick(window, unread.getByTestId("verify-unread-show"));
+      await expectReasons(unread, line, language, app, window, "verify");
+      await app.close();
+    } finally {
+      await removeDataFolder(outside);
+    }
+  });
+}
 
 /** What the stand-in for the text recognition model reads: page 1 of a scan, but not page 2. */
 async function scanScript(folder: string): Promise<string> {
