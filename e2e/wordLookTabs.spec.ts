@@ -85,7 +85,7 @@ const pageScrollsSideways = (window: Page) =>
     return page.scrollWidth > page.clientWidth;
   });
 
-test("a résumé's tab stops line its columns up, the dates against the right edge, and stay so as you type", async () => {
+test("a résumé's tab stops line its columns up at the file's stops, its dates ending at the right margin's stop, and stay so as you type", async () => {
   const { app, window } = await launchApp(dataDir, { home });
   await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
