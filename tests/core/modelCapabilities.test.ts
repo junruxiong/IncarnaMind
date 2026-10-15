@@ -3,10 +3,14 @@ import { join } from "node:path";
 import { describe, expect, onTestFinished, test, vi } from "vitest";
 import { type Core, DATABASE_FILE } from "../../src/core";
 import { ANSWER_TEMPERATURE } from "../../src/core/answers/engine";
+import type { ChatProviderKind } from "../../src/core/api";
 import { givesStructuredOutput, readsImages } from "../../src/core/providers/capabilities";
+import { catalogMenu } from "../../src/core/providers/catalog";
+import { keyProviderGroups } from "../../src/core/providers/catalog/providers";
 import { anthropicModelFacts } from "../../src/core/providers/modelLists";
 import { migrate, openDatabase } from "../../src/core/storage";
 import { migrations } from "../../src/core/storage/migrations";
+import { modelName } from "../../src/shared/modelName";
 import { askAndFinish, setUpWithDocuments } from "../helpers/citations";
 import {
   createMemoryKeychain,
@@ -340,6 +344,83 @@ describe("A provider's model list", () => {
     const next = await core.prepareChatModel({ providerId: provider.id, modelId: "claude-next" });
     expect(readsImages(next.capabilities)).toBe(true);
     expect(next.window).toEqual({ tokens: 2_000_000, outputTokens: 128_000 });
+  });
+});
+
+describe("The key form's Model list (#890)", () => {
+  /** Answers every provider's model-list request with these ids, in the provider's own shape. */
+  function listing(ids: readonly string[]) {
+    const original = globalThis.fetch;
+    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (!/\/models(\?|$)/.test(url)) {
+        return original(input as Parameters<typeof original>[0], init);
+      }
+      return Promise.resolve(
+        Response.json(
+          url.includes("generativelanguage")
+            ? {
+                models: ids.map((id) => ({
+                  name: `models/${id}`,
+                  supportedGenerationMethods: ["generateContent"],
+                })),
+              }
+            : { data: ids.map((id) => ({ id })) },
+        ),
+      );
+    });
+    onTestFinished(() => fetch.mockRestore());
+  }
+
+  async function settingsMenu(kind: ChatProviderKind, modelId: string): Promise<string[]> {
+    const core = startCore(await createTempDataFolder());
+    const saved = await core.saveChatProvider({ kind, modelId, apiKey: "sk-test" });
+    if (saved.service) await core.allowDataFlow("chat", saved.service.id);
+    const [group] = await core.listChatModels();
+    return group?.models ?? [];
+  }
+
+  test("for each first-class company, it holds what Settings' Default model menu lists once the key is saved, in that order", async () => {
+    const firstClass = keyProviderGroups().main;
+    expect(firstClass).toEqual(expect.arrayContaining(["anthropic", "openai", "deepseek"]));
+    for (const kind of firstClass) {
+      const form = catalogMenu(kind);
+      const recommended = form[0];
+      if (!recommended) throw new Error(`${kind} offers no model.`);
+      listing(form);
+      expect(await settingsMenu(kind, recommended), kind).toEqual(form);
+    }
+  });
+
+  test("for Anthropic, it has every current Claude model by name, Sonnet 5.5 and Opus 5.5 among them, as Anthropic lists them", async () => {
+    const form = catalogMenu("anthropic");
+    expect(form[0]).toBe("claude-haiku-5-5");
+    expect(form).toEqual(expect.arrayContaining(["claude-sonnet-5-5", "claude-opus-5-5"]));
+    // A model and its dated snapshot are one model: the form offers it once.
+    expect(form).toContain("claude-haiku-4-5");
+    expect(form).not.toContain("claude-haiku-4-5-20251001");
+
+    // Anthropic lists its 4.5 models by their dated ids; the names and their order are the same.
+    listing([
+      "claude-fable-5",
+      "claude-fable-5-1",
+      "claude-haiku-4-5-20251001",
+      "claude-haiku-5-5",
+      "claude-opus-4-5-20251101",
+      "claude-opus-4-6",
+      "claude-opus-4-7",
+      "claude-opus-4-8",
+      "claude-opus-5",
+      "claude-opus-5-5",
+      "claude-sonnet-4-5-20250929",
+      "claude-sonnet-4-6",
+      "claude-sonnet-5",
+      "claude-sonnet-5-5",
+    ]);
+    const settings = await settingsMenu("anthropic", "claude-haiku-5-5");
+    const names = (ids: string[]) => ids.map((id) => modelName(id, { kind: "anthropic" }));
+    expect(names(form)).toEqual(names(settings));
+    expect(names(form)).toContain("Claude Sonnet 5.5");
   });
 });
 
