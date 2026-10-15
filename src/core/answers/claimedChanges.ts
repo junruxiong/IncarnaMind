@@ -279,13 +279,27 @@ export function askAgainNote(
   calls: readonly AnswerToolCall[],
   names: MindNames,
 ): string {
-  const lines = toolRecordLines(calls, names);
   const said = claims.map((claim) => CLAIMED_WORDS[claim]).join(", and ");
+  return [
+    thisAnswersRecord(calls, names),
+    `Your reply says you ${said}, but no Tool did that. Write your reply again from its start, without saying what you changed: IncarnaMind lists each change under your reply. Say plainly what wasn't done and why. If the User's request still needs a change you can make now, make it with the Tools first.`,
+  ].join("\n");
+}
+
+/** What to tell the model when the User asked for text in a Mind and its reply holds it instead. */
+export function askToWriteNote(calls: readonly AnswerToolCall[], names: MindNames): string {
+  return [
+    thisAnswersRecord(calls, names),
+    "The User asked for this in a Mind, but no Tool changed one. Write it there now with the Minds' Tools, then reply in a sentence or two without repeating it. If you can't, say why in one sentence.",
+  ].join("\n");
+}
+
+function thisAnswersRecord(calls: readonly AnswerToolCall[], names: MindNames): string {
+  const lines = toolRecordLines(calls, names);
   return [
     "<tool-record>",
     "What the Tools of this Answer really did, as IncarnaMind recorded it:",
     ...(lines.length > 0 ? lines : ["- No Tool was called."]),
     "</tool-record>",
-    `Your reply says you ${said}, but no Tool did that. Write your reply again from its start, without saying what you changed: IncarnaMind lists each change under your reply. Say plainly what wasn't done and why. If the User's request still needs a change you can make now, make it with the Tools first.`,
   ].join("\n");
 }

@@ -47,6 +47,7 @@ import {
   type MindChange,
   type MindProblem,
   PROPOSAL_ATTRIBUTE,
+  type RequestedChange,
   type TextPlace,
   type ThirdPartySource,
   type WritingPlace,
@@ -111,6 +112,7 @@ export interface MindsForTools {
     beforeWriting(): void;
     /** More of its Proposals are in the Mind, as they come. */
     written(request: string, count: number): void;
+    requested: RequestedChange | null;
   }): Promise<{
     result: EditWithAiResult;
     length: { before: string; after: string } | null;
@@ -142,6 +144,12 @@ export interface MindToolsOptions {
     /** The first of `blocks` with a marker no Citation is recorded for yet; -1 for none. */
     firstUnrecorded: number;
   };
+  /**
+   * What the User's words asked for (../../answers/routeRequest), which the
+   * requests the calls make record; null: neither. A Mind made is tagged
+   * only when they asked for a new one.
+   */
+  requested: { change: RequestedChange; newMind: boolean } | null;
   /** A call changed a Mind: its card says so, as soon as it does, also while it writes. */
   changed(toolCallId: string, change: MindChange): void;
   failed(toolCallId: string, problem: MindProblem): void;
@@ -443,7 +451,11 @@ function paragraphsWritten(note: Y.XmlFragment, request: string): number {
  * before `cite` gave their markers' records gets its Citations then.
  */
 export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle(): void } {
-  const { minds, focused } = options;
+  const { minds, focused, requested } = options;
+  const requestedIn = (made: boolean): RequestedChange | null =>
+    !requested || (made && !(requested.change === "write" && requested.newMind))
+      ? null
+      : requested.change;
 
   /** The Mind a call means: the one it names, else the one in focus; or why there is none. */
   const targetOf = (input: Record<string, unknown>): ChangeableMind | Refusal => {
@@ -539,11 +551,13 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       if (!doc) return;
       setOrigins(doc, ids, options.origin);
       if (first) {
+        const tag = requestedIn(writer.made);
         recordProposalRequest(doc, writer.request, {
           source: "answer-added",
           providerId: options.prepared.provider.id,
           modelId: options.prepared.modelId,
           createdAt: options.now().toISOString(),
+          ...(tag && { requested: tag }),
         });
       }
     });
@@ -859,6 +873,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         beforeWriting: () => minds.checkpoint(mind.id),
         written: (request, proposals) =>
           options.changed(toolCallId, { mindId: mind.id, created: false, request, proposals }),
+        requested: requestedIn(false),
       });
       if (result.kind !== "proposed") {
         const why = notProposed(result, mind);

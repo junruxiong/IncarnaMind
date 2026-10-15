@@ -378,9 +378,17 @@ export const MIND_REVISIONS_FIELD = "revisions";
  * Documents, whose comparison table is one change (#98); or a Research
  * Task's cited draft (#130). The assistant (#202) and Enhance (#114) add theirs.
  */
+/**
+ * What the User's words in the assistant asked for, as `routeRequest` read
+ * them: text changed ("make it longer") or written ("write a summary page").
+ * Absent: neither, or a revision of the assistant's own waiting changes.
+ */
+export type RequestedChange = "edit" | "write";
+
 export type ProposalRequest =
   | (ProposalMaker & {
       source: "edit-with-ai";
+      requested?: RequestedChange;
       /** Absent on requests made before #94: their changes can't be regenerated. */
       action?: EditAction;
       /** What the User asked for ("translate", "instruction"); "" for none. */
@@ -389,7 +397,7 @@ export type ProposalRequest =
       reason?: string;
     })
   | (ProposalMaker & { source: "answer"; answerId: string })
-  | (ProposalMaker & { source: "answer-added" })
+  | (ProposalMaker & { source: "answer-added"; requested?: RequestedChange })
   | (ProposalMaker & { source: "comparison-table"; tableId: string })
   | (ProposalMaker & { source: "research"; taskId: string })
   | WordChangeRequest;
