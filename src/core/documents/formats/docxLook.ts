@@ -24,7 +24,7 @@ import { child, descendants, elements, local, onOff, parseXml, type XmlElement }
  * How the look was read. A Mind whose look an earlier version read has it
  * cleared (attributes, marks and map) and given again at the next start.
  */
-export const WORD_LOOK_VERSION = 3;
+export const WORD_LOOK_VERSION = 4;
 
 /** The first version that read table styles' conditional formatting. */
 export const CONDITIONAL_FORMATTING_VERSION = 3;

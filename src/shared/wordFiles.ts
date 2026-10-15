@@ -13,6 +13,7 @@ import {
   PROPOSAL_ATTRIBUTE,
   WORD_LOOK_ATTRIBUTE,
   WORD_RUN_MARK,
+  WORD_TAB_MARK,
   type WordAtomAttributes,
   type WordAtomKind,
   type WordFileInfo,
@@ -198,7 +199,7 @@ export function observeWordFile(doc: Y.Doc, listener: () => void): () => void {
  * it, its Word look (given later to earlier imports, which mustn't count as an edit).
  */
 const NOT_CONTENT = new Set(["id", "includeInContext", PROPOSAL_ATTRIBUTE, WORD_LOOK_ATTRIBUTE]);
-const NOT_TEXT_CONTENT = new Set([WORD_RUN_MARK]);
+const NOT_TEXT_CONTENT = new Set([WORD_RUN_MARK, WORD_TAB_MARK]);
 /** Mark attributes that are how a link opens, not where it leads. */
 const NOT_MARK_CONTENT = new Set(["target", "rel", "class"]);
 

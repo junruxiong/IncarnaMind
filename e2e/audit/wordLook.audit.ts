@@ -189,3 +189,76 @@ test("typing in the 304-page contract, and opening it and the corpus's largest f
     removeDir(files);
   }
 });
+
+test("typing in the 304-page contract with a tab after every clause number, and how long its tabs take to draw", async () => {
+  const dataDir = tempDir("data");
+  const files = tempDir("files");
+  const contract = join(files, "Framework Services Agreement (tabbed).docx");
+  writeFileSync(contract, longContract(undefined, { tabbed: true }));
+  const launched = await launch(dataDir);
+  const { window } = launched;
+  try {
+    const contractId = await importWord(window, contract);
+    await msToOpen(window, contractId, ".ProseMirror h1", 1);
+    await expect(window.locator(".ProseMirror h1")).toHaveCount(241, { timeout: 120_000 });
+    const tabs = await window.locator("[data-word-tab]").count();
+    const drawn: number[] = [];
+    for (let run = 0; run < 3; run++) {
+      await window.evaluate(async () => {
+        const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+        const mind = await core.createMind({ title: "Elsewhere" });
+        await core.changeLayout("main", {
+          type: "open",
+          item: { kind: "mind", mindId: mind.id },
+          where: { in: "place" },
+        });
+      });
+      drawn.push(
+        await window.evaluate(
+          async ({ id, wanted }) => {
+            const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+            const start = performance.now();
+            await core.changeLayout("main", {
+              type: "open",
+              item: { kind: "mind", mindId: id },
+              where: { in: "place" },
+            });
+            for (;;) {
+              const measured = document.querySelectorAll('[data-word-tab][style*="width"]').length;
+              if (measured >= wanted) break;
+              await new Promise((resolve) => requestAnimationFrame(resolve));
+            }
+            return Math.round(performance.now() - start);
+          },
+          { id: contractId, wanted: tabs },
+        ),
+      );
+    }
+
+    await installKeyLatency(window);
+    const clauses = window.locator(".ProseMirror > p:has([data-word-tab])");
+    const typeIn = async (index: number) => {
+      const target = clauses.nth(index);
+      await target.scrollIntoViewIfNeeded();
+      await target.click({ position: { x: 120, y: 6 } });
+      await window.keyboard.press("End");
+      for (let key = 0; key < 30; key++) {
+        await window.keyboard.type("x");
+        await window.waitForTimeout(40);
+      }
+      return takeKeyLatency(window);
+    };
+    const result = {
+      tabs,
+      tabsDrawnMs: { runs: drawn, median: median(drawn) },
+      typingFirstPage: await typeIn(1),
+      typingLastPage: await typeIn((await clauses.count()) - 2),
+    };
+    record("wordTabs", result);
+    console.log(JSON.stringify(result, null, 2));
+  } finally {
+    await close(launched);
+    removeDir(dataDir);
+    removeDir(files);
+  }
+});

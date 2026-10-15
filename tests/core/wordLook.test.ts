@@ -13,6 +13,7 @@ import {
   MIND_WORD_LOOK_FIELD,
   WORD_LOOK_ATTRIBUTE,
   WORD_RUN_MARK,
+  WORD_TAB_MARK,
   type WordLook,
   type WordParagraphLook,
 } from "../../src/core";
@@ -456,13 +457,13 @@ describe("a Mind imported from Word keeps its look", () => {
     expect(lookShown(client).blocks).toBeGreaterThan(2800);
   });
 
-  test("the Mind records content schema 21, and export writes the file's own bytes for what wasn't changed", async () => {
+  test("the Mind records content schema 22, and export writes the file's own bytes for what wasn't changed", async () => {
     for (const bytes of [resumeFile(), contractFile()]) {
       const { core, mindId, client } = await imported(bytes);
       expect(client.doc.getMap(MIND_SETTINGS_FIELD).get(CONTENT_SCHEMA_VERSION_KEY)).toBe(
         CONTENT_SCHEMA_VERSION,
       );
-      expect(CONTENT_SCHEMA_VERSION).toBe(21);
+      expect(CONTENT_SCHEMA_VERSION).toBe(22);
       const result = await core.exportMind(mindId, { format: "docx" });
       const before = unzip(bytes);
       const after = unzip(result.data);
@@ -560,7 +561,7 @@ function withoutLook(client: MindClient, dataDir: string, mindId: string): void 
       for (const child of element.toArray()) {
         if (child instanceof Y.XmlElement) strip(child);
         else if (child instanceof Y.XmlText)
-          child.format(0, child.length, { [WORD_RUN_MARK]: null });
+          child.format(0, child.length, { [WORD_RUN_MARK]: null, [WORD_TAB_MARK]: null });
       }
     };
     for (const child of client.blocks.toArray()) {

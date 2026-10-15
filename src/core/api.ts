@@ -146,8 +146,11 @@ export interface CreateMindInput {
  * - 21: a Word file's look (#746): the `wordLook` attribute and the
  *   `wordRun` mark, which an older version's editor would strip. Older
  *   content is version 21 content as it is.
+ * - 22: the `wordTab` mark on a Word file's tab characters (#746), which an
+ *   older version's editor would strip. Older content is version 22 content
+ *   as it is.
  */
-export const CONTENT_SCHEMA_VERSION = 21;
+export const CONTENT_SCHEMA_VERSION = 22;
 
 /**
  * The key, in the Mind's settings map (`MIND_SETTINGS_FIELD`), of the content
@@ -1179,6 +1182,9 @@ export const WORD_LOOK_ATTRIBUTE = "wordLook";
 
 /** A mark on text whose attribute `k` is a key in `WordLook.runs`. */
 export const WORD_RUN_MARK = "wordRun";
+
+/** A mark on each tab character of a Word file's text, so each is drawn to its tab stop. */
+export const WORD_TAB_MARK = "wordTab";
 
 /** Lengths are in points and colours hex "RRGGBB"; unset properties are left out. */
 export interface WordLook {
