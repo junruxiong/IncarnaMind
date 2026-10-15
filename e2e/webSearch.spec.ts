@@ -138,13 +138,18 @@ test("asked to search the web, an Answer saves the page it reads as a Document a
     window.getByTestId("viewer").locator("[data-quote-highlight]").first(),
   ).toBeVisible();
 
-  // It is a Web page Document now, and nothing but the pages the search found was fetched.
+  // It is a Web page Document now, and nothing but the pages the search found, and the saved
+  // page's picture (#756), was fetched.
   const documents = await window.evaluate(() =>
     (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.listDocuments(),
   );
   expect(documents.map((each) => [each.kind, each.name, each.web?.address])).toEqual([
     ["web", TITLE, "http://encyclopedia.test/tea"],
   ]);
-  expect(heard).toEqual(["encyclopedia.test/tea", "news.test/members"]);
+  expect([...heard].sort()).toEqual([
+    "encyclopedia.test/tea",
+    "images.example/tea-plantation.jpg",
+    "news.test/members",
+  ]);
   await app.close();
 });
