@@ -2,14 +2,20 @@ import type { Editor } from "@tiptap/core";
 import { yUndoPluginKey } from "@tiptap/y-tiptap";
 import { type Undoable, useUndo } from "../undo";
 
-interface UndoStack {
+type StackEvent = "stack-item-added" | "stack-item-popped";
+
+/** The editor's Yjs Undo manager, as far as it is used here. */
+export interface UndoStack {
   undoStack: unknown[];
+  /** When the last change it took in was; a change soon after joins its step. */
+  lastChange: number;
   stopCapturing(): void;
-  on(event: "stack-item-added" | "stack-item-popped", listener: () => void): void;
-  off(event: "stack-item-added" | "stack-item-popped", listener: () => void): void;
+  addTrackedOrigin(origin: unknown): void;
+  on(event: StackEvent, listener: (event: { stackItem: unknown }) => void): void;
+  off(event: StackEvent, listener: (event: { stackItem: unknown }) => void): void;
 }
 
-const undoStackOf = (editor: Editor): UndoStack | undefined =>
+export const undoStackOf = (editor: Editor): UndoStack | undefined =>
   yUndoPluginKey.getState(editor.state)?.undoManager;
 
 /**

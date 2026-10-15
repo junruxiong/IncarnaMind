@@ -109,6 +109,8 @@ export interface EditsOptions {
   recheck(attributes: Attributes): Attributes | null;
   /** Says where a request writes next in a Mind as its changes come in (#202); null once it has stopped. */
   writing(mindId: string, place: WritingPlace | null): void;
+  /** Saves a Checkpoint of the Mind just before an edit that applies at once writes to it (#113, #880). */
+  checkpoint(mindId: string): void;
   now(): Date;
 }
 
@@ -598,7 +600,10 @@ export function createEdits(options: EditsOptions) {
     try {
       if (draft.selection.plain !== input.text) return { kind: "changed" };
       if (draft.selection.text === "") return { kind: "unchanged" };
-      return await run(input, draft, signal, { requestId: input.requestId });
+      return await run(input, draft, signal, {
+        requestId: input.requestId,
+        beforeWriting: () => options.checkpoint(input.mindId),
+      });
     } finally {
       draft.fork.destroy();
     }
@@ -642,7 +647,7 @@ export function createEdits(options: EditsOptions) {
         },
         { mindId: input.mindId, base, fork, selection: read.selection },
         signal,
-        { settle: withdraw, requestId: input.requestId },
+        { settle: withdraw },
       );
     } finally {
       fork.destroy();
