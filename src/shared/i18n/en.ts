@@ -586,6 +586,9 @@ export const en = {
   "claim.mark.label": "Sentence check: {state}",
   "claim.card.label": "Sentence check: {state}. {sentence}",
   "claim.addAsCitation": "Add as Citation",
+  "claim.calculated.title": "Calculated from your Documents",
+  "claim.calculated.stated": "The sentence says {stated}.",
+  "claim.calculated.inputs": "Worked out from",
   "claim.cited": "Cited in this sentence",
   "claim.unsupported.inFolder": "Nothing in “{folder}” says this.",
   "claim.unsupported.anywhere": "Nothing in your Documents says this.",
@@ -593,6 +596,8 @@ export const en = {
   "claim.fixSentence": "Fix the sentence",
   "claim.findSources": "Find sources",
   "claim.searchWeb": "Search the web",
+  "claim.webSearchOff": "Turn on web search to look this up.",
+  "claim.webSearchOff.action": "Open Settings",
   "claim.removeMark": "Remove the mark",
   "claim.webQuestion": "Search the web for sources that support or contradict this: “{sentence}”",
   "claim.searchAll": "Search all Documents",
@@ -751,6 +756,7 @@ export const en = {
   "proposal.theirs.rejectAll": "Reject all changes from {name}",
   "proposal.unknownAuthor": "Unknown author",
   "proposal.madeBy": "{author}, {date}",
+  "proposal.why": "Why: {reason}",
   "proposal.outOfDate.why.theirs":
     "You edited this text after the change was made, so it can't be accepted. Reject it, or finish the edit yourself.",
   "proposal.announce.theirs":
@@ -1535,6 +1541,8 @@ export const en = {
   "providers.test.cost-cap":
     "Nothing was sent: this month's spending cap is reached. Change it in Settings → General.",
   "providers.test.no-answer": "The model sent no reply.",
+  "providers.test.ollama-not-running":
+    "Ollama isn't running on this computer. Open it, then test again.",
   "providers.test.unknown": "The test didn't work.",
 
   "providers.secrets.plainText.title": "No keyring is running",
@@ -1577,6 +1585,12 @@ export const en = {
   "localMode.keep.list.last": "{rest} and {last}",
   "localMode.keep.agents.one": "1 connected agent",
   "localMode.keep.agents": "{count} connected agents",
+  "localModel.title": "Use a local model",
+  "localModel.installed": "Ollama is on this computer, but it isn't running.",
+  "localModel.recommended": "Recommended: {model}, 3.3 GB. It is downloaded once.",
+  "localModel.open": "Open Ollama",
+  "localModel.opening": "Opening Ollama…",
+  "localModel.cancel": "Cancel",
 
   "providers.settings.title": "Chat model",
   "providers.settings.none": "No chat model is set up yet.",
@@ -1637,6 +1651,13 @@ export const en = {
   "chatgpt.consent.note":
     "It goes to OpenAI under your ChatGPT account, and counts against your plan's limits.",
   "chatgpt.menu.hint": "Use your Plus or Pro plan",
+  "chatgpt.paste.question": "Didn't come back?",
+  "chatgpt.paste.open": "Paste the address the browser shows",
+  "chatgpt.paste.continue": "Continue",
+  "chatgpt.paste.problem.not-sign-in-address": "That isn't the sign-in address.",
+  "chatgpt.paste.problem.other-sign-in":
+    "That address is from an earlier sign-in. Sign in on the page just opened, then paste its address.",
+  "chatgpt.paste.problem.finished": "This sign-in has already finished.",
 
   "consent.dialog.title": "Send data to {service}?",
   "consent.dialog.body": "To {purpose}, IncarnaMind sends this to {service}:",
@@ -1995,6 +2016,7 @@ export const en = {
 
   "answer.label": "Answer",
   "answer.status.streaming": "Writing…",
+  "mind.writing": "Writing…",
   "answer.phase.waiting-for-consent": "Waiting for your permission to send",
   "answer.phase.loading": "Loading the model…",
   "answer.phase.searching": "Searching your Documents…",
@@ -2019,6 +2041,7 @@ export const en = {
   "answer.error.local-mode":
     "Stopped: “Keep everything on this computer” was turned on, and {model} isn't on this computer",
   "answer.error.useLocal": "Use a local model",
+  "answer.error.ollama-not-running": "Ollama isn't running on this computer",
   "answer.error.too-long":
     "This Question is too long for the model’s context window, even with nothing before it. Shorten it, or choose another model",
   "answer.error.no-answer": "The model sent no Answer",
@@ -2691,6 +2714,9 @@ export const en = {
   "error.provider.urlScheme": "The server URL must start with http:// or https://.",
   "error.provider.urlExtras":
     "The server URL can't contain a user name, password, query or fragment. Put an API key in the key field.",
+  "error.provider.ollamaNotRunning": "Ollama isn't running on this computer.",
+  "error.provider.ollamaCantOpen":
+    "This computer can't open Ollama from here. Get it from ollama.com.",
   "error.provider.ollamaCloud":
     "{model} runs on ollama.com, not on this computer. Choose a local model, or pick it in the model menu.",
   "error.provider.rerankLocalMode":
@@ -2858,9 +2884,14 @@ export const en = {
   "menu.sendFeedback": "Send feedback…",
   "feedback.title": "Send feedback",
   "feedback.note":
-    "Feedback goes to IncarnaMind's page on GitHub, which is public: anyone can read what you post there. IncarnaMind sends nothing itself.",
+    "Feedback opens a form in your browser, with this app's version ({version}) and system ({system}) filled in. Nothing else is sent.",
+  "feedback.system.inset": "macOS",
+  "feedback.system.overlay": "Windows",
+  "feedback.system.native": "Linux",
+  "feedback.bug.lead": "Found a bug?",
+  "feedback.bug.link": "Report it on GitHub, which is public",
   "feedback.cancel": "Cancel",
-  "feedback.open": "Open GitHub",
+  "feedback.open": "Open the form",
   "menu.window": "Window",
   "menu.minimize": "Minimize",
   "menu.zoom": "Zoom",
@@ -3628,11 +3659,30 @@ export const en = {
   "answer.add": "Add to note",
   "answer.add.to": "Add to “{mind}” ({shortcut})",
   "answer.add.choose": "Choose a Mind to add it to",
+  "mindChanges.minds": "{count} Minds changed",
+  "mindChanges.one": "{count} changes in “{mind}”",
+  "mindChanges.one.one": "1 change in “{mind}”",
+  "mindChanges.one.none": "No changes waiting in “{mind}”",
+  "mindChanges.one.edited": "Edited “{mind}”",
+  "mindChanges.one.created": "Created “{mind}” · {count} changes",
+  "mindChanges.one.created.one": "Created “{mind}” · 1 change",
+  "mindChanges.one.created.none": "Created “{mind}”",
+  "mindChanges.one.removed": "Removed “{mind}”",
+  "mindChanges.review": "Review",
+  "mindChanges.row.created": "Created: {mind}",
+  "mindChanges.row.edited": "Edited: {mind}",
+  "mindChanges.row.removed": "Removed: {mind}",
+  "mindChanges.row.count": "· {count} changes",
+  "mindChanges.row.one": "· 1 change",
+  "mindChanges.row.none": "· none waiting",
+  "mindChanges.open": "Open",
+  "mindChanges.noMind": "No Mind was open to change.",
   "mindCall.thisMind": "this Mind",
   "mindCall.reading": "Reading “{mind}”…",
   "mindCall.editing": "Changing “{mind}”…",
   "mindCall.adding": "Adding to “{mind}”…",
   "mindCall.creating": "Making “{mind}”…",
+  "mindCall.creating.new": "Making a new Mind…",
   "mindCall.read": "Read “{mind}”",
   "mindCall.edited": "Edited “{mind}” · {count} changes",
   "mindCall.edited.one": "Edited “{mind}” · 1 change",

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { expect, test } from "@playwright/test";
 import {
   createDataFolder,
@@ -9,6 +11,13 @@ import {
   urlsOpened,
 } from "./app";
 
+const { version } = JSON.parse(readFileSync(resolve(__dirname, "../package.json"), "utf8")) as {
+  version: string;
+};
+
+const os =
+  process.platform === "darwin" ? "mac" : process.platform === "win32" ? "windows" : "linux";
+
 let dataDir: string;
 test.beforeEach(async () => {
   dataDir = await createDataFolder();
@@ -17,7 +26,7 @@ test.afterEach(async () => {
   await removeDataFolder(dataDir);
 });
 
-test("Send feedback opens the public issue page after saying it is public, and the app makes no network request (#123)", async () => {
+test("Send feedback opens the feedback form with the app version and system, keeps the public GitHub page as a link, and the app makes no network request (#123)", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   await interceptOpenExternal(app);
@@ -38,12 +47,13 @@ test("Send feedback opens the public issue page after saying it is public, and t
   const dialog = window.getByTestId("feedback-dialog");
   await expect(dialog).toBeVisible();
 
-  await expect(dialog).toContainText("public");
+  await expect(dialog).toContainText(`version (${version})`);
+  await expect(dialog).toContainText("GitHub, which is public");
   await dialog.getByTestId("feedback-open").click();
   await expect(dialog).toBeHidden();
   await expect
     .poll(() => urlsOpened(app))
-    .toEqual(["https://github.com/IncarnaMind/IncarnaMind/issues/new/choose"]);
+    .toEqual([`https://tally.so/r/bZVZjo?version=${version}&os=${os}`]);
   expect(requests).toEqual([]);
   await app.close();
 });
@@ -57,6 +67,11 @@ test("the feedback dialog speaks Chinese when the interface does", async () => {
   await window.keyboard.press("Enter");
   const dialog = window.getByTestId("feedback-dialog");
   await expect(dialog).toContainText("公开");
-  await expect(dialog.getByTestId("feedback-open")).toHaveText("打开 GitHub");
+  await expect(dialog.getByTestId("feedback-open")).toHaveText("打开表单");
+  await interceptOpenExternal(app);
+  await dialog.getByTestId("feedback-open").click();
+  await expect
+    .poll(() => urlsOpened(app))
+    .toEqual([`https://tally.so/r/M1K1EX?version=${version}&os=${os}`]);
   await app.close();
 });

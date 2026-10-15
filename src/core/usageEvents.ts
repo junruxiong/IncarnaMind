@@ -116,6 +116,7 @@ const ANSWER_ERRORS = [
   "provider",
   "consent-declined",
   "local-mode",
+  "ollama-not-running",
   "not-signed-in",
   "plan-limit",
   "blocked",
@@ -178,7 +179,6 @@ void _inStep;
 export const USAGE_EVENTS = {
   /** IncarnaMind started. `language`: the interface language. */
   app_opened: { language: oneOf(LANGUAGES) },
-  /** The User opened another example from an example's banner (#123): which group, nothing else. */
   example_opened: { group: oneOf(EXAMPLE_GROUPS) },
   /** The User made a Mind (not the example Mind). */
   mind_created: {},

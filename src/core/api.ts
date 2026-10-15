@@ -365,6 +365,8 @@ export type ProposalRequest =
       action?: EditAction;
       /** What the User asked for ("translate", "instruction"); "" for none. */
       instruction?: string;
+      /** Why the model changed the text, in its few words (#202); absent when it didn't say. */
+      reason?: string;
     })
   | (ProposalMaker & { source: "answer"; answerId: string })
   | (ProposalMaker & { source: "answer-added" })
@@ -817,6 +819,19 @@ export interface AnswerToolCall {
   uncalculated?: number;
   /** A Minds' Tool that changed a Mind or made one, once it ended (#202). Absent otherwise. */
   mindChange?: MindChange;
+}
+
+/**
+ * Where the assistant writes next in a Mind, as its changes come in (#202):
+ * a new Block after the Block `after` (null: at the Mind's end), or the
+ * paragraph or heading `over`, which it is writing anew.
+ */
+export type WritingPlace = { after: string | null } | { over: string };
+
+/** Where the assistant is writing a Mind's changes as they come (#202); `place` null once it has stopped. */
+export interface MindWriting {
+  mindId: string;
+  place: WritingPlace | null;
 }
 
 /**
@@ -2772,7 +2787,6 @@ export interface Examples {
   linkedFolderId: string | null;
   /** The example Answer, written in advance, while the example Mind exists. */
   answerId: string | null;
-  /** The other examples this one's banner offers, in this install's order (random, then kept). */
   more: ExampleGroup[];
 }
 
@@ -3259,6 +3273,8 @@ export type ProviderErrorKind =
   | "consent-declined"
   /** "Keep everything on this computer" is on and the model isn't on this computer: nothing was sent, or the Answer was stopped. */
   | "local-mode"
+  /** The model is in Ollama on this computer, and Ollama isn't running: found before anything was sent. */
+  | "ollama-not-running"
   /** ChatGPT plan: there is no sign-in on this device, or it expired: sign in again. */
   | "not-signed-in"
   /** ChatGPT plan: the plan's usage limit, or the one the User set for IncarnaMind, is reached. */
@@ -3840,6 +3856,23 @@ export interface LeftOutDocument {
   reason: EvidenceExclusion;
 }
 
+/**
+ * How a check worked out a figure the sentence states but the Documents don't
+ * (#707): the figure, calculated from numbers they state (ADR-0021), and the
+ * number the sentence writes for it. They agree to the sentence's rounding,
+ * and the sentence is supported, or they don't, and it is contradicted.
+ */
+export interface ClaimCalculation {
+  figure: CalculatedFigure;
+  /** The number as the sentence writes it: "1.1x". */
+  stated: string;
+  /**
+   * Whether they agree. One that doesn't contradicts the sentence; one that
+   * does settles only that number, and a Passage may still contradict the rest.
+   */
+  agrees: boolean;
+}
+
 /** A password-protected PDF Document, and the password to open it with (#763). */
 export interface UnlockDocumentInput {
   documentId: string;
@@ -3857,13 +3890,16 @@ export type ClaimCheckResult =
       verdict: ClaimVerdict;
       /**
        * For "supported" and "contradicted": the Passage that decides it, as a
-       * Citation whose quote the Citation check found. For "unsupported": null,
-       * or the nearest line when it states another value for the very thing
-       * the sentence says: "the Documents say something different" (#770).
+       * Citation whose quote the Citation check found; for a figure worked out,
+       * its first input's. For "unsupported": null, or the nearest line when it
+       * states another value for the very thing the sentence says: "the
+       * Documents say something different" (#770).
        */
       evidence: Citation | null;
       /** For "supported" and "contradicted": what the Document says, in one plain sentence. */
       says: string | null;
+      /** A figure worked out that decided it; null when a Passage did. */
+      calculation: ClaimCalculation | null;
       /** The versions of the Documents it read, each once. */
       versions: CheckedVersion[];
       excluded: LeftOutDocument[];
@@ -3937,6 +3973,8 @@ export interface ClaimCheckAttributes {
   evidence: CitationAttributes | null;
   /** "supported" and "contradicted": what the Document says, in one plain sentence. */
   says: string | null;
+  /** A figure worked out that decided it; null when a Passage did. */
+  calculation: ClaimCalculation | null;
   scope: ClaimCheckScope;
   versions: CheckedVersion[];
   excluded: LeftOutDocument[];
@@ -4764,6 +4802,18 @@ export interface ChatGptSignOutResult {
   status: ChatGptPlanStatus;
 }
 
+export type ChatGptPastedAddressProblem =
+  /** It isn't the address the sign-in sends the browser back to, with a code and a state. */
+  | "not-sign-in-address"
+  /** It is, but for another sign-in, e.g. from an older tab. */
+  | "other-sign-in"
+  /** The sign-in already finished, or none is waiting. */
+  | "finished";
+
+export type ChatGptPastedAddressResult =
+  | { ok: true }
+  | { ok: false; problem: ChatGptPastedAddressProblem };
+
 // ---------------------------------------------------------------------------
 // Secrets
 
@@ -4788,7 +4838,13 @@ export interface SecretStorageStatus {
 // Ollama
 
 export type OllamaStatus =
-  | { running: false; baseUrl: string }
+  | {
+      running: false;
+      baseUrl: string;
+      /** Whether `openOllama` can open its app: false too where this computer can't tell. */
+      installed: boolean;
+      recommendedModel: string;
+    }
   | {
       running: true;
       baseUrl: string;
@@ -7342,6 +7398,11 @@ export interface CoreApi {
   /** Looks for Ollama, on its default local port unless another URL is given. */
   detectOllama(input?: { baseUrl?: string }): Promise<OllamaStatus>;
   /**
+   * Opens Ollama's app and waits, for up to twenty seconds, until Ollama answers; resolves with
+   * what `detectOllama` then finds. Rejects when the app can't be opened from here.
+   */
+  openOllama(input?: { baseUrl?: string }): Promise<OllamaStatus>;
+  /**
    * One click "use local models": pulls the model if needed (progress arrives as
    * "ollama.pullProgress" events), saves Ollama as a provider and makes the model the default.
    */
@@ -7364,6 +7425,13 @@ export interface CoreApi {
    * device. A saved ChatGPT provider then needs a new sign-in.
    */
   signOutOfChatGpt(): Promise<ChatGptSignOutResult>;
+  /**
+   * The address the browser ended on, pasted by the User when the sign-in
+   * didn't come back to IncarnaMind: checked exactly as the browser's own
+   * return, and the waiting `signInToChatGpt` finishes with it. A refused
+   * address changes nothing.
+   */
+  pasteChatGptSignInAddress(address: string): Promise<ChatGptPastedAddressResult>;
 
   /**
    * Every registered external data flow, to each service it currently goes to
@@ -7833,6 +7901,8 @@ export interface CoreEvents {
   "examples.changed": Examples;
   /** A Mind's content changed. Clients editing that Mind apply the update to their `Y.Doc`. */
   "mind.update": MindUpdate;
+  /** The assistant is writing changes into a Mind as they come (#202), or has stopped. */
+  "mind.writing": MindWriting;
   /** A Mind's Checkpoints changed: one was saved, kept for good, or thinned out. Read `listCheckpoints` again. */
   "checkpoints.changed": { mindId: string };
   /**
@@ -8140,11 +8210,13 @@ const methods: Record<CoreApiMethod, true> = {
   getSecretStorage: true,
   acceptPlainTextSecretStorage: true,
   detectOllama: true,
+  openOllama: true,
   selectOllama: true,
   getChatGptPlan: true,
   signInToChatGpt: true,
   cancelChatGptSignIn: true,
   signOutOfChatGpt: true,
+  pasteChatGptSignInAddress: true,
   listDataFlows: true,
   listConsentRequests: true,
   respondToConsent: true,
