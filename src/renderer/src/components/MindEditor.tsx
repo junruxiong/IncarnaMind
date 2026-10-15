@@ -618,7 +618,7 @@ function MindEditorView({
   const verification = useVerification(doc);
   const frame = useRef<HTMLDivElement>(null);
   useClickBelowNote(editor, frame);
-  const wordLook = useWordLookStyle(doc, mindId);
+  const wordLook = useWordLookStyle(doc, mindId, editor);
 
   return (
     <MindIdContext.Provider value={mindId}>

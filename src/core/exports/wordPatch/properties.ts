@@ -191,28 +191,72 @@ const CODE_FONT = '<w:rFonts w:ascii="Consolas" w:hAnsi="Consolas" w:cs="Consola
 
 /**
  * Run properties for text marked `to`, from properties written for text
- * marked as they say: only the toggles whose mark changed are set or
- * removed, so a font, a size or a colour the editor doesn't show stays.
+ * marked `from` (as the import read the run, styles included; else as its own
+ * properties say): only the toggles whose mark changed are set or removed, so
+ * a font, a size or a colour the editor doesn't show stays.
  */
-export function runPropertiesFor(rPr: string, to: TextMarks, linkStyle: string | null): string {
-  const from = marksOfRun(rPr);
+export function runPropertiesFor(
+  rPr: string,
+  to: TextMarks,
+  linkStyle: string | null,
+  from: TextMarks = marksOfRun(rPr),
+): string {
+  const own = marksOfRun(rPr);
   const properties = Properties.run(rPr);
-  const toggle = (on: boolean, was: boolean, names: string[], xml: string[]) => {
+  // Off where a style turns it on takes an explicit off; off where only the run did, removing it.
+  const toggle = (
+    on: boolean,
+    was: boolean,
+    had: boolean,
+    names: string[],
+    xml: string[],
+    off: string[],
+  ) => {
     if (on === was) return;
-    if (!on) {
+    if (!on && had) {
       properties.remove(...names);
       return;
     }
-    for (const [index, name] of names.entries()) properties.set(name, xml[index] as string);
+    const values = on ? xml : off;
+    for (const [index, name] of names.entries()) properties.set(name, values[index] as string);
   };
-  toggle(to.bold, from.bold, ["w:b", "w:bCs"], ["<w:b/>", "<w:bCs/>"]);
-  toggle(to.italic, from.italic, ["w:i", "w:iCs"], ["<w:i/>", "<w:iCs/>"]);
-  toggle(to.underline, from.underline, ["w:u"], ['<w:u w:val="single"/>']);
+  toggle(
+    to.bold,
+    from.bold,
+    own.bold,
+    ["w:b", "w:bCs"],
+    ["<w:b/>", "<w:bCs/>"],
+    ['<w:b w:val="0"/>', '<w:bCs w:val="0"/>'],
+  );
+  toggle(
+    to.italic,
+    from.italic,
+    own.italic,
+    ["w:i", "w:iCs"],
+    ["<w:i/>", "<w:iCs/>"],
+    ['<w:i w:val="0"/>', '<w:iCs w:val="0"/>'],
+  );
+  toggle(
+    to.underline,
+    from.underline,
+    own.underline,
+    ["w:u"],
+    ['<w:u w:val="single"/>'],
+    ['<w:u w:val="none"/>'],
+  );
   if (to.strike !== from.strike) {
     if (to.strike) properties.set("w:strike", "<w:strike/>");
-    else properties.remove("w:strike", "w:dstrike");
+    else if (own.strike) properties.remove("w:strike", "w:dstrike");
+    else properties.set("w:strike", '<w:strike w:val="0"/>');
   }
-  toggle(to.highlight, from.highlight, ["w:highlight"], ['<w:highlight w:val="yellow"/>']);
+  toggle(
+    to.highlight,
+    from.highlight,
+    own.highlight,
+    ["w:highlight"],
+    ['<w:highlight w:val="yellow"/>'],
+    ['<w:highlight w:val="none"/>'],
+  );
   if (to.code) properties.set("w:rFonts", CODE_FONT);
   const style = valueIn(properties.get("w:rStyle"));
   if (to.link && linkStyle && !style) {

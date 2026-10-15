@@ -4,23 +4,24 @@ import type { MindLook } from "../../shared/wordLook";
 export interface ShownWordLook {
   shown: MindLook;
   choose(look: MindLook): void;
-  /** The Document the original is, when the Library has it. */
-  originalId: string | null;
+  openOriginal: (() => void) | null;
 }
 
 /** The Minds open in the window that have a Word file's look, for the Look menu and ⌘K. */
 export const useWordLooks = create<Record<string, ShownWordLook>>(() => ({}));
 
-const holders = new Map<string, number>();
+const holders = new Map<string, ShownWordLook[]>();
 
-/** Until the returned function is called; a Mind open in two panes is held by both. */
+/** Until the returned function is called; a Mind open in two panes is held by both, the latest shown. */
 export function holdWordLook(mindId: string, entry: ShownWordLook): () => void {
-  holders.set(mindId, (holders.get(mindId) ?? 0) + 1);
+  holders.set(mindId, [...(holders.get(mindId) ?? []), entry]);
   useWordLooks.setState({ [mindId]: entry });
   return () => {
-    const left = (holders.get(mindId) ?? 1) - 1;
-    if (left > 0) {
+    const left = (holders.get(mindId) ?? []).filter((each) => each !== entry);
+    const latest = left.at(-1);
+    if (latest) {
       holders.set(mindId, left);
+      useWordLooks.setState({ [mindId]: latest });
       return;
     }
     holders.delete(mindId);

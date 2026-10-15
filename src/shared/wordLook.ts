@@ -48,6 +48,11 @@ const FONT = /^[^"\\{};<>\p{Cc}]{1,64}$/u;
 
 const num = (value: unknown) =>
   typeof value === "number" && Number.isFinite(value) ? value : undefined;
+// Word's own range of font sizes, in points.
+const size = (value: unknown) => {
+  const points = num(value);
+  return points === undefined || points <= 0 ? undefined : Math.min(1638, Math.max(1, points));
+};
 const hex = (value: unknown) =>
   typeof value === "string" && HEX.test(value) ? value.toUpperCase() : undefined;
 const font = (value: unknown) =>
@@ -105,7 +110,7 @@ function runLook(value: Record<string, unknown>): WordRunLook {
   return defined({
     font: font(value.font),
     eastAsia: font(value.eastAsia),
-    size: num(value.size),
+    size: size(value.size),
     color: hex(value.color),
     highlight: wordName(value.highlight),
     shade: hex(value.shade),
@@ -205,7 +210,7 @@ export function wordLookOf(doc: Y.Doc): WordLook | null {
   if (version === undefined) return null;
   return {
     version,
-    body: num(map.get("body")) ?? null,
+    body: size(map.get("body")) ?? null,
     width: num(map.get("width")) ?? null,
     paragraphs: styles(map.get("paragraphs"), paragraphLook),
     runs: styles(map.get("runs"), runLook),

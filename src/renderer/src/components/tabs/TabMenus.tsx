@@ -111,8 +111,8 @@ export function GroupMenu({ groupId, merged }: { groupId: string; merged: boolea
         data-testid="group-menu-items"
         className={menuClass}
       >
-        {menu.open && shown?.kind === "mind" && (
-          <LookMenuItems mindId={shown.mindId} close={menu.close} />
+        {menu.open && shown?.kind === "mind" && group?.activeTabId && (
+          <LookMenuItems mindId={shown.mindId} tabId={group.activeTabId} close={menu.close} />
         )}
         <MenuItems
           items={items}
