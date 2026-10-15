@@ -15,6 +15,7 @@ import {
 } from "../../conversations";
 import { useT } from "../../i18n";
 import { isLive, useMeetings } from "../../meetings";
+import { useModelSetup } from "../../modelSetup";
 import { type ScopeChip, scopeChips } from "../../scope";
 import { useAppStore } from "../../store";
 import { interleave, type ThreadStart, threadTasks } from "../../taskGroups";
@@ -49,6 +50,7 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
   const t = useT();
   const messages = useConversations((state) => state.messages);
   const asking = useConversations((state) => state.asking);
+  const waitingQuestion = useModelSetup((state) => state.waiting);
   const askingQuote = useConversations((state) => state.askingQuote);
   const onItsWay = useAnswerOnItsWay();
   const stopWanted = useConversations((state) => state.stopWanted);
@@ -142,7 +144,7 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
       data-testid="assistant-log"
       className="assistant-log"
     >
-      {messages.length === 0 && asking === null && (
+      {messages.length === 0 && asking === null && !waitingQuestion && (
         <>
           <p data-testid="assistant-reads" title={reads} className="assistant-reads">
             <SearchIcon aria-hidden="true" className="assistant-reads-icon" />
@@ -170,6 +172,14 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
         );
       })}
       {asking !== null && <QuestionBubble text={asking} quote={askingQuote} />}
+      {waitingQuestion && (
+        <>
+          <QuestionBubble text={waitingQuestion.text} quote="" />
+          <p data-testid="assistant-waiting-model" className="assistant-empty">
+            {t("setup.waiting")}
+          </p>
+        </>
+      )}
       {onItsWay && (
         // Its line shows at rest, as an Answer's being written does.
         <div
