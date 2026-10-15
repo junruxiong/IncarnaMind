@@ -9,6 +9,7 @@
  * only in US dollars (the Chinese regions of providers that bill in yuan) have
  * their yuan prices here, from the providers' own price pages.
  */
+import { CLAUDE_BETWEEN_TOOLS, CLAUDE_LOW_EFFORT } from "./providers";
 import type { CatalogOverrides, OffPeak, Price } from "./types";
 
 /** A price in yuan per million tokens. */
@@ -74,10 +75,12 @@ export const OVERRIDES: CatalogOverrides = {
   },
   models: {
     anthropic: {
-      // These return 400 for a forced Tool choice ("any" or a named Tool).
-      "claude-fable-5-1": { forcedToolChoice: false },
-      "claude-opus-5-5": { forcedToolChoice: false },
-      "claude-sonnet-5-5": { forcedToolChoice: false },
+      // `thinking: disabled` returns 400 on these four (measured 2026-10-15, #907), and a forced
+      // Tool choice ("any" or a named Tool) on those with `forcedToolChoice: false`.
+      "claude-fable-5": { thinkingOff: CLAUDE_LOW_EFFORT },
+      "claude-fable-5-1": { forcedToolChoice: false, thinkingOff: CLAUDE_LOW_EFFORT },
+      "claude-opus-5-5": { forcedToolChoice: false, thinkingOff: CLAUDE_LOW_EFFORT },
+      "claude-sonnet-5-5": { forcedToolChoice: false, thinkingOff: CLAUDE_BETWEEN_TOOLS },
       "claude-haiku-5-5": {
         price: {
           currency: "USD",
