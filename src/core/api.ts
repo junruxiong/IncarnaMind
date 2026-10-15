@@ -1435,6 +1435,8 @@ export type CitationLocation =
       notes?: boolean;
       comment?: { author: string | null };
       paragraphs?: { from: number; to: number };
+      /** A web page's picture the quote was read from, numbered in the page from 1. */
+      figure?: number;
     };
 
 /** A stretch of words, and whether the Document has it where the Answer's quoted words were looked for. */
@@ -1814,6 +1816,8 @@ export interface DocumentPlace {
    * TXT or Markdown file.
    */
   quote?: string;
+  /** A saved web page's picture the quote was read from, numbered in the page from 1: it is outlined. */
+  figure?: number;
   /** The Citation this was opened from, if a Citation opened it. */
   citation?: TabCitation;
   /**
@@ -2031,7 +2035,12 @@ export type DocumentFailureReason =
    * couldn't be downloaded or failed on them. The pages that were read are
    * searched; Retry reads the others.
    */
-  | "pages-unread";
+  | "pages-unread"
+  /**
+   * The app stopped while it was being read, not closed in good order: it
+   * isn't read again by itself, as it could stop the app again. Retry reads it.
+   */
+  | "app-stopped";
 
 export interface DocumentFailure {
   reason: DocumentFailureReason;
@@ -2041,12 +2050,13 @@ export interface DocumentFailure {
   pages?: number[];
 }
 
-/** Where reading a PDF's scanned pages is (#397), while it is processed. */
+/** Where reading a PDF's scanned pages, or a saved web page's pictures, is while it is processed. */
 export interface DocumentScanProgress {
-  /** How many of its pages are scans to read. */
+  /** How many of its pages are scans to read, or of a saved web page's pictures. */
   pages: number;
   /** How many of them are read so far. */
   read: number;
+  of: "scanned-pages" | "pictures";
 }
 
 /**
@@ -2802,6 +2812,7 @@ export interface ScannedText {
  */
 export interface ScannedQuote {
   unsure: string[];
+  from: "scan" | "picture";
 }
 
 /** A Citation's quote, as `readScannedQuote` looks it up: its Document, version, Units and quote. */
