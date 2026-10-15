@@ -73,6 +73,7 @@
   "openTabOnce.spec.ts": 28,
   "otherModels.spec.ts": 8,
   "palette.spec.ts": 21,
+  "planLimit.spec.ts": 30,
   "privacy.spec.ts": 7,
   "problems.spec.ts": 30,
   "providerTiers.spec.ts": 14,

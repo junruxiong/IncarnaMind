@@ -23,6 +23,7 @@ import type { Reranker } from "./documents/searchTool";
 import type { AnswerSearchTuning } from "./documents/searchTuning";
 import type { WatchFolder } from "./documents/watcher";
 import type { FetchLimits, PageFetch } from "./documents/web/fetch";
+import type { PictureLimits } from "./documents/web/pictures";
 import type { ChatGptPlanEndpoints } from "./providers/chatgpt/plan";
 import type { EmbeddingModelFactory } from "./providers/embeddings";
 import type { ChatModelFactory } from "./providers/models";
@@ -713,7 +714,7 @@ export interface CoreAdapters {
    * How web pages are fetched (#261). Defaults to Node's fetch, within 20
    * seconds and 10 MB; tests shorten the limits.
    */
-  webPages?: { fetch?: PageFetch; limits?: FetchLimits };
+  webPages?: { fetch?: PageFetch; limits?: FetchLimits; pictureLimits?: PictureLimits };
   /**
    * How web search's fetcher resolves host names and makes its connections
    * (#128): the system's resolver and undici's by default. Tests stand a
@@ -737,6 +738,12 @@ export interface CoreAdapters {
    * src/core/agents/socket.ts), and the version the server names itself with.
    */
   agents?: {
+    /**
+     * Whether connecting agents is offered at all (the desktop app's
+     * `SHOW_AGENT_CONNECTION`). Not offered, the socket never listens and
+     * Privacy lists no agents, whatever an earlier build saved. Defaults to offered.
+     */
+    offered?: boolean;
     launcher?: AgentLauncher;
     socketPath?: string;
     version?: string;
@@ -806,6 +813,12 @@ export interface CoreAdapters {
    * Defaults to five minutes; tests shorten it.
    */
   connectorSignInTimeoutMs?: number;
+  /**
+   * Contradiction watch's timings (#112), which tests shorten: how long after
+   * a new version of a Document its Folder's Minds are checked (30 seconds),
+   * and how long a background check of one claim may take (3 minutes).
+   */
+  contradictionWatch?: { delayMs?: number; claimTimeLimitMs?: number };
   /**
    * The Connectors directory's entries, in its JSON form, in place of the
    * list that ships with the app; tests point an entry at a local stand-in.

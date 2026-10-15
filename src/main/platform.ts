@@ -24,6 +24,7 @@ import {
 } from "../core";
 import { createFakeCapture, type FakeCapture } from "../core/meetings/fakeCapture";
 import type { FakeTranscriberOptions } from "../core/transcription/fake";
+import { SHOW_AGENT_CONNECTION } from "../shared/agentConnection";
 import { createCitedPageCapture } from "./citedPageCapture";
 import { createSentryCrashReporter } from "./crashReports";
 import { createUtilityProcessEmbedder } from "./embedder";
@@ -361,6 +362,14 @@ const sourceProvidersUrl =
   import.meta.env.MODE === "test" ? process.env.INCARNAMIND_TEST_SOURCES : undefined;
 
 /**
+ * Test-only launch flag: how long after a new version of a Document
+ * contradiction watch checks its Folder's Minds (#112), so the smoke tests
+ * needn't wait the 30 seconds. Only a test build honours it.
+ */
+const contradictionWatchDelay =
+  import.meta.env.MODE === "test" ? process.env.INCARNAMIND_TEST_CONTRADICTION_DELAY_MS : undefined;
+
+/**
  * Test-only launch flag: a JSON file of Connectors directory entries (#148)
  * in place of the list that ships with the app, so the smoke tests connect
  * an entry served by a local stand-in. Only a test build honours it.
@@ -491,6 +500,9 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
     ...(referenceLookupUrl && {
       referenceLookup: { crossref: referenceLookupUrl, arxiv: referenceLookupUrl },
     }),
+    ...(contradictionWatchDelay && {
+      contradictionWatch: { delayMs: Number(contradictionWatchDelay) },
+    }),
     ...(sourceProvidersUrl && {
       sourceProviders: {
         openalex: `${sourceProvidersUrl}/openalex`,
@@ -533,6 +545,7 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
     // An outside agent starts the shim (#351) the same way: this app's binary, as plain Node,
     // running the shim built beside this file (inside app.asar, which Node mode reads).
     agents: {
+      offered: SHOW_AGENT_CONNECTION,
       launcher: {
         command: process.execPath,
         args: [join(__dirname, "agentShim.js")],
