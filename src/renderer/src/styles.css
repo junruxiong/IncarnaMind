@@ -1251,6 +1251,12 @@
       outline-offset: 1px;
     }
   }
+  /* When the whole Mind was last checked (#737): text, not a part to go to. */
+  .mind-health-when {
+    padding: 0 3px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
   .mind-health-icon {
     box-sizing: border-box;
     width: 12px;
@@ -1814,6 +1820,20 @@
     width: 12px;
     height: 12px;
     flex-shrink: 0;
+  }
+  /*
+   * Another model answers while the chosen one's plan limit is used up: filled, so it reads as a
+   * state. "All Documents" beside it gives up its room first, down to its icon, so the time shows:
+   * with no flex basis it only takes the room left, and the model chip shrinks only after it.
+   */
+  .composer-model[data-stand-in]:not(:hover, [aria-expanded="true"]) {
+    background: var(--color-hover);
+    color: var(--color-ink-secondary);
+  }
+  .composer-controls:has([data-stand-in]) > .composer-scope-all {
+    flex: 1 1 0;
+    min-width: 22px;
+    max-width: max-content;
   }
   .composer-model-anchor {
     display: flex;
@@ -4995,7 +5015,8 @@
     flex-direction: column;
     min-width: 0;
     min-height: 0;
-    overflow: hidden;
+    /* Clip, not hidden: a picker wider than the composer mustn't scroll the panel sideways as it scrolls its choice into view. */
+    overflow: clip;
     border-radius: 10px;
     background: var(--color-sheet);
     container: assistant / inline-size;
@@ -5711,6 +5732,22 @@
   .task-progress-dot {
     color: var(--color-ink-placeholder);
   }
+  /* Done, what it made, before Review: "1 source saved · 2 changes proposed". */
+  .task-progress-summary {
+    color: var(--color-ink);
+  }
+  /* Stopped at a limit, the steps it has still to do (#130). */
+  .task-progress-remaining {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    color: var(--color-ink-secondary);
+  }
+  .task-progress-remaining-label {
+    font-size: 12.5px;
+    line-height: 18px;
+    color: var(--color-ink-meta);
+  }
 
   /*
    * An Answer's steps (#391; DESIGN.md, Answer › In the assistant): one
@@ -6257,6 +6294,311 @@
     }
     .approval-button--primary {
       padding: 0 10px;
+    }
+  }
+  /* A Research Task in the thread: its topic as the Question, its progress under it (#130). */
+  .assistant-task {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  /*
+   * Research's plan card (#130; DESIGN.md, Task tray › Plan card): the steps,
+   * sources and where it writes scroll inside the tray; the estimate, Cancel
+   * and Start stay pinned at its foot.
+   */
+  .research-plan {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+
+    & + * {
+      border-top: 1px solid var(--color-rule);
+    }
+  }
+  .research-plan-body {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 12px 12px 4px;
+  }
+  /* At the foot of the steps as they scroll, so Sources and Write into stay in view while there is room. */
+  .research-plan-settings {
+    position: sticky;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: auto;
+    padding-top: 4px;
+    background: var(--color-sheet);
+  }
+  .research-plan-kind {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    font-size: 12.5px;
+    line-height: 16px;
+    color: var(--color-ink-meta);
+  }
+  .research-plan-title {
+    margin: 0;
+    font-size: var(--text-ui);
+    line-height: var(--text-ui--line-height);
+    font-weight: 600;
+    overflow-wrap: break-word;
+  }
+  .research-plan-planning {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    color: var(--color-ink-meta);
+  }
+  .research-plan-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .research-plan-step {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    border-radius: 4px;
+
+    &:hover,
+    &:focus-within {
+      background: var(--color-frame);
+    }
+    &:hover .research-plan-remove,
+    &:focus-within .research-plan-remove {
+      opacity: 1;
+    }
+  }
+  .research-plan-step--fixed:hover {
+    background: none;
+  }
+  .research-plan-number {
+    flex: none;
+    min-width: 18px;
+    padding: 2px 0 2px 2px;
+    color: var(--color-ink-meta);
+    font-variant-numeric: tabular-nums;
+  }
+  .research-plan-field {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 2px 0;
+    border: 0;
+    background: transparent;
+    resize: none;
+    field-sizing: content;
+    font: inherit;
+    color: var(--color-ink);
+    overflow-wrap: break-word;
+
+    &:focus {
+      outline: none;
+    }
+    &:disabled {
+      color: var(--color-ink-meta);
+    }
+  }
+  .research-plan-fixed {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 2px 0;
+    color: var(--color-ink-meta);
+    overflow-wrap: break-word;
+  }
+  .research-plan-remove {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    margin-top: -1px;
+    border-radius: 4px;
+    color: var(--color-ink-meta);
+    opacity: 0;
+
+    &:hover {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
+    &:focus-visible {
+      opacity: 1;
+    }
+  }
+  .research-plan-add {
+    display: inline-flex;
+    align-self: flex-start;
+    align-items: center;
+    gap: 6px;
+    height: 22px;
+    padding: 0 6px 0 2px;
+    border-radius: 4px;
+    color: var(--color-ink-meta);
+
+    &:hover {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
+  }
+  .research-plan-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 10px;
+    min-width: 0;
+  }
+  .research-plan-label {
+    flex: none;
+    min-width: 64px;
+    font-size: 12.5px;
+    color: var(--color-ink-meta);
+  }
+  .research-plan-sources {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .research-plan-source {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 24px;
+    padding: 0 8px;
+    border: 1px solid var(--color-rule);
+    border-radius: 6px;
+    background: var(--color-sheet);
+    font-size: 12.5px;
+    color: var(--color-ink-secondary);
+
+    &[aria-pressed="true"] {
+      border-color: var(--color-rule-strong);
+      background: var(--color-frame);
+      color: var(--color-ink);
+    }
+    &:hover:not(:disabled) {
+      background: var(--color-hover);
+    }
+    &:disabled {
+      color: var(--color-ink-placeholder);
+    }
+  }
+  .research-plan-target {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    max-width: 100%;
+    height: 24px;
+    padding: 0 6px;
+    margin-left: -6px;
+    border-radius: 6px;
+    font-weight: 600;
+
+    &:hover,
+    &[aria-expanded="true"] {
+      background: var(--color-hover);
+    }
+  }
+  .research-plan-note {
+    margin: -2px 0 0;
+    font-size: 12.5px;
+    line-height: 16px;
+    color: var(--color-ink-meta);
+  }
+  .research-plan-problem {
+    flex: none;
+    padding: 4px 12px 0;
+  }
+  .research-plan-foot {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 8px 8px 12px;
+  }
+  .research-plan-estimate {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 12.5px;
+    line-height: 16px;
+    color: var(--color-ink-meta);
+    overflow-wrap: break-word;
+  }
+  /* A running plan's steps read as text, not as fields to edit. */
+  .research-plan-fixed--ink {
+    color: var(--color-ink);
+  }
+  .research-plan-view-mind {
+    min-width: 0;
+    font-weight: 600;
+    overflow-wrap: break-word;
+  }
+  /*
+   * What the User told a Task that it hasn't read yet (#130; DESIGN.md, Task
+   * tray › Queued messages), nearest the composer, wrapping rather than cut.
+   */
+  .task-queued {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    margin: 0;
+    padding: 4px 4px 4px 10px;
+    list-style: none;
+
+    & + * {
+      border-top: 1px solid var(--color-rule);
+    }
+  }
+  .task-queued-message {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    min-height: 24px;
+    padding: 3px 0;
+  }
+  .task-queued-arrow {
+    flex: none;
+    color: var(--color-ink-meta);
+  }
+  .task-queued-text {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    word-break: normal;
+  }
+  .task-queued-when {
+    color: var(--color-ink-meta);
+  }
+  .task-queued-remove {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    margin-top: -1px;
+    border-radius: 4px;
+    color: var(--color-ink-meta);
+
+    &:hover {
+      background: var(--color-hover);
+      color: var(--color-ink);
     }
   }
   .task-ask-count {

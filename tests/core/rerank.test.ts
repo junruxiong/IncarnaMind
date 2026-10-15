@@ -249,9 +249,9 @@ describe("Rerank", { timeout: 30_000 }, () => {
     expect(shown[0]?.document).toBe("Coast");
     expect(rerankers.calls).toEqual([]);
     await expect(core.saveRerankSettings({ kind: "voyage", apiKey: "voyage-key" })).rejects.toThrow(
-      /Local mode/,
+      /Keep everything on this computer/,
     );
-    await expect(core.testRerankConnection()).rejects.toThrow(/Local mode/);
+    await expect(core.testRerankConnection()).rejects.toThrow(/Keep everything on this computer/);
 
     await core.setLocalOnly(false);
     expect((await ask())[0]?.document).toBe("Weather");
