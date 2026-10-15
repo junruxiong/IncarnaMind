@@ -6,12 +6,14 @@ import type {
   SecretStorageStatus,
   TestChatConnectionInput,
 } from "../../../../core/api";
+import { catalogMenu } from "../../../../core/providers/catalog";
 import {
   catalogProviderOfKind,
   endpointOf,
   KEY_PROVIDER_KINDS,
   keyProviderGroups,
 } from "../../../../core/providers/catalog/providers";
+import type { Role } from "../../../../core/providers/catalog/types";
 import type { MessageKey } from "../../../../shared/i18n";
 import { modelName } from "../../../../shared/modelName";
 import { core } from "../../core";
@@ -49,12 +51,20 @@ const ROW: readonly FormKind[] = ["anthropic", "openai", "google", "deepseek", "
 /** The "Another model…" choice of the model list. */
 const OTHER_MODEL = "\u0000other";
 
-/** A provider's current models from our own list: the recommended one first, then its other roles. */
-function modelChoices(kind: FormKind): string[] {
+/** Beside a model the catalog picked for a job, what it is good for; the recommended one has its own line. */
+const ROLE_HINTS = {
+  strongest: "providers.form.hint.strongest",
+  quickTasks: "providers.form.hint.quickTasks",
+  images: "providers.form.hint.images",
+} as const satisfies Partial<Record<Role, MessageKey>>;
+
+function roleHint(kind: FormKind, modelId: string): MessageKey | undefined {
   const roles = catalogProviderOfKind(kind)?.roles;
-  return [...new Set([roles?.answers, roles?.strongest, roles?.quickTasks])].filter(
-    (id): id is string => id !== undefined,
+  if (!roles || roles.answers === modelId) return undefined;
+  const role = (["strongest", "quickTasks", "images"] as const).find(
+    (each) => roles[each] === modelId,
   );
+  return role && ROLE_HINTS[role];
 }
 
 /** An OpenAI-compatible server's address as the User typed it, by its host. */
@@ -82,6 +92,7 @@ export function ProviderForm({
   withMoreProviders = false,
   initialKind,
   refused = null,
+  standalone = false,
 }: {
   /** Saved providers, to tell the User when a key is already stored. */
   providers: readonly ChatProvider[];
@@ -92,6 +103,8 @@ export function ProviderForm({
   initialKind?: FormKind;
   /** A key its provider refused: the form opens on that provider, says so by the key, and focuses it. */
   refused?: KeyRefusal | null;
+  /** The setup card's key step: the form is titled with the company picked, and opens on the key. */
+  standalone?: boolean;
 }) {
   const t = useT();
   const id = useId();
@@ -100,7 +113,7 @@ export function ProviderForm({
     refused?.kind ?? initialKind ?? (language === "zh-CN" ? "deepseek" : "anthropic");
   const [kind, setKind] = useState<FormKind | null>(first);
   const [otherModel, setOtherModel] = useState(
-    refused !== null && !modelChoices(refused.kind).includes(refused.modelId),
+    refused !== null && !catalogMenu(refused.kind, refused.endpoint).includes(refused.modelId),
   );
   const [moreOpen, setMoreOpen] = useState(false);
   /** The region of a provider that has several; its first otherwise. */
@@ -127,7 +140,10 @@ export function ProviderForm({
   // providers" opened when its provider is listed there.
   // biome-ignore lint/correctness/useExhaustiveDependencies: once, as the form opens on it.
   useEffect(() => {
-    if (!refused) return;
+    if (!refused) {
+      if (standalone) keyField.current?.focus();
+      return;
+    }
     if (more.includes(refused.kind)) setMoreOpen(true);
     keyField.current?.scrollIntoView({ block: "center" });
     keyField.current?.focus({ preventScroll: true });
@@ -153,6 +169,11 @@ export function ProviderForm({
             : null;
   const complete = kind !== null && missing === null;
 
+  const shortName = (option: FormKind) =>
+    option === "qwen" || option === "deepseek"
+      ? t(`providers.kind.short.${option}`)
+      : t(`providers.kind.${option}`);
+
   const chip = (option: FormKind) => (
     <label
       key={option}
@@ -168,9 +189,7 @@ export function ProviderForm({
         onChange={() => choose(option)}
         className="sr-only"
       />
-      {option === "qwen" || option === "deepseek"
-        ? t(`providers.kind.short.${option}`)
-        : t(`providers.kind.${option}`)}
+      {shortName(option)}
     </label>
   );
 
@@ -243,16 +262,33 @@ export function ProviderForm({
   };
   const site = siteOf(endpoint?.keyUrl ?? catalog?.keyUrl);
   const providerName = kind ? t(`providers.kind.${kind}`) : "";
-  const choices = kind && kind !== "openai-compatible" ? modelChoices(kind) : [];
+  const choices = kind && kind !== "openai-compatible" ? catalogMenu(kind, endpoint?.id) : [];
   const recommended = choices[0];
   const shownName = (id: string) =>
     modelName(id, { kind: kind ?? undefined, endpoint: endpoint?.id });
+  const optionName = (id: string) => {
+    const hint = kind ? roleHint(kind, id) : undefined;
+    return hint
+      ? t("providers.form.modelHint", { model: shownName(id), hint: t(hint) })
+      : shownName(id);
+  };
+  const example = catalog?.roles.answers;
   const typedModel = kind === "openai-compatible" || otherModel || choices.length === 0;
   const rowKinds = ROW.filter((each) => main.includes(each) || more.includes(each));
   const underMore = [...main, ...more].filter((each) => !rowKinds.includes(each));
 
   return (
     <form data-testid="provider-form" onSubmit={submit} className="flex flex-col gap-3">
+      {standalone && kind && (
+        <h3
+          data-testid="provider-form-title"
+          className="text-[15px] leading-6 font-semibold text-ink"
+        >
+          {kind === "openai-compatible"
+            ? t("providers.form.title.server")
+            : t("providers.form.title", { provider: shortName(kind) })}
+        </h3>
+      )}
       <fieldset>
         <legend className="sr-only">{t("providers.form.label")}</legend>
         <div className="flex flex-wrap gap-1">
@@ -282,6 +318,13 @@ export function ProviderForm({
                   // A key belongs to its region: it is never sent to another.
                   key.clear();
                   setEndpointId(event.target.value);
+                  if (!otherModel) {
+                    setModelId((current) =>
+                      catalogMenu(kind, event.target.value).includes(current)
+                        ? current
+                        : suggestedModel(kind),
+                    );
+                  }
                   setTest(null);
                   setError(null);
                 }}
@@ -354,6 +397,7 @@ export function ProviderForm({
                 value={modelId}
                 onChange={(event) => setModelId(event.target.value)}
                 spellCheck={false}
+                placeholder={example && t("providers.form.modelExample", { model: example })}
                 data-testid="provider-model-text"
                 className={inputClass}
               />
@@ -376,7 +420,7 @@ export function ProviderForm({
               >
                 {choices.map((id) => (
                   <option key={id} value={id} title={id}>
-                    {shownName(id)}
+                    {optionName(id)}
                   </option>
                 ))}
                 <option value={OTHER_MODEL}>{t("providers.form.anotherModel")}</option>

@@ -1,3 +1,4 @@
+import { SHOW_AGENT_CONNECTION } from "../../../../shared/agentConnection";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
 import {
@@ -16,7 +17,8 @@ const GOOGLE_CREDITS = "https://developers.google.com/program";
 /**
  * Settings → Models → "Already pay for a plan?": the routes for a plan the User already has.
  * ChatGPT signs in; Claude and Google AI plans can't be used by other apps, so the plan pays
- * where the User uses IncarnaMind from (the Claude app, Antigravity: Settings → Agents).
+ * where the User uses IncarnaMind from (the Claude app, Antigravity: Settings → Agents), which
+ * are offered only with the agent connection.
  */
 export function PlansSettings() {
   const t = useT();
@@ -48,37 +50,41 @@ export function PlansSettings() {
             {t("chatgpt.continue")}
           </button>,
         )}
-        {row(
-          t("plans.claude.title"),
-          t("plans.claude.line"),
-          <button
-            type="button"
-            data-testid="plans-claude"
-            onClick={() => showPage("agents")}
-            className={buttonStyle("secondary", "sm")}
-          >
-            {t("setup.claude.connect")}
-          </button>,
-        )}
-        {row(
-          t("plans.google.title"),
-          t("plans.google.line"),
-          <button
-            type="button"
-            data-testid="plans-google"
-            onClick={() => showPage("agents")}
-            className={buttonStyle("secondary", "sm")}
-          >
-            {t("plans.google.connect")}
-          </button>,
-          <a
-            href={GOOGLE_CREDITS}
-            target="_blank"
-            rel="noreferrer"
-            className="text-[13px] font-semibold text-accent underline-offset-2 hover:underline"
-          >
-            {t("plans.google.credits")} ↗
-          </a>,
+        {SHOW_AGENT_CONNECTION && (
+          <>
+            {row(
+              t("plans.claude.title"),
+              t("plans.claude.line"),
+              <button
+                type="button"
+                data-testid="plans-claude"
+                onClick={() => showPage("agents")}
+                className={buttonStyle("secondary", "sm")}
+              >
+                {t("setup.claude.connect")}
+              </button>,
+            )}
+            {row(
+              t("plans.google.title"),
+              t("plans.google.line"),
+              <button
+                type="button"
+                data-testid="plans-google"
+                onClick={() => showPage("agents")}
+                className={buttonStyle("secondary", "sm")}
+              >
+                {t("plans.google.connect")}
+              </button>,
+              <a
+                href={GOOGLE_CREDITS}
+                target="_blank"
+                rel="noreferrer"
+                className="text-[13px] font-semibold text-accent underline-offset-2 hover:underline"
+              >
+                {t("plans.google.credits")} ↗
+              </a>,
+            )}
+          </>
         )}
       </ul>
     </section>

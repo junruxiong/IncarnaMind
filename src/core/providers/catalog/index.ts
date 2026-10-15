@@ -18,7 +18,8 @@
 import type { CannotAnswerReason, ChatProviderKind, OtherModel } from "../../api";
 import generated from "./models.json";
 import { OVERRIDES } from "./overrides";
-import type { CatalogModel, GeneratedProviderModels, ModelFacts } from "./types";
+import { catalogProviderOfKind } from "./providers";
+import type { CatalogModel, GeneratedProviderModels, ModelFacts, Role } from "./types";
 
 export { LOCAL_MODEL_TIERS, LOCAL_MODELS, recommendedLocalModels } from "./local";
 export {
@@ -152,4 +153,42 @@ export function modelsProviderOfKind(kind: ChatProviderKind, endpoint?: string |
   if (kind === "chatgpt") return "openai";
   const regional = endpoint ? `${kind}/${endpoint}` : undefined;
   return regional && MODELS.has(regional) ? regional : kind;
+}
+
+/** The most models a provider's menu shows. */
+export const MAX_MENU_MODELS = 100;
+
+/**
+ * A provider's model menu, as Settings' Default model and the key form show
+ * it: its Answers, strongest and quick models first, where `inMenu` has them,
+ * then the rest of `inMenu` in its order.
+ */
+export const withRolesFirst = (
+  roles: Partial<Record<Role, string>> | undefined,
+  inMenu: readonly string[],
+): string[] => [
+  ...new Set([
+    ...[roles?.answers, roles?.strongest, roles?.quickTasks].filter(
+      (id): id is string => id !== undefined && inMenu.includes(id),
+    ),
+    ...inMenu,
+  ]),
+];
+
+/**
+ * What a provider's menu will hold once its key is saved, before its own list
+ * can be asked for: the catalog's ids that `otherModel` keeps, a dated
+ * snapshot giving way to its model (a provider lists one of the two), in the
+ * menu's order.
+ */
+export function catalogMenu(kind: ChatProviderKind, endpoint?: string | null): string[] {
+  const providerId = modelsProviderOfKind(kind, endpoint);
+  const ids = new Set(MODELS.get(providerId)?.keys());
+  const current = [...ids]
+    .filter((id) => {
+      const base = withoutDateSuffix(id);
+      return !(base !== id && ids.has(base)) && !otherModel(providerId, id, ids);
+    })
+    .sort((a, b) => a.localeCompare(b));
+  return withRolesFirst(catalogProviderOfKind(kind)?.roles, current).slice(0, MAX_MENU_MODELS);
 }
