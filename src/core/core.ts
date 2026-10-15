@@ -188,6 +188,7 @@ import { chatClassifier } from "./tags/classify";
 import { createJevTagging } from "./tags/jev";
 import { createTagger, TAGGING_FLOW_SENDS } from "./tags/tagger";
 import { createWebSearch, WEB_SEARCH_SENDS } from "./tools/web";
+import { createPublicFetch } from "./tools/web/fetcher";
 import {
   createTranscriptionModel,
   QWEN3_ASR_0_6B,
@@ -213,9 +214,11 @@ export interface Core extends CoreApi, CoreEventSource {
   openDocumentFile(documentId: string): Promise<DocumentFile>;
   /**
    * Opens a picture a live Markdown Document shows from beside it, by the
-   * relative path written in the file ("figures/map.png"), for the host to
-   * serve to the viewer: only images, only from the file's folder or below
-   * it. Throws NotFoundError for anything else.
+   * relative path written in the file ("figures/map.png"), or one a saved web
+   * page shows, by its path in the snapshot ("pictures/<hash>.png", #756),
+   * for the host to serve to the viewer: only images, only from the file's
+   * folder or below it, only those the page's versions show. Throws
+   * NotFoundError for anything else.
    */
   openDocumentImage(documentId: string, path: string): Promise<DocumentImage>;
   /**
@@ -645,6 +648,8 @@ export function createCore(adapters: CoreAdapters): Core {
     db.close();
     throw error;
   }
+  // A saved page's pictures may come from any host: only the public internet is reached (#756).
+  const pictureFetcher = createPublicFetch(adapters.web);
   const webPages = createWebPages({
     db,
     dataDir,
@@ -652,6 +657,8 @@ export function createCore(adapters: CoreAdapters): Core {
     documents,
     languages: () =>
       settings.get().language === "zh-CN" ? ["zh-CN", "zh;q=0.9", "en;q=0.8"] : ["en", "*;q=0.5"],
+    pictureFetch: pictureFetcher.fetch,
+    reportError: (error) => console.error("A web page's picture couldn't be fetched:", error),
     ...adapters.webPages,
   });
   webPages.dropPurged().catch((error: unknown) => console.error(error));
@@ -3202,6 +3209,7 @@ export function createCore(adapters: CoreAdapters): Core {
       // the User's approval are denied, and Skill scripts running are stopped.
       answers.stopAll();
       void webSearch.close().catch((error: unknown) => console.error(error));
+      void pictureFetcher.close().catch((error: unknown) => console.error(error));
       suggestions.stop();
       edits.stopAll();
       checks.stopAll();
