@@ -24,7 +24,7 @@ import { child, descendants, elements, local, onOff, parseXml, type XmlElement }
  * How the look was read. A Mind whose look an earlier version read has it
  * cleared (attributes, marks and map) and given again at the next start.
  */
-export const WORD_LOOK_VERSION = 1;
+export const WORD_LOOK_VERSION = 2;
 
 const MAX_STYLE_DEPTH = 20;
 
@@ -825,7 +825,7 @@ export class LookReader {
       ],
     };
     const context = this.paragraph(paragraph, table);
-    const run = this.run(undefined, context, 0);
+    const run = this.run(undefined, context, 0).key;
     const key = this.paragraphKey(context, run && this.canBeParagraphRun(run) ? run : null);
     this.nextLooks.set(id, key);
     return key;
@@ -858,7 +858,7 @@ export class LookReader {
     rPr: XmlElement | undefined,
     paragraph: ParagraphLookContext,
     characters: number,
-  ): string | null {
+  ): { key: string | null; look: WordRunLook } {
     const styleId = rPr && child(rPr, "w:rStyle")?.attrs["w:val"];
     let characterRuns: RunProps = {};
     for (const level of this.chain("character", styleId ?? null)) {
@@ -871,7 +871,8 @@ export class LookReader {
         (this.charactersBySize.get(props.size) ?? 0) + characters,
       );
     }
-    return this.runs.key(this.runLook(props));
+    const look = this.runLook(props);
+    return { key: this.runs.key(look), look };
   }
 
   private runLook(props: RunProps): WordRunLook {

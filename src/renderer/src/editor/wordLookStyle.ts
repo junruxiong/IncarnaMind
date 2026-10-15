@@ -1,19 +1,20 @@
+import type { Editor } from "@tiptap/core";
 import { useEffect, useMemo, useState } from "react";
 import type * as Y from "yjs";
 import { mindLookOf, observeWordLook, setMindLook, wordLookOf } from "../../../shared/wordLook";
 import { useAppStore } from "../store";
 import { holdWordLook } from "../wordLooks";
-import { useWordFile } from "./WordOrigin";
+import { openOriginalAtCaret, useWordFile } from "./WordOrigin";
 import { wordLookCss, wordLookScope } from "./wordLookCss";
 
+const lookIn = (doc: Y.Doc) => ({ look: wordLookOf(doc), shown: mindLookOf(doc) });
+
 /** The Mind's Word look as its frame's class and stylesheet; null while it is drawn as a plain Mind. */
-export function useWordLookStyle(doc: Y.Doc, mindId: string) {
-  const read = () => ({ look: wordLookOf(doc), shown: mindLookOf(doc) });
-  const [state, setState] = useState(read);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `read` only reads `doc`.
+export function useWordLookStyle(doc: Y.Doc, mindId: string, editor: Editor | null) {
+  const [state, setState] = useState(() => lookIn(doc));
   useEffect(() => {
-    setState(read());
-    return observeWordLook(doc, () => setState(read()));
+    setState(lookIn(doc));
+    return observeWordLook(doc, () => setState(lookIn(doc)));
   }, [doc]);
   const { file } = useWordFile(doc);
   const documentId = file?.documentId ?? null;
@@ -25,10 +26,10 @@ export function useWordLookStyle(doc: Y.Doc, mindId: string) {
     if (!state.look) return;
     return holdWordLook(mindId, {
       shown: state.shown,
-      originalId,
       choose: (look) => setMindLook(doc, look),
+      openOriginal: originalId ? () => openOriginalAtCaret(originalId, editor, doc) : null,
     });
-  }, [state, mindId, originalId, doc]);
+  }, [state, mindId, originalId, doc, editor]);
 
   return useMemo(
     () =>

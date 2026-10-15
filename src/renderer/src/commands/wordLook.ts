@@ -1,5 +1,4 @@
 import type { MindLook } from "../../../shared/wordLook";
-import { openDocumentBeside } from "../verify";
 import { useWordLooks } from "../wordLooks";
 import type { Command, CommandContext } from "./registry";
 import { mindShown, onlyOne } from "./targets";
@@ -34,14 +33,11 @@ export const wordLookCommands: readonly Command[] = [
   },
   {
     id: "mind.openOriginal",
-    label: "look.openOriginal",
+    label: "wordImport.openOriginal",
     keywords: ["look.keywords"],
     group: "open",
     reversible: true,
-    when: (ctx) => onlyOne(ctx) && Boolean(lookShown(ctx)?.originalId),
-    run: (ctx) => {
-      const originalId = lookShown(ctx)?.originalId;
-      if (originalId) openDocumentBeside(originalId);
-    },
+    when: (ctx) => onlyOne(ctx) && Boolean(lookShown(ctx)?.openOriginal),
+    run: (ctx) => lookShown(ctx)?.openOriginal?.(),
   },
 ];
