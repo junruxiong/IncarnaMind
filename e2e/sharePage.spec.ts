@@ -8,6 +8,7 @@ import {
   blocksUpdate,
   createDataFolder,
   dismissChatSetup,
+  exportFromMenu,
   launchApp,
   type MindChild,
   mindNode,
@@ -174,7 +175,7 @@ test("a web page to share: the sheet offers it, and the file loads nothing and o
   await expect(sheet).toBeHidden();
   await expect(window.getByTestId("export-mind")).toHaveAttribute("data-format", "share-page");
 
-  await pointAndClick(window, window.getByTestId("export-mind"));
+  await exportFromMenu(window);
   const page = await openOffline(app, await savedPath(window, "Tides.html"));
 
   // Nothing but the file was asked for, and the page's policy refuses a request it tries.

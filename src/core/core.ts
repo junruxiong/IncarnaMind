@@ -537,6 +537,7 @@ export function createCore(adapters: CoreAdapters): Core {
       db,
       dataDir,
       now,
+      log: adapters.log ?? silentLogger,
       model: embedding.model,
       textRecognition: textRecognitionModel,
       pdfPassword: (id) => pdfPasswords.of(id),

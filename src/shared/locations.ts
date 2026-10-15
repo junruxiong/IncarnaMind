@@ -78,6 +78,7 @@ export function parseLocation(value: unknown): CitationLocation | null {
         paragraphs.to >= paragraphs.from
           ? { paragraphs: { from: paragraphs.from, to: paragraphs.to } }
           : {}),
+        ...(isCount(location.figure) ? { figure: location.figure } : {}),
       };
     }
     default:
@@ -138,6 +139,9 @@ export function formatLocation(location: CitationLocation, t: Translate): string
           ? t("location.section", { heading: location.heading })
           : t("location.section.start");
       const { paragraphs } = location;
+      if (location.figure) {
+        return t("location.section.figure", { section, number: location.figure });
+      }
       if (paragraphs) {
         return t(
           paragraphs.to !== paragraphs.from
@@ -321,6 +325,15 @@ function paragraphsCovered(
   return numbers.length > 0 ? { from: Math.min(...numbers), to: Math.max(...numbers) } : null;
 }
 
+/** The picture a quote starts in, as its anchor numbers it ("figure2", "figure2.line3"); null in text. */
+function figureAt(where: UnitText, offset: number): number | null {
+  for (const anchor of anchorsOf(where)) {
+    const number = /^figure(\d+)$/.exec(anchor.target)?.[1];
+    if (number && anchor.start <= offset && offset < anchor.end) return Number(number);
+  }
+  return null;
+}
+
 /** A request for a narrower range than the Units cited: rows or lines the model named. */
 export interface RowsOrLines {
   from: number;
@@ -364,6 +377,8 @@ export function locationOf(
       if (section?.kind !== "section") return section;
       const comment = parts[0] ? commentAt(where, parts[0].start) : null;
       if (comment) return { ...section, comment };
+      const figure = parts[0] ? figureAt(where, parts[0].start) : null;
+      if (figure) return { ...section, figure };
       const paragraphs = paragraphsCovered(units, parts, where);
       return paragraphs ? { ...section, paragraphs } : section;
     }
@@ -438,9 +453,9 @@ export type RequestedLocation =
  */
 const A_COMMENT = /\s*(?:[,，;(]\s*(?:a\s+)?comment(?:\s+by\b.*)?|[,，]\s*[^,，]*批注)\)?$/iu;
 
-/** What a web page's Location adds after its section: ", ¶ 3", "，第 3 段" (#261). */
+/** What a web page's Location adds after its section: ", ¶ 3", "，第 3 段" (#261), ", figure 2", "，图 2". */
 const A_PARAGRAPH =
-  /\s*[,，;]?\s*(?:¶{1,2}\s*\d+(?:\s*[-–—]\s*\d+)?|第\s*\d+(?:\s*[-–—]\s*\d+)?\s*段)$/u;
+  /\s*[,，;]?\s*(?:¶{1,2}\s*\d+(?:\s*[-–—]\s*\d+)?|第\s*\d+(?:\s*[-–—]\s*\d+)?\s*段|(?:figure|fig\.?)\s*\d+|图\s*\d+)$/iu;
 
 const RANGE = String.raw`(\d{1,7})(?:\s*(?:-|–|—|to|and)\s*(\d{1,7}))?`;
 const range = (from: string | undefined, to: string | undefined) => {

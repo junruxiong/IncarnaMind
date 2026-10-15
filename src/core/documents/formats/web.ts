@@ -3,8 +3,14 @@
  * section, as for Markdown, its paragraphs anchored "p1", "p2"… from the
  * heading so a Location can name them ("§ History, ¶ 3"). Pure: the worker
  * indexes with it and the viewer draws with it, so both see the same blocks.
+ *
+ * A picture saved with the page is a block of its own, numbered in
+ * the page from 1 and anchored "figure2": its description, and the text
+ * read from it, each line anchored "figure2.line3" with its box on
+ * the picture. A picture's text never moves where a section is cut, so the
+ * viewer, which has only the descriptions, cuts the page where the index did.
  */
-import type { Anchor, TextUnit } from "../../../shared/units";
+import type { Anchor, TextUnit, UnitFigure } from "../../../shared/units";
 import { MAX_SECTION_CHARS } from "./docx";
 import { ExtractionError } from "./errors";
 import { elements, parseXml, textOf, type XmlElement, type XmlNode } from "./xml";
@@ -25,6 +31,71 @@ export interface WebBlock {
   level: number | null;
   /** As indexed: a table's rows on lines, their cells separated by tabs. */
   text: string;
+  /** A saved picture's number in the page, from 1. */
+  figure?: number;
+  /** A saved picture's lines read: spans of `text`, with their boxes. */
+  lines?: { start: number; end: number; quad: number[] }[];
+  reading?: Omit<UnitFigure, "number">;
+}
+
+export const SAVED_PICTURE = /^pictures\/[0-9a-f]{64}\.(?:png|jpg|gif|webp|avif)$/;
+
+export interface FigureReading {
+  reader: string;
+  /** Its lines, in reading order. */
+  text: string;
+  /** Spans of `text`, with their boxes on the picture as fractions (see `Anchor.quad`). */
+  lines: { start: number; end: number; quad: number[] }[];
+  unsure?: [number, number][];
+  /** It couldn't be read now: only its description is text. */
+  unread?: boolean;
+}
+
+interface Figures {
+  count: number;
+  readings: ReadonlyMap<number, FigureReading> | null;
+}
+
+function savedPictures(nodes: readonly XmlNode[]): XmlElement[] {
+  const found: XmlElement[] = [];
+  for (const node of nodes) {
+    if (typeof node === "string") continue;
+    if (nameOf(node) === "img" && SAVED_PICTURE.test(node.attrs.src ?? "")) found.push(node);
+    else found.push(...savedPictures(node.children));
+  }
+  return found;
+}
+
+function pushFigures(nodes: readonly XmlNode[], out: WebBlock[], figures: Figures): void {
+  for (const img of savedPictures(nodes)) {
+    const figure = ++figures.count;
+    const description = (img.attrs.alt ?? "").replace(SPACES, " ").trim();
+    const reading = figures.readings?.get(figure);
+    const offset = description && reading?.text ? description.length + 1 : 0;
+    out.push({
+      element: img,
+      level: null,
+      text: [description, reading?.text ?? ""].filter(Boolean).join("\n"),
+      figure,
+      ...(reading && {
+        lines: reading.lines.map((line) => ({
+          ...line,
+          start: line.start + offset,
+          end: line.end + offset,
+        })),
+        reading: {
+          reader: reading.reader,
+          ...(reading.unsure?.length && {
+            unsure: reading.unsure.map(([from, to]): [number, number] => [
+              from + offset,
+              to + offset,
+            ]),
+          }),
+          ...(reading.unread && { unread: true }),
+        },
+      }),
+    });
+  }
 }
 
 /** `blocks`: the indexes of its first and last block. */
@@ -124,28 +195,33 @@ const preText = (pre: XmlElement) =>
     .replace(/^\r?\n/, "")
     .trimEnd();
 
-function collectBlocks(container: XmlElement, out: WebBlock[]): void {
+function collectBlocks(container: XmlElement, out: WebBlock[], figures: Figures): void {
   for (const element of elements(container)) {
     const name = nameOf(element);
     const heading = HEADING.exec(name);
     if (heading) {
       const text = inlineText(element.children);
       if (text) out.push({ element, level: Number(heading[1]), text });
+      pushFigures(element.children, out, figures);
     } else if (name === "pre") {
       const text = preText(element);
       if (text.trim()) out.push({ element, level: null, text });
     } else if (name === "table") {
       const text = tableText(element);
       if (text) out.push({ element, level: null, text });
+      pushFigures(element.children, out, figures);
     } else if (name === "li") {
-      const text = inlineText(element.children.filter((node) => !isBlock(node)));
+      const inline = element.children.filter((node) => !isBlock(node));
+      const text = inlineText(inline);
       if (text) out.push({ element, level: null, text });
-      collectBlocks(element, out);
+      pushFigures(inline, out, figures);
+      collectBlocks(element, out, figures);
     } else if (PARAGRAPHS.has(name) && !element.children.some(isBlock)) {
       const text = inlineText(element.children);
       if (text) out.push({ element, level: null, text });
+      pushFigures(element.children, out, figures);
     } else if (CONTAINERS.has(name) || PARAGRAPHS.has(name)) {
-      collectBlocks(element, out);
+      collectBlocks(element, out, figures);
     }
   }
 }
@@ -181,14 +257,35 @@ function readMeta(root: XmlElement): WebPageMeta {
   };
 }
 
+interface Section {
+  text: string;
+  /** Its length without pictures' text, which never moves where a section is cut. */
+  measured: number;
+  anchors: Anchor[];
+  figures: UnitFigure[];
+  hasFigure: boolean;
+  first: number;
+  part: number;
+}
+
+const section = (text: string, first: number, part: number): Section => ({
+  text,
+  measured: text.length,
+  anchors: [],
+  figures: [],
+  hasFigure: false,
+  first,
+  part,
+});
+
 function unitsOf(blocks: readonly WebBlock[]): WebUnit[] {
   const units: WebUnit[] = [];
   const path: string[] = [];
-  let current: { text: string; anchors: Anchor[]; first: number; part: number } | null = null;
+  let current: Section | null = null;
   let paragraph = 0;
 
   const close = (last: number) => {
-    if (!current?.text.trim()) return;
+    if (!current || (!current.text.trim() && !current.hasFigure)) return;
     const sectionPath = path.filter(Boolean);
     units.push({
       page: units.length + 1,
@@ -197,6 +294,7 @@ function unitsOf(blocks: readonly WebBlock[]): WebUnit[] {
         path: sectionPath,
         ...(current.part > 1 ? { part: current.part } : {}),
         paragraphs: true,
+        ...(current.figures.length > 0 ? { figures: current.figures } : {}),
       },
       text: current.text,
       anchors: current.anchors,
@@ -210,26 +308,60 @@ function unitsOf(blocks: readonly WebBlock[]): WebUnit[] {
       path.length = block.level - 1;
       path[block.level - 1] = block.text;
       paragraph = 0;
-      current = { text: block.text, anchors: [], first: index, part: 1 };
+      current = section(block.text, index, 1);
       return;
     }
-    if (current?.text && current.text.length + 1 + block.text.length > MAX_SECTION_CHARS) {
+    if (
+      block.figure === undefined &&
+      current?.measured &&
+      current.measured + 1 + block.text.length > MAX_SECTION_CHARS
+    ) {
       close(index - 1);
-      current = { text: "", anchors: [], first: index, part: current.part + 1 };
+      current = section("", index, current.part + 1);
     }
-    current ??= { text: "", anchors: [], first: index, part: 1 };
+    current ??= section("", index, 1);
+    if (block.figure !== undefined) {
+      current.hasFigure = true;
+      if (!block.text) return;
+    } else current.measured += (current.measured > 0 ? 1 : 0) + block.text.length;
     if (current.text) current.text += "\n";
     const start = current.text.length;
     current.text += block.text;
-    paragraph++;
-    current.anchors.push({ start, end: current.text.length, target: `p${paragraph}` });
+    if (block.figure === undefined) {
+      paragraph++;
+      current.anchors.push({ start, end: current.text.length, target: `p${paragraph}` });
+      return;
+    }
+    const target = `figure${block.figure}`;
+    current.anchors.push({ start, end: current.text.length, target });
+    block.lines?.forEach((line, number) => {
+      current?.anchors.push({
+        start: start + line.start,
+        end: start + line.end,
+        target: `${target}.line${number + 1}`,
+        quad: line.quad,
+      });
+    });
+    if (block.reading) {
+      const { unsure, ...reading } = block.reading;
+      current.figures.push({
+        number: block.figure,
+        ...reading,
+        ...(unsure && {
+          unsure: unsure.map(([from, to]): [number, number] => [start + from, start + to]),
+        }),
+      });
+    }
   });
   close(blocks.length - 1);
   return units;
 }
 
 /** Throws `ExtractionError` for anything that isn't a snapshot. */
-export function readWebPage(source: string): WebPage {
+export function readWebPage(
+  source: string,
+  readings: ReadonlyMap<number, FigureReading> | null = null,
+): WebPage {
   const root = parseXml(source);
   if (nameOf(root) !== "html") {
     throw new ExtractionError("unreadable", "This isn't a saved web page.");
@@ -237,10 +369,13 @@ export function readWebPage(source: string): WebPage {
   const body = findElement(root, "body");
   const article = body ? (findElement(body, "article") ?? body) : null;
   const blocks: WebBlock[] = [];
-  if (article) collectBlocks(article, blocks);
+  if (article) collectBlocks(article, blocks, { count: 0, readings });
   return { meta: readMeta(root), article, blocks, units: unitsOf(blocks) };
 }
 
-export function webUnits(source: string): TextUnit[] {
-  return readWebPage(source).units.map(({ blocks: _blocks, ...unit }) => unit);
+export function webUnits(
+  source: string,
+  readings: ReadonlyMap<number, FigureReading> | null = null,
+): TextUnit[] {
+  return readWebPage(source, readings).units.map(({ blocks: _blocks, ...unit }) => unit);
 }
