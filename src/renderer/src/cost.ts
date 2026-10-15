@@ -7,13 +7,15 @@ type Translate = (key: MessageKey, params?: MessageParams) => string;
 
 /**
  * An amount in its currency: cents, and a small amount to its first figures
- * rather than "$0.00", so one short Answer still shows ("$0.0013").
+ * rather than "$0.00", so one short Answer still shows ("$0.0013"). Dollars
+ * are "$" in every language, where Chinese would write "US$".
  */
 export function formatMoney({ amount, currency }: Money, language: Language): string {
   const small = amount > 0 && amount < 0.01;
   return new Intl.NumberFormat(language, {
     style: "currency",
     currency,
+    currencyDisplay: currency === "USD" ? "narrowSymbol" : "symbol",
     minimumFractionDigits: amount === 0 ? 0 : 2,
     maximumFractionDigits: small ? 4 : 2,
   }).format(amount);
@@ -28,6 +30,20 @@ export function formatSpent(
   const [first, second] = spent.map((each) => formatMoney(each, language));
   if (!first) return null;
   return second ? t("cost.and", { first, second }) : first;
+}
+
+/** What is set aside for work still running: "$1.28 set aside for work in progress"; null when nothing is. */
+export function setAsideText(
+  setAside: readonly Money[],
+  t: Translate,
+  language: Language,
+): string | null {
+  const amount = formatSpent(
+    setAside.filter((each) => each.amount > 0),
+    t,
+    language,
+  );
+  return amount && t("cost.setAside", { amount });
 }
 
 /** When a plan's limit resets: the time today, else the day and time. */
@@ -56,7 +72,8 @@ export const notCheckedKey = (stop: RunStop): MessageKey =>
 /**
  * The line before a large run on a model billed per token, shown and never
  * asked: "About 24 calls, 310K tokens, $0.40 · $12.40 of $20 used this month".
- * Null for a plan or a model on this computer, which show nothing.
+ * What is set aside for running work follows, when there is any. Null for a
+ * plan or a model on this computer, which show nothing.
  */
 export function estimateText(
   estimate: RunEstimate,
@@ -73,8 +90,12 @@ export function estimateText(
       })
     : t("cost.estimate.unpriced", { calls: estimate.calls, tokens });
   if (!estimate.cap || !estimate.spentTowardCap) return run;
-  return `${run} · ${t("cost.estimate.month", {
+  const month = t("cost.estimate.month", {
     spent: formatMoney(estimate.spentTowardCap, language),
     cap: formatMoney(estimate.cap, language),
-  })}`;
+  });
+  const aside = estimate.setAsideTowardCap
+    ? setAsideText([estimate.setAsideTowardCap], t, language)
+    : null;
+  return [run, month, aside].filter(Boolean).join(" · ");
 }

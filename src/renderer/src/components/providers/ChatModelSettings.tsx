@@ -3,7 +3,7 @@ import type { ChatGptPlanModel, ChatProvider } from "../../../../core/api";
 import { modelName } from "../../../../shared/modelName";
 import { useAnswers } from "../../answers";
 import { core } from "../../core";
-import { formatSpent } from "../../cost";
+import { formatSpent, setAsideText } from "../../cost";
 import { useLanguage, useT } from "../../i18n";
 import { useKeyRefusals } from "../../keyRefusals";
 import { useModelNames } from "../../modelNames";
@@ -242,8 +242,9 @@ export function ChatModelSettings() {
 
 /**
  * What a provider billed per token cost this month, in its own currency
- * ("This month: $3.20"), once it has been used. A plan's line is in its own
- * section, and a model on this computer costs nothing.
+ * ("This month: $3.20 spent"), once it has been used, with what is set aside
+ * for its running work beside it. A plan's line is in its own section, and a
+ * model on this computer costs nothing.
  */
 function ProviderCostLine({ providerId }: { providerId: string }) {
   const t = useT();
@@ -254,10 +255,19 @@ function ProviderCostLine({ providerId }: { providerId: string }) {
   );
   if (!used) return null;
   const spent = formatSpent(used.spent, t, language);
+  const setAside = setAsideText(used.setAside, t, language);
   const tokens = new Intl.NumberFormat(language).format(used.unpricedTokens);
   return (
     <span data-testid="chat-provider-cost" className="text-[13px] leading-5 text-ink-meta">
       {spent ? t("cost.provider.thisMonth", { spent }) : t("cost.provider.unpriced", { tokens })}
+      {setAside && (
+        <>
+          {" · "}
+          <span data-testid="chat-provider-set-aside" title={t("cost.setAside.hint")}>
+            {setAside}
+          </span>
+        </>
+      )}
     </span>
   );
 }
