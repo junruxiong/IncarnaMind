@@ -218,6 +218,7 @@ test("a dotted leader fills a tab up to a right stop", async () => {
   const page = await placeOf(window, "3");
   const title = await placeOf(window, "Introduction");
   expect(page && title && page.left - title.right).toBeGreaterThan(100);
+  if (SCREENSHOTS) await window.screenshot({ path: join(SCREENSHOTS, "word-tabs-leader.png") });
   await app.close();
 });
 
