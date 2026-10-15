@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { homedir, tmpdir, userInfo } from "node:os";
+import { tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 import * as Y from "yjs";
 import { isCitationStyleId } from "../shared/citationStyles";
@@ -1542,7 +1542,7 @@ export function createCore(adapters: CoreAdapters): Core {
     events,
     now,
     settings,
-    suggested: join(adapters.paths.documents ?? join(homedir(), "Documents"), "IncarnaMind"),
+    suggested: join(adapters.paths.documents, "IncarnaMind"),
     linkedFolders: () => documents.linkedFolders.list(),
     recordOwnFile,
   });
@@ -2173,8 +2173,7 @@ export function createCore(adapters: CoreAdapters): Core {
 
   // Outside agents (#351): the User's own agent, paired in Settings, reads its Folders over the
   // socket and gets Citations IncarnaMind minted and checked. Off until the User turns it on.
-  // Where agents keep their settings and skills.
-  const home = adapters.agents?.home ?? homedir();
+  const { home } = adapters.paths;
   const agents = createAgents({
     db,
     now,
