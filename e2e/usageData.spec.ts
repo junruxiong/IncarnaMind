@@ -197,7 +197,9 @@ test("nothing is sent or kept to send before Send; after it, an example opened c
 
   // An example opened before the question: its event is neither sent nor kept.
   await banner.locator('[data-testid="example-more-link"][data-group="meetings"]').click();
-  await expect(window.locator('[data-testid="example-more-link"][data-group="tea"]')).toBeVisible();
+  await expect(
+    window.locator('[data-testid="example-more-link"][data-group="credit"]'),
+  ).toBeVisible();
   await useLocalChatModel(window);
   await askOwnQuestion(window, card);
   await expect(card).toBeVisible();

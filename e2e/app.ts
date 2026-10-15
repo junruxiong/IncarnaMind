@@ -854,6 +854,23 @@ export async function setWindowSize(
   await resizeContent(app, window, width, height);
 }
 
+const SIZE_WAIT_MS = 30_000;
+const REPORT_WAIT_MS = 2_000;
+
+async function within<T>(answer: Promise<T>, otherwise: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<T>((settle) => {
+    timer = setTimeout(() => settle(otherwise), REPORT_WAIT_MS);
+  });
+  try {
+    return await Promise.race([answer, late]);
+  } catch {
+    return otherwise;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
  * Asks for the content size once, waits until the page has it, then until the
  * page has drawn a frame at it. Chromium sends a page its next size only after
@@ -883,14 +900,31 @@ async function resizeContent(
           const page = await look();
           return [page.width, waitForHeight ? page.height : height];
         },
-        { message },
+        // A loaded runner can take far longer than expect's 5 s to draw the frame the size waits
+        // for (#432); this still ends early enough in the test's 60 s to report what it saw.
+        { message, timeout: SIZE_WAIT_MS },
       )
       .toEqual([width, height]);
   } catch (error) {
-    const content = await browserWindow.evaluate((win) => win.getContentSize());
-    const page = await look();
+    // A window that has stopped answering must not take the report down with it.
+    const [content, page, drawing] = await Promise.all([
+      within(
+        browserWindow.evaluate((win) => win.getContentSize().join(" × ")),
+        "unknown (the app's main process isn't answering)",
+      ),
+      within(
+        look().then((size) => `${size.width} × ${size.height}`),
+        "unknown (the page isn't answering)",
+      ),
+      within(
+        window.evaluate(
+          () => new Promise<string>((drawn) => requestAnimationFrame(() => drawn("drawing"))),
+        ),
+        "not drawing frames",
+      ),
+    ]);
     throw new Error(
-      `${message ?? "The window did not reach its size"}: asked ${width} × ${height}; the window's content is ${content.join(" × ")}, the page ${page.width} × ${page.height}.`,
+      `${message ?? "The window did not reach its size"}: asked ${width} × ${height}; the window's content is ${content}; the page is ${page}, ${drawing}.`,
       { cause: error },
     );
   }
