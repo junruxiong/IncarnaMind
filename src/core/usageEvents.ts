@@ -132,6 +132,7 @@ const DOCUMENT_ERRORS = [
   "file-missing",
   "processing-error",
   "pages-unread",
+  "app-stopped",
 ] as const;
 const CONNECTOR_ERRORS = [
   "missing-command",

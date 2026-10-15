@@ -8,6 +8,9 @@ import { expect, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../../src/core/api";
 import { longContract } from "../../tests/helpers/longContract";
 import {
+  busy,
+  cdp,
+  cdpMetrics,
   click,
   close,
   installKeyLatency,
@@ -70,9 +73,8 @@ test("typing in the 304-page contract, and opening it and the corpus's largest f
   const files = tempDir("files");
   const contract = join(files, "Framework Services Agreement.docx");
   writeFileSync(contract, longContract());
-  const launched = await launch(dataDir, { readyTestId: "chat-setup" });
+  const launched = await launch(dataDir);
   const { window } = launched;
-  await click(window, window.getByTestId("chat-setup-later"));
   const elsewhere = () =>
     window.evaluate(async () => {
       const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
@@ -83,15 +85,35 @@ test("typing in the 304-page contract, and opening it and the corpus's largest f
         where: { in: "place" },
       });
     });
+  const session = await cdp(window);
   const timedOpens = async (mindId: string, selector: string, count: () => Promise<number>) => {
     await msToOpen(window, mindId, selector, 1);
     const blocks = await count();
     const runs: number[] = [];
+    const work: ReturnType<typeof busy>[] = [];
     for (let run = 0; run < 3; run++) {
       await elsewhere();
+      const before = await cdpMetrics(session);
       runs.push(await msToOpen(window, mindId, selector, blocks));
+      work.push(busy(before, await cdpMetrics(session)));
     }
-    return { blocks, runs, median: median(runs) };
+    // Where the main thread's time went, to tell drawing (style and layout) from keeping (script).
+    const medianOf = (key: "scriptMs" | "styleMs" | "layoutMs") =>
+      median(work.map((each) => each[key]));
+    return {
+      blocks,
+      runs,
+      median: median(runs),
+      scriptMs: medianOf("scriptMs"),
+      styleMs: medianOf("styleMs"),
+      layoutMs: medianOf("layoutMs"),
+    };
+  };
+  const plainAgain = async (mindId: string, selector: string, blocks: number) => {
+    await click(window, window.getByTestId("group-menu"));
+    await click(window, window.getByTestId("look-plain"));
+    await expect(window.locator(".mind-editor-frame > style")).toHaveCount(0);
+    return timedOpens(mindId, selector, async () => blocks);
   };
   try {
     const contractId = await importWord(window, contract);
@@ -128,12 +150,17 @@ test("typing in the 304-page contract, and opening it and the corpus's largest f
         blocks = now;
       }
     });
+    const corpusPlainOpen = await plainAgain(corpusId, ".ProseMirror > *", corpusOpen.blocks);
+    await msToOpen(window, contractId, ".ProseMirror h1", 241);
+    const contractPlainOpen = await plainAgain(contractId, ".ProseMirror h1", 241);
     const result = {
       contractOpenMs: contractOpen,
+      contractPlainOpenMs: contractPlainOpen,
       typingFirstPage: first,
       typingLastPage: last,
       corpusFile: corpus.slice(corpus.indexOf("eval/word")),
       corpusOpenMs: corpusOpen,
+      corpusPlainOpenMs: corpusPlainOpen,
     };
     record("wordLook", result);
     console.log(JSON.stringify(result, null, 2));

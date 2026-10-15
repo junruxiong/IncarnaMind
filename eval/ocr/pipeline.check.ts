@@ -65,6 +65,8 @@ test.runIf(!wanted || wanted.includes("pipeline"))(
         },
         {
           read: (page, picture) => recognizer.read(picture, page),
+          readFile: (page, file) => recognizer.readFile(file, page),
+          log: () => {},
           progress: () => {},
           signal: new AbortController().signal,
         },

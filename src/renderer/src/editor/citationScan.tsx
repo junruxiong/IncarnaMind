@@ -42,11 +42,17 @@ export function useScannedQuote(attributes: CitationAttributes): ScannedQuote | 
 export function ScanLine({ scanned }: { scanned: ScannedQuote }) {
   const t = useT();
   const count = scanned.unsure.length;
+  const words =
+    scanned.from === "picture"
+      ? ([
+          "citation.picture",
+          "citation.picture.unsure.one",
+          "citation.picture.unsure.other",
+        ] as const)
+      : (["citation.scan", "citation.scan.unsure.one", "citation.scan.unsure.other"] as const);
   return (
-    <p data-testid="citation-scan" className="citation-card-source">
-      {count === 0
-        ? t("citation.scan")
-        : t(count === 1 ? "citation.scan.unsure.one" : "citation.scan.unsure.other", { count })}
+    <p data-testid="citation-scan" data-from={scanned.from} className="citation-card-source">
+      {count === 0 ? t(words[0]) : t(count === 1 ? words[1] : words[2], { count })}
     </p>
   );
 }

@@ -90,6 +90,9 @@ registerMenu(
   "tab",
   [
     "mind.outline",
+    "mind.look.word",
+    "mind.look.plain",
+    "mind.openOriginal",
     ...EXPORTS,
     "mind.history",
     "mind.checkAll",
