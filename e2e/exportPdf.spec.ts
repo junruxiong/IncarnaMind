@@ -13,12 +13,15 @@ import {
 import type { ChartAttributes, ChartValue } from "../src/shared/charts";
 import {
   addDocuments,
+  blocksUpdate,
   createDataFolder,
   dismissChatSetup,
   interceptOpenDialog,
   interceptOpenPath,
   interceptShowItemInFolder,
   launchApp,
+  type MindChild,
+  mindNode,
   motionSettled,
   newMind,
   openOptions,
@@ -74,22 +77,8 @@ const bridge = (window: Page) => ({
     ),
 });
 
-type Child = Y.XmlElement | string;
-
-/** A node as the editor stores it in the Mind's Yjs document; strings are its text. */
-function node(name: string, attributes: Record<string, unknown>, children: Child[] = []) {
-  const element = new Y.XmlElement(name);
-  for (const [key, value] of Object.entries(attributes)) {
-    element.setAttribute(key, value as string);
-  }
-  element.insert(
-    0,
-    children.map((child) => (typeof child === "string" ? new Y.XmlText(child) : child)),
-  );
-  return element;
-}
-
-const paragraph = (...children: Child[]) => node("paragraph", { id: randomUUID() }, children);
+const paragraph = (...children: MindChild[]) =>
+  mindNode("paragraph", { id: randomUUID() }, children);
 
 type Cited = Pick<Document, "id" | "name" | "contentHash">;
 
@@ -114,17 +103,10 @@ function citationAttributes(
 }
 
 const citation = (...given: Parameters<typeof citationAttributes>) =>
-  node("citation", { ...citationAttributes(...given) });
+  mindNode("citation", { ...citationAttributes(...given) });
 
-const cell = (kind: "tableHeader" | "tableCell", ...children: Child[]) =>
-  node(kind, { colspan: 1, rowspan: 1 }, [paragraph(...children)]);
-
-/** The Blocks as one Yjs update, to apply to a Mind. */
-function updateOf(blocks: Y.XmlElement[]): Uint8Array {
-  const doc = new Y.Doc();
-  doc.getXmlFragment("blocks").insert(0, blocks);
-  return Y.encodeStateAsUpdate(doc);
-}
+const cell = (kind: "tableHeader" | "tableCell", ...children: MindChild[]) =>
+  mindNode(kind, { colspan: 1, rowspan: 1 }, [paragraph(...children)]);
 
 const ARTICLE = readFile(join(__dirname, "../tests/fixtures/web/article.html"), "utf8");
 const ADDRESS = "https://reader.example/tea";
@@ -183,8 +165,8 @@ test("a Mind with English and Chinese Citations, a table and maths prints as a P
   const web = await documentNamed(window, "Tea - The Open Encyclopedia");
   await bridge(window).write(
     mindId,
-    updateOf([
-      node("heading", { id: randomUUID(), level: 1 }, ["Spring tides"]),
+    blocksUpdate([
+      mindNode("heading", { id: randomUUID(), level: 1 }, ["Spring tides"]),
       paragraph(
         "Spring tides happen at new moon and at full moon",
         citation(tides, 1, "found"),
@@ -193,17 +175,20 @@ test("a Mind with English and Chinese Citations, a table and maths prints as a P
       paragraph("大潮出现在新月和满月前后", citation(chinese, 1, "found"), "。"),
       paragraph(
         "The pull that raises them falls off as ",
-        node("inlineMath", { latex: "1/r^3" }),
+        mindNode("inlineMath", { latex: "1/r^3" }),
         ", faster than gravity:",
       ),
-      node("blockMath", { id: randomUUID(), latex: "F = G\\frac{m_1 m_2}{r^2}" }),
-      node("table", { id: randomUUID() }, [
-        node("tableRow", {}, [cell("tableHeader", "Tide 潮"), cell("tableHeader", "Range 潮差")]),
-        node("tableRow", {}, [
+      mindNode("blockMath", { id: randomUUID(), latex: "F = G\\frac{m_1 m_2}{r^2}" }),
+      mindNode("table", { id: randomUUID() }, [
+        mindNode("tableRow", {}, [
+          cell("tableHeader", "Tide 潮"),
+          cell("tableHeader", "Range 潮差"),
+        ]),
+        mindNode("tableRow", {}, [
           cell("tableCell", "Spring 大潮"),
           cell("tableCell", "4 m", citation(tides, 1, "found")),
         ]),
-        node("tableRow", {}, [
+        mindNode("tableRow", {}, [
           cell("tableCell", "Neap 小潮"),
           cell("tableCell", "2 m", citation(chinese, 1, "not-found")),
         ]),
@@ -317,7 +302,10 @@ test("a Mind with one chart prints its picture, drawn at twice its size, its cap
       ],
     },
   };
-  await bridge(window).write(mindId, updateOf([node(CHART_NODE, { id: randomUUID(), ...chart })]));
+  await bridge(window).write(
+    mindId,
+    blocksUpdate([mindNode(CHART_NODE, { id: randomUUID(), ...chart })]),
+  );
   await expect(window.getByTestId("mind-editor").getByTestId("chart-point")).toHaveCount(3);
 
   const out = await createDataFolder();
@@ -388,18 +376,18 @@ test("a long Mind breaks into pages: each footnote is on the page of its marker,
     );
   }
   const rows = Array.from({ length: 45 }, (_, index) =>
-    node("tableRow", {}, [
+    mindNode("tableRow", {}, [
       cell("tableCell", `Row ${index + 1} cell`, citation(chinese, index + 1, "found")),
       cell("tableCell", "大潮出现在新月和满月前后"),
     ]),
   );
   blocks.push(
-    node("table", { id: randomUUID() }, [
-      node("tableRow", {}, [cell("tableHeader", "Tide 潮"), cell("tableHeader", "Note 注")]),
+    mindNode("table", { id: randomUUID() }, [
+      mindNode("tableRow", {}, [cell("tableHeader", "Tide 潮"), cell("tableHeader", "Note 注")]),
       ...rows,
     ]),
   );
-  await bridge(window).write(mindId, updateOf(blocks));
+  await bridge(window).write(mindId, blocksUpdate(blocks));
   await expect(window.getByTestId("mind-editor").getByTestId("citation")).toHaveCount(85);
 
   const out = await createDataFolder();
@@ -565,7 +553,7 @@ test("Export as HTML saves one .html file whose footnotes link both ways, and th
   const chinese = await documentNamed(window, "潮汐");
   await bridge(window).write(
     mindId,
-    updateOf([
+    blocksUpdate([
       paragraph("Spring tides happen at new moon", citation(tides, 1, "found"), "."),
       paragraph("大潮出现在新月和满月前后", citation(chinese, 1, "not-found"), "。"),
     ]),

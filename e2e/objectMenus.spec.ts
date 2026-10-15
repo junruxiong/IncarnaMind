@@ -382,7 +382,7 @@ test("the context-menu key and Shift+F10 open the focused row's menu; arrows mov
   // Enter runs the focused item: Export options… opens the options sheet for this Mind.
   await row.focus();
   await window.keyboard.press("Shift+F10");
-  for (let step = 0; step < 8; step++) await window.keyboard.press("ArrowDown");
+  for (let step = 0; step < 9; step++) await window.keyboard.press("ArrowDown");
   await expect(menu.getByTestId("mind.exportOptions")).toBeFocused();
   await window.keyboard.press("Enter");
   await expect(window.getByTestId("export-dialog")).toBeVisible();
@@ -420,6 +420,7 @@ test("each item shows its shortcut as the system writes it, and the labels are i
     "导出为 PDF",
     "导出为 PDF 引用页面合集",
     "导出为 HTML",
+    "导出为可分享的网页（.html）",
     "导出为 Markdown（.md）",
     "导出选项…",
     "导出 AI 使用声明",
