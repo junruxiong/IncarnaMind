@@ -1251,10 +1251,19 @@ class Reader {
     const content = new Map<Placed, NodeJSON[]>();
     const outer = this.tableLook;
     const tableLook = this.look.table(tbl);
-    this.tableLook = tableLook;
-    placed.forEach((row) => {
+    const cellLooks = new Map<Placed, TableLookContext>();
+    placed.forEach((row, r) => {
       for (const at of row) {
         if (at.merge === "continue" && mergedInto.has(at)) continue;
+        this.tableLook = this.look.cellAt(tableLook, {
+          row: r,
+          rows: placed.length,
+          rowSpan: rowspans.get(at) ?? 1,
+          column: at.column,
+          span: at.span,
+          columns: width,
+        });
+        cellLooks.set(at, this.tableLook);
         const blocks: NodeJSON[] = [];
         this.blocks(at.cell, blocks, true);
         content.set(at, blocks);
@@ -1267,6 +1276,7 @@ class Reader {
         !["w:drawing", "w:pict", "w:object", "w:bookmarkStart"].some(
           (name) => descendants(cell.cell, name).length > 0,
         );
+      this.tableLook = cellLooks.get(into) ?? tableLook;
       if (!empty) this.blocks(cell.cell, content.get(into) ?? [], true);
     }
     this.tableLook = outer;
@@ -1292,7 +1302,7 @@ class Reader {
             }
           }
           const blocks = content.get(at) ?? [];
-          const cellLook = this.look.cell(at.cell, tableLook);
+          const cellLook = this.look.cell(at.cell, cellLooks.get(at) ?? tableLook);
           const cellNode: NodeJSON = {
             type: cellType,
             attrs: { colspan, rowspan, ...(cellLook && { [WORD_LOOK_ATTRIBUTE]: cellLook }) },
@@ -1336,7 +1346,7 @@ class Reader {
       type: "table",
       attrs: {
         [BLOCK_ID_ATTRIBUTE]: id,
-        ...(tableLook.key && { [WORD_LOOK_ATTRIBUTE]: tableLook.key }),
+        [WORD_LOOK_ATTRIBUTE]: tableLook.key,
       },
       content: tableRows,
     };

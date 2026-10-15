@@ -1,5 +1,7 @@
 import type { WordBorder, WordLook, WordParagraphLook, WordRunLook } from "../../../core/api";
+import { wordLookZoomCss } from "./useWordLookZoom";
 import { WORD_LOOK_DOM_ATTRIBUTE, WORD_RUN_DOM_ATTRIBUTE } from "./wordSchema";
+import { wordTableCss } from "./wordTableCss";
 
 /** Word's single line spacing for common fonts. */
 const SINGLE_LINE = 1.15;
@@ -44,11 +46,11 @@ export const wordLookScope = (mindId: string) => `word-look-${mindId}`;
 
 const escapedClass = (name: string) => name.replace(/[^\w-]/g, (character) => `\\${character}`);
 
-const pt = (value: number) => `calc(var(--word-pt) * ${value})`;
+export const pt = (value: number) => `calc(var(--word-pt) * ${value})`;
 const quoted = (font: string) => `"${font.replace(/["\\]/g, "")}"`;
 const attribute = (name: string, key: string) => `[${name}="${key.replace(/["\\]/g, "")}"]`;
 
-function border(value: WordBorder): string {
+export function border(value: WordBorder): string {
   const width = Math.max(value.width, 0.25);
   return `${pt(width)} ${BORDER_STYLES.get(value.style) ?? "solid"} ${value.color ? `#${value.color}` : "currentColor"}`;
 }
@@ -168,5 +170,6 @@ export function wordLookCss(mindId: string, look: WordLook): string {
     `${scope} :is(code, a) [${WORD_RUN_DOM_ATTRIBUTE}] { font-family: inherit; color: inherit; }`,
     `${scope} [${WORD_LOOK_DOM_ATTRIBUTE}] :is([contenteditable="false"], .citation-marker) { text-indent: 0; letter-spacing: normal; text-transform: none; font-variant-caps: normal; }`,
   );
+  rules.push(...wordTableCss(scope, look), ...wordLookZoomCss(scope));
   return rules.filter(Boolean).join("\n");
 }

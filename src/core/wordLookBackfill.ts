@@ -103,6 +103,40 @@ function changesFor(element: Y.XmlElement, node: NodeJSON): LookChange[] | null 
   return changes;
 }
 
+const span = (value: unknown) => (typeof value === "number" ? value : 1);
+
+/** The looks of an edited table and its cells, when it still has the rows and cells it was imported with. */
+function tableLooks(table: Y.XmlElement, node: NodeJSON): LookChange[] {
+  const rows = table.toArray();
+  const imported = node.content ?? [];
+  if (table.nodeName !== "table" || rows.length !== imported.length) return [];
+  const changes: LookChange[] = [];
+  const give = (element: Y.XmlElement, from: NodeJSON) => {
+    const key = from.attrs?.[WORD_LOOK_ATTRIBUTE];
+    if (typeof key === "string") changes.push({ kind: "attribute", element, value: key });
+  };
+  give(table, node);
+  for (const [index, row] of rows.entries()) {
+    const cells = row instanceof Y.XmlElement ? row.toArray() : [];
+    const importedCells = imported[index]?.content ?? [];
+    if (cells.length !== importedCells.length) return [];
+    for (const [at, cell] of cells.entries()) {
+      const from = importedCells[at];
+      if (
+        !(cell instanceof Y.XmlElement) ||
+        !from ||
+        cell.nodeName !== from.type ||
+        span(cell.getAttribute("colspan")) !== span(from.attrs?.colspan) ||
+        span(cell.getAttribute("rowspan")) !== span(from.attrs?.rowspan)
+      ) {
+        return [];
+      }
+      give(cell, from);
+    }
+  }
+  return changes;
+}
+
 const asImported = (element: Y.XmlElement, source: WordSource) =>
   wordFingerprint(element) === source.f || wordFingerprintBeforeLook(element) === source.f;
 
@@ -128,6 +162,7 @@ export function planLook(doc: Y.Doc, blocks: Y.XmlFragment, structure: WordStruc
         return;
       }
       plan.editedSinceImport++;
+      if (node?.type === "table") plan.changes.push(...tableLooks(element, node));
     }
     for (const child of element.toArray()) {
       if (child instanceof Y.XmlElement) look(child);
