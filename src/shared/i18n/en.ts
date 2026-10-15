@@ -3389,11 +3389,13 @@ export const en = {
   "examples.banner.label": "About this example",
   "examples.banner.title": "This is an example Mind.",
   "examples.banner.body":
+    "A Mind is a page where you write, and ask your Documents with every quote checked. This draft was checked against its two Documents, and one figure is wrong: click the red mark beside it to see what the results say.",
+  "examples.banner.body.tea":
     "A Mind is a page where you write, and ask your Documents with every quote checked. You write here like in any document, ask Questions about your Documents, and every claim in an Answer links to the page it came from. Click a check to see the quote; green means it was found.",
   "examples.banner.addOwn": "Add your Documents",
   "examples.banner.remove": "Remove the examples",
   "examples.banner.more": "Try an example closer to your work:",
-  "examples.group.tea": "Tea",
+  "examples.group.credit": "Credit paper",
   "examples.group.papers": "Papers",
   "examples.group.reports": "Reports",
   "examples.group.contracts": "Contracts",
@@ -3403,7 +3405,7 @@ export const en = {
   "gettingStarted.count": "· {done} of {total}",
   "gettingStarted.hide": "Hide Get started",
   "gettingStarted.done": "Done: ",
-  "gettingStarted.step.citation": "Check a Citation in the example",
+  "gettingStarted.step.citation": "Open a check in the example",
   "gettingStarted.step.documents": "Add your Documents",
   "gettingStarted.step.question": "Ask your own Question",
   "startGuide.title": "Start in three steps",

@@ -3221,11 +3221,13 @@ export const zhCN = {
   "examples.banner.label": "关于这个示例",
   "examples.banner.title": "这是一个示例 Mind。",
   "examples.banner.body":
+    "Mind 是你写作的页面，也可以在这里就你的文档提问，每条引文都会核对。这份草稿已对照它的两份文档核对过，其中有一个数字写错了：点它旁边的红色标记，看看业绩报告怎么说。",
+  "examples.banner.body.tea":
     "Mind 是你写作的页面，也可以在这里就你的文档提问，每条引文都会核对。你可以像在普通文档里一样在这里写作，并就你的文档提问；回答中的每个说法都链接到出处所在的页面。点击勾号查看引文，绿色表示找到了这段引文。",
   "examples.banner.addOwn": "添加你的文档",
   "examples.banner.remove": "移除示例",
   "examples.banner.more": "换一个和你工作更相关的示例：",
-  "examples.group.tea": "茶",
+  "examples.group.credit": "授信报告",
   "examples.group.papers": "论文",
   "examples.group.reports": "报告",
   "examples.group.contracts": "合同",
@@ -3235,7 +3237,7 @@ export const zhCN = {
   "gettingStarted.count": "· {done}/{total}",
   "gettingStarted.hide": "隐藏“开始使用”",
   "gettingStarted.done": "已完成：",
-  "gettingStarted.step.citation": "在示例中核对一条引用",
+  "gettingStarted.step.citation": "查看示例中的核对结果",
   "gettingStarted.step.documents": "添加你的文档",
   "gettingStarted.step.question": "提出你自己的问题",
   "startGuide.title": "三步开始",
