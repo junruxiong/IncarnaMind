@@ -31,6 +31,9 @@ describe("Cost in words", () => {
     const aside = [{ amount: 1.28, currency: "USD" as const }];
     expect(setAsideText(aside, t("en"), "en")).toBe("$1.28 set aside for work in progress");
     expect(setAsideText(aside, t("zh-CN"), "zh-CN")).toBe("进行中的任务预留 $1.28");
+    expect(
+      setAsideText([...aside, { amount: 1.4, currency: "CNY" as const }], t("zh-CN"), "zh-CN"),
+    ).toBe("进行中的任务预留 $1.28 和 ¥1.40");
     expect(setAsideText([], t("en"), "en")).toBeNull();
     expect(setAsideText([{ amount: 0, currency: "USD" }], t("en"), "en")).toBeNull();
     expect(translate("en", "cost.provider.thisMonth", { spent: "$0.01" })).toBe(
