@@ -101,9 +101,8 @@ function webpSize(bytes: Uint8Array): { width: number; height: number } | null {
  */
 function avifSize(bytes: Uint8Array): { width: number; height: number } | null {
   const data = view(bytes);
-  const limit = Math.min(bytes.length - 16, 64 * 1024);
   let largest: { width: number; height: number } | null = null;
-  for (let at = 4; at < limit; at++) {
+  for (let at = 4; at < bytes.length - 16; at++) {
     if (bytes[at] !== 0x69 || ascii(bytes, at, 4) !== "ispe") continue;
     const width = data.getUint32(at + 8);
     const height = data.getUint32(at + 12);

@@ -12,7 +12,7 @@ import { createReadStream } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { TextUnit } from "../../shared/units";
-import type { PagePicture, PictureRead, RecognizedLine } from "../adapters";
+import type { LogFields, PagePicture, PictureRead, RecognizedLine } from "../adapters";
 import type { DocumentFailureReason, DocumentKind } from "../api";
 import {
   type FileMetadata,
@@ -244,6 +244,7 @@ export interface ReadingChannel {
   read(page: number, picture: PagePicture): Promise<RecognizedLine[]>;
   /** The lines on a picture file, read where the model runs (`TextRecognizer.readFile`). */
   readFile(page: number, file: Uint8Array): Promise<PictureRead>;
+  log(event: string, fields: LogFields): void;
   /** `read` of `of` scanned pages of version `contentHash` are read; `unit` is the one just read. */
   progress(contentHash: string, read: number, of: number, unit: TextUnit | null): void;
   signal: AbortSignal;
@@ -276,7 +277,8 @@ export type WorkerResponse =
       progress: { contentHash: string; read: number; of: number; unit: TextUnit | null };
     }
   | { id: number; request: number; page: number; picture: PagePicture }
-  | { id: number; request: number; page: number; file: Uint8Array };
+  | { id: number; request: number; page: number; file: Uint8Array }
+  | { id: number; log: { event: string; fields: LogFields } };
 
 /** Runs a job of either kind. Never throws. */
 export function runJob(
@@ -349,7 +351,7 @@ export async function processFile(
       ? {
           read: channel.read,
           readFile: channel.readFile,
-          documentId: job.documentId,
+          log: channel.log,
           signal: channel.signal,
           progress: (read, of, unit) => channel.progress(version.contentHash, read, of, unit),
           reader: job.scan.reader,

@@ -406,10 +406,7 @@ describe("Re-processing", { timeout: 30_000 }, () => {
     const stopped = (await second.listDocuments()).find((each) => each.id === notes.id);
     expect(stopped).toMatchObject({
       status: "failed",
-      failure: {
-        reason: "processing-error",
-        message: "IncarnaMind stopped while reading this file.",
-      },
+      failure: { reason: "app-stopped", message: "The app stopped while it was being read." },
     });
     expect((await second.listDocuments()).find((each) => each.id === other.id)?.status).toBe(
       "ready",

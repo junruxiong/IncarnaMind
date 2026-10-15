@@ -1886,7 +1886,12 @@ export type DocumentFailureReason =
    * couldn't be downloaded or failed on them. The pages that were read are
    * searched; Retry reads the others.
    */
-  | "pages-unread";
+  | "pages-unread"
+  /**
+   * The app stopped while it was being read, not closed in good order: it
+   * isn't read again by itself, as it could stop the app again. Retry reads it.
+   */
+  | "app-stopped";
 
 export interface DocumentFailure {
   reason: DocumentFailureReason;
