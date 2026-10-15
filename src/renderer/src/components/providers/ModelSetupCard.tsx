@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { AgentClient, ChatProvider } from "../../../../core/api";
+import { SHOW_AGENT_CONNECTION } from "../../../../shared/agentConnection";
 import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useLanguage, useT } from "../../i18n";
@@ -26,13 +27,14 @@ import { ProviderForm } from "./ProviderForm";
 
 const CLAUDE_DOWNLOAD = "https://claude.ai/download";
 
-type View = "deepseek" | "key" | "local" | "chatgpt" | null;
+type View = "key" | "local" | null;
 
 /**
  * The first own Question with no model set (#103, D198): the assistant's composer becomes this
- * card while the Question waits above it. One recommended way leads (the ChatGPT plan; in Chinese,
- * a DeepSeek key), the others are folded under "Other ways", and Set up later is last. Choosing a
- * service is the consent for it (#718), so no dialog is added here.
+ * card while the Question waits above it. Two ways lead, the same size: the ChatGPT plan and a
+ * key (#890); in Chinese the key comes first and opens on DeepSeek. The rest are folded under
+ * "Other ways", and Set up later is last. Choosing a service is the consent for it (#718), so no
+ * dialog is added here.
  */
 export function ModelSetupCard() {
   const t = useT();
@@ -41,6 +43,7 @@ export function ModelSetupCard() {
   const [others, setOthers] = useState(false);
   const [providers, setProviders] = useState<ChatProvider[]>([]);
   const ollama = useOllama(() => undefined);
+  const sign = useContinueWithChatGpt({ onSignedIn: () => undefined });
   useEffect(() => {
     // Only to tell the form a key is already saved: the form works with none listed.
     core
@@ -49,23 +52,7 @@ export function ModelSetupCard() {
         console.error("The saved chat providers couldn't be listed for the setup card.", error),
       );
   }, []);
-  const open = (next: Exclude<View, null>) => setView(view === next ? null : next);
   const running = ollama.status?.running;
-  const localWay = {
-    testId: "way-local",
-    title: t("setup.way.local"),
-    line: t(
-      running === undefined
-        ? "setup.way.local.line"
-        : running
-          ? "setup.way.local.running"
-          : "setup.way.local.notRunning",
-    ),
-    onClick: () => open("local"),
-    ...(!running && {
-      link: { label: t("setup.getOllama"), href: "https://ollama.com/download" },
-    }),
-  };
 
   return (
     <section
@@ -85,102 +72,64 @@ export function ModelSetupCard() {
         )}
       </div>
 
-      {chinese ? (
+      {view === null ? (
+        <>
+          {sign.waiting ? (
+            <ChatGptSignInState sign={sign} />
+          ) : (
+            <>
+              <LeadingWays chinese={chinese} sign={sign} onKey={() => setView("key")} />
+              <ChatGptSignInState sign={sign} />
+            </>
+          )}
+          <details
+            open={others}
+            onToggle={(event) => setOthers(event.currentTarget.open)}
+            className="flex flex-col gap-2"
+          >
+            <summary
+              data-testid="setup-other"
+              className="cursor-default text-[13px] leading-5 font-semibold text-ink-secondary"
+            >
+              {t("setup.other")}
+            </summary>
+            <div className="mt-2 flex flex-col gap-2">
+              <Way
+                testId="way-local"
+                title={t("setup.way.local")}
+                line={t(
+                  running === undefined
+                    ? "setup.way.local.line"
+                    : running
+                      ? "setup.way.local.running"
+                      : "setup.way.local.notRunning",
+                )}
+                onClick={() => setView("local")}
+                {...(!running && {
+                  link: { label: t("setup.getOllama"), href: "https://ollama.com/download" },
+                })}
+              />
+              {/* Connecting the Claude app needs the agent connection, which is off (#882). */}
+              {SHOW_AGENT_CONNECTION && !chinese && <ClaudeWay />}
+            </div>
+          </details>
+        </>
+      ) : (
         <>
           <button
             type="button"
-            data-testid="setup-primary"
-            aria-expanded={view === "deepseek"}
-            onClick={() => open("deepseek")}
-            className={buttonStyle("primary", "lg")}
-          >
-            {t("setup.deepseek.use")}
-          </button>
-          <button
-            type="button"
-            data-testid="setup-how"
-            onClick={() => open("deepseek")}
+            data-testid="setup-back"
+            onClick={() => setView(null)}
             className="self-start text-[13px] font-semibold text-accent underline-offset-2 hover:underline"
           >
-            {t("setup.how")}
+            ‹ {t("setup.other")}
           </button>
-          {view === null && (
-            <p data-testid="setup-deepseek-sends" className={hintClass}>
-              {t("setup.deepseek.line")}
-            </p>
+          {view === "key" && (
+            <ProviderForm providers={providers} onSaved={() => undefined} standalone />
           )}
-          {view === "deepseek" && (
-            <ProviderForm providers={providers} onSaved={() => undefined} initialKind="deepseek" />
-          )}
+          {view === "local" && <LocalWay ollama={ollama} />}
         </>
-      ) : (
-        view === null && <ChatGptWay primary />
       )}
-
-      <details
-        open={others}
-        onToggle={(event) => setOthers(event.currentTarget.open)}
-        className="flex flex-col gap-2"
-      >
-        <summary
-          data-testid="setup-other"
-          className={`cursor-default text-[13px] leading-5 font-semibold text-ink-secondary ${
-            view !== null && view !== "deepseek" ? "sr-only" : ""
-          }`}
-        >
-          {t("setup.other")}
-        </summary>
-        <div className="mt-2 flex flex-col gap-2">
-          {view === null || view === "deepseek" ? (
-            <>
-              {chinese ? (
-                <>
-                  <Way
-                    testId="way-key"
-                    title={t("setup.way.key")}
-                    line={t("setup.way.key.line")}
-                    onClick={() => open("key")}
-                    link={{ label: t("setup.how"), onClick: () => open("key") }}
-                  />
-                  <Way {...localWay} />
-                  <Way
-                    testId="way-chatgpt"
-                    title={t("setup.way.chatgpt")}
-                    line={t("setup.way.chatgpt.line")}
-                    onClick={() => open("chatgpt")}
-                  />
-                </>
-              ) : (
-                <>
-                  <Way
-                    testId="way-key"
-                    title={t("setup.way.key")}
-                    line={t("setup.way.key.line")}
-                    onClick={() => open("key")}
-                    link={{ label: t("setup.how"), onClick: () => open("key") }}
-                  />
-                  <Way {...localWay} />
-                </>
-              )}
-              {!chinese && <ClaudeWay />}
-            </>
-          ) : (
-            <>
-              <button
-                type="button"
-                data-testid="setup-back"
-                onClick={() => setView(null)}
-                className="self-start text-[13px] font-semibold text-accent underline-offset-2 hover:underline"
-              >
-                ‹ {t("setup.other")}
-              </button>
-              {view === "key" && <ProviderForm providers={providers} onSaved={() => undefined} />}
-              {view === "local" && <LocalWay ollama={ollama} />}
-              {view === "chatgpt" && <ChatGptWay />}
-            </>
-          )}
-        </div>
-      </details>
 
       <div>
         <button
@@ -193,6 +142,67 @@ export function ModelSetupCard() {
         </button>
       </div>
     </section>
+  );
+}
+
+/**
+ * The two ways the card leads with, side by side where they fit and stacked where they don't,
+ * always the same size, each with who it's for. The ChatGPT plan signs in at once, so its line
+ * also says what goes to OpenAI; the key's line is in its form (ADR-0022).
+ */
+function LeadingWays({
+  chinese,
+  sign,
+  onKey,
+}: {
+  /** The key first, as DeepSeek is the recommended way in Chinese (D198); ChatGPT's line says it isn't in mainland China. */
+  chinese: boolean;
+  sign: ReturnType<typeof useContinueWithChatGpt>;
+  onKey(): void;
+}) {
+  const t = useT();
+  const storage = useChatGptStorage();
+  const lineClass = "text-[13px] leading-5 text-ink-secondary";
+  const plan = (
+    <div key="plan" className="flex min-w-0 flex-col gap-1">
+      <ChatGptStorageNotice storage={storage} />
+      <button
+        type="button"
+        data-testid="setup-chatgpt"
+        disabled={!storage.canSave}
+        onClick={() => void sign.run()}
+        className={`w-full ${buttonStyle(chinese ? "secondary" : "primary", "lg")}`}
+      >
+        <ChatGptMark className="size-4" />
+        {t("setup.chatgpt.use")}
+      </button>
+      <p data-testid="setup-chatgpt-for" className={lineClass}>
+        {t(chinese ? "setup.chatgpt.for.china" : "setup.chatgpt.for")}
+      </p>
+      <p data-testid="setup-chatgpt-sends" className={`${hintClass} mt-0`}>
+        {t("setup.chatgpt.line")}
+      </p>
+    </div>
+  );
+  const key = (
+    <div key="key" className="flex min-w-0 flex-col gap-1">
+      <button
+        type="button"
+        data-testid="setup-key"
+        onClick={onKey}
+        className={`w-full ${buttonStyle(chinese ? "primary" : "secondary", "lg")}`}
+      >
+        {t("setup.key.use")}
+      </button>
+      <p data-testid="setup-key-for" className={lineClass}>
+        {t("setup.key.for")}
+      </p>
+    </div>
+  );
+  return (
+    <div className="grid grid-cols-[repeat(auto-fit,minmax(12rem,1fr))] gap-3">
+      {chinese ? [key, plan] : [plan, key]}
+    </div>
   );
 }
 
@@ -241,34 +251,6 @@ function Way({
           </button>
         ))}
       <ChevronRightLineIcon aria-hidden="true" className="mr-2 size-3.5 shrink-0 text-ink-meta" />
-    </div>
-  );
-}
-
-/** Signing in with ChatGPT: the recommended button in English, a way under Other ways in Chinese. */
-function ChatGptWay({ primary = false }: { primary?: boolean }) {
-  const t = useT();
-  const sign = useContinueWithChatGpt({ onSignedIn: () => undefined });
-  const storage = useChatGptStorage();
-  return (
-    <div className="flex flex-col items-start gap-2">
-      <ChatGptStorageNotice storage={storage} />
-      {!sign.waiting && (
-        <button
-          type="button"
-          data-testid={primary ? "setup-primary" : "setup-chatgpt"}
-          disabled={!storage.canSave}
-          onClick={() => void sign.run()}
-          className={buttonStyle("primary", primary ? "lg" : "md")}
-        >
-          <ChatGptMark className="size-4" />
-          {primary ? t("setup.chatgpt.use") : t("chatgpt.continue")}
-        </button>
-      )}
-      <p data-testid="setup-chatgpt-sends" className={hintClass}>
-        {t("setup.chatgpt.line")}
-      </p>
-      <ChatGptSignInState sign={sign} />
     </div>
   );
 }

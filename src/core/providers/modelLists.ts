@@ -18,14 +18,18 @@
 import type { ChatProviderKind, OtherModel } from "../api";
 import { isRecord } from "../errors";
 import type { ModelFactsLayer } from "./capabilities";
-import { isNonChatModel, type ModelInput, modelsProviderOfKind, otherModel } from "./catalog";
+import {
+  isNonChatModel,
+  MAX_MENU_MODELS,
+  type ModelInput,
+  modelsProviderOfKind,
+  otherModel,
+} from "./catalog";
 import { KNOWN_PLAN_MODELS } from "./chatgpt/planEndpoint";
 import { endpointUrl } from "./kinds";
 import { isCloudModelName, isRemoteEntry } from "./ollamaCloud";
 
 const LIST_TIMEOUT_MS = 5_000;
-/** The picker shows at most this many models per provider. */
-const MAX_MODELS = 100;
 
 export interface ModelListSpec {
   kind: ChatProviderKind;
@@ -271,8 +275,8 @@ export async function listProviderModels(spec: ModelListSpec): Promise<ListedMod
       return other ? { ...model, other } : model;
     });
     return [
-      ...classified.filter((model) => !model.other).slice(0, MAX_MODELS),
-      ...classified.filter((model) => model.other).slice(0, MAX_MODELS),
+      ...classified.filter((model) => !model.other).slice(0, MAX_MENU_MODELS),
+      ...classified.filter((model) => model.other).slice(0, MAX_MENU_MODELS),
     ];
   } catch {
     return [];

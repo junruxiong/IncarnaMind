@@ -38,6 +38,7 @@ import {
   catalogFacts,
   catalogProviderOfKind,
   modelsProviderOfKind,
+  withRolesFirst,
 } from "./catalog";
 import { billingOf, ollamaCloudPrice } from "./catalog/billing";
 import { endpointOf } from "./catalog/providers";
@@ -662,8 +663,6 @@ export function createChat(options: {
           }
           const defaultModel = chatModel?.providerId === row.id ? [chatModel.modelId] : [];
           const inMenu = listed.filter((each) => !each.other).map((each) => each.id);
-          const roles = catalogProviderOfKind(provider.kind)?.roles;
-          const roleModels = [roles?.answers, roles?.strongest, roles?.quickTasks];
           const addedIds = menuModelsOf(row.id);
           const other = listed.flatMap((each): OtherModel[] =>
             each.other ? [{ id: each.id, ...each.other }] : [],
@@ -675,8 +674,7 @@ export function createChat(options: {
           const models = [
             ...new Set([
               ...defaultModel,
-              ...roleModels.filter((id): id is string => id !== undefined && inMenu.includes(id)),
-              ...inMenu,
+              ...withRolesFirst(catalogProviderOfKind(provider.kind)?.roles, inMenu),
               ...added,
             ]),
           ];
