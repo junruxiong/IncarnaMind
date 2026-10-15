@@ -648,7 +648,9 @@ export const en = {
   "editor.ai.addDocumentsToFindSupport": "Add Documents to find support",
   "checks.problem.no-documents.all": "Nothing to check against: add Documents first.",
   "checks.problem.nothing": "There's no sentence to check in what you selected.",
-  "checks.problem.has-proposals": "Accept or reject the changes in it before checking it.",
+  "checks.waiting.one": "1 sentence with changes waiting wasn't checked",
+  "checks.waiting": "{count} sentences with changes waiting weren't checked",
+  "checks.acceptAndCheck": "Accept all and check",
   "checks.problem.local-mode":
     "“Keep everything on this computer” is on, and the model isn't on this computer, so nothing was checked.",
   "checks.problem.chooseModel": "Choose a model",
@@ -2649,7 +2651,6 @@ export const en = {
   "scripts.call.stderrTruncated": "Cut: only the last {bytes} bytes are kept.",
 
   "export.action": "Export",
-  "export.action.title": "Export as {format} ({shortcut})",
   "export.as": "Export as {format}",
   "export.keywords": "export download save PDF Word docx Markdown source pack cited pages",
   "export.format": "Format",
@@ -2658,6 +2659,7 @@ export const en = {
   "export.format.source-pack": "Source pack (PDF)",
   "export.format.html": "HTML",
   "export.format.markdown": "Markdown (.md)",
+  "export.more": "More formats",
   "export.options": "Export options…",
   "export.options.title": "Export options",
   "export.options.close": "Close without saving",

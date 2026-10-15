@@ -17,6 +17,7 @@ import {
   type AssistantPlace,
   CHOSEN_PROVIDER_FLOWS,
   type CoreBridge,
+  type ExportFormat,
   type SaveChatProviderInput,
 } from "../src/core/api";
 import type { FakeTranscriberOptions } from "../src/core/transcription/fake";
@@ -1697,4 +1698,24 @@ export async function leaveText(window: Page): Promise<void> {
   await window.mouse.move(box.x + box.width / 2, box.y + box.height - 8, { steps: 8 });
   await window.mouse.down();
   await window.mouse.up();
+}
+
+/**
+ * Exports the Mind in the shown tab from Export's menu: in `format`, or in the
+ * one it lists first, the last one used.
+ */
+export async function exportFromMenu(window: Page, format?: ExportFormat): Promise<void> {
+  await pointAndClick(window, window.getByTestId("export-mind"));
+  const menu = window.getByTestId("export-menu");
+  await expect(menu).toBeVisible();
+  if (!format) {
+    await pointAndClick(window, menu.getByRole("menuitem").first());
+    return;
+  }
+  const item = window.getByTestId(`export-as-${format}`);
+  if ((await menu.getByTestId(`export-as-${format}`).count()) === 0) {
+    await pointAndClick(window, menu.getByTestId("export-more"));
+    await expect(window.getByTestId("export-more-menu")).toBeVisible();
+  }
+  await pointAndClick(window, item);
 }
