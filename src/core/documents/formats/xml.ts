@@ -113,6 +113,12 @@ export function parseXml(xml: string): XmlElement {
   return document;
 }
 
+/** An OOXML on/off element (`w:b`, `w:keepNext`…): on unless its value says otherwise; undefined when absent. */
+export const onOff = (element: XmlElement | undefined): boolean | undefined =>
+  element === undefined
+    ? undefined
+    : !["false", "0", "off"].includes(element.attrs["w:val"] ?? "true");
+
 /** The part of a name after its prefix: "w:p" → "p". */
 export const local = (name: string): string => name.slice(name.indexOf(":") + 1);
 

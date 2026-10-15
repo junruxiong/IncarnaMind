@@ -13,7 +13,7 @@
  * they are downloaded and checked the first time.
  */
 import { mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
-import { homedir, loadavg, tmpdir } from "node:os";
+import { loadavg, tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { MEETING_SAMPLE_RATE, type SpeechSegment } from "../../src/core/adapters";
@@ -25,11 +25,11 @@ import {
 } from "../../src/core/transcription/model";
 import { createSherpaEngine } from "../../src/core/transcription/sherpa";
 import { createSpeechHost } from "../../src/core/transcription/speech";
+import { evalCache } from "../lib/cache";
 import { characters, type ErrorRate, errorRate, words } from "./scoring";
 
 const CLIPS = process.env.INCARNAMIND_EVAL_CLIPS;
-const MODELS =
-  process.env.INCARNAMIND_EVAL_MODELS ?? join(homedir(), ".cache", "incarnamind-eval", "models");
+const MODELS = process.env.INCARNAMIND_EVAL_MODELS ?? join(evalCache(), "models");
 /** Silence before each clip and after the last, as pauses between speakers. */
 const PAUSE_MS = 1500;
 const FRAME = MEETING_SAMPLE_RATE / 10;

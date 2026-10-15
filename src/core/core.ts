@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { homedir, tmpdir, userInfo } from "node:os";
+import { tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 import * as Y from "yjs";
 import { isCitationStyleId } from "../shared/citationStyles";
@@ -15,6 +15,7 @@ import {
 import { mindModelOf } from "../shared/mindModel";
 import { mindName } from "../shared/naming";
 import { paperFor } from "../shared/printDocument";
+import { resolveProposals } from "../shared/proposals";
 import { wordFileOf } from "../shared/wordFiles";
 import { logActivity, silentLogger } from "./activityLog";
 import type { CoreAdapters } from "./adapters";
@@ -23,6 +24,7 @@ import { createAgentSetup, skillInstalled } from "./agents/setup";
 import { createAiUse } from "./aiUse";
 import { createAiUseStatement } from "./aiUseStatement";
 import { createAiSdkAnswerEngine, createAnswers } from "./answers";
+import { topLevelBlocks } from "./answers/blocks";
 import { createChecks } from "./answers/checks";
 import { AFTER_NEW_VERSION_MS, CLAIM_TIME_LIMIT_MS } from "./answers/checks/watch";
 import { recheckCitation, recheckKept } from "./answers/citations";
@@ -1089,7 +1091,20 @@ export function createCore(adapters: CoreAdapters): Core {
       },
       folderName: (folderId) =>
         library.folders().find((folder) => folder.id === folderId)?.name ?? null,
+      writing: (mindId, place) => events.emit("mind.writing", { mindId, place }),
       proposeInMind: (input) => edits.proposeInMind(input),
+    },
+    withdrawChanges: (changes) => {
+      for (const change of changes) {
+        if (!mindExists(change.mindId)) continue;
+        const emptied = content.edit(change.mindId, (blocks) => {
+          resolveProposals(blocks, (ref) => ref.request === change.request, "reject");
+          return topLevelBlocks(blocks).every(
+            (block) => block.nodeName === "paragraph" && block.length === 0,
+          );
+        });
+        if (change.created && emptied) removeMind(change.mindId);
+      }
     },
     approvals: {
       decide: (call) => approvals.decide(call),
@@ -1282,6 +1297,19 @@ export function createCore(adapters: CoreAdapters): Core {
       folderDefault: folderId === null ? null : library.citationStyle(folderId),
     }));
   };
+  /** Sends a Mind to Recently deleted; its tabs close. */
+  const removeMind = (mindId: unknown) => {
+    const at = now();
+    const deleted = db.transaction(() => {
+      const mind = minds.delete(mindId, at);
+      content.remove(mind.id, at);
+      return mind;
+    });
+    meetings.mindDeleted(deleted.id);
+    mindsChanged();
+    layouts.forgetDeletedMinds();
+  };
+
   // Edit with AI (#93): the change comes back as Proposals; Citations it keeps are checked again.
   const edits = createEdits({
     content,
@@ -1293,6 +1321,7 @@ export function createCore(adapters: CoreAdapters): Core {
     consent,
     localOnly: () => embedding.localOnly(),
     recheck: (attributes) => recheckKept(documents, attributes),
+    writing: (mindId, place) => events.emit("mind.writing", { mindId, place }),
     now: () => adapters.now?.() ?? new Date(),
   });
 
@@ -1450,7 +1479,7 @@ export function createCore(adapters: CoreAdapters): Core {
     events,
     now,
     settings,
-    suggested: join(adapters.paths.documents ?? join(homedir(), "Documents"), "IncarnaMind"),
+    suggested: join(adapters.paths.documents, "IncarnaMind"),
     linkedFolders: () => documents.linkedFolders.list(),
     recordOwnFile,
   });
@@ -1690,6 +1719,12 @@ export function createCore(adapters: CoreAdapters): Core {
   });
   wordImports.resume();
   wordImports.dropPurged().catch((error: unknown) => console.error(error));
+  wordImports.addLooks().catch((error: unknown) =>
+    (adapters.log ?? silentLogger).error("word.look.failed", {
+      error: error instanceof Error ? error.name : "unknown",
+      message: error instanceof Error ? error.message : String(error),
+    }),
+  );
 
   const recentlyDeleted = createRecentlyDeleted({
     db,
@@ -2084,8 +2119,7 @@ export function createCore(adapters: CoreAdapters): Core {
 
   // Outside agents (#351): the User's own agent, paired in Settings, reads its Folders over the
   // socket and gets Citations IncarnaMind minted and checked. Off until the User turns it on.
-  // Where agents keep their settings and skills.
-  const home = adapters.agents?.home ?? homedir();
+  const { home } = adapters.paths;
   const agents = createAgents({
     db,
     now,
@@ -2195,17 +2229,7 @@ export function createCore(adapters: CoreAdapters): Core {
       mindsChanged();
       return mind;
     },
-    deleteMind: async (mindId) => {
-      const at = now();
-      const deleted = db.transaction(() => {
-        const mind = minds.delete(mindId, at);
-        content.remove(mind.id, at);
-        return mind;
-      });
-      meetings.mindDeleted(deleted.id);
-      mindsChanged();
-      layouts.forgetDeletedMinds();
-    },
+    deleteMind: async (mindId) => removeMind(mindId),
     openMind: async (mindId) => {
       const mind = minds.get(mindId);
       // A Mind this version may only read is shown from what is stored: nothing is
@@ -2653,6 +2677,7 @@ export function createCore(adapters: CoreAdapters): Core {
     signInToChatGpt: (input) =>
       chatGpt.signIn({ anotherAccount: isRecord(input) && input.anotherAccount === true }),
     cancelChatGptSignIn: () => chatGpt.cancelSignIn(),
+    reopenChatGptSignIn: () => chatGpt.reopenSignInPage(),
     signOutOfChatGpt: () => chatGpt.signOut(),
     pasteChatGptSignInAddress: async (address) =>
       chatGpt.pasteSignInAddress(typeof address === "string" ? address : ""),

@@ -187,6 +187,7 @@ export function createMindCheck(options: MindCheckOptions) {
           text: sentence.text,
           evidence: null,
           says: null,
+          calculation: null,
           scope: scope.marked,
           versions: [],
           excluded: [],
