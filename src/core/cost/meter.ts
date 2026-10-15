@@ -95,7 +95,8 @@ interface RequestRow {
   billing: Billing;
   currency: Currency | null;
   requests: number;
-  amount: number | null;
+  settled: number;
+  set_aside: number;
   tokens: number | null;
   interrupted: number;
 }
@@ -173,11 +174,12 @@ export function createMeter(options: {
   /** The start of this calendar month, in the computer's time zone. */
   const monthStart = (at: Date) => new Date(at.getFullYear(), at.getMonth(), 1).toISOString();
 
-  /** Per provider, billing and currency: requests, what they cost (open reservations at their amount), and tokens. */
+  /** Per provider, billing and currency: requests, what the settled ones cost, what the open ones reserved, and tokens. */
   const monthRows = (since: string) =>
     db.all<RequestRow>(
       `SELECT provider_id, billing, currency, count(*) AS requests,
-         sum(CASE status WHEN 'reserved' THEN reserved ELSE cost END) AS amount,
+         coalesce(sum(CASE WHEN status <> 'reserved' THEN cost END), 0) AS settled,
+         coalesce(sum(CASE WHEN status = 'reserved' THEN reserved END), 0) AS set_aside,
          sum(coalesce(input_tokens, 0) + coalesce(output_tokens, 0)) AS tokens,
          sum(status = 'interrupted') AS interrupted
        FROM model_requests
@@ -187,14 +189,32 @@ export function createMeter(options: {
       [since],
     );
 
-  const spentIn = (currency: Currency, since: string) =>
-    monthRows(since).reduce(
-      (sum, row) =>
-        row.billing === "per-token" && row.currency && row.amount !== null
-          ? sum + inCurrency(row.amount, row.currency, currency)
-          : sum,
-      0,
-    );
+  /** What per-token requests cost this month once settled, and what is reserved for open ones, in `currency`. */
+  const monthIn = (currency: Currency, since: string) => {
+    let settled = 0;
+    let setAside = 0;
+    for (const row of monthRows(since)) {
+      if (row.billing !== "per-token" || !row.currency) continue;
+      settled += inCurrency(row.settled, row.currency, currency);
+      setAside += inCurrency(row.set_aside, row.currency, currency);
+    }
+    return { settled, setAside };
+  };
+
+  /** What counts against the cap: what is settled and what is set aside, together. */
+  const againstCap = (currency: Currency, since: string) => {
+    const { settled, setAside } = monthIn(currency, since);
+    return settled + setAside;
+  };
+
+  const towardCap = (cap: MonthlyCap | null, since: string) => {
+    if (!cap) return { spentTowardCap: null, setAsideTowardCap: null };
+    const { settled, setAside } = monthIn(cap.currency, since);
+    return {
+      spentTowardCap: { currency: cap.currency, amount: settled },
+      setAsideTowardCap: { currency: cap.currency, amount: setAside },
+    };
+  };
 
   /** Opens a request's record; throws `CostCapError`, recording nothing, when its reservation would pass the cap. */
   function begin(model: MeteredModel, params: CallOptions) {
@@ -231,7 +251,7 @@ export function createMeter(options: {
       const cap = options.cap();
       if (cap && price && reserved !== null) {
         const after =
-          spentIn(cap.currency, monthStart(at)) +
+          againstCap(cap.currency, monthStart(at)) +
           inCurrency(reserved, price.currency, cap.currency);
         if (after > cap.amount) throw new CostCapError();
       }
@@ -443,18 +463,20 @@ export function createMeter(options: {
       return open.count;
     },
 
-    /** This month so far: what per-token requests cost, and each provider's use. */
+    /** This month so far: what per-token requests cost once settled, what is set aside for open ones, and each provider's use. */
     summary(): CostSummary {
       const since = monthStart(now());
       const rows = monthRows(since);
       const byProvider = new Map<string, ProviderCost>();
       const totals = new Map<Currency, number>();
+      const asides = new Map<Currency, number>();
       for (const row of rows) {
         const provider = byProvider.get(row.provider_id) ?? {
           providerId: row.provider_id,
           billing: row.billing,
           requests: 0,
           spent: [],
+          setAside: [],
           unpricedTokens: 0,
           interrupted: 0,
         };
@@ -462,36 +484,40 @@ export function createMeter(options: {
         provider.interrupted += row.interrupted;
         if (row.billing === "per-token" && row.currency === null) {
           provider.unpricedTokens += row.tokens ?? 0;
-        } else if (row.billing === "per-token" && row.currency && row.amount !== null) {
-          provider.spent.push({ currency: row.currency, amount: row.amount });
-          totals.set(row.currency, (totals.get(row.currency) ?? 0) + row.amount);
+        } else if (row.billing === "per-token" && row.currency) {
+          provider.spent.push({ currency: row.currency, amount: row.settled });
+          totals.set(row.currency, (totals.get(row.currency) ?? 0) + row.settled);
+          if (row.set_aside > 0) {
+            provider.setAside.push({ currency: row.currency, amount: row.set_aside });
+            asides.set(row.currency, (asides.get(row.currency) ?? 0) + row.set_aside);
+          }
         }
         byProvider.set(row.provider_id, provider);
       }
       const cap = options.cap();
-      const spent: Money[] = [...totals].map(([currency, amount]) => ({ currency, amount }));
+      const moneys = (byCurrency: Map<Currency, number>): Money[] =>
+        [...byCurrency].map(([currency, amount]) => ({ currency, amount }));
       return {
         monthStart: since,
-        spent,
+        spent: moneys(totals),
+        setAside: moneys(asides),
         cap,
-        spentTowardCap: cap
-          ? { currency: cap.currency, amount: spentIn(cap.currency, since) }
-          : null,
+        ...towardCap(cap, since),
         providers: [...byProvider.values()],
       };
     },
 
     /**
-     * What a Task's model requests billed per token have cost, settled and
-     * still reserved, in the currency of most of it (the other at the fixed
-     * rate); null when none was priced.
+     * What a Task's model requests billed per token have cost once settled,
+     * in the currency of most of it (the other at the fixed rate); null when
+     * none was priced. A request still open adds when it settles.
      */
     taskCost(taskId: string): Money | null {
       const rows = db.all<{ currency: Currency; amount: number }>(
-        `SELECT currency, sum(CASE status WHEN 'reserved' THEN reserved ELSE cost END) AS amount
+        `SELECT currency, sum(cost) AS amount
          FROM model_requests
          WHERE run_id = ? AND deleted_at IS NULL AND billing = 'per-token'
-           AND currency IS NOT NULL
+           AND currency IS NOT NULL AND status <> 'reserved'
          GROUP BY currency ORDER BY amount DESC`,
         [taskId],
       );
@@ -559,9 +585,7 @@ export function createMeter(options: {
                 searchCost(model.price),
             }
           : null,
-        spentTowardCap: cap
-          ? { currency: cap.currency, amount: spentIn(cap.currency, monthStart(at)) }
-          : null,
+        ...towardCap(cap, monthStart(at)),
         cap,
       };
     },

@@ -2276,7 +2276,9 @@ export const zhCN = {
   "cost.cap.interrupted": "有 {count} 次请求被中断，费用未知。",
   "cost.cap.amount": "每月上限",
   "cost.cap.currency": "币种",
-  "cost.provider.thisMonth": "本月：{spent}",
+  "cost.provider.thisMonth": "本月已花 {spent}",
+  "cost.setAside": "进行中的任务预留 {amount}",
+  "cost.setAside.hint": "预留出来，避免进行中的任务超出你的月度上限",
   "cost.provider.unpriced": "本月：{tokens} token，价格未知",
 
   "citation.label": "引用 {number}：{document}。{badge}",
