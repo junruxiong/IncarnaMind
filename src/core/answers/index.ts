@@ -142,7 +142,12 @@ import {
   createCitationSession,
   withoutFootnoteDefinitions,
 } from "./citations";
-import { askAgainNote, unbackedClaims as claimsNoCallMade, holdBack } from "./claimedChanges";
+import {
+  askAgainNote,
+  askToWriteNote,
+  unbackedClaims as claimsNoCallMade,
+  holdBack,
+} from "./claimedChanges";
 import {
   conversationContext,
   conversationContextOf,
@@ -184,6 +189,7 @@ import {
   webInstructions,
 } from "./prompt";
 import { quotedWordsIn, withoutQuotationMarks } from "./quotedWords";
+import { routeRequest } from "./routeRequest";
 
 export type { AnswerDocuments } from "./citations";
 export { createAiSdkAnswerEngine } from "./engine";
@@ -1385,11 +1391,17 @@ export function createAnswers(options: AnswersOptions) {
           : [];
       // The Minds' Tools, for an Answer in the assistant (#202).
       const minds = outside ? undefined : options.minds;
+      const route = minds && input.assistant ? routeRequest(context.question) : null;
+      const requested =
+        route && (route.kind === "write" || route.kind === "edit")
+          ? { change: route.kind, newMind: route.newMind }
+          : null;
       const mindsTools =
         minds && input.assistant
           ? mindTools({
               minds,
               prepared,
+              requested,
               ...input.assistant,
               blocksOf: (text) => {
                 let found = 0;
@@ -1507,11 +1519,21 @@ export function createAnswers(options: AnswersOptions) {
         mindsNow ??= minds?.list() ?? [];
         return mindsNow;
       };
+      const changedAMind = () =>
+        [...mindChanges.values()].some(
+          (change) => change.created || change.revised || change.proposals > 0,
+        );
+      // Asked for text in a Mind, a reply that changed none and wasn't refused one is asked for once more.
+      const owesAWrite = () => requested !== null && !changedAMind() && mindProblems.size === 0;
+      const heldBack = holdBack(() => mindsListed().map((mind) => mind.name));
       const checkReply = (text: string) => {
         mindsNow = null;
         const claims = claimsNoCallMade(text, toolCalls, mindsListed());
-        return claims.length > 0
-          ? { claims, note: askAgainNote(claims, toolCalls, options.readableMindName) }
+        if (claims.length > 0) {
+          return { claims, note: askAgainNote(claims, toolCalls, options.readableMindName) };
+        }
+        return owesAWrite()
+          ? { claims, note: askToWriteNote(toolCalls, options.readableMindName) }
           : null;
       };
       for await (const event of engine.generate({
@@ -1543,7 +1565,7 @@ export function createAnswers(options: AnswersOptions) {
             connectorTools ? connectorInstructions(fromConnectors, mode === "no-documents") : "",
             sourcesInstructions(sourceTools),
             webInstructions(withWebTools),
-            mindInstructions(withMindTools),
+            mindInstructions(withMindTools, route),
             meetingInstructions(listening),
             signInNeededInstructions(signInNeeded.map((connector) => connector.name)),
             language,
@@ -1568,11 +1590,8 @@ export function createAnswers(options: AnswersOptions) {
         cacheKey: place.conversationId ?? place.mindId ?? undefined,
         ...(input.assistant && {
           checkReply,
-          shownUpTo: holdBack(() => mindsListed().map((mind) => mind.name)),
-          mayEndBlank: () =>
-            [...mindChanges.values()].some(
-              (change) => change.created || change.revised || change.proposals > 0,
-            ),
+          shownUpTo: (text: string) => (owesAWrite() ? 0 : heldBack(text)),
+          mayEndBlank: changedAMind,
         }),
         signal: controller.signal,
       })) {

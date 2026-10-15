@@ -1,0 +1,185 @@
+import type { MockLanguageModelV4 } from "ai/test";
+import { describe, expect, test } from "vitest";
+import type { Core } from "../../src/core";
+import { EDIT_INSTRUCTIONS } from "../../src/core/edits/prompt";
+import { pendingProposals, proposalRequestOf, resolveProposals } from "../../src/shared/proposals";
+import { askAssistant, changesIn } from "../helpers/assistant";
+import { createTempDataFolder, startCore } from "../helpers/core";
+import { connectToMind } from "../helpers/mindClient";
+import { heading, note, writeMind } from "../helpers/minds";
+import {
+  type ModelCall,
+  type ScriptedReply,
+  scriptedModel,
+  scriptedModels,
+} from "../helpers/models";
+
+/**
+ * How the assistant reads what the User asked for (`routeRequest`), through
+ * the core's public interface: the model is told, a request for text in a
+ * Mind that got a reply instead is asked for once more, and the requests the
+ * calls make record what was asked, for the changes that apply at once
+ * (#880). The model's choices are scripted.
+ */
+
+const asked = ({ options }: ModelCall): string => {
+  const last = options.prompt.filter((message) => message.role === "user").at(-1);
+  if (!last) return "";
+  return typeof last.content === "string"
+    ? last.content
+    : last.content.map((part) => ("text" in part ? part.text : "")).join("");
+};
+
+const called = (call: ModelCall, tool: string) => call.results.some((each) => each.tool === tool);
+
+const editPassage = (call: ModelCall): string | null =>
+  call.system === EDIT_INSTRUCTIONS
+    ? (/<passage>\n([\s\S]*?)\n<\/passage>/.exec(call.prompt)?.[1] ?? null)
+    : null;
+
+const ASKED_TO_WRITE = "The User asked for this in a Mind";
+const SUMMARY_PAGE = "## Summary\n\nThe paper is about spring tides.";
+
+async function setUp(model: MockLanguageModelV4) {
+  const core = startCore(await createTempDataFolder(), {
+    createChatModel: scriptedModels(model).createChatModel,
+  });
+  await core.saveChatProvider({ kind: "ollama", modelId: "local-model" });
+  const mind = await core.createMind({ title: "Q3 review" });
+  const client = await connectToMind(core, mind.id);
+  writeMind(client, [
+    heading(2, "Summary"),
+    note("The quarter was very good, and sales were really strong."),
+  ]);
+  await client.settled();
+  return { core, mind };
+}
+
+async function madeBy(core: Core, answer: Awaited<ReturnType<typeof askAssistant>>) {
+  const made = changesIn(answer).find((change) => change.created);
+  if (!made) throw new Error("The Answer made no Mind.");
+  return connectToMind(core, made.mindId);
+}
+
+describe("A request for text in a Mind", { timeout: 30_000 }, () => {
+  // protects=asked for a page, a reply that writes it in the panel is held back, the model is asked once more, and it writes the page, tagged as asked; fails_when=the panel text shows, the model isn't asked again, or the page's request isn't tagged "write"; no_claim=that a real model complies.
+  test("written in the reply instead, it is asked for once more and goes into a page", async () => {
+    let system = "";
+    const model = scriptedModel((call): ScriptedReply => {
+      system = call.system;
+      if (!asked(call).includes(ASKED_TO_WRITE))
+        return { text: "Summary: the paper is about tides." };
+      return called(call, "create_mind")
+        ? { text: "It covers the paper." }
+        : {
+            calls: [{ tool: "create_mind", input: { title: "Tide notes", content: SUMMARY_PAGE } }],
+          };
+    });
+    const { core, mind } = await setUp(model);
+    const shown: string[] = [];
+    core.on("answer.delta", (event) => shown.push(event.text));
+
+    const answer = await askAssistant(core, { text: "write a summary page", mindId: mind.id });
+
+    expect(system).toContain("This request asks for a new page or note");
+    expect(shown.join("")).not.toContain("Summary: the paper");
+    expect(answer.text).toBe("It covers the paper.");
+    const page = await madeBy(core, answer);
+    await page.settled();
+    const request = changesIn(answer)[0]?.request ?? "";
+    expect(proposalRequestOf(page.doc, request)).toMatchObject({
+      source: "answer-added",
+      requested: "write",
+    });
+  });
+
+  // protects=a Question is answered in the reply, with no instruction to write and nothing asked again; fails_when=the model is pushed to change a Mind; no_claim=none beyond protects.
+  test("a Question is answered in the reply, and nothing is asked again", async () => {
+    let system = "";
+    const model = scriptedModel((call): ScriptedReply => {
+      system = call.system;
+      return { text: "The quarter was good." };
+    });
+    const { core, mind } = await setUp(model);
+
+    const answer = await askAssistant(core, { text: "how was the quarter?", mindId: mind.id });
+
+    expect(answer.text).toBe("The quarter was good.");
+    expect(model.doStreamCalls).toHaveLength(1);
+    expect(system).not.toContain("This request asks");
+  });
+
+  // protects=a request a Tool refused (no Mind open) isn't asked for again: the refusal is the answer; fails_when=the model is asked to write after it was told it can't; no_claim=none beyond protects.
+  test("one a Tool refused isn't asked for again", async () => {
+    const model = scriptedModel(
+      ({ results }): ScriptedReply =>
+        results.length === 0
+          ? { calls: [{ tool: "add_to_mind", input: { content: "## Risks\n\nLate." } }] }
+          : { text: "No Mind is open: open one, or ask for a new Mind." },
+    );
+    const { core } = await setUp(model);
+
+    const answer = await askAssistant(core, { text: "add a risks section" });
+
+    expect(answer.text).toBe("No Mind is open: open one, or ask for a new Mind.");
+    expect(model.doStreamCalls).toHaveLength(2);
+  });
+});
+
+describe("What each change's request records", { timeout: 30_000 }, () => {
+  // protects=the owner's two requests tag their changes as asked: the new page "write", the edit of it "edit", and a revision of waiting text nothing; fails_when=a tag is missing or wrong, or a revision is tagged; no_claim=how #880 applies them.
+  test("“write a summary page” is tagged write, “make it longer” edit, a revision nothing", async () => {
+    const model = scriptedModel((call): ScriptedReply => {
+      const passage = editPassage(call);
+      if (passage !== null) return { text: `${passage} It also covers neap tides.` };
+      if (asked(call).endsWith("write a summary page")) {
+        return called(call, "create_mind")
+          ? { text: "It covers the paper." }
+          : {
+              calls: [
+                { tool: "create_mind", input: { title: "Tide notes", content: SUMMARY_PAGE } },
+              ],
+            };
+      }
+      return called(call, "edit_mind")
+        ? { text: "It says more now." }
+        : {
+            calls: [
+              {
+                tool: "edit_mind",
+                input: { mind: "Tide notes", part: "Summary", instruction: "Make it longer" },
+              },
+            ],
+          };
+    });
+    const { core, mind } = await setUp(model);
+    const first = await askAssistant(core, { text: "write a summary page", mindId: mind.id });
+    const page = await madeBy(core, first);
+    await page.settled();
+    const tagOf = (answer: Awaited<ReturnType<typeof askAssistant>>) =>
+      proposalRequestOf(page.doc, changesIn(answer)[0]?.request ?? "");
+    expect(tagOf(first)).toMatchObject({ requested: "write" });
+
+    const revising = await askAssistant(core, {
+      text: "make the summary section longer",
+      mindId: mind.id,
+      conversationId: first.conversationId,
+    });
+    await page.settled();
+    expect(changesIn(revising)[0]).toMatchObject({ revised: true });
+    expect(tagOf(revising)).not.toHaveProperty("requested");
+
+    page.doc.transact(() => resolveProposals(page.blocks, () => true, "accept"));
+    await page.settled();
+    expect(pendingProposals(page.blocks)).toEqual([]);
+    const editing = await askAssistant(core, {
+      text: "make the summary section longer",
+      mindId: mind.id,
+      conversationId: first.conversationId,
+    });
+    await page.settled();
+
+    expect(changesIn(editing)[0]).not.toHaveProperty("revised");
+    expect(tagOf(editing)).toMatchObject({ source: "edit-with-ai", requested: "edit" });
+  });
+});

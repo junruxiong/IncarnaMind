@@ -513,12 +513,15 @@ describe("A Question whose Search scope holds no Documents (#748)", { timeout: 3
       scope: { folderIds: [empty.id], tagIds: [], documentIds: [] },
     });
 
-    expect(model.doStreamCalls).toHaveLength(1);
+    expect(model.doStreamCalls.length).toBeGreaterThan(0);
     expect(answer.text).toBe("It is shorter now.");
     expect(answer.model).not.toBeNull();
     expect(answer.read).not.toBeNull();
-    expect(lastSent(model)).toContain("The summary section is long and wordy.");
-    expect(promptOf(model, 0).find((message) => message.role === "system")?.text).toContain(
+    const first = promptOf(model, 0);
+    expect(first.map((message) => message.text).join("\n")).toContain(
+      "The summary section is long and wordy.",
+    );
+    expect(first.find((message) => message.role === "system")?.text).toContain(
       "holds no Documents",
     );
   });

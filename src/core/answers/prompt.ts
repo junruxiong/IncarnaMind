@@ -4,6 +4,7 @@ import type { CitationSupport, SkillFile, UnreadFile, UnreadReason } from "../ap
 import { detectLanguage } from "../documents/textLanguage";
 import { LANGUAGE_NAMES, type Language } from "../language";
 import type { LoadedSkill, SkillSummary } from "../skills";
+import type { RequestRoute } from "./routeRequest";
 
 const CJK_CHARACTERS = new RegExp(`[${CJK}]`, "gu");
 const LATIN_WORDS = /\p{Script=Latin}{2,}/gu;
@@ -109,10 +110,11 @@ export function webInstructions(offered: boolean): string {
 
 /**
  * The Minds' Tools, when offered (#202): the User's words decide whether the
- * Answer answers, changes a Mind or makes one. IncarnaMind, not the reply,
- * reports what changed, from the calls; the reply never repeats the new text.
+ * Answer answers, changes a Mind or makes one, and `route` says how
+ * IncarnaMind read them. IncarnaMind, not the reply, reports what changed,
+ * from the calls; the reply never repeats the new text.
  */
-export function mindInstructions(offered: boolean): string {
+export function mindInstructions(offered: boolean, route: RequestRoute | null = null): string {
   if (!offered) return "";
   return [
     "You can also change the User's Minds (their notes) and make new ones, with read_mind, edit_mind, add_to_mind and create_mind. What you write into a Mind arrives there as changes the User accepts or rejects.",
@@ -123,7 +125,23 @@ export function mindInstructions(offered: boolean): string {
     "- If a Tool says nothing was changed, say that first, in one sentence, with why, and don't make the change another way.",
     "- What you write into a Mind follows the same rules as your replies: the language of the Question, and quotation marks only around a Document's own words.",
     "- Don't say what you changed or made in a Mind, nor repeat its new text: IncarnaMind writes under your reply what each call changed, and how much. Once the Tools are done, reply in a sentence or two, with no Citation markers, with only what that line can't say: why, what you left out, or plainly what you couldn't do and why.",
-  ].join("\n");
+    routeLine(route),
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function routeLine(route: RequestRoute | null): string {
+  switch (route?.kind) {
+    case "write":
+      return route.newMind
+        ? "- This request asks for a new page or note: write it into a new Mind with create_mind, not in your reply."
+        : "- This request asks for text in a Mind: write it there with add_to_mind, not in your reply. If text of yours still waiting already covers it, revise that with edit_mind instead of writing it again.";
+    case "edit":
+      return "- This request asks to change text in a Mind: change it there with edit_mind, not in your reply.";
+    default:
+      return "";
+  }
 }
 
 /**
