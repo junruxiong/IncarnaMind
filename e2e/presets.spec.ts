@@ -4,6 +4,7 @@ import {
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  newMind,
   openSettings,
   removeDataFolder,
   setLanguage,
@@ -54,6 +55,30 @@ test("Groq is a chip under More…, with its key page and its model marked not y
     await setLanguage(window, "zh-CN");
     await expect(reason).toHaveText("尚未测试引用核对");
     await expect(form.getByRole("radio", { name: "Groq", exact: true })).toBeChecked();
+  } finally {
+    await app.close();
+  }
+});
+
+test("the setup card offers only the first-class providers: no preset and no best-effort provider", async () => {
+  const { app, window } = await launchApp(dataDir, { ollama: "http://127.0.0.1:9" });
+  try {
+    await setWindowSize(app, window, 1100, 900);
+    await newMind(window);
+    await window.getByTestId("mind-editor").click();
+    await window.keyboard.press("ControlOrMeta+j");
+    await window.keyboard.type("What is in my Documents?");
+    await window.keyboard.press("Enter");
+    const card = window.getByTestId("model-setup");
+    await card.getByTestId("setup-other").click();
+    await card.getByTestId("way-key").click();
+    const form = card.getByTestId("provider-form");
+    await form.getByTestId("provider-more-toggle").click();
+    await expect(form.getByRole("radio", { name: "OpenRouter", exact: true })).toHaveCount(1);
+    for (const name of ["Groq", "Mistral", "xAI", "OpenAI-compatible server"]) {
+      await expect(form.getByRole("radio", { name, exact: true })).toHaveCount(0);
+    }
+    await expect(form.getByRole("radio", { name: /^(Kimi|GLM)/ })).toHaveCount(0);
   } finally {
     await app.close();
   }
