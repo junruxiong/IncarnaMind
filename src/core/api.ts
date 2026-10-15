@@ -6277,7 +6277,6 @@ export interface ExportPreferences {
   theirChanges?: TheirChangesShown;
 }
 
-/** See `ExportMindOptions`. */
 export interface SharePagePreferences {
   includeQuestions: boolean;
   citationCards: boolean;

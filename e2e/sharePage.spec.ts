@@ -153,8 +153,7 @@ test("a web page to share: the sheet offers it, and the file loads nothing and o
   await expect(window.getByTestId("mind-editor").getByTestId("citation")).toHaveCount(3);
   await useOutputLocation(window, out);
 
-  // The sheet: the format beside HTML, readers' cards on, the quiet foot line off and only
-  // there while cards are on, and no citation style, since the page numbers each Citation.
+  // No citation style: the page numbers each Citation.
   await openOptions(window, "Export options");
   const sheet = window.getByTestId("export-dialog");
   const format = sheet.getByTestId("export-format");
@@ -192,8 +191,6 @@ test("a web page to share: the sheet offers it, and the file loads nothing and o
   expect(requests.some((url) => url.startsWith("file:"))).toBe(true);
   expect(requests.filter((url) => !url.startsWith("file:"))).toEqual([]);
 
-  // By keyboard: Tab reaches the first marker, Enter opens its card beside it, ← → move between
-  // Citations, Tab stays in the card, and Esc closes it and goes back to the marker.
   const markers = page.locator("main a.cite");
   await expect(markers).toHaveCount(3);
   await expect(markers.first()).toHaveAttribute("role", "button");
@@ -236,14 +233,11 @@ test("a web page to share: the sheet offers it, and the file loads nothing and o
   await expect(markers.first()).toBeFocused();
   await expect(markers.first()).toHaveAttribute("aria-expanded", "false");
 
-  // Space opens it too, and a click outside closes it.
   await page.keyboard.press(" ");
   await expect(first).toBeVisible();
   await page.mouse.click(1000, 700);
   await expect(first).toBeHidden();
 
-  // At 375px the card is a sheet along the bottom, over a scrim; dragging it down, a tap
-  // outside and Esc close it.
   await resize(app, page, 375, 720);
   await pointAndClick(page, markers.nth(1));
   const second = page.locator("#card-2");
@@ -277,7 +271,6 @@ test("a web page to share: the sheet offers it, and the file loads nothing and o
   expect((await requestsMade(app)).filter((url) => !url.startsWith("file:"))).toEqual([]);
   await page.close();
 
-  // In Chinese, the sheet says the same.
   await setLanguage(window, "zh-CN");
   await openOptions(window, "导出选项");
   await expect(sheet.getByTestId("export-format").locator("option:checked")).toHaveText(

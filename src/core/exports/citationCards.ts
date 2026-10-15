@@ -38,7 +38,6 @@ export type CardContent =
   | { kind: "cells"; columns: string[]; rows: { label: string; cells: CardCell[] }[] }
   | { kind: "lines"; lines: { time: string; speaker: string | null; runs: CardRun[] }[] }
   | { kind: "quote"; text: string; scan: boolean }
-  /** The Document's text wasn't there when the page was made. */
   | { kind: "missing"; quote: string };
 
 export interface CitationCard {

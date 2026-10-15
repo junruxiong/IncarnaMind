@@ -79,7 +79,6 @@ export function notesSection(notes: readonly string[], labels: ExportLabels): st
   return `<section class="notes" aria-labelledby="notes-title"><h2 id="notes-title">${escapeText(labels.notes)}</h2><ol>${list}</ol></section>`;
 }
 
-/** A whole HTML file: its policy says what the page may load, and `body` is everything in `<body>`. */
 export function htmlFile({
   language,
   name,
