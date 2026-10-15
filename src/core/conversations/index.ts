@@ -706,7 +706,12 @@ export function createConversations(db: Database, now: () => string) {
     },
 
     /** The Question of an Answer, both live, to write the Answer again. */
-    questionOf(input: unknown): { answerId: string; question: ConversationQuestion } {
+    questionOf(input: unknown): {
+      answerId: string;
+      question: ConversationQuestion;
+      /** The Tool calls the Answer made, as it stands before it is written again. */
+      toolCalls: AnswerToolCall[];
+    } {
       if (!isRecord(input)) {
         throw new InvalidInputError("Expected { conversationId, answerId }.");
       }
@@ -719,7 +724,11 @@ export function createConversations(db: Database, now: () => string) {
       if (question?.kind !== "question") {
         throw new NotFoundError({ key: "error.answer.questionGone" });
       }
-      return { answerId: answer.id, question: toQuestion(question) };
+      return {
+        answerId: answer.id,
+        question: toQuestion(question),
+        toolCalls: storedList<AnswerToolCall>(answer.tool_calls),
+      };
     },
 
     /** Takes the Search scope off a Question, so its Answers search every Document (#748). */

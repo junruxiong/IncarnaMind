@@ -26,11 +26,10 @@ async function started() {
   const opened: string[] = [];
   const shim = await buildAgentShim();
   const core = startCore(dataDir, {
-    paths: { dataDir, documents: join(dataDir, "Documents"), tempDir },
+    paths: { dataDir, home, documents: join(dataDir, "Documents"), tempDir },
     agents: {
       ...(await agentsAdapter(dataDir)),
       shimScript: shim,
-      home,
       applications: [applications],
       openLink: async (url) => {
         links.push(url);
@@ -188,11 +187,10 @@ describe("setting an agent up", () => {
       const start = async () =>
         startCore(dataDir, {
           keychain,
-          paths: { dataDir, documents: join(dataDir, "Documents"), tempDir },
+          paths: { dataDir, home, documents: join(dataDir, "Documents"), tempDir },
           agents: {
             ...(await agentsAdapter(dataDir)),
             shimScript: await buildAgentShim(),
-            home,
             applications: [await createTempDataFolder()],
           },
         });
