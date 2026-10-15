@@ -73,6 +73,12 @@ const SOURCES: Record<
   "glm/intl": { modelsDev: "zai", litellm: "zai" },
   siliconflow: { modelsDev: "siliconflow-cn", litellm: "siliconflow", prices: false },
   "siliconflow/intl": { modelsDev: "siliconflow", litellm: "siliconflow" },
+  groq: { modelsDev: "groq", litellm: "groq" },
+  together: { modelsDev: "togetherai", litellm: "together_ai" },
+  fireworks: { modelsDev: "fireworks-ai", litellm: "fireworks_ai" },
+  cerebras: { modelsDev: "cerebras", litellm: "cerebras" },
+  cohere: { modelsDev: "cohere", litellm: "cohere_chat" },
+  venice: { modelsDev: "venice", litellm: "venice" },
 };
 
 const MIT = (copyright: string) =>
