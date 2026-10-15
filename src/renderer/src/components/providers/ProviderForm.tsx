@@ -274,6 +274,7 @@ export function ProviderForm({
   const example = catalog?.roles.answers;
   const modelIdField = (
     <input
+      id={`${id}-model-id`}
       required
       value={modelId}
       onChange={(event) => setModelId(event.target.value)}
@@ -399,10 +400,12 @@ export function ProviderForm({
           )}
 
           {choices.length === 0 ? (
-            <label className={fieldLabelClass}>
-              {t("providers.form.model")}
+            <div>
+              <label htmlFor={`${id}-model-id`} className={fieldLabelClass}>
+                {t("providers.form.model")}
+              </label>
               {modelIdField}
-            </label>
+            </div>
           ) : (
             <div>
               <label className={fieldLabelClass}>
@@ -428,11 +431,13 @@ export function ProviderForm({
                 </select>
               </label>
               {otherModel && (
-                <label className={`mt-2 ${fieldLabelClass}`}>
-                  <span className="sr-only">{t("providers.form.modelId")}</span>
+                <div className="mt-2">
+                  <label htmlFor={`${id}-model-id`} className="sr-only">
+                    {t("providers.form.modelId")}
+                  </label>
                   {modelIdField}
                   <span className={hintClass}>{t("providers.form.modelIdHint")}</span>
-                </label>
+                </div>
               )}
             </div>
           )}
