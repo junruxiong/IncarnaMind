@@ -62,6 +62,9 @@ export interface DataUse {
   url?: string;
 }
 
+/** Options for the AI SDK's provider, by its key: `{ anthropic: { effort: "low" } }`. */
+export type ProviderOptions = Record<string, Record<string, unknown>>;
+
 /** What every request to a provider carries, whatever the model. */
 export interface RequestQuirks {
   /** Ask the provider not to keep requests (the Responses API of OpenAI and xAI keeps them otherwise). */
@@ -79,7 +82,16 @@ export interface RequestQuirks {
    * the small calls that don't write the Answer. A model whose id starts with
    * one of `unless` can't turn it off.
    */
-  thinkingOff?: { options: Record<string, Record<string, unknown>>; unless?: readonly string[] };
+  thinkingOff?: {
+    options: ProviderOptions;
+    unless?: readonly string[];
+    /**
+     * For a model that refuses `options` and that the catalog has no form for
+     * (`ModelFacts.thinkingOff`), the form its provider's refusal names: the
+     * first whose `names` the error message contains.
+     */
+    refused?: readonly { names: string; options: ProviderOptions }[];
+  };
   /**
    * Provider options that ask for the provider's summary of a model's
    * reasoning, for the calls that write the Answer (#391). Only providers
@@ -88,7 +100,7 @@ export interface RequestQuirks {
    * `only`, they go to the models whose id starts with one of its prefixes,
    * the ones that think by default.
    */
-  reasoningSummary?: { options: Record<string, Record<string, unknown>>; only?: readonly string[] };
+  reasoningSummary?: { options: ProviderOptions; only?: readonly string[] };
 }
 
 /**
@@ -193,6 +205,8 @@ export interface ModelFacts {
   temperature: boolean;
   /** It accepts a forced Tool choice ("required" or a named Tool). */
   forcedToolChoice: boolean;
+  /** How a small call asks it not to think, where its provider's way (`RequestQuirks.thinkingOff`) is refused. */
+  thinkingOff: ProviderOptions;
   /** Its context window, in tokens, input and output together. */
   context: number;
   /** The most a request may send, when the provider limits input below the window. */
