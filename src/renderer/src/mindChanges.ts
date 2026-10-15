@@ -144,11 +144,15 @@ const openBeside = (mindId: string) =>
 /** Frames to wait for a Mind just opened to show its changes. */
 const REVEAL_FRAMES = 60;
 
-/** Puts the cursor in the first of the requests' changes in a Mind open in the editor, once it shows them. */
-function revealChange(mindId: string, requests: readonly string[], frames = REVEAL_FRAMES): void {
+/** Puts the cursor in the first of the changes `picked` picks in a Mind open in the editor, once it shows them. */
+function revealChange(
+  mindId: string,
+  picked: (proposal: ProposalRef) => boolean,
+  frames = REVEAL_FRAMES,
+): void {
   const read = readMindHandle.current;
   if (read && read.mindId === mindId && !read.editor.isDestroyed) {
-    const first = pendingIn(read.editor.state).find(belongsTo(requests));
+    const first = pendingIn(read.editor.state).find(picked);
     if (first) {
       const at = first.block ? first.from + 1 : first.from;
       read.editor
@@ -160,13 +164,19 @@ function revealChange(mindId: string, requests: readonly string[], frames = REVE
       return;
     }
   }
-  if (frames > 0) requestAnimationFrame(() => revealChange(mindId, requests, frames - 1));
+  if (frames > 0) requestAnimationFrame(() => revealChange(mindId, picked, frames - 1));
 }
 
 /** Review and Open: the Mind, at its first change from the Answer. */
 export function showChanges(row: ChangedMind): void {
   useAppStore.getState().openMind(row.mindId);
-  revealChange(row.mindId, row.requests);
+  revealChange(row.mindId, belongsTo(row.requests));
+}
+
+/** Review, where changes waiting kept the assistant from changing a Mind (#893): the Mind, at its first change. */
+export function showWaitingChanges(mindId: string): void {
+  useAppStore.getState().openMind(mindId);
+  revealChange(mindId, () => true);
 }
 
 /** One Mind's part of Accept all or Reject all: how many changes it took, and how to take it back and do it again. */
