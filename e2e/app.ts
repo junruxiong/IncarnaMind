@@ -128,6 +128,11 @@ export interface LaunchOptions {
    * started with `startScriptedTask`. Needs a test build.
    */
   scriptedTasks?: boolean;
+  /**
+   * How long after a new version of a Document contradiction watch checks its
+   * Folder's Minds (#112), instead of 30 seconds. Needs a test build.
+   */
+  contradictionWatchDelayMs?: number;
 }
 
 /**
@@ -181,6 +186,7 @@ export async function launchApp(
     scans,
     web,
     scriptedTasks = false,
+    contradictionWatchDelayMs,
   }: LaunchOptions = {},
 ): Promise<RunningApp> {
   const env: Record<string, string> = {};
@@ -207,6 +213,7 @@ export async function launchApp(
   delete env.INCARNAMIND_TEST_SCANS;
   delete env.INCARNAMIND_TEST_WEB;
   delete env.INCARNAMIND_TEST_TASKS;
+  delete env.INCARNAMIND_TEST_CONTRADICTION_DELAY_MS;
   // A test never uses the ChatGPT sign-in an agent's shell may point at for checks by hand.
   delete env.INCARNAMIND_CHATGPT_PROFILE;
   env.INCARNAMIND_TEST_AUDIO = "fake";
@@ -229,6 +236,9 @@ export async function launchApp(
   if (scans) env.INCARNAMIND_TEST_SCANS = scans;
   if (web) env.INCARNAMIND_TEST_WEB = String(web);
   if (scriptedTasks) env.INCARNAMIND_TEST_TASKS = "1";
+  if (contradictionWatchDelayMs !== undefined) {
+    env.INCARNAMIND_TEST_CONTRADICTION_DELAY_MS = String(contradictionWatchDelayMs);
+  }
   env.INCARNAMIND_DATA_DIR = dataDir;
   env.INCARNAMIND_TEST_HOOKS = "1";
   if (fakeChat) env.INCARNAMIND_FAKE_CHAT = "1";

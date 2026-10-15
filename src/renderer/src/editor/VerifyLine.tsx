@@ -27,7 +27,7 @@ import {
 } from "../verify";
 import { AnswerError } from "./AnswerView";
 import { coverageOf, sameCoverage, shownClaims } from "./claimChecks";
-import { useMindModel } from "./ModelChip";
+import { useMindModel, useRunModel } from "./ModelChip";
 import { UncoveredLine } from "./UncoveredLine";
 
 /** What a Mind made by "Verify a document…" verifies, as it changes. */
@@ -84,13 +84,7 @@ export function VerifyLine({
   );
   const outcome = useVerify((state) => state.outcomes[mindId]);
   const openSettings = useAppStore((state) => state.openSettings);
-  // The model the run used: the Mind's own, else the default the composer shows.
-  const defaultProvider = useAppStore((state) =>
-    state.chatReadiness?.ready ? state.chatReadiness.provider.id : null,
-  );
-  const defaultModelId = useAppStore((state) =>
-    state.chatReadiness?.ready ? state.chatReadiness.modelId : null,
-  );
+  const runModel = useRunModel(doc);
   const inFolder = useAppStore(
     (state) => (state.minds.find((each) => each.id === mindId)?.folderId ?? null) !== null,
   );
@@ -339,8 +333,8 @@ export function VerifyLine({
         // The Answer errors' own wordings: the company or model named, and what to do next.
         <AnswerError
           kind={outcome.error.kind}
-          modelId={model?.modelId ?? defaultModelId}
-          providerId={model?.providerId ?? defaultProvider}
+          modelId={runModel.modelId}
+          providerId={runModel.providerId}
           resetsAt={outcome.error.resetsAt ?? null}
           details={outcome.error.message}
           onRetry={() =>
