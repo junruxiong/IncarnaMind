@@ -817,12 +817,20 @@ class RunWriter {
     deleted: boolean;
   } | null = null;
 
+  private readonly importedMarks = new Map<XmlElement, TextMarks>();
+
   constructor(
     private readonly input: ParagraphInput,
     private readonly context: ParagraphContext,
     private readonly scope: Namespaces,
     private readonly paragraph: XmlElement | null,
-  ) {}
+  ) {
+    for (const token of input.base?.tokens ?? []) {
+      if (token.kind === "char" && token.run && !this.importedMarks.has(token.run)) {
+        this.importedMarks.set(token.run, token.marks);
+      }
+    }
+  }
 
   /** The wrappers around an element, outermost first, up to the paragraph. */
   private wrappersOf(element: XmlElement | null): XmlElement[] {
@@ -974,7 +982,8 @@ class RunWriter {
     const baseRPr = use === "borrowed" ? withoutFormatChange(ownRPr) : ownRPr;
     const linkChanged = token.marks.link !== inheritedLink;
     const style = !linkChanged ? null : token.marks.link ? addLinkStyle() : linkStyle;
-    const rPr = runPropertiesFor(baseRPr, token.marks, style);
+    const imported = formatRun ? this.importedMarks.get(formatRun) : undefined;
+    const rPr = runPropertiesFor(baseRPr, token.marks, style, imported);
     const startTag = formatRun ? openTag(text, formatRun) : "<w:r>";
     const deleted =
       changes.some((each) => each.kind === "delete") ||
