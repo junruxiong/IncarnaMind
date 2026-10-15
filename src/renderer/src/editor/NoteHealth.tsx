@@ -261,11 +261,31 @@ export function NoteHealth({
             : t("checks.problem.no-documents.all")}
         </ProblemLine>
       )}
+      {!running && problem?.kind === "waiting" && (
+        <ProblemLine
+          testId="checks-waiting"
+          className="mind-health-line"
+          action={{
+            label: t("checks.acceptAndCheck"),
+            testId: "checks-accept-and-check",
+            onClick: () => {
+              dismissCheckProblem(mindId);
+              problem.acceptAndCheck();
+            },
+          }}
+          also={close}
+        >
+          {problem.sentences === 1
+            ? t("checks.waiting.one")
+            : t("checks.waiting", { count: format(problem.sentences) })}
+        </ProblemLine>
+      )}
       {!running &&
         problem &&
         problem.kind !== "not-ready" &&
         problem.kind !== "local-mode" &&
-        problem.kind !== "no-documents" && (
+        problem.kind !== "no-documents" &&
+        problem.kind !== "waiting" && (
           <ProblemLine
             testId="checks-problem"
             className="mind-health-line"

@@ -325,6 +325,8 @@ export function createChecks(options: ChecksOptions) {
     const { mindId } = input;
     const read = content.read(mindId, (blocks) => selectedSentences(blocks, input.from, input.to));
     if (!read.ok) return { kind: read.reason };
+    const { waiting } = read;
+    if (read.sentences.length === 0) return { kind: "waiting", waiting };
 
     const original = options.originalOf(mindId) ?? undefined;
     const { searchable, folderId, check } = scopeOf(mindId, input.allDocuments, original);
@@ -396,6 +398,7 @@ export function createChecks(options: ChecksOptions) {
       sentences: queued.length,
       checked,
       smallModel: judgesUnreliably(ready.prepared),
+      ...(waiting.sentences > 0 && { waiting }),
     };
   }
 

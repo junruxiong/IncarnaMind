@@ -15,6 +15,7 @@ import {
   addDocuments,
   createDataFolder,
   dismissChatSetup,
+  exportFromMenu,
   interceptOpenDialog,
   interceptOpenPath,
   interceptShowItemInFolder,
@@ -344,7 +345,7 @@ test("a Mind with one chart prints its picture, drawn at twice its size, its cap
 
   // In Chinese, the words are Chinese.
   await bridge(window).language("zh-CN");
-  await pointAndClick(window, window.getByTestId("export-mind"));
+  await exportFromMenu(window);
   await expect(window.getByTestId("export-done")).toHaveText("已保存“Tides 潮汐 2.pdf”", {
     timeout: 30_000,
   });
@@ -443,13 +444,18 @@ test("Export options remembers the format and its options; Export and ⇧⌘E us
   const out = await createDataFolder();
   await useOutputLocation(window, out);
 
-  // Export says what one click does: the last format, Word to begin with.
+  // Export's menu lists the last format first, with ⇧⌘E: Word to begin with.
   const exportButton = window.getByTestId("export-mind");
   await expect(exportButton).toHaveAttribute("data-format", "docx");
-  await expect(exportButton).toHaveAttribute(
-    "aria-label",
-    /^Export as Word \(\.docx\) \((⇧⌘E|Ctrl\+Shift\+E)\)$/,
-  );
+  const exportMenu = window.getByTestId("export-menu");
+  await pointAndClick(window, exportButton);
+  await expect(exportMenu.getByRole("menuitem")).toHaveText([
+    /^Word \(\.docx\)(⇧⌘E|Ctrl\+Shift\+E)$/,
+    "PDF",
+    "More formats",
+    "Export options…",
+  ]);
+  await window.keyboard.press("Escape");
 
   // The sheet opens with the options last saved; Cancel leaves them so.
   const sheet = window.getByTestId("export-dialog");
@@ -498,7 +504,7 @@ test("Export options remembers the format and its options; Export and ⇧⌘E us
   const result = window.getByTestId("export-result");
   const first = await savedPath(window, "Tides.pdf");
   await screenshot(window, "export-result-en-wide");
-  await pointAndClick(window, exportButton);
+  await exportFromMenu(window);
   await savedPath(window, "Tides 2.pdf");
   expect((await readFile(first)).subarray(0, 5).toString("latin1")).toBe("%PDF-");
   expect((await readdir(out)).sort()).toEqual(["Tides 2.pdf", "Tides.pdf"]);
@@ -511,7 +517,7 @@ test("Export options remembers the format and its options; Export and ⇧⌘E us
   await mkdir(gone, { recursive: true });
   await useOutputLocation(window, gone);
   await rm(join(sources, "Exports"), { recursive: true });
-  await pointAndClick(window, exportButton);
+  await exportFromMenu(window);
   const problem = result.getByTestId("export-problem");
   await expect(problem).toHaveText(
     "Couldn't save: the folder isn't there any more · Change output location…",
@@ -523,7 +529,14 @@ test("Export options remembers the format and its options; Export and ⇧⌘E us
   // In Chinese, at the narrowest window, the sheet and the line fit, in Chinese.
   await bridge(window).language("zh-CN");
   await setWindowSize(app, window, 900, WINDOW_SIZE.height);
-  await expect(exportButton).toHaveAttribute("aria-label", /^导出为 PDF（(⇧⌘E|Ctrl\+Shift\+E)）$/);
+  await pointAndClick(window, exportButton);
+  await expect(exportMenu.getByRole("menuitem")).toHaveText([
+    /^PDF(⇧⌘E|Ctrl\+Shift\+E)$/,
+    "Word（.docx）",
+    "更多格式",
+    "导出选项…",
+  ]);
+  await window.keyboard.press("Escape");
   await openOptions(window, "导出选项");
   await expect(sheet.getByTestId("export-format-note")).toHaveText(
     "引用会成为脚注，写明文档和位置。",
@@ -545,7 +558,7 @@ test("Export options remembers the format and its options; Export and ⇧⌘E us
   await motionSettled(window);
   await screenshot(window, "export-options-zh-narrow");
   await window.keyboard.press("Escape");
-  await pointAndClick(window, exportButton);
+  await exportFromMenu(window);
   await expect(result.getByTestId("export-done")).toHaveText("已保存“Tides 4.pdf”", {
     timeout: 30_000,
   });

@@ -218,6 +218,44 @@ describe("Find support", () => {
     expect((await shownChecks(core, client))[0]?.shown).toEqual({ state: "unsupported" });
   });
 
+  test("a sentence holding a change still waiting is left out and counted; with only such sentences, nothing is sent", async () => {
+    const calls: ModelCall[] = [];
+    const { core, client, mind } = await setUpWithDocuments(checkingModel(PLANS, calls), [TIDES]);
+    const change = { id: "change-1", request: "request-1", target: "x" };
+    const block = paragraph(text(`${SUPPORTED} Penguins nest `), {
+      type: "text",
+      text: "on the cliffs above the harbour.",
+      marks: [{ type: "proposalInsert", attrs: change }],
+    });
+    writeMind(client, [block]);
+    await client.settled();
+    const length = SUPPORTED.length + 1 + UNSUPPORTED.length;
+    const check = (from: number) =>
+      core.checkSentences({
+        requestId: crypto.randomUUID(),
+        mindId: mind.id,
+        action: "find-support",
+        from: { blockId: block.attrs.id, offset: from },
+        to: { blockId: block.attrs.id, offset: length },
+      });
+
+    expect(await check(0)).toEqual({
+      kind: "checked",
+      sentences: 1,
+      checked: 1,
+      smallModel: false,
+      waiting: { sentences: 1, changes: ["change-1"] },
+    });
+    expect((await shownChecks(core, client)).map((each) => each.sentence)).toEqual([SUPPORTED]);
+
+    calls.length = 0;
+    expect(await check(SUPPORTED.length + 1)).toEqual({
+      kind: "waiting",
+      waiting: { sentences: 1, changes: ["change-1"] },
+    });
+    expect(calls).toEqual([]);
+  });
+
   test("with nothing to check against, nothing is sent", async () => {
     const calls: ModelCall[] = [];
     const model = checkingModel(PLANS, calls);

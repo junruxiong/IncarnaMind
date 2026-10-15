@@ -14,15 +14,18 @@ import {
   DEFAULT_FOLDER_ZH,
   dismissChatSetup,
   editFolderInLibrary,
+  exportFromMenu,
   interceptOpenDialog,
   interceptOpenPath,
   interceptShowItemInFolder,
   launchApp,
+  motionSettled,
   newMind,
   openDocumentMenu,
   openSettings,
   pathsOpened,
   pathsShown,
+  pointAndClick,
   removeDataFolder,
   setWindowSize,
   showSourceLocations,
@@ -72,7 +75,91 @@ test.afterEach(async () => {
   await removeDataFolder(sources);
 });
 
-test("Export saves a .docx in one click: the first goes to Documents › IncarnaMind without asking and says so, with Open and Change folder…; the Mind says a quote wasn't found, and the next goes there under a free name", async () => {
+test("Export opens a short menu: Word and PDF, the last one used first with ⇧⌘E, the rest under More formats, by mouse and keyboard, in Chinese too", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await setWindowSize(app, window, WINDOW_SIZE.width, WINDOW_SIZE.height);
+  await newMind(window);
+  await window.getByTestId("mind-title").fill("Tides");
+  await window.getByTestId("mind-editor").click();
+  await window.keyboard.type("Spring tides come twice a month.");
+  await useOutputLocation(window, sources);
+  const done = window.getByTestId("export-result").getByTestId("export-done");
+  const menu = window.getByTestId("export-menu");
+  const items = menu.getByRole("menuitem");
+  const shortcut = /(⇧⌘E|Ctrl\+Shift\+E)$/;
+
+  await pointAndClick(window, window.getByTestId("export-mind"));
+  await expect(items).toHaveText([/^Word \(\.docx\)/, "PDF", "More formats", "Export options…"]);
+  await expect(items.first()).toHaveText(shortcut);
+  await motionSettled(window);
+  // Under the button, its right edge by the button's, so it stays over the Mind.
+  const button = await window.getByTestId("export-mind").boundingBox();
+  const opened = await menu.boundingBox();
+  expect(
+    Math.abs((opened?.x ?? 0) + (opened?.width ?? 0) - (button?.x ?? 0) - (button?.width ?? 0)),
+  ).toBeLessThan(2);
+  expect(opened?.y ?? 0).toBeGreaterThan(button?.y ?? 0);
+  await screenshot(window, "export-menu-en");
+  await pointAndClick(window, menu.getByTestId("export-as-docx"));
+  await expect(done).toHaveText("Saved Tides.docx");
+
+  // PDF exports, and is first the next time.
+  await exportFromMenu(window, "pdf");
+  await expect(done).toHaveText("Saved Tides.pdf");
+  await pointAndClick(window, window.getByTestId("export-mind"));
+  await expect(items).toHaveText([
+    new RegExp(`^PDF${shortcut.source}`),
+    "Word (.docx)",
+    "More formats",
+    "Export options…",
+  ]);
+
+  // More formats opens beside it, from the keyboard too; Markdown exports from there.
+  await window.keyboard.press("ArrowDown");
+  await window.keyboard.press("ArrowDown");
+  await expect(menu.getByTestId("export-more")).toBeFocused();
+  await window.keyboard.press("ArrowRight");
+  const more = window.getByTestId("export-more-menu");
+  await expect(more.getByRole("menuitem")).toHaveText([
+    "Markdown (.md)",
+    "HTML",
+    "Source pack (PDF)",
+  ]);
+  await expect(more.getByTestId("export-as-markdown")).toBeFocused();
+  await motionSettled(window);
+  await screenshot(window, "export-more-en");
+  await window.keyboard.press("ArrowLeft");
+  await expect(more).toBeHidden();
+  await expect(menu.getByTestId("export-more")).toBeFocused();
+  await window.keyboard.press("ArrowRight");
+  await window.keyboard.press("Enter");
+  await expect(done).toHaveText("Saved Tides.md");
+
+  // In Chinese.
+  await bridge(window).language("zh-CN");
+  await pointAndClick(window, window.getByTestId("export-mind"));
+  await expect(items).toHaveText([
+    /^Markdown（\.md）/,
+    "Word（.docx）",
+    "PDF",
+    "更多格式",
+    "导出选项…",
+  ]);
+  await motionSettled(window);
+  await screenshot(window, "export-menu-zh");
+  // The pointer opens More formats as it comes onto it; the click that follows keeps it open.
+  await pointAndClick(window, menu.getByTestId("export-more"));
+  await motionSettled(window);
+  await expect(more).toBeVisible();
+  await expect(menu.getByTestId("export-more")).toHaveAttribute("aria-expanded", "true");
+  await window.keyboard.press("Escape");
+  await expect(more).toBeHidden();
+  await window.keyboard.press("Escape");
+  await expect(menu).toBeHidden();
+});
+
+test("Export saves a .docx from its menu: the first goes to Documents › IncarnaMind without asking and says so, with Open and Change folder…; the Mind says a quote wasn't found, and the next goes there under a free name", async () => {
   await writeFile(join(sources, "Tides.pdf"), TIDES);
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
@@ -91,13 +178,13 @@ test("Export saves a .docx in one click: the first goes to Documents › Incarna
   await addToNote(window, answer);
   await expect(editor.getByTestId("citation")).toHaveAttribute("data-check", "not-found");
 
-  // One click exports in the last format, Word to begin with. The first save goes to IncarnaMind
+  // Export's first item is the last format, Word to begin with. The first save goes to IncarnaMind
   // in Documents (the test build's own Documents folder) without asking, and the line says so.
   await interceptShowItemInFolder(app);
   await interceptOpenPath(app);
   const exportButton = window.getByTestId("export-mind");
   await expect(exportButton).toHaveAttribute("data-format", "docx");
-  await exportButton.click();
+  await exportFromMenu(window);
   const result = window.getByTestId("export-result");
   const ask = window.getByTestId("file-write-dialog");
   const done = result.getByTestId("export-done");
@@ -137,7 +224,7 @@ test("Export saves a .docx in one click: the first goes to Documents › Incarna
 
   // The next export doesn't ask either, says only its name, and leaves the first file as it was.
   const first = await readFile(target);
-  await exportButton.click();
+  await exportFromMenu(window);
   await expect(done).toHaveText("Saved Tides 2.docx");
   await expect(ask).toBeHidden();
   await expect(result.getByTestId("export-change-folder")).toHaveCount(0);
@@ -161,10 +248,9 @@ test("in Chinese, at the narrowest window, the first export says it went to 文�
   await window.getByTestId("mind-editor").click();
   await window.keyboard.type("Spring tides come twice a month.");
 
-  const exportButton = window.getByTestId("export-mind");
   const result = window.getByTestId("export-result");
   const ask = window.getByTestId("file-write-dialog");
-  await exportButton.click();
+  await exportFromMenu(window);
   await expect(ask).toHaveAttribute("data-kind", "output-location");
   await expect(ask.getByRole("heading")).toHaveText("Where should new files go?");
   await expect(ask.getByTestId("file-write-unusable")).toHaveText(
@@ -178,7 +264,7 @@ test("in Chinese, at the narrowest window, the first export says it went to 文�
 
   await bridge(window).language("zh-CN");
   await setWindowSize(app, window, 900, WINDOW_SIZE.height);
-  await exportButton.click();
+  await exportFromMenu(window);
   await expect(ask.getByRole("heading")).toHaveText("新文件保存到哪里？");
   await expect(ask.getByTestId("file-write-unusable")).toHaveText(
     `无法把“${title}.docx”保存到“${DEFAULT_FOLDER_ZH}”：IncarnaMind 无法创建这个文件夹。`,
@@ -191,7 +277,7 @@ test("in Chinese, at the narrowest window, the first export says it went to 文�
   // With the file out of the way, the save goes there and says so, the whole name wrapped
   // inside the line rather than cut short.
   await rm(blocked);
-  await exportButton.click();
+  await exportFromMenu(window);
   const done = result.getByTestId("export-done");
   await expect(done).toHaveText(`已保存“${title}.docx”到“${DEFAULT_FOLDER_ZH}”`);
   await expect(result.getByTestId("export-open")).toHaveText("打开");
@@ -243,7 +329,7 @@ test("maths exports to .docx as Word equations, which a Word viewer shows as equ
 
   const target = join(sources, "Gravity.docx");
   await useOutputLocation(window, sources);
-  await window.getByTestId("export-mind").click();
+  await exportFromMenu(window);
   await expect(window.getByTestId("export-done")).toHaveText("Saved Gravity.docx");
 
   // Word equations, not "$…$" text: one on its own line, one in the sentence.
@@ -308,7 +394,7 @@ test("saving inside a Linked folder asks once; Settings › General shows where 
   // The first save there asks about the Linked folder; the next doesn't.
   const result = window.getByTestId("export-result");
   const ask = window.getByTestId("file-write-dialog");
-  const exportOnce = () => window.getByTestId("export-mind").click();
+  const exportOnce = () => exportFromMenu(window);
   await exportOnce();
   await expect(ask).toHaveAttribute("data-kind", "linked-folder");
   await expect(ask.getByRole("heading")).toHaveText("Add files to “Papers”?");
@@ -377,7 +463,7 @@ test("an export saved into a Linked folder is IncarnaMind's file: its viewer say
   await window.getByTestId("mind-title").fill("Tides");
   await window.getByTestId("mind-editor").click();
   await window.keyboard.type("Spring tides come twice a month.");
-  await window.getByTestId("export-mind").click();
+  await exportFromMenu(window);
   await expect(window.getByTestId("export-done")).toHaveText("Saved Tides.docx");
 
   // The Linked folder picks the export up, beside the User's own file.

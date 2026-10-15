@@ -6,6 +6,7 @@
  */
 import * as Y from "yjs";
 import { readClaimCheck } from "../../../shared/claimChecks";
+import { readProposalAttribute, readProposalRef } from "../../../shared/proposals";
 import { INLINE_NODE, sentenceSpans } from "../../../shared/sentences";
 import {
   BLOCK_ID_ATTRIBUTE,
@@ -17,6 +18,7 @@ import {
   PROPOSAL_DELETE_MARK,
   PROPOSAL_INSERT_MARK,
   type TextPlace,
+  type WaitingSentences,
 } from "../../api";
 import { layout, textBlocks } from "../../proposals/write";
 
@@ -44,8 +46,8 @@ export interface SelectedSentence {
 }
 
 export type SelectedSentences =
-  | { ok: true; sentences: SelectedSentence[] }
-  | { ok: false; reason: "nothing" | "has-proposals" };
+  | { ok: true; sentences: SelectedSentence[]; waiting: WaitingSentences }
+  | { ok: false; reason: "nothing" };
 
 /** A Block's text as checks read it. */
 function textOf(element: Y.XmlElement): string {
@@ -62,32 +64,32 @@ function textOf(element: Y.XmlElement): string {
     .join("");
 }
 
-/** Whether `from`..`to` of a Block holds a change still waiting. */
-function holdsProposal(element: Y.XmlElement, from: number, to: number): boolean {
+/** The changes still waiting in `from`..`to` of a Block, or on the Block, by id. */
+function changesIn(element: Y.XmlElement, from: number, to: number): string[] {
+  const found = new Set<string>();
+  const add = (ref: { id: string } | null) => {
+    if (ref) found.add(ref.id);
+  };
   for (let at: unknown = element; at instanceof Y.XmlElement; at = at.parent) {
-    if (at.getAttribute(PROPOSAL_ATTRIBUTE)) return true;
+    add(readProposalAttribute(at.getAttribute(PROPOSAL_ATTRIBUTE)));
   }
   for (const { node, start, size } of layout(element)) {
     if (start + size <= from || start >= to) continue;
     if (node instanceof Y.XmlElement) {
-      if (node.getAttribute(PROPOSAL_ATTRIBUTE)) return true;
+      add(readProposalAttribute(node.getAttribute(PROPOSAL_ATTRIBUTE)));
       continue;
     }
     let offset = start;
     for (const run of node.toDelta() as Run[]) {
       const length = typeof run.insert === "string" ? run.insert.length : 1;
-      const overlaps = offset < to && offset + length > from;
-      if (
-        overlaps &&
-        run.attributes &&
-        (PROPOSAL_INSERT_MARK in run.attributes || PROPOSAL_DELETE_MARK in run.attributes)
-      ) {
-        return true;
+      if (offset < to && offset + length > from) {
+        add(readProposalRef(run.attributes?.[PROPOSAL_INSERT_MARK]));
+        add(readProposalRef(run.attributes?.[PROPOSAL_DELETE_MARK]));
       }
       offset += length;
     }
   }
-  return false;
+  return [...found];
 }
 
 /** What the Citations in `from`..`to` of a Block quote. */
@@ -124,6 +126,7 @@ export function selectedSentences(
   const last = all.findIndex(({ element }) => idOf(element) === to.blockId);
   if (first < 0 || last < first) return { ok: false, reason: "nothing" };
   const sentences: SelectedSentence[] = [];
+  const waiting: WaitingSentences = { sentences: 0, changes: [] };
   for (const [index, { element, busy }] of all.slice(first, last + 1).entries()) {
     if (busy || element.nodeName !== "paragraph") continue;
     const blockId = idOf(element);
@@ -135,7 +138,12 @@ export function selectedSentences(
       const touched =
         start === end ? span.from <= start && start <= span.to : span.from < end && span.to > start;
       if (!touched) continue;
-      if (holdsProposal(element, span.from, span.to)) return { ok: false, reason: "has-proposals" };
+      const changes = changesIn(element, span.from, span.to);
+      if (changes.length > 0) {
+        waiting.sentences++;
+        waiting.changes.push(...changes.filter((id) => !waiting.changes.includes(id)));
+        continue;
+      }
       sentences.push({
         element,
         blockId,
@@ -147,7 +155,9 @@ export function selectedSentences(
       });
     }
   }
-  return sentences.length > 0 ? { ok: true, sentences } : { ok: false, reason: "nothing" };
+  return sentences.length + waiting.sentences > 0
+    ? { ok: true, sentences, waiting }
+    : { ok: false, reason: "nothing" };
 }
 
 /** Every sentence of the Mind's paragraphs, in order, but those holding a change still waiting. */
@@ -157,7 +167,7 @@ export function everySentence(blocks: Y.XmlFragment): SelectedSentence[] {
     if (busy || element.nodeName !== "paragraph" || typeof blockId !== "string") return [];
     const text = textOf(element);
     return sentenceSpans(text).flatMap((span) =>
-      holdsProposal(element, span.from, span.to)
+      changesIn(element, span.from, span.to).length > 0
         ? []
         : [
             {

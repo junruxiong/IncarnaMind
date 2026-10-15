@@ -299,6 +299,77 @@ export function acceptedSlice(slice: Slice): Slice {
     : new Slice(content, slice.openStart, slice.openEnd);
 }
 
+/** A place in a paragraph or heading: its id, and how far into its text, an inline node counting as one. */
+export interface BlockPlace {
+  blockId: string;
+  offset: number;
+}
+
+const goesOnAccept = (node: ProseMirrorNode) =>
+  readProposalAttribute(node.attrs[PROPOSAL_ATTRIBUTE])?.kind === "delete" ||
+  node.marks.some((mark) => mark.type.name === PROPOSAL_DELETE_MARK);
+
+/**
+ * Where the text between `from` and `to` that stays once the changes there
+ * are accepted will start and end, counted in that text; null when they
+ * leave none. What a change removes goes, and a Block it removes goes whole.
+ * A Block's places, unlike positions in the editor, hold through a change
+ * the core or another device makes (`positionOf`).
+ */
+export function keptOnAccept(
+  doc: ProseMirrorNode,
+  from: number,
+  to: number,
+): { from: BlockPlace; to: BlockPlace } | null {
+  let first: BlockPlace | null = null;
+  let last: BlockPlace | null = null;
+  doc.nodesBetween(from, to, (node, pos) => {
+    if (readProposalAttribute(node.attrs[PROPOSAL_ATTRIBUTE])?.kind === "delete") return false;
+    if (!node.isTextblock) return true;
+    const blockId: unknown = node.attrs.id;
+    if (typeof blockId !== "string") return false;
+    let offset = 0;
+    node.forEach((child, at) => {
+      if (goesOnAccept(child)) return;
+      const start = pos + 1 + at;
+      const end = start + child.nodeSize;
+      if (end > from && start < to) {
+        first ??= { blockId, offset: offset + (child.isText ? Math.max(from - start, 0) : 0) };
+        last = { blockId, offset: offset + (child.isText ? Math.min(to, end) - start : 1) };
+      }
+      offset += child.isText ? child.nodeSize : 1;
+    });
+    return false;
+  });
+  return first && last ? { from: first, to: last } : null;
+}
+
+/** Where a Block's place is in the editor now; null when the Block is gone. */
+export function positionOf(doc: ProseMirrorNode, place: BlockPlace): number | null {
+  let found: number | null = null;
+  doc.descendants((node, pos) => {
+    if (found !== null) return false;
+    if (!node.isTextblock) return true;
+    if (node.attrs.id !== place.blockId) return false;
+    let left = place.offset;
+    let at = pos + 1;
+    for (let index = 0; index < node.childCount && left > 0; index++) {
+      const child = node.child(index);
+      const size = child.isText ? child.nodeSize : 1;
+      if (child.isText && left <= size) {
+        at += left;
+        left = 0;
+        break;
+      }
+      left -= size;
+      at += child.nodeSize;
+    }
+    found = at;
+    return false;
+  });
+  return found;
+}
+
 /** The Proposals waiting in the editor's Mind. */
 export const pendingIn = (state: EditorState): readonly PendingProposal[] =>
   proposalReviewKey.getState(state)?.proposals ?? [];
