@@ -6,7 +6,7 @@
  * They are RapidOCR's conversions, downloaded from the copies on Hugging
  * Face, whose bytes match RapidOCR's own release (RapidAI/RapidOCR on
  * ModelScope, onnx/PP-OCRv5): 21 MB together, downloaded the first time a
- * scanned page needs reading. The comparison that chose it is in
+ * scanned page, or a saved web page's picture, needs reading. The comparison that chose it is in
  * eval/ocr/README.md.
  */
 import type { EmbeddingModelSource } from "../../adapters";
