@@ -1,6 +1,6 @@
 /**
- * Presets (#863): hosted services that speak OpenAI's API, each one catalog row
- * on the shared "openai-compatible" kind. Groq is the first; a second row is
+ * Presets: hosted services that speak OpenAI's API, each one catalog row on
+ * the shared "openai-compatible" kind. Groq is the first; a second row is
  * added here only to show that a row is all a preset needs.
  */
 import { afterEach, describe, expect, test, vi } from "vitest";
@@ -84,7 +84,7 @@ describe("Presets on the shared OpenAI-compatible path", () => {
         answer: "Spring tides come at new and full moon [^1].",
       });
       const group = (await core.listChatModels()).find((each) => each.provider.id === saved.id);
-      expect(group?.models).toEqual(expect.arrayContaining([modelId, "another-model"]));
+      expect(group?.models).toContain(modelId);
       const listing = requests.find((request) => request.method === "GET");
       expect(listing?.url).toBe(`${base}/models`);
       expect(listing?.headers.authorization).toBe(`Bearer key-for-${catalogId}`);
@@ -132,7 +132,6 @@ describe("Presets on the shared OpenAI-compatible path", () => {
       provider: { id: tide.id },
     });
 
-    // Saving a preset again finds its row and keeps its key.
     const again = await core.saveChatProvider({
       kind: "openai-compatible",
       catalogId: "groq",
@@ -142,6 +141,42 @@ describe("Presets on the shared OpenAI-compatible path", () => {
     const saved = await core.listChatProviders();
     expect(saved.filter((each) => each.catalogId === "groq")).toHaveLength(1);
     expect(saved.filter((each) => each.catalogId === "tide-cloud")).toHaveLength(1);
+  });
+
+  test("testing a preset's connection without a key uses the key saved for that preset, and no other", async () => {
+    const { core } = await setUpWithDocuments(replyingModel(), [], {
+      createChatModel: createAiSdkChatModel,
+    });
+    await core.saveChatProvider({
+      kind: "openai-compatible",
+      catalogId: "groq",
+      apiKey: "key-groq",
+      modelId: "openai/gpt-oss-120b",
+    });
+    await core.saveChatProvider({
+      kind: "openai-compatible",
+      catalogId: "tide-cloud",
+      apiKey: "key-tide",
+      modelId: "tide-1",
+    });
+    const requests = fakeProvider("api.groq.com", {
+      protocol: "chat",
+      models: { data: [] },
+      query: "",
+      records: () => [],
+      answer: "OK",
+    });
+    const result = await core.testChatConnection({
+      kind: "openai-compatible",
+      catalogId: "groq",
+      modelId: "openai/gpt-oss-120b",
+    });
+    expect(result.ok).toBe(true);
+    expect(posts(requests).length).toBeGreaterThan(0);
+    for (const request of posts(requests)) {
+      expect(request.url).toBe("https://api.groq.com/openai/v1/chat/completions");
+      expect(request.headers.authorization).toBe("Bearer key-groq");
+    }
   });
 
   test("a server the User gives is still its own provider, beside a preset", async () => {

@@ -651,10 +651,11 @@ export const catalogProvider = (id: string | null | undefined): CatalogProvider 
 export const catalogProviderOfKind = (kind: ChatProviderKind): CatalogProvider | undefined =>
   catalogProvider(kind);
 
-export const isPreset = (provider: CatalogProvider | undefined): boolean =>
+export type Preset = CatalogProvider & { adapter: "openai-compatible" };
+
+export const isPreset = (provider: CatalogProvider | undefined): provider is Preset =>
   provider !== undefined && presetIds.has(provider.id);
 
-/** A saved provider's catalog row: its preset's, else its kind's. */
 export const catalogProviderOf = (
   kind: ChatProviderKind,
   catalogId: string | null | undefined,
@@ -662,7 +663,7 @@ export const catalogProviderOf = (
   (catalogId && presetIds.has(catalogId) ? catalogProvider(catalogId) : undefined) ??
   catalogProviderOfKind(kind);
 
-/** The kind a provider of this catalog id is saved as: a preset's is "openai-compatible". */
+/** Throws for an id the catalog doesn't have. */
 export function kindOfCatalogId(id: string): ChatProviderKind {
   if (presetIds.has(id)) return "openai-compatible";
   const kind = kinds.get(id);
@@ -676,7 +677,7 @@ export function kindOfCatalogId(id: string): ChatProviderKind {
  * recommended, whatever else its row says.
  */
 export const untestedForCitations = (provider: CatalogProvider | undefined): boolean =>
-  isPreset(provider) && provider?.citingTested === undefined;
+  isPreset(provider) && provider.citingTested === undefined;
 
 /**
  * The providers set up with a key or a server address, by catalog id, in

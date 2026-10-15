@@ -89,8 +89,6 @@ describe("The provider catalog", () => {
         expect(provider.serverUrl, where).toBeDefined();
       }
       // Each role names a model the catalog knows: a cloud model, or one recommended for Ollama.
-      // A preset's facts come from its own model list until the catalog maps its models.
-      if (isPreset(provider)) continue;
       for (const [role, modelId] of Object.entries(provider.roles)) {
         const known =
           provider.id === "ollama"
@@ -148,6 +146,7 @@ describe("The provider catalog", () => {
       "glm",
       "glm/intl",
       "google",
+      "groq",
       "kimi",
       "kimi/intl",
       "mistral",
@@ -484,7 +483,7 @@ describe("Support tiers (ADR-0019)", () => {
     );
   });
 
-  test("a preset is a hosted OpenAI-compatible row with a key page and an Answers model, saved as that kind, and not yet tested is never first-class (#863)", () => {
+  test("a preset is a hosted OpenAI-compatible row with a key page and an Answers model, saved as that kind, and not yet tested is never first-class", () => {
     expect(PRESETS.length).toBeGreaterThan(0);
     for (const preset of PRESETS) {
       const where = preset.id;
@@ -495,6 +494,13 @@ describe("Support tiers (ADR-0019)", () => {
       expect(preset.endpoints.length, where).toBeGreaterThan(0);
       expect(preset.keyUrl ?? preset.endpoints[0]?.keyUrl, where).toMatch(/^https:\/\//);
       expect(preset.roles.answers, where).toBeDefined();
+      // An Answers model that calls Tools, and quick tasks that cost no more.
+      const output = (id: string | undefined) =>
+        id ? catalogModel(preset.id, id)?.price?.output : undefined;
+      expect(catalogModel(preset.id, preset.roles.answers ?? "")?.tools, where).toBe(true);
+      expect(output(preset.roles.quickTasks) ?? Number.NaN, where).toBeLessThanOrEqual(
+        output(preset.roles.answers) ?? Number.NaN,
+      );
       expect(untestedForCitations(preset), where).toBe(preset.citingTested === undefined);
       if (untestedForCitations(preset)) expect(preset.support, where).toBe("best-effort");
     }

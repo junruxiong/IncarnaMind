@@ -1,7 +1,7 @@
 /**
- * Hosted services that speak OpenAI's API, one catalog row each (#863). They
- * share the "openai-compatible" kind and its code, told apart by their
- * catalog id, so adding one is a row here and nothing else.
+ * Hosted services that speak OpenAI's API, one catalog row each. They share
+ * the "openai-compatible" kind and its code, told apart by their catalog id,
+ * so adding one is a row here and nothing else.
  */
 import type { CatalogProvider } from "./types";
 

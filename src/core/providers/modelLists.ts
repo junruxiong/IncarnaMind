@@ -34,7 +34,7 @@ export interface ModelListSpec {
   apiKey: string | null;
   /** A hosted provider's endpoint id; its first when left out. */
   endpoint?: string | null;
-  /** A preset's catalog id (#863): its endpoint is the server. */
+  /** A preset's catalog id: its endpoint is the server. */
   catalogId?: string | null;
 }
 
