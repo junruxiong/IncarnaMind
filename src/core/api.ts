@@ -827,7 +827,30 @@ export interface AnswerToolCall {
   uncalculated?: number;
   /** A Minds' Tool that changed a Mind or made one, once it ended (#202). Absent otherwise. */
   mindChange?: MindChange;
+  /** A Minds' Tool that changed nothing: why, as its card says (#893). Absent otherwise. */
+  mindProblem?: MindProblem;
 }
+
+/**
+ * Why a call of a Minds' Tool changed nothing (#893). "waiting": changes
+ * still wait in the text it was to change, which the assistant can't revise
+ * (someone else's, or the User's own requests), `count` of them in the Mind;
+ * "mixed": its own waiting text sits beside the User's there. "model": the
+ * model failed, as `message` says.
+ */
+export type MindProblem =
+  | { kind: "waiting"; mindId: string; count: number; mixed: boolean }
+  | { kind: "no-mind" }
+  | { kind: "not-found"; name: string }
+  | { kind: "several"; name: string }
+  | { kind: "no-heading"; mindId: string; heading: string }
+  | { kind: "no-place"; mindId: string; place: string }
+  | {
+      kind: "no-text" | "too-long" | "changed" | "content-not-own" | "stopped";
+      mindId: string;
+    }
+  | { kind: "local-mode" | "not-ready" }
+  | { kind: "model"; mindId: string; message: string };
 
 /**
  * Where the assistant writes next in a Mind, as its changes come in (#202):
@@ -854,6 +877,15 @@ export interface MindChange {
   request: string;
   /** How many Proposals it made there. */
   proposals: number;
+  /**
+   * It revised the assistant's own changes still waiting there (#893): they
+   * are gone, and its request holds the new text and the rest of them.
+   */
+  revised?: true;
+  /** How many Citations the text it wrote there holds. Absent: none, or it rewrote text keeping its own. */
+  cited?: number;
+  /** How many of its text's markers had no Citation recorded, and were left out. Absent: none. */
+  unrecorded?: number;
 }
 
 /** What a call of `read_web_page` came to (see `AnswerToolCall.webPage`). */
@@ -4547,7 +4579,20 @@ export interface AnswerSteps {
    * it wrote without markers that match the Passages it read (#760).
    */
   citedAfterChecking?: number;
+  /**
+   * The changes its reply says it made to a Mind that none of its Tool calls
+   * made, even once the model was asked again with what they did (#893).
+   * Absent: none.
+   */
+  unbackedClaims?: ClaimedChange[];
 }
+
+/**
+ * The changes an Answer's reply can say it made to a Mind (#893): made one,
+ * added text to one, changed text in one, or removed or replaced text in one.
+ */
+export const CLAIMED_CHANGES = ["made", "added", "changed", "removed"] as const;
+export type ClaimedChange = (typeof CLAIMED_CHANGES)[number];
 
 /** A Tool call of an Answer started, or finished (see `call.status`). */
 export interface AnswerToolCallEvent extends AnswerPlace {

@@ -63,6 +63,7 @@ import {
   type ChatModelChoice,
   type ChatReadiness,
   type CitationSupport,
+  type ClaimedChange,
   type ConversationAskResult,
   type ConversationQuestion,
   type CoreEventName,
@@ -75,6 +76,7 @@ import {
   MIND_CONTENT_FIELD,
   type MindChange,
   type MindFocus,
+  type MindProblem,
   type ProviderError,
   QUESTION_BLOCK,
   type QuoteRetry,
@@ -139,6 +141,7 @@ import {
   createCitationSession,
   withoutFootnoteDefinitions,
 } from "./citations";
+import { askAgainNote, unbackedClaims as claimsNoCallMade } from "./claimedChanges";
 import {
   conversationContext,
   conversationContextOf,
@@ -691,6 +694,8 @@ export function createAnswers(options: AnswersOptions) {
      * Blocks it adds link back to. It is offered the Minds' Tools. Absent: none.
      */
     assistant?: Pick<MindToolsOptions, "focused" | "folderId" | "origin">;
+    /** The Tool calls of the conversation's earlier Answers: a claim about one of them holds by theirs (#893). */
+    earlierCalls?: readonly AnswerToolCall[];
   }): void {
     const { home, answerId, model, context, documentIds, forcedSkill } = input;
     const outside = input.outside === true;
@@ -733,6 +738,8 @@ export function createAnswers(options: AnswersOptions) {
     let quoteRetry: QuoteRetry | null = null;
     /** The one request to fix figures, if the engine made it (see ./figureRetry). */
     let figureRetry: FigureRetry | null = null;
+    /** The changes its reply claims that none of its calls made, even once asked again (#893). */
+    let unbackedClaims: ClaimedChange[] = [];
     /** What the model calls counted, the cached input tokens too. */
     const usage: AnswerUsage = {
       inputTokens: 0,
@@ -768,6 +775,7 @@ export function createAnswers(options: AnswersOptions) {
             : null,
         ...(read?.partial && { readShare }),
         ...(citedAfterChecking.count > 0 && { citedAfterChecking: citedAfterChecking.count }),
+        ...(unbackedClaims.length > 0 && { unbackedClaims: [...unbackedClaims] }),
       };
     };
     let skills: SkillSession | null = null;
@@ -969,7 +977,10 @@ export function createAnswers(options: AnswersOptions) {
       id: string,
       ok: boolean,
       resultCount: number | null,
-      found: Pick<AnswerToolCall, "passages" | "error" | "webPage" | "mindChange"> = {},
+      found: Pick<
+        AnswerToolCall,
+        "passages" | "error" | "webPage" | "mindChange" | "mindProblem"
+      > = {},
     ) => {
       const call = toolCalls.find((each) => each.id === id);
       if (!call) return;
@@ -981,6 +992,7 @@ export function createAnswers(options: AnswersOptions) {
       if (found.error) call.error = found.error;
       if (found.webPage) call.webPage = found.webPage;
       if (found.mindChange) call.mindChange = found.mindChange;
+      if (found.mindProblem) call.mindProblem = found.mindProblem;
       announce("answer.toolCallFinished", { ...place, answerId, call: { ...call } });
       input.onCall?.({ ...call });
       writeSoon();
@@ -995,6 +1007,8 @@ export function createAnswers(options: AnswersOptions) {
     const webPages = new Map<string, WebPageCall>();
     /** What each call of a Minds' Tool changed, by call, for its card when it finishes (#202). */
     const mindChanges = new Map<string, MindChange>();
+    /** Why each call of a Minds' Tool that changed nothing didn't, by call, for its card (#893). */
+    const mindProblems = new Map<string, MindProblem>();
     /** Keeps how a script's run went on its card. */
     const setScriptRun = (id: string, run: SkillScriptRun) => {
       const call = toolCalls.find((each) => each.id === id);
@@ -1367,6 +1381,7 @@ export function createAnswers(options: AnswersOptions) {
               prepared,
               ...input.assistant,
               blocksOf: (text) => {
+                let found = 0;
                 let notFound = 0;
                 let unrecorded = 0;
                 const cited = withCitations(
@@ -1375,6 +1390,7 @@ export function createAnswers(options: AnswersOptions) {
                     const node = session.checkedNode(marker);
                     if (!node) unrecorded++;
                     else if (node.attrs?.check === "not-found") notFound++;
+                    else found++;
                     return node;
                   },
                 );
@@ -1387,7 +1403,7 @@ export function createAnswers(options: AnswersOptions) {
                       )
                     : cited,
                 );
-                return { blocks, notFound, unrecorded };
+                return { blocks, cited: found + notFound, notFound, unrecorded };
               },
               changed: (toolCallId, change) => {
                 mindChanges.set(toolCallId, change);
@@ -1398,6 +1414,7 @@ export function createAnswers(options: AnswersOptions) {
                   writeSoon();
                 }
               },
+              failed: (toolCallId, problem) => mindProblems.set(toolCallId, problem),
               signal: controller.signal,
               now: () => new Date(),
             })
@@ -1462,6 +1479,17 @@ export function createAnswers(options: AnswersOptions) {
 
       const learntKey = modelKey(model, prepared);
       let outcome: Outcome = { status: "stopped" };
+      const mindNames = (mindId: string) => options.readableMindName(mindId);
+      /** A reply that claims changes to a Mind none of the Answer's calls made (#893): see `AnswerRequest.checkReply`. */
+      const checkReply = (text: string) => {
+        const claims = claimsNoCallMade(text, toolCalls, {
+          earlierCalls: input.earlierCalls ?? [],
+          minds: minds?.list().map((mind) => mind.name) ?? [],
+        });
+        return claims.length > 0
+          ? { claims, note: askAgainNote(claims, toolCalls, mindNames) }
+          : null;
+      };
       for await (const event of engine.generate({
         instructions: (
           mode,
@@ -1514,6 +1542,7 @@ export function createAnswers(options: AnswersOptions) {
         window: prepared.window,
         retryQuotes: prepared.retryQuotes,
         cacheKey: place.conversationId ?? place.mindId ?? undefined,
+        ...(input.assistant && { checkReply }),
         signal: controller.signal,
       })) {
         if (finished) break;
@@ -1547,6 +1576,10 @@ export function createAnswers(options: AnswersOptions) {
             break;
           case "figures-retried":
             figureRetry = event.retry;
+            break;
+          case "claims-unbacked":
+            unbackedClaims = event.claims;
+            writeSoon();
             break;
           case "usage":
             usage.inputTokens += event.usage.inputTokens ?? 0;
@@ -1596,11 +1629,13 @@ export function createAnswers(options: AnswersOptions) {
           case "tool-call-finished": {
             const webPage = webPages.get(event.id);
             const mindChange = mindChanges.get(event.id);
+            const mindProblem = mindProblems.get(event.id);
             callFinished(event.id, event.ok, event.resultCount, {
               ...(event.passages && { passages: [...event.passages] }),
               ...(event.error && { error: event.error }),
               ...(webPage && { webPage }),
               ...(mindChange && { mindChange }),
+              ...(mindProblem && { mindProblem }),
             });
             break;
           }
@@ -1825,9 +1860,11 @@ export function createAnswers(options: AnswersOptions) {
         ? mind.reading.section(MIND_TOKEN_LIMIT, asking)
         : mind?.section;
     const documents = options.documents.names();
+    const mindNames = (mindId: string) => options.readableMindName(mindId);
     const { context, origins } = conversationContextOf(turn.earlier, question.text, {
       mind: section,
       documents,
+      mindNames,
     });
     const requestOf = (reading: MindReading, kept: MindCut): RequestMind => ({
       text: kept.text,
@@ -1858,6 +1895,7 @@ export function createAnswers(options: AnswersOptions) {
                 context: conversationContextOf(turn.earlier, question.text, {
                   mind: smaller,
                   documents,
+                  mindNames,
                 }).context,
                 request: requestOf(mind.reading, smaller),
                 share: smaller.share,
@@ -1879,6 +1917,9 @@ export function createAnswers(options: AnswersOptions) {
         folderId: oneFolderOf(question.scope),
         origin: { from: messageReference(conversation.id, answer.id), question: question.text },
       },
+      earlierCalls: turn.earlier.flatMap((message) =>
+        message.kind === "answer" ? message.toolCalls : [],
+      ),
     });
     return { asked: true, conversation, questionId: question.id, answerId: answer.id };
   }

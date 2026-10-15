@@ -75,6 +75,7 @@ import {
 import type {
   AnswerPhase,
   CitationSupport,
+  ClaimedChange,
   FigureRetry,
   ProviderError,
   QuoteRetry,
@@ -95,7 +96,9 @@ import { createAiSdkRunEngine, reasoningReader } from "../runs/aiSdkEngine";
 import type {
   GateDecision,
   RunEngine,
+  RunEvent,
   RunMessage,
+  RunRequest,
   RunToolCall,
   RunWindow,
   TokenUsage,
@@ -379,6 +382,14 @@ export interface AnswerRequest {
    * providers that route requests to a prompt cache by a key (see ../providers/promptCache).
    */
   cacheKey?: string;
+  /**
+   * Reads the reply once it is written (#893): the changes to a Mind it claims
+   * that none of the Answer's Tool calls made, and what to tell the model so
+   * it writes the reply again; null when it claims none. In the Tool loop the
+   * model is asked once more with `note`; a reply that still claims one, or one
+   * written without Tools, ends with "claims-unbacked".
+   */
+  checkReply?(text: string): { claims: ClaimedChange[]; note: string } | null;
   /** Stops generating. The stream then ends, with neither "finished" nor "failed". */
   signal: AbortSignal;
 }
@@ -449,6 +460,8 @@ export type AnswerEngineEvent =
   | { type: "read-third-party"; source: ReadThirdPartySource }
   /** A model call ended, with the tokens its provider counted, the cached ones too. */
   | { type: "usage"; usage: TokenUsage }
+  /** The reply claims these changes to a Mind, which none of the Answer's Tool calls made (#893). */
+  | { type: "claims-unbacked"; claims: ClaimedChange[] }
   /** The Answer is complete. Nothing follows. */
   | { type: "finished" }
   /** The model or its provider failed. Nothing follows. */
@@ -1486,11 +1499,43 @@ async function* toolLoop(
   const calls = new Map<string, Tool>();
   /** Searches running now: the Answer is "searching" while there are any. */
   let searching = 0;
-  for await (const event of engine.run({
+  /**
+   * The reply as first written, once the model is asked once more because it
+   * claims a change no call made (#893): what stays if that request fails.
+   */
+  let first: { text: string; claims: ClaimedChange[] } | null = null;
+  /** What the model is asked again with, after the history so far, once the first reply claims a change no call made. */
+  let again: readonly RunMessage[] | null = null;
+  /** Ends the second request that failed or was refused: the first reply comes back, flagged. */
+  async function* backToFirst(written: { text: string; claims: ClaimedChange[] }) {
+    const shown = keptText + stepText;
+    if (shown) yield { type: "text-retracted" as const, length: shown.length };
+    keptText = written.text;
+    if (written.text) yield { type: "text-delta" as const, text: written.text };
+    yield { type: "claims-unbacked" as const, claims: written.claims };
+  }
+  /** The reply is written: its markers placed, its sentences without Citations checked, and done. */
+  async function* endAnswer(): AsyncGenerator<AnswerEngineEvent> {
+    const placed = yield* missingMarkerEvents(keptText, cited, request.documents);
+    yield* citeUnmarked(request, placed, temperature, budget);
+    yield { type: "finished" };
+  }
+  const runTools = tools.map(tracked);
+  /** The Run, and once its reply is read (`again`), the same Run asked once more. */
+  async function* runs(): AsyncGenerator<RunEvent> {
+    let history: readonly RunMessage[] = messages.map(runMessage);
+    for (;;) {
+      yield* engine.run(runRequest(history));
+      if (!again) return;
+      history = [...history, ...again];
+      again = null;
+    }
+  }
+  const runRequest = (history: readonly RunMessage[]): RunRequest => ({
     model: request.model,
     instructions,
-    messages: messages.map(runMessage),
-    tools: tools.map(tracked),
+    messages: history,
+    tools: runTools,
     maxSteps,
     cacheKey: request.cacheKey,
     gate: async (call) => {
@@ -1515,7 +1560,8 @@ async function* toolLoop(
       ),
     temperature,
     signal,
-  })) {
+  });
+  for await (const event of runs()) {
     if (signal.aborted) return;
     switch (event.type) {
       case "reasoning":
@@ -1608,6 +1654,12 @@ async function* toolLoop(
         break;
       }
       case "refused":
+        // Asked once more, its first reply stands: trying another way now would call its Tools again.
+        if (first) {
+          yield* backToFirst(first);
+          yield* endAnswer();
+          return;
+        }
         // Too long only with a window, so sized to one.
         yield event.what === "tools"
           ? { type: "unsupported" }
@@ -1621,19 +1673,36 @@ async function* toolLoop(
         return;
       case "failed":
         for (const source of unannounced.splice(0)) yield { type: "read-third-party", source };
+        if (first) {
+          console.error(
+            `Asking again for a reply that claims changes failed: ${event.error.message}`,
+          );
+          yield* backToFirst(first);
+          yield* endAnswer();
+          return;
+        }
         yield { type: "failed", error: event.error };
         return;
-      case "finished":
+      case "finished": {
         if (keptText.trim() === "" && unmarked.trim() !== "") {
           keptText = unmarked;
           yield { type: "text-delta", text: unmarked };
         }
-        {
-          const placed = yield* missingMarkerEvents(keptText, cited, request.documents);
-          yield* citeUnmarked(request, placed, temperature, budget);
+        const unbacked = request.checkReply?.(keptText) ?? null;
+        if (unbacked && !first) {
+          first = { text: keptText, claims: unbacked.claims };
+          if (keptText) yield { type: "text-retracted", length: keptText.length };
+          keptText = "";
+          stepText = "";
+          answered = false;
+          unmarked = "";
+          again = [...event.messages, { role: "user", text: unbacked.note }];
+          break;
         }
-        yield { type: "finished" };
+        if (unbacked) yield { type: "claims-unbacked", claims: unbacked.claims };
+        yield* endAnswer();
         return;
+      }
     }
   }
 }
@@ -1757,7 +1826,14 @@ async function* structured(
       if (signal.aborted) return;
     }
   }
+  yield* flagClaims(request, emitted);
   yield { type: "finished" };
+}
+
+/** A reply written without Tools that claims a change to a Mind, which nothing could make: it is flagged (#893). */
+function* flagClaims(request: AnswerRequest, text: string): Generator<AnswerEngineEvent> {
+  const unbacked = request.checkReply?.(text);
+  if (unbacked) yield { type: "claims-unbacked", claims: unbacked.claims };
 }
 
 /** A plain streamed Answer, with no Tools and no Citations. */
@@ -1769,7 +1845,7 @@ async function* plain(
 ): Attempt {
   const { signal } = request;
   const estimated = sized?.estimated;
-  let produced = false;
+  let produced = "";
   const reasoning = reasoningReader();
   try {
     const result = streamText({
@@ -1788,7 +1864,7 @@ async function* plain(
         if (event) yield event;
       } else if (part.type === "text-delta") {
         if (!part.text) continue;
-        produced = true;
+        produced += part.text;
         yield { type: "text-delta", text: part.text };
       } else if (part.type === "finish-step") {
         yield { type: "usage", usage: tokenUsageOf(part.usage) };
@@ -1805,5 +1881,7 @@ async function* plain(
     yield refused ?? { type: "failed", error: classifyProviderError(error) };
     return;
   }
-  if (!signal.aborted) yield { type: "finished" };
+  if (signal.aborted) return;
+  yield* flagClaims(request, produced);
+  yield { type: "finished" };
 }

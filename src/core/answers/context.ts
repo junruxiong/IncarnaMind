@@ -26,9 +26,11 @@ import {
   type ThirdPartySource,
 } from "../api";
 import { keywordTerms, keywordText } from "../documents/keywords";
+import { type ReviewReading, reviewReading } from "../mindText";
 import { attribute, contentMarkdown, textAttribute, toMarkdown } from "./blocks";
 import { answerMarkdown } from "./contextText";
 import type { AnswerMessage } from "./engine";
+import { type MindNames, TOOL_RECORD, toolRecord } from "./toolRecord";
 
 /** About 12k tokens, the old app's budget for what precedes a Question. */
 export const QUESTION_CONTEXT_TOKEN_BUDGET = 12_000;
@@ -115,20 +117,23 @@ function tail(text: string, tokens: number): string {
  */
 type Documents = readonly LiveDocument[] | null;
 
-/** What a Block above the Question contributes, if anything. */
-function pieceOf(block: Y.XmlElement, documents: Documents): Piece | null {
+/**
+ * What a Block above the Question contributes, if anything. `review`: the changes still
+ * waiting to read as changes (see `ReadOptions.review`).
+ */
+function pieceOf(block: Y.XmlElement, documents: Documents, review?: ReviewReading): Piece | null {
   if (block.nodeName === QUESTION_BLOCK) {
-    const text = toMarkdown(block, documents);
+    const text = toMarkdown(block, documents, review);
     return text ? { role: "user", text } : null;
   }
   if (block.nodeName === ANSWER_BLOCK) {
     if (textAttribute(block, "status") === "failed") return null;
-    const text = contentMarkdown(block, documents);
+    const text = contentMarkdown(block, documents, review);
     return text ? { role: "assistant", text } : null;
   }
   // A Note.
   if (attribute(block, INCLUDE_IN_CONTEXT_ATTRIBUTE) === false) return null;
-  const text = toMarkdown(block, documents);
+  const text = toMarkdown(block, documents, review);
   return text ? { role: "user", text } : null;
 }
 
@@ -278,11 +283,13 @@ function readText(block: Y.XmlElement, piece: Piece): string {
 /**
  * Reads a Mind for a Question asked beside it in the assistant (#544), as a
  * Question in the Mind reads the Blocks above it (`pieceOf`): Notes the User
- * excluded stay out, earlier Answers keep their Citations as plain references,
- * the AI's Proposals still waiting aren't read, and someone's changes from a
- * Word file are read as changes (#734). `focus` is where the User is in it:
- * the text they selected is read first, unless it is in a Note they excluded.
- * Its Citations name their Documents as `documents` names them now.
+ * excluded stay out and earlier Answers keep their Citations as plain
+ * references. Every change still waiting is read as a change, as the User
+ * sees it (#893): the AI's as waiting, someone's from a Word file with who
+ * made it (#734), so the assistant knows what it has proposed. `focus` is
+ * where the User is in it: the text they selected is read first, unless it
+ * is in a Note they excluded. Its Citations name their Documents as
+ * `documents` names them now.
  */
 export function readMind(
   blocks: Y.XmlFragment,
@@ -298,9 +305,10 @@ export function readMind(
    * an empty line, is where the one before it is), and whether the User excluded it.
    */
   const byId = new Map<string, { index: number; excluded: boolean }>();
+  const review = reviewReading(blocks);
   for (const block of blocks.toArray()) {
     if (!(block instanceof Y.XmlElement)) continue;
-    const piece = pieceOf(block, documents);
+    const piece = pieceOf(block, documents, review);
     const id = textAttribute(block, BLOCK_ID_ATTRIBUTE);
     if (id) {
       byId.set(id, {
@@ -515,14 +523,25 @@ type MindParts = Pick<MindCut, "text" | "selection">;
 export function conversationContext(
   earlier: readonly ConversationMessage[],
   question: string,
-  options: { mind?: MindParts; budget?: number; documents?: Documents } = {},
+  options: ConversationContextOptions = {},
 ): QuestionContext {
   return conversationContextOf(earlier, question, options).context;
+}
+
+interface ConversationContextOptions {
+  mind?: MindParts;
+  budget?: number;
+  documents?: Documents;
+  /** The Minds' names now, for the record of what earlier Answers' Tools did (./toolRecord). */
+  mindNames?: MindNames;
 }
 
 /**
  * `conversationContext`, with where the third-party text in the earlier
  * Answers it keeps came from: Answers written in a Run that had read some.
+ * Each earlier Answer is followed by the record of what its Tool calls really
+ * did (#893), which a failed one keeps too: a call may have changed a Mind
+ * before it failed.
  */
 export function conversationContextOf(
   earlier: readonly ConversationMessage[],
@@ -531,16 +550,20 @@ export function conversationContextOf(
     mind,
     budget = QUESTION_CONTEXT_TOKEN_BUDGET,
     documents = null,
-  }: { mind?: MindParts; budget?: number; documents?: Documents } = {},
+    mindNames = () => null,
+  }: ConversationContextOptions = {},
 ): QuestionContextWithOrigins {
   const pieces: Piece[] = earlier.flatMap((message): Piece[] => {
     if (message.kind === "question")
       return message.text ? [{ role: "user", text: message.text }] : [];
-    if (message.status === "failed") return [];
+    const record = toolRecord(message.toolCalls, mindNames, message.citations.length);
+    const recorded: Piece[] = record ? [{ role: "user", text: record }] : [];
+    if (message.status === "failed") return recorded;
     const text = answerMarkdown(message.text, message.citations, message.figures, documents);
-    if (!text) return [];
+    if (!text) return recorded;
     return [
       { role: "assistant", text, ...(message.textOrigin && { origins: [message.textOrigin] }) },
+      ...recorded,
     ];
   });
   const kept = keptWithinBudget(pieces.reverse(), budget - estimateTokens(question));
@@ -684,7 +707,7 @@ export function earlierContext(
 ): string {
   const pieces: Piece[] = messages.map((message) => ({
     role: message.role,
-    text: message.content,
+    text: message.content.replace(TOOL_RECORD, ""),
   }));
   // The last message ends with the Question, after whatever Notes come right before it.
   const last = pieces.at(-1);
