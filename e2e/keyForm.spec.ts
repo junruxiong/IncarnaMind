@@ -62,7 +62,9 @@ test("at 900px high the key form shows provider, key, Model and its button witho
       const form = card.getByTestId("provider-form");
       await expect(form.getByRole("radio", { checked: true })).toHaveCount(1);
       await expect(form.getByTestId("provider-model")).toBeVisible();
-      await expect(form.getByTestId("provider-model-reason")).toBeVisible();
+      await expect(form.getByTestId("provider-model").locator("option").first()).toContainText(
+        value === "en" ? "Recommended" : "推荐",
+      );
       await expect(form.getByTestId("provider-key-link")).toBeVisible();
       await expect(form.getByTestId("provider-use-key")).toBeInViewport({ ratio: 1 });
       await expect(form.getByTestId("provider-model")).toBeInViewport({ ratio: 1 });

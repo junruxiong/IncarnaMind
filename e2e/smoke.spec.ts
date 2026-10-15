@@ -218,7 +218,7 @@ test("first run asks for no model; the first own Question waits while the setup 
   await expect(card.getByTestId("setup-key")).toHaveText("Paste an API key");
   // Choosing it is the consent (ADR-0022), so its line names everything that goes.
   await expect(card.getByTestId("setup-chatgpt-sends")).toHaveText(
-    "No key needed · Your Questions, the Mind you're in, Passages from your Documents, and Document text for Tags go to OpenAI under your ChatGPT account.",
+    "If you pay for ChatGPT Plus or Pro · No key needed · Your Questions, the Mind you're in, Passages from your Documents, and Document text for Tags go to OpenAI under your ChatGPT account.",
   );
   // The card says what the Mind's "needs a chat model" line would, so that line steps aside.
   await expect(window.getByTestId("chat-readiness")).toHaveCount(0);
@@ -235,7 +235,7 @@ test("first run asks for no model; the first own Question waits while the setup 
   );
   await expect(card.getByTestId("setup-key")).toHaveText("粘贴 API 密钥");
   await expect(card.getByTestId("setup-chatgpt-sends")).toHaveText(
-    "无需密钥 · 你的问题、当前 Mind、文档中的相关段落，以及用于打标签的文档文字，会通过你的 ChatGPT 账号发送给 OpenAI。",
+    "如果你订阅了 ChatGPT Plus 或 Pro（中国大陆无法使用）· 无需密钥 · 你的问题、当前 Mind、文档中的相关段落，以及用于打标签的文档文字，会通过你的 ChatGPT 账号发送给 OpenAI。",
   );
   await window.evaluate(async () =>
     (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
