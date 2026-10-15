@@ -1621,6 +1621,33 @@ export interface MindUpdate {
   mindId: string;
   /** A Yjs update (the default v1 encoding). */
   update: Uint8Array;
+  /** The edit the User asked for that wrote it, if one did (#880). */
+  cause?: EditCause;
+}
+
+/**
+ * An edit the User asked for on the text, writing its changes as Proposals
+ * (#880). The window that asked applies the update as its own change, so one
+ * Undo there takes the whole edit back, and accepts the Proposals at once
+ * when `apply`; while the edit can't yet tell what was meant, they wait.
+ */
+export interface EditCause {
+  /** The `EditWithAiInput.requestId` the window chose. */
+  requestId: string;
+  /** Its Proposals' `ProposalRef.request`. */
+  request: string;
+  apply: boolean;
+}
+
+/** A part of the selection an edit's new text left out, kept as it was (#880): `from`..`to` of a Block's text. */
+export interface LeftOutPart {
+  blockId: string;
+  from: number;
+  to: number;
+  /** All of the Block's text. */
+  whole: boolean;
+  /** The kind of Block, for naming them: "paragraph", "heading:2", "bullet", "numbered", "quote". */
+  kind: string;
 }
 
 /** Settings that belong to the User and will sync across their devices (ADR-0003). */
@@ -3905,6 +3932,14 @@ export type EditWithAiResult =
       proposals: number;
       droppedCitations: number;
       outOfDate: number;
+      /**
+       * For an edit the User asked for (#880): its new text can't be mapped
+       * onto the selection and would remove most of it, so its Proposals wait
+       * for the User instead of applying.
+       */
+      held?: true;
+      /** What its new text left out of the selection, kept as it was; absent when nothing. */
+      leftOut?: LeftOutPart[];
     }
   /** The model gave the text back as it was: there is nothing to propose. */
   | { kind: "unchanged" }
