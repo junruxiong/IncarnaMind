@@ -254,6 +254,9 @@ test("a web page to share: the sheet offers it, and the file loads nothing and o
   expect(Math.abs(sheetBox.x)).toBeLessThanOrEqual(1);
   expect(Math.abs(sheetBox.width - 375)).toBeLessThanOrEqual(1);
   expect(Math.abs(sheetBox.y + sheetBox.height - 720)).toBeLessThanOrEqual(1);
+  expect(
+    await second.locator(".card-source .date").evaluate((date) => date.getClientRects().length),
+  ).toBe(1);
   const grab = await second.locator(".card-grab").boundingBox();
   if (!grab) throw new Error("The sheet has no grab bar.");
   await page.mouse.move(grab.x + grab.width / 2, grab.y + 2);
