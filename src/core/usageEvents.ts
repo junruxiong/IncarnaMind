@@ -179,7 +179,6 @@ void _inStep;
 export const USAGE_EVENTS = {
   /** IncarnaMind started. `language`: the interface language. */
   app_opened: { language: oneOf(LANGUAGES) },
-  /** The User opened another example from an example's banner (#123): which group, nothing else. */
   example_opened: { group: oneOf(EXAMPLE_GROUPS) },
   /** The User made a Mind (not the example Mind). */
   mind_created: {},

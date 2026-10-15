@@ -7,6 +7,12 @@ const root = fileURLToPath(new URL(".", import.meta.url));
 const NODE_WORKER = "?nodeWorker";
 
 /**
+ * Gives each test file a temporary HOME and refuses its writes under the real
+ * one; the evaluation's configs use it too.
+ */
+export const HOME_GUARD = join(root, "tests/setup/home.ts");
+
+/**
  * electron-vite builds `import start from "./worker?nodeWorker"` into a separate
  * chunk and a function that starts it on a worker thread. Vitest can't run a
  * TypeScript worker, so this plugin does the same for tests: it bundles the
@@ -63,6 +69,7 @@ export default defineConfig({
   test: {
     include: ["tests/**/*.test.ts"],
     environment: "node",
+    setupFiles: [HOME_GUARD],
     // Tests wait for states, not times: a limit only catches a hang. Vitest's 5 s default failed
     // tests that were merely slow on a loaded CI runner.
     testTimeout: 30_000,

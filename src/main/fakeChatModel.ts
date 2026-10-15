@@ -85,12 +85,18 @@
  * new text streams in word by word, slowly when the instruction says
  * "slowly", then a line saying why (#202).
  *
+ * Research (`fakePlan`): a plan of three steps about the topic; each step is
+ * then answered as a Question that asks for the web is, and the pages it saved
+ * are tagged with their names' first words (`fakeResearchTags`).
+ *
  * Make this a Skill (`fakeSkillDraft`): a draft whose "when to use it" and first
  * step quote the Mind's last Question, so a test sees that the Mind was read.
  *
  * Find support and Check against Documents (`checkReply`): a sentence that shares
  * three words with a Passage's line is supported, or contradicted when it has a
- * number the line doesn't; otherwise unsupported.
+ * number the line doesn't; otherwise unsupported. Offered calculate, a sentence
+ * that states a multiple ("1.1x") has it worked out as the line's first number
+ * over its second (#707).
  *
  * Verify (`fakeClaims`): every sentence of a document claims something, but a
  * question or thanks. Its claims are checked as above.
@@ -592,7 +598,7 @@ function scriptNamed(
  */
 function nextReply(prompt: Prompt, tools: readonly OfferedTool[]): Reply {
   const names = tools.map((tool) => tool.name);
-  if (CHECK_RUN.test(systemOf(prompt))) return checkReply(prompt);
+  if (CHECK_RUN.test(systemOf(prompt))) return checkReply(prompt, names);
   const question = lastQuestion(prompt);
   if (/blank reply/i.test(question)) return { text: "" };
   /** What the calls made first said, in order. */
@@ -1016,6 +1022,48 @@ function editedText(action: string, passage: string, asked: string): string {
   }
 }
 
+/** Research's planner (#130, src/core/research/prompt.ts). */
+const PLANNER = /^You plan research for IncarnaMind/m;
+
+/**
+ * A Research plan (#130): three steps about the topic, "slowly" kept in
+ * them so the Task takes its time too; asked to change it, the change
+ * becomes a step after the others.
+ */
+function fakePlan(options: GenerateOptions): string | null {
+  if (!PLANNER.test(systemOf(options.prompt))) return null;
+  const request = userText(options.prompt.find((message) => message.role === "user"));
+  const topic = (/^Topic: (.*)$/m.exec(request)?.[1] ?? "").replace(/^research\s+/i, "");
+  const slowly = SLOWLY.test(topic) ? ", slowly" : "";
+  const subject = topic.replace(/,?\s*slowly\b/i, "").replace(/[?？.。]$/, "");
+  const change = /^Change it as the User asks: (.*)$/m.exec(request)?.[1];
+  const steps = [
+    `Search the web and the Library for ${subject}${slowly}`,
+    `Read what the sources say about ${subject}${slowly}`,
+    `Compare what they found${slowly}`,
+    ...(change ? [change] : []),
+  ];
+  return [
+    `TITLE: What do the sources say about ${subject}?`,
+    ...steps.map((step, index) => `${index + 1}. ${step}`),
+  ].join("\n");
+}
+
+/** Research's tagger (#130, src/core/research/prompt.ts). */
+const RESEARCH_TAGGER = /^You tag the web pages a research Task saved/m;
+
+/** Tags for the pages Research saved: each page's first word, the pages that share it under it. */
+function fakeResearchTags(options: GenerateOptions): string | null {
+  if (!RESEARCH_TAGGER.test(systemOf(options.prompt))) return null;
+  const request = userText(options.prompt.find((message) => message.role === "user"));
+  const pages = new Map<string, number[]>();
+  for (const [, number, name] of request.matchAll(/^(\d+)\. (.+)$/gm)) {
+    const word = /\p{L}+/u.exec(name ?? "")?.[0];
+    if (word) pages.set(word, [...(pages.get(word) ?? []), Number(number)]);
+  }
+  return [...pages].map(([word, numbers]) => `${word}: ${numbers.join(", ")}`).join("\n");
+}
+
 /** Test-only classifier: chooses a group whose name appears in the excerpt. */
 function fakeStructuredOutput(options: GenerateOptions): string {
   const format = options.responseFormat;
@@ -1098,8 +1146,9 @@ const checkWords = (text: string): string[] => [
  * support it, unless the sentence has a number the line doesn't while the
  * line has numbers: that contradicts it. Fewer leave it unsupported. A
  * sentence with "blank reply" gets an empty reply, and one with "refuse" a refusal.
+ * Offered calculate, a sentence that states a multiple has it worked out first.
  */
-function checkReply(prompt: Prompt): Reply {
+function checkReply(prompt: Prompt, tools: readonly string[]): Reply {
   const sentence = /<sentence>\n([\s\S]*?)\n<\/sentence>/.exec(lastUserText(prompt))?.[1] ?? "";
   if (/blank reply/i.test(sentence)) return { text: "" };
   if (/\brefuse\b/i.test(sentence)) return { text: "I'm sorry, I can't help with that." };
@@ -1119,6 +1168,34 @@ function checkReply(prompt: Prompt): Reply {
     lineNumbers.length > 0 && words.some((word) => /\d/.test(word) && !lineNumbers.includes(word));
   if (toolResults(prompt, "cite").length === 0) {
     return { tool: "cite", input: { citations: [best.record] } };
+  }
+  const multiple = /\d+(?:\.\d+)?x\b/.exec(sentence)?.[0];
+  if (tools.includes("calculate") && multiple && toolResults(prompt, "calculate").length === 0) {
+    const inputs = [1, 2].map((position) => ({
+      name: `n${position}`,
+      label: position === 1 ? "First" : "Second",
+      citation: 1,
+      position,
+    }));
+    return {
+      tool: "calculate",
+      input: {
+        figures: [
+          {
+            marker: 1,
+            label: "Multiple",
+            inputs,
+            formula: "n1 / n2",
+            as: "times",
+            stated: multiple,
+          },
+        ],
+      },
+    };
+  }
+  // The figure worked out is the only number the sentence has: the rest of it is supported.
+  if (multiple && tools.includes("calculate")) {
+    return { text: "Verdict: supported\nThe Document's figures give it [^1]." };
   }
   return {
     text: contradicted
@@ -1239,7 +1316,9 @@ export const createFakeChatModel: ChatModelFactory = (spec) =>
             text:
               options.responseFormat?.type === "json"
                 ? fakeStructuredOutput(options)
-                : (fakeClaims(options) ??
+                : (fakePlan(options) ??
+                  fakeResearchTags(options) ??
+                  fakeClaims(options) ??
                   fakeConfirm(options) ??
                   fakeSkillDraft(options) ??
                   fakeEdit(options.prompt)?.text ??
