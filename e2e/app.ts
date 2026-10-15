@@ -1667,8 +1667,8 @@ export async function leaveText(window: Page): Promise<void> {
 }
 
 /**
- * Exports the Mind in the shown tab from Export's menu: in `format`, or in the one it lists
- * first, the last one used. A format under More formats is reached through it.
+ * Exports the Mind in the shown tab from Export's menu: in `format`, or in the
+ * one it lists first, the last one used.
  */
 export async function exportFromMenu(window: Page, format?: ExportFormat): Promise<void> {
   await pointAndClick(window, window.getByTestId("export-mind"));
