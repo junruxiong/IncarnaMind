@@ -25,7 +25,7 @@ import { DocumentChip } from "./documentChipSchema";
 import { Footnote } from "./footnoteSchema";
 import { ProposalAttributes, ProposalDelete, ProposalInsert } from "./proposalSchema";
 import { Answer, MindDocument, Question, QuestionContextFlag } from "./questionSchema";
-import { InlineImage, WordAtom, WordBlock } from "./wordSchema";
+import { InlineImage, WordAtom, WordBlock, WordLookAttribute, WordRun } from "./wordSchema";
 
 /** The attribute each Block keeps its UUID in. It is stored in the Mind's Yjs document. */
 export { BLOCK_ID_ATTRIBUTE };
@@ -85,7 +85,8 @@ export interface NoteSchemaOptions {
  * table cells included. Footnotes the User writes, inline, each holding its
  * text. Charts, drawn from a table or from cited figures, each value with its
  * Citation (#436). Comparison tables, top-level only (#98). What a Word
- * import kept as it is, and its inline pictures (#104, see `wordSchema`).
+ * import kept as it is, and its inline pictures (#104), and the file's look
+ * (see `wordSchema`).
  * Proposals the AI made, waiting for the User (see `proposalSchema`).
  * AI text, the words the AI wrote that the User hasn't made their own (see `aiText`).
  * The checks of the User's own sentences, on their text (see `claimChecks`).
@@ -154,6 +155,8 @@ export function noteExtensions({
     WordAtom.configure({ view: wordAtomView ?? null }),
     WordBlock.configure({ view: wordBlockView ?? null }),
     InlineImage,
+    WordLookAttribute,
+    WordRun,
     QuestionContextFlag,
     // Proposals waiting for the User: words struck and added, and whole Blocks (#93).
     ProposalInsert,

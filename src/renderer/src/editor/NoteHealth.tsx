@@ -1,15 +1,19 @@
 import type { Editor } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { useEditorState } from "@tiptap/react";
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import type * as Y from "yjs";
 import type { CitationAttributes } from "../../../core/api";
 import { citationState } from "../../../shared/citations";
 import { checkSentences, dismissCheckProblem, stopCheck, useChecks } from "../checks";
 import { ProblemLine } from "../components/ProblemLine";
 import { ReadinessExplanation, readinessAction } from "../components/providers/ChatReadinessNotice";
+import { useContradictionLine } from "../contradictions";
+import { errorMessage } from "../errors";
 import { useLanguage, useT } from "../i18n";
+import { checkMind, startMindCheck, useMindCheck, useMindCheckRun } from "../mindCheck";
 import { useAppStore } from "../store";
+import { AnswerError } from "./AnswerView";
 import { coverageOf, sameCoverage, shownClaims } from "./claimChecks";
 import {
   HEALTH_PARTS,
@@ -18,6 +22,8 @@ import {
   noteHealth,
 } from "./healthCounts";
 import { CheckMarkIcon, ClaimMarkIcon } from "./icons";
+import { CheckedWhen, MindCheckAction, MindCheckProgress } from "./MindCheckLine";
+import { useRunModel } from "./ModelChip";
 import { UncoveredLine } from "./UncoveredLine";
 import { COUNT_IDLE_MS } from "./WordCount";
 
@@ -29,6 +35,7 @@ const NONE: Health = {
   noCitation: [],
   recheck: [],
   notChecked: [],
+  unchecked: [],
 };
 
 /** Each part's small mark, as the margin draws its state; none for sentences with no Citation. */
@@ -52,7 +59,7 @@ function PartMark({ part }: { part: HealthPart }) {
 }
 
 /** The Mind's health, worked out a moment after it last changed, as the word count is. */
-function useHealth(editor: Editor): Health {
+function useHealth(editor: Editor, skipped: ReadonlySet<string>): Health {
   const documents = useAppStore((state) =>
     state.status.kind === "ready" ? state.documents : null,
   );
@@ -68,6 +75,7 @@ function useHealth(editor: Editor): Health {
           editor.state.doc,
           shownClaims(editor.state),
           (attributes: CitationAttributes) => citationState(attributes, documents, kept).check,
+          skipped,
         ),
       );
     };
@@ -81,7 +89,7 @@ function useHealth(editor: Editor): Health {
       clearTimeout(timer);
       editor.off("transaction", later);
     };
-  }, [editor, documents, kept]);
+  }, [editor, documents, kept, skipped]);
   return health;
 }
 
@@ -95,28 +103,36 @@ function useHealth(editor: Editor): Health {
  */
 export function NoteHealth({
   editor,
-  mindId,
   doc,
+  mindId,
 }: {
   editor: Editor;
-  mindId: string;
   doc: Y.Doc;
+  mindId: string;
 }) {
   const t = useT();
   const language = useLanguage();
-  const health = useHealth(editor);
+  const checkedAll = useMindCheckRun(doc);
+  const skippedKeys = checkedAll?.skipped.join(" ") ?? "";
+  const skipped = useMemo(() => new Set(skippedKeys.split(" ").filter(Boolean)), [skippedKeys]);
+  const health = useHealth(editor, skipped);
+  const asking = useMindCheck((state) => state.asking[mindId] !== undefined);
   const coverage = useEditorState({
     editor,
     selector: ({ editor: current }) => coverageOf(shownClaims(current.state)),
     equalityFn: sameCoverage,
   });
+  const runModel = useRunModel(doc);
   const running = useChecks((state) => state.running[mindId]);
   const problem = useChecks((state) => state.problems[mindId]);
   const smallModel = useChecks((state) => state.smallModel[mindId] === true);
+  const contradictions = useContradictionLine(doc, mindId);
   const openSettings = useAppStore((state) => state.openSettings);
   const folderName = useAppStore((state) => {
-    if (problem?.kind !== "no-documents" || problem.folderId === null) return null;
-    return state.library?.groups.find((group) => group.id === problem.folderId)?.name ?? null;
+    const folderId =
+      problem?.kind === "no-documents" || problem?.kind === "only-cited" ? problem.folderId : null;
+    if (folderId === null) return null;
+    return state.library?.groups.find((group) => group.id === folderId)?.name ?? null;
   });
   const format = (value: number) => new Intl.NumberFormat(language).format(value);
 
@@ -150,6 +166,8 @@ export function NoteHealth({
   };
 
   const parts = HEALTH_PARTS.filter((part) => health[part].length > 0);
+  const canCheck =
+    !running && !asking && (health.unchecked.length > 0 || health.recheck.length > 0);
   const close = {
     label: t("checks.close"),
     testId: "checks-problem-close",
@@ -158,8 +176,16 @@ export function NoteHealth({
 
   return (
     <>
-      {parts.length > 0 && (
+      {(parts.length > 0 || checkedAll || canCheck) && (
         <fieldset className="mind-health" data-testid="mind-health" aria-label={t("health.label")}>
+          {checkedAll && !running && (
+            <>
+              <span className="mind-health-dot" aria-hidden="true">
+                ·
+              </span>
+              <CheckedWhen run={checkedAll} />
+            </>
+          )}
           {parts.map((part) => {
             const text = label(part, health[part].length);
             return (
@@ -184,9 +210,22 @@ export function NoteHealth({
               </Fragment>
             );
           })}
+          {canCheck && (
+            <>
+              <span className="mind-health-dot" aria-hidden="true">
+                ·
+              </span>
+              <MindCheckAction
+                unchecked={health.unchecked.length}
+                recheck={health.recheck.length}
+                onCheck={() => void startMindCheck(mindId, "changed")}
+              />
+            </>
+          )}
         </fieldset>
       )}
-      {smallModel && parts.length > 0 && (
+      {((smallModel && parts.length > 0) ||
+        (contradictions?.kind !== "asking" && contradictions?.run.smallModel)) && (
         <p data-testid="checks-small-model" className="mind-health-line mind-health-note">
           {t("checks.smallModel")}
         </p>
@@ -202,7 +241,11 @@ export function NoteHealth({
             onClick: () => stopCheck(mindId),
           }}
         >
-          {t(`checks.running.${running.action}`)}
+          {running.action === "whole-mind" ? (
+            <MindCheckProgress editor={editor} requestId={running.requestId} />
+          ) : (
+            t(`checks.running.${running.action}`)
+          )}
         </ProblemLine>
       )}
       {!running && problem?.kind === "not-ready" && (
@@ -231,17 +274,21 @@ export function NoteHealth({
           {t("checks.problem.local-mode")}
         </ProblemLine>
       )}
-      {!running && !problem && coverage.mostlyUncovered && (
+      {!running && !asking && !problem && coverage.mostlyUncovered && (
         <UncoveredLine
           className="mind-health-line"
           onCheckAll={
-            coverage.canWiden && coverage.range && coverage.action
-              ? () =>
-                  void checkSentences(editor, mindId, doc, coverage.action ?? "find-support", {
-                    ...(coverage.range && { range: coverage.range }),
-                    allDocuments: true,
-                  })
-              : undefined
+            !coverage.canWiden
+              ? undefined
+              : checkedAll
+                ? () => void startMindCheck(mindId, "all", { allDocuments: true })
+                : coverage.range && coverage.action
+                  ? () =>
+                      void checkSentences(editor, mindId, doc, coverage.action ?? "find-support", {
+                        ...(coverage.range && { range: coverage.range }),
+                        allDocuments: true,
+                      })
+                  : undefined
           }
         />
       )}
@@ -261,15 +308,47 @@ export function NoteHealth({
             : t("checks.problem.no-documents.all")}
         </ProblemLine>
       )}
+      {!running && problem?.kind === "find-failed" && (
+        <AnswerError
+          kind={problem.error.kind}
+          modelId={runModel.modelId}
+          providerId={runModel.providerId}
+          resetsAt={problem.error.resetsAt ?? null}
+          details={problem.error.message}
+          onRetry={() =>
+            void checkMind(mindId, problem.mode, { allDocuments: problem.allDocuments })
+          }
+          onOpenSettings={openSettings}
+        />
+      )}
       {!running &&
         problem &&
         problem.kind !== "not-ready" &&
         problem.kind !== "local-mode" &&
-        problem.kind !== "no-documents" && (
-          <ProblemLine testId="checks-problem" className="mind-health-line" action={close}>
-            {problem.kind === "failed"
-              ? t("checks.problem.failed", { message: problem.message })
-              : t(`checks.problem.${problem.kind}`)}
+        problem.kind !== "no-documents" &&
+        problem.kind !== "find-failed" && (
+          <ProblemLine
+            testId="checks-problem"
+            className="mind-health-line"
+            action={
+              problem.kind === "failed" && problem.retry
+                ? {
+                    label: t("checks.tryAgain"),
+                    testId: "checks-try-again",
+                    onClick: () => {
+                      dismissCheckProblem(mindId);
+                      problem.retry?.();
+                    },
+                  }
+                : close
+            }
+            also={problem.kind === "failed" && problem.retry ? close : undefined}
+          >
+            {problem.kind === "only-cited"
+              ? t("checks.problem.only-cited.folder", { folder: folderName ?? "" })
+              : problem.kind === "failed"
+                ? t("checks.problem.failed", { message: errorMessage(problem.error, t) })
+                : t(`checks.problem.${problem.kind}`)}
           </ProblemLine>
         )}
     </>

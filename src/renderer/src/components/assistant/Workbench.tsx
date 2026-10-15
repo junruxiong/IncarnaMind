@@ -1,4 +1,12 @@
-import { type CSSProperties, type ReactNode, useLayoutEffect, useMemo, useState } from "react";
+import {
+  type CSSProperties,
+  type ReactNode,
+  type RefObject,
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useState,
+} from "react";
 import { type AssistantPlace, DEFAULT_ASSISTANT } from "../../../../core/api";
 import {
   BOTTOM_MIN,
@@ -43,9 +51,11 @@ import { useAssistantDrag } from "./useAssistantDrag";
  * the groups share what it is given (`useGroupsMerged`).
  */
 export function Workbench({
+  ref,
   sidebarHidden,
   cardOverlay,
 }: {
+  ref: RefObject<HTMLDivElement | null>;
   sidebarHidden: boolean;
   /** Drawn over the card, such as where dropped links go. */
   cardOverlay: ReactNode;
@@ -61,9 +71,16 @@ export function Workbench({
   const side = isSide(dock);
   const { folded } = shown;
   const [area, setArea] = useState<HTMLDivElement | null>(null);
+  const holdArea = useCallback(
+    (element: HTMLDivElement | null) => {
+      ref.current = element;
+      setArea(element);
+    },
+    [ref],
+  );
   const room = useContentSize(area);
   const [card, setCard] = useState<HTMLDivElement | null>(null);
-  useMeasuredCard(card);
+  useMeasuredCard(card, sidebarHidden);
   const [slot, setSlot] = useState<HTMLElement | null>(null);
   // The same element every time: moving or resizing the assistant draws the groups again only
   // as far as their own measurements change, so it keeps up with the pointer.
@@ -105,7 +122,7 @@ export function Workbench({
 
   return (
     <div
-      ref={setArea}
+      ref={holdArea}
       data-testid="workbench"
       data-dock={dock}
       data-folded={folded || undefined}
@@ -205,13 +222,16 @@ function useContentSize(element: HTMLElement | null): Size {
 }
 
 /** Keeps the card's width where the groups read it (`useCardWidth`). */
-function useMeasuredCard(card: HTMLElement | null): void {
+function useMeasuredCard(card: HTMLElement | null, sidebarHidden: boolean): void {
+  // Before the sidebar's slide starts, so the groups merge or part first and what they draw slides too.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `sidebarHidden` is when to measure again.
   useLayoutEffect(() => {
     if (!card) return;
-    const measure = () => useCardWidth.setState({ width: card.getBoundingClientRect().width });
+    // The laid-out width: a slide's transform must not count.
+    const measure = () => useCardWidth.setState({ width: card.offsetWidth });
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(card);
     return () => observer.disconnect();
-  }, [card]);
+  }, [card, sidebarHidden]);
 }

@@ -18,6 +18,10 @@
  * has Regenerate make it again from them, then regenerates an Answer the
  * User edited, which comes back as changes over their version.
  *
+ * A third (#202) shortens a whole note of four paragraphs and a heading, and
+ * checks that its changes come in while the model still writes, paragraph by
+ * paragraph, and that the model says why.
+ *
  * Set INCARNAMIND_LIVE_REPORT to a file to keep what each model gave back.
  */
 import { appendFile } from "node:fs/promises";
@@ -37,7 +41,12 @@ import {
 import { catalogProvider } from "../../src/core/providers/catalog/providers";
 import { createAiSdkChatModel } from "../../src/core/providers/models";
 import { isCloudModelName } from "../../src/core/providers/ollamaCloud";
-import { outOfDateProposals, pendingProposals, resolveProposals } from "../../src/shared/proposals";
+import {
+  outOfDateProposals,
+  pendingProposals,
+  proposalRequestOf,
+  resolveProposals,
+} from "../../src/shared/proposals";
 import { createTempDataFolder, nextEvent, startCore } from "../helpers/core";
 import { addAndProcess, writeSourceFile } from "../helpers/documents";
 import { connectToMind, type MindClient } from "../helpers/mindClient";
@@ -267,6 +276,8 @@ describe.each(LIVE)("Edit with AI, live: $name", (live) => {
           each.instruction,
         );
         const proposed = shown(client, each.blockId);
+        const made =
+          result.kind === "proposed" ? proposalRequestOf(client.doc, result.request) : null;
         report.push(
           `- ${each.blockId} ${each.action}${each.instruction ? ` (${each.instruction})` : ""}: ${result.kind}${
             result.kind === "proposed"
@@ -274,7 +285,7 @@ describe.each(LIVE)("Edit with AI, live: $name", (live) => {
               : result.kind === "failed"
                 ? `: ${result.error.kind}`
                 : ""
-          }, ${seconds.toFixed(1)} s\n  ${proposed}`,
+          }, ${seconds.toFixed(1)} s\n  ${proposed}\n  why: ${made?.source === "edit-with-ai" ? (made.reason ?? "(none)") : "(none)"}`,
         );
         expect(result.kind, result.kind === "failed" ? result.error.kind : result.kind).toBe(
           "proposed",
@@ -417,6 +428,88 @@ describe.each(LIVE)("Changes out of date, live: $name", (live) => {
       await client.settled();
       report.push(`  accepted: ${answerText(client, answerId).slice(0, 300)}`);
       expect(answerText(client, answerId)).not.toContain("My own note on this Answer.");
+      if (process.env.INCARNAMIND_LIVE_REPORT) {
+        await appendFile(process.env.INCARNAMIND_LIVE_REPORT, `${report.join("\n")}\n\n`);
+      }
+    },
+  );
+});
+
+describe.each(LIVE)("Edit with AI as it writes, live: $name", (live) => {
+  test.skipIf(live.apiKey === undefined)(
+    `${live.name}: a whole note shortened comes in paragraph by paragraph, and says why`,
+    { timeout: 600_000 },
+    async () => {
+      const { core, client, mind } = await liveCore(live);
+      const report: string[] = [`## ${live.name} · ${live.model} (#202)`];
+      const blocks = [
+        {
+          type: "heading",
+          attrs: { id: "heading", level: 2 },
+          content: [{ type: "text", text: "Tides at the harbour" }],
+        },
+        ...[
+          "The tides at the harbour are really quite strong in the spring, and they come in very fast over the flats twice every single day.",
+          "The harbour master publishes the times of high water every year, and the fishermen basically plan all of their trips around those published times.",
+          "Neap tides are actually much weaker, because the Sun and the Moon pull at right angles to each other, so the water does not rise very much at all.",
+          "In winter the storms can push the water even higher than the tables say, which is why the harbour wall was raised by a whole metre in 2019.",
+        ].map((text, index) => ({
+          type: "paragraph",
+          attrs: { id: `paragraph-${index + 1}` },
+          content: [{ type: "text", text }],
+        })),
+      ];
+      writeMind(client, blocks);
+      await client.settled();
+      const plain = (id: string) => {
+        let text = "";
+        readMind(client).descendants((node) => {
+          if (node.attrs.id === id) text = node.textContent;
+          return text === "";
+        });
+        return text;
+      };
+      const last = "paragraph-4";
+      // How many changes wait in the Mind each time it changes while the model writes.
+      const seen: number[] = [];
+      let done = false;
+      core.on("mind.update", ({ mindId }) => {
+        if (mindId !== mind.id || done) return;
+        setTimeout(() => {
+          if (!done) seen.push(pendingProposals(client.blocks).length);
+        }, 0);
+      });
+      const started = Date.now();
+      const result = await core.editWithAi({
+        requestId: crypto.randomUUID(),
+        mindId: mind.id,
+        from: { blockId: "heading", offset: 0 },
+        to: { blockId: last, offset: plain(last).length },
+        text: blocks.map((block) => (block.content[0] as { text: string }).text).join("\n"),
+        action: "shorten",
+      });
+      done = true;
+      await client.settled();
+      const request = result.kind === "proposed" ? result.request : "";
+      const reason = proposalRequestOf(client.doc, request);
+      const steps = [...new Set(seen)].filter((count) => count > 0);
+      report.push(
+        `- shorten the whole note: ${result.kind}${result.kind === "proposed" ? `, ${result.proposals} changes` : ""}, ${((Date.now() - started) / 1000).toFixed(1)} s`,
+        `  changes waiting as they came: ${steps.join(", ")}`,
+        `  why: ${reason?.source === "edit-with-ai" ? (reason.reason ?? "(none)") : "(none)"}`,
+      );
+      expect(result.kind).toBe("proposed");
+      // More than one step: the first paragraphs' changes were in before the last was written.
+      expect(steps.length).toBeGreaterThan(1);
+      expect(reason?.source === "edit-with-ai" && reason.reason).toBeTruthy();
+      client.doc.transact(() => {
+        resolveProposals(client.blocks as Y.XmlFragment, () => true, "accept");
+      }, "editor");
+      await client.settled();
+      report.push(
+        `  accepted: ${readMind(client).textBetween(0, readMind(client).content.size, " | ")}`,
+      );
+      expect(plain("heading")).not.toBe("");
       if (process.env.INCARNAMIND_LIVE_REPORT) {
         await appendFile(process.env.INCARNAMIND_LIVE_REPORT, `${report.join("\n")}\n\n`);
       }

@@ -1,32 +1,37 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { generateText, jsonSchema, streamText, tool } from "ai";
-import { describe, expect, test } from "vitest";
+import { describe, expect, onTestFinished, test, vi } from "vitest";
 import {
   ChatNotReadyError,
   ConsentDeclinedError,
+  type ConversationAnswer,
+  type ConversationAskResult,
   type Core,
-  type CoreAdapters,
   type CoreEventName,
   type CoreEvents,
   createAiSdkChatModel,
 } from "../../src/core";
 import { DATABASE_FILE } from "../../src/core/core";
-import { shapePlanRequest } from "../../src/core/providers/chatgpt/planEndpoint";
+import { planResetTime, shapePlanRequest } from "../../src/core/providers/chatgpt/planEndpoint";
 import { classifyProviderError } from "../../src/core/providers/providerErrors";
 import { migrate, migrations, openDatabase } from "../../src/core/storage";
 import { createFileKeychain, SECRETS_FILE } from "../../src/main/secretsFile";
+import { firstReset, nextPlanModel } from "../../src/shared/planLimits";
 import {
+  ACCOUNT_MODELS,
   ANSWER,
   createFakeBrowser,
   EMAIL,
   type FakeBrowser,
   type FakeOpenAI,
+  type FakeOpenAIServer,
   FULL_SCOPE,
   RESOURCE,
   startFakeOpenAI,
 } from "../helpers/chatgpt";
 import { createFakeCipher } from "../helpers/cipher";
+import { answerEnded } from "../helpers/citations";
 import {
   createMemoryKeychain,
   createTempDataFolder,
@@ -35,6 +40,7 @@ import {
   nextEvent,
   saveProviderUnasked,
   startCore,
+  type TestAdapters,
 } from "../helpers/core";
 
 const CHATGPT_SERVICE = { id: "chatgpt-plan", name: "ChatGPT" };
@@ -42,7 +48,7 @@ const MODEL = "gpt-6.1-sol";
 
 interface Setup {
   core: Core;
-  fake: FakeOpenAI;
+  fake: FakeOpenAIServer;
   browser: FakeBrowser;
   keychain: MemoryKeychain;
   clock: ReturnType<typeof manualClock>;
@@ -50,7 +56,7 @@ interface Setup {
 }
 
 /** A core whose ChatGPT plan provider talks to a fresh fake OpenAI through the real adapter. */
-async function setUp(overrides: Partial<CoreAdapters> = {}): Promise<Setup> {
+async function setUp(overrides: TestAdapters = {}): Promise<Setup> {
   const clock = manualClock();
   const fake = await startFakeOpenAI({ now: () => clock.now().getTime() });
   const browser = createFakeBrowser(fake);
@@ -72,8 +78,12 @@ function acceptConsentAutomatically(core: Core): void {
 }
 
 /** Signs in, accepts the chat flow and makes the plan the default chat model. */
-async function signedIn(overrides: Partial<CoreAdapters> = {}): Promise<Setup> {
+async function signedIn(
+  overrides: TestAdapters = {},
+  models: FakeOpenAI["modelList"] = ACCOUNT_MODELS,
+): Promise<Setup> {
   const setup = await setUp(overrides);
+  setup.fake.modelList = models;
   const result = await setup.core.signInToChatGpt();
   expect(result.ok).toBe(true);
   acceptConsentAutomatically(setup.core);
@@ -149,6 +159,7 @@ describe("Continue with ChatGPT", () => {
           { id: "gpt-6.1-sol", name: "GPT-6.1 Sol" },
           { id: "gpt-6-luna", name: "GPT-6 Luna" },
         ],
+        limits: { usedUp: [], standIn: null },
       },
     });
     await expect.poll(() => changes.map((status) => status.signingIn)).toEqual([true, false]);
@@ -325,6 +336,22 @@ describe("Continue with ChatGPT", () => {
     await expect(fetch(redirect)).rejects.toThrow();
   });
 
+  test("a waiting sign-in's page can be opened again, and nothing is opened when none waits", async () => {
+    const { core, browser } = await setUp();
+    expect(await core.reopenChatGptSignIn()).toBe(false);
+    browser.behaviour = "ignore";
+
+    const result = core.signInToChatGpt();
+    await expect.poll(() => browser.opened).toHaveLength(1);
+    expect(await core.reopenChatGptSignIn()).toBe(true);
+
+    expect(browser.opened).toHaveLength(2);
+    expect(browser.opened[1]).toBe(browser.opened[0]);
+    await core.cancelChatGptSignIn();
+    await result;
+    expect(await core.reopenChatGptSignIn()).toBe(false);
+  });
+
   test("starting again replaces a sign-in still waiting, e.g. after the User closed the tab", async () => {
     const { core, browser } = await setUp();
     browser.behaviour = "ignore";
@@ -336,6 +363,167 @@ describe("Continue with ChatGPT", () => {
 
     expect(await abandoned).toMatchObject({ ok: false, error: { kind: "cancelled" } });
     expect(retried).toMatchObject({ ok: true, status: { account: { state: "signed-in" } } });
+  });
+});
+
+describe("Pasting the address the browser shows", () => {
+  /** A sign-in whose browser never comes back, and the address OpenAI's page sent it to. */
+  async function waitingSignIn({ core, browser, fake }: Setup) {
+    browser.behaviour = "ignore";
+    const opened = browser.opened.length;
+    const result = core.signInToChatGpt();
+    await expect.poll(() => browser.opened).toHaveLength(opened + 1);
+    const address = fake.redirectFor(browser.opened.at(-1) ?? "", { approve: {} }).href;
+    return { result, address };
+  }
+
+  const exchanges = (fake: FakeOpenAI) =>
+    fake.tokenRequests.filter((request) => request.grant_type === "authorization_code");
+
+  test("a pasted address finishes the sign-in, with spaces and quotes around it, and is never logged", async () => {
+    const setup = await setUp();
+    const logged = (["log", "info", "warn", "error", "debug"] as const).map((level) =>
+      vi.spyOn(console, level),
+    );
+    onTestFinished(() => {
+      for (const spy of logged) spy.mockRestore();
+    });
+    const { result, address } = await waitingSignIn(setup);
+
+    expect(await setup.core.pasteChatGptSignInAddress(`  "${address}"\n`)).toEqual({ ok: true });
+
+    expect(await result).toMatchObject({
+      ok: true,
+      firstTime: true,
+      status: { account: { state: "signed-in", email: EMAIL }, signingIn: false },
+    });
+    expect(exchanges(setup.fake)).toEqual([
+      expect.objectContaining({ client_id: "oaiapp_test_1", code: "code-1" }),
+    ]);
+    const callback = new URL(address);
+    callback.search = "";
+    await expect(fetch(callback)).rejects.toThrow();
+    const output = logged.flatMap((spy) => spy.mock.calls.flat().map(String)).join("\n");
+    expect(output).not.toContain("code-1");
+    expect(output).not.toContain(new URL(address).searchParams.get("state"));
+  });
+
+  test("an address with another state is refused and changes nothing; the right one still works", async () => {
+    const setup = await setUp();
+    const { result, address } = await waitingSignIn(setup);
+    const other = new URL(address);
+    other.searchParams.set("state", "from-another-sign-in");
+
+    expect(await setup.core.pasteChatGptSignInAddress(other.href)).toEqual({
+      ok: false,
+      problem: "other-sign-in",
+    });
+
+    expect(setup.fake.tokenRequests).toEqual([]);
+    expect((await setup.core.getChatGptPlan()).signingIn).toBe(true);
+    expect(await setup.core.pasteChatGptSignInAddress(address)).toEqual({ ok: true });
+    expect(await result).toMatchObject({ ok: true });
+  });
+
+  test("an earlier sign-in's address, its code already used, is refused", async () => {
+    const setup = await setUp();
+    const first = await waitingSignIn(setup);
+    await setup.core.pasteChatGptSignInAddress(first.address);
+    expect(await first.result).toMatchObject({ ok: true });
+    await setup.core.signOutOfChatGpt();
+    const second = await waitingSignIn(setup);
+
+    expect(await setup.core.pasteChatGptSignInAddress(first.address)).toEqual({
+      ok: false,
+      // The new sign-in listens on another free port, unless the system hands out the same one.
+      problem: expect.stringMatching(/^(not-sign-in-address|other-sign-in)$/),
+    });
+
+    expect(exchanges(setup.fake)).toHaveLength(1);
+    expect((await setup.core.getChatGptPlan()).account).toEqual({ state: "signed-out" });
+    await setup.core.cancelChatGptSignIn();
+    expect(await second.result).toMatchObject({ ok: false, error: { kind: "cancelled" } });
+  });
+
+  test("pasting twice, or the browser coming back after a paste, exchanges the code once", async () => {
+    const setup = await setUp();
+    const { result, address } = await waitingSignIn(setup);
+    let release = () => {};
+    setup.fake.holdCodeExchange = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    expect(await setup.core.pasteChatGptSignInAddress(address)).toEqual({ ok: true });
+    await expect.poll(() => exchanges(setup.fake)).toHaveLength(1);
+    expect(await setup.core.pasteChatGptSignInAddress(address)).toEqual({
+      ok: false,
+      problem: "finished",
+    });
+    const late = await fetch(address);
+    expect(late.status).toBe(409);
+    release();
+
+    expect(await result).toMatchObject({ ok: true });
+    expect(exchanges(setup.fake)).toHaveLength(1);
+  });
+
+  test("an address pasted after the browser came back is ignored", async () => {
+    const { core, browser, fake, keychain } = await setUp();
+    expect(await core.signInToChatGpt()).toMatchObject({ ok: true });
+    const before = { status: await core.getChatGptPlan(), stored: stored(keychain) };
+    const address = fake.redirectFor(browser.opened[0] ?? "", { approve: {} }).href;
+
+    expect(await core.pasteChatGptSignInAddress(address)).toEqual({
+      ok: false,
+      problem: "finished",
+    });
+
+    expect(exchanges(fake)).toHaveLength(1);
+    expect({ status: await core.getChatGptPlan(), stored: stored(keychain) }).toEqual(before);
+  });
+
+  test("an address of another host, port, scheme or path, or without a code or state, isn't the sign-in address", async () => {
+    const setup = await setUp();
+    const { result, address } = await waitingSignIn(setup);
+    const changed = (change: (url: URL) => void) => {
+      const url = new URL(address);
+      change(url);
+      return url.href;
+    };
+    const refused = [
+      changed((url) => {
+        url.hostname = "localhost";
+      }),
+      changed((url) => {
+        url.port = "1";
+      }),
+      changed((url) => {
+        url.protocol = "https:";
+      }),
+      changed((url) => {
+        url.pathname = "/auth/other";
+      }),
+      changed((url) => url.searchParams.delete("state")),
+      changed((url) => url.searchParams.delete("code")),
+      `${address} trailing`,
+      address.replace("/auth/", "/auth/\n"),
+      `"${address}`,
+      "",
+      "not an address",
+      setup.fake.endpoints.authorizeUrl,
+    ];
+
+    for (const text of refused) {
+      expect(await setup.core.pasteChatGptSignInAddress(text)).toEqual({
+        ok: false,
+        problem: "not-sign-in-address",
+      });
+    }
+
+    expect(setup.fake.tokenRequests).toEqual([]);
+    expect((await setup.core.getChatGptPlan()).signingIn).toBe(true);
+    await setup.core.cancelChatGptSignIn();
+    expect(await result).toMatchObject({ ok: false, error: { kind: "cancelled" } });
   });
 });
 
@@ -845,6 +1033,29 @@ describe("Refusals", () => {
     expect(classifyProviderError(failure)).toMatchObject({ kind: "plan-limit" });
   });
 
+  test("a usage limit's reset time comes from what the refusal carries, and is never guessed", () => {
+    const now = Date.parse("2026-10-06T09:00:00.000Z");
+    const limit = (fields: object) => ({
+      error: { code: "subscription_sharing_usage_limit_exceeded", message: "Limit.", ...fields },
+    });
+    const noHeaders = new Headers();
+
+    expect(planResetTime(limit({ resets_at: now / 1000 + 600 }), noHeaders, now)).toBe(
+      now + 600_000,
+    );
+    expect(planResetTime(limit({ resets_in_seconds: 90 }), noHeaders, now)).toBe(now + 90_000);
+    expect(planResetTime(limit({}), new Headers({ "retry-after": "120" }), now)).toBe(
+      now + 120_000,
+    );
+    expect(
+      planResetTime(
+        { type: "response.failed", response: limit({ resets_at: 1_791_000_000 }) },
+        null,
+      ),
+    ).toBe(1_791_000_000_000);
+    expect(planResetTime(limit({}), noHeaders, now)).toBeNull();
+  });
+
   test("a 401 that a fresh token doesn't fix means OpenAI refused the sign-in for plan use", async () => {
     const { core, fake } = await signedIn();
     fake.reply = { kind: "error", status: 401, body: { error: { message: "Unauthorized" } } };
@@ -854,6 +1065,216 @@ describe("Refusals", () => {
     expect(result).toMatchObject({ ok: false, error: { kind: "blocked" } });
     expect(refreshes(fake)).toHaveLength(1);
     expect((await core.getChatGptPlan()).account.state).toBe("signed-in");
+  });
+});
+
+describe("A model's usage limit, used up", { timeout: 30_000 }, () => {
+  const SOL = "gpt-6.1-sol";
+  const ASTRA = "gpt-6-astra";
+  const LUNA = "gpt-6-luna";
+  const PLAN_MODELS = [
+    { slug: SOL, display_name: "GPT-6.1 Sol", visibility: "list" },
+    { slug: ASTRA, display_name: "GPT-6 Astra", visibility: "list" },
+    { slug: LUNA, display_name: "GPT-6 Luna", visibility: "list" },
+  ];
+  const START = Date.parse("2026-10-06T09:00:00.000Z");
+  const hours = (count: number) => count * 60 * 60_000;
+
+  /** The plan refuses `model` for its usage limit, saying when it resets (epoch milliseconds) or not. */
+  const usedUp = (fake: FakeOpenAI, model: string, resetsAt: number | null) => {
+    fake.replyFor[model] = {
+      kind: "error",
+      status: 429,
+      body: {
+        error: {
+          code: "subscription_sharing_usage_limit_exceeded",
+          message: "Limit reached.",
+          ...(resetsAt !== null && { resets_at: resetsAt / 1000 }),
+        },
+      },
+    };
+  };
+
+  const onPlan = () => signedIn({}, PLAN_MODELS);
+
+  /** Asks in a conversation, or regenerates its Answer, and resolves once the Answer ended. */
+  async function settled(core: Core, result: Promise<ConversationAskResult>) {
+    const asked = await result;
+    if (!asked.asked) throw new Error(`The Question wasn't asked: ${JSON.stringify(asked)}`);
+    const { event } = await answerEnded(core, asked.answerId);
+    const { messages } = await core.getConversation(asked.conversation.id);
+    const answer = messages.find((message) => message.id === asked.answerId);
+    if (answer?.kind !== "answer") throw new Error("No Answer.");
+    return { event, answer: answer as ConversationAnswer, conversationId: asked.conversation.id };
+  }
+
+  const lastModel = (fake: FakeOpenAI) => fake.responses().at(-1)?.body.model;
+
+  /** What the Problem line offers for an Answer `modelId` couldn't write: the next model, or the first reset. */
+  async function offered(core: Core, modelId: string) {
+    const { models, limits } = await core.getChatGptPlan();
+    return { next: nextPlanModel(models, limits, modelId)?.id ?? null, reset: firstReset(limits) };
+  }
+
+  test("the chosen model's limit offers the next model in the plan's order; one click answers with it, in place, until the reset", async () => {
+    const { core, fake } = await onPlan();
+    const resetsAt = START + hours(2);
+    usedUp(fake, SOL, resetsAt);
+
+    const failed = await settled(core, core.askInConversation({ text: "What is attention?" }));
+
+    expect(failed.event).toBe("failed");
+    expect(failed.answer).toMatchObject({ errorKind: "plan-limit", model: { modelId: SOL } });
+    expect((await core.getChatGptPlan()).limits).toEqual({
+      usedUp: [{ modelId: SOL, resetsAt: new Date(resetsAt).toISOString() }],
+      standIn: null,
+    });
+    expect(await offered(core, SOL)).toEqual({
+      next: ASTRA,
+      reset: new Date(resetsAt).toISOString(),
+    });
+
+    const status = await core.answerWithPlanModel({ insteadOf: SOL, modelId: ASTRA });
+    expect(status.limits.standIn).toEqual({
+      insteadOf: SOL,
+      modelId: ASTRA,
+      until: new Date(resetsAt).toISOString(),
+    });
+    const again = await settled(
+      core,
+      core.regenerateConversationAnswer({
+        conversationId: failed.conversationId,
+        answerId: failed.answer.id,
+      }),
+    );
+    expect(again).toMatchObject({
+      event: "finished",
+      answer: { id: failed.answer.id, text: ANSWER },
+    });
+    expect(again.answer.model?.modelId).toBe(ASTRA);
+    expect(lastModel(fake)).toBe(ASTRA);
+
+    const followUp = await settled(
+      core,
+      core.askInConversation({ text: "And transformers?", conversationId: failed.conversationId }),
+    );
+    expect(followUp.answer.model?.modelId).toBe(ASTRA);
+  });
+
+  test("a model whose limit is already used up is passed over, and with none left the first reset is all there is", async () => {
+    const { core, fake } = await onPlan();
+    usedUp(fake, SOL, START + hours(3));
+    const first = await settled(core, core.askInConversation({ text: "What is attention?" }));
+    await core.answerWithPlanModel({ insteadOf: SOL, modelId: ASTRA });
+    usedUp(fake, ASTRA, START + hours(1));
+
+    const second = await settled(
+      core,
+      core.askInConversation({ text: "And transformers?", conversationId: first.conversationId }),
+    );
+
+    expect(second.answer).toMatchObject({ errorKind: "plan-limit", model: { modelId: ASTRA } });
+    expect((await offered(core, ASTRA)).next).toBe(LUNA);
+    // Luna stands in for the model the User chose, until that one's reset.
+    const status = await core.answerWithPlanModel({ insteadOf: ASTRA, modelId: LUNA });
+    expect(status.limits.standIn).toEqual({
+      insteadOf: SOL,
+      modelId: LUNA,
+      until: new Date(START + hours(3)).toISOString(),
+    });
+
+    usedUp(fake, LUNA, START + hours(2));
+    const third = await settled(
+      core,
+      core.askInConversation({
+        text: "And attention heads?",
+        conversationId: first.conversationId,
+      }),
+    );
+    expect(third.answer).toMatchObject({ errorKind: "plan-limit", model: { modelId: LUNA } });
+    expect(await offered(core, LUNA)).toEqual({
+      next: null,
+      reset: new Date(START + hours(1)).toISOString(),
+    });
+  });
+
+  test("after the reset time the chosen model answers again, with nothing to click", async () => {
+    const { core, fake, clock } = await onPlan();
+    usedUp(fake, SOL, START + hours(2));
+    const first = await settled(core, core.askInConversation({ text: "What is attention?" }));
+    await core.answerWithPlanModel({ insteadOf: SOL, modelId: ASTRA });
+    fake.replyFor = {};
+
+    clock.advance(hours(2));
+    const after = await settled(
+      core,
+      core.askInConversation({ text: "And transformers?", conversationId: first.conversationId }),
+    );
+
+    expect(after.answer.model?.modelId).toBe(SOL);
+    expect(lastModel(fake)).toBe(SOL);
+    expect((await core.getChatGptPlan()).limits).toEqual({ usedUp: [], standIn: null });
+  });
+
+  test("the User's own pick wins over the stand-in", async () => {
+    const { core, fake } = await onPlan();
+    usedUp(fake, SOL, START + hours(2));
+    const first = await settled(core, core.askInConversation({ text: "What is attention?" }));
+    await core.answerWithPlanModel({ insteadOf: SOL, modelId: ASTRA });
+
+    expect((await core.endPlanStandIn()).limits.standIn).toBeNull();
+    const picked = await settled(
+      core,
+      core.askInConversation({ text: "And transformers?", conversationId: first.conversationId }),
+    );
+
+    // Sol is still used up: the Answer says so again, rather than switch by itself.
+    expect(picked.answer).toMatchObject({ errorKind: "plan-limit", model: { modelId: SOL } });
+    expect(lastModel(fake)).toBe(SOL);
+  });
+
+  test("nothing switches model without the click", async () => {
+    const { core, fake } = await onPlan();
+    usedUp(fake, SOL, START + hours(2));
+    const first = await settled(core, core.askInConversation({ text: "What is attention?" }));
+
+    const again = await settled(
+      core,
+      core.askInConversation({ text: "And transformers?", conversationId: first.conversationId }),
+    );
+
+    expect(again.answer).toMatchObject({ errorKind: "plan-limit", model: { modelId: SOL } });
+    expect(fake.responses().map((request) => request.body.model)).toEqual([SOL, SOL]);
+  });
+
+  test("with no reset time, it lasts for now: the chosen model gets one small try an hour, and answers once it can", async () => {
+    const { core, fake, clock } = await onPlan();
+    usedUp(fake, SOL, null);
+    const first = await settled(core, core.askInConversation({ text: "What is attention?" }));
+    expect((await core.getChatGptPlan()).limits.usedUp).toEqual([{ modelId: SOL, resetsAt: null }]);
+    await core.answerWithPlanModel({ insteadOf: SOL, modelId: LUNA });
+    const ask = (text: string) =>
+      settled(core, core.askInConversation({ text, conversationId: first.conversationId }));
+
+    clock.advance(hours(1) - 60_000);
+    expect((await ask("Second?")).answer.model?.modelId).toBe(LUNA);
+    clock.advance(60_000);
+    const sent = fake.responses().length;
+    expect((await ask("Third?")).answer.model?.modelId).toBe(LUNA);
+    // One small try of Sol first, refused, then the Question to Luna.
+    expect(
+      fake
+        .responses()
+        .slice(sent)
+        .map((request) => request.body.model),
+    ).toEqual([SOL, LUNA]);
+    expect((await core.getChatGptPlan()).limits.standIn).toMatchObject({ modelId: LUNA });
+
+    fake.replyFor = {};
+    clock.advance(hours(1));
+    const back = await ask("Fourth?");
+    expect(back.answer.model?.modelId).toBe(SOL);
+    expect((await core.getChatGptPlan()).limits).toEqual({ usedUp: [], standIn: null });
   });
 });
 

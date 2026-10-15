@@ -18,6 +18,7 @@ import {
   PROPOSAL_ATTRIBUTE,
   PROPOSAL_INSERT_MARK,
 } from "../../../core/api";
+import { sentenceKey } from "../../../shared/mindCheck";
 import { readProposalAttribute } from "../../../shared/proposals";
 import { INLINE_NODE, isClaim, sentenceSpans } from "../../../shared/sentences";
 import type { ShownClaim } from "./claimChecks";
@@ -33,8 +34,12 @@ export const HEALTH_PARTS = [
 ] as const;
 export type HealthPart = (typeof HEALTH_PARTS)[number];
 
-/** Where each part's sentences or Citations are, top to bottom: its count is how many. */
-export type NoteHealth = Record<HealthPart, number[]>;
+/**
+ * Where each part's sentences or Citations are, top to bottom: its count is
+ * how many. `unchecked`: the sentences that make a claim with no check, but
+ * those the last whole-Mind check found make none (#737), for "Check all".
+ */
+export type NoteHealth = Record<HealthPart, number[]> & { unchecked: number[] };
 
 /** Blocks whose text isn't counted. */
 const UNCOUNTED: ReadonlySet<string> = new Set([
@@ -62,6 +67,7 @@ export function noteHealth(
   doc: ProseMirrorNode,
   claims: readonly ShownClaim[],
   citationCheck: (attributes: CitationAttributes) => CitationCheck,
+  skipped: ReadonlySet<string> = new Set(),
 ): NoteHealth {
   const health: NoteHealth = {
     found: [],
@@ -71,6 +77,7 @@ export function noteHealth(
     noCitation: [],
     recheck: [],
     notChecked: [],
+    unchecked: [],
   };
   doc.descendants((node, pos) => {
     if (UNCOUNTED.has(node.type.name) || proposed(node)) return false;
@@ -103,6 +110,8 @@ export function noteHealth(
       const from = places[span.from] ?? pos;
       const to = (places[span.to - 1] ?? from) + 1;
       const claim = claims.find((each) => each.from < to && each.to > from);
+      const words = text.slice(span.from, span.to);
+      if (!claim && isClaim(words) && !skipped.has(sentenceKey(words))) health.unchecked.push(from);
       const problem = claim && PROBLEM[claim.shown.state];
       if (problem) {
         health[problem].push(from);
@@ -114,8 +123,7 @@ export function noteHealth(
         if (check === "found") health.found.push(citation.pos);
         else if (check === "not-found") health.notFound.push(citation.pos);
       }
-      if (cited.length === 0 && isClaim(text.slice(span.from, span.to)))
-        health.noCitation.push(from);
+      if (cited.length === 0 && isClaim(words)) health.noCitation.push(from);
     }
     return false;
   });

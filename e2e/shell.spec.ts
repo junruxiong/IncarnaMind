@@ -13,6 +13,7 @@ import {
   openLinkedFolderMenu,
   previewLink,
   removeDataFolder,
+  showFolders,
   showSourceLocations,
   turnOnEmbeddings,
   useLocalChatModel,
@@ -247,7 +248,7 @@ test("sidebar rows share one text edge, in the Folders view and on disk, a folde
   const settings = window.getByTestId("sidebar-footer").getByRole("button", { name: "Settings" });
   expect((await boxOf(settings.locator("svg"))).x - sidebarLeft).toBeCloseTo(16, 0);
   expect((await textLeft(settings.locator("span"))) - sidebarLeft).toBeCloseTo(40, 0);
-  await window.getByTestId("browse-views").getByRole("button", { name: "Folders" }).click();
+  await showFolders(window);
   const notInAFolder = window.getByTestId("not-in-a-folder-toggle").locator("span");
   expect((await textLeft(notInAFolder)) - sidebarLeft).toBeCloseTo(16, 0);
   await showSourceLocations(window);
@@ -511,13 +512,7 @@ test("an Answer that waits for the User's approval shows an amber dot on the ass
 test("first run and every Settings page", async () => {
   test.skip(!SCREENSHOTS, "Only takes screenshots: set INCARNAMIND_SCREENSHOTS to a folder.");
   const { app, window } = await launchApp(dataDir);
-  const setup = window.getByTestId("chat-setup");
-  await expect(setup).toBeVisible();
   await screenshot(window, "first-run");
-  await setup.getByTestId("chat-choice-api-key").check();
-  await screenshot(window, "first-run-api-key");
-  await setup.getByTestId("chat-setup-later").click();
-  await expect(setup).toBeHidden();
 
   await window.getByRole("button", { name: "Settings" }).click();
   const settings = window.getByTestId("settings");
