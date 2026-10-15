@@ -368,8 +368,7 @@ test("B0 startup breakdown: Electron's own baseline, and the main process's mark
 
   // The app, on a data folder made by an earlier launch, with the startup hook.
   const dataDir = tempDir("data");
-  const firstRun = await launch(dataDir, { readyTestId: "chat-setup" });
-  await click(firstRun.window, firstRun.window.getByTestId("chat-setup-later"));
+  const firstRun = await launch(dataDir, { readyTestId: "plus-menu" });
   await close(firstRun);
   const marks: unknown[] = [];
   for (let i = 0; i < RUNS; i++) {
@@ -410,7 +409,7 @@ test("B1 startup: cold (fresh data folder) and warm, 3× each", async () => {
   const cold: unknown[] = [];
   for (let i = 0; i < RUNS; i++) {
     const dataDir = tempDir("data");
-    const { launched, result } = await timedLaunch(dataDir, "chat-setup");
+    const { launched, result } = await timedLaunch(dataDir, "plus-menu");
     cold.push({
       ...result,
       memoryAtIdle: await (async () => {
@@ -429,9 +428,8 @@ test("B1 startup: cold (fresh data folder) and warm, 3× each", async () => {
   const fixtures = writeFixtures(root, 0);
   let first: Launched | undefined;
   try {
-    first = await launch(dataDir, { fakeChat: true, readyTestId: "chat-setup" });
+    first = await launch(dataDir, { fakeChat: true, readyTestId: "plus-menu" });
     await sealShell(first.app);
-    await click(first.window, first.window.getByTestId("chat-setup-later"));
     await first.window.evaluate(async (folder) => {
       const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
       await bridge.saveChatProvider({ kind: "ollama", modelId: "fake-model" });
@@ -482,11 +480,10 @@ test("B2 typing: a short Mind and a long one (~300 blocks, many Citations)", asy
   const dataDir = tempDir("data");
   const root = tempDir("fixtures");
   const fixtures = writeFixtures(root, 0);
-  const app = await launch(dataDir, { fakeChat: true, readyTestId: "chat-setup" });
+  const app = await launch(dataDir, { fakeChat: true, readyTestId: "plus-menu" });
   const { window } = app;
   try {
     await sealShell(app.app);
-    await click(window, window.getByTestId("chat-setup-later"));
     await window.evaluate(async (folder) => {
       const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
       await bridge.saveChatProvider({ kind: "ollama", modelId: "fake-model" });
@@ -656,11 +653,10 @@ test("B2 typing: a short Mind and a long one (~300 blocks, many Citations)", asy
 test("B2b typing with 500 changes from Edit with AI waiting in the Mind (#93)", async () => {
   test.setTimeout(10 * 60_000);
   const dataDir = tempDir("data");
-  const app = await launch(dataDir, { fakeChat: true, readyTestId: "chat-setup" });
+  const app = await launch(dataDir, { fakeChat: true, readyTestId: "plus-menu" });
   const { window } = app;
   try {
     await sealShell(app.app);
-    await click(window, window.getByTestId("chat-setup-later"));
     await window.evaluate(async () => {
       const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
       await bridge.saveChatProvider({ kind: "ollama", modelId: "fake-model" });
@@ -751,11 +747,10 @@ test("B3 2,000 Documents: linking, the sidebar, the Library, Organize, and a war
   const dataDir = tempDir("data");
   const root = tempDir("fixtures");
   const fixtures = writeFixtures(root, 2000);
-  let app = await launch(dataDir, { fakeChat: true, readyTestId: "chat-setup" });
+  let app = await launch(dataDir, { fakeChat: true, readyTestId: "plus-menu" });
   try {
     let { window } = app;
     await sealShell(app.app);
-    await click(window, window.getByTestId("chat-setup-later"));
     await window.evaluate(async () => {
       const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
       const provider = await bridge.saveChatProvider({ kind: "ollama", modelId: "fake-model" });
@@ -1108,11 +1103,10 @@ test("B4 the viewer: a 300-page PDF, a 50k-cell sheet, a Word file with images (
   const dataDir = tempDir("data");
   const root = tempDir("fixtures");
   const fixtures = writeFixtures(root, 0);
-  const app = await launch(dataDir, { fakeChat: true, readyTestId: "chat-setup" });
+  const app = await launch(dataDir, { fakeChat: true, readyTestId: "plus-menu" });
   const { window } = app;
   try {
     await sealShell(app.app);
-    await click(window, window.getByTestId("chat-setup-later"));
     await window.evaluate(async (folder) => {
       const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
       await bridge.addLinkedFolder(folder);
@@ -1253,7 +1247,7 @@ test("B4 the viewer: a 300-page PDF, a 50k-cell sheet, a Word file with images (
 test("B5 motion: frames while a menu opens and closes (on, reduced, off), and typing with motion on and off", async () => {
   test.setTimeout(10 * 60_000);
   const dataDir = tempDir("data");
-  const app = await launch(dataDir, { readyTestId: "chat-setup" });
+  const app = await launch(dataDir, { readyTestId: "plus-menu" });
   const { window } = app;
   const chooseMotion = async (motion: "on" | "reduced" | "off") => {
     await window.evaluate(async (chosen) => {
@@ -1264,7 +1258,6 @@ test("B5 motion: frames while a menu opens and closes (on, reduced, off), and ty
   };
   try {
     await sealShell(app.app);
-    await click(window, window.getByTestId("chat-setup-later"));
     const plus = window.getByTestId("plus-menu");
     const menus: Record<string, unknown> = {};
     for (const motion of ["on", "reduced", "off"] as const) {
@@ -1367,7 +1360,7 @@ test("B6 outside agents (#351): an agent's search over 2,000 Documents, through 
   const root = tempDir("fixtures");
   const fixtures = writeFixtures(root, 2000);
   const paths = filesUnder(fixtures.scale);
-  const app = await launch(dataDir, { fakeChat: true, readyTestId: "chat-setup" });
+  const app = await launch(dataDir, { fakeChat: true, readyTestId: "plus-menu" });
   try {
     const { window } = app;
     const folderId = await window.evaluate(async (all) => {

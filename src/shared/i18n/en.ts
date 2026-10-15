@@ -1474,6 +1474,50 @@ export const en = {
   "providers.setup.body":
     "Asking Questions needs a chat model. Notes and Documents work without one, and you can change this later in Settings.",
   "providers.setup.later": "Set up later",
+  "setup.title": "Choose where Answers come from",
+  "setup.body": "Your Question waits here and is answered as soon as you pick.",
+  "setup.waiting": "Waiting for you to choose a model",
+  "setup.chatgpt.use": "Use my ChatGPT plan",
+  "setup.chatgpt.line":
+    "Plus or Pro · No key needed · Your Questions, the Mind you're in, Passages from your Documents, and Document text for Tags go to OpenAI under your ChatGPT account.",
+  "setup.deepseek.use": "Paste a DeepSeek key",
+  "setup.deepseek.line":
+    "Your Questions, the Mind you're in, Passages from your Documents, and Document text for Tags go to DeepSeek under your own key.",
+  "setup.how": "How do I get one?",
+  "setup.getOllama": "Get Ollama",
+  "setup.other": "Other ways",
+  "setup.way.key": "Paste a key",
+  "setup.way.key.line": "From Anthropic, OpenAI, Google, DeepSeek and more.",
+  "setup.way.local": "Use a model on this computer",
+  "setup.way.local.line":
+    "Free and private. Needs the free Ollama app. Slower, and cites less reliably.",
+  "setup.way.local.running":
+    "Ollama is running here. Free and private; slower, and cites less reliably.",
+  "setup.way.local.notRunning": "Ollama isn't running on this computer. It's free to get.",
+  "setup.way.chatgpt": "Sign in with ChatGPT",
+  "setup.way.chatgpt.line": "Plus or Pro. Not available in mainland China.",
+  "setup.claude.title": "Already pay for Claude?",
+  "setup.claude.line":
+    "Anthropic doesn’t let other apps use a Claude plan. You can ask your Documents in the Claude app instead.",
+  "setup.claude.connect": "Connect the Claude app",
+  "setup.claude.missing":
+    "Needs the Claude app for Mac or Windows; claude.ai in a browser can’t reach this computer.",
+  "setup.claude.download": "Download Claude",
+  "setup.claude.copied": "Copied. Paste it into the Claude app, then ask your Documents there.",
+  "setup.claude.connected": "Connected. Open the Claude app and ask your Documents there.",
+  "setup.claude.noFolder":
+    "Claude reads one Folder. Put this Mind in a Folder first, or set it up in Settings.",
+  "setup.claude.openAgents": "Open Agents settings",
+  "plans.title": "Already pay for a plan?",
+  "plans.chatgpt.title": "ChatGPT Plus or Pro",
+  "plans.chatgpt.line": "Sign in with your ChatGPT account. No key needed.",
+  "plans.claude.title": "Claude Pro, Max or Team",
+  "plans.claude.line":
+    "Use IncarnaMind in the Claude app, where your plan pays. Max and Team also include monthly API credits for a key.",
+  "plans.google.title": "Google AI Pro or Ultra",
+  "plans.google.line": "Use IncarnaMind in Antigravity, where your plan pays.",
+  "plans.google.connect": "Connect Antigravity",
+  "plans.google.credits": "Google’s page on developer credits",
   "providers.choice.label": "Chat model",
   "providers.choice.local": "Stays on this computer",
   "providers.choice.apiKey": "An API key",
@@ -1526,6 +1570,16 @@ export const en = {
   "providers.sends":
     "Your Questions, the Mind you're in, Passages from your Documents, and Document text for Tags go to {provider} when you use it.",
   "providers.form.saving": "Saving…",
+  "providers.form.moreShort": "More…",
+  "providers.form.whereKey": "Where do I find it?",
+  "providers.form.anotherModel": "Another model…",
+  "providers.form.recommended": "Recommended: {model}",
+  "providers.form.useKey": "Use this key",
+  "providers.form.checking": "Checking the key…",
+  "providers.form.needsKey": "Paste the key first.",
+  "providers.form.needsAddress": "Enter the server's address first.",
+  "providers.form.needsModel": "Choose a model first.",
+  "providers.form.badKey": "This key isn’t valid for {provider}. Check it on {site}.",
 
   "providers.test.ok": "Connected: the provider answered.",
   "providers.test.auth": "The key was refused. Check that it is correct and still active.",
@@ -1614,6 +1668,10 @@ export const en = {
   "chatgpt.account.unknown": "your ChatGPT account",
   "chatgpt.signingIn": "Finish signing in in your browser…",
   "chatgpt.cancel": "Cancel",
+  "chatgpt.reopen": "Open the sign-in page again",
+  "chatgpt.nothingExtra":
+    "It uses your ChatGPT plan; there’s nothing extra to pay. OpenAI may ask to let IncarnaMind use the plan.",
+  "chatgpt.late": "Didn’t finish? Open the sign-in page again.",
   "chatgpt.signOut": "Sign out",
   "chatgpt.anotherAccount": "Use another account",
   "chatgpt.signInAgain": "Sign in again",

@@ -2653,6 +2653,7 @@ export function createCore(adapters: CoreAdapters): Core {
     signInToChatGpt: (input) =>
       chatGpt.signIn({ anotherAccount: isRecord(input) && input.anotherAccount === true }),
     cancelChatGptSignIn: () => chatGpt.cancelSignIn(),
+    reopenChatGptSignIn: () => chatGpt.reopenSignInPage(),
     signOutOfChatGpt: () => chatGpt.signOut(),
     pasteChatGptSignInAddress: async (address) =>
       chatGpt.pasteSignInAddress(typeof address === "string" ? address : ""),
