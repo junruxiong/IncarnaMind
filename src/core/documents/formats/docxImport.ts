@@ -94,6 +94,19 @@ export async function readWordStructure(
   return (await readWordDocument(pkg, review)).structure;
 }
 
+/** Each node mapped from the document, by its place ("w:p#12"). */
+export function nodesByPlace(structure: WordStructure): Map<string, NodeJSON> {
+  const byPlace = new Map<string, NodeJSON>();
+  const visit = (node: NodeJSON) => {
+    const id = node.attrs?.[BLOCK_ID_ATTRIBUTE];
+    const source = typeof id === "string" ? structure.sources.get(id) : undefined;
+    if (source) byPlace.set(source.n, node);
+    for (const each of node.content ?? []) visit(each);
+  };
+  for (const block of structure.blocks) visit(block);
+  return byPlace;
+}
+
 /**
  * The main document as the import reads it, for export to write into (#105):
  * its Blocks, its text as stored (a byte-order mark kept), its root element
