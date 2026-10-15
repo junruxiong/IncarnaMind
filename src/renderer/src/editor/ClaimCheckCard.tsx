@@ -2,8 +2,9 @@ import type { Editor } from "@tiptap/core";
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type * as Y from "yjs";
-import { CITATION_NODE, type CitationAttributes } from "../../../core/api";
+import { CITATION_NODE, type CitationAttributes, type ClaimCalculation } from "../../../core/api";
 import { shownDocumentName } from "../../../shared/citations";
+import { formulaText } from "../../../shared/formula";
 import { citationLocation, formatLocation, openKind } from "../../../shared/locations";
 import { addAsCitation, checkAgain, removeClaimMark } from "../checks";
 import { CountItLine } from "../components/CountItLine";
@@ -53,14 +54,9 @@ const sentenceOf = (editor: Editor, claim: ShownClaim) =>
 
 /**
  * Asks the assistant to look for the sentence on the web (#128), which a model
- * that can search does; with web search off, Settings shows where to turn it on.
+ * that can search does. The card says so first when web search is off (`ClaimCard`).
  */
 function searchTheWeb(mindId: string, sentence: string): void {
-  const { settings, openSettings } = useAppStore.getState();
-  if (!settings?.user.webSearch) {
-    openSettings("search");
-    return;
-  }
   void askInAssistant({
     text: translateNow("claim.webQuestion", { sentence }),
     mindId,
@@ -100,7 +96,8 @@ export function ClaimMark({
   const askers = useRef(new Set<string>());
   const timer = useRef<number | undefined>(undefined);
   const open = pinned || peeking;
-  const plus = state === "supported" && !citesEvidence(editor, claim);
+  // A figure worked out has inputs, not one Passage to cite.
+  const plus = state === "supported" && !claim.check.calculation && !citesEvidence(editor, claim);
 
   const hold = useCallback((source: string, on: boolean) => {
     if (on) askers.current.add(source);
@@ -196,6 +193,10 @@ export function ClaimMark({
                 searchTheWeb(mindId, sentenceOf(editor, claim));
                 done();
               }}
+              onTurnOnWebSearch={() => {
+                useAppStore.getState().openSettings("search");
+                done();
+              }}
               onRemove={() => {
                 removeClaimMark(editor, claim);
                 done();
@@ -209,12 +210,70 @@ export function ClaimMark({
 }
 
 /**
+ * A figure the check worked out (#707): how ("£1,234m ÷ £942m = 1.31x"),
+ * what the sentence says when they differ, and each input's Citation, which
+ * opens its Document at the quote. "Calculated", never "verified" (ADR-0021).
+ */
+function Working({ calculation, onOpen }: { calculation: ClaimCalculation; onOpen(): void }) {
+  const t = useT();
+  const documents = useAppStore((store) => store.documents);
+  const { figure } = calculation;
+  const byName = new Map(figure.inputs.map((input) => [input.name.toLowerCase(), input]));
+  const working = formulaText(
+    figure.formula,
+    (name) => byName.get(name.toLowerCase())?.number.chars ?? null,
+  );
+  return (
+    <div data-testid="claim-working" className="claim-card-working">
+      <p className="citation-card-note">{t("claim.calculated.title")}</p>
+      <p data-testid="claim-figure" className="claim-card-figure">
+        {working} = {figure.shown}
+      </p>
+      {!calculation.agrees && (
+        <p data-testid="claim-stated" className="claim-card-says">
+          {t("claim.calculated.stated", { stated: calculation.stated })}
+        </p>
+      )}
+      <ul aria-label={t("claim.calculated.inputs")} className="claim-card-inputs">
+        {figure.inputs.map((input) => {
+          const location = citationLocation(input.citation);
+          const where = location ? formatLocation(location, t) : null;
+          const source = [shownDocumentName(input.citation, documents), where]
+            .filter(Boolean)
+            .join(" · ");
+          return (
+            <li key={input.name}>
+              <button
+                type="button"
+                data-testid="claim-input"
+                className="claim-card-input"
+                title={input.citation.quote}
+                onClick={() => {
+                  openCited(input.citation, { check: "found", withQuote: true, label: where });
+                  onOpen();
+                }}
+              >
+                <span className="claim-card-input-figure">
+                  {input.label ? `${input.label}: ` : ""}
+                  {input.number.chars}
+                </span>
+                <span className="claim-card-input-source">{source}</span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+/**
  * A sentence check's card: its state; for a Passage found, the Document and
  * Location with the quote washed in the state's colour, and Add as Citation
- * when it isn't cited yet; for a contradiction, what the Document says; for
- * nothing found, where it looked, with Search all Documents; otherwise why,
- * with Check again. Documents IncarnaMind wrote that matched are named, with
- * Count it.
+ * when it isn't cited yet; for a contradiction, what the Document says; for a
+ * figure worked out, its working and inputs; for nothing found, where it
+ * looked, with Search all Documents; otherwise why, with Check again.
+ * Documents IncarnaMind wrote that matched are named, with Count it.
  */
 function ClaimCard({
   claim,
@@ -225,6 +284,7 @@ function ClaimCard({
   onFix,
   onFindSources,
   onSearchWeb,
+  onTurnOnWebSearch,
   onRemove,
 }: {
   claim: ShownClaim;
@@ -235,15 +295,22 @@ function ClaimCard({
   onFix(): void;
   onFindSources(): void;
   onSearchWeb(): void;
+  onTurnOnWebSearch(): void;
   onRemove(): void;
 }) {
   const t = useT();
+  const webSearchOn = useAppStore((store) => store.settings?.user.webSearch === true);
+  // Search the web with web search off says why, and where to turn it on, before anything else happens.
+  const [webOffShown, setWebOffShown] = useState(false);
   const { shown, check } = claim;
   const state = shown.state;
+  const decided = state === "supported" || state === "contradicted";
+  const calculation = decided ? check.calculation : null;
+  // A figure that agrees can sit beside a Passage that contradicts the rest of the sentence.
+  const fromPassage = !calculation || (state === "contradicted" && calculation.agrees);
   // An unsupported sentence keeps the nearest line when it says something different (#770).
   const differs = state === "unsupported" && check.evidence !== null;
-  const evidence =
-    state === "supported" || state === "contradicted" || differs ? check.evidence : null;
+  const evidence = (decided && fromPassage) || differs ? check.evidence : null;
   const location = evidence ? citationLocation(evidence) : null;
   const where = location ? formatLocation(location, t) : null;
   const folderName = useAppStore((store) =>
@@ -293,11 +360,25 @@ function ClaimCard({
           </blockquote>
         </figure>
       )}
+      {calculation && <Working calculation={calculation} onOpen={onOpen} />}
       {state === "unsupported" && !differs && (
         <p data-testid="claim-nothing" className="citation-card-note">
           {searchedFolder
             ? t("claim.unsupported.inFolder", { folder: folderName })
             : t("claim.unsupported.anywhere")}
+        </p>
+      )}
+      {webOffShown && !webSearchOn && (
+        <p data-testid="claim-web-off" className="citation-card-note">
+          {t("claim.webSearchOff")}{" "}
+          <button
+            type="button"
+            data-testid="claim-web-off-settings"
+            className="font-semibold text-accent underline-offset-2 hover:underline"
+            onClick={onTurnOnWebSearch}
+          >
+            {t("claim.webSearchOff.action")}
+          </button>
         </p>
       )}
       {reason && (
@@ -378,7 +459,7 @@ function ClaimCard({
               type="button"
               data-testid="claim-search-web"
               className="citation-card-action"
-              onClick={onSearchWeb}
+              onClick={() => (webSearchOn ? onSearchWeb() : setWebOffShown(true))}
             >
               {t("claim.searchWeb")}
             </button>
