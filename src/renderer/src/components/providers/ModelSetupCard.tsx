@@ -155,7 +155,7 @@ function LeadingWays({
   sign,
   onKey,
 }: {
-  /** The key first, as DeepSeek is the recommended way in Chinese (D198); ChatGPT's line says it isn't in mainland China. */
+  /** The key first, as a DeepSeek key is the recommended way in Chinese; ChatGPT's line says it isn't in mainland China. */
   chinese: boolean;
   sign: ReturnType<typeof useContinueWithChatGpt>;
   onKey(): void;
