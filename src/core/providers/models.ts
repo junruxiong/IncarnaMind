@@ -27,7 +27,7 @@ import { endpointUrl } from "./kinds";
 import { createOllamaChatModel } from "./ollamaChat";
 import { DEFAULT_OLLAMA_SETTINGS, type OllamaModelSettings } from "./ollamaModels";
 import { withCacheBreakpoints } from "./promptCache";
-import { withoutStorage, withProviderOptions } from "./responsesStore";
+import { withOptionsOver, withoutStorage, withProviderOptions } from "./responsesStore";
 
 /** A model object, never a model id string (which the AI SDK would send to its gateway). */
 export type ChatLanguageModel = Exclude<LanguageModel, string>;
@@ -152,18 +152,6 @@ function canSkipThinking(
 /** The form of thinking off each model's refusal named this session, by provider and model. */
 const namedByRefusal = new Map<string, ProviderOptions>();
 
-/** `options` over `params`' own, provider by provider. */
-function withOptions<Params extends { providerOptions?: unknown }>(
-  params: Params,
-  options: ProviderOptions,
-): Params {
-  const providerOptions = { ...(params.providerOptions as ProviderOptions | undefined) };
-  for (const [key, value] of Object.entries(options)) {
-    providerOptions[key] = { ...providerOptions[key], ...value };
-  }
-  return { ...params, providerOptions };
-}
-
 /**
  * A small call's model, asked not to think: in the form the catalog has for the
  * model, else its provider's. A model that refuses its provider's form is asked
@@ -188,7 +176,7 @@ function withThinkingOff(
     model,
     middleware: {
       specificationVersion: "v4",
-      transformParams: async ({ params }) => withOptions(params, options()),
+      transformParams: async ({ params }) => withOptionsOver(params, options()),
       wrapGenerate: async ({ doGenerate, params, model: inner }) => {
         try {
           return await doGenerate();
@@ -196,7 +184,7 @@ function withThinkingOff(
           const form = named(error);
           if (!form) throw error;
           namedByRefusal.set(key, form);
-          return inner.doGenerate(withOptions(params, form));
+          return inner.doGenerate(withOptionsOver(params, form));
         }
       },
       wrapStream: async ({ doStream, params, model: inner }) => {
@@ -206,7 +194,7 @@ function withThinkingOff(
           const form = named(error);
           if (!form) throw error;
           namedByRefusal.set(key, form);
-          return inner.doStream(withOptions(params, form));
+          return inner.doStream(withOptionsOver(params, form));
         }
       },
     },

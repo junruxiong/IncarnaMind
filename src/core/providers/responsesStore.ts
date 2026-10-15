@@ -1,5 +1,18 @@
 import { wrapLanguageModel } from "ai";
+import type { ProviderOptions } from "./catalog/types";
 import type { ChatLanguageModel } from "./models";
+
+/** A request's params with `options` over its own provider options, provider by provider. */
+export function withOptionsOver<Params extends { providerOptions?: unknown }>(
+  params: Params,
+  options: ProviderOptions,
+): Params {
+  const providerOptions = { ...(params.providerOptions as ProviderOptions | undefined) };
+  for (const [key, value] of Object.entries(options)) {
+    providerOptions[key] = { ...providerOptions[key], ...value };
+  }
+  return { ...params, providerOptions };
+}
 
 /**
  * A model whose every request carries these provider options (by the AI SDK
@@ -8,22 +21,13 @@ import type { ChatLanguageModel } from "./models";
  */
 export function withProviderOptions(
   model: ChatLanguageModel,
-  options: Record<string, Record<string, unknown>>,
+  options: ProviderOptions,
 ): ChatLanguageModel {
   return wrapLanguageModel({
     model,
     middleware: {
       specificationVersion: "v4",
-      transformParams: async ({ params }) => {
-        const providerOptions = { ...params.providerOptions } as Record<
-          string,
-          Record<string, unknown>
-        >;
-        for (const [key, value] of Object.entries(options)) {
-          providerOptions[key] = { ...providerOptions[key], ...value };
-        }
-        return { ...params, providerOptions } as typeof params;
-      },
+      transformParams: async ({ params }) => withOptionsOver(params, options),
     },
   });
 }
