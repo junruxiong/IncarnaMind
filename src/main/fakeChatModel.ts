@@ -81,14 +81,18 @@
  * does so, or "drop the citations" (去掉引用) leaves their markers out.
  * "Restructure" (重新组织) cuts a plain last paragraph and puts the last
  * section, from its heading (a "#" paragraph) on, first, keeping each
- * paragraph's mark, as a model restructuring a whole Mind does (#703).
+ * paragraph's mark, as a model restructuring a whole Mind does (#703). The
+ * new text streams in word by word, slowly when the instruction says
+ * "slowly", then a line saying why (#202).
  *
  * Make this a Skill (`fakeSkillDraft`): a draft whose "when to use it" and first
  * step quote the Mind's last Question, so a test sees that the Mind was read.
  *
  * Find support and Check against Documents (`checkReply`): a sentence that shares
  * three words with a Passage's line is supported, or contradicted when it has a
- * number the line doesn't; otherwise unsupported.
+ * number the line doesn't; otherwise unsupported. Offered calculate, a sentence
+ * that states a multiple ("1.1x") has it worked out as the line's first number
+ * over its second (#707).
  *
  * Verify (`fakeClaims`): every sentence of a document claims something, but a
  * question or thanks. Its claims are checked as above.
@@ -98,8 +102,11 @@
  * which Edit with AI's scripted model carries out as Shorten; one for a new
  * note (新笔记, 新建) calls create_mind, titled from what follows "called"
  * (叫), its content citing the Documents when there are any; and "add X to
- * <Mind>" (把 X 添加到 <Mind>) calls add_to_mind with X. Each then replies with
- * the first sentence of what its call came to.
+ * <Mind>" (把 X 添加到 <Mind>) calls add_to_mind with X, and "add X" (添加 X)
+ * adds X to the Mind in focus; "add X to <Mind> and make a new note called Y"
+ * calls both. Each then replies with the first sentence of what its calls
+ * came to; add_to_mind's and create_mind's input streams in word by word,
+ * slowly for a Question asked "slowly", as does edit_mind's edit.
  */
 import { APICallError } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
@@ -116,6 +123,8 @@ const WORD_DELAY_MS = 60;
 /** For a Question asked "slowly": the wait before each step, and between two words of the Answer. */
 const SLOW_STEP_MS = 1200;
 const SLOW_WORD_MS = 250;
+/** Between two words of Edit with AI's new text: a passage takes a moment, not seconds. */
+const EDIT_WORD_MS = 10;
 const SLOWLY = /\bslowly\b/i;
 
 /** What the scripted model reasons before it searches: a line that quotes the Question. */
@@ -585,7 +594,7 @@ function scriptNamed(
  */
 function nextReply(prompt: Prompt, tools: readonly OfferedTool[]): Reply {
   const names = tools.map((tool) => tool.name);
-  if (CHECK_RUN.test(systemOf(prompt))) return checkReply(prompt);
+  if (CHECK_RUN.test(systemOf(prompt))) return checkReply(prompt, names);
   const question = lastQuestion(prompt);
   if (/blank reply/i.test(question)) return { text: "" };
   /** What the calls made first said, in order. */
@@ -638,6 +647,9 @@ function nextReply(prompt: Prompt, tools: readonly OfferedTool[]): Reply {
   return "text" in reply && said.length > 0 ? { text: [...said, reply.text].join("\n\n") } : reply;
 }
 
+/** The Minds' Tools whose input the scripted provider streams. */
+const STREAMED_INPUT: ReadonlySet<string> = new Set(["add_to_mind", "create_mind"]);
+
 /** A request to shorten a Mind's text. */
 const SHORTEN = /\bshort(?:en|er)\b|缩短|改短/i;
 /** A request for a new note, and its title after "called" (叫). */
@@ -646,6 +658,11 @@ const CALLED = /\b(?:called|named|titled)\s+[“"]?(.+?)[”"]?[.。]?$|叫[“"
 /** A request to add something to a Mind by name: what, and to which. */
 const ADD_TO =
   /^add\s+(.+?)\s+to\s+[“"]?(.+?)[”"]?[.。]?$|^把\s*(.+?)\s*添加到\s*[“"]?(.+?)[”"]?[。]?$/iu;
+/** A request to add something to the Mind in focus: "add X" (添加 X). */
+const ADD_HERE = /^add\s+(.+?)[.。]?$|^添加\s*(.+?)[。]?$/iu;
+/** Both at once: "add X to <Mind> and make a new note called Y". */
+const ADD_AND_NEW =
+  /^add\s+(.+?)\s+to\s+[“"]?(.+?)[”"]?\s+and\s+(?:make|create)\s+a\s+new\s+note\s+called\s+[“"]?(.+?)[”"]?[.。]?$/iu;
 
 /** The first sentence of what a call came to, as the scripted assistant's reply. */
 const firstSentence = (result: string) => /^[^.。]*[.。]?/u.exec(result)?.[0] ?? result;
@@ -654,11 +671,28 @@ const firstSentence = (result: string) => /^[^.。]*[.。]?/u.exec(result)?.[0] 
  * The scripted assistant's choice with the Minds' Tools (see the top of this
  * file): a Tool call, the reply once it has returned, or null to answer.
  */
-function mindsReply(prompt: Prompt, question: string, names: readonly string[]): Reply | null {
+function mindsReply(prompt: Prompt, asked: string, names: readonly string[]): Reply | null {
   if (!names.includes("edit_mind")) return null;
+  // Asked "slowly", only its pace changes.
+  const question = asked.replace(/\s+slowly$/i, "");
+  const both = ADD_AND_NEW.exec(question);
+  if (both) {
+    if (lastResult(prompt, "add_to_mind") === undefined) {
+      return { tool: "add_to_mind", input: { mind: both[2], content: both[1] } };
+    }
+    const made = lastResult(prompt, "create_mind");
+    if (made === undefined) {
+      const content = "## Summary\n\nWritten by the scripted assistant.";
+      return { tool: "create_mind", input: { title: both[3], content } };
+    }
+    return {
+      text: `${firstSentence(lastResult(prompt, "add_to_mind") ?? "")} ${firstSentence(made)}`,
+    };
+  }
   if (SHORTEN.test(question)) {
     const result = lastResult(prompt, "edit_mind");
-    if (result === undefined) return { tool: "edit_mind", input: { instruction: question } };
+    // Asked "slowly", the edit is written slowly too.
+    if (result === undefined) return { tool: "edit_mind", input: { instruction: asked } };
     return { text: firstSentence(result) };
   }
   const add = ADD_TO.exec(question);
@@ -670,6 +704,13 @@ function mindsReply(prompt: Prompt, question: string, names: readonly string[]):
         input: { mind: add[2] ?? add[4], content: add[1] ?? add[3] },
       };
     }
+    return { text: firstSentence(result) };
+  }
+  const here = ADD_HERE.exec(question);
+  if (here) {
+    const result = lastResult(prompt, "add_to_mind");
+    if (result === undefined)
+      return { tool: "add_to_mind", input: { content: here[1] ?? here[2] } };
     return { text: firstSentence(result) };
   }
   if (!NEW_NOTE.test(question)) return null;
@@ -909,9 +950,20 @@ function restructured(passage: string): string {
   return [...paragraphs.slice(last), ...paragraphs.slice(0, last)].join("\n\n");
 }
 
-/** The scripted Edit with AI (see the top of this file): the passage's new text, or an explanation. */
-function fakeEdit(options: GenerateOptions): string | null {
-  const request = options.prompt
+/** Why the scripted Edit with AI changed a passage, by its action, in English and in Chinese. */
+const EDIT_REASONS: Readonly<Record<string, readonly [string, string]>> = {
+  shorten: ["Shorter: the filler words are gone.", "更简洁：去掉了多余的词。"],
+  improve: ["Each sentence starts with a capital.", "每句话的开头都大写了。"],
+  translate: ["Translated.", "已翻译。"],
+  instruction: ["Changed as you asked.", "已按你的要求修改。"],
+};
+
+/**
+ * The scripted Edit with AI (see the top of this file): the passage's new
+ * text and why, or an explanation; `slow` when the instruction says "slowly".
+ */
+function fakeEdit(prompt: Prompt): { text: string; slow: boolean } | null {
+  const request = prompt
     .filter((message) => message.role === "user")
     .map((message) =>
       typeof message.content === "string"
@@ -923,7 +975,16 @@ function fakeEdit(options: GenerateOptions): string | null {
   if (!task) return null;
   const passage = /<passage>\n([\s\S]*?)\n<\/passage>/.exec(request)?.[1] ?? "";
   const asked = (task[2] ?? "").replace(/^Do what the User asks: /, "");
-  switch (task[1]) {
+  const action = task[1] ?? "";
+  const text = editedText(action, passage, asked.replace(/\s+slowly\.?$/i, ""));
+  // In the passage's language, as the instructions ask.
+  const why = EDIT_REASONS[action]?.[/\p{Script=Han}/u.test(passage) ? 1 : 0];
+  return { text: why ? `${text}\n\n<why>${why}</why>` : text, slow: SLOWLY.test(asked) };
+}
+
+/** The scripted Edit with AI's new text for `passage`, or its explanation. */
+function editedText(action: string, passage: string, asked: string): string {
+  switch (action) {
     case "shorten":
       return passage.replace(FILLER, "");
     case "improve":
@@ -1039,8 +1100,9 @@ const checkWords = (text: string): string[] => [
  * support it, unless the sentence has a number the line doesn't while the
  * line has numbers: that contradicts it. Fewer leave it unsupported. A
  * sentence with "blank reply" gets an empty reply, and one with "refuse" a refusal.
+ * Offered calculate, a sentence that states a multiple has it worked out first.
  */
-function checkReply(prompt: Prompt): Reply {
+function checkReply(prompt: Prompt, tools: readonly string[]): Reply {
   const sentence = /<sentence>\n([\s\S]*?)\n<\/sentence>/.exec(lastUserText(prompt))?.[1] ?? "";
   if (/blank reply/i.test(sentence)) return { text: "" };
   if (/\brefuse\b/i.test(sentence)) return { text: "I'm sorry, I can't help with that." };
@@ -1060,6 +1122,34 @@ function checkReply(prompt: Prompt): Reply {
     lineNumbers.length > 0 && words.some((word) => /\d/.test(word) && !lineNumbers.includes(word));
   if (toolResults(prompt, "cite").length === 0) {
     return { tool: "cite", input: { citations: [best.record] } };
+  }
+  const multiple = /\d+(?:\.\d+)?x\b/.exec(sentence)?.[0];
+  if (tools.includes("calculate") && multiple && toolResults(prompt, "calculate").length === 0) {
+    const inputs = [1, 2].map((position) => ({
+      name: `n${position}`,
+      label: position === 1 ? "First" : "Second",
+      citation: 1,
+      position,
+    }));
+    return {
+      tool: "calculate",
+      input: {
+        figures: [
+          {
+            marker: 1,
+            label: "Multiple",
+            inputs,
+            formula: "n1 / n2",
+            as: "times",
+            stated: multiple,
+          },
+        ],
+      },
+    };
+  }
+  // The figure worked out is the only number the sentence has: the rest of it is supported.
+  if (multiple && tools.includes("calculate")) {
+    return { text: "Verdict: supported\nThe Document's figures give it [^1]." };
   }
   return {
     text: contradicted
@@ -1084,13 +1174,20 @@ function replyParts(prompt: Prompt, tools: readonly OfferedTool[]): StreamPart[]
   if ("tool" in reply) {
     // Calls of one Tool after its first, such as a second page read, have ids of their own.
     const earlier = allResults(prompt, reply.tool).length;
+    const toolCallId = earlier === 0 ? `fake-${reply.tool}` : `fake-${reply.tool}-${earlier + 1}`;
+    const input = JSON.stringify(reply.input);
+    // A Minds' Tool that writes new text gets its input word by word, as a provider streams it.
+    if (STREAMED_INPUT.has(reply.tool)) {
+      parts.push(
+        { type: "tool-input-start", id: toolCallId, toolName: reply.tool },
+        ...input
+          .split(/(?<=\s)/)
+          .map((delta): StreamPart => ({ type: "tool-input-delta", id: toolCallId, delta })),
+        { type: "tool-input-end", id: toolCallId },
+      );
+    }
     parts.push(
-      {
-        type: "tool-call",
-        toolCallId: earlier === 0 ? `fake-${reply.tool}` : `fake-${reply.tool}-${earlier + 1}`,
-        toolName: reply.tool,
-        input: JSON.stringify(reply.input),
-      },
+      { type: "tool-call", toolCallId, toolName: reply.tool, input },
       { type: "finish", finishReason: { unified: "tool-calls", raw: undefined }, usage: USAGE },
     );
     return parts;
@@ -1103,6 +1200,19 @@ function replyParts(prompt: Prompt, tools: readonly OfferedTool[]): StreamPart[]
     { type: "finish", finishReason: { unified: "stop", raw: undefined }, usage: USAGE },
   );
   return parts;
+}
+
+/** Edit with AI's new text, streamed in word by word. */
+function editParts(text: string): StreamPart[] {
+  return [
+    { type: "stream-start", warnings: [] },
+    { type: "text-start", id: "edit" },
+    ...text
+      .split(/(?<=\s)/)
+      .map((word): StreamPart => ({ type: "text-delta", id: "edit", delta: word })),
+    { type: "text-end", id: "edit" },
+    { type: "finish", finishReason: { unified: "stop", raw: undefined }, usage: USAGE },
+  ];
 }
 
 /** What a provider says of a wrong key, or of a model that can't use Tools or structured output. */
@@ -1163,7 +1273,7 @@ export const createFakeChatModel: ChatModelFactory = (spec) =>
                 : (fakeClaims(options) ??
                   fakeConfirm(options) ??
                   fakeSkillDraft(options) ??
-                  fakeEdit(options) ??
+                  fakeEdit(options.prompt)?.text ??
                   "OK"),
           },
         ],
@@ -1201,10 +1311,13 @@ export const createFakeChatModel: ChatModelFactory = (spec) =>
         });
       }
       const search = tools?.find((each) => each.type === "provider");
+      const edit = search ? null : fakeEdit(prompt);
       const parts = search
         ? searchParts(search.name, lastQuestion(prompt))
-        : replyParts(prompt, tools ?? []);
-      const slow = !search && SLOWLY.test(lastQuestion(prompt));
+        : edit
+          ? editParts(edit.text)
+          : replyParts(prompt, tools ?? []);
+      const slow = edit ? edit.slow : !search && SLOWLY.test(lastQuestion(prompt));
       const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
       const stream = new ReadableStream<StreamPart>({
         async pull(controller) {
@@ -1214,7 +1327,9 @@ export const createFakeChatModel: ChatModelFactory = (spec) =>
             return;
           }
           if (slow && part.type === "stream-start") await wait(SLOW_STEP_MS);
-          if (part.type === "text-delta") await wait(slow ? SLOW_WORD_MS : WORD_DELAY_MS);
+          if (part.type === "text-delta" || part.type === "tool-input-delta") {
+            await wait(slow ? SLOW_WORD_MS : edit ? EDIT_WORD_MS : WORD_DELAY_MS);
+          }
           if (slow && part.type === "reasoning-delta") await wait(WORD_DELAY_MS);
           if (abortSignal?.aborted) {
             controller.error(new DOMException("The request was aborted.", "AbortError"));

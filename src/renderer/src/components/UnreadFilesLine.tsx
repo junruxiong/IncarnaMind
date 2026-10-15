@@ -51,7 +51,8 @@ export function UnreadFilesLine({
  * A file that couldn't be read, and why. A Document's name opens it (#485). A
  * scan some of whose pages weren't read can be read again: text recognition
  * runs by itself, so "Read with OCR" is the Document's Retry, which reads
- * those pages.
+ * those pages. A locked PDF offers Unlock…, which opens it where its password
+ * is asked for (#763).
  */
 function UnreadFileRow({ file }: { file: UnreadFile }) {
   const t = useT();
@@ -63,6 +64,11 @@ function UnreadFileRow({ file }: { file: UnreadFile }) {
       (each) =>
         each.id === documentId && each.status === "failed" && each.fileStatus === "available",
     ),
+  );
+  const lockedPdf = useAppStore((state) =>
+    file.reason === "password"
+      ? (state.documents.find((each) => each.id === documentId && each.kind === "pdf") ?? null)
+      : null,
   );
   return (
     <li
@@ -83,8 +89,19 @@ function UnreadFileRow({ file }: { file: UnreadFile }) {
         </button>
       )}
       {t("unread.file.reason", {
-        reason: t(UNREAD_REASON_KEYS[file.reason], { extension: file.extension ?? "" }),
+        reason: lockedPdf
+          ? t("unread.reason.passwordPdf")
+          : t(UNREAD_REASON_KEYS[file.reason], { extension: file.extension ?? "" }),
       })}
+      {lockedPdf?.fileStatus === "available" && (
+        <LineAction
+          action={{
+            label: t("documents.unlockAction"),
+            testId: "unread-file-unlock",
+            onClick: () => openDocument({ documentId: lockedPdf.id }),
+          }}
+        />
+      )}
       {file.reason === "pages" && retryable && documentId !== null && (
         <LineAction
           action={{
