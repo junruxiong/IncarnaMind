@@ -200,6 +200,37 @@ describe("someone else's tracked changes", () => {
     ]);
   });
 
+  // protects=a line break someone removed, resolved here, goes back resolved, in a paragraph or a table's cell; fails_when=the paragraph is kept as it was and the removal comes back waiting (#858); no_claim=none beyond protects.
+  test("a line break someone removed, rejected or accepted, goes back resolved, in a paragraph and in a table's cell", async () => {
+    const brokenOff = (id: number, before: string, after: string) =>
+      `${run(before)}<w:del w:id="${id}" ${LARS}><w:r><w:br/></w:r></w:del>${run(after)}`;
+    const cell = (content: string) => `<w:tc><w:p>${content}</w:p></w:tc>`;
+    const { core, mindId, client } = await imported(
+      [
+        paragraph(brokenOff(1, "First line", "second line")),
+        paragraph(brokenOff(2, "Kept", "apart")),
+        `<w:tbl><w:tr>${cell(brokenOff(3, "Cell one", "after"))}${cell(brokenOff(4, "Cell two", "after"))}</w:tr></w:tbl>`,
+      ].join(""),
+    );
+    const [first, kept, inCell, keptInCell] = pendingProposals(client.blocks).map(
+      (change) => change.id,
+    );
+    expect([first, kept, inCell, keptInCell].every(Boolean)).toBe(true);
+
+    await resolveChanges(client, "accept", (id) => id === first || id === inCell);
+    await resolveChanges(client, "reject", (id) => id === kept || id === keptInCell);
+
+    const { document } = await exported(core, mindId);
+    expect(document).not.toContain("<w:del");
+    expect(document).not.toContain("Lars Berg");
+    expect(acceptedParagraphs(document)).toEqual([
+      "First linesecond line",
+      "Kept\napart",
+      "Cell oneafter",
+      "Cell two\nafter",
+    ]);
+  });
+
   test("accepting one in a paragraph the User edited follows the rule for changes out of date: an edit to its own words keeps it waiting", async () => {
     const { core, mindId, client } = await imported(REDLINE);
 

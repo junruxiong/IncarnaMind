@@ -140,7 +140,7 @@ export function createContradictionWatch(options: WatchOptions) {
     const folderId = options.mindFolder(mindId);
     const read = content.read(mindId, (blocks) => {
       if (!range) return { ok: true as const, sentences: everySentence(blocks) };
-      return selectedSentences(blocks, range.from, range.to);
+      return selectedSentences(blocks, [range]);
     });
     if (!read.ok) return { kind: read.reason };
     const cited = read.sentences.filter(

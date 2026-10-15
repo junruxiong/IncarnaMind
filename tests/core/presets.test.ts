@@ -1,11 +1,13 @@
 /**
  * Presets: hosted services that speak OpenAI's API, each one catalog row on
- * the shared "openai-compatible" kind. Groq is the first; a second row is
- * added here only to show that a row is all a preset needs.
+ * the shared "openai-compatible" kind. Every preset in the catalog goes through
+ * the same path; a row of the test's own is added only to show that a row is
+ * all a preset needs.
  */
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { InvalidInputError } from "../../src/core";
 import type { CatalogProvider } from "../../src/core/providers/catalog";
+import { PRESETS as CATALOG_PRESETS } from "../../src/core/providers/catalog/presets";
 import { catalogProvider } from "../../src/core/providers/catalog/providers";
 import { createAiSdkChatModel } from "../../src/core/providers/models";
 import { askAndFinish, citationsIn, setUpWithDocuments } from "../helpers/citations";
@@ -40,10 +42,10 @@ const TIDES = buildPdf([
 ]);
 const SPRING = "Spring tides happen at new moon and at full moon.";
 
-const PRESETS = [
-  { catalogId: "groq", origin: "https://api.groq.com", base: "https://api.groq.com/openai/v1" },
-  { catalogId: "tide-cloud", origin: "https://api.tide.test", base: "https://api.tide.test/v1" },
-] as const;
+const PRESETS = CATALOG_PRESETS.map((each) => {
+  const base = each.endpoints[0]?.baseUrl ?? "";
+  return { catalogId: each.id, origin: new URL(base).origin, base };
+});
 
 const posts = (requests: RecordedRequest[]) => requests.filter((each) => each.method === "POST");
 
