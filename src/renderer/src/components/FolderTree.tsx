@@ -1,4 +1,11 @@
-import { type ComponentType, type ReactNode, type SVGProps, useCallback, useMemo } from "react";
+import {
+  type ComponentType,
+  type ReactNode,
+  type SVGProps,
+  useCallback,
+  useEffect,
+  useMemo,
+} from "react";
 import { create } from "zustand";
 import type { Document, LinkedFolder } from "../../../core/api";
 import { buildFolderTree, type FolderNode } from "../folders";
@@ -10,10 +17,11 @@ import {
   rowStateLabel,
 } from "../linkedFolders";
 import type { ObjectRef } from "../objects";
+import { useRequests } from "../requests";
 import { sorted } from "../sort";
 import { useSort } from "../sortChoices";
 import { documentFields, folderFields } from "../sortFields";
-import { selectTagFilterKey, useAppStore } from "../store";
+import { allExamples, selectTagFilterKey, useAppStore } from "../store";
 import { foldKeys, useTreeItem } from "../treeKeys";
 import { ExampleChip } from "./GettingStarted";
 import {
@@ -35,6 +43,9 @@ import {
 
 /** The "Other Documents" group's key among the folded. */
 const OTHER_DOCUMENTS = "other-documents";
+
+/** As long as the wash's animation lasts (`[data-just-linked]` in styles.css). */
+const LINKED_WASH_MS = 1600;
 
 interface FolderTreeState {
   /**
@@ -277,7 +288,19 @@ function LinkedFolderItem({
   const language = useLanguage();
   const state = linkedFolderRowState(linked, hasContents);
   const label = rowStateLabel(state, t, language);
-  const isExample = useAppStore((current) => current.examples?.linkedFolderId === linked.id);
+  const isExample = useAppStore((current) =>
+    allExamples(current).some((each) => each.linkedFolderId === linked.id),
+  );
+  const justLinked = useRequests((current) => current.showLinked === linked.id);
+  // Its row, once it shows: in sight, washed for a moment, then as any other (#763).
+  useEffect(() => {
+    if (!justLinked) return;
+    document
+      .querySelector(`[data-linked-folder-id="${linked.id}"][data-root]`)
+      ?.scrollIntoView({ block: "nearest" });
+    const timer = setTimeout(() => useRequests.getState().clear("showLinked"), LINKED_WASH_MS);
+    return () => clearTimeout(timer);
+  }, [justLinked, linked.id]);
   return (
     <GroupItem
       testId="folder-item"
@@ -308,6 +331,7 @@ function LinkedFolderItem({
         "data-state": state.kind,
         "data-status": linked.status,
         "data-layout": linked.layout,
+        ...(justLinked && { "data-just-linked": "true" }),
       }}
     >
       {children}

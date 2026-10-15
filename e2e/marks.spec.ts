@@ -1,4 +1,5 @@
 import { expect, type Locator, test } from "@playwright/test";
+import { SHOW_AGENT_CONNECTION } from "../src/shared/agentConnection";
 import {
   createDataFolder,
   dismissChatSetup,
@@ -29,16 +30,9 @@ test.afterEach(async () => {
 const INK_SECONDARY = "rgb(74, 79, 87)";
 const CHECK_GREEN = "rgb(22, 101, 52)";
 
-const PAGES: SettingsPage[] = [
-  "general",
-  "models",
-  "search",
-  "meetings",
-  "connectors",
-  "skills",
-  "agents",
-  "privacy",
-];
+const PAGES: SettingsPage[] = (
+  ["general", "models", "search", "meetings", "connectors", "skills", "agents", "privacy"] as const
+).filter((page) => page !== "agents" || SHOW_AGENT_CONNECTION);
 
 /** The text in a part of the page that is drawn in the check green. */
 function greenTexts(scope: Locator): Promise<string[]> {
