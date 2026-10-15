@@ -15,6 +15,7 @@ import {
   chartOfSelection,
   chartOfTable,
   insertChart,
+  switchedChartIn,
   tableUpdate,
   toggledSeries,
   withKind,
@@ -71,6 +72,33 @@ const QUARTERS: JSONContent = {
         cell("tableCell", text("362.0")),
       ],
     },
+  ],
+};
+
+const wordsRow = (header: boolean, ...values: string[]): JSONContent => ({
+  type: "tableRow",
+  content: values.map((value) =>
+    cell(header ? "tableHeader" : "tableCell", ...(value === "" ? [] : [text(value)])),
+  ),
+});
+
+const YEARS_BY_METRICS: JSONContent = {
+  type: "table",
+  attrs: { id: "table-2" },
+  content: [
+    wordsRow(true, "Metric", "2023", "2024", "2025"),
+    wordsRow(false, "Revenue", "289.4", "301.2", "330.6"),
+    wordsRow(false, "Net income", "41.2", "45.0", "52.3"),
+  ],
+};
+
+const WORKING_TABLE: JSONContent = {
+  type: "table",
+  attrs: { id: "table-3" },
+  content: [
+    wordsRow(true, "Step", "Formula", "Result"),
+    wordsRow(false, "Revenue growth", "(377.9 − 330.6) ÷ 330.6", "14.3%"),
+    wordsRow(false, "Net margin", "41.2 ÷ 377.9", "10.9%"),
   ],
 };
 
@@ -151,6 +179,23 @@ describe("Chart from table", () => {
     // The Citation is kept as a Citation keeps itself: no editor-only attributes.
     expect(Object.keys(q1?.citation ?? {})).not.toContain("proposal");
     expect(inserted.data.rows[1]?.values[1]?.citation).toBeNull();
+  });
+
+  test("a table of years by metrics gets its years on the x axis, and the metrics as its series", () => {
+    const editor = editorWith([YEARS_BY_METRICS, paragraph()]);
+    cursorIn(editor, "Revenue");
+    const chart = chartOfTable(editor.state, "en") as ChartAttributes;
+    expect(chart.source).toEqual({ kind: "table", blockId: "table-2", switched: true });
+    expect(chart.data.rows.map((row) => row.label)).toEqual(["2023", "2024", "2025"]);
+    expect(chart.data.series).toEqual(["Revenue", "Net income"]);
+    insertChart(editor, chart);
+    expect(chartAt(editor).chart.source).toEqual(chart.source);
+  });
+
+  test("isn't offered for a calculation's working table", () => {
+    const editor = editorWith([WORKING_TABLE, paragraph()]);
+    cursorIn(editor, "Revenue growth");
+    expect(chartOfTable(editor.state, "en")).toBeNull();
   });
 
   test("a table in an Answer gets its chart after the Answer", () => {
@@ -258,6 +303,79 @@ describe("changing a chart in place", () => {
       drawn: [0, 1],
     });
     expect(toggledSeries({ ...chart, kind: "scatter", drawn: [0, 1] }, 1)).toEqual([0]);
+  });
+
+  test("switches its rows and columns, and doesn't take its table to have changed", () => {
+    const editor = made();
+    const node = () => editor.state.doc.nodeAt(chartAt(editor).pos);
+    const { chart, pos } = chartAt(editor);
+    const switched = switchedChartIn(editor.state.doc, node()?.attrs ?? {}, "en");
+    expect(switched).not.toBeNull();
+    changeChart(editor, pos, switched ?? {});
+
+    const after = chartAt(editor).chart;
+    expect(after.source).toEqual({ kind: "table", blockId: "table-1", switched: true });
+    expect(after.data.series).toEqual(["Q1", "Q2"]);
+    expect(after.data.rows.map((row) => row.label)).toEqual(["2024", "2025"]);
+    expect(tableUpdate(editor.state.doc, node()?.attrs ?? {}, "en")).toBeNull();
+
+    let at = -1;
+    editor.state.doc.descendants((child, place) => {
+      if (at < 0 && child.isText && child.text === "362.0") at = place;
+      return at < 0;
+    });
+    editor.view.dispatch(editor.state.tr.insertText("365.0", at, at + 5));
+    const update = tableUpdate(editor.state.doc, node()?.attrs ?? {}, "en");
+    expect(update?.rows.map((row) => row.label)).toEqual(["2024", "2025"]);
+    expect(update?.rows[1]?.values[1]?.shown).toBe("365.0");
+
+    const back = switchedChartIn(editor.state.doc, node()?.attrs ?? {}, "en");
+    changeChart(editor, chartAt(editor).pos, back ?? {});
+    expect(chartAt(editor).chart.source).toEqual({ kind: "table", blockId: "table-1" });
+    expect(chartAt(editor).chart.data.rows).toEqual(chart.data.rows);
+    expect(
+      tableUpdate(editor.state.doc, node()?.attrs ?? {}, "en")?.rows[1]?.values[1]?.shown,
+    ).toBe("365.0");
+  });
+
+  test("switched there and back, a row with no number is where it was, and the table hasn't changed", () => {
+    const editor = editorWith([
+      {
+        type: "table",
+        attrs: { id: "table-4" },
+        content: [
+          wordsRow(true, "Metric", "2023", "2024", "2025"),
+          wordsRow(false, "Revenue", "289.4", "301.2", "330.6"),
+          wordsRow(false, "Operating costs:", "", "", ""),
+          wordsRow(false, "Rent", "12.0", "12.5", "13.1"),
+        ],
+      },
+      paragraph(),
+    ]);
+    cursorIn(editor, "Revenue");
+    insertChart(editor, chartOfTable(editor.state, "en") as ChartAttributes);
+    const node = () => editor.state.doc.nodeAt(chartAt(editor).pos);
+    expect(chartAt(editor).chart.data.series).toEqual(["Revenue", "Rent"]);
+
+    changeChart(
+      editor,
+      chartAt(editor).pos,
+      switchedChartIn(editor.state.doc, node()?.attrs ?? {}, "en") ?? {},
+    );
+    expect(chartAt(editor).chart.data.rows.map((row) => row.label)).toEqual([
+      "Revenue",
+      "Operating costs:",
+      "Rent",
+    ]);
+    expect(tableUpdate(editor.state.doc, node()?.attrs ?? {}, "en")).toBeNull();
+
+    changeChart(
+      editor,
+      chartAt(editor).pos,
+      switchedChartIn(editor.state.doc, node()?.attrs ?? {}, "en") ?? {},
+    );
+    expect(chartAt(editor).chart.data.series).toEqual(["Revenue", "Rent"]);
+    expect(tableUpdate(editor.state.doc, node()?.attrs ?? {}, "en")).toBeNull();
   });
 
   test("knows when its table changed since, and what it would draw now", () => {

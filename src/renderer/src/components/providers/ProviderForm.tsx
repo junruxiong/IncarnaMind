@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useId, useState } from "react";
+import { type FormEvent, useEffect, useId, useRef, useState } from "react";
 import type {
   ChatProvider,
   ChatProviderKind,
@@ -13,8 +13,10 @@ import {
   keyProviderGroups,
 } from "../../../../core/providers/catalog/providers";
 import { core } from "../../core";
+import { dayOf } from "../../dates";
 import { errorMessage } from "../../errors";
 import { useGap, useLanguage, useT } from "../../i18n";
+import type { KeyRefusal } from "../../keyRefusals";
 import { ChevronDownLineIcon } from "../lineIcons";
 import { ProblemMark } from "../ProblemLine";
 import {
@@ -66,25 +68,28 @@ export function ProviderForm({
   providers,
   onSaved,
   withMoreProviders = false,
+  refused = null,
 }: {
   /** Saved providers, to tell the User when a key is already stored. */
   providers: readonly ChatProvider[];
   onSaved(provider: ChatProvider): void;
   /** Settings lists the best-effort providers too, under "More providers"; first run only the first-class ones. */
   withMoreProviders?: boolean;
+  /** A key its provider refused: the form opens on that provider, says so by the key, and focuses it. */
+  refused?: KeyRefusal | null;
 }) {
   const t = useT();
   const id = useId();
   const language = useLanguage();
   const gap = useGap();
-  const [kind, setKind] = useState<FormKind | null>(null);
+  const [kind, setKind] = useState<FormKind | null>(refused?.kind ?? null);
   const [moreOpen, setMoreOpen] = useState(false);
   /** The region of a provider that has several; its first otherwise. */
-  const [endpointId, setEndpointId] = useState("");
+  const [endpointId, setEndpointId] = useState(refused?.endpoint ?? "");
   const key = useProviderKey();
   const { apiKey } = key;
   const [baseUrl, setBaseUrl] = useState("");
-  const [modelId, setModelId] = useState("");
+  const [modelId, setModelId] = useState(refused?.modelId ?? "");
   const [busy, setBusy] = useState<"testing" | "saving" | null>(null);
   const [test, setTest] = useState<ConnectionTestResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -97,6 +102,17 @@ export function ProviderForm({
   const { main, more } = keyProviderGroups(
     withMoreProviders ? providers.map((each) => each.kind) : [],
   );
+  const refusedHere = refused !== null && refused.kind === kind;
+  const keyField = useRef<HTMLInputElement>(null);
+  // A refused key's field is where "Check the key" leads: in view, focused, and under "More
+  // providers" opened when its provider is listed there.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: once, as the form opens on it.
+  useEffect(() => {
+    if (!refused) return;
+    if (more.includes(refused.kind)) setMoreOpen(true);
+    keyField.current?.scrollIntoView({ block: "center" });
+    keyField.current?.focus({ preventScroll: true });
+  }, []);
   const catalog = kind ? catalogProviderOfKind(kind) : undefined;
   const words = language === "zh-CN" ? "zh" : "en";
   const summary = catalog?.dataUse.summary[words] ?? "";
@@ -282,8 +298,11 @@ export function ProviderForm({
               onChange={(event) => key.type(event.target.value, baseUrl)}
               autoComplete="off"
               spellCheck={false}
+              ref={keyField}
+              aria-describedby={refusedHere ? `${id}-refused` : undefined}
               className={inputClass}
             />
+            {refusedHere && <KeyRefusedLine id={`${id}-refused`} refused={refused} />}
             {saved?.hasApiKey && (
               <span className={hintClass}>{t("providers.form.apiKeySaved")}</span>
             )}
@@ -379,6 +398,21 @@ export function ProviderForm({
         </>
       )}
     </form>
+  );
+}
+
+/** Beside a refused key: who refused it, and when. */
+function KeyRefusedLine({ id, refused }: { id: string; refused: KeyRefusal }) {
+  const t = useT();
+  const language = useLanguage();
+  const provider = t(`providers.kind.${refused.kind}`);
+  const when = refused.at ? dayOf(new Date(refused.at), new Date(), language, t) : null;
+  return (
+    <span id={id} data-testid="provider-key-refused" role="status" className={hintClass}>
+      {when
+        ? t("providers.form.keyRefused", { provider, when })
+        : t("providers.form.keyRefusedNow", { provider })}
+    </span>
   );
 }
 
