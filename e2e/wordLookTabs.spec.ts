@@ -1,7 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type ElectronApplication, expect, type Page, test } from "@playwright/test";
-import { paragraph, run, wordFile } from "../tests/helpers/word";
+import { paragraph, run, W_NS, wordFile } from "../tests/helpers/word";
 import { contractFile, RESUME_TEXT_WIDTH_TWIPS, resumeFile } from "../tests/helpers/wordLookFiles";
 import {
   createDataFolder,
@@ -171,7 +171,7 @@ test("a clause's text after its number starts at the clause's hanging indent", a
   await app.close();
 });
 
-test("a tab that wraps onto another line when the column narrows reaches that line's next default stop", async () => {
+test("a tab that wraps onto another line when the column narrows reaches that line's next default stop, as far apart as the file sets them", async () => {
   const { app, window } = await launchApp(dataDir, { home });
   await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
@@ -185,14 +185,21 @@ test("a tab that wraps onto another line when the column narrows reaches that li
       styles:
         '<w:docDefaults><w:rPrDefault><w:rPr><w:sz w:val="24"/></w:rPr></w:rPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>',
       body: paragraph(`${run(sentence)}<w:r><w:tab/></w:r>${run("Clause 4")}`),
+      rels: '<Relationship Id="rIdSettings" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/>',
+      parts: [
+        {
+          name: "word/settings.xml",
+          data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:settings xmlns:w="${W_NS}"><w:defaultTabStop w:val="420"/></w:settings>`,
+        },
+      ],
     }),
   );
-  // From the column's edge to "Clause 4", in points: a multiple of the 36 pt default stops.
+  // From the column's edge to "Clause 4", in points: a multiple of the file's 21 pt default stops.
   const offDefaultStop = async () => {
     const place = await placeOf(window, "Clause 4", 12);
     if (!place) return { at: Number.NaN, off: Number.POSITIVE_INFINITY };
     const points = place.left / place.pt;
-    return { at: place.left, off: Math.abs(points - Math.round(points / 36) * 36) * place.pt };
+    return { at: place.left, off: Math.abs(points - Math.round(points / 21) * 21) * place.pt };
   };
   await expect.poll(async () => (await offDefaultStop()).off).toBeLessThan(2);
   const wide = (await offDefaultStop()).at;

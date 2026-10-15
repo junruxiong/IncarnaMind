@@ -1,12 +1,13 @@
 import { describe, expect, onTestFinished, test, vi } from "vitest";
 import * as Y from "yjs";
 import { MIND_WORD_LOOK_FIELD, WORD_TAB_MARK } from "../../src/core";
+import { wordLookOf } from "../../src/shared/wordLook";
 import { createTempDataFolder, queryDatabase, startCore } from "../helpers/core";
 import { paragraphsOf, unzip } from "../helpers/docx";
 import { recordingLog } from "../helpers/log";
 import { connectToMind, type MindClient } from "../helpers/mindClient";
 import { readMind } from "../helpers/minds";
-import { resumeFile } from "../helpers/wordLookFiles";
+import { contractFile, resumeFile } from "../helpers/wordLookFiles";
 import { importWordBytes } from "../helpers/wordMinds";
 
 function tabs(client: MindClient): { marked: number; unmarked: number } {
@@ -70,6 +71,19 @@ describe("the tabs of a Mind imported from Word", () => {
     expect(after.filter((_, index) => index !== typed)).toEqual(
       before.filter((_, index) => index !== typed),
     );
+  });
+
+  test("the file's own default tab stops are kept, and a Word default when it sets none", async () => {
+    const dataDir = await createTempDataFolder();
+    const core = startCore(dataDir);
+    onTestFinished(() => core.close());
+    const settings = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:defaultTabStop w:val="420"/></w:settings>`;
+    const chinese = await importWordBytes(core, dataDir, contractFile({ settings }), {
+      origin: "own",
+    });
+    expect(wordLookOf(chinese.client.doc)?.defaultTab).toBe(21);
+    const plain = await importWordBytes(core, dataDir, contractFile(), { origin: "own" });
+    expect(wordLookOf(plain.client.doc)?.defaultTab).toBeNull();
   });
 
   test("a Mind whose look an earlier version read gets them at the next start", async () => {

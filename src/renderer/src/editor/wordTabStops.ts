@@ -1,6 +1,6 @@
 import type { WordParagraphLook, WordTabStop } from "../../../core/api";
 
-/** Word's default tab stops when the file doesn't set its own (`w:defaultTabStop`, 0.5 in). */
+/** Word's default tab stops when the file doesn't set its own (`w:defaultTabStop`): 0.5 in. */
 const DEFAULT_TAB_STOP = 36;
 /** A tab right on a stop goes to the next one, as in Word. */
 const EPSILON = 0.5;
@@ -8,9 +8,13 @@ const EPSILON = 0.5;
 /**
  * The stop a tab at `x` (points from the column's left edge) goes to: the
  * paragraph's own, then its hanging indent, which Word treats as a stop, then
- * the default stops.
+ * the default stops, `every` points apart.
  */
-export function tabStopAfter(x: number, look: WordParagraphLook | undefined): WordTabStop {
+export function tabStopAfter(
+  x: number,
+  look: WordParagraphLook | undefined,
+  every: number = DEFAULT_TAB_STOP,
+): WordTabStop {
   const stops = (look?.tabs ?? []).filter((stop) => stop.align !== "bar");
   if (look?.firstLine !== undefined && look.firstLine < 0) {
     stops.push({ at: look.left ?? 0, align: "left", leader: "none" });
@@ -18,7 +22,7 @@ export function tabStopAfter(x: number, look: WordParagraphLook | undefined): Wo
   const next = stops.filter((stop) => stop.at > x + EPSILON).sort((a, b) => a.at - b.at)[0];
   if (next) return next;
   return {
-    at: (Math.floor((x + EPSILON) / DEFAULT_TAB_STOP) + 1) * DEFAULT_TAB_STOP,
+    at: (Math.floor((x + EPSILON) / every) + 1) * every,
     align: "left",
     leader: "none",
   };
