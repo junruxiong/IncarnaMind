@@ -29,6 +29,7 @@ import { isRecord } from "../../errors";
 import type { OAuthCredentials } from "../../oauthAccount";
 import type { ChatLanguageModel } from "../models";
 import { withoutStorage } from "../responsesStore";
+import { retryAfterMs } from "../retryAfter";
 import { ChatGptPlanError } from "./errors";
 import { CHATGPT_PLAN_RESOURCE } from "./signIn";
 
@@ -157,6 +158,14 @@ function bodyText(body: RequestInit["body"]): string {
   throw new Error("The ChatGPT plan adapter expects a JSON request body.");
 }
 
+/** A refusal's error object: the Responses API's `error`, a failed event's `response.error`, or the event itself. */
+const errorOf = (value: unknown): unknown =>
+  isRecord(value) && isRecord(value.error)
+    ? value.error
+    : isRecord(value) && isRecord(value.response) && isRecord(value.response.error)
+      ? value.response.error
+      : value;
+
 /**
  * What a refusal says: the Responses API's `{ error: { code, message, param } }`,
  * an event's own fields, or the `{ detail }` the route answers with before a
@@ -166,12 +175,7 @@ function refusalOf(value: unknown): { code: string | null; message: string | nul
   if (isRecord(value) && typeof value.detail === "string") {
     return { code: null, message: value.detail };
   }
-  const error =
-    isRecord(value) && isRecord(value.error)
-      ? value.error
-      : isRecord(value) && isRecord(value.response) && isRecord(value.response.error)
-        ? value.response.error
-        : value;
+  const error = errorOf(value);
   if (!isRecord(error)) return { code: null, message: null };
   const pick = (key: string) => (typeof error[key] === "string" ? (error[key] as string) : null);
   const param = pick("param");
@@ -202,11 +206,39 @@ const PASSING_CODES = new Set([
 const PLAN_LIMIT_MESSAGE =
   "Your ChatGPT plan's usage limit, or the one you set for IncarnaMind, is reached.";
 
+const positive = (value: unknown): value is number =>
+  typeof value === "number" && Number.isFinite(value) && value > 0;
+
+/**
+ * When a usage limit resets (epoch milliseconds), from what its refusal
+ * carries: `resets_at` (epoch seconds) or `resets_in_seconds` in its error,
+ * or a `retry-after` header. Null when it carries none: OpenAI's guide says
+ * not to infer one from the code alone.
+ */
+export function planResetTime(
+  value: unknown,
+  headers: Headers | null,
+  now = Date.now(),
+): number | null {
+  const error = errorOf(value);
+  if (isRecord(error) && positive(error.resets_at)) return error.resets_at * 1000;
+  if (isRecord(error) && positive(error.resets_in_seconds)) {
+    return now + error.resets_in_seconds * 1000;
+  }
+  const wait = headers ? retryAfterMs(headers, now) : null;
+  return wait ? now + wait : null;
+}
+
 /** The refusal as a `ChatGptPlanError`, or null when it isn't one only a ChatGPT plan gets. */
-function planError(status: number, value: unknown): ChatGptPlanError | null {
+function planError(status: number, value: unknown, headers: Headers): ChatGptPlanError | null {
   const { code, message } = refusalOf(value);
   if (code && PLAN_LIMIT_CODES.has(code)) {
-    return new ChatGptPlanError("plan-limit", PLAN_LIMIT_MESSAGE, status);
+    return new ChatGptPlanError(
+      "plan-limit",
+      PLAN_LIMIT_MESSAGE,
+      status,
+      planResetTime(value, headers),
+    );
   }
   if ((code && BLOCKED_CODES.has(code)) || status === 401 || status === 403) {
     const said = message ?? code ?? `HTTP ${status}`;
@@ -229,7 +261,7 @@ async function checkRefusal(response: Response, url: string): Promise<Response> 
   const text = await response.text();
   const parsed = parseJson(text);
   const { status } = response;
-  const refused = planError(status, parsed);
+  const refused = planError(status, parsed, response.headers);
   if (refused) throw refused;
   const { code, message } = refusalOf(parsed);
   if (status === 503 || (code && PASSING_CODES.has(code))) {
@@ -285,7 +317,7 @@ function failedEventError(event: Record<string, unknown>): ChatGptPlanError | nu
   if (event.type !== "response.failed" && event.type !== "error") return null;
   const { code } = refusalOf(event);
   return code && PLAN_LIMIT_CODES.has(code)
-    ? new ChatGptPlanError("plan-limit", PLAN_LIMIT_MESSAGE, 429)
+    ? new ChatGptPlanError("plan-limit", PLAN_LIMIT_MESSAGE, 429, planResetTime(event, null))
     : null;
 }
 

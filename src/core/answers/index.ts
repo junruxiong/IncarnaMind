@@ -261,8 +261,12 @@ export interface AnswerConversations {
    * written, which reads `read`.
    */
   add(input: QuestionInput, answerModel: ChatModelChoice | null, read: AnswerRead | null): Turn;
-  /** The Question of an Answer, to write the Answer again. */
-  questionOf(input: unknown): { answerId: string; question: ConversationQuestion };
+  /** The Question of an Answer, and the Tool calls it made, to write the Answer again. */
+  questionOf(input: unknown): {
+    answerId: string;
+    question: ConversationQuestion;
+    toolCalls: AnswerToolCall[];
+  };
   /** Takes the Search scope off a Question: its Answers search every Document (#748). */
   clearScope(questionId: string): ConversationQuestion | null;
   /** Empties an Answer, where it is, to write it again, reading `read`. */
@@ -367,6 +371,12 @@ export interface AnswersOptions {
    * Proposals (#202, ../tools/minds); absent: it changes none.
    */
   minds?: MindsForTools;
+  /**
+   * Takes back the changes an Answer proposed in Minds, before it is written
+   * again (#202): those still waiting are rejected, and a Mind it made goes
+   * once nothing else is in it.
+   */
+  withdrawChanges?(changes: readonly MindChange[]): void;
   /** Asking the User before a Connector Tool or a Skill script runs. */
   approvals: AnswerApprovals;
   /** Running Skill scripts. */
@@ -671,6 +681,10 @@ export function createAnswers(options: AnswersOptions) {
     listening?: () => Promise<WindowedPassage[] | null>;
     /** Written for a Task (#126), which gives way to Answers itself (see ../runs/tasks). */
     task?: boolean;
+    /** Offers web search's Tools whatever the Question says: a Research Task's Web source (#130). */
+    web?: boolean;
+    /** Hears each Tool call as it ends. */
+    onCall?(call: AnswerToolCall): void;
     /**
      * An Answer in the assistant (#202): the Mind it was asked from and the
      * Blocks the User selected there, where a Mind it makes goes, and what
@@ -937,8 +951,16 @@ export function createAnswers(options: AnswersOptions) {
     const base = answerInstructions();
     const language = languageInstruction(context.question);
     const callStarted = (call: AnswerToolCall) => {
-      // A call that asks the User first may already be there (see `ask`).
-      if (toolCalls.some((each) => each.id === call.id)) return;
+      // A call that asks the User first may already be there (see `ask`), and one whose input
+      // streams in is there from its start (#202): it now has all of its input.
+      const there = toolCalls.find((each) => each.id === call.id);
+      if (there) {
+        if (Object.keys(there.input).length === 0) {
+          there.input = call.input;
+          writeSoon();
+        }
+        return;
+      }
       toolCalls.push(call);
       announce("answer.toolCallStarted", { ...place, answerId, call: { ...call } });
       writeSoon();
@@ -960,6 +982,7 @@ export function createAnswers(options: AnswersOptions) {
       if (found.webPage) call.webPage = found.webPage;
       if (found.mindChange) call.mindChange = found.mindChange;
       announce("answer.toolCallFinished", { ...place, answerId, call: { ...call } });
+      input.onCall?.({ ...call });
       writeSoon();
     };
     const setApproval = (id: string, approval: ToolCallApproval) => {
@@ -1115,6 +1138,19 @@ export function createAnswers(options: AnswersOptions) {
       }
       return denied === null ? { run: true } : { run: false, result: denied };
     };
+
+    /**
+     * Whether a Tool may act on a call's input as it comes, before the gate
+     * (#202): only when the gate lets every call of it through. A Connector's
+     * Tool and a Skill's scripts never do: the User's "ask" and "off" are
+     * theirs, and they ask by default. Any other Tool does when each of its
+     * Effects runs without asking, whatever the input: the Minds' Tools, whose
+     * only write is a Proposal.
+     */
+    const streamsInput = (tool: Tool): boolean =>
+      tool.provider.kind !== "connector" &&
+      tool.name !== SKILL_TOOLS.runScript &&
+      tool.effects({}).every(runsByDefault);
 
     /**
      * `run_skill_script`'s call, once the gate let it through: runs the script
@@ -1299,9 +1335,9 @@ export function createAnswers(options: AnswersOptions) {
       }
       // Web search's Tools, only for a Question that asks for the web, with a model whose provider
       // searches it, while the User has it on (#128).
-      const web = outside ? undefined : options.web;
+      const web = outside && !input.web ? undefined : options.web;
       let webService: ExternalService | null = null;
-      if (web && asksForWeb(context.question)) {
+      if (web && (input.web || asksForWeb(context.question))) {
         try {
           webService = await web.service(model);
         } catch (error) {
@@ -1353,7 +1389,16 @@ export function createAnswers(options: AnswersOptions) {
                 );
                 return { blocks, notFound, unrecorded };
               },
-              changed: (toolCallId, change) => mindChanges.set(toolCallId, change),
+              changed: (toolCallId, change) => {
+                mindChanges.set(toolCallId, change);
+                // On its card at once: a Mind changes while the call is still being written.
+                const call = toolCalls.find((each) => each.id === toolCallId);
+                if (call && !finished) {
+                  call.mindChange = change;
+                  writeSoon();
+                }
+              },
+              signal: controller.signal,
               now: () => new Date(),
             })
           : [];
@@ -1460,6 +1505,7 @@ export function createAnswers(options: AnswersOptions) {
         documents,
         tools: [...provided, ...fromSkills, ...fromWeb, ...fromMinds],
         gate,
+        streamsInput,
         toolSet: input.toolSet,
         thirdParty: contextReasons,
         support: startingSupport(prepared.support, supportByModel.get(learntKey)),
@@ -2007,10 +2053,12 @@ export function createAnswers(options: AnswersOptions) {
       if (isRecord(input) && input.clearScope === true) {
         options.conversations.clearScope(asked.question.id);
       }
-      const { answerId, question } = options.conversations.questionOf(input);
+      const { answerId, question, toolCalls } = options.conversations.questionOf(input);
       const ready = await readyModel(question.model, question.forcedSkill);
       if ("asked" in ready) return ready;
       active.get(answerId)?.finish({ status: "stopped" });
+      // Written again, it proposes its changes again: those still waiting from before go.
+      options.withdrawChanges?.(toolCalls.flatMap((call) => call.mindChange ?? []));
       const { documentIds, emptyScope } = scopeNow(question.scope);
       const from = question.askedFrom;
       const mind =
@@ -2133,6 +2181,64 @@ export function createAnswers(options: AnswersOptions) {
           outside: true,
           toolSet: "check",
           task: true,
+        });
+        const stop = () => active.get(answerId)?.finish({ status: "stopped" });
+        if (input.signal.aborted) stop();
+        else input.signal.addEventListener("abort", stop, { once: true });
+      });
+    },
+
+    /**
+     * Does one step of a Research Task (#130) as an Answer kept nowhere, as a
+     * cell is: from the Documents of `documentIds` (null: every Document)
+     * and, with `web`, the web, whatever the step's words; a page it reads is
+     * saved into the Folder of `mindId`. It uses no Connector and no Skill
+     * script, so nothing it does waits for the User. The model is ready and
+     * allowed already. `onCall` hears each Tool call as it ends.
+     */
+    answerResearch(input: {
+      mindId: string;
+      context: QuestionContext;
+      documentIds: string[] | null;
+      web: boolean;
+      model: ChatModelChoice;
+      signal: AbortSignal;
+      onCall(call: AnswerToolCall): void;
+    }): Promise<CellAnswer> {
+      const answerId = randomUUID();
+      return new Promise<CellAnswer>((resolve) => {
+        start({
+          home: {
+            place: { mindId: input.mindId },
+            write(answer, outcome) {
+              if (outcome) {
+                resolve({
+                  status: outcome.status,
+                  markdown: answer.markdown,
+                  blocks: answer.blocks(),
+                  citations: answer.citations(),
+                  error: outcome.status === "failed" ? outcome.error : null,
+                });
+              }
+              return true;
+            },
+          },
+          answerId,
+          questionId: answerId,
+          model: input.model,
+          context: input.context,
+          contextReasons: [],
+          documentIds: input.documentIds,
+          emptyScope:
+            !input.web &&
+            input.documentIds !== null &&
+            options.documents.searchableCount(input.documentIds) === 0,
+          forcedSkill: null,
+          consentNeeded: false,
+          outside: true,
+          task: true,
+          web: input.web,
+          onCall: input.onCall,
         });
         const stop = () => active.get(answerId)?.finish({ status: "stopped" });
         if (input.signal.aborted) stop();

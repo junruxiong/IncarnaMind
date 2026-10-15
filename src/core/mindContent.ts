@@ -273,6 +273,10 @@ export function createMindContent(
       return result as T;
     },
 
+    isLoaded(mindId: string): boolean {
+      return loaded.has(mindId);
+    },
+
     /** Compacts the Mind and drops its document from memory. Does nothing if it isn't loaded. */
     close(mindId: string): void {
       const mind = loaded.get(mindId);

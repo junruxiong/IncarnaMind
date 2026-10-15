@@ -182,6 +182,7 @@ export function createClaudeAccount(options: {
     },
 
     cancelSignIn: account.cancelSignIn,
+    reopenSignInPage: account.reopenSignInPage,
 
     /** Forgets the tokens on this device, and ends the session at Anthropic where the profile says how. */
     async signOut(): Promise<ClaudeAccountStatus> {

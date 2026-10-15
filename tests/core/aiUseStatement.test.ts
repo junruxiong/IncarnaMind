@@ -78,6 +78,7 @@ function checked(
     text: asked,
     evidence: null,
     says: null,
+    calculation: null,
     scope: { folderId: null, widened: false },
     versions: [{ documentId: document.id, contentHash: document.contentHash }],
     excluded: [],
