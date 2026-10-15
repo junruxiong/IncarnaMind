@@ -1,6 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
-import { nodeWorkers } from "../../vitest.config";
+import { HOME_GUARD, nodeWorkers } from "../../vitest.config";
+import { evalCache } from "../lib/cache";
 
 /**
  * `npm run eval:dump` (eval/README.md, "Offline scoring"): writes the
@@ -14,6 +15,8 @@ export default defineConfig({
   test: {
     include: ["eval/dumps/**/*.dump.ts"],
     environment: "node",
+    setupFiles: [HOME_GUARD],
+    env: { INCARNAMIND_EVAL_CACHE: evalCache() },
     disableConsoleIntercept: true,
     reporters: [["default", { summary: false }]],
     // Fetching the hard tier's library, if it isn't cached, and indexing it.

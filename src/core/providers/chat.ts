@@ -224,7 +224,7 @@ const displayName = (kind: ChatProviderKind, baseUrl: string | null) =>
 /** What chat providers need from the ChatGPT plan provider. */
 export type ChatGptPlanAccess = Pick<
   ChatGptPlan,
-  "hasSignIn" | "credentials" | "apiBaseUrl" | "models"
+  "hasSignIn" | "credentials" | "apiBaseUrl" | "models" | "limits"
 >;
 
 export function createChat(options: {
@@ -420,6 +420,9 @@ export function createChat(options: {
     };
   };
 
+  const watchedPlan = (kind: ChatProviderKind, model: ChatLanguageModel, modelId: string) =>
+    kind === "chatgpt" ? chatGpt.limits.watch(model, modelId) : model;
+
   const toProvider = async (row: ProviderRow, modelId?: string): Promise<ChatProvider> => {
     const kind = row.kind as ChatProviderKind;
     const hasApiKey = acceptsApiKey(kind) && (await secrets.tryGet(keyName(row.id))) !== null;
@@ -551,7 +554,7 @@ export function createChat(options: {
     };
   };
 
-  return {
+  const chat = {
     async list(): Promise<ChatProvider[]> {
       return Promise.all(knownRows().map(withDefaultModel));
     },
@@ -876,7 +879,7 @@ export function createChat(options: {
           catalog: catalogFacts(modelsProviderOfKind(server.kind, server.endpoint), modelId),
         });
         const model = meter.wrap(
-          createModel(specFor(server, apiKey, modelId, profile)),
+          watchedPlan(server.kind, createModel(specFor(server, apiKey, modelId, profile)), modelId),
           meteredModel(
             { kind: server.kind, service },
             rowByServer(server)?.id ?? server.catalogId ?? server.kind,
@@ -897,6 +900,23 @@ export function createChat(options: {
       } catch (error) {
         return { ok: false, error: classifyProviderError(error) };
       }
+    },
+
+    /**
+     * The model a Question for `choice` (or the default model) goes to: the
+     * ChatGPT plan's stand-in the User chose with "Answer with …" while the
+     * chosen model's limit is used up. With no reset time, the chosen model
+     * gets one small try an hour first, and takes the Question once it answers.
+     */
+    async answeringModel(choice?: ChatModelChoice): Promise<ChatModelChoice | undefined> {
+      const picked = choice ?? settings.get().user.chatModel ?? undefined;
+      if (!picked || rowById(picked.providerId)?.kind !== "chatgpt") return choice;
+      const standIn = chatGpt.limits.standInFor(picked.modelId);
+      if (!standIn) return choice;
+      if (standIn.retry && (await chat.test({ kind: "chatgpt", modelId: picked.modelId })).ok) {
+        return choice;
+      }
+      return { providerId: picked.providerId, modelId: standIn.modelId };
     },
 
     /**
@@ -931,14 +951,18 @@ export function createChat(options: {
       checkCanChat(profile, modelId);
       // The calls that don't write the Answer (tagging, classifying, an Answer's search query)
       // skip thinking where they can.
-      const model = createModel(
-        specFor(
-          provider,
-          apiKey,
-          modelId,
-          profile,
-          thinking ?? (flow === "chat" ? "summary" : "off"),
+      const model = watchedPlan(
+        provider.kind,
+        createModel(
+          specFor(
+            provider,
+            apiKey,
+            modelId,
+            profile,
+            thinking ?? (flow === "chat" ? "summary" : "off"),
+          ),
         ),
+        modelId,
       );
       const row: ProviderRow = {
         id: provider.id,
@@ -983,4 +1007,5 @@ export function createChat(options: {
       };
     },
   };
+  return chat;
 }
