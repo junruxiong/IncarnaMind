@@ -311,6 +311,8 @@ export function createChatGptSignIn(options: {
 
     cancelSignIn: account.cancelSignIn,
 
+    reopenSignInPage: account.reopenSignInPage,
+
     /**
      * Stops using the sign-in, ends its session at OpenAI and forgets its
      * tokens; the registration stays for the next sign-in. `revoked` is false

@@ -49,10 +49,8 @@ import type { Language } from "./language";
 const EXAMPLES_VALUE = "examples";
 /** Set once the examples were offered on a first run, so they aren't made again unasked. */
 const OFFERED_VALUE = "examplesOffered";
-/** The order this install offers the other examples in, picked at random once. */
 const ORDER_VALUE = "examplesOrder";
 const DEFAULT_GROUP: ExampleGroup = "tea";
-/** The examples the banner offers besides the default. */
 const OFFERED_GROUPS: readonly ExampleGroup[] = ["papers", "contracts", "meetings"];
 
 const GROUPS = Object.keys(EXAMPLE_SETS) as ExampleGroup[];
@@ -95,7 +93,6 @@ export interface ExamplesOptions {
   recheck(input: RecheckCitationInput): CitationRecheck;
   /** Pushes "examples.changed". */
   changed(examples: Examples): void;
-  /** A number from 0 up to, not including, 1; Math.random unless a test sets it. */
   random?(): number;
 }
 
@@ -119,13 +116,11 @@ export function createExamples(options: ExamplesOptions) {
       : null;
   };
 
-  /** A kept order: each offered example exactly once. */
   const isOffered = (value: unknown): value is ExampleGroup[] =>
     Array.isArray(value) &&
     value.length === OFFERED_GROUPS.length &&
     OFFERED_GROUPS.every((group) => value.includes(group));
 
-  /** The offered examples in this install's order: shuffled the first time, then kept. */
   const order = (): ExampleGroup[] => {
     const kept = options.readValue(ORDER_VALUE);
     if (isOffered(kept)) return kept;

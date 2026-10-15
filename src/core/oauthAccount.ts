@@ -209,7 +209,12 @@ export function createOAuthAccount<A extends OAuthAccountRecord>(options: {
   /** Bumped by every sign-in and sign-out, so a refresh that finishes afterwards changes nothing. */
   let generation = 0;
   let refreshing: Promise<A> | null = null;
-  let running: { controller: AbortController; done: Promise<unknown> } | null = null;
+  let running: {
+    controller: AbortController;
+    done: Promise<unknown>;
+    /** The address the browser was last sent to, for opening the page again. */
+    pageUrl?: string;
+  } | null = null;
   let pasteRedirect: SignInRedirect["paste"] | null = null;
   let signingOut = false;
 
@@ -343,7 +348,10 @@ export function createOAuthAccount<A extends OAuthAccountRecord>(options: {
         try {
           return await authorizeInBrowser({
             ...request,
-            openBrowser: (url) => options.browser.open(url),
+            openBrowser: (url) => {
+              if (running?.controller === controller) running.pageUrl = url;
+              return options.browser.open(url);
+            },
             onWaiting(waiting) {
               paste = waiting;
               pasteRedirect = waiting;
@@ -357,8 +365,11 @@ export function createOAuthAccount<A extends OAuthAccountRecord>(options: {
           if (pasteRedirect === paste) pasteRedirect = null;
         }
       };
+      // Registered before the attempt starts, which may open the browser before its first await.
+      const entry: NonNullable<typeof running> = { controller, done: Promise.resolve() };
+      running = entry;
       const done = attempt(authorize, controller.signal);
-      running = { controller, done };
+      entry.done = done;
       onChange();
       try {
         return await done;
@@ -369,6 +380,14 @@ export function createOAuthAccount<A extends OAuthAccountRecord>(options: {
     },
 
     cancelSignIn,
+
+    /** Opens the sign-in page again, for a User who closed its tab: true if one is waiting. */
+    async reopenSignInPage(): Promise<boolean> {
+      const url = running?.pageUrl;
+      if (!url) return false;
+      await options.browser.open(url);
+      return true;
+    },
 
     /**
      * The address the browser ended on, pasted when it couldn't come back to

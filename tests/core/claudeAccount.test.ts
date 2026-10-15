@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { generateText, streamText } from "ai";
 import { describe, expect, test, vi } from "vitest";
 import { version } from "../../package.json";
-import { type Core, type CoreAdapters, createAiSdkChatModel } from "../../src/core";
+import { type Core, createAiSdkChatModel } from "../../src/core";
 import type { ClaudeAccountProblem } from "../../src/core/api";
 import { createClaudeAccount } from "../../src/core/providers/claudeAccount/account";
 import { createAccountFetch } from "../../src/core/providers/claudeAccount/messages";
@@ -24,6 +24,7 @@ import {
   manualClock,
   nextTurn,
   startCore,
+  type TestAdapters,
 } from "../helpers/core";
 import {
   ANSWER,
@@ -47,7 +48,7 @@ interface Setup {
 
 async function setUp(
   redirect: "page" | "loopback" = "page",
-  overrides: Partial<CoreAdapters> = {},
+  overrides: TestAdapters = {},
 ): Promise<Setup> {
   const clock = manualClock();
   const fake = await startFakeAnthropic();
@@ -81,7 +82,7 @@ async function signIn({ core, browser }: Setup) {
 /** Signs in and makes a Claude account model the default, which allows its flows. */
 async function signedIn(
   redirect: "page" | "loopback" = "page",
-  overrides: Partial<CoreAdapters> = {},
+  overrides: TestAdapters = {},
 ): Promise<Setup> {
   const setup = await setUp(redirect, overrides);
   await signIn(setup);
@@ -205,6 +206,20 @@ describe("Sign in with Claude", () => {
 
     expect(await core.signInToClaude()).toMatchObject({ ok: true });
     expect(await browser.visits[0]).toBe(200);
+  });
+
+  test("the waiting sign-in's page can be opened again, and not once it has finished", async () => {
+    const setup = await setUp();
+    const result = setup.core.signInToClaude();
+    await browserOpened(setup.browser);
+
+    expect(await setup.core.reopenClaudeSignIn()).toBe(true);
+    expect(setup.browser.opened).toHaveLength(2);
+    expect(setup.browser.opened[1]).toBe(setup.browser.opened[0]);
+
+    await setup.core.pasteClaudeSignInAddress(setup.browser.shown?.code ?? "");
+    await result;
+    expect(await setup.core.reopenClaudeSignIn()).toBe(false);
   });
 
   test("cancelling a waiting sign-in keeps nothing", async () => {
