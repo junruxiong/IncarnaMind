@@ -6,6 +6,7 @@ import {
   dismissChatSetup,
   interceptOpenExternal,
   launchApp,
+  newMind,
   openSettings,
   removeDataFolder,
   setLanguage,
@@ -114,16 +115,23 @@ test("first run, in Chinese: an earlier sign-in's address is refused, and the ad
     await interceptOpenExternal(app);
     await setLanguage(window, "zh-CN");
     await acceptPlainTextKeys(window);
-    const setup = window.getByTestId("chat-setup");
-    await setup.getByTestId("chat-choice-chatgpt").check();
-    await setup.getByTestId("chatgpt-continue").click();
+    // The first own Question waits while the setup card offers the ways, ChatGPT under Other ways.
+    await newMind(window);
+    await window.getByTestId("mind-editor").click();
+    await window.keyboard.press("ControlOrMeta+j");
+    await window.keyboard.type("我的文档里有什么？");
+    await window.keyboard.press("Enter");
+    const setup = window.getByTestId("model-setup");
+    await setup.getByTestId("setup-other").click();
+    await setup.getByTestId("way-chatgpt").click();
+    await setup.getByTestId("setup-chatgpt").click();
     const address = await addressAfterApproving(app);
 
     await expect(setup).toContainText("没有回到 IncarnaMind？粘贴浏览器地址栏里的地址");
     await setup.getByRole("button", { name: "粘贴浏览器地址栏里的地址" }).click();
     const field = setup.getByTestId("chatgpt-paste-address");
     await expect(field).toBeFocused();
-    // Esc closes the field, not the setup, where Esc would mean "set up later".
+    // Esc closes the field only, not what it sits in.
     await field.press("Escape");
     await expect(field).toBeHidden();
     await expect(setup).toBeVisible();

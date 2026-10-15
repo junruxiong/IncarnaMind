@@ -1,8 +1,8 @@
 import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
-import { documentImageUrl } from "../../../shared/documentViewer";
 import type { TextRange } from "../../../shared/quoteMatch";
 import { lowlight } from "../editor/codeLanguages";
 import { useT } from "../i18n";
+import { loadDocumentPicture } from "./documentPicture";
 import { type Block, type Inline, type ListItem, sectionHeadings } from "./markdown";
 
 /** The Markdown Document shown, whose pictures beside it its images load. */
@@ -284,28 +284,6 @@ function pictureBeside(src: string): string | null {
   }
 }
 
-/** Reads a picture beside the Document, as a `data:` URL (the app's policy allows those). */
-function loadPicture(documentId: string, path: string, signal: AbortSignal): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const request = new XMLHttpRequest();
-    request.open("GET", documentImageUrl(documentId, path));
-    request.responseType = "blob";
-    request.onload = () => {
-      if (request.status !== 200) {
-        reject(new Error(`status ${request.status}`));
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result));
-      reader.onerror = () => reject(reader.error);
-      reader.readAsDataURL(request.response as Blob);
-    };
-    request.onerror = () => reject(new Error("The picture couldn't be read."));
-    signal.addEventListener("abort", () => request.abort(), { once: true });
-    request.send();
-  });
-}
-
 /**
  * An image in a Markdown file: a picture beside the file is shown; one from
  * the web isn't loaded (the app loads nothing from the network to show a
@@ -325,7 +303,7 @@ function MarkdownImage({ src, alt }: { src: string; alt: string }) {
     const path = pictureBeside(src);
     if (DATA_IMAGE.test(src) || path === null || !documentId) return;
     const controller = new AbortController();
-    loadPicture(documentId, path, controller.signal).then(
+    loadDocumentPicture(documentId, path, controller.signal).then(
       (url) => {
         if (!controller.signal.aborted) setState({ kind: "ready", url });
       },

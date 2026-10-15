@@ -238,7 +238,12 @@ export function createChatGptSignIn(options: {
   /** Bumped by every sign-in and sign-out, so a refresh that finishes afterwards changes nothing. */
   let generation = 0;
   let refreshing: Promise<StoredAccount> | null = null;
-  let running: { controller: AbortController; done: Promise<unknown> } | null = null;
+  let running: {
+    controller: AbortController;
+    done: Promise<unknown>;
+    /** The address the browser was last sent to, for opening the page again. */
+    pageUrl?: string;
+  } | null = null;
   let pasteRedirect: LoopbackRedirect["paste"] | null = null;
   let signingOut = false;
 
@@ -424,7 +429,10 @@ export function createChatGptSignIn(options: {
           }
         },
         exchangeClientId: () => clientId ?? DYNAMIC_CLIENT,
-        openBrowser: (url) => options.browser.open(url),
+        openBrowser: (url) => {
+          if (running) running.pageUrl = url;
+          return options.browser.open(url);
+        },
         onWaiting(waiting) {
           paste = waiting;
           pasteRedirect = waiting;
@@ -527,6 +535,14 @@ export function createChatGptSignIn(options: {
     },
 
     cancelSignIn: cancel,
+
+    /** Opens the sign-in page again, for a User who closed its tab: true if one is waiting. */
+    async reopenSignInPage(): Promise<boolean> {
+      const url = running?.pageUrl;
+      if (!url) return false;
+      await options.browser.open(url);
+      return true;
+    },
 
     /**
      * Stops using the sign-in, ends its session at OpenAI and forgets its
