@@ -6218,9 +6218,9 @@ export interface TagMerge {
 
 /**
  * What a Mind exports to: Markdown, for an archive, or Word (.docx), PDF or HTML, for the
- * deliverable; a source pack, a PDF of the pages the Mind cites (#134); or a web page to share
- * (#72), an HTML file whose readers open each Citation's quote. Formats are listed in the order
- * the options sheet offers them.
+ * deliverable; a source pack, a PDF of the pages the Mind cites (#134); or a web page to share,
+ * an HTML file whose readers open each Citation's quote. Formats are listed in the order the
+ * options sheet offers them.
  */
 export const EXPORT_FORMATS = [
   "docx",
@@ -6247,7 +6247,7 @@ export interface ExportPreferences {
   theirChanges?: TheirChangesShown;
 }
 
-/** A web page to share's own choices (#72; see `ExportMindOptions`). */
+/** See `ExportMindOptions`. */
 export interface SharePagePreferences {
   includeQuestions: boolean;
   citationCards: boolean;
@@ -6301,7 +6301,7 @@ export interface ExportMindOptions {
    */
   commentFailedChecks?: boolean;
   /**
-   * A web page to share only (#72): each Citation's marker opens a card with
+   * A web page to share only: each Citation's marker opens a card with
    * its quote, the part of its Document around it, and its check. Off, the
    * file is the HTML export. Absent: on.
    */

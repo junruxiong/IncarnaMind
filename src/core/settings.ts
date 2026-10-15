@@ -67,7 +67,6 @@ const SHARE_PAGE_CHOICES = ["includeQuestions", "citationCards", "checkedLine"] 
 const isSharePageOption = (value: unknown) =>
   hasOnly(value, SHARE_PAGE_CHOICES) && SHARE_PAGE_CHOICES.every((key) => isBoolean(value[key]));
 
-/** Readers open each Citation unless the User says not; the foot says nothing of IncarnaMind unless asked (#72). */
 const SHARE_PAGE_DEFAULTS: SharePagePreferences = {
   includeQuestions: false,
   citationCards: true,
@@ -76,7 +75,7 @@ const SHARE_PAGE_DEFAULTS: SharePagePreferences = {
 
 /**
  * HTML came after the others, how someone's changes are shown (#734) after HTML, and the web
- * page to share (#72) after that: choices saved before them have none, and read as the defaults.
+ * page to share after that: choices saved before them have none, and read as the defaults.
  */
 const isExportPreferences = (value: unknown): value is ExportPreferences => {
   if (!isRecord(value)) return false;

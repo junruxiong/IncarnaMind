@@ -1,10 +1,7 @@
 /**
- * A Mind as a web page to share (#72): the HTML export's page (./html) with a head saying when it
- * was shared, each Citation's marker opening a card beside it (a sheet from the bottom on a
- * phone), and a foot. One file: its styles and its small script are inline, and its policy
- * refuses every request, so opening it loads nothing; the script is allowed by its hash alone.
- * Without the script, each marker is a link to its note, which repeats the Citation's Document,
- * Location and quote, as it does in print.
+ * The page's policy refuses every request, so opening it loads nothing, and allows its one script
+ * by its hash. Without the script, and in print, each marker is a link to its note, which repeats
+ * the Citation's Document, Location and quote.
  */
 import { createHash } from "node:crypto";
 import { formatDate } from "../../shared/dates";
@@ -17,7 +14,6 @@ import { HTML_STYLES, htmlFile, notesSection, withTableBodies } from "./html";
 import type { ExportLabels } from "./labels";
 import { escapeHtml, renderPrintHtml, sourceHtml } from "./printHtml";
 
-/** How the check works, for the foot's "Citations checked with IncarnaMind". */
 const HOW_CHECKS_WORK: Readonly<Record<Language, string>> = {
   en: "https://github.com/IncarnaMind/IncarnaMind#what-you-can-do",
   "zh-CN": "https://github.com/IncarnaMind/IncarnaMind/blob/main/README.zh-CN.md#你能用它做什么",
@@ -67,11 +63,7 @@ mark.quote{background:var(--success-wash);color:var(--ink)}
 @media print{.card,.scrim{display:none!important}a.cite{border:0;background:none;color:inherit;padding:0;font-size:.7em;vertical-align:super}}
 `.replace(/\n/g, "");
 
-/**
- * The page's behaviour: a marker (a link to its note until this runs) opens its card beside it,
- * or as a sheet from the bottom under 640px; ← → open the Citation before or after, and Esc, ✕,
- * a click outside or dragging the sheet down closes it. Kept to plain ES2017: no framework.
- */
+/** Plain JavaScript with no framework: the file must work on its own in any browser. */
 const SCRIPT = `(() => {
   const markers = Array.from(document.querySelectorAll("a.cite"));
   const scrim = document.querySelector(".scrim");
@@ -219,7 +211,6 @@ export interface SharePage {
   name: string;
   /** When it was made, ISO 8601: the day the head, the cards and the foot name. */
   at: string;
-  /** Each Citation's card, by its footnote. */
   cards: ReadonlyMap<Footnote, CitationCard>;
   /** The foot says "Citations checked with IncarnaMind", linking to how the check works. */
   checkedLine: boolean;

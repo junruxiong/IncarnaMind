@@ -132,10 +132,6 @@ function WordReviewRows({
   );
 }
 
-/**
- * A web page to share's own choices (#72): whether readers open each Citation, and, when they
- * do, the quiet line at its foot, off unless the User asks for it.
- */
 function SharePageRows({
   draft,
   onChange,
