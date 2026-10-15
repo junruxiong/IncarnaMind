@@ -11,7 +11,7 @@
  * This module holds no model facts, so the renderer can import it for names
  * and defaults without the generated data (see ./index).
  */
-import { type ChatProviderKind, chatProviderKinds } from "../../api";
+import type { ChatProviderKind } from "../../api";
 import { PRESETS } from "./presets";
 import type { CatalogProvider, Endpoint } from "./types";
 
@@ -638,6 +638,7 @@ export const CATALOG_PROVIDERS: readonly CatalogProvider[] = PROVIDERS.flatMap(
 
 const byId = new Map<string, CatalogProvider>(CATALOG_PROVIDERS.map((each) => [each.id, each]));
 const presetIds = new Set(PRESETS.map((each) => each.id));
+const kinds = new Map<string, ChatProviderKind>(PROVIDERS.map((each) => [each.id, each.id]));
 
 /** The provider with this catalog id, if the catalog has it. */
 export const catalogProvider = (id: string | null | undefined): CatalogProvider | undefined =>
@@ -664,7 +665,7 @@ export const catalogProviderOf = (
 /** The kind a provider of this catalog id is saved as: a preset's is "openai-compatible". */
 export function kindOfCatalogId(id: string): ChatProviderKind {
   if (presetIds.has(id)) return "openai-compatible";
-  const kind = chatProviderKinds.find((each) => each === id);
+  const kind = kinds.get(id);
   if (!kind) throw new Error(`The catalog has no provider kind "${id}".`);
   return kind;
 }
