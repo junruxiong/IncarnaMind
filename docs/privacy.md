@@ -11,7 +11,7 @@ What IncarnaMind sends from your computer, and how to change it. **Settings → 
 - **Web search** (off unless you turn it on in Settings → Search, and off in local mode): when a Question asks for the web, what the Answer searches for, written by the model from your Question, goes to the provider of the model you asked with (Anthropic, OpenAI, or OpenAI on your ChatGPT plan), whose own web search runs it, after you allow it once. Its search costs count toward the monthly cap. The pages the Answer reads are then fetched from your computer as web pages you add are, only from addresses the search returned and never from this computer or your local network, and saved as Documents.
 - **Crash reports**: off unless you turn them on, and stripped of your content first.
 - **Usage data**: only if you agree, described below.
-- **The AI use record** stays on this computer and is never sent, whatever you choose about usage data. It notes each time the AI wrote into a Mind and what you did with it, as sizes, kinds, the model's name and times, with no text. Clear it in Settings → Privacy.
+- **The AI use record** stays on this computer and is never sent, whatever you choose about usage data. It notes each time the AI wrote into a Mind and what you did with it, as sizes, kinds, the model's name and times, with no text. Clear it in Settings → Privacy. "Export AI use statement" in a Mind's menu turns it, with the Mind's own AI text marks and checks, into counts in a new Mind on this computer, for you to edit and attach to a thesis; nothing is sent.
 - **A Word file you import as a Mind** is read on this computer and sends nothing. A copy of it is kept in your data folder ("Word imports"), so export can write your changes back into it after the file has moved; it is deleted once no Mind made from it is left, Recently deleted included.
 - **The cost record** stays on this computer and is never sent. For each request to a cloud model it notes the model, the tokens its provider reported and what that cost at its price, with no text, for this month's figure and the monthly cap in Settings → General.
 
@@ -22,8 +22,8 @@ Usage data is a small set of anonymous product events, such as "a Question was a
 ### When it's sent
 
 - **Only from a build made with an analytics project.** A build without one (from source, by default) sends nothing, asks nothing, and doesn't load the analytics code.
-- **A release asks once, on the first run.** Nothing is sent unless you agree; the default is no.
-- **A test build, for invited testers,** sends usage data until you turn it off, as testers agree to when they join. Its first run says so, with the switch to turn it off.
+- **A release asks once, after the first Answer to a Question of your own,** in a card at the bottom of the sidebar, not on the first run. Nothing is sent, or kept to send, unless you choose Send; the default is no.
+- **A test build, for invited testers,** sends usage data until you turn it off, as testers agree to when they join. Its first run says so, in a notice at the bottom of the sidebar with the switch to turn it off.
 - **Local mode** ("Keep everything on this computer", in Settings → Search) turns usage data off, and it stays off.
 - **You can change it any time** in Settings → Privacy, under "Usage data". Turning it off stops sending at once and drops anything still waiting to be sent.
 
@@ -46,7 +46,7 @@ Every field is a value from a closed list, a whole number, or true/false: there'
 | Event | Fields |
 | --- | --- |
 | `app_opened` | `language`: the interface language, `en` or `zh-CN` |
-| `onboarding_picked` | What the first run's "What will you use IncarnaMind for?" question was answered with, once that question exists: `papers_research`, `reports_analysis`, `contracts_legal`, `meetings_notes`, `everything`, `something_else`, `skipped`, each true or false |
+| `example_opened` | `group`: which example was opened from an example's banner: `tea`, `papers`, `reports`, `contracts` or `meetings`. Nothing else |
 | `mind_created` | No fields: you made a Mind |
 | `question_asked` | `provider`: the kind of provider of the model (`openai`, `anthropic`, `google`, `deepseek`, `qwen`, `kimi`, `glm`, `siliconflow`, `mistral`, `xai`, `openrouter`, `openai-compatible`, `ollama`, `chatgpt`); `local`: whether the model runs on your computer. Never the Question or the model's prompt |
 | `answer_finished` | `outcome`: `done` or `stopped`; `duration_ms`: how long it took; `citations`: how many Citations it has; `found`, `not_found`, `cant_check`: how many of them by check |

@@ -1,5 +1,6 @@
 import { mkdirSync } from "node:fs";
-import { homedir, tmpdir, userInfo } from "node:os";
+import { readFile } from "node:fs/promises";
+import { tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 import * as Y from "yjs";
 import { isCitationStyleId } from "../shared/citationStyles";
@@ -14,13 +15,16 @@ import {
 import { mindModelOf } from "../shared/mindModel";
 import { mindName } from "../shared/naming";
 import { paperFor } from "../shared/printDocument";
+import { resolveProposals } from "../shared/proposals";
 import { wordFileOf } from "../shared/wordFiles";
 import { logActivity, silentLogger } from "./activityLog";
 import type { CoreAdapters } from "./adapters";
 import { agentSocketPath, createAgents } from "./agents";
 import { createAgentSetup, skillInstalled } from "./agents/setup";
 import { createAiUse } from "./aiUse";
+import { createAiUseStatement } from "./aiUseStatement";
 import { createAiSdkAnswerEngine, createAnswers } from "./answers";
+import { topLevelBlocks } from "./answers/blocks";
 import { createChecks } from "./answers/checks";
 import { recheckCitation, recheckKept } from "./answers/citations";
 import {
@@ -56,6 +60,7 @@ import {
   type SavedExport,
   type SearchScope,
   type Task,
+  type UnlockDocumentInput,
   type UnreadFile,
   type Unsubscribe,
 } from "./api";
@@ -78,13 +83,16 @@ import {
   parseListOptions,
 } from "./documents";
 import { createEvidence, parseCheckedDocument, passageResult } from "./documents/evidence";
+import { pdfIsLocked, pdfOpensWith } from "./documents/extract";
 import { statIdentity } from "./documents/files";
 import { createOwnFiles } from "./documents/ownFiles";
+import { createPdfPasswords } from "./documents/pdfPasswords";
 import { createVersionRetention, type VersionRetention } from "./documents/retention";
 import { BUILT_IN_TEXT_RECOGNITION_MODEL, createTextRecognitionModel } from "./documents/scan";
 import type { WindowedPassage } from "./documents/search";
 import { tunedSearch } from "./documents/searchTuning";
 import { findUnreadDocuments } from "./documents/unread";
+import { createViewing } from "./documents/viewing";
 import { fsWatchFolder } from "./documents/watcher";
 import { createWebPages } from "./documents/web";
 import { createEdits } from "./edits";
@@ -130,7 +138,7 @@ import {
   parseMindId,
 } from "./minds";
 import { firstLineOf, readBlocks, theirChangesReading } from "./mindText";
-import { createNoteAdding } from "./noteAdding";
+import { createNoteAdding, insertBlocks } from "./noteAdding";
 import { createOutputFiles } from "./outputFiles";
 import { createPrivacy, type NetworkTrafficRegistry } from "./privacy";
 import { readsImages } from "./providers/capabilities";
@@ -143,8 +151,10 @@ import {
   detectOllama,
   hasOllamaModel,
   OLLAMA_REGISTRY,
+  OLLAMA_START_TIMEOUT_MS,
   pullOllamaModel,
   RECOMMENDED_OLLAMA_MODEL,
+  waitForOllama,
 } from "./providers/ollama";
 import { isCloudModelName } from "./providers/ollamaCloud";
 import { createOllamaModels } from "./providers/ollamaModels";
@@ -297,6 +307,27 @@ const LIVE_TRANSCRIPT_WAIT_MS = 3_000;
  * Opens (or creates) the data folder and its database, brings the schema up to
  * date, and returns the core. The host passes in every platform capability.
  */
+
+/** The longest password a PDF is unlocked with: far beyond any real one, short enough to refuse junk. */
+const MAX_PDF_PASSWORD = 1_024;
+
+const parseDocumentId = (input: unknown): string => {
+  if (typeof input !== "string" || input === "") {
+    throw new InvalidInputError({ key: "error.document.notFound" });
+  }
+  return input;
+};
+
+/** `unlockDocument`'s input. Its errors never repeat the password. */
+function parseUnlock(input: unknown): UnlockDocumentInput {
+  if (!isRecord(input)) throw new InvalidInputError({ key: "error.document.passwordMissing" });
+  const { password } = input;
+  if (typeof password !== "string" || password === "" || password.length > MAX_PDF_PASSWORD) {
+    throw new InvalidInputError({ key: "error.document.passwordMissing" });
+  }
+  return { documentId: parseDocumentId(input.documentId), password };
+}
+
 export function createCore(adapters: CoreAdapters): Core {
   const { dataDir } = adapters.paths;
   mkdirSync(dataDir, { recursive: true });
@@ -417,6 +448,16 @@ export function createCore(adapters: CoreAdapters): Core {
     file: (documentId, groupId) => library.file(documentId, groupId),
   });
   const secrets = createSecrets(adapters.keychain, settings);
+  const pdfPasswords = createPdfPasswords(secrets, settings);
+  const viewing = createViewing();
+  /** Forgets the passwords of Documents gone from the Library (#763), and says which are kept. */
+  const forgetPasswords = async (ids: readonly string[]) => {
+    const kept = pdfPasswords.kept();
+    const gone = ids.filter((id) => kept.includes(id));
+    if (gone.length === 0) return;
+    for (const id of gone) await pdfPasswords.forget(id);
+    events.emit("documentPasswords.changed", pdfPasswords.kept());
+  };
   const consent = createConsent(db, events, now);
   /** Aborts work still running (model downloads, a ChatGPT sign-in, provider requests) when the core closes. */
   const lifetime = new AbortController();
@@ -495,6 +536,7 @@ export function createCore(adapters: CoreAdapters): Core {
       now,
       model: embedding.model,
       textRecognition: textRecognitionModel,
+      pdfPassword: (id) => pdfPasswords.of(id),
       folders,
       emitStatus: (document) => {
         events.emit("document.status", document);
@@ -506,6 +548,9 @@ export function createCore(adapters: CoreAdapters): Core {
       emitRemoved: (ids) => {
         events.emit("documents.removed", ids);
         batches.changed(ids);
+        forgetPasswords(ids).catch((error: unknown) =>
+          console.error("A removed Document's PDF password couldn't be forgotten.", error),
+        );
       },
       emitKept: (kept) => events.emit("keptCitationTexts.changed", kept),
       foldersChanged,
@@ -557,7 +602,8 @@ export function createCore(adapters: CoreAdapters): Core {
       background,
       document: (id) => documents.getMany([id])[0] ?? null,
       filePath: (id) => documents.filePath(id),
-      drawPdf: documentCitedPages,
+      drawPdf: async (documentId, file, contentHash, pages, signal) =>
+        documentCitedPages(file, contentHash, pages, signal, await pdfPasswords.of(documentId)),
       capturePage: adapters.capturePage,
       log: adapters.log ?? silentLogger,
     });
@@ -1051,7 +1097,20 @@ export function createCore(adapters: CoreAdapters): Core {
       },
       folderName: (folderId) =>
         library.folders().find((folder) => folder.id === folderId)?.name ?? null,
+      writing: (mindId, place) => events.emit("mind.writing", { mindId, place }),
       proposeInMind: (input) => edits.proposeInMind(input),
+    },
+    withdrawChanges: (changes) => {
+      for (const change of changes) {
+        if (!mindExists(change.mindId)) continue;
+        const emptied = content.edit(change.mindId, (blocks) => {
+          resolveProposals(blocks, (ref) => ref.request === change.request, "reject");
+          return topLevelBlocks(blocks).every(
+            (block) => block.nodeName === "paragraph" && block.length === 0,
+          );
+        });
+        if (change.created && emptied) removeMind(change.mindId);
+      }
     },
     approvals: {
       decide: (call) => approvals.decide(call),
@@ -1244,6 +1303,19 @@ export function createCore(adapters: CoreAdapters): Core {
       folderDefault: folderId === null ? null : library.citationStyle(folderId),
     }));
   };
+  /** Sends a Mind to Recently deleted; its tabs close. */
+  const removeMind = (mindId: unknown) => {
+    const at = now();
+    const deleted = db.transaction(() => {
+      const mind = minds.delete(mindId, at);
+      content.remove(mind.id, at);
+      return mind;
+    });
+    meetings.mindDeleted(deleted.id);
+    mindsChanged();
+    layouts.forgetDeletedMinds();
+  };
+
   // Edit with AI (#93): the change comes back as Proposals; Citations it keeps are checked again.
   const edits = createEdits({
     content,
@@ -1255,6 +1327,7 @@ export function createCore(adapters: CoreAdapters): Core {
     consent,
     localOnly: () => embedding.localOnly(),
     recheck: (attributes) => recheckKept(documents, attributes),
+    writing: (mindId, place) => events.emit("mind.writing", { mindId, place }),
     now: () => adapters.now?.() ?? new Date(),
   });
 
@@ -1286,7 +1359,13 @@ export function createCore(adapters: CoreAdapters): Core {
     document: (documentId) => documents.get(documentId),
     onStatus: (listener) => events.on("document.status", listener),
     readText: (documentId) => documents.readText(documentId),
-    createMind: (title, folderId) => makeMind({ title, kind: DEFAULT_MIND_KIND, folderId }),
+    // Named so it doesn't share its Document's name in ⌘K and the sidebar.
+    createMind: (title, folderId) =>
+      makeMind({
+        title: translate(settings.get().language, "verify.mindTitle", { name: title }),
+        kind: DEFAULT_MIND_KIND,
+        folderId,
+      }),
     mindFolder: (mindId) => minds.get(mindId).folderId,
     originalOf: (mindId) => wordImports.originalOf(mindId),
     defaultModel: () => settings.get().user.chatModel,
@@ -1316,6 +1395,20 @@ export function createCore(adapters: CoreAdapters): Core {
     recheck: (input) => recheckCitation(documents, input),
     recordAiUse: (inputs) => void aiUse.record(inputs),
     now: () => adapters.now?.() ?? new Date(),
+  });
+
+  // The AI use statement (#739): a new Mind, made from what the Mind records.
+  const aiUseStatement = createAiUseStatement({
+    mind: (mindId) => minds.get(mindId),
+    read: (mindId, look) => content.peek(mindId, look),
+    entries: (mindId) => aiUse.list(mindId),
+    providers: () => chat.list(),
+    documents: () => documents.list(),
+    keptCitationTexts: () => documents.keptCitationTexts(),
+    language: () => settings.get().language,
+    createMind: makeMind,
+    write: (mindId, blocks) => content.edit(mindId, (note) => void insertBlocks(note, blocks)),
+    now,
   });
 
   // The fingerprints of the files IncarnaMind writes (#80). A Document already indexed with
@@ -1382,7 +1475,7 @@ export function createCore(adapters: CoreAdapters): Core {
     events,
     now,
     settings,
-    suggested: join(adapters.paths.documents ?? join(homedir(), "Documents"), "IncarnaMind"),
+    suggested: join(adapters.paths.documents, "IncarnaMind"),
     linkedFolders: () => documents.linkedFolders.list(),
     recordOwnFile,
   });
@@ -1498,7 +1591,12 @@ export function createCore(adapters: CoreAdapters): Core {
     chatReadsImages: (choice) => chat.readsImages(choice),
     async pageImages(id, contentHash, signal) {
       try {
-        return await documentPageImages(await documents.filePath(id), contentHash, signal);
+        return await documentPageImages(
+          await documents.filePath(id),
+          contentHash,
+          signal,
+          await pdfPasswords.of(id),
+        );
       } catch (error) {
         // A missing source file is a visible classification failure, not a retry loop.
         throw new Error(error instanceof Error ? error.message : String(error), { cause: error });
@@ -1862,6 +1960,7 @@ export function createCore(adapters: CoreAdapters): Core {
     if (input !== undefined && !isRecord(input)) throw new InvalidInputError("Expected an object.");
     return ollamaBaseUrl(input?.baseUrl);
   };
+  const ollamaInstalled = async () => (await adapters.ollamaApp?.installed()) ?? false;
 
   // Transcripts (#136): a Meeting is transcribed on this computer as it records, where this copy can.
   let listMeetings: (() => Meeting[]) | undefined;
@@ -2007,8 +2106,7 @@ export function createCore(adapters: CoreAdapters): Core {
 
   // Outside agents (#351): the User's own agent, paired in Settings, reads its Folders over the
   // socket and gets Citations IncarnaMind minted and checked. Off until the User turns it on.
-  // Where agents keep their settings and skills.
-  const home = adapters.agents?.home ?? homedir();
+  const { home } = adapters.paths;
   const agents = createAgents({
     db,
     now,
@@ -2118,17 +2216,7 @@ export function createCore(adapters: CoreAdapters): Core {
       mindsChanged();
       return mind;
     },
-    deleteMind: async (mindId) => {
-      const at = now();
-      const deleted = db.transaction(() => {
-        const mind = minds.delete(mindId, at);
-        content.remove(mind.id, at);
-        return mind;
-      });
-      meetings.mindDeleted(deleted.id);
-      mindsChanged();
-      layouts.forgetDeletedMinds();
-    },
+    deleteMind: async (mindId) => removeMind(mindId),
     openMind: async (mindId) => {
       const mind = minds.get(mindId);
       // A Mind this version may only read is shown from what is stored: nothing is
@@ -2210,11 +2298,6 @@ export function createCore(adapters: CoreAdapters): Core {
       }
       const languageWas = settings.get().language;
       const updated = settings.update(change);
-      if (updated.language !== languageWas) {
-        examples
-          .followLanguage()
-          .catch((error) => console.error("The example Minds didn't follow the language:", error));
-      }
       if (!updated.user.suggestWhileWriting) suggestions.stop();
       events.emit("settings.changed", updated);
       // Skill scripts turned off: none runs any more, and none waits to.
@@ -2224,6 +2307,12 @@ export function createCore(adapters: CoreAdapters): Core {
       }
       const flowChanged = syncChatFlow();
       if (chatModel !== undefined || flowChanged) await readinessChanged();
+      // The examples follow the new language before this returns, so whoever awaits it can rely on it.
+      if (updated.language !== languageWas) {
+        await examples
+          .followLanguage()
+          .catch((error) => console.error("The example Minds didn't follow the language:", error));
+      }
       return updated;
     },
     addDocuments,
@@ -2284,6 +2373,31 @@ export function createCore(adapters: CoreAdapters): Core {
       activity.documentDeleted(id as string);
     },
     retryDocument: async (id) => documents.retry(id),
+    unlockDocument: async (input) => {
+      const { documentId, password } = parseUnlock(input);
+      const document = documents.getMany([documentId])[0];
+      if (!document) throw new NotFoundError({ key: "error.document.notFound" });
+      if (document.kind !== "pdf") throw new InvalidInputError({ key: "error.document.notPdf" });
+      const bytes = await readFile(await documents.filePath(documentId));
+      if (!(await pdfIsLocked(bytes))) {
+        throw new InvalidInputError({ key: "error.document.notLocked" });
+      }
+      if (!(await pdfOpensWith(bytes, password))) return { kind: "wrong-password" };
+      await pdfPasswords.keep(documentId, password);
+      events.emit("documentPasswords.changed", pdfPasswords.kept());
+      const failed = document.status === "failed";
+      return { kind: "unlocked", document: failed ? documents.retry(documentId) : document };
+    },
+    forgetDocumentPassword: async (id) => forgetPasswords([parseDocumentId(id)]),
+    documentPasswordFor: async (id) => {
+      const document = documents.getMany([parseDocumentId(id)])[0];
+      if (document?.kind !== "pdf" || !viewing.isShown(document.id)) return null;
+      return (await pdfPasswords.of(document.id)) ?? null;
+    },
+    listDocumentPasswords: async () => {
+      const kept = pdfPasswords.kept();
+      return documents.getMany(kept).map((each) => each.id);
+    },
     readDocumentText: async (id) => documents.readText(id),
     readScannedText: async (id) => documents.readScannedText(id),
     readScannedQuote: async (input) => {
@@ -2503,7 +2617,17 @@ export function createCore(adapters: CoreAdapters): Core {
     getSecretStorage: async () => secrets.status(),
     acceptPlainTextSecretStorage: async () => secrets.acceptPlainText(),
 
-    detectOllama: (input) => detectOllama(ollamaUrl(input)),
+    detectOllama: (input) => detectOllama(ollamaUrl(input), ollamaInstalled),
+    openOllama: async (input) => {
+      const baseUrl = ollamaUrl(input);
+      if (!(await ollamaInstalled())) {
+        throw new InvalidInputError({ key: "error.provider.ollamaCantOpen" });
+      }
+      await adapters.ollamaApp?.open();
+      return waitForOllama(baseUrl, ollamaInstalled, {
+        timeoutMs: adapters.ollamaStartTimeoutMs ?? OLLAMA_START_TIMEOUT_MS,
+      });
+    },
     selectOllama: async (input) => {
       const baseUrl = ollamaUrl(input);
       const model = input?.model ?? RECOMMENDED_OLLAMA_MODEL;
@@ -2537,6 +2661,8 @@ export function createCore(adapters: CoreAdapters): Core {
       chatGpt.signIn({ anotherAccount: isRecord(input) && input.anotherAccount === true }),
     cancelChatGptSignIn: () => chatGpt.cancelSignIn(),
     signOutOfChatGpt: () => chatGpt.signOut(),
+    pasteChatGptSignInAddress: async (address) =>
+      chatGpt.pasteSignInAddress(typeof address === "string" ? address : ""),
 
     listDataFlows: () => consent.list(),
     listConsentRequests: async () => consent.requests(),
@@ -2568,6 +2694,7 @@ export function createCore(adapters: CoreAdapters): Core {
     getAiUseStatus: async () => aiUse.status(),
     clearAiUse: async () => aiUse.clear(),
     restoreAiUse: async (clearedAt) => aiUse.restore(clearedAt),
+    createAiUseStatement: async (mindId) => aiUseStatement.create(mindId),
 
     listFolders: async () => folders.list(),
 
@@ -2880,7 +3007,10 @@ export function createCore(adapters: CoreAdapters): Core {
     retryTranscript: async (meetingId) => meetings.retryTranscript(meetingId),
     openAudioSettings: (source) => meetings.openSettings(source),
 
-    openDocumentFile: (documentId) => documents.openFile(documentId),
+    openDocumentFile: async (documentId) => {
+      const file = await documents.openFile(documentId);
+      return { ...file, stream: viewing.watch(file.document.id, file.stream) };
+    },
     openDocumentImage: (documentId, path) => documents.openImage(documentId, path),
     readCellNumber: (documentId, sheet, ref) => documents.cellNumber(documentId, sheet, ref),
     openDocumentInApp: async (documentId) => {

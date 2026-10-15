@@ -405,6 +405,13 @@ function unstyle(elements: readonly HTMLElement[], opacity = true): void {
   }
 }
 
+function haltUncounted(element: HTMLElement): void {
+  const previous = latest.get(element);
+  if (!previous) return;
+  previous.stop();
+  running.get(previous)?.();
+}
+
 /**
  * Runs `plan` on `element`. A newer animation of the same element replaces
  * it and starts from where it is; `done` runs when it settles, or is replaced.
@@ -577,11 +584,7 @@ function leaving(
   const copy = copyOf(element, box);
   const scrollTop = element.scrollTop;
   // The element itself is at rest at once, whatever it was doing: it is going.
-  const own = latest.get(element);
-  if (own) {
-    own.stop();
-    running.get(own)?.();
-  }
+  haltUncounted(element);
   unstyle([element]);
   return () => {
     pending++;
@@ -730,36 +733,89 @@ function moveFrame(
     enter(element, {});
     return;
   }
+  moveFrames([{ element, from, to }], options);
+}
+
+interface Moving {
+  element: HTMLElement;
+  from: Box;
+  to: Box;
+}
+
+const differ = (a: Box, b: Box) =>
+  Math.max(
+    Math.abs(a.left - b.left),
+    Math.abs(a.top - b.top),
+    Math.abs(a.width - b.width),
+    Math.abs(a.height - b.height),
+  ) >= 0.5;
+
+// A transform on an element with no box of its own (display: contents) does nothing: its children take it.
+function boxedChildren(parent: Element): HTMLElement[] {
+  return Array.from(parent.children).flatMap((child) => {
+    if (!(child instanceof HTMLElement)) return [];
+    return getComputedStyle(child).display === "contents" ? boxedChildren(child) : [child];
+  });
+}
+
+/**
+ * Boxes moving on one spring, each from its old box to its new one; one that
+ * changes size has its children counter-scaled. `velocity` is the first box's.
+ */
+function moveFrames(
+  moves: readonly Moving[],
+  options: { spring?: SpringName; velocity?: { x: number; y: number } },
+): void {
   // A move it interrupts stops where it is, and is measured from there.
-  const previous = latest.get(element);
-  if (previous) {
-    previous.stop();
-    running.get(previous)?.();
-  }
-  const box = element.getBoundingClientRect();
-  const children = Array.from(element.children)
-    .filter((child): child is HTMLElement => child instanceof HTMLElement)
-    .map((child) => {
+  for (const { element } of moves) haltUncounted(element);
+  const frames = moves.map(({ element, from, to }) => {
+    const box = element.getBoundingClientRect();
+    const resized = from.width !== to.width || from.height !== to.height;
+    const children = (resized ? boxedChildren(element) : []).map((child) => {
       const rect = child.getBoundingClientRect();
       return { child, x: rect.left - box.left, y: rect.top - box.top };
     });
+    return { element, from, to, children };
+  });
+  // A box inside another moving box is already carried by its translation (its
+  // children are counter-scaled), so it adds only the rest of its own move.
+  const carriers = new Map(
+    frames.map((inner) => {
+      let carrier: (typeof frames)[number] | undefined;
+      for (const outer of frames) {
+        if (outer === inner || !outer.element.contains(inner.element)) continue;
+        if (!carrier || carrier.element.contains(outer.element)) carrier = outer;
+      }
+      return [inner, carrier];
+    }),
+  );
   const apply = (progress: number) => {
-    const frame = frameAt(from, to, progress);
-    element.style.transform = `translate(${frame.x}px, ${frame.y}px) scale(${frame.scaleX}, ${frame.scaleY})`;
-    for (const { child, x, y } of children) {
-      child.style.transform = `translate(${x / frame.scaleX - x}px, ${y / frame.scaleY - y}px) scale(${1 / frame.scaleX}, ${1 / frame.scaleY})`;
+    const at = new Map(frames.map((moving) => [moving, frameAt(moving.from, moving.to, progress)]));
+    for (const [moving, frame] of at) {
+      const carrier = carriers.get(moving);
+      const carried = carrier ? at.get(carrier) : undefined;
+      const x = frame.x - (carried?.x ?? 0);
+      const y = frame.y - (carried?.y ?? 0);
+      moving.element.style.transform = `translate(${x}px, ${y}px) scale(${frame.scaleX}, ${frame.scaleY})`;
+      for (const { child, x, y } of moving.children) {
+        child.style.transform = `translate(${x / frame.scaleX - x}px, ${y / frame.scaleY - y}px) scale(${1 / frame.scaleX}, ${1 / frame.scaleY})`;
+      }
     }
   };
   // How fast, in progress per second, the release's velocity carries the box along its path.
-  const dx = to.left - from.left;
-  const dy = to.top - from.top;
+  const first = moves[0];
+  const dx = first ? first.to.left - first.from.left : 0;
+  const dy = first ? first.to.top - first.from.top : 0;
   const distance = dx * dx + dy * dy;
   const velocity = options.velocity;
   const progressVelocity =
     velocity && distance >= 1
       ? clamp((velocity.x * dx + velocity.y * dy) / distance, -12, 12)
       : undefined;
-  const all = [element, ...children.map(({ child }) => child)];
+  const all = frames.flatMap(({ element, children }) => [
+    element,
+    ...children.map(({ child }) => child),
+  ]);
   try {
     for (const node of all) node.style.transformOrigin = "0 0";
     apply(0);
@@ -767,15 +823,72 @@ function moveFrame(
       ...physics(spring[options.spring ?? "smooth"], progressVelocity),
       onUpdate: apply,
     });
-    latest.set(element, controls);
+    for (const { element } of frames) latest.set(element, controls);
     track(controls, () => {
-      if (latest.get(element) === controls) latest.delete(element);
+      for (const { element } of frames) {
+        if (latest.get(element) === controls) latest.delete(element);
+      }
       unstyle(all, false);
     });
   } catch (error) {
     unstyle(all, false);
     report(error);
   }
+}
+
+/**
+ * The sidebar hides, shows or peeks (DESIGN.md, Motion), in two steps: call
+ * this just before the change, with the boxes beside the sidebar that may move
+ * with its edge and whether the sidebar shows after it; then, once the change
+ * is laid out, call what it returns with any bands inside those boxes. On,
+ * they slide together from where they are now, on the panel spring, and a
+ * band laid out to its box's right edge stretches with it rather than riding
+ * along, so it never falls short of that edge; Reduced, the sidebar fades and
+ * the rest is placed at once; Off, nothing moves.
+ */
+export function slideSidebar(
+  sidebar: HTMLElement,
+  beside: readonly HTMLElement[],
+  shows: boolean,
+): (bands: readonly HTMLElement[]) => void {
+  if (mode === "off") return () => {};
+  if (mode === "reduced") {
+    const seen = () => sidebar.checkVisibility({ opacityProperty: true });
+    const was = seen();
+    const goes = was && !shows ? leaving(sidebar, { to: {} }) : null;
+    return () => {
+      const now = seen();
+      if (was && !now) goes?.();
+      else if (!was && now) enter(sidebar, {});
+    };
+  }
+  const elements = [sidebar, ...beside];
+  // Held where they are until the change is laid out, so a turn mid-way starts exactly there.
+  for (const element of elements) latest.get(element)?.stop();
+  const before = elements.map((element) => ({
+    element,
+    from: boxOf(element.getBoundingClientRect()),
+  }));
+  return (bands) => {
+    for (const element of [...elements, ...bands]) haltUncounted(element);
+    const moves = before
+      .filter(({ element }) => element.isConnected)
+      .map((move) => ({ ...move, to: boxOf(move.element.getBoundingClientRect()) }))
+      .filter(({ from, to }) => to.width >= 1 && to.height >= 1 && differ(from, to));
+    const stretched = bands.flatMap((band) => {
+      const pane = moves.find(({ element }) => element.contains(band));
+      const to = boxOf(band.getBoundingClientRect());
+      if (!pane || Math.abs(to.left + to.width - (pane.to.left + pane.to.width)) >= 1) return [];
+      const from = {
+        left: pane.from.left + to.left - pane.to.left,
+        top: pane.from.top + to.top - pane.to.top,
+        width: to.width + pane.from.width - pane.to.width,
+        height: to.height,
+      };
+      return [{ element: band, from, to }];
+    });
+    if (moves.length > 0) moveFrames([...moves, ...stretched], { spring: "smooth" });
+  };
 }
 
 /**

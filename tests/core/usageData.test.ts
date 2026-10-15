@@ -95,18 +95,7 @@ async function useTheApp(sender: UsageDataSender, agree: boolean | null) {
   await core.exportMind(mind.id, { format: "markdown" });
   await core.recordUsage({ event: "citation_opened", fields: { check: "found" } });
   await core.recordUsage({ event: "settings_page_viewed", fields: { page: "privacy" } });
-  await core.recordUsage({
-    event: "onboarding_picked",
-    fields: {
-      papers_research: true,
-      reports_analysis: false,
-      contracts_legal: false,
-      meetings_notes: true,
-      everything: false,
-      something_else: false,
-      skipped: false,
-    },
-  });
+  await core.recordUsage({ event: "example_opened", fields: { group: "contracts" } });
   return { ...setUp, answerId };
 }
 
@@ -227,7 +216,9 @@ describe("Usage data: consent", { timeout: 30_000 }, () => {
     expect(fieldsOf(sent, "settings_page_viewed")).toEqual([
       expect.objectContaining({ page: "privacy" }),
     ]);
-    expect(fieldsOf(sent, "onboarding_picked")).toHaveLength(1);
+    expect(fieldsOf(sent, "example_opened")).toEqual([
+      expect.objectContaining({ group: "contracts" }),
+    ]);
 
     // Nothing the User wrote or named appears anywhere in what was sent.
     const everything = JSON.stringify(sent);

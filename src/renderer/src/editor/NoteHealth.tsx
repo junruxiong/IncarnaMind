@@ -266,7 +266,23 @@ export function NoteHealth({
         problem.kind !== "not-ready" &&
         problem.kind !== "local-mode" &&
         problem.kind !== "no-documents" && (
-          <ProblemLine testId="checks-problem" className="mind-health-line" action={close}>
+          <ProblemLine
+            testId="checks-problem"
+            className="mind-health-line"
+            action={
+              problem.kind === "failed" && problem.retry
+                ? {
+                    label: t("checks.tryAgain"),
+                    testId: "checks-try-again",
+                    onClick: () => {
+                      dismissCheckProblem(mindId);
+                      problem.retry?.();
+                    },
+                  }
+                : close
+            }
+            also={problem.kind === "failed" && problem.retry ? close : undefined}
+          >
             {problem.kind === "failed"
               ? t("checks.problem.failed", { message: problem.message })
               : t(`checks.problem.${problem.kind}`)}

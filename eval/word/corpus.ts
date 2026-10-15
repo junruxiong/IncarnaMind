@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { descendants, parseXml } from "../../src/core/documents/formats/xml";
 import { openPackage, resolvePart } from "../../src/core/documents/formats/zip";
+import { evalCache } from "../lib/cache";
 import { countFeatures, type Features } from "./features";
 
 export const WORD_DIR = dirname(fileURLToPath(import.meta.url));
@@ -86,10 +86,7 @@ export function readExtended(): ExtendedEntry[] {
 
 /** Where `npm run eval:word:fetch` puts the extended set. */
 export function extendedCache(): string {
-  return (
-    process.env.INCARNAMIND_WORD_CACHE ??
-    join(homedir(), ".cache", "incarnamind-eval", "word-extended")
-  );
+  return process.env.INCARNAMIND_WORD_CACHE ?? join(evalCache(), "word-extended");
 }
 
 export interface PackageReport {

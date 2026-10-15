@@ -26,7 +26,7 @@ import {
   useVerify,
 } from "../verify";
 import { AnswerError } from "./AnswerView";
-import { type Coverage, coverageOf, sameCoverage, shownClaims } from "./claimChecks";
+import { coverageOf, sameCoverage, shownClaims } from "./claimChecks";
 import { useMindModel } from "./ModelChip";
 import { UncoveredLine } from "./UncoveredLine";
 
@@ -101,7 +101,7 @@ export function VerifyLine({
       b !== null &&
       a.marked === b.marked &&
       a.checking === b.checking &&
-      sameCoverage(a.coverage, b.coverage as Coverage | null) &&
+      sameCoverage(a.coverage, b.coverage) &&
       a.needLook.length === b.needLook.length &&
       a.needLook.every((at, index) => at === b.needLook[index]),
   });
@@ -149,7 +149,9 @@ export function VerifyLine({
     // The PDF beside it turns to the claim's page.
     const id: unknown = place.parent.attrs.id;
     const page = typeof id === "string" ? verification.pages[id] : undefined;
-    if (page !== undefined) openDocumentBeside(verification.documentId, page);
+    if (page !== undefined) {
+      openDocumentBeside(verification.documentId, { pageFrom: page, pageTo: page });
+    }
   };
 
   const stop = (
