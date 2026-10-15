@@ -223,7 +223,7 @@ function useStatuses(): Status[] {
         if (PROCESSING.has(item.status)) {
           if (item.linkedFolderId === null || !paused.has(item.linkedFolderId)) {
             processing++;
-            if (item.scan) scannedPages += item.scan.pages - item.scan.read;
+            if (item.scan?.of === "scanned-pages") scannedPages += item.scan.pages - item.scan.read;
           }
         } else if (item.status === "ready") {
           if (item.tagging === "pending" || item.tagging === "tagging") tagging++;
