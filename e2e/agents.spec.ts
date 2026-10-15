@@ -4,6 +4,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { expect, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
+import { SHOW_AGENT_CONNECTION } from "../src/shared/agentConnection";
 import {
   acceptPlainTextKeys,
   createDataFolder,
@@ -11,6 +12,11 @@ import {
   launchApp,
   removeDataFolder,
 } from "./app";
+
+test.skip(
+  !SHOW_AGENT_CONNECTION,
+  "The agent socket stays closed while SHOW_AGENT_CONNECTION is false.",
+);
 
 /*
  * Outside agents (#351): an agent's MCP client starts IncarnaMind's server as

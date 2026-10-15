@@ -1,6 +1,7 @@
 import type { BlockOrigin } from "../../../core/api";
 import { signInAgain } from "../chatGptSignIn";
 import { useCitationStylePicker } from "../citationStylePicker";
+import { startContradictionCheck } from "../contradictions";
 import { blockMenuOpeners } from "../editor/blockMenuOpeners";
 import { originOf } from "../editor/blockOrigins";
 import { blockAt, noteHolding } from "../editor/noteKeymap";
@@ -9,6 +10,7 @@ import { useFindSources } from "../findSources";
 import { useHistory } from "../history";
 import { currentTabOf } from "../layoutSlice";
 import { startSkillFromMind } from "../makeSkill";
+import { startMindCheck } from "../mindCheck";
 import { useMindTools } from "../mindTools";
 import { useReferenceImport } from "../referenceImport";
 import { useAppStore } from "../store";
@@ -43,6 +45,7 @@ import {
 import { paletteCommands } from "./palette";
 import { peekCommands } from "./peek";
 import { proposalCommands } from "./proposals";
+import { researchCommands } from "./research";
 import { sortCommands } from "./sort";
 import "./objectMenus";
 import { type Command, type CommandContext, commands, fromMenu } from "./registry";
@@ -138,6 +141,7 @@ const appCommands: readonly Command[] = [
   ...fileCommands,
   ...evidenceCommands,
   ...comparisonCommands,
+  ...researchCommands,
   ...exportCommands,
   ...taskCommands,
   {
@@ -219,6 +223,32 @@ const appCommands: readonly Command[] = [
     run: (ctx) => {
       const mindId = mindShown(ctx);
       if (mindId) useHistory.getState().open(mindId);
+    },
+  },
+  {
+    id: "mind.checkAll",
+    label: "mindCheck.command",
+    keywords: ["mindCheck.command.keywords"],
+    group: "main",
+    // It changes no words: its marks go with Check again, or when the sentence is edited.
+    reversible: true,
+    when: (ctx) => onlyOne(ctx) && mindShown(ctx) !== null,
+    run: (ctx) => {
+      const mindId = mindShown(ctx);
+      if (mindId) return startMindCheck(mindId, "all");
+    },
+  },
+  {
+    id: "mind.checkContradictions",
+    label: "contradictions.command",
+    keywords: ["contradictions.command.keywords"],
+    group: "main",
+    // It changes no words: its marks go with Check again, or when the sentence is edited.
+    reversible: true,
+    when: (ctx) => onlyOne(ctx) && mindShown(ctx) !== null,
+    run: (ctx) => {
+      const mindId = mindShown(ctx);
+      if (mindId) return startContradictionCheck(mindId);
     },
   },
   {

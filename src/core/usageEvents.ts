@@ -57,7 +57,7 @@ type Exactly<List extends readonly string[], T extends string> = [T] extends [Li
   : never;
 
 const LANGUAGES = ["en", "zh-CN"] as const;
-const EXAMPLE_GROUPS = ["tea", "papers", "reports", "contracts", "meetings"] as const;
+const EXAMPLE_GROUPS = ["credit", "papers", "reports", "contracts", "meetings"] as const;
 const PROVIDER_KINDS = [
   "openai",
   "anthropic",

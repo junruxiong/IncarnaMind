@@ -179,7 +179,7 @@ test("Import references speaks Chinese, and says why a file can't be imported", 
     await window.getByTestId("library-add-documents").click();
     await window.getByTestId("import-references").click();
     await expect(window.getByTestId("import-failed")).toHaveText(
-      "“notes.txt”不是 CSL JSON、BibTeX 或 RIS 文件。 · 选择其他文件…",
+      "“notes.txt”不是 CSL JSON、BibTeX 或 RIS 文件。· 选择其他文件…",
     );
     await shot(window, "287-import-zh-failed");
   } finally {

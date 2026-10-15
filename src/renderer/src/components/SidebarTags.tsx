@@ -17,7 +17,7 @@ const markBox = (mark: ReactNode) => (
 );
 
 /**
- * The sidebar's Tags view, beside Folders and Source locations: "Needs
+ * The sidebar's Tags view, beside Folders and Folders on disk: "Needs
  * review" first while a Tag awaits review (as in the Tags filter), then every
  * Tag in name order, each with its dot and how many Documents carry it.
  * Clicking one shows its Documents in the Library, through the Tag filter the
