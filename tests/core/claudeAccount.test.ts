@@ -7,6 +7,7 @@ import { version } from "../../package.json";
 import { type Core, type CoreAdapters, createAiSdkChatModel } from "../../src/core";
 import type { ClaudeAccountProblem } from "../../src/core/api";
 import { createClaudeAccount } from "../../src/core/providers/claudeAccount/account";
+import { createAccountFetch } from "../../src/core/providers/claudeAccount/messages";
 import {
   CLAUDE_ACCOUNT_PROBLEMS,
   CLAUDE_ACCOUNT_WAYS_BACK,
@@ -161,6 +162,16 @@ describe("Sign in with Claude", () => {
       ok: false,
       problem: "not-sign-in-address",
     });
+    const { searchParams } = new URL(browser.shown?.address ?? "");
+    for (const elsewhere of [
+      `https://elsewhere.example/oauth/code/callback?${searchParams}`,
+      `${fake.origin}/another/path?${searchParams}`,
+    ]) {
+      expect(await core.pasteClaudeSignInAddress(elsewhere), elsewhere).toEqual({
+        ok: false,
+        problem: "not-sign-in-address",
+      });
+    }
     expect(fake.tokenRequests).toHaveLength(0);
 
     expect(await core.pasteClaudeSignInAddress(browser.shown?.address ?? "")).toEqual({ ok: true });
@@ -319,6 +330,40 @@ describe("Tokens", () => {
     });
   });
 
+  test("signing out while a refresh is being saved forgets the tokens it brings too", async () => {
+    const memory = createMemoryKeychain();
+    let release = () => {};
+    let held = false;
+    const keychain: MemoryKeychain = {
+      ...memory,
+      async set(name, value) {
+        if (value.includes("access-2")) {
+          held = true;
+          await new Promise<void>((resolve) => {
+            release = resolve;
+          });
+        }
+        await memory.set(name, value);
+      },
+    };
+    const { core, fake, clock } = await signedIn("page", { keychain });
+    clock.advance(fake.expiresIn * 1000);
+    const asking = ask(core).catch(() => undefined);
+    await vi.waitFor(() => expect(held).toBe(true));
+
+    const signingOut = core.signOutOfClaude();
+    for (let turn = 0; turn < 10; turn += 1) await nextTurn();
+    release();
+    await Promise.all([asking, signingOut]);
+
+    expect(fake.issued).toHaveLength(2);
+    for (const tokens of fake.issued) {
+      expect(stored(memory)).not.toContain(tokens.accessToken);
+      expect(stored(memory)).not.toContain(tokens.refreshToken);
+    }
+    expect((await core.getClaudeAccount()).account).toEqual({ state: "signed-out" });
+  });
+
   test("signing out forgets the tokens, and nothing is sent afterwards", async () => {
     const { core, fake, keychain } = await signedIn();
     await ask(core);
@@ -336,7 +381,7 @@ describe("Tokens", () => {
 });
 
 describe("Requests", () => {
-  test("identify as IncarnaMind with the account's token, and carry what the profile adds first", async () => {
+  test("carry the account's token, IncarnaMind's User-Agent, and what the profile adds first", async () => {
     const { core, fake } = await signedIn();
 
     const { text } = await ask(core);
@@ -404,9 +449,50 @@ describe("Requests", () => {
 
     expect(await setup.core.listNetworkTraffic()).toContainEqual({
       id: "claude-sign-in",
-      service: { id: setup.fake.origin, name: "Anthropic" },
+      service: { id: setup.fake.origin, name: new URL(setup.fake.origin).host },
       enabled: true,
     });
+  });
+
+  test("the Privacy page lists each origin the sign-in reaches, when they differ", async () => {
+    const fake = await startFakeAnthropic();
+    const profile = {
+      ...fake.profile("page"),
+      authorizeUrl: "https://login.example.test/authorize",
+    };
+    const browser = createFakeClaudeBrowser(fake);
+    const keychain = createMemoryKeychain();
+    const core = startCore(await createTempDataFolder(), {
+      keychain,
+      browser,
+      claudeAccount: profile,
+    });
+    await signIn({ core, fake, browser, keychain, clock: manualClock() });
+
+    const services = (await core.listNetworkTraffic())
+      .filter((traffic) => traffic.id === "claude-sign-in")
+      .map((traffic) => traffic.service.id);
+    expect(services.sort()).toEqual(["https://login.example.test", fake.origin].sort());
+  });
+
+  test("the account's token is never sent to another origin than the API's", async () => {
+    const calls: string[] = [];
+    const accountFetch = createAccountFetch(
+      { access: async () => ({ accessToken: "test-access" }) },
+      {},
+      "https://api.example.test/v1",
+      async (input) => {
+        calls.push(String(input));
+        return new Response("{}", { headers: { "content-type": "application/json" } });
+      },
+    );
+
+    await expect(
+      accountFetch("https://elsewhere.example.test/v1/messages", { method: "POST", body: "{}" }),
+    ).rejects.toThrow(/only sent to https:\/\/api\.example\.test/);
+    expect(calls).toEqual([]);
+    await accountFetch("https://api.example.test/v1/messages", { method: "POST", body: "{}" });
+    expect(calls).toEqual(["https://api.example.test/v1/messages"]);
   });
 
   test("codes and tokens are never logged", async () => {
@@ -463,16 +549,16 @@ describe("Failures", () => {
       problem: "refused",
     },
     {
-      name: "a request the endpoint no longer accepts",
+      name: "a token the endpoint won't take for this request",
       reply: {
         status: 400,
         body: JSON.stringify({
           type: "error",
-          error: { type: "invalid_request_error", message: "" },
+          error: { type: "invalid_request_error", message: "This credential can't be used here." },
         }),
       },
-      kind: "provider",
-      problem: "unexpected-response",
+      kind: "blocked",
+      problem: "refused",
     },
     {
       name: "a page that isn't an answer",
@@ -498,6 +584,23 @@ describe("Failures", () => {
     expect(await failure(core)).toMatchObject({
       resetsAt: new Date(1_791_300_000 * 1000).toISOString(),
     });
+  });
+
+  test("a prompt that is too long stays an ordinary request error", async () => {
+    const { core, fake } = await signedIn();
+    fake.replies.push({
+      kind: "error",
+      status: 400,
+      body: JSON.stringify({
+        type: "error",
+        error: { type: "invalid_request_error", message: "prompt is too long: 250000 tokens" },
+      }),
+    });
+
+    const error = await failure(core);
+
+    expect(error.kind).toBe("provider");
+    expect(error.claudeAccount).toBeUndefined();
   });
 
   test("a passing rate limit isn't the plan's", async () => {

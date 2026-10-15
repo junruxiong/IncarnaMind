@@ -32,14 +32,15 @@ export interface AnthropicOAuthConfig {
   request?: RequestTransform;
   /** Defaults to five minutes. */
   signInTimeoutMs?: number;
+  /** Random bytes in the sign-in's `state`. */
+  stateBytes?: number;
   /** An experimental sign-in route, which the User is told about before signing in. */
   experimental?: boolean;
 }
 
-/** Anthropic's subscription endpoint serves Sonnet and Opus only with this prefix. */
+/** The first system block of every request this route sends. */
 const SUBSCRIPTION_SYSTEM_PREFIX = "You are Claude Code, Anthropic's official CLI for Claude.";
 
-/** An experimental sign-in route. */
 export const ANTHROPIC_OAUTH: Readonly<AnthropicOAuthConfig> | null = EXPERIMENTAL_SIGN_IN_ROUTES
   ? {
       experimental: true,
@@ -51,6 +52,8 @@ export const ANTHROPIC_OAUTH: Readonly<AnthropicOAuthConfig> | null = EXPERIMENT
       authorizeParams: { code: "true" },
       redirect: { kind: "page", uri: "https://platform.claude.com/oauth/code/callback" },
       tokenRequest: { format: "json", stateInExchange: true },
+      // Its authorization server refuses a shorter state.
+      stateBytes: 32,
       apiBaseUrl: "https://api.anthropic.com/v1",
       request: {
         systemBlocks: [SUBSCRIPTION_SYSTEM_PREFIX],

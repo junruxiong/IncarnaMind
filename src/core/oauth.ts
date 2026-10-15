@@ -48,6 +48,8 @@ export interface LoopbackRedirectOptions {
   timeoutMs?: number;
   /** Aborting cancels the sign-in and frees the port. */
   signal?: AbortSignal;
+  /** Random bytes in the sign-in's `state`. Defaults to 24; some servers want more. */
+  stateBytes?: number;
 }
 
 /** Where the authorization server sends the browser back to with the code. */
@@ -75,6 +77,8 @@ export interface BrowserAuthorizationOptions {
   timeoutMs?: number;
   /** Aborting cancels the sign-in and frees the port. */
   signal?: AbortSignal;
+  /** Random bytes in the sign-in's `state`. Defaults to 24; some servers want more. */
+  stateBytes?: number;
   /** Extra query parameters for the authorization request (e.g. RFC 8707 `resource`). */
   authorizeParams?: Readonly<Record<string, string>>;
   /** Extra parameters for the code exchange. */
@@ -191,7 +195,8 @@ function sendPage(response: ServerResponse, status: number, html: string): Promi
   });
 }
 
-const text = (value: unknown) => (typeof value === "string" && value !== "" ? value : null);
+export const nonEmptyText = (value: unknown) =>
+  typeof value === "string" && value !== "" ? value : null;
 
 async function readTokenResponse(response: Response, action: string): Promise<OAuthTokens> {
   const raw = await response.text();
@@ -202,24 +207,24 @@ async function readTokenResponse(response: Response, action: string): Promise<OA
     body = undefined;
   }
   if (!response.ok) {
-    const code = isRecord(body) ? text(body.error) : null;
-    const description = isRecord(body) ? text(body.error_description) : null;
+    const code = isRecord(body) ? nonEmptyText(body.error) : null;
+    const description = isRecord(body) ? nonEmptyText(body.error_description) : null;
     throw new OAuthTokenError(
       response.status,
       code,
       `The ${action} was refused (${response.status}): ${description ?? code ?? (raw.slice(0, 200) || response.statusText)}`,
     );
   }
-  const accessToken = isRecord(body) ? text(body.access_token) : null;
+  const accessToken = isRecord(body) ? nonEmptyText(body.access_token) : null;
   if (!isRecord(body) || !accessToken) {
     throw new OAuthTokenError(null, null, `The ${action} response has no access token.`);
   }
   return {
     accessToken,
-    refreshToken: text(body.refresh_token),
-    idToken: text(body.id_token),
+    refreshToken: nonEmptyText(body.refresh_token),
+    idToken: nonEmptyText(body.id_token),
     expiresIn: typeof body.expires_in === "number" ? body.expires_in : null,
-    scope: text(body.scope),
+    scope: nonEmptyText(body.scope),
   };
 }
 
@@ -304,7 +309,7 @@ export async function revokeOAuthToken(options: {
   } catch {
     body = undefined;
   }
-  const code = isRecord(body) ? text(body.error) : null;
+  const code = isRecord(body) ? nonEmptyText(body.error) : null;
   throw new OAuthTokenError(
     response.status,
     code,
@@ -406,12 +411,10 @@ function pastedCode(pasted: string, redirectUri: string): URL | null {
   return url;
 }
 
-/** What `waitForRedirect` hands the code that receives the browser. */
 interface RedirectWait {
   redirect: SignInRedirect;
   /** The one check for a redirect, from the browser or pasted: the first that passes is taken. */
   claim(url: URL): PastedRedirect;
-  /** Hands a claimed redirect to `receive`. */
   arrive(arrival: Arrival): void;
   fail(error: Error): void;
 }
@@ -428,11 +431,11 @@ function waitForRedirect(options: {
   acceptsCode: boolean;
   timeoutMs?: number;
   signal?: AbortSignal;
+  stateBytes?: number;
   release(): Promise<void>;
 }): RedirectWait {
   const { signal, redirectUri } = options;
-  // Anthropic refuses a shorter state.
-  const state = base64Url(randomBytes(32));
+  const state = base64Url(randomBytes(options.stateBytes ?? 24));
   const redirect = new URL(redirectUri);
 
   let arrive!: (arrival: Arrival) => void;
@@ -598,6 +601,7 @@ export async function openLoopbackRedirect(
     acceptsCode: false,
     ...(options.timeoutMs !== undefined && { timeoutMs: options.timeoutMs }),
     ...(options.signal && { signal: options.signal }),
+    ...(options.stateBytes !== undefined && { stateBytes: options.stateBytes }),
     // Pages are sent with "connection: close"; drop anything still open so the port is free now.
     release: () =>
       new Promise<void>((resolve) => {
@@ -631,6 +635,7 @@ export async function authorizeInBrowser(
           pages: options.pages,
           ...(options.timeoutMs !== undefined && { timeoutMs: options.timeoutMs }),
           ...(signal && { signal }),
+          ...(options.stateBytes !== undefined && { stateBytes: options.stateBytes }),
         })
       : waitForRedirect({
           redirectUri: options.redirect.uri,
@@ -638,12 +643,15 @@ export async function authorizeInBrowser(
           acceptsCode: true,
           ...(options.timeoutMs !== undefined && { timeoutMs: options.timeoutMs }),
           ...(signal && { signal }),
+          ...(options.stateBytes !== undefined && { stateBytes: options.stateBytes }),
           release: async () => {},
         }).redirect;
   try {
     if (!signal?.aborted) {
       const authorize = new URL(options.authorizeUrl);
+      // The extra parameters go first, so they can't replace the state or the PKCE challenge.
       const params: Record<string, string> = {
+        ...options.authorizeParams,
         response_type: "code",
         client_id: options.clientId,
         redirect_uri: redirect.redirectUri,
@@ -651,7 +659,6 @@ export async function authorizeInBrowser(
         code_challenge: pkce.challenge,
         code_challenge_method: "S256",
         state: redirect.state,
-        ...options.authorizeParams,
       };
       for (const [name, value] of Object.entries(params)) authorize.searchParams.set(name, value);
       await options.openBrowser(authorize.href);
@@ -664,13 +671,13 @@ export async function authorizeInBrowser(
           fetcher,
           options.tokenUrl,
           {
+            ...options.tokenParams,
             grant_type: "authorization_code",
             client_id: options.exchangeClientId?.(params) ?? options.clientId,
             code,
             ...(options.stateInExchange && { state: redirect.state }),
             redirect_uri: redirect.redirectUri,
             code_verifier: pkce.verifier,
-            ...options.tokenParams,
           },
           options.tokenFormat ?? "form",
           signal,

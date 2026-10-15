@@ -1646,7 +1646,7 @@ export const en = {
   "claudeAccount.problem.signInCancelled": "Claude sign-in cancelled: nothing was kept",
   "claudeAccount.problem.signedOut": "You're not signed in to Claude",
   "claudeAccount.problem.signInExpired": "Your Claude sign-in has expired",
-  "claudeAccount.problem.refused": "Anthropic didn't let IncarnaMind use your Claude plan",
+  "claudeAccount.problem.refused": "Claude refused this sign-in",
   "claudeAccount.problem.planLimit": "Your Claude plan's usage limit is reached",
   "claudeAccount.problem.planLimitUntil": "Your Claude plan's usage limit is reached until {time}",
   "claudeAccount.problem.unexpectedResponse": "Claude answered in a way IncarnaMind didn't expect",

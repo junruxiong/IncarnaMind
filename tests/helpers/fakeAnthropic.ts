@@ -224,6 +224,7 @@ export async function startFakeAnthropic(): Promise<FakeAnthropic> {
           ? { kind: "page", uri: `${origin}/oauth/code/callback` }
           : { kind: "loopback", port: 0, path: "/callback" },
       tokenRequest: { format: "json", stateInExchange: true },
+      stateBytes: 32,
       apiBaseUrl: `${origin}/v1`,
       request: { systemBlocks: [SYSTEM_BLOCK], headers: { "anthropic-beta": BETA_FLAG } },
     }),

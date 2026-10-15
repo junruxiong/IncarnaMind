@@ -3,9 +3,11 @@
  * access token of a Claude account sign-in (see ./account). This adapter is
  * the only place that knows how they differ from an API key's:
  *
- * - the token goes as a bearer token, and no API key is sent;
- * - they identify as IncarnaMind, and carry what the route's profile adds
- *   (./config: system blocks first, headers);
+ * - the token goes as a bearer token, only to the API's own origin, and no
+ *   API key is sent;
+ * - the User-Agent names IncarnaMind, and they carry what the route's
+ *   profile adds (./config: system blocks first, headers), so they follow
+ *   the shape the subscription endpoint accepts;
  * - a token the API refuses is refreshed once and the request retried;
  * - refusals become `ClaudeAccountError`: the plan's usage limit, a refused
  *   sign-in, and an answer the route doesn't know.
@@ -27,7 +29,9 @@ const PLAN_LIMIT_STATUS = "anthropic-ratelimit-unified-status";
 /** When the plan's limit resets, in seconds since the epoch. */
 const PLAN_LIMIT_RESET = "anthropic-ratelimit-unified-reset";
 
-/** The request's system blocks with `prefix` before them, unless they already start with it. */
+/** A 400 that refuses the account's token for this request, rather than the request itself. */
+const CREDENTIAL_REFUSAL = /credential|oauth/i;
+
 function withSystemPrefix(
   body: Record<string, unknown>,
   prefix: readonly string[],
@@ -54,7 +58,6 @@ const bodyText = (body: RequestInit["body"]): string | null =>
       ? new TextDecoder().decode(body)
       : null;
 
-/** The body to send: the request's, with the system prefix when it is a Messages request. */
 function shapedBody(url: string, body: RequestInit["body"], prefix: readonly string[]) {
   if (prefix.length === 0 || !new URL(url).pathname.endsWith("/messages")) return body;
   const raw = bodyText(body);
@@ -64,7 +67,6 @@ function shapedBody(url: string, body: RequestInit["body"], prefix: readonly str
   return JSON.stringify(withSystemPrefix(parsed, prefix));
 }
 
-/** The flags of two `anthropic-beta` headers, each once. */
 function joinedBetas(current: string | null, added: string): string {
   const flags = [current ?? "", added].flatMap((header) =>
     header
@@ -111,13 +113,16 @@ async function refusalOf(response: Response): Promise<ClaudeAccountError | null>
       Number.isFinite(reset) && reset > 0 ? reset * 1000 : null,
     );
   }
-  // An API key's request would be answered: here it means the endpoint changed what it accepts.
+  // Other 400s, such as a prompt that is too long, are the request's own and stay the AI SDK's.
   if (status === 400) {
-    const message = await errorMessage(response);
-    return new ClaudeAccountError(
-      "unexpected-response",
-      `Anthropic didn't accept the request (400): ${message}`,
-    );
+    const message = await errorMessage(response.clone());
+    if (CREDENTIAL_REFUSAL.test(message)) {
+      await response.body?.cancel();
+      return new ClaudeAccountError(
+        "refused",
+        `Anthropic refused the Claude sign-in (400): ${message}`,
+      );
+    }
   }
   if (response.ok) {
     const type = response.headers.get("content-type") ?? "";
@@ -132,16 +137,22 @@ async function refusalOf(response: Response): Promise<ClaudeAccountError | null>
   return null;
 }
 
-function createAccountFetch(
+/** The `fetch` the AI SDK's Anthropic model is given; it signs requests to `apiBaseUrl`'s origin only. */
+export function createAccountFetch(
   credentials: OAuthCredentials,
   request: RequestTransform,
+  apiBaseUrl: string,
   fetcher: typeof globalThis.fetch = globalThis.fetch,
 ): typeof globalThis.fetch {
+  const origin = new URL(apiBaseUrl).origin;
   const accountFetch = async (
     input: Parameters<typeof globalThis.fetch>[0],
     init?: RequestInit,
   ) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    if (new URL(url).origin !== origin) {
+      throw new Error(`The Claude sign-in's token is only sent to ${origin}.`);
+    }
     const body = shapedBody(url, init?.body, request.systemBlocks ?? []);
 
     const send = async (rejected?: string) => {
@@ -174,7 +185,6 @@ function createAccountFetch(
   return accountFetch as typeof globalThis.fetch;
 }
 
-/** A model on the User's Claude plan, as an AI SDK language model. */
 export function createClaudeAccountChatModel(options: {
   baseUrl: string;
   modelId: string;
@@ -187,6 +197,6 @@ export function createClaudeAccountChatModel(options: {
     baseURL: options.baseUrl,
     // Replaced by the sign-in's access token in every request; never read from the environment.
     apiKey: "claude-account",
-    fetch: createAccountFetch(options.credentials, options.request, options.fetch),
+    fetch: createAccountFetch(options.credentials, options.request, options.baseUrl, options.fetch),
   })(options.modelId);
 }
