@@ -7,6 +7,7 @@ import {
   type ConsentRequest,
   type Core,
   type Document,
+  type EditCause,
   type EditWithAiInput,
   MIND_PROPOSAL_REQUESTS_FIELD,
   PROPOSAL_ATTRIBUTE,
@@ -1621,5 +1622,172 @@ describe("Edit with AI and the model's service", () => {
       await core.editWithAi(wholeParagraph(client, mind.id, note.attrs.id, "improve")),
     ).toEqual({ kind: "not-ready", readiness: { ready: false, reason: "no-provider" } });
     expect(shownWithChanges(client)).toEqual(["A paragraph."]);
+  });
+});
+
+describe("An edit the User asked for (#880)", () => {
+  const FIRST = "Tides rise twice a day along this coast.";
+  const SECOND = "It's a big harbour and a lot of boats don't leave at low water.";
+  const THIRD = "The harbour office posts the times each week.";
+  const FORMAL = "It is a considerable harbour and a great many boats do not leave at low water.";
+
+  /** A Mind of three paragraphs, all selected, and Edit with AI over them as the window asks. */
+  async function threeParagraphs(edit: (call: EditCall) => string) {
+    const set = await setUp(editingModel(edit));
+    const blocks = [FIRST, SECOND, THIRD].map((words) => paragraph(text(words)));
+    writeMind(set.client, blocks);
+    await set.client.settled();
+    const asked = (instruction: string): EditWithAiInput => ({
+      requestId: `asked-${++ids}`,
+      mindId: set.mind.id,
+      from: { blockId: blocks[0]?.attrs.id ?? "", offset: 0 },
+      to: { blockId: blocks[2]?.attrs.id ?? "", offset: THIRD.length },
+      text: [FIRST, SECOND, THIRD].join("\n"),
+      action: "instruction",
+      instruction,
+    });
+    return { ...set, blocks, asked };
+  }
+
+  test("names its updates, for the window that asked to take them in, and saves a Checkpoint before writing", async () => {
+    const { core, mind, asked } = await threeParagraphs(({ passage }) =>
+      passage.replace("big", "large"),
+    );
+    const causes: (EditCause | undefined)[] = [];
+    const stop = core.on("mind.update", (event) => {
+      if (event.mindId === mind.id) causes.push(event.cause);
+    });
+    const input = asked("Use a better word for big");
+
+    const result = await core.editWithAi(input);
+    stop();
+
+    expect(result).toMatchObject({ kind: "proposed", proposals: 1 });
+    expect(result).not.toHaveProperty("held");
+    expect(result).not.toHaveProperty("leftOut");
+    const request = result.kind === "proposed" ? result.request : "";
+    const named = causes.filter((cause) => cause !== undefined);
+    expect(named.length).toBeGreaterThan(0);
+    expect(named.every((cause) => cause.requestId === input.requestId)).toBe(true);
+    expect(named.every((cause) => cause.request === request && cause.apply)).toBe(true);
+    expect((await core.listCheckpoints(mind.id)).checkpoints).toEqual([
+      expect.objectContaining({ reason: "accept" }),
+    ]);
+  });
+
+  test('whole note selected, "make the second paragraph more formal": the model\'s only paragraph changes the second, and the two it left out are kept, named for the window', async () => {
+    const { core, client, blocks, asked } = await threeParagraphs(() => FORMAL);
+
+    const result = await core.editWithAi(
+      asked("make the second paragraph more formal; leave the others as they are"),
+    );
+
+    expect(result).toMatchObject({
+      kind: "proposed",
+      leftOut: [
+        { blockId: blocks[0]?.attrs.id, from: 0, to: FIRST.length, whole: true, kind: "paragraph" },
+        { blockId: blocks[2]?.attrs.id, from: 0, to: THIRD.length, whole: true, kind: "paragraph" },
+      ],
+    });
+    expect(result).not.toHaveProperty("held");
+    const shown = shownWithChanges(client);
+    expect(shown[0]).toBe(FIRST);
+    expect(shown[1]).toContain("{+");
+    expect(shown[2]).toBe(THIRD);
+    await resolveChanges(client, "accept");
+    expect(shownWithChanges(client)).toEqual([FIRST, FORMAL, THIRD]);
+  });
+
+  test('an explicit "delete…" takes out what the new text leaves out, and applies', async () => {
+    const { core, client, asked } = await threeParagraphs(() => [FIRST, THIRD].join("\n\n"));
+
+    const result = await core.editWithAi(asked("delete the second paragraph"));
+
+    expect(result).toMatchObject({ kind: "proposed" });
+    expect(result).not.toHaveProperty("held");
+    expect(result).not.toHaveProperty("leftOut");
+    expect(shownWithChanges(client)).toEqual([FIRST, `- ${SECOND}`, THIRD]);
+  });
+
+  test("new text like none of the selection's, which would remove most of it, is held for the User, all of it as changes", async () => {
+    const { core, client, asked } = await threeParagraphs(
+      () => "Gulls wheel, crying\n\nsalt wind on stone\n\nnight falls soft",
+    );
+
+    const result = await core.editWithAi(asked("replace it all with a haiku"));
+
+    expect(result).toMatchObject({ kind: "proposed", held: true });
+    expect(result).not.toHaveProperty("leftOut");
+    const shown = shownWithChanges(client);
+    expect(shown.filter((line) => line.startsWith("- "))).toHaveLength(0);
+    expect(shown.join("\n")).toContain(`[-${FIRST}-]`);
+    expect(shown.join("\n")).toContain(`[-${THIRD}-]`);
+  });
+
+  test("a translation is mapped by its order and never held, however much it changes", async () => {
+    const { core, asked } = await threeParagraphs(({ passage }) => passage.toUpperCase());
+
+    const result = await core.editWithAi({
+      ...asked(""),
+      action: "translate",
+      instruction: "French",
+    });
+
+    expect(result).toMatchObject({ kind: "proposed" });
+    expect(result).not.toHaveProperty("held");
+  });
+
+  test("accepted as the window applies it, its new words are AI text recorded as an edit accepted, as when the User accepted it as a change", async () => {
+    const { core, mind, client, blocks, asked } = await threeParagraphs(() => FORMAL);
+    const result = await core.editWithAi(asked("make the second paragraph more formal"));
+    const request = result.kind === "proposed" ? result.request : "";
+
+    let accepted: ReturnType<typeof resolveProposals> = [];
+    client.doc.transact(() => {
+      accepted = resolveProposals(client.blocks, (ref) => ref.request === request, "accept");
+    });
+    await client.settled();
+    await core.recordAiUse(
+      aiUseOfAccepted(client.doc, mind.id, accepted, "2026-10-15T09:00:00.000Z"),
+    );
+
+    const added = readMind(client)
+      .child(1)
+      .content.content.filter((node) => node.marks.some((mark) => mark.type.name === "generated"))
+      .map((node) => node.text ?? "")
+      .join("");
+    expect(added.length).toBeGreaterThan(0);
+    const recorded = await core.listAiUse(mind.id);
+    expect(recorded.length).toBeGreaterThan(0);
+    for (const entry of recorded) {
+      expect(entry).toMatchObject({
+        kind: "edit-with-ai-accepted",
+        outcome: "kept",
+        modelId: "local-model",
+        blockIds: [blocks[1]?.attrs.id],
+      });
+    }
+    expect(recorded.reduce((sum, entry) => sum + entry.characters, 0)).toBe(added.length);
+  });
+
+  test("Regenerate on a change isn't an edit the User asked for: its updates aren't named", async () => {
+    const { core, mind, client } = await setUp(editingModel(() => "The tides are strong."));
+    const note = paragraph(text("The tides are very strong."));
+    writeMind(client, [note]);
+    await client.settled();
+    const asked = await core.editWithAi(wholeParagraph(client, mind.id, note.attrs.id, "shorten"));
+    expect(asked).toMatchObject({ kind: "proposed" });
+    const [first] = pendingProposals(client.blocks);
+    const causes: (EditCause | undefined)[] = [];
+    const stop = core.on("mind.update", (event) => causes.push(event.cause));
+
+    await core.regenerateProposal({
+      requestId: "again",
+      mindId: mind.id,
+      proposalId: first?.id ?? "",
+    });
+    stop();
+
+    expect(causes.every((cause) => cause === undefined)).toBe(true);
   });
 });

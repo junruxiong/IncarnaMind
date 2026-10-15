@@ -40,10 +40,11 @@ import {
 } from "../conversations";
 import { core } from "../core";
 import { carriesDocuments, droppedDocumentIds } from "../documentDrag";
-import { editFromComposer, stopEditing, useEdits } from "../editWithAi";
+import { editFromComposer, requestEdit, stopEditing, useEdits } from "../editWithAi";
 import { errorMessage } from "../errors";
 import { useT } from "../i18n";
 import { newNoteTitle } from "../newNoteRequest";
+import { routeRequest } from "../requestRoute";
 import {
   cancelResearch,
   changePlan,
@@ -458,6 +459,19 @@ export function Composer({
       update({ text: "", research: false });
       if (plan) void changePlan(mind.mindId, topic, mindModelOf(mind.doc));
       else openResearch(mind.mindId, topic, mindModelOf(mind.doc), webReach === "ready");
+      return;
+    }
+    // A change asked for in the selected text: it applies there at once, with Undo (#880).
+    if (
+      said === undefined &&
+      mind &&
+      selection.quote !== "" &&
+      current.pastes.length === 0 &&
+      !current.skill &&
+      routeRequest(current.text).kind === "edit"
+    ) {
+      update({ text: "" });
+      void requestEdit(mind.editor, mind.mindId, mind.doc, "instruction", current.text.trim());
       return;
     }
     // An Answer is being written, or its Question is on its way: Enter waits for it, as in
