@@ -1715,6 +1715,12 @@ export function createCore(adapters: CoreAdapters): Core {
   });
   wordImports.resume();
   wordImports.dropPurged().catch((error: unknown) => console.error(error));
+  wordImports.addLooks().catch((error: unknown) =>
+    (adapters.log ?? silentLogger).error("word.look.failed", {
+      error: error instanceof Error ? error.name : "unknown",
+      message: error instanceof Error ? error.message : String(error),
+    }),
+  );
 
   const recentlyDeleted = createRecentlyDeleted({
     db,
@@ -2660,6 +2666,7 @@ export function createCore(adapters: CoreAdapters): Core {
     signInToChatGpt: (input) =>
       chatGpt.signIn({ anotherAccount: isRecord(input) && input.anotherAccount === true }),
     cancelChatGptSignIn: () => chatGpt.cancelSignIn(),
+    reopenChatGptSignIn: () => chatGpt.reopenSignInPage(),
     signOutOfChatGpt: () => chatGpt.signOut(),
     pasteChatGptSignInAddress: async (address) =>
       chatGpt.pasteSignInAddress(typeof address === "string" ? address : ""),
