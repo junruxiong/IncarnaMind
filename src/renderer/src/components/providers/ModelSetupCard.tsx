@@ -145,17 +145,11 @@ export function ModelSetupCard() {
   );
 }
 
-/**
- * The two ways the card leads with, side by side where they fit and stacked where they don't,
- * always the same size, each with who it's for. The ChatGPT plan signs in at once, so its line
- * also says what goes to OpenAI; the key's line is in its form (ADR-0022).
- */
 function LeadingWays({
   chinese,
   sign,
   onKey,
 }: {
-  /** The key first, as a DeepSeek key is the recommended way in Chinese; ChatGPT's line says it isn't in mainland China. */
   chinese: boolean;
   sign: ReturnType<typeof useContinueWithChatGpt>;
   onKey(): void;
@@ -176,6 +170,7 @@ function LeadingWays({
         <ChatGptMark className="size-4" />
         {t("setup.chatgpt.use")}
       </button>
+      {/* It signs in at once, so its line also says what goes to OpenAI (ADR-0022). */}
       <p data-testid="setup-chatgpt-sends" className={lineClass}>
         {t(chinese ? "setup.chatgpt.line.china" : "setup.chatgpt.line")}
       </p>
@@ -199,6 +194,7 @@ function LeadingWays({
   );
   return (
     <div className="grid grid-cols-[repeat(auto-fit,minmax(12rem,1fr))] gap-3">
+      {/* A DeepSeek key is the recommended way in Chinese. */}
       {chinese ? [key, plan] : [plan, key]}
     </div>
   );

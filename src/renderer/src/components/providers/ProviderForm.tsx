@@ -53,7 +53,6 @@ const ROW: readonly CatalogId[] = ["anthropic", "openai", "google", "deepseek", 
 /** The "Another model…" choice of the model list. */
 const OTHER_MODEL = "\u0000other";
 
-/** Beside a model the catalog picked for a job, in the Model list: what it is good for. */
 const ROLE_HINTS = {
   answers: "providers.form.hint.answers",
   strongest: "providers.form.hint.strongest",
