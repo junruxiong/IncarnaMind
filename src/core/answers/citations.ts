@@ -38,7 +38,7 @@ import {
   unitLocation,
 } from "../../shared/locations";
 import { findQuote, lostLigatures, type MatchOptions } from "../../shared/quoteMatch";
-import { foldRadicals } from "../../shared/text";
+import { foldRadicals, nameKey } from "../../shared/text";
 import { sameRun } from "../../shared/units";
 import {
   type Citation,
@@ -52,6 +52,7 @@ import {
 import type { CitationSource } from "../documents";
 import type { PageText } from "../documents/passages";
 import type { WindowedPassage } from "../documents/search";
+import { writtenInCjk } from "../documents/textLanguage";
 import { closestWords } from "./closestWords";
 import { withCueMarks } from "./cueMarks";
 import type {
@@ -117,13 +118,6 @@ export function cleanQuote(raw: string): string {
     if (quote === before) return quote;
   }
 }
-
-/** A name read for comparing: its letters and digits, in lower case ("Gradient Descent: The Ultimate Optimizer" is a file named without its colon). */
-const nameKey = (name: string) =>
-  name
-    .normalize("NFKC")
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, "");
 
 /** How a Document's text is matched: whether it lost its f-ligatures (see `lostLigatures`). */
 type Matching = Pick<MatchOptions, "lostLigatures">;
@@ -878,6 +872,11 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
     }
     if (!record.quote) return `the quote is empty; copy a short quote from ${handle}.`;
     if (check(record).check !== "not-found") return null;
+    if (
+      writtenInCjk(record.quote) !== writtenInCjk(passageUnits.map((unit) => unit.text).join("\n"))
+    ) {
+      return `the quote is a translation: copy it from ${handle} in the Passage's own language, word for word, never translated.`;
+    }
     return where
       ? `the quote isn't word for word at ${cutLocation(record) ?? where} in ${handle}; copy it exactly, and check where it is.`
       : `the quote isn't word for word${record.range.pageFrom === null ? "" : ` on p. ${pagesLabel(record.range)}`} in ${handle}; copy it exactly, and check its page.`;
@@ -1135,9 +1134,13 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
      * matching in the Units cited in its sentence. One found changes nothing.
      * One not found makes the Citation whose Units are nearest it "not found",
      * with the Answer's words and the Document's nearest for its card. Where a
-     * Citation of the sentence couldn't be checked, no span of it is.
+     * Citation of the sentence couldn't be checked, no span of it is. Words in
+     * another language than every page cited are a translation, which no
+     * Document has: they aren't checked, and are returned for the Answer to
+     * take off their quotation marks.
      */
-    checkQuotedWords(quoted: readonly { words: string; markers: readonly number[] }[]): void {
+    checkQuotedWords(quoted: readonly { words: string; markers: readonly number[] }[]): string[] {
+      const translated: string[] = [];
       // A Document's name in quotation marks, as an Answer gives a title, is a name, not a quote.
       const names = new Set(
         [...records.values()].map(({ source }) => nameKey(source.documentName)),
@@ -1152,6 +1155,16 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
         });
         if (cited.some(({ record }) => record.result?.check === "cant-check")) continue;
         if (cited.some(({ units, matching }) => quoteInUnits(units, words, matching))) continue;
+        const inCjk = writtenInCjk(words);
+        if (
+          cited.length > 0 &&
+          cited.every(
+            ({ units }) => writtenInCjk(units.map((unit) => unit.text).join("\n")) !== inCjk,
+          )
+        ) {
+          translated.push(words);
+          continue;
+        }
         let nearest: { record: Accepted; closest: ReturnType<typeof closestWords> } | undefined;
         for (const { record, units, matching } of cited) {
           const closest = closestWords(units, words, matching);
@@ -1163,6 +1176,7 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
         nearest.record.result = { check: "not-found", checkReason: "quoted-words-not-on-pages" };
         nearest.record.quotedWords = nearest.closest.shown;
       }
+      return translated;
     },
 
     finalCitation,
