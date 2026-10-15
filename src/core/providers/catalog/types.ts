@@ -62,7 +62,6 @@ export interface DataUse {
   url?: string;
 }
 
-/** Options for the AI SDK's provider, by its key: `{ anthropic: { effort: "low" } }`. */
 export type ProviderOptions = Record<string, Record<string, unknown>>;
 
 /** What every request to a provider carries, whatever the model. */
@@ -85,11 +84,7 @@ export interface RequestQuirks {
   thinkingOff?: {
     options: ProviderOptions;
     unless?: readonly string[];
-    /**
-     * For a model that refuses `options` and that the catalog has no form for
-     * (`ModelFacts.thinkingOff`), the form its provider's refusal names: the
-     * first whose `names` the error message contains.
-     */
+    /** The form to retry with when a refusal of `options` names it, for a model the catalog has none for. */
     refused?: readonly { names: string; options: ProviderOptions }[];
   };
   /**

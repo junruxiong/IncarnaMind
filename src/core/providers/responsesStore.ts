@@ -2,7 +2,6 @@ import { wrapLanguageModel } from "ai";
 import type { ProviderOptions } from "./catalog/types";
 import type { ChatLanguageModel } from "./models";
 
-/** A request's params with `options` over its own provider options, provider by provider. */
 export function withOptionsOver<Params extends { providerOptions?: unknown }>(
   params: Params,
   options: ProviderOptions,
