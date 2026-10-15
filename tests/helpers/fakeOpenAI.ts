@@ -154,6 +154,8 @@ export interface FakeOpenAI {
   expiresIn: number;
   /** Milliseconds each refresh takes. */
   refreshDelayMs: number;
+  /** When set, a code exchange is answered only once this settles. */
+  holdCodeExchange: Promise<unknown> | null;
   /** When set, refreshes are refused with this status and body. */
   refreshRefusal: { status: number; body: unknown } | null;
   /** How the revocation endpoint answers. */
@@ -162,6 +164,8 @@ export interface FakeOpenAI {
   modelList: typeof ACCOUNT_MODELS | number;
   /** How the Responses API answers a request with a valid token. */
   reply: ApiReply;
+  /** How it answers a request for one model, by its id, in place of `reply`. */
+  replyFor: Record<string, ApiReply>;
   /** Changes the next ID token, to check that a bad one is refused. */
   tamperIdToken: ((claims: Record<string, unknown>) => Record<string, unknown>) | null;
   /** Signs the next ID token with a key OpenAI doesn't publish. */
@@ -263,6 +267,7 @@ export async function createFakeOpenAI(
       return;
     }
     if (form.grant_type === "authorization_code") {
+      await fake.holdCodeExchange;
       const pending = codes.get(form.code ?? "");
       codes.delete(form.code ?? "");
       const challenge = createHash("sha256")
@@ -348,7 +353,7 @@ export async function createFakeOpenAI(
       });
       return;
     }
-    const { reply } = fake;
+    const reply = fake.replyFor[String(body.model)] ?? fake.reply;
     if (reply.kind === "error") {
       sendJson(response, reply.status, reply.body);
       return;
@@ -449,10 +454,12 @@ export async function createFakeOpenAI(
     clients: [],
     expiresIn: 3600,
     refreshDelayMs: 0,
+    holdCodeExchange: null,
     refreshRefusal: null,
     revokeStatus: 200,
     modelList: ACCOUNT_MODELS,
     reply: { kind: "answer", text: ANSWER },
+    replyFor: {},
     tamperIdToken: null,
     foreignSigner: false,
     revokeAccessTokens: () => validAccessTokens.clear(),

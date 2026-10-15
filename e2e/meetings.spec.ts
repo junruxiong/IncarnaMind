@@ -802,7 +802,7 @@ test("recording details: a slow engine, a fallback and a part that can't be save
   await expect(toggle).toHaveAttribute("aria-label", "隐藏录制详情");
   await shot(window, "meeting-details-narrow-zh");
   await toggle.click();
-  await expect(unsaved).toHaveText(/ · 详情$/);
+  await expect(unsaved).toHaveText(/。· 详情$/);
   await shot(window, "meeting-line-unsaved-narrow-zh");
   await setWindowSize(app, window, 1440, 900);
   await shot(window, "meeting-line-unsaved-wide-zh");
