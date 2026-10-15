@@ -24,10 +24,18 @@ export function loadPdfJs(): Promise<PdfJs> {
 
 const dataUrl = (folder: string) => new URL(`pdfjs/${folder}/`, document.baseURI).href;
 
-/** Starts loading a Document's PDF, streamed from the main process (never over IPC). */
-export function openPdf(pdfjs: PdfJs, documentId: string): PDFDocumentLoadingTask {
+/**
+ * Starts loading a Document's PDF, streamed from the main process (never over
+ * IPC). `password` opens a locked one (#763): handed to pdf.js and kept nowhere else.
+ */
+export function openPdf(
+  pdfjs: PdfJs,
+  documentId: string,
+  password?: string,
+): PDFDocumentLoadingTask {
   return pdfjs.getDocument({
     url: documentFileUrl(documentId),
+    ...(password !== undefined && { password }),
     cMapUrl: dataUrl("cmaps"),
     cMapPacked: true,
     standardFontDataUrl: dataUrl("standard_fonts"),
@@ -35,6 +43,10 @@ export function openPdf(pdfjs: PdfJs, documentId: string): PDFDocumentLoadingTas
     enableXfa: false,
   });
 }
+
+/** True if loading failed for want of the PDF's password, or a wrong one (#763). */
+export const isPasswordError = (error: unknown): boolean =>
+  error instanceof Error && error.name === "PasswordException";
 
 /** True if loading failed because the main process has no such Document (deleted, or its file is gone). */
 export function isMissingDocumentError(error: unknown): boolean {

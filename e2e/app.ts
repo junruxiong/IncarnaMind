@@ -20,6 +20,7 @@ import {
 import type { FakeTranscriberOptions } from "../src/core/transcription/fake";
 import type { DocumentLocation } from "../src/shared/documentViewer";
 import type { TestHooks } from "../src/shared/testHooks";
+import { homeEnv } from "../tests/helpers/home";
 
 const appDir = resolve(__dirname, "..");
 
@@ -46,6 +47,11 @@ export interface LaunchOptions {
    * Where Ollama is: a local server standing in for it (the app's `OLLAMA_HOST`).
    */
   ollama?: string;
+  /**
+   * Set, the app really asks the Ollama at `ollama` whether it runs, and opening Ollama's app
+   * only counts (`ollamaAppOpened`). Without it, the scripted chat model's Ollama always runs.
+   */
+  ollamaApp?: "installed" | "missing";
   /**
    * Where crash reports go: a test build offers them only with this, and
    * ignores the DSN a real build is made with. Point it at a local server.
@@ -156,6 +162,7 @@ export async function launchApp(
   {
     fakeChat = false,
     ollama,
+    ollamaApp,
     sentryDsn,
     usageData,
     examples = false,
@@ -180,6 +187,8 @@ export async function launchApp(
   delete env.ELECTRON_RUN_AS_NODE;
   delete env.OLLAMA_HOST;
   if (ollama) env.OLLAMA_HOST = ollama;
+  delete env.INCARNAMIND_TEST_OLLAMA_APP;
+  if (ollamaApp) env.INCARNAMIND_TEST_OLLAMA_APP = ollamaApp;
   delete env.INCARNAMIND_TEST_SENTRY_DSN;
   delete env.INCARNAMIND_TEST_EXAMPLES;
   delete env.INCARNAMIND_TEST_POSTHOG_KEY;
@@ -207,7 +216,7 @@ export async function launchApp(
     if (usageData.testerBuild) env.INCARNAMIND_TEST_TESTER_BUILD = "1";
   }
   const appHome = home ?? (await mkdtemp(join(tmpdir(), "incarnamind-home-")));
-  env.HOME = appHome;
+  Object.assign(env, homeEnv(appHome));
   if (referenceLookup) env.INCARNAMIND_TEST_REFERENCE_LOOKUP = referenceLookup;
   if (sources) env.INCARNAMIND_TEST_SOURCES = sources;
   if (connectorDirectory) env.INCARNAMIND_TEST_CONNECTOR_DIRECTORY = connectorDirectory;
@@ -596,6 +605,14 @@ export async function interceptOpenExternal(app: ElectronApplication) {
 /** The URLs the intercepted system browser was asked to open. */
 export function urlsOpened(app: ElectronApplication) {
   return app.evaluate(() => (globalThis as { urlsOpened?: string[] }).urlsOpened ?? []);
+}
+
+export function ollamaAppOpened(app: ElectronApplication) {
+  return app.evaluate(
+    () =>
+      (globalThis as { incarnamindOllamaApp?: { opened: number } }).incarnamindOllamaApp?.opened ??
+      0,
+  );
 }
 
 /**

@@ -10,7 +10,6 @@ import { useAppStore } from "../store";
 import { linksIn, useWebPages } from "../webPages";
 import { CopiedLine } from "./CopiedLine";
 import { DocumentsSection } from "./DocumentsSection";
-import { GetStartedCard } from "./GettingStarted";
 import {
   AppMark,
   DocumentLineIcon,
@@ -23,6 +22,7 @@ import {
   SettingsLineIcon,
   VerifyLineIcon,
 } from "./lineIcons";
+import { NudgeSlot } from "./NudgeSlot";
 import { SidebarSelection } from "./SidebarSelection";
 import { SidebarStatus } from "./SidebarStatus";
 import { SidebarToggle } from "./SidebarToggle";
@@ -67,7 +67,7 @@ export function Sidebar({ width, onOpenSettings }: { width: number; onOpenSettin
         </div>
       </div>
 
-      <GetStartedCard />
+      <NudgeSlot />
       <UndoLine />
       <CopiedLine />
       <footer
