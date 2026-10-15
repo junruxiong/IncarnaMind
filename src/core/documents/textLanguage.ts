@@ -34,11 +34,7 @@ const MIN_COMMON_WORDS = 3;
 
 const count = (text: string, pattern: RegExp) => text.match(pattern)?.length ?? 0;
 
-/**
- * The language `text` is mostly written in, or null when it can't tell. A
- * Latin-script language needs `minimumWords` of its common words: a short
- * Question may settle for fewer than a Document's sample.
- */
+/** The language `text` is mostly written in, or null when it can't tell. */
 export function detectLanguage(text: string, minimumWords = MIN_COMMON_WORDS): TextLanguage | null {
   const han = count(text, /\p{Script=Han}/gu);
   const kana = count(text, /[\p{Script=Hiragana}\p{Script=Katakana}]/gu);

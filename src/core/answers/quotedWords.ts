@@ -215,11 +215,6 @@ export function quotedWordsIn(markdown: string): QuotedSentence[] {
   return found;
 }
 
-/**
- * The Markdown with the quotation marks taken off the given words (as
- * `quotedWordsIn` read them): what the Answer put in them was not the
- * Document's, so it stands as the Answer's own sentence.
- */
 export function withoutQuotationMarks(markdown: string, words: ReadonlySet<string>): string {
   return mapBlocks(markdown, (text) => {
     let changed = text;

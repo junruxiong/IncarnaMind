@@ -1135,9 +1135,8 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
      * One not found makes the Citation whose Units are nearest it "not found",
      * with the Answer's words and the Document's nearest for its card. Where a
      * Citation of the sentence couldn't be checked, no span of it is. Words in
-     * another language than every page cited are a translation, which no
-     * Document has: they aren't checked, and are returned for the Answer to
-     * take off their quotation marks.
+     * another language than every page cited are a translation: they aren't
+     * checked, and are returned to lose their quotation marks.
      */
     checkQuotedWords(quoted: readonly { words: string; markers: readonly number[] }[]): string[] {
       const translated: string[] = [];

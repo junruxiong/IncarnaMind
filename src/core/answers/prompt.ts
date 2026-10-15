@@ -43,12 +43,10 @@ export function answerInstructions(): string {
 }
 
 /**
- * The one line of the instructions that depends on the Question: the
- * language it is written in, or the interface language when it has none (a
- * figure, a file name, a Document's name). The Documents' language never
- * decides (#892). It goes last, after everything that stays the same from one
- * Question to the next, so a change of language doesn't change the start of
- * the prompt (a provider caches that: #343).
+ * The one line of the instructions that depends on the Question. It goes last,
+ * after everything that stays the same from one Question to the next, so a
+ * change of language doesn't change the start of the prompt (a provider
+ * caches that: #343).
  */
 export function languageInstruction(
   question: string,
