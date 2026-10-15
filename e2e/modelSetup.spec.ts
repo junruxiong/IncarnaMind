@@ -193,9 +193,9 @@ test("the key step's title follows the company picked at once, and Another model
     await setLanguage(window, "zh-CN");
     await card.getByTestId("setup-key").click();
     // In Chinese the key step opens on DeepSeek, and says so until another company is picked.
-    await expect(title).toHaveText("粘贴你的 DeepSeek 密钥");
+    await expect(title).toHaveText("粘贴 DeepSeek 密钥");
     await chip("Anthropic").click();
-    await expect(title).toHaveText("粘贴你的 Anthropic 密钥");
+    await expect(title).toHaveText("粘贴 Anthropic 密钥");
     await model.selectOption({ label: "其他模型…" });
     await expect(form.getByTestId("provider-model-text")).toHaveAttribute(
       "placeholder",
