@@ -266,3 +266,51 @@ describe.each(LIVE)("The assistant changes Minds, live: $name", (live) => {
     },
   );
 });
+
+describe.each(LIVE)("In a Folder with no Documents yet, live: $name", (live) => {
+  test.skipIf(live.apiKey === undefined)(
+    `${live.name}: a request to change the Mind changes it; a Question says the scope has no Documents`,
+    { timeout: 600_000 },
+    async () => {
+      const dataDir = await createTempDataFolder();
+      const core = startCore(dataDir, {
+        createChatModel: createAiSdkChatModel,
+        ...(live.kind === "ollama" && { ollamaModels: createOllamaModels() }),
+      });
+      core.on("consent.requested", (asked) => void core.respondToConsent(asked.requestId, true));
+      await core.saveChatProvider({
+        kind: live.kind,
+        ...(live.apiKey && { apiKey: live.apiKey }),
+        modelId: live.model,
+      });
+      const report: string[] = [`## ${live.name} · ${live.model} · empty Folder`];
+      onTestFinished(async () => {
+        if (process.env.INCARNAMIND_LIVE_REPORT)
+          await appendFile(process.env.INCARNAMIND_LIVE_REPORT, `${report.join("\n")}\n\n`);
+      });
+      const folder = await core.createLibraryGroup({ name: "New client", description: "" });
+      const scope = { folderIds: [folder.id], tagIds: [], documentIds: [] };
+      const [english] = LANGUAGES;
+      const mind = await core.createMind({ title: english.focused, folderId: folder.id });
+      const client = await connectToMind(core, mind.id);
+      writeMind(
+        client,
+        english.summary.map((text) => note(text)),
+      );
+      await client.settled();
+      for (const request of [
+        { text: "Shorten this summary", expected: "focused" as const },
+        { text: "What did customers say about deliveries?", expected: "answer" as const },
+      ]) {
+        await resolveChanges(client, "reject");
+        const { answer, seconds } = await ask(core, request.text, mind.id, scope);
+        const did = didWhat(answer, mind.id, "");
+        report.push(
+          `- "${request.text}": expected ${request.expected}, did ${did.join(" + ")}; ${seconds.toFixed(1)} s`,
+          `  > ${answer.text.replace(/\s+/g, " ").slice(0, 300)}`,
+        );
+        expect.soft(did, request.text).toContain(request.expected);
+      }
+    },
+  );
+});

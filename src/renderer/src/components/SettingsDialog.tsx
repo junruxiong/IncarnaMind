@@ -3,7 +3,7 @@ import type { LanguagePreference } from "../../../core/language";
 import type { MessageKey } from "../../../shared/i18n";
 import { files } from "../core";
 import { useT } from "../i18n";
-import { type SettingsPage, settingsPageLabels, settingsPages } from "../settingsPages";
+import { offeredSettingsPages, type SettingsPage, settingsPageLabels } from "../settingsPages";
 import { recordUsage, useAppStore } from "../store";
 import { AuthorNameSettings } from "./AuthorNameSettings";
 import { AgentsSettings } from "./agents/AgentsSettings";
@@ -86,7 +86,7 @@ export function SettingsDialog() {
               {t("settings.title")}
             </h2>
           </div>
-          {settingsPages.map((each) => (
+          {offeredSettingsPages.map((each) => (
             <button
               key={each}
               type="button"

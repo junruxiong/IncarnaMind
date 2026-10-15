@@ -11,8 +11,7 @@ import { useAppStore } from "./store";
 
 /** The refusal Settings › Models opens on. */
 export interface KeyRefusal {
-  /** The provider's catalog id: a preset's, else its kind. */
-  kind: string;
+  catalogId: string;
   /** The provider's endpoint (its region), when it has several. */
   endpoint: string | null;
   /** The model the refused Answer asked, to keep in the form. */
@@ -43,7 +42,7 @@ export const useKeyRefusals = create<KeyRefusalsState>()((set) => ({
       const provider = providers.find((each) => each.id === providerId);
       const id = provider && (provider.catalogId ?? provider.kind);
       if (provider && id && KEY_PROVIDERS.includes(id)) {
-        set({ showing: { kind: id, endpoint: provider.endpoint, modelId, at } });
+        set({ showing: { catalogId: id, endpoint: provider.endpoint, modelId, at } });
       }
     } catch (error) {
       reportError(error);

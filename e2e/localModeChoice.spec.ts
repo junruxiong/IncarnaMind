@@ -2,6 +2,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
+import { SHOW_AGENT_CONNECTION } from "../src/shared/agentConnection";
 import {
   acceptPlainTextKeys,
   createDataFolder,
@@ -119,10 +120,14 @@ for (const [name, locale] of [
     const box = page.getByTestId("keep-local-box");
     const line = page.getByTestId("keep-local-line");
     await expect(box).not.toBeChecked();
+    // An agent connected while connecting agents isn't offered never listens, so nothing of it pauses.
+    const pauses = !SHOW_AGENT_CONNECTION
+      ? "llm.example.com"
+      : zh
+        ? "llm.example.com 和 1 个已连接的智能体"
+        : "llm.example.com and 1 connected agent";
     await expect(line).toHaveText(
-      zh
-        ? "会暂停 llm.example.com 和 1 个已连接的智能体，直到你关闭它。"
-        : "Pauses llm.example.com and 1 connected agent until you turn it off.",
+      zh ? `会暂停 ${pauses}，直到你关闭它。` : `Pauses ${pauses} until you turn it off.`,
     );
     expect(Math.abs((await textLeft(line)) - (await textLeft(label(box))))).toBeLessThanOrEqual(1);
 

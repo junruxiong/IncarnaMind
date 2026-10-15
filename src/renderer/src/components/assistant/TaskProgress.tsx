@@ -2,13 +2,14 @@ import { Fragment, type ReactNode, useEffect, useId, useState } from "react";
 import type { Task, TaskStep } from "../../../../core/api";
 import type { Language } from "../../../../core/language";
 import { formatDateTime } from "../../../../shared/dates";
+import { RESEARCH_TASK } from "../../../../shared/research";
 import { core } from "../../core";
 import { formatMoney } from "../../cost";
 import { useLanguage, useT } from "../../i18n";
 import type { Translate } from "../../objects";
 import { useAppStore } from "../../store";
 import { needsYou } from "../../taskGroups";
-import { pauseTask, resumeTask, showTask, stopTask, useTasks } from "../../tasks";
+import { pauseTask, resumeTask, reviewTask, stopTask, useTasks } from "../../tasks";
 import { stepLine, taskName } from "../../taskText";
 import { CheckLineIcon } from "../lineIcons";
 
@@ -42,10 +43,14 @@ function headLine(task: Task, minutes: number, t: Translate): string {
   if (task.status === "stopped") return t("task.status.stopped");
   const progress = task.progress;
   if (!progress || progress.total === 0) return time;
-  const counted = t(task.kind === "comparison" ? "task.progress.cells" : "task.progress.items", {
-    done: progress.done,
-    total: progress.total,
-  });
+  const counted = t(
+    task.kind === "comparison"
+      ? "task.progress.cells"
+      : task.kind === RESEARCH_TASK
+        ? "task.progress.steps"
+        : "task.progress.items",
+    { done: progress.done, total: progress.total },
+  );
   return `${counted} · ${time}`;
 }
 
@@ -173,7 +178,7 @@ export function TaskProgress({
         key: "review",
         testId: "review",
         label: t("task.action.review"),
-        onClick: () => showTask(task),
+        onClick: () => reviewTask(task),
         strong: true,
       });
     }
@@ -268,15 +273,36 @@ export function TaskProgress({
           </li>
         )}
       </ol>
+      {task.remaining.length > 0 && (
+        <div data-testid="task-progress-remaining" className="task-progress-remaining">
+          <p className="task-progress-remaining-label">{t("task.progress.remaining")}</p>
+          <ul className="task-progress-steps">
+            {task.remaining.map((step, index) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: what is left, in its order.
+              <li key={index} className="task-progress-step">
+                <span aria-hidden="true" className="task-progress-mark">
+                  –
+                </span>
+                <span>{step}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {detailsOpen && (
         <p id={detailsId} data-testid="task-progress-record" className="task-progress-details">
           {details(task, t, language)}
         </p>
       )}
       <div data-testid="task-progress-actions" className="task-progress-actions">
+        {task.summary && (
+          <span data-testid="task-progress-summary" className="task-progress-summary">
+            {task.summary}
+          </span>
+        )}
         {offered.map((action, index) => (
           <Fragment key={action.key}>
-            {index > 0 && <Dot />}
+            {(index > 0 || task.summary) && <Dot />}
             <button
               type="button"
               data-testid={`task-progress-${action.testId}`}
