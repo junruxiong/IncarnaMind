@@ -86,7 +86,7 @@ describe("Choosing a service is the consent (ADR-0022)", () => {
       allowed("chat", ["blocks", "passages"]),
       allowed("suggestions", ["writing", "writing-passages"]),
       allowed("edits", ["selection"]),
-      allowed("checks", ["selection", "passages", "verified-document"]),
+      allowed("checks", ["selection", "passages", "verified-document", "blocks"]),
       allowed("tagging", ["tags", "document-excerpts"]),
       allowed("classification", ["groups", "tags", "document-excerpts", "page-images"]),
     ]);
@@ -162,7 +162,7 @@ describe("Decisions made before choosing was the consent", () => {
             AT,
           ],
         );
-      decided("checks", "accepted", ["selection", "passages", "verified-document"]);
+      decided("checks", "accepted", ["selection", "passages", "verified-document", "blocks"]);
       decided("edits", "declined", []);
     } finally {
       db.close();
@@ -175,7 +175,7 @@ describe("Decisions made before choosing was the consent", () => {
       flow: {
         id: "checks",
         service: OPENAI_SERVICE,
-        sends: ["selection", "passages", "verified-document"],
+        sends: ["selection", "passages", "verified-document", "blocks"],
       },
       consent: "accepted",
       decidedAt: AT,
@@ -268,7 +268,7 @@ describe("Data-flow consent", () => {
       // Suggestions, Edit with AI, the checks (#96, #97) and tagging go there too.
       notAsked("suggestions", ["writing", "writing-passages"]),
       notAsked("edits", ["selection"]),
-      notAsked("checks", ["selection", "passages", "verified-document"]),
+      notAsked("checks", ["selection", "passages", "verified-document", "blocks"]),
       notAsked("tagging", ["tags", "document-excerpts"]),
     ]);
   });

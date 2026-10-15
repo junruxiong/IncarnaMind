@@ -6,10 +6,12 @@ import { createFakeOpenAI } from "../tests/helpers/fakeOpenAI";
 import {
   acceptPlainTextKeys,
   assistantAnswers,
+  closeSettings,
   createDataFolder,
   interceptOpenExternal,
   launchApp,
   newMind,
+  openSettings,
   removeDataFolder,
   setWindowSize,
   urlsOpened,
@@ -155,9 +157,11 @@ test("Use this key shows a refused key in place, and with a good one saves and t
     await setWindowSize(app, window, 1100, 900);
     await acceptPlainTextKeys(window);
     const card = await openKeyForm(window);
-    await card.getByTestId("setup-other").click();
-    await card.getByTestId("way-key").click();
-    const form = card.getByTestId("provider-form");
+    // A server the User gives is offered in Settings, not at first run (ADR-0019); saved there,
+    // it answers the Question waiting in the setup card all the same.
+    const settings = await openSettings(window, "models");
+    await settings.getByTestId("chat-choice-api-key").check();
+    const form = settings.getByTestId("provider-form");
     await form.getByTestId("provider-more-toggle").click();
     await form.locator("label").filter({ hasText: "OpenAI-compatible server" }).click();
     // A compatible server keeps a free-text Model.
@@ -173,6 +177,8 @@ test("Use this key shows a refused key in place, and with a good one saves and t
 
     await form.getByLabel(/^API key/).fill("good-key");
     await form.getByTestId("provider-use-key").click();
+    await expect(form).toBeHidden();
+    await closeSettings(window);
     await expect(card).toBeHidden();
     // The waiting Question was asked: the conversation holds its Answer (the server only answers
     // the connection test, so how it ends is not the point).
