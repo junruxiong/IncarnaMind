@@ -69,7 +69,7 @@ port.on("message", (message: WorkerRequest) => {
           send({ id, request, page, file });
         }),
     };
-    void runJob(message.job, channel).then((result) => {
+    void runJob(message.job, channel, message.password).then((result) => {
       running.delete(id);
       send({ id, result });
     });

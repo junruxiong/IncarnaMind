@@ -130,7 +130,13 @@ for (const view of VIEWS) {
     await expect(blocks(editor).last()).toHaveText("Neap tides are weaker.!!");
     await expect(window.getByTestId("mind-title")).toHaveValue("Tides");
 
+    // How much one Undo takes depends on how far apart the words and each "!" were typed: all of
+    // them, both "!", or only the last "!", which a second Undo takes.
     await window.keyboard.press("ControlOrMeta+z");
+    await expect(blocks(editor).last()).toHaveText(/^(Neap tides are weaker\.!?)?$/);
+    if ((await blocks(editor).last().textContent())?.endsWith("!")) {
+      await window.keyboard.press("ControlOrMeta+z");
+    }
     await expect(blocks(editor).last()).not.toHaveText(/!/);
     await expect(blocks(editor)).toHaveCount(6);
     await app.close();

@@ -13,7 +13,7 @@ import { useAppStore } from "../store";
 import { AiUseSettings } from "./AiUseSettings";
 import { ApprovalsSettings } from "./ApprovalsSettings";
 import { OnThisComputer } from "./OnThisComputer";
-import { USAGE_DATA_DETAILS_URL } from "./UsageDataDialog";
+import { USAGE_DATA_DETAILS_URL } from "./UsageDataCard";
 import {
   buttonStyle,
   pageIntroClass,

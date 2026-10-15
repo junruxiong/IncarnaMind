@@ -1,4 +1,5 @@
 import { EXPORT_FORMATS } from "../../../core/api";
+import { exportAiUseStatement } from "../aiUseStatement";
 import { useExportDialog } from "../exportDialog";
 import { exportMind, exportPreferences, FORMAT_LABELS } from "../exports";
 import { currentTabOf } from "../layoutSlice";
@@ -72,6 +73,20 @@ export const exportCommands: readonly Command[] = [
     run: (ctx) => {
       const mindId = mindOf(ctx);
       if (mindId) useExportDialog.getState().open(mindId);
+    },
+  },
+  {
+    // The statement opens as a new Mind beside this one, to edit and attach to a thesis (#739).
+    id: "mind.aiUseStatement",
+    label: "aiStatement.command",
+    keywords: ["aiStatement.keywords"],
+    group: "main",
+    // Undo sends the new Mind to Recently deleted, as for any Mind made.
+    reversible: true,
+    when: (ctx) => onlyOne(ctx) && mindOf(ctx) !== null,
+    run: (ctx) => {
+      const mindId = mindOf(ctx);
+      if (mindId) return exportAiUseStatement(mindId);
     },
   },
 ];
