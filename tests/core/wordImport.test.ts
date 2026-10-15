@@ -859,7 +859,7 @@ describe("a file whose look the Mind doesn't draw (#735)", () => {
   const SYNTHETIC = join(WORD_DIR, "documents", "synthetic");
   const RESUMES = ["en-resume-layout.docx", "zh-resume-layout.docx"];
 
-  test("a résumé laid out with tables that have no borders, shading, tab stops, colours and sizes says its layout is kept; a plain memo doesn't", async () => {
+  test("a résumé laid out with tab stops, tables that have no borders, shading, colours and sizes says its layout is kept; a plain memo doesn't", async () => {
     const core = startCore(await createTempDataFolder());
     for (const file of RESUMES) {
       expect((await core.checkWordFile(join(SYNTHETIC, file))).layoutNotShown, file).toBe(true);
