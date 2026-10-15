@@ -20,6 +20,7 @@ import {
   createDataFolder,
   dismissChatSetup,
   documentIdOf,
+  exportFromMenu,
   launchApp,
   linkFolderFromSidebar,
   newMind,
@@ -257,7 +258,7 @@ test("Word, PowerPoint, Excel and CSV files in a linked folder are cited by sect
   const target = join(sources, "Formats.docx");
   await useOutputLocation(window, sources);
   await window.keyboard.press("Escape");
-  await window.getByTestId("export-mind").click();
+  await exportFromMenu(window);
   const result = window.getByTestId("export-result");
   await expect(result.getByTestId("export-done")).toHaveText("Saved Formats.docx");
   // Every quote was found: no line about one that wasn't.

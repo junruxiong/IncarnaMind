@@ -269,6 +269,9 @@ export function NoCitationsLine({
   );
 }
 
+/** Asked for once per run: while offline, asking again on every error would only fail again. */
+let modelsAsked = false;
+
 /** Failures that can come of a model that can't answer, rather than of the connection. */
 const WRONG_MODEL: ReadonlySet<ProviderErrorKind> = new Set([
   "model",
@@ -305,15 +308,21 @@ export function AnswerError({
   const t = useT();
   const language = useLanguage();
   const shownModel = useModelNames()(modelId ?? "", providerId);
-  const provider = useAnswers(
-    (state) => state.models?.find((group) => group.provider.id === providerId)?.provider.kind,
+  const providerInUse = useAnswers(
+    (state) => state.models?.find((group) => group.provider.id === providerId)?.provider,
   );
+  const provider = providerInUse?.kind;
+  const service = providerInUse
+    ? (providerInUse.service?.name ?? t(`providers.kind.${providerInUse.kind}`))
+    : t("answer.error.thisService");
   const [shownAt] = useState(() => new Date().toISOString());
   const keySaved = useKeySavedSince(providerId, failedAt ?? shownAt);
   // Whose plan it was decides where its usage is managed.
   useEffect(() => {
-    if (kind === "plan-limit" || WRONG_MODEL.has(kind)) useAnswers.getState().loadModels();
-  }, [kind]);
+    if (modelsAsked) return;
+    modelsAsked = true;
+    useAnswers.getState().loadModels();
+  }, []);
   // A model the User added to the menu that then failed: one click takes it back out.
   const added = useAnswers((state) =>
     state.models?.some(
@@ -377,7 +386,7 @@ export function AnswerError({
         title={details ?? undefined}
         className="mt-1 select-none"
       >
-        {t(line, { model: modelId ? shownModel.name : t("answer.error.thisModel") })}
+        {t(line, { model: modelId ? shownModel.name : t("answer.error.thisModel"), service })}
         {removeFromMenu && kind !== "model" && ` · ${shownModel.name}`}
         {kind === "plan-limit" && resetsAt && (
           <>

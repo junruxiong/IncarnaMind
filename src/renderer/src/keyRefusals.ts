@@ -4,14 +4,14 @@
  * beside it, and once a key for it is saved the Answer offers to ask again.
  */
 import { create } from "zustand";
-import type { ChatProvider, ChatProviderKind } from "../../core/api";
-import { KEY_PROVIDER_KINDS } from "../../core/providers/catalog/providers";
+import type { ChatProvider } from "../../core/api";
+import { KEY_PROVIDERS } from "../../core/providers/catalog/providers";
 import { core } from "./core";
 import { useAppStore } from "./store";
 
 /** The refusal Settings › Models opens on. */
 export interface KeyRefusal {
-  kind: ChatProviderKind;
+  catalogId: string;
   /** The provider's endpoint (its region), when it has several. */
   endpoint: string | null;
   /** The model the refused Answer asked, to keep in the form. */
@@ -40,8 +40,9 @@ export const useKeyRefusals = create<KeyRefusalsState>()((set) => ({
     try {
       const providers = providerId ? await core.listChatProviders() : [];
       const provider = providers.find((each) => each.id === providerId);
-      if (provider && KEY_PROVIDER_KINDS.includes(provider.kind)) {
-        set({ showing: { kind: provider.kind, endpoint: provider.endpoint, modelId, at } });
+      const id = provider && (provider.catalogId ?? provider.kind);
+      if (provider && id && KEY_PROVIDERS.includes(id)) {
+        set({ showing: { catalogId: id, endpoint: provider.endpoint, modelId, at } });
       }
     } catch (error) {
       reportError(error);

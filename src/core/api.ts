@@ -134,6 +134,10 @@ export interface CreateMindInput {
  * - 18: checks of the User's own sentences (#96): the `claimCheck` mark on a
  *   sentence's text, which holds its result (see `CLAIM_CHECK_MARK`). Older
  *   content is version 18 content as it is: nothing is rewritten.
+ * - 19: contradiction watch (#112): "contradiction-watch", a third `action`
+ *   of the `claimCheck` mark. An older version reads it as Find support, so
+ *   its Check again would check the sentence against the very Documents it
+ *   cites. Older content is version 19 content as it is: nothing is rewritten.
  * - 20: someone's tracked changes in an imported Word file, as Proposals
  *   (#108): their requests are `WordChangeRequest`s, which name the change's
  *   author and date. A version before 20 would take them for the
@@ -2936,20 +2940,25 @@ export type LinkedFolderStatus = "scanning" | "watching" | "paused" | "unavailab
 
 /**
  * The groups that have an example Mind (onboarding, see src/core/examples.ts):
- * "tea" is the first-run default; the others are closer to a kind of work
- * (papers, reports, contracts, meetings), and open from the default's banner.
+ * "credit", a credit committee paper, is the first-run default (#802); the
+ * others are closer to a kind of work (papers, reports, contracts, meetings),
+ * and open from the default's banner.
  */
-export const EXAMPLE_GROUPS = ["tea", "papers", "reports", "contracts", "meetings"] as const;
+export const EXAMPLE_GROUPS = ["credit", "papers", "reports", "contracts", "meetings"] as const;
 export type ExampleGroup = (typeof EXAMPLE_GROUPS)[number];
 
 /**
- * An example Mind (onboarding, see src/core/examples.ts): "Where tea comes
- * from", or one of a group, with its example Documents in their own Linked
- * folder, written in advance so it works before any chat model is set up.
+ * An example Mind (onboarding, see src/core/examples.ts): "Draft: credit
+ * committee paper", or one of a group, with its example Documents in their own
+ * Linked folder, written in advance so it works before any chat model is set up.
  */
 export interface Examples {
-  /** Which example this is. */
-  group: ExampleGroup;
+  /**
+   * Which example this is. "tea": "Where tea comes from", which a first run of
+   * an earlier version made; it is shown as the example, and removed, while
+   * there is no credit paper, but no longer made (#802).
+   */
+  group: ExampleGroup | "tea";
   /** Whether this copy of IncarnaMind ships the examples. */
   available: boolean;
   /** The example Mind, while it exists. */
@@ -3411,6 +3420,11 @@ export interface ChatProvider {
 export interface SaveChatProviderInput {
   kind: ChatProviderKind;
   /**
+   * A preset of the "openai-compatible" kind, by its catalog id, e.g. "groq":
+   * its endpoint and name come from the catalog. Left out: the kind's own.
+   */
+  catalogId?: string;
+  /**
    * A hosted provider's endpoint (its region), by its id in the catalog, e.g.
    * "intl" for Qwen. Left out: its first. Each endpoint is its own provider
    * with its own key, as keys and model lists differ by region.
@@ -3426,6 +3440,7 @@ export interface SaveChatProviderInput {
 
 export interface TestChatConnectionInput {
   kind: ChatProviderKind;
+  catalogId?: string;
   /** The endpoint to test (see `SaveChatProviderInput`). */
   endpoint?: string;
   baseUrl?: string;
@@ -4064,13 +4079,19 @@ export type EditWithAiResult =
   | { kind: "failed"; error: ProviderError };
 
 /**
- * The checks of the User's own sentences (#96). Both check each sentence's
+ * The checks of the User's own sentences (#96). Each checks a sentence's
  * claim against the Documents: Find support looks for a Passage that backs
  * it; Check against Documents does the same for a sentence that already has
  * Citations, telling the model what they quote, so the claim is checked and
- * not only the quote.
+ * not only the quote. Contradiction watch (#112) checks a cited sentence
+ * against the other Documents in its Mind's Folder, the ones it cites left
+ * out, and keeps a mark only where one contradicts it.
  */
-export const claimCheckActions = ["find-support", "check-against-documents"] as const;
+export const claimCheckActions = [
+  "find-support",
+  "check-against-documents",
+  "contradiction-watch",
+] as const;
 export type ClaimCheckAction = (typeof claimCheckActions)[number];
 
 /** What a claim check found (CONTEXT.md: supported, unsupported, contradicted). */
@@ -4245,6 +4266,8 @@ export interface CheckSentencesInput {
   /** Where the selection starts, and where it ends: each sentence it touches is checked, whole. */
   from: TextPlace;
   to: TextPlace;
+  /** More stretches checked with `from`..`to`, each sentence once. */
+  more?: TextStretch[];
   action: ClaimCheckAction;
   /** Search every Document, not the Mind's Folder ("Search all Documents"). */
   allDocuments?: boolean;
@@ -4259,7 +4282,14 @@ export type CheckSentencesResult =
    * checked. `smallModel`: a model on this computer too small to judge
    * reliably made the verdicts (#680), so they carry a notice.
    */
-  | { kind: "checked"; sentences: number; checked: number; smallModel: boolean }
+  | {
+      kind: "checked";
+      sentences: number;
+      checked: number;
+      smallModel: boolean;
+      /** Sentences left out because they hold changes still waiting; absent when none. */
+      waiting?: WaitingSentences;
+    }
   /** Nothing was sent: the model can't be used now, and `readiness` says why. */
   | { kind: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
   /** Nothing was sent: local mode is on, and the model isn't on this computer. */
@@ -4268,10 +4298,130 @@ export type CheckSentencesResult =
   | { kind: "no-documents"; folderId: string | null }
   /** The selection holds no sentence to check, or isn't in the Mind any more. */
   | { kind: "nothing" }
-  /** Nothing was sent: the selection holds changes still waiting. */
-  | { kind: "has-proposals" }
+  /** Nothing was sent: every sentence of the selection holds changes still waiting. */
+  | { kind: "waiting"; waiting: WaitingSentences }
   /** The User stopped it (`cancelCheck`): the sentences not checked yet say "stopped". */
-  | { kind: "cancelled" };
+  | { kind: "cancelled" }
+  /** Contradiction watch, nothing sent: the Mind is in no Folder, so there is none to check against. */
+  | { kind: "no-folder" }
+  /** Contradiction watch, nothing sent: the Folder holds no Documents but those its claims cite. */
+  | { kind: "only-cited"; folderId: string };
+
+/** Contradiction watch (#112) on a whole Mind, on demand. */
+export interface CheckContradictionsInput {
+  /** Chosen by the caller, so it can stop the request (`cancelCheck`). */
+  requestId: string;
+  mindId: string;
+  /** The model to use; none, or null: the Mind's own, else the default chat model. */
+  model?: ChatModelChoice | null;
+}
+
+/** What a check for contradictions would check, before anything is sent. */
+export type ContradictionCheckPlan =
+  /**
+   * `claims` cited sentences, each checked against the other Documents in the
+   * Folder, with `model`: the Mind's own, or null for the default.
+   */
+  | { kind: "ready"; claims: number; model: ChatModelChoice | null }
+  | Extract<
+      CheckSentencesResult,
+      { kind: "no-folder" | "only-cited" | "no-documents" | "nothing" }
+    >;
+
+/** What a check for contradictions found, on demand or after a new version (`ContradictionWatchRun`). */
+export interface ContradictionCheckOutcome {
+  /** The cited sentences checked: a contradicted one has its mark, the others none. */
+  claims: number;
+  /** Of them, those the model gave a verdict for. */
+  checked: number;
+  contradicted: number;
+  /** What its requests billed per token cost; null when none was priced. */
+  cost: Money | null;
+  /** The monthly cap or a plan's limit stopped it; the claims after it weren't checked. */
+  stop: RunStop | null;
+  /** The verdicts came from a model too small to judge reliably (#680). */
+  smallModel: boolean;
+}
+
+/** What `checkContradictions` did. */
+export type CheckContradictionsResult =
+  | ({ kind: "checked" } & ContradictionCheckOutcome)
+  | Exclude<CheckSentencesResult, { kind: "checked" | "waiting" }>;
+
+/**
+ * The last check for contradictions a new version of a Document in the Mind's
+ * Folder started (#112), kept in the Mind's settings so its line can show
+ * what it found and cost (`src/shared/contradictionWatch.ts`).
+ */
+export interface ContradictionWatchRun extends ContradictionCheckOutcome {
+  /** When it finished. ISO 8601, UTC. */
+  at: string;
+  /** The Document whose new version started it, by name. */
+  documentName: string;
+}
+
+/**
+ * What "Check this Mind" checks (#737): "all", every sentence that makes a
+ * claim, found afresh; "changed", the checks that need a re-check and the
+ * sentences never checked since, found among those the last run didn't
+ * leave out.
+ */
+export type CheckMindMode = "all" | "changed";
+
+export interface CheckMindInput {
+  requestId: string;
+  mindId: string;
+  mode: CheckMindMode;
+  /** Every Document, not only the Mind's Folder, as for `checkSentences`. */
+  allDocuments?: boolean;
+  /** The model; the Mind's own, else the default, when absent. */
+  model?: ChatModelChoice | null;
+}
+
+/** What `checkMind` would send, before it sends anything, so a cloud model's estimate can show first. */
+export type MindCheckPlan =
+  | {
+      kind: "ready";
+      /** The sentences it sends: to find the claims among, and the checks to make again. */
+      sentences: number;
+      /** Whether the model first names the claims among them; only checks made again don't need it. */
+      findsClaims: boolean;
+      /** The Mind's own model; null for the default. */
+      model: ChatModelChoice | null;
+    }
+  | Extract<CheckSentencesResult, { kind: "no-documents" | "nothing" }>;
+
+export type CheckMindResult =
+  /**
+   * Each claim has its mark: `checked` of the `sentences` with a verdict, the
+   * rest not checked. The monthly cap or a plan's limit stopped it (`stop`):
+   * the claims after it say "not checked: cost cap".
+   */
+  | {
+      kind: "checked";
+      sentences: number;
+      checked: number;
+      smallModel: boolean;
+      stop: RunStop | null;
+    }
+  /** The model couldn't name the claims: nothing was checked. */
+  | { kind: "failed"; error: ProviderError }
+  | Exclude<CheckSentencesResult, { kind: "checked" | "no-folder" | "only-cited" | "waiting" }>;
+
+/**
+ * The last whole-Mind check (#737), in the Mind's settings
+ * (`src/shared/mindCheck.ts`), for the line under its title: "Checked 48
+ * sentences, 2 Oct, 15:20".
+ */
+export interface MindCheckRun {
+  /** When it finished. ISO 8601, UTC. */
+  at: string;
+  /** The Mind's sentences with a check then. */
+  sentences: number;
+  stop: RunStop | null;
+  /** The sentences it found make no claim, by `sentenceKey`, so a later run doesn't send them again. */
+  skipped: string[];
+}
 
 /** A document someone else wrote, to verify claim by claim (#97): the window offers PDFs. */
 export interface VerifyDocumentInput {
@@ -4299,9 +4449,19 @@ export interface VerifyClaimsInput {
   model?: ChatModelChoice | null;
 }
 
+export interface WaitingSentences {
+  sentences: TextStretch[];
+  changeIds: string[];
+}
+
+export interface TextStretch {
+  from: TextPlace;
+  to: TextPlace;
+}
+
 /** Why finding or checking a document's claims sent nothing. */
 type VerifyRefusal =
-  | Exclude<CheckSentencesResult, { kind: "checked" } | { kind: "has-proposals" }>
+  | Exclude<CheckSentencesResult, { kind: "checked" } | { kind: "waiting" }>
   /** Another document's claims are being found or checked, in that Mind: one run at a time. */
   | { kind: "busy"; mindId: string };
 
@@ -7366,7 +7526,7 @@ export interface CoreApi {
    */
   addFoundSource(input: AddFoundSourceInput): Promise<AddFoundSourceResult>;
 
-  /** An example Mind and its Documents, if made (see `Examples`); the tea example by default. */
+  /** An example Mind and its Documents, if made (see `Examples`); the credit paper by default. */
   getExamples(group?: ExampleGroup): Promise<Examples>;
   /**
    * On a first run (no Mind yet, examples never offered before), makes the
@@ -7376,8 +7536,8 @@ export interface CoreApi {
   /**
    * Makes the example Mind and its Documents (copies of the shipped files in
    * the data folder, linked), or returns them if they exist. Its Citations
-   * are checked once the Documents have been read. "examples.changed" follows.
-   * The tea example by default.
+   * are checked once the Documents have been read, and so are its draft's
+   * checks, already made. "examples.changed" follows. The credit paper by default.
    */
   createExamples(group?: ExampleGroup): Promise<Examples>;
   /** Deletes the example Mind, and unlinks the example Documents and deletes their copies. */
@@ -7699,6 +7859,42 @@ export interface CoreApi {
    * limit stops the run. `cancelCheck` stops it. One verify run at a time.
    */
   verifyClaims(input: VerifyClaimsInput): Promise<VerifyClaimsResult>;
+  /**
+   * What "Check for contradictions" would check in a Mind (#112): its cited
+   * sentences, or why there is nothing to check. Sends nothing.
+   */
+  planContradictionCheck(mindId: string): Promise<ContradictionCheckPlan>;
+  /**
+   * Contradiction watch (#112): checks each cited sentence of a Mind against
+   * the other Documents in its Folder, the Documents it cites and IncarnaMind's
+   * own files left out, with `checkClaim`. A contradicted sentence gets a
+   * "contradiction-watch" `CLAIM_CHECK_MARK`; any such mark on the others goes.
+   * A new version of a Document in a Folder starts the same check, in the
+   * background, for the Folder's Minds, when the User allowed the "checks"
+   * flow for the model's service (`ContradictionWatchRun`). `cancelCheck` stops it.
+   */
+  checkContradictions(input: CheckContradictionsInput): Promise<CheckContradictionsResult>;
+  /**
+   * What "Check this Mind" (#737) would send in `mode`, against the Mind's
+   * Folder or, with `allDocuments`, every Document; or why there is nothing
+   * to check. Sends nothing.
+   */
+  planMindCheck(
+    mindId: string,
+    mode: CheckMindMode,
+    allDocuments?: boolean,
+  ): Promise<MindCheckPlan>;
+  /**
+   * "Check this Mind" (#737): the model names the claims among the Mind's
+   * sentences, leaving out headings, questions and the User's own opinions,
+   * then each claim is checked as Check against Documents checks it, against
+   * the Mind's Folder (or every Document). In "changed" mode only the checks
+   * that need a re-check, and the sentences never checked since, are sent.
+   * Each claim gets its mark at once, then its result; a cloud model checks a
+   * few at once, and the monthly cap or a plan's limit stops the run. Records
+   * the run in the Mind (`MindCheckRun`). `cancelCheck` stops it.
+   */
+  checkMind(input: CheckMindInput): Promise<CheckMindResult>;
 
   getSecretStorage(): Promise<SecretStorageStatus>;
   /** The User accepts storing keys without keyring protection on this device. */
@@ -8532,6 +8728,10 @@ const methods: Record<CoreApiMethod, true> = {
   verifyDocument: true,
   findClaims: true,
   verifyClaims: true,
+  planContradictionCheck: true,
+  checkContradictions: true,
+  planMindCheck: true,
+  checkMind: true,
   getSecretStorage: true,
   acceptPlainTextSecretStorage: true,
   detectOllama: true,
