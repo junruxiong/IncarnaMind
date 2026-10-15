@@ -171,12 +171,12 @@ test("a clause's text after its number starts at the clause's hanging indent", a
   await app.close();
 });
 
-test("a tab that wraps onto another line at a narrower window reaches that line's next default stop", async () => {
+test("a tab that wraps onto another line when the column narrows reaches that line's next default stop", async () => {
   const { app, window } = await launchApp(dataDir, { home });
   await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
-  const sentence =
-    "The supplier delivers the goods to the buyer's warehouse in Leeds, packed and labelled as Schedule 3 says, on the days the buyer names in its order, and the buyer's staff sign for them at the door, after counting every case against the delivery note and the order";
+  // One line in a whole window's column; two in half of it, where the tab follows "Leeds" on the second.
+  const sentence = "The supplier delivers the goods to the buyer's warehouse in Leeds";
   await importFile(
     app,
     window,
@@ -196,7 +196,9 @@ test("a tab that wraps onto another line at a narrower window reaches that line'
   };
   await expect.poll(async () => (await offDefaultStop()).off).toBeLessThan(2);
   const wide = (await offDefaultStop()).at;
-  await setWindowSize(app, window, 1100, 900);
+  // The Mind open beside itself: its column narrows where it is.
+  await pointAndClick(window, window.getByTestId("split-group"));
+  await expect(window.locator('[data-testid="mind-pane"]:visible')).toHaveCount(2);
   await expect.poll(async () => (await offDefaultStop()).at).not.toBe(wide);
   await expect.poll(async () => (await offDefaultStop()).off).toBeLessThan(2);
   await app.close();
