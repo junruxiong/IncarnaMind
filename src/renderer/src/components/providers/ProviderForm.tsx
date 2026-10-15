@@ -8,6 +8,8 @@ import type {
 import {
   catalogProvider,
   endpointOf,
+  fieldAccepts,
+  fieldUrl,
   isPreset,
   KEY_PROVIDERS,
   keyProviderGroups,
@@ -68,11 +70,19 @@ const hostOf = (url: string): string | null => {
   }
 };
 
-const sameServer = (provider: ChatProvider, kind: CatalogId, endpoint: string, baseUrl: string) =>
+const sameServer = (
+  provider: ChatProvider,
+  kind: CatalogId,
+  endpoint: string,
+  baseUrl: string,
+  fieldAddress: string | null,
+) =>
   (provider.catalogId ?? provider.kind) === kind &&
-  (kind === "openai-compatible"
-    ? provider.baseUrl === baseUrl.trim().replace(/\/+$/, "")
-    : provider.endpoint === endpoint);
+  (fieldAddress !== null
+    ? provider.baseUrl === fieldAddress
+    : kind === "openai-compatible"
+      ? provider.baseUrl === baseUrl.trim().replace(/\/+$/, "")
+      : provider.endpoint === endpoint);
 
 /**
  * Pick a provider, paste a key (and a URL for an OpenAI-compatible server),
@@ -109,6 +119,7 @@ export function ProviderForm({
   const [endpointId, setEndpointId] = useState(refused?.endpoint ?? "");
   const key = useProviderKey();
   const { apiKey } = key;
+  const [fieldValue, setFieldValue] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [modelId, setModelId] = useState(refused?.modelId ?? suggestedModel(first));
   const [busy, setBusy] = useState<"saving" | null>(null);
@@ -137,8 +148,12 @@ export function ProviderForm({
   const catalog = kind ? catalogProvider(kind) : undefined;
   const words = language === "zh-CN" ? "zh" : "en";
   const endpoint = catalog ? endpointOf(catalog, endpointId) : undefined;
+  const field = endpoint?.field;
+  const fieldUsed = (fieldValue || field?.choices?.[0]?.value || "").trim();
+  const fieldAddress =
+    endpoint && field && fieldAccepts(field, fieldUsed) ? fieldUrl(endpoint, fieldUsed) : null;
   const saved = kind
-    ? providers.find((each) => sameServer(each, kind, endpoint?.id ?? "", baseUrl))
+    ? providers.find((each) => sameServer(each, kind, endpoint?.id ?? "", baseUrl, fieldAddress))
     : undefined;
   const keyRequired = kind !== null && kind !== "openai-compatible";
   const hasKey = apiKey.trim() !== "" || Boolean(saved?.hasApiKey);
@@ -148,11 +163,13 @@ export function ProviderForm({
       ? null
       : kind === "openai-compatible" && baseUrl.trim() === ""
         ? "providers.form.needsAddress"
-        : keyRequired && !hasKey
-          ? "providers.form.needsKey"
-          : modelId.trim() === ""
-            ? "providers.form.needsModel"
-            : null;
+        : field && fieldAddress === null
+          ? "providers.form.needsField"
+          : keyRequired && !hasKey
+            ? "providers.form.needsKey"
+            : modelId.trim() === ""
+              ? "providers.form.needsModel"
+              : null;
   const complete = kind !== null && missing === null;
 
   const chip = (option: CatalogId) => (
@@ -184,6 +201,7 @@ export function ProviderForm({
     setKind(next);
     if (more.includes(next)) setMoreOpen(true);
     setEndpointId("");
+    setFieldValue("");
     setModelId((current) =>
       current === "" || isSuggestion(current) ? suggestedModel(next) : current,
     );
@@ -198,6 +216,7 @@ export function ProviderForm({
       ...(isPreset(catalogProvider(kind)) && { catalogId: kind }),
       modelId: modelId.trim(),
       ...(endpoint ? { endpoint: endpoint.id } : {}),
+      ...(field ? { endpointValue: fieldUsed } : {}),
       ...(kind === "openai-compatible" ? { baseUrl: baseUrl.trim() } : {}),
       ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
     };
@@ -300,6 +319,43 @@ export function ProviderForm({
                   </option>
                 ))}
               </select>
+            </label>
+          )}
+
+          {field && (
+            <label className={fieldLabelClass}>
+              {field.label[words]}
+              {field.choices ? (
+                <select
+                  data-testid="provider-field"
+                  value={fieldUsed}
+                  onChange={(event) => {
+                    setFieldValue(event.target.value);
+                    setTest(null);
+                    setError(null);
+                  }}
+                  className={inputClass}
+                >
+                  {field.choices.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {`${option.label[words]} · ${option.value}`}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  data-testid="provider-field"
+                  value={fieldValue}
+                  onChange={(event) => {
+                    setFieldValue(event.target.value);
+                    setTest(null);
+                    setError(null);
+                  }}
+                  autoComplete="off"
+                  spellCheck={false}
+                  className={inputClass}
+                />
+              )}
             </label>
           )}
 
@@ -416,7 +472,9 @@ export function ProviderForm({
             </button>
             {missing && (
               <span data-testid="provider-use-key-why" className={hintClass}>
-                {t(missing)}
+                {missing === "providers.form.needsField" && field
+                  ? t(missing, { field: field.label[words] })
+                  : t(missing)}
               </span>
             )}
           </div>

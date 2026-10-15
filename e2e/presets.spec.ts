@@ -86,3 +86,49 @@ test("the setup card offers only the first-class providers: no preset and no bes
     await app.close();
   }
 });
+
+test("Amazon Bedrock asks for its region from a list, and Cloudflare for its account ID, before Use this key; in English and Chinese", async () => {
+  const { app, window } = await launchApp(dataDir, { ollama: "http://127.0.0.1:9" });
+  try {
+    await dismissChatSetup(window);
+    await setWindowSize(app, window, 1440, 900);
+    await acceptPlainTextKeys(window);
+    const settings = await openSettings(window, "models");
+    await settings.getByTestId("chat-choice-api-key").check();
+    const form = settings.getByTestId("provider-form");
+    await form.getByTestId("provider-more-toggle").click();
+    const pick = (name: string) =>
+      form.getByRole("radio", { name, exact: true }).locator("xpath=..").click();
+
+    await pick("Amazon Bedrock");
+    const region = form.getByRole("combobox", { name: "Region" });
+    await expect(region).toHaveValue("us-east-1");
+    await region.selectOption("eu-west-1");
+    await expect(region.locator("option:checked")).toHaveText("Europe (Ireland) · eu-west-1");
+    await form.getByLabel(/^API key/).fill("bedrock-key");
+    await expect(form.getByTestId("provider-use-key")).toBeEnabled();
+    await expect(form.getByTestId("provider-sends")).toContainText("go to Amazon Bedrock");
+
+    await pick("Cloudflare Workers AI");
+    const account = form.getByTestId("provider-field");
+    await expect(account).toHaveAccessibleName("Account ID");
+    await form.getByLabel(/^API key/).fill("cloudflare-token");
+    await expect(form.getByTestId("provider-use-key-why")).toHaveText("Fill in Account ID first.");
+    await account.fill("0123456789abcdef0123456789abcdef");
+    await expect(form.getByTestId("provider-use-key-why")).toHaveCount(0);
+    if (process.env.INCARNAMIND_SCREENSHOTS) {
+      await settings.screenshot({
+        path: `${process.env.INCARNAMIND_SCREENSHOTS}/preset-cloudflare-en.png`,
+      });
+    }
+
+    await setLanguage(window, "zh-CN");
+    await expect(account).toHaveAccessibleName("账户 ID");
+    await account.fill("");
+    await expect(form.getByTestId("provider-use-key-why")).toHaveText("请先填写账户 ID。");
+    await pick("Amazon Bedrock");
+    await expect(form.getByRole("combobox", { name: "区域" })).toBeVisible();
+  } finally {
+    await app.close();
+  }
+});

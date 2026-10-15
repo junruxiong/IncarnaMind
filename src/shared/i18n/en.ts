@@ -1620,6 +1620,7 @@ export const en = {
   "providers.form.checking": "Checking the key…",
   "providers.form.needsKey": "Paste the key first.",
   "providers.form.needsAddress": "Enter the server's address first.",
+  "providers.form.needsField": "Fill in {field} first.",
   "providers.form.needsModel": "Choose a model first.",
   "providers.form.badKey": "This key isn’t valid for {provider}. Check it on {site}.",
 
@@ -2914,6 +2915,8 @@ export const en = {
   "error.files.notSaved.open": "Only a file IncarnaMind saved can be opened.",
   "error.provider.modelMissing": "Enter a model name.",
   "error.provider.unknown": "IncarnaMind doesn't know the provider “{provider}”.",
+  "error.provider.fieldMissing": "This provider's address needs a value. Fill it in first.",
+  "error.provider.fieldInvalid": "“{value}” can't be used in this provider's address.",
   "error.chatgpt.notPlanModel": "That model isn't on your ChatGPT plan.",
   "error.provider.embeddingModelMissing": "Enter a search model name.",
   "error.provider.rerankModelMissing": "Enter a model name for ordering results.",

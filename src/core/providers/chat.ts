@@ -43,7 +43,7 @@ import {
   modelsProviderOfKind,
 } from "./catalog";
 import { billingOf, ollamaCloudPrice } from "./catalog/billing";
-import { endpointOf } from "./catalog/providers";
+import { endpointOf, fieldAccepts, fieldUrl } from "./catalog/providers";
 import type { ChatGptPlan } from "./chatgpt/plan";
 import {
   acceptsApiKey,
@@ -158,12 +158,32 @@ function parseServer(input: Record<string, unknown>): ParsedServer {
     throw new InvalidInputError(`Unknown chat provider "${String(input.kind)}".`);
   }
   const catalogId = parseCatalogId(input.kind, input.catalogId);
+  const endpoint = parseEndpoint(input.kind, input.endpoint, catalogId);
+  const baseUrl = baseUrlFor(input.kind, input.baseUrl, catalogId);
   return {
     kind: input.kind,
-    baseUrl: baseUrlFor(input.kind, input.baseUrl, catalogId),
-    endpoint: parseEndpoint(input.kind, input.endpoint, catalogId),
+    baseUrl: fieldEndpointUrl(input.kind, catalogId, endpoint, input.endpointValue) ?? baseUrl,
+    endpoint,
     catalogId,
   };
+}
+
+/** The address of an endpoint built from a value the User gives (`endpointValue`); null for any other. */
+function fieldEndpointUrl(
+  kind: ChatProviderKind,
+  catalogId: string | null,
+  endpointId: string | null,
+  value: unknown,
+): string | null {
+  const provider = catalogProviderOf(kind, catalogId);
+  const endpoint = provider && endpointOf(provider, endpointId);
+  if (!endpoint?.field) return null;
+  const given = typeof value === "string" ? value.trim() : "";
+  if (given === "") throw new InvalidInputError({ key: "error.provider.fieldMissing" });
+  if (!fieldAccepts(endpoint.field, given)) {
+    throw new InvalidInputError({ key: "error.provider.fieldInvalid", values: { value: given } });
+  }
+  return fieldUrl(endpoint, given);
 }
 
 function parseCatalogId(kind: ChatProviderKind, value: unknown): string | null {

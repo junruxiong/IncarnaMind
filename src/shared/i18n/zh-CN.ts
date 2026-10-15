@@ -1546,6 +1546,7 @@ export const zhCN = {
   "providers.form.checking": "正在检查密钥…",
   "providers.form.needsKey": "请先粘贴密钥。",
   "providers.form.needsAddress": "请先填写服务器地址。",
+  "providers.form.needsField": "请先填写{field}。",
   "providers.form.needsModel": "请先选择模型。",
   "providers.form.badKey": "这个密钥对 {provider} 无效。请到 {site} 检查。",
 
@@ -2788,6 +2789,8 @@ export const zhCN = {
   "error.files.notSaved.show": "只能显示 IncarnaMind 保存的文件。",
   "error.files.notSaved.open": "只能打开 IncarnaMind 保存的文件。",
   "error.provider.unknown": "无法识别服务商“{provider}”。",
+  "error.provider.fieldMissing": "这个服务商的地址需要一个值，请先填写。",
+  "error.provider.fieldInvalid": "“{value}”不能用于这个服务商的地址。",
   "error.provider.modelMissing": "输入模型名称。",
   "error.chatgpt.notPlanModel": "你的 ChatGPT 订阅里没有这个模型。",
   "error.provider.embeddingModelMissing": "输入搜索模型名称。",
