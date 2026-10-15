@@ -74,17 +74,21 @@ async function start(
   await window.evaluate(async (path) => {
     await (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.addLinkedFolder(path);
   }, library);
-  // Read to the end: the scan has no text, the .docx wants a password.
+  // Found and read to the end: the scan has no text, the .docx wants a password.
   await expect
     .poll(() =>
-      window.evaluate(
-        async () =>
-          (
-            await (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.listDocuments()
-          ).filter((each) => each.status === "queued" || each.status === "extracting").length,
-      ),
+      window.evaluate(async () => {
+        const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+        const [linked] = await bridge.listLinkedFolders();
+        const documents = await bridge.listDocuments();
+        return (
+          linked?.status === "watching" &&
+          documents.length > 0 &&
+          documents.every((each) => each.status !== "queued" && each.status !== "extracting")
+        );
+      }),
     )
-    .toBe(0);
+    .toBe(true);
   await newMind(window);
   return { app, window };
 }
