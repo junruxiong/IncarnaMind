@@ -11,7 +11,7 @@ export interface ModelFailure {
 
 /**
  * Each chat provider's last real failure, from the Answers it wrote: a later Answer that works,
- * or a key saved for it, clears it. Nothing asks the provider just to fill this (#765).
+ * or a key saved for it, clears it. Nothing asks the provider just to fill this.
  */
 export const useModelHealth = create<{ failures: Readonly<Record<string, ModelFailure>> }>(() => ({
   failures: {},
