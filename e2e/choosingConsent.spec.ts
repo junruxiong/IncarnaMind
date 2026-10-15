@@ -31,7 +31,7 @@ async function screenshot(window: Page, name: string): Promise<void> {
 }
 
 const SENDS_EN =
-  "Your Questions, the Mind you're in, Passages from your Documents, and Document text for Tags go to OpenAI when you use it.";
+  "Your Questions, the Mind you're in, passages from your Documents, and Document text for Tags go to OpenAI when you use it.";
 const SENDS_ZH =
   "你的问题、当前 Mind、文档中的相关段落，以及用于打标签的文档文字，会在使用时发送给 OpenAI。";
 

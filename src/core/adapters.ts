@@ -840,6 +840,12 @@ export interface CoreAdapters {
    */
   connectorSignInTimeoutMs?: number;
   /**
+   * Contradiction watch's timings (#112), which tests shorten: how long after
+   * a new version of a Document its Folder's Minds are checked (30 seconds),
+   * and how long a background check of one claim may take (3 minutes).
+   */
+  contradictionWatch?: { delayMs?: number; claimTimeLimitMs?: number };
+  /**
    * The Connectors directory's entries, in its JSON form, in place of the
    * list that ships with the app; tests point an entry at a local stand-in.
    */
