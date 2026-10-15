@@ -101,8 +101,9 @@ test("Amazon Bedrock asks for its region from a list, and Cloudflare for its acc
       form.getByRole("radio", { name, exact: true }).locator("xpath=..").click();
 
     await pick("Amazon Bedrock");
-    const region = form.getByRole("combobox", { name: "Region" });
+    const region = form.getByRole("combobox", { name: /^Region/ });
     await expect(region).toHaveValue("us-east-1");
+    await expect(form.getByTestId("provider-field-hint")).toContainText("long-term API key");
     await region.selectOption("eu-west-1");
     await expect(region.locator("option:checked")).toHaveText("Europe (Ireland) · eu-west-1");
     await form.getByLabel(/^API key/).fill("bedrock-key");
@@ -111,7 +112,8 @@ test("Amazon Bedrock asks for its region from a list, and Cloudflare for its acc
 
     await pick("Cloudflare Workers AI");
     const account = form.getByTestId("provider-field");
-    await expect(account).toHaveAccessibleName("Account ID");
+    await expect(account).toHaveAccessibleName(/^Account ID/);
+    await expect(form.getByTestId("provider-field-hint")).toContainText("Use REST API");
     await form.getByLabel(/^API key/).fill("cloudflare-token");
     await expect(form.getByTestId("provider-use-key-why")).toHaveText("Fill in Account ID first.");
     await account.fill("0123456789abcdef0123456789abcdef");
@@ -123,11 +125,12 @@ test("Amazon Bedrock asks for its region from a list, and Cloudflare for its acc
     }
 
     await setLanguage(window, "zh-CN");
-    await expect(account).toHaveAccessibleName("账户 ID");
+    await expect(account).toHaveAccessibleName(/^账户 ID/);
     await account.fill("");
     await expect(form.getByTestId("provider-use-key-why")).toHaveText("请先填写账户 ID。");
     await pick("Amazon Bedrock");
-    await expect(form.getByRole("combobox", { name: "区域" })).toBeVisible();
+    await expect(form.getByRole("combobox", { name: /^区域/ })).toBeVisible();
+    await expect(form.getByTestId("provider-field-hint")).toContainText("长期 API 密钥");
   } finally {
     await app.close();
   }

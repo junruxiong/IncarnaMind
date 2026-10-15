@@ -38,6 +38,8 @@ export interface EndpointField {
   /** The values to pick from; left out, a typed value that matches `pattern` (a regular expression). */
   choices?: readonly { value: string; label: Localized }[];
   pattern?: string;
+  /** One plain line under the field, for what the User must know to fill it in. */
+  hint?: Localized;
 }
 
 /** Where a provider's API is, for one region. */

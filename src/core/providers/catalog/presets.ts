@@ -193,6 +193,10 @@ export const PRESETS: readonly CatalogProvider[] = [
         field: {
           name: "region",
           label: { en: "Region", zh: "区域" },
+          hint: {
+            en: "Use a long-term API key made in this region. A short-term key stops working within 12 hours.",
+            zh: "请使用在这个区域创建的长期 API 密钥。短期密钥最长 12 小时后失效。",
+          },
           choices: [
             {
               value: "us-east-1",
@@ -255,6 +259,10 @@ export const PRESETS: readonly CatalogProvider[] = [
         field: {
           name: "account",
           label: { en: "Account ID", zh: "账户 ID" },
+          hint: {
+            en: "On the Workers AI page of the Cloudflare dashboard, under Use REST API.",
+            zh: "在 Cloudflare 控制台的 Workers AI 页面，“使用 REST API”下可以找到。",
+          },
           pattern: "[0-9a-f]{32}",
         },
       },

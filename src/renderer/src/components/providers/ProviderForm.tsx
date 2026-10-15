@@ -209,6 +209,12 @@ export function ProviderForm({
     setError(null);
   };
 
+  const changeField = (value: string) => {
+    setFieldValue(value);
+    setTest(null);
+    setError(null);
+  };
+
   const input = (): TestChatConnectionInput | null => {
     if (!kind) return null;
     return {
@@ -323,17 +329,14 @@ export function ProviderForm({
           )}
 
           {field && (
-            <label className={fieldLabelClass}>
+            <label htmlFor={`${id}-field`} className={fieldLabelClass}>
               {field.label[words]}
               {field.choices ? (
                 <select
+                  id={`${id}-field`}
                   data-testid="provider-field"
                   value={fieldUsed}
-                  onChange={(event) => {
-                    setFieldValue(event.target.value);
-                    setTest(null);
-                    setError(null);
-                  }}
+                  onChange={(event) => changeField(event.target.value)}
                   className={inputClass}
                 >
                   {field.choices.map((option) => (
@@ -344,17 +347,19 @@ export function ProviderForm({
                 </select>
               ) : (
                 <input
+                  id={`${id}-field`}
                   data-testid="provider-field"
                   value={fieldValue}
-                  onChange={(event) => {
-                    setFieldValue(event.target.value);
-                    setTest(null);
-                    setError(null);
-                  }}
+                  onChange={(event) => changeField(event.target.value)}
                   autoComplete="off"
                   spellCheck={false}
                   className={inputClass}
                 />
+              )}
+              {field.hint && (
+                <span data-testid="provider-field-hint" className={hintClass}>
+                  {field.hint[words]}
+                </span>
               )}
             </label>
           )}
