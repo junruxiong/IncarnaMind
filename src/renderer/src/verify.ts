@@ -7,9 +7,10 @@
 
 import type * as Y from "yjs";
 import { create } from "zustand";
-import type { FindClaimsResult, VerifyClaimsResult } from "../../core/api";
+import type { DocumentPlace, FindClaimsResult, VerifyClaimsResult } from "../../core/api";
 import { mindModelOf } from "../../shared/mindModel";
 import { core, files } from "./core";
+import { errorMessage } from "./errors";
 import { translateNow } from "./i18n";
 import { currentMindIdOf } from "./layoutSlice";
 import { useAppStore } from "./store";
@@ -28,8 +29,6 @@ interface VerifyState {
 }
 
 export const useVerify = create<VerifyState>()(() => ({ running: null, outcomes: {} }));
-
-const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 function settle(mindId: string, outcome: VerifyOutcome | null) {
   useVerify.setState((state) => {
@@ -67,7 +66,7 @@ async function runStep<R extends FindClaimsResult | VerifyClaimsResult>(
   try {
     result = await step(requestId);
   } catch (error) {
-    settle(mindId, { kind: "error", message: messageOf(error) });
+    settle(mindId, { kind: "error", message: errorMessage(error, translateNow) });
     return;
   }
   if (result.kind === "busy") {
@@ -102,11 +101,11 @@ export function stopVerify(mindId: string): void {
   if (running?.mindId === mindId) void core.cancelCheck(running.requestId);
 }
 
-/** Opens a Document beside the Mind in front, at a page: the one it verifies, or its original (#720). */
-export function openDocumentBeside(documentId: string, page?: number): void {
+/** Opens a Document beside the Mind in front, at a place: the one it verifies, or its original (#720). */
+export function openDocumentBeside(documentId: string, place: DocumentPlace = {}): void {
   const { layout, openDocument } = useAppStore.getState();
   openDocument(
-    { documentId, ...(page !== undefined && { pageFrom: page, pageTo: page }) },
+    { documentId, ...place },
     { as: "citation", stay: true, ...(layout && { from: layout.focusedGroupId }) },
   );
 }

@@ -18,7 +18,9 @@ import { usePopoverMenu } from "../components/usePopoverMenu";
 import { useComposer } from "../composer";
 import { core } from "../core";
 import { useT } from "../i18n";
+import { useModelMenuRequests } from "../modelMenu";
 import { useModelNames } from "../modelNames";
+import { usePlanStandIn } from "../planLimits";
 import { useAppStore } from "../store";
 import { ChevronDownSmallIcon } from "./icons";
 
@@ -97,7 +99,16 @@ function chooseModel(doc: Y.Doc | null, choice: ChatModelChoice): void {
  * with ChatGPT"; while its model is chosen, it says the plan is in use, with
  * "Manage usage". Not shown before any chat model is set up.
  */
-export function ModelChip({ doc, onChosen }: { doc: Y.Doc | null; onChosen(): void }) {
+export function ModelChip({
+  doc,
+  onChosen,
+  opensOnRequest = false,
+}: {
+  doc: Y.Doc | null;
+  onChosen(): void;
+  /** The assistant's chip: "Choose another model" on an Answer opens its menu (`requestModelMenu`). */
+  opensOnRequest?: boolean;
+}) {
   const t = useT();
   const chosen = useMindModel(doc);
   const defaultModel = useAppStore((state) => state.settings?.user.chatModel ?? null);
@@ -107,6 +118,7 @@ export function ModelChip({ doc, onChosen }: { doc: Y.Doc | null; onChosen(): vo
   const groups = useAnswers((state) => state.models);
   const loadModels = useAnswers((state) => state.loadModels);
   const nameOf = useModelNames();
+  const standIn = usePlanStandIn();
   const [query, setQuery] = useState("");
   const search = useRef<HTMLInputElement>(null);
   // Over the composer, not on it.
@@ -133,6 +145,15 @@ export function ModelChip({ doc, onChosen }: { doc: Y.Doc | null; onChosen(): vo
   }, [menu.open, loadModels]);
   useEffect(() => core.on("chatGptPlan.changed", setPlan), []);
 
+  const requests = useModelMenuRequests((state) => state.count);
+  const answered = useRef(requests);
+  useEffect(() => {
+    if (requests === answered.current) return;
+    answered.current = requests;
+    const chip = menu.buttonProps.ref.current;
+    if (opensOnRequest && chip && !menu.open) chip.click();
+  }, [requests, opensOnRequest, menu.buttonProps.ref, menu.open]);
+
   const current = chosen ?? defaultModel;
   if (!current) return null;
   const providerOf = (providerId: string): ChatProvider | null =>
@@ -150,13 +171,34 @@ export function ModelChip({ doc, onChosen }: { doc: Y.Doc | null; onChosen(): vo
   };
   const via = provider ? t(VIA[groupOf(provider, isCloud(provider.id, current.modelId))]) : null;
   const shown = nameOf(current.modelId, current.providerId);
+  const answering =
+    standIn && provider?.kind === "chatgpt" && standIn.insteadOf === current.modelId
+      ? { name: nameOf(standIn.modelId, current.providerId).name, until: standIn.untilTime }
+      : null;
+  const chipText = answering?.until
+    ? t("composer.model.standIn", { model: answering.name, time: answering.until })
+    : (answering?.name ?? shown.name);
   const named = shown.id ? `${shown.name} · ${shown.id}` : shown.name;
-  const title = via ? `${named} · ${via}` : named;
+  const title = answering
+    ? answering.until
+      ? t("composer.model.standIn.title", {
+          chosen: shown.name,
+          model: answering.name,
+          time: answering.until,
+        })
+      : t("composer.model.standIn.titleForNow", { chosen: shown.name, model: answering.name })
+    : via
+      ? `${named} · ${via}`
+      : named;
   const label = via
-    ? t("composer.model.label", { model: shown.name, via })
-    : t("composer.model.labelPlain", { model: shown.name });
+    ? t("composer.model.label", { model: chipText, via })
+    : t("composer.model.labelPlain", { model: chipText });
 
   const choose = (choice: ChatModelChoice) => {
+    // The User's own pick wins over a stand-in, for the model it stood in for too.
+    if (answering || (standIn && choice.modelId === standIn.insteadOf)) {
+      core.endPlanStandIn().catch(useAppStore.getState().reportError);
+    }
     chooseModel(doc, choice);
     menu.close();
     onChosen();
@@ -189,13 +231,14 @@ export function ModelChip({ doc, onChosen }: { doc: Y.Doc | null; onChosen(): vo
         type="button"
         {...menu.buttonProps}
         data-testid="composer-model"
+        data-stand-in={answering ? "" : undefined}
         aria-label={label}
         title={title}
         onPointerEnter={loadModels}
         onFocus={loadModels}
         className="composer-chip composer-model"
       >
-        <span className="truncate">{shown.name}</span>
+        <span className="truncate">{chipText}</span>
         <ChevronDownSmallIcon className="composer-model-chevron" />
       </button>
       <div
@@ -216,7 +259,7 @@ export function ModelChip({ doc, onChosen }: { doc: Y.Doc | null; onChosen(): vo
                   !event.metaKey &&
                   !event.ctrlKey &&
                   !event.altKey &&
-                  event.target !== search.current
+                  !(event.target instanceof HTMLInputElement)
                 ) {
                   search.current?.focus();
                 }

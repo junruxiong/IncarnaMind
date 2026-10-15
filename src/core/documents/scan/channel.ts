@@ -43,10 +43,13 @@ export interface TextRecognizerChannel {
 
 type Pending = { resolve(response: TextRecognizerResponse): void; reject(error: Error): void };
 
+/** Far longer than a picture takes to read: one that hangs the process mustn't hold up the rest. */
+const READ_FILE_MS = 60_000;
+
 /**
  * The core's `TextRecognizer`, backed by a channel that `start` opens on the
  * first `load`. If it stops, pending requests fail, and the next `load` opens
- * a new one.
+ * a new one. A picture file not read in `READ_FILE_MS` stops it.
  */
 export function createChannelTextRecognizer(start: () => TextRecognizerChannel): TextRecognizer {
   let channel: TextRecognizerChannel | undefined;
@@ -55,6 +58,15 @@ export function createChannelTextRecognizer(start: () => TextRecognizerChannel):
   const pending = new Map<number, Pending>();
   let nextId = 1;
 
+  /** The process is done with: what it was asked fails, and the next `load` starts another. */
+  function drop(target: TextRecognizerChannel, error: Error): void {
+    if (channel !== target) return;
+    channel = undefined;
+    loadedKey = undefined;
+    for (const waiting of pending.values()) waiting.reject(error);
+    pending.clear();
+  }
+
   function open(): TextRecognizerChannel {
     const started = start();
     started.onResponse((response) => {
@@ -62,14 +74,9 @@ export function createChannelTextRecognizer(start: () => TextRecognizerChannel):
       pending.delete(response.id);
       waiting?.resolve(response);
     });
-    started.onExit((code) => {
-      if (channel !== started) return;
-      channel = undefined;
-      loadedKey = undefined;
-      const error = new Error(`The text recognition process stopped (exit code ${code}).`);
-      for (const waiting of pending.values()) waiting.reject(error);
-      pending.clear();
-    });
+    started.onExit((code) =>
+      drop(started, new Error(`The text recognition process stopped (exit code ${code}).`)),
+    );
     return started;
   }
 
@@ -113,12 +120,21 @@ export function createChannelTextRecognizer(start: () => TextRecognizerChannel):
     },
 
     async readFile(file, page) {
-      if (!channel || loadedKey === undefined) {
+      const target = channel;
+      if (!target || loadedKey === undefined) {
         throw new Error("The text recognition model isn't loaded.");
       }
-      const { lines, size } = await request({ type: "readFile", file, page });
-      if (!lines || !size) throw new Error("The text recognition process returned no lines.");
-      return { lines, ...size };
+      const timer = setTimeout(() => {
+        drop(target, new Error(`The picture wasn't read in ${READ_FILE_MS} ms.`));
+        target.stop();
+      }, READ_FILE_MS);
+      try {
+        const { lines, size } = await request({ type: "readFile", file, page });
+        if (!lines || !size) throw new Error("The text recognition process returned no lines.");
+        return { lines, ...size };
+      } finally {
+        clearTimeout(timer);
+      }
     },
 
     close() {

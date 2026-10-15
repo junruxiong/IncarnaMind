@@ -14,6 +14,7 @@ import {
 } from "react";
 import type { Document } from "../../../core/api";
 import { findQuoteInPages, lostLigatures, type TextPiece } from "../../../shared/quoteMatch";
+import { core } from "../core";
 import { useT } from "../i18n";
 import type { ViewerTarget } from "../store";
 import {
@@ -25,8 +26,9 @@ import {
   ZoomInIcon,
   ZoomOutIcon,
 } from "./icons";
+import { LockedPdf } from "./LockedPdf";
 import { loadOutline, type OutlineItem } from "./outline";
-import { isMissingDocumentError, loadPdfJs, openPdf, type PdfJs } from "./pdfjs";
+import { isMissingDocumentError, isPasswordError, loadPdfJs, openPdf, type PdfJs } from "./pdfjs";
 import { PlaceMemoryContext } from "./place";
 import { CitationMark, type QuoteMark, quoteMarkOf, quoteTone } from "./quoteMark";
 import { type ScannedPage, scannedTextLayer, useScannedPages } from "./scannedText";
@@ -78,6 +80,8 @@ type Loaded =
   | { kind: "loading" }
   | { kind: "ready"; pdfjs: PdfJs; pdf: PDFDocumentProxy; firstPage: PageSize }
   | { kind: "missing" }
+  /** Password-protected, with no password kept that opens it (#763). */
+  | { kind: "locked" }
   | { kind: "failed"; message: string };
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
@@ -117,15 +121,36 @@ export function PdfView({
 }) {
   const t = useT();
   const [loaded, setLoaded] = useState<Loaded>({ kind: "loading" });
+  /** Counts the times it was unlocked, to open it again. */
+  const [unlocked, setUnlocked] = useState(0);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `unlocked` opens it again once its password is kept.
   useEffect(() => {
     let cancelled = false;
     let task: PDFDocumentLoadingTask | undefined;
+    /** Opens the PDF; a locked one with the password the core keeps for it, asked for only then. */
+    const open = async (pdfjs: PdfJs): Promise<PDFDocumentProxy | null> => {
+      task = openPdf(pdfjs, document.id, source);
+      try {
+        return await task.promise;
+      } catch (error) {
+        if (!isPasswordError(error)) throw error;
+        const password = await core.documentPasswordFor(document.id);
+        if (cancelled || password === null) return null;
+        await task.destroy();
+        task = openPdf(pdfjs, document.id, source, password);
+        return await task.promise;
+      }
+    };
     loadPdfJs()
       .then(async (pdfjs) => {
         if (cancelled) return;
-        task = openPdf(pdfjs, document.id, source);
-        const pdf = await task.promise;
+        const pdf = await open(pdfjs);
+        if (cancelled) return;
+        if (!pdf) {
+          setLoaded({ kind: "locked" });
+          return;
+        }
         const first = (await pdf.getPage(1)).getViewport({ scale: 1 });
         if (!cancelled) {
           setLoaded({
@@ -139,13 +164,14 @@ export function PdfView({
       .catch((error: unknown) => {
         if (cancelled) return;
         if (isMissingDocumentError(error)) setLoaded({ kind: "missing" });
+        else if (isPasswordError(error)) setLoaded({ kind: "locked" });
         else setLoaded({ kind: "failed", message: error instanceof Error ? error.message : "" });
       });
     return () => {
       cancelled = true;
       void task?.destroy();
     };
-  }, [document.id, source]);
+  }, [document.id, source, unlocked]);
 
   switch (loaded.kind) {
     case "loading":
@@ -162,6 +188,19 @@ export function PdfView({
           <ViewerHeader openable={false} />
           {banner}
           <FileGone quote={target.quote} />
+        </>
+      );
+    case "locked":
+      return (
+        <>
+          <ViewerHeader />
+          <LockedPdf
+            documentId={document.id}
+            onUnlocked={() => {
+              setLoaded({ kind: "loading" });
+              setUnlocked((count) => count + 1);
+            }}
+          />
         </>
       );
     case "failed":

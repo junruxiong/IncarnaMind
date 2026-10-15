@@ -2,9 +2,9 @@
  * Electron implementations of the core's adapters. This is the only place that
  * turns Electron APIs into capabilities the core can use.
  */
-import { mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { connect } from "node:net";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { app, safeStorage, shell } from "electron";
 import { Agent, fetch as undiciFetch } from "undici";
@@ -15,20 +15,24 @@ import {
   BUILT_IN_SKILLS_SOURCE,
   type CoreAdapters,
   type CrashReporter,
+  createOllamaModels,
   type Executor,
   type FileShell,
   type Keychain,
   type Logger,
+  type OllamaApp,
   type UsageDataSender,
 } from "../core";
 import type { PageFetch } from "../core/documents/web/fetch";
 import { createFakeCapture, type FakeCapture } from "../core/meetings/fakeCapture";
 import { type Resolve, systemResolve } from "../core/tools/web/addresses";
 import type { FakeTranscriberOptions } from "../core/transcription/fake";
+import { SHOW_AGENT_CONNECTION } from "../shared/agentConnection";
 import { createCitedPageCapture } from "./citedPageCapture";
 import { createSentryCrashReporter } from "./crashReports";
 import { createUtilityProcessEmbedder } from "./embedder";
 import { createElectronAudioCapture } from "./meetings/capture";
+import { createFakeOllamaApp, createOllamaApp } from "./ollamaApp";
 import { createPageLook } from "./pageLook";
 import { createElectronPictures } from "./pictures";
 import { createElectronPrinter } from "./printPdf";
@@ -101,6 +105,29 @@ const fileShell: FileShell = {
     shell.showItemInFolder(path);
   },
 };
+
+/**
+ * Test-only launch flag ("installed" or "missing"). Without it, the scripted chat model's
+ * Ollama always runs, so a test that saves an Ollama provider needs no server.
+ */
+const testOllamaApp =
+  import.meta.env.MODE === "test" ? process.env.INCARNAMIND_TEST_OLLAMA_APP : undefined;
+
+function ollamaApp(): OllamaApp {
+  if (import.meta.env.MODE === "test") {
+    return createFakeOllamaApp(testOllamaApp === "installed" ? "installed" : "missing");
+  }
+  return createOllamaApp({
+    platform: process.platform,
+    home: app.getPath("home"),
+    localAppData: process.env.LOCALAPPDATA,
+    exists: existsSync,
+    async openPath(path) {
+      const error = await shell.openPath(path);
+      if (error) throw new Error(error);
+    },
+  });
+}
 
 /**
  * Local Connectors and Skill scripts start with the User's login-shell
@@ -217,6 +244,13 @@ function citationStylesFolder(): string {
     ? join(process.resourcesPath, "citation-styles")
     : join(app.getAppPath(), "resources", "citation-styles");
 }
+
+/**
+ * The home folder the core gets. Node's, not `app.getPath("home")`: on macOS
+ * that ignores HOME, which the smoke tests point at a temporary folder, and
+ * their agents' settings would land in the real one.
+ */
+export const homeFolder = (): string => homedir();
 
 /**
  * The User's Documents folder, where the first save offers to put the Output
@@ -483,6 +517,12 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
   const web = webStandIn();
   const standIn = standInPort();
   const connectorDirectory = testConnectorDirectory();
+  const scriptedOllama =
+    import.meta.env.MODE === "test" &&
+    process.env.INCARNAMIND_FAKE_CHAT === "1" &&
+    testOllamaApp === undefined
+      ? { ...createOllamaModels(), running: async () => true }
+      : undefined;
   return {
     ...(connectorDirectory !== undefined && { connectorDirectory }),
     ...(connectorRegistryUrl && { connectorRegistryUrl }),
@@ -516,6 +556,7 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
       builtInSkills: builtInSkillsFolder(),
       examples: examplesFolder(),
       citationStyles: citationStylesFolder(),
+      home: homeFolder(),
       documents: documentsFolder(dataDir),
     },
     systemLanguages: () => app.getPreferredSystemLanguages(),
@@ -524,6 +565,8 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
     keychain: createSafeStorageKeychain(dataDir),
     browser: systemBrowser,
     shell: fileShell,
+    ollamaApp: ollamaApp(),
+    ...(scriptedOllama && { ollamaModels: scriptedOllama }),
     printer: createElectronPrinter({ log, rendererUrl: process.env.ELECTRON_RENDERER_URL }),
     pageLook: createPageLook({
       log,
@@ -540,6 +583,7 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
     // An outside agent starts the shim (#351) the same way: this app's binary, as plain Node,
     // running the shim built beside this file (inside app.asar, which Node mode reads).
     agents: {
+      offered: SHOW_AGENT_CONNECTION,
       launcher: {
         command: process.execPath,
         args: [join(__dirname, "agentShim.js")],

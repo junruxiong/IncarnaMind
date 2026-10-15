@@ -24,6 +24,7 @@ import { deletedCommands } from "./deleted";
 import { editCommands } from "./edit";
 import { evidenceCommands } from "./evidence";
 import { exportCommands } from "./exports";
+import { feedbackCommands } from "./feedback";
 import { fileCommands } from "./fileInfo";
 import { footnoteCommands } from "./footnotes";
 import { citationHandle, findHandle, readMindHandle, sidebarHandle } from "./handles";
@@ -42,6 +43,7 @@ import {
 import { paletteCommands } from "./palette";
 import { peekCommands } from "./peek";
 import { proposalCommands } from "./proposals";
+import { researchCommands } from "./research";
 import { sortCommands } from "./sort";
 import "./objectMenus";
 import { type Command, type CommandContext, commands, fromMenu } from "./registry";
@@ -132,10 +134,12 @@ const appCommands: readonly Command[] = [
   ...tabCommands,
   ...meetingCommands,
   ...webPageCommands,
+  ...feedbackCommands,
   ...sortCommands,
   ...fileCommands,
   ...evidenceCommands,
   ...comparisonCommands,
+  ...researchCommands,
   ...exportCommands,
   ...taskCommands,
   {
