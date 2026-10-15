@@ -3984,6 +3984,8 @@ export interface CheckSentencesInput {
   /** Where the selection starts, and where it ends: each sentence it touches is checked, whole. */
   from: TextPlace;
   to: TextPlace;
+  /** More stretches checked with `from`..`to`, each sentence once. */
+  more?: TextStretch[];
   action: ClaimCheckAction;
   /** Search every Document, not the Mind's Folder ("Search all Documents"). */
   allDocuments?: boolean;
@@ -4045,10 +4047,14 @@ export interface VerifyClaimsInput {
   model?: ChatModelChoice | null;
 }
 
-/** Sentences a check left out, as they hold changes still waiting: how many, and those changes' ids. */
 export interface WaitingSentences {
-  sentences: number;
-  changes: string[];
+  sentences: TextStretch[];
+  changeIds: string[];
+}
+
+export interface TextStretch {
+  from: TextPlace;
+  to: TextPlace;
 }
 
 /** Why finding or checking a document's claims sent nothing. */
