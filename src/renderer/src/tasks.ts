@@ -40,17 +40,19 @@ export const resumeTask = (taskId: string) => core.resumeTask(taskId).then(put, 
 export const stopTask = (taskId: string) => core.stopTask(taskId).then(put, report);
 export const answerTaskAsk = (taskId: string, answer: TaskAskAnswer) =>
   core.answerTaskAsk(taskId, answer).then(put, report);
+/** Tell it…: rejects when the Task can't take it, for the composer to say why. */
+export const tellTask = (taskId: string, text: string) => core.tellTask(taskId, text).then(put);
+export const untellTask = (taskId: string, messageId: string) =>
+  core.untellTask(taskId, messageId).then(put);
 
 /** Frames to wait for a Mind just opened to draw the Block a Task works on. */
 const BLOCK_FRAMES = 60;
 
-/** Scrolls the Block a Task works on (a comparison table) into the middle, once its Mind draws it. */
-function revealBlock(mindId: string, blockId: string, frames = BLOCK_FRAMES): void {
-  const block = document.querySelector(
-    `article[data-mind-id="${CSS.escape(mindId)}"] [data-comparison-table="${CSS.escape(blockId)}"]`,
-  );
-  if (block) block.scrollIntoView({ block: "center" });
-  else if (frames > 0) requestAnimationFrame(() => revealBlock(mindId, blockId, frames - 1));
+/** Scrolls what `selector` finds in a Mind into the middle, once the Mind draws it. */
+function reveal(mindId: string, selector: string, frames = BLOCK_FRAMES): void {
+  const found = document.querySelector(`article[data-mind-id="${CSS.escape(mindId)}"] ${selector}`);
+  if (found) found.scrollIntoView({ block: "center" });
+  else if (frames > 0) requestAnimationFrame(() => reveal(mindId, selector, frames - 1));
 }
 
 /** Opens a Task's Mind at its place (its Block, if any), with its row marked in the tray. */
@@ -58,7 +60,21 @@ export function showTask(task: Pick<Task, "id" | "mindId" | "blockId">): void {
   useTasks.setState({ shown: task.id });
   if (!task.mindId) return;
   useAppStore.getState().openMind(task.mindId);
-  if (task.blockId) revealBlock(task.mindId, task.blockId);
+  if (task.blockId) reveal(task.mindId, `[data-comparison-table="${CSS.escape(task.blockId)}"]`);
+}
+
+/** Review: where a finished Task's work went (a Research draft's first change), else its own place. */
+export function reviewTask(task: Task): void {
+  const { review } = task;
+  if (!review) {
+    showTask(task);
+    return;
+  }
+  useTasks.setState({ shown: task.id });
+  useAppStore.getState().openMind(review.mindId);
+  if (review.proposalId) {
+    reveal(review.mindId, `[data-proposal-id="${CSS.escape(review.proposalId)}"]`);
+  }
 }
 
 core.on("task.changed", put);

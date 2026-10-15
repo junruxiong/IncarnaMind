@@ -1,4 +1,6 @@
 import { mkdtemp, rm } from "node:fs/promises";
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
@@ -21,6 +23,7 @@ import {
 import type { FakeTranscriberOptions } from "../src/core/transcription/fake";
 import type { DocumentLocation } from "../src/shared/documentViewer";
 import type { TestHooks } from "../src/shared/testHooks";
+import { type FakeOpenAIServer, signInAt } from "../tests/helpers/fakeOpenAI";
 import { homeEnv } from "../tests/helpers/home";
 
 const appDir = resolve(__dirname, "..");
@@ -126,6 +129,11 @@ export interface LaunchOptions {
    * started with `startScriptedTask`. Needs a test build.
    */
   scriptedTasks?: boolean;
+  /**
+   * How long after a new version of a Document contradiction watch checks its
+   * Folder's Minds (#112), instead of 30 seconds. Needs a test build.
+   */
+  contradictionWatchDelayMs?: number;
 }
 
 /**
@@ -179,6 +187,7 @@ export async function launchApp(
     scans,
     web,
     scriptedTasks = false,
+    contradictionWatchDelayMs,
   }: LaunchOptions = {},
 ): Promise<RunningApp> {
   const env: Record<string, string> = {};
@@ -205,6 +214,7 @@ export async function launchApp(
   delete env.INCARNAMIND_TEST_SCANS;
   delete env.INCARNAMIND_TEST_WEB;
   delete env.INCARNAMIND_TEST_TASKS;
+  delete env.INCARNAMIND_TEST_CONTRADICTION_DELAY_MS;
   // A test never uses the ChatGPT sign-in an agent's shell may point at for checks by hand.
   delete env.INCARNAMIND_CHATGPT_PROFILE;
   env.INCARNAMIND_TEST_AUDIO = "fake";
@@ -227,6 +237,9 @@ export async function launchApp(
   if (scans) env.INCARNAMIND_TEST_SCANS = scans;
   if (web) env.INCARNAMIND_TEST_WEB = String(web);
   if (scriptedTasks) env.INCARNAMIND_TEST_TASKS = "1";
+  if (contradictionWatchDelayMs !== undefined) {
+    env.INCARNAMIND_TEST_CONTRADICTION_DELAY_MS = String(contradictionWatchDelayMs);
+  }
   env.INCARNAMIND_DATA_DIR = dataDir;
   env.INCARNAMIND_TEST_HOOKS = "1";
   if (fakeChat) env.INCARNAMIND_FAKE_CHAT = "1";
@@ -286,17 +299,29 @@ export const flushUsageData = (app: ElectronApplication) =>
 
 /**
  * Stands in for the system's notifications: each one shown is recorded
- * instead (`notificationsShown`). Notifications made before this aren't.
+ * instead (`notificationsShown`, `clickNotification`). Notifications made
+ * before this aren't.
  */
 export const recordNotifications = (app: ElectronApplication) =>
   app.evaluate(({ Notification }) => {
     const shown: { title: string; body: string }[] = [];
-    (globalThis as { notificationsShown?: typeof shown }).notificationsShown = shown;
+    const held: Electron.Notification[] = [];
+    Object.assign(globalThis, { notificationsShown: shown, notificationsHeld: held });
     Notification.isSupported = () => true;
     Notification.prototype.show = function show(this: Electron.Notification) {
       shown.push({ title: this.title, body: this.body });
+      held.push(this);
     };
   });
+
+/** Clicks the notification recorded `index`th, as the User would in the system's list. */
+export const clickNotification = (app: ElectronApplication, index: number) =>
+  app.evaluate((_electron, at) => {
+    const held = (globalThis as { notificationsHeld?: Electron.Notification[] }).notificationsHeld;
+    const notification = held?.[at];
+    if (!notification) throw new Error(`No notification ${at} was shown.`);
+    notification.emit("click");
+  }, index);
 
 export const notificationsShown = (app: ElectronApplication) =>
   app.evaluate(
@@ -304,6 +329,13 @@ export const notificationsShown = (app: ElectronApplication) =>
       (globalThis as { notificationsShown?: { title: string; body: string }[] })
         .notificationsShown ?? [],
   );
+
+/** Force-quits the app as a crash would: its process killed, nothing saved on the way out. */
+export async function forceQuit(app: ElectronApplication): Promise<void> {
+  const exited = new Promise<void>((resolve) => app.process().once("exit", () => resolve()));
+  app.process().kill("SIGKILL");
+  await exited;
+}
 
 /** Chooses the Edit menu's Undo or Redo, as the application menu has it now. */
 export const clickEditItem = (app: ElectronApplication, id: "edit.undo" | "edit.redo") =>
@@ -355,25 +387,54 @@ export async function editFolderInLibrary(window: Page, name: string): Promise<L
 }
 
 /**
- * Shows the sidebar's Source locations view: each Linked folder with its
+ * Shows the sidebar's Folders on disk view: each Linked folder with its
  * folders as on disk, and "Other Documents".
  */
 export async function showSourceLocations(window: Page): Promise<void> {
   const button = window.getByTestId("browse-views").getByRole("button", {
-    name: "Source locations",
+    name: "Folders on disk",
   });
   await button.click();
   await expect(button).toHaveAttribute("aria-pressed", "true");
 }
 
+/** Shows the sidebar's Folders view: the User's Folders with their Minds and Documents. */
+export async function showFolders(window: Page): Promise<void> {
+  const button = window
+    .getByTestId("browse-views")
+    .getByRole("button", { name: "Folders", exact: true });
+  await button.click();
+  await expect(button).toHaveAttribute("aria-pressed", "true");
+}
+
 /**
- * On a fresh data folder the first-run chat setup covers the window: choose
- * "set up later". The choice is remembered, so later launches don't show it.
+ * First run asks for no model (#103): the setup shows in the composer at the first own Question,
+ * so there is nothing to dismiss. Kept so a spec says where the old dialog used to be.
  */
 export async function dismissChatSetup(window: Page): Promise<void> {
-  const setup = window.getByTestId("chat-setup");
-  await setup.getByTestId("chat-setup-later").click();
-  await setup.waitFor({ state: "hidden" });
+  await expect(window.getByTestId("chat-setup")).toHaveCount(0);
+}
+
+/**
+ * An Ollama server that lists models, for the model chip's menu, after
+ * `delayMs` as a slow provider does. It answers nothing else.
+ */
+export async function ollamaListing(models: string[], { delayMs = 0 }: { delayMs?: number } = {}) {
+  const server: Server = createServer((request, response) => {
+    request.resume();
+    if (request.url === "/api/tags") {
+      setTimeout(() => {
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(JSON.stringify({ models: models.map((name) => ({ name, model: name })) }));
+      }, delayMs);
+      return;
+    }
+    response.writeHead(404);
+    response.end();
+  });
+  await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+  const { port } = server.address() as AddressInfo;
+  return { server, url: `http://127.0.0.1:${port}` };
 }
 
 /**
@@ -614,6 +675,28 @@ export function ollamaAppOpened(app: ElectronApplication) {
       (globalThis as { incarnamindOllamaApp?: { opened: number } }).incarnamindOllamaApp?.opened ??
       0,
   );
+}
+
+/**
+ * Continue with ChatGPT in Settings → Models, as the User does, against the
+ * local stand-in for OpenAI the app was launched with (`chatGpt`); then closes
+ * Settings. With no chat model before, the plan's first model becomes the default.
+ */
+export async function signInWithChatGpt(
+  app: ElectronApplication,
+  window: Page,
+  openai: FakeOpenAIServer,
+): Promise<void> {
+  await interceptOpenExternal(app);
+  const plan = (await openSettings(window, "models")).getByTestId("chatgpt-settings");
+  await acceptPlainTextKeys(window, plan);
+  await plan.getByTestId("chatgpt-continue").click();
+  await expect.poll(() => urlsOpened(app)).toHaveLength(1);
+  const [authorize] = await urlsOpened(app);
+  expect((await signInAt(openai, authorize ?? "")).status).toBe(200);
+  await window.getByTestId("chatgpt-welcome-ok").click();
+  await expect(plan.getByTestId("chatgpt-in-use")).toBeVisible();
+  await closeSettings(window);
 }
 
 /**

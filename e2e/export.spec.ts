@@ -28,6 +28,7 @@ import {
   pointAndClick,
   removeDataFolder,
   setWindowSize,
+  showFolders,
   showSourceLocations,
   useLocalChatModel,
   useOutputLocation,
@@ -543,7 +544,7 @@ test("an export saved into a Linked folder is IncarnaMind's file: its viewer say
   await (await coreOf(window)).evaluate((core) =>
     core.createLibraryGroup({ name: "Reports", description: "" }),
   );
-  await window.getByTestId("browse-views").getByRole("button", { name: "Folders" }).click();
+  await showFolders(window);
   await editFolderInLibrary(window, "Reports");
   const library = window.getByTestId("library");
   const counts = library.getByTestId("folder-counts-own-files");

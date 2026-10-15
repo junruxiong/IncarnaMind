@@ -51,7 +51,8 @@ extraResources:
     filter:
       - "**/*"
   # The licence notices: what the model catalog is generated from (scripts/catalogModels.ts),
-  # and the citation-style engine's crates and the CSL styles and locales.
+  # the citation-style engine's crates and the CSL styles and locales, and the Speex code the
+  # Meetings echo canceller is derived from.
   - from: resources/notices
     to: notices
     filter:

@@ -58,9 +58,12 @@ describe("A web page's snapshot", () => {
     ]) {
       expect(xhtml).not.toMatch(unsafe);
     }
-    // A picture is its description; a tracking pixel isn't even that.
-    expect(xhtml).toContain('<img alt="A tea plantation on a hillside"/>');
+    // A picture is its description, marked for the save to fetch; a tracking pixel isn't even that.
+    expect(xhtml).toContain('<img alt="A tea plantation on a hillside" data-picture="0"/>');
     expect(xhtml.match(/<img/g)).toHaveLength(1);
+    expect(snapshot.pictures).toEqual([
+      { index: 0, address: "https://images.example/tea-plantation.jpg" },
+    ]);
     // Links are to web addresses, made absolute; the edit link beside a heading goes.
     expect(xhtml).toContain('<a href="https://encyclopedia.example/wiki/Camellia_sinensis">');
     expect(xhtml).not.toContain("edit");

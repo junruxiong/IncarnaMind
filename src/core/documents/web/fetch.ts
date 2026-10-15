@@ -41,7 +41,7 @@ export interface FetchedPage {
 const HTML_TYPES = new Set(["text/html", "application/xhtml+xml"]);
 
 // Some sites turn away requests that don't look like a browser's.
-const USER_AGENT =
+export const USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 IncarnaMind";
 
 const isWebAddress = (url: string) => /^https?:$/i.test(URL.parse(url)?.protocol ?? "");
