@@ -451,7 +451,6 @@ describe("a web page to share (#72)", { timeout: 60_000 }, () => {
     expect(cardText(document.getElementById("card-1"), ".card-source")).toBe(
       "Northwind results · 核对于 2026年10月13日",
     );
-    // A Chinese line can end at any character, so each date is kept whole.
     expect(cardText(document.getElementById("card-1"), ".card-source .date")).toBe(
       "2026年10月13日",
     );
