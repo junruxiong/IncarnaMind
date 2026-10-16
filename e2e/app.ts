@@ -1119,8 +1119,10 @@ export async function dotsOf(line: Locator) {
     const parts: Element[] = [];
     const collect = (parent: Element) => {
       for (const child of parent.children) {
-        if (getComputedStyle(child).display === "contents") collect(child);
-        else if (child.tagName !== "UL") parts.push(child);
+        const { display, position } = getComputedStyle(child);
+        if (display === "contents") collect(child);
+        else if (display !== "none" && position !== "absolute" && child.tagName !== "UL")
+          parts.push(child);
       }
     };
     collect(element);
