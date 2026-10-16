@@ -80,7 +80,7 @@ describe("Asking during a call", { timeout: 60_000 }, () => {
     const calls: ModelCall[] = [];
     const { core, record, meeting } = await setUp(listeningModel(calls));
     await core.startMeeting({ meetingId: meeting.id });
-    record(9 * SECOND);
+    record(9 * SECOND, ["microphone"]);
     const early = await until(core, meeting.id, (transcript) => transcript.lines >= 4);
     await vi.waitFor(
       async () => {
@@ -90,7 +90,7 @@ describe("Asking during a call", { timeout: 60_000 }, () => {
       { timeout: 20_000, interval: 50 },
     );
     // The newest lines, just said: the Transcript isn't indexed again for a while yet.
-    record(5 * SECOND);
+    record(5 * SECOND, ["microphone"]);
     const live = await until(core, meeting.id, (transcript) => transcript.lines >= 6);
     expect(await core.searchPassages("Friday", { mode: "keyword" })).toEqual([]);
     const client = await connectToMind(core, meeting.mindId);
@@ -109,11 +109,31 @@ describe("Asking during a call", { timeout: 60_000 }, () => {
       expect.objectContaining({
         documentId: live.documentId,
         quote: NEWEST,
-        location: expect.objectContaining({ kind: "time" }),
+        location: expect.objectContaining({ kind: "time", speaker: "Speaker ?" }),
         check: "found",
       }),
     ]);
     expect(readMind(client).textContent).toBe("");
+  });
+
+  test("the transcript's lines say who said them, so Questions about what they said are about the other side", async () => {
+    const calls: ModelCall[] = [];
+    const { core, record, meeting } = await setUp(listeningModel(calls));
+    await core.startMeeting({ meetingId: meeting.id, systemAudio: true });
+    record(9 * SECOND);
+    await until(core, meeting.id, (transcript) => transcript.lines >= 4);
+    await ask(core, {
+      mindId: meeting.mindId,
+      text: "What did they say about the payment provider?",
+    });
+
+    const [firstCall] = calls;
+    if (!firstCall) throw new Error("The model wasn't asked.");
+    const sent = userText(firstCall);
+    expect(sent).toMatch(/\[\d+:\d{2} Me\] /);
+    expect(sent).toMatch(/\[\d+:\d{2} Them\] /);
+    expect(firstCall.system).toContain('"Them" is the other side of the call');
+    expect(firstCall.system).toContain("never guess");
   });
 
   test("a Question from another Mind, or after Stop, goes without the transcript", async () => {

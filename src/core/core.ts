@@ -1119,7 +1119,8 @@ export function createCore(adapters: CoreAdapters): Core {
     readiness: (model) => chat.readiness(model),
     prepare: (model) => chat.prepareModel(model, "web-search", "off"),
     // A page an Answer saves is never loaded whole: that is for the User to ask for, page by page.
-    savePage: (address, fetch) => webPages.save({ address, keepLook: false }, undefined, fetch),
+    savePage: (address, fetch) =>
+      webPages.save({ address, keepLook: false }, undefined, fetch, "search"),
     folderOf: (place) => {
       try {
         if (place.mindId !== null) return minds.get(place.mindId).folderId;
@@ -1603,6 +1604,7 @@ export function createCore(adapters: CoreAdapters): Core {
       searchableCount: (documentIds) => documents.searchableCount(documentIds ?? undefined),
       names: () => documents.names(),
       searchableLanguages: (documentIds) => documents.searchableLanguages(documentIds ?? undefined),
+      savedBySearch: (documentId) => documents.getMany([documentId])[0]?.web?.origin === "search",
       citationSource: (passageId) => documents.citationSource(passageId),
       pageTexts: (documentId, contentHash, from, to) =>
         documents.pageTexts(documentId, contentHash, from, to),
@@ -1844,6 +1846,7 @@ export function createCore(adapters: CoreAdapters): Core {
     now,
     tags,
     enabled: () => !organizing(),
+    stopped: (id) => library.taggingStoppedFor(id),
     canRun: async () => {
       const classifier = await tagging.resolve();
       if (!classifier) return false;
@@ -3377,6 +3380,19 @@ export function createCore(adapters: CoreAdapters): Core {
     retagDocuments: async (documentIds) => {
       if (organizing()) return library.classify(documentIds);
       tagger.retag(documentIds);
+    },
+    stopTagging: async () => {
+      const places = library.taggingPlaces();
+      library.setTaggingStopped(places, true);
+      tagger.resume();
+      return places;
+    },
+    setTaggingWithAi: async (folderId, on) => {
+      if ((folderId !== null && typeof folderId !== "string") || typeof on !== "boolean") {
+        throw new InvalidInputError({ key: "error.tagging.place" });
+      }
+      library.setTaggingStopped([folderId], !on);
+      tagger.resume();
     },
 
     getJevSettings: () => jev.status(),
