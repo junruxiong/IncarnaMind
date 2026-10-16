@@ -1,7 +1,8 @@
 /**
  * Reading a Document's reference record from its file (#286), offline: a
  * PDF's Info dictionary and XMP metadata, an Office file's core properties,
- * and a DOI or arXiv id printed on its first pages. Pure: the processing
+ * a DOI or arXiv id printed on its first pages, and what a PDF's first page
+ * prints where its metadata says nothing (./firstPage). Pure: the processing
  * worker reads the file and hands the parts over (see `readMetadataOf` in
  * ../documents/processing). What isn't found is left out, never guessed: a
  * field the file doesn't give stays empty for the User or Look up to fill.
@@ -16,8 +17,10 @@ import {
   parseWrittenNames,
 } from "../../shared/references";
 import type { DocumentKind, ReferenceFields, ReferenceName } from "../api";
+import type { PageLine } from "../documents/extract";
 import { elements, parseXml, textOf, type XmlElement } from "../documents/formats/xml";
 import { detectLanguage, type TextLanguage } from "../documents/textLanguage";
+import { readFirstPage, withoutAffiliationMarks } from "./firstPage";
 
 /** What a file's reading gives: only the fields it found, and always a type. */
 export type FileReference = Partial<ReferenceFields> & Pick<ReferenceFields, "type">;
@@ -37,6 +40,8 @@ export interface FileMetadata {
    * often sits in them.
    */
   firstPages: readonly string[];
+  /** A PDF's first page's lines, with their sizes. */
+  firstPageLines?: readonly PageLine[];
 }
 
 /** A web page's own description of itself, as saved with it (#261). */
@@ -170,16 +175,21 @@ const first = (properties: Map<string, string[]>, ...names: string[]) => {
 };
 
 /**
- * A Document's reference record as its file gives it. A DOI, or a journal's
- * name in the XMP, makes it a journal article; an arXiv id, a preprint; else
- * it is Other, which nothing flags as needing details.
+ * A Document's reference record as its file gives it. A thesis says so on its
+ * first page; a DOI, a journal's name in the XMP or a Chinese journal's article
+ * marks make it a journal article; an arXiv id, a preprint; a report's first
+ * page says so too; else it is Other, which nothing flags as needing details.
  */
 export function readReference(meta: FileMetadata): FileReference {
   const read: Partial<ReferenceFields> = {};
   const xmp = meta.xmp ? xmpProperties(meta.xmp) : new Map<string, string[]>();
+  const page = meta.firstPageLines ? readFirstPage(meta.firstPageLines) : {};
 
   const title =
-    titleOf(first(xmp, "dc:title")) ?? titleOf(meta.info?.title) ?? titleOf(meta.office?.title);
+    titleOf(first(xmp, "dc:title")) ??
+    titleOf(meta.info?.title) ??
+    titleOf(meta.office?.title) ??
+    titleOf(page.title);
   if (title) read.title = title;
 
   const creators = xmp.get("dc:creator");
@@ -189,14 +199,18 @@ export function readReference(meta: FileMetadata): FileReference {
     creators
       ? creators.map(parseName).filter((name): name is ReferenceName => name !== null)
       : written
-        ? parseWrittenNames(written)
+        ? parseWrittenNames(withoutAffiliationMarks(written))
         : []
   ).filter(realName);
+  const printedAuthors = (page.authors ?? []).filter(realName);
   if (authors.length > 0) read.authors = authors;
+  else if (printedAuthors.length > 0) read.authors = printedAuthors;
 
-  const issued = parseIssued(
-    first(xmp, "prism:coverDate", "prism:publicationDate", "prism:coverDisplayDate") ?? "",
-  );
+  const arxiv = ARXIV.exec(meta.firstPages[0] ?? "")?.[1];
+  const issued =
+    parseIssued(
+      first(xmp, "prism:coverDate", "prism:publicationDate", "prism:coverDisplayDate") ?? "",
+    ) ?? (page.issued ? parseIssued(page.issued) : null);
   if (issued) read.issued = issued;
 
   const journal = first(xmp, "prism:publicationName");
@@ -213,9 +227,6 @@ export function readReference(meta: FileMetadata): FileReference {
       : start
     : first(xmp, "prism:pageRange");
   if (pages) read.pages = pages;
-  const publisher = first(xmp, "dc:publisher");
-  if (publisher) read.publisher = publisher;
-
   const identifier = first(xmp, "dc:identifier");
   const doi =
     normalizeDoi(first(xmp, "prism:doi", "prism:DOI", "pdfx:doi", "crossmark:DOI") ?? "") ??
@@ -223,7 +234,18 @@ export function readReference(meta: FileMetadata): FileReference {
     doiPrinted(meta.firstPages);
   if (doi) read.doi = doi;
 
-  const arxiv = ARXIV.exec(meta.firstPages[0] ?? "")?.[1];
+  // What a first page suggests never outweighs a DOI or a journal the metadata names.
+  const type = doi || journal ? "article-journal" : arxiv ? "article" : (page.type ?? "document");
+  // A thesis is published by the university that grants it, a report by its organisation,
+  // which is also a report's author when no person is named.
+  const publisher =
+    first(xmp, "dc:publisher") ??
+    (type === "thesis" || type === "report" ? (page.institution ?? null) : null);
+  if (publisher) read.publisher = publisher;
+  if (type === "report" && !read.authors && page.institution) {
+    read.authors = [{ literal: page.institution }];
+  }
+
   const url = first(xmp, "prism:url");
   if (arxiv) read.url = arxivUrl(arxiv);
   else if (url && /^https?:\/\//i.test(url)) read.url = url;
@@ -234,7 +256,6 @@ export function readReference(meta: FileMetadata): FileReference {
     LANGUAGE_TAGS[detectLanguage(meta.firstPages.join("\n").slice(0, 4000)) ?? ""];
   if (language) read.language = language;
 
-  const type = doi || journal ? "article-journal" : arxiv ? "article" : "document";
   return { ...read, type };
 }
 
