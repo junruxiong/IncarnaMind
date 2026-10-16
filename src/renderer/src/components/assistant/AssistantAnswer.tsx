@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import type { ConversationAnswer, ConversationQuestion } from "../../../../core/api";
 import { answerBlocks, hasText } from "../../answerBlocks";
 import { useAnswers } from "../../answers";
+import { useAnswerWait } from "../../answerWait";
 import { useApprovals, waitingFor } from "../../approvals";
 import { regenerateAnswer } from "../../conversations";
 import {
@@ -63,6 +64,8 @@ export function AssistantAnswer({
   const problem = useAnswers((state) => state.blocked[answer.id]);
   const waiting = useApprovals((state) => state.waiting);
   const approvals = useMemo(() => waitingFor(waiting, answer.id), [waiting, answer.id]);
+  const consenting = useAnswers((state) => state.phases[answer.id] === "waiting-for-consent");
+  const { silent, usual } = useAnswerWait(answer, streaming, approvals.length > 0 || consenting);
   const openSettings = useAppStore((state) => state.openSettings);
   const regenerate = () => void regenerateAnswer(answer.id);
   const written = hasText(blocks);
@@ -91,6 +94,7 @@ export function AssistantAnswer({
         question={question}
         streaming={streaming}
         waitingForApproval={approvals.length > 0}
+        wait={silent ? { usual } : null}
         onRegenerate={regenerate}
       />
       {answer.citationSupport === "none" && (
@@ -167,6 +171,7 @@ export function AssistantAnswer({
       <AnswerActions
         answer={answer}
         streaming={streaming}
+        stopAbove={silent}
         canKeep={written}
         focusedMindName={keeping.focusedMindName}
         onAdd={() => keeping.add(answer)}

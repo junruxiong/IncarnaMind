@@ -2405,6 +2405,7 @@ export function createCore(adapters: CoreAdapters): Core {
       return documents.searchableCount((wanted ? resolveScope(wanted) : null) ?? undefined);
     },
     stopConversationAnswer: async (input) => answers.stopInConversation(input),
+    usualAnswerWait: async (answerId) => conversations.usualWait(answerId),
     listConversations: async (options) => conversations.list(options),
     getConversation: async (conversationId) => conversations.content(conversationId),
     searchConversations: async (query) => conversations.search(query),

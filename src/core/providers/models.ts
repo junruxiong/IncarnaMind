@@ -109,7 +109,9 @@ export const createAiSdkChatModel: ChatModelFactory = (spec) => {
     model = withThinkingOff(model, spec, request.thinkingOff);
   }
   const summary =
-    spec.thinking === "summary" || spec.thinking === "careful" ? reasoningSummaryOptions(spec) : null;
+    spec.thinking === "summary" || spec.thinking === "careful"
+      ? reasoningSummaryOptions(spec)
+      : null;
   if (summary) model = withProviderOptions(model, summary);
   return model;
 };
