@@ -6,7 +6,8 @@
  * The Run is the Answer engine's Tool-calling loop (ADR-0007) with the check
  * Tool set: the Documents' search and `cite`, nothing else (ADR-0013, #78).
  * Its searches leave out what a check may not use as evidence (#80): the
- * files IncarnaMind wrote, unless counted, and the document being checked.
+ * files IncarnaMind wrote, unless counted, the User's own workings and the
+ * document being checked.
  * The model records the Passage that decides the claim with `cite`, and its
  * quote must pass the Citation check before the verdict is taken: a
  * "supported" or "contradicted" without a quote that is found is not
@@ -30,7 +31,9 @@ import type {
   ClaimCheckFailure,
   ClaimCheckResult,
   LeftOutDocument,
+  PassageSearchResult,
   ProviderError,
+  RecordAiUseInput,
   ThirdPartyReason,
 } from "../../api";
 import type { Evidence, EvidenceScope } from "../../documents/evidence";
@@ -54,7 +57,7 @@ import {
   type DocumentLanguage,
 } from "../engine";
 import { agreesWith, statedFigure } from "./calculated";
-import { nearestLine } from "./nearest";
+import { figuresMatch, nearestLine } from "./nearest";
 import {
   CONFIRM_INSTRUCTIONS,
   checkInstructions,
@@ -118,17 +121,45 @@ export function runFailureOf(result: ClaimCheckResult): ProviderError | null {
   return { kind: reason, message: result.detail ?? reason };
 }
 
+/** Records a sentence a model judged as a use of AI (#906); one it couldn't judge isn't one. */
+export function recordJudged(
+  record: (inputs: RecordAiUseInput[]) => void,
+  mindId: string,
+  model: PreparedChatModel,
+  result: ClaimCheckResult,
+  at: string,
+): void {
+  if (result.verdict === "not-checked") return;
+  record([
+    {
+      mindId,
+      kind: "sentence-checked",
+      providerId: model.provider.id,
+      modelId: model.modelId,
+      characters: 0,
+      occurredAt: at,
+    },
+  ]);
+}
+
 export function createClaimCheck(deps: ClaimCheckDependencies) {
   return async function checkClaim(request: ClaimCheckRequest): Promise<ClaimCheckResult> {
     const { scope, signal } = request;
     const read = new Map<string, string>();
     const excluded = new Map<string, LeftOutDocument>();
+    const workings = new Map<string, PassageSearchResult[]>();
     const scoped: AnswerDocuments = {
       searchableCount: () => deps.documents.searchableCount(scope.documentIds),
       async search(query, searchSignal) {
         const found = await deps.evidence.search(query, scope, searchSignal);
         for (const passage of found.passages) read.set(passage.documentId, passage.contentHash);
         for (const each of found.excluded) {
+          if (each.reason === "own-workings") {
+            workings.set(each.documentId, [
+              ...(workings.get(each.documentId) ?? []),
+              ...each.passages,
+            ]);
+          }
           if (excluded.has(each.documentId)) continue;
           excluded.set(each.documentId, {
             documentId: each.documentId,
@@ -184,6 +215,16 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       ),
       excluded: [...excluded.values()].filter((each) => each.reason === "own-file"),
     });
+    const workingsSayingIt = (): LeftOutDocument[] =>
+      [...workings].flatMap(([documentId, passages]) => {
+        const left = excluded.get(documentId);
+        const speaks = passages.some(
+          (passage) =>
+            figuresMatch(request.claim, passage.text) &&
+            nearestLine(request.claim, [{ id: passage.passageId, text: passage.text }]),
+        );
+        return left && speaks ? [left] : [];
+      });
     const notChecked = (
       reason: ClaimCheckFailure,
       detail: string | null = null,
@@ -258,12 +299,14 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
     const unsupported = async (): Promise<ClaimCheckResult> => {
       const nearest = await nearestDifferent(request, session, signal);
       if (signal.aborted) return notChecked("stopped");
+      const left = facts();
       return {
         verdict: "unsupported",
         evidence: nearest,
         says: null,
         calculation: null,
-        ...facts(),
+        ...left,
+        excluded: nearest ? left.excluded : [...left.excluded, ...workingsSayingIt()],
       };
     };
     session.check();

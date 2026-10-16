@@ -594,6 +594,7 @@ export const en = {
   "claim.unsupported.inFolder": "Nothing in “{folder}” says this.",
   "claim.unsupported.anywhere": "Nothing in your Documents says this.",
   "claim.unsupported.differs": "Your Documents say something different:",
+  "claim.unsupported.ownWorkings": "Only your own working file says this.",
   "claim.fixSentence": "Fix the sentence",
   "claim.findSources": "Find sources",
   "claim.searchWeb": "Search the web",
@@ -1025,6 +1026,17 @@ export const en = {
   "evidence.countedMany": "{count} Documents count as evidence now",
   "evidence.leftOut": "“{name}” no longer counts as evidence",
   "evidence.leftOutMany": "{count} Documents no longer count as evidence",
+  "evidence.notCited": "Don't cite this Document",
+  "evidence.notCitedMany": "Don't cite {count} Documents",
+  "evidence.citeAgain": "Cite this Document again",
+  "evidence.citeAgainMany": "Cite {count} Documents again",
+  "evidence.notCited.hint":
+    "IncarnaMind can still read it to understand your question, but won't cite it or use it to support a check.",
+  "evidence.notCited.label": "Not cited",
+  "evidence.notCited.done": "“{name}” won't be cited",
+  "evidence.notCited.doneMany": "{count} Documents won't be cited",
+  "evidence.citeAgain.done": "“{name}” can be cited again",
+  "evidence.citeAgain.doneMany": "{count} Documents can be cited again",
   "evidence.settings.title": "Checks",
   "evidence.settings.switch": "Leave out files IncarnaMind wrote",
   "evidence.settings.body":
@@ -2020,7 +2032,7 @@ export const en = {
     "Skill scripts run on this computer and can make their own network requests, sending anything they can read. This page doesn't control them: the approval you give before each run does, and you can turn them off in Settings, under Skills.",
   "privacy.aiUse.title": "AI use record",
   "privacy.aiUse.body":
-    "IncarnaMind keeps a record of what the AI wrote into your Minds and whether you kept, edited or deleted it, so you can say how you used AI. It holds no text of yours or the AI's, stays on this computer, and is never sent anywhere, whatever you choose about usage data.",
+    "IncarnaMind keeps a record of what the AI wrote into your Minds, how many sentences it checked, and whether you kept, edited or deleted what it wrote, so you can say how you used AI. It holds no text of yours or the AI's, stays on this computer, and is never sent anywhere, whatever you choose about usage data.",
   "privacy.aiUse.entries": "Entries: {count}",
   "privacy.aiUse.clear": "Clear record",
   "privacy.aiUse.cleared": "Cleared the AI use record.",
@@ -2177,6 +2189,10 @@ export const en = {
   "answer.figures.uncalculated.one": "1 figure couldn't be calculated",
   "answer.status.stopped": "Stopped",
   "answer.stop": "Stop",
+  "answer.wait.still": "Still working",
+  "answer.wait.usually.seconds": "Usually about {count} seconds with {model}",
+  "answer.wait.usually.minute": "Usually about a minute with {model}",
+  "answer.wait.usually.minutes": "Usually about {count} minutes with {model}",
   "answer.regenerate": "Regenerate",
   "answer.more": "More for this Answer",
   "answer.error.thisModel": "this model",
@@ -2236,6 +2252,7 @@ export const en = {
   "comparison.cell.nothingToSearch": "no text to search",
   "comparison.cell.sourceRemoved": "source removed",
   "comparison.cell.leftOut": "left out: IncarnaMind wrote it",
+  "comparison.cell.notCited": "left out: your own working file",
   "comparison.cell.auth": "key refused",
   "comparison.cell.rateLimit": "provider busy",
   "comparison.cell.network": "provider unreachable",
@@ -2773,7 +2790,7 @@ export const en = {
     "There is nothing to report: IncarnaMind has no record of AI use in this document, and the document has no Citations or checks.",
   "aiStatement.uses.heading": "AI models and what they were used for",
   "aiStatement.uses.none":
-    "IncarnaMind has no record of AI writing, suggesting changes or searching for this document.",
+    "IncarnaMind has no record of AI writing, suggesting changes, searching or checking sentences for this document.",
   "aiStatement.uses.column.use": "Use",
   "aiStatement.uses.column.model": "Model",
   "aiStatement.uses.column.times": "Times",
@@ -2787,6 +2804,7 @@ export const en = {
   "aiStatement.use.search-documents": "Searches of the author's own Documents",
   "aiStatement.use.search-sources": "Searches of public scholarly sources (Find sources)",
   "aiStatement.use.search-web": "Web searches",
+  "aiStatement.use.sentence-checked": "Sentences checked against the Documents",
   "aiStatement.text.heading": "AI text, by section",
   "aiStatement.text.none": "This document has no AI text.",
   "aiStatement.text.intro":
@@ -2820,6 +2838,11 @@ export const en = {
   "aiStatement.sentences.contradicted": "Contradicted",
   "aiStatement.sentences.recheck": "Needs re-check",
   "aiStatement.sentences.notChecked": "Not checked",
+  "aiStatement.sentences.changed": "Changed since checked",
+  "aiStatement.sentences.list.intro":
+    "Each sentence checked, cut after its first {count} words, with the latest result of its check:",
+  "aiStatement.sentences.column.sentence": "Sentence",
+  "aiStatement.sentences.column.checked": "Checked",
   "aiStatement.unread.one":
     "When these sentences were checked, 1 file they were checked against couldn't be read, so the checks didn't search it:",
   "aiStatement.unread":
@@ -2983,6 +3006,7 @@ export const en = {
   "error.document.gone": "That Document no longer exists.",
   "error.document.nameEmpty": "A Document's name can't be empty.",
   "error.document.nameTooLong": "A Document's name can't be longer than {max} characters.",
+  "error.document.notCitedChoice": "Whether a Document is cited must be true or false.",
   "error.document.fileMissing": "The Document's file is missing.",
   "error.verify.request": "That isn't a request to verify a document that IncarnaMind can read.",
   "error.verify.notVerifying": "This Mind doesn't verify a document.",
@@ -4005,6 +4029,7 @@ export const en = {
   "steps.live.searching": "Searching {scope}…",
   "steps.live.checking": "Checking {count} Citations…",
   "steps.live.checking.one": "Checking 1 Citation…",
+  "steps.live.thinking": "Thinking…",
   "steps.label": "Steps",
   "steps.scope.all": "All Documents",
   "steps.scope.named": "{name}",
@@ -4066,6 +4091,8 @@ export const en = {
   "mindCall.failed.several": "Several Minds are called “{name}”",
   "mindCall.failed.noHeading": "Couldn't change “{mind}”: it has no heading “{heading}”",
   "mindCall.failed.noPlace": "Couldn't add to “{mind}”: it has no heading or paragraph “{place}”",
+  "mindCall.failed.severalPlaces":
+    "Couldn't change “{mind}”: more than one place is called “{name}”",
   "mindCall.failed.noText": "Couldn't change “{mind}”: there's no text there to change",
   "mindCall.failed.tooLong": "Couldn't change “{mind}”: that's too much text to change at once",
   "mindCall.failed.changed": "Couldn't change “{mind}”: its text changed while it was being read",
@@ -4112,6 +4139,11 @@ export const en = {
   "command.assistant.fold": "Assistant: Fold",
   "command.assistant.unfold": "Assistant: Show",
   "command.assistant.history": "Conversation history",
+  "assistant.several.headings": "There are {count} headings called “{name}”: {places}. Which one?",
+  "assistant.several.paragraphs":
+    "There are {count} paragraphs starting “{name}”: {places}. Which one?",
+  "assistant.place.under": "under “{heading}”",
+  "assistant.place.number": "number {n}",
   // Outside agents (#351): the consent for each agent the User connects, and what IncarnaMind
   // tells an agent when a call can't be done, which the agent passes on to the User.
   "consent.flow.agents": "Your AI agents",

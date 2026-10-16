@@ -64,6 +64,19 @@ export function countText(text: string): TextCount {
   };
 }
 
+/** The text up to its `limit`th word, counted as the Mind's count counts; `cut` when more words follow. */
+export function firstWords(text: string, limit: number): { text: string; cut: boolean } {
+  let used = 0;
+  let end = 0;
+  for (const { segment, index, isWordLike } of segmenter.segment(text)) {
+    if (!isWordLike) continue;
+    if (used >= limit) return { text: text.slice(0, end), cut: true };
+    used += countFor(countText(segment), "words");
+    end = index + segment.length;
+  }
+  return { text, cut: false };
+}
+
 /** The number a basis shows. */
 export function countFor(count: TextCount, basis: CountBasis): number {
   return basis === "words"

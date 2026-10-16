@@ -36,6 +36,11 @@ export interface TestHooks {
     /** The kinds of object ⌘K finds by name. */
     found: readonly string[];
   };
+  /**
+   * How long an Answer may have no words before its line says how long it
+   * usually takes (15 seconds), so a test needn't wait for it.
+   */
+  setSilentWaitMs(ms: number): void;
   /** How many animations are running, leaving copies of closed menus included: settled at 0. */
   motionRunning(): number;
   /** Plays every animation at this speed (0.25: four times slower), so a test can act during one. */

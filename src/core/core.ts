@@ -1091,7 +1091,7 @@ export function createCore(adapters: CoreAdapters): Core {
     liveTranscript: (mindId) => liveTranscriptOf(mindId),
     providerExists: (providerId) => chat.exists(providerId),
     readiness: async (choice) => chat.readiness(await chat.answeringModel(choice)),
-    prepareModel: (choice) => chat.prepareModel(choice),
+    prepareModel: (choice, thinking) => chat.prepareModel(choice, "chat", thinking),
     documents: {
       searchableCount: (documentIds) => documents.searchableCount(documentIds ?? undefined),
       names: () => documents.names(),
@@ -1509,6 +1509,7 @@ export function createCore(adapters: CoreAdapters): Core {
     mindFolder: (mindId) => minds.get(mindId).folderId,
     originalOf: (mindId) => wordImports.originalOf(mindId),
     defaultModel: () => settings.get().user.chatModel,
+    recordAiUse: (inputs) => void aiUse.record(inputs),
     chat,
     consent,
     localOnly: () => embedding.localOnly(),
@@ -2315,6 +2316,7 @@ export function createCore(adapters: CoreAdapters): Core {
       passage: (passageId) => documents.passage(passageId),
       passagesBetween: (documentId, from, to) => documents.passagesBetween(documentId, from, to),
       citing,
+      notCited: (passageId) => documents.citationSource(passageId)?.notCited ?? false,
       recheck: (input) => recheckCitation(documents, input),
       minds: () => minds.list().filter((mind) => isKnownKind(mind.kind)),
       liveDocuments: () => documents.names(),
@@ -2423,6 +2425,7 @@ export function createCore(adapters: CoreAdapters): Core {
       return documents.searchableCount((wanted ? resolveScope(wanted) : null) ?? undefined);
     },
     stopConversationAnswer: async (input) => answers.stopInConversation(input),
+    usualAnswerWait: async (answerId) => conversations.usualWait(answerId),
     listConversations: async (options) => conversations.list(options),
     getConversation: async (conversationId) => conversations.content(conversationId),
     searchConversations: async (query) => conversations.search(query),
@@ -2664,6 +2667,7 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     setCountedAsEvidence: async (documentId, counted) =>
       documents.setCountedAsEvidence(documentId, counted),
+    setNotCited: async (documentId, notCited) => documents.setNotCited(documentId, notCited),
     getEmbeddingModel: async () => embeddingModel.status(),
     downloadEmbeddingModel: async () => embeddingModel.retry(),
     getTextRecognitionModel: async () =>
