@@ -3109,6 +3109,7 @@ export const en = {
   "error.check.declined":
     "You declined sending the claim to the model's service, so nothing was sent.",
   "error.tagging.noModel": "Choose a classification model.",
+  "error.tagging.place": "Choose where to tag with AI: a Folder, or Not in a Folder.",
   "error.tagging.cloudPaused":
     "Cloud classification is paused while “Keep everything on this computer” is on.",
   "error.tagging.jevNotSetUp": "Jev isn't set up.",

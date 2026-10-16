@@ -3150,10 +3150,9 @@ export function createCore(adapters: CoreAdapters): Core {
       return places;
     },
     setTaggingWithAi: async (folderId, on) => {
-      if (folderId !== null && typeof folderId !== "string") {
-        throw new InvalidInputError("Choose a Folder, or Not in a Folder.");
+      if ((folderId !== null && typeof folderId !== "string") || typeof on !== "boolean") {
+        throw new InvalidInputError({ key: "error.tagging.place" });
       }
-      if (typeof on !== "boolean") throw new InvalidInputError("on must be true or false.");
       library.setTaggingStopped([folderId], !on);
       tagger.resume();
     },
