@@ -167,6 +167,37 @@ test("the target's field keeps the focus when the menu's toggle event comes late
   await app.close();
 });
 
+/** How long after the next click or key the count read `shown`, measured in the page so the test's own round trips don't add to it. */
+async function countShownAfter(window: Page, shown: string, act: () => Promise<void>) {
+  const took = window.evaluate(
+    (expected) =>
+      new Promise<number>((resolve) => {
+        let from: number | null = null;
+        const start = (event: Event) => {
+          from ??= event.timeStamp;
+        };
+        document.addEventListener("click", start, true);
+        document.addEventListener("keydown", start, true);
+        const shown = () =>
+          document
+            .querySelector('[data-testid="mind-count-button"]')
+            ?.textContent?.replace(/\s+/g, " ")
+            .trim() === expected;
+        const watch = new MutationObserver(() => {
+          if (from === null || !shown()) return;
+          watch.disconnect();
+          document.removeEventListener("click", start, true);
+          document.removeEventListener("keydown", start, true);
+          resolve(performance.now() - from);
+        });
+        watch.observe(document.body, { childList: true, subtree: true, characterData: true });
+      }),
+    shown,
+  );
+  await act();
+  return took;
+}
+
 const COUNTS = {
   en: { empty: "0 words", written: PARAGRAPHS.en, ask: "Write three paragraphs", unit: "words" },
   "zh-CN": { empty: "0 字", written: PARAGRAPHS.zh, ask: "写三段", unit: "字" },
@@ -193,14 +224,19 @@ for (const language of ["en", "zh-CN"] as const) {
     // Waiting text isn't the Mind's yet.
     await expect(button).toHaveText(empty);
 
-    await pointAndClick(window, bar.getByTestId("proposals-accept-all"));
-    await expect(button).toHaveText(`${total} ${unit}`);
+    // An Accept is waited on, so its count comes within 100 ms, not after the pause typing gets.
+    const accepted = await countShownAfter(window, `${total} ${unit}`, () =>
+      pointAndClick(window, bar.getByTestId("proposals-accept-all")),
+    );
+    expect(accepted).toBeLessThan(100);
     await expect(bar).toHaveCount(0);
 
     await window.getByTestId("mind-editor").click();
-    await window.keyboard.press("ControlOrMeta+z");
+    const undone = await countShownAfter(window, empty, () =>
+      window.keyboard.press("ControlOrMeta+z"),
+    );
+    expect(undone).toBeLessThan(100);
     await expect(bar.getByTestId("proposals-accept-all")).toBeVisible();
-    await expect(button).toHaveText(empty);
 
     // Accepting one change counts that change's words.
     await window.getByTestId("mind-editor").locator("p").first().click();

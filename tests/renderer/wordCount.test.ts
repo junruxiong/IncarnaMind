@@ -79,6 +79,9 @@ describe("counting text", () => {
   test.each([
     ["an empty Mind in English", "", "words", false, "words"],
     ["an empty Mind in a Chinese interface", "", "words", true, "characters"],
+    ["a Mind of only a space in a Chinese interface", " ", "words", true, "characters"],
+    ["a Mind of only a comma in a Chinese interface", "，", "words", true, "characters"],
+    ["a Mind of only an emoji in a Chinese interface", "😀", "words", true, "characters"],
     ["English text in a Chinese interface", "The tide turns", "words", true, "words"],
     ["Chinese text in an English interface", "潮水每天涨落", "words", false, "characters"],
     ["characters asked for", "The tide turns", "characters", false, "characters"],
