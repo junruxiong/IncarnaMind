@@ -2,15 +2,19 @@ import type {
   AssignmentChange,
   DocumentBatch,
   DocumentGroupAssignment,
+  LibraryClassifier,
   LibraryGroup,
   LibraryGroupInput,
   LibrarySettings,
   LibrarySnapshot,
+  TaggingClassifier,
+  TaggingModels,
 } from "./library/types";
 import type { UiUsageEvent } from "./usageEvents";
 
 export type {
   AssignmentChange,
+  AutomaticTaggingReason,
   ClassificationStatus,
   DocumentBatch,
   DocumentGroupAssignment,
@@ -19,6 +23,11 @@ export type {
   LibraryGroupInput,
   LibrarySettings,
   LibrarySnapshot,
+  TaggingClassifier,
+  TaggingCost,
+  TaggingModelGroup,
+  TaggingModelOption,
+  TaggingModels,
 } from "./library/types";
 
 /**
@@ -1468,7 +1477,10 @@ export const MAX_CITED_PAGES = 2;
  * gone. Language-neutral: the label is worded when shown ("p. 4", "slide 4",
  * "Revenue, rows 12–14", "§ 2.1 Sensitivity", "§ 2 Costs, comment by
  * Reviewer", "lines 120–134").
- * - "page", "slide": the cited pages or slides.
+ * - "page", "slide": the cited pages or slides. A PDF's `printed` names the
+ *   first and last page as they call themselves ("xii", "68") when that
+ *   isn't their number in the PDF; `from` and `to` stay the PDF's, which
+ *   open the viewer (#901).
  * - "rows": the rows the quote covers in a sheet (a CSV's has no name), or
  *   the cited block's when it wasn't found.
  * - "section": the heading of the section the quote sits under; null before
@@ -1481,7 +1493,8 @@ export const MAX_CITED_PAGES = 2;
  *   the end of the one it ends in, in ms from the Transcript's start (#136).
  */
 export type CitationLocation =
-  | { kind: "page" | "slide"; from: number; to: number }
+  | { kind: "page"; from: number; to: number; printed?: { from: string; to: string } }
+  | { kind: "slide"; from: number; to: number }
   | { kind: "rows"; sheet: string | null; from: number; to: number }
   | { kind: "lines"; from: number; to: number }
   | { kind: "time"; from: number; to: number }
@@ -1684,6 +1697,34 @@ export interface MindUpdate {
   mindId: string;
   /** A Yjs update (the default v1 encoding). */
   update: Uint8Array;
+  /** The edit the User asked for that wrote it (#880). */
+  cause?: EditCause;
+}
+
+/** An edit the User asked for (#880): the window that asked takes its updates in as its own change, one step of Undo. */
+export interface EditCause {
+  /** `EditWithAiInput.requestId`. */
+  requestId: string;
+  /** Its Proposals' `ProposalRef.request`. */
+  request: string;
+  /** Drawn as applied while it streams in; false until its new text maps onto the selection. */
+  apply: boolean;
+}
+
+/**
+ * What kind of Block a paragraph of a selection is, as the model reads it and
+ * writes it back: a heading of a level ("heading:2"), a bullet, a numbered
+ * item, a quote, or a plain paragraph.
+ */
+export type BlockKind = "paragraph" | "bullet" | "numbered" | "quote" | `heading:${number}`;
+
+/** Part of the selection an edit's new text left out, kept (#880): `from`..`to` of a Block's text. */
+export interface LeftOutPart {
+  blockId: string;
+  from: number;
+  to: number;
+  whole: boolean;
+  kind: BlockKind;
 }
 
 /** Settings that belong to the User and will sync across their devices (ADR-0003). */
@@ -1691,6 +1732,19 @@ export interface UserSettings {
   language: LanguagePreference;
   /** The default model for Answers, or null before a chat provider is set up. */
   chatModel: ChatModelChoice | null;
+  /**
+   * The model for the calls that don't write the Answer: an Answer's
+   * search query and its translation, and automatic tagging where the
+   * provider names no tagging model. Null: the quick-tasks model of the
+   * Answers model's provider, from the catalog, or the Answers model itself.
+   */
+  quickTasksModel: ChatModelChoice | null;
+  /**
+   * The model that reads a scan's pages when the Answers model can't read
+   * images. Null: the image model of the Answers model's provider,
+   * from the catalog, when it has one.
+   */
+  imageModel: ChatModelChoice | null;
   /**
    * Suggest as the User writes, from their Documents (see `suggestNext`): off
    * until they turn it on. Turning it on asks for consent to the "suggestions"
@@ -2229,7 +2283,10 @@ export interface Document {
   tags: DocumentTag[];
   /** Where automatic tagging is, separately from `status`. */
   tagging: TaggingState;
-  /** Set when `tagging` is "failed". */
+  /**
+   * Set when `tagging` is "failed", and when it is "waiting-for-provider" for
+   * a reason worth saying, such as the ChatGPT plan's limit ("plan-limit").
+   */
   taggingError: ProviderError | null;
   /**
    * When the Document itself was created, as its file tells, for the
@@ -4141,6 +4198,10 @@ export type EditWithAiResult =
       proposals: number;
       droppedCitations: number;
       outOfDate: number;
+      /** An edit the User asked for that waits for them instead of applying (#880). */
+      held?: true;
+      /** What its new text left out of the selection, kept; absent when nothing. */
+      leftOut?: LeftOutPart[];
     }
   /** The model gave the text back as it was: there is nothing to propose. */
   | { kind: "unchanged" }
@@ -6638,6 +6699,27 @@ export interface SentenceChecksExported {
   commented: boolean;
 }
 
+/** What a Mind's web page to share would hold, for the sheet to show before it is made. */
+export interface SharePagePreview {
+  /** Every Document the Mind cites, in the order it is first cited. */
+  documents: SharedDocument[];
+  /** The file's size with every Citation's card as text, in bytes. */
+  textBytes: number;
+}
+
+export interface SharedDocument {
+  documentId: string;
+  name: string;
+  /** The Citations that cite it. */
+  quotes: number;
+  /** The page pictures they carry: none for a Document without pages, or whose pages weren't saved. */
+  pictures: number;
+  /** About what those pictures add to the file, in bytes. */
+  pictureBytes: number;
+  /** Its Citations' cards stay text, as the User chose (`setSharePageTextOnly`). */
+  textOnly: boolean;
+}
+
 /** A Mind exported as a file, for the host to save where the User chooses. */
 export interface MindExport extends MindExportPreview {
   /** The file's contents: UTF-8 text for Markdown and HTML, a ZIP package for .docx, a PDF for PDF and a source pack. */
@@ -7303,7 +7385,24 @@ export interface CoreApi {
    */
   deleteLibraryGroup(groupId: string): Promise<FolderDeletion>;
   addLibraryStarterGroups(keys: string[]): Promise<void>;
-  saveLibrarySettings(settings: LibrarySettings): Promise<void>;
+  /**
+   * Saves the Tagging setting: the model for automatic tagging and Organize,
+   * and whether new and changed Documents are organized automatically. A
+   * classifier of null is Automatic; `organizeWith` left out stays as it was.
+   */
+  saveLibrarySettings(
+    settings: Omit<LibrarySettings, "classifier" | "organizeWith"> & {
+      classifier: LibraryClassifier | null;
+      organizeWith?: TaggingClassifier | null;
+    },
+  ): Promise<void>;
+  /**
+   * What the Tagging section shows: what Automatic tags with now and
+   * why, and the models the User can choose instead, grouped by where they
+   * run, with what each costs. Asks Ollama on this computer which decision
+   * models it has; sends nothing anywhere else.
+   */
+  getTaggingModels(): Promise<TaggingModels>;
   /**
    * Queues selected documents, or all. Organize suggests a Folder for each
    * (a Suggested Folder) and its Tags; manual assignments are preserved, and
@@ -7654,6 +7753,12 @@ export interface CoreApi {
    * scanned, or its quote isn't in them.
    */
   readScannedQuote(input: ScannedQuoteInput): Promise<ScannedQuote | null>;
+  /**
+   * A Citation's quote as its Document's text reads it (#905): a word a PDF split at a line end
+   * whole again, and a quote that stops at one run to the end of its word. Null when the quote
+   * isn't in the Units it cites, which leaves the quote as it is.
+   */
+  readableQuote(input: ScannedQuoteInput): Promise<string | null>;
   /** The built-in text recognition model's download state (#397). */
   getTextRecognitionModel(): Promise<EmbeddingModelStatus>;
   /**
@@ -8592,6 +8697,16 @@ export interface CoreApi {
    */
   exportMind(mindId: string, options: ExportMindOptions): Promise<MindExport>;
   /**
+   * What the Mind's web page to share would hold with these options (Questions, someone's changes
+   * waiting): its Documents, their quotes and pictures.
+   */
+  previewSharePage(mindId: string, options: ExportMindOptions): Promise<SharePagePreview>;
+  /**
+   * The Documents whose Citations the Mind's web page to share keeps as text, without their
+   * page pictures; kept with the Mind.
+   */
+  setSharePageTextOnly(mindId: string, documentIds: string[]): Promise<void>;
+  /**
    * Exports a Mind (as `exportMind`) into the Output location, under the
    * next free name, asking where new files go the first time.
    */
@@ -8963,6 +9078,7 @@ const methods: Record<CoreApiMethod, true> = {
   readDocumentText: true,
   readScannedText: true,
   readScannedQuote: true,
+  readableQuote: true,
   getTextRecognitionModel: true,
   downloadTextRecognitionModel: true,
   previewLinkedFolder: true,
@@ -9096,6 +9212,7 @@ const methods: Record<CoreApiMethod, true> = {
   deleteLibraryGroup: true,
   addLibraryStarterGroups: true,
   saveLibrarySettings: true,
+  getTaggingModels: true,
   classifyDocuments: true,
   assignDocumentGroup: true,
   acceptAssignments: true,
@@ -9161,6 +9278,8 @@ const methods: Record<CoreApiMethod, true> = {
   restoreBuiltInSkills: true,
   previewMindExport: true,
   exportMind: true,
+  previewSharePage: true,
+  setSharePageTextOnly: true,
   saveMindExport: true,
   formatCitations: true,
   getMindCitationStyle: true,

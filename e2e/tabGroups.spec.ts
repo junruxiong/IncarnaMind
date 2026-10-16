@@ -110,8 +110,10 @@ async function chooseFromTabMenu(window: Page, tab: Locator, item: string): Prom
 }
 
 test("a Citation opens its Document as a preview in the group to the right, the focus staying in the Mind; three in a row leave one tab, and reading it keeps it", async () => {
-  const { window } = await launchApp(dataDir);
+  const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
+  // Wide enough for the group's tabs to keep their names' room, so a drag can reach each.
+  await setWindowSize(app, window, 2000, 800);
   const ids = await addSources(window);
   await newMind(window, "Lit review: urban heat islands");
   await window.getByTestId("mind-title").press("Enter");
@@ -192,6 +194,8 @@ test("a Citation opens its Document as a preview in the group to the right, the 
   await openDocumentAt(window, { documentId: ids.list, quote: "Oke 1982" });
   const listTab = right.getByTestId("document-tab").filter({ hasText: "Reading list" });
   await expect(listTab).toHaveAttribute("data-preview", "true");
+  // The tabs keep the start of their names, so the strip scrolls: to its start, where the first tab is.
+  await right.getByTestId("tab-list").evaluate((list) => list.scrollTo({ left: 0 }));
   const firstTab = await boxOf(right.getByRole("tab").first());
   await dragTabTo(window, listTab, { x: firstTab.x + 12, y: firstTab.y + firstTab.height / 2 });
   await expect(titlesIn(right).first()).toHaveText("Reading list");

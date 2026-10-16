@@ -25,7 +25,8 @@ import { existsSync, renameSync } from "node:fs";
 import { rm, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
 import type { LiveDocument } from "../../shared/citations";
-import { quoteInUnits } from "../../shared/locations";
+import { joinUnits, quoteInUnits } from "../../shared/locations";
+import { readableQuote } from "../../shared/readableQuote";
 import {
   type Anchor,
   anchorsOf,
@@ -532,8 +533,9 @@ export function createDocuments(options: DocumentsOptions) {
       folderId: row.folder_id,
       tags: tagsOfDocument(db, row.id),
       tagging,
+      // Why it failed, or why it waits when that is worth saying (the ChatGPT plan's limit).
       taggingError:
-        tagging === "failed"
+        tagging === "failed" || (tagging === "waiting-for-provider" && row.tagging_error_kind)
           ? {
               kind: (row.tagging_error_kind ?? "unknown") as ProviderErrorKind,
               message: row.tagging_error_message ?? "",
@@ -1423,15 +1425,31 @@ export function createDocuments(options: DocumentsOptions) {
     for (const units of options.citedUnits(upgraded)) byDocument.get(units.documentId)?.push(units);
     citedAtStart = byDocument;
   }
+  // A Document read well before, being read again for a newer pipeline, isn't what stopped the app.
+  const rereadForNewerPipeline = (row: DocumentRow) =>
+    row.processing_version <
+      (Object.entries(CURRENT_SINCE).find(([kind]) => kind === row.kind)?.[1] ??
+        PROCESSING_VERSION) && indexedStatus(row) !== null;
   for (const row of unfinished) {
     if (row.status === "extracting") {
-      // Read again by itself, what stopped the app could stop it again, at every start.
-      db.run(
-        `UPDATE documents SET status = ?, failure_reason = 'app-stopped',
-           failure_message = ?, updated_at = ? WHERE id = ?`,
-        [indexedStatus(row) ?? "failed", "The app stopped while it was being read.", now(), row.id],
-      );
-      continue;
+      if (!rereadForNewerPipeline(row)) {
+        // Read again by itself, what stopped the app could stop it again, at every start.
+        db.run(
+          `UPDATE documents SET status = ?, failure_reason = 'app-stopped',
+             failure_message = ?, updated_at = ? WHERE id = ?`,
+          [
+            indexedStatus(row) ?? "failed",
+            "The app stopped while it was being read.",
+            now(),
+            row.id,
+          ],
+        );
+        continue;
+      }
+      db.run("UPDATE documents SET status = 'queued', updated_at = ? WHERE id = ?", [
+        now(),
+        row.id,
+      ]);
     }
     if (!isPaused(row.id)) processor.enqueue(jobFor(row));
   }
@@ -2015,6 +2033,20 @@ export function createDocuments(options: DocumentsOptions) {
           anchors: unit.anchors ?? [],
         })),
       };
+    },
+
+    /** A Citation's quote as the Document's text reads it (see `CoreApi.readableQuote`). */
+    readableQuote(input: ScannedQuoteInput): string | null {
+      const row = find(parseId(input.documentId));
+      if (!row) return null;
+      const units = pageTexts(
+        row.id,
+        input.contentHash ?? row.content_hash,
+        input.pageFrom,
+        input.pageTo ?? input.pageFrom,
+      );
+      const ranges = quoteInUnits(units, cleanQuote(input.quote));
+      return ranges && ranges.length > 0 ? readableQuote(joinUnits(units).text, ranges) : null;
     },
 
     /** A Citation's quote read from a scan (see `CoreApi.readScannedQuote`). */

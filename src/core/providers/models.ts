@@ -19,7 +19,7 @@ import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { APICallError, type LanguageModel, wrapLanguageModel } from "ai";
 import type { ChatProviderKind } from "../api";
 import type { OAuthCredentials } from "../oauthAccount";
-import { catalogFacts, modelsProviderOfKind } from "./catalog";
+import { catalogFacts, modelsProviderOfKind, withoutDateSuffix } from "./catalog";
 import { catalogProviderOf, catalogProviderOfKind } from "./catalog/providers";
 import type { ProviderOptions, RequestQuirks } from "./catalog/types";
 import { createPlanChatModel } from "./chatgpt/planEndpoint";
@@ -158,8 +158,11 @@ function canSkipThinking(
   spec: ChatModelSpec,
   request: NonNullable<ReturnType<typeof catalogProviderOfKind>>["request"],
 ): boolean {
-  const { unless = [] } = request?.thinkingOff ?? {};
+  const { unless = [], except = [] } = request?.thinkingOff ?? {};
   if (unless.some((prefix) => spec.modelId.startsWith(prefix))) return false;
+  if (except.includes(spec.modelId) || except.includes(withoutDateSuffix(spec.modelId))) {
+    return false;
+  }
   const set = modelsProviderOfKind(spec.kind, spec.endpoint, spec.catalogId);
   return catalogFacts(set, spec.modelId)?.reasoning !== false;
 }
