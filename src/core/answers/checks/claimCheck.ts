@@ -130,7 +130,7 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       searchableCount: () => deps.documents.searchableCount(scope.documentIds),
       async search(query, searchSignal) {
         const found = await deps.evidence.search(query, scope, searchSignal);
-        // A page found on the web can't stand for a court decision: only a Document the User added can.
+        // A web result never settles a citation of a court decision, and a saved web page is one.
         const passages =
           decisions.length === 0
             ? found.passages
@@ -415,7 +415,6 @@ async function confirmContradiction(
   }
 }
 
-/** Whether one of the court decisions a sentence cites is in none of the Documents: none names it, by its Passages or its own name. */
 async function lacksDecision(
   decisions: readonly CaseCitation[],
   documents: AnswerDocuments,

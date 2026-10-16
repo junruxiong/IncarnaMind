@@ -168,7 +168,6 @@ const spaced = (text: string) => text.replace(/\s+/g, " ").trim();
 const bare = (name: string) => spaced(name.replace(SIGNAL, ""));
 
 const MAY_CITE = /\sv\.?\s|\[(?:1[89]|20)\d{2}\]/u;
-/** What follows a citation as part of it: pin cites and the court and year, ", 105 (Tex. 2017)". */
 const TRAILER = /^(?:,\s*\d{1,5}(?:[-–]\d{1,5})?)*(?:\s*\([^()]{0,40}\d{4}\))?/u;
 
 /** The court decisions a text cites, in order, where each is. */
@@ -202,7 +201,6 @@ export function citedCases(text: string): CitedCase[] {
 export const caseCitations = (sentence: string): CaseCitation[] =>
   citedCases(sentence).map(({ name, cite }) => ({ name, cite }));
 
-/** Words only, lower case: "Hallmark Builders, Inc. v. Rio Grande" reads "hallmark builders inc v rio grande". */
 const plain = (text: string) =>
   text
     .toLowerCase()
