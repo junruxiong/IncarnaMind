@@ -74,7 +74,7 @@ const text = (value: string, check?: ClaimCheckAttributes): JSONContent => ({
 const LEFT_CHECKING: ClaimCheckAttributes = {
   id: "left-checking",
   request: "",
-  action: "find-support",
+  action: "check-against-documents",
   state: "checking",
   reason: null,
   detail: null,
@@ -116,7 +116,10 @@ async function mindWith(
   const block = paragraph(text(body));
   writeMind(setup.client, [block]);
   await setup.client.settled();
-  const check = (action: ClaimCheckAction = "find-support", range = whole(block, body.length)) =>
+  const check = (
+    action: ClaimCheckAction = "check-against-documents",
+    range = whole(block, body.length),
+  ) =>
     setup.core.checkSentences({
       requestId: crypto.randomUUID(),
       mindId: setup.mind.id,
@@ -159,7 +162,7 @@ describe("The language of a check's sentence", () => {
   });
 });
 
-describe("Find support", () => {
+describe("Check against Documents", () => {
   test("marks each sentence the selection touches with what its check found", async () => {
     const { core, client, check, tides } = await mindWith([SUPPORTED, CONTRADICTED, UNSUPPORTED]);
 
@@ -173,7 +176,7 @@ describe("Find support", () => {
     ]);
     const [supported, contradicted, unsupported] = checks.map((each) => each.check);
     expect(supported).toMatchObject({
-      action: "find-support",
+      action: "check-against-documents",
       text: SUPPORTED,
       evidence: {
         documentId: tides.id,
@@ -196,7 +199,7 @@ describe("Find support", () => {
     const inSecond = SUPPORTED.length + 5;
 
     expect(
-      await check("find-support", {
+      await check("check-against-documents", {
         from: { blockId: block.attrs.id, offset: inSecond },
         to: { blockId: block.attrs.id, offset: inSecond + 3 },
       }),
@@ -234,7 +237,7 @@ describe("Find support", () => {
       core.checkSentences({
         requestId: crypto.randomUUID(),
         mindId: mind.id,
-        action: "find-support",
+        action: "check-against-documents",
         from: { blockId: block.attrs.id, offset: from },
         to: { blockId: block.attrs.id, offset: length },
       });
@@ -279,7 +282,7 @@ describe("Find support", () => {
       await core.checkSentences({
         requestId: "r1",
         mindId: mind.id,
-        action: "find-support",
+        action: "check-against-documents",
         ...whole(block, SUPPORTED.length),
       }),
     ).toEqual({ kind: "no-documents", folderId: null });
@@ -288,11 +291,11 @@ describe("Find support", () => {
 });
 
 describe("One claim check", () => {
-  test("Find support and Check against Documents ask the same check Run, offered only search and cite", async () => {
+  test("a sentence with no Citations sends none and one with Citations sends them, in the same check Run offered only search and cite", async () => {
     const calls: ModelCall[] = [];
     const { core, client, check } = await mindWith([SUPPORTED], checkingModel(PLANS, calls));
-    await check("find-support");
-    const findSupport = calls.splice(0);
+    await check();
+    const uncited = calls.splice(0);
 
     const cited = paragraph(
       text(`${SUPPORTED.slice(0, -1)} `),
@@ -309,21 +312,45 @@ describe("One claim check", () => {
     writeMind(client, [cited]);
     await client.settled();
     await check("check-against-documents", whole(cited, SUPPORTED.length + 1));
-    const againstDocuments = calls.splice(0);
+    const withCitations = calls.splice(0);
 
-    for (const call of [...findSupport, ...againstDocuments]) {
+    for (const call of [...uncited, ...withCitations]) {
       expect(call.tools.sort()).toEqual(["cite", "search_documents"]);
     }
-    expect(againstDocuments[0]?.system).toBe(findSupport[0]?.system);
+    expect(withCitations[0]?.system).toBe(uncited[0]?.system);
     const asked = (call: ModelCall | undefined) =>
       call?.options.prompt.find((message) => message.role === "user")?.content;
-    expect(JSON.stringify(asked(againstDocuments[0]))).toContain(
+    expect(JSON.stringify(asked(withCitations[0]))).toContain(
       "Tides: “Spring tides happen at new moon and at full moon”",
     );
-    expect(JSON.stringify(asked(findSupport[0]))).not.toContain("The User cites this");
+    expect(JSON.stringify(asked(uncited[0]))).not.toContain("The User cites this");
     expect((await shownChecks(core, client)).map((each) => each.check.action)).toEqual([
       "check-against-documents",
     ]);
+  });
+
+  test("a request that still says Find support, as an older version's mark does, sends the Citations too", async () => {
+    const calls: ModelCall[] = [];
+    const { client, check } = await mindWith([SUPPORTED], checkingModel(PLANS, calls));
+    const cited = paragraph(
+      text(`${SUPPORTED.slice(0, -1)} `),
+      {
+        type: "citation",
+        attrs: {
+          documentName: "Tides",
+          quote: "Spring tides happen at new moon and at full moon",
+          check: "found",
+        },
+      },
+      text("."),
+    );
+    writeMind(client, [cited]);
+    await client.settled();
+
+    await check("find-support", whole(cited, SUPPORTED.length + 1));
+
+    const asked = calls[0]?.options.prompt.find((message) => message.role === "user")?.content;
+    expect(JSON.stringify(asked)).toContain("The User cites this");
   });
 
   test("a contradiction counts only once the sentence and its quote, judged alone, conflict", async () => {
@@ -636,7 +663,7 @@ describe("A figure the Documents don't state, worked out (#707)", () => {
     await core.checkSentences({
       requestId: "r1",
       mindId: mind.id,
-      action: "find-support",
+      action: "check-against-documents",
       ...whole(block, claim.length),
     });
 
@@ -850,7 +877,7 @@ describe("When the model can't check a sentence", () => {
     await core.checkSentences({
       requestId: "capped",
       mindId: mind.id,
-      action: "find-support",
+      action: "check-against-documents",
       ...whole(block, SUPPORTED.length),
     });
 
@@ -962,7 +989,7 @@ describe("Stopping", () => {
     const running = core.checkSentences({
       requestId: "stop-me",
       mindId: mind.id,
-      action: "find-support",
+      action: "check-against-documents",
       ...whole(block, body.length),
     });
     await vi.waitFor(async () =>

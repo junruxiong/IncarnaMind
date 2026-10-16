@@ -1458,7 +1458,7 @@ export function createCore(adapters: CoreAdapters): Core {
     now: () => adapters.now?.() ?? new Date(),
   });
 
-  // Find support and Check against Documents (#96): check Runs that can only search and cite.
+  // Check against Documents (#96): check Runs that can only search and cite.
   /** A new Mind, in the citation style last chosen for a Mind in its Folder, as its own choice (#289). */
   const makeMind = (input: Required<CreateMindInput>): Mind => {
     if (input.folderId !== null) library.folder(input.folderId);

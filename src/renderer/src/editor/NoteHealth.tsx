@@ -294,10 +294,16 @@ export function NoteHealth({
                 ? () => void startMindCheck(mindId, "all", { allDocuments: true })
                 : coverage.range && coverage.action
                   ? () =>
-                      void checkSentences(editor, mindId, doc, coverage.action ?? "find-support", {
-                        ...(coverage.range && { ranges: [coverage.range] }),
-                        allDocuments: true,
-                      })
+                      void checkSentences(
+                        editor,
+                        mindId,
+                        doc,
+                        coverage.action ?? "check-against-documents",
+                        {
+                          ...(coverage.range && { ranges: [coverage.range] }),
+                          allDocuments: true,
+                        },
+                      )
                   : undefined
           }
         />

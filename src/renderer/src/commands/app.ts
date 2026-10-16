@@ -97,6 +97,7 @@ const appCommands: readonly Command[] = [
   {
     id: "verify.document",
     label: "verify.command",
+    hint: "verify.command.hint",
     keywords: ["verify.command.keywords"],
     group: "main",
     // It adds the PDF and makes a Mind of it, each deleted as any other is.
@@ -211,6 +212,7 @@ const appCommands: readonly Command[] = [
   {
     id: "mind.checkAll",
     label: "mindCheck.command",
+    hint: "mindCheck.command.hint",
     keywords: ["mindCheck.command.keywords"],
     group: "main",
     // It changes no words: its marks go with Check again, or when the sentence is edited.
@@ -224,6 +226,7 @@ const appCommands: readonly Command[] = [
   {
     id: "mind.checkContradictions",
     label: "contradictions.command",
+    hint: "contradictions.command.hint",
     keywords: ["contradictions.command.keywords"],
     group: "main",
     // It changes no words: its marks go with Check again, or when the sentence is edited.

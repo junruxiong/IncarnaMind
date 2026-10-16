@@ -576,8 +576,8 @@ export const en = {
   "editor.ai.explain": "Explain",
   "editor.ai.edit": "Edit with AI…",
   "editor.ai.markAsMine": "Mark as mine",
-  "editor.ai.findSupport": "Find support",
   "editor.ai.checkAgainstDocuments": "Check against Documents",
+  "editor.ai.checkAgainstDocuments.keywords": "check find support sources cite verify claims",
   "claim.state.checking": "Checking…",
   "claim.state.supported": "Supported",
   "claim.state.unsupported": "Unsupported",
@@ -645,7 +645,6 @@ export const en = {
   "checks.checkAll": "Check against all Documents",
   "checks.uncovered": "Your Documents don't cover most of this",
   "editor.ai.addDocumentsToCheck": "Add Documents to check",
-  "editor.ai.addDocumentsToFindSupport": "Add Documents to find support",
   "checks.problem.no-documents.all": "Nothing to check against: add Documents first.",
   "checks.problem.nothing": "There's no sentence to check in what you selected.",
   "checks.waiting.one": "1 sentence with changes waiting wasn't checked",
@@ -664,6 +663,7 @@ export const en = {
   "contradictions.command": "Check for contradictions",
   "contradictions.command.keywords":
     "contradictions conflict contradicted cited claims Folder watch",
+  "contradictions.command.hint": "Where your Documents disagree with this Mind's Citations",
   "contradictions.ask.one": "Check 1 cited claim against this Folder’s other Documents? {estimate}",
   "contradictions.ask":
     "Check {count} cited claims against this Folder’s other Documents? {estimate}",
@@ -679,6 +679,7 @@ export const en = {
   "contradictions.cost": "{result} · {cost}",
   "mindCheck.command": "Check this Mind",
   "mindCheck.command.keywords": "check all whole draft before sending claims sentences verify",
+  "mindCheck.command.hint": "Every claim against your Documents",
   "mindCheck.ask.folder.one":
     "Check this Mind’s sentence against this Folder’s Documents? {estimate}",
   "mindCheck.ask.folder":
@@ -689,6 +690,7 @@ export const en = {
   "mindCheck.cancel": "Not now",
   "verify.command": "Verify a document…",
   "verify.command.keywords": "verify check PDF claims fact-check received draft someone else",
+  "verify.command.hint": "Check the claims in a PDF someone else wrote",
   "verify.pick.title": "Verify a document",
   "verify.pick.filter": "PDF documents",
   "verify.refused.unreadable": "Couldn't read that PDF.",
@@ -715,7 +717,7 @@ export const en = {
   "verify.noDocuments.all": "Nothing to check against: add Documents first",
   "verify.problem.error": "Couldn't check: {message}",
   "verify.tryAgain": "Try again",
-  "consent.flow.checks": "Find support and Verify",
+  "consent.flow.checks": "Checks",
   "consent.flow.checks.purpose":
     "check the sentences you select, a whole Mind you check, and the documents you verify, against your Documents",
   "aiText.markedAsMine": "Marked as yours",
@@ -2778,7 +2780,7 @@ export const en = {
   "aiStatement.citations.contradicted": "Claim contradicted by the Document",
   "aiStatement.citations.checking": "Still being checked",
   "aiStatement.sentences.intro":
-    "Sentences the author had checked against the Documents, with Find support or Check against Documents, by result:",
+    "Sentences the author had checked against the Documents, with Check against Documents, by result:",
   "aiStatement.sentences.column.count": "Sentences",
   "aiStatement.sentences.supported": "Supported",
   "aiStatement.sentences.unsupported": "Unsupported",

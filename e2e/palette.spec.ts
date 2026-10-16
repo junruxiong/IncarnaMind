@@ -12,6 +12,7 @@ import {
   newMind,
   pointAndClick,
   removeDataFolder,
+  setLanguage,
   setWindowSize,
   slideSelect,
   useLocalChatModel,
@@ -350,6 +351,74 @@ test("runs a command on the Documents selected in the sidebar, taken back with U
   await expect(rows).toHaveCount(1);
   await pointAndClick(window, window.getByTestId("undo-action"));
   await expect(rows).toHaveCount(3);
+});
+
+test("with a sentence selected, ⌘K finds the one check by check, find support, 核对 and 出处, and the checks say what each is for", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await setWindowSize(app, window, 1280, 760);
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await writeMind(window, ["Harbours publish the times of high water every year."]);
+  const line = window.locator(".ProseMirror p").filter({ hasText: "Harbours publish" });
+  const row = (key: string) => palette(window).locator(`[data-key="command:${key}"]`);
+
+  // The selection stays in the Mind while the palette opens from the sidebar.
+  const search = async (query: string) => {
+    await slideSelect(window, line, "Harbours publish");
+    await pointAndClick(window, window.getByTestId("sidebar-search"));
+    await expect(window.getByTestId("palette-search")).toBeFocused();
+    await window.keyboard.type(query);
+  };
+
+  for (const query of ["check", "find support"]) {
+    await search(query);
+    await expect(row("check.againstDocuments")).toHaveText("Check against Documents");
+    await expect(palette(window).locator('[data-key^="command:check."]')).toHaveCount(1);
+    if (query === "check") {
+      await expect(row("mind.checkAll").getByTestId("palette-hint")).toHaveText(
+        "Every claim against your Documents",
+      );
+      await expect(row("mind.checkContradictions").getByTestId("palette-hint")).toHaveText(
+        "Where your Documents disagree with this Mind's Citations",
+      );
+      const verify = row("verify.document");
+      await expect(verify.getByTestId("palette-hint")).toHaveText(
+        "Check the claims in a PDF someone else wrote",
+      );
+      // The hint sits under the name and inside the row.
+      const rowBox = await verify.boundingBox();
+      const hintBox = await verify.getByTestId("palette-hint").boundingBox();
+      const nameBox = await verify.locator("span.truncate").first().boundingBox();
+      expect(hintBox?.y ?? 0).toBeGreaterThanOrEqual((nameBox?.y ?? 0) + (nameBox?.height ?? 0));
+      expect((hintBox?.x ?? 0) + (hintBox?.width ?? 0)).toBeLessThanOrEqual(
+        (rowBox?.x ?? 0) + (rowBox?.width ?? 0),
+      );
+    }
+    await window.keyboard.press("Escape");
+    await expect(palette(window)).toBeHidden();
+  }
+
+  await setLanguage(window, "zh-CN");
+  for (const query of ["核对", "出处"]) {
+    await search(query);
+    await expect(row("check.againstDocuments")).toHaveText("对照文档核对");
+    await expect(palette(window).locator('[data-key^="command:check."]')).toHaveCount(1);
+    if (query === "核对") {
+      await expect(row("mind.checkAll").getByTestId("palette-hint")).toHaveText(
+        "每个说法都对照你的文档",
+      );
+      await expect(row("verify.document").getByTestId("palette-hint")).toHaveText(
+        "核对别人写的 PDF 里的说法",
+      );
+    }
+    await window.keyboard.press("Escape");
+    await expect(palette(window)).toBeHidden();
+  }
+
+  await search("矛盾");
+  await expect(row("mind.checkContradictions").getByTestId("palette-hint")).toHaveText(
+    "你的文档与这个 Mind 的引用不一致的地方",
+  );
 });
 
 test("with nothing named so, “Ask about …” asks in the assistant; the assistant's commands are in the list", async () => {

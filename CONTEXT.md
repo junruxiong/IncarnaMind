@@ -240,7 +240,7 @@ The result of a Citation check when the Citation's quote, or words its sentence 
 _Avoid_: broken, invalid, failed
 
 **Unsupported**:
-The result for a sentence when Find support, Verify or note health finds nothing in the Documents that backs it up. It is not a finding that the sentence is wrong.
+The result for a sentence when Check against Documents, Verify or note health finds nothing in the Documents that backs it up. It is not a finding that the sentence is wrong.
 _Avoid_: not found, unverified, false
 
 **Contradicted**:

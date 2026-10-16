@@ -257,7 +257,7 @@ export function createExamples(options: ExamplesOptions) {
       const attributes: ClaimCheckAttributes = {
         id: randomUUID(),
         request: randomUUID(),
-        action: "find-support",
+        action: "check-against-documents",
         state: check.verdict,
         reason: null,
         detail: null,
