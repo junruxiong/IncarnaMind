@@ -97,14 +97,22 @@ export function locatorOf(location: CitationLocation | null, language: Language)
     const single = from === to;
     const plain = single ? !RANGE_MARK.test(from) : /^\d+$/.test(from) && /^\d+$/.test(to);
     if (plain) return { locator: single ? from : `${from}-${to}`, label: "page" };
-    // CSL turns even a custom locator's hyphen between digits into an en dash, a range.
-    const kept = (name: string) => name.replaceAll("-", "\u2011");
     return {
       locator: single
-        ? t("location.page", { range: kept(from) })
-        : t("location.pages", { range: `${kept(from)}–${kept(to)}` }),
+        ? t("location.page", { range: from })
+        : t("location.pages", { range: `${from}–${to}` }),
       label: "custom",
     };
   }
   return { locator: formatLocation(location, t), label: "custom" };
+}
+
+/**
+ * A custom locator as the engine wrote it into a run's text: the engine turns a hyphen between
+ * digits into an en dash, so a page the PDF names "1-3" or a section headed "2023-24" would read
+ * as a range. Put the label's own hyphen back.
+ */
+export function restoreHyphens(text: string, locator: string): string {
+  const written = locator.replace(/(\d)-(?=\d)/g, "$1–");
+  return written === locator ? text : text.replace(written, locator);
 }

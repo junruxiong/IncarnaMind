@@ -19,9 +19,14 @@ const BARE_NUMBER = [
   /^(?<n>\d{1,4})\s*(?:of|\/)\s*\d{1,4}$/,
   /^第(?<n>\d{1,4})页(?:,?共\d{1,4}页)?$/,
 ];
-const NUMBER_BEFORE_TEXT = /^(?<n>\d{1,3})(?:\s*[|·•]\s*|\s+)(?<rest>\p{L}.{0,80})$/u;
-const NUMBER_AFTER_TEXT =
-  /^(?<rest>(?=.*\p{L}).{1,80}?[\p{L}\p{N}])(?:\s*[|·•]\s*|\s+)(?<n>\d{1,3})$/u;
+// A separator must stand between the number and the text: a footnote's "3 Ibid., p. 4" has only a space.
+const NUMBER_BEFORE_TEXT = /^(?<n>\d{1,3})\s*[|·•]\s*(?<rest>\p{L}.{0,80})$/u;
+const NUMBER_AFTER_TEXT = /^(?<rest>(?=.*\p{L}).{1,80}?[\p{L}\p{N}])\s*[|·•]\s*(?<n>\d{1,3})$/u;
+const ROMAN = "(?=[ivxlcdm])m{0,3}(?:cm|cd|d?c{0,3})(?:xc|xl|l?x{0,3})(?:ix|iv|v?i{0,3})";
+const OTHER_NAME = new RegExp(
+  `^(?:(?:page|pg|p)\\.?\\s*)?(?:${ROMAN}|[a-z]{1,3}\\s*-\\s*\\d{1,4}|\\d{1,3}\\s*-\\s*\\d{1,4})$`,
+  "i",
+);
 const LABEL_OF_ANOTHER_NUMBER =
   /(?:^|\s)(?:figure|fig|table|chart|exhibit|section|chapter|appendix|part|note|plate|equation|article|clause|schedule|annex|step|item|no)\.?$/i;
 
@@ -82,7 +87,11 @@ function numbersAt(zones: readonly string[][]): Set<number>[] {
   );
 }
 
-function steadyNames(numbers: readonly Set<number>[]): (string | null)[] | null {
+type End = (string | null)[] | "unsteady" | "absent";
+
+// A cover can print a year or a title's number alone, so the first page is let off.
+function steadyNames(numbers: readonly Set<number>[], named: readonly boolean[]): End {
+  if (!numbers.some((page, index) => index > 0 && page.size > 0)) return "absent";
   const votes = new Map<number, number>();
   numbers.forEach((page, index) => {
     for (const number of page) {
@@ -91,33 +100,41 @@ function steadyNames(numbers: readonly Set<number>[]): (string | null)[] | null 
     }
   });
   const [best, runnerUp] = [...votes].sort((a, b) => b[1] - a[1]);
-  if (!best || best[1] < MIN_PAGES || best[1] === runnerUp?.[1]) return null;
+  if (!best || best[1] < MIN_PAGES || best[1] === runnerUp?.[1]) return "unsteady";
 
   const offset = best[0];
-  // A cover can print a year or a title's number alone, so the first page is let off.
   const disagrees = numbers.some(
     (page, index) => index > 0 && page.size > 0 && !page.has(index + 1 - offset),
   );
-  if (disagrees) return null;
+  if (disagrees) return "unsteady";
   const agreeing = numbers.flatMap((page, index) => (page.has(index + 1 - offset) ? [index] : []));
   const first = agreeing[0];
   const last = agreeing.at(-1);
-  if (first === undefined || last === undefined) return null;
-  if (agreeing.length < MIN_SHARE * (last - first + 1)) return null;
-  return numbers.map((_, index) =>
-    index >= first && index <= last ? String(index + 1 - offset) : null,
+  if (first === undefined || last === undefined) return "unsteady";
+  if (agreeing.length < MIN_SHARE * (last - first + 1)) return "unsteady";
+  return numbers.map((page, index) =>
+    index >= first && index <= last && (page.has(index + 1 - offset) || !named[index])
+      ? String(index + 1 - offset)
+      : null,
   );
 }
 
 export function printedNumbers(texts: readonly string[]): (string | null)[] {
+  const none = texts.map(() => null);
   const zones = texts.map(zonesOf);
-  const header = steadyNames(numbersAt(zones.map((zone) => zone.header)));
-  const footer = steadyNames(numbersAt(zones.map((zone) => zone.footer)));
-  if (!header || !footer) return header ?? footer ?? texts.map(() => null);
+  // A page in a gap that prints "A-1" or "ii" has a name of its own, not one from the offset.
+  const named = zones.map((zone) =>
+    [...zone.header, ...zone.footer].some((line) => OTHER_NAME.test(line)),
+  );
+  const header = steadyNames(numbersAt(zones.map((zone) => zone.header)), named);
+  const footer = steadyNames(numbersAt(zones.map((zone) => zone.footer)), named);
+  if (header === "unsteady" || footer === "unsteady") return none;
+  if (header === "absent") return footer === "absent" ? none : footer;
+  if (footer === "absent") return header;
   const agree = header.every(
     (name, index) => name === null || footer[index] === null || name === footer[index],
   );
-  return agree ? footer.map((name, index) => name ?? header[index] ?? null) : texts.map(() => null);
+  return agree ? footer.map((name, index) => name ?? header[index] ?? null) : none;
 }
 
 function nameOf(label: string | undefined): string | null {

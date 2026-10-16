@@ -130,6 +130,37 @@ describe("Page numbers read from footers and headers", () => {
     expect(printedNumbers(footed(["", "1", "2", "3", "9", "5"]))).toEqual(NONE(6));
   });
 
+  test("one end with numbers but no steady offset gives nothing, whatever the other end prints", () => {
+    const stray = ["", "", "7", "", "3", "", ""];
+    const steady = ["", "1", "2", "3", "4", "5", "6"];
+    expect(printedNumbers(framed(stray, steady))).toEqual(NONE(7));
+    expect(printedNumbers(framed(steady, stray))).toEqual(NONE(7));
+  });
+
+  test("an end whose only number is on the cover doesn't spoil the other end", () => {
+    const pages = framed(["2023", "", "", "", "", ""], ["", "1", "2", "3", "4", "5"]);
+    expect(printedNumbers(pages)).toEqual([null, "1", "2", "3", "4", "5"]);
+  });
+
+  test("a footnote's number before its text, one a page, is not a running footer", () => {
+    const notes = ["", ...[1, 2, 3, 4, 5].map((n) => `${n} Ibid., p. 4`)];
+    expect(printedNumbers(footed(notes))).toEqual(NONE(6));
+  });
+
+  test("a number beside text with only a space between them is not a page number", () => {
+    const spaced = ["", ...[1, 2, 3, 4].map((n) => `Annual Report 2024 ${n}`)];
+    expect(printedNumbers(footed(spaced))).toEqual(NONE(5));
+    const before = ["", ...[1, 2, 3, 4].map((n) => `${n} Annual Report 2024`)];
+    expect(printedNumbers(footed(before))).toEqual(NONE(5));
+  });
+
+  test("a page in a gap that prints its own name is not named from the offset", () => {
+    for (const own of ["A-1", "i", "ii", "5-12"]) {
+      const printed = ["", "1", "2", own, "4", "5"];
+      expect(printedNumbers(footed(printed))).toEqual([null, "1", "2", null, "4", "5"]);
+    }
+  });
+
   test("a number beside text that disagrees spoils it as a bare one does", () => {
     const footers = ["", "Annual Report | 1", "Annual Report | 2", "Annual Report | 3"];
     expect(printedNumbers(footed([...footers, "Annual Report | 9", "Annual Report | 5"]))).toEqual(
