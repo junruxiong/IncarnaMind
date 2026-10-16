@@ -196,7 +196,7 @@ test("Settings › Models says in one phrase what the ChatGPT plan and an API ke
   );
   await expect(plan.getByTestId("provider-sends")).toHaveCount(0);
   await expect(settings.getByTestId("chat-provider-choices")).toContainText(
-    `That service receives: ${phrase}.`,
+    `The service you choose receives: ${phrase}.`,
   );
   await plan.scrollIntoViewIfNeeded();
   await screenshot(window, "choosing-line-chatgpt-en");

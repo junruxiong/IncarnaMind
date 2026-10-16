@@ -1659,9 +1659,9 @@ export const en = {
   "providers.choice.local": "Stays on this computer",
   "providers.choice.apiKey": "An API key",
   "providers.choice.apiKey.body":
-    "OpenAI, Anthropic, Google, DeepSeek, Qwen, Kimi, GLM, Mistral, xAI, OpenRouter, SiliconFlow, or an OpenAI-compatible server. That service receives: {sends}.",
+    "OpenAI, Anthropic, Google, DeepSeek, Qwen, Kimi, GLM, Mistral, xAI, OpenRouter, SiliconFlow, or an OpenAI-compatible server. The service you choose receives: {sends}.",
   "providers.choice.apiKey.firstRun.body":
-    "{providers}. More providers are in Settings. That service receives: {sends}.",
+    "{providers}. More providers are in Settings. The service you choose receives: {sends}.",
   "providers.list.separator": ", ",
   "providers.list.last": "{rest} or {last}",
   "providers.kind.short.qwen": "Qwen",
