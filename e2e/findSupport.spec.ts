@@ -46,6 +46,7 @@ const SUPPORTED = "Spring tides happen at new and full moon.";
 const UNSUPPORTED = "Penguins nest on the harbour cliffs.";
 const CONTRADICTED = "Harbours publish the times of high water every 6 months.";
 const BLANK = "This line asks the model for a blank reply.";
+const LIGHTHOUSES = "Lighthouses guide ships past rocks at night.";
 
 let dataDir: string;
 let sources: string;
@@ -382,6 +383,55 @@ test("A check reads the text as it stands and says which sentences with changes 
   ]);
   await expect(bar.getByTestId("proposals-count")).toHaveText(/2/);
 });
+
+/** Starts noting, every frame, where the element with this test id is; the reader gives back each place seen. */
+async function notePlaces(window: Page, testId: string) {
+  await window.evaluate((id) => {
+    const seen: { x: number; y: number }[] = [];
+    (globalThis as { placesSeen?: typeof seen }).placesSeen = seen;
+    const look = () => {
+      const box = document.querySelector(`[data-testid="${id}"]`)?.getBoundingClientRect();
+      if (box) seen.push({ x: box.x, y: box.y });
+      requestAnimationFrame(look);
+    };
+    requestAnimationFrame(look);
+  }, testId);
+  return () =>
+    window.evaluate(
+      () => (globalThis as { placesSeen?: { x: number; y: number }[] }).placesSeen ?? [],
+    );
+}
+
+for (const [language, width] of [
+  ["en", 1100],
+  ["en", 1440],
+  ["zh-CN", 1100],
+  ["zh-CN", 1440],
+] as const) {
+  test(`Accept all and check stays where it first showed while the counts fill in after the check (${language}, ${width}px)`, async () => {
+    const { app, window } = await launchWithTides();
+    await useLocalChatModel(window);
+    if (language === "zh-CN") await setLanguage(window, language);
+    const { line } = await mindWithSentences(window, [
+      SUPPORTED,
+      UNSUPPORTED,
+      CONTRADICTED,
+      LIGHTHOUSES,
+    ]);
+    await setWindowSize(app, window, width, 900);
+    await askForTwoChanges(window, line);
+    const places = await notePlaces(window, "checks-accept-and-check");
+
+    await checkAll(window, line, "Spring tides", "at night.", "find-support");
+    await expect(window.getByTestId("checks-accept-and-check")).toBeVisible();
+    await expect(window.getByTestId("mind-health").getByTestId("health-unsupported")).toBeVisible();
+    await motionSettled(window);
+
+    const seen = await places();
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.every(({ x, y }) => x === seen[0]?.x && y === seen[0]?.y)).toBe(true);
+  });
+}
 
 test("Check against Documents on sentences that all have changes waiting sends nothing and says so; Accept all and check checks them against the Documents", async () => {
   const { app, window } = await launchWithTides();
