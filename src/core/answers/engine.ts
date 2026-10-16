@@ -110,6 +110,7 @@ import { earlierContext, type RequestMind } from "./context";
 import { retryFigures } from "./figureRetry";
 import { missingMarkerEvents, textEdits } from "./markerPlacement";
 import {
+  bracketedAmountsNote,
   datedDocumentsNote,
   notCitedNote,
   SEARCH_QUERY_INSTRUCTIONS,
@@ -119,6 +120,7 @@ import {
   unreadDocumentsNote,
 } from "./prompt";
 import { retryQuotes } from "./quoteRetry";
+import { claimsOf, createNudges, settleReply, type TurnCheck } from "./turnChecks";
 import { citeUnmarked } from "./unmarkedQuotes";
 import { createWindowBudget, SEARCH_RESERVE_TOKENS, type WindowBudget } from "./window";
 
@@ -400,16 +402,14 @@ export interface AnswerRequest {
    */
   cacheKey?: string;
   /**
-   * Reads the reply once it is written: the changes to a Mind it claims
-   * that none of the Answer's Tool calls made, and what to tell the model so
-   * it writes the reply again; null when it claims none. In the Tool loop the
-   * model is asked once more with `note`; a reply that still claims one, or one
-   * written without Tools, ends with "claims-unbacked".
+   * The end-of-turn checks (see ./turnChecks), in order. In the Tool loop the
+   * model is asked once more with a check's note, and a reply that still
+   * trips one, or one written without Tools, ends with "claims-unbacked".
    */
-  checkReply?(text: string): { claims: ClaimedChange[]; note: string } | null;
+  turnChecks?: readonly TurnCheck[];
   /**
    * How much of a reply being written may show while it streams: up to the
-   * first sentence that may claim a change, which waits for `checkReply`.
+   * first sentence that may claim a change, which waits for the checks.
    * Absent: all of it.
    */
   shownUpTo?(text: string): number;
@@ -1338,6 +1338,7 @@ export function documentTools(
         const notes = [
           datedDocumentsNote(result.text),
           notCitedNote(result.text),
+          bracketedAmountsNote(result.text),
           unreadDocumentsNote(documents.unreadDocuments?.() ?? []),
         ];
         return [result.text, ...notes].filter((part) => part !== "").join("\n\n");
@@ -1363,7 +1364,7 @@ export function documentTools(
     calculate: documents.calculate
       ? {
           ...own(DOCUMENT_TOOLS.calculate),
-          description: `Work out a number from numbers in the Passages instead of in your head, and get its result back. Give figures, each {marker, label, inputs, formula, as}. Each input is {name, label, citation, number}: citation is the marker of a cite record whose quote has the number (1 for [^1]), or give passage, location and quote instead; number is the number as it is written there. The formula is in Excel's syntax over the inputs' names. For example: {"figures": [{"marker": 1, "label": "Revenue growth 2025", "inputs": [{"name": "r24", "label": "Revenue 2024", "citation": 1, "number": "$1,231.0 million"}, {"name": "r25", "label": "Revenue 2025", "citation": 1, "number": "$1,482.6 million"}], "formula": "r25 / r24 - 1", "as": "percent"}]}. IncarnaMind reads each number from its quote, checks the quote and does the arithmetic. Inputs are read in base units with their page's scale ("单位：万元", "in millions") applied, so give scale ("亿", "billion") for the scale a figure is shown in, never multiply or divide by 1000 or 10000 in the formula. ${
+          description: `Work out a number from numbers in the Passages instead of in your head, and get its result back. Give figures, each {marker, label, inputs, formula, as}. Each input is {name, label, citation, number}: citation is the marker of a cite record whose quote has the number (1 for [^1]), or give passage, location and quote instead; number is the number as it is written there. The formula is in Excel's syntax over the inputs' names. For example: {"figures": [{"marker": 1, "label": "Revenue growth 2025", "inputs": [{"name": "r24", "label": "Revenue 2024", "citation": 1, "number": "$1,231.0 million"}, {"name": "r25", "label": "Revenue 2025", "citation": 1, "number": "$1,482.6 million"}], "formula": "r25 / r24 - 1", "as": "percent"}]}. IncarnaMind reads each number from its quote, checks the quote and does the arithmetic. Inputs are read in base units with their page's scale ("单位：万元", "in millions") applied, so give scale ("亿", "billion") for the scale a figure is shown in, never multiply or divide by 1000 or 10000 in the formula. An input keeps its sign as the Passage writes it: an amount in brackets, "(12,500)", is negative, so take a deduction off by adding it, never by subtracting it. ${
             checking
               ? "Give stated, the number as the sentence to check writes it: IncarnaMind compares the result with it."
               : "Write the figure's marker, such as [=1], in the number's place; never write the number yourself."
@@ -1579,11 +1580,12 @@ async function* toolLoop(
   const calls = new Map<string, Tool>();
   /** Searches running now: the Answer is "searching" while there are any. */
   let searching = 0;
-  /** The reply as first written, once the model is asked once more because it claims a change no call made. */
-  let first: string | null = null;
+  /** The reply that stands if the model, asked once more, fails: as it was before the last ask. */
+  let standing: string | null = null;
   let again: readonly RunMessage[] | null = null;
   /** Model calls made so far: asked once more, the model gets what is left of `maxSteps`. */
   let steps = 0;
+  const nudges = createNudges(maxSteps, () => steps);
   /** How much of `keptText + stepText` the Answer shows: a claim of a change waits until it is checked. */
   let released = 0;
   function* release(upTo: number): Generator<AnswerEngineEvent> {
@@ -1595,7 +1597,7 @@ async function* toolLoop(
   }
   const releasable = (text: string) => request.shownUpTo?.(text) ?? text.length;
   function* flag(text: string): Generator<AnswerEngineEvent> {
-    const claims = request.checkReply?.(text)?.claims ?? [];
+    const claims = claimsOf(request.turnChecks ?? [], text);
     if (claims.length > 0) yield { type: "claims-unbacked", claims };
   }
   function* backToFirst(written: string): Generator<AnswerEngineEvent> {
@@ -1609,7 +1611,9 @@ async function* toolLoop(
   async function* endAnswer(): AsyncGenerator<AnswerEngineEvent> {
     if (!request.documents.wroteIntoMind?.()) {
       const placed = yield* missingMarkerEvents(keptText, cited, request.documents);
-      yield* citeUnmarked(request, placed, temperature, budget);
+      yield* citeUnmarked(request, placed, temperature, budget, () =>
+        nudges.take("unmarked-quotes"),
+      );
     }
     yield { type: "finished" };
   }
@@ -1617,7 +1621,7 @@ async function* toolLoop(
   async function* runs(): AsyncGenerator<RunEvent> {
     let history: readonly RunMessage[] = messages.map(runMessage);
     for (;;) {
-      yield* engine.run(runRequest(history, Math.max(1, maxSteps - steps)));
+      yield* engine.run(runRequest(history, maxSteps - steps));
       if (!again) return;
       history = [...history, ...again];
       again = null;
@@ -1749,9 +1753,9 @@ async function* toolLoop(
         break;
       }
       case "refused":
-        // Asked once more, its first reply stands: trying another way now would call its Tools again.
-        if (first !== null) {
-          yield* backToFirst(first);
+        // Asked once more, the reply before stands: trying another way now would call its Tools again.
+        if (standing !== null) {
+          yield* backToFirst(standing);
           yield* endAnswer();
           return;
         }
@@ -1768,11 +1772,9 @@ async function* toolLoop(
         return;
       case "failed":
         for (const source of unannounced.splice(0)) yield { type: "read-third-party", source };
-        if (first !== null) {
-          console.error(
-            `Asking again for a reply that claims changes failed: ${event.error.message}`,
-          );
-          yield* backToFirst(first);
+        if (standing !== null) {
+          console.error(`Asking again for a better reply failed: ${event.error.message}`);
+          yield* backToFirst(standing);
           yield* endAnswer();
           return;
         }
@@ -1780,22 +1782,20 @@ async function* toolLoop(
         return;
       case "finished": {
         if (keptText.trim() === "" && unmarked.trim() !== "") keptText = unmarked;
-        const unbacked = request.checkReply?.(keptText) ?? null;
-        if (unbacked && first === null) {
-          first = keptText;
+        const settled = settleReply(request.turnChecks ?? [], keptText, nudges);
+        if ("nudge" in settled) {
+          standing = keptText;
           if (released > 0) yield { type: "text-retracted", length: released };
           released = 0;
           keptText = "";
           stepText = "";
           answered = false;
           unmarked = "";
-          again = [...event.messages, { role: "user", text: unbacked.note }];
+          again = [...event.messages, { role: "user", text: settled.nudge }];
           break;
         }
         yield* release(keptText.length);
-        if (unbacked && unbacked.claims.length > 0) {
-          yield { type: "claims-unbacked", claims: unbacked.claims };
-        }
+        if (settled.claims.length > 0) yield { type: "claims-unbacked", claims: settled.claims };
         yield* endAnswer();
         return;
       }
@@ -1927,8 +1927,8 @@ async function* structured(
 }
 
 function* flagClaims(request: AnswerRequest, text: string): Generator<AnswerEngineEvent> {
-  const unbacked = request.checkReply?.(text);
-  if (unbacked) yield { type: "claims-unbacked", claims: unbacked.claims };
+  const claims = claimsOf(request.turnChecks ?? [], text);
+  if (claims.length > 0) yield { type: "claims-unbacked", claims };
 }
 
 /** A plain streamed Answer, with no Tools and no Citations. */

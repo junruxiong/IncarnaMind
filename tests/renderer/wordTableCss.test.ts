@@ -68,6 +68,7 @@ describe("a Word table's stylesheet", () => {
       version: 3,
       body: 12,
       width: 450,
+      defaultTab: null,
       paragraphs: {},
       runs: {},
       tables: {
@@ -104,6 +105,7 @@ describe("a Word table's stylesheet", () => {
       version: 3,
       body: 12,
       width: 450,
+      defaultTab: null,
       paragraphs: {},
       runs: {},
       tables: { t1: { borders: { insideH: single, insideV: single } } },
@@ -156,7 +158,7 @@ describe("a Word table's stylesheet", () => {
     expect(look.tables).toEqual({ t1: { columns: [100] } });
     expect(look.cells).toEqual({ c1: {} });
     const css = wordLookCss("mind", look);
-    expect(css).not.toContain("display");
+    expect(css).not.toContain("display: none");
     expect(css.split("{").length).toBe(css.split("}").length);
   });
 });
