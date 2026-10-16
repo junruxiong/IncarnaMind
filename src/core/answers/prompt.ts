@@ -1,13 +1,32 @@
 /** The instructions every Answer is written with. Kept short: every word is sent with every Question. */
+import { CJK, nameKey } from "../../shared/text";
 import type { CitationSupport, SkillFile, UnreadFile, UnreadReason } from "../api";
+import { detectLanguage } from "../documents/textLanguage";
+import { LANGUAGE_NAMES, type Language } from "../language";
 import type { LoadedSkill, SkillSummary } from "../skills";
 
-/** A language a Question is clearly written in, judged by its script alone. */
-function scriptLanguage(question: string): string | null {
-  if (/[぀-ヿ]/.test(question)) return "Japanese";
-  if (/[가-힯]/.test(question)) return "Korean";
-  if (/[一-鿿]/.test(question)) return "Chinese";
-  return null;
+const CJK_CHARACTERS = new RegExp(`[${CJK}]`, "gu");
+const LATIN_WORDS = /\p{Script=Latin}{2,}/gu;
+const EXTENSION = /(?<=\S)\.[\p{L}\p{N}]{1,5}$/u;
+
+const countOf = (text: string, pattern: RegExp) => text.match(pattern)?.length ?? 0;
+
+// A Question is short, so two common words tell its language where a Document's sample needs three.
+const QUESTION_COMMON_WORDS = 2;
+
+function questionLanguage(question: string): string | null {
+  const cjk = countOf(question, CJK_CHARACTERS);
+  const words = countOf(question, LATIN_WORDS);
+  // A few CJK characters among Latin words are a name, as in "What does 合同条款 say?".
+  return cjk > 0 && cjk >= 2 * words
+    ? detectLanguage(question.replace(LATIN_WORDS, " "))
+    : detectLanguage(question.replace(CJK_CHARACTERS, " "), QUESTION_COMMON_WORDS);
+}
+
+function isWritten(question: string, documentNames: readonly string[]): boolean {
+  const keys = [question.trim(), question.trim().replace(EXTENSION, "")].map(nameKey);
+  if (documentNames.some((name) => keys.includes(nameKey(name)))) return false;
+  return countOf(question, LATIN_WORDS) + Math.floor(countOf(question, CJK_CHARACTERS) / 2) >= 2;
 }
 
 /** The system prompt for answering Questions, before anything about Documents. The same for every Question. */
@@ -24,14 +43,23 @@ export function answerInstructions(): string {
 }
 
 /**
- * The one line of the instructions that depends on the Question, for a
- * Question clearly written in one script. It goes last, after everything that
- * stays the same from one Question to the next, so a change of language
- * doesn't change the start of the prompt (a provider caches that: #343).
+ * The one line of the instructions that depends on the Question. It goes last,
+ * after everything that stays the same from one Question to the next, so a
+ * change of language doesn't change the start of the prompt (a provider
+ * caches that: #343).
  */
-export function languageInstruction(question: string): string {
-  const language = scriptLanguage(question);
-  return language ? `- The Question is written in ${language}, so answer in ${language}.` : "";
+export function languageInstruction(
+  question: string,
+  interfaceLanguage: Language,
+  documentNames: readonly string[],
+): string {
+  if (!isWritten(question, documentNames)) {
+    return `- The Question is only a name or a figure, which has no language: answer in ${LANGUAGE_NAMES[interfaceLanguage]}, even when the Question's characters and the Documents are in another language.`;
+  }
+  const language = questionLanguage(question);
+  return language
+    ? `- The Question is written in ${language}, so answer in ${language}.`
+    : "- Write the Answer in the language of the Question itself, not the Documents'.";
 }
 
 /**
@@ -90,6 +118,7 @@ export function mindInstructions(offered: boolean): string {
     "You can also change the User's Minds (their notes) and make new ones, with read_mind, edit_mind, add_to_mind and create_mind. What you write into a Mind arrives there as changes the User accepts or rejects.",
     '- The User\'s words decide. A Question (what, why, how, compare, find, explain…) is answered in your reply and changes no Mind. A request to write or change something in a Mind ("shorten the summary", "add a risks section", "fix the typos", "把这段改短") changes that Mind. A request for a new note ("make notes on these papers", "summarise this into a new Mind", "新建一篇笔记") makes one.',
     "- The Mind is the one in <mind>, unless the User names another. If they ask to change a Mind but none is in <mind> and they name none, change nothing: say so, and that they can open one or ask for a new Mind.",
+    "- What you write into a Mind follows the same rules as your replies: the language of the Question, and quotation marks only around a Document's own words.",
     "- Never write a Mind's new text in your reply. Once the Tools are done, reply in one or two sentences, with no Citation markers (the Mind holds them): which Mind you changed or made, what changed and why, and plainly anything you couldn't do. A card under your reply lists each Mind and how many changes wait there, so don't list them again or say that they wait. E.g. \"Shortened the summary in “Q3 review” from 320 to 150 words: dropped the repeated background and the third example; every Citation kept.\"",
   ].join("\n");
 }
@@ -193,7 +222,7 @@ const UNBROKEN_QUOTE =
 
 /** The Citation check also looks for the words an Answer puts in quotation marks (#483): a reader takes them for the Document's own. */
 const QUOTATION_MARKS =
-  "- Use quotation marks only around a Document's exact words, the same as the record's quote.";
+  "- Use quotation marks only around a Document's exact words, in its own language, the same as the record's quote, never a translation of them: that goes after the closing mark, as “…”（译：…）.";
 
 /** The most Document names the instructions list: the most recently added. */
 export const LISTED_DOCUMENTS = 50;
