@@ -18,11 +18,13 @@ import { createZai } from "@ai-sdk/zai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { APICallError, type LanguageModel, wrapLanguageModel } from "ai";
 import type { ChatProviderKind } from "../api";
+import type { OAuthCredentials } from "../oauthAccount";
 import { catalogFacts, modelsProviderOfKind } from "./catalog";
 import { catalogProviderOf, catalogProviderOfKind } from "./catalog/providers";
 import type { ProviderOptions, RequestQuirks } from "./catalog/types";
 import { createPlanChatModel } from "./chatgpt/planEndpoint";
-import type { ChatGptCredentials } from "./chatgpt/signIn";
+import type { RequestTransform } from "./claudeAccount/config";
+import { createClaudeAccountChatModel } from "./claudeAccount/messages";
 import { endpointUrl } from "./kinds";
 import { createOllamaChatModel } from "./ollamaChat";
 import { DEFAULT_OLLAMA_SETTINGS, type OllamaModelSettings } from "./ollamaModels";
@@ -58,8 +60,10 @@ export interface ChatModelSpec {
   thinking?: "off" | "summary" | "answer" | "careful";
   apiKey: string | null;
   modelId: string;
-  /** "chatgpt" only: the User's ChatGPT sign-in, which signs (and refreshes) every request. */
-  credentials?: ChatGptCredentials;
+  /** "chatgpt" and "claude-account": the User's sign-in, which signs (and refreshes) every request. */
+  credentials?: OAuthCredentials;
+  /** "claude-account" only: what its client profile adds to every request. */
+  request?: RequestTransform;
   /** "ollama" only: the settings every request to the model carries (see ./ollamaModels). */
   ollama?: OllamaModelSettings;
 }
@@ -100,12 +104,12 @@ const hostedUrl = (spec: ChatModelSpec): string =>
  * for the Answer's, the request for a summary of the model's reasoning.
  */
 export const createAiSdkChatModel: ChatModelFactory = (spec) => {
-  const request = catalogProviderOf(spec.kind, spec.catalogId)?.request;
+  const request = catalogProviderOf(anthropicFor(spec.kind), spec.catalogId)?.request;
   let model = providerModel(spec);
   if (request?.store === false) {
     model = withoutStorage(model, spec.kind === "xai" ? "xai" : "openai");
   }
-  if (spec.kind === "anthropic") model = withCacheBreakpoints(model);
+  if (anthropicFor(spec.kind) === "anthropic") model = withCacheBreakpoints(model);
   if (spec.thinking === "off" && request?.thinkingOff && canSkipThinking(spec, request)) {
     model = withThinkingOff(model, spec, request.thinkingOff);
   }
@@ -114,9 +118,14 @@ export const createAiSdkChatModel: ChatModelFactory = (spec) => {
   return model;
 };
 
+/** A Claude account's requests are Anthropic's Messages API, with what the catalog says of it. */
+const anthropicFor = (kind: ChatProviderKind): ChatProviderKind =>
+  kind === "claude-account" ? "anthropic" : kind;
+
 /** The ChatGPT plan is OpenAI's Responses API: its reasoning is summarized as OpenAI's is. */
 const summaryQuirk = (kind: ChatProviderKind) =>
-  catalogProviderOfKind(kind === "chatgpt" ? "openai" : kind)?.request?.reasoningSummary;
+  catalogProviderOfKind(kind === "chatgpt" ? "openai" : anthropicFor(kind))?.request
+    ?.reasoningSummary;
 
 /**
  * Whether a provider's reasoning comes back as its own summary (Anthropic,
@@ -312,6 +321,14 @@ function providerModel(spec: ChatModelSpec): ChatLanguageModel {
         baseUrl: requireBaseUrl(spec),
         modelId: spec.modelId,
         credentials: spec.credentials,
+      });
+    case "claude-account":
+      if (!spec.credentials) throw new Error("A Claude sign-in is required.");
+      return createClaudeAccountChatModel({
+        baseUrl: requireBaseUrl(spec),
+        modelId: spec.modelId,
+        credentials: spec.credentials,
+        request: spec.request ?? {},
       });
   }
 }
