@@ -438,8 +438,16 @@ const textKey = (text: string) =>
     .toLocaleLowerCase()
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim();
-// Shorter than this, a match is a coincidence ("Notes"), not a second copy.
-const MIN_COPY = 4;
+// Two summaries may share a short line ("Not reported.", "The Passages found don't describe the
+// methods."): only long paragraphs in a row, already there, are a second copy.
+const COPY_WORDS = 8;
+const COPY_CJK = 30;
+const COPY_RUN = 2;
+
+function longEnough(text: string): boolean {
+  const count = countText(text);
+  return count.words >= COPY_WORDS || count.cjk >= COPY_CJK;
+}
 
 function nodeText(node: NodeJSON): string {
   return node.text ?? (node.content ?? []).map(nodeText).join(" ");
@@ -593,19 +601,22 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
   const changeOf = (writer: Writer, created: boolean): MindChange =>
     changeIn(writer.mind.id, writer.request, created);
 
-  // Sections may share their headings ("Key findings"), so only a paragraph is a second copy.
   const copyIn = (writer: Writer, blocks: readonly NodeJSON[]): string | null => {
     const there = new Set(
-      minds
-        .read(writer.mind.id, (note) => ownWaitingTexts(note, writer.request))
-        .map(textKey)
-        .filter((key) => key.length >= MIN_COPY),
+      minds.read(writer.mind.id, (note) => ownWaitingTexts(note, writer.request)).map(textKey),
     );
     let section: string | null = null;
+    let first: string | null = null;
+    let run = 0;
     for (const block of blocks) {
       const text = nodeText(block);
-      if (block.type === "heading") section = text;
-      else if (textKey(text).length >= MIN_COPY && there.has(textKey(text))) return section ?? text;
+      if (block.type === "heading") {
+        if (run === 0) section = text;
+      } else if (longEnough(text)) {
+        run = there.has(textKey(text)) ? run + 1 : 0;
+        if (run === 1) first = section ?? text;
+        if (run >= COPY_RUN) return first;
+      }
     }
     return null;
   };
