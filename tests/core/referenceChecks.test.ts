@@ -329,6 +329,23 @@ describe("Checking a reference list (#711)", { timeout: 30_000 }, () => {
     });
   });
 
+  // protects=by an arXiv number, an OpenAlex record dated otherwise gives way to arXiv's record of the preprint, as OpenAlex dates "Attention is all you need" 2025; fails_when=the real preprint reads "doesn't match"; no_claim=none beyond protects.
+  test("by an arXiv number, OpenAlex's record that differs gives way to arXiv's", async () => {
+    const redated: OpenAlexWork = {
+      id: "https://openalex.org/W2626778328",
+      doi: "https://doi.org/10.48550/arxiv.1706.03762",
+      display_name: "Attention Is All You Need",
+      publication_date: "2025-08-23",
+      authorships: [{ author: { display_name: "Ashish Vaswani" } }],
+    };
+    const { core, mindId } = await setUp([ON_ARXIV], { openalex: [redated] });
+
+    expect(await core.checkReferences(mindId)).toMatchObject({
+      kind: "checked",
+      references: [{ mark: "found", service: "arxiv", record: { year: 2017 } }],
+    });
+  });
+
   // protects=OpenAlex offline: Crossref's answers stand, the first miss isn't checked with OpenAlex named, and OpenAlex isn't asked again; fails_when=a miss reads as not listed when OpenAlex wasn't asked, or each miss tries OpenAlex; no_claim=none beyond protects.
   test("when OpenAlex can't be reached, Crossref's answers stand and OpenAlex is asked once", async () => {
     const { core, services, mindId } = await setUp([REAL, INVENTED, CONFERENCE]);
@@ -382,6 +399,39 @@ describe("Reading a reference as written", () => {
     ).toMatchObject({ doi: "10.1234/2019.5", year: 2021 });
   });
 
+  // protects=a page in a range, a CoRR arXiv number and a one-year gap aren't read as a wrong year, and a title a PDF joined at its hyphen still holds; fails_when=a real reference in a paper's list reads "doesn't match" for any of these; no_claim=none beyond protects.
+  test("its year, past pages and CoRR numbers, within a year of the record's", () => {
+    expect(
+      citedReference(
+        "Sepp Hochreiter. Long short-term memory. Neural computation, 9(8):1735–1780, 1997.",
+      ),
+    ).toMatchObject({ year: 1997 });
+    expect(
+      citedReference(
+        "Denny Britz. Massive exploration of NMT architectures. CoRR, abs/1703.03906, 2017.",
+      ),
+    ).toMatchObject({ arxiv: "1703.03906", year: 2017 });
+    const adam = citedReference(
+      "Diederik Kingma and Jimmy Ba. Adam: A method for stochastic optimization. In ICLR, 2015.",
+    );
+    const record = {
+      fields: {
+        title: "Adam: A Method for Stochastic Optimization",
+        authors: [{ family: "Kingma", given: "Diederik P." }],
+      },
+    };
+    expect(differences(adam, { ...record, years: [2014] })).toEqual([]);
+    expect(differences(adam, { ...record, years: [2012] }).map((each) => each.field)).toEqual([
+      "year",
+    ]);
+    expect(
+      titleCoverage(
+        "Luong. Effective approaches to attentionbased neural machine translation, 2015.",
+        "Effective Approaches to Attention-based Neural Machine Translation",
+      ),
+    ).toBe(1);
+  });
+
   // protects=the title is read as each common style sets it apart (APA, numbered with quotes, GB/T 7714, Vancouver), for OpenAlex's search by title; fails_when=an author list or venue is taken for the title; no_claim=styles beyond these.
   test("its title, in the common styles", () => {
     expect(titleOf(CONFERENCE)).toBe("Language models are few-shot learners");
@@ -409,6 +459,59 @@ describe("Reading a reference as written", () => {
       { id: "f", heading: false, text: INVENTED },
     ];
     expect(checkableReferences(blocks).map((entry) => entry.blockId)).toEqual(["c", "d"]);
+  });
+
+  // protects=an entry a PDF broke into paragraphs is read whole: a numbered one until the next number, one whose authors stand alone into the paragraph with its year; the list still ends after its last number and at prose; fails_when=a broken entry ends the list, is read as two, or an appendix after the last number is read as a reference; no_claim=entries broken any other way.
+  test("an entry a PDF broke into paragraphs is read whole", () => {
+    const block = (id: string, text: string, isHeading = false) => ({
+      id,
+      heading: isHeading,
+      text,
+    });
+    const numbered = [
+      block("h", "References", true),
+      block("a", "[1] Christian Szegedy and Zbigniew Wojna."),
+      block(
+        "b",
+        "Rethinking the inception architecture for computer vision. CoRR, abs/1512.00567, 2015.",
+      ),
+      block("c", "[2] Yoon Kim and Alexander M. Rush. Structured attention networks, 2017."),
+      block(
+        "d",
+        "Attention Visualizations It is in this spirit that laws passed since 2009 matter.",
+      ),
+    ];
+    expect(checkableReferences(numbered)).toEqual([
+      {
+        blockId: "a",
+        text: "[1] Christian Szegedy and Zbigniew Wojna. Rethinking the inception architecture for computer vision. CoRR, abs/1512.00567, 2015.",
+      },
+      {
+        blockId: "c",
+        text: "[2] Yoon Kim and Alexander M. Rush. Structured attention networks, 2017.",
+      },
+    ]);
+    const authorsFirst = [
+      block("h", "REFERENCES", true),
+      block(
+        "a",
+        "Amari, Shun-Ichi. Natural gradient works efficiently in learning. Neural computation, 10(2):251–276, 1998.",
+      ),
+      block("b", "Maas, Andrew L, Daly, Raymond E, and Potts, Christopher."),
+      block(
+        "c",
+        "Learning word vectors for sentiment analysis. In Proceedings of ACL, pp. 142–150, 2011.",
+      ),
+      block(
+        "d",
+        "Zeiler, Matthew D. Adadelta: An adaptive learning rate method. arXiv preprint arXiv:1212.5701, 2012.",
+      ),
+    ];
+    expect(checkableReferences(authorsFirst).map((entry) => entry.blockId)).toEqual([
+      "a",
+      "b",
+      "d",
+    ]);
   });
 
   // protects=a short title must stand alone in the reference, so a record titled "Introduction" isn't a longer title's work; a short real title still is; fails_when=either is wrong; no_claim=none beyond protects.

@@ -30,15 +30,12 @@ export const NEEDS_A_LOOK: ReadonlySet<ReferenceCheck["mark"]> = new Set(
 /** How many of a found work's authors its record line names before "et al.". */
 const AUTHORS_SHOWN = 3;
 
-/**
- * The dot each mark shows, in DESIGN.md's status colours: red only for a
- * DOI or arXiv number that leads nowhere; amber for what may still be right.
- */
+/** The dot each mark shows, in DESIGN.md's status colours; red is kept for a contradicted claim (#648). */
 const MARK_DOT: Record<ReferenceCheck["mark"], string> = {
   found: "bg-success",
   mismatch: "bg-attention",
   "not-listed": "bg-attention",
-  "not-found": "bg-danger",
+  "not-found": "bg-attention",
   "not-checked": "bg-ink-placeholder",
 };
 

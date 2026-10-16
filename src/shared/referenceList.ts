@@ -12,16 +12,25 @@ const HEADING =
   /^(?:[\dIVX]+\.?\s*)?(?:references|reference list|bibliography|works cited|literature cited|literature|参考文献|参考资料|引用文献)\s*[:：]?$/i;
 /** Where a numbered entry starts inside a Block: "[12] " or "12. " after the previous entry. */
 const NUMBERED = /\s(?=\[\d{1,3}\]\s)|(?<=[.)])\s+(?=\d{1,3}\.\s+\p{Lu})/u;
+/** How a numbered entry starts. */
+const NUMBER_START = /^(?:\[\d{1,3}\]|\d{1,3}\.)\s/;
+/** How an entry starts with its authors, family name first: "Maas, Andrew L, …". */
+const AUTHOR_START = /^\p{Lu}[\p{L}'’-]*,\s/u;
+/** The longest an entry's opening paragraphs run before its year, DOI or number. */
+const LONGEST_OPENING = 400;
 
 /** A DOI as a reference writes it, after "doi:" or "https://doi.org/" or alone. */
 export const DOI_IN_TEXT = /(?:doi\.org\/|doi\s*[:：]?\s*)?(10\.\d{4,9}\/[^\s"<>]+)/i;
-/** An arXiv number as a reference writes it: "arXiv:1706.03762", or in an arxiv.org address. */
+/** An arXiv number as a reference writes it: "arXiv:1706.03762", "CoRR, abs/1409.0473", or in an arxiv.org address. */
 export const ARXIV_IN_TEXT = new RegExp(
-  `(?:arxiv\\s*[:：]\\s*|arxiv\\.org/(?:abs|pdf)/)${ARXIV_ID.source}`,
+  `(?:arxiv\\s*[:：]\\s*|arxiv\\.org/(?:abs|pdf)/|\\bcorr,?\\s*abs/)${ARXIV_ID.source}`,
   "i",
 );
-/** A year a reference names: four digits from 1500 to 2099. */
-export const YEAR_IN_TEXT = /(?<!\d)(1[5-9]\d\d|20\d\d)(?!\d)/;
+/**
+ * A year a reference names: four digits from 1500 to 2099, not a page in a
+ * range ("9(8):1735–1780") or part of a number ("abs/1512.00567").
+ */
+export const YEAR_IN_TEXT = /(?<![\d/:–—-])(1[5-9]\d\d|20\d\d)(?![\d–—-]|\.\d)/;
 /** What every reference holds one of: a year, a DOI, an arXiv number, a web address or its number in the list. */
 const REFERENCE_SIGN = new RegExp(
   [
@@ -95,28 +104,73 @@ function isCheckable(reference: string): boolean {
   return titleWords(reference).length >= MIN_WORDS;
 }
 
-/** The entries of a reference list, in order; none without a heading that starts one. */
+interface Part {
+  blockId: string;
+  heading: boolean;
+  text: string;
+}
+
+/** The Blocks' texts, a Block holding several numbered entries split at their numbers. */
+function partsOf(blocks: readonly ListBlock[]): Part[] {
+  return blocks.flatMap((block) => {
+    const text = block.text.replace(/\s+/g, " ").trim();
+    const parts = block.heading || HEADING.test(text) ? [text] : text.split(NUMBERED);
+    return parts
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .map((part) => ({ blockId: block.id, heading: block.heading, text: part }));
+  });
+}
+
+/** A heading: a list starts at one that names it, and ends at any other. */
+const isHeading = (part: Part) => part.heading || HEADING.test(part.text);
+
+/**
+ * The entries of a reference list, in order; none without a heading that
+ * starts one. A PDF can break an entry into paragraphs: a numbered entry
+ * goes on until the next number, and an entry whose authors stand alone
+ * goes on into the paragraph with its year, DOI or number.
+ */
 function referenceEntries(blocks: readonly ListBlock[]): ListedReference[] {
+  const parts = partsOf(blocks);
+  const numberedLater = (from: number) => {
+    for (const part of parts.slice(from + 1)) {
+      if (isHeading(part)) return false;
+      if (NUMBER_START.test(part.text)) return true;
+    }
+    return false;
+  };
   const entries: ListedReference[] = [];
   let listing = false;
-  for (const block of blocks) {
-    const text = block.text.replace(/\s+/g, " ").trim();
-    if (HEADING.test(text)) {
-      listing = true;
+  let current: ListedReference | null = null;
+  let opening: ListedReference | null = null;
+  for (const [at, part] of parts.entries()) {
+    if (isHeading(part)) {
+      listing = HEADING.test(part.text);
+      current = null;
+      opening = null;
       continue;
     }
-    if (block.heading) {
-      listing = false;
-      continue;
-    }
-    if (!listing || !text) continue;
-    for (const part of text.split(NUMBERED).map((each) => each.trim())) {
-      if (!part) continue;
-      if (!REFERENCE_SIGN.test(part)) {
+    if (!listing) continue;
+    if (opening) {
+      opening.text = `${opening.text} ${part.text}`;
+      if (REFERENCE_SIGN.test(part.text)) {
+        entries.push(opening);
+        current = opening;
+        opening = null;
+      } else if (opening.text.length > LONGEST_OPENING) {
         listing = false;
-        break;
       }
-      entries.push({ blockId: block.id, text: part });
+    } else if (current && NUMBER_START.test(current.text) && !NUMBER_START.test(part.text)) {
+      if (numberedLater(at)) current.text = `${current.text} ${part.text}`;
+      else listing = false;
+    } else if (REFERENCE_SIGN.test(part.text)) {
+      current = { blockId: part.blockId, text: part.text };
+      entries.push(current);
+    } else if (AUTHOR_START.test(part.text)) {
+      opening = { blockId: part.blockId, text: part.text };
+    } else {
+      listing = false;
     }
   }
   return entries;

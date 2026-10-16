@@ -5,8 +5,9 @@
  *
  * A reference is the work when most of the record's title is in it, word for
  * word once case, accents and punctuation are set aside. Then its year must
- * be one of the record's (issued, in print or online, which can differ by a
- * year), and its first author's family name must be in it. A title that is
+ * be within a year of one of the record's (issued, in print or online; a
+ * preprint's year and its proceedings' often differ by one), and its first
+ * author's family name must be in it. A title that is
  * only partly there is a work by another title: by DOI, that is a mismatch
  * (the DOI leads to a record, but not to this work); found by searching, it
  * is no match at all.
@@ -77,14 +78,21 @@ export function titleOf(reference: string): string | null {
   return parts.find((part) => titleWords(part).length >= 2)?.trim() ?? null;
 }
 
-/** The share of a title's words that a reference holds, from 0 to 1. */
+/**
+ * The share of a title's words that a reference holds, from 0 to 1. Two
+ * words a PDF joined at a line's hyphen ("attentionbased") count as held.
+ */
 export function titleCoverage(reference: string, title: string): number {
-  const wanted = new Set(titleWords(title));
-  if (wanted.size === 0) return 0;
+  const wanted = titleWords(title);
   const held = new Set(titleWords(reference));
-  let shared = 0;
-  for (const word of wanted) if (held.has(word)) shared++;
-  return shared / wanted.size;
+  const shared = new Set<string>();
+  for (const [at, word] of wanted.entries()) {
+    const next = wanted[at + 1];
+    if (held.has(word)) shared.add(word);
+    if (next !== undefined && held.has(`${word}${next}`)) shared.add(word).add(next);
+  }
+  const distinct = new Set(wanted).size;
+  return distinct === 0 ? 0 : shared.size / distinct;
 }
 
 /** Where a reference's parts end: its authors, year, title and venue are set apart by these. */
@@ -122,7 +130,12 @@ export function differences(cited: CitedReference, record: WorkRecord): Referenc
   if (title && !holdsTitle(cited.text, title)) {
     found.push({ field: "title", found: title, cited: null });
   }
-  if (cited.year !== null && record.years.length > 0 && !record.years.includes(cited.year)) {
+  const { year } = cited;
+  if (
+    year !== null &&
+    record.years.length > 0 &&
+    !record.years.some((each) => Math.abs(each - year) <= 1)
+  ) {
     found.push({
       field: "year",
       found: String(Math.min(...record.years)),
