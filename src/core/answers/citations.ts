@@ -633,9 +633,16 @@ export interface CitationSessionEvents {
 /**
  * One Answer's Citations: the Passages it was given (each with a short id such
  * as "P3", which is what the model cites), the records it gave, and the Tools
- * the Answer engine offers the model.
+ * the Answer engine offers the model. `opening`, when the Question is asked
+ * beside the working copy of a Document too long to give whole (#1036): that
+ * Document's opening Passages, which a search that finds nothing gives
+ * instead, once.
  */
-export function createCitationSession(documents: AnswerDocuments, events: CitationSessionEvents) {
+export function createCitationSession(
+  documents: AnswerDocuments,
+  events: CitationSessionEvents,
+  opening?: { documentId: string; name: string; passages(): WindowedPassage[] },
+) {
   const handles = new Map<string, string>();
   const handleOf = new Map<string, string>();
   /** Each Passage's text as the model was given it, by its short id. */
@@ -644,6 +651,7 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
   /** Records naming no Passage the model was given, or no marker: as given, and why. */
   const rejected: RejectedRecord[] = [];
   const searched = new Set<string>();
+  let openingGiven = false;
   /** Markers in the final text, in order of first appearance, and those that had no record. */
   const finalMarkers: number[] = [];
   let removedMarkers = 0;
@@ -1001,6 +1009,7 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
       const same = sameSearch(options?.document ? `${options.document}\n${query}` : query);
       if (searched.has(same)) return { text: SEARCHED_ALREADY, passageCount: 0 };
       searched.add(same);
+      let within: string[] | undefined;
       if (options?.document) {
         const id = documents.documentNamed?.(options.document) ?? null;
         if (!id) {
@@ -1009,9 +1018,19 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
             passageCount: 0,
           };
         }
-        return search(query, signal, [id], options);
+        within = [id];
       }
-      return search(query, signal, undefined, options);
+      const found = await search(query, signal, within, options);
+      if (found.passageCount > 0 || !opening || openingGiven) return found;
+      if (within && !within.includes(opening.documentId)) return found;
+      const passages = opening.passages();
+      if (passages.length === 0) return found;
+      openingGiven = true;
+      return {
+        text: `No Passages match these words. The opening of “${opening.name}”, which the Mind is the working copy of, instead:\n${show(passages)}`,
+        passageCount: passages.length,
+        passageIds: passages.map((passage) => passage.passageId),
+      };
     },
 
     cite,
