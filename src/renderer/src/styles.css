@@ -5681,13 +5681,6 @@
     line-height: 22px;
     color: var(--color-ink);
   }
-  .answer-asked-again {
-    margin: 0;
-    font-family: var(--font-sans);
-    font-size: 13px;
-    line-height: 20px;
-    color: var(--color-ink-meta);
-  }
   .mind-changes-no-mind {
     display: flex;
     flex-wrap: wrap;

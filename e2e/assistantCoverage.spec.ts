@@ -80,9 +80,13 @@ test("“the two main documents” names the two it took, and Use others asks ag
   await expect(answers).toHaveCount(2);
   const again = answers.last();
   await expect(again).toHaveAttribute("data-status", "done", { timeout: 15_000 });
-  await expect(again.getByTestId("answer-asked-again")).toHaveText(
-    "Asked again with the 1 Document the first answer didn't use",
-  );
+  // The steps line says it, as one line, the whole of it in its tooltip.
+  const againSteps = again.getByTestId("answer-steps");
+  await expect(againSteps).toHaveText("Asked again with the other Document");
+  await expect(againSteps).toHaveAttribute("title", "Asked again with the other Document");
+  const steps = await againSteps.boundingBox();
+  const againReply = await again.getByTestId("assistant-answer-text").boundingBox();
+  expect(steps && againReply && steps.y < againReply.y).toBe(true);
   await expect(again.getByTestId("answer-coverage")).toHaveCount(0);
   await expect(coverage).toHaveText(
     "I took “Report 1” and “Report 2” as the main ones. · Use others",
@@ -91,8 +95,6 @@ test("“the two main documents” names the two it took, and Use others asks ag
 
   await setLanguage(window, "zh-CN");
   await expect(coverage).toHaveText("我选了“Report 1”和“Report 2”作为主要文档。· 换别的");
-  await expect(again.getByTestId("answer-asked-again")).toHaveText(
-    "用第一次没用到的 1 个文档重新回答",
-  );
+  await expect(againSteps).toHaveText("用其余 1 个文档重新回答");
   if (SCREENSHOTS) await window.screenshot({ path: join(SCREENSHOTS, "main-pick-zh.png") });
 });

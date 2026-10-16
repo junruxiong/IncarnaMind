@@ -60,13 +60,3 @@ export function CoverageLine({
     </p>
   );
 }
-
-/** On an Answer asked again with the Documents an earlier one didn't use: what changed. */
-export function AskedAgainLine({ count }: { count: number }) {
-  const t = useT();
-  return (
-    <p data-testid="answer-asked-again" className="answer-asked-again">
-      {count === 1 ? t("coverage.askedAgain.one") : t("coverage.askedAgain", { count })}
-    </p>
-  );
-}
