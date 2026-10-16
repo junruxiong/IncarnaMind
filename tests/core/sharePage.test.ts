@@ -353,7 +353,10 @@ describe("a web page to share (#72)", { timeout: 60_000 }, () => {
 
     const note = document.getElementById("note-1")?.textContent?.replace(/↩︎/, "");
     expect(note).toBe(`Northwind results, p. 2 · “${QUOTES.pdf}”`);
-    expect(document.getElementById("note-10")?.textContent).toContain("[unverified]");
+    expect(document.getElementById("note-10")?.textContent).toContain(
+      "“Gross margin rose to 44%” · Quote not found in § Results",
+    );
+    expect(document.querySelector(".notes")?.textContent).not.toContain("[unverified]");
 
     expect(document.querySelector(".shared-from")?.textContent).toBe(
       "Shared from IncarnaMind · 13 Oct 2026",
@@ -612,42 +615,69 @@ describe("what a web page to share says of its checks", () => {
     );
   });
 
-  test("a Document's name, a quote and an address written to break the page stay words", () => {
+  test("a Document's name, a quote, an address and a check written to break the page stay words", () => {
     const hostile = `<script>alert("x")</script><img src=x onerror=alert(1)> "q" 'a'`;
     // As untrusted as a Mind synced from elsewhere: a check this version doesn't know.
-    const unknownCheck: CitationCheck = JSON.parse('"found\\" onclick=\\"alert(1)"');
-    const { html, document } = pageOf(
-      [
-        card(unknownCheck, {
-          heading: hostile,
-          source: hostile,
-          spoken: hostile,
-          quote: hostile,
-          verdict: hostile,
-          content: {
-            kind: "passage",
-            runs: [{ text: hostile, quote: true }],
-            address: "javascript:alert(1)",
+    const unknownCheck: CitationCheck = JSON.parse('"verified-v2\\" onclick=\\"alert(1)"');
+    const shown = citationCard(
+      {
+        documentId: "page",
+        documentName: hostile,
+        contentHash: "first",
+        pageFrom: 1,
+        pageTo: 1,
+        location: { kind: "section", heading: hostile },
+        quote: hostile,
+        check: unknownCheck,
+        verdict: hostile,
+      },
+      {
+        documents: [
+          {
+            id: "page",
+            contentHash: "first",
+            name: hostile,
+            web: {
+              address: "javascript:alert(1)",
+              siteName: hostile,
+              author: null,
+              published: null,
+              fetchedAt: "2026-10-13T12:00:00.000Z",
+              versions: [],
+              picturesLeftOut: 0,
+              look: null,
+            },
           },
-        }),
-      ],
-      { footnote: { source: hostile, link: "javascript:alert(2)" } },
+        ],
+        kept: [],
+        units: () => [
+          { page: 1, kind: "section", text: `Before it. ${hostile} After it.`, label: null },
+        ],
+        t: (key, params) => translate("en", key, params),
+      },
     );
+    for (const address of ["javascript:alert(2)", "mailto:someone@example.com"]) {
+      const { html, document } = pageOf([shown], {
+        footnote: { source: `${hostile} ${address}`, link: address },
+      });
 
-    expect(document.querySelectorAll("script")).toHaveLength(1);
-    expect(document.querySelectorAll("img")).toHaveLength(0);
-    const handlers = [...document.querySelectorAll("*")].flatMap((element) =>
-      [...element.attributes].filter((attribute) => attribute.name.startsWith("on")),
-    );
-    expect(handlers).toEqual([]);
-    expect(html).not.toMatch(/href="javascript:/i);
-    const shown = document.getElementById("card-1");
-    expect(shown?.querySelector(".card-heading")?.textContent).toBe(hostile);
-    expect(shown?.querySelector("mark.quote")?.textContent).toBe(hostile);
-    expect(shown?.querySelector(".card-address")?.textContent).toBe("javascript:alert(1)");
-    expect(shown?.querySelector(".card-address a")).toBeNull();
-    expect(shown?.classList.contains("check-cant-check")).toBe(true);
-    expect(document.querySelector("a.cite")?.getAttribute("data-check")).toBe("cant-check");
+      expect(document.querySelectorAll("script")).toHaveLength(1);
+      expect(document.querySelectorAll("img")).toHaveLength(0);
+      const handlers = [...document.querySelectorAll("*")].flatMap((element) =>
+        [...element.attributes].filter((attribute) => attribute.name.startsWith("on")),
+      );
+      expect(handlers).toEqual([]);
+      expect(html).not.toMatch(/href="(javascript|mailto):/i);
+      const card = document.getElementById("card-1");
+      expect(card?.querySelector(".card-heading")?.textContent).toBe("Can't check");
+      expect(card?.querySelector(".card-source")?.textContent).toBe(`${hostile}, § ${hostile}`);
+      expect(card?.querySelector("mark.quote")?.textContent).toBe(hostile);
+      expect(card?.querySelector(".card-address")?.textContent).toBe("javascript:alert(1)");
+      expect(card?.querySelector(".card-address a")).toBeNull();
+      expect(card?.classList.contains("check-cant-check")).toBe(true);
+      expect(document.querySelector("a.cite")?.getAttribute("data-check")).toBe("cant-check");
+      expect(document.getElementById("note-1")?.textContent).toContain(" · Can't check");
+    }
   });
 
   test("a Document unlinked with its folder shows the quote its kept text has; one changed since says so", () => {

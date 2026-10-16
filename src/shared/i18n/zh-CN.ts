@@ -2742,7 +2742,7 @@ export const zhCN = {
   "share.card.unchecked": "分享时尚未核对",
   "share.card.row": "第 {row} 行",
   "share.card.part": "文件中只包含文档的这一部分。",
-  "share.card.missing": "分享时来源文档不可用",
+  "share.card.missing": "分享时来源文档无法访问",
   "share.card.swipe": "向下轻扫或轻点外部即可关闭。",
   "export.unnamedDocument": "未命名文档",
   "export.chart": "图表",

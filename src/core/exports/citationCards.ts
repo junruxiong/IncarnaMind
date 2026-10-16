@@ -77,7 +77,7 @@ export function citationCard(
   attributes: Partial<CitationAttributes>,
   { documents, kept, units, t }: CardSources,
 ): CitationCard {
-  const state = citationState(attributes, documents, kept);
+  const state = knownCheck(citationState(attributes, documents, kept));
   const quote = attributes.quote?.trim() ?? "";
   const name = shownDocumentName(attributes, documents) || t("export.unnamedDocument");
   const location = citedLocation(attributes, t);
@@ -106,6 +106,19 @@ export function citationCard(
     ),
   };
 }
+
+const CHECKS: ReadonlySet<string> = new Set<CitationCheck>([
+  "checking",
+  "found",
+  "not-found",
+  "cant-check",
+  "unsupported",
+  "contradicted",
+]);
+
+/** A check this version doesn't know, from a newer one through sync, is one it can't vouch for. */
+const knownCheck = (state: CitationState): CitationState =>
+  CHECKS.has(state.check) ? state : { ...state, check: "cant-check", reason: null };
 
 /** The check in the app's words, except where those speak to the User: "your Documents", "checking…". */
 function headingOf(
