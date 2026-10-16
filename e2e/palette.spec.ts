@@ -398,6 +398,14 @@ test("with a sentence selected, ⌘K finds the one check by check, find support,
     await expect(palette(window)).toBeHidden();
   }
 
+  // Words that belong to other commands don't list it.
+  for (const query of ["verify", "cite", "find sources"]) {
+    await search(query);
+    await expect(row("check.againstDocuments")).toHaveCount(0);
+    await window.keyboard.press("Escape");
+    await expect(palette(window)).toBeHidden();
+  }
+
   await setLanguage(window, "zh-CN");
   for (const query of ["核对", "出处"]) {
     await search(query);

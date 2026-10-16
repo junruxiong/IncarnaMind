@@ -577,7 +577,7 @@ export const en = {
   "editor.ai.edit": "Edit with AI…",
   "editor.ai.markAsMine": "Mark as mine",
   "editor.ai.checkAgainstDocuments": "Check against Documents",
-  "editor.ai.checkAgainstDocuments.keywords": "check find support sources cite verify claims",
+  "editor.ai.checkAgainstDocuments.keywords": "check find support",
   "claim.state.checking": "Checking…",
   "claim.state.supported": "Supported",
   "claim.state.unsupported": "Unsupported",
@@ -634,7 +634,6 @@ export const en = {
   "health.next": "{part}: go to the next",
   "checks.smallModel":
     "This model is small, so its verdicts may be wrong. A larger model checks more reliably.",
-  "checks.running.find-support": "Finding support…",
   "checks.running.check-against-documents": "Checking against Documents…",
   "checks.running.contradiction-watch": "Checking cited claims for contradictions…",
   "checks.stop": "Stop",
