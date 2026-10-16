@@ -4009,9 +4009,11 @@ export interface TaskShown {
   blockId: string | null;
 }
 
-/** A large run to estimate: so many items (a comparison table's cells, verify's sentences…), each about an Answer. */
+/** A large run to estimate: so many items (a comparison table's cells, verify's sentences…). */
 export interface RunEstimateInput {
   items: number;
+  /** What each item is: about an Answer (the default), or a sentence checked against Documents (#973). */
+  each?: "answer" | "check";
   /** The web searches it makes (#128), each billed by the model's provider, on top of its items. */
   searches?: number;
   /** The model it would use; the default model when left out. */
@@ -4648,6 +4650,11 @@ export type MindCheckPlan =
       model: ChatModelChoice | null;
     }
   | Extract<CheckSentencesResult, { kind: "no-documents" | "nothing" }>;
+
+/** The claims a Check this Mind run would check, once the model has named them (`findMindClaims`). */
+export type FindMindClaimsResult =
+  /** The fresh sentences it named as claims, and the checks to make again. */
+  { kind: "found"; claims: number } | Exclude<CheckMindResult, { kind: "checked" }>;
 
 export type CheckMindResult =
   /**
@@ -8453,6 +8460,13 @@ export interface CoreApi {
     allDocuments?: boolean,
   ): Promise<MindCheckPlan>;
   /**
+   * The first step of "Check this Mind" (#973): the model names the claims
+   * among the sentences `checkMind` would send, so the ask before the run
+   * counts and prices them exactly. What it named is kept, and `checkMind`
+   * doesn't send those sentences to be sorted again. `cancelCheck` stops it.
+   */
+  findMindClaims(input: CheckMindInput): Promise<FindMindClaimsResult>;
+  /**
    * "Check this Mind" (#737): the model names the claims among the Mind's
    * sentences, leaving out headings, questions and the User's own opinions,
    * then each claim is checked as Check against Documents checks it, against
@@ -9357,6 +9371,7 @@ const methods: Record<CoreApiMethod, true> = {
   planContradictionCheck: true,
   checkContradictions: true,
   planMindCheck: true,
+  findMindClaims: true,
   checkMind: true,
   getSecretStorage: true,
   acceptPlainTextSecretStorage: true,

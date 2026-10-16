@@ -3051,7 +3051,10 @@ export function createCore(adapters: CoreAdapters): Core {
     getCostSummary: async () => meter.summary(),
     estimateRun: async (input) => {
       if (!isRecord(input)) throw new InvalidInputError("estimateRun expects an object.");
-      const { items, model, searches = 0 } = input;
+      const { items, model, searches = 0, each = "answer" } = input;
+      if (each !== "answer" && each !== "check") {
+        throw new InvalidInputError({ key: "error.estimate.each" });
+      }
       if (typeof items !== "number" || !Number.isInteger(items) || items < 0 || items > 100_000) {
         throw new InvalidInputError("items must be a whole number from 0 to 100,000.");
       }
@@ -3068,7 +3071,7 @@ export function createCore(adapters: CoreAdapters): Core {
       }
       const metered = chat.metered(model);
       if (!metered) throw new InvalidInputError("There is no model to estimate for.");
-      return meter.estimate(metered, items, searches);
+      return meter.estimate(metered, items, searches, each);
     },
     compareDocuments: (input) => comparisons.compareDocuments(input),
     fillComparisonTable: (input) => comparisons.fillComparisonTable(input),
@@ -3106,6 +3109,7 @@ export function createCore(adapters: CoreAdapters): Core {
     planContradictionCheck: (mindId) => checks.planContradictionCheck(mindId),
     checkContradictions: (input) => checks.checkContradictions(input),
     planMindCheck: (mindId, mode, allDocuments) => checks.planMindCheck(mindId, mode, allDocuments),
+    findMindClaims: (input) => checks.findMindClaims(input),
     checkMind: (input) => checks.checkMind(input),
 
     getSecretStorage: async () => secrets.status(),
