@@ -8,9 +8,10 @@ import { buildPdf } from "../tests/helpers/pdf";
 import {
   askInAssistant,
   useLocalChatModel as connectLocalChatModel,
+  copyFrom,
   createDataFolder,
   dismissChatSetup,
-  dotsOf,
+  expectDotsBetweenParts,
   interceptOpenDialog,
   launchApp,
   newMind,
@@ -298,14 +299,17 @@ for (const language of ["en", "zh-CN"] as const) {
       await screenshot(window, `verify-wrap-${language}`);
       let wrapped = false;
       for (const row of await line.locator(".meta-line").all()) {
-        for (const dot of await dotsOf(row)) {
-          expect(dot.shown).toBe(dot.sameLine);
-          if (dot.shown) expect(dot.between).toBe(true);
-          if (!dot.sameLine) wrapped = true;
-        }
-        expect((await row.innerText()).trimEnd().endsWith("·")).toBe(false);
+        if (await expectDotsBetweenParts(row)) wrapped = true;
       }
       expect(wrapped).toBe(true);
+
+      // Copied across its parts, a line reads as one line, "A · B · C", and within a part the browser copies it.
+      const whole = line.locator(".meta-line").first();
+      const across = await copyFrom(whole);
+      expect(across.taken).toBe(true);
+      expect(across.text).not.toContain("\n");
+      expect(across.text.split(" · ")).toHaveLength(5);
+      expect((await copyFrom(whole, ".meta-part")).taken).toBe(false);
       await app.close();
     } finally {
       await removeDataFolder(outside);

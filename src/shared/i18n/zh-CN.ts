@@ -650,7 +650,6 @@ export const zhCN = {
   "contradictions.noneChecked": "{count} 条引用的说法都未能核对",
   "contradictions.found": "{count} 条引用的说法中有 {contradicted} 条与文档矛盾",
   "contradictions.after": "“{document}”更新后：{result}",
-  "contradictions.cost": "{result} · {cost}",
   "mindCheck.command": "核对整个 Mind",
   "mindCheck.command.keywords": "核对 全部 整篇 草稿 发送前 说法 句子",
   "mindCheck.ask.folder.one": "要对照这个文件夹中的文档，核对这个 Mind 的这一句吗？",

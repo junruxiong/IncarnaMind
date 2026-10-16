@@ -1,13 +1,13 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { expect, type Page, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   addDocuments,
   createDataFolder,
   dismissChatSetup,
-  dotsOf,
+  expectDotsBetweenParts,
   launchApp,
   newMind,
   pointAndClick,
@@ -28,15 +28,6 @@ test.afterEach(async () => {
   await removeDataFolder(dataDir);
   await removeDataFolder(sources);
 });
-
-const language = (window: Page, value: "en" | "zh-CN") =>
-  window.evaluate(
-    (chosen) =>
-      (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
-        user: { language: chosen },
-      }),
-    value,
-  );
 
 test("a line of parts joined by dots wraps between parts and never starts or ends with a dot, in English and Chinese at a narrow width", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
@@ -59,18 +50,12 @@ test("a line of parts joined by dots wraps between parts and never starts or end
   const line = window.getByTestId("composer-not-ready");
 
   for (const value of ["en", "zh-CN"] as const) {
-    await language(window, value);
+    await setLanguage(window, value);
     {
       const row = line.locator(".meta-line").first();
       await expect(row).toBeVisible();
-      const dots = await dotsOf(row);
       // The line wraps here: some part begins a line, and its dot is not shown.
-      expect(dots.some((dot) => !dot.sameLine)).toBe(true);
-      for (const dot of dots) {
-        expect(dot.shown).toBe(dot.sameLine);
-        if (dot.shown) expect(dot.between).toBe(true);
-      }
-      expect((await row.innerText()).trimEnd().endsWith("·")).toBe(false);
+      expect(await expectDotsBetweenParts(row)).toBe(true);
     }
   }
   await app.close();
@@ -116,15 +101,9 @@ for (const value of ["en", "zh-CN"] as const) {
     for (const width of [1100, 1440]) {
       await setWindowSize(app, window, width, 900);
       // The row of the count: the problem line is a part of it, and wraps onto a row of its own.
-      const outer = await dotsOf(window.getByTestId("mind-count"));
-      expect(outer.some((dot) => !dot.sameLine)).toBe(true);
+      expect(await expectDotsBetweenParts(window.getByTestId("mind-count"))).toBe(true);
       // And the problem's own words and actions wrap between parts inside it.
-      const inner = await dotsOf(problem.locator(".meta-line").first());
-      for (const dot of [...outer, ...inner]) {
-        expect(dot.shown).toBe(dot.sameLine);
-        if (dot.shown) expect(dot.between).toBe(true);
-      }
-      expect((await problem.innerText()).trimEnd().endsWith("·")).toBe(false);
+      await expectDotsBetweenParts(problem.locator(".meta-line").first());
     }
     await app.close();
   });

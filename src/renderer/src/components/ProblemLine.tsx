@@ -25,7 +25,6 @@ export interface ProblemAction {
   disabled?: boolean;
 }
 
-/** The one action of a line, as a part of it. */
 export function LineAction({ action }: { action: ProblemAction }) {
   return (
     <button

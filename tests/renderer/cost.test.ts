@@ -4,6 +4,7 @@ import {
   formatMoney,
   formatSpent,
   notCheckedKey,
+  runStopParts,
   runStopText,
   setAsideText,
 } from "../../src/renderer/src/cost";
@@ -73,6 +74,13 @@ describe("Cost in words", () => {
     expect(
       runStopText({ reason: "plan-limit", resetsAt: later }, t("zh-CN"), "zh-CN", now),
     ).toMatch(/^已达到订阅用量上限 · (14:30|下午2:30) 后可重试$/);
+    const parts = runStopParts({ reason: "plan-limit", resetsAt: later }, t("en"), "en", now);
+    expect(parts[0]).toBe("Plan limit reached");
+    expect(parts[1]).toMatch(/^Try again after (14:30|2:30 pm)$/);
+    expect(parts).toHaveLength(2);
+    expect(runStopParts({ reason: "cost-cap" }, t("en"), "en", now)).toEqual([
+      "Monthly cap reached",
+    ]);
     const tomorrow = new Date(2026, 9, 13, 14, 30).toISOString();
     expect(runStopText({ reason: "plan-limit", resetsAt: tomorrow }, t("en"), "en", now)).toMatch(
       /^Plan limit reached · Try again after 13 Oct, (14:30|2:30 pm)$/,

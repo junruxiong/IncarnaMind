@@ -3,7 +3,7 @@ import { useEditorState } from "@tiptap/react";
 import type { MindCheckRun } from "../../../core/api";
 import { formatDateTime } from "../../../shared/dates";
 import { ProblemLine } from "../components/ProblemLine";
-import { runStopText } from "../cost";
+import { runStopParts } from "../cost";
 import { useLanguage, useT } from "../i18n";
 import { checkMind, dismissMindCheck, useMindCheck } from "../mindCheck";
 import { shownClaims } from "./claimChecks";
@@ -85,7 +85,12 @@ export function CheckedWhen({ run }: { run: MindCheckRun }) {
       <span data-testid="health-checked-all" className="mind-health-when">
         {said}
       </span>
-      {run.stop && <span className="mind-health-when">{runStopText(run.stop, t, language)}</span>}
+      {run.stop &&
+        runStopParts(run.stop, t, language).map((part) => (
+          <span key={part} className="mind-health-when">
+            {part}
+          </span>
+        ))}
     </>
   );
 }
