@@ -1032,6 +1032,17 @@ export async function clickNow(window: Page, target: Locator): Promise<void> {
   await window.mouse.up();
 }
 
+/** How long an Answer may have no words before its line says how long it takes (15 seconds), so a test needn't wait that long. */
+export async function setSilentWaitMs(window: Page, ms: number): Promise<void> {
+  await window.evaluate(
+    (value) =>
+      (globalThis as { incarnamindTestHooks?: TestHooks }).incarnamindTestHooks?.setSilentWaitMs(
+        value,
+      ),
+    ms,
+  );
+}
+
 /** Plays every animation at `speed` (0.2: five times slower), so a test can look, or act, during one. */
 export async function setMotionSpeed(window: Page, speed: number): Promise<void> {
   await window.evaluate(

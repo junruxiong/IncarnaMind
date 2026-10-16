@@ -1,22 +1,15 @@
-/**
- * What an Answer with no words yet says about the wait (#899): once it has
- * been silent for 15 seconds, how long its model usually takes, or that it is
- * still working.
- */
 import { useEffect, useState } from "react";
 import type { ConversationAnswer } from "../../core/api";
 import { silentWaitMs } from "./answerWaitWords";
 import { core } from "./core";
 
-/** Words in the Answer's text, or a Mind its Tool calls began to change. */
 const hasWords = (answer: ConversationAnswer): boolean =>
   answer.text.trim() !== "" || answer.toolCalls.some((call) => call.mindChange !== undefined);
 
 /**
- * Whether an Answer being written has been silent for long enough to say how
- * long it takes (counted from when its Question went to the model), and what
- * its model usually takes in seconds, asked for when it starts; null when
- * that isn't known. Never while it waits for the User.
+ * Whether an Answer being written has had no words for long enough (counted
+ * from when its Question went to the model, never while it waits for the
+ * User), and what its model usually takes in seconds, null when not known.
  */
 export function useAnswerWait(
   answer: ConversationAnswer,
