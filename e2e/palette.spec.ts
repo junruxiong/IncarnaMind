@@ -376,7 +376,7 @@ test("with a sentence selected, ⌘K finds the one check by check, find support,
     await expect(palette(window).locator('[data-key^="command:check."]')).toHaveCount(1);
     if (query === "check") {
       await expect(row("mind.checkAll").getByTestId("palette-hint")).toHaveText(
-        "Every claim against your Documents",
+        "Whether each claim has support in your Documents",
       );
       await expect(row("mind.checkContradictions").getByTestId("palette-hint")).toHaveText(
         "Where your Documents disagree with this Mind's Citations",
@@ -405,7 +405,7 @@ test("with a sentence selected, ⌘K finds the one check by check, find support,
     await expect(palette(window).locator('[data-key^="command:check."]')).toHaveCount(1);
     if (query === "核对") {
       await expect(row("mind.checkAll").getByTestId("palette-hint")).toHaveText(
-        "每个说法都对照你的文档",
+        "每个说法在你的文档里有没有依据",
       );
       await expect(row("verify.document").getByTestId("palette-hint")).toHaveText(
         "核对别人写的 PDF 里的说法",

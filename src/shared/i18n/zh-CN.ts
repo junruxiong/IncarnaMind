@@ -653,7 +653,7 @@ export const zhCN = {
   "contradictions.cost": "{result} · {cost}",
   "mindCheck.command": "核对整个 Mind",
   "mindCheck.command.keywords": "核对 全部 整篇 草稿 发送前 说法 句子",
-  "mindCheck.command.hint": "每个说法都对照你的文档",
+  "mindCheck.command.hint": "每个说法在你的文档里有没有依据",
   "mindCheck.ask.folder.one": "要对照这个文件夹中的文档，核对这个 Mind 的这一句吗？{estimate}",
   "mindCheck.ask.folder": "要对照这个文件夹中的文档，核对这个 Mind 的 {count} 句吗？{estimate}",
   "mindCheck.ask.all.one": "要对照你的文档，核对这个 Mind 的这一句吗？{estimate}",
