@@ -141,7 +141,6 @@ test("typing in the 304-page contract, and opening it and the corpus's largest f
     const first = await typeIn(2);
     const last = await typeIn((await paragraphs.count()) - 2);
 
-    // The résumé: its tables zoomed to fit the measure, typed in a shaded cell.
     const resumeId = await importWord(window, resume);
     const resumeOpen = await timedOpens(resumeId, ".ProseMirror td", async () => {
       await expect(window.locator(".ProseMirror td")).toHaveCount(10);
