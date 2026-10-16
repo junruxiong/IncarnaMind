@@ -81,6 +81,8 @@ export interface RecordSources {
   t: Translate;
   /** A model as the record names it, or null when the Mind doesn't say. */
   model(providerId: string | null, modelId: string | null): RecordModel | null;
+  /** A Citation's quote as its Document's text reads it (#905): a PDF's split words whole again. */
+  readQuote(attributes: Partial<CitationAttributes>): string | null;
 }
 
 interface Run {
@@ -92,7 +94,7 @@ const fileNameOf = (path: string) => path.split(/[\\/]/).at(-1) ?? path;
 
 function documentOf(
   attributes: Partial<CitationAttributes>,
-  { documents, t }: Pick<RecordSources, "documents" | "t">,
+  { documents, t, readQuote }: Pick<RecordSources, "documents" | "t" | "readQuote">,
 ): RecordDocument {
   const found = liveDocumentOf(attributes, documents);
   const live = found && documents.find((each) => each.id === found.id);
@@ -103,7 +105,7 @@ function documentOf(
     size: live && sha256 !== null && live.contentHash === sha256 ? live.size : null,
     sha256,
     location: citedLocation(attributes, t),
-    quote: attributes.quote ?? null,
+    quote: readQuote(attributes),
   };
 }
 
