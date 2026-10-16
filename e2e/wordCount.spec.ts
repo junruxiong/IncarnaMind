@@ -205,7 +205,7 @@ for (const language of ["en", "zh-CN"] as const) {
     // Accepting one change counts that change's words.
     await window.getByTestId("mind-editor").locator("p").first().click();
     await pointAndClick(window, window.getByTestId("change-accept"));
-    await expect(button).toHaveText(`${words([written[0]])} ${unit}`);
+    await expect(button).toHaveText(`${words(written.slice(0, 1))} ${unit}`);
     await app.close();
   });
 }
