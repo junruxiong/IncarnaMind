@@ -385,8 +385,10 @@ export function createLibrary(options: {
     const existing = assignment(doc.id);
     if (existing) {
       db.run(
-        "UPDATE document_groups SET group_id = ?, source = ?, suggested = ?, status = ?, content_hash = ?, request_id = ?, error_kind = NULL, error_message = NULL, error_wording = NULL, updated_at = ?, classification_model = ? WHERE document_id = ? AND deleted_at IS NULL",
+        "UPDATE document_groups SET filed_at = CASE WHEN group_id IS ? THEN filed_at ELSE ? END, group_id = ?, source = ?, suggested = ?, status = ?, content_hash = ?, request_id = ?, error_kind = NULL, error_message = NULL, error_wording = NULL, updated_at = ?, classification_model = ? WHERE document_id = ? AND deleted_at IS NULL",
         [
+          groupId,
+          at,
           groupId,
           source,
           suggested ? 1 : 0,
@@ -400,7 +402,7 @@ export function createLibrary(options: {
       );
     } else {
       db.run(
-        "INSERT INTO document_groups (id, document_id, group_id, source, suggested, status, content_hash, request_id, created_at, updated_at, classification_model) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO document_groups (id, document_id, group_id, source, suggested, status, content_hash, request_id, created_at, updated_at, filed_at, classification_model) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
           randomUUID(),
           doc.id,
@@ -410,6 +412,7 @@ export function createLibrary(options: {
           status,
           doc.content_hash,
           randomUUID(),
+          at,
           at,
           at,
           model ? JSON.stringify(model) : null,
@@ -837,12 +840,12 @@ export function createLibrary(options: {
       db.run("UPDATE library_groups SET deleted_at = NULL, updated_at = ? WHERE id = ?", [at, id]);
       db.run(
         `UPDATE document_groups SET group_id = item.folder_id, suggested = item.suggested,
-           updated_at = ?
+           updated_at = ?, filed_at = ?
          FROM deleted_folder_items item
          WHERE item.folder_id = ? AND item.item_kind = 'document' AND item.deleted_at IS NULL
            AND item.item_id = document_groups.document_id
            AND document_groups.deleted_at IS NULL AND document_groups.group_id IS NULL`,
-        [at, id],
+        [at, at, id],
       );
       const taken = (kind: "mind" | "conversation") =>
         db

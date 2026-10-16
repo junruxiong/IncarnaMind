@@ -1843,18 +1843,29 @@ export function createDocuments(options: DocumentsOptions) {
     /** How many live Documents have Passages to search: of all of them, or only of these. */
     searchableCount,
 
-    /** The live Documents with Passages to search (of all of them, or only of these) added after `since` (ISO 8601, UTC). */
-    searchableAddedAfter(
+    /**
+     * The live Documents with Passages to search (of all of them, or only of these) that
+     * joined after `since` (ISO 8601, UTC): added then, or, with `folderId`, filed into that
+     * Folder then. `joinedAt` says when.
+     */
+    searchableJoinedAfter(
       documentIds: readonly string[] | undefined,
       since: string,
-    ): { id: string; createdAt: string }[] {
+      folderId: string | null,
+    ): { id: string; joinedAt: string }[] {
       const { where, params } = searchable(documentIds);
       return db
-        .all<{ id: string; created_at: string }>(
-          `SELECT d.id, d.created_at FROM documents d WHERE ${where} AND d.created_at > ?`,
-          [...params, since],
+        .all<{ id: string; joined_at: string }>(
+          `SELECT id, joined_at FROM (
+             SELECT d.id, MAX(d.created_at, COALESCE((
+               SELECT COALESCE(a.filed_at, a.created_at) FROM document_groups a
+               WHERE a.document_id = d.id AND a.group_id = ? AND a.deleted_at IS NULL
+             ), d.created_at)) AS joined_at
+             FROM documents d WHERE ${where}
+           ) WHERE joined_at > ?`,
+          [folderId, ...params, since],
         )
-        .map((row) => ({ id: row.id, createdAt: row.created_at }));
+        .map((row) => ({ id: row.id, joinedAt: row.joined_at }));
     },
 
     /**

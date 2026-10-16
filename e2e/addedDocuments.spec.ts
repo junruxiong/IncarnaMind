@@ -4,6 +4,7 @@ import { expect, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
+  acceptPlainTextKeys,
   addDocuments,
   createDataFolder,
   dismissChatSetup,
@@ -153,7 +154,20 @@ test("closed, the line stays closed for those Documents, and a Document added la
   );
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
-  await useLocalChatModel(window);
+  await acceptPlainTextKeys(window);
+  await window.evaluate(async () => {
+    const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    const provider = await core.saveChatProvider({
+      kind: "anthropic",
+      apiKey: "sk-ant-test",
+      modelId: "claude-haiku-5-5",
+    });
+    if (provider.service) {
+      for (const flow of ["chat", "tagging", "checks"] as const) {
+        await core.allowDataFlow(flow, provider.service.id);
+      }
+    }
+  });
   await setWindowSize(app, window, 1440, 900);
   await addDocuments(window, [join(sources, "Tides.pdf")]);
   await mindWrittenBefore(window, "Harbour notes", [{ note: `${MOON} ${PENGUINS}` }]);
@@ -175,7 +189,7 @@ test("closed, the line stays closed for those Documents, and a Document added la
   await fileInto(window, ["Cranes"], join(sources, "Cranes.pdf"));
   await expect(line).toHaveText(/^2 Documents added since these checks/);
 
-  // From ⌘K too: the check made again, nothing was added since.
+  // From ⌘K too. Billed per token, it asks first with the count and the estimate, however few.
   await window.getByTestId("mind-editor").click();
   await window.keyboard.press("ControlOrMeta+k");
   await window.keyboard.type("check again with");
@@ -185,6 +199,10 @@ test("closed, the line stays closed for those Documents, and a Document added la
       .getByTestId("palette-item")
       .filter({ hasText: "Check again with the Documents added since" }),
   );
+  const ask = window.getByTestId("mind-check-ask");
+  await expect(ask).toContainText("Check this Mind’s sentence against this Folder’s Documents?");
+  await expect(ask).toContainText("About $");
+  await pointAndClick(window, ask.getByTestId("mind-check-check"));
   await expect(window.getByTestId("checks-running")).toHaveCount(0);
   await expect(line).toHaveCount(0);
   await expect(
