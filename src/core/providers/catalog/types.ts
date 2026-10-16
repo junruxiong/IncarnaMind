@@ -79,7 +79,7 @@ export interface DataUse {
   training: "no" | "opt-out" | "free-tier" | "unknown";
   /** One plain line, shown where the User picks the provider. */
   summary: Localized;
-  /** The provider's own terms, when there is one place for them. */
+  /** The provider's own page on it (terms, privacy policy or data-retention page), when there is one place for it; shown as "Data use". */
   url?: string;
 }
 
