@@ -15,6 +15,9 @@ export const settingsPages = [
 
 export type SettingsPage = (typeof settingsPages)[number];
 
+/** A setting Settings can open at: shown and focused once it is drawn. */
+export type SettingsAt = "output-location" | "claude-plan";
+
 export const offeredSettingsPages: readonly SettingsPage[] = settingsPages.filter(
   (page) => page !== "agents" || SHOW_AGENT_CONNECTION,
 );

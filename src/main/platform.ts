@@ -486,6 +486,28 @@ function chatGptStandIn(): CoreAdapters["chatGptPlan"] {
 }
 
 /**
+ * Test-only launch flag: a local server standing in for Anthropic (#872), at
+ * this origin, where the Claude account signs in and asks
+ * (tests/helpers/fakeAnthropic.ts). Only a test build honours it.
+ */
+function claudeStandIn(): CoreAdapters["claudeAccount"] {
+  const origin = import.meta.env.MODE === "test" ? process.env.INCARNAMIND_TEST_CLAUDE : undefined;
+  if (!origin) return undefined;
+  return {
+    experimental: true,
+    clientId: "test-client",
+    authorizeUrl: `${origin}/oauth/authorize`,
+    tokenUrl: `${origin}/v1/oauth/token`,
+    scopes: ["user:profile", "user:inference"],
+    authorizeParams: { code: "true" },
+    redirect: { kind: "page", uri: `${origin}/oauth/code/callback` },
+    tokenRequest: { format: "json", stateInExchange: true },
+    stateBytes: 32,
+    apiBaseUrl: `${origin}/v1`,
+  };
+}
+
+/**
  * What records Meetings: the hidden capture window (ADR-0015). Test-only
  * launch flags: the smoke tests record a fake that makes a tone in real time,
  * so no device is ever opened (INCARNAMIND_TEST_AUDIO=fake), its computer's
@@ -533,6 +555,7 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
   const usageData = createUsageDataSender();
   const chatGptStore = chatGptTestProfile(log);
   const chatGptPlan = chatGptStandIn();
+  const claudeAccount = claudeStandIn();
   const web = webStandIn();
   const standIn = standInPort();
   const connectorDirectory = testConnectorDirectory();
@@ -547,6 +570,7 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
     ...(connectorRegistryUrl && { connectorRegistryUrl }),
     ...(chatGptStore && { chatGptStore }),
     ...(chatGptPlan && { chatGptPlan }),
+    ...(claudeAccount && { claudeAccount }),
     ...(web && { web }),
     ...(standIn !== undefined && { webPages: { fetch: standInPageFetch(standIn) } }),
     ...(crashReporter && { crashReporter }),

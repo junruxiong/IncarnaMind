@@ -43,6 +43,7 @@ export function keyProviderName(id: string, t: Translate, language: Language): s
 /** "OpenAI","OpenAI-compatible server · api.deepseek.com", "Ollama · on this computer". */
 export function providerLabel(provider: ChatProvider, t: Translate, language: Language): string {
   if (provider.kind === "chatgpt") return t("chatgpt.title");
+  if (provider.kind === "claude-account") return t("providers.kind.claude-account");
   const catalog = catalogProviderOf(provider.kind, provider.catalogId);
   const kind = isPreset(catalog)
     ? keyProviderName(catalog.id, t, language)

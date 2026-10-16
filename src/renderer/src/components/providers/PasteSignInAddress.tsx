@@ -1,22 +1,53 @@
 import { type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
-import type { PastedAddressProblem } from "../../../../core/api";
+import type { PastedAddressProblem, PastedAddressResult } from "../../../../core/api";
+import type { MessageKey } from "../../../../shared/i18n";
 import { core } from "../../core";
 import { useGap, useT } from "../../i18n";
 import { useAppStore } from "../../store";
 import { ProblemMark } from "../ProblemLine";
 import { buttonStyle, errorTextClass, fieldClass } from "../ui";
 
+/** What a sign-in's paste field says, and how its test ids start. */
+export interface PasteWords {
+  testId: string;
+  question: MessageKey;
+  open: MessageKey;
+  problems: Record<PastedAddressProblem, MessageKey>;
+  placeholder?: string;
+}
+
+const CHATGPT: PasteWords = {
+  testId: "chatgpt-paste",
+  question: "chatgpt.paste.question",
+  open: "chatgpt.paste.open",
+  problems: {
+    "not-sign-in-address": "chatgpt.paste.problem.not-sign-in-address",
+    "other-sign-in": "chatgpt.paste.problem.other-sign-in",
+    finished: "chatgpt.paste.problem.finished",
+  },
+  placeholder: "http://127.0.0.1:…",
+};
+
 /**
- * "Didn't come back? Paste the address the browser shows", under a ChatGPT
- * sign-in that waits for the browser: when the browser can't hand the
- * sign-in back (a blocked port, another browser profile, a proxy), the
- * address it ended on finishes the sign-in. It opens in place; Esc closes it.
+ * "Didn't come back? Paste the address the browser shows", under a sign-in
+ * that waits for the browser: when the browser can't hand the sign-in back (a
+ * blocked port, another browser profile, a proxy), or the provider's page shows
+ * a code to copy, what the User pastes finishes the sign-in. It opens in place
+ * (`startOpen`: at once); Esc closes it.
  */
-export function PasteSignInAddress() {
+export function PasteSignInAddress({
+  paste = (address) => core.pasteChatGptSignInAddress(address),
+  words = CHATGPT,
+  startOpen = false,
+}: {
+  paste?(address: string): Promise<PastedAddressResult>;
+  words?: PasteWords;
+  startOpen?: boolean;
+}) {
   const t = useT();
   const gap = useGap();
   const id = useId();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(startOpen);
   const [address, setAddress] = useState("");
   const [problem, setProblem] = useState<PastedAddressProblem | null>(null);
   const [sending, setSending] = useState(false);
@@ -32,8 +63,8 @@ export function PasteSignInAddress() {
     }
   }, [open]);
 
-  const question = t("chatgpt.paste.question");
-  const action = t("chatgpt.paste.open");
+  const question = t(words.question);
+  const action = t(words.open);
   const between = gap(question, action);
 
   if (!open) {
@@ -44,7 +75,7 @@ export function PasteSignInAddress() {
         <button
           ref={opener}
           type="button"
-          data-testid="chatgpt-paste-open"
+          data-testid={`${words.testId}-open`}
           onClick={() => setOpen(true)}
           className="font-semibold text-accent underline-offset-2 hover:underline"
         >
@@ -61,7 +92,7 @@ export function PasteSignInAddress() {
     setSending(true);
     setProblem(null);
     try {
-      const pasted = await core.pasteChatGptSignInAddress(address);
+      const pasted = await paste(address);
       // Taken: the sign-in finishes, and this line goes with the wait it belongs to.
       if (pasted.ok) return;
       setProblem(pasted.problem);
@@ -89,7 +120,7 @@ export function PasteSignInAddress() {
   };
 
   return (
-    <div data-testid="chatgpt-paste" className="flex w-full flex-col gap-1">
+    <div data-testid={words.testId} className="flex w-full flex-col gap-1">
       <label htmlFor={id} className="text-[13px] leading-5 text-ink-secondary">
         {question}
         {between}
@@ -100,10 +131,10 @@ export function PasteSignInAddress() {
           ref={field}
           id={id}
           type="text"
-          data-testid="chatgpt-paste-address"
+          data-testid={`${words.testId}-address`}
           value={address}
           readOnly={sending}
-          placeholder="http://127.0.0.1:…"
+          placeholder={words.placeholder}
           spellCheck={false}
           autoComplete="off"
           aria-invalid={problem ? true : undefined}
@@ -117,7 +148,7 @@ export function PasteSignInAddress() {
         />
         <button
           type="button"
-          data-testid="chatgpt-paste-continue"
+          data-testid={`${words.testId}-continue`}
           disabled={sending || empty}
           onClick={() => void submit()}
           className={buttonStyle("secondary", "sm")}
@@ -129,11 +160,11 @@ export function PasteSignInAddress() {
         <p
           id={`${id}-problem`}
           role="alert"
-          data-testid="chatgpt-paste-problem"
+          data-testid={`${words.testId}-problem`}
           className={errorTextClass}
         >
           <ProblemMark />
-          {t(`chatgpt.paste.problem.${problem}`)}
+          {t(words.problems[problem])}
         </p>
       )}
     </div>
