@@ -85,7 +85,7 @@ async function exchangeToken(options: {
     idToken: null,
     expiresIn: expiresAt === null ? null : Math.max(0, expiresAt - options.now / 1000),
     scope: null,
-    response: body,
+    account: { email: null, organization: null },
   };
 }
 

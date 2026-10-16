@@ -7,7 +7,7 @@ import type {
   ClaudeSignInResult,
   PastedAddressResult,
 } from "../../api";
-import { isRecord, SecretStorageError } from "../../errors";
+import { SecretStorageError } from "../../errors";
 import type { Language } from "../../language";
 import {
   DEFAULT_SIGN_IN_TIMEOUT_MS,
@@ -39,15 +39,6 @@ const parseStored = (record: Record<string, unknown>): StoredAccount => ({
   email: nonEmptyText(record.email),
   organization: nonEmptyText(record.organization),
 });
-
-/** The account a token answer names, as Anthropic's token endpoint adds it. */
-function namedAccount(response: Record<string, unknown>) {
-  const { account, organization } = response;
-  return {
-    email: isRecord(account) ? nonEmptyText(account.email_address) : null,
-    organization: isRecord(organization) ? nonEmptyText(organization.name) : null,
-  };
-}
 
 function signInError(error: unknown): { kind: ClaudeSignInErrorKind; message: string } {
   const message = error instanceof Error ? error.message : String(error);
@@ -185,7 +176,7 @@ export function createClaudeAccount(options: {
           await account.commit({
             tokens: account.storedTokens(tokens, null),
             ended: null,
-            ...namedAccount(tokens.response),
+            ...tokens.account,
           });
         });
         return { ok: true, status: await status() };
