@@ -222,6 +222,7 @@ function storedSteps(value: string | null): AnswerSteps | null {
     careful,
     unbackedClaims,
     example,
+    withoutMindTools,
     coverage,
   } = parsed;
   const claimed = Array.isArray(unbackedClaims)
@@ -253,6 +254,7 @@ function storedSteps(value: string | null): AnswerSteps | null {
     ...(careful === true && { careful }),
     ...(claimed.length > 0 && { unbackedClaims: claimed }),
     ...(example === true && { example }),
+    ...(withoutMindTools === true && { withoutMindTools }),
     ...(storedCoverage(coverage) ?? {}),
   };
 }
