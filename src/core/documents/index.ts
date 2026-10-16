@@ -1863,11 +1863,6 @@ export function createDocuments(options: DocumentsOptions) {
       return { total: searchableCount(documentIds), names };
     },
 
-    /** A live Document's live Passages, in reading order. */
-    passagesOf(documentId: string): WindowedPassage[] {
-      return passagesBetween(db, documentId, 0, Number.MAX_SAFE_INTEGER);
-    },
-
     /** The live Documents with Passages to search (of all of them, or only of these), the most text first: `size` characters. */
     searchableBySize(
       documentIds: readonly string[] | undefined,
