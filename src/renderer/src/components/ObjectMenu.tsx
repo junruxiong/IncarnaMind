@@ -206,6 +206,7 @@ export function ObjectMenu({
           const { command, enabled } = entry;
           const keys = menuKeysLabel(command);
           const reason = enabled === true ? undefined : t(enabled.reason);
+          const hint = command.hint ? t(command.hint) : undefined;
           return (
             <button
               key={command.id}
@@ -213,7 +214,8 @@ export function ObjectMenu({
               role="menuitem"
               data-testid={command.id}
               aria-disabled={enabled === true ? undefined : true}
-              title={reason}
+              aria-description={hint}
+              title={reason ?? hint}
               onClick={() => run(entry)}
               className={`${menuItemClass} ${menuItemUnavailableClass} pl-2`}
             >
