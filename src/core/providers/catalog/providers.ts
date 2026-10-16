@@ -13,7 +13,7 @@
  */
 import type { ChatProviderKind } from "../../api";
 import { PRESETS } from "./presets";
-import type { CatalogProvider, Endpoint, EndpointField, ProviderOptions } from "./types";
+import type { CatalogProvider, Endpoint, EndpointField, ProviderOptions, Role } from "./types";
 
 const GLOBAL = { en: "Global", zh: "全球" };
 
@@ -133,9 +133,35 @@ const PROVIDERS = [
       },
     ],
     docsUrl: "https://platform.openai.com/docs/models",
+    // The Responses API keeps each request on OpenAI's servers unless it says not to. Small
+    // calls run with reasoning off: on the Organize evaluation GPT-6 Luna tagged as well with it
+    // off, writing a quarter of the output tokens. These models refuse "none" (GPT-6.1 Sol and
+    // GPT-6 Astra start at "low", the 2025 GPT-5 models at "minimal"; o-series, Pro and Codex
+    // models aren't checked), so they keep their own.
     request: {
-      // The Responses API keeps each request on OpenAI's servers unless it says not to.
       store: false,
+      thinkingOff: {
+        options: { openai: { reasoningEffort: "none" } },
+        except: [
+          "gpt-6.1-sol",
+          "gpt-6-astra",
+          "gpt-5",
+          "gpt-5-mini",
+          "gpt-5-nano",
+          "gpt-5-pro",
+          "gpt-5.2-pro",
+          "gpt-5.3-codex",
+          "gpt-5.3-codex-spark",
+          "gpt-5.4-pro",
+          "gpt-5.5-pro",
+          "o1",
+          "o1-pro",
+          "o3",
+          "o3-mini",
+          "o3-pro",
+          "o4-mini",
+        ],
+      },
       reasoningSummary: { options: { openai: { reasoningSummary: "auto" } } },
     },
     roles: {
@@ -284,11 +310,15 @@ const PROVIDERS = [
     apiKey: "required",
     keyUrl: "https://console.mistral.ai/api-keys",
     docsUrl: "https://docs.mistral.ai/getting-started/models/models_overview/",
+    request: { thinkingOff: { options: { mistral: { reasoningEffort: "none" } } } },
     roles: {
       answers: "mistral-small-2603",
       strongest: "mistral-medium-2604",
       quickTasks: "ministral-8b-2512",
       images: "mistral-small-2603",
+      // Tagging's cost is nearly all input, which Mistral Small 4 prices as Ministral 8B does,
+      // and it is a much larger model.
+      tagging: "mistral-small-2603",
     },
     dataUse: {
       training: "opt-out",
@@ -654,6 +684,18 @@ const PROVIDERS = [
 
 export type CatalogProviderId = (typeof PROVIDERS)[number]["id"];
 
+/**
+ * The ChatGPT plan's models for the jobs that aren't Answers: it has no entry
+ * of its own (it serves OpenAI's models, see ../chatgpt), and the User picks
+ * its Answers model from the plan's list.
+ */
+export const CHATGPT_PLAN_ROLES: Readonly<
+  Pick<Partial<Record<Role, string>>, "quickTasks" | "tagging">
+> = {
+  quickTasks: "gpt-6-luna",
+  tagging: "gpt-6-luna",
+};
+
 /** The providers, in the order the catalog lists them: the presets before a server the User gives. */
 export const CATALOG_PROVIDERS: readonly CatalogProvider[] = PROVIDERS.flatMap(
   (each): readonly CatalogProvider[] =>
@@ -760,3 +802,17 @@ export const endpointOf = (
   id: string | null | undefined,
 ): Endpoint | undefined =>
   provider.endpoints.find((each) => each.id === id) ?? provider.endpoints[0];
+
+/**
+ * A provider's model for a job that isn't Answers, from the catalog: the
+ * ChatGPT plan's from its own roles. Undefined when it names none.
+ */
+export const catalogRoleModel = (
+  { kind, catalogId }: { kind: ChatProviderKind; catalogId: string | null },
+  role: "quickTasks" | "images" | "tagging",
+): string | undefined =>
+  kind === "chatgpt"
+    ? role === "images"
+      ? undefined
+      : CHATGPT_PLAN_ROLES[role]
+    : catalogProviderOf(kind, catalogId)?.roles[role];
