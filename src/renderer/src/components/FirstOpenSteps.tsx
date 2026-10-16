@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 import type { CommandId } from "../../../shared/commands";
 import type { MessageKey } from "../../../shared/i18n";
 import { shortcutLabel } from "../commands/keymap";
@@ -9,6 +9,7 @@ import { useT } from "../i18n";
 import { useAppStore } from "../store";
 import { ExampleBanner, OtherExamples } from "./GettingStarted";
 import { CloseLineIcon } from "./lineIcons";
+import { ProblemLine } from "./ProblemLine";
 import { SLOT, Slotted } from "./Slotted";
 import { buttonStyle } from "./ui";
 
@@ -57,10 +58,7 @@ function Step({
   children?: ReactNode;
 }) {
   const t = useT();
-  const tone =
-    state === "open"
-      ? "font-semibold text-ink"
-      : `text-ink-meta${state === "done" ? " line-through" : ""}`;
+  const tone = state === "open" ? "font-semibold text-ink" : "text-ink-meta";
   return (
     <li
       data-testid="first-open-step"
@@ -80,11 +78,6 @@ function Step({
   );
 }
 
-/**
- * The first open's three steps, at the top of the example page: only the step in hand is open,
- * a finished one folds into a grey ticked line, and when all three are done "You're set up."
- * says what to try next.
- */
 export function FirstOpenSteps({ mindId }: { mindId: string }) {
   const t = useT();
   const progress = useAppStore((state) => state.settings?.device.gettingStarted);
@@ -93,6 +86,20 @@ export function FirstOpenSteps({ mindId }: { mindId: string }) {
   const updateGettingStarted = useAppStore((state) => state.updateGettingStarted);
   const removeExamples = useAppStore((state) => state.removeExamples);
   const ready = useAppStore((state) => state.examples?.ready ?? null);
+  const skipped = useAppStore((state) => state.skippedFiles);
+  const addFiles = useRef<HTMLButtonElement>(null);
+  // The ready Question's button goes once it is asked: the focus moves on to the next step.
+  const focusNext = useRef(false);
+  const filesOpen =
+    progress !== undefined &&
+    progress.citationChecked &&
+    (progress.askedOwn || progress.askedReady) &&
+    !progress.indexed;
+  useEffect(() => {
+    if (!filesOpen || !focusNext.current) return;
+    focusNext.current = false;
+    addFiles.current?.focus();
+  }, [filesOpen]);
   if (!progress) return null;
 
   const done: Record<StepKey, boolean> = {
@@ -116,18 +123,16 @@ export function FirstOpenSteps({ mindId }: { mindId: string }) {
         <h2 id={`first-open-${mindId}`} className="text-[16px] leading-6 font-semibold text-ink">
           {t(allDone ? "firstOpen.done.title" : "firstOpen.title")}
         </h2>
-        {allDone && (
-          <button
-            type="button"
-            data-testid="first-open-hide"
-            aria-label={t("firstOpen.hide")}
-            title={t("firstOpen.hide")}
-            onClick={() => updateGettingStarted({ hidden: true })}
-            className="inline-flex size-[22px] items-center justify-center rounded-md text-ink-meta hover:bg-chip hover:text-ink focus-visible:outline-offset-0"
-          >
-            <CloseLineIcon strokeWidth={2.5} className="size-3" />
-          </button>
-        )}
+        <button
+          type="button"
+          data-testid="first-open-hide"
+          aria-label={t("firstOpen.hide")}
+          title={t("firstOpen.hide")}
+          onClick={() => updateGettingStarted({ hidden: true })}
+          className="inline-flex size-[22px] items-center justify-center rounded-md text-ink-meta hover:bg-chip hover:text-ink focus-visible:outline-offset-0"
+        >
+          <CloseLineIcon strokeWidth={2.5} className="size-3" />
+        </button>
       </div>
       {!allDone && (
         <p className="pb-3 text-[13px] leading-5 text-ink-secondary">{t("firstOpen.lead")}</p>
@@ -148,7 +153,10 @@ export function FirstOpenSteps({ mindId }: { mindId: string }) {
                 <button
                   type="button"
                   data-testid="first-open-ready"
-                  onClick={() => void askReadyQuestion()}
+                  onClick={() => {
+                    focusNext.current = true;
+                    void askReadyQuestion();
+                  }}
                   className={buttonStyle("secondary", "sm")}
                 >
                   {t("firstOpen.step.question.ready", { question: ready })}
@@ -170,6 +178,7 @@ export function FirstOpenSteps({ mindId }: { mindId: string }) {
           </p>
           <div className="flex flex-wrap gap-2">
             <button
+              ref={addFiles}
               type="button"
               data-testid="first-open-add-files"
               onClick={() => void pickDocuments()}
@@ -186,6 +195,11 @@ export function FirstOpenSteps({ mindId }: { mindId: string }) {
               {t("startGuide.documents.linkFolder")}
             </button>
           </div>
+          {skipped.length > 0 && (
+            <ProblemLine testId="first-open-skipped">
+              {t("documents.skipped", { names: skipped.join(", ") })}
+            </ProblemLine>
+          )}
         </Step>
       </ol>
       {allDone && (

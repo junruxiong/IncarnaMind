@@ -153,6 +153,10 @@ test("a first run opens on the credit paper with no model set up: its Citations 
   );
   await expect(step(window, "citation")).toHaveAttribute("data-state", "done");
   await expect(step(window, "citation")).toContainText("Saw a mistake it caught");
+  await expect(step(window, "citation").locator("span").last()).toHaveCSS(
+    "text-decoration-line",
+    "none",
+  );
   await expect(mark).not.toHaveAttribute("data-guided");
   await expect(step(window, "question")).toHaveAttribute("data-state", "open");
   await window.keyboard.press("Escape");
@@ -465,6 +469,104 @@ test("in Chinese, the ready Question is the Chinese example's, answered with no 
   // Not a Question of the User's own: the usage-data ask still waits for one.
   expect((await gettingStarted(window)).askedOwn).toBe(false);
   await app.close();
+});
+
+test("Add files… with only a file it can't take says why in step 3, which stays open (#123)", async () => {
+  const picture = join(sources, "Picture.png");
+  await writeFile(picture, "not a document");
+  const { app, window } = await launchApp(dataDir, { examples: true });
+  await markSteps(window, { citationChecked: true, askedReady: true });
+  const files = step(window, "files");
+  await expect(files).toHaveAttribute("data-state", "open");
+  await interceptOpenDialog(app, picture);
+  await pointAndClick(window, files.getByTestId("first-open-add-files"));
+  const problem = files.getByTestId("first-open-skipped");
+  await expect(problem).toContainText("Only PDF, Word, PowerPoint, Excel, CSV, TXT and Markdown");
+  await expect(problem).toContainText("Picture.png");
+  await expect(files).toHaveAttribute("data-state", "open");
+  await app.close();
+});
+
+test("✕ ends the first open at any step, and so does Remove the examples or a deleted example, after a restart too (#123)", async () => {
+  const shellIsBack = async (window: Page) => {
+    await expect(window.getByTestId("assistant")).toBeVisible();
+    await expect(window.getByTestId("ask-pill")).toHaveCount(0);
+    await expect(window.getByTestId("sidebar").getByTestId("sidebar-status")).toHaveCount(1);
+  };
+  const first = await launchApp(dataDir, { examples: true });
+  const hide = first.window.getByTestId("first-open-hide");
+  await expect(step(first.window, "citation")).toHaveAttribute("data-state", "open");
+  await pointAndClick(first.window, hide);
+  await expect(first.window.getByTestId("first-open-steps")).toHaveCount(0);
+  await expect(first.window.getByTestId("tab-list")).toBeVisible();
+  await shellIsBack(first.window);
+  await first.app.close();
+
+  const removing = await createDataFolder();
+  const second = await launchApp(removing, { examples: true });
+  await pointAndClick(second.window, second.window.getByTestId("first-open-remove"));
+  await expect(second.window.getByTestId("mind-list-item")).toHaveCount(0);
+  await dismissChatSetup(second.window);
+  await shellIsBack(second.window);
+  await second.app.close();
+  const afterRemoving = await launchApp(removing, { examples: true });
+  await dismissChatSetup(afterRemoving.window);
+  await shellIsBack(afterRemoving.window);
+  await afterRemoving.app.close();
+  await removeDataFolder(removing);
+
+  const deleting = await createDataFolder();
+  const third = await launchApp(deleting, { examples: true });
+  await expect(third.window.getByTestId("first-open-steps")).toBeVisible();
+  await third.window.evaluate(async () => {
+    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    const { mindId } = await bridge.getExamples();
+    if (mindId) await bridge.deleteMind(mindId);
+  });
+  await third.app.close();
+  const afterDeleting = await launchApp(deleting, { examples: true });
+  await dismissChatSetup(afterDeleting.window);
+  await shellIsBack(afterDeleting.window);
+  await afterDeleting.app.close();
+  await removeDataFolder(deleting);
+});
+
+test("a double-click on the ready Question asks it once, and Enter on it moves the focus to the next step (#123)", async () => {
+  const first = await launchApp(dataDir, { examples: true });
+  const pane = first.window.getByTestId("mind-pane");
+  await expect(pane.getByTestId("claim-mark")).toHaveAttribute("data-check", "contradicted", {
+    timeout: 20_000,
+  });
+  await markSteps(first.window, { citationChecked: true });
+  await step(first.window, "question").getByTestId("first-open-ready").dblclick();
+  await expect(assistantAnswers(first.window).last()).toHaveAttribute("data-status", "done");
+  await expect
+    .poll(() =>
+      first.window.evaluate(
+        async () =>
+          (
+            await (
+              globalThis as unknown as { incarnamind: CoreBridge }
+            ).incarnamind.listConversations()
+          ).length,
+      ),
+    )
+    .toBe(1);
+  await first.app.close();
+
+  const keyboard = await createDataFolder();
+  const second = await launchApp(keyboard, { examples: true });
+  await expect(second.window.getByTestId("mind-pane").getByTestId("claim-mark")).toHaveAttribute(
+    "data-check",
+    "contradicted",
+    { timeout: 20_000 },
+  );
+  await markSteps(second.window, { citationChecked: true });
+  await step(second.window, "question").getByTestId("first-open-ready").focus();
+  await second.window.keyboard.press("Enter");
+  await expect(step(second.window, "files").getByTestId("first-open-add-files")).toBeFocused();
+  await second.app.close();
+  await removeDataFolder(keyboard);
 });
 
 test("the steps can be hidden once all are done, and stay hidden", async () => {

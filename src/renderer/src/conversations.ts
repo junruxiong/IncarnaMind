@@ -136,14 +136,20 @@ export async function openConversation(conversationId: string, answerId?: string
   }
 }
 
-/** Asks the first open's ready Question: its Answer, written in advance, opens in the assistant. */
+let readyAsking = false;
+
 export async function askReadyQuestion(): Promise<void> {
+  // A double-click asks it once.
+  if (readyAsking) return;
+  readyAsking = true;
   try {
     const { conversationId } = await core.askReadyQuestion();
     useAppStore.getState().updateGettingStarted({ askedReady: true });
     await openConversation(conversationId);
   } catch (error) {
     report(error);
+  } finally {
+    readyAsking = false;
   }
 }
 
