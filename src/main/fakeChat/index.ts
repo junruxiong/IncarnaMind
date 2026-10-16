@@ -5,7 +5,8 @@
  *
  * A Question with "blank reply" in it gets a reply with no text at all. A model whose id ends
  * "-not-found" fails as one its provider doesn't know when it answers; one ending "-claims-not-found"
- * does when it finds or checks claims. A key with "refused" in it is refused,
+ * does when it finds or checks claims; one ending "-claims-offline" can't reach its provider the
+ * first time it finds claims. A key with "refused" in it is refused,
  * as a provider refuses a wrong key (HTTP 401). A model whose id ends "-no-tools" refuses
  * Tools and structured output, as a small server model does, so its Answers have no Citations.
  * A Document whose text says "slowly" takes a moment to tag or organize; one whose text says "unreachable"
@@ -17,7 +18,7 @@ import { MockLanguageModelV4 } from "ai/test";
 import type { ChatModelFactory } from "../../core";
 import { searchParts } from "./answers";
 import { isCell } from "./cells";
-import { fakeClaims } from "./claims";
+import { fakeClaims, findsClaims } from "./claims";
 import { fakeConfirm } from "./confirm";
 import { editParts, fakeEdit } from "./edit";
 import { fakePlan } from "./plan";
@@ -44,6 +45,7 @@ const EDIT_WORD_MS = 10;
 
 /** The cells whose provider has refused them once already ("busy" in the Question). */
 const refusedOnce = new Set<string>();
+const offline = new Set<string>();
 
 /**
  * The scripted replies to a request that doesn't ask for JSON, in order: the first that
@@ -82,6 +84,20 @@ export const createFakeChatModel: ChatModelFactory = (spec) =>
           url: "https://fake.invalid/chat",
           requestBodyValues: {},
           statusCode: 404,
+        });
+      }
+      // A model id ending "-claims-offline" can't reach its provider the first time it finds claims (#973).
+      if (
+        spec.modelId.endsWith("-claims-offline") &&
+        findsClaims(options) &&
+        !offline.has(spec.modelId)
+      ) {
+        offline.add(spec.modelId);
+        throw new APICallError({
+          message: "Cannot connect to API: fetch failed",
+          url: "https://fake.invalid/chat",
+          requestBodyValues: {},
+          isRetryable: false,
         });
       }
       if (tagsSlowly(options)) await new Promise((resolve) => setTimeout(resolve, SLOW_TAGGING_MS));

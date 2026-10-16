@@ -686,7 +686,6 @@ export const en = {
     "Check this Mind’s {count} claims against this Folder’s Documents?",
   "mindCheck.ask.claims.all.one": "Check this Mind’s claim against your Documents?",
   "mindCheck.ask.claims.all": "Check this Mind’s {count} claims against your Documents?",
-  "mindCheck.finding": "Finding the claims to check…",
   "mindCheck.check": "Check",
   "mindCheck.cancel": "Not now",
   "verify.command": "Verify a document…",

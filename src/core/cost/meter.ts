@@ -80,7 +80,6 @@ export interface MeteredModel {
 /** The output reserved for a request that sets no limit, on a model whose limit isn't known. */
 const DEFAULT_OUTPUT_TOKENS = 16_384;
 
-/** What an estimate counts for each item of a run: its calls, and the recorded requests it averages. */
 interface ItemCost {
   calls: number;
   /** A call before this computer has recorded two items' worth on the model. */

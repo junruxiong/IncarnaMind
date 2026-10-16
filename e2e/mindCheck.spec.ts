@@ -163,7 +163,7 @@ test("Check this Mind from ⌘K: the estimate first on a cloud model, then every
   await expect(marks(window)).toHaveCount(15);
 });
 
-test("In Chinese and a narrow window, from the Mind's tab menu: a model on this computer checks at once; a Folder that holds too little offers all Documents; Check all checks a sentence written since", async () => {
+test("In Chinese and a narrow window, from the Mind's tab menu: a model on this computer asks with the claims and no price; a Folder that holds too little offers all Documents; Check all checks a sentence written since", async () => {
   await writeFile(join(sources, "Tides.pdf"), TIDES);
   await writeFile(
     join(sources, "Garden.pdf"),
@@ -232,4 +232,27 @@ test("In Chinese and a narrow window, from the Mind's tab menu: a model on this 
   await pointAndClick(window, ask.getByTestId("mind-check-check"));
   await expect(marks(window)).toHaveCount(16);
   await expect(health.getByTestId("health-check")).toHaveCount(0);
+});
+
+test("when the provider can't be reached while the claims are named, Try again names them again and asks before it checks", async () => {
+  await writeFile(join(sources, "Tides.pdf"), TIDES);
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  // The scripted model can't reach its provider the first time it names the claims.
+  await useLocalChatModel(window, "fake-model-claims-offline");
+  await setWindowSize(app, window, 1440, 900);
+  await addDocuments(window, [join(sources, "Tides.pdf")]);
+  await harbourNotes(window);
+
+  await window.getByTestId("mind-tab").first().click({ button: "right" });
+  await pointAndClick(window, window.getByRole("menuitem", { name: "Check this Mind" }));
+  const failure = window.getByTestId("answer-error");
+  await expect(failure).toHaveAttribute("data-error-kind", "network");
+  await pointAndClick(window, failure.getByTestId("answer-error-action"));
+
+  const ask = window.getByTestId("mind-check-ask");
+  await expect(ask).toContainText("Check this Mind’s 15 claims against your Documents?");
+  await expect(marks(window)).toHaveCount(0);
+  await pointAndClick(window, ask.getByTestId("mind-check-check"));
+  await expect(marks(window)).toHaveCount(15);
 });

@@ -660,7 +660,6 @@ export const zhCN = {
   "mindCheck.ask.claims.folder": "要对照这个文件夹中的文档，核对这个 Mind 中的 {count} 条说法吗？",
   "mindCheck.ask.claims.all.one": "要对照你的文档，核对这个 Mind 中的这条说法吗？",
   "mindCheck.ask.claims.all": "要对照你的文档，核对这个 Mind 中的 {count} 条说法吗？",
-  "mindCheck.finding": "正在找出要核对的说法…",
   "mindCheck.check": "核对",
   "mindCheck.cancel": "暂不",
   "verify.command": "核对文档…",

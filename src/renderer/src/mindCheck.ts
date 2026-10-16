@@ -32,12 +32,12 @@ interface MindCheckState {
 interface Asking {
   mode: CheckMindMode;
   allDocuments: boolean;
-  /** The claims the model named and the checks to make again, or, when it named none, the checks. */
+  /** The claims the model named and the checks to make again, or, when only checking again, the checks. */
   count: number;
   claims: boolean;
   /** Checked against the Mind's Folder: the question names it. */
   inFolder: boolean;
-  /** Null for a plan or a model on this computer. */
+  /** Null for a plan or a model on this computer, or when `estimateRun` failed. */
   estimate: EstimateLine | null;
 }
 
@@ -88,7 +88,6 @@ export async function checkMind(
   }
 }
 
-/** The claims the model names first, with Stop, as the run shows them; null when it stopped or something stood in the way. */
 async function findClaims(
   mindId: string,
   mode: CheckMindMode,
