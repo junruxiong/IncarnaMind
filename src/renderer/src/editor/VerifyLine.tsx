@@ -15,6 +15,7 @@ import { UnreadFilesLine } from "../components/UnreadFilesLine";
 import { buttonStyle } from "../components/ui";
 import { core } from "../core";
 import { estimateText, runStopText } from "../cost";
+import { errorMessage } from "../errors";
 import { useLanguage, useT } from "../i18n";
 import { enter } from "../motion";
 import { useAppStore } from "../store";
@@ -359,7 +360,7 @@ export function VerifyLine({
               void (claims === null ? findClaims(mindId, doc) : checkClaims(mindId, doc)),
           }}
         >
-          {t("verify.problem.error", { message: outcome.message })}
+          {t("verify.problem.error", { message: errorMessage(outcome.error, t) })}
         </ProblemLine>
       )}
     </>
