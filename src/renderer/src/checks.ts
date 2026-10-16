@@ -39,7 +39,7 @@ export type CheckProblem =
 
 export interface CheckRunning {
   requestId: string;
-  action: ClaimCheckAction | "whole-mind";
+  action: Exclude<ClaimCheckAction, "find-support"> | "whole-mind";
 }
 
 /**
@@ -107,12 +107,14 @@ export async function checkSentences(
   editor: Editor,
   mindId: string,
   doc: Y.Doc,
-  action: ClaimCheckAction,
+  asked: ClaimCheckAction,
   {
     ranges,
     allDocuments = false,
   }: { ranges?: readonly { from: number; to: number }[]; allDocuments?: boolean } = {},
 ): Promise<void> {
+  // An older version's mark says "find-support": it is Check against Documents now.
+  const action = asked === "find-support" ? "check-against-documents" : asked;
   if (editor.isDestroyed || useChecks.getState().running[mindId]) return;
   const stretches = (ranges ?? [editor.state.selection]).flatMap((range) => {
     const read = selectionForEdit(editor.state, range);
