@@ -602,8 +602,9 @@ export type ComparisonCellStatus = "waiting" | "writing" | "done" | "failed";
 
 /**
  * Why a cell has no Answer: its Document doesn't answer the Question
- * ("not-found"), has no text to search, was deleted, or is a file
- * IncarnaMind wrote, which checks leave out (#80); or why its model didn't
+ * ("not-found"), has no text to search, was deleted, is a file
+ * IncarnaMind wrote, which checks leave out (#80), or is one the User keeps as
+ * their own workings, which Answers never cite; or why its model didn't
  * write one (a `ProviderErrorKind`). "cost-cap" and "plan-limit" stopped the
  * fill (`RunStop`): the cell wasn't checked.
  */
@@ -612,6 +613,7 @@ export type ComparisonProblem =
   | "nothing-to-search"
   | "source-removed"
   | "left-out"
+  | "not-cited"
   | ProviderErrorKind;
 
 /** Attributes of a comparison table's cell. */
@@ -866,6 +868,7 @@ export type MindProblem =
   | { kind: "several"; name: string }
   | { kind: "no-heading"; mindId: string; heading: string }
   | { kind: "no-place"; mindId: string; place: string }
+  | { kind: "several-places"; mindId: string; name: string; adding: boolean }
   | {
       kind: "no-text" | "too-long" | "changed" | "content-not-own" | "stopped";
       mindId: string;
@@ -2266,6 +2269,12 @@ export interface Document {
    * (web pages, Transcripts), which count as evidence as usual.
    */
   ownFile: OwnFile | null;
+  /**
+   * The User keeps it as their own workings: a spreadsheet of figures copied from a
+   * report, with their own ratios. Answers search and read it to understand a Question but
+   * never cite it, and checks never use it as evidence (`setNotCited`).
+   */
+  notCited: boolean;
   /** Where its text came from, when Find sources added it (#296); null for any other Document. */
   found: DocumentFoundSource | null;
   /**
@@ -2301,11 +2310,13 @@ export interface OwnFile {
 /**
  * Why a check leaves a Document out of its evidence (#80):
  * - "own-file": IncarnaMind wrote it (see `OwnFile`). Counting it lets it count.
+ * - "own-workings": the User keeps it as their own workings (`Document.notCited`).
+ *   Never evidence, counted or not, until the User cites it again.
  * - "checked-document": it is the document being checked, an earlier version
  *   of it, or a copy of either (the same content fingerprint, at any path).
  *   Never evidence for that check.
  */
-export type EvidenceExclusion = "own-file" | "checked-document";
+export type EvidenceExclusion = "own-file" | "own-workings" | "checked-document";
 
 /** The document a check verifies (#97, #110): it, its earlier versions and their copies are never its evidence. */
 export interface CheckedDocument {
@@ -4317,6 +4328,9 @@ export interface ClaimCheckAttributes {
   reason: ClaimCheckFailure | null;
   /** "failed": the provider's message. */
   detail: string | null;
+  /** The model that checked it; null on a mark made before it was kept. */
+  providerId: string | null;
+  modelId: string | null;
   /** The sentence as it was checked: an inline node as U+FFFC, a line break as "\n". */
   text: string;
   /** "supported" and "contradicted": the Passage that decides it, as a Citation found. */
@@ -4655,6 +4669,14 @@ export interface AnswerSteps {
    * it wrote without markers that match the Passages it read (#760).
    */
   citedAfterChecking?: number;
+  /**
+   * How long, in ms, the Question was with the model before the Answer had
+   * words: its text, or a Mind its Tool call began to change. Absent while
+   * there are none, and for an Answer written before #899.
+   */
+  firstWordMs?: number;
+  /** Its Question asked to check or calculate, so it was written with the larger thinking budget. */
+  careful?: true;
   /**
    * The changes its reply says it made to a Mind that none of its Tool calls
    * made, even once the model was asked again with what they did.
@@ -5796,6 +5818,8 @@ export const aiUseKinds = [
   "edit-with-ai-accepted",
   /** A comparison table from Compare Documents accepted (#98). */
   "comparison-table-accepted",
+  /** A sentence of the Mind's checked against the Documents (#906). */
+  "sentence-checked",
 ] as const;
 export type AiUseKind = (typeof aiUseKinds)[number];
 
@@ -5821,7 +5845,7 @@ export interface AiUseEntry {
   modelId: string | null;
   /** How much the AI wrote, in characters. */
   characters: number;
-  /** The Blocks it made, by their stable ids; none for a rejected proposal or a suggestion. */
+  /** The Blocks it made, by their stable ids; none for a rejected proposal, a suggestion or a check. */
   blockIds: string[];
   /** When the User accepted or rejected it, ISO 8601 UTC. */
   occurredAt: string;
@@ -6482,10 +6506,18 @@ export interface TagMerge {
 
 /**
  * What a Mind exports to: Markdown, for an archive, or Word (.docx), PDF or HTML, for the
- * deliverable; or a source pack, a PDF of the pages the Mind cites (#134). Formats are listed
- * in the order the options sheet offers them.
+ * deliverable; a source pack, a PDF of the pages the Mind cites (#134); or a web page to share,
+ * an HTML file whose readers open each Citation's quote. Formats are listed in the order the
+ * options sheet offers them.
  */
-export const EXPORT_FORMATS = ["docx", "pdf", "source-pack", "html", "markdown"] as const;
+export const EXPORT_FORMATS = [
+  "docx",
+  "pdf",
+  "source-pack",
+  "html",
+  "share-page",
+  "markdown",
+] as const;
 export type ExportFormat = (typeof EXPORT_FORMATS)[number];
 
 /**
@@ -6498,8 +6530,15 @@ export interface ExportPreferences {
   docx: WordExportPreferences;
   pdf: { includeQuestions: boolean };
   html: { includeQuestions: boolean };
+  "share-page": SharePagePreferences;
   /** How a PDF, an HTML file or Markdown shows someone's changes still waiting (#734). Absent: shown. */
   theirChanges?: TheirChangesShown;
+}
+
+export interface SharePagePreferences {
+  includeQuestions: boolean;
+  citationCards: boolean;
+  checkedLine: boolean;
 }
 
 /**
@@ -6549,6 +6588,14 @@ export interface ExportMindOptions {
    * IncarnaMind saying so. Absent: off.
    */
   commentFailedChecks?: boolean;
+  /**
+   * A web page to share only: each Citation's marker opens a card with
+   * its quote, the part of its Document around it, and its check. Off, the
+   * file is the HTML export. Absent: on.
+   */
+  citationCards?: boolean;
+  /** A web page to share only: its foot says "Citations checked with IncarnaMind". Absent: off. */
+  checkedLine?: boolean;
 }
 
 /** What exporting a Mind will write, for the User to see before the file is written. */
@@ -7414,6 +7461,13 @@ export interface CoreApi {
   /** Stops an Answer of a conversation being written, keeping what it has. */
   stopConversationAnswer(input: ConversationAnswerInput): Promise<void>;
   /**
+   * How many seconds the model of an Answer of a conversation usually takes
+   * before its Answers have words, from its latest ones to a Question of the
+   * same kind (one that asks to check or calculate, or not); null with too
+   * few to say (#899).
+   */
+  usualAnswerWait(answerId: string): Promise<number | null>;
+  /**
    * The conversations that aren't deleted, newest first: all of them, or those of one
    * Folder (`folderId` null: Not in a Folder). Only the assistant's History lists them.
    */
@@ -7796,6 +7850,12 @@ export interface CoreApi {
    * IncarnaMind didn't write.
    */
   setCountedAsEvidence(documentId: string, counted: boolean): Promise<Document>;
+  /**
+   * Keeps a Document as the User's own workings, or with false cites it as any
+   * Document again (see `Document.notCited`): its Undo, and its menu. Returns
+   * it, and "document.status" says so.
+   */
+  setNotCited(documentId: string, notCited: boolean): Promise<Document>;
   /** The built-in embedding model and its download. */
   getEmbeddingModel(): Promise<EmbeddingModelStatus>;
   /**
@@ -8865,6 +8925,7 @@ const methods: Record<CoreApiMethod, true> = {
   regenerateConversationAnswer: true,
   countScopeDocuments: true,
   stopConversationAnswer: true,
+  usualAnswerWait: true,
   listConversations: true,
   getConversation: true,
   searchConversations: true,
@@ -8923,6 +8984,7 @@ const methods: Record<CoreApiMethod, true> = {
   searchPassages: true,
   searchEvidence: true,
   setCountedAsEvidence: true,
+  setNotCited: true,
   getEmbeddingModel: true,
   downloadEmbeddingModel: true,
   getEmbeddingSettings: true,
