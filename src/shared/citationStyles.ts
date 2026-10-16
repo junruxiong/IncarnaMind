@@ -52,6 +52,13 @@ export interface CitationStyle {
    * null for Numbered, whose exports have none.
    */
   heading: string | null;
+  /**
+   * Where a Citation's Location goes: "in-citation", as the style's file writes it ("(Oke, 1982,
+   * p. 4)"), or "raised-after": the file leaves it out, and the standard puts it after the number
+   * or the author and year, raised ("[3]⁵⁻⁶", "（钱学森，1990）³⁰"), as GB/T 7714—2015 10.1.3 and
+   * 10.2.5 do.
+   */
+  locators: "in-citation" | "raised-after";
 }
 
 const GB_T = ["GB/T 7714", "GBT 7714", "国标", "国家标准", "guobiao"];
@@ -65,6 +72,7 @@ export const CITATION_STYLES: readonly CitationStyle[] = [
     language: "en",
     keywords: ["footnote", "document", "page", "脚注", "编号"],
     heading: null,
+    locators: "in-citation",
   },
   {
     id: "apa",
@@ -74,6 +82,7 @@ export const CITATION_STYLES: readonly CitationStyle[] = [
     language: "en",
     keywords: ["American Psychological Association", "author-date"],
     heading: "References",
+    locators: "in-citation",
   },
   {
     id: "mla",
@@ -83,6 +92,7 @@ export const CITATION_STYLES: readonly CitationStyle[] = [
     language: "en",
     keywords: ["Modern Language Association", "works cited"],
     heading: "Works Cited",
+    locators: "in-citation",
   },
   {
     id: "harvard",
@@ -92,6 +102,7 @@ export const CITATION_STYLES: readonly CitationStyle[] = [
     language: "en",
     keywords: ["Cite Them Right", "author-date"],
     heading: "Reference list",
+    locators: "in-citation",
   },
   {
     id: "chicago-notes",
@@ -101,6 +112,7 @@ export const CITATION_STYLES: readonly CitationStyle[] = [
     language: "en",
     keywords: ["Chicago Manual of Style", "footnote", "notes and bibliography", "脚注"],
     heading: "Bibliography",
+    locators: "in-citation",
   },
   {
     id: "chicago-author-date",
@@ -110,6 +122,7 @@ export const CITATION_STYLES: readonly CitationStyle[] = [
     language: "en",
     keywords: ["Chicago Manual of Style", "author-date"],
     heading: "References",
+    locators: "in-citation",
   },
   {
     id: "ieee",
@@ -119,6 +132,7 @@ export const CITATION_STYLES: readonly CitationStyle[] = [
     language: "en",
     keywords: ["Institute of Electrical and Electronics Engineers", "numeric"],
     heading: "References",
+    locators: "in-citation",
   },
   {
     id: "gb-t-7714-2015-numeric",
@@ -128,6 +142,7 @@ export const CITATION_STYLES: readonly CitationStyle[] = [
     language: "zh-CN",
     keywords: [...GB_T, "numeric", "顺序编码"],
     heading: "参考文献",
+    locators: "raised-after",
   },
   {
     id: "gb-t-7714-2015-author-date",
@@ -137,6 +152,7 @@ export const CITATION_STYLES: readonly CitationStyle[] = [
     language: "zh-CN",
     keywords: [...GB_T, "author-date", "著者-出版年"],
     heading: "参考文献",
+    locators: "raised-after",
   },
   {
     id: "gb-t-7714-2025-numeric",
@@ -146,6 +162,7 @@ export const CITATION_STYLES: readonly CitationStyle[] = [
     language: "zh-CN",
     keywords: [...GB_T, "numeric", "顺序编码"],
     heading: "参考文献",
+    locators: "raised-after",
   },
   {
     id: "gb-t-7714-2025-author-date",
@@ -155,6 +172,7 @@ export const CITATION_STYLES: readonly CitationStyle[] = [
     language: "zh-CN",
     keywords: [...GB_T, "author-date", "著者-出版年"],
     heading: "参考文献",
+    locators: "raised-after",
   },
   {
     id: "vancouver",
@@ -164,14 +182,24 @@ export const CITATION_STYLES: readonly CitationStyle[] = [
     language: "en",
     keywords: ["NLM", "Citing Medicine", "numeric", "medicine"],
     heading: "References",
+    locators: "in-citation",
   },
 ];
 
 /**
- * A Mind that hasn't chosen is Numbered: many Minds cite contracts and reports that no
- * citation style could cite better, so none turns into "(n.d.)" by itself.
+ * The style of a Mind that hasn't chosen one. Numbered, as many Minds cite contracts and reports
+ * that no citation style could cite better, so none turns into "(n.d.)" by itself; but GB/T
+ * 7714—2015 when the interface and the Mind's text are both Chinese and it cites a paper or a
+ * book (`isCitableWork`), as a Chinese thesis is cited.
  */
-export const DEFAULT_CITATION_STYLE: CitationStyleId = "numbered";
+export function defaultCitationStyle(
+  language: Language,
+  mind: { chineseText: boolean; citesWorks: boolean },
+): CitationStyleId {
+  return language === "zh-CN" && mind.chineseText && mind.citesWorks
+    ? "gb-t-7714-2015-numeric"
+    : "numbered";
+}
 
 /**
  * The styles the prompt in a Mind that cites papers or books offers (`CitationStylePrompt`),

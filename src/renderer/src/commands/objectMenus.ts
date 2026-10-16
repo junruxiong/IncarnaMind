@@ -67,6 +67,7 @@ registerMenu("folder", [
   "folder.new",
   "folder.ask",
   "folder.organize",
+  "folder.tagWithAi",
   "folder.editDescription",
   "folder.sort",
   "folder.rename",

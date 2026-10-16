@@ -159,8 +159,11 @@ export interface CreateMindInput {
  *   `MIND_REVISIONS_FIELD` so rejecting the revision brings them back. An
  *   older version would reject it and lose them. Older content is version
  *   22 content as it is.
+ * - 23: the `wordTab` mark on a Word file's tab characters (#746), which an
+ *   older version's editor would strip. Older content is version 23 content
+ *   as it is.
  */
-export const CONTENT_SCHEMA_VERSION = 22;
+export const CONTENT_SCHEMA_VERSION = 23;
 
 /**
  * The key, in the Mind's settings map (`MIND_SETTINGS_FIELD`), of the content
@@ -380,6 +383,13 @@ export const MIND_PROPOSAL_REQUESTS_FIELD = "proposalRequests";
 export const MIND_REVISIONS_FIELD = "revisions";
 
 /**
+ * What the User's words in the assistant asked for, as `routeRequest` read
+ * them: text changed ("make it longer") or written ("write a summary page").
+ * Absent: neither, or a revision of the assistant's own waiting changes.
+ */
+export type RequestedChange = "edit" | "write";
+
+/**
  * What made a request's Proposals: Edit with AI (#93), with what it was asked
  * so a change can be made again (regenerated) once it is out of date;
  * Regenerate of an Answer the User had edited (#94); an Answer from the
@@ -390,6 +400,7 @@ export const MIND_REVISIONS_FIELD = "revisions";
 export type ProposalRequest =
   | (ProposalMaker & {
       source: "edit-with-ai";
+      requested?: RequestedChange;
       /** Absent on requests made before #94: their changes can't be regenerated. */
       action?: EditAction;
       /** What the User asked for ("translate", "instruction"); "" for none. */
@@ -398,7 +409,7 @@ export type ProposalRequest =
       reason?: string;
     })
   | (ProposalMaker & { source: "answer"; answerId: string })
-  | (ProposalMaker & { source: "answer-added" })
+  | (ProposalMaker & { source: "answer-added"; requested?: RequestedChange })
   | (ProposalMaker & { source: "comparison-table"; tableId: string })
   | (ProposalMaker & { source: "research"; taskId: string })
   | WordChangeRequest;
@@ -868,7 +879,8 @@ export interface AnswerToolCall {
  * still wait in the text it was to change, which the assistant can't revise
  * (someone else's, or the User's own requests), `count` of them in the Mind;
  * "mixed": its own waiting text sits beside the User's there. "model": the
- * model failed, as `message` says.
+ * model failed, as `message` says. "no-table": a table it wrote couldn't be
+ * made, so none of its text went in (#961).
  */
 export type MindProblem =
   | { kind: "waiting"; mindId: string; count: number; mixed: boolean }
@@ -879,11 +891,12 @@ export type MindProblem =
   | { kind: "no-place"; mindId: string; place: string }
   | { kind: "several-places"; mindId: string; name: string; adding: boolean }
   | {
-      kind: "no-text" | "too-long" | "changed" | "content-not-own" | "stopped";
+      kind: "no-text" | "too-long" | "changed" | "content-not-own" | "stopped" | "no-table";
       mindId: string;
     }
   | { kind: "local-mode" | "not-ready" }
-  | { kind: "model"; mindId: string; message: string };
+  | { kind: "model"; mindId: string; message: string }
+  | { kind: "copy"; mindId: string; text: string };
 
 /**
  * Where the assistant writes next in a Mind, as its changes come in (#202):
@@ -912,6 +925,12 @@ export interface MindChange {
   proposals: number;
   /** How many paragraphs the whole Blocks it wrote hold (a heading or a table holds none). Absent: none. */
   paragraphs?: number;
+  /** How many tables it added. Absent: none. */
+  tables?: number;
+  /** Sources in its tables' cells written as a name in brackets that matched no Citation, kept as text. Absent: none. */
+  unlinkedSources?: number;
+  /** Cells beyond its tables' columns, their text kept in their row's last cell. Absent: none. */
+  extraCells?: number;
   /**
    * It revised the assistant's own changes still waiting there: they
    * are gone, and its request holds the new text and the rest of them.
@@ -1097,8 +1116,6 @@ export interface WordFileCheck {
   origin: WordOrigin;
   /** Who wrote its tracked changes and comments, in the order they first appear. */
   authors: string[];
-  /** Its look is mostly what a Mind doesn't draw, so the import screen says it is kept (#735). */
-  layoutNotShown: boolean;
   /** Its tracked changes, of every kind (paragraph marks, formatting and moves too). */
   changes: number;
   comments: number;
@@ -1166,23 +1183,6 @@ export interface WordImportReport {
    * Absent on reports from before #108.
    */
   keptChanges?: Partial<Record<KeptChangeKind, number>>;
-  /** What the Mind doesn't draw of the file's look; absent from a report made before #735. */
-  layout?: WordLayout;
-}
-
-/**
- * What a Word file's look holds that a Mind doesn't draw (#735), counted from
- * the document's own formatting: paragraphs, runs and cells shaded;
- * paragraphs with a border; tab stops set; and how many text colours (other
- * than black), fonts and sizes it sets.
- */
-export interface WordLayout {
-  shading: number;
-  borders: number;
-  tabStops: number;
-  colours: number;
-  fonts: number;
-  sizes: number;
 }
 
 /**
@@ -1239,6 +1239,9 @@ export const WORD_LOOK_ATTRIBUTE = "wordLook";
 /** A mark on text whose attribute `k` is a key in `WordLook.runs`. */
 export const WORD_RUN_MARK = "wordRun";
 
+/** A mark on each tab character of a Word file's text, so each is drawn to its tab stop. */
+export const WORD_TAB_MARK = "wordTab";
+
 /** Lengths are in points and colours hex "RRGGBB"; unset properties are left out. */
 export interface WordLook {
   version: number;
@@ -1246,6 +1249,8 @@ export interface WordLook {
   body: number | null;
   /** The text width on the first page; null when the file doesn't say. */
   width: number | null;
+  /** How far apart Word's default tab stops are (`w:defaultTabStop`); null when the file doesn't say. */
+  defaultTab: number | null;
   paragraphs: Record<string, WordParagraphLook>;
   runs: Record<string, WordRunLook>;
   tables: Record<string, WordTableLook>;
@@ -1490,14 +1495,15 @@ export const MAX_CITED_PAGES = 2;
  *   web page, the paragraphs of the section the quote covers, from 1 (#261).
  * - "lines": the lines the quote covers, or the cited block's.
  * - "time": in a Transcript, from the start of the cue the quote starts in to
- *   the end of the one it ends in, in ms from the Transcript's start (#136).
+ *   the end of the one it ends in, in ms from the Transcript's start (#136);
+ *   `speaker`: who said the cue it starts in, where the Transcript says (#941).
  */
 export type CitationLocation =
   | { kind: "page"; from: number; to: number; printed?: { from: string; to: string } }
   | { kind: "slide"; from: number; to: number }
   | { kind: "rows"; sheet: string | null; from: number; to: number }
   | { kind: "lines"; from: number; to: number }
-  | { kind: "time"; from: number; to: number }
+  | { kind: "time"; from: number; to: number; speaker?: string }
   | {
       kind: "section";
       heading: string | null;
@@ -2188,6 +2194,8 @@ export interface DocumentScanProgress {
  * - "failed": the tagger's provider failed (see `taggingError`); a re-tag, a
  *   change of model or a restart tries again.
  * - "skipped": the Document has no text to tag (processing failed, or found none).
+ * - "stopped": Tagging with AI is stopped where it is, in its Folder or Not in
+ *   a Folder (see `stopTagging`): nothing is sent until it is turned back on.
  */
 export type TaggingState =
   | "pending"
@@ -2195,7 +2203,8 @@ export type TaggingState =
   | "tagging"
   | "tagged"
   | "failed"
-  | "skipped";
+  | "skipped"
+  | "stopped";
 
 /** Who put a Tag on a Document: automatic tagging, or the User. */
 export type TagSource = "automatic" | "user";
@@ -4206,6 +4215,12 @@ export type EditWithAiResult =
       proposals: number;
       droppedCitations: number;
       outOfDate: number;
+      /** Markers the text had for none of the passage's Citations, left out. Absent: none. */
+      unmatchedMarkers?: number;
+      /** Sources in a table's cells written as a name in brackets that matched none of its Citations, kept as text (#961). Absent: none. */
+      unlinkedSources?: number;
+      /** Cells beyond a table's columns, their text kept in their row's last cell. Absent: none. */
+      extraCells?: number;
       /** An edit the User asked for that waits for them instead of applying (#880). */
       held?: true;
       /** What its new text left out of the selection, kept; absent when nothing. */
@@ -4228,6 +4243,11 @@ export type EditWithAiResult =
   | { kind: "too-long" }
   /** The User stopped it (`cancelEdit`). */
   | { kind: "cancelled" }
+  /**
+   * The model wrote lines that read as a table's rows but make no table
+   * (#961): nothing was written. `text`: the passage's new text, as it wrote it.
+   */
+  | { kind: "no-table"; text: string }
   /** The model failed, or gave nothing back. */
   | { kind: "failed"; error: ProviderError };
 
@@ -6750,6 +6770,11 @@ export interface MindExport extends MindExportPreview {
   sentenceChecks: SentenceChecksExported;
   /** Changes still waiting that a Word file holds as tracked changes. */
   trackedChanges: number;
+  /**
+   * The Documents whose Bibliography entries are too thin to cite (`BibliographyEntry.needsDetails`),
+   * each marked so in the file. None in Numbered, which lists Documents by name.
+   */
+  needsDetails: string[];
 }
 
 /** What `saveMindExport` did. */
@@ -6759,7 +6784,7 @@ export type SavedMindExport =
       MindExportPreview,
       "fileName" | "fromWord" | "theirChanges"
     > &
-      Pick<MindExport, "sentenceChecks" | "trackedChanges">)
+      Pick<MindExport, "sentenceChecks" | "trackedChanges" | "needsDetails">)
   /**
    * Not saved: a Mind imported from Word can't keep something in its file
    * (`WordExportReport.notKept`) the User hasn't accepted (`ExportMindOptions.accept`).
@@ -7142,8 +7167,11 @@ export interface MeetingTranscript {
   state: TranscriptState;
   /** How many lines it has. */
   lines: number;
-  /** The speech being transcribed now, while live: where it starts, in the Meeting's time, and its words so far. */
-  partial: { startMs: number; text: string } | null;
+  /**
+   * The speech being transcribed now, while live: where it starts, in the Meeting's time, its
+   * words so far, and whose they are ("Me", "Them" or "Speaker ?", see src/shared/speakers.ts).
+   */
+  partial: { startMs: number; text: string; speaker: string } | null;
   /** The speech-to-text model, while it is downloading or failed to. */
   model: TranscriptionModelStatus | null;
   /** The WebVTT file in the Output location, once saved. */
@@ -7416,7 +7444,7 @@ export interface CoreApi {
    * classifier of null is Automatic; `organizeWith` left out stays as it was.
    */
   saveLibrarySettings(
-    settings: Omit<LibrarySettings, "classifier" | "organizeWith"> & {
+    settings: Omit<LibrarySettings, "classifier" | "organizeWith" | "taggingStopped"> & {
       classifier: LibraryClassifier | null;
       organizeWith?: TaggingClassifier | null;
     },
@@ -7434,6 +7462,17 @@ export interface CoreApi {
    * only their Tags suggested.
    */
   classifyDocuments(documentIds?: string[]): Promise<void>;
+  /**
+   * Stops automatic Tagging with AI where the Documents waiting to be
+   * tagged, or being tagged, are: each of their Folders, and Not in a Folder
+   * (null). Nothing more from there is sent to tag, by automatic tagging or by
+   * Organize on its own, until `setTaggingWithAi` turns it back on; a re-tag
+   * or Organize the User asks for still goes. Kept across restarts. Returns
+   * the places it stopped.
+   */
+  stopTagging(): Promise<(string | null)[]>;
+  /** Turns automatic Tagging with AI on, or stops it, in a Folder or Not in a Folder (null). */
+  setTaggingWithAi(folderId: string | null, on: boolean): Promise<void>;
   /**
    * A manual choice, including Not in a Folder (null), wins over in-flight classification.
    * Returns the assignment before, for `restoreAssignment` (null: it had none).
@@ -7861,6 +7900,13 @@ export interface CoreApi {
     before: ReferenceRecord,
     fields: ReferenceField[],
   ): Promise<Document>;
+  /**
+   * The User checked what was read from the file (`fieldsToCheck`): each of those fields
+   * becomes theirs, as if typed, so reading the file again never replaces it. Undo is
+   * `restoreReference` with the record from before. Returns the Document; "references.changed"
+   * carries it too.
+   */
+  confirmReference(documentId: string): Promise<Document>;
   /**
    * Look up (#286): fetches the record for the Document's DOI from Crossref,
    * or for its arXiv id (from an arXiv address) from arXiv, and fills its
@@ -9121,6 +9167,7 @@ const methods: Record<CoreApiMethod, true> = {
   listKeptCitationTexts: true,
   updateReference: true,
   restoreReference: true,
+  confirmReference: true,
   lookUpReference: true,
   listSourceProviders: true,
   setSourceProviderKey: true,
@@ -9245,6 +9292,8 @@ const methods: Record<CoreApiMethod, true> = {
   saveLibrarySettings: true,
   getTaggingModels: true,
   classifyDocuments: true,
+  stopTagging: true,
+  setTaggingWithAi: true,
   assignDocumentGroup: true,
   acceptAssignments: true,
   rejectAssignments: true,
