@@ -128,5 +128,12 @@ test("signed out of Copilot, the lines name GitHub Copilot with its ways back, a
   await expect(settings).toHaveAttribute("data-page", "models");
   await expect(window.getByTestId("plans-settings")).toBeInViewport();
   await expect(settings.getByRole("note")).toHaveText("You're not signed in to GitHub Copilot.");
+  const row = settings.getByTestId("plans-copilot");
+  await expect(row).toBeInViewport();
+  await pointAndClick(window, row.getByTestId("copilot-sign-in"));
+  await expect(row.getByTestId("copilot-code")).toBeVisible();
+  github.approve();
+  await expect(row.getByTestId("plans-copilot-sign-out")).toBeVisible();
+  await expect(window.getByTestId("chat-readiness")).toBeHidden();
   await app.close();
 });

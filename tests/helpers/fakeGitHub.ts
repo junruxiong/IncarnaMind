@@ -13,6 +13,8 @@ import type { CopilotProfile } from "../../src/core/providers/copilot/config";
 export const ANSWER = "Hello from your Copilot plan.";
 export const USER_CODE = "WDJB-MJHT";
 export const EDITOR_HEADER = "test-editor/1";
+/** The GitHub account the fake signs in. */
+export const LOGIN = "priya-shah";
 /** GitHub asks for five seconds between polls; the fake asks for a moment, so tests needn't wait. */
 const POLL_SECONDS = 0.01;
 
@@ -76,6 +78,12 @@ export interface FakeGitHub {
   exchangeOffline: boolean;
   /** The token exchange answers with GitHub's own error for an account without Copilot. */
   exchangeNoCopilot: boolean;
+  /** The token exchange answers that an organization's policy blocks the app. */
+  exchangePolicy: boolean;
+  /** What the token exchange says of the plan. */
+  sku: string;
+  /** The account's name isn't given: GitHub answers this status instead. */
+  userStatus: number | null;
   /** The token exchange answers only once this resolves. */
   holdExchange: Promise<void> | null;
   /** The next replies of the chat API, then answers. */
@@ -148,6 +156,7 @@ export async function createFakeGitHub(): Promise<FakeGitHub> {
       scopes: id === "own" ? ["read:user", "offline_access"] : ["read:user"],
       format: "json",
       apiBaseUrl: origin,
+      accountUrl: `${origin}/user`,
       ...(id === "editor" && {
         experimental: true,
         signInHeaders: { "Editor-Version": EDITOR_HEADER },
@@ -167,6 +176,9 @@ export async function createFakeGitHub(): Promise<FakeGitHub> {
     exchangeStatus: null,
     exchangeOffline: false,
     exchangeNoCopilot: false,
+    exchangePolicy: false,
+    sku: "plus_monthly_subscriber_quota",
+    userStatus: null,
     holdExchange: null,
     replies: [],
     script: null,
@@ -325,6 +337,11 @@ export async function createFakeGitHub(): Promise<FakeGitHub> {
               },
             });
           }
+          if (fake.exchangePolicy) {
+            return sendJson(response, 403, {
+              message: "Copilot is disabled for this app by your organization's policy.",
+            });
+          }
           if (fake.exchangeStatus) {
             const status = fake.exchangeStatus;
             const message =
@@ -341,7 +358,14 @@ export async function createFakeGitHub(): Promise<FakeGitHub> {
           return sendJson(response, 200, {
             token: session,
             expires_at: Math.floor(Date.parse("2026-10-06T09:25:00.000Z") / 1000),
+            sku: fake.sku,
           });
+        }
+        if (request.method === "GET" && path === "/user") {
+          if (!live.has(bearer(request)))
+            return sendJson(response, 401, { message: "Bad credentials" });
+          if (fake.userStatus) return sendJson(response, fake.userStatus, { message: "Error" });
+          return sendJson(response, 200, { login: LOGIN, id: 1 });
         }
         if (request.method === "GET" && path === "/models") {
           if (!live.has(bearer(request)))
