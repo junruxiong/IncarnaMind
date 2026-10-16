@@ -7,8 +7,11 @@ import { shownDocumentName } from "../../../shared/citations";
 import { formulaText } from "../../../shared/formula";
 import { citationLocation, formatLocation, openKind } from "../../../shared/locations";
 import { savedPageSource } from "../../../shared/webSource";
+import { useAddedDocuments } from "../addedDocuments";
 import { addAsCitation, checkAgain, removeClaimMark } from "../checks";
 import { CountItLine } from "../components/CountItLine";
+import { MetaLine } from "../components/MetaLine";
+import { LineAction } from "../components/ProblemLine";
 import { askInAssistant } from "../conversations";
 import { useFindSources } from "../findSources";
 import { translateNow, useLanguage, useT } from "../i18n";
@@ -100,6 +103,7 @@ export function ClaimMark({
   const open = pinned || peeking;
   // A figure worked out has inputs, not one Passage to cite.
   const plus = state === "supported" && !claim.check.calculation && !citesEvidence(editor, claim);
+  const added = useAddedDocuments((store) => store.byMind[mindId]?.[claim.check.id]?.length ?? 0);
 
   const hold = useCallback((source: string, on: boolean) => {
     if (on) askers.current.add(source);
@@ -175,6 +179,7 @@ export function ClaimMark({
             <ClaimCard
               claim={claim}
               addable={plus}
+              added={added}
               onAdd={() => {
                 addAsCitation(editor, claim);
                 done();
@@ -291,6 +296,7 @@ function Working({ calculation, onOpen }: { calculation: ClaimCalculation; onOpe
 function ClaimCard({
   claim,
   addable,
+  added,
   onAdd,
   onCheckAgain,
   onOpen,
@@ -302,6 +308,8 @@ function ClaimCard({
 }: {
   claim: ShownClaim;
   addable: boolean;
+  /** The Documents added to its scope since it was checked (#993). */
+  added: number;
   onAdd(): void;
   onCheckAgain(allDocuments?: boolean): void;
   onOpen(): void;
@@ -453,6 +461,26 @@ function ClaimCard({
           {reason}
         </p>
       )}
+      {added > 0 && (
+        <div className="citation-card-note">
+          <MetaLine
+            data-testid="claim-added"
+            parts={[
+              added === 1
+                ? t("claim.added.one")
+                : t("claim.added", { count: new Intl.NumberFormat(language).format(added) }),
+              <LineAction
+                key="check"
+                action={{
+                  label: t("claim.checkAgain"),
+                  testId: "claim-added-check",
+                  onClick: () => onCheckAgain(),
+                }}
+              />,
+            ]}
+          />
+        </div>
+      )}
       {check.excluded.map((left) => {
         const document =
           left.reason === "own-file" && documents.find((each) => each.id === left.documentId);
@@ -543,7 +571,7 @@ function ClaimCard({
             {t("claim.removeMark")}
           </button>
         )}
-        {(state === "not-checked" || state === "needs-recheck") && (
+        {(state === "needs-recheck" || (state === "not-checked" && added === 0)) && (
           <button
             type="button"
             data-testid="claim-check-again"

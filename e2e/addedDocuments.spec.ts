@@ -1,0 +1,177 @@
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { expect, type Page, test } from "@playwright/test";
+import type { CoreBridge } from "../src/core/api";
+import { buildPdf } from "../tests/helpers/pdf";
+import {
+  addDocuments,
+  createDataFolder,
+  dismissChatSetup,
+  launchApp,
+  mindWrittenBefore,
+  motionSettled,
+  pointAndClick,
+  removeDataFolder,
+  setLanguage,
+  setWindowSize,
+  useLocalChatModel,
+} from "./app";
+
+/*
+ * Documents added since a Mind's checks (#993): a sentence nothing in the
+ * Mind's Folder supported is offered a check again once a Document that
+ * could support it is added there. The scripted model supports a sentence
+ * that shares three words with a line of a Document. Set
+ * INCARNAMIND_SCREENSHOTS to a folder to also save screenshots.
+ */
+
+const SCREENSHOTS = process.env.INCARNAMIND_SCREENSHOTS;
+const screenshot = async (window: Page, name: string) => {
+  if (SCREENSHOTS) await window.screenshot({ path: join(SCREENSHOTS, `${name}.png`) });
+};
+
+const MOON = "Spring tides come at new moon and at full moon.";
+const PENGUINS = "Penguins nest on the cliffs above the harbour.";
+
+let dataDir: string;
+let sources: string;
+test.beforeEach(async () => {
+  dataDir = await createDataFolder();
+  sources = await createDataFolder();
+});
+test.afterEach(async () => {
+  await removeDataFolder(dataDir);
+  await removeDataFolder(sources);
+});
+
+/**
+ * Files the Mind and the Documents named into the Folder “Harbours”, made if need be; with
+ * `adding`, adds that file to the Library first, as Add files does, once it is read.
+ */
+async function fileInto(window: Page, names: readonly string[], adding?: string) {
+  await window.evaluate(async (path) => {
+    if (path)
+      await (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.addDocuments([path]);
+  }, adding ?? null);
+  await expect
+    .poll(() =>
+      window.evaluate(
+        async (wanted) =>
+          (
+            await (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.listDocuments()
+          ).filter((each) => wanted.includes(each.name) && each.status === "ready").length,
+        names,
+      ),
+    )
+    .toBe(names.length);
+  await window.evaluate(async (wanted) => {
+    const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    const library = await core.getLibrary();
+    const folder =
+      library.groups.find((group) => group.name === "Harbours") ??
+      (await core.createLibraryGroup({ name: "Harbours", description: "" }));
+    const documents = (await core.listDocuments()).filter((each) => wanted.includes(each.name));
+    const minds = (await core.listMinds()).filter((each) => each.title === "Harbour notes");
+    await core.moveToFolder({
+      documentIds: documents.map((each) => each.id),
+      mindIds: minds.map((each) => each.id),
+      folderId: folder.id,
+    });
+  }, names);
+}
+
+test("a sentence nothing supported is offered a check again once a Document is added to the Mind's Folder, and is then supported; in English and Chinese at 1,100 px", async () => {
+  await writeFile(join(sources, "Tides.pdf"), buildPdf([{ lines: ["Harbour times", MOON] }]));
+  await writeFile(
+    join(sources, "Seabirds.pdf"),
+    buildPdf([{ lines: ["Seabirds", "Penguins nest on the cliffs above the harbour in spring."] }]),
+  );
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await setWindowSize(app, window, 1100, 860);
+  await addDocuments(window, [join(sources, "Tides.pdf")]);
+  await mindWrittenBefore(window, "Harbour notes", [{ note: `${MOON} ${PENGUINS}` }]);
+  await window.getByTestId("mind-list-item").filter({ hasText: "Harbour notes" }).click();
+  await fileInto(window, ["Tides"]);
+  const editor = window.getByTestId("mind-editor");
+  await expect(editor).toContainText(PENGUINS);
+
+  await window.getByTestId("mind-tab").first().click({ button: "right" });
+  await pointAndClick(window, window.getByRole("menuitem", { name: "Check this Mind" }));
+  const ask = window.getByTestId("mind-check-ask");
+  await pointAndClick(window, ask.getByTestId("mind-check-check"));
+  const marks = window.getByTestId("claim-mark");
+  await expect(marks).toHaveCount(2);
+  await expect(marks.and(window.locator('[data-check="unsupported"]'))).toHaveCount(1);
+  const line = window.getByTestId("checks-added");
+  await expect(line).toHaveCount(0);
+
+  await fileInto(window, ["Seabirds"], join(sources, "Seabirds.pdf"));
+  await expect(line).toHaveText(
+    /^1 Document added since these checks\s*·\s*Check again\s*·\s*Close$/,
+  );
+  const unsupported = marks.and(window.locator('[data-check="unsupported"]'));
+  await pointAndClick(window, unsupported);
+  const card = window.getByTestId("claim-card");
+  await expect(card.getByTestId("claim-added")).toHaveText(
+    /^1 Document added since this check\s*·\s*Check again$/,
+  );
+  await motionSettled(window);
+  await screenshot(window, "added-card-en");
+  await window.keyboard.press("Escape");
+  await expect(card).toHaveCount(0);
+  await motionSettled(window);
+  await screenshot(window, "added-line-en");
+
+  await setLanguage(window, "zh-CN");
+  await expect(line).toHaveText(/^检查之后新增了 1 个文档\s*·\s*重新核对\s*·\s*关闭$/);
+  const box = await line.boundingBox();
+  const lineHeight = await line.evaluate((element) =>
+    Number.parseFloat(getComputedStyle(element).lineHeight),
+  );
+  expect(box?.height ?? Number.POSITIVE_INFINITY).toBeLessThan(2 * lineHeight);
+  await motionSettled(window);
+  await screenshot(window, "added-line-zh");
+  await setLanguage(window, "en");
+
+  await pointAndClick(window, line.getByTestId("checks-added-check"));
+  await expect(marks.and(window.locator('[data-check="supported"]'))).toHaveCount(2);
+  await expect(marks).toHaveCount(2);
+  await expect(line).toHaveCount(0);
+});
+
+test("closed, the line stays closed for those Documents, and a Document added later shows it again", async () => {
+  await writeFile(join(sources, "Tides.pdf"), buildPdf([{ lines: ["Harbour times", MOON] }]));
+  await writeFile(
+    join(sources, "Ferries.pdf"),
+    buildPdf([{ lines: ["Ferries", "The ferry leaves twice a day."] }]),
+  );
+  await writeFile(
+    join(sources, "Cranes.pdf"),
+    buildPdf([{ lines: ["Cranes", "Two cranes unload the ships."] }]),
+  );
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await setWindowSize(app, window, 1440, 900);
+  await addDocuments(window, [join(sources, "Tides.pdf")]);
+  await mindWrittenBefore(window, "Harbour notes", [{ note: `${MOON} ${PENGUINS}` }]);
+  await window.getByTestId("mind-list-item").filter({ hasText: "Harbour notes" }).click();
+  await fileInto(window, ["Tides"]);
+  await window.getByTestId("mind-tab").first().click({ button: "right" });
+  await pointAndClick(window, window.getByRole("menuitem", { name: "Check this Mind" }));
+  await pointAndClick(window, window.getByTestId("mind-check-ask").getByTestId("mind-check-check"));
+  await expect(
+    window.getByTestId("claim-mark").and(window.locator('[data-check="unsupported"]')),
+  ).toHaveCount(1);
+
+  await fileInto(window, ["Ferries"], join(sources, "Ferries.pdf"));
+  const line = window.getByTestId("checks-added");
+  await expect(line).toBeVisible();
+  await pointAndClick(window, line.getByTestId("checks-added-close"));
+  await expect(line).toHaveCount(0);
+
+  await fileInto(window, ["Cranes"], join(sources, "Cranes.pdf"));
+  await expect(line).toHaveText(/^2 Documents added since these checks/);
+});

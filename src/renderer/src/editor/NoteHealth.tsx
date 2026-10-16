@@ -21,6 +21,7 @@ import { useLanguage, useT } from "../i18n";
 import { startMindCheck, useMindCheck, useMindCheckRun } from "../mindCheck";
 import { useAppStore } from "../store";
 import { useCheckUnread } from "../unreadFiles";
+import { AddedDocumentsLine } from "./AddedDocumentsLine";
 import { AnswerError } from "./AnswerView";
 import { coverageOf, sameCoverage, shownClaims } from "./claimChecks";
 import {
@@ -363,6 +364,7 @@ export function NoteHealth({
           )}
         </fieldset>
       )}
+      <AddedDocumentsLine editor={editor} doc={doc} mindId={mindId} />
       {((smallModel && parts.length > 0) ||
         (contradictions?.kind !== "asking" && contradictions?.run.smallModel)) && (
         <p data-testid="checks-small-model" className="mind-health-line mind-health-note">
