@@ -10,9 +10,9 @@ import { shownClaims } from "./claimChecks";
 
 /**
  * Check this Mind's question (#737), on the line under the title before a
- * run billed per token: "Check about 30–48 claims in this Mind against this
- * Folder's Documents? · About $0.40 · 72 model calls · Check · Not now". The
- * model names the claims once the run starts, so the count is a range.
+ * run, once the model has named the claims: "Check this Mind's 48 claims
+ * against this Folder's Documents? · About $0.40 · 113 model calls · Check ·
+ * Not now", with no price for a plan or a model on this computer.
  */
 export function MindCheckAsk({ mindId }: { mindId: string }) {
   const t = useT();
@@ -20,24 +20,17 @@ export function MindCheckAsk({ mindId }: { mindId: string }) {
   const asking = useMindCheck((state) => state.asking[mindId]);
   if (!asking) return null;
   const where = asking.inFolder ? "folder" : "all";
-  const format = new Intl.NumberFormat(language).format;
-  const count = format(asking.sentences);
-  const { likely } = asking;
-  const question =
-    likely === null || asking.sentences === 1
-      ? t(asking.sentences === 1 ? `mindCheck.ask.${where}.one` : `mindCheck.ask.${where}`, {
-          count,
-        })
-      : likely < asking.sentences
-        ? t(`mindCheck.ask.${where}.range`, { least: format(likely), most: count })
-        : t(`mindCheck.ask.${where}.about`, { count });
+  const count = new Intl.NumberFormat(language).format(asking.count);
+  const one = asking.count === 1;
+  const question = asking.claims
+    ? t(one ? `mindCheck.ask.claims.${where}.one` : `mindCheck.ask.claims.${where}`, { count })
+    : t(one ? `mindCheck.ask.${where}.one` : `mindCheck.ask.${where}`, { count });
   return (
     <ProblemLine
       role="status"
       testId="mind-check-ask"
       className="mind-health-line"
-      details={asking.estimate.parts}
-      title={asking.estimate.title}
+      {...(asking.estimate && { details: asking.estimate.parts, title: asking.estimate.title })}
       action={{
         label: t("mindCheck.check"),
         testId: "mind-check-check",
@@ -73,7 +66,7 @@ export function MindCheckProgress({ editor, requestId }: { editor: Editor; reque
   return (
     <span data-testid="mind-check-progress" className="tabular-nums">
       {total === 0
-        ? t("verify.finding")
+        ? t("mindCheck.finding")
         : t("verify.checking", { done: format(done), total: format(total) })}
     </span>
   );

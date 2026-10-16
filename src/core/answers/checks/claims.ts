@@ -111,22 +111,6 @@ export const FIND_OWN_CLAIMS_INSTRUCTIONS = [
   'Reply with one JSON object and nothing else: {"claims": [the numbers of those sentences]}.',
 ].join("\n");
 
-/**
- * What the model would leave out of the User's own draft, as far as the
- * words alone say (FIND_OWN_CLAIMS_INSTRUCTIONS): questions, greetings and
- * thanks, requests, and the writer's opinions and advice. Before a run, so
- * its estimate counts about the sentences it will check (#973).
- */
-const NOT_A_CLAIM = [
-  /[?？]\s*$/u,
-  /^\s*(?:thanks|thank you|dear|hi|hello|please|let['’]s|can (?:someone|you|we)|could (?:someone|you|we))\b/iu,
-  /\b(?:I|we) (?:think|believe|feel|recommend|suggest|propose|would|should)\b|\bin (?:my|our) (?:view|opinion)\b/iu,
-  /^\s*(?:谢谢|感谢|请|麻烦|您好|你好)|我(?:们)?(?:认为|觉得|建议|相信|主张)|依我看/u,
-];
-
-export const readsAsOwnClaim = (text: string): boolean =>
-  !NOT_A_CLAIM.some((pattern) => pattern.test(text));
-
 /** The sentences of one batch, each after its number. */
 export const findClaimsPrompt = (sentences: readonly { number: number; text: string }[]): string =>
   sentences.map(({ number, text }) => `[${number}] ${text.replaceAll("\n", " ")}`).join("\n");

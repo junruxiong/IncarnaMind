@@ -4582,18 +4582,17 @@ export type MindCheckPlan =
       kind: "ready";
       /** The sentences it sends: to find the claims among, and the checks to make again. */
       sentences: number;
-      /**
-       * How many it is likely to check: the checks made again, and the sentences
-       * whose words read as claims. The model names the claims only once the run
-       * starts, so the number checked is from about this up to `sentences`.
-       */
-      likely: number;
       /** Whether the model first names the claims among them; only checks made again don't need it. */
       findsClaims: boolean;
       /** The Mind's own model; null for the default. */
       model: ChatModelChoice | null;
     }
   | Extract<CheckSentencesResult, { kind: "no-documents" | "nothing" }>;
+
+/** The claims a Check this Mind run would check, once the model has named them (`findMindClaims`). */
+export type FindMindClaimsResult =
+  /** The fresh sentences it named as claims, and the checks to make again. */
+  { kind: "found"; claims: number } | Exclude<CheckMindResult, { kind: "checked" }>;
 
 export type CheckMindResult =
   /**
@@ -8344,6 +8343,13 @@ export interface CoreApi {
     allDocuments?: boolean,
   ): Promise<MindCheckPlan>;
   /**
+   * The first step of "Check this Mind" (#973): the model names the claims
+   * among the sentences `checkMind` would send, so the ask before the run
+   * counts and prices them exactly. What it named is kept, and `checkMind`
+   * doesn't send those sentences to be sorted again. `cancelCheck` stops it.
+   */
+  findMindClaims(input: CheckMindInput): Promise<FindMindClaimsResult>;
+  /**
    * "Check this Mind" (#737): the model names the claims among the Mind's
    * sentences, leaving out headings, questions and the User's own opinions,
    * then each claim is checked as Check against Documents checks it, against
@@ -9237,6 +9243,7 @@ const methods: Record<CoreApiMethod, true> = {
   planContradictionCheck: true,
   checkContradictions: true,
   planMindCheck: true,
+  findMindClaims: true,
   checkMind: true,
   getSecretStorage: true,
   acceptPlainTextSecretStorage: true,

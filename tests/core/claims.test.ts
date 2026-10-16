@@ -3,11 +3,7 @@
  * (#97, src/core/answers/checks/claims.ts).
  */
 import { describe, expect, test } from "vitest";
-import {
-  paragraphsOf,
-  readClaimNumbers,
-  readsAsOwnClaim,
-} from "../../src/core/answers/checks/claims";
+import { paragraphsOf, readClaimNumbers } from "../../src/core/answers/checks/claims";
 
 const page = (number: number, ...lines: string[]) => ({
   page: number,
@@ -101,25 +97,4 @@ describe("The claims the model names", () => {
       expect(readClaimNumbers(reply)).toBeNull();
     },
   );
-});
-
-describe("Before a run, the sentences of the User's draft that read as claims (#973)", () => {
-  test.each([
-    ["Sub-Saharan Africa's growth is projected to remain at 4.1 percent in 2026.", true],
-    ["The report recommends lower tariffs on fertilizer.", true],
-    ["Please send comments by Friday.", false],
-    ["Thanks to Maria for pulling the three reports together.", false],
-    ["Should we revisit our allocation to oil-importing countries?", false],
-    ["We recommend holding the current allocation until the June updates.", false],
-    ["In my view, the downside risks in Africa are understated.", false],
-    ["I think the region's clean power mix is its best long-term asset.", false],
-    ["Let's discuss this at Tuesday's meeting.", false],
-    ["2026 年撒哈拉以南非洲的经济增长预计保持在 4.1%。", true],
-    ["报告建议降低化肥关税。", true],
-    ["我们建议维持当前配置。", false],
-    ["请在周五前反馈意见。", false],
-    ["要不要调整对石油进口国的配置？", false],
-  ] as const)("“%s” reads as a claim: %s", (sentence, claim) => {
-    expect(readsAsOwnClaim(sentence)).toBe(claim);
-  });
 });

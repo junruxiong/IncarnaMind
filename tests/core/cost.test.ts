@@ -5,7 +5,6 @@ import { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, test } from "vitest";
 import type { ChatProvider, Core, MonthlyCap, TaskKind } from "../../src/core";
 import { createAiSdkChatModel, InvalidInputError } from "../../src/core";
-import { readsAsOwnClaim } from "../../src/core/answers/checks/claims";
 import { DATABASE_FILE } from "../../src/core/core";
 import { costOf, inCurrency, rateAt } from "../../src/core/cost/price";
 import { catalogFacts } from "../../src/core/providers/catalog";
@@ -997,7 +996,7 @@ describe("The estimate before a large run", () => {
 describe("The estimate before a check run (#973)", () => {
   const AT = new Date("2026-10-12T09:00:00.000Z");
   /** A real Check this Mind run's calls, as Anthropic reported them (see the fixture's "about"). */
-  const recordedRun = async (): Promise<{ memo: string[][]; checked: number; calls: Counted[] }> =>
+  const recordedRun = async (): Promise<{ checked: number; calls: Counted[] }> =>
     JSON.parse(
       await readFile(join(import.meta.dirname, "../fixtures/cost/recorded-checks.json"), "utf8"),
     );
@@ -1006,14 +1005,12 @@ describe("The estimate before a check run (#973)", () => {
     expect(estimated / actual).toBeLessThan(1.5);
   };
 
-  // protects=the accountant's case: the estimate counts about the sentences checked and comes within 1.5 times the run's calls, tokens and price; fails_when=it counts every sentence, or prices a check as an Answer; no_claim=other models' token counts.
-  test("a memo checked on Claude Haiku 5.5: the sentences that read as claims are about those the model checked, and calls, tokens and price come within 1.5 times the run's", async () => {
+  // protects=the accountant's case: an estimate for the claims the model named comes within 1.5 times the run's calls, tokens and price; fails_when=it prices a check as an Answer; no_claim=other models' token counts.
+  test("a memo checked on Claude Haiku 5.5: for the claims the model named, calls, tokens and price come within 1.5 times the run's", async () => {
     const run = await recordedRun();
-    const likely = run.memo.flat().filter(readsAsOwnClaim).length;
-    expect(Math.abs(likely - run.checked)).toBeLessThanOrEqual(run.checked / 5);
     const { core } = await cloudCore(reportingModel([{ input: 0, output: 0 }]));
 
-    const estimate = await core.estimateRun({ items: likely, each: "check" });
+    const estimate = await core.estimateRun({ items: run.checked, each: "check" });
 
     if (estimate.billing !== "per-token" || !estimate.cost) throw new Error("No price.");
     within(estimate.calls, run.calls.length);
