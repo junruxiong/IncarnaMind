@@ -13,6 +13,7 @@ import {
   MIND_WORD_LOOK_FIELD,
   WORD_LOOK_ATTRIBUTE,
   WORD_RUN_MARK,
+  WORD_TAB_MARK,
   type WordLook,
   type WordParagraphLook,
 } from "../../src/core";
@@ -456,13 +457,13 @@ describe("a Mind imported from Word keeps its look", () => {
     expect(lookShown(client).blocks).toBeGreaterThan(2800);
   });
 
-  test("the Mind records content schema 21 or later, and export writes the file's own bytes for what wasn't changed", async () => {
+  test("the Mind records content schema 23 or later, and export writes the file's own bytes for what wasn't changed", async () => {
     for (const bytes of [resumeFile(), contractFile()]) {
       const { core, mindId, client } = await imported(bytes);
       expect(client.doc.getMap(MIND_SETTINGS_FIELD).get(CONTENT_SCHEMA_VERSION_KEY)).toBe(
         CONTENT_SCHEMA_VERSION,
       );
-      expect(CONTENT_SCHEMA_VERSION).toBeGreaterThanOrEqual(21);
+      expect(CONTENT_SCHEMA_VERSION).toBeGreaterThanOrEqual(23);
       const result = await core.exportMind(mindId, { format: "docx" });
       const before = unzip(bytes);
       const after = unzip(result.data);
@@ -560,7 +561,7 @@ function withoutLook(client: MindClient, dataDir: string, mindId: string): void 
       for (const child of element.toArray()) {
         if (child instanceof Y.XmlElement) strip(child);
         else if (child instanceof Y.XmlText)
-          child.format(0, child.length, { [WORD_RUN_MARK]: null });
+          child.format(0, child.length, { [WORD_RUN_MARK]: null, [WORD_TAB_MARK]: null });
       }
     };
     for (const child of client.blocks.toArray()) {
@@ -613,7 +614,9 @@ describe("a Mind imported before gets its look once", () => {
     const edited = styled(after, wordLookOf(after.doc) as WordLook).find((node) =>
       node.text.includes("Edited."),
     );
-    expect(edited).toMatchObject({ look: null, runs: [null] });
+    // Plain, but for its tab, which the look marks wherever it is.
+    expect(edited?.look).toBeNull();
+    expect(edited?.runs).toEqual([null, null, null]);
     expect(
       styled(after, wordLookOf(after.doc) as WordLook).find((node) => node.text.startsWith("3.1"))
         ?.look,
@@ -675,6 +678,39 @@ describe("a Mind imported before gets its look once", () => {
     expect(
       queryDatabase<{ look_version: number }>(dataDir, "SELECT look_version FROM word_packages"),
     ).toEqual([{ look_version: WORD_LOOK_VERSION }]);
+  });
+
+  test("a Block edited since import keeps the looks a newer version still reads the same", async () => {
+    const { dataDir, core, mindId, client } = await imported(contractFile());
+    const clause = client.blocks
+      .toArray()
+      .find(
+        (child): child is Y.XmlElement =>
+          child instanceof Y.XmlElement && child.toString().includes("Prices are fixed"),
+      );
+    const key = clause?.getAttribute(WORD_LOOK_ATTRIBUTE);
+    if (!clause || typeof key !== "string") throw new Error("No clause with a look.");
+    client.doc.transact(() => {
+      findText(client.blocks, "Prices are fixed").insert(0, "Edited. ");
+      client.doc.getMap(MIND_WORD_LOOK_FIELD).set("version", WORD_LOOK_VERSION - 1);
+    });
+    await client.settled();
+    core.close();
+    queryDatabase(dataDir, "UPDATE word_packages SET look_version = ? WHERE mind_id = ?", [
+      WORD_LOOK_VERSION - 1,
+      mindId,
+    ]);
+
+    const { log, entries } = recordingLog();
+    const restarted = startCore(dataDir, { log });
+    const after = await connectToMind(restarted, mindId);
+    await vi.waitFor(() =>
+      expect(entries).toContainEqual(expect.objectContaining({ event: "word.look.done" })),
+    );
+    const edited = styled(after, wordLookOf(after.doc) as WordLook).find((node) =>
+      node.text.startsWith("Edited."),
+    );
+    expect(edited?.look).toMatchObject({ align: "justify" });
   });
 
   test("a Mind as the version before the look wrote it gets the look on every Block, and export still writes the file's own bytes", async () => {

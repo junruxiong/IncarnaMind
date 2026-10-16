@@ -49,6 +49,7 @@ import {
   type MindChange,
   type MindProblem,
   PROPOSAL_ATTRIBUTE,
+  type RequestedChange,
   type TextPlace,
   type ThirdPartySource,
   type WritingPlace,
@@ -56,7 +57,12 @@ import {
 import type { Language } from "../../language";
 import { plainText } from "../../mindText";
 import { insertBlocks } from "../../noteAdding";
-import { type OwnWaiting, replaceOwn, waitingIn } from "../../proposals/ownWaiting";
+import {
+  type OwnWaiting,
+  ownWaitingTexts,
+  replaceOwn,
+  waitingIn,
+} from "../../proposals/ownWaiting";
 import { layout, textBlocks } from "../../proposals/write";
 import type { PreparedChatModel } from "../../providers/chat";
 import { MIND_TOOLS, type Tool, type ToolProviderInfo } from "..";
@@ -114,6 +120,7 @@ export interface MindsForTools {
     beforeWriting(): void;
     /** More of its Proposals are in the Mind, as they come. */
     written(request: string, count: number): void;
+    requested: RequestedChange | null;
   }): Promise<{
     result: EditWithAiResult;
     length: { before: string; after: string } | null;
@@ -151,6 +158,12 @@ export interface MindToolsOptions {
     /** Cells beyond its tables' columns, their text kept in the row's last cell. */
     extraCells: number;
   };
+  /**
+   * What the User's words asked for (../../answers/routeRequest), which the
+   * requests the calls make record; null: neither. A Mind made is tagged
+   * only when they asked for a new one.
+   */
+  requested: { change: RequestedChange; newMind: boolean } | null;
   /** A call changed a Mind: its card says so, as soon as it does, also while it writes. */
   changed(toolCallId: string, change: MindChange): void;
   /** A call changed nothing, and whatever it wrote as its input came was taken back. */
@@ -619,6 +632,27 @@ function stretchText(blocks: Y.XmlFragment, { from, to }: Stretch): string {
     .join("\n\n");
 }
 
+const textKey = (text: string) =>
+  text
+    .toLocaleLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+// Two summaries may share a short line ("Not reported.", "The Passages found don't describe the
+// methods."), or a long one under another heading: only long paragraphs in a row, already there
+// under the same heading, are a second copy.
+const COPY_WORDS = 8;
+const COPY_CJK = 30;
+const COPY_RUN = 2;
+
+function longEnough(text: string): boolean {
+  const count = countText(text);
+  return count.words >= COPY_WORDS || count.cjk >= COPY_CJK;
+}
+
+function nodeText(node: NodeJSON): string {
+  return node.text ?? (node.content ?? []).map(nodeText).join(" ");
+}
+
 function writtenBy(note: Y.XmlFragment, request: string): { paragraphs: number; tables: number } {
   const counts = { paragraphs: 0, tables: 0 };
   const visit = (element: Y.XmlElement, written: boolean) => {
@@ -640,7 +674,11 @@ function writtenBy(note: Y.XmlFragment, request: string): { paragraphs: number; 
  * before `cite` gave their markers' records gets its Citations then.
  */
 export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle(): void } {
-  const { minds, focused } = options;
+  const { minds, focused, requested } = options;
+  const requestedIn = (made: boolean): RequestedChange | null =>
+    !requested || (made && !(requested.change === "write" && requested.newMind))
+      ? null
+      : requested.change;
 
   /** The Mind a call means: the one it names, else the one in focus; or why there is none. */
   const targetOf = (input: Record<string, unknown>): ChangeableMind | Refusal => {
@@ -738,11 +776,13 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       if (!doc) return;
       setOrigins(doc, ids, options.origin);
       if (first) {
+        const tag = requestedIn(writer.made);
         recordProposalRequest(doc, writer.request, {
           source: "answer-added",
           providerId: options.prepared.provider.id,
           modelId: options.prepared.modelId,
           createdAt: options.now().toISOString(),
+          ...(tag && { requested: tag }),
         });
       }
     });
@@ -768,6 +808,32 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
   const changeOf = (writer: Writer, created: boolean): MindChange =>
     changeIn(writer.mind.id, writer.request, created);
 
+  const copyIn = (writer: Writer, blocks: readonly NodeJSON[]): string | null => {
+    const there = minds.read(writer.mind.id, (note) => ownWaitingTexts(note, writer.request));
+    // Before its first heading, new text goes into a section of the Mind's: any heading matches.
+    const isThere = (section: string | null, text: string) =>
+      there.some(
+        (each) =>
+          textKey(each.text) === textKey(text) &&
+          (section === null || textKey(each.heading ?? "") === textKey(section)),
+      );
+    let section: string | null = null;
+    let first: string | null = null;
+    let run = 0;
+    for (const block of blocks) {
+      const text = nodeText(block);
+      if (block.type === "heading") {
+        section = text;
+        run = 0;
+      } else if (longEnough(text)) {
+        run = isThere(section, text) ? run + 1 : 0;
+        if (run === 1) first = section ?? text;
+        if (run >= COPY_RUN) return first;
+      }
+    }
+    return null;
+  };
+
   /** Takes back what a writer wrote: the call ended up meaning another Mind, or another place. */
   const withdraw = (writer: Writer): void => {
     if (writer.written === 0) return;
@@ -782,7 +848,10 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
    * once, and "Writing…" stands where the next one goes. Null: the call can't
    * be written yet, or its input says nothing that streams.
    */
-  const streams = new Map<string, { writer: Writer | null; created: boolean; breaks: number }>();
+  const streams = new Map<
+    string,
+    { writer: Writer | null; created: boolean; breaks: number; copy: string | null }
+  >();
   /**
    * Calls already made: input the engine still hands over after the call ran
    * (it reads the stream behind the call) writes nothing more.
@@ -812,7 +881,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     if (!content) return;
     let stream = streams.get(toolCallId);
     if (!stream) {
-      stream = { writer: null, created: false, breaks: 0 };
+      stream = { writer: null, created: false, breaks: 0, copy: null };
       streams.set(toolCallId, stream);
     }
     // Only once a paragraph has ended is there a Block more to write.
@@ -826,12 +895,19 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       stream.created = opened.created;
     }
     const { writer } = stream;
+    if (stream.copy !== null) return;
     const { blocks, firstUnrecorded } = options.blocksOf(content.value);
     // `cite` may run after this call's input starts: a Block waits for its markers' records.
     const ready = blocks.slice(
       0,
       firstUnrecorded < 0 ? -1 : Math.min(firstUnrecorded, blocks.length - 1),
     );
+    stream.copy = writer.made ? null : copyIn(writer, ready);
+    if (stream.copy !== null) {
+      withdraw(writer);
+      minds.writing(writer.mind.id, null);
+      return;
+    }
     const unmade = ready.findIndex(unmadeTable);
     writeMore(writer, unmade < 0 ? ready : ready.slice(0, unmade));
     minds.writing(writer.mind.id, { after: writer.anchor });
@@ -863,6 +939,15 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     }
     if (unmade) return null;
     writer ??= writerFor(mind, after, made);
+    const copy = stream?.copy ?? (made ? null : copyIn(writer, blocks));
+    if (copy !== null) {
+      withdraw(writer);
+      minds.writing(writer.mind.id, null);
+      throw new Refusal(
+        { kind: "copy", mindId: mind.id, text: copy },
+        `Nothing was added to “${mind.name}”: “${copy}” is there already, as your own text still waiting. Revise it with edit_mind, naming its heading in part and giving its whole new text as content, instead of adding a second copy.`,
+      );
+    }
     writeMore(writer, blocks);
     minds.writing(writer.mind.id, null);
     // Markers `cite` may still record in this step count as left out only once the Run is done.
@@ -1099,6 +1184,8 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         beforeWriting: () => minds.checkpoint(mind.id),
         written: (request, proposals) =>
           options.changed(toolCallId, { mindId: mind.id, created: false, request, proposals }),
+        // Rewriting the User's text is an edit, whatever the turn asked for.
+        requested: requested ? "edit" : null,
       });
       if (result.kind !== "proposed") {
         const why = notProposed(result, mind, unmadeSaid(mind.name));

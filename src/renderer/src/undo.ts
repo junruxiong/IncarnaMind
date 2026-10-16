@@ -22,6 +22,8 @@ export interface Undoable {
   shownAt?: string;
   /** Does it again once taken back. Without it, taking it back ends what can be redone. */
   redo?(): Promise<void>;
+  /** An action before Undo, for a change made for the User rather than by them: "Change". */
+  also?: { label: string; testId: string; run(): void };
 }
 
 /** Where the line of what was done with an Answer in the assistant shows: under that Answer. */

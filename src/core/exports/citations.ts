@@ -5,6 +5,7 @@
  * and is never passed through here.
  */
 import type { CitationStyle } from "../../shared/citationStyles";
+import { withNeedsDetailsMark } from "../../shared/references";
 import { type SourceContext, sourceEntry, sourcesOf } from "../../shared/sources";
 import type { CitationFormatRequest, CitedWork, FormattedCitations, StyledRun } from "../api";
 import { type Block, type Inline, type Pendings, trimTrailingSpace } from "../mindText";
@@ -108,12 +109,14 @@ function runsOf(runs: FormattedCitations["clusters"][number]["runs"]): StyledRun
 
 /**
  * The Blocks with their Citations in `style`, and its Bibliography at the end: `format` is the
- * core's `formatCitations`. Blocks with no Citation come back as they were.
+ * core's `formatCitations`, and `needsDetails` the mark after an entry too thin to cite
+ * ("[needs details]"). Blocks with no Citation come back as they were.
  */
 export async function styleCitations(
   blocks: readonly Block[],
   style: CitationStyle,
   format: (request: CitationFormatRequest) => Promise<FormattedCitations>,
+  needsDetails: string,
 ): Promise<Block[]> {
   const works: CitedWork[][] = [];
   mapInlines(blocks, (content) => {
@@ -165,7 +168,10 @@ export async function styleCitations(
     {
       kind: "bibliography",
       heading: style.heading,
-      items: formatted.bibliography.map((entry) => ({ label: entry.label, runs: entry.runs })),
+      items: formatted.bibliography.map((entry) => ({
+        label: entry.label,
+        runs: entry.needsDetails ? withNeedsDetailsMark(entry.runs, needsDetails) : entry.runs,
+      })),
       hangingIndent: formatted.hangingIndent,
     },
   ];
