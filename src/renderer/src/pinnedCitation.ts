@@ -1,17 +1,29 @@
-let pinned: { mindId: string; at: number } | null = null;
+import type { TabItem } from "../../core/api";
 
-/** The Citation whose card was open when the Document came to the front of the window, by its place in the Mind. */
-export const pinCitation = (mindId: string, at: number): void => {
-  pinned = { mindId, at };
-};
+let pinned: { mindId: string; place: string } | null = null;
 
-export const unpinCitation = (): void => {
+/** Whether the tab in front is one the Citation's card is still waited for from: its Document, or its Mind. */
+export const staysPinned = (tab: TabItem | undefined, mindId: string): boolean =>
+  tab === undefined || tab.kind === "document" || (tab.kind === "mind" && tab.mindId === mindId);
+
+/**
+ * A Citation whose card was open when its Document came to the front of a one-group window,
+ * `place` being where it is in the Mind (or in a footnote, by the footnote's id). Going on to
+ * another Mind or page instead lets it go (see `CitationView`).
+ */
+export function pinCitation(mindId: string, place: string): void {
+  pinned = { mindId, place };
+}
+
+export const pinnedMind = (): string | null => pinned?.mindId ?? null;
+
+export function unpinCitation(): void {
   pinned = null;
-};
+}
 
-/** Whether the Mind's Citation at `at` had its card open when the User left; true once, as the Mind comes back. */
-export function takePinnedCitation(mindId: string, at: number): boolean {
-  const same = pinned?.mindId === mindId && pinned.at === at;
+/** Whether the Citation at `place` had its card open when the User left; true once, as the Mind comes back. */
+export function takePinnedCitation(mindId: string, place: string): boolean {
+  const same = pinned?.mindId === mindId && pinned.place === place;
   if (same) pinned = null;
   return same;
 }
