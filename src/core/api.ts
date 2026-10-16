@@ -5813,16 +5813,19 @@ export type DataFlowId = (typeof dataFlowIds)[number];
 
 /**
  * The flows choosing the chat model's provider allows (ADR-0022): everything
- * that sends to it, as the line above "Use this provider" says.
+ * that sends to it, as the line above "Use this provider" says. That line is
+ * made from this list, so a flow added here needs its words (`chosenFlowLines`).
  */
-export const CHOSEN_PROVIDER_FLOWS: readonly DataFlowId[] = [
+export const CHOSEN_PROVIDER_FLOWS = [
   "chat",
-  "edits",
   "checks",
   "suggestions",
+  "edits",
   "tagging",
   "classification",
-];
+] as const satisfies readonly DataFlowId[];
+
+export type ChosenProviderFlow = (typeof CHOSEN_PROVIDER_FLOWS)[number];
 
 /** Data leaving this computer: what one flow sends to one service. */
 export interface DataFlow {
