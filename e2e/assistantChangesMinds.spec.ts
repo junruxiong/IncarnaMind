@@ -446,6 +446,6 @@ test("a table the assistant writes into a Mind is a table, and the card counts i
   await setLanguage(window, "zh-CN");
   await setWindowSize(app, window, 900, 760);
   await expect(title).toHaveText("在“Q3 review”中添加了 1 个表格");
-  await expect(kept).toHaveText("· 表格中有 1 处来源无法关联，已作为文字显示");
+  await expect(kept).toHaveText("· 表格中有 1 处出处无法关联，已作为文字显示");
   await screenshot(window, "assistant-table-zh");
 });
