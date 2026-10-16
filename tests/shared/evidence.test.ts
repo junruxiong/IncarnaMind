@@ -6,6 +6,8 @@ const settings = (leaveOutOwnFiles: boolean): Pick<Settings, "user"> => ({
   user: {
     language: "en",
     chatModel: null,
+    quickTasksModel: null,
+    imageModel: null,
     suggestWhileWriting: false,
     leaveOutOwnFiles,
     exportOptions: {
