@@ -1,6 +1,6 @@
 /**
  * The assistant's changes the User asked for, applied once they have all
- * arrived (#880, D224): set aside, then written again as the editor's own
+ * arrived (#880): set aside, then written again as the editor's own
  * change, so one Undo takes them back and Redo does them again, whenever
  * they arrived. Changes the User didn't ask for keep waiting.
  */

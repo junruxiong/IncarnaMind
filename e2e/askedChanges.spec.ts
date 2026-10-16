@@ -15,8 +15,8 @@ import {
 } from "./app";
 
 /*
- * What the User asks the assistant to write or change applies at once (#880,
- * D224): the owner's own two requests, "write a summary page", then "make it
+ * What the User asks the assistant to write or change applies at once
+ * (#880): the owner's own two requests, "write a summary page", then "make it
  * longer". The scripted model (src/main/fakeChat/minds.ts) makes a page with
  * a short summary, then has Edit with AI add a sentence to each paragraph;
  * asked to rewrite the User's notes "to be clearer", it writes two new

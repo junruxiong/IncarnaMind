@@ -475,7 +475,7 @@ export function createEdits(options: EditsOptions) {
           randomUUID,
           freshCitations(selection, options.recheck),
           {
-            // An edit the User asked for applies at once, here or from the assistant (#880, D224).
+            // An edit the User asked for applies at once, here or from the assistant (#880).
             leftOut:
               (requestId !== undefined || ask.requested === "edit") &&
               ask.action === "instruction" &&

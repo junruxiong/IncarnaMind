@@ -51,7 +51,7 @@ export type AppliedLine = (
       /** Null at the Mind's end. */
       blockId: string | null;
       places: number;
-      /** What the assistant was asked for, as its Answer counts it (#880, D224): "Wrote 3 paragraphs". */
+      /** What the assistant was asked for, as its Answer counts it (#880): "Wrote 3 paragraphs". */
       facts?: ChangeCounts;
       reason: string | null;
       changes: readonly AppliedChange[];
