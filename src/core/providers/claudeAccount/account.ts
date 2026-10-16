@@ -1,10 +1,4 @@
-/**
- * Sign in with a Claude account: Anthropic's OAuth with the client, redirect
- * and token requests the route's profile names (./config), kept as
- * `../../oauthAccount` keeps a sign-in. Signing in doesn't choose the route;
- * saving a "claude-account" chat provider does, and that choice allows its
- * flows (ADR-0022).
- */
+/** Signing in doesn't choose the route: saving a "claude-account" provider does, and allows its flows (ADR-0022). */
 import { translate } from "../../../shared/i18n";
 import type { Browser } from "../../adapters";
 import type {
@@ -13,10 +7,11 @@ import type {
   ClaudeSignInResult,
   PastedAddressResult,
 } from "../../api";
-import { SecretStorageError } from "../../errors";
+import { isRecord, SecretStorageError } from "../../errors";
 import type { Language } from "../../language";
 import {
   DEFAULT_SIGN_IN_TIMEOUT_MS,
+  nonEmptyText,
   OAuthFlowError,
   OAuthTokenError,
   refreshOAuthTokens,
@@ -34,6 +29,26 @@ import type { AnthropicOAuthConfig } from "./config";
 
 const ACCOUNT_SECRET = "claude:account";
 
+interface StoredAccount extends OAuthAccountRecord {
+  email: string | null;
+  organization: string | null;
+}
+
+const parseStored = (record: Record<string, unknown>): StoredAccount => ({
+  ...parseAccountRecord(record),
+  email: nonEmptyText(record.email),
+  organization: nonEmptyText(record.organization),
+});
+
+/** The account a token answer names, as Anthropic's token endpoint adds it. */
+function namedAccount(response: Record<string, unknown>) {
+  const { account, organization } = response;
+  return {
+    email: isRecord(account) ? nonEmptyText(account.email_address) : null,
+    organization: isRecord(organization) ? nonEmptyText(organization.name) : null,
+  };
+}
+
 function signInError(error: unknown): { kind: ClaudeSignInErrorKind; message: string } {
   const message = error instanceof Error ? error.message : String(error);
   if (error instanceof SecretStorageError) return { kind: "secret-storage", message };
@@ -44,7 +59,10 @@ function signInError(error: unknown): { kind: ClaudeSignInErrorKind; message: st
     return { kind: error.reason === "denied" ? "refused" : "failed", message };
   }
   if (error instanceof OAuthTokenError) {
-    return { kind: error.status === null ? "unexpected-response" : "refused", message };
+    if (error.status === null) return { kind: "unexpected-response", message };
+    // A code pasted short or twice: the sign-in didn't work, and signing in again fixes it.
+    const codeRefused = error.code === "invalid_grant" || error.code === "invalid_request";
+    return { kind: codeRefused ? "failed" : "refused", message };
   }
   return { kind: "failed", message };
 }
@@ -55,12 +73,10 @@ export function createClaudeAccount(options: {
   /** The route's client profile; null where this build has none, and the route isn't offered. */
   config: Readonly<AnthropicOAuthConfig> | null;
   secrets: Secrets;
-  /** The User's language, for the browser tab's pages. */
   language: () => Language;
   browser: Browser;
   /** Milliseconds since the epoch. */
   now: () => number;
-  /** The sign-in changed: started, finished, signed out, or expired. */
   onChange: () => void;
   fetch?: typeof globalThis.fetch;
 }) {
@@ -69,10 +85,10 @@ export function createClaudeAccount(options: {
   const format = config?.tokenRequest?.format ?? "form";
   const revokeUrl = config?.revokeUrl;
 
-  const account = createOAuthAccount<OAuthAccountRecord>({
+  const account = createOAuthAccount<StoredAccount>({
     secretName: ACCOUNT_SECRET,
     secrets: options.secrets,
-    parse: parseAccountRecord,
+    parse: parseStored,
     browser: options.browser,
     pages: () => {
       const language = options.language();
@@ -112,6 +128,7 @@ export function createClaudeAccount(options: {
             ...fetcher,
           }),
       }),
+    forgetOnSignOut: (stored) => ({ ...stored, email: null, organization: null }),
     signInRequired: (reason) =>
       reason === "expired"
         ? new ClaudeAccountError("sign-in-expired", "Your Claude sign-in expired. Sign in again.")
@@ -126,15 +143,12 @@ export function createClaudeAccount(options: {
     // Read before awaiting the keychain, so the status describes the moment it was asked for.
     const signingIn = account.signingIn();
     const stored = config ? await account.load() : null;
-    const state = stored?.tokens
-      ? "signed-in"
-      : stored?.ended === "expired"
-        ? "expired"
-        : "signed-out";
     return {
       available: config !== null,
       experimental: config?.experimental === true,
-      account: { state },
+      account: stored?.tokens
+        ? { state: "signed-in", email: stored.email, organization: stored.organization }
+        : { state: stored?.ended === "expired" ? "expired" : "signed-out" },
       signingIn,
     };
   };
@@ -148,11 +162,6 @@ export function createClaudeAccount(options: {
     /** Whether the sign-in's traffic can happen on this device: it has signed in, or is signing in. */
     used: async () => account.signingIn() || (await hasSignIn()),
 
-    /**
-     * Opens Anthropic's sign-in in the browser and waits until the User
-     * finishes there, or pastes what the page shows. Starting again cancels
-     * a sign-in still waiting.
-     */
     async signIn(): Promise<ClaudeSignInResult> {
       if (!config) {
         return {
@@ -173,7 +182,11 @@ export function createClaudeAccount(options: {
             stateInExchange: config.tokenRequest?.stateInExchange ?? false,
             ...(config.stateBytes !== undefined && { stateBytes: config.stateBytes }),
           });
-          await account.commit({ tokens: account.storedTokens(tokens, null), ended: null });
+          await account.commit({
+            tokens: account.storedTokens(tokens, null),
+            ended: null,
+            ...namedAccount(tokens.response),
+          });
         });
         return { ok: true, status: await status() };
       } catch (error) {

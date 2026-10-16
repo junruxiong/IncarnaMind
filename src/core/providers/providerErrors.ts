@@ -64,7 +64,6 @@ export class ClaudeAccountError extends Error {
   }
 }
 
-/** The kind each Claude account problem is among every provider's. */
 const CLAUDE_ACCOUNT_KINDS: Record<ClaudeAccountError["problem"], ProviderErrorKind> = {
   "signed-out": "not-signed-in",
   "sign-in-expired": "not-signed-in",

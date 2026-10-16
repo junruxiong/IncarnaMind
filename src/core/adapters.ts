@@ -828,11 +828,7 @@ export interface CoreAdapters {
    * OpenAI's servers; tests point it at a local fake authorization server and API.
    */
   chatGptPlan?: Partial<ChatGptPlanEndpoints>;
-  /**
-   * The Claude account route's client profile, in place of the one this
-   * build has (./providers/claudeAccount/config); tests point it at a local
-   * fake authorization server and API.
-   */
+  /** In place of this build's Claude account profile: tests point it at a local fake. */
   claudeAccount?: AnthropicOAuthConfig;
   /**
    * Where the ChatGPT sign-in is kept instead of `keychain`: a store that

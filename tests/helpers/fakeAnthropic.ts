@@ -50,6 +50,14 @@ export interface FakeAnthropic {
   refuseRefresh: string | null;
   /** The next replies of the Messages API, then answers. */
   replies: MessagesReply[];
+  /** Refresh tokens revoked at sign-out, in order. */
+  revoked: string[];
+  /** A refresh is answered only once this resolves. */
+  holdRefresh: Promise<void> | null;
+  /** The token endpoint and the Messages API answer with a redirect to `/elsewhere`. */
+  redirects: boolean;
+  /** Requests that reached `/elsewhere`. */
+  redirected: string[];
   /** Hands out a code for an authorization request, as Anthropic's page does once the User approves. */
   approve(authorizeUrl: string): { code: string; state: string; redirectUri: string };
   close(): Promise<void>;
@@ -92,10 +100,16 @@ export async function startFakeAnthropic(): Promise<FakeAnthropic> {
       refresh_token: tokens.refreshToken,
       expires_in: fake.expiresIn,
       token_type: "Bearer",
+      account: { uuid: "account-1", email_address: "reader@example.test" },
+      organization: { uuid: "organization-1", name: "Reader's Organization" },
     };
   };
 
-  const token = (fake: FakeAnthropic, body: Record<string, unknown>, response: ServerResponse) => {
+  const token = async (
+    fake: FakeAnthropic,
+    body: Record<string, unknown>,
+    response: ServerResponse,
+  ) => {
     fake.tokenRequests.push(body);
     if (body.grant_type === "authorization_code") {
       const pending = codes.get(String(body.code));
@@ -111,6 +125,7 @@ export async function startFakeAnthropic(): Promise<FakeAnthropic> {
       return sendJson(response, 200, issue(fake));
     }
     if (body.grant_type === "refresh_token") {
+      await fake.holdRefresh;
       if (fake.refuseRefresh) return sendJson(response, 400, { error: fake.refuseRefresh });
       if (body.client_id !== CLIENT_ID || body.refresh_token !== refreshable) {
         return sendJson(response, 400, { error: "invalid_grant" });
@@ -213,6 +228,10 @@ export async function startFakeAnthropic(): Promise<FakeAnthropic> {
     expiresIn: 3600,
     refuseRefresh: null,
     replies: [],
+    revoked: [],
+    holdRefresh: null,
+    redirects: false,
+    redirected: [],
     profile: (redirect) => ({
       experimental: true,
       clientId: CLIENT_ID,
@@ -256,6 +275,18 @@ export async function startFakeAnthropic(): Promise<FakeAnthropic> {
         const isJson = (request.headers["content-type"] ?? "").includes("application/json");
         const parsed: unknown = raw && isJson ? JSON.parse(raw) : {};
         const body = isRecord(parsed) ? parsed : {};
+        if (path === "/elsewhere") {
+          fake.redirected.push(raw);
+          return sendJson(response, 200, {});
+        }
+        if (fake.redirects && (path === "/v1/oauth/token" || path === "/v1/messages")) {
+          response.writeHead(307, { location: `${origin}/elsewhere` }).end();
+          return;
+        }
+        if (request.method === "POST" && path === "/v1/oauth/revoke") {
+          fake.revoked.push(new URLSearchParams(raw).get("token") ?? "");
+          return sendJson(response, 200, {});
+        }
         if (request.method === "POST" && path === "/v1/oauth/token") {
           if (!isJson) return sendJson(response, 415, { error: "invalid_request" });
           return token(fake, body, response);

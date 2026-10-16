@@ -274,6 +274,43 @@ describe("Sign in with Claude", () => {
     expect(keychain.secrets.size).toBe(0);
   });
 
+  test("a code pasted short is a failed sign-in, which signing in again fixes, not a refusal", async () => {
+    const { core, browser, keychain } = await setUp();
+    const result = core.signInToClaude();
+    await browserOpened(browser);
+
+    expect(await core.pasteClaudeSignInAddress((browser.shown?.code ?? "").slice(1))).toEqual({
+      ok: true,
+    });
+
+    expect(await result).toMatchObject({ ok: false, error: { kind: "failed" } });
+    expect(keychain.secrets.size).toBe(0);
+  });
+
+  test("a token endpoint that redirects is never followed", async () => {
+    const { core, fake, browser, keychain } = await setUp();
+    fake.redirects = true;
+    const result = core.signInToClaude();
+    await browserOpened(browser);
+    await core.pasteClaudeSignInAddress(browser.shown?.code ?? "");
+
+    expect(await result).toMatchObject({ ok: false });
+    expect(fake.redirected).toEqual([]);
+    expect(keychain.secrets.size).toBe(0);
+  });
+
+  test("signed in, the status names the account and organization, until sign-out", async () => {
+    const { core } = await signedIn();
+
+    expect((await core.getClaudeAccount()).account).toEqual({
+      state: "signed-in",
+      email: "reader@example.test",
+      organization: "Reader's Organization",
+    });
+    await core.signOutOfClaude();
+    expect((await core.getClaudeAccount()).account).toEqual({ state: "signed-out" });
+  });
+
   test("a build without a client profile doesn't offer the route", async () => {
     const account = createClaudeAccount({
       config: null,
@@ -319,7 +356,10 @@ describe("Tokens", () => {
       keychain: createFileKeychain(join(dataDir, SECRETS_FILE), createFakeCipher()),
       claudeAccount: fake.profile("page"),
     });
-    expect((await restarted.getClaudeAccount()).account).toEqual({ state: "signed-in" });
+    expect((await restarted.getClaudeAccount()).account).toMatchObject({
+      state: "signed-in",
+      email: "reader@example.test",
+    });
   });
 
   test("an access token is refreshed shortly before it expires, and the new tokens replace the old", async () => {
@@ -409,6 +449,38 @@ describe("Tokens", () => {
       expect(stored(memory)).not.toContain(tokens.refreshToken);
     }
     expect((await core.getClaudeAccount()).account).toEqual({ state: "signed-out" });
+  });
+
+  test("signing out during a refresh revokes the refresh token it brings, where the profile can revoke", async () => {
+    const fake = await startFakeAnthropic();
+    const browser = createFakeClaudeBrowser(fake);
+    const keychain = createMemoryKeychain();
+    const clock = manualClock();
+    const core = startCore(await createTempDataFolder(), {
+      keychain,
+      browser,
+      now: clock.now,
+      createChatModel: createAiSdkChatModel,
+      claudeAccount: { ...fake.profile("page"), revokeUrl: `${fake.origin}/v1/oauth/revoke` },
+    });
+    await signIn({ core, fake, browser, keychain, clock });
+    await core.saveChatProvider({ kind: "claude-account", modelId: MODEL });
+    let release = () => {};
+    fake.holdRefresh = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    clock.advance(fake.expiresIn * 1000);
+    const asking = ask(core).catch(() => undefined);
+    await vi.waitFor(() => expect(fake.tokenRequests).toHaveLength(2));
+
+    const signingOut = core.signOutOfClaude();
+    for (let turn = 0; turn < 10; turn += 1) await nextTurn();
+    release();
+    await Promise.all([asking, signingOut]);
+
+    expect(fake.issued).toHaveLength(2);
+    expect(fake.revoked).toContain(fake.issued[1]?.refreshToken);
+    expect(stored(keychain)).not.toContain(fake.issued[1]?.refreshToken);
   });
 
   test("signing out forgets the tokens, and nothing is sent afterwards", async () => {
@@ -525,6 +597,14 @@ describe("Requests", () => {
     expect(services.sort()).toEqual(
       ["https://login.example.test", "https://revoke.example.test", fake.origin].sort(),
     );
+  });
+
+  test("a Messages API that redirects is never followed, so the token stays with the API", async () => {
+    const { core, fake } = await signedIn();
+    fake.redirects = true;
+
+    await expect(ask(core)).rejects.toThrow();
+    expect(fake.redirected).toEqual([]);
   });
 
   test("the account's token is never sent to another origin than the API's", async () => {

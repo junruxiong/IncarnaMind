@@ -1,9 +1,4 @@
-/**
- * What the Claude account route needs to know about Anthropic's side: the
- * OAuth client, its scopes and redirect, the token requests, and what
- * requests made with its token carry. Nothing else names any of it, so a
- * change on Anthropic's side touches only this file.
- */
+/** The only place that names Anthropic's side of the route, so a change there touches only this file. */
 import { EXPERIMENTAL_SIGN_IN_ROUTES } from "../../buildFlags";
 import type { RedirectShape, TokenRequestFormat } from "../../oauth";
 
@@ -22,7 +17,6 @@ export interface AnthropicOAuthConfig {
   /** Ends the session at sign-out (RFC 7009); without one, signing out forgets the tokens here. */
   revokeUrl?: string;
   scopes: readonly string[];
-  /** Extra query parameters for the authorization request. */
   authorizeParams?: Readonly<Record<string, string>>;
   redirect: RedirectShape;
   /** How the token endpoint takes a code exchange or a refresh. Defaults to a form, without the state. */
@@ -32,13 +26,11 @@ export interface AnthropicOAuthConfig {
   request?: RequestTransform;
   /** Defaults to five minutes. */
   signInTimeoutMs?: number;
-  /** Random bytes in the sign-in's `state`. */
   stateBytes?: number;
   /** An experimental sign-in route, which the User is told about before signing in. */
   experimental?: boolean;
 }
 
-/** The first system block of every request this route sends. */
 const SUBSCRIPTION_SYSTEM_PREFIX = "You are Claude Code, Anthropic's official CLI for Claude.";
 
 export const ANTHROPIC_OAUTH: Readonly<AnthropicOAuthConfig> | null = EXPERIMENTAL_SIGN_IN_ROUTES
