@@ -298,7 +298,7 @@ The words of a Meeting, in order and with times, kept as a Document so that a Ci
 _Avoid_: captions, subtitles, minutes
 
 **Speaker**:
-A person in a Transcript who is told apart from the others. A Speaker is named by the User, and a Citation to a Transcript names who said the quote.
+A person in a Transcript who is told apart from the others. A Speaker is named by the User, and a Citation to a Transcript names who said the quote. Before that, a live Meeting's lines are "Me" (the microphone) or "Them" (the computer's sound), or "Speaker ?" with no computer sound.
 _Avoid_: voice, participant, user
 
 ### Files

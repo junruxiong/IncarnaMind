@@ -77,6 +77,7 @@ describe("Why a call changed nothing, on its row", () => {
     { kind: "changed", mindId: "a" },
     { kind: "content-not-own", mindId: "a" },
     { kind: "stopped", mindId: "a" },
+    { kind: "no-table", mindId: "a" },
     { kind: "local-mode" },
     { kind: "not-ready" },
     { kind: "model", mindId: "a", message: "Overloaded" },
@@ -120,6 +121,17 @@ describe("Why a call changed nothing, on its row", () => {
     );
     expect(en("mindChanges.waiting", { mind: "Q3 review", count: 12 })).toBe(
       "12 changes are waiting in “Q3 review”. Accept or reject them first?",
+    );
+  });
+
+  // protects=a table that couldn't be made says so in plain words, and that nothing went in (#961); fails_when=the line blames the model vaguely or loses the Mind's name; no_claim=none beyond protects.
+  test("a table that couldn't be made says nothing was added", () => {
+    const problem: MindProblem = { kind: "no-table", mindId: "a" };
+    expect(problemText(en, problem, "Q3 review")).toBe(
+      "Couldn't make the table, so nothing was added to “Q3 review”",
+    );
+    expect(problemText(zh, problem, "Q3 review")).toBe(
+      "未能生成表格，因此没有向“Q3 review”添加内容",
     );
   });
 });
