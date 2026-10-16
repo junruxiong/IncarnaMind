@@ -88,7 +88,64 @@ describe("Text written into a Mind keeps its Citations", { timeout: 30_000 }, ()
     ]);
     expect(answer.text).toBe(REPORT);
     expect(answer.citations).toEqual([]);
+    const told = model.doStreamCalls
+      .flatMap((call) => call.prompt)
+      .flatMap((message) => (message.role === "tool" ? message.content : []))
+      .map((part) => (part.type === "tool-result" ? JSON.stringify(part.output) : ""))
+      .join("\n");
+    expect(told).not.toContain("left out.");
     // Search, the step with both calls, the report: nothing more was asked to cite it.
     expect(model.doStreamCalls).toHaveLength(3);
+  });
+
+  // protects=a revision with new text, written in the same step as its cite, keeps its Citation whichever comes first; fails_when=the revised page loses its marker; no_claim=how a real provider orders the calls.
+  test.each(["cite-first", "write-first"] as const)("a revision, %s", async (order) => {
+    const LONGER =
+      "## Tides\n\nSpring tides come at new and full moon [^1].\n\nNeap tides come between, at half moon.";
+    let turn = 0;
+    const model = scriptedModel(({ results, prompt }: ModelCall): ScriptedReply => {
+      const second = prompt.includes("make it longer");
+      const search = results.find((result) => result.tool === "search_documents");
+      if (!search)
+        return { calls: [{ tool: "search_documents", input: { query: "spring tides" } }] };
+      if (results.some((result) => result.tool === (second ? "edit_mind" : "create_mind"))) {
+        return { text: second ? "It says more now." : REPORT };
+      }
+      turn++;
+      const [passage] = shownPassages(search.text);
+      const record = { marker: 1, passage: passage?.id, pageFrom: 1, pageTo: 1, quote: SPRING };
+      const cite = { tool: "cite", input: { citations: [record] } };
+      const write = second
+        ? {
+            tool: "edit_mind",
+            input: { mind: "Tide notes", part: "Tides", content: LONGER },
+          }
+        : { tool: "create_mind", input: { title: "Tide notes", content: CONTENT } };
+      return { calls: order === "cite-first" ? [cite, write] : [write, cite] };
+    });
+    const { core, mind, scope } = await setUp(model);
+    const first = await askAssistant(core, {
+      text: "Summarise these Documents into a new note",
+      mindId: mind.id,
+      scope,
+    });
+
+    const second = await askAssistant(core, {
+      text: "make it longer",
+      mindId: mind.id,
+      scope,
+      conversationId: first.conversationId,
+    });
+
+    expect(turn).toBe(2);
+    const [revised] = changesIn(second);
+    expect(revised).toMatchObject({ revised: true, cited: 1 });
+    expect(revised?.unrecorded).toBeUndefined();
+    const page = await connectToMind(core, revised?.mindId ?? "");
+    expect(shownWithChanges(page)).toEqual([
+      "+ Tides",
+      "+ Spring tides come at new and full moon ⟨found⟩.",
+      "+ Neap tides come between, at half moon.",
+    ]);
   });
 });
