@@ -2,15 +2,19 @@ import type {
   AssignmentChange,
   DocumentBatch,
   DocumentGroupAssignment,
+  LibraryClassifier,
   LibraryGroup,
   LibraryGroupInput,
   LibrarySettings,
   LibrarySnapshot,
+  TaggingClassifier,
+  TaggingModels,
 } from "./library/types";
 import type { UiUsageEvent } from "./usageEvents";
 
 export type {
   AssignmentChange,
+  AutomaticTaggingReason,
   ClassificationStatus,
   DocumentBatch,
   DocumentGroupAssignment,
@@ -19,6 +23,11 @@ export type {
   LibraryGroupInput,
   LibrarySettings,
   LibrarySnapshot,
+  TaggingClassifier,
+  TaggingCost,
+  TaggingModelGroup,
+  TaggingModelOption,
+  TaggingModels,
 } from "./library/types";
 
 /**
@@ -1481,14 +1490,15 @@ export const MAX_CITED_PAGES = 2;
  *   web page, the paragraphs of the section the quote covers, from 1 (#261).
  * - "lines": the lines the quote covers, or the cited block's.
  * - "time": in a Transcript, from the start of the cue the quote starts in to
- *   the end of the one it ends in, in ms from the Transcript's start (#136).
+ *   the end of the one it ends in, in ms from the Transcript's start (#136);
+ *   `speaker`: who said the cue it starts in, where the Transcript says (#941).
  */
 export type CitationLocation =
   | { kind: "page"; from: number; to: number; printed?: { from: string; to: string } }
   | { kind: "slide"; from: number; to: number }
   | { kind: "rows"; sheet: string | null; from: number; to: number }
   | { kind: "lines"; from: number; to: number }
-  | { kind: "time"; from: number; to: number }
+  | { kind: "time"; from: number; to: number; speaker?: string }
   | {
       kind: "section";
       heading: string | null;
@@ -1688,6 +1698,34 @@ export interface MindUpdate {
   mindId: string;
   /** A Yjs update (the default v1 encoding). */
   update: Uint8Array;
+  /** The edit the User asked for that wrote it (#880). */
+  cause?: EditCause;
+}
+
+/** An edit the User asked for (#880): the window that asked takes its updates in as its own change, one step of Undo. */
+export interface EditCause {
+  /** `EditWithAiInput.requestId`. */
+  requestId: string;
+  /** Its Proposals' `ProposalRef.request`. */
+  request: string;
+  /** Drawn as applied while it streams in; false until its new text maps onto the selection. */
+  apply: boolean;
+}
+
+/**
+ * What kind of Block a paragraph of a selection is, as the model reads it and
+ * writes it back: a heading of a level ("heading:2"), a bullet, a numbered
+ * item, a quote, or a plain paragraph.
+ */
+export type BlockKind = "paragraph" | "bullet" | "numbered" | "quote" | `heading:${number}`;
+
+/** Part of the selection an edit's new text left out, kept (#880): `from`..`to` of a Block's text. */
+export interface LeftOutPart {
+  blockId: string;
+  from: number;
+  to: number;
+  whole: boolean;
+  kind: BlockKind;
 }
 
 /** Settings that belong to the User and will sync across their devices (ADR-0003). */
@@ -1695,6 +1733,19 @@ export interface UserSettings {
   language: LanguagePreference;
   /** The default model for Answers, or null before a chat provider is set up. */
   chatModel: ChatModelChoice | null;
+  /**
+   * The model for the calls that don't write the Answer: an Answer's
+   * search query and its translation, and automatic tagging where the
+   * provider names no tagging model. Null: the quick-tasks model of the
+   * Answers model's provider, from the catalog, or the Answers model itself.
+   */
+  quickTasksModel: ChatModelChoice | null;
+  /**
+   * The model that reads a scan's pages when the Answers model can't read
+   * images. Null: the image model of the Answers model's provider,
+   * from the catalog, when it has one.
+   */
+  imageModel: ChatModelChoice | null;
   /**
    * Suggest as the User writes, from their Documents (see `suggestNext`): off
    * until they turn it on. Turning it on asks for consent to the "suggestions"
@@ -2138,6 +2189,8 @@ export interface DocumentScanProgress {
  * - "failed": the tagger's provider failed (see `taggingError`); a re-tag, a
  *   change of model or a restart tries again.
  * - "skipped": the Document has no text to tag (processing failed, or found none).
+ * - "stopped": Tagging with AI is stopped where it is, in its Folder or Not in
+ *   a Folder (see `stopTagging`): nothing is sent until it is turned back on.
  */
 export type TaggingState =
   | "pending"
@@ -2145,7 +2198,8 @@ export type TaggingState =
   | "tagging"
   | "tagged"
   | "failed"
-  | "skipped";
+  | "skipped"
+  | "stopped";
 
 /** Who put a Tag on a Document: automatic tagging, or the User. */
 export type TagSource = "automatic" | "user";
@@ -2233,7 +2287,10 @@ export interface Document {
   tags: DocumentTag[];
   /** Where automatic tagging is, separately from `status`. */
   tagging: TaggingState;
-  /** Set when `tagging` is "failed". */
+  /**
+   * Set when `tagging` is "failed", and when it is "waiting-for-provider" for
+   * a reason worth saying, such as the ChatGPT plan's limit ("plan-limit").
+   */
   taggingError: ProviderError | null;
   /**
    * When the Document itself was created, as its file tells, for the
@@ -2360,6 +2417,12 @@ export interface EvidenceSearchResult {
 export interface WebPageInfo {
   /** The address it was saved from: http or https, without a fragment. */
   address: string;
+  /**
+   * Who saved it: "user" (Add a web page, Save page, a source the User chose to add) or "search"
+   * (read by an Answer's web search). A page from before this was kept reads as "search" until
+   * the User saves its address again.
+   */
+  origin: WebPageOrigin;
   /** The site's name, as the page gives it, else its host. */
   siteName: string;
   author: string | null;
@@ -2377,6 +2440,8 @@ export interface WebPageInfo {
   /** The last fetch kept as it looks; null when it wasn't asked to be. */
   look: WebPageLook | null;
 }
+
+export type WebPageOrigin = "user" | "search";
 
 /** What `saveWebPage` takes. */
 export interface SaveWebPageInput {
@@ -3438,7 +3503,8 @@ export interface TestRerankConnectionInput {
  * Ollama, normally on this computer; it also offers one-click model downloads.
  * "chatgpt" is the User's ChatGPT plan, used through Sign in with ChatGPT
  * instead of an API key (see `ChatGptPlanStatus`); "claude-account" the
- * User's Claude plan, signed in with their Claude account (see `ClaudeAccountStatus`).
+ * User's Claude plan, signed in with their Claude account (see `ClaudeAccountStatus`);
+ * "copilot" the User's GitHub Copilot plan, signed in with GitHub (see `CopilotStatus`).
  */
 export const chatProviderKinds = [
   "openai",
@@ -3456,6 +3522,7 @@ export const chatProviderKinds = [
   "ollama",
   "chatgpt",
   "claude-account",
+  "copilot",
 ] as const;
 
 export type ChatProviderKind = (typeof chatProviderKinds)[number];
@@ -3565,8 +3632,8 @@ export interface ProviderError {
   wording?: ErrorWording;
   /** "plan-limit": when the plan's limit resets (ISO 8601), when the provider says. */
   resetsAt?: string;
-  /** A Claude account's request: which of the route's problems it is, for its own line. */
-  claudeAccount?: ClaudeAccountProblem;
+  /** A sign-in route's request (a Claude account, Copilot): which of its problems it is, for its own line. */
+  signInRoute?: SignInRouteProblem;
 }
 
 /**
@@ -4143,6 +4210,10 @@ export type EditWithAiResult =
       proposals: number;
       droppedCitations: number;
       outOfDate: number;
+      /** An edit the User asked for that waits for them instead of applying (#880). */
+      held?: true;
+      /** What its new text left out of the selection, kept; absent when nothing. */
+      leftOut?: LeftOutPart[];
     }
   /** The model gave the text back as it was: there is nothing to propose. */
   | { kind: "unchanged" }
@@ -4263,6 +4334,13 @@ export type ClaimCheckResult =
       says: string | null;
       /** A figure worked out that decided it; null when a Passage did. */
       calculation: ClaimCalculation | null;
+      /**
+       * The sentence cites a court decision that none of the Documents holds: the citation itself
+       * isn't checked, whatever else backs the sentence.
+       */
+      citedCaseUnchecked: boolean;
+      /** The Passage that decides it is in the opinion of the court decision it cites, among the Documents. */
+      citedCaseFound: boolean;
       /** The versions of the Documents it read, each once. */
       versions: CheckedVersion[];
       excluded: LeftOutDocument[];
@@ -4341,6 +4419,8 @@ export interface ClaimCheckAttributes {
   says: string | null;
   /** A figure worked out that decided it; null when a Passage did. */
   calculation: ClaimCalculation | null;
+  citedCaseUnchecked: boolean;
+  citedCaseFound: boolean;
   scope: ClaimCheckScope;
   versions: CheckedVersion[];
   excluded: LeftOutDocument[];
@@ -5364,19 +5444,27 @@ export type PastedAddressResult = { ok: true } | { ok: false; problem: PastedAdd
 // ---------------------------------------------------------------------------
 // Claude account
 
-/** Each said where it happened, with a way back (./providers/claudeAccount/problems.ts). */
-export type ClaudeAccountProblem =
+/** Each said where it happened, with a way back (./providers/signInRoutes.ts). */
+export type SignInRouteProblem =
   /** The User cancelled the sign-in, or didn't finish it in time: nothing was kept. */
   | "sign-in-cancelled"
   | "signed-out"
   /** The sign-in can't be renewed any more: sign in again. */
   | "sign-in-expired"
-  /** Anthropic refused the sign-in, or a request made with it. */
+  /** The provider refused the sign-in, or a request made with it. */
   | "refused"
-  /** The plan's usage limit is reached, until `ProviderError.resetsAt` when Anthropic says. */
+  /** The plan's usage limit is reached, until `ProviderError.resetsAt` when the provider says. */
   | "plan-limit"
-  /** Anthropic answered in a way this route doesn't know. */
-  | "unexpected-response";
+  /** The provider answered in a way this route doesn't know. */
+  | "unexpected-response"
+  /** The account has no plan this route can use. */
+  | "no-plan"
+  /** The account's organization doesn't allow it. */
+  | "policy-blocked"
+  /** The plan doesn't offer the model to IncarnaMind. */
+  | "model-unavailable"
+  /** The provider asked to slow down for a while, short of the plan's limit. */
+  | "rate-limited";
 
 export type ClaudeAccount =
   | { state: "signed-out" }
@@ -5396,7 +5484,7 @@ export interface ClaudeAccountStatus {
 }
 
 export type ClaudeSignInErrorKind =
-  | Extract<ClaudeAccountProblem, "sign-in-cancelled" | "refused" | "unexpected-response">
+  | Extract<SignInRouteProblem, "sign-in-cancelled" | "refused" | "unexpected-response">
   /** This build has no client profile for the route. */
   | "unavailable"
   /** This device can't store the sign-in securely (see `getSecretStorage`). */
@@ -5407,6 +5495,55 @@ export type ClaudeSignInErrorKind =
 export type ClaudeSignInResult =
   | { ok: true; status: ClaudeAccountStatus }
   | { ok: false; error: { kind: ClaudeSignInErrorKind; message: string } };
+
+// ---------------------------------------------------------------------------
+// GitHub Copilot
+
+export const copilotProfileIds = ["own", "editor"] as const;
+
+export type CopilotProfileId = (typeof copilotProfileIds)[number];
+
+export interface CopilotModel {
+  id: string;
+  /** What the User sees, e.g. "GPT-5.5". */
+  name: string;
+}
+
+/** The User's Copilot plan for Answers instead of an API key; it counts toward the plan's limits. */
+export interface CopilotStatus {
+  account:
+    | { state: "signed-out" }
+    /** Renewing the sign-in failed, or GitHub refused its token: sign in again. */
+    | { state: "expired" }
+    | { state: "signed-in"; profile: CopilotProfileId };
+  /** A sign-in is waiting for the User on GitHub's page. */
+  signingIn: boolean;
+  /** While a sign-in waits, once GitHub has given it: the code the User types, and where. */
+  deviceCode: { userCode: string; verificationUri: string; expiresIn: number } | null;
+  /** The ways to sign in, the default first; an experimental one is said so before sign-in. */
+  profiles: { id: CopilotProfileId; experimental: boolean }[];
+  /** The models the plan offers for the token, once signed in. */
+  models: CopilotModel[];
+}
+
+export type CopilotSignInErrorKind =
+  | Extract<SignInRouteProblem, "sign-in-cancelled" | "refused" | "no-plan" | "unexpected-response">
+  /** The code on GitHub's page expired before the User approved it. */
+  | "code-expired"
+  /** The User declined on GitHub's page. */
+  | "declined"
+  | "unreachable"
+  /** GitHub answered with a server error. */
+  | "service-error"
+  /** This build doesn't offer that way to sign in. */
+  | "unavailable"
+  /** This device can't store the sign-in securely (see `getSecretStorage`). */
+  | "secret-storage"
+  | "failed";
+
+export type CopilotSignInResult =
+  | { ok: true; status: CopilotStatus }
+  | { ok: false; error: { kind: CopilotSignInErrorKind; message: string } };
 
 // ---------------------------------------------------------------------------
 // Secrets
@@ -5660,6 +5797,8 @@ export interface RegisteredDataFlow {
  *   reading OpenAI's signing keys; listed once the User has signed in.
  * - "claude-sign-in": signing in with a Claude account and refreshing it;
  *   listed once the User has started signing in.
+ * - "copilot-sign-in": signing in with GitHub for Copilot, renewing it, and
+ *   reading the plan's models; listed once the User has started signing in.
  * - "remote-connectors": connecting to each remote Connector that is on, and
  *   signing in to it: its server, and the authorization server it names
  *   (discovery, registration, tokens). One entry per server. Tool calls, which
@@ -5677,6 +5816,7 @@ export const networkTrafficIds = [
   "ollama-pull",
   "chatgpt-sign-in",
   "claude-sign-in",
+  "copilot-sign-in",
   "remote-connectors",
   "usage-data",
 ] as const;
@@ -6806,11 +6946,15 @@ export interface SavedFile {
   path: string;
   /** Its name: the one asked for, or, when that was taken, the next free one ("Tides 2.docx"). */
   name: string;
+  /** The folder it is in, absolute, symbolic links resolved. */
+  folder: string;
   /**
    * This save took the default Output location, Documents › IncarnaMind,
    * none being chosen yet (D209): what shows it says where, with a way to change it.
    */
   defaulted: boolean;
+  /** The folder is the default Output location, which a line names as this computer names Documents. */
+  inDefaultFolder: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -7002,8 +7146,11 @@ export interface MeetingTranscript {
   state: TranscriptState;
   /** How many lines it has. */
   lines: number;
-  /** The speech being transcribed now, while live: where it starts, in the Meeting's time, and its words so far. */
-  partial: { startMs: number; text: string } | null;
+  /**
+   * The speech being transcribed now, while live: where it starts, in the Meeting's time, its
+   * words so far, and whose they are ("Me", "Them" or "Speaker ?", see src/shared/speakers.ts).
+   */
+  partial: { startMs: number; text: string; speaker: string } | null;
   /** The speech-to-text model, while it is downloading or failed to. */
   model: TranscriptionModelStatus | null;
   /** The WebVTT file in the Output location, once saved. */
@@ -7270,13 +7417,41 @@ export interface CoreApi {
    */
   deleteLibraryGroup(groupId: string): Promise<FolderDeletion>;
   addLibraryStarterGroups(keys: string[]): Promise<void>;
-  saveLibrarySettings(settings: LibrarySettings): Promise<void>;
+  /**
+   * Saves the Tagging setting: the model for automatic tagging and Organize,
+   * and whether new and changed Documents are organized automatically. A
+   * classifier of null is Automatic; `organizeWith` left out stays as it was.
+   */
+  saveLibrarySettings(
+    settings: Omit<LibrarySettings, "classifier" | "organizeWith" | "taggingStopped"> & {
+      classifier: LibraryClassifier | null;
+      organizeWith?: TaggingClassifier | null;
+    },
+  ): Promise<void>;
+  /**
+   * What the Tagging section shows: what Automatic tags with now and
+   * why, and the models the User can choose instead, grouped by where they
+   * run, with what each costs. Asks Ollama on this computer which decision
+   * models it has; sends nothing anywhere else.
+   */
+  getTaggingModels(): Promise<TaggingModels>;
   /**
    * Queues selected documents, or all. Organize suggests a Folder for each
    * (a Suggested Folder) and its Tags; manual assignments are preserved, and
    * only their Tags suggested.
    */
   classifyDocuments(documentIds?: string[]): Promise<void>;
+  /**
+   * Stops automatic Tagging with AI where the Documents waiting to be
+   * tagged, or being tagged, are: each of their Folders, and Not in a Folder
+   * (null). Nothing more from there is sent to tag, by automatic tagging or by
+   * Organize on its own, until `setTaggingWithAi` turns it back on; a re-tag
+   * or Organize the User asks for still goes. Kept across restarts. Returns
+   * the places it stopped.
+   */
+  stopTagging(): Promise<(string | null)[]>;
+  /** Turns automatic Tagging with AI on, or stops it, in a Folder or Not in a Folder (null). */
+  setTaggingWithAi(folderId: string | null, on: boolean): Promise<void>;
   /**
    * A manual choice, including Not in a Folder (null), wins over in-flight classification.
    * Returns the assignment before, for `restoreAssignment` (null: it had none).
@@ -7621,6 +7796,12 @@ export interface CoreApi {
    * scanned, or its quote isn't in them.
    */
   readScannedQuote(input: ScannedQuoteInput): Promise<ScannedQuote | null>;
+  /**
+   * A Citation's quote as its Document's text reads it (#905): a word a PDF split at a line end
+   * whole again, and a quote that stops at one run to the end of its word. Null when the quote
+   * isn't in the Units it cites, which leaves the quote as it is.
+   */
+  readableQuote(input: ScannedQuoteInput): Promise<string | null>;
   /** The built-in text recognition model's download state (#397). */
   getTextRecognitionModel(): Promise<EmbeddingModelStatus>;
   /**
@@ -8213,6 +8394,18 @@ export interface CoreApi {
   /** Checked exactly as the browser's own return; a refused one changes nothing. */
   pasteClaudeSignInAddress(address: string): Promise<PastedAddressResult>;
 
+  getCopilot(): Promise<CopilotStatus>;
+  /**
+   * Shows GitHub's code in the status and waits until the User approves or
+   * the code expires; `profile` defaults to IncarnaMind's own app. Saving the
+   * "copilot" provider, not signing in, allows its flows (ADR-0022).
+   */
+  signInToCopilot(input?: { profile?: CopilotProfileId }): Promise<CopilotSignInResult>;
+  /** Stops waiting for GitHub. Nothing is kept. */
+  cancelCopilotSignIn(): Promise<void>;
+  /** A saved Copilot provider then needs a new sign-in. */
+  signOutOfCopilot(): Promise<CopilotStatus>;
+
   /**
    * Every registered external data flow, to each service it currently goes to
    * and each service the User has decided on, with that decision.
@@ -8795,6 +8988,8 @@ export interface CoreEvents {
   "chatGptPlan.changed": ChatGptPlanStatus;
   /** The Claude account sign-in changed: started, finished, signed out, or expired. */
   "claudeAccount.changed": ClaudeAccountStatus;
+  /** The Copilot sign-in changed: started, showed its code, finished, signed out, or expired. */
+  "copilot.changed": CopilotStatus;
   /** Jev was set up, changed or removed on this device. */
   "jev.changed": JevSettings;
   /**
@@ -8926,6 +9121,7 @@ const methods: Record<CoreApiMethod, true> = {
   readDocumentText: true,
   readScannedText: true,
   readScannedQuote: true,
+  readableQuote: true,
   getTextRecognitionModel: true,
   downloadTextRecognitionModel: true,
   previewLinkedFolder: true,
@@ -9031,6 +9227,10 @@ const methods: Record<CoreApiMethod, true> = {
   reopenClaudeSignIn: true,
   signOutOfClaude: true,
   pasteClaudeSignInAddress: true,
+  getCopilot: true,
+  signInToCopilot: true,
+  cancelCopilotSignIn: true,
+  signOutOfCopilot: true,
   listDataFlows: true,
   listConsentRequests: true,
   respondToConsent: true,
@@ -9055,7 +9255,10 @@ const methods: Record<CoreApiMethod, true> = {
   deleteLibraryGroup: true,
   addLibraryStarterGroups: true,
   saveLibrarySettings: true,
+  getTaggingModels: true,
   classifyDocuments: true,
+  stopTagging: true,
+  setTaggingWithAi: true,
   assignDocumentGroup: true,
   acceptAssignments: true,
   rejectAssignments: true,

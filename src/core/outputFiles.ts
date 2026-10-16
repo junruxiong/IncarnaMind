@@ -387,7 +387,13 @@ export function createOutputFiles(options: OutputFilesOptions) {
         }
         const path = join(folder, used);
         saved.add(path);
-        return { path, name: used, defaulted };
+        const inDefaultFolder =
+          defaulted ||
+          (await realFolder(suggested).then(
+            (real) => real === folder,
+            () => false,
+          ));
+        return { path, name: used, folder, defaulted, inDefaultFolder };
       }
     },
 
