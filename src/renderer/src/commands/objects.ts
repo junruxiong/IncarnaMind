@@ -370,7 +370,7 @@ export const folderCommands: readonly Command[] = [
     reversible: true,
     async run(ctx) {
       const id = idsOf(ctx, "folder")[0];
-      if (id) await tagWithAi([id]);
+      if (id) return tagWithAi([id]);
     },
   },
   {

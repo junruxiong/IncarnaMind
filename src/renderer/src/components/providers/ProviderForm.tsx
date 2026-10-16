@@ -40,6 +40,7 @@ import {
 } from "../ui";
 import { LocalServerLine, useLocalServer } from "./LocalServerLine";
 import { keyProviderName, testErrorKey, useProviderKey } from "./shared";
+import { useJevSettings } from "./useJevSettings";
 
 type CatalogId = string;
 
@@ -148,9 +149,14 @@ export function ProviderForm({
   const [modelId, setModelId] = useState(refused?.modelId ?? suggestedModel(first));
   const [busy, setBusy] = useState<"saving" | null>(null);
   const [test, setTest] = useState<ConnectionTestResult | null>(null);
-  const tagsAutomatically = useAppStore(
-    (state) => (state.library?.settings.classifier.kind ?? "automatic") === "automatic",
-  );
+  const [jev] = useJevSettings();
+  // Automatic tags with this key's provider unless a Jev key comes first, or nothing may leave the computer.
+  const tagsAutomatically =
+    useAppStore(
+      (state) =>
+        (state.library?.settings.classifier.kind ?? "automatic") === "automatic" &&
+        state.embedding?.localOnly !== true,
+    ) && !jev?.enabled;
   const [error, setError] = useState<string | null>(null);
   const [secretStorage, setSecretStorage] = useState<SecretStorageStatus | null>(null);
 
@@ -627,7 +633,7 @@ function KeyRefusedLine({ id, refused }: { id: string; refused: KeyRefusal }) {
 /**
  * Above the button that chooses the chat model's provider: what goes to it.
  * Choosing it is the consent for all of that (ADR-0022). `tagsOnSave`: the
- * Tagging setting is Automatic, so saving the key starts tagging with it (#895).
+ * Tagging setting is Automatic, so saving the key starts tagging with it.
  */
 export function ProviderSendsLine({
   provider,

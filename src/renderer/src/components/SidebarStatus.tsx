@@ -3,6 +3,7 @@ import { useShallow } from "zustand/react/shallow";
 import type { DocumentStatus, EmbeddingModelError } from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
 import { organizes } from "../../../shared/libraryModels";
+import { commands } from "../commands/registry";
 import { core } from "../core";
 import { useLanguage, useT } from "../i18n";
 import { useCapturing } from "../meetings";
@@ -10,7 +11,7 @@ import { downloadProgress } from "../modelDownload";
 import { enterFrom, exitToward } from "../motion";
 import { rerankingModelStatus } from "../rerankStatus";
 import { allExamples, isOwnDocument, useAppStore } from "../store";
-import { placesText, stopTagging, taggingPlaces } from "../taggingStop";
+import { placesText, taggingPlaces } from "../taggingStop";
 import { textRecognitionStatus, useTextRecognition } from "../textRecognition";
 import { canTryAgain, outsideDialog, reasonKey, useWebPages } from "../webPages";
 import { CloseLineIcon } from "./lineIcons";
@@ -60,7 +61,7 @@ interface Status {
   full: string;
   action?: { label: string; testId?: string; title?: string; run(): void };
   dismiss?: () => void;
-  /** It may take two lines, its action said after it, so nothing it names is cut off (#895). */
+  /** It may take two lines, its action said after it, so nothing it names is cut off. */
   wraps?: boolean;
 }
 
@@ -107,12 +108,12 @@ function StatusRow({ status, children }: { status: Status; children?: ReactNode 
         />
       </span>
       {wraps ? (
-        <span className="line-clamp-2 min-w-0 flex-1">
+        <span className="min-w-0 flex-1">
           <span aria-hidden="true" data-testid="status-label">
             {short}
           </span>
           {action && (
-            <>
+            <span className="whitespace-nowrap">
               <span aria-hidden="true"> · </span>
               <button
                 type="button"
@@ -123,7 +124,7 @@ function StatusRow({ status, children }: { status: Status; children?: ReactNode 
               >
                 {action.label}
               </button>
-            </>
+            </span>
           )}
         </span>
       ) : (
@@ -297,12 +298,32 @@ function useStatuses(): Status[] {
   const openSettings = useAppStore((state) => state.openSettings);
   const taggingWaits = !organizing && counts.waitingForTagger > 0;
   const tagging = !organizing && counts.tagging > 0;
-  const taggingService = useTaggingService(taggingWaits || tagging);
+  const organizingNow =
+    organizing &&
+    !!library?.assignments.some(
+      (item) => item.status === "pending" || item.status === "classifying",
+    );
+  const taggingService = useTaggingService(
+    organizing ? "classification" : "tagging",
+    taggingWaits || tagging || organizingNow,
+  );
   const taggingNeedsOk =
     taggingWaits && taggingService && !taggingService.allowed ? taggingService.service : null;
   const places = useAppStore(
-    useShallow((state) => (tagging ? taggingPlaces(state.documents, state.library) : [])),
+    useShallow((state) =>
+      tagging || organizingNow ? taggingPlaces(state.documents, state.library) : [],
+    ),
   );
+  const service = taggingService?.service.name;
+  const stop = {
+    label: t("tagging.stop"),
+    testId: "tagging-stop",
+    title: t("tagging.stop.title", { places: placesText(places, library, t, language) }),
+    run: () =>
+      void commands
+        .run("tagging.stop")
+        .catch((error: unknown) => useAppStore.getState().reportError(error)),
+  };
   // The dialog shows how the pages typed in it go; the rest are said here.
   const fetchingPages = useWebPages(
     (state) => state.fetching.filter((key) => outsideDialog(state, key)).length,
@@ -551,7 +572,6 @@ function useStatuses(): Status[] {
   }
 
   if (!capturing && tagging) {
-    const service = taggingService?.service.name;
     const text = service
       ? counts.tagging === 1
         ? t("status.taggingWith.one", { service })
@@ -565,13 +585,7 @@ function useStatuses(): Status[] {
       short: text,
       full: text,
       wraps: true,
-      action: {
-        label: t("tagging.stop"),
-        testId: "tagging-stop",
-        title: t("tagging.stop.title", { places: placesText(places, library, t, language) }),
-        run: () =>
-          void stopTagging().catch((error: unknown) => useAppStore.getState().reportError(error)),
-      },
+      action: stop,
     });
   }
 
@@ -590,13 +604,19 @@ function useStatuses(): Status[] {
         full: t("library.waiting", { count: attention }),
         action: { label: t("library.review"), run: () => useAppStore.getState().openLibrary() },
       });
-    if (pending)
+    if (pending) {
+      const text = service
+        ? t("library.progressWith", { count: pending, service })
+        : t("library.progress", { count: pending });
       statuses.push({
         testId: "organization-progress",
         tone: "progress",
-        short: t("library.progress", { count: pending }),
-        full: t("library.progress", { count: pending }),
+        short: text,
+        full: text,
+        wraps: true,
+        action: stop,
       });
+    }
   }
   return statuses;
 }

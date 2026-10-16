@@ -99,6 +99,7 @@ export const en = {
   "library.inside.retry": "Try again",
   "library.classify": "Organize",
   "library.progress": "Organizing {count} Documents…",
+  "library.progressWith": "Organizing {count} Documents with {service}…",
   "library.waiting":
     "{count} Documents need text, a model or permission. Open their details to check.",
   "library.count": "{count} Documents",
@@ -1524,6 +1525,8 @@ export const en = {
   "tagging.review.kept":
     "This model doesn't say how sure it is, so every Tag it adds is kept. Remove any you don't want.",
   "tagging.stop": "Stop",
+  "tagging.stop.command": "Stop Tagging",
+  "tagging.tagNotInFolder": "Tag Documents not in a Folder with AI",
   "tagging.stop.title":
     "Stop, and don't tag new Documents {places} with AI until you turn it back on",
   "tagging.place.folders": "in {names}",

@@ -9,12 +9,15 @@ export interface TaggingService {
 }
 
 /**
- * The service the Tagging setting tags with now, and whether the User has
- * allowed it; null for a model on this computer. Tagging is background work
- * and never asks (ADR-0022): where its Documents wait says so, and offers
- * Allow in place. Read only while `watching`.
+ * The service automatic tagging, or Organize, sends to now, and whether the
+ * User has allowed it; null for a model on this computer. Tagging is
+ * background work and never asks (ADR-0022): where its Documents wait says
+ * so, and offers Allow in place. Read only while `watching`.
  */
-export function useTaggingService(watching: boolean): TaggingService | null {
+export function useTaggingService(
+  flow: "tagging" | "classification",
+  watching: boolean,
+): TaggingService | null {
   const [tagging, setTagging] = useState<TaggingService | null>(null);
 
   useEffect(() => {
@@ -27,8 +30,8 @@ export function useTaggingService(watching: boolean): TaggingService | null {
       core.listRegisteredDataFlows().then(
         (flows) => {
           if (stopped) return;
-          // The flow goes only to the service the Tagging setting tags with now.
-          const to = flows.find((flow) => flow.id === "tagging")?.services[0];
+          // The flow goes only to the service the Tagging setting tags or organizes with now.
+          const to = flows.find((each) => each.id === flow)?.services[0];
           setTagging(to ? { service: to.flow.service, allowed: to.consent === "accepted" } : null);
         },
         (error: unknown) => useAppStore.getState().reportError(error),
@@ -45,7 +48,7 @@ export function useTaggingService(watching: boolean): TaggingService | null {
       stopped = true;
       for (const stop of stops) stop();
     };
-  }, [watching]);
+  }, [flow, watching]);
 
   return tagging;
 }
