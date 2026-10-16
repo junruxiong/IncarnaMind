@@ -75,7 +75,10 @@ export function requestFailures(outcome: RequestOutcome): RequestFailure[] {
       flagged: (answer.steps?.unbackedClaims ?? []).length > 0,
     });
   }
-  const citedHere = expected.write ? outcome.citedInMinds.length : answer.citations.length;
+  // Asked a Question, it may still write its cited answer into a Mind, as a change to accept.
+  const citedHere = expected.write
+    ? outcome.citedInMinds.length
+    : answer.citations.length + outcome.citedInMinds.length;
   if (expected.cite && outcome.scoped.length > 0 && citedHere === 0) {
     failures.push({ kind: "no-citations" });
   }
