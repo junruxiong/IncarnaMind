@@ -26,7 +26,7 @@ import { AnswerActions } from "./AnswerActions";
 import { AnswerSteps, useStepsScopeOf } from "./AnswerSteps";
 import { AnswerText } from "./AnswerText";
 import { UnbackedClaimLine, WaitingChangesLine } from "./ChangeProblemLines";
-import { AskedAgainLine, CoverageLine } from "./CoverageLines";
+import { CoverageLine } from "./CoverageLines";
 import { MindChangesCard, NoMindLine, wantedAMind } from "./MindChangesCard";
 
 /** What adding an Answer needs from the thread around it. */
@@ -97,10 +97,10 @@ export function AssistantAnswer({
       aria-label={t("answer.label")}
       className="assistant-answer"
     >
-      {askedAgain !== undefined && <AskedAgainLine count={askedAgain} />}
       <AnswerSteps
         answer={answer}
         question={question}
+        askedAgain={askedAgain}
         streaming={streaming}
         waitingForApproval={approvals.length > 0}
         wait={silent ? { usual } : null}
