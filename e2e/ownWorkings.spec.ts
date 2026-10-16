@@ -147,15 +147,18 @@ test("In the Library and in Chinese: the same menu item and label, one Undo for 
   await expect(window.getByTestId("undo-line").getByTestId("undo-message")).toHaveText(
     "“Workings”不再作为引用来源",
   );
-  const [name, labelBox, rowBox] = await Promise.all([
-    workings.getByTestId("library-document-name").boundingBox(),
+  const report = libraryRow(window, "Annual report");
+  const [tags, labelBox, rowBox, reportTags] = await Promise.all([
+    workings.getByTestId("document-tags").boundingBox(),
     label.boundingBox(),
     workings.boundingBox(),
+    report.getByTestId("document-tags").boundingBox(),
   ]);
-  if (!name || !labelBox || !rowBox) throw new Error("The row isn't laid out.");
-  expect(labelBox.x).toBeGreaterThanOrEqual(name.x + name.width);
+  if (!tags || !labelBox || !rowBox || !reportTags) throw new Error("The row isn't laid out.");
+  expect(labelBox.x).toBeGreaterThanOrEqual(tags.x + tags.width);
   expect(labelBox.x + labelBox.width).toBeLessThanOrEqual(rowBox.x + rowBox.width);
   expect(labelBox.height).toBeLessThan(24);
+  expect(reportTags.x).toBeCloseTo(tags.x, 0);
   await screenshot(window.getByTestId("library"), "not-cited-library-zh-narrow");
 
   await expect(sidebarRow(window, "Workings").getByTestId("document-not-cited")).toHaveText(
