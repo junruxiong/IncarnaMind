@@ -81,14 +81,15 @@ export function MindCheckAsk({ mindId }: { mindId: string }) {
   );
 }
 
-/** How far the run is: "Finding the claims to check…", then "Checking 12 of 48…". */
-export function MindCheckProgress({ editor, requestId }: { editor: Editor; requestId: string }) {
-  const t = useT();
-  const language = useLanguage();
-  const { done, total } = useEditorState({
+/** How many of the claims a Check this Mind run marked it has checked. */
+export function useMindCheckProgress(editor: Editor, requestId: string | null) {
+  return useEditorState({
     editor,
     selector: ({ editor: current }) => {
-      const mine = shownClaims(current.state).filter((each) => each.check.request === requestId);
+      const mine =
+        requestId === null
+          ? []
+          : shownClaims(current.state).filter((each) => each.check.request === requestId);
       return {
         total: mine.length,
         done: mine.filter((each) => each.shown.state !== "checking").length,
@@ -96,6 +97,13 @@ export function MindCheckProgress({ editor, requestId }: { editor: Editor; reque
     },
     equalityFn: (a, b) => b !== null && a.done === b.done && a.total === b.total,
   });
+}
+
+/** How far the run is: "Finding the claims to check…", then "Checking 12 of 48…". */
+export function MindCheckProgress({ editor, requestId }: { editor: Editor; requestId: string }) {
+  const t = useT();
+  const language = useLanguage();
+  const { done, total } = useMindCheckProgress(editor, requestId);
   const format = (value: number) => new Intl.NumberFormat(language).format(value);
   return (
     <span data-testid="mind-check-progress" className="tabular-nums">
@@ -117,14 +125,14 @@ export function CheckedWhen({ run }: { run: MindCheckRun }) {
     when,
   });
   return (
-    <span data-testid="health-checked-all" className="mind-health-when">
+    <span data-testid="health-checked-all">
       {run.stop ? `${said} · ${runStopText(run.stop, t, language)}` : said}
     </span>
   );
 }
 
 /**
- * The health line's way to check what changed: "Check all" while some
+ * The check card's way to check what changed: "Check all" while some
  * sentences were never checked, "Check again" while some checks need a re-check.
  */
 export function MindCheckAction({

@@ -5,8 +5,8 @@ export const BADGE_MARKS = ["contradicted", "unsupported", "notFound", "notCheck
 export type BadgeMark = (typeof BADGE_MARKS)[number] & HealthPart;
 
 export interface BadgeInput {
-  /** How many sentences or Citations each marked part has. */
-  marks: Record<BadgeMark, number>;
+  /** How many sentences or Citations each part of the Mind's health has. */
+  marks: Readonly<Partial<Record<HealthPart, number>>>;
   /** Sentences that make a claim no check has looked at. */
   toCheck: number;
   /** "Checking 12 of 24", or a check's own words, while one runs. */
@@ -31,9 +31,10 @@ export interface Badge {
  * "with no Citation" are in its card but never show it on their own.
  */
 export function badgeOf(input: BadgeInput): Badge | null {
-  const marks = BADGE_MARKS.flatMap((part) =>
-    input.marks[part] > 0 ? [{ part, count: input.marks[part] }] : [],
-  );
+  const marks = BADGE_MARKS.flatMap((part) => {
+    const count = input.marks[part] ?? 0;
+    return count > 0 ? [{ part, count }] : [];
+  });
   const shown =
     marks.length > 0 ||
     input.toCheck > 0 ||
