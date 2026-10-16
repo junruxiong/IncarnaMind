@@ -774,6 +774,7 @@ export interface AnswerAttributes {
   errorMessage: string | null;
   /** When the plan's limit that stopped it resets (ISO 8601), when the provider said. */
   errorResetsAt: string | null;
+  errorSignInRoute: SignInRouteProblem | null;
   /** A fingerprint of the content as it was generated: it differs once the User edits the Answer. */
   generatedHash: string | null;
   /**
@@ -4873,6 +4874,11 @@ export interface AnswerSteps {
    * Absent: none.
    */
   unbackedClaims?: ClaimedChange[];
+  /**
+   * Its model can't call Tools, and the User's words asked to write into a
+   * Mind or change one (`routeRequest`): nothing was written. Absent: neither.
+   */
+  withoutMindTools?: true;
   /** It covered only some of the Documents in scope, and offers the rest. Absent: all of them. */
   coverage?: AnswerCoverage;
 }
@@ -5109,6 +5115,7 @@ export interface ConversationAnswer {
   /** Why it failed, when `status` is "failed". */
   errorKind: ProviderErrorKind | null;
   errorMessage: string | null;
+  errorSignInRoute: SignInRouteProblem | null;
   citationSupport: CitationSupport | null;
   /** The Tools it called, in order: its searches, Skills and Connectors' Tools. */
   toolCalls: AnswerToolCall[];
@@ -5631,13 +5638,21 @@ export interface CopilotModel {
   name: string;
 }
 
+export type CopilotPlan = "free" | "pro" | "pro-plus" | "business" | "enterprise";
+
 /** The User's Copilot plan for Answers instead of an API key; it counts toward the plan's limits. */
 export interface CopilotStatus {
   account:
     | { state: "signed-out" }
     /** Renewing the sign-in failed, or GitHub refused its token: sign in again. */
     | { state: "expired" }
-    | { state: "signed-in"; profile: CopilotProfileId };
+    /** The GitHub login and the plan, as GitHub named them at sign-in, when it did. */
+    | {
+        state: "signed-in";
+        profile: CopilotProfileId;
+        login: string | null;
+        plan: CopilotPlan | null;
+      };
   /** A sign-in is waiting for the User on GitHub's page. */
   signingIn: boolean;
   /** While a sign-in waits, once GitHub has given it: the code the User types, and where. */
@@ -5649,7 +5664,10 @@ export interface CopilotStatus {
 }
 
 export type CopilotSignInErrorKind =
-  | Extract<SignInRouteProblem, "sign-in-cancelled" | "refused" | "no-plan" | "unexpected-response">
+  | Extract<
+      SignInRouteProblem,
+      "sign-in-cancelled" | "refused" | "no-plan" | "policy-blocked" | "unexpected-response"
+    >
   /** The code on GitHub's page expired before the User approved it. */
   | "code-expired"
   /** The User declined on GitHub's page. */
@@ -5929,7 +5947,8 @@ export interface RegisteredDataFlow {
  * - "claude-sign-in": signing in with a Claude account and refreshing it;
  *   listed once the User has started signing in.
  * - "copilot-sign-in": signing in with GitHub for Copilot, renewing it, and
- *   reading the plan's models; listed once the User has started signing in.
+ *   reading the account's name and the plan's models; listed once the User
+ *   has started signing in.
  * - "remote-connectors": connecting to each remote Connector that is on, and
  *   signing in to it: its server, and the authorization server it names
  *   (discovery, registration, tokens). One entry per server. Tool calls, which

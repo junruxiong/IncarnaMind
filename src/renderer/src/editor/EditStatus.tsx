@@ -1,5 +1,9 @@
 import { ProblemLine } from "../components/ProblemLine";
-import { ReadinessExplanation, readinessAction } from "../components/providers/ChatReadinessNotice";
+import {
+  ReadinessExplanation,
+  readinessAction,
+  readinessAlso,
+} from "../components/providers/ChatReadinessNotice";
 import { dismissEditProblem, stopEdit, TRANSLATE_LANGUAGES, useEdits } from "../editWithAi";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
@@ -47,6 +51,7 @@ export function EditStatus({ mindId }: { mindId: string }) {
           action={readinessAction(problem.readiness, t, openSettings, t("question.setUp"), () =>
             dismissEditProblem(mindId),
           )}
+          also={readinessAlso(problem.readiness, t, openSettings, () => dismissEditProblem(mindId))}
         >
           <ReadinessExplanation readiness={problem.readiness} inLine />
         </ProblemLine>

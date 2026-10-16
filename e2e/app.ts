@@ -102,6 +102,8 @@ export interface LaunchOptions {
    * standing in for OpenAI (tests/helpers/fakeOpenAI.ts). A test build honours it.
    */
   chatGpt?: string;
+  /** A local stand-in for GitHub and Copilot at this origin, where the Copilot plan signs in and asks. */
+  copilot?: string;
   /**
    * Leaves the window at the size and place it opened at, instead of making
    * it `WINDOW_SIZE`: for a test of how the window opens.
@@ -186,6 +188,7 @@ export async function launchApp(
     connectorDirectory,
     connectorRegistry,
     chatGpt,
+    copilot,
     keepWindow = false,
     computerSound = "allowed",
     transcriber,
@@ -218,6 +221,7 @@ export async function launchApp(
   delete env.INCARNAMIND_TEST_CONNECTOR_DIRECTORY;
   delete env.INCARNAMIND_TEST_CONNECTOR_REGISTRY;
   delete env.INCARNAMIND_TEST_CHATGPT;
+  delete env.INCARNAMIND_TEST_COPILOT;
   delete env.INCARNAMIND_TEST_TRANSCRIBER_OPTIONS;
   delete env.INCARNAMIND_TEST_SCANS;
   delete env.INCARNAMIND_TEST_WEB;
@@ -243,6 +247,7 @@ export async function launchApp(
   // Nowhere, unless a test serves one: a search in a test never reaches the real Registry.
   env.INCARNAMIND_TEST_CONNECTOR_REGISTRY = connectorRegistry ?? "http://127.0.0.1:9";
   if (chatGpt) env.INCARNAMIND_TEST_CHATGPT = chatGpt;
+  if (copilot) env.INCARNAMIND_TEST_COPILOT = copilot;
   if (scans) env.INCARNAMIND_TEST_SCANS = scans;
   if (web) env.INCARNAMIND_TEST_WEB = String(web);
   if (lookLimit) env.INCARNAMIND_TEST_LOOK_LIMIT = String(lookLimit);
@@ -1090,6 +1095,12 @@ export async function expectReadyDocuments(window: Page, count: number): Promise
       { timeout: 30_000 },
     )
     .toBe(count);
+}
+
+/** Ends the first open (hides Get started), so the shell shows everything, as it does for a returning User. */
+export async function leaveFirstOpen(window: Page): Promise<void> {
+  await window.getByTestId("get-started-hide").click();
+  await expect(window.getByTestId("get-started")).toHaveCount(0);
 }
 
 /** The id of the Document listed in the sidebar under `name`. */
