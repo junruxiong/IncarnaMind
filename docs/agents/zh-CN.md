@@ -54,6 +54,7 @@ The words from `CONTEXT.md`, then the ones the interaction rules bring in. Where
 | Web page | 网页 | A Document saved from a web address (网址). Its snapshot is 快照, as search engines' 网页快照: "打开快照". Fetching it is 抓取: "重新抓取", "无法抓取：网页需要登录". The live page: 原网页 ("打开原网页"). |
 | Passage | 段落 | |
 | Citation | 引用 | The numbered reference in an Answer, as Kimi, Doubao, Qwen, Cherry Studio and Open WebUI show it. |
+| Own workings | 工作文件 | A Document the User keeps as their own workings: "不作为引用来源", "重新作为引用来源", its label "不引用", and on a check's card "只有你自己的工作文件这样写。" |
 | quote (of a Citation) | 引文 | "已在第 3 页找到引文", "未找到引文". |
 | Quote (block) | 引述 | The "/" menu's block for quoted text; not a Citation (引用) or its quote (引文). |
 | Location | 位置 | "第 3 页", "第 2 张幻灯片", "第 4–6 行", "§ 标题", a web page's "§ 历史，第 3 段". |
