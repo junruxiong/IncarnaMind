@@ -41,6 +41,7 @@ import {
 } from "../../../shared/proposals";
 import { countFor, countText, mostlyCjk } from "../../../shared/wordCount";
 import { createElement, type NodeJSON, syncContent, topLevelBlocks } from "../../answers/blocks";
+import type { ParagraphAsked } from "../../answers/paragraphAsked";
 import {
   BLOCK_ID_ATTRIBUTE,
   type BlockOrigin,
@@ -167,6 +168,8 @@ export interface MindToolsOptions {
    * only when they asked for a new one.
    */
   requested: { change: RequestedChange; newMind: boolean } | null;
+  /** The one paragraph the User's words name by its place (../../answers/paragraphAsked). */
+  paragraph: ParagraphAsked;
   /** A call changed a Mind: its card says so, as soon as it does, also while it writes. */
   changed(toolCallId: string, change: MindChange): void;
   /** A call changed nothing, and whatever it wrote as its input came was taken back. */
@@ -395,13 +398,16 @@ interface Stretch {
 /**
  * The stretch of a Mind `edit_mind` changes, whole: the section under the
  * heading `part` (to the next heading as high or higher), else the Blocks the
- * User selected, else all of it. Why not, when there is nothing there to change.
+ * User selected, else all of it; of that, only the paragraph the User named
+ * by its place (`asked`, counted in the selection or the whole Mind). Why
+ * not, when there is nothing there to change.
  */
 function stretchOf(
   blocks: Y.XmlFragment,
   part: string | null,
   language: Language,
   selected: readonly string[],
+  asked: ParagraphAsked,
 ): Stretch | { why: string; kind: "no-heading" | "no-text" | "several-places" } {
   const all = textBlocks(blocks).map((each) => each.element);
   let chosen = all;
@@ -438,6 +444,14 @@ function stretchOf(
     };
     const picked = all.filter(inSelection);
     if (picked.length > 0) chosen = picked;
+  }
+  if (asked !== null && chosen.length > 1) {
+    // Rewritten with the paragraphs around it, the others would come back reworded.
+    const paragraphs = (part === null ? chosen : all).filter(
+      (element) => element.nodeName === "paragraph" && plainText(element).trim() !== "",
+    );
+    const paragraph = asked === "last" ? paragraphs.at(-1) : paragraphs[asked];
+    if (paragraph && chosen.includes(paragraph)) chosen = [paragraph];
   }
   const first = chosen[0];
   const last = chosen.at(-1);
@@ -1183,8 +1197,10 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       const part = optional(input.part);
       // The selection counts only in the Mind it is in, and only when no section is named.
       const selected = focused?.mindId === mind.id && part === null ? focused.blockIds : [];
+      // Text the assistant still waits on is revised as a whole, from its heading.
+      const asked = markdown === null ? options.paragraph : null;
       const stretch = minds.read(mind.id, (blocks) =>
-        stretchOf(blocks, part, options.language, selected),
+        stretchOf(blocks, part, options.language, selected, asked),
       );
       if ("why" in stretch) {
         throw new Refusal(

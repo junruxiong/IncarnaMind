@@ -182,6 +182,7 @@ import type {
 } from "./engine";
 import { listenedTokens, newestWithin, withTranscript } from "./liveTranscript";
 import { markdownToBlocks } from "./markdown";
+import { paragraphAsked } from "./paragraphAsked";
 import {
   answerInstructions,
   connectorInstructions,
@@ -1492,6 +1493,7 @@ export function createAnswers(options: AnswersOptions) {
               minds,
               prepared,
               requested,
+              paragraph: paragraphAsked(context.question),
               ...input.assistant,
               language: answerLanguage(context.question),
               blocksOf: (text) => {

@@ -395,6 +395,51 @@ describe("The Minds' Tools find what the model names", { timeout: 30_000 }, () =
     ]);
   });
 
+  // protects=asked about one paragraph by its place, edit_mind over the whole Mind changes that paragraph only and the others stay byte for byte, though the rewrite rewords whatever it is given; fails_when=a paragraph around it changes; no_claim=that a model picks the right Tool.
+  test.each([
+    ["Make the second paragraph more formal and leave the others as they are", 1],
+    ["把第二段改得更正式，其他段落保持不变", 1],
+    ["Tighten the last paragraph", 2],
+  ] as const)("“%s” changes only that paragraph, the whole Mind selected", async (text, at) => {
+    const model = toolModel({ tool: "edit_mind", input: { instruction: "Rewrite it" } }, "Done.");
+    const { core, mind, client } = await setUp(model);
+    const lines = [
+      "Sales were really strong.",
+      "Margins were really thin in the north.",
+      "Hiring was very slow.",
+    ];
+    writeMind(
+      client,
+      lines.map((line) => note(line)),
+    );
+    await client.settled();
+    const all = [0, 1, 2].map((index) => blockIdAt(client, index));
+    const before = [0, 1, 2].map((index) => client.blocks.get(index).toString());
+
+    await ask(core, { text, mindId: mind.id, focus: { selection: "everything", blockIds: all } });
+
+    await client.settled();
+    const shown = shownWithChanges(client);
+    expect(shown[at]).toContain("[-");
+    for (const index of [0, 1, 2].filter((each) => each !== at)) {
+      expect(client.blocks.get(index).toString()).toBe(before[index]);
+      expect(shown[index]).toBe(lines[index]);
+    }
+  });
+
+  // protects=a paragraph the User leaves alone by its place isn't the one changed; fails_when=only that paragraph is rewritten; no_claim=none beyond protects.
+  test("“everything but the second paragraph” rewrites the rest", async () => {
+    const model = toolModel({ tool: "edit_mind", input: { instruction: "Shorten it" } }, "Done.");
+    const { core, mind, client } = await setUp(model);
+    writeMind(client, [note("Sales were really strong."), note("Margins were really thin.")]);
+    await client.settled();
+
+    await ask(core, { text: "Shorten everything but the second paragraph", mindId: mind.id });
+
+    await client.settled();
+    expect(shownWithChanges(client)[0]).toBe("Sales were [-really -]strong.");
+  });
+
   // protects=read_mind gives another Mind's text, as the Mind in focus is read; fails_when=the model gets nothing, or the wrong Mind; no_claim=none beyond protects.
   test("read_mind gives the Mind the User names", async () => {
     const model = toolModel({ tool: "read_mind", input: { mind: "“project PLAN”" } }, "Read it.");
