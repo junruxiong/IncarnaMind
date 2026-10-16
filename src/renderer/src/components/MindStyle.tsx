@@ -48,9 +48,9 @@ const PRESET_FACES: Record<FontPreset, string> = {
 };
 
 /**
- * Style (#121, DESIGN.md › Typography): the font and text size of one Mind, and the choice to
- * make them the ones new Minds start in. A menu that opens beside the button that asked for it,
- * from the Mind's ⋯ and from ⌘K (`useMindStylePanel`); `MindStyleChoices` is its contents.
+ * Style: the font and text size of one Mind (DESIGN.md › Typography). A menu that opens beside
+ * the button that asked for it, from the Mind's ⋯ and from ⌘K (`useMindStylePanel`);
+ * `MindStyleChoices` is its contents.
  */
 export function MindStyleHost() {
   const t = useT();
@@ -61,7 +61,6 @@ export function MindStyleHost() {
     null,
   );
 
-  // Placed by the button it opens beside, or at the top of the window when nothing asked from one.
   useLayoutEffect(() => {
     if (!open) return;
     menu.buttonProps.ref.current = open.anchor?.isConnected ? open.anchor : fallback.current;
@@ -279,7 +278,6 @@ function MakeDefault({ mindId, close }: { mindId: string; close(): void }) {
   );
 }
 
-/** The fonts installed on the computer, each name in its own face, with a field to search them. */
 function FontPicker({
   mindId,
   anchor,

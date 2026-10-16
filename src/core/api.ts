@@ -1784,8 +1784,8 @@ export interface UserSettings {
    */
   keepWebPageLook: boolean;
   /**
-   * The font and text size a new Mind starts in (#121): "Make this the default for new
-   * Minds" in a Mind's Style. Minds already made keep theirs.
+   * The font and text size a new Mind starts in: "Make this the default for new Minds" in a
+   * Mind's Style. Minds already made keep theirs.
    */
   newMindStyle: MindStyle;
 }
@@ -8940,7 +8940,7 @@ export interface CoreApi {
     options?: SetMindCitationStyleOptions,
   ): Promise<MindCitationStyle>;
 
-  /** The font and text size a Mind is written in (#121): its own choice, else the default style. */
+  /** The font and text size a Mind is written in: its own choice, else the default style. */
   getMindStyle(mindId: string): Promise<MindStyle>;
   /** Sets the Mind's font and text size together, so Undo can put both back. */
   setMindStyle(mindId: string, style: MindStyle): Promise<MindStyle>;

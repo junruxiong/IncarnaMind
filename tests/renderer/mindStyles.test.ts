@@ -2,7 +2,7 @@ import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 import { DEFAULT_MIND_STYLE, type MindStyle } from "../../src/shared/mindStyle";
 
 /*
- * A Mind's font and text size as the window handles them (#121): a choice shows at once and is
+ * A Mind's font and text size as the window handles them: a choice shows at once and is
  * written through the core, Undo puts the Mind back, a refusal puts it back at once, and a
  * font is called missing only when the page draws it as the generic family it falls back to.
  */
