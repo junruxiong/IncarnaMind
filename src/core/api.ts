@@ -5380,7 +5380,9 @@ export type SignInRouteProblem =
   /** The account's organization doesn't allow it. */
   | "policy-blocked"
   /** The plan doesn't offer the model to IncarnaMind. */
-  | "model-unavailable";
+  | "model-unavailable"
+  /** The provider asked to slow down for a while, short of the plan's limit. */
+  | "rate-limited";
 
 export type ClaudeAccount =
   | { state: "signed-out" }
@@ -5415,12 +5417,10 @@ export type ClaudeSignInResult =
 // ---------------------------------------------------------------------------
 // GitHub Copilot
 
-/** The ways to sign in with GitHub for Copilot: IncarnaMind's own app first, then any other this build offers. */
 export const copilotProfileIds = ["own", "editor"] as const;
 
 export type CopilotProfileId = (typeof copilotProfileIds)[number];
 
-/** A model the User's Copilot plan offers IncarnaMind. */
 export interface CopilotModel {
   id: string;
   /** What the User sees, e.g. "GPT-5.5". */
@@ -5446,6 +5446,13 @@ export interface CopilotStatus {
 
 export type CopilotSignInErrorKind =
   | Extract<SignInRouteProblem, "sign-in-cancelled" | "refused" | "no-plan" | "unexpected-response">
+  /** The code on GitHub's page expired before the User approved it. */
+  | "code-expired"
+  /** The User declined on GitHub's page. */
+  | "declined"
+  | "unreachable"
+  /** GitHub answered with a server error. */
+  | "service-error"
   /** This build doesn't offer that way to sign in. */
   | "unavailable"
   /** This device can't store the sign-in securely (see `getSecretStorage`). */

@@ -73,6 +73,8 @@ export interface FakeGitHub {
   refuseRefresh: string | null;
   /** The exchange answers this status instead of a Copilot token, e.g. 404 for no Copilot plan. */
   exchangeStatus: number | null;
+  /** The token exchange drops the connection, as offline. */
+  exchangeOffline: boolean;
   /** The next replies of the chat API, then answers. */
   replies: ChatReply[];
   /** What the chat API says to each request after `replies`; `ANSWER` without one. */
@@ -158,6 +160,7 @@ export async function startFakeGitHub(): Promise<FakeGitHub> {
     slowDown: false,
     refuseRefresh: null,
     exchangeStatus: null,
+    exchangeOffline: false,
     replies: [],
     script: null,
     approve: () => {
@@ -298,8 +301,17 @@ export async function startFakeGitHub(): Promise<FakeGitHub> {
         if (request.method === "GET" && path === "/copilot_internal/v2/token") {
           if (!live.has(bearer(request)))
             return sendJson(response, 401, { message: "Bad credentials" });
-          if (fake.exchangeStatus)
-            return sendJson(response, fake.exchangeStatus, { message: "Not Found" });
+          if (fake.exchangeOffline) return response.socket?.destroy();
+          if (fake.exchangeStatus) {
+            const status = fake.exchangeStatus;
+            const message =
+              status === 403
+                ? "Resource not accessible by integration"
+                : status === 404
+                  ? "Not Found"
+                  : "Server Error";
+            return sendJson(response, status, { message });
+          }
           const session = `copilot-session-${fake.exchanged.length + 1}`;
           fake.exchanged.push(session);
           live.add(session);

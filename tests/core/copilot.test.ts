@@ -6,7 +6,11 @@ import type { SignInRouteProblem } from "../../src/core/api";
 import { authorizeWithDevice } from "../../src/core/oauth";
 import { COPILOT_SERVICE } from "../../src/core/providers/copilot/service";
 import { classifyProviderError } from "../../src/core/providers/providerErrors";
-import { SIGN_IN_ROUTES, wayBackLabel } from "../../src/core/providers/signInRoutes";
+import {
+  COPILOT_SIGN_IN_PROBLEMS,
+  SIGN_IN_ROUTES,
+  wayBackLabel,
+} from "../../src/core/providers/signInRoutes";
 import { translate } from "../../src/shared/i18n";
 import { askAndFinish, citationsIn, shownPassages } from "../helpers/citations";
 import {
@@ -96,7 +100,7 @@ const chats = (fake: FakeGitHub) => fake.requests.filter((r) => r.path === "/cha
 const stored = (keychain: MemoryKeychain) => [...keychain.secrets.values()].join("\n");
 
 describe("The device flow", () => {
-  test("polls at the server's interval, adds five seconds on slow_down, and stops when the code expires", async () => {
+  test("polls at the server's interval, and after a slow_down five seconds longer or as long as it says", async () => {
     const answers = [
       { error: "authorization_pending" },
       { error: "slow_down" },
@@ -241,15 +245,15 @@ describe("Sign in with GitHub for Copilot", () => {
     });
   });
 
-  test("declining on GitHub's page is a refused sign-in, and a code that expires a cancelled one", async () => {
+  test("declining on GitHub's page says the User declined, and a code that expires says so", async () => {
     const { core, fake } = await setUp();
     const { result: declined } = await codeShown(core);
     fake.deny();
-    expect(await declined).toMatchObject({ ok: false, error: { kind: "refused" } });
+    expect(await declined).toMatchObject({ ok: false, error: { kind: "declined" } });
 
     const { result: expired } = await codeShown(core);
     fake.expire();
-    expect(await expired).toMatchObject({ ok: false, error: { kind: "sign-in-cancelled" } });
+    expect(await expired).toMatchObject({ ok: false, error: { kind: "code-expired" } });
   });
 
   test("offers IncarnaMind's own app first, and says which way to sign in is experimental", async () => {
@@ -325,6 +329,16 @@ describe("Questions with IncarnaMind's own app", () => {
       signInRoute: "sign-in-expired",
     });
     expect((await core.getCopilot()).account).toEqual({ state: "expired" });
+  });
+
+  test("a refresh refused with a code IncarnaMind doesn't know asks to sign in again, not to wait", async () => {
+    const setup = await setUp();
+    setup.fake.expiring = true;
+    const { core, fake, clock } = await signedIn(undefined, setup);
+    fake.refuseRefresh = "refresh_not_allowed";
+    clock.advance(28_800 * 1000);
+
+    expect(await failure(core)).toMatchObject({ signInRoute: "sign-in-expired" });
   });
 
   test("a token that doesn't expire lasts until GitHub refuses it, then asks to sign in again", async () => {
@@ -475,6 +489,23 @@ describe("The editor profile, an experimental sign-in route", () => {
     expect(chats(fake).at(-1)?.headers.authorization).toBe(`Bearer ${fake.exchanged[1]}`);
   });
 
+  test("a failed token exchange says what happened, and says no plan only when GitHub does", async () => {
+    const cases = [
+      { set: (fake: FakeGitHub) => (fake.exchangeStatus = 503), kind: "service-error" },
+      { set: (fake: FakeGitHub) => (fake.exchangeStatus = 403), kind: "refused" },
+      { set: (fake: FakeGitHub) => (fake.exchangeOffline = true), kind: "unreachable" },
+    ];
+    for (const { set, kind } of cases) {
+      const setup = await setUp();
+      set(setup.fake);
+      const { result } = await codeShown(setup.core, "editor");
+      setup.fake.approve();
+
+      expect(await result, kind).toMatchObject({ ok: false, error: { kind } });
+      expect(setup.keychain.secrets.size).toBe(0);
+    }
+  });
+
   test("a GitHub account without Copilot is told so at sign-in, and nothing is kept", async () => {
     const setup = await setUp();
     setup.fake.exchangeStatus = 404;
@@ -500,6 +531,13 @@ describe("Failures", () => {
       body: { error: { message: "You don't have access to GitHub Copilot." } },
       kind: "blocked",
       problem: "no-plan",
+    },
+    {
+      name: "a refusal that doesn't say there's no plan",
+      status: 403,
+      body: { error: { message: "Forbidden" } },
+      kind: "blocked",
+      problem: "refused",
     },
     {
       name: "an organization's policy",
@@ -542,7 +580,7 @@ describe("Failures", () => {
     });
   }
 
-  test("a passing rate limit stays a rate limit", async () => {
+  test("a passing rate limit is a rate limit, with its own line", async () => {
     const { core, fake } = await signedIn();
     fake.replies.push({
       kind: "error",
@@ -550,10 +588,7 @@ describe("Failures", () => {
       body: JSON.stringify({ error: { message: "Too many requests" } }),
     });
 
-    const error = await failure(core);
-
-    expect(error.kind).toBe("rate-limit");
-    expect(error.signInRoute).toBeUndefined();
+    expect(await failure(core)).toMatchObject({ kind: "rate-limit", signInRoute: "rate-limited" });
   });
 
   test("a page that isn't an answer is an unexpected response", async () => {
@@ -573,7 +608,7 @@ describe("Failures", () => {
     for (const language of ["en", "zh-CN"] as const) {
       const lines = Object.values(problems).map(({ line }) => translate(language, line));
       expect(new Set(lines).size).toBe(lines.length);
-      for (const line of lines) expect(line).toMatch(/GitHub|Copilot/);
+      for (const line of lines) expect(line).toMatch(/GitHub|Copilot|organization|组织/);
       for (const words of Object.values(problems)) {
         for (const wayBack of words.waysBack) {
           const key = wayBackLabel("copilot", wayBack);
@@ -589,6 +624,14 @@ describe("Failures", () => {
     ] as const) {
       expect(problems[problem]?.waysBack).toContain("use-another-model");
     }
-    expect(problems["sign-in-expired"]?.waysBack).toEqual(["sign-in-again"]);
+    expect(problems["sign-in-expired"]?.waysBack[0]).toBe("sign-in-again");
+    // Every failure, of a sign-in or a request, has a way back to an API key.
+    const signIn = Object.values(COPILOT_SIGN_IN_PROBLEMS);
+    for (const words of [...Object.values(problems), ...signIn]) {
+      expect(words.waysBack).toContain("paste-api-key");
+    }
+    for (const language of ["en", "zh-CN"] as const) {
+      for (const { line } of signIn) expect(translate(language, line)).not.toBe(line);
+    }
   });
 });
