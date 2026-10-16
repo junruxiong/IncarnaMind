@@ -486,7 +486,6 @@ export function createExamples(options: ExamplesOptions) {
     // A folder of the same name would mix the two languages' files: the old ones go first.
     if (sameFolder) await discardFiles(examples);
     const { folder, linked } = await copyAndLink(source, set);
-    if (!sameFolder) await discardFiles(examples);
     const questionId = randomUUID();
     const answerId = randomUUID();
     populate(examples.mindId, set, linked.folderId, questionId, answerId);
@@ -500,6 +499,9 @@ export function createExamples(options: ExamplesOptions) {
       checked: false,
     } satisfies StoredExamples);
     options.changed(status(group));
+    // After "changed", not before: nothing may wait between linking the new folder and saying it
+    // is the example's, or its Documents are reported as the User's own (#914).
+    if (!sameFolder) await discardFiles(examples);
     checkWhenRead(group);
   };
 
