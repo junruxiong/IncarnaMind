@@ -86,7 +86,7 @@ export function countedUnit(
   basis: CountBasis,
   chineseInterface: boolean,
 ): "words" | "characters" {
-  const empty = count.characters === 0;
+  const empty = count.words + count.cjk === 0;
   return basis === "words" && !mostlyCjk(count) && !(empty && chineseInterface)
     ? "words"
     : "characters";
