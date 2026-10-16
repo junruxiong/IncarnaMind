@@ -142,10 +142,12 @@ function useCountSettings(doc: Y.Doc) {
 export function WordCount({
   editor,
   doc,
+  quiet = false,
   children,
 }: {
   editor: Editor;
   doc: Y.Doc;
+  quiet?: boolean;
   /** What follows the count on its line: the Mind's health (#96). */
   children?: ReactNode;
 }) {
@@ -157,7 +159,7 @@ export function WordCount({
   const [draft, setDraft] = useState("");
   const [invalid, setInvalid] = useState(false);
 
-  if (!counts) {
+  if (!counts || quiet) {
     return (
       <div className="mind-count" data-testid="mind-count">
         {children}
