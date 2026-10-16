@@ -3,6 +3,7 @@ import { shortcutLabel } from "../commands/keymap";
 import { commands } from "../commands/registry";
 import { TableIcon } from "../editor/icons";
 import { useFindSources } from "../findSources";
+import { useFirstOpen } from "../firstOpen";
 import { useT } from "../i18n";
 import { canRecordMeetings } from "../meetings";
 import { usePruneSelection } from "../selection";
@@ -43,6 +44,7 @@ import { usePopoverMenu } from "./usePopoverMenu";
 export function Sidebar({ width, onOpenSettings }: { width: number; onOpenSettings(): void }) {
   const t = useT();
   usePruneSelection();
+  const firstOpen = useFirstOpen();
 
   return (
     <aside
@@ -76,7 +78,7 @@ export function Sidebar({ width, onOpenSettings }: { width: number; onOpenSettin
         className="relative flex shrink-0 flex-col p-2 before:absolute before:inset-x-2 before:top-0 before:h-px before:bg-rule before:content-['']"
       >
         <SidebarSelection />
-        <SidebarStatus />
+        <SidebarStatus problemsOnly={firstOpen} />
         <div className={rowClass(false)}>
           <button type="button" onClick={onOpenSettings} className={rowButtonClass}>
             <SettingsLineIcon className={rowIconClass(false)} />
