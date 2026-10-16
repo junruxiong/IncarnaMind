@@ -1,6 +1,8 @@
 import type { ClaimCheckAction } from "../../../core/api";
+import { documentsAdded, useAddedDocuments } from "../addedDocuments";
 import { checkSentences, useChecks } from "../checks";
 import { selectionForEdit } from "../editor/editSelection";
+import { startMindCheck } from "../mindCheck";
 import { noteHandle } from "./handles";
 import type { Command } from "./registry";
 
@@ -28,7 +30,26 @@ const checkCommand = (
   },
 });
 
+/** The Mind last written in, while Documents added since its checks could change some (#993). */
+function withAdded(): string | null {
+  const note = noteHandle.current;
+  if (!note || note.editor.isDestroyed || useChecks.getState().running[note.mindId]) return null;
+  const added = useAddedDocuments.getState().byMind[note.mindId];
+  return documentsAdded(added).length > 0 ? note.mindId : null;
+}
+
 export const checkCommands: readonly Command[] = [
   checkCommand("find-support", "editor.ai.findSupport"),
   checkCommand("check-against-documents", "editor.ai.checkAgainstDocuments"),
+  {
+    id: "check.addedDocuments",
+    label: "checks.added.command",
+    group: "main",
+    reversible: true,
+    when: () => withAdded() !== null,
+    run() {
+      const mindId = withAdded();
+      if (mindId) void startMindCheck(mindId, "added");
+    },
+  },
 ];

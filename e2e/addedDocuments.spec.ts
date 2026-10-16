@@ -174,4 +174,20 @@ test("closed, the line stays closed for those Documents, and a Document added la
 
   await fileInto(window, ["Cranes"], join(sources, "Cranes.pdf"));
   await expect(line).toHaveText(/^2 Documents added since these checks/);
+
+  // From ⌘K too: the check made again, nothing was added since.
+  await window.getByTestId("mind-editor").click();
+  await window.keyboard.press("ControlOrMeta+k");
+  await window.keyboard.type("check again with");
+  await pointAndClick(
+    window,
+    window
+      .getByTestId("palette-item")
+      .filter({ hasText: "Check again with the Documents added since" }),
+  );
+  await expect(window.getByTestId("checks-running")).toHaveCount(0);
+  await expect(line).toHaveCount(0);
+  await expect(
+    window.getByTestId("claim-mark").and(window.locator('[data-check="unsupported"]')),
+  ).toHaveCount(1);
 });

@@ -644,6 +644,7 @@ export const en = {
   "checks.close": "Close",
   "checks.added.one": "1 Document added since these checks",
   "checks.added": "{count} Documents added since these checks",
+  "checks.added.command": "Check again with the Documents added since",
   "checks.problem.no-documents.folder":
     "Nothing to check against: “{folder}” has no Documents yet.",
   "checks.addFiles": "Add files…",

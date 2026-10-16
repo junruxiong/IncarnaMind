@@ -622,6 +622,7 @@ export const zhCN = {
   "checks.close": "关闭",
   "checks.added.one": "检查之后新增了 1 个文档",
   "checks.added": "检查之后新增了 {count} 个文档",
+  "checks.added.command": "对照新增的文档重新核对",
   "checks.problem.no-documents.folder": "没有可核对的文档：“{folder}”中还没有文档。",
   "checks.addFiles": "添加文件…",
   "checks.checkAll": "对照全部文档核对",
