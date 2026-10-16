@@ -1,7 +1,7 @@
 /**
  * Check this Mind's cost on a real model (#973): a one-page memo of 26
- * sentences checked against the three report examples, the estimate before
- * the run beside what the run sent and cost. Runs only with
+ * sentences checked against the three report examples, the estimate for the
+ * claims the model named beside what the run then sent and cost. Runs only with
  * INCARNAMIND_LIVE_ANTHROPIC_KEY (INCARNAMIND_LIVE_ANTHROPIC_MODEL, Haiku by
  * default). Set INCARNAMIND_LIVE_REPORT to a file to keep each call's tokens,
  * the source of tests/fixtures/cost/recorded-checks.json.
@@ -19,8 +19,7 @@ import { writeMind } from "../helpers/minds";
 
 const KEY = process.env.INCARNAMIND_LIVE_ANTHROPIC_KEY;
 const MODEL =
-  process.env.INCARNAMIND_LIVE_ANTHROPIC_MODEL ??
-  (catalogProvider("anthropic")?.roles.quickTasks as string);
+  process.env.INCARNAMIND_LIVE_ANTHROPIC_MODEL ?? catalogProvider("anthropic")?.roles.quickTasks;
 
 const REPORTS = join(import.meta.dirname, "../../resources/examples/reports/en");
 const FILES = [
@@ -36,14 +35,14 @@ const MEMO: readonly string[][] = JSON.parse(
 
 const text = (value: string): JSONContent => ({ type: "text", text: value });
 
-test.skipIf(!KEY)(
+test.skipIf(!KEY || !MODEL)(
   "Check this Mind on a one-page memo: the estimate beside what the run sent and cost",
   { timeout: 600_000 },
   async () => {
     const dataDir = await createTempDataFolder();
     const core = startCore(dataDir, { createChatModel: createAiSdkChatModel });
     core.on("consent.requested", (asked) => void core.respondToConsent(asked.requestId, true));
-    await core.saveChatProvider({ kind: "anthropic", apiKey: KEY, modelId: MODEL });
+    await core.saveChatProvider({ kind: "anthropic", apiKey: KEY, modelId: MODEL ?? "" });
     const sources = await createTempDataFolder();
     await addAndProcess(
       core,
@@ -67,7 +66,13 @@ test.skipIf(!KEY)(
 
     const plan = await core.planMindCheck(mind.id, "changed", false);
     if (plan.kind !== "ready") throw new Error(`Nothing to check: ${plan.kind}.`);
-    const estimate = await core.estimateRun({ items: plan.sentences });
+    const found = await core.findMindClaims({
+      requestId: "sort",
+      mindId: mind.id,
+      mode: "changed",
+    });
+    if (found.kind !== "found") throw new Error(`No claims found: ${found.kind}.`);
+    const estimate = await core.estimateRun({ items: found.claims, each: "check" });
     const result = await core.checkMind({ requestId: "memo", mindId: mind.id, mode: "changed" });
     const calls = queryDatabase<{
       flow: string;
@@ -85,6 +90,7 @@ test.skipIf(!KEY)(
     const report = {
       model: MODEL,
       sentences: plan.sentences,
+      claims: found.claims,
       checked: result.kind === "checked" ? result.sentences : null,
       estimate,
       cost: calls.reduce((sum, call) => sum + call.cost, 0),
@@ -93,6 +99,6 @@ test.skipIf(!KEY)(
     if (process.env.INCARNAMIND_LIVE_REPORT) {
       await appendFile(process.env.INCARNAMIND_LIVE_REPORT, `${JSON.stringify(report)}\n`);
     }
-    expect(result.kind).toBe("checked");
+    expect(result).toMatchObject({ kind: "checked", sentences: found.claims });
   },
 );

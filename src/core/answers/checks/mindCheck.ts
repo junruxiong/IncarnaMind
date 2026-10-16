@@ -5,9 +5,10 @@
  * 1. The Mind's sentences are read, as for note health: those in paragraphs,
  *    lists, quotes and Answers, not headings or Questions.
  * 2. The model names the claims among them, leaving out questions and the
- *    User's own opinions (./findClaims). In "changed" mode it is shown only
- *    the sentences never checked since the last run, and the checks that
- *    need a re-check are made again without asking it.
+ *    User's own opinions (./findClaims), before the run is asked for, so its
+ *    estimate counts them (`findMindClaims`), and only once. In "changed"
+ *    mode it is shown only the sentences never checked since the last run,
+ *    and the checks that need a re-check are made again without asking it.
  * 3. Each claim gets a "checking" mark at once, then its result, as Check
  *    against Documents gives it (./runChecks).
  * 4. The run is recorded in the Mind's settings (`MindCheckRun`): when, how
@@ -26,14 +27,15 @@ import type {
   CheckMindMode,
   CheckMindResult,
   ClaimCheckAttributes,
+  FindMindClaimsResult,
   MindCheckPlan,
 } from "../../api";
 import { parseModel } from "../../edits";
 import { InvalidInputError, isRecord } from "../../errors";
 import type { MindContent } from "../../mindContent";
 import { parseMindId } from "../../minds";
-import { readsAsOwnClaim } from "./claims";
-import { claimsAmong } from "./findClaims";
+import type { PreparedChatModel } from "../../providers/chat";
+import { type ClaimsFound, claimsAmong } from "./findClaims";
 import { type QueuedClaim, type RunChecksOptions, runChecks } from "./runChecks";
 import { everySentence, markedSentences, markSentence, type SelectedSentence } from "./sentences";
 import type { CheckScope, VerifyOptions } from "./verify";
@@ -100,6 +102,49 @@ export function createMindCheck(options: MindCheckOptions) {
   const modelOf = (mindId: string): ChatModelChoice | null =>
     content.readSettings(mindId, (settings) => (settings.doc ? mindModelOf(settings.doc) : null));
 
+  /**
+   * What the model named among each Mind's sentences, by key: the ask before
+   * a run counts the claims exactly, and neither Check nor a later run sends a
+   * sentence to be sorted again (#973).
+   */
+  const sorted = new Map<string, { claims: Set<string>; left: Set<string> }>();
+
+  /** Has the model sort the sentences of `fresh` it hasn't yet; the claims among all of them, and those left out. */
+  async function sort(
+    mindId: string,
+    fresh: readonly SelectedSentence[],
+    prepared: PreparedChatModel,
+    signal: AbortSignal,
+  ): Promise<
+    | { kind: "found"; claims: SelectedSentence[]; left: SelectedSentence[] }
+    | Exclude<ClaimsFound, { kind: "found" }>
+  > {
+    const known = sorted.get(mindId) ?? { claims: new Set<string>(), left: new Set<string>() };
+    sorted.set(mindId, known);
+    const unsorted = fresh.filter((sentence) => {
+      const key = sentenceKey(sentence.text);
+      return !known.claims.has(key) && !known.left.has(key);
+    });
+    if (unsorted.length > 0) {
+      const found = await claimsAmong(
+        prepared,
+        unsorted.map((sentence) => sentence.text),
+        "own",
+        signal,
+      );
+      if (found.kind !== "found") return found;
+      for (const [index, sentence] of unsorted.entries()) {
+        (found.claims.has(index) ? known.claims : known.left).add(sentenceKey(sentence.text));
+      }
+    }
+    const named = (sentence: SelectedSentence) => known.claims.has(sentenceKey(sentence.text));
+    return {
+      kind: "found",
+      claims: fresh.filter(named),
+      left: fresh.filter((sentence) => !named(sentence)),
+    };
+  }
+
   /** The sentences a run in `mode` sends now. */
   function sending(mindId: string, mode: CheckMindMode): Sending {
     const skipped = new Set(content.readSettings(mindId, readMindCheck)?.skipped ?? []);
@@ -138,10 +183,27 @@ export function createMindCheck(options: MindCheckOptions) {
     return {
       kind: "ready",
       sentences: fresh.length + again.length,
-      likely: fresh.filter((sentence) => readsAsOwnClaim(sentence.text)).length + again.length,
       findsClaims: fresh.length > 0,
       model: modelOf(mindId),
     };
+  }
+
+  async function findClaims(
+    input: ReturnType<typeof parseCheckMind>,
+    signal: AbortSignal,
+  ): Promise<FindMindClaimsResult> {
+    const { mindId, mode } = input;
+    const { fresh, again } = sending(mindId, mode);
+    if (fresh.length + again.length === 0) return { kind: "nothing" };
+    const { searchable, folderId } = options.scopeOf(mindId, input.allDocuments);
+    if (searchable === 0) return { kind: "no-documents", folderId };
+    const ready = await options.prepare(input.model ?? modelOf(mindId) ?? options.defaultModel());
+    if (!ready.ok) return ready.result;
+    if (signal.aborted) return { kind: "cancelled" };
+    const found = await sort(mindId, fresh, ready.prepared, signal);
+    if (found.kind !== "found") return found;
+    const claims = found.claims.length + again.length;
+    return claims === 0 ? { kind: "nothing" } : { kind: "found", claims };
   }
 
   async function check(
@@ -159,17 +221,10 @@ export function createMindCheck(options: MindCheckOptions) {
 
     let claims = again;
     if (fresh.length > 0) {
-      const found = await claimsAmong(
-        ready.prepared,
-        fresh.map((sentence) => sentence.text),
-        "own",
-        signal,
-      );
+      const found = await sort(mindId, fresh, ready.prepared, signal);
       if (found.kind !== "found") return found;
-      for (const [index, sentence] of fresh.entries()) {
-        if (!found.claims.has(index)) skipped.add(sentenceKey(sentence.text));
-      }
-      claims = [...fresh.filter((_, index) => found.claims.has(index)), ...again];
+      for (const sentence of found.left) skipped.add(sentenceKey(sentence.text));
+      claims = [...found.claims, ...again];
     }
 
     const startedAt = options.now().toISOString();
@@ -246,6 +301,21 @@ export function createMindCheck(options: MindCheckOptions) {
       const id = parseMindId(mindId);
       options.requireMind(id);
       return plan(id, parseMode(mode), allDocuments);
+    },
+
+    /** See `CoreApi.findMindClaims`. */
+    async findMindClaims(input: unknown): Promise<FindMindClaimsResult> {
+      const parsed = parseCheckMind(input);
+      options.requireMind(parsed.mindId);
+      if (options.isRunning(parsed.requestId)) {
+        throw new InvalidInputError({ key: "error.mindCheck.request" });
+      }
+      const tracked = options.track(parsed.requestId, parsed.mindId);
+      try {
+        return await findClaims(parsed, tracked.signal);
+      } finally {
+        tracked.done();
+      }
     },
 
     /** See `CoreApi.checkMind`. */
