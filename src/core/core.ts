@@ -159,6 +159,8 @@ import { CHAT_FLOW_SENDS, createChat, type PreparedChatModel } from "./providers
 import { CHATGPT_PLAN_ENDPOINTS, createChatGptPlan } from "./providers/chatgpt/plan";
 import { createClaudeAccount } from "./providers/claudeAccount/account";
 import { ANTHROPIC_OAUTH } from "./providers/claudeAccount/config";
+import { createCopilotAccount } from "./providers/copilot/account";
+import { COPILOT_PROFILES } from "./providers/copilot/config";
 import { createAiSdkEmbeddingModel } from "./providers/embeddings";
 import { defaultOllamaUrl, ollamaBaseUrl } from "./providers/kinds";
 import { createLocalServers } from "./providers/localServers";
@@ -839,6 +841,15 @@ export function createCore(adapters: CoreAdapters): Core {
     now: () => (adapters.now?.() ?? new Date()).getTime(),
     onChange: () => claudeAccountChanged(),
   });
+  let copilotChanged = () => {};
+  const copilotProfiles = adapters.copilotProfiles ?? COPILOT_PROFILES;
+  const copilot = createCopilotAccount({
+    profiles: copilotProfiles,
+    secrets,
+    browser: adapters.browser,
+    now: () => (adapters.now?.() ?? new Date()).getTime(),
+    onChange: () => copilotChanged(),
+  });
   const meter = createMeter({
     db,
     now: () => adapters.now?.() ?? new Date(),
@@ -855,6 +866,7 @@ export function createCore(adapters: CoreAdapters): Core {
     createModel: adapters.createChatModel ?? createAiSdkChatModel,
     chatGpt,
     claudeAccount,
+    copilot,
     ollamaModels: adapters.ollamaModels ?? createOllamaModels(),
     localOnly: () => embedding.localOnly(),
     meter,
@@ -1519,8 +1531,17 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     requireFolder: (folderId) => void library.folder(folderId),
     async addFile(path, folderId) {
-      const added = await addDocuments([path], folderId === null ? {} : { groupId: folderId });
-      return added.documents[0] ?? null;
+      const fresh = new Set<string>();
+      const added = await addDocuments(
+        [path],
+        folderId === null ? {} : { groupId: folderId },
+        (documentId) => fresh.add(documentId),
+      );
+      const [document] = added.documents;
+      // Someone else's file, checked: not proof of its own claims. One the Library already had keeps the User's choice.
+      return document && fresh.has(document.id)
+        ? documents.setNotCited(document.id, true)
+        : (document ?? null);
     },
     document: (documentId) => documents.get(documentId),
     onStatus: (listener) => events.on("document.status", listener),
@@ -2121,6 +2142,17 @@ export function createCore(adapters: CoreAdapters): Core {
       },
     );
   };
+  copilotChanged = () => {
+    const report = async () => {
+      const status = await copilot.status();
+      if (lifetime.signal.aborted) return;
+      events.emit("copilot.changed", status);
+      await readinessChanged();
+    };
+    report().catch((error: unknown) => {
+      if (!lifetime.signal.aborted) console.error(error);
+    });
+  };
 
   // Tagging a quit interrupted starts again, once Automatic knows what it tags with;
   // Documents waiting for a model are checked.
@@ -2201,6 +2233,23 @@ export function createCore(adapters: CoreAdapters): Core {
       listed: () => claudeAccount.used(),
     });
   }
+  const copilotHosts = new Map(
+    Object.values(copilotProfiles)
+      .flatMap((profile) => [
+        profile.deviceCodeUrl,
+        profile.tokenUrl,
+        profile.tokenExchange?.url,
+        profile.apiBaseUrl,
+      ])
+      .filter((url): url is string => url !== undefined)
+      .map((url) => new URL(url))
+      .map((url) => [url.origin, url.host]),
+  );
+  privacy.traffic.register({
+    id: "copilot-sign-in",
+    services: () => [...copilotHosts].map(([id, name]) => ({ id, name })),
+    listed: () => copilot.used(),
+  });
   privacy.traffic.register({
     id: "remote-connectors",
     services: () => connectors.remoteTraffic(),
@@ -2548,11 +2597,18 @@ export function createCore(adapters: CoreAdapters): Core {
     reportError: (error) => console.error(error),
   });
 
-  const addDocuments: CoreApi["addDocuments"] = async (paths, options) => {
+  const addDocuments = async (
+    paths: string[],
+    options?: Parameters<CoreApi["addDocuments"]>[1],
+    onNew?: (documentId: string) => void,
+  ): ReturnType<CoreApi["addDocuments"]> => {
     const batchId = batches.begin(library.target(options));
     const since = now();
     const result = await documents
-      .add(paths, (documentId) => batches.added(batchId, documentId))
+      .add(paths, (documentId) => {
+        batches.added(batchId, documentId);
+        onNew?.(documentId);
+      })
       .finally(() => batches.done(batchId));
     usageData.record({ event: "documents_added", fields: addedCounts(result, since) });
     return { ...result, batchId };
@@ -3055,6 +3111,15 @@ export function createCore(adapters: CoreAdapters): Core {
     signOutOfClaude: () => claudeAccount.signOut(),
     pasteClaudeSignInAddress: async (address) =>
       claudeAccount.pasteSignInAddress(typeof address === "string" ? address : ""),
+    getCopilot: () => copilot.status(),
+    signInToCopilot: (input) =>
+      copilot.signIn(
+        isRecord(input) && (input.profile === "own" || input.profile === "editor")
+          ? { profile: input.profile }
+          : {},
+      ),
+    cancelCopilotSignIn: () => copilot.cancelSignIn(),
+    signOutOfCopilot: () => copilot.signOut(),
 
     listDataFlows: () => consent.list(),
     listConsentRequests: async () => consent.requests(),

@@ -3491,7 +3491,8 @@ export interface TestRerankConnectionInput {
  * Ollama, normally on this computer; it also offers one-click model downloads.
  * "chatgpt" is the User's ChatGPT plan, used through Sign in with ChatGPT
  * instead of an API key (see `ChatGptPlanStatus`); "claude-account" the
- * User's Claude plan, signed in with their Claude account (see `ClaudeAccountStatus`).
+ * User's Claude plan, signed in with their Claude account (see `ClaudeAccountStatus`);
+ * "copilot" the User's GitHub Copilot plan, signed in with GitHub (see `CopilotStatus`).
  */
 export const chatProviderKinds = [
   "openai",
@@ -3509,6 +3510,7 @@ export const chatProviderKinds = [
   "ollama",
   "chatgpt",
   "claude-account",
+  "copilot",
 ] as const;
 
 export type ChatProviderKind = (typeof chatProviderKinds)[number];
@@ -3618,8 +3620,8 @@ export interface ProviderError {
   wording?: ErrorWording;
   /** "plan-limit": when the plan's limit resets (ISO 8601), when the provider says. */
   resetsAt?: string;
-  /** A Claude account's request: which of the route's problems it is, for its own line. */
-  claudeAccount?: ClaudeAccountProblem;
+  /** A sign-in route's request (a Claude account, Copilot): which of its problems it is, for its own line. */
+  signInRoute?: SignInRouteProblem;
 }
 
 /**
@@ -5421,19 +5423,27 @@ export type PastedAddressResult = { ok: true } | { ok: false; problem: PastedAdd
 // ---------------------------------------------------------------------------
 // Claude account
 
-/** Each said where it happened, with a way back (./providers/claudeAccount/problems.ts). */
-export type ClaudeAccountProblem =
+/** Each said where it happened, with a way back (./providers/signInRoutes.ts). */
+export type SignInRouteProblem =
   /** The User cancelled the sign-in, or didn't finish it in time: nothing was kept. */
   | "sign-in-cancelled"
   | "signed-out"
   /** The sign-in can't be renewed any more: sign in again. */
   | "sign-in-expired"
-  /** Anthropic refused the sign-in, or a request made with it. */
+  /** The provider refused the sign-in, or a request made with it. */
   | "refused"
-  /** The plan's usage limit is reached, until `ProviderError.resetsAt` when Anthropic says. */
+  /** The plan's usage limit is reached, until `ProviderError.resetsAt` when the provider says. */
   | "plan-limit"
-  /** Anthropic answered in a way this route doesn't know. */
-  | "unexpected-response";
+  /** The provider answered in a way this route doesn't know. */
+  | "unexpected-response"
+  /** The account has no plan this route can use. */
+  | "no-plan"
+  /** The account's organization doesn't allow it. */
+  | "policy-blocked"
+  /** The plan doesn't offer the model to IncarnaMind. */
+  | "model-unavailable"
+  /** The provider asked to slow down for a while, short of the plan's limit. */
+  | "rate-limited";
 
 export type ClaudeAccount =
   | { state: "signed-out" }
@@ -5453,7 +5463,7 @@ export interface ClaudeAccountStatus {
 }
 
 export type ClaudeSignInErrorKind =
-  | Extract<ClaudeAccountProblem, "sign-in-cancelled" | "refused" | "unexpected-response">
+  | Extract<SignInRouteProblem, "sign-in-cancelled" | "refused" | "unexpected-response">
   /** This build has no client profile for the route. */
   | "unavailable"
   /** This device can't store the sign-in securely (see `getSecretStorage`). */
@@ -5464,6 +5474,55 @@ export type ClaudeSignInErrorKind =
 export type ClaudeSignInResult =
   | { ok: true; status: ClaudeAccountStatus }
   | { ok: false; error: { kind: ClaudeSignInErrorKind; message: string } };
+
+// ---------------------------------------------------------------------------
+// GitHub Copilot
+
+export const copilotProfileIds = ["own", "editor"] as const;
+
+export type CopilotProfileId = (typeof copilotProfileIds)[number];
+
+export interface CopilotModel {
+  id: string;
+  /** What the User sees, e.g. "GPT-5.5". */
+  name: string;
+}
+
+/** The User's Copilot plan for Answers instead of an API key; it counts toward the plan's limits. */
+export interface CopilotStatus {
+  account:
+    | { state: "signed-out" }
+    /** Renewing the sign-in failed, or GitHub refused its token: sign in again. */
+    | { state: "expired" }
+    | { state: "signed-in"; profile: CopilotProfileId };
+  /** A sign-in is waiting for the User on GitHub's page. */
+  signingIn: boolean;
+  /** While a sign-in waits, once GitHub has given it: the code the User types, and where. */
+  deviceCode: { userCode: string; verificationUri: string; expiresIn: number } | null;
+  /** The ways to sign in, the default first; an experimental one is said so before sign-in. */
+  profiles: { id: CopilotProfileId; experimental: boolean }[];
+  /** The models the plan offers for the token, once signed in. */
+  models: CopilotModel[];
+}
+
+export type CopilotSignInErrorKind =
+  | Extract<SignInRouteProblem, "sign-in-cancelled" | "refused" | "no-plan" | "unexpected-response">
+  /** The code on GitHub's page expired before the User approved it. */
+  | "code-expired"
+  /** The User declined on GitHub's page. */
+  | "declined"
+  | "unreachable"
+  /** GitHub answered with a server error. */
+  | "service-error"
+  /** This build doesn't offer that way to sign in. */
+  | "unavailable"
+  /** This device can't store the sign-in securely (see `getSecretStorage`). */
+  | "secret-storage"
+  | "failed";
+
+export type CopilotSignInResult =
+  | { ok: true; status: CopilotStatus }
+  | { ok: false; error: { kind: CopilotSignInErrorKind; message: string } };
 
 // ---------------------------------------------------------------------------
 // Secrets
@@ -5717,6 +5776,8 @@ export interface RegisteredDataFlow {
  *   reading OpenAI's signing keys; listed once the User has signed in.
  * - "claude-sign-in": signing in with a Claude account and refreshing it;
  *   listed once the User has started signing in.
+ * - "copilot-sign-in": signing in with GitHub for Copilot, renewing it, and
+ *   reading the plan's models; listed once the User has started signing in.
  * - "remote-connectors": connecting to each remote Connector that is on, and
  *   signing in to it: its server, and the authorization server it names
  *   (discovery, registration, tokens). One entry per server. Tool calls, which
@@ -5734,6 +5795,7 @@ export const networkTrafficIds = [
   "ollama-pull",
   "chatgpt-sign-in",
   "claude-sign-in",
+  "copilot-sign-in",
   "remote-connectors",
   "usage-data",
 ] as const;
@@ -8283,6 +8345,18 @@ export interface CoreApi {
   /** Checked exactly as the browser's own return; a refused one changes nothing. */
   pasteClaudeSignInAddress(address: string): Promise<PastedAddressResult>;
 
+  getCopilot(): Promise<CopilotStatus>;
+  /**
+   * Shows GitHub's code in the status and waits until the User approves or
+   * the code expires; `profile` defaults to IncarnaMind's own app. Saving the
+   * "copilot" provider, not signing in, allows its flows (ADR-0022).
+   */
+  signInToCopilot(input?: { profile?: CopilotProfileId }): Promise<CopilotSignInResult>;
+  /** Stops waiting for GitHub. Nothing is kept. */
+  cancelCopilotSignIn(): Promise<void>;
+  /** A saved Copilot provider then needs a new sign-in. */
+  signOutOfCopilot(): Promise<CopilotStatus>;
+
   /**
    * Every registered external data flow, to each service it currently goes to
    * and each service the User has decided on, with that decision.
@@ -8865,6 +8939,8 @@ export interface CoreEvents {
   "chatGptPlan.changed": ChatGptPlanStatus;
   /** The Claude account sign-in changed: started, finished, signed out, or expired. */
   "claudeAccount.changed": ClaudeAccountStatus;
+  /** The Copilot sign-in changed: started, showed its code, finished, signed out, or expired. */
+  "copilot.changed": CopilotStatus;
   /** Jev was set up, changed or removed on this device. */
   "jev.changed": JevSettings;
   /**
@@ -9101,6 +9177,10 @@ const methods: Record<CoreApiMethod, true> = {
   reopenClaudeSignIn: true,
   signOutOfClaude: true,
   pasteClaudeSignInAddress: true,
+  getCopilot: true,
+  signInToCopilot: true,
+  cancelCopilotSignIn: true,
+  signOutOfCopilot: true,
   listDataFlows: true,
   listConsentRequests: true,
   respondToConsent: true,
