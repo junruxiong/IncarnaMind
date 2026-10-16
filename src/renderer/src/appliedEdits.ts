@@ -16,6 +16,7 @@ import {
   MIND_CONTENT_FIELD,
   type ProposalRef,
 } from "../../core/api";
+import { waitsForUser } from "../../shared/askedChanges";
 import { aiUseOfAccepted, proposalRequestOf, resolveProposals } from "../../shared/proposals";
 import { type ChangeCounts, changeFact } from "./changeFacts";
 import { core } from "./core";
@@ -31,12 +32,18 @@ import {
 import {
   anchorChanges,
   asItWas,
-  ownTextRemoved,
   planChanges,
   proposalKindOf,
   writeAccepted,
 } from "./editor/arrivedChanges";
-import { asOneStep, offerEditorUndo, type UndoStep, undoStackOf } from "./editor/editorUndo";
+import {
+  asOneStep,
+  type FollowedSteps,
+  followSteps,
+  offerEditorUndo,
+  type UndoStep,
+  undoStackOf,
+} from "./editor/editorUndo";
 import {
   applyingIn,
   editorDoc,
@@ -62,6 +69,8 @@ export interface Applying {
   steps: UndoStep[];
   /** Later steps that belong to it: restoring a change, removing what it left out. */
   more: UndoStep[];
+  /** The assistant's changes the User asked for (#880): its steps as Undo and Redo move them. */
+  followed: FollowedSteps | null;
   leftOut: readonly LeftOutPart[];
   stopTaking(): void;
   forget(): void;
@@ -150,6 +159,7 @@ function beginEdit(editor: Editor, mindId: string, requestId: string): Applying 
     request: null,
     steps: [],
     more: [],
+    followed: null,
     leftOut: [],
     stopTaking: () => undefined,
     forget: () => {
@@ -305,25 +315,18 @@ function apply(edit: Applying, request: string): number {
 // Setting the assistant's changes aside before writing them as the editor's own: no Undo tracks it.
 class SettingAside {}
 
-// The share of the User's own text in the Mind an assistant change may take out before it waits.
-const MOST_OF_YOUR_TEXT = 0.5;
+type AskedApplied = (
+  mindId: string,
+  requests: ReadonlySet<string>,
+  followed: FollowedSteps,
+) => void;
 
-// A translation rewrites all of the text by asking, so it never waits, as Edit with AI's never does.
-const TRANSLATION =
-  /\btranslat|\bin(?:to)? (?:chinese|english)\b|翻译|译成|(?:改成|用)(?:中文|英文)/i;
+const applied = new Set<AskedApplied>();
 
-function translates(editor: Editor, requests: ReadonlySet<string>): boolean {
-  const doc = editorDoc(editor);
-  return (
-    doc !== null &&
-    [...requests].every((request) => {
-      const made = proposalRequestOf(doc, request);
-      return (
-        made?.source === "edit-with-ai" &&
-        (made.action === "translate" || TRANSLATION.test(made.instruction ?? ""))
-      );
-    })
-  );
+/** Calls `listener` as the changes the User asked for apply: at once, or later from a held line. */
+export function onAskedApplied(listener: AskedApplied): () => void {
+  applied.add(listener);
+  return () => applied.delete(listener);
 }
 
 /**
@@ -342,11 +345,8 @@ export function applyArrived(
   const first = proposalsIn(editor.state.doc).find((each) => requests.has(each.request));
   if (!first || editor.isDestroyed) return null;
   for (const request of requests) drawApplying(editor, request, false);
-  if (
-    holds &&
-    !translates(editor, requests) &&
-    ownTextRemoved(editor.state, requests) > MOST_OF_YOUR_TEXT
-  ) {
+  const doc = editorDoc(editor);
+  if (holds && doc && waitsForUser(doc, requests)) {
     setAppliedLine(editor, {
       kind: "held",
       blockId: topBlockAt(editor.state, first.from),
@@ -364,6 +364,9 @@ export function applyArrived(
   });
   const entries = aiUseOfAccepted(edit.doc, mindId, resolved, new Date().toISOString());
   if (entries.length > 0) core.recordAiUse(entries).catch(useAppStore.getState().reportError);
+  edit.followed = followSteps(editor, edit.steps);
+  const { followed } = edit;
+  if (followed) for (const listener of applied) listener(mindId, requests, followed);
   if (editor.isDestroyed) return "applied";
   const changes = anchorChanges(editor.state, planned);
   const message = changeFact(t, facts, null);
@@ -476,7 +479,11 @@ export function restoreChange(editor: Editor, index: number): void {
   });
   asOneStep(editor, () => editor.view.dispatch(tr));
   const top = undoStackOf(editor)?.undoStack.at(-1);
-  if (top) latest.get(editor)?.more.push(top);
+  const edit = latest.get(editor);
+  if (top && edit) {
+    edit.more.push(top);
+    edit.followed?.add(top);
+  }
   // Placed again now that the change has reached the Mind's document.
   const now = appliedLineIn(editor.state);
   if (now) setAppliedLine(editor, { ...now });
@@ -532,7 +539,10 @@ function removeKept(editor: Editor): void {
   tr.setMeta(appliedLineKey, { ...line, kept: null });
   asOneStep(editor, () => editor.view.dispatch(tr));
   const top = undoStackOf(editor)?.undoStack.at(-1);
-  if (top && !edit.steps.includes(top)) edit.more.push(top);
+  if (top && !edit.steps.includes(top)) {
+    edit.more.push(top);
+    edit.followed?.add(top);
+  }
   offerEditorUndo(editor, t("edit.kept.removed"));
 }
 

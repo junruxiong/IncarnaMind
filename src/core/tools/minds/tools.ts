@@ -30,6 +30,7 @@
  */
 import { randomUUID } from "node:crypto";
 import * as Y from "yjs";
+import { askedFor, waitsForUser } from "../../../shared/askedChanges";
 import { setOrigins } from "../../../shared/blockOrigins";
 import { translate } from "../../../shared/i18n";
 import { looksLikeTable } from "../../../shared/markdownTables";
@@ -60,6 +61,7 @@ import { plainText } from "../../mindText";
 import { insertBlocks } from "../../noteAdding";
 import {
   type OwnWaiting,
+  ownAsked,
   ownWaitingTexts,
   replaceOwn,
   waitingIn,
@@ -595,7 +597,10 @@ const WAITING =
   "They wait in the Mind for the User to accept or reject them; until then nothing of the User's text has changed.";
 // The window that asked applies what the User asked for (#880), so the reply mustn't say it waits.
 const APPLIES =
-  "As the User asked for this, it applies in the Mind at once, with Undo: say what changed, not that anything waits. Only a change that would rewrite most of the User's own text waits for them.";
+  "As the User asked for this, it applies in the Mind at once, with Undo: say what changed, not that anything waits.";
+
+const held = (name: string) =>
+  `The User asked for this, but it would take out most of their own text in “${name}”, so it waits there for them to apply or discard; nothing of their text has changed yet. Say that it waits for them, not that it changed.`;
 
 function waitingMessage(name: string, count: number, mixed: boolean): string {
   const how =
@@ -744,10 +749,25 @@ function writtenBy(note: Y.XmlFragment, request: string): { paragraphs: number; 
  */
 export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle(): void } {
   const { minds, focused, requested } = options;
-  const requestedIn = (made: boolean): RequestedChange | null =>
-    !requested || (made && !(requested.change === "write" && requested.newMind))
-      ? null
-      : requested.change;
+  // The one Mind the request is about: the first a call changes. Changes elsewhere weren't asked for, and wait (#880).
+  let askedMind: string | null = null;
+  const requestedIn = (mindId: string, made: boolean): RequestedChange | null => {
+    if (!requested || (made && !(requested.change === "write" && requested.newMind))) return null;
+    askedMind ??= mindId;
+    return askedMind === mindId ? requested.change : null;
+  };
+
+  /** By Mind, this turn's requests the User asked for. */
+  const askedIn = new Map<string, Set<string>>();
+  /** What became of a call's change, for the model to say: applied, or waiting for the User and why. */
+  const outcomeOf = (mind: ChangeableMind, request: string): string => {
+    const doc = minds.read(mind.id, (note) => note.doc);
+    if (!doc || !askedFor(doc, request)) return WAITING;
+    const asked = askedIn.get(mind.id) ?? new Set<string>();
+    asked.add(request);
+    askedIn.set(mind.id, asked);
+    return waitsForUser(doc, asked) ? held(mind.name) : APPLIES;
+  };
 
   /** The Mind a call means: the one it names, else the one in focus; or why there is none. */
   const targetOf = (input: Record<string, unknown>): ChangeableMind | Refusal => {
@@ -845,7 +865,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       if (!doc) return;
       setOrigins(doc, ids, options.origin);
       if (first) {
-        const tag = requestedIn(writer.made);
+        const tag = requestedIn(writer.mind.id, writer.made);
         recordProposalRequest(doc, writer.request, {
           source: "answer-added",
           providerId: options.prepared.provider.id,
@@ -1071,14 +1091,14 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
 
   /** What the model reads of Blocks it added: how many, and what of their Citations didn't hold. */
   const added = (
+    mind: ChangeableMind,
     written: NonNullable<ReturnType<typeof finishContent>>,
     where: string,
-    made: boolean,
   ): string =>
     [
       `Proposed ${written.change.proposals === 1 ? "1 new Block" : `${written.change.proposals} new Blocks`} ${where}.`,
       ...tableNotes(written.change),
-      requestedIn(made) ? APPLIES : WAITING,
+      outcomeOf(mind, written.change.request),
       ...writtenNotes(written),
     ].join(" ");
 
@@ -1116,8 +1136,12 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       "The text, in Markdown, cited as an Answer is, with markers like [^1] for Citations recorded with cite, in a table's cells too, right after the words each backs. Never write a source as its name in brackets, like [Tides, p. 3]. A new section starts with its heading. A table has a heading row, a row of ---, then each row on a line of its own. Write it last, after the other fields.",
   };
 
-  const revisedText = (name: string, change: MindChange, went: string): string =>
-    `Revised your own waiting text in “${name}”${went}: the old version of it is gone, and ${changes(change.proposals)} wait there in its place for the User to accept or reject. Nothing of the User's text changed.`;
+  const revisedText = (mind: ChangeableMind, change: MindChange, went: string): string => {
+    const outcome = outcomeOf(mind, change.request);
+    return outcome === WAITING
+      ? `Revised your own waiting text in “${mind.name}”${went}: the old version of it is gone, and ${changes(change.proposals)} wait there in its place for the User to accept or reject. Nothing of the User's text changed.`
+      : `Revised your own text in “${mind.name}”${went}: the old version of it is gone. ${outcome}`;
+  };
 
   /**
    * `edit_mind` with new text: it takes the place of the assistant's own
@@ -1135,6 +1159,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     const request = randomUUID();
     minds.checkpoint(mind.id);
     const ids = minds.edit(mind.id, (note) => {
+      const asked = requestedIn(mind.id, false) !== null && ownAsked(note, own);
       const written = replaceOwn(note, own, blocks.map(createElement), request);
       const doc = note.doc;
       if (!written || !doc) return written;
@@ -1144,6 +1169,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         providerId: options.prepared.provider.id,
         modelId: options.prepared.modelId,
         createdAt: options.now().toISOString(),
+        ...(asked && { requested: "edit" }),
       });
       return written;
     });
@@ -1247,7 +1273,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         const before = minds.read(mind.id, (blocks) => stretchText(blocks, stretch));
         const revised = reviseWith(toolCallId, mind, waiting, markdown);
         return [
-          revisedText(mind.name, revised.change, ` (${lengths(before, markdown)})`),
+          revisedText(mind, revised.change, ` (${lengths(before, markdown)})`),
           ...tableNotes(revised.change),
           ...writtenNotes(revised),
         ].join(" ");
@@ -1262,7 +1288,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         written: (request, proposals) =>
           options.changed(toolCallId, { mindId: mind.id, created: false, request, proposals }),
         // Rewriting the User's text is an edit, whatever the turn asked for.
-        requested: requested ? "edit" : null,
+        requested: requestedIn(mind.id, false) ? "edit" : null,
       });
       if (result.kind !== "proposed") {
         const why = notProposed(result, mind, unmadeSaid(mind.name));
@@ -1300,8 +1326,8 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       const went = length ? ` (${lengths(length.before, length.after)})` : "";
       return [
         revised
-          ? revisedText(mind.name, change, went)
-          : `Proposed ${changes(result.proposals)} in “${mind.name}”${went}. ${requested ? APPLIES : WAITING}`,
+          ? revisedText(mind, change, went)
+          : `Proposed ${changes(result.proposals)} in “${mind.name}”${went}. ${outcomeOf(mind, result.request)}`,
         ...tableNotes(change, result.unmatchedMarkers),
         ...(reason ? [`Why, as the rewrite says: ${reason}`] : []),
         ...(result.droppedCitations > 0
@@ -1362,9 +1388,9 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       const written = finishContent(toolCallId, mind, after, markdown, false);
       if (!written) throw noTable(mind);
       return added(
+        mind,
         written,
         `in “${mind.name}”, ${after ? `after “${after}”` : "at its end"}`,
-        false,
       );
     },
   };
@@ -1420,7 +1446,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         options.changed(toolCallId, { mindId: mind.id, created: true, request: "", proposals: 0 });
         return `${made}. It is empty. ${noTable(mind).message}`;
       }
-      return `${made}. ${added(written, "in it", true)}`;
+      return `${made}. ${added(mind, written, "in it")}`;
     },
   };
 

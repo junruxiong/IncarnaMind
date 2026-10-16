@@ -11,7 +11,6 @@ import { absolutePositionToRelativePosition, ySyncPluginKey } from "@tiptap/y-ti
 import * as Y from "yjs";
 import {
   BLOCK_ID_ATTRIBUTE,
-  GENERATED_MARK,
   MIND_CONTENT_FIELD,
   PROPOSAL_ATTRIBUTE,
   PROPOSAL_DELETE_MARK,
@@ -195,7 +194,6 @@ function writeAs(blocks: Y.XmlFragment, wanted: Y.XmlFragment): void {
   };
   let index = 0;
   for (const want of target) {
-    // A Block the changes took out.
     while (goes(blocks.get(index))) blocks.delete(index, 1);
     const here = blocks.get(index);
     if (here && blockIdOf(here) === blockIdOf(want)) {
@@ -239,26 +237,4 @@ export function writeAccepted(
   } finally {
     scratch.destroy();
   }
-}
-
-/** How much of the User's own text in the Mind, not AI text, the requests' changes would take out: a share from 0 to 1. */
-export function ownTextRemoved(state: EditorState, requests: ReadonlySet<string>): number {
-  let removed = 0;
-  let own = 0;
-  const asked = (request: unknown) => typeof request === "string" && requests.has(request);
-  state.doc.descendants((block) => {
-    if (!block.isTextblock) return true;
-    const proposal = readProposalAttribute(block.attrs[PROPOSAL_ATTRIBUTE]);
-    if (proposal?.kind === "insert") return false;
-    const goes = proposal?.kind === "delete" && asked(proposal.request);
-    block.forEach((node) => {
-      if (!node.isText || node.marks.some((mark) => mark.type.name === GENERATED_MARK)) return;
-      if (node.marks.some((mark) => mark.type.name === PROPOSAL_INSERT_MARK)) return;
-      own += node.nodeSize;
-      const deleted = node.marks.find((mark) => mark.type.name === PROPOSAL_DELETE_MARK);
-      if (goes || (deleted && asked(deleted.attrs.request))) removed += node.nodeSize;
-    });
-    return false;
-  });
-  return own === 0 ? 0 : removed / own;
 }
