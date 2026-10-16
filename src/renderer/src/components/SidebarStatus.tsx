@@ -1,4 +1,4 @@
-import { type ReactNode, type ToggleEvent, useId, useRef, useState } from "react";
+import { type ReactNode, type ToggleEvent, useEffect, useId, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import type { DocumentStatus, EmbeddingModelError } from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
@@ -11,6 +11,7 @@ import { downloadProgress } from "../modelDownload";
 import { enterFrom, exitToward } from "../motion";
 import { rerankingModelStatus } from "../rerankStatus";
 import { allExamples, isOwnDocument, useAppStore } from "../store";
+import { useTaggingExplained } from "../taggingExplained";
 import { placesText, taggingPlaces } from "../taggingStop";
 import { textRecognitionStatus, useTextRecognition } from "../textRecognition";
 import { canTryAgain, outsideDialog, reasonKey, useWebPages } from "../webPages";
@@ -315,6 +316,28 @@ function useStatuses(): Status[] {
     ),
   );
   const service = taggingService?.service.name;
+  const running = tagging || organizingNow;
+  // A scan without text goes to Organize as pictures of its pages.
+  const scans = useAppStore(
+    (state) =>
+      organizingNow &&
+      state.documents.some(
+        (each) =>
+          each.status === "no-text" &&
+          state.library?.assignments.some(
+            (item) =>
+              item.documentId === each.id &&
+              (item.status === "pending" || item.status === "classifying"),
+          ),
+      ),
+  );
+  const explained = useTaggingExplained();
+  const saysWhatIsSent = running && service !== undefined && explained.says(places);
+  useEffect(() => {
+    if (saysWhatIsSent) useTaggingExplained.getState().shown(places);
+    else if (!running) useTaggingExplained.getState().ended();
+  }, [saysWhatIsSent, running, places]);
+  const whatIsSent = scans ? t("status.sendsScans") : "";
   const stop = {
     label: t("tagging.stop"),
     testId: "tagging-stop",
@@ -573,9 +596,13 @@ function useStatuses(): Status[] {
 
   if (!capturing && tagging) {
     const text = service
-      ? counts.tagging === 1
-        ? t("status.taggingWith.one", { service })
-        : t("status.taggingWith.other", { count: counts.tagging, service })
+      ? saysWhatIsSent
+        ? (counts.tagging === 1
+            ? t("status.taggingSends.one", { service })
+            : t("status.taggingSends.other", { count: counts.tagging, service })) + whatIsSent
+        : counts.tagging === 1
+          ? t("status.taggingWith.one", { service })
+          : t("status.taggingWith.other", { count: counts.tagging, service })
       : counts.tagging === 1
         ? t("status.tagging.one")
         : t("status.tagging.other", { count: counts.tagging });
@@ -606,9 +633,13 @@ function useStatuses(): Status[] {
       });
     if (pending) {
       const text = service
-        ? pending === 1
-          ? t("library.progressWith.one", { service })
-          : t("library.progressWith.other", { count: pending, service })
+        ? saysWhatIsSent
+          ? (pending === 1
+              ? t("library.progressSends.one", { service })
+              : t("library.progressSends.other", { count: pending, service })) + whatIsSent
+          : pending === 1
+            ? t("library.progressWith.one", { service })
+            : t("library.progressWith.other", { count: pending, service })
         : pending === 1
           ? t("library.progress.one")
           : t("library.progress.other", { count: pending });

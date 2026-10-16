@@ -9,6 +9,7 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
+import { buildPdf } from "../tests/helpers/pdf";
 import {
   acceptPlainTextKeys,
   closeSettings,
@@ -113,7 +114,7 @@ test("the status names where Tagging goes; Stop keeps the Folder's new Documents
   await pasteKey(window);
   const status = footer.getByTestId("tagging-status");
   await expect(status.getByTestId("status-label")).toHaveText(
-    /^Tagging [2-4] Documents with Anthropic…$/,
+    /^Tagging [2-4] Documents with Anthropic: each one's name, outline and short excerpts are sent$/,
   );
   await expect(footer.getByTestId("tagging-waiting")).toHaveCount(0);
   const stop = status.getByTestId("tagging-stop");
@@ -162,6 +163,13 @@ test("the status names where Tagging goes; Stop keeps the Folder's new Documents
   await expect(again.window.getByTestId("undo-message")).toHaveText(
     `Tagging Documents in “${FOLDER}” with AI again`,
   );
+  // The Folder has been told what is sent: from now on the short line.
+  await expect(
+    again.window
+      .getByTestId("sidebar-status")
+      .getByTestId("tagging-status")
+      .getByTestId("status-label"),
+  ).toHaveText(/^Tagging [1-6] Documents? with Anthropic…$/);
   await expect(documentItem(again.window, "Expert report")).not.toHaveAttribute(
     "data-tagging",
     "stopped",
@@ -193,7 +201,7 @@ test("in Chinese, the status names the company, and Stop names the Folder", asyn
   await openFolder(window, FOLDER);
   const status = window.getByTestId("sidebar-status").getByTestId("tagging-status");
   await expect(status.getByTestId("status-label")).toHaveText(
-    /^正在用 Anthropic 给 [2-4] 个文档打标签…$/,
+    /^正在用 Anthropic 给 [2-4] 个文档打标签：会发送每个文档的名称、目录和简短摘录$/,
   );
   const stop = status.getByTestId("tagging-stop");
   await expect(stop).toHaveText("停止");
@@ -271,14 +279,17 @@ test("while Organize runs, the status names the company too, with Stop", async (
       automatic: true,
     });
   }, providerId);
+  const scan = join(sources, "Scanned receipt.pdf");
+  await writeFile(scan, buildPdf([{ image: true }]));
   await window
     .getByTestId("add-documents-input")
-    .setInputFiles(
-      await Promise.all(["Field notes", "Site visit", "Interview", "Survey"].map(slowFile)),
-    );
+    .setInputFiles([
+      ...(await Promise.all(["Field notes", "Site visit", "Interview", "Survey"].map(slowFile))),
+      scan,
+    ]);
   const progress = window.getByTestId("sidebar-status").getByTestId("organization-progress");
   await expect(progress.getByTestId("status-label")).toHaveText(
-    /^Organizing [2-4] Documents with Anthropic…$/,
+    /^Organizing [2-5] Documents with Anthropic: each one's name, outline and short excerpts are sent \(page images for scans\)$/,
   );
   await screenshot(window, "organize-status-stop-en");
   await progress.getByTestId("tagging-stop").click();
