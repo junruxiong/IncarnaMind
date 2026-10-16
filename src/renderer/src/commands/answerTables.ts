@@ -13,7 +13,6 @@ import type { Command } from "./registry";
  * view (the one the focus is in, else the newest), one row each, "Open table 2 as a table".
  */
 
-/** An Answer with several tables lists this many. */
 const MOST_LISTED = 4;
 
 interface InView {
@@ -33,11 +32,16 @@ function lookAt(active: Element | null): InView | null {
   return tables.length > 0 ? { answer, tables, held: tableHolding(answer.id, active) } : null;
 }
 
-// ⌘K takes the focus into its field: what held it is read as it opens.
+// ⌘K takes the focus into its field: what held it is read as it opens. A command runs in the
+// task that closes it, so what was read stays until that task is over.
 let atOpen: InView | null | undefined;
 usePalette.subscribe((state, before) => {
   if (state.open && !before.open) {
     atOpen = typeof document === "undefined" ? null : lookAt(document.activeElement);
+  } else if (!state.open && before.open) {
+    queueMicrotask(() => {
+      atOpen = undefined;
+    });
   }
 });
 

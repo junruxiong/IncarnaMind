@@ -5414,6 +5414,11 @@
     .tableWrapper[data-more-after] {
       mask-image: linear-gradient(to left, transparent, #000 28px);
     }
+    /* The mask would clip a ring drawn outside the frame: it sits inside, and the fade steps aside. */
+    .tableWrapper:focus-visible {
+      outline-offset: -2px;
+      mask-image: none;
+    }
     table {
       border: 0;
       border-radius: 0;
@@ -5449,7 +5454,7 @@
       color: var(--color-ink-secondary);
       white-space: normal;
     }
-    :is(th, td):first-child::after {
+    .tableWrapper[data-more-before] :is(th, td):first-child::after {
       content: "";
       position: absolute;
       top: 0;

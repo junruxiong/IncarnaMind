@@ -162,24 +162,30 @@ const openBeside = (mindId: string) =>
     where: { in: "place" },
   });
 
+/** A new Mind named as the conversation, in its Folder. */
+async function newMindFor(added: AddedAnswer) {
+  const title = conversationLabel(added.conversation);
+  const mind = await core.createMind({ title, folderId: added.conversation?.folderId ?? null });
+  return { mind, title };
+}
+
+const putIn = (mindId: string, added: AddedAnswer, proposed: boolean) =>
+  core.addToNote({
+    mindId,
+    blocks: added.blocks,
+    origin: originOf(added),
+    model: added.answer.model,
+    proposed,
+  });
+
 /**
  * Into a new Mind: named as the conversation, in its Folder, the Answer in it
  * as changes to accept or reject, in a new tab beside the focused one. Undo
  * deletes it.
  */
 async function addToNewMind(added: AddedAnswer): Promise<void> {
-  const title = conversationLabel(added.conversation);
-  const mind = await core.createMind({
-    title,
-    folderId: added.conversation?.folderId ?? null,
-  });
-  await core.addToNote({
-    mindId: mind.id,
-    blocks: added.blocks,
-    origin: originOf(added),
-    model: added.answer.model,
-    proposed: true,
-  });
+  const { mind, title } = await newMindFor(added);
+  await putIn(mind.id, added, true);
   await openBeside(mind.id);
   useUndo.getState().push({
     message: t("answer.addedToNew", { mind: mindName(mind) || title }),
@@ -188,30 +194,26 @@ async function addToNewMind(added: AddedAnswer): Promise<void> {
   });
 }
 
+let openingTable = false;
+
 /**
- * "Open as a table": the one table in `added.blocks` in a Mind of its own, named as the
- * conversation, as it is (to copy or export from its tab). Its tab opens beside the focused one
- * first and the table is put in after, so a big table never keeps the tab from showing. Undo
- * deletes the Mind; if the table can't go in, the Mind is deleted and the problem shown.
+ * "Open as a table": the one table in `added.blocks` in a Mind of its own, as it is (to copy or
+ * export from its tab). Its tab opens beside the focused one first and the table is put in after,
+ * so a big table never keeps the tab from showing. Undo deletes the Mind. A table that can't go in
+ * is shown as a problem and its Mind deleted. A second call while one is under way does nothing.
  */
 export async function openTable(added: AddedAnswer): Promise<void> {
+  if (openingTable) return;
+  openingTable = true;
   try {
-    const title = conversationLabel(added.conversation);
-    const mind = await core.createMind({
-      title,
-      folderId: added.conversation?.folderId ?? null,
-    });
+    const { mind, title } = await newMindFor(added);
     await openBeside(mind.id);
     try {
-      await core.addToNote({
-        mindId: mind.id,
-        blocks: added.blocks,
-        origin: originOf(added),
-        model: added.answer.model,
-      });
+      await putIn(mind.id, added, false);
     } catch (error) {
+      useAppStore.getState().reportError(error);
       await core.deleteMind(mind.id);
-      throw error;
+      return;
     }
     useUndo.getState().push({
       message: t("answer.tableOpened", { mind: mindName(mind) || title }),
@@ -220,6 +222,8 @@ export async function openTable(added: AddedAnswer): Promise<void> {
     });
   } catch (error) {
     useAppStore.getState().reportError(error);
+  } finally {
+    openingTable = false;
   }
 }
 

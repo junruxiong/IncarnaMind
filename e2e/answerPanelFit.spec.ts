@@ -8,12 +8,14 @@ import {
   useLocalChatModel as connectLocalChatModel,
   createDataFolder,
   dismissChatSetup,
+  focusRingShows,
   launchApp,
   newMind,
   pointAndClick,
   removeDataFolder,
   setLanguage,
   setWindowSize,
+  tabTo,
 } from "./app";
 
 /**
@@ -65,15 +67,35 @@ const QUESTIONS = {
     table: "What do tides do in nine rows",
     forty: "What do tides do with forty citations",
     row: "What do tides do, twelve in a row",
+    two: "What do tides do in two tables",
   },
   "zh-CN": {
     table: "九行 tides",
     forty: "四十条引用 tides",
     row: "连续十二条 tides",
+    two: "两个表 tides",
   },
 } as const;
 
-/** What in an Answer's text is wider than the text, or reaches past its right edge; and whether the thread scrolls sideways. */
+const WORDS = {
+  en: {
+    open: "Open as a table",
+    nth: (n: number) => `Open table ${n} as a table`,
+    find: "table",
+    made: "from this table",
+    header: ["Figure", "Harrow Foods", "Brightmart", "Calder Grocers"],
+    second: ["Region", "Share"],
+  },
+  "zh-CN": {
+    open: "以表格打开",
+    nth: (n: number) => `以表格打开第 ${n} 个表格`,
+    find: "表格",
+    made: "已用这个表格新建 Mind",
+    header: ["指标", "哈罗食品", "明智超市", "考尔德杂货"],
+    second: ["地区", "占比"],
+  },
+} as const;
+
 function reachesPast(answer: Locator) {
   return answer.getByTestId("assistant-answer-text").evaluate((text) => {
     const box = text.getBoundingClientRect();
@@ -93,12 +115,21 @@ function reachesPast(answer: Locator) {
   });
 }
 
+const leftFadeShows = (frame: Locator) =>
+  frame.evaluate((each) => {
+    const cell = each.querySelector("tr > :first-child");
+    if (!cell) return null;
+    const { content } = getComputedStyle(cell, "::after");
+    return content !== "none" && content !== "normal";
+  });
+
 for (const { width, height } of SIZES) {
   for (const language of ["en", "zh-CN"] as const) {
     test(`at ${width} × ${height}, in ${language}: a wide table scrolls to every column and opens as a table, and a run of Citations stays in the Answer`, async () => {
       test.setTimeout(240_000);
       const window = await start(language, width, height);
       const asked = QUESTIONS[language];
+      const words = WORDS[language];
 
       await test.step("the table scrolls inside the Answer", async () => {
         const answer = await askInAssistant(window, asked.table);
@@ -109,7 +140,6 @@ for (const { width, height } of SIZES) {
 
         expect(await reachesPast(answer)).toEqual({ past: [], threadScrollsSideways: false });
 
-        // It is wider than the Answer, so it scrolls, and the keyboard reaches it.
         const sizes = await frame.evaluate((each) => ({
           scrolls: each.scrollWidth > each.clientWidth,
           overflow: getComputedStyle(each).overflowX,
@@ -118,14 +148,13 @@ for (const { width, height } of SIZES) {
         await expect(frame).toHaveAttribute("tabindex", "0");
         await expect(frame).toHaveAttribute("role", "region");
 
-        // Numbers are never cut: no cell wraps, and none holds more than it shows.
         const cut = await frame.evaluate((each) => {
           const cells = [...each.querySelectorAll("td:not(:first-child), th:not(:first-child)")];
           return cells
             .filter((cell) => {
-              const words = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+              const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
               const lines = new Set<number>();
-              for (let node = words.nextNode(); node; node = words.nextNode()) {
+              for (let node = walker.nextNode(); node; node = walker.nextNode()) {
                 if (node.parentElement?.closest(".citation")) continue;
                 const range = document.createRange();
                 range.selectNodeContents(node);
@@ -137,15 +166,27 @@ for (const { width, height } of SIZES) {
         });
         expect(cut).toEqual([]);
 
-        // Scrolled with the keyboard to the end, each column comes into view in turn, while the
-        // first column stays where it is, in front of what slides under it.
-        await frame.focus();
+        await expect(frame).toHaveAttribute("data-more-after", "");
+        expect(await leftFadeShows(frame)).toBe(false);
+        await tabTo(window, frame);
+        expect(await focusRingShows(window)).toBe(true);
+        const ring = await frame.evaluate((each) => {
+          const style = getComputedStyle(each);
+          return {
+            offset: Number.parseFloat(style.outlineOffset),
+            masked: style.maskImage !== "none",
+          };
+        });
+        expect(ring.offset).toBeLessThanOrEqual(-2);
+        expect(ring.masked).toBe(false);
+
         const seen = new Set<number>();
         for (let press = 0; press < 40; press++) {
           const state = await frame.evaluate((each) => {
             const frameBox = each.getBoundingClientRect();
-            const headings = [...each.querySelectorAll("tr:first-child > *")] as HTMLElement[];
-            const first = headings[0] as HTMLElement;
+            const headings = [...each.querySelectorAll<HTMLElement>("tr:first-child > *")];
+            const first = headings[0];
+            if (!first) throw new Error("The table has no heading row.");
             const firstBox = first.getBoundingClientRect();
             const visible = headings.flatMap((heading, column) => {
               const box = heading.getBoundingClientRect();
@@ -175,6 +216,8 @@ for (const { width, height } of SIZES) {
         expect([...seen].sort()).toEqual([1, 2, 3]);
         await expect(frame).not.toHaveAttribute("data-more-after", "");
         await expect(frame).toHaveAttribute("data-more-before", "");
+        expect(await leftFadeShows(frame)).toBe(true);
+        expect(await focusRingShows(window)).toBe(true);
       });
 
       await test.step("Open as a table shows all of it in a tab beside the Mind", async () => {
@@ -186,8 +229,7 @@ for (const { width, height } of SIZES) {
         const before = await note.textContent();
 
         const open = answer.getByTestId("answer-open-table");
-        await expect(open).toHaveText(language === "en" ? "Open as a table" : "以表格打开");
-        // Under the table, on the Answer's edge.
+        await expect(open).toHaveText(words.open);
         const opener = await open.boundingBox();
         const table = await answer.locator(".tableWrapper").boundingBox();
         if (!opener || !table) throw new Error("The table or its button isn't visible.");
@@ -196,7 +238,6 @@ for (const { width, height } of SIZES) {
 
         await expect(tabs).toHaveCount(2);
         await expect(tabs.nth(1)).toHaveAttribute("aria-selected", "true");
-        // The Mind the User was in is still there, as it was.
         await expect(tabs.first()).toHaveAttribute("title", original ?? "");
         await tabs.first().click();
         await expect(note).toHaveText(before ?? "");
@@ -211,17 +252,10 @@ for (const { width, height } of SIZES) {
             rows.map((row) => [...row.children].map((cell) => (cell.textContent ?? "").trim())),
           );
         expect(cells.every((row) => row.length === 4)).toBe(true);
-        expect(cells[0]).toEqual(
-          language === "en"
-            ? ["Figure", "Harrow Foods", "Brightmart", "Calder Grocers"]
-            : ["指标", "哈罗食品", "明智超市", "考尔德杂货"],
-        );
+        expect(cells[0]).toEqual(words.header);
         expect(cells[9]?.slice(1)).toEqual(["1.1×", "0.1×", "0.65×"]);
 
-        const said = answer.getByTestId("answer-added");
-        await expect(said).toContainText(
-          language === "en" ? "from this table" : "已用这个表格新建 Mind",
-        );
+        await expect(answer.getByTestId("answer-added")).toContainText(words.made);
         await pointAndClick(window, answer.getByTestId("answer-added-undo"));
         await expect(tabs).toHaveCount(1);
       });
@@ -253,23 +287,21 @@ for (const { width, height } of SIZES) {
               for (let node = walker.nextNode(); node; node = walker.nextNode()) {
                 if (node instanceof Text) {
                   if (node.parentElement?.closest(".citation")) continue;
-                  const value = node.nodeValue ?? "";
-                  const end = value.trimEnd().length;
+                  const end = (node.nodeValue ?? "").trimEnd().length;
                   if (end === 0) continue;
                   const range = document.createRange();
                   range.setStart(node, end - 1);
                   range.setEnd(node, end);
                   last = range.getBoundingClientRect();
-                } else if ((node as Element).matches(".citation-marker")) {
-                  const chip = (node as Element).getBoundingClientRect();
+                } else if (node instanceof Element && node.matches(".citation-marker")) {
+                  const chip = node.getBoundingClientRect();
                   const middle = (chip.top + chip.bottom) / 2;
-                  // On the line of the last word before it, and after it.
                   const beside =
                     last !== null &&
                     middle > last.top &&
                     middle < last.bottom &&
                     chip.left >= last.right - 1;
-                  if (!beside) stray.push(Number((node as Element).textContent));
+                  if (!beside) stray.push(Number(node.textContent));
                 }
               }
             }
@@ -282,35 +314,35 @@ for (const { width, height } of SIZES) {
   }
 }
 
-const COMMAND = {
-  en: { open: "Open as a table", nth: (n: number) => `Open table ${n} as a table`, find: "table" },
-  "zh-CN": { open: "以表格打开", nth: (n: number) => `以表格打开第 ${n} 个表格`, find: "表格" },
-} as const;
-
 for (const language of ["en", "zh-CN"] as const) {
   test(`⌘K opens a table of the Answer as a table: the one the cursor is in, or one listed, in ${language}`, async () => {
     test.setTimeout(240_000);
     const window = await start(language, 1440, 900);
-    const words = COMMAND[language];
-    const asked = language === "en" ? "What do tides do in two tables" : "两个表 tides";
-    const answer = await askInAssistant(window, asked);
+    const words = WORDS[language];
+    const answer = await askInAssistant(window, QUESTIONS[language].two);
     const frames = answer.locator(".tableWrapper");
     await expect(frames).toHaveCount(2);
     const tabs = window.getByTestId("mind-tab");
     await expect(tabs).toHaveCount(1);
     const items = window.getByTestId("palette").getByTestId("palette-item");
 
+    for (const frame of await frames.all()) {
+      await expect(frame).not.toHaveAttribute("tabindex");
+      await expect(frame).not.toHaveAttribute("data-more-after");
+      expect(await leftFadeShows(frame)).toBe(false);
+    }
+
     const ask = async () => {
       await window.keyboard.press("ControlOrMeta+k");
       await expect(window.getByTestId("palette-search")).toBeFocused();
       await window.keyboard.type(words.find);
     };
-    const opened = async (header: string[]) => {
+    const opened = async () => {
       await expect(tabs).toHaveCount(2);
       await expect(tabs.nth(1)).toHaveAttribute("aria-selected", "true");
       const table = window.getByTestId("mind-editor").locator("table");
       await expect(table.locator("tr")).toHaveCount(3);
-      await expect(table.locator("th")).toHaveText(header);
+      await expect(table.locator("th")).toHaveText(words.second);
       await pointAndClick(window, answer.getByTestId("answer-added-undo"));
       await expect(tabs).toHaveCount(1);
     };
@@ -320,61 +352,69 @@ for (const language of ["en", "zh-CN"] as const) {
       await expect(items.filter({ hasText: words.nth(1) })).toHaveCount(1);
       await expect(items.filter({ hasText: words.nth(2) })).toHaveCount(1);
       await items.filter({ hasText: words.nth(2) }).click();
-      await opened(language === "en" ? ["Region", "Share"] : ["地区", "占比"]);
+      await opened();
     });
 
     await test.step("with the cursor in a table, only that one is offered, and it opens", async () => {
-      const second = frames.nth(1);
-      await pointAndClick(window, second.locator("td").first());
+      await pointAndClick(window, frames.nth(1).locator("td").first());
       await ask();
       await expect(items.filter({ hasText: words.open })).toHaveCount(1);
       await expect(items.filter({ hasText: words.nth(1) })).toHaveCount(0);
       await items.filter({ hasText: words.open }).click();
-      await opened(language === "en" ? ["Region", "Share"] : ["地区", "占比"]);
+      await opened();
     });
   });
 
-  test(`an Answer with one table is offered "Open as a table" from ⌘K, and its tab is open before the table is in, in ${language}`, async () => {
+  test(`an Answer with one table: Open as a table from ⌘K and from the keyboard, ⌘Z takes it back, and its tab is open before the table is in, in ${language}`, async () => {
     test.setTimeout(240_000);
     const window = await start(language, 1440, 900);
-    const words = COMMAND[language];
-    const answer = await askInAssistant(
-      window,
-      language === "en" ? "What do tides do in nine rows" : "九行 tides",
-    );
+    const words = WORDS[language];
+    const answer = await askInAssistant(window, QUESTIONS[language].table);
     const tabs = window.getByTestId("mind-tab");
+    const table = window.getByTestId("mind-editor").locator("table");
     await expect(tabs).toHaveCount(1);
 
-    await window.keyboard.press("ControlOrMeta+k");
-    await expect(window.getByTestId("palette-search")).toBeFocused();
-    await window.keyboard.type(words.find);
-    const item = window.getByTestId("palette").getByTestId("palette-item");
-    await expect(item.filter({ hasText: words.open })).toHaveCount(1);
+    await test.step("from ⌘K", async () => {
+      await window.keyboard.press("ControlOrMeta+k");
+      await expect(window.getByTestId("palette-search")).toBeFocused();
+      await window.keyboard.type(words.find);
+      const item = window.getByTestId("palette").getByTestId("palette-item");
+      await expect(item.filter({ hasText: words.open })).toHaveCount(1);
 
-    // The Mind it opens holds no table the first moment its tab shows (openTable.test.ts pins
-    // that the table is put in after the tab opens).
-    await window.evaluate(() => {
-      const seen: number[] = [];
-      Object.assign(window, { tableWhenTabShown: seen });
-      new MutationObserver(() => {
-        const tabsNow = document.querySelectorAll('[data-testid="mind-tab"]').length;
-        if (tabsNow === 2 && seen.length === 0) {
-          seen.push(document.querySelectorAll('[data-testid="mind-editor"] table').length);
-        }
-      }).observe(document.body, { subtree: true, childList: true, attributes: true });
+      const tableWhenTabShown = await window.evaluateHandle(() => {
+        const seen: number[] = [];
+        new MutationObserver(() => {
+          const shown = document.querySelectorAll('[data-testid="mind-tab"]').length;
+          if (shown === 2 && seen.length === 0) {
+            seen.push(document.querySelectorAll('[data-testid="mind-editor"] table').length);
+          }
+        }).observe(document.body, { subtree: true, childList: true, attributes: true });
+        return seen;
+      });
+      await item.filter({ hasText: words.open }).click();
+
+      await expect(tabs).toHaveCount(2);
+      await expect(table.locator("tr")).toHaveCount(10);
+      expect(await tableWhenTabShown.jsonValue()).toEqual([0]);
+      await expect(answer.getByTestId("answer-added")).toContainText(words.made);
+      await pointAndClick(window, answer.getByTestId("answer-added-undo"));
+      await expect(tabs).toHaveCount(1);
     });
-    await item.filter({ hasText: words.open }).click();
 
-    await expect(tabs).toHaveCount(2);
-    const table = window.getByTestId("mind-editor").locator("table");
-    await expect(table.locator("tr")).toHaveCount(10);
-    expect(
-      await window.evaluate(
-        () => (window as unknown as { tableWhenTabShown: number[] }).tableWhenTabShown,
-      ),
-    ).toEqual([0]);
-    await expect(answer.getByTestId("answer-added")).toContainText(
-      language === "en" ? "from this table" : "已用这个表格新建 Mind",
-    );
+    await test.step("from the keyboard: Tab to the button, Enter, then ⌘Z", async () => {
+      const open = answer.getByTestId("answer-open-table");
+      await tabTo(window, open);
+      expect(await focusRingShows(window)).toBe(true);
+      await window.keyboard.press("Enter");
+
+      await expect(tabs).toHaveCount(2);
+      await expect(table.locator("tr")).toHaveCount(10);
+      await expect(answer.getByTestId("answer-added")).toContainText(words.made);
+
+      await window.keyboard.press("ControlOrMeta+z");
+      await expect(tabs).toHaveCount(1);
+      await expect(answer.getByTestId("answer-added")).toHaveCount(0);
+      await expect(open).toBeVisible();
+    });
   });
 }
