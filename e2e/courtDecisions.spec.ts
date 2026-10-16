@@ -86,7 +86,11 @@ async function findSupportFor(window: Page, texts: readonly string[], firstWords
     window,
     window.getByTestId("selection-menu").getByTestId("selection-action-find-support"),
   );
-  await expect(window.getByTestId("claim-mark")).toHaveCount(texts.length);
+  const marks = window.getByTestId("claim-mark");
+  await expect(marks).toHaveCount(texts.length);
+  for (let index = 0; index < texts.length; index++) {
+    await expect(marks.nth(index)).not.toHaveAttribute("data-check", "checking");
+  }
 }
 
 for (const language of ["en", "zh-CN"] as const) {
