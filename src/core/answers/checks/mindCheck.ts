@@ -109,7 +109,6 @@ export function createMindCheck(options: MindCheckOptions) {
    */
   const sorted = new Map<string, { claims: Set<string>; left: Set<string> }>();
 
-  /** Has the model sort the sentences of `fresh` it hasn't yet; the claims among all of them, and those left out. */
   async function sort(
     mindId: string,
     fresh: readonly SelectedSentence[],

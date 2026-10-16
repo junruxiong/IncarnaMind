@@ -66,7 +66,7 @@ export function MindCheckProgress({ editor, requestId }: { editor: Editor; reque
   return (
     <span data-testid="mind-check-progress" className="tabular-nums">
       {total === 0
-        ? t("mindCheck.finding")
+        ? t("verify.finding")
         : t("verify.checking", { done: format(done), total: format(total) })}
     </span>
   );
