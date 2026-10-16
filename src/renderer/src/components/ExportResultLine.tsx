@@ -1,4 +1,5 @@
 import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
+import { displayName } from "../../../shared/documentNames";
 import { core, files } from "../core";
 import { CheckStateIcon } from "../editor/icons";
 import { errorMessage } from "../errors";
@@ -7,13 +8,16 @@ import { commentedChecks, trackedChanges, unmarkedChecks } from "../exportChecks
 import { useExportDialog } from "../exportDialog";
 import {
   type ExportResult,
+  exportAgain,
   exportMind,
   FORMAT_LABELS,
+  isCheckRecord,
+  revealNeedsDetails,
   revealUnverified,
   useExports,
 } from "../exports";
 import { showFileLabelKey } from "../fileInfo";
-import { useT } from "../i18n";
+import { useLanguage, useT } from "../i18n";
 import { folderName } from "../linkedFolders";
 import { enter } from "../motion";
 import {
@@ -22,6 +26,7 @@ import {
   showOutputLocationSetting,
 } from "../outputFiles";
 import { saveFailureReason } from "../problems";
+import { useAppStore } from "../store";
 import { CloseLineIcon, ExportLineIcon } from "./lineIcons";
 import { type ProblemAction, ProblemLine } from "./ProblemLine";
 import { WordExportReview } from "./WordExportReview";
@@ -32,7 +37,10 @@ const SAVED_SHOWN_MS = 10_000;
 type SavedResult = Extract<ExportResult, { state: "saved" }>;
 
 const isPlainSaved = (result: SavedResult, t: ReturnType<typeof useT>): boolean =>
-  result.unverified === 0 && result.kept.length === 0 && unmarkedChecks(result.checks, t) === null;
+  result.unverified === 0 &&
+  result.needsDetails.length === 0 &&
+  result.kept.length === 0 &&
+  unmarkedChecks(result.checks, t) === null;
 
 /**
  * How the last export of this Mind went, floating at the foot of its tab (#100), as problems
@@ -128,14 +136,16 @@ function ResultBody({
     return () => clearTimeout(timer);
   }, [plain, held, dismiss]);
 
-  const format = t(FORMAT_LABELS[result.format]);
+  const saving = isCheckRecord(result.format)
+    ? t("checkRecord.saving")
+    : t("export.saving.line", { format: t(FORMAT_LABELS[result.format]) });
   const fix = (): ProblemAction | undefined => {
     if (result.state === "failed") {
       return {
         label: t("export.changeLocation"),
         testId: "export-change-location",
         onClick: () =>
-          void exportMind(
+          void exportAgain(
             result.mindId,
             result.format,
             async () => (await chooseOutputLocation()) !== null,
@@ -148,7 +158,7 @@ function ResultBody({
         label: t("export.allow"),
         testId: "export-allow",
         onClick: () =>
-          void exportMind(result.mindId, result.format, async () => {
+          void exportAgain(result.mindId, result.format, async () => {
             await core.setLinkedFolderWriting(linkedFolderId, true);
             return true;
           }),
@@ -174,7 +184,7 @@ function ResultBody({
             className="flex items-center gap-2 py-1 text-[13px] leading-5 text-ink-meta"
           >
             <ExportLineIcon className="size-4 shrink-0" />
-            {t("export.saving.line", { format })}
+            {saving}
           </p>
         ) : result.state === "saved" ? (
           <>
@@ -245,6 +255,9 @@ function ResultBody({
                   : t("export.unverified.line.other", { count: result.unverified })}
               </ProblemLine>
             )}
+            {result.needsDetails.length > 0 && (
+              <NeedsDetailsLine mindId={result.mindId} documentIds={result.needsDetails} />
+            )}
             {unmarked && (
               <ProblemLine
                 role="status"
@@ -313,6 +326,49 @@ function ResultBody({
         </button>
       )}
     </>
+  );
+}
+
+const NAMED_BEFORE_MORE = 3;
+
+/**
+ * The Documents whose entries went into the file marked "[needs details]", by name, and Show,
+ * which goes to the first in the Mind's References, where "Needs details" fills it in.
+ */
+function NeedsDetailsLine({ mindId, documentIds }: { mindId: string; documentIds: string[] }) {
+  const t = useT();
+  const language = useLanguage();
+  const documents = useAppStore((state) => state.documents);
+  const names = documentIds.flatMap((id) => {
+    const document = documents.find((each) => each.id === id);
+    return document ? [displayName(document)] : [];
+  });
+  if (names.length === 0) return null;
+  const listed = names.slice(0, NAMED_BEFORE_MORE).map((name) => `“${name}”`);
+  const separator = language === "zh-CN" ? "、" : ", ";
+  const text =
+    names.length === 1
+      ? t("export.needsDetails.line.one", { name: names[0] ?? "" })
+      : t("export.needsDetails.line.other", {
+          count: names.length,
+          names: `${listed.join(separator)}${names.length > NAMED_BEFORE_MORE ? "…" : ""}`,
+        });
+  return (
+    <ProblemLine
+      role="status"
+      testId="export-needs-details"
+      action={{
+        label: t("export.needsDetails.show"),
+        testId: "export-needs-details-show",
+        onClick: () => revealNeedsDetails(mindId),
+      }}
+    >
+      <span
+        aria-hidden="true"
+        className="mr-2 inline-block size-1.5 rounded-full bg-attention align-[2px]"
+      />
+      {text}
+    </ProblemLine>
   );
 }
 

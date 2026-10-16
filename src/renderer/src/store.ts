@@ -72,7 +72,7 @@ import {
 import { untitledFolderName } from "./newFolder";
 import { useNotices } from "./notices";
 import { useRequests } from "./requests";
-import { resolveSettingsPage, type SettingsAt, type SettingsPage } from "./settingsPages";
+import { resolveSettingsPage, type SettingsPage, type SettingsTarget } from "./settingsPages";
 import { type Undoable, UndoRefused, useUndo } from "./undo";
 
 type Status = { kind: "loading" } | { kind: "ready" } | { kind: "failed"; message: string };
@@ -147,7 +147,7 @@ export interface AppState extends LayoutSlice {
   /** The page Settings shows. */
   settingsPage: SettingsPage;
   /** A setting Settings opened at, shown and focused once it is drawn, which then clears this. */
-  settingsAt: SettingsAt | null;
+  settingsAt: SettingsTarget | null;
   /**
    * Every Folder of every Linked folder, flat, in name order: each Linked
    * folder's own Folder and those inside it. The sidebar builds the tree from each `parentId`.
@@ -291,7 +291,7 @@ export interface AppState extends LayoutSlice {
    * Models to set one up, or Privacy to allow a declined flow; and, with
    * `at`, at one setting on it.
    */
-  openSettings(page?: SettingsPage, at?: SettingsAt): void;
+  openSettings(page?: SettingsPage, at?: SettingsTarget): void;
   closeSettings(): void;
   showSettingsPage(page: SettingsPage): void;
   /**

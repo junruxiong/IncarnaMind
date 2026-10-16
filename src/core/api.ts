@@ -159,8 +159,11 @@ export interface CreateMindInput {
  *   `MIND_REVISIONS_FIELD` so rejecting the revision brings them back. An
  *   older version would reject it and lose them. Older content is version
  *   22 content as it is.
+ * - 23: the `wordTab` mark on a Word file's tab characters (#746), which an
+ *   older version's editor would strip. Older content is version 23 content
+ *   as it is.
  */
-export const CONTENT_SCHEMA_VERSION = 22;
+export const CONTENT_SCHEMA_VERSION = 23;
 
 /**
  * The key, in the Mind's settings map (`MIND_SETTINGS_FIELD`), of the content
@@ -771,6 +774,7 @@ export interface AnswerAttributes {
   errorMessage: string | null;
   /** When the plan's limit that stopped it resets (ISO 8601), when the provider said. */
   errorResetsAt: string | null;
+  errorSignInRoute: SignInRouteProblem | null;
   /** A fingerprint of the content as it was generated: it differs once the User edits the Answer. */
   generatedHash: string | null;
   /**
@@ -1113,8 +1117,6 @@ export interface WordFileCheck {
   origin: WordOrigin;
   /** Who wrote its tracked changes and comments, in the order they first appear. */
   authors: string[];
-  /** Its look is mostly what a Mind doesn't draw, so the import screen says it is kept (#735). */
-  layoutNotShown: boolean;
   /** Its tracked changes, of every kind (paragraph marks, formatting and moves too). */
   changes: number;
   comments: number;
@@ -1182,23 +1184,6 @@ export interface WordImportReport {
    * Absent on reports from before #108.
    */
   keptChanges?: Partial<Record<KeptChangeKind, number>>;
-  /** What the Mind doesn't draw of the file's look; absent from a report made before #735. */
-  layout?: WordLayout;
-}
-
-/**
- * What a Word file's look holds that a Mind doesn't draw (#735), counted from
- * the document's own formatting: paragraphs, runs and cells shaded;
- * paragraphs with a border; tab stops set; and how many text colours (other
- * than black), fonts and sizes it sets.
- */
-export interface WordLayout {
-  shading: number;
-  borders: number;
-  tabStops: number;
-  colours: number;
-  fonts: number;
-  sizes: number;
 }
 
 /**
@@ -1255,6 +1240,9 @@ export const WORD_LOOK_ATTRIBUTE = "wordLook";
 /** A mark on text whose attribute `k` is a key in `WordLook.runs`. */
 export const WORD_RUN_MARK = "wordRun";
 
+/** A mark on each tab character of a Word file's text, so each is drawn to its tab stop. */
+export const WORD_TAB_MARK = "wordTab";
+
 /** Lengths are in points and colours hex "RRGGBB"; unset properties are left out. */
 export interface WordLook {
   version: number;
@@ -1262,6 +1250,8 @@ export interface WordLook {
   body: number | null;
   /** The text width on the first page; null when the file doesn't say. */
   width: number | null;
+  /** How far apart Word's default tab stops are (`w:defaultTabStop`); null when the file doesn't say. */
+  defaultTab: number | null;
   paragraphs: Record<string, WordParagraphLook>;
   runs: Record<string, WordRunLook>;
   tables: Record<string, WordTableLook>;
@@ -2650,6 +2640,77 @@ export type ReferenceLookupFailureReason =
   | "unreachable"
   | "service-error";
 
+/** A service a reference is looked up in. */
+export type ReferenceService = "crossref" | "openalex" | "arxiv";
+
+/**
+ * How a reference in a Mind's reference list checks, looked up in
+ * Crossref, then OpenAlex, and an arXiv number on arXiv:
+ * - "found": the work exists, as written;
+ * - "mismatch": a record exists, but its title, year or first author differ;
+ * - "not-found": the DOI or arXiv number it gives leads nowhere: no agency
+ *   registered it, or arXiv has no such preprint;
+ * - "not-listed": searched for as written, neither Crossref nor OpenAlex has
+ *   a record like it. It may still exist: neither holds every conference
+ *   paper, preprint or Chinese journal;
+ * - "not-checked": it couldn't be asked about (`ReferenceCheck.reason`).
+ */
+export type ReferenceCheckMark = "found" | "mismatch" | "not-found" | "not-listed" | "not-checked";
+
+/**
+ * Why a reference wasn't checked; "registered-elsewhere": its DOI exists,
+ * but another agency than Crossref registered it and OpenAlex has no record
+ * of it either, so its details couldn't be compared.
+ */
+export type ReferenceCheckReason =
+  | "local-mode"
+  | "declined"
+  | "unreachable"
+  | "rate-limited"
+  | "service-error"
+  | "registered-elsewhere";
+
+/** How a reference differs from the record of the work it names. */
+export interface ReferenceDifference {
+  field: "title" | "authors" | "year";
+  /** As the record has it: the authors as "Hochreiter, Schmidhuber". */
+  found: string;
+  /** As the reference has it, when it can be read alone (its year). */
+  cited: string | null;
+}
+
+export interface ReferenceCheck {
+  /** As written, its white space collapsed. */
+  reference: string;
+  mark: ReferenceCheckMark;
+  /** Whose record it is, which said its identifier leads nowhere, or which couldn't be asked. */
+  service: ReferenceService | null;
+  /** The record of the work it names; null when none was found, or it wasn't checked. */
+  record: {
+    title: string;
+    authors: ReferenceName[];
+    year: number | null;
+    doi: string | null;
+  } | null;
+  /** For "mismatch": how it differs. */
+  differences: ReferenceDifference[];
+  /** For "not-checked": why. */
+  reason: ReferenceCheckReason | null;
+  /** "rate-limited": when the service takes requests again, as it said (ISO 8601). */
+  resetsAt?: string;
+}
+
+export type CheckReferencesResult =
+  | {
+      kind: "checked";
+      /** Each entry of the reference list, in order, with the Block it is in. */
+      references: (ReferenceCheck & { blockId: string })[];
+    }
+  /** The Mind has no reference list: no heading such as "References" or "参考文献". */
+  | { kind: "no-references" }
+  /** Stopped by `stopReferenceCheck`, or the Mind went. */
+  | { kind: "cancelled" };
+
 /** What Look up came to. */
 export type ReferenceLookupResult =
   | {
@@ -3620,6 +3681,8 @@ export type ProviderErrorKind =
   | "local-mode"
   /** The model is in Ollama on this computer, and Ollama isn't running: found before anything was sent. */
   | "ollama-not-running"
+  /** Anthropic: a model that requires 30-day data retention (Fable 5.1), asked by an organization or workspace that has it off. */
+  | "data-retention"
   /** ChatGPT plan: there is no sign-in on this device, or it expired: sign in again. */
   | "not-signed-in"
   /** ChatGPT plan: the plan's usage limit, or the one the User set for IncarnaMind, is reached. */
@@ -3947,9 +4010,11 @@ export interface TaskShown {
   blockId: string | null;
 }
 
-/** A large run to estimate: so many items (a comparison table's cells, verify's sentences…), each about an Answer. */
+/** A large run to estimate: so many items (a comparison table's cells, verify's sentences…). */
 export interface RunEstimateInput {
   items: number;
+  /** What each item is: about an Answer (the default), or a sentence checked against Documents (#973). */
+  each?: "answer" | "check";
   /** The web searches it makes (#128), each billed by the model's provider, on top of its items. */
   searches?: number;
   /** The model it would use; the default model when left out. */
@@ -4587,6 +4652,11 @@ export type MindCheckPlan =
     }
   | Extract<CheckSentencesResult, { kind: "no-documents" | "nothing" }>;
 
+/** The claims a Check this Mind run would check, once the model has named them (`findMindClaims`). */
+export type FindMindClaimsResult =
+  /** The fresh sentences it named as claims, and the checks to make again. */
+  { kind: "found"; claims: number } | Exclude<CheckMindResult, { kind: "checked" }>;
+
 export type CheckMindResult =
   /**
    * Each claim has its mark: `checked` of the `sentences` with a verdict, the
@@ -4792,6 +4862,20 @@ export interface AnswerSteps {
    * Absent: none.
    */
   unbackedClaims?: ClaimedChange[];
+  /** It covered only some of the Documents in scope, and offers the rest. Absent: all of them. */
+  coverage?: AnswerCoverage;
+}
+
+/**
+ * What an Answer covered of the Documents in scope, when not all of them: the
+ * main few the Question asked for ("main"), or the largest of more than one
+ * summary covers well ("largest"); by name as they were then. `rest`: the
+ * others' ids, which a second Question can be asked from.
+ */
+export interface AnswerCoverage {
+  kind: "main" | "largest";
+  used: { id: string; name: string }[];
+  rest: string[];
 }
 
 /**
@@ -5014,6 +5098,7 @@ export interface ConversationAnswer {
   /** Why it failed, when `status` is "failed". */
   errorKind: ProviderErrorKind | null;
   errorMessage: string | null;
+  errorSignInRoute: SignInRouteProblem | null;
   citationSupport: CitationSupport | null;
   /** The Tools it called, in order: its searches, Skills and Connectors' Tools. */
   toolCalls: AnswerToolCall[];
@@ -5677,6 +5762,7 @@ export const dataKinds = [
   "answers",
   "web-searches",
   "verified-document",
+  "references",
   "connector-search",
 ] as const;
 
@@ -5702,6 +5788,10 @@ export type DataKind = (typeof dataKinds)[number];
  * - "reference-lookup": a Document's DOI to Crossref, or its arXiv id to
  *   arXiv, when the User asks Look up to fill its reference record (#286).
  *   Nothing else: no file, text or name. None in local mode.
+ * - "reference-check": each entry of a Mind's reference list, as written,
+ *   to Crossref, then to OpenAlex when Crossref has no record of it or one
+ *   that differs, and an arXiv number to arXiv, when the User checks the
+ *   list's references. Nothing else of the Mind. None in local mode.
  * - "find-sources": what the User (or an Answer, for them) searches for, with
  *   its filters, to each Source provider searched, and the identifier of a
  *   work they add, to the provider that gives its full text or record (#296).
@@ -5735,6 +5825,7 @@ export const dataFlowIds = [
   "rerank",
   "suggestions",
   "reference-lookup",
+  "reference-check",
   "find-sources",
   "edits",
   "checks",
@@ -5747,16 +5838,19 @@ export type DataFlowId = (typeof dataFlowIds)[number];
 
 /**
  * The flows choosing the chat model's provider allows (ADR-0022): everything
- * that sends to it, as the line above "Use this provider" says.
+ * that sends to it, as the line above "Use this provider" says. That line is
+ * made from this list, so a flow added here needs its words (`chosenFlowLines`).
  */
-export const CHOSEN_PROVIDER_FLOWS: readonly DataFlowId[] = [
+export const CHOSEN_PROVIDER_FLOWS = [
   "chat",
-  "edits",
   "checks",
   "suggestions",
+  "edits",
   "tagging",
   "classification",
-];
+] as const satisfies readonly DataFlowId[];
+
+export type ChosenProviderFlow = (typeof CHOSEN_PROVIDER_FLOWS)[number];
 
 /** Data leaving this computer: what one flow sends to one service. */
 export interface DataFlow {
@@ -6069,9 +6163,13 @@ export interface TestJevConnectionInput {
  *   the sign-in failed (`signIn.expired`). Answers skip its Tools.
  * - "ready": connected; Answers can use its Tools (see `ApprovalPolicy` for which ask first).
  * - "error": it couldn't start or be reached, or it stopped (see `error`).
+ * - "paused": remote: its server isn't on this computer, and "Keep everything
+ *   on this computer" is on, so IncarnaMind isn't connected to it and Answers
+ *   don't use it. It connects again once that is off.
  */
 export type ConnectorState =
   | "off"
+  | "paused"
   | "connecting"
   | "signing-in"
   | "needs-sign-in"
@@ -6636,6 +6734,10 @@ export const EXPORT_FORMATS = [
 ] as const;
 export type ExportFormat = (typeof EXPORT_FORMATS)[number];
 
+/** What a Mind's check record (#738) is saved as: a PDF to file with the work, and a CSV for the User's own records. */
+export const CHECK_RECORD_FORMATS = ["pdf", "csv"] as const;
+export type CheckRecordFormat = (typeof CHECK_RECORD_FORMATS)[number];
+
 /**
  * The User's export choices (`UserSettings.exportOptions`): the format Export uses, and each
  * format's own options. Markdown, the archive, always keeps the Questions; a source pack has
@@ -6777,6 +6879,11 @@ export interface MindExport extends MindExportPreview {
   sentenceChecks: SentenceChecksExported;
   /** Changes still waiting that a Word file holds as tracked changes. */
   trackedChanges: number;
+  /**
+   * The Documents whose Bibliography entries are too thin to cite (`BibliographyEntry.needsDetails`),
+   * each marked so in the file. None in Numbered, which lists Documents by name.
+   */
+  needsDetails: string[];
 }
 
 /** What `saveMindExport` did. */
@@ -6786,7 +6893,7 @@ export type SavedMindExport =
       MindExportPreview,
       "fileName" | "fromWord" | "theirChanges"
     > &
-      Pick<MindExport, "sentenceChecks" | "trackedChanges">)
+      Pick<MindExport, "sentenceChecks" | "trackedChanges" | "needsDetails">)
   /**
    * Not saved: a Mind imported from Word can't keep something in its file
    * (`WordExportReport.notKept`) the User hasn't accepted (`ExportMindOptions.accept`).
@@ -7903,6 +8010,13 @@ export interface CoreApi {
     fields: ReferenceField[],
   ): Promise<Document>;
   /**
+   * The User checked what was read from the file (`fieldsToCheck`): each of those fields
+   * becomes theirs, as if typed, so reading the file again never replaces it. Undo is
+   * `restoreReference` with the record from before. Returns the Document; "references.changed"
+   * carries it too.
+   */
+  confirmReference(documentId: string): Promise<Document>;
+  /**
    * Look up (#286): fetches the record for the Document's DOI from Crossref,
    * or for its arXiv id (from an arXiv address) from arXiv, and fills its
    * empty fields with it, leaving every other field that has a value. The
@@ -7913,6 +8027,18 @@ export interface CoreApi {
    * User asks: nothing looks up by itself.
    */
   lookUpReference(documentId: string): Promise<ReferenceLookupResult>;
+  /**
+   * Looks up each entry of a Mind's reference list in Crossref, by its DOI,
+   * else as written; then in OpenAlex when Crossref has no record of it or
+   * only one that differs; an arXiv number on arXiv. Calling it is the
+   * consent to the "reference-check" flow (ADR-0022); in local mode every
+   * entry is "not-checked". One check of a Mind at a time. Answers are kept:
+   * a found record for good, a miss for seven days; `again` asks about every
+   * miss again.
+   */
+  checkReferences(mindId: string, options?: { again?: boolean }): Promise<CheckReferencesResult>;
+  /** Stops a Mind's `checkReferences`: it gives "cancelled". Stopping none does nothing. */
+  stopReferenceCheck(mindId: string): Promise<void>;
   /**
    * Imports the references in a CSL JSON, BibTeX or RIS file (#287), from
    * Zotero, EndNote, Mendeley and others. The format is read from what is in
@@ -8335,6 +8461,13 @@ export interface CoreApi {
     mode: CheckMindMode,
     allDocuments?: boolean,
   ): Promise<MindCheckPlan>;
+  /**
+   * The first step of "Check this Mind" (#973): the model names the claims
+   * among the sentences `checkMind` would send, so the ask before the run
+   * counts and prices them exactly. What it named is kept, and `checkMind`
+   * doesn't send those sentences to be sorted again. `cancelCheck` stops it.
+   */
+  findMindClaims(input: CheckMindInput): Promise<FindMindClaimsResult>;
   /**
    * "Check this Mind" (#737): the model names the claims among the Mind's
    * sentences, leaving out headings, questions and the User's own opinions,
@@ -8777,6 +8910,12 @@ export interface CoreApi {
    * next free name, asking where new files go the first time.
    */
   saveMindExport(mindId: string, options: ExportMindOptions): Promise<SavedMindExport>;
+  /**
+   * Saves a record of what was checked in a Mind (#738) into the Output location, as
+   * `saveMindExport` does: each checked sentence and each Citation with its result, the Document
+   * version, the model and the time. Nothing is sent anywhere.
+   */
+  saveCheckRecord(mindId: string, format: CheckRecordFormat): Promise<SavedExport>;
 
   /**
    * Formats Citations and their Bibliography in a citation style (#289), from the cited
@@ -9005,6 +9144,8 @@ export interface CoreEvents {
    * "document.status". Carries each Document whole.
    */
   "references.changed": Document[];
+  /** How far a Mind's `checkReferences` is: `done` of `total` entries looked up. */
+  "referenceCheck.progress": { mindId: string; done: number; total: number };
   /** `importReferences` has matched `done` of `total` references. */
   "references.importProgress": { done: number; total: number };
   /** The ChatGPT sign-in changed: started, finished, signed out, or expired. */
@@ -9156,7 +9297,10 @@ const methods: Record<CoreApiMethod, true> = {
   listKeptCitationTexts: true,
   updateReference: true,
   restoreReference: true,
+  confirmReference: true,
   lookUpReference: true,
+  checkReferences: true,
+  stopReferenceCheck: true,
   listSourceProviders: true,
   setSourceProviderKey: true,
   findSources: true,
@@ -9229,6 +9373,7 @@ const methods: Record<CoreApiMethod, true> = {
   planContradictionCheck: true,
   checkContradictions: true,
   planMindCheck: true,
+  findMindClaims: true,
   checkMind: true,
   getSecretStorage: true,
   acceptPlainTextSecretStorage: true,
@@ -9349,6 +9494,7 @@ const methods: Record<CoreApiMethod, true> = {
   previewSharePage: true,
   setSharePageTextOnly: true,
   saveMindExport: true,
+  saveCheckRecord: true,
   formatCitations: true,
   getMindCitationStyle: true,
   setMindCitationStyle: true,

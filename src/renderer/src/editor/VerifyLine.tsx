@@ -11,7 +11,11 @@ import {
 import { DocumentLineIcon, VerifyLineIcon } from "../components/lineIcons";
 import { MetaLine } from "../components/MetaLine";
 import { ProblemLine } from "../components/ProblemLine";
-import { ReadinessExplanation, readinessAction } from "../components/providers/ChatReadinessNotice";
+import {
+  ReadinessExplanation,
+  readinessAction,
+  readinessAlso,
+} from "../components/providers/ChatReadinessNotice";
 import { UnreadFilesLine } from "../components/UnreadFilesLine";
 import { buttonStyle } from "../components/ui";
 import { core } from "../core";
@@ -29,8 +33,9 @@ import {
   useVerify,
 } from "../verify";
 import { AnswerError } from "./AnswerView";
-import { coverageOf, sameCoverage, shownClaims } from "./claimChecks";
+import { coverageOf, type ShownClaim, sameCoverage, shownClaims } from "./claimChecks";
 import { useMindModel, useRunModel } from "./ModelChip";
+import { ReferencesLine } from "./ReferencesLine";
 import { UncoveredLine } from "./UncoveredLine";
 
 const partsOf = (...parts: ReactNode[]): ReactNode[] => parts;
@@ -45,31 +50,65 @@ export function useVerification(doc: Y.Doc): Verification | null {
   return verification;
 }
 
-/** The checks of the document's sentences: how many there are, are going, and need a look, and where. */
+/** The parts of the counts that each move to the next claim of their kind (#690). */
+const VERIFY_PARTS = ["needLook", "notChecked", "recheck"] as const;
+type VerifyPart = (typeof VERIFY_PARTS)[number];
+
+const TEST_ID: Record<VerifyPart, string> = {
+  needLook: "verify-need-look",
+  notChecked: "verify-not-checked",
+  recheck: "verify-recheck",
+};
+
+const PART_OF: Partial<Record<ShownClaim["shown"]["state"], VerifyPart>> = {
+  unsupported: "needLook",
+  contradicted: "needLook",
+  "needs-recheck": "recheck",
+};
+
+/** A claim no model checked stays not checked when it is edited, or "Checked 20 of 24" would count it. */
+const partOf = (claim: ShownClaim): VerifyPart | undefined =>
+  claim.check.state === "not-checked" ? "notChecked" : PART_OF[claim.shown.state];
+
+/** The checks of the document's claims: how many there are and are going, and where each part's are. */
 function claimMarks(editor: Editor, pages: Verification["pages"]) {
   const { doc } = editor.state;
   let marked = 0;
   let checking = 0;
-  const needLook: number[] = [];
+  const places: Record<VerifyPart, number[]> = { needLook: [], notChecked: [], recheck: [] };
   for (const claim of shownClaims(editor.state)) {
     const id: unknown = doc.resolve(claim.from).parent.attrs.id;
     if (typeof id !== "string" || !(id in pages)) continue;
     marked++;
     if (claim.shown.state === "checking") checking++;
-    else if (claim.shown.state !== "supported") needLook.push(claim.from);
+    const part = partOf(claim);
+    if (part) places[part].push(claim.from);
   }
-  return { marked, checking, needLook, coverage: coverageOf(shownClaims(editor.state)) };
+  return { marked, checking, places, coverage: coverageOf(shownClaims(editor.state)) };
 }
+
+type ClaimMarks = ReturnType<typeof claimMarks>;
+
+const sameMarks = (a: ClaimMarks, b: ClaimMarks | null) =>
+  b !== null &&
+  a.marked === b.marked &&
+  a.checking === b.checking &&
+  sameCoverage(a.coverage, b.coverage) &&
+  VERIFY_PARTS.every(
+    (part) =>
+      a.places[part].length === b.places[part].length &&
+      a.places[part].every((at, index) => at === b.places[part][index]),
+  );
 
 /**
  * The line under the title of a Mind made by "Verify a document…" (#97; the
  * boards Final-35-Verify-Start and Final-08-Verify), in place of the word
  * count: where its text came from, then where its verify is. "Check it
  * against this Folder's Documents? [Check 24 claims]" with the estimate on a
- * cloud model, "Checking 12 of 24…" with Stop, then "Checked 24 claims · 2
- * need a look", which moves to the next such claim and fades in once as the
- * run finishes; or why there is nothing to check. Last on the line, the files
- * the checks couldn't read, if any.
+ * cloud model, "Checking 12 of 24…" with Stop, then "Checked 20 of 24 claims
+ * · 2 need a look · 4 not checked", each part moving to the next claim of its
+ * kind (#690), fading in once as the run finishes; or why there is nothing to
+ * check. Last on the line, the files the checks couldn't read, if any.
  */
 export function VerifyLine({
   editor,
@@ -97,13 +136,7 @@ export function VerifyLine({
   const marks = useEditorState({
     editor,
     selector: ({ editor: current }) => claimMarks(current, verification.pages),
-    equalityFn: (a, b) =>
-      b !== null &&
-      a.marked === b.marked &&
-      a.checking === b.checking &&
-      sameCoverage(a.coverage, b.coverage) &&
-      a.needLook.length === b.needLook.length &&
-      a.needLook.every((at, index) => at === b.needLook[index]),
+    equalityFn: sameMarks,
   });
   const unread = useCheckUnread(editor, doc);
   const claims = verification.claims;
@@ -115,7 +148,7 @@ export function VerifyLine({
     if (!asking) return;
     let current = true;
     core
-      .estimateRun({ items: total, ...(model && { model }) })
+      .estimateRun({ items: total, each: "check", ...(model && { model }) })
       .then((result) => {
         if (current) setEstimate(estimateLine(result, t, language));
       })
@@ -139,10 +172,11 @@ export function VerifyLine({
   }, [running]);
 
   const format = (value: number) => new Intl.NumberFormat(language).format(value);
-  const goToNext = () => {
+  const goToNext = (part: VerifyPart) => {
     if (editor.isDestroyed) return;
+    const places = marks.places[part];
     const head = editor.state.selection.head;
-    const next = marks.needLook.find((at) => at > head) ?? marks.needLook[0];
+    const next = places.find((at) => at > head) ?? places[0];
     if (next === undefined) return;
     const place = editor.state.doc.resolve(next);
     editor.view.dispatch(editor.state.tr.setSelection(TextSelection.near(place)).scrollIntoView());
@@ -227,30 +261,47 @@ export function VerifyLine({
       )),
     );
   } else {
-    const look = marks.needLook.length;
-    const lookText = t(look === 1 ? "verify.needLook.one" : "verify.needLook", {
-      count: format(look),
-    });
+    const notChecked = marks.places.notChecked.length;
+    const partText = (part: VerifyPart, count: number) => {
+      const shown = { count: format(count) };
+      switch (part) {
+        case "needLook":
+          return t(count === 1 ? "verify.needLook.one" : "verify.needLook", shown);
+        case "notChecked":
+          return t("verify.notChecked", shown);
+        case "recheck":
+          return t(count === 1 ? "verify.recheck.one" : "verify.recheck", shown);
+      }
+    };
     const stopped = outcome?.kind === "checked" ? outcome.stop : null;
     state = partsOf(
-      <span>
-        {t(marks.marked === 1 ? "verify.checked.one" : "verify.checked", {
-          count: format(marks.marked),
-        })}
+      <span data-testid="verify-checked">
+        {notChecked > 0
+          ? t(marks.marked === 1 ? "verify.checkedOf.one" : "verify.checkedOf", {
+              checked: format(marks.marked - notChecked),
+              count: format(marks.marked),
+            })
+          : t(marks.marked === 1 ? "verify.checked.one" : "verify.checked", {
+              count: format(marks.marked),
+            })}
       </span>,
-      look > 0 && (
-        <button
-          type="button"
-          data-testid="verify-need-look"
-          className="mind-health-part"
-          aria-label={t("verify.needLook.next", { part: lookText })}
-          title={t("verify.needLook.next", { part: lookText })}
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={goToNext}
-        >
-          {lookText}
-        </button>
-      ),
+      ...VERIFY_PARTS.filter((part) => marks.places[part].length > 0).map((part) => {
+        const text = partText(part, marks.places[part].length);
+        return (
+          <button
+            key={part}
+            type="button"
+            data-testid={TEST_ID[part]}
+            className="mind-health-part"
+            aria-label={t("verify.next", { part: text })}
+            title={t("verify.next", { part: text })}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => goToNext(part)}
+          >
+            {text}
+          </button>
+        );
+      }),
       ...(stopped ? runStopParts(stopped, t, language) : []).map((part) => (
         <span key={part} data-testid="verify-stopped">
           {part}
@@ -305,6 +356,9 @@ export function VerifyLine({
           action={readinessAction(outcome.readiness, t, openSettings, t("question.setUp"), () =>
             dismissVerifyOutcome(mindId),
           )}
+          also={readinessAlso(outcome.readiness, t, openSettings, () =>
+            dismissVerifyOutcome(mindId),
+          )}
         >
           <ReadinessExplanation readiness={outcome.readiness} inLine />
         </ProblemLine>
@@ -325,6 +379,7 @@ export function VerifyLine({
           modelId={runModel.modelId}
           providerId={runModel.providerId}
           resetsAt={outcome.error.resetsAt ?? null}
+          signInRoute={outcome.error.signInRoute ?? null}
           details={outcome.error.message}
           onRetry={() =>
             void (claims === null ? findClaims(mindId, doc) : checkClaims(mindId, doc))
@@ -346,6 +401,7 @@ export function VerifyLine({
           {t("verify.problem.error", { message: outcome.message })}
         </ProblemLine>
       )}
+      {running === null && <ReferencesLine editor={editor} mindId={mindId} />}
     </>
   );
 }

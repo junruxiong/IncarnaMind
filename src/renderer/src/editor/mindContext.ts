@@ -30,10 +30,10 @@ export const CountSlotContext = createContext<HTMLElement | null>(null);
 export const CompareSheetSlotContext = createContext<HTMLElement | null>(null);
 
 /**
- * Whether a node view is drawn in a footnote's text (`FootnoteText`), where a
- * Citation is part of the footnote and has no number of its own.
+ * The footnote a node view is drawn in (`FootnoteText`), by its id, where a
+ * Citation is part of the footnote and has no number of its own; null in the text.
  */
-export const InFootnoteContext = createContext(false);
+export const InFootnoteContext = createContext<string | null>(null);
 
 export function useMindId(): string {
   const mindId = useContext(MindIdContext);

@@ -3,7 +3,13 @@
  * names written as text and read back, dates, DOIs and arXiv ids, and what a
  * record still needs before it can be cited. Pure.
  */
-import type { ReferenceField, ReferenceFields, ReferenceName, ReferenceRecord } from "../core/api";
+import type {
+  ReferenceField,
+  ReferenceFields,
+  ReferenceName,
+  ReferenceRecord,
+  StyledRun,
+} from "../core/api";
 import type { Language } from "../core/language";
 import { CJK } from "./text";
 
@@ -261,6 +267,40 @@ export function isCitableWork(record: Pick<ReferenceRecord, "fields"> | null): b
   return type !== "document" && (authors.length > 0 || issued !== "");
 }
 
+/** What reading a file guesses at, as a style prints it; not a DOI or an address, found as written. */
+const GUESSED: readonly ReferenceField[] = [
+  "type",
+  "title",
+  "authors",
+  "issued",
+  "containerTitle",
+  "volume",
+  "issue",
+  "pages",
+  "publisher",
+];
+
+/**
+ * What was read from the file and is waiting for the User to check it: each field a style
+ * prints that reading gave ("file") a value. A field the User edited, or Look up or an import
+ * filled, isn't one.
+ */
+export function fieldsToCheck(
+  record: Pick<ReferenceRecord, "fields" | "sources">,
+): ReferenceField[] {
+  return GUESSED.filter(
+    (field) => record.sources[field] === "file" && !isEmptyValue(field, record.fields[field]),
+  );
+}
+
+/**
+ * Whether a record shows "Needs checking" (需要核对) on its Library row: a work of a known type
+ * with something read from its file not yet checked. A record of type Other (a contract, a deck)
+ * keeps the check to its "Cite as" panel.
+ */
+export const needsCheck = (record: Pick<ReferenceRecord, "fields" | "sources">): boolean =>
+  record.fields.type !== "document" && fieldsToCheck(record).length > 0;
+
 /**
  * What a record still needs before it can be cited: its title, authors and
  * date, of a work of a known type (a web page needs only its title: its
@@ -278,4 +318,17 @@ export function missingDetails(record: Pick<ReferenceRecord, "fields">): Referen
     if (fields.issued === "") missing.push("issued");
   }
   return missing;
+}
+
+/** Full-width punctuation, which carries its own space. */
+const FULL_WIDTH = /[\u3000-\u303f\uff00-\uffef]/u;
+
+/**
+ * A Bibliography entry too thin to cite, as an export and the References' Copy write it: with
+ * `mark` after it ("[needs details]", "[信息待补充]").
+ */
+export function withNeedsDetailsMark(runs: readonly StyledRun[], mark: string): StyledRun[] {
+  const last = runs.at(-1)?.text ?? "";
+  const space = FULL_WIDTH.test(last.slice(-1)) || FULL_WIDTH.test(mark[0] ?? "") ? "" : " ";
+  return [...runs, { text: `${space}${mark}` }];
 }

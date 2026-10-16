@@ -1,8 +1,11 @@
 import { create } from "zustand";
 import type {
+  CheckRecordFormat,
   ExportFormat,
   ExportMindOptions,
   ExportPreferences,
+  SavedExport,
+  SavedMindExport,
   SentenceChecksExported,
   WordExportReport,
 } from "../../core/api";
@@ -21,6 +24,11 @@ export const FORMAT_LABELS: Readonly<Record<ExportFormat, MessageKey>> = {
   html: "export.format.html",
   "share-page": "export.format.share-page",
   markdown: "export.format.markdown",
+};
+
+export const RECORD_FORMAT_LABELS: Readonly<Record<CheckRecordFormat, MessageKey>> = {
+  pdf: "export.format.pdf",
+  csv: "checkRecord.format.csv",
 };
 
 /** Until settings load, as the core's defaults have it. */
@@ -66,13 +74,21 @@ export const optionsFor = (
     : { format, theirChanges };
 };
 
+export type ExportKind = ExportFormat | `check-record-${CheckRecordFormat}`;
+
+export const isCheckRecord = (kind: ExportKind): kind is `check-record-${CheckRecordFormat}` =>
+  kind.startsWith("check-record-");
+
+export const checkRecordKind = (format: CheckRecordFormat): `check-record-${CheckRecordFormat}` =>
+  `check-record-${format}`;
+
 /** How the last export went, said in the Mind it exported (`ExportResultLine`). */
 export type ExportResult =
-  | { mindId: string; state: "saving"; format: ExportFormat }
+  | { mindId: string; state: "saving"; format: ExportKind }
   | {
       mindId: string;
       state: "saved";
-      format: ExportFormat;
+      format: ExportKind;
       path: string;
       name: string;
       /** The folder it is in, which the line names. */
@@ -87,18 +103,20 @@ export type ExportResult =
       tracked: number;
       /** The header and footer kept in a Word file though deleted from the Mind (#105). */
       kept: ("header" | "footer")[];
+      /** The Documents whose entries are too thin to cite, marked so in the file. */
+      needsDetails: string[];
       /** The first save, which took Documents › IncarnaMind: the line says where (D209). */
       defaulted: boolean;
     }
   /** Not saved yet: what a Word file can't keep, for the User to see first (#105). */
   | { mindId: string; state: "review"; format: ExportFormat; word: WordExportReport }
-  | { mindId: string; state: "failed"; format: ExportFormat; message: string }
+  | { mindId: string; state: "failed"; format: ExportKind; message: string }
   /** A source pack of a Mind with no Citations: nothing to make, and nothing went wrong. */
   | { mindId: string; state: "empty"; format: ExportFormat }
   | {
       mindId: string;
       state: "not-allowed";
-      format: ExportFormat;
+      format: ExportKind;
       linkedFolderId: string;
       folder: string;
     };
@@ -111,12 +129,68 @@ export const useExports = create<{
   dismiss: () => set({ result: null }),
 }));
 
+// Null while the same Mind is still exporting, so a held ⇧⌘E makes one file; a newer export or a
+// dismissal wins over a late answer.
+function begin(mindId: string, kind: ExportKind): ((next: ExportResult | null) => void) | null {
+  const { result } = useExports.getState();
+  if (result?.mindId === mindId && result.state === "saving") return null;
+  useExports.setState({ result: { mindId, state: "saving", format: kind } });
+  return (next) => {
+    const current = useExports.getState().result;
+    if (current?.mindId === mindId && current.state === "saving") {
+      useExports.setState({ result: next });
+    }
+  };
+}
+
+const NO_CHECKS: SentenceChecksExported = {
+  contradicted: 0,
+  unsupported: 0,
+  needsRecheck: 0,
+  commented: false,
+};
+
+function savedResult(
+  mindId: string,
+  format: ExportKind,
+  saved: Exclude<SavedMindExport, { status: "review" }> | SavedExport,
+): ExportResult | null {
+  if (saved.status === "saved") {
+    return {
+      mindId,
+      state: "saved",
+      format,
+      path: saved.file.path,
+      name: saved.file.name,
+      folder: saved.file.folder,
+      inDefaultFolder: saved.file.inDefaultFolder,
+      at: Date.now(),
+      unverified: "unverifiedCitations" in saved ? saved.unverifiedCitations : 0,
+      checks: "sentenceChecks" in saved ? saved.sentenceChecks : NO_CHECKS,
+      tracked: "trackedChanges" in saved ? saved.trackedChanges : 0,
+      kept: "word" in saved ? (saved.word?.keptFurniture ?? []) : [],
+      needsDetails: "needsDetails" in saved ? saved.needsDetails : [],
+      defaulted: saved.file.defaulted,
+    };
+  }
+  if (saved.status === "not-allowed") {
+    return {
+      mindId,
+      state: "not-allowed",
+      format,
+      linkedFolderId: saved.linkedFolderId,
+      folder: folderName(saved.linkedFolderPath),
+    };
+  }
+  // The User didn't choose where new files go: nothing was saved, and nothing went wrong.
+  return null;
+}
+
 /**
  * Exports a Mind into the Output location (the first save asks where that is), in `format` or
  * the last one, which it becomes; the result line says how it went. `first` fixes what stopped
  * the last try (another Output location, allowing a Linked folder), unless it returns false.
  * `accept` is what a Word file can't keep that the User has seen and exports anyway (#105).
- * Nothing starts while the same Mind is still exporting: a held ⇧⌘E makes one file.
  */
 export async function exportMind(
   mindId: string,
@@ -124,23 +198,15 @@ export async function exportMind(
   first?: () => Promise<boolean>,
   accept?: readonly string[],
 ): Promise<void> {
-  const { result } = useExports.getState();
-  if (result?.mindId === mindId && result.state === "saving") return;
   const preferences = exportPreferences();
   const chosen = format ?? preferences.format;
-  useExports.setState({ result: { mindId, state: "saving", format: chosen } });
+  const settle = begin(mindId, chosen);
+  if (!settle) return;
   if (chosen !== preferences.format) {
     void useAppStore
       .getState()
       .updateSettings({ user: { exportOptions: { ...preferences, format: chosen } } });
   }
-  const settle = (next: ExportResult | null) => {
-    // A newer export, or a dismissal, wins over this one's late answer.
-    const current = useExports.getState().result;
-    if (current?.mindId === mindId && current.state === "saving") {
-      useExports.setState({ result: next });
-    }
-  };
   try {
     if (chosen === "source-pack") {
       const { citations } = await core.previewMindExport(mindId, { format: chosen });
@@ -157,36 +223,11 @@ export async function exportMind(
       ...optionsFor(chosen, preferences),
       ...(accept && { accept: [...accept] }),
     });
-    if (saved.status === "saved") {
-      settle({
-        mindId,
-        state: "saved",
-        format: chosen,
-        path: saved.file.path,
-        name: saved.file.name,
-        folder: saved.file.folder,
-        inDefaultFolder: saved.file.inDefaultFolder,
-        at: Date.now(),
-        unverified: saved.unverifiedCitations,
-        checks: saved.sentenceChecks,
-        tracked: saved.trackedChanges,
-        kept: saved.word?.keptFurniture ?? [],
-        defaulted: saved.file.defaulted,
-      });
-    } else if (saved.status === "review") {
-      settle({ mindId, state: "review", format: chosen, word: saved.word });
-    } else if (saved.status === "not-allowed") {
-      settle({
-        mindId,
-        state: "not-allowed",
-        format: chosen,
-        linkedFolderId: saved.linkedFolderId,
-        folder: folderName(saved.linkedFolderPath),
-      });
-    } else {
-      // The User didn't choose where new files go: nothing was saved, and nothing went wrong.
-      settle(null);
-    }
+    settle(
+      saved.status === "review"
+        ? { mindId, state: "review", format: chosen, word: saved.word }
+        : savedResult(mindId, chosen, saved),
+    );
   } catch (failure) {
     settle({
       mindId,
@@ -195,6 +236,48 @@ export async function exportMind(
       message: errorMessage(failure, translateNow),
     });
   }
+}
+
+export async function exportCheckRecord(
+  mindId: string,
+  format: CheckRecordFormat,
+  first?: () => Promise<boolean>,
+): Promise<void> {
+  const kind = checkRecordKind(format);
+  const settle = begin(mindId, kind);
+  if (!settle) return;
+  try {
+    if (first && !(await first())) {
+      settle(null);
+      return;
+    }
+    settle(savedResult(mindId, kind, await core.saveCheckRecord(mindId, format)));
+  } catch (failure) {
+    settle({ mindId, state: "failed", format: kind, message: errorMessage(failure, translateNow) });
+  }
+}
+
+export function exportAgain(
+  mindId: string,
+  kind: ExportKind,
+  first: () => Promise<boolean>,
+): Promise<void> {
+  if (!isCheckRecord(kind)) return exportMind(mindId, kind, first);
+  return exportCheckRecord(mindId, kind === "check-record-pdf" ? "pdf" : "csv", first);
+}
+
+/**
+ * Shows the first entry of the Mind's References too thin to cite, as the result line's Show
+ * does: scrolled to the middle, its "Needs details" focused, which opens its "Cite as" on Enter.
+ */
+export function revealNeedsDetails(mindId: string): boolean {
+  const needs = document.querySelector<HTMLElement>(
+    `article[data-mind-id="${CSS.escape(mindId)}"] [data-testid="reference-entry"][data-needs-details] [data-testid="reference-needs-details"]`,
+  );
+  if (!needs) return false;
+  needs.scrollIntoView({ block: "center" });
+  needs.focus();
+  return true;
 }
 
 /**
