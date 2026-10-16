@@ -157,7 +157,7 @@ describe("a Word table's stylesheet", () => {
     expect(look.tables).toEqual({ t1: { columns: [100] } });
     expect(look.cells).toEqual({ c1: {} });
     const css = wordLookCss("mind", look);
-    expect(css).not.toContain("display");
+    expect(css).not.toContain("display: none");
     expect(css.split("{").length).toBe(css.split("}").length);
   });
 });

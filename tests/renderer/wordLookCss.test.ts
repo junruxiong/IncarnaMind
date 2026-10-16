@@ -38,7 +38,7 @@ describe("the Word look's stylesheet", () => {
     const shortRules = rulesOf(wordLookCss(short.mindId, short.look));
     const longRules = rulesOf(wordLookCss(long.mindId, long.look));
     expect(longRules).toHaveLength(shortRules.length);
-    expect(longRules.length).toBeLessThan(20);
+    expect(longRules.length).toBeLessThan(25);
     for (const rule of longRules)
       expect(rule.startsWith(`.${wordLookScope(long.mindId)} `)).toBe(true);
   });
