@@ -13,7 +13,13 @@ import {
 } from "../../src/core/providers/signInRoutes";
 import { translate } from "../../src/shared/i18n";
 import { askAssistant } from "../helpers/assistant";
-import { askAndFinish, citationsIn, shownPassages } from "../helpers/citations";
+import {
+  answerEnded,
+  askAndFinish,
+  askNew,
+  citationsIn,
+  shownPassages,
+} from "../helpers/citations";
 import {
   createMemoryKeychain,
   createTempDataFolder,
@@ -32,6 +38,7 @@ import {
   USER_CODE,
 } from "../helpers/fakeGitHub";
 import { connectToMind } from "../helpers/mindClient";
+import { answerIn } from "../helpers/minds";
 
 const MODEL = "gpt-5.5";
 
@@ -678,6 +685,31 @@ describe("Failures", () => {
     for (const language of ["en", "zh-CN"] as const) {
       for (const { line } of signIn) expect(translate(language, line)).not.toBe(line);
     }
+  });
+});
+
+describe("A failed Answer in a Mind", () => {
+  test("keeps its route's problem with the Answer, for the route's own line", async () => {
+    const { core, fake } = await signedIn();
+    const refusal = {
+      kind: "error" as const,
+      status: 403,
+      body: JSON.stringify({
+        error: { message: "Copilot is disabled by your organization's policy." },
+      }),
+    };
+    fake.replies.push(refusal, refusal, refusal, refusal);
+    const mind = await core.createMind({ title: "Plan" });
+    const client = await connectToMind(core, mind.id);
+
+    const answerId = await askNew(core, client, mind.id, "What does my plan cover?");
+
+    expect((await answerEnded(core, answerId)).event).toBe("failed");
+    await client.settled();
+    expect(answerIn(client, answerId).attrs).toMatchObject({
+      errorKind: "blocked",
+      errorSignInRoute: "policy-blocked",
+    });
   });
 });
 

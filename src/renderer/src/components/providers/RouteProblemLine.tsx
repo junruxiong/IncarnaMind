@@ -1,14 +1,12 @@
 import type { ProviderErrorKind } from "../../../../core/api";
 import {
   type RouteProblemWords,
-  type RouteWayBack,
   type SignInRoute,
   wayBackLabel,
 } from "../../../../core/providers/signInRoutes";
 import { formatResetTime } from "../../cost";
 import { useLanguage, useT } from "../../i18n";
-import { requestModelMenu } from "../../modelMenu";
-import { signInToRoute } from "../../routeSignIn";
+import { wayBackRun } from "../../routeSignIn";
 import type { SettingsPage } from "../../settingsPages";
 import { type ProblemAction, ProblemLine } from "../ProblemLine";
 
@@ -35,15 +33,8 @@ export function RouteProblemLine({
 }) {
   const t = useT();
   const language = useLanguage();
-  const run: Record<RouteWayBack, (() => void) | undefined> = {
-    "sign-in": () => void signInToRoute(route).then((signedIn) => signedIn && onRetry?.()),
-    "sign-in-again": () => void signInToRoute(route).then((signedIn) => signedIn && onRetry?.()),
-    "try-again": onRetry,
-    "use-another-model": requestModelMenu,
-    "paste-api-key": () => onOpenSettings("models"),
-  };
   const [first, second] = words.waysBack.flatMap((wayBack, index): ProblemAction[] => {
-    const onClick = run[wayBack];
+    const onClick = wayBackRun(route, wayBack, { onRetry, onOpenSettings });
     if (!onClick) return [];
     const testId = index === 0 ? "answer-error-action" : "answer-error-also";
     return [{ label: t(wayBackLabel(route, wayBack)), onClick, testId }];
@@ -57,7 +48,6 @@ export function RouteProblemLine({
       <ProblemLine
         action={first}
         also={second}
-        // The provider's own words, for whoever wants them.
         title={details ?? undefined}
         className="mt-1 select-none"
       >

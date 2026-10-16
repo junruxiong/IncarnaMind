@@ -13,7 +13,11 @@ import {
   useChecks,
 } from "../checks";
 import { ProblemLine } from "../components/ProblemLine";
-import { ReadinessExplanation, readinessAction } from "../components/providers/ChatReadinessNotice";
+import {
+  ReadinessExplanation,
+  readinessAction,
+  readinessAlso,
+} from "../components/providers/ChatReadinessNotice";
 import { UnreadFilesLine } from "../components/UnreadFilesLine";
 import { useContradictionLine } from "../contradictions";
 import { errorMessage } from "../errors";
@@ -213,6 +217,9 @@ export function NoteHealth({
           testId="checks-problem"
           className="mind-health-line"
           action={readinessAction(problem.readiness, t, openSettings, t("question.setUp"), () =>
+            dismissCheckProblem(mindId),
+          )}
+          also={readinessAlso(problem.readiness, t, openSettings, () =>
             dismissCheckProblem(mindId),
           )}
         >

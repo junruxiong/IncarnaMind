@@ -1,6 +1,11 @@
-import type { ChatProviderKind, ProviderErrorKind } from "../../core/api";
+import type { ChatProviderKind, ProviderErrorKind, SignInRouteProblem } from "../../core/api";
 import { OLLAMA_USAGE_URL } from "../../core/providers/catalog/billing";
-import { isSignInRoute } from "../../core/providers/signInRoutes";
+import {
+  isSignInRoute,
+  type RouteProblemWords,
+  SIGN_IN_ROUTES,
+  type SignInRoute,
+} from "../../core/providers/signInRoutes";
 import type { MessageKey } from "../../shared/i18n";
 import { CHATGPT_USAGE_URL } from "./chatGptUsage";
 import type { SettingsPage } from "./settingsPages";
@@ -92,13 +97,14 @@ const CHATGPT_ONLY: ReadonlySet<ProviderErrorKind> = new Set([
 
 /**
  * A failed Answer's problem, for the provider that wrote it: an Ollama Cloud allowance is Ollama's
- * to manage, and a sign-in route without its own words never gets ChatGPT's.
+ * to manage, and an Answer of a sign-in route without its own words never gets ChatGPT's.
  */
 export function answerProblem(
   kind: ProviderErrorKind,
   provider: ChatProviderKind | undefined,
+  onSignInRoute = isSignInRoute(provider),
 ): AnswerProblem {
-  if (isSignInRoute(provider) && CHATGPT_ONLY.has(kind)) {
+  if (onSignInRoute && CHATGPT_ONLY.has(kind)) {
     return {
       line: "answer.error.provider",
       fix: { kind: "settings", page: "models", label: "answer.error.chooseModel" },
@@ -111,6 +117,27 @@ export function answerProblem(
     };
   }
   return ANSWER_PROBLEMS[kind];
+}
+
+export type FailedAnswerLine =
+  | { kind: "route"; route: SignInRoute; words: RouteProblemWords }
+  | { kind: "plain"; problem: AnswerProblem };
+
+/**
+ * A failed Answer's line: its sign-in route's own, where `offered` (this build signs in with the
+ * route), else the plain one. A route's problem with no provider known, removed or not loaded
+ * yet, still keeps ChatGPT's words off it.
+ */
+export function failedAnswerLine(
+  kind: ProviderErrorKind,
+  provider: ChatProviderKind | undefined,
+  signInRoute: SignInRouteProblem | null,
+  offered: boolean,
+): FailedAnswerLine {
+  const route = isSignInRoute(provider) ? provider : null;
+  const words = route && signInRoute ? SIGN_IN_ROUTES[route].problems[signInRoute] : undefined;
+  if (route && words && offered) return { kind: "route", route, words };
+  return { kind: "plain", problem: answerProblem(kind, provider, route !== null || !!signInRoute) };
 }
 
 /**

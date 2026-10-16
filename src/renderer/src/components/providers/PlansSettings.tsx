@@ -15,7 +15,6 @@ import { useContinueWithChatGpt } from "./ChatGptSignIn";
 
 const GOOGLE_CREDITS = "https://developers.google.com/program";
 
-/** Signing in again with a route opens Settings here until the route's own row is built. */
 const ROUTES = ["claude-account", "copilot"] as const;
 
 /**

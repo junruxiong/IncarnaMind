@@ -11,11 +11,7 @@ import {
   SOURCE_KIND_PROVIDERS,
   type ToolApprovalRequest,
 } from "../../../core/api";
-import {
-  isSignInRoute,
-  isSignInRouteProblem,
-  SIGN_IN_ROUTES,
-} from "../../../core/providers/signInRoutes";
+import { isSignInRoute, isSignInRouteProblem } from "../../../core/providers/signInRoutes";
 import { asksAfterThirdParty } from "../../../shared/approvalRules";
 import { toolCallsOf } from "../../../shared/toolCalls";
 import { AnswerWriting } from "../answerPhase";
@@ -42,7 +38,7 @@ import { useKeyRefusals, useKeySavedSince } from "../keyRefusals";
 import { requestModelMenu } from "../modelMenu";
 import { useModelNames } from "../modelNames";
 import { useStoppedByPlanLimit } from "../planLimits";
-import { ANSWER_PROBLEMS, answerProblem } from "../problems";
+import { ANSWER_PROBLEMS, failedAnswerLine } from "../problems";
 import { useRouteOffered } from "../routeSignIn";
 import type { SettingsPage } from "../settingsPages";
 import { useAppStore } from "../store";
@@ -308,7 +304,6 @@ export function AnswerError({
   providerId: string | null;
   /** When the plan's limit resets, when its provider said. */
   resetsAt: string | null;
-  /** A sign-in route's own problem, said in the route's words. */
   signInRoute?: SignInRouteProblem | null;
   details: string | null;
   /**
@@ -353,14 +348,13 @@ export function AnswerError({
           });
         }
       : undefined;
-  const route = isSignInRoute(provider) ? provider : null;
-  const offered = useRouteOffered(route);
-  const routeWords = route && signInRoute && SIGN_IN_ROUTES[route].problems[signInRoute];
-  if (route && routeWords && offered) {
+  const offered = useRouteOffered(isSignInRoute(provider) ? provider : null);
+  const shown = failedAnswerLine(kind, provider, signInRoute, offered);
+  if (shown.kind === "route") {
     return (
       <RouteProblemLine
-        route={route}
-        words={routeWords}
+        route={shown.route}
+        words={shown.words}
         kind={kind}
         resetsAt={resetsAt}
         details={details}
@@ -369,7 +363,7 @@ export function AnswerError({
       />
     );
   }
-  const { line, fix } = answerProblem(kind, provider);
+  const { line, fix } = shown.problem;
   if (fix.kind === "ollama") return <OllamaNotRunningLine details={details} onRetry={onRetry} />;
   if (fix.kind === "local-model") {
     return (
