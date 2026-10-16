@@ -22,6 +22,7 @@ export interface ServiceRequest {
   path: string;
   /** How many bytes of body came with it. */
   bodyLength: number;
+  userAgent: string;
 }
 
 export interface ReferenceServices {
@@ -109,7 +110,8 @@ export async function startReferenceServices(answers: {
     });
     request.on("end", () => {
       const path = request.url ?? "/";
-      requests.push({ method: request.method ?? "", path, bodyLength });
+      const userAgent = request.headers["user-agent"] ?? "";
+      requests.push({ method: request.method ?? "", path, bodyLength, userAgent });
       if (held) {
         const { waiting } = held;
         held.arrived();

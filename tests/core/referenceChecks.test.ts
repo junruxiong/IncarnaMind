@@ -1,5 +1,5 @@
 import { describe, expect, onTestFinished, test } from "vitest";
-import type { Core, CoreEvents } from "../../src/core";
+import type { CheckReferencesResult, Core, CoreEvents } from "../../src/core";
 import {
   citedReference,
   differences,
@@ -15,6 +15,7 @@ import { unusedLocalUrl } from "../helpers/ollama";
 import {
   type CrossrefWork,
   type OpenAlexWork,
+  type ReferenceServices,
   recordedAnswer,
   startReferenceServices,
 } from "../helpers/referenceServices";
@@ -97,20 +98,30 @@ async function setUp(
     localOnly = false,
     works = [LSTM, DEEP],
     openalex = OPENALEX_WORKS,
-  }: { localOnly?: boolean; works?: CrossrefWork[]; openalex?: OpenAlexWork[] } = {},
+    reuse,
+  }: {
+    localOnly?: boolean;
+    works?: CrossrefWork[];
+    openalex?: OpenAlexWork[];
+    /** The data folder and stand-in of an earlier core, as after a restart. */
+    reuse?: { dataDir: string; services: ReferenceServices };
+  } = {},
 ) {
-  const services = await startReferenceServices({
-    works,
-    registered: {
-      "10.48550/arXiv.1412.6980": "datacite",
-      "10.48550/arXiv.1706.03762": "datacite",
-      "10.5281/zenodo.123456": "datacite",
-    },
-    openalex,
-    arxiv: { "1706.03762": recordedAnswer("arxiv-attention.xml") },
-  });
-  onTestFinished(() => services.close());
-  const core: Core = startCore(await createTempDataFolder(), {
+  const services =
+    reuse?.services ??
+    (await startReferenceServices({
+      works,
+      registered: {
+        "10.48550/arXiv.1412.6980": "datacite",
+        "10.48550/arXiv.1706.03762": "datacite",
+        "10.5281/zenodo.123456": "datacite",
+      },
+      openalex,
+      arxiv: { "1706.03762": recordedAnswer("arxiv-attention.xml") },
+    }));
+  if (!reuse) onTestFinished(() => services.close());
+  const dataDir = reuse?.dataDir ?? (await createTempDataFolder());
+  const core: Core = startCore(dataDir, {
     referenceLookup: { crossref: services.url, arxiv: services.url, openalex: services.url },
   });
   if (localOnly) await core.setLocalOnly(true);
@@ -122,7 +133,7 @@ async function setUp(
     ...entries.map((entry) => note(entry)),
   ]);
   await client.settled();
-  return { core, services, mindId: mind.id };
+  return { core, services, dataDir, mindId: mind.id };
 }
 
 describe("Checking a reference list", { timeout: 30_000 }, () => {
@@ -204,6 +215,52 @@ describe("Checking a reference list", { timeout: 30_000 }, () => {
       kind: "checked",
       references: [{ mark: "found", record: { doi: "10.1162/neco.1997.9.8.1735", year: 1997 } }],
     });
+  });
+
+  // protects=a list checked once is checked again, after a restart too, without asking any service, so re-checks never spend OpenAlex's free daily allowance, and each mark still names the service its record came from; fails_when=a re-check sends a request, or a kept answer loses its service or changes a mark; no_claim=a failure, which isn't kept.
+  test("checking the same list again, after a restart, asks no service and names the same sources", async () => {
+    const entries = [REAL, BY_DOI, CONFERENCE, PREPRINT, INVENTED, WRONG_YEAR];
+    const first = await setUp(entries);
+    const before = await first.core.checkReferences(first.mindId);
+    const asked = first.services.requests.length;
+    first.core.close();
+
+    const again = await setUp(entries, { reuse: first });
+    const after = await again.core.checkReferences(again.mindId);
+
+    expect(first.services.requests).toHaveLength(asked);
+    const marks = (result: CheckReferencesResult) =>
+      result.kind === "checked"
+        ? result.references.map(({ mark, service, record, differences, reason }) => ({
+            mark,
+            service,
+            record,
+            differences,
+            reason,
+          }))
+        : [];
+    expect(marks(after)).toEqual(marks(before));
+    expect(marks(after).map((check) => check.service)).toEqual([
+      "crossref",
+      "crossref",
+      "openalex",
+      "openalex",
+      null,
+      "crossref",
+    ]);
+  });
+
+  // protects=no request to Crossref, OpenAlex or arXiv carries an e-mail address: no mailto parameter, and nothing but IncarnaMind's name and address in the User-Agent; fails_when=a contact address is added to a request; no_claim=none beyond protects.
+  test("no request carries an e-mail address", async () => {
+    const { core, services, mindId } = await setUp([REAL, BY_DOI, CONFERENCE, PREPRINT, INVENTED]);
+
+    await core.checkReferences(mindId);
+
+    expect(services.requests.length).toBeGreaterThan(0);
+    for (const request of services.requests) {
+      expect(decodeURIComponent(request.path)).not.toMatch(/mailto|@/i);
+      expect(request.userAgent).not.toMatch(/mailto|@/i);
+    }
   });
 
   // protects=starting the check is the consent (ADR-0022): no dialog, and Settings › Privacy lists it as chosen for each of Crossref, OpenAlex and arXiv; fails_when=a dialog opens, or a service a reference may go to isn't listed; no_claim=the line by the action, which the e2e covers.

@@ -15,6 +15,8 @@ import { ConsentDeclinedError } from "../errors";
 import type { MindContent } from "../mindContent";
 import { parseMindId } from "../minds";
 import type { SourceHttp } from "../sources/http";
+import type { Database } from "../storage";
+import { cachedLookups } from "./cache";
 import { type CheckRun, checkReference, ServiceFailure } from "./check";
 import { referenceList } from "./list";
 import { createLookups, REFERENCE_SERVICES } from "./lookups";
@@ -30,13 +32,15 @@ export interface ReferenceChecksOptions {
   /** Each service's API, unless the host says otherwise (tests). */
   urls?: Partial<Record<ReferenceService, string>> | undefined;
   content: Pick<MindContent, "read">;
+  db: Database;
+  now: () => string;
   progress(event: { mindId: string; done: number; total: number }): void;
   signal: AbortSignal;
 }
 
 export function createReferenceChecks(options: ReferenceChecksOptions) {
   const { consent } = options;
-  const lookups = createLookups(options.http, options.urls);
+  const lookups = cachedLookups(createLookups(options.http, options.urls), options.db, options.now);
   const services = Object.values(REFERENCE_SERVICES);
   const checked = new Map<string, ReferenceCheck>();
   const running = new Map<string, AbortController>();
