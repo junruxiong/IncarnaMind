@@ -31,9 +31,16 @@ import { type CommandContext, commands } from "../commands/registry";
 import { ObjectMenu, useObjectMenu } from "../components/ObjectMenu";
 import { useTabPlace } from "../components/tabs/tabItems";
 import { useGap, useLanguage, useT } from "../i18n";
-import { groupsMerged } from "../layoutSlice";
+import { currentTabOf, groupsMerged } from "../layoutSlice";
 import type { ObjectRef } from "../objects";
 import { openCited as openCitedPlace, quoteSaysSo } from "../openCited";
+import {
+  pinCitation,
+  pinnedMind,
+  staysPinned,
+  takePinnedCitation,
+  unpinCitation,
+} from "../pinnedCitation";
 import { recordUsage, useAppStore } from "../store";
 import { pageDate } from "../webPages";
 import { CitationQuotedWords } from "./CitationQuotedWords";
@@ -51,6 +58,11 @@ import { Popover } from "./Popover";
 import { onPeek, peekCitation } from "./peek";
 import { StyledRuns, StyledRunView } from "./StyledRuns";
 import { runsText } from "./styledText";
+
+useAppStore.subscribe((state) => {
+  const mindId = pinnedMind();
+  if (mindId !== null && !staysPinned(currentTabOf(state.layout)?.item, mindId)) unpinCitation();
+});
 
 /** How long a pointer rests on a Citation before its card shows, and how long it may leave before it goes. */
 const SHOW_MS = 120;
@@ -116,7 +128,8 @@ export function CitationView({
   const badgeText = t(badge.key, badge.params);
   const number = citationNumberOf(decorations);
   // In a footnote's text it is part of the footnote: it shows where it points, not a number.
-  const inFootnote = useContext(InFootnoteContext);
+  const footnoteId = useContext(InFootnoteContext);
+  const inFootnote = footnoteId !== null;
   const pointsTo = citationSource(shown, t).text;
   /** Clicked: the card stays until it is dismissed. */
   const [pinned, setPinned] = useState(false);
@@ -143,6 +156,20 @@ export function CitationView({
     window.clearTimeout(timer.current);
     setPinned(false);
     setPeeking(false);
+    unpinCitation();
+  }, []);
+  const placeOf = () => {
+    const at = getPos();
+    return at === undefined ? null : `${footnoteId ?? "text"}:${at}`;
+  };
+  // The window showed one group and the Document came to the front: the card is open when the Mind returns.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only when the node view is made.
+  useEffect(() => {
+    const place = placeOf();
+    if (!mindId || place === null || !takePinnedCitation(mindId, place)) return;
+    setPinned(true);
+    const frame = requestAnimationFrame(() => marker.current?.scrollIntoView({ block: "center" }));
+    return () => cancelAnimationFrame(frame);
   }, []);
   useEffect(() => {
     const element = marker.current;
@@ -168,6 +195,8 @@ export function CitationView({
 
   const onClick = () => {
     setPinned(true);
+    const place = placeOf();
+    if (mindId && place !== null && groupsMerged()) pinCitation(mindId, place);
     // Step 1 of the first open's steps, and step 3 of the steps in an empty Mind.
     useAppStore.getState().updateGettingStarted({ citationChecked: true });
     recordUsage({ event: "citation_opened", fields: { check: state.check } });

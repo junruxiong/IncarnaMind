@@ -12,6 +12,7 @@ import { useLanguage, useT } from "../i18n";
 import { formatCount } from "../linkedFolders";
 import { useAppStore } from "../store";
 import { CloseLineIcon } from "./lineIcons";
+import { MetaLine } from "./MetaLine";
 import { type ProblemAction, ProblemLine } from "./ProblemLine";
 import { SourceKeyField } from "./SourceKeyField";
 import { buttonStyle, iconButtonClass, inputClass, sectionTitleClass } from "./ui";
@@ -339,16 +340,16 @@ function ResultRow({ work }: { work: FoundSource }) {
           {fields.title}
         </p>
         {byline.length > 0 && (
-          <p className="text-[13px] leading-5 break-words text-ink-secondary">
-            {byline.join(" · ")}
-          </p>
+          <MetaLine
+            parts={byline}
+            className="text-[13px] leading-5 break-words text-ink-secondary"
+          />
         )}
-        <p
+        <MetaLine
+          parts={facts}
           data-testid="find-sources-result-facts"
           className="text-[13px] leading-5 break-words text-ink-meta"
-        >
-          {facts.join(" · ")}
-        </p>
+        />
         {work.notice && (
           <p
             data-testid="find-sources-result-notice"

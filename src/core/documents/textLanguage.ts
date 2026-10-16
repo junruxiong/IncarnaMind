@@ -59,6 +59,12 @@ export function detectLanguage(text: string, minimumWords = MIN_COMMON_WORDS): T
   return bestCount >= minimumWords ? best : null;
 }
 
+/** How much of a text its language is told from: the start of a long Mind says it as well as all of it. */
+export const LANGUAGE_SAMPLE = 4000;
+
+export const writtenInChinese = (text: string): boolean =>
+  detectLanguage(text.slice(0, LANGUAGE_SAMPLE)) === "Chinese";
+
 const CJK_LANGUAGES: ReadonlySet<TextLanguage | null> = new Set(["Chinese", "Japanese", "Korean"]);
 
 export const writtenInCjk = (text: string): boolean => CJK_LANGUAGES.has(detectLanguage(text));

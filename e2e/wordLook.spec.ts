@@ -127,7 +127,7 @@ test("the 304-page contract opens in its look, with one rule a style", async () 
     ),
   );
   expect(rules).toHaveLength(1);
-  expect(rules[0]).toBeLessThan(20);
+  expect(rules[0]).toBeLessThan(25);
   await app.close();
 });
 

@@ -15,14 +15,18 @@ import {
   MIND_WORD_LOOK_FIELD,
   WORD_LOOK_ATTRIBUTE,
   WORD_RUN_MARK,
+  WORD_TAB_MARK,
+  type WordLook,
   type WordSource,
 } from "./api";
 import { nodesByPlace, type WordStructure } from "./documents/formats/docxImport";
 import { CONDITIONAL_FORMATTING_VERSION } from "./documents/formats/docxLook";
+import { isRecord } from "./errors";
 
-/** The look's mark, and formatting the import reads with styles resolved. */
+/** The look's marks, and formatting the import reads with styles resolved. */
 const GIVEN_MARKS: ReadonlySet<string> = new Set([
   WORD_RUN_MARK,
+  WORD_TAB_MARK,
   "bold",
   "italic",
   "underline",
@@ -176,6 +180,37 @@ function conditionalToggles(paragraph: Y.XmlElement, node: NodeJSON): LookChange
   return changes;
 }
 
+function tabMarks(element: Y.XmlElement): LookChange[] {
+  const changes: LookChange[] = [];
+  for (const child of element.toArray()) {
+    if (!(child instanceof Y.XmlText)) continue;
+    let at = 0;
+    for (const each of child.toDelta() as Delta) {
+      if (typeof each.insert !== "string") {
+        at += 1;
+        continue;
+      }
+      if (each.attributes?.[WORD_TAB_MARK] === undefined) {
+        for (
+          let tab = each.insert.indexOf("\t");
+          tab >= 0;
+          tab = each.insert.indexOf("\t", tab + 1)
+        ) {
+          changes.push({
+            kind: "marks",
+            text: child,
+            index: at + tab,
+            length: 1,
+            marks: { [WORD_TAB_MARK]: {} },
+          });
+        }
+      }
+      at += each.insert.length;
+    }
+  }
+  return changes;
+}
+
 const asImported = (element: Y.XmlElement, source: WordSource) =>
   wordFingerprint(element) === source.f || wordFingerprintBeforeLook(element) === source.f;
 
@@ -212,6 +247,8 @@ export function planLook(
         plan.changes.push(...conditionalToggles(element, node));
       }
     }
+    // The tab mark isn't content: a tab gets it whether its Block was edited or not.
+    plan.changes.push(...tabMarks(element));
     for (const child of element.toArray()) {
       if (child instanceof Y.XmlElement) look(child);
     }
@@ -238,19 +275,30 @@ export function planLook(
   return plan;
 }
 
-/** Takes away a look an earlier version gave, so keys it named don't outlive it. */
-export function clearLook(doc: Y.Doc, blocks: Y.XmlFragment): void {
+/**
+ * Takes away the keys an earlier version gave that `look` doesn't have. Keys
+ * name a look by its content, so a Block the User edited keeps every look
+ * that reads the same.
+ */
+export function clearLook(doc: Y.Doc, blocks: Y.XmlFragment, look: WordLook): void {
+  const kept = new Set(
+    [look.paragraphs, look.runs, look.tables, look.cells].flatMap((styles) => Object.keys(styles)),
+  );
+  const stale = (key: unknown) => typeof key !== "string" || !kept.has(key);
   const clear = (element: Y.XmlElement) => {
-    if (element.getAttribute(WORD_LOOK_ATTRIBUTE) !== undefined) {
-      element.removeAttribute(WORD_LOOK_ATTRIBUTE);
-    }
+    const key = element.getAttribute(WORD_LOOK_ATTRIBUTE);
+    if (key !== undefined && stale(key)) element.removeAttribute(WORD_LOOK_ATTRIBUTE);
     for (const child of element.toArray()) {
       if (child instanceof Y.XmlElement) clear(child);
       else if (child instanceof Y.XmlText) {
         let at = 0;
-        for (const run of child.toDelta() as { insert: unknown; attributes?: object }[]) {
+        for (const run of child.toDelta() as {
+          insert: unknown;
+          attributes?: Record<string, unknown>;
+        }[]) {
           const length = typeof run.insert === "string" ? run.insert.length : 1;
-          if (run.attributes && WORD_RUN_MARK in run.attributes) {
+          const mark = run.attributes?.[WORD_RUN_MARK];
+          if (mark !== undefined && stale(isRecord(mark) ? mark.k : null)) {
             child.format(at, length, { [WORD_RUN_MARK]: null });
           }
           at += length;

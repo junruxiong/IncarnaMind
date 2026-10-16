@@ -12,6 +12,7 @@ import { needsYou } from "../../taskGroups";
 import { pauseTask, resumeTask, reviewTask, stopTask, useTasks } from "../../tasks";
 import { stepLine, taskName } from "../../taskText";
 import { CheckLineIcon } from "../lineIcons";
+import { MetaLine } from "../MetaLine";
 
 /**
  * What a Task's progress offers that its kind brings (#130's plan card, and
@@ -36,13 +37,13 @@ function useMinutes(since: string, until: string | null): number {
 }
 
 /** Its head's right side: how far it is and for how long, or how it ended. */
-function headLine(task: Task, minutes: number, t: Translate): string {
+function headLine(task: Task, minutes: number, t: Translate): string[] {
   const time = t("task.minutes", { count: minutes });
-  if (task.status === "done") return t("task.progress.doneIn", { time });
-  if (task.status === "failed") return t("task.status.failed");
-  if (task.status === "stopped") return t("task.status.stopped");
+  if (task.status === "done") return [t("task.progress.doneIn", { time })];
+  if (task.status === "failed") return [t("task.status.failed")];
+  if (task.status === "stopped") return [t("task.status.stopped")];
   const progress = task.progress;
-  if (!progress || progress.total === 0) return time;
+  if (!progress || progress.total === 0) return [time];
   const counted = t(
     task.kind === "comparison"
       ? "task.progress.cells"
@@ -51,7 +52,7 @@ function headLine(task: Task, minutes: number, t: Translate): string {
         : "task.progress.items",
     { done: progress.done, total: progress.total },
   );
-  return `${counted} · ${time}`;
+  return [counted, time];
 }
 
 /** What it waits for, where the step it is on would be: the User below, or a limit. */
@@ -66,14 +67,14 @@ function waitingLine(task: Task, t: Translate, language: Language): string | nul
   return task.status === "paused" ? stepLine(task, t, language) : null;
 }
 
-function details(task: Task, t: Translate, language: Language): string {
+function details(task: Task, t: Translate, language: Language): string[] {
   const parts: string[] = [];
   if (task.kind === "comparison" && task.progress) {
     parts.push(t("task.details.cells", { done: task.progress.done, total: task.progress.total }));
   }
   parts.push(t("task.details.started", { time: formatDateTime(task.startedAt, language) }));
   if (task.cost) parts.push(t("task.details.cost", { cost: formatMoney(task.cost, language) }));
-  return parts.join(" · ");
+  return parts;
 }
 
 function StepMark({ step, live }: { step: TaskStep; live: boolean }) {
@@ -224,9 +225,12 @@ export function TaskProgress({
           </span>
         )}
         <span className="task-progress-name">{name}</span>
-        <span data-testid="task-progress-meta" className="task-progress-meta">
-          {headLine(task, minutes, t)}
-        </span>
+        <MetaLine
+          as="div"
+          data-testid="task-progress-meta"
+          className="task-progress-meta"
+          parts={headLine(task, minutes, t)}
+        />
       </div>
       {!finished && (
         <div
@@ -290,9 +294,12 @@ export function TaskProgress({
         </div>
       )}
       {detailsOpen && (
-        <p id={detailsId} data-testid="task-progress-record" className="task-progress-details">
-          {details(task, t, language)}
-        </p>
+        <MetaLine
+          id={detailsId}
+          data-testid="task-progress-record"
+          className="task-progress-details"
+          parts={details(task, t, language)}
+        />
       )}
       <div data-testid="task-progress-actions" className="task-progress-actions">
         {task.summary && (
