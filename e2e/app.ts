@@ -105,6 +105,13 @@ export interface LaunchOptions {
   /** A local stand-in for GitHub and Copilot at this origin, where the Copilot plan signs in and asks. */
   copilot?: string;
   /**
+   * Where the Claude account signs in and asks: the origin of a local server
+   * standing in for Anthropic (tests/helpers/fakeAnthropic.ts). A test build honours it.
+   */
+  claude?: string;
+  /** How long the Claude sign-in waits for its code, in milliseconds. A test build honours it. */
+  claudeSignInMs?: number;
+  /**
    * Leaves the window at the size and place it opened at, instead of making
    * it `WINDOW_SIZE`: for a test of how the window opens.
    */
@@ -188,6 +195,8 @@ export async function launchApp(
     connectorDirectory,
     connectorRegistry,
     chatGpt,
+    claude,
+    claudeSignInMs,
     copilot,
     keepWindow = false,
     computerSound = "allowed",
@@ -221,6 +230,8 @@ export async function launchApp(
   delete env.INCARNAMIND_TEST_CONNECTOR_DIRECTORY;
   delete env.INCARNAMIND_TEST_CONNECTOR_REGISTRY;
   delete env.INCARNAMIND_TEST_CHATGPT;
+  delete env.INCARNAMIND_TEST_CLAUDE;
+  delete env.INCARNAMIND_TEST_CLAUDE_SIGN_IN_MS;
   delete env.INCARNAMIND_TEST_COPILOT;
   delete env.INCARNAMIND_TEST_TRANSCRIBER_OPTIONS;
   delete env.INCARNAMIND_TEST_SCANS;
@@ -247,6 +258,8 @@ export async function launchApp(
   // Nowhere, unless a test serves one: a search in a test never reaches the real Registry.
   env.INCARNAMIND_TEST_CONNECTOR_REGISTRY = connectorRegistry ?? "http://127.0.0.1:9";
   if (chatGpt) env.INCARNAMIND_TEST_CHATGPT = chatGpt;
+  if (claude) env.INCARNAMIND_TEST_CLAUDE = claude;
+  if (claudeSignInMs) env.INCARNAMIND_TEST_CLAUDE_SIGN_IN_MS = String(claudeSignInMs);
   if (copilot) env.INCARNAMIND_TEST_COPILOT = copilot;
   if (scans) env.INCARNAMIND_TEST_SCANS = scans;
   if (web) env.INCARNAMIND_TEST_WEB = String(web);
