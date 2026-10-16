@@ -517,7 +517,7 @@ describe("Local mode", () => {
       ).toMatchObject({
         status: "waiting",
         error: {
-          message: "Cloud classification is paused while “Keep everything on this computer” is on.",
+          message: "Cloud tagging paused: “Keep everything on this computer” is on.",
         },
       }),
     );

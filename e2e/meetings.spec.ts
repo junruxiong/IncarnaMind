@@ -250,7 +250,7 @@ test("a meeting records from the + menu, after the one-time notice: the bar, ⌘
   await bar.getByTestId("meeting-stop").click();
   await expect(bar).toBeHidden();
   const audio = window.getByTestId("meeting-audio");
-  await expect(audio).toContainText(/^Recorded 0:\d\d · Audio kept on this computer until /);
+  await expect(audio).toContainText(/^Recorded 0:\d\d · Audio stays on this computer until /);
   // Stopped, the Document is read.
   await expect(
     window.getByTestId("document-list-item").filter({ hasText: "Agenda" }),
@@ -264,7 +264,7 @@ test("a meeting records from the + menu, after the one-time notice: the bar, ⌘
   await expect(confirm.getByTestId("meeting-audio-delete-confirm")).toBeFocused();
   const question = await confirm.textContent();
   await window.keyboard.press("Escape");
-  await expect(audio).toContainText("Audio kept on this computer");
+  await expect(audio).toContainText("Audio stays on this computer");
 
   // ⌘K's "Delete audio" is the same command: the same question, in the same place, and Esc
   // or "Keep it" keeps the audio.
@@ -278,11 +278,11 @@ test("a meeting records from the + menu, after the one-time notice: the bar, ⌘
   await expect(confirm).toHaveText(question ?? "");
   await expect(confirm.getByTestId("meeting-audio-delete-confirm")).toBeFocused();
   await window.keyboard.press("Escape");
-  await expect(audio).toContainText("Audio kept on this computer");
+  await expect(audio).toContainText("Audio stays on this computer");
   await searchPalette(window, "delete audio");
   await window.keyboard.press("Enter");
   await confirm.getByRole("button", { name: "Keep it" }).click();
-  await expect(audio).toContainText("Audio kept on this computer");
+  await expect(audio).toContainText("Audio stays on this computer");
   expect((await bridge(window))[0]?.audio.kept).toBe(true);
 
   await audio.getByTestId("meeting-audio-delete").click();
