@@ -625,7 +625,10 @@ export function createLibrary(options: {
     taggingPlaces(): (string | null)[] {
       const ids = db
         .all<{ id: string }>(
-          "SELECT id FROM documents WHERE deleted_at IS NULL AND status = 'ready' AND tagging_status IN ('pending', 'tagging')",
+          `SELECT d.id FROM documents d WHERE d.deleted_at IS NULL AND (
+             (d.status = 'ready' AND d.tagging_status IN ('pending', 'tagging'))
+             OR EXISTS (SELECT 1 FROM document_groups g WHERE g.document_id = d.id
+               AND g.deleted_at IS NULL AND g.status IN ('pending', 'classifying')))`,
         )
         .map((row) => row.id);
       return [...new Set(ids.map(placeOf))];

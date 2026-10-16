@@ -606,8 +606,12 @@ function useStatuses(): Status[] {
       });
     if (pending) {
       const text = service
-        ? t("library.progressWith", { count: pending, service })
-        : t("library.progress", { count: pending });
+        ? pending === 1
+          ? t("library.progressWith.one", { service })
+          : t("library.progressWith.other", { count: pending, service })
+        : pending === 1
+          ? t("library.progress.one")
+          : t("library.progress.other", { count: pending });
       statuses.push({
         testId: "organization-progress",
         tone: "progress",

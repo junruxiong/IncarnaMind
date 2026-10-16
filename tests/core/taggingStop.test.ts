@@ -4,6 +4,7 @@
  * across a restart, until "Tag with AI" turns it back on. Through the core's
  * public interface, with a scripted model: no network.
  */
+import { writeFile } from "node:fs/promises";
 import { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, test, vi } from "vitest";
 import type { Core, Document } from "../../src/core";
@@ -252,6 +253,24 @@ describe("Stop while Organize tags", () => {
     await waitForTagging(core, [first.id], (each) => each.tagging === "tagged");
     await stopped(core, second.id);
     expect(recorder.sent("Austin warehouse")).toBe(false);
+  });
+
+  test("stops a changed Document that Organize queued again, while another is sent", async () => {
+    const { core, recorder, contracts } = await organizing(true);
+    const board = await core.createLibraryGroup({ name: "Board", description: "Board papers" });
+    const lease = await add(core, "Lease.md", "The lease for the Austin warehouse.", contracts.id);
+    await waitForTagging(core, [lease.id], (each) => each.tagging === "tagged");
+    recorder.hold();
+    await add(core, "Minutes.md", "Minutes of the March board meeting.", board.id);
+    await vi.waitFor(() => expect(recorder.sent("March board meeting")).toBe(true));
+    await writeFile(lease.path, "The lease for the Austin warehouse, renewed to 2031.");
+    await core.reconcileDocuments();
+    await assigned(core, [lease.id], "pending");
+
+    expect(await core.stopTagging()).toEqual(expect.arrayContaining([board.id, contracts.id]));
+    recorder.release();
+    await stopped(core, lease.id);
+    expect(recorder.sent("renewed to 2031")).toBe(false);
   });
 
   test("with automatic Organize off, Tag with AI organizes what was stopped", async () => {
