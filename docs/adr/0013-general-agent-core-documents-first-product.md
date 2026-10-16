@@ -99,4 +99,4 @@ Web search gives an Answer two Tools of IncarnaMind's own, offered only when the
 
 ## Amendment, 2026-10-16: edits the User asked for apply at once (#880)
 
-An edit the User asks for on the text (Edit with AI, the selection menu's AI actions, a change asked for in the composer with text selected) applies at once, with one Undo and a line over it saying what changed. Changes the User didn't ask for stay Proposals, and so does an edit the guards hold back: one that would remove most of the selection without mapping onto it.
+An edit the User asks for on the text (Edit with AI, the selection menu's AI actions, a change asked for in the composer with text selected) applies at once, with one Undo and a line over it saying what changed. Changes the User didn't ask for stay Proposals, and so does an edit the guards hold back: one that would remove most of the selection without mapping onto it. The core still writes every AI change as Proposals; the window that asked accepts them, and they stay Proposals otherwise.

@@ -3398,6 +3398,21 @@
   .mind-editor .citation-marker.proposal-node--insert.proposal-applying {
     box-shadow: none;
   }
+  /* Review changes draws an applied edit's changes as proposals are drawn, over text that stays applied. */
+  .mind-editor .applied-new {
+    text-decoration: underline 1px var(--color-accent);
+    text-decoration-skip-ink: none;
+    text-underline-offset: 5px;
+  }
+  .mind-editor .applied-old {
+    color: var(--color-ink-meta);
+    text-decoration: line-through 1px var(--color-ink-meta);
+    user-select: none;
+  }
+  .mind-editor .applied-old--block {
+    display: block;
+    margin-block: 4px;
+  }
   .mind-editor .applied-line,
   .mind-editor .applied-kept-line {
     display: flex;

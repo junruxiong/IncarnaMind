@@ -62,7 +62,7 @@ async function mindWith(window: Page, lines: readonly string[]) {
     await window.keyboard.type(line);
   }
   const paragraphs = editor.locator(":scope > p");
-  await expect(paragraphs).toHaveText([...lines]);
+  await expect(paragraphs).toHaveText(lines.filter((line) => !line.startsWith("#")));
   return { editor, paragraphs };
 }
 
@@ -124,13 +124,13 @@ test("⌘J applies the change at once as AI text, with Changed 1 place · Undo �
   await expect(note.locator("del.proposal-delete, ins.proposal-insert")).toHaveCount(0);
 });
 
-test("Shorten from the menu applies at once; Review changes shows what it did, struck and underlined, each with Restore original; Done keeps the rest, and Undo all takes all back", async () => {
+test("Shorten from the menu applies at once; Review changes shows what it did, struck and underlined, over text that stays applied, each with Restore original; Done keeps the rest, and Undo all takes all back", async () => {
   const { window } = await launch();
   await useLocalChatModel(window);
   const { editor, paragraphs } = await mindWith(window, [TIDES]);
   const note = paragraphs.first();
   const line = lineOf(editor);
-  const removed = note.locator("del.proposal-delete");
+  const removed = note.locator("del.applied-old");
 
   await slideSelect(window, note, TIDES);
   await pointAndClick(window, window.getByTestId("selection-action-shorten"));
@@ -142,17 +142,20 @@ test("Shorten from the menu applies at once; Review changes shows what it did, s
   await expect(line.getByTestId("applied-count")).toHaveText("2 changes made by Edit with AI");
   await expect(line.getByTestId("applied-undo-all")).toHaveText("Undo all");
   await expect(line.getByTestId("applied-done")).toHaveText("Done");
+  await expect(note.locator(".applied-new")).toHaveCount(0);
   await expect(window.getByTestId("proposals-bar")).toHaveCount(0);
   await motionSettled(window);
   await screenshot(window, "applied-review-en");
 
   // Restoring one leaves the other.
   await pointAndClick(window, removed.first());
-  const changeBar = window.getByTestId("change-bar");
+  const changeBar = window.getByTestId("applied-change-bar");
+  await expect(changeBar).toContainText("Change 1 of 2");
   await expect(changeBar.getByTestId("change-restore")).toHaveText("Restore original");
-  await expect(changeBar.getByTestId("change-accept")).toHaveCount(0);
   await pointAndClick(window, changeBar.getByTestId("change-restore"));
   await expect(removed).toHaveText(["really "]);
+  await expect(note).toContainText("are very strong");
+  await expect(window.getByTestId("undo-message")).toHaveText("Restored the original");
   await expect(line.getByTestId("applied-count")).toHaveText("1 change made by Edit with AI");
   await pointAndClick(window, line.getByTestId("applied-done"));
   await expect(note).toHaveText("The tides here are very strong and regular.");
@@ -211,6 +214,42 @@ test("whole note selected, “make the second paragraph more formal”, the mode
   await pointAndClick(window, line.getByTestId("applied-undo"));
   await expect(paragraphs).toHaveText([FIRST, SECOND, THIRD]);
   await expect(line).toHaveCount(0);
+});
+
+test("Remove them, then Review changes: only the edit's own change is shown again, and the heading and the paragraph outside the selection stay", async () => {
+  const { window } = await launch();
+  await useLocalChatModel(window);
+  const NEXT = "The next meeting is in May.";
+  const { editor, paragraphs } = await mindWith(window, [
+    "## Harbour notes",
+    FIRST,
+    SECOND,
+    THIRD,
+    NEXT,
+  ]);
+  const heading = editor.locator(":scope > h2");
+  await expect(heading).toHaveText("Harbour notes");
+  await expect(paragraphs).toHaveText([FIRST, SECOND, THIRD, NEXT]);
+  const line = lineOf(editor);
+
+  await slideSelect(window, paragraphs.first(), FIRST, { line: paragraphs.nth(2), words: THIRD });
+  await askToChange(window, "make the second paragraph more formal; leave the others as they are");
+  await expect(paragraphs).toHaveText([FIRST, FORMAL, THIRD, NEXT]);
+  await pointAndClick(window, editor.getByTestId("applied-remove-kept"));
+  await expect(paragraphs).toHaveText([FORMAL, NEXT]);
+
+  await pointAndClick(window, line.getByTestId("applied-review"));
+  await expect(line.getByTestId("applied-count")).toHaveText(/changes? made by Edit with AI$/);
+  await expect(paragraphs.first().locator(".applied-new").first()).toBeVisible();
+  await expect(paragraphs.first().locator("del.applied-old").first()).toBeVisible();
+  await expect(heading).toHaveText("Harbour notes");
+  await expect(paragraphs).toHaveCount(2);
+  await expect(paragraphs.last()).toHaveText(NEXT);
+
+  await pointAndClick(window, line.getByTestId("applied-done"));
+  await expect(line).toHaveCount(0);
+  await expect(heading).toHaveText("Harbour notes");
+  await expect(paragraphs).toHaveText([FORMAL, NEXT]);
 });
 
 test("an edit that would remove most of what was selected, and can't be mapped onto it, waits for the User: Discard leaves the text, Apply applies it", async () => {
@@ -274,4 +313,88 @@ test("“delete the second paragraph” applies at once; a change asked for in t
   await expect(paragraphs.first()).toHaveText("Tides rise twice a day along this shore.");
   await expect(line.getByTestId("applied-count")).toHaveText("Changed 1 place");
   await expect(input).toHaveValue("");
+});
+
+test("text typed elsewhere while a slow edit streams in stays, and one ⌘Z takes back the whole edit", async () => {
+  const { window } = await launch();
+  await useLocalChatModel(window);
+  const lines = [
+    "The tides here are very strong and really regular.",
+    "The moon is really bright over the harbour tonight.",
+    "Harbours are very busy in the spring and really quiet in winter.",
+  ];
+  const { editor, paragraphs } = await mindWith(window, [...lines, "Notes:"]);
+  const line = lineOf(editor);
+
+  await slideSelect(window, paragraphs.first(), "The tides", {
+    line: paragraphs.nth(2),
+    words: "quiet in winter.",
+  });
+  await window.keyboard.press("ControlOrMeta+j");
+  await window.keyboard.type("Shorten this slowly");
+  await window.keyboard.press("Enter");
+  await expect(editor.getByTestId("mind-writing")).toBeVisible();
+  await pointAndClick(window, paragraphs.last());
+  await window.keyboard.press("End");
+  await window.keyboard.type(" typed meanwhile");
+  await expect(editor.getByTestId("mind-writing")).toHaveCount(0, { timeout: 30_000 });
+  await expect(line.getByTestId("applied-count")).toHaveText("Changed 5 places");
+  await expect(paragraphs.last()).toHaveText("Notes: typed meanwhile");
+
+  await editor.focus();
+  await window.keyboard.press("ControlOrMeta+z");
+  await expect(paragraphs).toHaveText([...lines, "Notes: typed meanwhile"]);
+  await expect(line).toHaveCount(0);
+});
+
+/** Runs a command from ⌘K by the keyboard: its words, then Enter. */
+async function fromPalette(window: Page, id: string, words: string) {
+  await window.keyboard.press("ControlOrMeta+k");
+  await expect(window.getByTestId("palette-search")).toBeFocused();
+  await window.keyboard.type(`>${words}`);
+  await expect(window.getByTestId("palette").locator(`[data-key="command:${id}"]`)).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await window.keyboard.press("Enter");
+}
+
+test("by the keyboard alone: ⌘J, Review changes from ⌘K, ⌘⌫ restores the change, Undo from ⌘K; Apply from ⌘K for an edit held back", async () => {
+  const { window } = await launch();
+  await useLocalChatModel(window);
+  const { editor, paragraphs } = await mindWith(window, [TIDES]);
+  const note = paragraphs.first();
+  const line = lineOf(editor);
+
+  await window.keyboard.press("ControlOrMeta+a");
+  await askToChange(window, "replace strong with powerful");
+  await expect(note).toHaveText("The tides here are very powerful and really regular.");
+  await fromPalette(window, "edit.reviewApplied", "Review changes");
+  await expect(line.getByTestId("applied-count")).toHaveText("1 change made by Edit with AI");
+  await expect(window.getByTestId("applied-change-bar")).toBeVisible();
+  await editor.focus();
+  await window.keyboard.press("ControlOrMeta+Backspace");
+  await expect(note).toHaveText(TIDES);
+  await expect(line).toHaveCount(0);
+
+  await editor.focus();
+  await window.keyboard.press("ControlOrMeta+a");
+  await askToChange(window, "replace strong with mighty");
+  await expect(note).toHaveText("The tides here are very mighty and really regular.");
+  await fromPalette(window, "edit.undoApplied", "Undo the AI edit");
+  await expect(note).toHaveText(TIDES);
+  await expect(line).toHaveCount(0);
+
+  const held = await mindWith(window, [FIRST, SECOND, THIRD]);
+  await window.keyboard.press("ControlOrMeta+a");
+  await askToChange(window, "replace it all with a haiku");
+  const heldLine = lineOf(held.editor);
+  await expect(heldLine.getByTestId("applied-apply")).toBeVisible();
+  await fromPalette(window, "edit.applyHeld", "Apply the waiting edit");
+  await expect(heldLine.getByTestId("applied-count")).toHaveText(/^Changed \d+ places?$/);
+  await expect(held.paragraphs).toHaveText([
+    "Gulls wheel, crying",
+    "salt wind on stone",
+    "night falls soft",
+  ]);
 });

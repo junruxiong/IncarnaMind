@@ -153,7 +153,8 @@ const failure = (error: unknown): EditWithAiResult => ({
  * the selection closes at its end, so the User can write on. The change
  * applies at once (#880); one held back waits as Proposals, which take the
  * cursor, if it is still where it was, so their bar shows; anything else is
- * one line in the composer.
+ * one line in the composer. One edit at a time in a Mind. Says whether the
+ * change came back.
  */
 export async function requestEdit(
   editor: Editor,
@@ -162,9 +163,9 @@ export async function requestEdit(
   action: EditAction,
   instruction?: string,
   range?: { from: number; to: number },
-): Promise<void> {
+): Promise<boolean> {
   const selection = selectionForEdit(editor.state, range);
-  if (!selection || editor.isDestroyed) return;
+  if (!selection || editor.isDestroyed || useEdits.getState().pending[mindId]) return false;
   const requestId = crypto.randomUUID();
   set("problems", mindId, null);
   set("editing", mindId, null);
@@ -205,9 +206,12 @@ export async function requestEdit(
     requestId,
     watch.movedOn(),
     result,
-    () => requestEdit(editor, mindId, doc, action, instruction, range ?? selection.range),
+    async () => {
+      await requestEdit(editor, mindId, doc, action, instruction, range ?? selection.range);
+    },
     applying,
   );
+  return result.kind === "proposed";
 }
 
 /**
@@ -382,6 +386,7 @@ export function editFromComposer(
   doc: Y.Doc,
   instruction: string,
 ): boolean {
+  if (useEdits.getState().pending[mindId]) return false;
   const target = editTarget(editor.state);
   set("editing", mindId, null);
   if (!target || instruction.trim() === "") {

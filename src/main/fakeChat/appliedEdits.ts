@@ -21,3 +21,6 @@ export function appliedEditReply(passage: string, asked: string): string | null 
   }
   return null;
 }
+
+/** Asked of the assistant, "replace X with Y" is its own change to the Mind, which waits for the User. */
+export const ASSISTANT_REPLACES = /^replace\s+.+\s+with\s+/i;
