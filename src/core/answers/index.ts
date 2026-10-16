@@ -189,7 +189,7 @@ import {
   webInstructions,
 } from "./prompt";
 import { quotedWordsIn, withoutQuotationMarks } from "./quotedWords";
-import { routeRequest } from "./routeRequest";
+import { type RequestContext, routeRequest } from "./routeRequest";
 
 export type { AnswerDocuments } from "./citations";
 export { createAiSdkAnswerEngine } from "./engine";
@@ -705,9 +705,7 @@ export function createAnswers(options: AnswersOptions) {
      * Blocks the User selected there, where a Mind it makes goes, and what
      * Blocks it adds link back to. It is offered the Minds' Tools. Absent: none.
      */
-    assistant?: Pick<MindToolsOptions, "focused" | "folderId" | "origin"> & {
-      followsAChange: boolean;
-    };
+    assistant?: Pick<MindToolsOptions, "focused" | "folderId" | "origin"> & RequestContext;
   }): void {
     const { home, answerId, model, context, documentIds, forcedSkill } = input;
     const outside = input.outside === true;
@@ -1973,6 +1971,7 @@ export function createAnswers(options: AnswersOptions) {
           turn.earlier
             .findLast((message) => message.kind === "answer")
             ?.toolCalls.some((call) => call.mindChange && changesAMind(call.mindChange)) ?? false,
+        followsAnAnswer: turn.earlier.some((message) => message.kind === "answer"),
       },
     });
     return { asked: true, conversation, questionId: question.id, answerId: answer.id };
