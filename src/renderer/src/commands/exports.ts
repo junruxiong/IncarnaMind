@@ -1,13 +1,7 @@
-import { CHECK_RECORD_FORMATS, EXPORT_FORMATS } from "../../../core/api";
+import { EXPORT_FORMATS } from "../../../core/api";
 import { exportAiUseStatement } from "../aiUseStatement";
 import { useExportDialog } from "../exportDialog";
-import {
-  exportCheckRecord,
-  exportMind,
-  exportPreferences,
-  FORMAT_LABELS,
-  RECORD_FORMAT_LABELS,
-} from "../exports";
+import { exportCheckRecord, exportMind, exportPreferences, FORMAT_LABELS } from "../exports";
 import { currentTabOf } from "../layoutSlice";
 import { useAppStore } from "../store";
 import { findTab } from "../tabs";
@@ -95,19 +89,17 @@ export const exportCommands: readonly Command[] = [
       if (mindId) return exportAiUseStatement(mindId);
     },
   },
-  ...CHECK_RECORD_FORMATS.map(
-    (format): Command => ({
-      id: `mind.checkRecord.${format}`,
-      label: (_ctx, t) => t("checkRecord.as", { format: t(RECORD_FORMAT_LABELS[format]) }),
-      keywords: ["checkRecord.keywords"],
-      group: "main",
-      // A new file under a free name: nothing is replaced, and the file stays the User's to delete.
-      reversible: true,
-      when: (ctx) => onlyOne(ctx) && mindOf(ctx) !== null,
-      run: (ctx) => {
-        const mindId = mindOf(ctx);
-        if (mindId) return exportCheckRecord(mindId, format);
-      },
-    }),
-  ),
+  {
+    id: "mind.checkRecord",
+    label: "checkRecord.command",
+    keywords: ["checkRecord.keywords"],
+    group: "main",
+    // Two new files under free names: nothing is replaced, and the files stay the User's to delete.
+    reversible: true,
+    when: (ctx) => onlyOne(ctx) && mindOf(ctx) !== null,
+    run: (ctx) => {
+      const mindId = mindOf(ctx);
+      if (mindId) return exportCheckRecord(mindId);
+    },
+  },
 ];

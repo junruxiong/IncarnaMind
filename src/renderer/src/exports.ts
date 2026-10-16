@@ -4,6 +4,7 @@ import type {
   ExportFormat,
   ExportMindOptions,
   ExportPreferences,
+  SavedCheckRecord,
   SavedExport,
   SavedMindExport,
   SentenceChecksExported,
@@ -24,11 +25,6 @@ export const FORMAT_LABELS: Readonly<Record<ExportFormat, MessageKey>> = {
   html: "export.format.html",
   "share-page": "export.format.share-page",
   markdown: "export.format.markdown",
-};
-
-export const RECORD_FORMAT_LABELS: Readonly<Record<CheckRecordFormat, MessageKey>> = {
-  pdf: "export.format.pdf",
-  csv: "checkRecord.format.csv",
 };
 
 /** Until settings load, as the core's defaults have it. */
@@ -74,13 +70,9 @@ export const optionsFor = (
     : { format, theirChanges };
 };
 
-export type ExportKind = ExportFormat | `check-record-${CheckRecordFormat}`;
+export type ExportKind = ExportFormat | "check-record";
 
-export const isCheckRecord = (kind: ExportKind): kind is `check-record-${CheckRecordFormat}` =>
-  kind.startsWith("check-record-");
-
-export const checkRecordKind = (format: CheckRecordFormat): `check-record-${CheckRecordFormat}` =>
-  `check-record-${format}`;
+export const isCheckRecord = (kind: ExportKind): kind is "check-record" => kind === "check-record";
 
 /** How the last export went, said in the Mind it exported (`ExportResultLine`). */
 export type ExportResult =
@@ -91,6 +83,10 @@ export type ExportResult =
       format: ExportKind;
       path: string;
       name: string;
+      /** The check record's CSV, saved beside the PDF named. */
+      withCsv: boolean;
+      /** The check record's files that couldn't be saved, each with why: the other was kept. */
+      failures: { format: CheckRecordFormat; reason: string }[];
       /** The folder it is in, which the line names. */
       folder: string;
       inDefaultFolder: boolean;
@@ -151,7 +147,7 @@ const NO_CHECKS: SentenceChecksExported = {
 function savedResult(
   mindId: string,
   format: ExportKind,
-  saved: Exclude<SavedMindExport, { status: "review" }> | SavedExport,
+  saved: Exclude<SavedMindExport, { status: "review" }> | SavedExport | SavedCheckRecord,
 ): ExportResult | null {
   if (saved.status === "saved") {
     return {
@@ -160,6 +156,14 @@ function savedResult(
       format,
       path: saved.file.path,
       name: saved.file.name,
+      withCsv: "withCsv" in saved && saved.withCsv,
+      failures:
+        "failures" in saved
+          ? saved.failures.map(({ format, message, wording }) => ({
+              format,
+              reason: wording ? translateNow(wording.key, wording.values) : message,
+            }))
+          : [],
       folder: saved.file.folder,
       inDefaultFolder: saved.file.inDefaultFolder,
       at: Date.now(),
@@ -237,20 +241,23 @@ export async function exportMind(
 
 export async function exportCheckRecord(
   mindId: string,
-  format: CheckRecordFormat,
   first?: () => Promise<boolean>,
 ): Promise<void> {
-  const kind = checkRecordKind(format);
-  const settle = begin(mindId, kind);
+  const settle = begin(mindId, "check-record");
   if (!settle) return;
   try {
     if (first && !(await first())) {
       settle(null);
       return;
     }
-    settle(savedResult(mindId, kind, await core.saveCheckRecord(mindId, format)));
+    settle(savedResult(mindId, "check-record", await core.saveCheckRecord(mindId)));
   } catch (failure) {
-    settle({ mindId, state: "failed", format: kind, message: errorMessage(failure, translateNow) });
+    settle({
+      mindId,
+      state: "failed",
+      format: "check-record",
+      message: errorMessage(failure, translateNow),
+    });
   }
 }
 
@@ -260,7 +267,7 @@ export function exportAgain(
   first: () => Promise<boolean>,
 ): Promise<void> {
   if (!isCheckRecord(kind)) return exportMind(mindId, kind, first);
-  return exportCheckRecord(mindId, kind === "check-record-pdf" ? "pdf" : "csv", first);
+  return exportCheckRecord(mindId, first);
 }
 
 /**

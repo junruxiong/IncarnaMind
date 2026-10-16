@@ -13,8 +13,7 @@ const EXPORTS = [
   "mind.exportAs.markdown",
   "mind.exportOptions",
   "mind.aiUseStatement",
-  "mind.checkRecord.pdf",
-  "mind.checkRecord.csv",
+  "mind.checkRecord",
 ] as const;
 
 registerMenu("mind", [

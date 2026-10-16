@@ -34,7 +34,10 @@ const SAVED_SHOWN_MS = 10_000;
 type SavedResult = Extract<ExportResult, { state: "saved" }>;
 
 const isPlainSaved = (result: SavedResult, t: ReturnType<typeof useT>): boolean =>
-  result.unverified === 0 && result.kept.length === 0 && unmarkedChecks(result.checks, t) === null;
+  result.unverified === 0 &&
+  result.kept.length === 0 &&
+  result.failures.length === 0 &&
+  unmarkedChecks(result.checks, t) === null;
 
 /**
  * How the last export of this Mind went, floating at the foot of its tab (#100), as problems
@@ -194,6 +197,7 @@ function ResultBody({
                 <CheckIcon />
                 <SavedName
                   name={result.name}
+                  withCsv={result.withCsv}
                   folder={
                     result.inDefaultFolder ? defaultFolderLabel(t) : folderName(result.folder)
                   }
@@ -285,6 +289,11 @@ function ResultBody({
                     )}
               </ProblemLine>
             )}
+            {result.failures.map(({ format, reason }) => (
+              <ProblemLine key={format} role="status" testId={`export-failed-${format}`}>
+                {t(`checkRecord.failed.${format}`, { reason: reasonOf(reason, t) })}
+              </ProblemLine>
+            ))}
             {error && <ProblemLine testId="export-problem">{error}</ProblemLine>}
           </>
         ) : result.state === "empty" ? (
@@ -328,15 +337,17 @@ function ResultBody({
  */
 function SavedName({
   name,
+  withCsv,
   folder,
   withFile,
 }: {
   name: string;
+  withCsv: boolean;
   folder: string;
   withFile: readonly { testId: string; text: string }[];
 }) {
   const t = useT();
-  const said = t("export.doneIn", { name: "\u0000", folder });
+  const said = t(withCsv ? "export.record.doneIn" : "export.doneIn", { name: "\u0000", folder });
   const [before = "", after = ""] = said.split("\u0000");
   const saved = (
     <span className="min-w-0 break-words">

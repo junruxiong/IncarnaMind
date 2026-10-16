@@ -6469,6 +6469,22 @@ export type ExportFormat = (typeof EXPORT_FORMATS)[number];
 export const CHECK_RECORD_FORMATS = ["pdf", "csv"] as const;
 export type CheckRecordFormat = (typeof CHECK_RECORD_FORMATS)[number];
 
+/** A file of the check record that could not be saved, and why (`message` is English; `wording` says it in the interface language). */
+export interface CheckRecordFailure {
+  format: CheckRecordFormat;
+  message: string;
+  wording: ErrorWording | null;
+}
+
+/**
+ * What `saveCheckRecord` did. Saved: `file` is the PDF, or the CSV when the PDF could not be made;
+ * `withCsv` says the CSV is beside it; each file that failed is in `failures`, and the other was kept.
+ * When neither could be saved, it throws the first failure.
+ */
+export type SavedCheckRecord =
+  | { status: "saved"; file: SavedFile; withCsv: boolean; failures: CheckRecordFailure[] }
+  | Exclude<SavedExport, { status: "saved" }>;
+
 /**
  * The User's export choices (`UserSettings.exportOptions`): the format Export uses, and each
  * format's own options. Markdown, the archive, always keeps the Questions; a source pack has
@@ -8532,10 +8548,11 @@ export interface CoreApi {
   saveMindExport(mindId: string, options: ExportMindOptions): Promise<SavedMindExport>;
   /**
    * Saves a record of what was checked in a Mind (#738) into the Output location, as
-   * `saveMindExport` does: each checked sentence and each Citation with its result, the Document
-   * version, the model and the time. Nothing is sent anywhere.
+   * `saveMindExport` does, as a PDF and a CSV side by side under one name: each checked sentence
+   * and each Citation with its result, the Document version, the model and the time. Nothing is
+   * sent anywhere.
    */
-  saveCheckRecord(mindId: string, format: CheckRecordFormat): Promise<SavedExport>;
+  saveCheckRecord(mindId: string): Promise<SavedCheckRecord>;
 
   /**
    * Formats Citations and their Bibliography in a citation style (#289), from the cited
