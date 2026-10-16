@@ -6,6 +6,7 @@ import {
   MIND_CONTENT_FIELD,
   MIND_SETTINGS_FIELD,
   MIND_WORD_LOOK_FIELD,
+  WORD_LOOK_ATTRIBUTE,
   WORD_TAB_MARK,
 } from "../../src/core";
 import { wordLookOf } from "../../src/shared/wordLook";
@@ -29,6 +30,31 @@ function tabs(client: MindClient): { marked: number; unmarked: number } {
     return true;
   });
   return { marked, unmarked };
+}
+
+function typeAtStartOf(client: MindClient, line: string, typed: string): void {
+  for (const node of client.blocks.createTreeWalker(() => true)) {
+    if (node instanceof Y.XmlText && node.toString().includes(line)) {
+      node.insert(0, typed);
+      return;
+    }
+  }
+  throw new Error(`No line with ${line}.`);
+}
+
+/** The tab stops of the paragraph whose text starts with `line`. */
+function stopsOf(client: MindClient, line: string) {
+  const look = wordLookOf(client.doc);
+  for (const node of client.blocks.createTreeWalker(() => true)) {
+    if (node instanceof Y.XmlElement && node.nodeName === "paragraph") {
+      const text = node.toArray().find((child) => child instanceof Y.XmlText);
+      const key = node.getAttribute(WORD_LOOK_ATTRIBUTE);
+      if (text?.toString().startsWith(line) && typeof key === "string") {
+        return look?.paragraphs[key]?.tabs;
+      }
+    }
+  }
+  return undefined;
 }
 
 describe("the tabs of a Mind imported from Word", () => {
@@ -59,14 +85,7 @@ describe("the tabs of a Mind imported from Word", () => {
     onTestFinished(() => core.close());
     const bytes = resumeFile();
     const { mindId, client } = await importWordBytes(core, dataDir, bytes, { origin: "own" });
-    client.doc.transact(() => {
-      for (const node of client.blocks.createTreeWalker(() => true)) {
-        if (node instanceof Y.XmlText && node.toString().includes("复旦大学")) {
-          node.insert(0, "A");
-          return;
-        }
-      }
-    });
+    client.doc.transact(() => typeAtStartOf(client, "复旦大学", "A"));
     await client.settled();
 
     const result = await core.exportMind(mindId, { format: "docx" });
@@ -78,6 +97,28 @@ describe("the tabs of a Mind imported from Word", () => {
     expect(after.filter((_, index) => index !== typed)).toEqual(
       before.filter((_, index) => index !== typed),
     );
+  });
+
+  test("an edited line of tab stops exports with its stops, and the file imports again the same", async () => {
+    const dataDir = await createTempDataFolder();
+    const core = startCore(dataDir);
+    onTestFinished(() => core.close());
+    const { mindId, client } = await importWordBytes(core, dataDir, resumeFile(), {
+      origin: "own",
+    });
+    const stops = stopsOf(client, "复旦大学");
+    expect(stops?.length).toBeGreaterThan(1);
+    client.doc.transact(() => typeAtStartOf(client, "复旦大学", "A"));
+    await client.settled();
+
+    const exported = await core.exportMind(mindId, { format: "docx" });
+    const again = await importWordBytes(core, dataDir, Buffer.from(exported.data), {
+      origin: "own",
+      name: "Edited.docx",
+    });
+    expect(stopsOf(again.client, "A复旦大学")).toEqual(stops);
+    expect(tabs(again.client)).toEqual(tabs(client));
+    expect(readMind(again.client).textContent).toBe(readMind(client).textContent);
   });
 
   test("the file's own default tab stops are kept, and a Word default when it sets none", async () => {
@@ -93,7 +134,7 @@ describe("the tabs of a Mind imported from Word", () => {
     expect(wordLookOf(plain.client.doc)?.defaultTab).toBeNull();
   });
 
-  test("a Mind whose look an earlier version read gets them at the next start", async () => {
+  test("a Mind whose look an earlier version read gets them at the next start, on Blocks edited since import too", async () => {
     const dataDir = await createTempDataFolder();
     const core = startCore(dataDir);
     const { mindId, client } = await importWordBytes(core, dataDir, resumeFile(), {
@@ -108,6 +149,7 @@ describe("the tabs of a Mind imported from Word", () => {
         }
       };
       for (const child of client.blocks.toArray()) if (child instanceof Y.XmlElement) strip(child);
+      typeAtStartOf(client, "复旦大学", "A");
       client.doc.getMap(MIND_WORD_LOOK_FIELD).set("version", 1);
     });
     await client.settled();

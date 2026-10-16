@@ -1,7 +1,8 @@
 import { Mark } from "@tiptap/core";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
-import { type EditorState, Plugin } from "@tiptap/pm/state";
-import type { EditorView } from "@tiptap/pm/view";
+import { type EditorState, Plugin, type Transaction } from "@tiptap/pm/state";
+import { AddMarkStep, RemoveMarkStep } from "@tiptap/pm/transform";
+import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
 import type * as Y from "yjs";
 import {
   WORD_LOOK_ATTRIBUTE,
@@ -43,7 +44,6 @@ const holdsTab = (node: ProseMirrorNode) => {
   return found;
 };
 
-/** What comes after a tab up to the next one (or the paragraph's end), and up to its first decimal point. */
 function following(span: HTMLElement, next: HTMLElement | undefined, paragraph: HTMLElement) {
   const range = document.createRange();
   range.setStartAfter(span);
@@ -164,7 +164,6 @@ class TabMeasurer {
     return found;
   }
 
-  /** How many paragraphs it measured; none while the Mind isn't laid out. */
   private measure(pending: Pending[]): number {
     const look = this.look;
     if (!look) return 0;
@@ -199,16 +198,20 @@ class TabMeasurer {
         const x = (span.getBoundingClientRect().left - item.origin) / item.scale;
         const stop = tabStopAfter(x / ptToPx, item.look, look.defaultTab ?? undefined);
         const after = following(span, item.spans[item.next + 1], item.paragraph);
+        // Capped at the right margin, so a far stop never runs the line off the column.
+        const stopAt = Math.min(stop.at, look.width ?? Number.POSITIVE_INFINITY);
         const width = tabWidth(stop, {
           x,
-          stopX: stop.at * ptToPx,
+          stopX: stopAt * ptToPx,
           following: after.width / item.scale,
           beforeDecimal: after.beforeDecimal / item.scale,
         });
         return [{ span, stop, width }];
       });
       for (const { span, stop, width } of widths) {
+        // The tab character spans its box, so the caret and a selection of it fall where the text does.
         span.style.width = `${width}px`;
+        span.style.tabSize = `${width}px`;
         if (stop.leader === "none") delete span.dataset.leader;
         else span.dataset.leader = stop.leader;
       }
@@ -217,6 +220,67 @@ class TabMeasurer {
     return count;
   }
 }
+
+const BOX_ATTRIBUTES = { [WORD_TAB_DOM_ATTRIBUTE]: "" };
+
+function boxesIn(doc: ProseMirrorNode, from: number, to: number): Decoration[] {
+  const boxes: Decoration[] = [];
+  doc.nodesBetween(from, to, (node, pos) => {
+    if (!node.isText) return true;
+    if (!node.marks.some((mark) => mark.type.name === WORD_TAB_MARK)) return false;
+    const text = node.text ?? "";
+    for (let at = text.indexOf("\t"); at >= 0; at = text.indexOf("\t", at + 1)) {
+      boxes.push(Decoration.inline(pos + at, pos + at + 1, BOX_ATTRIBUTES));
+    }
+    return false;
+  });
+  return boxes;
+}
+
+function changedRanges(tr: Transaction): [number, number][] {
+  const ranges: [number, number][] = [];
+  const widened = (from: number, to: number) => {
+    const start = tr.doc.resolve(Math.min(from, tr.doc.content.size));
+    const end = tr.doc.resolve(Math.min(to, tr.doc.content.size));
+    ranges.push([
+      start.parent.isTextblock ? start.start() : start.pos,
+      end.parent.isTextblock ? end.end() : end.pos,
+    ]);
+  };
+  tr.steps.forEach((step, index) => {
+    const after = tr.mapping.slice(index + 1);
+    step.getMap().forEach((_from, _to, from, to) => {
+      widened(after.map(from, -1), after.map(to, 1));
+    });
+    // A mark step's map is empty.
+    if (step instanceof AddMarkStep || step instanceof RemoveMarkStep) {
+      widened(after.map(step.from, -1), after.map(step.to, 1));
+    }
+  });
+  return ranges;
+}
+
+// A box for each tab character: tabs side by side share one text node and one mark element.
+const tabBoxes = new Plugin<DecorationSet>({
+  state: {
+    init: (_, state) =>
+      DecorationSet.create(state.doc, boxesIn(state.doc, 0, state.doc.content.size)),
+    apply(tr, boxes) {
+      if (!tr.docChanged) return boxes;
+      let next = boxes.map(tr.mapping, tr.doc);
+      for (const [from, to] of changedRanges(tr)) {
+        const stale = next.find(from, to).filter((box) => box.from >= from && box.to <= to);
+        next = next.remove(stale).add(tr.doc, boxesIn(tr.doc, from, to));
+      }
+      return next;
+    },
+  },
+  props: {
+    decorations(state) {
+      return this.getState(state);
+    },
+  },
+});
 
 /**
  * A tab character of a Word file's text, drawn to its tab stop. Not inclusive:
@@ -231,15 +295,18 @@ export const WordTab = Mark.create({
 
   addMarkView() {
     return () => {
+      // Without renderHTML's attribute: the look draws the boxes inside, one a tab, whose
+      // widths and leaders ProseMirror counts as this element's mutations. They aren't edits.
       const dom = document.createElement("span");
-      dom.setAttribute(WORD_TAB_DOM_ATTRIBUTE, "");
-      // The measuring sets the width and leader; the editor mustn't read them back as an edit.
       return { dom, contentDOM: dom, ignoreMutation: (mutation) => mutation.type === "attributes" };
     };
   },
 
   addProseMirrorPlugins() {
     const editor = this.editor;
-    return [new Plugin({ view: (view) => new TabMeasurer(view, () => editorDoc(editor)) })];
+    return [
+      tabBoxes,
+      new Plugin({ view: (view) => new TabMeasurer(view, () => editorDoc(editor)) }),
+    ];
   },
 });

@@ -1,7 +1,7 @@
 import type { WordParagraphLook, WordTabStop } from "../../../core/api";
 
 /** Word's default tab stops when the file doesn't set its own (`w:defaultTabStop`): 0.5 in. */
-const DEFAULT_TAB_STOP = 36;
+export const DEFAULT_TAB_STOP = 36;
 /** A tab right on a stop goes to the next one, as in Word. */
 const EPSILON = 0.5;
 

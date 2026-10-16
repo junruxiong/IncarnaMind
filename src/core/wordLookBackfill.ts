@@ -180,6 +180,37 @@ function conditionalToggles(paragraph: Y.XmlElement, node: NodeJSON): LookChange
   return changes;
 }
 
+function tabMarks(element: Y.XmlElement): LookChange[] {
+  const changes: LookChange[] = [];
+  for (const child of element.toArray()) {
+    if (!(child instanceof Y.XmlText)) continue;
+    let at = 0;
+    for (const each of child.toDelta() as Delta) {
+      if (typeof each.insert !== "string") {
+        at += 1;
+        continue;
+      }
+      if (each.attributes?.[WORD_TAB_MARK] === undefined) {
+        for (
+          let tab = each.insert.indexOf("\t");
+          tab >= 0;
+          tab = each.insert.indexOf("\t", tab + 1)
+        ) {
+          changes.push({
+            kind: "marks",
+            text: child,
+            index: at + tab,
+            length: 1,
+            marks: { [WORD_TAB_MARK]: {} },
+          });
+        }
+      }
+      at += each.insert.length;
+    }
+  }
+  return changes;
+}
+
 const asImported = (element: Y.XmlElement, source: WordSource) =>
   wordFingerprint(element) === source.f || wordFingerprintBeforeLook(element) === source.f;
 
@@ -216,6 +247,8 @@ export function planLook(
         plan.changes.push(...conditionalToggles(element, node));
       }
     }
+    // The tab mark isn't content: a tab gets it whether its Block was edited or not.
+    plan.changes.push(...tabMarks(element));
     for (const child of element.toArray()) {
       if (child instanceof Y.XmlElement) look(child);
     }

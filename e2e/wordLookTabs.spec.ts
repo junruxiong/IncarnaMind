@@ -83,11 +83,37 @@ async function chooseLook(window: Page, look: "word" | "plain") {
   await pointAndClick(window, window.getByTestId(`look-${look}`));
 }
 
-const pageScrollsSideways = (window: Page) =>
+/** Whether the window or a Mind's scroller scrolls sideways, and the text of each line that does in its own frame. */
+const sideways = (window: Page) =>
   window.evaluate(() => {
-    const page = document.scrollingElement ?? document.documentElement;
-    return page.scrollWidth > page.clientWidth;
+    const wide = (element: Element) => element.scrollWidth > element.clientWidth + 1;
+    return {
+      page:
+        wide(document.scrollingElement ?? document.documentElement) ||
+        [...document.querySelectorAll(".mind-scroller")].some(wide),
+      lines: [...document.querySelectorAll('[data-testid="mind-editor"] p')]
+        .filter(wide)
+        .map((line) => line.textContent ?? ""),
+    };
   });
+
+/** A paragraph with its own tab stops, `[align, twips, leader?]`, and its runs. */
+const stopped = (stops: [string, number, string?][], content: string) =>
+  paragraph(content).replace(
+    "<w:p>",
+    `<w:p><w:pPr><w:tabs>${stops
+      .map(
+        ([align, at, leader]) =>
+          `<w:tab w:val="${align}"${leader ? ` w:leader="${leader}"` : ""} w:pos="${at}"/>`,
+      )
+      .join("")}</w:tabs></w:pPr>`,
+  );
+const TAB = "<w:r><w:tab/></w:r>";
+/** An A4 page with 1 in margins: a text width of 451.3 pt. */
+const A4 =
+  '<w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/>';
+const TWELVE_POINT =
+  '<w:docDefaults><w:rPrDefault><w:rPr><w:sz w:val="24"/></w:rPr></w:rPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>';
 
 test("a résumé's tab stops line its columns up at the file's stops, its dates ending at the right margin's stop, and stay so as you type", async () => {
   const { app, window } = await launchApp(dataDir, { home });
@@ -215,20 +241,136 @@ test("a tab that wraps onto another line when the column narrows reaches that li
   await app.close();
 });
 
-test("a dotted leader fills a tab up to a right stop", async () => {
+test("two tabs in a row reach two stops, a decimal stop lines up the point, and a centred stop centres its text", async () => {
   const { app, window } = await launchApp(dataDir, { home });
   await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
-  const contents = paragraph(`${run("Introduction")}<w:r><w:tab/></w:r>${run("3")}`).replace(
-    "<w:p>",
-    '<w:p><w:pPr><w:tabs><w:tab w:val="right" w:leader="dot" w:pos="9000"/></w:tabs></w:pPr>',
+  await importFile(
+    app,
+    window,
+    "Stops.docx",
+    wordFile({
+      styles: TWELVE_POINT,
+      sectPr: A4,
+      body: [
+        paragraph(`${run("Alpha")}${TAB}${TAB}${run("Bravo")}`),
+        stopped([["decimal", 4320]], `${run("Total")}${TAB}${run("1234.50")}`),
+        stopped([["center", 4320]], `${run("Name")}${TAB}${run("Centred")}`),
+      ].join(""),
+    }),
   );
-  await importFile(app, window, "Contents.docx", wordFile({ body: contents }));
-  const tab = window.getByTestId("mind-editor").locator("[data-word-tab]");
-  await expect(tab).toHaveAttribute("data-leader", "dot");
-  const page = await placeOf(window, "3");
-  const title = await placeOf(window, "Introduction");
+  const at = async (text: string, edge: "left" | "right" | "middle") => {
+    const place = await placeOf(window, text, 12);
+    if (!place) return Number.NaN;
+    const x = edge === "middle" ? (place.left + place.right) / 2 : place[edge];
+    return x / place.pt;
+  };
+  // Each tab its own box: "Alpha" ends before the first default stop, so "Bravo" starts at the second.
+  await expect.poll(() => at("Bravo", "left")).toBeCloseTo(72, 0);
+  await expect(
+    window.getByTestId("mind-editor").locator("p", { hasText: "Bravo" }).locator("[data-word-tab]"),
+  ).toHaveCount(2);
+  await expect.poll(() => at(".50", "left")).toBeCloseTo(216, 0);
+  await expect.poll(() => at("Centred", "middle")).toBeCloseTo(216, 0);
+  if (SCREENSHOTS) await window.screenshot({ path: join(SCREENSHOTS, "word-tabs-stops.png") });
+  await app.close();
+});
+
+test("the caret and a selection of a tab fall where the text is drawn", async () => {
+  const { app, window } = await launchApp(dataDir, { home });
+  await setWindowSize(app, window, 1440, 900);
+  await dismissChatSetup(window);
+  await importFile(
+    app,
+    window,
+    "Centred.docx",
+    wordFile({
+      styles: TWELVE_POINT,
+      sectPr: A4,
+      body: stopped([["center", 4320]], `${run("Name")}${TAB}${run("Centred")}`),
+    }),
+  );
+  const box = (text: string) =>
+    window.evaluate((wanted) => {
+      const editor = document.querySelector('[data-testid="mind-editor"]');
+      const walker = document.createTreeWalker(editor ?? document.body, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        const at = node.textContent?.indexOf(wanted) ?? -1;
+        if (at < 0) continue;
+        const range = document.createRange();
+        range.setStart(node, at);
+        range.setEnd(node, at + wanted.length);
+        const { left, right, top, bottom } = range.getBoundingClientRect();
+        return { left, right, top, bottom };
+      }
+      return null;
+    }, text);
+  const selection = () =>
+    window.evaluate(() => {
+      const range = getSelection()?.getRangeAt(0);
+      const rects = range ? [...range.getClientRects()] : [];
+      if (rects.length === 0) return null;
+      return {
+        left: Math.min(...rects.map((rect) => rect.left)),
+        right: Math.max(...rects.map((rect) => rect.right)),
+      };
+    });
+  await expect.poll(async () => (await box("Centred"))?.left ?? 0).toBeGreaterThan(200);
+  const centred = await box("Centred");
+  const name = await box("Name");
+  if (!centred || !name) throw new Error("The line isn't drawn.");
+
+  // Just before "Centred": the caret is at its first letter, not where the tab's character starts.
+  await window.mouse.click(centred.left + 1, (centred.top + centred.bottom) / 2);
+  await expect.poll(async () => (await selection())?.left ?? 0).toBeCloseTo(centred.left, -0.5);
+  // ← steps over the tab to the end of "Name"; → back to "Centred".
+  await window.keyboard.press("ArrowLeft");
+  await expect.poll(async () => (await selection())?.left ?? 0).toBeCloseTo(name.right, -0.5);
+  await window.keyboard.press("ArrowRight");
+  await expect.poll(async () => (await selection())?.left ?? 0).toBeCloseTo(centred.left, -0.5);
+  // Selecting the tab highlights the whole gap it draws.
+  await window.keyboard.press("Shift+ArrowLeft");
+  await expect.poll(async () => (await selection())?.left ?? 0).toBeCloseTo(name.right, -0.5);
+  expect((await selection())?.right ?? 0).toBeCloseTo(centred.left, -0.5);
+  await app.close();
+});
+
+test("leaders fill their tabs, dots, dashes and underscores alike, and neither they nor a stop past the margin make a line or the page scroll sideways", async () => {
+  const { app, window } = await launchApp(dataDir, { home });
+  await setWindowSize(app, window, 1440, 900);
+  await dismissChatSetup(window);
+  await importFile(
+    app,
+    window,
+    "Contents.docx",
+    wordFile({
+      styles: TWELVE_POINT,
+      sectPr: A4,
+      body: [
+        stopped([["right", 9000, "dot"]], `${run("Introduction")}${TAB}${run("3")}`),
+        stopped([["right", 9000, "hyphen"]], `${run("Methods")}${TAB}${run("7")}`),
+        stopped([["right", 9000, "underscore"]], `${run("Signed")}${TAB}${run("Date")}`),
+        stopped([["left", 7200, "dot"]], `${run("Left")}${TAB}${run("stop")}`),
+        stopped([["left", 12000]], `${run("Past")}${TAB}${run("margin")}`),
+      ].join(""),
+    }),
+  );
+  const tabs = window.getByTestId("mind-editor").locator("[data-word-tab]");
+  await expect(tabs).toHaveCount(5);
+  await expect
+    .poll(() => tabs.evaluateAll((all) => all.map((tab) => tab.dataset.leader)))
+    .toEqual(["dot", "hyphen", "underscore", "dot", undefined]);
+  const page = await placeOf(window, "3", 12);
+  const title = await placeOf(window, "Introduction", 12);
   expect(page && title && page.left - title.right).toBeGreaterThan(100);
+  // The stop past the right margin is drawn at it.
+  await expect
+    .poll(async () => {
+      const place = await placeOf(window, "margin", 12);
+      return place ? place.left / place.pt : Number.NaN;
+    })
+    .toBeLessThan(452);
+  expect(await sideways(window)).toEqual({ page: false, lines: [] });
   if (SCREENSHOTS) await window.screenshot({ path: join(SCREENSHOTS, "word-tabs-leader.png") });
   await app.close();
 });
@@ -244,7 +386,11 @@ test("at 1,100 px a line of tab stops scrolls in its own frame, in English and C
     await expect.poll(async () => (await placeOf(window, date))?.overflow).toBe("auto");
     const place = await placeOf(window, date);
     expect(place && place.width > place.shown).toBe(true);
-    expect(await pageScrollsSideways(window)).toBe(false);
+    const scrolling = await sideways(window);
+    expect(scrolling.page).toBe(false);
+    expect(scrolling.lines.some((line) => line.includes(date))).toBe(true);
+    // Only lines with tab stops scroll, each in its own frame.
+    for (const line of scrolling.lines) expect(line).toContain("\t");
     if (SCREENSHOTS) {
       await window.screenshot({ path: join(SCREENSHOTS, `word-tabs-1100-${language}.png`) });
     }
