@@ -110,6 +110,11 @@ export interface LibrarySettings {
    * On until the User turns it off.
    */
   automatic: boolean;
+  /**
+   * Where automatic Tagging with AI is stopped: Folder ids, and null
+   * for Not in a Folder. Empty until the User presses Stop.
+   */
+  taggingStopped: (string | null)[];
 }
 
 export type ClassificationStatus = "pending" | "classifying" | "classified" | "waiting" | "failed";

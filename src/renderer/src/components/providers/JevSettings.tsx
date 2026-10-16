@@ -28,6 +28,7 @@ import {
   sectionTitleClass,
 } from "../ui";
 import { SecretStorageNotice, TestResult } from "./ProviderForm";
+import { useJevSettings } from "./useJevSettings";
 
 /** TypeSafe's hosted API, shown as the server's placeholder. */
 const HOSTED_URL = "https://api.typesafe.ai";
@@ -41,13 +42,8 @@ const toPercent = (probability: number) => Math.round(probability * 100);
  */
 export function JevSettingsSection({ embedded = false }: { embedded?: boolean }) {
   const t = useT();
-  const [jev, setJev] = useState<JevSettings | null>(null);
+  const [jev, setJev] = useJevSettings();
   const [editing, setEditing] = useState(false);
-
-  useEffect(() => {
-    core.getJevSettings().then(setJev, () => undefined);
-    return core.on("jev.changed", setJev);
-  }, []);
 
   const remove = async () => {
     try {
