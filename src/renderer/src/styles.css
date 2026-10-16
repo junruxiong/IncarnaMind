@@ -3469,6 +3469,11 @@
     &:hover {
       text-decoration: underline;
     }
+    &[aria-disabled="true"] {
+      cursor: default;
+      color: var(--color-ink-meta);
+      text-decoration: none;
+    }
   }
   /*
    * A change out of date (#94; DESIGN.md, AI edits): its new words grey, on a

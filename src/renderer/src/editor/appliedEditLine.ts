@@ -62,6 +62,7 @@ export type AppliedLine = (
       blockId: string | null;
       changes: readonly AppliedChange[];
       byAssistant?: true;
+      undo?: { available(): boolean; mind: string };
     }
   | {
       kind: "held";
@@ -175,7 +176,8 @@ export function placeOfChange(
     relativePositionToAbsolutePosition(binding.doc, binding.type, relative, binding.mapping);
   const from = at(change.from);
   const inside = at(change.to);
-  const to = inside === null || change.block !== "added" ? inside : inside + 1;
+  const end = inside === null ? null : state.doc.resolve(inside);
+  const to = change.block !== "added" ? inside : end && end.depth > 0 ? end.after(1) : null;
   return from === null || to === null || to < from ? null : { from, to };
 }
 
@@ -207,6 +209,11 @@ function mainLine(line: AppliedLine, options: Options): HTMLElement {
   }
   if (line.kind === "review") {
     const count = line.changes.length;
+    const undo = button("undo-all", t("edit.review.undoAll"));
+    if (line.undo && !line.undo.available()) {
+      undo.setAttribute("aria-disabled", "true");
+      undo.title = t("mindChanges.undo.changedSince", { mind: line.undo.mind });
+    }
     return lineElement("applied-line", "applied-line", [
       sparkle(),
       text(
@@ -221,7 +228,7 @@ function mainLine(line: AppliedLine, options: Options): HTMLElement {
         "applied-count",
       ),
       dot(),
-      button("undo-all", t("edit.review.undoAll")),
+      undo,
       dot(),
       button("done", t("edit.review.done")),
     ]);
@@ -298,11 +305,12 @@ function decorations(state: EditorState, line: AppliedLine, options: Options): D
   if (at !== null) {
     const count =
       line.kind === "applied" ? line.places : line.kind === "review" ? line.changes.length : 0;
+    const canUndo = line.kind !== "review" || !line.undo || line.undo.available();
     marks.push(
       Decoration.widget(at, () => mainLine(line, options), {
         ...shared,
         // Drawn again in the interface language once it changes.
-        key: `applied:${line.kind}:${count}:${line.blockId}:${options.translate("edit.applied.undo")}`,
+        key: `applied:${line.kind}:${count}:${line.blockId}:${canUndo}:${options.translate("edit.applied.undo")}`,
       }),
     );
   }

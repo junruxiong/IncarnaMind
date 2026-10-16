@@ -17,6 +17,7 @@ import {
   type ProposalRef,
 } from "../../core/api";
 import { waitsForUser } from "../../shared/askedChanges";
+import { mindName } from "../../shared/naming";
 import { aiUseOfAccepted, proposalRequestOf, resolveProposals } from "../../shared/proposals";
 import { type ChangeCounts, changeFact } from "./changeFacts";
 import { core } from "./core";
@@ -365,7 +366,13 @@ export function applyArrived(
   const planned = planChanges(editor.state, requests);
   let resolved: ReturnType<typeof writeAccepted> = [];
   asEditStep(edit, () => {
-    resolved = writeAccepted(edit.doc, requests, new SettingAside(), new AcceptingEdit());
+    resolved = writeAccepted(
+      edit.doc,
+      requests,
+      new SettingAside(),
+      new AcceptingEdit(),
+      editor.schema,
+    );
   });
   const entries = aiUseOfAccepted(edit.doc, mindId, resolved, new Date().toISOString());
   if (entries.length > 0) core.recordAiUse(entries).catch(useAppStore.getState().reportError);
@@ -434,9 +441,16 @@ export async function finishApplying(
 }
 
 function undoEdit(editor: Editor): void {
-  const edit = latest.get(editor);
+  const edit =
+    appliedLineIn(editor.state)?.kind === "review" ? reviewed.get(editor) : latest.get(editor);
   const stack = undoStackOf(editor);
   if (!edit || !stack || edit.steps.length === 0) return;
+  if (edit.followed) {
+    if (!edit.followed.onTop()) return;
+    edit.followed.undo();
+    setAppliedLine(editor, null);
+    return;
+  }
   const steps = [...edit.steps, ...edit.more];
   let top = stack.undoStack.at(-1);
   while (!editor.isDestroyed && top !== undefined && steps.includes(top)) {
@@ -458,11 +472,16 @@ function reviewEdit(edit: Applying, changes: readonly AppliedChange[], byAssista
   const { editor } = edit;
   if (changes.length === 0 || editor.isDestroyed) return;
   reviewed.set(editor, edit);
+  const { followed } = edit;
+  const mind = useAppStore.getState().minds.find((each) => each.id === edit.mindId);
   setAppliedLine(editor, {
     kind: "review",
     blockId: firstBlockOf(editor.state, changes),
     changes: [...changes],
     ...(byAssistant && { byAssistant: true }),
+    ...(followed && {
+      undo: { available: () => followed.onTop(), mind: mind ? mindName(mind) : t("mind.untitled") },
+    }),
   });
   const first = changes
     .map((change) => placeOfChange(editor.state, change))

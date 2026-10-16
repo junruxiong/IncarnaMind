@@ -91,6 +91,17 @@ test("“write a summary page” makes the page with the summary applied, “mak
   await expect(editor.locator(".applied-new").filter({ hasText: /^ It says more\.$/ })).toHaveCount(
     0,
   );
+  await expect(line.getByTestId("applied-undo-all")).toHaveAttribute("aria-disabled", "true");
+  await pointAndClick(window, line.getByTestId("applied-undo-all"));
+  await expect(paragraphs).toHaveText([`${SPRING} It says more.`, `${NEAP} It says more.`]);
+  await setLanguage(window, "zh-CN");
+  await expect(line.getByTestId("applied-count")).toHaveText("助手做的 3 处改动");
+  await expect(line.getByTestId("applied-undo-all")).toHaveAttribute("title", /Summary.*查看改动/);
+  await setLanguage(window, "en");
+  await screenshot(window, "asked-review-earlier-en");
+  await pointAndClick(window, second.getByTestId("mind-changes-review"));
+  await expect(line.getByTestId("applied-undo-all")).not.toHaveAttribute("aria-disabled");
+  await expect(editor.locator(".applied-new")).toHaveText([" It says more.", " It says more."]);
   await pointAndClick(window, line.getByTestId("applied-done"));
 
   const longer = [`${SPRING} It says more.`, `${NEAP} It says more.`];
@@ -113,13 +124,14 @@ test("“write a summary page” makes the page with the summary applied, “mak
   await expect(second.getByTestId("mind-changes-undone")).toHaveText("Undone");
   await expect(firstUndo).not.toHaveAttribute("aria-disabled");
 
-  // Redo and Undo in the Mind move the change, and its card says where it is.
+  // The review's Undo follows the step created by Redo in the Mind.
   await editor.focus();
   await window.keyboard.press("ControlOrMeta+Shift+z");
   await expect(paragraphs).toHaveText(longer);
   await expect(secondUndo).not.toHaveAttribute("aria-disabled");
   await expect(firstUndo).toHaveAttribute("aria-disabled", "true");
-  await window.keyboard.press("ControlOrMeta+z");
+  await pointAndClick(window, second.getByTestId("mind-changes-review"));
+  await pointAndClick(window, line.getByTestId("applied-undo-all"));
   await expect(paragraphs).toHaveText([SPRING, NEAP]);
   await expect(second.getByTestId("mind-changes-undone")).toBeVisible();
 
@@ -136,7 +148,9 @@ test("“write a summary page” makes the page with the summary applied, “mak
     await expect(paragraphs).toHaveText([SPRING, NEAP]);
   }).toPass();
   await expect(firstUndo).not.toHaveAttribute("aria-disabled");
-  await pointAndClick(window, firstUndo);
+  await pointAndClick(window, summary.getByTestId("mind-changes-review"));
+  await expect(line.getByTestId("applied-undo-all")).not.toHaveAttribute("aria-disabled");
+  await pointAndClick(window, line.getByTestId("applied-undo-all"));
   await expect(editor).not.toContainText("Spring tides");
   await expect(summary.getByTestId("mind-changes-undone")).toHaveText("Undone");
 });
