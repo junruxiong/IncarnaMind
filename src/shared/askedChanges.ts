@@ -21,12 +21,25 @@ const TRANSLATION =
   /\btranslat|\bin(?:to)? (?:chinese|english)\b|翻译|译成|(?:改成|用)(?:中文|英文)/i;
 
 interface Run {
-  insert: unknown;
-  attributes?: Record<string, unknown>;
+  insert: string;
+  attributes: Record<string, unknown>;
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+function runsOf(text: Y.XmlText): Run[] {
+  const delta: unknown = text.toDelta();
+  if (!Array.isArray(delta)) return [];
+  return delta.flatMap((run: unknown) =>
+    isRecord(run) && typeof run.insert === "string"
+      ? [{ insert: run.insert, attributes: isRecord(run.attributes) ? run.attributes : {} }]
+      : [],
+  );
 }
 
 const marked = (run: Run, mark: string) => {
-  const value = run.attributes?.[mark];
+  const value = run.attributes[mark];
   return value !== undefined && value !== null;
 };
 
@@ -37,11 +50,10 @@ export function ownTextRemoved(blocks: Y.XmlFragment, requests: ReadonlySet<stri
   const visit = (parent: Y.XmlFragment | Y.XmlElement, goes: boolean) => {
     for (const child of parent.toArray()) {
       if (child instanceof Y.XmlText) {
-        for (const run of child.toDelta() as Run[]) {
-          if (typeof run.insert !== "string") continue;
+        for (const run of runsOf(child)) {
           if (marked(run, GENERATED_MARK) || marked(run, PROPOSAL_INSERT_MARK)) continue;
           own += run.insert.length;
-          const deleted = readProposalRef(run.attributes?.[PROPOSAL_DELETE_MARK]);
+          const deleted = readProposalRef(run.attributes[PROPOSAL_DELETE_MARK]);
           if (goes || (deleted && requests.has(deleted.request))) removed += run.insert.length;
         }
       } else if (child instanceof Y.XmlElement) {
@@ -55,7 +67,6 @@ export function ownTextRemoved(blocks: Y.XmlFragment, requests: ReadonlySet<stri
   return own === 0 ? 0 : removed / own;
 }
 
-/** Whether the User asked for a request's changes, in the words of their Question. */
 export function askedFor(doc: Y.Doc, request: string): boolean {
   const made = proposalRequestOf(doc, request);
   return made !== null && "requested" in made && made.requested !== undefined;
@@ -71,7 +82,6 @@ function translates(doc: Y.Doc, requests: ReadonlySet<string>): boolean {
   });
 }
 
-/** Whether the requests' changes wait for the User to apply or discard them. */
 export function waitsForUser(doc: Y.Doc, requests: ReadonlySet<string>): boolean {
   return (
     requests.size > 0 &&

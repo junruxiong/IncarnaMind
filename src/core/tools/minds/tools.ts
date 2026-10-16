@@ -757,7 +757,6 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     return askedMind === mindId ? requested.change : null;
   };
 
-  /** By Mind, this turn's requests the User asked for. */
   const askedIn = new Map<string, Set<string>>();
   /** What became of a call's change, for the model to say: applied, or waiting for the User and why. */
   const outcomeOf = (mind: ChangeableMind, request: string): string => {
@@ -1278,6 +1277,9 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
           ...writtenNotes(revised),
         ].join(" ");
       }
+      // Only a request for an edit rewrites the User's text at once; one to write waits there (#880).
+      const tag =
+        requested?.change === "edit" || waiting.kind === "own" ? requestedIn(mind.id, false) : null;
       const { result, length, reason, revised } = await minds.proposeInMind({
         mindId: mind.id,
         ...stretch,
@@ -1287,8 +1289,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         beforeWriting: () => minds.checkpoint(mind.id),
         written: (request, proposals) =>
           options.changed(toolCallId, { mindId: mind.id, created: false, request, proposals }),
-        // Rewriting the User's text is an edit, whatever the turn asked for.
-        requested: requestedIn(mind.id, false) ? "edit" : null,
+        requested: tag === null ? null : "edit",
       });
       if (result.kind !== "proposed") {
         const why = notProposed(result, mind, unmadeSaid(mind.name));

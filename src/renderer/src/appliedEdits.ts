@@ -77,6 +77,8 @@ export interface Applying {
 }
 
 const latest = new WeakMap<Editor, Applying>();
+// An Answer's card can review an earlier edit than the latest: what Restore original belongs to.
+const reviewed = new WeakMap<Editor, Applying>();
 
 function asEditStep(edit: Applying, change: () => void): void {
   const stack = undoStackOf(edit.editor);
@@ -145,6 +147,7 @@ function beginEdit(editor: Editor, mindId: string, requestId: string): Applying 
   const stack = undoStackOf(editor);
   if (!doc || !stack || editor.isDestroyed) return null;
   latest.get(editor)?.forget();
+  reviewed.delete(editor);
   setAppliedLine(editor, null);
   stack.addTrackedOrigin(EDIT_FROM_CORE);
   stack.addTrackedOrigin(AcceptingEdit);
@@ -315,11 +318,13 @@ function apply(edit: Applying, request: string): number {
 // Setting the assistant's changes aside before writing them as the editor's own: no Undo tracks it.
 class SettingAside {}
 
-type AskedApplied = (
-  mindId: string,
-  requests: ReadonlySet<string>,
-  followed: FollowedSteps,
-) => void;
+/** Changes the User asked for, applied: their steps of Undo, and Review changes for them alone. */
+export interface AppliedAsked {
+  followed: FollowedSteps;
+  review(): void;
+}
+
+type AskedApplied = (mindId: string, requests: ReadonlySet<string>, asked: AppliedAsked) => void;
 
 const applied = new Set<AskedApplied>();
 
@@ -365,10 +370,13 @@ export function applyArrived(
   const entries = aiUseOfAccepted(edit.doc, mindId, resolved, new Date().toISOString());
   if (entries.length > 0) core.recordAiUse(entries).catch(useAppStore.getState().reportError);
   edit.followed = followSteps(editor, edit.steps);
+  const changes = editor.isDestroyed ? [] : anchorChanges(editor.state, planned);
   const { followed } = edit;
-  if (followed) for (const listener of applied) listener(mindId, requests, followed);
+  if (followed) {
+    const asked = { followed, review: () => reviewEdit(edit, changes, true) };
+    for (const listener of applied) listener(mindId, requests, asked);
+  }
   if (editor.isDestroyed) return "applied";
-  const changes = anchorChanges(editor.state, planned);
   const message = changeFact(t, facts, null);
   setAppliedLine(editor, {
     kind: "applied",
@@ -441,14 +449,22 @@ function undoEdit(editor: Editor): void {
 
 function review(editor: Editor): void {
   const line = appliedLineIn(editor.state);
-  if (line?.kind !== "applied" || line.changes.length === 0 || editor.isDestroyed) return;
+  const edit = latest.get(editor);
+  if (line?.kind !== "applied" || !edit) return;
+  reviewEdit(edit, line.changes, line.facts !== undefined);
+}
+
+function reviewEdit(edit: Applying, changes: readonly AppliedChange[], byAssistant: boolean): void {
+  const { editor } = edit;
+  if (changes.length === 0 || editor.isDestroyed) return;
+  reviewed.set(editor, edit);
   setAppliedLine(editor, {
     kind: "review",
-    blockId: line.blockId,
-    changes: line.changes,
-    ...(line.facts && { byAssistant: true }),
+    blockId: firstBlockOf(editor.state, changes),
+    changes: [...changes],
+    ...(byAssistant && { byAssistant: true }),
   });
-  const first = line.changes
+  const first = changes
     .map((change) => placeOfChange(editor.state, change))
     .find((place) => place !== null);
   if (first) editor.chain().setTextSelection(first.from).scrollIntoView().run();
@@ -479,7 +495,7 @@ export function restoreChange(editor: Editor, index: number): void {
   });
   asOneStep(editor, () => editor.view.dispatch(tr));
   const top = undoStackOf(editor)?.undoStack.at(-1);
-  const edit = latest.get(editor);
+  const edit = reviewed.get(editor) ?? latest.get(editor);
   if (top && edit) {
     edit.more.push(top);
     edit.followed?.add(top);
