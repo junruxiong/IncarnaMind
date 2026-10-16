@@ -5,6 +5,7 @@
  * is. A Mind with no choice is in the default style (`DEFAULT_MIND_STYLE`).
  */
 import type * as Y from "yjs";
+import { isRecord } from "../core/errors";
 import { fontKind } from "./fontKinds";
 
 export const FONT_PRESETS = ["default", "serif", "mono"] as const;
@@ -33,7 +34,6 @@ const hasControlCharacter = (text: string) =>
     return code < 32 || code === 127;
   });
 
-/** A family name as the system lists it: text, with no control characters. */
 export const isFontFamily = (value: unknown): value is string =>
   typeof value === "string" &&
   value.trim() !== "" &&
@@ -48,16 +48,14 @@ export const isTextSize = (value: unknown): value is TextSize =>
 
 export function isMindFont(value: unknown): value is MindFont {
   if (isFontPreset(value)) return true;
-  if (typeof value !== "object" || value === null) return false;
+  if (!isRecord(value)) return false;
   const keys = Object.keys(value);
-  return (
-    keys.length === 1 && keys[0] === "family" && isFontFamily((value as { family: unknown }).family)
-  );
+  return keys.length === 1 && keys[0] === "family" && isFontFamily(value.family);
 }
 
 export function isMindStyle(value: unknown): value is MindStyle {
-  if (typeof value !== "object" || value === null) return false;
-  const { font, size, ...rest } = value as Record<string, unknown>;
+  if (!isRecord(value)) return false;
+  const { font, size, ...rest } = value;
   return Object.keys(rest).length === 0 && isMindFont(font) && isTextSize(size);
 }
 
@@ -110,7 +108,6 @@ export function exportedFamily(font: MindFont): string | null {
   return familyOf(font);
 }
 
-/** One size of type: the font's size and its line height, in CSS pixels. */
 export interface TypeSize {
   size: number;
   leading: number;
@@ -181,7 +178,7 @@ export function writingType(style: MindStyle, installed: boolean): WritingType {
  * The type scale as the custom properties the Mind's page sets (styles.css): the theme's own
  * sizes for writing, set for this Mind, and the font the writing takes.
  */
-export function writingProperties(type: WritingType): Record<string, string> {
+export function writingProperties(type: WritingType): Record<`--${string}`, string> {
   return {
     "--writing-font": type.family,
     "--text-body": `${type.body.size}px`,
