@@ -18,6 +18,7 @@ import {
   editActions,
   FOOTNOTE_NODE,
   MIND_PROPOSAL_REQUESTS_FIELD,
+  MIND_REVISIONS_FIELD,
   PROPOSAL_ATTRIBUTE,
   PROPOSAL_DELETE_MARK,
   PROPOSAL_INSERT_MARK,
@@ -199,6 +200,8 @@ export function resolveProposals(
   const wanted = (proposal: ProposalRef) => picked(proposal) && !stale.has(proposal.id);
   const resolved = new Map<string, ResolvedProposal>();
   const order: string[] = [];
+  /** Where each request's first top-level Block removed by a reject was: what it revised goes back there. */
+  const removedAt = new Map<string, number>();
   const note = (ref: ProposalRef, characters: number, blockId: string | null) => {
     let entry = resolved.get(ref.id);
     if (!entry) {
@@ -250,6 +253,7 @@ export function resolveProposals(
         const written = keep && attribute.kind === "insert" && !footnote;
         note(attribute, written ? textLength(child) : 0, own);
         if (!keep) {
+          if (parent === blocks) removedAt.set(attribute.request, index);
           parent.delete(index, 1);
           continue;
         }
@@ -260,8 +264,96 @@ export function resolveProposals(
   };
 
   visit(blocks, null);
+  settleRevisions(
+    blocks,
+    new Set([...resolved.values()].map((each) => each.request)),
+    outcome,
+    removedAt,
+  );
   // Walked from the end: the first one met is the last in the Mind.
   return order.reverse().map((id) => resolved.get(id) as ResolvedProposal);
+}
+
+const REVISED_BLOCKS = "blocks";
+const REVISED_AFTER = "after";
+
+const revisionsOf = (blocks: Y.XmlFragment) =>
+  blocks.doc?.getMap<Y.Map<unknown>>(MIND_REVISIONS_FIELD) ?? null;
+
+/**
+ * Keeps the top-level Blocks a revision by `request` replaces, before they go,
+ * and the Block before them, so rejecting the revision brings them back
+ * (`MIND_REVISIONS_FIELD`).
+ */
+export function keepRevised(
+  blocks: Y.XmlFragment,
+  request: string,
+  replaced: readonly Y.XmlElement[],
+): void {
+  const revisions = revisionsOf(blocks);
+  const first = replaced[0];
+  if (!revisions || !first) return;
+  const before = blocks.get(blocks.toArray().indexOf(first) - 1);
+  const kept = new Y.Array<Y.XmlElement>();
+  kept.insert(
+    0,
+    replaced.map((element) => element.clone()),
+  );
+  const revision = new Y.Map<unknown>();
+  revision.set(REVISED_BLOCKS, kept);
+  revision.set(REVISED_AFTER, before instanceof Y.XmlElement ? idOf(before) : null);
+  revisions.set(request, revision);
+}
+
+/**
+ * Puts back what a revision by `request` replaced, after the Block that was
+ * before it, unless a change of it still waits or they are back already: a
+ * reject undone and done again puts them back once.
+ */
+export function restoreRevised(blocks: Y.XmlFragment, request: string, fallback?: number): void {
+  const revision = revisionsOf(blocks)?.get(request);
+  const kept = revision?.get(REVISED_BLOCKS);
+  if (!revision || !(kept instanceof Y.Array)) return;
+  if (pendingProposals(blocks).some((each) => each.request === request)) return;
+  const elements = kept
+    .toArray()
+    .filter((each): each is Y.XmlElement => each instanceof Y.XmlElement);
+  const children = blocks.toArray();
+  const ids = new Set(
+    children.flatMap((child) => (child instanceof Y.XmlElement ? (idOf(child) ?? []) : [])),
+  );
+  if (elements.some((element) => ids.has(idOf(element) ?? ""))) return;
+  const after = revision.get(REVISED_AFTER);
+  const anchor =
+    typeof after === "string"
+      ? children.findIndex((child) => child instanceof Y.XmlElement && idOf(child) === after)
+      : -1;
+  const at =
+    after === null
+      ? 0
+      : anchor >= 0
+        ? anchor + 1
+        : Math.min(fallback ?? blocks.length, blocks.length);
+  blocks.insert(
+    at,
+    elements.map((element) => element.clone()),
+  );
+}
+
+/** What revisions of the resolved requests replaced: back once all their new Blocks are rejected, gone once any is accepted. */
+function settleRevisions(
+  blocks: Y.XmlFragment,
+  requests: ReadonlySet<string>,
+  outcome: "accept" | "reject",
+  removedAt: ReadonlyMap<string, number>,
+): void {
+  const revisions = revisionsOf(blocks);
+  if (!revisions || revisions.size === 0) return;
+  for (const request of requests) {
+    if (!revisions.has(request)) continue;
+    if (outcome === "accept") revisions.delete(request);
+    else restoreRevised(blocks, request, removedAt.get(request));
+  }
 }
 
 /** The Proposals waiting in the Mind's Blocks, each once, in the order they start. */
@@ -288,6 +380,45 @@ export function pendingProposals(blocks: Y.XmlFragment): ProposalRef[] {
 }
 
 const requestsOf = (doc: Y.Doc) => doc.getMap<unknown>(MIND_PROPOSAL_REQUESTS_FIELD);
+
+const DECISION_KEYS = { accept: "accepted", reject: "rejected" } as const;
+
+/**
+ * `resolveProposals` for what the User decides, which the Mind also remembers
+ * per request (how many were accepted and how many rejected), so a later
+ * Question knows what became of an Answer's changes. In the caller's
+ * transaction, as `resolveProposals` is.
+ */
+export function decideProposals(
+  blocks: Y.XmlFragment,
+  picked: (proposal: ProposalRef) => boolean,
+  outcome: "accept" | "reject",
+): ResolvedProposal[] {
+  const resolved = resolveProposals(blocks, picked, outcome);
+  const requests = blocks.doc ? requestsOf(blocks.doc) : null;
+  if (!requests) return resolved;
+  const key = DECISION_KEYS[outcome];
+  const counts = new Map<string, number>();
+  for (const each of resolved) counts.set(each.request, (counts.get(each.request) ?? 0) + 1);
+  for (const [request, count] of counts) {
+    const made = requests.get(request);
+    if (typeof made !== "object" || made === null) continue;
+    const before = (made as Record<string, unknown>)[key];
+    requests.set(request, { ...made, [key]: (typeof before === "number" ? before : 0) + count });
+  }
+  return resolved;
+}
+
+/** How many of a request's Proposals the User accepted and rejected (`decideProposals`). */
+export function decisionsOn(doc: Y.Doc, request: string): { accepted: number; rejected: number } {
+  const made = requestsOf(doc).get(request);
+  const count = (key: string) => {
+    const value =
+      typeof made === "object" && made !== null ? (made as Record<string, unknown>)[key] : 0;
+    return typeof value === "number" ? value : 0;
+  };
+  return { accepted: count(DECISION_KEYS.accept), rejected: count(DECISION_KEYS.reject) };
+}
 
 /** Records what made a request's Proposals, in the Mind's document beside its Blocks. */
 export function recordProposalRequest(doc: Y.Doc, request: string, made: ProposalRequest): void {

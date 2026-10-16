@@ -12,13 +12,11 @@ import { EvidenceSettings } from "./EvidenceSettings";
 import { CloseLineIcon } from "./lineIcons";
 import { MeetingsSettings } from "./MeetingsSettings";
 import { MotionSettings } from "./MotionSettings";
-import { OrganizationSettings } from "./OrganizationSettings";
 import { OutputLocationSettings } from "./OutputLocationSettings";
 import { PrivacySettings } from "./PrivacySettings";
 import { ChatGptPlanSettings } from "./providers/ChatGptPlanSettings";
 import { ChatModelSettings } from "./providers/ChatModelSettings";
 import { EmbeddingSettingsSection } from "./providers/EmbeddingSettings";
-import { JevSettingsSection } from "./providers/JevSettings";
 import { OtherModelsSettings } from "./providers/OtherModelsSettings";
 import { PlansSettings } from "./providers/PlansSettings";
 import { RerankSettingsSection } from "./providers/RerankSettings";
@@ -26,6 +24,7 @@ import { SavedWebPagesSettings } from "./SavedWebPagesSettings";
 import { SkillScriptsSettings, SkillsSettings } from "./SkillsSettings";
 import { SpendingCapSettings } from "./SpendingCapSettings";
 import { SuggestionSettings } from "./SuggestionSettings";
+import { TaggingSettings } from "./TaggingSettings";
 import {
   buttonClass,
   dialogFrameClass,
@@ -167,10 +166,7 @@ function PageContent({ page }: { page: SettingsPage }) {
           <OtherModelsSettings />
           <PlansSettings />
           <ChatGptPlanSettings />
-          <JevSettingsSection />
-          <Titled title="library.settingsTitle" testId="organization-settings">
-            <OrganizationSettings />
-          </Titled>
+          <TaggingSettings />
         </Page>
       );
     case "search":

@@ -2,15 +2,19 @@ import type {
   AssignmentChange,
   DocumentBatch,
   DocumentGroupAssignment,
+  LibraryClassifier,
   LibraryGroup,
   LibraryGroupInput,
   LibrarySettings,
   LibrarySnapshot,
+  TaggingClassifier,
+  TaggingModels,
 } from "./library/types";
 import type { UiUsageEvent } from "./usageEvents";
 
 export type {
   AssignmentChange,
+  AutomaticTaggingReason,
   ClassificationStatus,
   DocumentBatch,
   DocumentGroupAssignment,
@@ -19,6 +23,11 @@ export type {
   LibraryGroupInput,
   LibrarySettings,
   LibrarySnapshot,
+  TaggingClassifier,
+  TaggingCost,
+  TaggingModelGroup,
+  TaggingModelOption,
+  TaggingModels,
 } from "./library/types";
 
 /**
@@ -146,8 +155,12 @@ export interface CreateMindInput {
  * - 21: a Word file's look (#746): the `wordLook` attribute and the
  *   `wordRun` mark, which an older version's editor would strip. Older
  *   content is version 21 content as it is.
+ * - 22: the assistant's own waiting Blocks a revision replaced, kept in
+ *   `MIND_REVISIONS_FIELD` so rejecting the revision brings them back. An
+ *   older version would reject it and lose them. Older content is version
+ *   22 content as it is.
  */
-export const CONTENT_SCHEMA_VERSION = 21;
+export const CONTENT_SCHEMA_VERSION = 22;
 
 /**
  * The key, in the Mind's settings map (`MIND_SETTINGS_FIELD`), of the content
@@ -356,6 +369,15 @@ export interface ProposalAttribute extends ProposalRef {
  * wrote it.
  */
 export const MIND_PROPOSAL_REQUESTS_FIELD = "proposalRequests";
+
+/**
+ * The name of the Y.Map, beside a Mind's Blocks, that keeps the top-level
+ * Blocks each revision of the assistant's own waiting changes replaced, and
+ * the id of the Block before them, by the revising request: rejecting all of
+ * that request, or writing its Answer again, puts them back as they were
+ * (`restoreRevised`); accepting any of it lets them go.
+ */
+export const MIND_REVISIONS_FIELD = "revisions";
 
 /**
  * What made a request's Proposals: Edit with AI (#93), with what it was asked
@@ -589,8 +611,9 @@ export type ComparisonCellStatus = "waiting" | "writing" | "done" | "failed";
 
 /**
  * Why a cell has no Answer: its Document doesn't answer the Question
- * ("not-found"), has no text to search, was deleted, or is a file
- * IncarnaMind wrote, which checks leave out (#80); or why its model didn't
+ * ("not-found"), has no text to search, was deleted, is a file
+ * IncarnaMind wrote, which checks leave out (#80), or is one the User keeps as
+ * their own workings, which Answers never cite; or why its model didn't
  * write one (a `ProviderErrorKind`). "cost-cap" and "plan-limit" stopped the
  * fill (`RunStop`): the cell wasn't checked.
  */
@@ -599,6 +622,7 @@ export type ComparisonProblem =
   | "nothing-to-search"
   | "source-removed"
   | "left-out"
+  | "not-cited"
   | ProviderErrorKind;
 
 /** Attributes of a comparison table's cell. */
@@ -835,7 +859,31 @@ export interface AnswerToolCall {
   uncalculated?: number;
   /** A Minds' Tool that changed a Mind or made one, once it ended (#202). Absent otherwise. */
   mindChange?: MindChange;
+  /** A Minds' Tool that changed nothing: why, as its card says. Absent otherwise. */
+  mindProblem?: MindProblem;
 }
+
+/**
+ * Why a call of a Minds' Tool changed nothing. "waiting": changes
+ * still wait in the text it was to change, which the assistant can't revise
+ * (someone else's, or the User's own requests), `count` of them in the Mind;
+ * "mixed": its own waiting text sits beside the User's there. "model": the
+ * model failed, as `message` says.
+ */
+export type MindProblem =
+  | { kind: "waiting"; mindId: string; count: number; mixed: boolean }
+  | { kind: "no-mind" }
+  | { kind: "not-found"; name: string }
+  | { kind: "several"; name: string }
+  | { kind: "no-heading"; mindId: string; heading: string }
+  | { kind: "no-place"; mindId: string; place: string }
+  | { kind: "several-places"; mindId: string; name: string; adding: boolean }
+  | {
+      kind: "no-text" | "too-long" | "changed" | "content-not-own" | "stopped";
+      mindId: string;
+    }
+  | { kind: "local-mode" | "not-ready" }
+  | { kind: "model"; mindId: string; message: string };
 
 /**
  * Where the assistant writes next in a Mind, as its changes come in (#202):
@@ -862,6 +910,17 @@ export interface MindChange {
   request: string;
   /** How many Proposals it made there. */
   proposals: number;
+  /** How many paragraphs the whole Blocks it wrote hold (a heading or a table holds none). Absent: none. */
+  paragraphs?: number;
+  /**
+   * It revised the assistant's own changes still waiting there: they
+   * are gone, and its request holds the new text and the rest of them.
+   */
+  revised?: true;
+  /** How many Citations the text it wrote there holds. Absent: none, or it rewrote text keeping its own. */
+  cited?: number;
+  /** How many of its text's markers had no Citation recorded, and were left out. Absent: none. */
+  unrecorded?: number;
 }
 
 /** What a call of `read_web_page` came to (see `AnswerToolCall.webPage`). */
@@ -1418,7 +1477,10 @@ export const MAX_CITED_PAGES = 2;
  * gone. Language-neutral: the label is worded when shown ("p. 4", "slide 4",
  * "Revenue, rows 12–14", "§ 2.1 Sensitivity", "§ 2 Costs, comment by
  * Reviewer", "lines 120–134").
- * - "page", "slide": the cited pages or slides.
+ * - "page", "slide": the cited pages or slides. A PDF's `printed` names the
+ *   first and last page as they call themselves ("xii", "68") when that
+ *   isn't their number in the PDF; `from` and `to` stay the PDF's, which
+ *   open the viewer (#901).
  * - "rows": the rows the quote covers in a sheet (a CSV's has no name), or
  *   the cited block's when it wasn't found.
  * - "section": the heading of the section the quote sits under; null before
@@ -1432,7 +1494,8 @@ export const MAX_CITED_PAGES = 2;
  *   `speaker`: who said the cue it starts in, where the Transcript says (#941).
  */
 export type CitationLocation =
-  | { kind: "page" | "slide"; from: number; to: number }
+  | { kind: "page"; from: number; to: number; printed?: { from: string; to: string } }
+  | { kind: "slide"; from: number; to: number }
   | { kind: "rows"; sheet: string | null; from: number; to: number }
   | { kind: "lines"; from: number; to: number }
   | { kind: "time"; from: number; to: number; speaker?: string }
@@ -1635,6 +1698,34 @@ export interface MindUpdate {
   mindId: string;
   /** A Yjs update (the default v1 encoding). */
   update: Uint8Array;
+  /** The edit the User asked for that wrote it (#880). */
+  cause?: EditCause;
+}
+
+/** An edit the User asked for (#880): the window that asked takes its updates in as its own change, one step of Undo. */
+export interface EditCause {
+  /** `EditWithAiInput.requestId`. */
+  requestId: string;
+  /** Its Proposals' `ProposalRef.request`. */
+  request: string;
+  /** Drawn as applied while it streams in; false until its new text maps onto the selection. */
+  apply: boolean;
+}
+
+/**
+ * What kind of Block a paragraph of a selection is, as the model reads it and
+ * writes it back: a heading of a level ("heading:2"), a bullet, a numbered
+ * item, a quote, or a plain paragraph.
+ */
+export type BlockKind = "paragraph" | "bullet" | "numbered" | "quote" | `heading:${number}`;
+
+/** Part of the selection an edit's new text left out, kept (#880): `from`..`to` of a Block's text. */
+export interface LeftOutPart {
+  blockId: string;
+  from: number;
+  to: number;
+  whole: boolean;
+  kind: BlockKind;
 }
 
 /** Settings that belong to the User and will sync across their devices (ADR-0003). */
@@ -1642,6 +1733,19 @@ export interface UserSettings {
   language: LanguagePreference;
   /** The default model for Answers, or null before a chat provider is set up. */
   chatModel: ChatModelChoice | null;
+  /**
+   * The model for the calls that don't write the Answer: an Answer's
+   * search query and its translation, and automatic tagging where the
+   * provider names no tagging model. Null: the quick-tasks model of the
+   * Answers model's provider, from the catalog, or the Answers model itself.
+   */
+  quickTasksModel: ChatModelChoice | null;
+  /**
+   * The model that reads a scan's pages when the Answers model can't read
+   * images. Null: the image model of the Answers model's provider,
+   * from the catalog, when it has one.
+   */
+  imageModel: ChatModelChoice | null;
   /**
    * Suggest as the User writes, from their Documents (see `suggestNext`): off
    * until they turn it on. Turning it on asks for consent to the "suggestions"
@@ -2180,7 +2284,10 @@ export interface Document {
   tags: DocumentTag[];
   /** Where automatic tagging is, separately from `status`. */
   tagging: TaggingState;
-  /** Set when `tagging` is "failed". */
+  /**
+   * Set when `tagging` is "failed", and when it is "waiting-for-provider" for
+   * a reason worth saying, such as the ChatGPT plan's limit ("plan-limit").
+   */
   taggingError: ProviderError | null;
   /**
    * When the Document itself was created, as its file tells, for the
@@ -2220,6 +2327,12 @@ export interface Document {
    * (web pages, Transcripts), which count as evidence as usual.
    */
   ownFile: OwnFile | null;
+  /**
+   * The User keeps it as their own workings: a spreadsheet of figures copied from a
+   * report, with their own ratios. Answers search and read it to understand a Question but
+   * never cite it, and checks never use it as evidence (`setNotCited`).
+   */
+  notCited: boolean;
   /** Where its text came from, when Find sources added it (#296); null for any other Document. */
   found: DocumentFoundSource | null;
   /**
@@ -2255,11 +2368,13 @@ export interface OwnFile {
 /**
  * Why a check leaves a Document out of its evidence (#80):
  * - "own-file": IncarnaMind wrote it (see `OwnFile`). Counting it lets it count.
+ * - "own-workings": the User keeps it as their own workings (`Document.notCited`).
+ *   Never evidence, counted or not, until the User cites it again.
  * - "checked-document": it is the document being checked, an earlier version
  *   of it, or a copy of either (the same content fingerprint, at any path).
  *   Never evidence for that check.
  */
-export type EvidenceExclusion = "own-file" | "checked-document";
+export type EvidenceExclusion = "own-file" | "own-workings" | "checked-document";
 
 /** The document a check verifies (#97, #110): it, its earlier versions and their copies are never its evidence. */
 export interface CheckedDocument {
@@ -3376,7 +3491,8 @@ export interface TestRerankConnectionInput {
  * Where Answers can come from. "ollama" is an OpenAI-compatible server run by
  * Ollama, normally on this computer; it also offers one-click model downloads.
  * "chatgpt" is the User's ChatGPT plan, used through Sign in with ChatGPT
- * instead of an API key (see `ChatGptPlanStatus`).
+ * instead of an API key (see `ChatGptPlanStatus`); "claude-account" the
+ * User's Claude plan, signed in with their Claude account (see `ClaudeAccountStatus`).
  */
 export const chatProviderKinds = [
   "openai",
@@ -3393,6 +3509,7 @@ export const chatProviderKinds = [
   "openai-compatible",
   "ollama",
   "chatgpt",
+  "claude-account",
 ] as const;
 
 export type ChatProviderKind = (typeof chatProviderKinds)[number];
@@ -3502,6 +3619,8 @@ export interface ProviderError {
   wording?: ErrorWording;
   /** "plan-limit": when the plan's limit resets (ISO 8601), when the provider says. */
   resetsAt?: string;
+  /** A Claude account's request: which of the route's problems it is, for its own line. */
+  claudeAccount?: ClaudeAccountProblem;
 }
 
 /**
@@ -4078,6 +4197,10 @@ export type EditWithAiResult =
       proposals: number;
       droppedCitations: number;
       outOfDate: number;
+      /** An edit the User asked for that waits for them instead of applying (#880). */
+      held?: true;
+      /** What its new text left out of the selection, kept; absent when nothing. */
+      leftOut?: LeftOutPart[];
     }
   /** The model gave the text back as it was: there is nothing to propose. */
   | { kind: "unchanged" }
@@ -4265,6 +4388,9 @@ export interface ClaimCheckAttributes {
   reason: ClaimCheckFailure | null;
   /** "failed": the provider's message. */
   detail: string | null;
+  /** The model that checked it; null on a mark made before it was kept. */
+  providerId: string | null;
+  modelId: string | null;
   /** The sentence as it was checked: an inline node as U+FFFC, a line break as "\n". */
   text: string;
   /** "supported" and "contradicted": the Passage that decides it, as a Citation found. */
@@ -4603,7 +4729,28 @@ export interface AnswerSteps {
    * it wrote without markers that match the Passages it read (#760).
    */
   citedAfterChecking?: number;
+  /**
+   * How long, in ms, the Question was with the model before the Answer had
+   * words: its text, or a Mind its Tool call began to change. Absent while
+   * there are none, and for an Answer written before #899.
+   */
+  firstWordMs?: number;
+  /** Its Question asked to check or calculate, so it was written with the larger thinking budget. */
+  careful?: true;
+  /**
+   * The changes its reply says it made to a Mind that none of its Tool calls
+   * made, even once the model was asked again with what they did.
+   * Absent: none.
+   */
+  unbackedClaims?: ClaimedChange[];
 }
+
+/**
+ * The changes an Answer's reply can say it made to a Mind: made one,
+ * added text to one, changed text in one, or removed or replaced text in one.
+ */
+export const CLAIMED_CHANGES = ["made", "added", "changed", "removed"] as const;
+export type ClaimedChange = (typeof CLAIMED_CHANGES)[number];
 
 /** A Tool call of an Answer started, or finished (see `call.status`). */
 export interface AnswerToolCallEvent extends AnswerPlace {
@@ -5196,7 +5343,6 @@ export type ChatGptAccount =
  */
 export interface ChatGptPlanStatus {
   account: ChatGptAccount;
-  /** A browser sign-in is waiting for the User. */
   signingIn: boolean;
   /**
    * The models Questions can use with the plan, the default first: the
@@ -5262,7 +5408,8 @@ export interface ChatGptSignOutResult {
   status: ChatGptPlanStatus;
 }
 
-export type ChatGptPastedAddressProblem =
+/** Why an address pasted into a waiting sign-in (ChatGPT, Claude) wasn't taken. */
+export type PastedAddressProblem =
   /** It isn't the address the sign-in sends the browser back to, with a code and a state. */
   | "not-sign-in-address"
   /** It is, but for another sign-in, e.g. from an older tab. */
@@ -5270,9 +5417,54 @@ export type ChatGptPastedAddressProblem =
   /** The sign-in already finished, or none is waiting. */
   | "finished";
 
-export type ChatGptPastedAddressResult =
-  | { ok: true }
-  | { ok: false; problem: ChatGptPastedAddressProblem };
+export type PastedAddressResult = { ok: true } | { ok: false; problem: PastedAddressProblem };
+
+// ---------------------------------------------------------------------------
+// Claude account
+
+/** Each said where it happened, with a way back (./providers/claudeAccount/problems.ts). */
+export type ClaudeAccountProblem =
+  /** The User cancelled the sign-in, or didn't finish it in time: nothing was kept. */
+  | "sign-in-cancelled"
+  | "signed-out"
+  /** The sign-in can't be renewed any more: sign in again. */
+  | "sign-in-expired"
+  /** Anthropic refused the sign-in, or a request made with it. */
+  | "refused"
+  /** The plan's usage limit is reached, until `ProviderError.resetsAt` when Anthropic says. */
+  | "plan-limit"
+  /** Anthropic answered in a way this route doesn't know. */
+  | "unexpected-response";
+
+export type ClaudeAccount =
+  | { state: "signed-out" }
+  /** Refreshing the sign-in failed: sign in again. */
+  | { state: "expired" }
+  /** The account and organization as Anthropic named them at sign-in, when it did. */
+  | { state: "signed-in"; email: string | null; organization: string | null };
+
+/** The User's Claude plan for Answers instead of an API key; not offered where this build has no profile for it. */
+export interface ClaudeAccountStatus {
+  available: boolean;
+  /** An experimental sign-in route, which the User is told about before signing in. */
+  experimental: boolean;
+  account: ClaudeAccount;
+  /** A browser sign-in is waiting for the User. */
+  signingIn: boolean;
+}
+
+export type ClaudeSignInErrorKind =
+  | Extract<ClaudeAccountProblem, "sign-in-cancelled" | "refused" | "unexpected-response">
+  /** This build has no client profile for the route. */
+  | "unavailable"
+  /** This device can't store the sign-in securely (see `getSecretStorage`). */
+  | "secret-storage"
+  /** The sign-in didn't work, e.g. a code pasted incompletely: sign in again. */
+  | "failed";
+
+export type ClaudeSignInResult =
+  | { ok: true; status: ClaudeAccountStatus }
+  | { ok: false; error: { kind: ClaudeSignInErrorKind; message: string } };
 
 // ---------------------------------------------------------------------------
 // Secrets
@@ -5524,6 +5716,8 @@ export interface RegisteredDataFlow {
  * - "ollama-pull": Ollama downloads a model from its registry, when the User picks local models.
  * - "chatgpt-sign-in": Sign in with ChatGPT, refreshing it, signing out, and
  *   reading OpenAI's signing keys; listed once the User has signed in.
+ * - "claude-sign-in": signing in with a Claude account and refreshing it;
+ *   listed once the User has started signing in.
  * - "remote-connectors": connecting to each remote Connector that is on, and
  *   signing in to it: its server, and the authorization server it names
  *   (discovery, registration, tokens). One entry per server. Tool calls, which
@@ -5540,6 +5734,7 @@ export const networkTrafficIds = [
   "transcription-model",
   "ollama-pull",
   "chatgpt-sign-in",
+  "claude-sign-in",
   "remote-connectors",
   "usage-data",
 ] as const;
@@ -5630,6 +5825,8 @@ export const aiUseKinds = [
   "edit-with-ai-accepted",
   /** A comparison table from Compare Documents accepted (#98). */
   "comparison-table-accepted",
+  /** A sentence of the Mind's checked against the Documents (#906). */
+  "sentence-checked",
 ] as const;
 export type AiUseKind = (typeof aiUseKinds)[number];
 
@@ -5655,7 +5852,7 @@ export interface AiUseEntry {
   modelId: string | null;
   /** How much the AI wrote, in characters. */
   characters: number;
-  /** The Blocks it made, by their stable ids; none for a rejected proposal or a suggestion. */
+  /** The Blocks it made, by their stable ids; none for a rejected proposal, a suggestion or a check. */
   blockIds: string[];
   /** When the User accepted or rejected it, ISO 8601 UTC. */
   occurredAt: string;
@@ -6316,10 +6513,18 @@ export interface TagMerge {
 
 /**
  * What a Mind exports to: Markdown, for an archive, or Word (.docx), PDF or HTML, for the
- * deliverable; or a source pack, a PDF of the pages the Mind cites (#134). Formats are listed
- * in the order the options sheet offers them.
+ * deliverable; a source pack, a PDF of the pages the Mind cites (#134); or a web page to share,
+ * an HTML file whose readers open each Citation's quote. Formats are listed in the order the
+ * options sheet offers them.
  */
-export const EXPORT_FORMATS = ["docx", "pdf", "source-pack", "html", "markdown"] as const;
+export const EXPORT_FORMATS = [
+  "docx",
+  "pdf",
+  "source-pack",
+  "html",
+  "share-page",
+  "markdown",
+] as const;
 export type ExportFormat = (typeof EXPORT_FORMATS)[number];
 
 /**
@@ -6332,8 +6537,15 @@ export interface ExportPreferences {
   docx: WordExportPreferences;
   pdf: { includeQuestions: boolean };
   html: { includeQuestions: boolean };
+  "share-page": SharePagePreferences;
   /** How a PDF, an HTML file or Markdown shows someone's changes still waiting (#734). Absent: shown. */
   theirChanges?: TheirChangesShown;
+}
+
+export interface SharePagePreferences {
+  includeQuestions: boolean;
+  citationCards: boolean;
+  checkedLine: boolean;
 }
 
 /**
@@ -6383,6 +6595,14 @@ export interface ExportMindOptions {
    * IncarnaMind saying so. Absent: off.
    */
   commentFailedChecks?: boolean;
+  /**
+   * A web page to share only: each Citation's marker opens a card with
+   * its quote, the part of its Document around it, and its check. Off, the
+   * file is the HTML export. Absent: on.
+   */
+  citationCards?: boolean;
+  /** A web page to share only: its foot says "Citations checked with IncarnaMind". Absent: off. */
+  checkedLine?: boolean;
 }
 
 /** What exporting a Mind will write, for the User to see before the file is written. */
@@ -6416,6 +6636,27 @@ export interface SentenceChecksExported {
   needsRecheck: number;
   /** They went into the file as comments: a Word file, with `commentFailedChecks` on. Otherwise they went out unmarked. */
   commented: boolean;
+}
+
+/** What a Mind's web page to share would hold, for the sheet to show before it is made. */
+export interface SharePagePreview {
+  /** Every Document the Mind cites, in the order it is first cited. */
+  documents: SharedDocument[];
+  /** The file's size with every Citation's card as text, in bytes. */
+  textBytes: number;
+}
+
+export interface SharedDocument {
+  documentId: string;
+  name: string;
+  /** The Citations that cite it. */
+  quotes: number;
+  /** The page pictures they carry: none for a Document without pages, or whose pages weren't saved. */
+  pictures: number;
+  /** About what those pictures add to the file, in bytes. */
+  pictureBytes: number;
+  /** Its Citations' cards stay text, as the User chose (`setSharePageTextOnly`). */
+  textOnly: boolean;
 }
 
 /** A Mind exported as a file, for the host to save where the User chooses. */
@@ -7086,7 +7327,24 @@ export interface CoreApi {
    */
   deleteLibraryGroup(groupId: string): Promise<FolderDeletion>;
   addLibraryStarterGroups(keys: string[]): Promise<void>;
-  saveLibrarySettings(settings: LibrarySettings): Promise<void>;
+  /**
+   * Saves the Tagging setting: the model for automatic tagging and Organize,
+   * and whether new and changed Documents are organized automatically. A
+   * classifier of null is Automatic; `organizeWith` left out stays as it was.
+   */
+  saveLibrarySettings(
+    settings: Omit<LibrarySettings, "classifier" | "organizeWith"> & {
+      classifier: LibraryClassifier | null;
+      organizeWith?: TaggingClassifier | null;
+    },
+  ): Promise<void>;
+  /**
+   * What the Tagging section shows: what Automatic tags with now and
+   * why, and the models the User can choose instead, grouped by where they
+   * run, with what each costs. Asks Ollama on this computer which decision
+   * models it has; sends nothing anywhere else.
+   */
+  getTaggingModels(): Promise<TaggingModels>;
   /**
    * Queues selected documents, or all. Organize suggests a Folder for each
    * (a Suggested Folder) and its Tags; manual assignments are preserved, and
@@ -7250,6 +7508,13 @@ export interface CoreApi {
   countScopeDocuments(scope?: SearchScope | null): Promise<number>;
   /** Stops an Answer of a conversation being written, keeping what it has. */
   stopConversationAnswer(input: ConversationAnswerInput): Promise<void>;
+  /**
+   * How many seconds the model of an Answer of a conversation usually takes
+   * before its Answers have words, from its latest ones to a Question of the
+   * same kind (one that asks to check or calculate, or not); null with too
+   * few to say (#899).
+   */
+  usualAnswerWait(answerId: string): Promise<number | null>;
   /**
    * The conversations that aren't deleted, newest first: all of them, or those of one
    * Folder (`folderId` null: Not in a Folder). Only the assistant's History lists them.
@@ -7633,6 +7898,12 @@ export interface CoreApi {
    * IncarnaMind didn't write.
    */
   setCountedAsEvidence(documentId: string, counted: boolean): Promise<Document>;
+  /**
+   * Keeps a Document as the User's own workings, or with false cites it as any
+   * Document again (see `Document.notCited`): its Undo, and its menu. Returns
+   * it, and "document.status" says so.
+   */
+  setNotCited(documentId: string, notCited: boolean): Promise<Document>;
   /** The built-in embedding model and its download. */
   getEmbeddingModel(): Promise<EmbeddingModelStatus>;
   /**
@@ -7998,7 +8269,23 @@ export interface CoreApi {
    * return, and the waiting `signInToChatGpt` finishes with it. A refused
    * address changes nothing.
    */
-  pasteChatGptSignInAddress(address: string): Promise<ChatGptPastedAddressResult>;
+  pasteChatGptSignInAddress(address: string): Promise<PastedAddressResult>;
+
+  getClaudeAccount(): Promise<ClaudeAccountStatus>;
+  /**
+   * Waits a few minutes at most for the browser or a pasted code. Signing in
+   * doesn't choose a model: saving the "claude-account" provider does, and
+   * allows its flows (ADR-0022).
+   */
+  signInToClaude(): Promise<ClaudeSignInResult>;
+  /** Stops waiting for a browser sign-in. Nothing is kept. */
+  cancelClaudeSignIn(): Promise<void>;
+  /** Opens the waiting sign-in's page in the browser again; false when none is waiting. */
+  reopenClaudeSignIn(): Promise<boolean>;
+  /** A saved Claude account then needs a new sign-in. */
+  signOutOfClaude(): Promise<ClaudeAccountStatus>;
+  /** Checked exactly as the browser's own return; a refused one changes nothing. */
+  pasteClaudeSignInAddress(address: string): Promise<PastedAddressResult>;
 
   /**
    * Every registered external data flow, to each service it currently goes to
@@ -8334,6 +8621,16 @@ export interface CoreApi {
    */
   exportMind(mindId: string, options: ExportMindOptions): Promise<MindExport>;
   /**
+   * What the Mind's web page to share would hold with these options (Questions, someone's changes
+   * waiting): its Documents, their quotes and pictures.
+   */
+  previewSharePage(mindId: string, options: ExportMindOptions): Promise<SharePagePreview>;
+  /**
+   * The Documents whose Citations the Mind's web page to share keeps as text, without their
+   * page pictures; kept with the Mind.
+   */
+  setSharePageTextOnly(mindId: string, documentIds: string[]): Promise<void>;
+  /**
    * Exports a Mind (as `exportMind`) into the Output location, under the
    * next free name, asking where new files go the first time.
    */
@@ -8570,6 +8867,8 @@ export interface CoreEvents {
   "references.importProgress": { done: number; total: number };
   /** The ChatGPT sign-in changed: started, finished, signed out, or expired. */
   "chatGptPlan.changed": ChatGptPlanStatus;
+  /** The Claude account sign-in changed: started, finished, signed out, or expired. */
+  "claudeAccount.changed": ClaudeAccountStatus;
   /** Jev was set up, changed or removed on this device. */
   "jev.changed": JevSettings;
   /**
@@ -8670,6 +8969,7 @@ const methods: Record<CoreApiMethod, true> = {
   regenerateConversationAnswer: true,
   countScopeDocuments: true,
   stopConversationAnswer: true,
+  usualAnswerWait: true,
   listConversations: true,
   getConversation: true,
   searchConversations: true,
@@ -8728,6 +9028,7 @@ const methods: Record<CoreApiMethod, true> = {
   searchPassages: true,
   searchEvidence: true,
   setCountedAsEvidence: true,
+  setNotCited: true,
   getEmbeddingModel: true,
   downloadEmbeddingModel: true,
   getEmbeddingSettings: true,
@@ -8798,6 +9099,12 @@ const methods: Record<CoreApiMethod, true> = {
   reopenChatGptSignIn: true,
   signOutOfChatGpt: true,
   pasteChatGptSignInAddress: true,
+  getClaudeAccount: true,
+  signInToClaude: true,
+  cancelClaudeSignIn: true,
+  reopenClaudeSignIn: true,
+  signOutOfClaude: true,
+  pasteClaudeSignInAddress: true,
   listDataFlows: true,
   listConsentRequests: true,
   respondToConsent: true,
@@ -8822,6 +9129,7 @@ const methods: Record<CoreApiMethod, true> = {
   deleteLibraryGroup: true,
   addLibraryStarterGroups: true,
   saveLibrarySettings: true,
+  getTaggingModels: true,
   classifyDocuments: true,
   assignDocumentGroup: true,
   acceptAssignments: true,
@@ -8887,6 +9195,8 @@ const methods: Record<CoreApiMethod, true> = {
   restoreBuiltInSkills: true,
   previewMindExport: true,
   exportMind: true,
+  previewSharePage: true,
+  setSharePageTextOnly: true,
   saveMindExport: true,
   formatCitations: true,
   getMindCitationStyle: true,

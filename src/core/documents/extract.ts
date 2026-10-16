@@ -14,6 +14,7 @@ import { isRecord } from "../errors";
 import { ExtractionError, extractUnits } from "./formats";
 import { type FigureReading, readWebPage, webUnits } from "./formats/web";
 import { passwordProblem } from "./pdfPasswords";
+import { printedPageNames } from "./printedPages";
 import { scannedUnit } from "./scan/layout";
 import { type CanvasFactory, isScanned, pagePicture } from "./scan/pages";
 import { PICTURE_LIMITS, pictureSize, pictureType } from "./web/pictures";
@@ -311,7 +312,12 @@ async function extractPdf(
       reading && scanned.length > 0
         ? await readScannedPages(document, pages, scanned, reading)
         : null;
-    return { pageCount: pages.length, units: pages, unread };
+    const names = printedPageNames(
+      await document.getPageLabels(),
+      pages.map((unit) => unit.text),
+    );
+    const units = pages.map((unit, index) => withPrintedName(unit, names[index] ?? null));
+    return { pageCount: pages.length, units, unread };
   } catch (error) {
     if (reading?.signal.aborted) throw reading.signal.reason;
     const name = error instanceof Error ? error.name : "";
@@ -323,6 +329,13 @@ async function extractPdf(
   } finally {
     await task.destroy();
   }
+}
+
+function withPrintedName(unit: TextUnit, name: string | null): TextUnit {
+  // A scanned page kept from an earlier read has the name that read gave it.
+  const { printed: _earlier, ...label } = unit.label ?? {};
+  const named = name === null ? label : { ...label, printed: name };
+  return { ...unit, label: Object.keys(named).length > 0 ? named : null };
 }
 
 /**

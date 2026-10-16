@@ -75,6 +75,7 @@ import {
 import type {
   AnswerPhase,
   CitationSupport,
+  ClaimedChange,
   FigureRetry,
   ProviderError,
   QuoteRetry,
@@ -95,7 +96,9 @@ import { createAiSdkRunEngine, reasoningReader } from "../runs/aiSdkEngine";
 import type {
   GateDecision,
   RunEngine,
+  RunEvent,
   RunMessage,
+  RunRequest,
   RunToolCall,
   RunWindow,
   TokenUsage,
@@ -108,6 +111,7 @@ import { retryFigures } from "./figureRetry";
 import { missingMarkerEvents, textEdits } from "./markerPlacement";
 import {
   datedDocumentsNote,
+  notCitedNote,
   SEARCH_QUERY_INSTRUCTIONS,
   searchQueryPrompt,
   TRANSLATE_QUERY_INSTRUCTIONS,
@@ -245,6 +249,12 @@ export interface AnswerTools {
    */
   correctQuote?(marker: number, quote: string): boolean;
   /**
+   * Whether the Answer wrote its text into a Mind: its Citations are
+   * there, so its reply only reports what was done, and no marker the model
+   * left out of the reply is placed in it, nor any asked for.
+   */
+  wroteIntoMind?(): boolean;
+  /**
    * Takes calculated figures (ADR-0021, ./calculations); returns what to tell
    * the model about them. Absent: the Answer offers no `calculate`.
    */
@@ -329,6 +339,13 @@ export interface AnswerRequest {
   question: string;
   /** The model to answer with, from `Core.prepareChatModel`. */
   model: ChatLanguageModel;
+  /**
+   * The quick-tasks model, for the calls that don't write the Answer:
+   * rewriting a follow-up Question into a search query, and translating the
+   * query. Asked for only when one is made; without it, or when it can't be
+   * had (e.g. its flow was declined), the Answer's model makes them.
+   */
+  quickModel?(): Promise<ChatLanguageModel>;
   /** Searching and citing the Documents: the Documents' Tools, and the search of a model without Tools. */
   documents: AnswerTools;
   /**
@@ -379,6 +396,22 @@ export interface AnswerRequest {
    * providers that route requests to a prompt cache by a key (see ../providers/promptCache).
    */
   cacheKey?: string;
+  /**
+   * Reads the reply once it is written: the changes to a Mind it claims
+   * that none of the Answer's Tool calls made, and what to tell the model so
+   * it writes the reply again; null when it claims none. In the Tool loop the
+   * model is asked once more with `note`; a reply that still claims one, or one
+   * written without Tools, ends with "claims-unbacked".
+   */
+  checkReply?(text: string): { claims: ClaimedChange[]; note: string } | null;
+  /**
+   * How much of a reply being written may show while it streams: up to the
+   * first sentence that may claim a change, which waits for `checkReply`.
+   * Absent: all of it.
+   */
+  shownUpTo?(text: string): number;
+  /** Whether a reply with no text still answers: the Answer changed a Mind, which its card reports. */
+  mayEndBlank?(): boolean;
   /** Stops generating. The stream then ends, with neither "finished" nor "failed". */
   signal: AbortSignal;
 }
@@ -449,6 +482,8 @@ export type AnswerEngineEvent =
   | { type: "read-third-party"; source: ReadThirdPartySource }
   /** A model call ended, with the tokens its provider counted, the cached ones too. */
   | { type: "usage"; usage: TokenUsage }
+  /** The reply claims these changes to a Mind, which none of the Answer's Tool calls made. */
+  | { type: "claims-unbacked"; claims: ClaimedChange[] }
   /** The Answer is complete. Nothing follows. */
   | { type: "finished" }
   /** The model or its provider failed. Nothing follows. */
@@ -703,13 +738,16 @@ const recordsSchema = {
 
 /** Records from the model's JSON, kept only where they have the right shape. */
 function parseRecords(value: unknown): CitationRecordInput[] {
-  // Some models send the array as a JSON string.
+  // Some models send the array as a JSON string, or one record alone.
   if (typeof value === "string") {
     try {
       return parseRecords(JSON.parse(value));
     } catch {
       return [];
     }
+  }
+  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+    return parseRecords([value]);
   }
   if (!Array.isArray(value)) return [];
   return value.flatMap((item): CitationRecordInput[] => {
@@ -762,6 +800,39 @@ function queryIn(reply: string): string {
     .slice(0, MAX_QUERY_LENGTH);
 }
 
+/** The model a call that doesn't write the Answer goes to, with the temperature it gets. */
+interface SmallCallModel {
+  model: ChatLanguageModel;
+  temperature: number | undefined;
+}
+
+/** What a call that doesn't write the Answer gave: its text, and the tokens it counted. */
+interface SmallCallResult<T> {
+  value: T;
+  usage: TokenUsage | null;
+}
+
+/**
+ * The quick-tasks model, else the Answer's (see `AnswerRequest.quickModel`).
+ * Another model than the Answer's runs at its provider's own temperature.
+ */
+async function smallCallModel(
+  request: AnswerRequest,
+  temperature: number | undefined,
+): Promise<SmallCallModel> {
+  if (request.quickModel) {
+    try {
+      const quick = await request.quickModel();
+      if (quick !== request.model) return { model: quick, temperature: undefined };
+    } catch (error) {
+      if (!request.signal.aborted) {
+        console.error(`The quick-tasks model couldn't be used: ${messageOf(error)}`);
+      }
+    }
+  }
+  return { model: request.model, temperature };
+}
+
 /**
  * What a model that can't call Tools searches for: the Question, rewritten by
  * the model into one query that stands on its own, from the Question context
@@ -772,14 +843,15 @@ function queryIn(reply: string): string {
  */
 async function searchQuery(
   request: AnswerRequest,
-  temperature: number | undefined,
-): Promise<string> {
+  small: () => Promise<SmallCallModel>,
+): Promise<SmallCallResult<string>> {
   const { question, signal } = request;
   const earlier = earlierContext(request.messages, question);
-  if (!earlier) return question;
+  if (!earlier) return { value: question, usage: null };
   try {
-    const { text } = await generateText({
-      model: request.model,
+    const { model, temperature } = await small();
+    const { text, usage } = await generateText({
+      model,
       instructions: SEARCH_QUERY_INSTRUCTIONS,
       prompt: searchQueryPrompt(earlier, question),
       temperature,
@@ -789,12 +861,12 @@ async function searchQuery(
       maxRetries: 0,
       abortSignal: signal,
     });
-    return queryIn(text) || question;
+    return { value: queryIn(text) || question, usage: tokenUsageOf(usage) };
   } catch (error) {
     if (!signal.aborted) {
       console.error(`The Question couldn't be rewritten for search: ${messageOf(error)}`);
     }
-    return question;
+    return { value: question, usage: null };
   }
 }
 
@@ -859,11 +931,12 @@ async function translatedQuery(
   request: AnswerRequest,
   query: string,
   language: string,
-  temperature: number | undefined,
-): Promise<string | null> {
+  small: () => Promise<SmallCallModel>,
+): Promise<SmallCallResult<string | null>> {
   try {
-    const { text } = await generateText({
-      model: request.model,
+    const { model, temperature } = await small();
+    const { text, usage } = await generateText({
+      model,
       instructions: TRANSLATE_QUERY_INSTRUCTIONS,
       prompt: translateQueryPrompt(query, language),
       temperature,
@@ -873,12 +946,15 @@ async function translatedQuery(
       abortSignal: request.signal,
     });
     const translated = queryIn(text);
-    return translated && translated !== query ? translated : null;
+    return {
+      value: translated && translated !== query ? translated : null,
+      usage: tokenUsageOf(usage),
+    };
   } catch (error) {
     if (!request.signal.aborted) {
       console.error(`The search query couldn't be translated: ${messageOf(error)}`);
     }
-    return null;
+    return { value: null, usage: null };
   }
 }
 
@@ -1047,15 +1123,25 @@ function createWritingEngine(options: AiSdkAnswerEngineOptions): AnswerEngine {
       let searched: SearchResultForModel | undefined;
       async function* searchOnce(): AsyncGenerator<AnswerEngineEvent, SearchResultForModel> {
         if (searched !== undefined) return searched;
-        const query = await searchQuery(request, temperature());
+        // The quick-tasks model is asked for once, and only if a call needs it.
+        let small: Promise<SmallCallModel> | undefined;
+        const smallModel = () => {
+          small ??= smallCallModel(request, temperature());
+          return small;
+        };
+        const rewrite = await searchQuery(request, smallModel);
+        if (rewrite.usage) yield { type: "usage", usage: rewrite.usage };
+        const query = rewrite.value;
         signal.throwIfAborted();
         const language = searchLanguage(
           request.question,
           request.documents.documentLanguages ?? [],
         );
-        const translated = language
-          ? await translatedQuery(request, query, language, temperature())
+        const translation = language
+          ? await translatedQuery(request, query, language, smallModel)
           : null;
+        if (translation?.usage) yield { type: "usage", usage: translation.usage };
+        const translated = translation?.value ?? null;
         signal.throwIfAborted();
         const searches: [string, string][] = [
           ["question-search", query],
@@ -1157,18 +1243,20 @@ function createWritingEngine(options: AiSdkAnswerEngineOptions): AnswerEngine {
 
 /**
  * Passes on an Answer's events, but an Answer that finishes with no text
- * fails as "no-answer" instead: a reply that ended empty, or whose stream
- * held nothing the provider could read, would otherwise be a blank Answer.
+ * fails as "no-answer" instead, unless `mayEndBlank`: a reply that ended
+ * empty, or whose stream held nothing the provider could read, would
+ * otherwise be a blank Answer.
  */
 async function* endedBlank(
   events: AsyncIterable<AnswerEngineEvent>,
-  model: AnswerRequest["model"],
+  request: AnswerRequest,
 ): AsyncGenerator<AnswerEngineEvent> {
+  const { model } = request;
   let text = "";
   for await (const event of events) {
     if (event.type === "text-delta") text += event.text;
     else if (event.type === "text-retracted") text = text.slice(0, -event.length);
-    if (event.type === "finished" && text.trim() === "") {
+    if (event.type === "finished" && text.trim() === "" && !request.mayEndBlank?.()) {
       console.warn(`The model sent no Answer: provider=${model.provider} model=${model.modelId}`);
       yield { type: "failed", error: { kind: "no-answer", message: "The model sent no Answer." } };
       return;
@@ -1179,7 +1267,7 @@ async function* endedBlank(
 
 export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}): AnswerEngine {
   const writer = createWritingEngine(options);
-  return { generate: (request) => endedBlank(writer.generate(request), request.model) };
+  return { generate: (request) => endedBlank(writer.generate(request), request) };
 }
 
 /** What one go of the Tool-calling loop keeps of its calls of the Documents' Tools. */
@@ -1245,6 +1333,7 @@ export function documentTools(
         // The dates are named from the Passages that fit, so never a Document the model wasn't handed.
         const notes = [
           datedDocumentsNote(result.text),
+          notCitedNote(result.text),
           unreadDocumentsNote(documents.unreadDocuments?.() ?? []),
         ];
         return [result.text, ...notes].filter((part) => part !== "").join("\n\n");
@@ -1486,12 +1575,56 @@ async function* toolLoop(
   const calls = new Map<string, Tool>();
   /** Searches running now: the Answer is "searching" while there are any. */
   let searching = 0;
-  for await (const event of engine.run({
+  /** The reply as first written, once the model is asked once more because it claims a change no call made. */
+  let first: string | null = null;
+  let again: readonly RunMessage[] | null = null;
+  /** Model calls made so far: asked once more, the model gets what is left of `maxSteps`. */
+  let steps = 0;
+  /** How much of `keptText + stepText` the Answer shows: a claim of a change waits until it is checked. */
+  let released = 0;
+  function* release(upTo: number): Generator<AnswerEngineEvent> {
+    const text = keptText + stepText;
+    const end = Math.min(upTo, text.length);
+    if (end <= released) return;
+    yield { type: "text-delta", text: text.slice(released, end) };
+    released = end;
+  }
+  const releasable = (text: string) => request.shownUpTo?.(text) ?? text.length;
+  function* flag(text: string): Generator<AnswerEngineEvent> {
+    const claims = request.checkReply?.(text)?.claims ?? [];
+    if (claims.length > 0) yield { type: "claims-unbacked", claims };
+  }
+  function* backToFirst(written: string): Generator<AnswerEngineEvent> {
+    if (released > 0) yield { type: "text-retracted", length: released };
+    released = 0;
+    keptText = written;
+    stepText = "";
+    yield* release(keptText.length);
+    yield* flag(keptText);
+  }
+  async function* endAnswer(): AsyncGenerator<AnswerEngineEvent> {
+    if (!request.documents.wroteIntoMind?.()) {
+      const placed = yield* missingMarkerEvents(keptText, cited, request.documents);
+      yield* citeUnmarked(request, placed, temperature, budget);
+    }
+    yield { type: "finished" };
+  }
+  const runTools = tools.map(tracked);
+  async function* runs(): AsyncGenerator<RunEvent> {
+    let history: readonly RunMessage[] = messages.map(runMessage);
+    for (;;) {
+      yield* engine.run(runRequest(history, Math.max(1, maxSteps - steps)));
+      if (!again) return;
+      history = [...history, ...again];
+      again = null;
+    }
+  }
+  const runRequest = (history: readonly RunMessage[], stepsLeft: number): RunRequest => ({
     model: request.model,
     instructions,
-    messages: messages.map(runMessage),
-    tools: tools.map(tracked),
-    maxSteps,
+    messages: history,
+    tools: runTools,
+    maxSteps: stepsLeft,
     cacheKey: request.cacheKey,
     gate: async (call) => {
       const tool = offered.get(call.tool);
@@ -1515,7 +1648,8 @@ async function* toolLoop(
       ),
     temperature,
     signal,
-  })) {
+  });
+  for await (const event of runs()) {
     if (signal.aborted) return;
     switch (event.type) {
       case "reasoning":
@@ -1526,7 +1660,7 @@ async function* toolLoop(
         // A new step's text goes on from the last kept text in a new paragraph.
         if (stepText === "" && keptText !== "" && !/\s$/.test(keptText)) text = `\n\n${text}`;
         stepText += text;
-        yield { type: "text-delta", text };
+        yield* release(releasable(keptText + stepText));
         break;
       }
       case "tool-input-started": {
@@ -1586,6 +1720,7 @@ async function* toolLoop(
         break;
       }
       case "step-finished": {
+        steps++;
         yield { type: "usage", usage: event.usage };
         // Text before a call with a Tool-call card (a search, a Skill, a Connector's Tool), or
         // before records or figures with no marker in it, was a preamble.
@@ -1596,7 +1731,9 @@ async function* toolLoop(
         // writes the Answer again.
         const again = answered && MARKER.test(stepText);
         if ((preamble || again) && stepText) {
-          yield { type: "text-retracted", length: stepText.length };
+          const shown = released - keptText.length;
+          if (shown > 0) yield { type: "text-retracted", length: shown };
+          released = Math.min(released, keptText.length);
           if (recorded && !stepTools.some((each) => !recording(each)) && !again)
             unmarked = stepText;
         } else {
@@ -1608,6 +1745,12 @@ async function* toolLoop(
         break;
       }
       case "refused":
+        // Asked once more, its first reply stands: trying another way now would call its Tools again.
+        if (first !== null) {
+          yield* backToFirst(first);
+          yield* endAnswer();
+          return;
+        }
         // Too long only with a window, so sized to one.
         yield event.what === "tools"
           ? { type: "unsupported" }
@@ -1621,19 +1764,37 @@ async function* toolLoop(
         return;
       case "failed":
         for (const source of unannounced.splice(0)) yield { type: "read-third-party", source };
+        if (first !== null) {
+          console.error(
+            `Asking again for a reply that claims changes failed: ${event.error.message}`,
+          );
+          yield* backToFirst(first);
+          yield* endAnswer();
+          return;
+        }
         yield { type: "failed", error: event.error };
         return;
-      case "finished":
-        if (keptText.trim() === "" && unmarked.trim() !== "") {
-          keptText = unmarked;
-          yield { type: "text-delta", text: unmarked };
+      case "finished": {
+        if (keptText.trim() === "" && unmarked.trim() !== "") keptText = unmarked;
+        const unbacked = request.checkReply?.(keptText) ?? null;
+        if (unbacked && first === null) {
+          first = keptText;
+          if (released > 0) yield { type: "text-retracted", length: released };
+          released = 0;
+          keptText = "";
+          stepText = "";
+          answered = false;
+          unmarked = "";
+          again = [...event.messages, { role: "user", text: unbacked.note }];
+          break;
         }
-        {
-          const placed = yield* missingMarkerEvents(keptText, cited, request.documents);
-          yield* citeUnmarked(request, placed, temperature, budget);
+        yield* release(keptText.length);
+        if (unbacked && unbacked.claims.length > 0) {
+          yield { type: "claims-unbacked", claims: unbacked.claims };
         }
-        yield { type: "finished" };
+        yield* endAnswer();
         return;
+      }
     }
   }
 }
@@ -1757,7 +1918,13 @@ async function* structured(
       if (signal.aborted) return;
     }
   }
+  yield* flagClaims(request, emitted);
   yield { type: "finished" };
+}
+
+function* flagClaims(request: AnswerRequest, text: string): Generator<AnswerEngineEvent> {
+  const unbacked = request.checkReply?.(text);
+  if (unbacked) yield { type: "claims-unbacked", claims: unbacked.claims };
 }
 
 /** A plain streamed Answer, with no Tools and no Citations. */
@@ -1769,7 +1936,7 @@ async function* plain(
 ): Attempt {
   const { signal } = request;
   const estimated = sized?.estimated;
-  let produced = false;
+  let produced = "";
   const reasoning = reasoningReader();
   try {
     const result = streamText({
@@ -1788,7 +1955,7 @@ async function* plain(
         if (event) yield event;
       } else if (part.type === "text-delta") {
         if (!part.text) continue;
-        produced = true;
+        produced += part.text;
         yield { type: "text-delta", text: part.text };
       } else if (part.type === "finish-step") {
         yield { type: "usage", usage: tokenUsageOf(part.usage) };
@@ -1805,5 +1972,7 @@ async function* plain(
     yield refused ?? { type: "failed", error: classifyProviderError(error) };
     return;
   }
-  if (!signal.aborted) yield { type: "finished" };
+  if (signal.aborted) return;
+  yield* flagClaims(request, produced);
+  yield { type: "finished" };
 }
