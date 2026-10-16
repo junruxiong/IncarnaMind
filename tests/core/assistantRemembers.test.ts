@@ -1,10 +1,11 @@
 import type { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, test } from "vitest";
-import * as Y from "yjs";
 import { EDIT_INSTRUCTIONS } from "../../src/core/edits/prompt";
+import { resolveInEditor } from "../../src/renderer/src/editor/proposalReview";
 import { pendingProposals } from "../../src/shared/proposals";
 import { askAssistant, changesIn } from "../helpers/assistant";
 import { createTempDataFolder, startCore } from "../helpers/core";
+import { boundEditor } from "../helpers/editor";
 import { connectToMind, type MindClient } from "../helpers/mindClient";
 import { heading, note, resolveChanges, shownWithChanges, writeMind } from "../helpers/minds";
 import {
@@ -214,26 +215,34 @@ describe("The assistant knows what the User did with its changes", { timeout: 60
     );
   });
 
-  // protects=changes the User rejected and then brought back with Undo read as waiting again, not as rejected; fails_when=the record says rejected while they wait; no_claim=none beyond protects.
-  test("a rejection taken back with Undo reads as waiting again", async () => {
+  // protects=a decision taken back with Undo in the editor takes its count with it, so a later decision reads as what it is: accept all, Undo, reject all reads as rejected, and reject all then Undo as waiting; fails_when=the counts stay (the rejection is lost as "none waiting any more", or a taken-back rejection reads as rejected); no_claim=none beyond protects.
+  test("Undo takes a decision's count back too", async () => {
     const sent: string[] = [];
     const { core, mind, client } = await setUp(addingModel("Late.\n\nVery late.", sent));
     const first = await askAssistant(core, { text: "add two lines", mindId: mind.id });
     await client.settled();
-    const undo = new Y.UndoManager(client.blocks, { trackedOrigins: new Set(["editor"]) });
-    await resolveChanges(client, "reject");
-    undo.undo();
-    await client.settled();
+    const editor = boundEditor(client);
+    const next = async () => {
+      await client.settled();
+      await askAssistant(core, {
+        text: "next",
+        mindId: mind.id,
+        conversationId: first.conversationId,
+      });
+      return sent.at(-1) ?? "";
+    };
+
+    resolveInEditor(editor, "all", "reject");
+    editor.commands.undo();
     expect(waitingIn(client)).toBe(2);
+    expect(await next()).toContain("proposed 2 new Blocks, waiting for the User");
 
-    await askAssistant(core, {
-      text: "next",
-      mindId: mind.id,
-      conversationId: first.conversationId,
-    });
-
-    expect(sent[0]).toContain("proposed 2 new Blocks, waiting for the User");
-    expect(sent[0]).not.toContain("rejected");
+    resolveInEditor(editor, "all", "accept");
+    editor.commands.undo();
+    expect(waitingIn(client)).toBe(2);
+    resolveInEditor(editor, "all", "reject");
+    expect(waitingIn(client)).toBe(0);
+    expect(await next()).toContain("proposed 2 new Blocks, then the User rejected all 2");
   });
 
   // protects=a made page whose Mind the User deleted after rejecting it reads as gone, not as waiting; fails_when=the record says it waits; no_claim=none beyond protects.

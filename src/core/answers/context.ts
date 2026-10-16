@@ -35,6 +35,7 @@ import {
   type MindNames,
   RECORD_BLOCK,
   TOOL_RECORD,
+  tellsOfChanges,
   toolRecord,
   withoutItsAnswer,
 } from "./toolRecord";
@@ -58,7 +59,6 @@ const SEARCH_QUERY_CONTEXT_TOKEN_BUDGET = 2_000;
 /** A Block's share of the budget that is too small to be worth keeping the tail of. */
 const MIN_TAIL_TOKENS = 64;
 
-/** The most of the history's budget the records of earlier Answers' Tool calls keep, newest first. */
 const RECORDS_SHARE = 0.5;
 
 interface Piece {
@@ -67,11 +67,12 @@ interface Piece {
   /** Where the third-party text in it came from (#78); absent: none. */
   origins?: readonly ThirdPartySource[];
   /**
-   * The record of an earlier Answer's Tool calls, kept whole or not at all.
-   * It outlasts the Answer's text (the piece of the same `answer`), which goes
-   * first when the budget runs out.
+   * The record of an earlier Answer's Tool calls, kept whole or not at all,
+   * and only with that Answer's text (the piece of the same `answer`) when it
+   * has any, unless it is `priority`: it tells of changes to a Mind that is
+   * still there, and outlasts the text.
    */
-  record?: { answer: string };
+  record?: { answer: string; alone: boolean; priority: boolean };
   /** An earlier Answer's text: its id, which its record names. */
   answer?: string;
 }
@@ -582,7 +583,13 @@ export function conversationContextOf(
         ? ""
         : answerMarkdown(message.text, message.citations, message.figures, documents);
     const recorded: Piece[] = record
-      ? [{ role: "user", text: record, record: { answer: message.id } }]
+      ? [
+          {
+            role: "user",
+            text: record,
+            record: { answer: message.id, alone: !text, priority: tellsOfChanges(record) },
+          },
+        ]
       : [];
     if (!text) return recorded;
     return [
@@ -616,11 +623,6 @@ function withMind(mind: string, kept: readonly Piece[], asked: string): AnswerMe
   return messages;
 }
 
-/**
- * The newest of `newestFirst` that fit in `remaining` tokens, and what is left;
- * the newest that doesn't fit whole keeps its end, marked as cut, when that is
- * worth keeping, and the rest are left out. A record of Tool calls is never cut.
- */
 function fitting(
   newestFirst: readonly Piece[],
   remaining: number,
@@ -628,8 +630,8 @@ function fitting(
   const chosen = new Map<Piece, Piece>();
   for (const piece of newestFirst) {
     if (remaining <= 0) break;
-    // A record counts as it reads without its Answer, which is the longer.
-    const cost = estimateTokens(piece.record ? withoutItsAnswer(piece.text) : piece.text);
+    // A record that outlasts its Answer's text counts as it reads without it, which is the longer.
+    const cost = estimateTokens(piece.record?.priority ? withoutItsAnswer(piece.text) : piece.text);
     if (cost <= remaining) {
       chosen.set(piece, piece);
       remaining -= cost;
@@ -646,40 +648,47 @@ function fitting(
 /**
  * The pieces above the Question that fit in `remaining` tokens, oldest first:
  * the oldest pieces are the ones left out, and the newest piece that doesn't
- * fit whole keeps its end, marked as cut, when that is worth keeping. With
- * records of Tool calls among them, those are kept first, newest first and
- * whole or not at all, up to `RECORDS_SHARE` of the budget, so an Answer's
- * text goes before its record does. Those before the first of the User's are
- * left out too: a conversation starts with the User.
+ * fit whole keeps its end, marked as cut, when that is worth keeping. The
+ * records of changes to a Mind that is still there are kept first, newest
+ * first and whole or not at all, up to `RECORDS_SHARE` of the budget, and
+ * outlast their Answer's text. Every other record goes with its Answer, as
+ * Answer text does. Those before the first of the User's are left out too: a
+ * conversation starts with the User.
  */
 function keptWithinBudget(newestFirst: Iterable<Piece>, remaining: number): Piece[] {
   const pieces = [...newestFirst];
+  const first = pieces.filter((piece) => piece.record?.priority);
   let chosen: Map<Piece, Piece>;
-  if (pieces.some((piece) => piece.record)) {
+  if (first.length > 0) {
     const share = Math.floor(remaining * RECORDS_SHARE);
-    const records = fitting(
-      pieces.filter((piece) => piece.record),
-      share,
-    );
+    const records = fitting(first, share);
     const rest = fitting(
-      pieces.filter((piece) => !piece.record),
+      pieces.filter((piece) => !piece.record?.priority),
       remaining - (share - records.left),
     );
     chosen = new Map([...records.chosen, ...rest.chosen]);
   } else {
     chosen = fitting(pieces, remaining).chosen;
   }
-  const kept = pieces
-    .filter((piece) => chosen.has(piece))
-    .reverse()
-    .map((piece) => chosen.get(piece) as Piece);
+  const kept = pieces.toReversed().flatMap((piece) => {
+    const there = chosen.get(piece);
+    return there ? [there] : [];
+  });
   while (kept[0]?.role === "assistant") kept.shift();
   const answers = new Set(kept.flatMap((piece) => (piece.answer ? [piece.answer] : [])));
-  return kept.map((piece) =>
-    piece.record && !answers.has(piece.record.answer)
-      ? { ...piece, text: withoutItsAnswer(piece.text) }
-      : piece,
-  );
+  return kept
+    .filter(
+      (piece) =>
+        !piece.record ||
+        piece.record.priority ||
+        piece.record.alone ||
+        answers.has(piece.record.answer),
+    )
+    .map((piece) =>
+      piece.record?.priority && !piece.record.alone && !answers.has(piece.record.answer)
+        ? { ...piece, text: withoutItsAnswer(piece.text) }
+        : piece,
+    );
 }
 
 /** The kept pieces, then the Question, as messages: one per run of the same role, as providers expect roles to alternate. */
@@ -781,7 +790,11 @@ function piecesOf(messages: readonly AnswerMessage[]): Piece[] {
       pieces.push({
         role: "user",
         text: found[0],
-        record: { answer: follows ? String(index - 1) : "" },
+        record: {
+          answer: follows ? String(index - 1) : "",
+          alone: !follows,
+          priority: tellsOfChanges(found[0]),
+        },
       });
       at = start + found[0].length;
     }

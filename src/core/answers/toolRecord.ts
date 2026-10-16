@@ -108,7 +108,7 @@ function decisions(total: number, accepted: number, rejected: number): string {
  */
 function fateOf(proposals: number, state: ChangeState | null): string {
   if (!state) return "waiting for the User";
-  if (state.gone) return "but the Mind is no longer there";
+  if (state.gone) return GONE;
   const { waiting, accepted, rejected } = state;
   if (waiting >= proposals) return "waiting for the User";
   const did =
@@ -200,6 +200,7 @@ export function toolRecordLines(
   });
 }
 
+const GONE = "but the Mind is no longer there";
 const WITH_ITS_ANSWER =
   "What the Tools of your Answer above really did, as IncarnaMind recorded it:";
 const WITHOUT_ITS_ANSWER =
@@ -227,12 +228,16 @@ export function toolRecord(
   return ["<tool-record>", WITH_ITS_ANSWER, ...lines, "</tool-record>"].join("\n");
 }
 
-/** A record read without the Answer it follows, which the context has left out. */
 export const withoutItsAnswer = (record: string): string =>
   record.replace(WITH_ITS_ANSWER, WITHOUT_ITS_ANSWER);
 
-/** A record's block, as a message holds it. */
 export const RECORD_BLOCK = /<tool-record>[\s\S]*?<\/tool-record>/g;
 
-/** A record's block and the blank lines after it: what reads a message for anything but the model leaves out. */
+/** A record's block, as a message holds it: what reads it for anything but the model leaves it out. */
 export const TOOL_RECORD = /<tool-record>[\s\S]*?<\/tool-record>\s*/g;
+
+/** Whether a record tells of changes to a Mind that is still there: the one thing worth keeping after its Answer's text. */
+export const tellsOfChanges = (record: string): boolean =>
+  record
+    .split("\n")
+    .some((line) => / proposed \d+ (?:changes?|new Blocks?)/.test(line) && !line.includes(GONE));
