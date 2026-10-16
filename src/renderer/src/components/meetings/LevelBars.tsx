@@ -18,7 +18,7 @@ const MICROPHONE_PROBLEMS: Partial<Record<MeetingSourceState, MessageKey>> = {
 };
 
 /**
- * Small level bars that move with the voices while a Meeting records (#839): the one thing that
+ * Small level bars that move with the voices while a Meeting records: the one thing that
  * moves, so the User knows they're heard, as voice input's meter does. With reduced motion they
  * hold still and only change height. When the microphone fails, a warning mark says what to do.
  * `onStop`: hovered or focused, they become Stop (the folded panel).

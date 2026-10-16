@@ -18,7 +18,7 @@ import {
 } from "./app";
 
 /**
- * One-click help during a call (#839), on the scripted chat model and the fake capture and
+ * One-click help during a call, on the scripted chat model and the fake capture and
  * transcriber every smoke test gets: the floating panel above the meeting with the buttons and
  * the latest suggestion, the buttons at the top of the assistant, the shortcuts held only while
  * a meeting records, and the level bars. Set INCARNAMIND_SCREENSHOTS to a folder to also save
@@ -52,7 +52,6 @@ test.afterEach(async () => {
 const core = (window: Page) =>
   window.evaluateHandle(() => (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind);
 
-/** The floating panel's page, once its window is open. */
 async function panelOf(app: ElectronApplication): Promise<Page> {
   const find = () => app.windows().find((page) => page.url().includes("meetingPanel.html"));
   await expect.poll(() => find() !== undefined, { timeout: 15_000 }).toBe(true);
@@ -76,7 +75,6 @@ async function recordingMeeting(window: Page) {
   return bar;
 }
 
-/** Presses a button in the panel and waits for its options. */
 async function pressIn(page: Page, name: string): Promise<Locator> {
   const button = page.getByTestId("help-button").filter({ hasText: name });
   await pointAndClick(page, button);
@@ -106,12 +104,30 @@ test("help during the call: the floating panel above the meeting gives one or tw
   });
   await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
-  await useLocalChatModel(window);
   const bar = await recordingMeeting(window);
+
+  // With no AI model yet, the assistant and the panel each say so in one line, with Set up.
+  await window.getByTestId("mind-editor").click();
+  await expect(window.getByTestId("meeting-set-up")).toHaveText(
+    "Choose an AI model to get help during the call · Set up",
+  );
+  const panel = await panelOf(app);
+  await pointAndClick(
+    panel,
+    panel.getByTestId("help-button").filter({ hasText: "Say no politely" }),
+  );
+  await expect(panel.getByTestId("help-set-up")).toHaveText(
+    "Choose an AI model to get help during the call · Set up",
+  );
+  await useLocalChatModel(window);
+  await expect(window.getByTestId("meeting-starter")).toHaveText([
+    "Recap the last 5 minutes",
+    "What should I ask next?",
+    "Action items so far",
+  ]);
 
   // The panel opened with the recording: above other windows, never focused, kept out of
   // capture where the system can.
-  const panel = await panelOf(app);
   const panelWindow = await app.browserWindow(panel);
   const state = () =>
     panelWindow.evaluate((win) => ({

@@ -15,7 +15,7 @@ import { useAppStore } from "../store";
 import type { Command } from "./registry";
 
 /*
- * Help during a call (#839), from ⌘K: each button, asked in the assistant; showing or hiding
+ * Help during a call, from ⌘K: each button, asked in the assistant; showing or hiding
  * the floating panel; and the meeting's template, which adds buttons for its kind.
  */
 

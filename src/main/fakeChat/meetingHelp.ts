@@ -1,5 +1,5 @@
 /**
- * Help during a call (#839): a button's Question gets the shape it asks for. Options cite the
+ * Help during a call: a button's Question gets the shape it asks for. Options cite the
  * first Passage found ahead in the User's Documents, its line in the recommended option, and
  * without one, they cite nothing; readings and lines cite the transcript's newest line. In
  * Chinese when the button's name is.
@@ -16,7 +16,6 @@ import {
 
 const HELP = /pressed a button for help/;
 
-/** The text between `<tag>` and `</tag>` in the Question's message; "" without them. */
 const block = (text: string, tag: string) =>
   new RegExp(`<${tag}>\\n([\\s\\S]*?)\\n</${tag}>`).exec(text)?.[1] ?? "";
 

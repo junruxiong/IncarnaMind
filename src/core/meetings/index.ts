@@ -177,7 +177,7 @@ export function createMeetings(options: MeetingsOptions) {
   let live: Live | null = null;
   /** Whether each Meeting has audio on disk, looked up once. */
   const kept = new Map<string, boolean>();
-  /** For the call's help (#839), kept in memory: it matters only while the Meeting is live. */
+  /** For the call's help, kept in memory: it matters only while the Meeting is live. */
   const help = new Map<string, MeetingHelp>();
   const templates = new Map<string, MeetingHelpTemplate>();
 
@@ -826,7 +826,7 @@ export function createMeetings(options: MeetingsOptions) {
       changed();
     },
 
-    /** Help was asked for during the call (#839): the panel shows its Answer. */
+    /** Help was asked for during the call: the panel shows its Answer. */
     helped(meetingId: string, given: MeetingHelp): void {
       if (!isLiveRow(rowOf(meetingId))) return;
       help.set(meetingId, given);

@@ -70,7 +70,7 @@ export interface Command {
   /** Keys the row binds itself (Enter or F2 renames, ⇧⌘M moves), shown in menus; #224 and #225 make them shortcuts. */
   rowKeys?: ShortcutKeys;
   /**
-   * A global shortcut the main process holds for it while a meeting records (#839), as this
+   * A global shortcut the main process holds for it while a meeting records, as this
    * system writes it; the window never binds it. Null: none.
    */
   globalKeys?(): string | null;

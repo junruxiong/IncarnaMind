@@ -317,7 +317,7 @@ export interface GatedCall extends RunToolCall {
  *   whatever the request brings, so the text it checks can't steer a write or
  *   a send;
  * - "documents": the Documents' Tools as an Answer has them, and nothing the
- *   request brings: help during a call (#839), which reads a transcript
+ *   request brings: help during a call, which reads a transcript
  *   someone else spoke.
  */
 export type ToolSet = "answer" | "check" | "documents";

@@ -1120,7 +1120,7 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
      */
     show,
 
-    /** Searches the Answer's Search scope as its search Tool does, for Passages to `show` (#839). */
+    /** Searches the Answer's Search scope as its search Tool does, for Passages to `show`. */
     find: (query: string, signal?: AbortSignal, options?: AnswerSearchOptions) =>
       documents.search(query, signal, undefined, options),
 

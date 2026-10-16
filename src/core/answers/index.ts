@@ -362,7 +362,7 @@ export interface AnswersOptions {
    */
   liveTranscript(mindId: string): Promise<WindowedPassage[] | null>;
   /**
-   * The help button (#839) a Question in a conversation is, asked from a Mind whose Meeting
+   * The help button a Question in a conversation is, asked from a Mind whose Meeting
    * records or is paused: its text is the button's name. Null for any other Question.
    */
   meetingHelp?(mindId: string, question: string): MeetingHelpKind | null;
@@ -718,7 +718,7 @@ export function createAnswers(options: AnswersOptions) {
      */
     listening?: () => Promise<WindowedPassage[] | null>;
     /**
-     * One-click help during the call (#839): the button pressed. Its Answer is laid out as
+     * One-click help during the call: the button pressed. Its Answer is laid out as
      * the panel reads it, and is offered the Documents' Tools only.
      */
     help?: MeetingHelpKind;
@@ -767,7 +767,6 @@ export function createAnswers(options: AnswersOptions) {
     /** It listened to a meeting's live transcript: the Question went with it. */
     let listening = false;
     const { help } = input;
-    /** Passages of the User's Documents found ahead for a help button's Question. */
     let foundAhead = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
     let finished = false;
@@ -1379,7 +1378,7 @@ export function createAnswers(options: AnswersOptions) {
           listening = true;
         }
         // Help gets what the User's Documents say about the newest lines at once, with no search
-        // the model has to call first (#839).
+        // the model has to call first.
         if (help && kept.length > 0) {
           const transcript = new Set(kept.map((passage) => passage.documentId));
           try {

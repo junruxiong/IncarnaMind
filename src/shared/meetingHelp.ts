@@ -1,5 +1,5 @@
 /**
- * One-click help during a call (#839): the buttons, in the floating panel and
+ * One-click help during a call: the buttons, in the floating panel and
  * at the top of the assistant, each a short Question about the call whose
  * Answer is one or two options to say.
  */

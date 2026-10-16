@@ -5327,7 +5327,7 @@
   }
 
   /*
-   * Help during a call (#839; the canvas boards Meet-Help-*): the buttons, in the floating
+   * Help during a call (the canvas boards Meet-Help-*): the buttons, in the floating
    * panel two to a row with their keys, and at the top of the assistant as a strip; then a
    * suggestion: one or two options, the recommended first and starred, each with what it
    * leads to, read in a second or two.
@@ -5552,7 +5552,7 @@
   }
 
   /*
-   * The level bars while a Meeting records (#839; the canvas board Meet-Polish-Live): the one
+   * The level bars while a Meeting records (the canvas board Meet-Polish-Live): the one
    * thing that moves, so the User knows they're heard. Their heights change; nothing slides.
    */
   .level-meter {

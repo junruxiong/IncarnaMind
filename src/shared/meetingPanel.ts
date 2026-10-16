@@ -1,5 +1,5 @@
 /**
- * The floating panel during a call (#839): a small window above the meeting
+ * The floating panel during a call: a small window above the meeting
  * app, with the help buttons and the latest suggestion. It shares the app's
  * preload, which gives its page the core and this bridge for the argument.
  */

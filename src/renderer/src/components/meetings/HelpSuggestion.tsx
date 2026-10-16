@@ -14,7 +14,7 @@ import { quoted, type ReplyItem, type ReplyPiece, readHelpReply } from "../../he
 import { useT } from "../../i18n";
 import { CheckLineIcon, DocumentLineIcon } from "../lineIcons";
 
-/** A help Answer (#839), as the core writes it: loaded once, then each write as it streams. */
+/** A help Answer, as the core writes it: loaded once, then each write as it streams. */
 export function useHelpAnswer(
   help: { conversationId: string; answerId: string } | null,
 ): ConversationAnswer | null {
@@ -46,7 +46,6 @@ export function useHelpAnswer(
   return answer;
 }
 
-/** A Citation's marker as a chip: its number, and a tick once its quote is found. */
 function CitationChip({ citation, marker }: { citation?: MarkedCitation; marker: number }) {
   const t = useT();
   const where = citation ? citedLocation(citation, t) : null;
@@ -179,7 +178,6 @@ export function HelpHeading({
   );
 }
 
-/** The Documents and transcript moments a suggestion cites, one line each. */
 function Sources({ answer, markers }: { answer: ConversationAnswer; markers: readonly number[] }) {
   const t = useT();
   const cited = markers.flatMap((marker) => {

@@ -2526,7 +2526,7 @@ export function createCore(adapters: CoreAdapters): Core {
       ) ?? null
     );
   };
-  /** The conversation each live Meeting's help went to last (#839): the panel's goes on there. */
+  /** The conversation each live Meeting's help went to last: the panel's goes on there. */
   const helpConversations = new Map<string, string>();
   const askMeetingHelp = async (input: unknown): Promise<ConversationAskResult> => {
     if (!isRecord(input)) throw new InvalidInputError("askMeetingHelp expects an object.");

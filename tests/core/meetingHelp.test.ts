@@ -1,5 +1,5 @@
 /**
- * One-click help during a call (#839), through the core's public interface as the floating
+ * One-click help during a call, through the core's public interface as the floating
  * panel and the assistant ask: a button's Question goes with the live transcript, the shape its
  * Answer takes and what the User's Documents say about the newest lines, found ahead; the
  * Meeting names its latest help, the line it answers and the conversation it went to; the
