@@ -306,6 +306,30 @@ describe("What the model is told of each change", { timeout: 30_000 }, () => {
     expect(read[0]?.[1]).toContain("They wait in the Mind for the User");
   });
 
+  // protects=a request to write tags what it writes, not a rewrite of the User's own text the model also makes, which waits and is told so; fails_when=the rewrite is tagged or told it applied; no_claim=that a real model makes both calls.
+  test("“add a risks section” tags the section, and a rewrite of the User's text alongside it waits", async () => {
+    const { model, read } = editing(
+      {
+        calls: [
+          { tool: "add_to_mind", input: { content: "## Risks\n\nThe supplier is late." } },
+          { tool: "edit_mind", input: { part: "The quarter was", instruction: "Make it longer" } },
+        ],
+      },
+      (passage) => `${passage} Margins held.`,
+    );
+    const { core, mind } = await setUp(model);
+
+    const answer = await askAssistant(core, { text: "add a risks section", mindId: mind.id });
+
+    const page = await connectToMind(core, mind.id);
+    await page.settled();
+    const [added, rewritten] = changesIn(answer);
+    expect(proposalRequestOf(page.doc, added?.request ?? "")).toMatchObject({ requested: "write" });
+    expect(proposalRequestOf(page.doc, rewritten?.request ?? "")).not.toHaveProperty("requested");
+    expect(read[0]?.[0]).toContain("applies in the Mind at once");
+    expect(read[0]?.[1]).toContain("They wait in the Mind for the User");
+  });
+
   // protects=text an unclear request wrote, still waiting, revised by a request the User asked for, still waits: what it revises wasn't asked for; fails_when=the revision is tagged; no_claim=none beyond protects.
   test("a revision of an unclear request's waiting text isn't asked for", async () => {
     const model = scriptedModel((call): ScriptedReply => {

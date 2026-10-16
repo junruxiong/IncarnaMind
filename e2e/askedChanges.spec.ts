@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
+import type { CoreBridge } from "../src/core/api";
 import {
   askInAssistant,
   assistantAnswers,
@@ -83,6 +84,15 @@ test("“write a summary page” makes the page with the summary applied, “mak
   await pointAndClick(window, line.getByTestId("applied-done"));
   await expect(paragraphs).toHaveText([`${SPRING} It says more.`, `${NEAP} It says more.`]);
 
+  // Review on the first card shows the summary that Answer wrote, not the later change.
+  await pointAndClick(window, assistantAnswers(window).first().getByTestId("mind-changes-review"));
+  await expect(line.getByTestId("applied-count")).toHaveText(/made by the assistant$/);
+  await expect(editor.locator(".applied-new").filter({ hasText: "Spring tides" })).toHaveCount(1);
+  await expect(editor.locator(".applied-new").filter({ hasText: /^ It says more\.$/ })).toHaveCount(
+    0,
+  );
+  await pointAndClick(window, line.getByTestId("applied-done"));
+
   const longer = [`${SPRING} It says more.`, `${NEAP} It says more.`];
   // The Answer `askInAssistant` gave is the last one, whichever that is now.
   const summary = assistantAnswers(window).first();
@@ -131,7 +141,7 @@ test("“write a summary page” makes the page with the summary applied, “mak
   await expect(summary.getByTestId("mind-changes-undone")).toHaveText("Undone");
 });
 
-test("an Answer written again applies what was asked as the first did, and its card can undo it", async () => {
+test("an Answer written again replaces what it applied with what it writes now, and its card can undo it", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
   await useLocalChatModel(window);
@@ -144,15 +154,20 @@ test("an Answer written again applies what was asked as the first did, and its c
 
   const answer = await askInAssistant(window, "make it longer");
   await expect(paragraphs).toHaveText([`${SPRING} It says more.`, `${NEAP} It says more.`]);
+  const firstWrite = await changeRequestOf(window);
   await openSteps(window, answer);
   await pointAndClick(window, answer.getByTestId("answer-regenerate"));
-  await expect(paragraphs).toHaveText([
-    `${SPRING} It says more. It says more.`,
-    `${NEAP} It says more. It says more.`,
-  ]);
+  await expect
+    .poll(async () => {
+      const now = await changeRequestOf(window);
+      return now !== null && now !== firstWrite;
+    })
+    .toBe(true);
+  await expect(answer.getByTestId("mind-changes-undo")).not.toHaveAttribute("aria-disabled");
+  await expect(paragraphs).toHaveText([`${SPRING} It says more.`, `${NEAP} It says more.`]);
   await expect(editor.locator("ins.proposal-insert, del.proposal-delete")).toHaveCount(0);
   await pointAndClick(window, answer.getByTestId("mind-changes-undo"));
-  await expect(paragraphs).toHaveText([`${SPRING} It says more.`, `${NEAP} It says more.`]);
+  await expect(paragraphs).toHaveText([SPRING, NEAP]);
   await expect(answer.getByTestId("mind-changes-undone")).toHaveText("Undone");
 });
 
@@ -208,6 +223,19 @@ test("a rewrite that would take out most of the User's own text waits, in Englis
   await window.keyboard.press("ControlOrMeta+z");
   await expect(paragraphs).toHaveText(NOTES);
 });
+
+/** The request the newest Answer's change made, once that Answer is done; null before. */
+function changeRequestOf(window: Page): Promise<string | null> {
+  return window.evaluate(async () => {
+    const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    const [conversation] = await core.listConversations();
+    if (!conversation) return null;
+    const { messages } = await core.getConversation(conversation.id);
+    const answer = messages.filter((message) => message.kind === "answer").at(-1);
+    if (answer?.kind !== "answer" || answer.status !== "done") return null;
+    return answer.toolCalls.find((call) => call.mindChange)?.mindChange?.request ?? null;
+  });
+}
 
 /** A new Mind, its title and its Notes typed as a person types them. */
 async function writeMind(window: Page, title: string, notes: readonly string[]): Promise<void> {

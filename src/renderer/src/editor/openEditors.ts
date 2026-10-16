@@ -8,7 +8,6 @@ import type { Editor } from "@tiptap/core";
 const open = new Map<string, Editor[]>();
 const waiting = new Map<string, ((editor: Editor) => void)[]>();
 
-/** While a Mind's editor is mounted. Returns what ends it. */
 export function registerMindEditor(mindId: string, editor: Editor): () => void {
   open.set(mindId, [...(open.get(mindId) ?? []), editor]);
   for (const resolve of waiting.get(mindId) ?? []) resolve(editor);

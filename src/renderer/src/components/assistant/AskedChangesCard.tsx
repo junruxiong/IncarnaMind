@@ -141,7 +141,7 @@ function AppliedActions({
           <button
             type="button"
             data-testid="mind-changes-review"
-            onClick={() => void reviewAsked(mindId)}
+            onClick={() => void reviewAsked(answerId, mindId)}
             className="mind-changes-review"
           >
             {t("edit.applied.review")}

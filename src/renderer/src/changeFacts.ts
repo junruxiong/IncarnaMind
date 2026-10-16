@@ -30,7 +30,6 @@ export function leftText(
   return waiting === 1 ? t("mindChanges.left.one") : t("mindChanges.left", { count: waiting });
 }
 
-/** The facts in words, with the Mind's name, or without it (`null`) for the Mind's own line. */
 export function changeFact(t: Translate, row: ChangeCounts, name: string | null): string {
   const count = row.wrote + row.changed;
   if (row.tables > 0) return tablesFact(t, row, name);

@@ -15,7 +15,7 @@ import type * as Y from "yjs";
 import { create } from "zustand";
 import type { ConversationAnswer } from "../../core/api";
 import { askedFor } from "../../shared/askedChanges";
-import { actOnAppliedEdit, applyArrived, onAskedApplied } from "./appliedEdits";
+import { type AppliedAsked, applyArrived, onAskedApplied } from "./appliedEdits";
 import { type ChangedMind, changedMinds } from "./changedMinds";
 import { readMindHandle } from "./commands/handles";
 import { core } from "./core";
@@ -38,10 +38,9 @@ interface Asked {
   answerId: string;
   mindId: string;
   requests: ReadonlySet<string>;
-  followed: FollowedSteps | null;
+  applied: AppliedAsked | null;
 }
 
-/** By Answer and Mind (`keyOf`). */
 const asked = new Map<string, Asked>();
 const askedHere = new Set<string>();
 const seen = new Set<string>();
@@ -59,10 +58,18 @@ function setOutcome(answerId: string, mindId: string, outcome: AskedOutcome): vo
   }));
 }
 
-/** An Answer this window asked for, or asks for again: what it was asked to write or change applies here. */
+/**
+ * An Answer this window asked for, or asks for again: what it was asked to write or change
+ * applies here. Asked again, what it applied before makes way for what it writes now, while
+ * nothing was done in the Mind since.
+ */
 export function applyWhatWasAsked(answerId: string): void {
   askedHere.add(answerId);
-  for (const [key, each] of asked) if (each.answerId === answerId) asked.delete(key);
+  for (const [key, each] of asked) {
+    if (each.answerId !== answerId) continue;
+    if (each.applied?.followed.onTop()) each.applied.followed.undo();
+    asked.delete(key);
+  }
   for (const key of seen) if (key.startsWith(`${answerId} `)) seen.delete(key);
   useAskedChanges.setState((state) => {
     const outcomes = { ...state.outcomes };
@@ -129,7 +136,7 @@ async function finish(answer: ConversationAnswer): Promise<void> {
       answerId: answer.id,
       mindId: row.mindId,
       requests,
-      followed: null,
+      applied: null,
     });
     if (applyArrived(editor, row.mindId, requests, row) === "held") {
       setOutcome(answer.id, row.mindId, "held");
@@ -137,16 +144,15 @@ async function finish(answer: ConversationAnswer): Promise<void> {
   }
 }
 
-onAskedApplied((mindId, requests, followed) => {
+onAskedApplied((mindId, requests, applied) => {
   for (const each of asked.values()) {
     if (each.mindId !== mindId || ![...requests].some((request) => each.requests.has(request)))
       continue;
-    each.followed = followed;
+    each.applied = applied;
     setOutcome(each.answerId, mindId, "applied");
   }
 });
 
-/** Where the changes an Answer applied in a Mind are now, as Undo and Redo in it move them. */
 export type AskedState = "can-undo" | "changed-since" | "undone" | "closed";
 
 function stateOf(followed: FollowedSteps | null): AskedState {
@@ -157,7 +163,7 @@ function stateOf(followed: FollowedSteps | null): AskedState {
 }
 
 export function useAskedState(answerId: string, mindId: string): AskedState {
-  const followed = asked.get(keyOf(answerId, mindId))?.followed ?? null;
+  const followed = asked.get(keyOf(answerId, mindId))?.applied?.followed ?? null;
   const subscribe = useCallback(
     (changed: () => void) => followed?.observe(changed) ?? (() => undefined),
     [followed],
@@ -165,17 +171,14 @@ export function useAskedState(answerId: string, mindId: string): AskedState {
   return useSyncExternalStore(subscribe, () => stateOf(followed));
 }
 
-/** Undo on the Answer's card: what it applied in the Mind, while nothing was done there since. */
 export function undoAsked(answerId: string, mindId: string): void {
-  const followed = asked.get(keyOf(answerId, mindId))?.followed;
+  const followed = asked.get(keyOf(answerId, mindId))?.applied?.followed;
   if (followed?.onTop()) followed.undo();
 }
 
-/** Review changes on the Answer's card: the Mind, with what was applied shown again. */
-export async function reviewAsked(mindId: string): Promise<void> {
+export async function reviewAsked(answerId: string, mindId: string): Promise<void> {
   await useAppStore.getState().openMind(mindId);
-  const editor = mindEditor(mindId) ?? (await whenMindEditor(mindId, OPEN_WAIT_MS));
-  if (editor) actOnAppliedEdit(editor, "review");
+  asked.get(keyOf(answerId, mindId))?.applied?.review();
 }
 
 core.on("conversation.message", (message) => {
