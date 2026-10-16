@@ -10,7 +10,7 @@ import { waitForProcessing } from "../helpers/documents";
 import { connectToMind, type MindClient } from "../helpers/mindClient";
 import { readMind, writeMind } from "../helpers/minds";
 import { type ModelCall, type ScriptedReply, scriptedModel } from "../helpers/models";
-import { startWeb, webSearchingModel } from "../helpers/web";
+import { connectorTo, startWeb, webSearchingModel } from "../helpers/web";
 
 const TIDES: SourceFile = {
   name: "Tides.md",
@@ -66,6 +66,26 @@ const PLANS: Record<string, Plan> = {
   },
 };
 
+const MEMO: SourceFile = {
+  name: "Memo on payment rights.md",
+  contents: [
+    "# Memo on payment rights",
+    "",
+    "To the client team, from the construction group, 4 March 2025. This note sets out where we stand on lien rights on the Brazos job and what we recommend before the next payment falls due, so that nobody is surprised.",
+    "",
+    `${LIEN}. See ${CITATION}.`,
+  ].join("\n"),
+};
+
+const CLIENT_ALERT: SourceFile = {
+  name: "Client alert 2017.md",
+  contents: [
+    "# Client alert",
+    "",
+    `Hallmark Builders and Rio Grande Supply went to the Supreme Court of Texas this year, and the court gave its view. ${LIEN}.`,
+  ].join("\n"),
+};
+
 const OPINION_ADDRESS = "http://opinions.example/hallmark";
 const FILLER = Array.from(
   { length: 6 },
@@ -81,7 +101,6 @@ const paragraph = (text: string): JSONContent & { attrs: { id: string } } => ({
   content: [{ type: "text", text }],
 });
 
-/** Checks the sentences of one paragraph of a new Mind, and gives each check as its mark holds it. */
 async function checkParagraph(
   core: Core,
   sentences: readonly string[],
@@ -104,14 +123,13 @@ async function checkParagraph(
 }
 
 const summary = (checks: readonly ClaimCheckAttributes[]) =>
-  checks.map((each) => [each.text, each.state, each.citedDecision]);
+  checks.map((each) => [each.text, each.state, each.citedCaseUnchecked, each.citedCaseFound]);
 
 async function checked(sentences: readonly string[], files: readonly SourceFile[]) {
   const setup = await setUpWithDocuments(scriptedChecker(), files);
   return checkParagraph(setup.core, sentences);
 }
 
-/** The model that checks as `PLANS` say, and the web research an Answer does for `OPINION_ADDRESS`. */
 function scriptedChecker(calls: ModelCall[] = []): MockLanguageModelV4 {
   return scriptedModel(
     (call: ModelCall): ScriptedReply => {
@@ -141,8 +159,8 @@ describe("A sentence that cites a court decision", () => {
     const checks = await checked([INVENTED, PENGUINS], [TIDES]);
 
     expect(summary(checks)).toEqual([
-      [INVENTED, "unsupported", "missing"],
-      [PENGUINS, "unsupported", null],
+      [INVENTED, "unsupported", true, false],
+      [PENGUINS, "unsupported", false, false],
     ]);
   });
 
@@ -150,8 +168,8 @@ describe("A sentence that cites a court decision", () => {
     const checks = await checked([LIEN_CITED, PENGUINS_CITED], [TIDES, OPINION]);
 
     expect(summary(checks)).toEqual([
-      [LIEN_CITED, "supported", "held"],
-      [PENGUINS_CITED, "unsupported", null],
+      [LIEN_CITED, "supported", false, true],
+      [PENGUINS_CITED, "unsupported", false, false],
     ]);
     expect(checks[0]?.evidence).toMatchObject({
       documentName: "Hallmark Builders v Rio Grande Supply",
@@ -159,29 +177,63 @@ describe("A sentence that cites a court decision", () => {
     });
   });
 
+  test.each([
+    ["a memo that cites it", MEMO],
+    ["a client alert that names both parties", CLIENT_ALERT],
+  ])(
+    "is not found in %s: the sentence it backs stays Supported, and its cited case is unchecked",
+    async (_what, file) => {
+      const checks = await checked([LIEN_CITED], [TIDES, file]);
+
+      expect(summary(checks)).toEqual([[LIEN_CITED, "supported", true, false]]);
+    },
+  );
+
   test("finds a slip opinion with no reporter citation, whatever words come before the case's name", async () => {
     const checks = await checked([LIEN_UNDER], [TIDES, SLIP_OPINION]);
 
-    expect(summary(checks)).toEqual([[LIEN_UNDER, "supported", "held"]]);
+    expect(summary(checks)).toEqual([[LIEN_UNDER, "supported", false, true]]);
   });
 
-  test("that another Document supports stays Supported, and its decision stays unchecked", async () => {
+  test("that another Document supports stays Supported, and its cited case is flagged unchecked", async () => {
     const checks = await checked([HARBOUR_CITED], [TIDES]);
 
-    expect(summary(checks)).toEqual([[HARBOUR_CITED, "supported", "missing"]]);
+    expect(summary(checks)).toEqual([[HARBOUR_CITED, "supported", true, false]]);
   });
 });
 
 describe("A saved web page as the opinion", { timeout: 30_000 }, () => {
-  /** A core whose model also searches the web, with a Mind to ask in. */
-  async function setUp(calls: ModelCall[] = []) {
+  async function setUp(calls: ModelCall[] = [], gated = false) {
     const web = await startWeb({ "/hallmark": () => ({ status: 200, body: OPINION_PAGE }) });
+    let release = () => {};
+    let reach = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const reached = new Promise<void>((resolve) => {
+      reach = resolve;
+    });
+    const connect = connectorTo(web.port);
+    const adapters = gated
+      ? {
+          web: {
+            ...web.adapters.web,
+            connector: (lookup: Parameters<typeof connect>[0]) => {
+              const inner = connect(lookup);
+              return (...args: Parameters<typeof inner>) => {
+                reach();
+                void gate.then(() => inner(...args));
+              };
+            },
+          },
+        }
+      : web.adapters;
     const { model } = webSearchingModel(scriptedChecker(calls), [
       { url: OPINION_ADDRESS, title: "Hallmark Builders v. Rio Grande Supply" },
     ]);
     const core = startCore(await createTempDataFolder(), {
       createChatModel: () => model,
-      ...web.adapters,
+      ...adapters,
     });
     const provider = await core.saveChatProvider({
       kind: "anthropic",
@@ -194,7 +246,7 @@ describe("A saved web page as the opinion", { timeout: 30_000 }, () => {
     await core.updateSettings({ user: { webSearch: true } });
     const asking = await core.createMind({ title: "Research" });
     const client = await connectToMind(core, asking.id);
-    return { core, asking, client, web };
+    return { core, asking, client, web, reached, release };
   }
 
   async function searchSavesOpinion(core: Core, asking: { id: string }, client: MindClient) {
@@ -213,12 +265,34 @@ describe("A saved web page as the opinion", { timeout: 30_000 }, () => {
 
     const [check] = await checkParagraph(core, [LIEN_CITED]);
 
-    expect(check).toMatchObject({ state: "supported", citedDecision: "held" });
+    expect(check).toMatchObject({
+      state: "supported",
+      citedCaseUnchecked: false,
+      citedCaseFound: true,
+    });
     expect(check?.evidence).toMatchObject({
       documentId: saved.document.id,
       documentName: "Hallmark Builders v. Rio Grande Supply",
       quote: `${LIEN}.`,
     });
+  });
+
+  test("the User saving an address while a web search is saving it makes the page theirs", async () => {
+    const { core, asking, client, reached, release } = await setUp([], true);
+    const asked = askAndFinish(
+      core,
+      client,
+      asking.id,
+      "Search the web: Hallmark Builders v. Rio Grande",
+    );
+    await reached;
+    const saving = core.saveWebPage({ address: OPINION_ADDRESS });
+    release();
+    await Promise.all([asked, saving]);
+
+    const pages = await core.listDocuments();
+    expect(pages).toHaveLength(1);
+    expect(pages[0]?.web?.origin).toBe("user");
   });
 
   test("a page a web search saved never does: nothing it holds is shown to the check", async () => {
@@ -228,7 +302,11 @@ describe("A saved web page as the opinion", { timeout: 30_000 }, () => {
 
     const [cited] = await checkParagraph(core, [INVENTED]);
 
-    expect(cited).toMatchObject({ state: "unsupported", citedDecision: "missing", evidence: null });
+    expect(cited).toMatchObject({
+      state: "unsupported",
+      citedCaseUnchecked: true,
+      evidence: null,
+    });
     expect(calls.length).toBeGreaterThan(0);
     const shown = (list: readonly ModelCall[]) =>
       list.flatMap((call) => call.results.map((result) => result.text));
@@ -236,7 +314,7 @@ describe("A saved web page as the opinion", { timeout: 30_000 }, () => {
 
     calls.length = 0;
     const [plain] = await checkParagraph(core, [LIEN_PLAIN]);
-    expect(plain).toMatchObject({ state: "supported", citedDecision: null });
+    expect(plain).toMatchObject({ state: "supported", citedCaseUnchecked: false });
     expect(shown(calls).filter((text) => text.includes(LIEN))).not.toEqual([]);
   });
 
@@ -249,6 +327,10 @@ describe("A saved web page as the opinion", { timeout: 30_000 }, () => {
     expect(again).toMatchObject({ outcome: "saved", existing: true });
     expect((await core.listDocuments())[0]?.web?.origin).toBe("user");
     const [check] = await checkParagraph(core, [LIEN_CITED]);
-    expect(check).toMatchObject({ state: "supported", citedDecision: "held" });
+    expect(check).toMatchObject({
+      state: "supported",
+      citedCaseUnchecked: false,
+      citedCaseFound: true,
+    });
   });
 });

@@ -182,7 +182,6 @@ export function currentLookHash(db: Database, documentId: string): string | null
   return latest?.look_status === "saved" && isLookHash(latest.look_hash) ? latest.look_hash : null;
 }
 
-/** The User saving an address a web search saved already makes it theirs. */
 export function claimForUser(db: Database, documentId: string, at: string): void {
   db.run(
     `UPDATE web_pages SET origin = 'user', updated_at = ?

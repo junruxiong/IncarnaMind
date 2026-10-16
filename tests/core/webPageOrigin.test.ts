@@ -4,9 +4,11 @@ import { migrations } from "../../src/core/storage/migrations";
 
 test("a page saved before its origin was kept reads as a web search's, until the User saves its address again", () => {
   const db = openDatabase(":memory:");
+  const addsOrigin = migrations.find((each) => each.sql.includes("web_pages ADD COLUMN origin"));
+  if (!addsOrigin) throw new Error("No migration adds web_pages.origin.");
   migrate(
     db,
-    migrations.filter((each) => each.version < 95),
+    migrations.filter((each) => each.version < addsOrigin.version),
   );
   const at = "2026-10-01T09:00:00.000Z";
   db.run(

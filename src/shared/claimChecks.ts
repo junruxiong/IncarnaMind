@@ -8,7 +8,6 @@ import {
   type CalculatedFigure,
   type CheckedVersion,
   type CitationAttributes,
-  type CitedDecision,
   type ClaimCalculation,
   type ClaimCheckAction,
   type ClaimCheckAttributes,
@@ -40,8 +39,6 @@ const FAILURES: readonly ClaimCheckFailure[] = [
   "failed",
   "stopped",
 ];
-
-const CITED_DECISIONS: readonly CitedDecision[] = ["held", "missing"];
 
 const EXCLUSIONS: readonly EvidenceExclusion[] = ["own-file", "checked-document"];
 
@@ -110,7 +107,8 @@ export function readClaimCheck(value: unknown): ClaimCheckAttributes | null {
     evidence: isRecord(value.evidence) ? (value.evidence as unknown as CitationAttributes) : null,
     says: text(value.says),
     calculation: calculationOf(value.calculation),
-    citedDecision: CITED_DECISIONS.find((each) => each === value.citedDecision) ?? null,
+    citedCaseUnchecked: value.citedCaseUnchecked === true,
+    citedCaseFound: value.citedCaseFound === true,
     scope: scopeOf(value.scope),
     versions: versionsOf(value.versions),
     excluded: excludedOf(value.excluded),

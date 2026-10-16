@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { caseCitations, citedCases, namesDecision } from "../../src/shared/caseCitations";
+import { caseCitations, citedCases, isOpinionOf } from "../../src/shared/caseCitations";
 
 describe("Court decisions a sentence cites", () => {
   test.each([
@@ -112,6 +112,36 @@ describe("Court decisions a sentence cites", () => {
     expect(caseCitations(sentence)).toEqual([expect.objectContaining({ cite })]);
   });
 
+  test.each([
+    [
+      "The case arose in the U.S.",
+      "Brown v. Board of Education, 347 U.S. 483 (1954), decided it.",
+      "Brown v. Board of Education",
+    ],
+    [
+      "The buyer was Acme Co.",
+      "Smith v. Jones, 12 F.3d 5 (1st Cir. 1994), is cited.",
+      "Smith v. Jones",
+    ],
+  ])(
+    "an abbreviation ending the sentence before doesn't start the name: %j",
+    (before, cited, name) => {
+      const text = `${before} ${cited}`;
+      const [found] = citedCases(text);
+      expect(found?.name).toBe(name);
+      expect(text.slice(0, found?.from).trim()).toBe(before);
+    },
+  );
+
+  test.each([
+    ["Palsgraf v. Long Island R.R. Co., 248 N.Y. 339 (1928).", "Palsgraf v. Long Island R.R. Co."],
+    ["Acme Co. v. Widget Corp., 25 F. Supp. 2d 345 (S.D.N.Y. 1998).", "Acme Co. v. Widget Corp."],
+    ["U.S. v. Smith, 12 F.3d 5 (1st Cir. 1994).", "U.S. v. Smith"],
+    ["J. Smith v. Jones, 12 F.3d 5 (1st Cir. 1994).", "J. Smith v. Jones"],
+  ])("an abbreviation inside a party's name stays in it: %j", (sentence, name) => {
+    expect(caseCitations(sentence)).toEqual([expect.objectContaining({ name })]);
+  });
+
   test("finds each of the decisions a sentence cites, in order", () => {
     expect(
       caseCitations(
@@ -153,44 +183,100 @@ describe("Court decisions a sentence cites", () => {
   });
 });
 
-describe("Whether a text names a decision", () => {
+describe("Whether a Document is the opinion of a decision", () => {
   const hallmark = { name: "Hallmark Builders v. Rio Grande Supply", cite: "512 S.W.3d 101" };
+  const document = (name: string, start = "") => ({ name, start });
+  const PREAMBLE =
+    "To: the client team. From: the construction group. Date: 4 March 2025. Subject: payment rights on the Brazos job. This note sets out where we stand on lien rights and what we recommend before the next payment is due. ";
 
   test.each([
-    "Hallmark Builders, Inc., Petitioner, v. Rio Grande Supply Co., Respondent. No. 15-0123",
-    "hallmark_builders_v_rio_grande_supply_2017.pdf",
-    "Reported at 512 S.W.3d 101 (Tex. 2017)",
-  ])("%j does", (text) => {
-    expect(namesDecision(text, hallmark)).toBe(true);
+    document("Hallmark Builders v Rio Grande Supply.pdf"),
+    document("hallmark_builders_v_rio_grande_supply_2017.pdf"),
+    document(
+      "Opinion 15-0123.pdf",
+      "Supreme Court of Texas. Hallmark Builders, Inc., Petitioner, v. Rio Grande Supply Co., Respondent. No. 15-0123.",
+    ),
+    document(
+      "Opinion.pdf",
+      "IN THE SUPREME COURT OF TEXAS\n\nHallmark Builders, Inc.,\nPetitioner,\nv.\nRio Grande Supply Co.,\nRespondent.",
+    ),
+    document("Slip.pdf", "Cite as 512 S.W.3d 101 (Tex. 2017). Opinion of the Court."),
+    document("512 S.W.3d 101.pdf"),
+  ])("%j is, by its caption or its citation at its head", (found) => {
+    expect(isOpinionOf(found, hallmark)).toBe(true);
   });
 
   test.each([
-    "Hallmark Builders v. Rio Grande Supply, Opinion of the Court, Supreme Court of Texas",
-    "hallmark_builders_v_rio_grande_supply_2017.pdf",
-  ])(
-    "a slip opinion with no reporter citation, %j, names a decision cited with words before it",
-    (text) => {
-      for (const sentence of [
-        "Under Hallmark Builders v. Rio Grande Supply, 512 S.W.3d 101 (Tex. 2017), it attaches.",
-        "In Hallmark Builders v. Rio Grande Supply, 512 S.W.3d 101 (Tex. 2017), it attached.",
-      ]) {
-        const [decision] = caseCitations(sentence);
-        expect(decision && namesDecision(text, decision)).toBe(true);
-      }
-    },
-  );
-
-  test.each([
-    "Rio Grande Supply Co. invoiced Hallmark Roofing.",
-    "Lease.pdf",
-    "See 512 S.W.3d 1010 for another case.",
-  ])("%j doesn't", (text) => {
-    expect(namesDecision(text, hallmark)).toBe(false);
+    [
+      "a memo that cites the case further in",
+      document(
+        "Memo.pdf",
+        `${PREAMBLE}A supplier lien attaches on delivery: Hallmark Builders v. Rio Grande Supply, 512 S.W.3d 101 (Tex. 2017).`,
+      ),
+    ],
+    [
+      "a client alert that names both parties without a v.",
+      document(
+        "Client alert 2017.pdf",
+        "Client alert: Hallmark Builders and Rio Grande Supply went to the Supreme Court of Texas.",
+      ),
+    ],
+    [
+      "a note that mentions both parties far apart",
+      document(
+        "Notes.pdf",
+        "Hallmark Builders was paid late on three jobs this year, and the owners have asked about Rio Grande Supply, the supplier on the Tulsa job.",
+      ),
+    ],
+    [
+      "an unrelated Document",
+      document("Lease.pdf", "Rio Grande Supply Co. invoiced Hallmark Roofing."),
+    ],
+    ["another case's citation", document("Other.pdf", "See 512 S.W.3d 1010 for another case.")],
+  ])("%s isn't", (_what, found) => {
+    expect(isOpinionOf(found, hallmark)).toBe(false);
   });
 
-  test("a decision with no name is named by its citation alone", () => {
+  test("two people named Smith and Jones in a Document don't make it the opinion of Smith v. Jones", () => {
+    const decision = { name: "Smith v. Jones", cite: "10 F.3d 1" };
+    expect(
+      isOpinionOf(
+        document("Minutes.pdf", "Mr Smith met Ms Jones at the harbour office."),
+        decision,
+      ),
+    ).toBe(false);
+    expect(
+      isOpinionOf(document("Smith v. Jones.pdf", "The Court of Appeals, First Circuit."), decision),
+    ).toBe(true);
+  });
+
+  test("a slip opinion with no reporter citation is the opinion of a case cited with words before it", () => {
+    for (const sentence of [
+      "Under Hallmark Builders v. Rio Grande Supply, 512 S.W.3d 101 (Tex. 2017), it attaches.",
+      "In Hallmark Builders v. Rio Grande Supply, 512 S.W.3d 101 (Tex. 2017), it attached.",
+    ]) {
+      const [decision] = caseCitations(sentence);
+      expect(
+        decision &&
+          isOpinionOf(
+            document(
+              "opinion-15-0123.pdf",
+              "Hallmark Builders, Inc., Petitioner, v. Rio Grande Supply Co.",
+            ),
+            decision,
+          ),
+      ).toBe(true);
+    }
+  });
+
+  test("a decision with no name is the opinion that its citation heads", () => {
     const neutral = { name: null, cite: "[2024] UKSC 5" };
-    expect(namesDecision("Judgment given on 5 March 2024 [2024] UKSC 5", neutral)).toBe(true);
-    expect(namesDecision("The UKSC sat in 2024", neutral)).toBe(false);
+    expect(
+      isOpinionOf(
+        document("Judgment.pdf", "[2024] UKSC 5. Judgment given on 5 March 2024."),
+        neutral,
+      ),
+    ).toBe(true);
+    expect(isOpinionOf(document("Notes.pdf", "The UKSC sat in 2024"), neutral)).toBe(false);
   });
 });

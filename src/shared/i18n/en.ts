@@ -597,6 +597,8 @@ export const en = {
   "claim.courtDecision.title": "This cites a court decision.",
   "claim.courtDecision.body":
     "IncarnaMind can't check that the case exists or that it says this. Look it up in your legal research service before you rely on it.",
+  "claim.citedCaseUnchecked":
+    "The case this sentence cites isn't in your Documents, so it hasn't been checked. Look it up in your legal research service before you rely on it.",
   "claim.courtDecision.held":
     "This cites a court decision. The quoted words were found in your saved copy of the opinion ({document}, {location}). Whether it has been overruled or changed isn't checked: look it up in your legal research service before you rely on it.",
   "claim.fixSentence": "Fix the sentence",
@@ -2873,6 +2875,7 @@ export const en = {
     "Contradicted: your Documents give {shown}, and the sentence says {stated}.",
   "export.comment.sentence.contradicted.plain": "Contradicted by your Documents.",
   "export.comment.sentence.unsupported": "Unsupported: nothing in your Documents says this.",
+  "export.comment.sentence.citedCaseUnchecked": "Cited case not checked: not in the Documents.",
   "export.comment.sentence.unsupported.folder": "Unsupported: nothing in “{folder}” says this.",
   "export.comment.sentence.unsupported.differs":
     "Unsupported: your Documents say something different (“{quote}”, {source})",

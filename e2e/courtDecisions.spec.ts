@@ -1,6 +1,5 @@
 import { writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
-import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import { formatShortDate } from "../src/shared/dates";
@@ -35,6 +34,9 @@ test.afterEach(async () => {
 const TIDES = buildPdf([
   { lines: ["Harbour times", "Harbours publish the times of high water every 12 months."] },
 ]);
+const HARBOURS = buildPdf([
+  { lines: ["Harbour times", "Harbours publish the times of high water every year."] },
+]);
 const OPINION = buildPdf([
   {
     lines: [
@@ -47,6 +49,7 @@ const OPINION = buildPdf([
 const CITATION = "Hallmark Builders v. Rio Grande Supply, 512 S.W.3d 101 (Tex. 2017)";
 const INVENTED = `See ${CITATION}.`;
 const BESIDE = "Penguins nest on the harbour cliffs.";
+const BACKED = `Harbours publish the times of high water every year, see ${CITATION}.`;
 const HELD = `A supplier lien attaches when the materials are delivered to the job site, see ${CITATION}.`;
 
 const WORDS = {
@@ -54,6 +57,8 @@ const WORDS = {
     title: "This cites a court decision.",
     body: "IncarnaMind can't check that the case exists or that it says this. Look it up in your legal research service before you rely on it.",
     nothing: "Nothing in your Documents says this.",
+    unchecked:
+      "The case this sentence cites isn't in your Documents, so it hasn't been checked. Look it up in your legal research service before you rely on it.",
     held: (document: string, location: string) =>
       `This cites a court decision. The quoted words were found in your saved copy of the opinion (${document}, ${location}). Whether it has been overruled or changed isn't checked: look it up in your legal research service before you rely on it.`,
     page: "p. 1",
@@ -62,13 +67,14 @@ const WORDS = {
     title: "本句引用了法院判决。",
     body: "IncarnaMind 无法核对这个判决是否存在、是否这样说。依赖它之前，请在你使用的法律数据库中查一下。",
     nothing: "你的文档中没有内容提到这一点。",
+    unchecked:
+      "本句引用的判决不在你的文档中，因此尚未核对。依赖它之前，请在你使用的法律数据库中查一下。",
     held: (document: string, location: string) =>
-      `这里引用了一项法院判决。引用的文字在你保存的判决书副本中找到（${document}，${location}）。它是否已被推翻或修改没有核对，引用前请在你的法律检索服务中查证。`,
+      `本句引用了法院判决。引用的文字已在你保存的判决书副本中找到（${document}，${location}）。之后有没有法院推翻或修改这个判决，尚未核对；依赖它之前，请在你使用的法律数据库中查一下。`,
     page: "第 1 页",
   },
 } as const;
 
-/** Types each text as a paragraph of its own, selects them all and runs Find support on them. */
 async function findSupportFor(window: Page, texts: readonly string[], firstWords: string) {
   const editor = window.getByTestId("mind-editor");
   await editor.click();
@@ -134,6 +140,30 @@ for (const language of ["en", "zh-CN"] as const) {
     await app.close();
   });
 
+  test(`a Supported sentence whose cited case is in no Document stays Supported, and its card says the citation isn't checked (${language})`, async () => {
+    test.setTimeout(120_000);
+    const words = WORDS[language];
+    await writeFile(join(sources, "Harbours.pdf"), HARBOURS);
+    const { app, window } = await launchApp(dataDir, { fakeChat: true, home: sources });
+    await setWindowSize(app, window, 1440, 900);
+    await dismissChatSetup(window);
+    await useLocalChatModel(window);
+    await setLanguage(window, language);
+    await addDocuments(window, [join(sources, "Harbours.pdf")]);
+    await newMind(window);
+    await findSupportFor(window, [BACKED], "Harbours publish");
+    const marks = window.getByTestId("claim-mark");
+    await expect(marks.first()).toHaveAttribute("data-check", "supported");
+
+    await pointAndClick(window, marks.first());
+    const card = window.getByTestId("claim-card");
+    await expect(card.getByTestId("claim-badge")).toHaveAttribute("data-check", "supported");
+    await expect(card.getByTestId("claim-cited-case-unchecked")).toHaveText(words.unchecked);
+    await expect(card.getByTestId("claim-court-decision")).toHaveCount(0);
+    await expect(card.getByTestId("claim-court-decision-held")).toHaveCount(0);
+    await app.close();
+  });
+
   test(`a cited court decision whose opinion is among the Documents is checked against it, and the card says where it was found (${language})`, async () => {
     test.setTimeout(120_000);
     const words = WORDS[language];
@@ -160,6 +190,7 @@ for (const language of ["en", "zh-CN"] as const) {
       words.held("Hallmark Builders v Rio Grande Supply", words.page),
     );
     await expect(card.getByTestId("claim-court-decision")).toHaveCount(0);
+    await expect(card.getByTestId("claim-cited-case-unchecked")).toHaveCount(0);
     await expect(card.getByTestId("claim-web-source")).toHaveCount(0);
     await app.close();
   });
@@ -188,7 +219,9 @@ test.describe("a web page the User saved", () => {
       }
     });
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-    port = (server.address() as AddressInfo).port;
+    const bound = server.address();
+    if (bound === null || typeof bound === "string") throw new Error("The server has no port.");
+    port = bound.port;
   });
   test.afterEach(async () => {
     server.closeAllConnections();
@@ -237,6 +270,7 @@ test.describe("a web page the User saved", () => {
         "title",
         savedPageSource({ address, savedAt }, language, t, { compact: false }),
       );
+      await expect(card.getByTestId("claim-cited-case-unchecked")).toHaveCount(0);
       await expect(card.getByTestId("claim-court-decision-held")).toContainText(
         language === "en" ? `(${OPINION_TITLE}, ` : `（${OPINION_TITLE}，`,
       );

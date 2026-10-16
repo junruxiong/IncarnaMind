@@ -48,6 +48,8 @@ describe("The sentences of a paragraph", () => {
       "The plan is Plan A.",
       "In Hallmark v. Rio Grande, 512 S.W.3d 101 (Tex. 2017), it was upheld.",
     ],
+    ["The case arose in the U.S.", "Brown v. Board of Education, 347 U.S. 483 (1954), decided it."],
+    ["The buyer was Acme Co.", "Smith v. Jones, 12 F.3d 5 (1st Cir. 1994), is cited."],
   ])("the sentence before a citation stays apart from it: %j", (before, cited) => {
     expect(sentences(`${before} ${cited}`)).toEqual([before, cited]);
   });
