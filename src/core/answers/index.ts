@@ -134,6 +134,7 @@ import {
   topLevelBlocks,
 } from "./blocks";
 import { answerLanguage, createCalculationSession } from "./calculations";
+import { asksToCheckOrCalculate } from "./carefulIntent";
 import {
   type AnswerDocuments,
   createCitationSession,
@@ -345,7 +346,7 @@ export interface AnswersOptions {
   /** Whether Questions can be asked with this model (the default one when undefined). */
   readiness(choice: ChatModelChoice | undefined): Promise<ChatReadiness>;
   /** The model, once the User has accepted its data flow (see `Core.prepareChatModel`). */
-  prepareModel(choice: ChatModelChoice): Promise<PreparedChatModel>;
+  prepareModel(choice: ChatModelChoice, thinking?: "careful"): Promise<PreparedChatModel>;
   /** Searching the User's Documents, and what Citations point to. */
   documents: DocumentsForAnswers;
   /** The ids of the live Documents a Search scope covers; null with no Search scope (every Document). */
@@ -1263,7 +1264,10 @@ export function createAnswers(options: AnswersOptions) {
       if (consenting) showPhase();
       let prepared: PreparedChatModel;
       try {
-        prepared = await options.prepareModel(model);
+        prepared = await options.prepareModel(
+          model,
+          asksToCheckOrCalculate(context.question) ? "careful" : undefined,
+        );
       } catch (error) {
         finish({ status: "failed", error: failureOf(error) });
         return;
