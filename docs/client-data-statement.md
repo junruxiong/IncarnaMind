@@ -19,7 +19,7 @@ Paste the paragraphs under "For your engagement letter" and fill in the brackets
   - A searchable text copy of each document is kept in the app's data folder.
   - After 30 days a deleted item leaves only a small record that it existed.
   - Usage data and crash reports are off unless you agree; test builds you were invited to may send usage data by default.
-  - Connectors you add may still be reached when "Keep everything on this computer" is on.
+  - When "Keep everything on this computer" is on, Connectors on other computers are paused. A Connector that runs on this computer keeps working and may reach the internet itself.
 
 ## For your engagement letter
 

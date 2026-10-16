@@ -9,6 +9,7 @@ import {
   kindOfCatalogId,
 } from "../../../../core/providers/catalog/providers";
 import { OLLAMA_CLOUD } from "../../../../core/providers/ollamaCloud";
+import { isSignInRoute, SIGN_IN_ROUTES } from "../../../../core/providers/signInRoutes";
 import type { MessageKey, MessageParams } from "../../../../shared/i18n";
 
 type Translate = (key: MessageKey, params?: MessageParams) => string;
@@ -25,13 +26,13 @@ export function testErrorKey(kind: ProviderErrorKind): MessageKey {
   }
 }
 
-/** What to configure before Questions can be asked, in words. */
-export function readinessKey(
-  reason: Extract<ChatReadiness, { ready: false }>["reason"],
-): MessageKey {
-  return reason === "sign-in-required"
-    ? "chatgpt.readiness.sign-in-required"
-    : `providers.readiness.${reason}`;
+/** What to configure before Questions can be asked, in words: a sign-in names its provider. */
+export function readinessKey(readiness: Extract<ChatReadiness, { ready: false }>): MessageKey {
+  if (readiness.reason !== "sign-in-required") return `providers.readiness.${readiness.reason}`;
+  const { kind } = readiness.provider;
+  return isSignInRoute(kind)
+    ? SIGN_IN_ROUTES[kind].problems["signed-out"].line
+    : "chatgpt.readiness.sign-in-required";
 }
 
 export function keyProviderName(id: string, t: Translate, language: Language): string {

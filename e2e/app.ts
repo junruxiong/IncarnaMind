@@ -102,6 +102,8 @@ export interface LaunchOptions {
    * standing in for OpenAI (tests/helpers/fakeOpenAI.ts). A test build honours it.
    */
   chatGpt?: string;
+  /** A local stand-in for GitHub and Copilot at this origin, where the Copilot plan signs in and asks. */
+  copilot?: string;
   /**
    * Where the Claude account signs in and asks: the origin of a local server
    * standing in for Anthropic (tests/helpers/fakeAnthropic.ts). A test build honours it.
@@ -195,6 +197,7 @@ export async function launchApp(
     chatGpt,
     claude,
     claudeSignInMs,
+    copilot,
     keepWindow = false,
     computerSound = "allowed",
     transcriber,
@@ -229,6 +232,7 @@ export async function launchApp(
   delete env.INCARNAMIND_TEST_CHATGPT;
   delete env.INCARNAMIND_TEST_CLAUDE;
   delete env.INCARNAMIND_TEST_CLAUDE_SIGN_IN_MS;
+  delete env.INCARNAMIND_TEST_COPILOT;
   delete env.INCARNAMIND_TEST_TRANSCRIBER_OPTIONS;
   delete env.INCARNAMIND_TEST_SCANS;
   delete env.INCARNAMIND_TEST_WEB;
@@ -256,6 +260,7 @@ export async function launchApp(
   if (chatGpt) env.INCARNAMIND_TEST_CHATGPT = chatGpt;
   if (claude) env.INCARNAMIND_TEST_CLAUDE = claude;
   if (claudeSignInMs) env.INCARNAMIND_TEST_CLAUDE_SIGN_IN_MS = String(claudeSignInMs);
+  if (copilot) env.INCARNAMIND_TEST_COPILOT = copilot;
   if (scans) env.INCARNAMIND_TEST_SCANS = scans;
   if (web) env.INCARNAMIND_TEST_WEB = String(web);
   if (lookLimit) env.INCARNAMIND_TEST_LOOK_LIMIT = String(lookLimit);
@@ -1264,11 +1269,17 @@ export async function pointAndClick(
     modifiers = [],
   }: { button?: "left" | "right"; modifiers?: readonly ("ControlOrMeta" | "Shift")[] } = {},
 ): Promise<void> {
-  await target.scrollIntoViewIfNeeded();
-  const box = await target.boundingBox();
+  // A list that redraws as the click begins swaps the element for an equal one: look again.
+  let box: Awaited<ReturnType<Locator["boundingBox"]>> = null;
+  await expect(async () => {
+    await target.scrollIntoViewIfNeeded();
+    box = await target.boundingBox();
+    if (!box) throw new Error("The element isn't visible.");
+  }).toPass();
   if (!box) throw new Error("The element isn't visible.");
-  const x = box.x + box.width / 2;
-  const y = box.y + box.height / 2;
+  const { x: left, y: top, width, height } = box;
+  const x = left + width / 2;
+  const y = top + height / 2;
   await window.mouse.move(x, y, { steps: 8 });
   for (const key of modifiers) await window.keyboard.down(key);
   try {

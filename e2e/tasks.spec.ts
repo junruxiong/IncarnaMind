@@ -6,11 +6,13 @@ import {
   addDocuments,
   createDataFolder,
   dismissChatSetup,
+  expectDotsBetweenParts,
   forceQuit,
   launchApp,
   motionSettled,
   newMind,
   notificationsShown,
+  placeAssistant,
   pointAndClick,
   recordNotifications,
   removeDataFolder,
@@ -116,12 +118,8 @@ const cellTexts = (table: Locator) =>
       ),
     );
 
-test("a comparison table keeps filling as a Task: closing its Mind and force-quitting don't stop it, and it goes on at the next start", async () => {
-  test.setTimeout(150_000);
-  const { app, window } = await launchApp(dataDir, { fakeChat: true });
-  await dismissChatSetup(window);
-  await setWindowSize(app, window, 1440, 860);
-  await useLocalChatModel(window);
+/** Starts a comparison of the three suppliers' Documents on two Questions the scripted model fills slowly, and returns its table. */
+async function startSlowComparison(window: Page, sources: string): Promise<Locator> {
   const paths: string[] = [];
   for (const [name, text] of Object.entries(SUPPLIERS)) {
     const path = join(sources, name);
@@ -146,6 +144,16 @@ test("a comparison table keeps filling as a Task: closing its Mind and force-qui
 
   const table = window.getByTestId("comparison-table");
   await expect(table).toBeVisible();
+  return table;
+}
+
+test("a comparison table keeps filling as a Task: closing its Mind and force-quitting don't stop it, and it goes on at the next start", async () => {
+  test.setTimeout(150_000);
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await setWindowSize(app, window, 1440, 860);
+  await useLocalChatModel(window);
+  const table = await startSlowComparison(window, sources);
   // Its progress is in the thread: its name, how far, the bar and its latest steps; no tray.
   const progress = window.getByTestId("assistant-thread").getByTestId("task-progress");
   await expect(progress).toContainText("Compare Documents");
@@ -377,6 +385,35 @@ test("a Task waiting for approval comes back paused after a quit: â€œNeeds youâ€
     await removeDataFolder(folder);
   }
 });
+
+for (const language of ["en", "zh-CN"] as const) {
+  test(`a Task's progress head keeps within its row at the narrowest assistant, and wraps between its parts, never at a dot (${language})`, async () => {
+    test.setTimeout(150_000);
+    const { app, window } = await launchApp(dataDir, { fakeChat: true });
+    await dismissChatSetup(window);
+    await setWindowSize(app, window, 1100, 760);
+    await useLocalChatModel(window);
+    await setLanguage(window, language);
+    await startSlowComparison(window, sources);
+    const progress = window.getByTestId("assistant-thread").getByTestId("task-progress");
+    const meta = progress.getByTestId("task-progress-meta");
+    await expect(meta.locator(".meta-part")).toHaveCount(2);
+    await placeAssistant(window, { width: 240 });
+
+    const head = progress.locator(".task-progress-head");
+    const [row, own] = [await head.boundingBox(), await meta.boundingBox()];
+    if (!row || !own) throw new Error("The head or its line isn't on screen.");
+    expect(own.x + own.width).toBeLessThanOrEqual(row.x + row.width + 1);
+    await expectDotsBetweenParts(meta);
+
+    // With little room it wraps between its parts, and a part that starts a row shows no dot.
+    await head.evaluate((element) => {
+      element.style.width = "150px";
+    });
+    expect(await expectDotsBetweenParts(meta)).toBe(true);
+    await app.close();
+  });
+}
 
 test("Stop in a Task's progress ends it and withdraws its ask; the progress fits the assistant's 320px in Chinese, under a header with no chat icon", async () => {
   const folder = await createDataFolder();
