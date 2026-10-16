@@ -1800,7 +1800,6 @@ export const en = {
   "providers.form.testing": "Testing…",
   "providers.form.save": "Use this service",
   "providers.sendsLine": "Sends your questions and document text to {provider}.",
-  "providers.sendsDetails": "Details",
   "providers.sends.chat":
     "your Questions, the Mind you're in, matching passages with their Document names and pages, and the names of other Documents in scope",
   "providers.sends.checks": "each sentence you check",
@@ -3316,6 +3315,7 @@ export const en = {
   "error.action": "That didn't work: {message}",
   "error.dismiss": "Dismiss",
   "error.details": "Details",
+  "details.label": "Details",
   "error.system.notAllowed": "IncarnaMind isn't allowed to change that file or folder.",
   "error.system.full": "The disk is full.",
   "error.system.gone": "That file or folder isn't there any more.",
