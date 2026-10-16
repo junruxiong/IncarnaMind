@@ -1,0 +1,197 @@
+/**
+ * The assistant's own changes still waiting in a Mind: Blocks an
+ * Answer in the assistant added whole (`add_to_mind`, `create_mind`, a Mind
+ * made from an Answer), which the User hasn't accepted or rejected, nor typed
+ * in. Asked to change that text again ("make it longer", "remove the part
+ * about…"), the assistant revises those same waiting Blocks: they are
+ * replaced by its new text, still waiting, so the Mind holds one version, not
+ * two. Nothing of the User's text is touched, since none is in them.
+ */
+import { randomUUID } from "node:crypto";
+import * as Y from "yjs";
+import { INLINE_CODE_MARK } from "../../shared/aiText";
+import {
+  keepRevised,
+  pendingProposals,
+  proposalRequestOf,
+  readProposalAttribute,
+  readProposalRef,
+  resolveProposals,
+} from "../../shared/proposals";
+import { topLevelBlocks } from "../answers/blocks";
+import {
+  BLOCK_ID_ATTRIBUTE,
+  GENERATED_MARK,
+  PROPOSAL_ATTRIBUTE,
+  PROPOSAL_DELETE_MARK,
+  PROPOSAL_INSERT_MARK,
+  type TextPlace,
+} from "../api";
+import { setProposal, textBlocks } from "./write";
+
+/** The assistant's own waiting Blocks a stretch is in, from the first's top-level Block to the last's. */
+export interface OwnWaiting {
+  kind: "own";
+  blockIds: string[];
+  /** What they hold as read, to tell whether they changed since. */
+  fingerprint: string;
+}
+
+/**
+ * What waits in a stretch of a Mind: nothing; only the assistant's own
+ * waiting Blocks (`OwnWaiting`); some of those beside the User's text
+ * ("mixed"); or changes the assistant can't revise ("other"). `count`: the
+ * changes waiting in the whole Mind, as the User is told.
+ */
+export type WaitingIn = { kind: "none" } | OwnWaiting | { kind: "mixed" | "other"; count: number };
+
+interface Run {
+  insert: unknown;
+  attributes?: Record<string, unknown>;
+}
+
+const idOf = (element: Y.XmlElement): string => {
+  const id = element.getAttribute(BLOCK_ID_ATTRIBUTE);
+  return typeof id === "string" ? id : "";
+};
+
+function topOf(element: Y.XmlElement): Y.XmlElement {
+  let at = element;
+  while (at.parent instanceof Y.XmlElement) at = at.parent;
+  return at;
+}
+
+function holdsProposal(nodes: readonly (Y.XmlElement | Y.XmlText | Y.XmlHook)[]): boolean {
+  return nodes.some((node) => {
+    if (node instanceof Y.XmlText) {
+      return (node.toDelta() as Run[]).some(
+        (run) =>
+          !!run.attributes &&
+          (PROPOSAL_INSERT_MARK in run.attributes || PROPOSAL_DELETE_MARK in run.attributes),
+      );
+    }
+    if (!(node instanceof Y.XmlElement)) return false;
+    return node.getAttribute(PROPOSAL_ATTRIBUTE) !== undefined || holdsProposal(node.toArray());
+  });
+}
+
+function allAiText(element: Y.XmlElement): boolean {
+  // A code block's text can't carry the mark.
+  if (element.nodeName === "codeBlock") return true;
+  return element.toArray().every((node) => {
+    if (node instanceof Y.XmlElement) return allAiText(node);
+    if (!(node instanceof Y.XmlText)) return true;
+    return (node.toDelta() as Run[]).every(
+      (run) =>
+        typeof run.insert !== "string" ||
+        run.insert === "" ||
+        (!!run.attributes &&
+          (GENERATED_MARK in run.attributes || INLINE_CODE_MARK in run.attributes)),
+    );
+  });
+}
+
+function isOwn(element: Y.XmlElement): boolean {
+  const attribute = readProposalAttribute(element.getAttribute(PROPOSAL_ATTRIBUTE));
+  const doc = element.doc;
+  return (
+    attribute?.kind === "insert" &&
+    !!doc &&
+    proposalRequestOf(doc, attribute.request)?.source === "answer-added" &&
+    !holdsProposal(element.toArray()) &&
+    allAiText(element)
+  );
+}
+
+function rangeOf(blocks: Y.XmlFragment, from: TextPlace, to: TextPlace): Y.XmlElement[] {
+  const texts = textBlocks(blocks).map((each) => each.element);
+  const first = texts.find((element) => idOf(element) === from.blockId);
+  const last = texts.find((element) => idOf(element) === to.blockId);
+  if (!first || !last) return [];
+  const top = topLevelBlocks(blocks);
+  const start = top.indexOf(topOf(first));
+  const end = top.indexOf(topOf(last));
+  return start < 0 || end < start ? [] : top.slice(start, end + 1);
+}
+
+const fingerprintOf = (elements: readonly Y.XmlElement[]) =>
+  elements.map((element) => element.toString()).join("\n");
+
+export function waitingIn(blocks: Y.XmlFragment, from: TextPlace, to: TextPlace): WaitingIn {
+  const range = rangeOf(blocks, from, to);
+  if (!holdsProposal(range)) return { kind: "none" };
+  const count = pendingProposals(blocks).length;
+  const own = range.filter(isOwn);
+  if (own.length === range.length) {
+    return { kind: "own", blockIds: range.map(idOf), fingerprint: fingerprintOf(range) };
+  }
+  const others = range.filter((element) => !own.includes(element));
+  return { kind: own.length > 0 && !holdsProposal(others) ? "mixed" : "other", count };
+}
+
+/** The Blocks of `own` in the Mind now, in order; null once they have changed. */
+function blocksOf(blocks: Y.XmlFragment, own: OwnWaiting): Y.XmlElement[] | null {
+  const top = topLevelBlocks(blocks);
+  const start = top.findIndex((element) => idOf(element) === own.blockIds[0]);
+  if (start < 0) return null;
+  const range = top.slice(start, start + own.blockIds.length);
+  const same =
+    range.length === own.blockIds.length &&
+    range.every((element, index) => idOf(element) === own.blockIds[index]) &&
+    fingerprintOf(range) === own.fingerprint;
+  return same ? range : null;
+}
+
+/**
+ * Accepts the Proposals of `own`'s Blocks in a copy of the Mind, so its text
+ * reads as the User would see it once accepted: what a revision rewrites.
+ * Call it in a Yjs transaction.
+ */
+export function acceptOwnIn(blocks: Y.XmlFragment, own: OwnWaiting): void {
+  const ids = new Set(
+    (blocksOf(blocks, own) ?? []).flatMap((element) => {
+      const ref = readProposalRef(element.getAttribute(PROPOSAL_ATTRIBUTE));
+      return ref ? [ref.id] : [];
+    }),
+  );
+  resolveProposals(blocks, (proposal) => ids.has(proposal.id), "accept");
+}
+
+/**
+ * Where `own`'s Blocks are in a copy of the Mind: how many top-level Blocks
+ * come before them and after them, which a revision there leaves as they are.
+ */
+export function boundsOf(
+  blocks: Y.XmlFragment,
+  own: OwnWaiting,
+): { before: number; after: number } | null {
+  const top = topLevelBlocks(blocks);
+  const start = top.findIndex((element) => idOf(element) === own.blockIds[0]);
+  const end = top.findIndex((element) => idOf(element) === own.blockIds.at(-1));
+  return start < 0 || end < start ? null : { before: start, after: top.length - end - 1 };
+}
+
+/**
+ * Puts `revised` in place of `own`'s Blocks, each waiting whole as a Proposal
+ * of `request`, and keeps what they replaced (`MIND_REVISIONS_FIELD`), so
+ * rejecting the revision brings it back. Returns the new Blocks' ids; null,
+ * changing nothing, when `own`'s Blocks have changed since they were read.
+ * Call it in a Yjs transaction.
+ */
+export function replaceOwn(
+  blocks: Y.XmlFragment,
+  own: OwnWaiting,
+  revised: readonly Y.XmlElement[],
+  request: string,
+): string[] | null {
+  const old = blocksOf(blocks, own);
+  const first = old?.[0];
+  if (!old || !first) return null;
+  keepRevised(blocks, request, old);
+  const at = blocks.toArray().indexOf(first);
+  blocks.delete(at, old.length);
+  blocks.insert(at, [...revised]);
+  for (const element of revised)
+    setProposal(element, { id: randomUUID(), request, kind: "insert" });
+  return revised.map(idOf);
+}
