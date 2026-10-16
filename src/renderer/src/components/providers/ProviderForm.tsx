@@ -627,7 +627,7 @@ function KeyRefusedLine({ id, refused }: { id: string; refused: KeyRefusal }) {
 export function ProviderSendsLine({ provider }: { provider: string }) {
   const t = useT();
   return (
-    <div data-testid="provider-sends" className="mt-1 text-[12px] leading-[18px] text-ink-meta">
+    <div data-testid="provider-sends" className={hintClass}>
       <p>{t("providers.sends", { provider })}</p>
       <ul data-testid="provider-sends-list" className="list-disc pl-4">
         {chosenFlowLines().map((line) => (

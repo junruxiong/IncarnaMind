@@ -5537,9 +5537,9 @@ export const CHOSEN_PROVIDER_FLOWS = [
   "chat",
   "checks",
   "suggestions",
+  "edits",
   "tagging",
   "classification",
-  "edits",
 ] as const satisfies readonly DataFlowId[];
 
 export type ChosenProviderFlow = (typeof CHOSEN_PROVIDER_FLOWS)[number];

@@ -33,21 +33,21 @@ async function screenshot(window: Page, name: string): Promise<void> {
 const SENDS_EN = {
   lead: "When you use it, OpenAI receives:",
   items: [
-    "your Questions, the Mind you're in, and matching passages with their Document names and pages",
+    "your Questions, the Mind you're in, matching passages with their Document names and pages, and the names of other Documents in scope",
     "each sentence you check",
     "the paragraph you pause on, for writing suggestions",
-    "each Document's name, outline and short excerpts, to tag and file it (page images for scans with no text)",
-    "the text the assistant edits when you ask it to",
+    "the text you ask the assistant to change",
+    "each Document's name, outline and short excerpts, with your Folder and Tag names, to tag and file it (page images for scans with no text)",
   ],
 };
 const SENDS_ZH = {
   lead: "使用时，以下内容会发送给 OpenAI：",
   items: [
-    "你的问题、当前 Mind，以及相关段落及其文档名称和页码",
+    "你的问题、你所在的 Mind、相关段落及其文档名称和页码，以及范围内其他文档的名称",
     "你核对的每一句话",
     "写作建议时你停下的那一段",
-    "每个文档的名称、目录和简短摘录，用于打标签和整理（没有文字的扫描件会发送页面图片）",
-    "你让助手修改时被修改的文字",
+    "你让助手修改的文字",
+    "每个文档的名称、目录和简短摘录，以及你的文件夹和标签名称，用于打标签和归档（没有文字的扫描件会发送页面图片）",
   ],
 };
 
@@ -183,17 +183,22 @@ test("before a model is chosen, a new Document's tagging waits with its line, an
   await app.close();
 });
 
-test("the ChatGPT plan's card in Settings › Models names the same list, with ChatGPT", async () => {
+test("Settings › Models says in one phrase what the ChatGPT plan and an API key send", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   const settings = await openSettings(window, "models");
 
+  const phrase =
+    "your Questions with the Mind you're in, matching passages and the names of Documents in scope; sentences you check; the paragraph you pause on; text you ask the assistant to change; and Document names, outlines and excerpts with your Folder and Tag names, to tag and file them (page images for scans)";
   const plan = settings.getByTestId("chatgpt-settings");
-  await plan.getByTestId("provider-sends").scrollIntoViewIfNeeded();
-  await expectSends(plan.getByTestId("provider-sends"), {
-    ...SENDS_EN,
-    lead: "When you use it, ChatGPT receives:",
-  });
+  await expect(plan).toContainText(
+    `OpenAI receives, under your ChatGPT account: ${phrase}. It counts against your plan's limits.`,
+  );
+  await expect(plan.getByTestId("provider-sends")).toHaveCount(0);
+  await expect(settings.getByTestId("chat-provider-choices")).toContainText(
+    `That service receives: ${phrase}.`,
+  );
+  await plan.scrollIntoViewIfNeeded();
   await screenshot(window, "choosing-line-chatgpt-en");
   await app.close();
 });
