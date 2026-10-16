@@ -14,9 +14,16 @@ export type WaitingQuestion = Omit<AskInConversationInput, "conversationId"> & {
   conversationId: string | null;
 };
 
-export const useModelSetup = create<{ waiting: WaitingQuestion | null }>(() => ({
+export const useModelSetup = create<{ waiting: WaitingQuestion | null; wanted: boolean }>(() => ({
   waiting: null,
+  wanted: false,
 }));
+
+/** The setup card with no Question waiting, which the first open's steps card asks for (#1027). */
+export const openModelSetup = (): void => useModelSetup.setState({ wanted: true });
+
+export const useSettingUp = (): boolean =>
+  useModelSetup((state) => state.waiting !== null || state.wanted);
 
 /** Keeps a Question that couldn't be asked for want of a model, for the setup card to wait on. */
 export const waitForModel = (question: WaitingQuestion): void =>
@@ -25,8 +32,8 @@ export const waitForModel = (question: WaitingQuestion): void =>
 /** "Set up later": the Question's words go back to the composer they were typed in. */
 export function giveUpWaiting(): void {
   const { waiting } = useModelSetup.getState();
+  useModelSetup.setState({ waiting: null, wanted: false });
   if (!waiting) return;
-  useModelSetup.setState({ waiting: null });
   const key = waiting.mindId ?? NO_MIND;
   const draft = useComposer.getState().draft(key);
   if (draft.text === "") useComposer.getState().update(key, { text: waiting.text });

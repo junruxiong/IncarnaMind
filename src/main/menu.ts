@@ -31,6 +31,7 @@ export function installAppMenu(language: Language, { developer }: { developer: b
 let installed: { language: Language; developer: boolean } | null = null;
 let sidebarHidden = false;
 let exportedMind: string | null = null;
+let examplesRemoved = false;
 
 /** Until the window says where its focus is, Undo and Redo show as a field's: enabled, naming nothing. */
 let editMenu: EditMenuState = { text: "field", undo: null, redo: null };
@@ -50,6 +51,12 @@ export function isEditMenuState(value: unknown): value is EditMenuState {
   if (typeof value !== "object" || value === null) return false;
   const { text, undo, redo } = value as Record<string, unknown>;
   return isTextPlace(text) && isNamed(undo) && isNamed(redo);
+}
+
+export function setExamplesRemoved(removed: boolean): void {
+  if (removed === examplesRemoved) return;
+  examplesRemoved = removed;
+  if (installed) buildMenu();
 }
 
 export function setExportMenu(mindName: string | null): void {
@@ -191,7 +198,10 @@ function buildMenu(): void {
     {
       label: t("menu.help"),
       role: "help",
-      submenu: [command("help.feedback")],
+      submenu: [
+        { ...command("examples.show"), id: "examples.show", visible: examplesRemoved },
+        command("help.feedback"),
+      ],
     },
     {
       label: t("menu.window"),
