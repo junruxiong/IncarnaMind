@@ -147,7 +147,6 @@ function FontChoices({ mindId, onOtherFonts }: { mindId: string; onOtherFonts():
   const family = familyOf(font);
   return (
     <>
-      <p className={menuTitleClass}>{t("mindStyle.font")}</p>
       {/* biome-ignore lint/a11y/useSemanticElements: a menu's radio items are grouped by role; a fieldset is for a form's. */}
       <div role="group" aria-label={t("mindStyle.font")} className="grid grid-cols-3 gap-1 px-1">
         {FONT_PRESETS.map((preset) => {
