@@ -253,6 +253,7 @@ export function createMindCheck(options: MindCheckOptions) {
       kind: "ready",
       sentences: fresh.length + again.length,
       findsClaims: fresh.length > 0,
+      inFolder: folderId !== null && sent.widened.size === 0,
       model: modelOf(mindId),
     };
   }

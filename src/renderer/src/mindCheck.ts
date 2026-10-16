@@ -121,7 +121,7 @@ export async function startMindCheck(
   mode: CheckMindMode,
   { allDocuments = false }: { allDocuments?: boolean } = {},
 ): Promise<void> {
-  const { openMind, minds } = useAppStore.getState();
+  const { openMind } = useAppStore.getState();
   await openMind(mindId);
   if (useChecks.getState().running[mindId]) return;
   const plan = await core.planMindCheck(mindId, mode, allDocuments);
@@ -136,20 +136,26 @@ export async function startMindCheck(
   dismissCheckProblem(mindId);
   const count = plan.findsClaims ? await findClaims(mindId, mode, allDocuments) : plan.sentences;
   if (count === null) return;
-  const estimate = await core
+  const estimated = await core
     .estimateRun({ items: count, each: "check", ...(plan.model && { model: plan.model }) })
-    .then((result) => estimateLine(result, translateNow, languageNow()))
     .catch((error: unknown) => {
       console.warn(`Couldn't estimate checking Mind ${mindId}; it asks without one.`, error);
       return null;
     });
-  if (estimate === null && !plan.findsClaims) return checkMind(mindId, mode, { allDocuments });
-  const inFolder =
-    !allDocuments && (minds.find((each) => each.id === mindId)?.folderId ?? null) !== null;
+  if (estimated && estimated.billing !== "per-token" && !plan.findsClaims)
+    return checkMind(mindId, mode, { allDocuments });
+  const estimate = estimated ? estimateLine(estimated, translateNow, languageNow()) : null;
   useMindCheck.setState((state) => ({
     asking: {
       ...state.asking,
-      [mindId]: { mode, allDocuments, count, claims: plan.findsClaims, inFolder, estimate },
+      [mindId]: {
+        mode,
+        allDocuments,
+        count,
+        claims: plan.findsClaims,
+        inFolder: plan.inFolder,
+        estimate,
+      },
     },
   }));
 }

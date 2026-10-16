@@ -308,7 +308,6 @@ function ClaimCard({
 }: {
   claim: ShownClaim;
   addable: boolean;
-  /** The Documents added to its scope since it was checked (#993). */
   added: number;
   onAdd(): void;
   onCheckAgain(allDocuments?: boolean): void;

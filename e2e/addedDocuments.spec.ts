@@ -45,10 +45,6 @@ test.afterEach(async () => {
   await removeDataFolder(sources);
 });
 
-/**
- * Files the Mind and the Documents named into the Folder “Harbours”, made if need be; with
- * `adding`, adds that file to the Library first, as Add files does, once it is read.
- */
 async function fileInto(window: Page, names: readonly string[], adding?: string) {
   await window.evaluate(async (path) => {
     if (path)
@@ -142,70 +138,102 @@ test("a sentence nothing supported is offered a check again once a Document is a
   await expect(line).toHaveCount(0);
 });
 
-test("closed, the line stays closed for those Documents, and a Document added later shows it again", async () => {
-  await writeFile(join(sources, "Tides.pdf"), buildPdf([{ lines: ["Harbour times", MOON] }]));
-  await writeFile(
-    join(sources, "Ferries.pdf"),
-    buildPdf([{ lines: ["Ferries", "The ferry leaves twice a day."] }]),
-  );
-  await writeFile(
-    join(sources, "Cranes.pdf"),
-    buildPdf([{ lines: ["Cranes", "Two cranes unload the ships."] }]),
-  );
-  const { app, window } = await launchApp(dataDir, { fakeChat: true });
-  await dismissChatSetup(window);
-  await acceptPlainTextKeys(window);
-  await window.evaluate(async () => {
-    const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
-    const provider = await core.saveChatProvider({
-      kind: "anthropic",
-      apiKey: "sk-ant-test",
-      modelId: "claude-haiku-5-5",
-    });
-    if (provider.service) {
-      for (const flow of ["chat", "tagging", "checks"] as const) {
-        await core.allowDataFlow(flow, provider.service.id);
+for (const widened of [false, true]) {
+  test(`closed, the line stays closed until another Document is added; asks with the ${widened ? "all Documents" : "Folder"} scope`, async () => {
+    await writeFile(join(sources, "Tides.pdf"), buildPdf([{ lines: ["Harbour times", MOON] }]));
+    await writeFile(
+      join(sources, "Ferries.pdf"),
+      buildPdf([{ lines: ["Ferries", "The ferry leaves twice a day."] }]),
+    );
+    await writeFile(
+      join(sources, "Cranes.pdf"),
+      buildPdf([{ lines: ["Cranes", "Two cranes unload the ships."] }]),
+    );
+    const { app, window } = await launchApp(dataDir, { fakeChat: true });
+    await dismissChatSetup(window);
+    await acceptPlainTextKeys(window);
+    await window.evaluate(async () => {
+      const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      const provider = await core.saveChatProvider({
+        kind: "anthropic",
+        apiKey: "sk-ant-test",
+        modelId: "claude-haiku-5-5",
+      });
+      if (provider.service) {
+        for (const flow of ["chat", "tagging", "checks"] as const) {
+          await core.allowDataFlow(flow, provider.service.id);
+        }
       }
+    });
+    await setWindowSize(app, window, 1440, 900);
+    await addDocuments(window, [join(sources, "Tides.pdf")]);
+    await mindWrittenBefore(window, "Harbour notes", [{ note: `${MOON} ${PENGUINS}` }]);
+    await window.getByTestId("mind-list-item").filter({ hasText: "Harbour notes" }).click();
+    await fileInto(window, ["Tides"]);
+    await window.getByTestId("mind-tab").first().click({ button: "right" });
+    await pointAndClick(window, window.getByRole("menuitem", { name: "Check this Mind" }));
+    await pointAndClick(
+      window,
+      window.getByTestId("mind-check-ask").getByTestId("mind-check-check"),
+    );
+    await expect(
+      window.getByTestId("claim-mark").and(window.locator('[data-check="unsupported"]')),
+    ).toHaveCount(1);
+
+    if (widened) {
+      const unsupported = window
+        .getByTestId("claim-mark")
+        .and(window.locator('[data-check="unsupported"]'));
+      await pointAndClick(window, unsupported);
+      const card = window.getByTestId("claim-card");
+      await pointAndClick(window, card.getByTestId("claim-search-all"));
+      await expect(window.getByTestId("checks-running")).toHaveCount(0);
+      await expect(unsupported).toHaveCount(1);
+      await pointAndClick(window, unsupported);
+      await expect(card).toBeVisible();
+      await expect(card.getByTestId("claim-search-all")).toHaveCount(0);
+      await window.keyboard.press("Escape");
     }
+
+    await fileInto(window, ["Ferries"], join(sources, "Ferries.pdf"));
+    const line = window.getByTestId("checks-added");
+    await expect(line).toBeVisible();
+    await pointAndClick(window, line.getByTestId("checks-added-close"));
+    await expect(line).toHaveCount(0);
+
+    await fileInto(window, ["Cranes"], join(sources, "Cranes.pdf"));
+    await expect(line).toHaveText(/^2 Documents added since these checks/);
+
+    await window.getByTestId("mind-editor").click();
+    await window.keyboard.press("ControlOrMeta+k");
+    await window.keyboard.type("check again with");
+    await pointAndClick(
+      window,
+      window
+        .getByTestId("palette-item")
+        .filter({ hasText: "Check again with the Documents added since" }),
+    );
+    const ask = window.getByTestId("mind-check-ask");
+    await expect(ask).toContainText(
+      widened
+        ? "Check this Mind’s sentence against your Documents?"
+        : "Check this Mind’s sentence against this Folder’s Documents?",
+    );
+    await expect(ask).toContainText("About $");
+    await motionSettled(window);
+    await screenshot(window, widened ? "ask-all-en" : "ask-folder-en");
+    if (widened) {
+      await setLanguage(window, "zh-CN");
+      await expect(ask).toContainText("要对照你的文档，核对这个 Mind 的这一句吗？");
+      await motionSettled(window);
+      await screenshot(window, "ask-all-zh");
+      await setLanguage(window, "en");
+    }
+    await pointAndClick(window, ask.getByTestId("mind-check-check"));
+    await expect(window.getByTestId("checks-running")).toHaveCount(0);
+    await expect(line).toHaveCount(0);
+    await expect(
+      window.getByTestId("claim-mark").and(window.locator('[data-check="unsupported"]')),
+    ).toHaveCount(1);
   });
-  await setWindowSize(app, window, 1440, 900);
-  await addDocuments(window, [join(sources, "Tides.pdf")]);
-  await mindWrittenBefore(window, "Harbour notes", [{ note: `${MOON} ${PENGUINS}` }]);
-  await window.getByTestId("mind-list-item").filter({ hasText: "Harbour notes" }).click();
-  await fileInto(window, ["Tides"]);
-  await window.getByTestId("mind-tab").first().click({ button: "right" });
-  await pointAndClick(window, window.getByRole("menuitem", { name: "Check this Mind" }));
-  await pointAndClick(window, window.getByTestId("mind-check-ask").getByTestId("mind-check-check"));
-  await expect(
-    window.getByTestId("claim-mark").and(window.locator('[data-check="unsupported"]')),
-  ).toHaveCount(1);
-
-  await fileInto(window, ["Ferries"], join(sources, "Ferries.pdf"));
-  const line = window.getByTestId("checks-added");
-  await expect(line).toBeVisible();
-  await pointAndClick(window, line.getByTestId("checks-added-close"));
-  await expect(line).toHaveCount(0);
-
-  await fileInto(window, ["Cranes"], join(sources, "Cranes.pdf"));
-  await expect(line).toHaveText(/^2 Documents added since these checks/);
-
-  // From ⌘K too. Billed per token, it asks first with the count and the estimate, however few.
-  await window.getByTestId("mind-editor").click();
-  await window.keyboard.press("ControlOrMeta+k");
-  await window.keyboard.type("check again with");
-  await pointAndClick(
-    window,
-    window
-      .getByTestId("palette-item")
-      .filter({ hasText: "Check again with the Documents added since" }),
-  );
-  const ask = window.getByTestId("mind-check-ask");
-  await expect(ask).toContainText("Check this Mind’s sentence against this Folder’s Documents?");
-  await expect(ask).toContainText("About $");
-  await pointAndClick(window, ask.getByTestId("mind-check-check"));
-  await expect(window.getByTestId("checks-running")).toHaveCount(0);
-  await expect(line).toHaveCount(0);
-  await expect(
-    window.getByTestId("claim-mark").and(window.locator('[data-check="unsupported"]')),
-  ).toHaveCount(1);
-});
+}
