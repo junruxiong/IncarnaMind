@@ -119,7 +119,7 @@ A public service that Find sources searches for works to add to the Library: Ope
 _Avoid_: source (a Document is not one), database, provider on its own (an AI model's provider)
 
 **Location**:
-Where in a Document a Citation points, in the unit the Document's own readers use: one or two pages of a PDF, one or two slides of a deck (speaker notes count as part of their slide), a sheet and a range of rows of a spreadsheet, the section a quote sits under in a Word file or Markdown (for a quote of a Word comment, the section the comment is anchored in, and that it is a comment by its author), the section and paragraphs of a Web page, a range of lines in plain text, or a range of time in a Transcript (shown as the time the quote starts, "14:26").
+Where in a Document a Citation points, in the unit the Document's own readers use: one or two pages of a PDF (named as the page names itself, by its page label or the number printed on it, with its place in the PDF beside it when they differ: "p. 68 · page 69 of the PDF"), one or two slides of a deck (speaker notes count as part of their slide), a sheet and a range of rows of a spreadsheet, the section a quote sits under in a Word file or Markdown (for a quote of a Word comment, the section the comment is anchored in, and that it is a comment by its author), the section and paragraphs of a Web page, a range of lines in plain text, or a range of time in a Transcript (shown as the time the quote starts, "14:26").
 _Avoid_: page (for anything that isn't a PDF), position, anchor
 
 **Cited page**:
