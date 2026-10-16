@@ -29,15 +29,8 @@
  */
 import * as Y from "yjs";
 import { INLINE_CODE_MARK } from "../../shared/aiText";
-import {
-  citesSource,
-  linkSources,
-  looksLikeTable,
-  type NamedSource,
-  rowCells,
-  type TableAlign,
-  tableStart,
-} from "../../shared/markdownTables";
+import { looksLikeTable, rowCells, type TableAlign, tableStart } from "../../shared/markdownTables";
+import { citesSource, linkSources, type NamedSource } from "../../shared/namedSources";
 import {
   INLINE_NODES,
   NODE_CHARACTER,

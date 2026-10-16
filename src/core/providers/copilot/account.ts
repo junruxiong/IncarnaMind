@@ -30,6 +30,7 @@ import type { Secrets } from "../../secrets";
 import { SignInRouteError } from "../providerErrors";
 import type { CopilotProfile } from "./config";
 import { listCopilotModels } from "./requests";
+import { NO_COPILOT_ACCESS } from "./service";
 
 const ACCOUNT_SECRET = "copilot:account";
 
@@ -75,7 +76,10 @@ async function exchangeToken(options: {
   const body: unknown = await response.json().catch(() => undefined);
   const token = isRecord(body) && typeof body.token === "string" ? body.token : null;
   if (!response.ok || !token || !isRecord(body)) {
-    const said = isRecord(body) && typeof body.message === "string" ? body.message : "";
+    const details = isRecord(body) && isRecord(body.error_details) ? body.error_details : {};
+    const said = [isRecord(body) && body.message, details.notification_id, details.message]
+      .filter((each) => typeof each === "string")
+      .join(" ");
     throw new ExchangeRefusal(response.ok ? null : response.status, said);
   }
   const expiresAt = typeof body.expires_at === "number" ? body.expires_at : null;
@@ -85,12 +89,9 @@ async function exchangeToken(options: {
     idToken: null,
     expiresIn: expiresAt === null ? null : Math.max(0, expiresAt - options.now / 1000),
     scope: null,
-    response: body,
+    account: { email: null, organization: null },
   };
 }
-
-/** GitHub says the account has no Copilot this way: no token for it (404), or a refusal naming Copilot's plan. */
-const NO_COPILOT = /copilot|subscription|seat|plan/i;
 
 /** Why the second way's token exchange failed: only GitHub's own word says there's no plan. */
 class ExchangeFailure extends Error {
@@ -108,7 +109,7 @@ function exchangeFailure(error: unknown): ExchangeFailure {
   if (!(error instanceof ExchangeRefusal)) return new ExchangeFailure("unreachable", message);
   const { status } = error;
   if (status === null) return new ExchangeFailure("unexpected-response", message);
-  if (status === 404 || (status === 403 && NO_COPILOT.test(error.said))) {
+  if (NO_COPILOT_ACCESS.test(error.said)) {
     return new ExchangeFailure("no-plan", message);
   }
   if (status >= 500) return new ExchangeFailure("service-error", message);
