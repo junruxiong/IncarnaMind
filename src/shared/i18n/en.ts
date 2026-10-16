@@ -2758,6 +2758,10 @@ export const en = {
   "aiStatement.sentences.contradicted": "Contradicted",
   "aiStatement.sentences.recheck": "Needs re-check",
   "aiStatement.sentences.notChecked": "Not checked",
+  "aiStatement.unread.one":
+    "When these sentences were checked, 1 file they were checked against couldn't be read, so the checks didn't search it:",
+  "aiStatement.unread":
+    "When these sentences were checked, {count} files they were checked against couldn't be read, so the checks didn't search them:",
   "aiStatement.note":
     "Schools have their own forms for declaring AI use. Use these counts to fill in yours.",
   "export.questionsLeftOut.one": "1 Question is left out.",

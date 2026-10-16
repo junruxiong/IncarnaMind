@@ -38,6 +38,24 @@ const everything: AiUseFigures = {
   removed: 2,
   citations: { found: 9, notFound: 1, cantCheck: 1, unsupported: 1, contradicted: 1, checking: 1 },
   sentences: { supported: 3, unsupported: 2, contradicted: 1, needsRecheck: 1, notChecked: 1 },
+  unread: [
+    {
+      id: "contract",
+      name: "合同.doc",
+      reason: "format",
+      extension: ".doc",
+      documentId: null,
+      pages: [],
+    },
+    {
+      id: "scan",
+      name: "Scan.pdf",
+      reason: "scan",
+      extension: null,
+      documentId: "scan",
+      pages: [],
+    },
+  ],
 };
 const nothing: AiUseFigures = {
   uses: [],
@@ -46,6 +64,7 @@ const nothing: AiUseFigures = {
   removed: 0,
   citations: { found: 0, notFound: 0, cantCheck: 0, unsupported: 0, contradicted: 0, checking: 0 },
   sentences: { supported: 0, unsupported: 0, contradicted: 0, needsRecheck: 0, notChecked: 0 },
+  unread: [],
 };
 const FIGURES = { everything, nothing };
 
