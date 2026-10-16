@@ -1545,6 +1545,32 @@ export async function addToNote(window: Page, answer: Locator): Promise<void> {
   await expect(answer.getByTestId("answer-added")).toBeVisible();
 }
 
+export type MindChild = Y.XmlElement | string;
+
+/** A node as the editor stores it in a Mind's Yjs document; strings are its text. */
+export function mindNode(
+  name: string,
+  attributes: Record<string, unknown>,
+  children: MindChild[] = [],
+): Y.XmlElement {
+  const element = new Y.XmlElement(name);
+  for (const [key, value] of Object.entries(attributes)) {
+    element.setAttribute(key, value as string);
+  }
+  element.insert(
+    0,
+    children.map((child) => (typeof child === "string" ? new Y.XmlText(child) : child)),
+  );
+  return element;
+}
+
+/** Blocks as one Yjs update, to apply to a Mind (`applyMindUpdate`), as an edit from another device arrives. */
+export function blocksUpdate(blocks: Y.XmlElement[]): Uint8Array {
+  const doc = new Y.Doc();
+  doc.getXmlFragment("blocks").insert(0, blocks);
+  return Y.encodeStateAsUpdate(doc);
+}
+
 /** A Block of a Mind as Minds held them before Questions went to the assistant (#201). */
 export type BlockFromBefore =
   | { note: string }
