@@ -69,6 +69,30 @@ test("the tab strip comes with the second tab, and the Library with the first ow
   await app.close();
 });
 
+test("a file the first open can't take still says so in the footer, though its other news waits (#123)", async () => {
+  await writeFile(join(sources, "Picture.png"), "not a document");
+  const { app, window } = await launchApp(dataDir, { examples: true });
+  const sidebar = window.getByTestId("sidebar");
+  await expect(window.getByTestId("mind-pane")).toBeVisible();
+  await expect(sidebar.getByTestId("sidebar-status")).toHaveCount(0);
+  await window.getByTestId("add-documents-input").setInputFiles([join(sources, "Picture.png")]);
+  const skipped = sidebar.getByTestId("skipped-files");
+  await expect(skipped).toBeVisible();
+  await expect(skipped).toHaveAttribute("title", /Picture\.png/);
+  await expect(sidebar.getByTestId("tagging-waiting")).toHaveCount(0);
+  await app.close();
+});
+
+test("a Mind of one's own made on the first open isn't listed under Examples (#123)", async () => {
+  const { app, window } = await launchApp(dataDir, { examples: true });
+  const section = window.getByTestId("sidebar").getByTestId("not-in-a-folder-toggle");
+  await expect(section).toHaveText("Examples");
+  await newMind(window);
+  await expect(window.getByTestId("mind-list-item")).toHaveCount(2);
+  await expect(section).toHaveText("Not in a Folder");
+  await app.close();
+});
+
 test("the assistant comes with the first Question, and stays after a restart (#123)", async () => {
   const first = await launchApp(dataDir, { examples: true, fakeChat: true });
   await useLocalChatModel(first.window);
