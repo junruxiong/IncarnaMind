@@ -5852,6 +5852,23 @@
     background: var(--color-attention);
     animation: none;
   }
+  /* Under the live line: how long it takes, with Stop, its words in line with the line's own. */
+  .answer-steps-wait {
+    margin: 0 0 0 20px;
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--color-ink-meta);
+  }
+  .answer-steps-wait-stop {
+    padding: 0;
+    border-radius: 4px;
+    font-weight: 600;
+    color: var(--color-ink-secondary);
+
+    &:hover {
+      color: var(--color-ink);
+    }
+  }
   .answer-timeline {
     display: flex;
     flex-direction: column;

@@ -752,6 +752,9 @@ export function createAnswers(options: AnswersOptions) {
     let lastReasoningAt: number | null = null;
     /** When the text the Answer keeps began: a preamble taken back doesn't count. */
     let firstTextAt: number | null = null;
+    /** When the first Mind change of a Minds' Tool call began to be written. */
+    let firstMindWordAt: number | null = null;
+    const careful = asksToCheckOrCalculate(context.question);
     const iso = (ms: number | null) => (ms === null ? null : new Date(ms).toISOString());
     const steps = (): AnswerSteps => {
       const summary = reasoning.trim();
@@ -759,6 +762,7 @@ export function createAnswers(options: AnswersOptions) {
         firstTextAt !== null && reasoningStartedAt !== null && firstTextAt > reasoningStartedAt
           ? firstTextAt
           : (lastReasoningAt ?? Date.now());
+      const firstWordAt = Math.min(firstTextAt ?? Infinity, firstMindWordAt ?? Infinity);
       return {
         sentAt: iso(sentAt),
         finishedAt: iso(finishedAt),
@@ -769,6 +773,9 @@ export function createAnswers(options: AnswersOptions) {
             : null,
         ...(read?.partial && { readShare }),
         ...(citedAfterChecking.count > 0 && { citedAfterChecking: citedAfterChecking.count }),
+        ...(sentAt !== null &&
+          firstWordAt !== Infinity && { firstWordMs: Math.max(0, firstWordAt - sentAt) }),
+        ...(careful && { careful: true as const }),
       };
     };
     let skills: SkillSession | null = null;
@@ -1264,10 +1271,7 @@ export function createAnswers(options: AnswersOptions) {
       if (consenting) showPhase();
       let prepared: PreparedChatModel;
       try {
-        prepared = await options.prepareModel(
-          model,
-          asksToCheckOrCalculate(context.question) ? "careful" : undefined,
-        );
+        prepared = await options.prepareModel(model, careful ? "careful" : undefined);
       } catch (error) {
         finish({ status: "failed", error: failureOf(error) });
         return;
@@ -1394,6 +1398,7 @@ export function createAnswers(options: AnswersOptions) {
                 return { blocks, notFound, unrecorded };
               },
               changed: (toolCallId, change) => {
+                firstMindWordAt ??= Date.now();
                 mindChanges.set(toolCallId, change);
                 // On its card at once: a Mind changes while the call is still being written.
                 const call = toolCalls.find((each) => each.id === toolCallId);
