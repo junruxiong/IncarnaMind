@@ -37,7 +37,7 @@ import {
   resolveRequested,
   unitLocation,
 } from "../../shared/locations";
-import { citesSource, type NamedSource } from "../../shared/markdownTables";
+import { citesSource, type NamedSource } from "../../shared/namedSources";
 import { findQuote, lostLigatures, type MatchOptions } from "../../shared/quoteMatch";
 import { foldRadicals, nameKey } from "../../shared/text";
 import { sameRun } from "../../shared/units";
