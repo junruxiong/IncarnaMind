@@ -10,7 +10,7 @@ import type { Core, Meeting, MeetingHelpKind } from "../../src/core";
 import { answerEnded, shownPassages } from "../helpers/citations";
 import { createTempDataFolder } from "../helpers/core";
 import { createSourceFolder, waitForProcessing, writeSourceFile } from "../helpers/documents";
-import { type ModelCall, scriptedModel } from "../helpers/models";
+import { type ModelCall, scriptedModel, scriptedModels } from "../helpers/models";
 import { transcribingCore, until } from "../helpers/transcription";
 
 const SECOND = 1000;
@@ -39,18 +39,28 @@ function helpingModel(calls: ModelCall[]) {
   });
 }
 
-/** A meeting recording with lines from both sides; `before`, what to do first (Documents wait while it records). */
-async function setUp(before?: (core: Core) => Promise<void>) {
+/**
+ * A meeting recording with lines from both sides; `before`, what to do first (Documents wait while
+ * it records); `lines` and `theirLines`, what each side says.
+ */
+async function setUp(
+  before?: (core: Core) => Promise<void>,
+  said: { lines?: readonly string[]; theirLines?: readonly string[] } = {},
+) {
   const calls: ModelCall[] = [];
   const dataDir = await createTempDataFolder();
-  const { core, record } = await transcribingCore(dataDir, { model: helpingModel(calls) });
+  const models = scriptedModels(helpingModel(calls));
+  const { core, record } = await transcribingCore(dataDir, {
+    createChatModel: models.createChatModel,
+    engine: said,
+  });
   await core.saveChatProvider({ kind: "ollama", modelId: "local-model" });
   await before?.(core);
   const meeting = await core.createMeeting();
   await core.startMeeting({ meetingId: meeting.id, systemAudio: true });
   record(9 * SECOND);
   await until(core, meeting.id, (transcript) => transcript.lines >= 4);
-  return { core, meeting, calls };
+  return { core, meeting, calls, specs: models.specs };
 }
 
 async function press(core: Core, meeting: Meeting, kind: MeetingHelpKind, conversationId?: string) {
@@ -152,6 +162,41 @@ describe("Help during the call", { timeout: 60_000 }, () => {
     expect(stopped?.help).toBeNull();
     expect(stopped?.helpTemplate).toBeNull();
     await expect(core.askMeetingHelp({ meetingId: meeting.id, kind: "say" })).rejects.toThrow();
+  });
+
+  test("help is written without the model thinking first, an ordinary Question with it", async () => {
+    const { core, meeting, specs } = await setUp(async (before) => {
+      const saved = await before.saveChatProvider({
+        kind: "anthropic",
+        modelId: "claude-haiku-5-5",
+        apiKey: "sk-test",
+      });
+      if (saved.service) await before.allowDataFlow("chat", saved.service.id);
+    });
+    await press(core, meeting, "say");
+    expect(specs.at(-1)?.thinking).toBe("off");
+    const asked = await core.askInConversation({ mindId: meeting.mindId, text: "Who joined?" });
+    if (asked.asked) await answerEnded(core, asked.answerId);
+    expect(specs.at(-1)?.thinking).toBe("answer");
+  });
+
+  test("help answers in the call's language, whatever the interface's: Sum up, What to ask next and Check what was said", async () => {
+    const { core, meeting, calls } = await setUp(undefined, {
+      lines: ["我们先看一下报价。", "团队版每个席位每月二十五美元。"],
+      theirLines: ["企业版能便宜一点吗？", "四十个席位一共多少钱？"],
+    });
+    for (const kind of ["sum", "ask", "check"] as const) {
+      await press(core, meeting, kind);
+      const system = calls.at(-1)?.system ?? "";
+      expect(system).toContain(
+        '- The call is in Chinese: write all of it in Chinese, the "→" lines too',
+      );
+      expect(system).not.toContain("The Question is written in English");
+      expect(calls.at(-1)?.prompt).toContain("企业版");
+    }
+    await core.updateSettings({ user: { language: "zh-CN" } });
+    const { messages } = await press(core, meeting, "ask");
+    expect(messages.at(-2)).toMatchObject({ kind: "question", text: "接下来问什么" });
   });
 
   test("the buttons' shortcuts are kept per device, and only keys with ⌘, ⌃ or ⌥ are taken", async () => {

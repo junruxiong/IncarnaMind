@@ -16,7 +16,7 @@ const countOf = (text: string, pattern: RegExp) => text.match(pattern)?.length ?
 // A Question is short, so two common words tell its language where a Document's sample needs three.
 const QUESTION_COMMON_WORDS = 2;
 
-function questionLanguage(question: string): string | null {
+export function questionLanguage(question: string): string | null {
   const cjk = countOf(question, CJK_CHARACTERS);
   const words = countOf(question, LATIN_WORDS);
   // A few CJK characters among Latin words are a name, as in "What does 合同条款 say?".

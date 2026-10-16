@@ -68,7 +68,6 @@ const SILENT_SAMPLES = MEETING_SAMPLE_RATE * 60;
 /** How often audio past its day is looked for. */
 const SWEEP_INTERVAL_MS = 60_000;
 
-/** How often the sources' loudness is told, for the level bars. */
 const LEVEL_EVERY_MS = 100;
 
 /** Loudness from 0 to 1 for samples: their RMS on a scale where quiet speech is about a third. */
@@ -826,7 +825,6 @@ export function createMeetings(options: MeetingsOptions) {
       changed();
     },
 
-    /** Help was asked for during the call: the panel shows its Answer. */
     helped(meetingId: string, given: MeetingHelp): void {
       if (!isLiveRow(rowOf(meetingId))) return;
       help.set(meetingId, given);
@@ -842,7 +840,6 @@ export function createMeetings(options: MeetingsOptions) {
       return toMeeting(row);
     },
 
-    /** The Mind's Meeting while it records or is paused; null otherwise. */
     liveOf(mindId: string): Meeting | null {
       const row = db.get<MeetingRow>(
         `SELECT ${COLUMNS} FROM meetings WHERE mind_id = ? AND deleted_at IS NULL AND status IN ('recording', 'paused')`,

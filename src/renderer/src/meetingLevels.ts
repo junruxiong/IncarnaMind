@@ -1,7 +1,6 @@
 import { create } from "zustand";
 import { core } from "./core";
 
-/** How many of the latest loudness readings the level bars draw, newest last. */
 export const LEVEL_BARS = 5;
 
 /**

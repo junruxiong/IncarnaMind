@@ -8,6 +8,7 @@ import {
   helpLabel,
   isGlobalKeys,
 } from "../../../../shared/meetingHelp";
+import { SAYS_HIDDEN_FROM_SHARES } from "../../../../shared/meetingPanel";
 import { keysHere } from "../../commands/keymap";
 import { files } from "../../core";
 import { useT } from "../../i18n";
@@ -219,29 +220,31 @@ export function HelpSettings() {
             className="switch"
           />
         </div>
-        <div className={ruledRowClass}>
-          <div className="flex min-w-0 flex-col gap-0.5">
-            <label htmlFor={hiddenId} className={rowTitleClass}>
-              {t("meetings.settings.hidden")}
-            </label>
-            <p id={`${hiddenId}-description`} className={rowTextClass}>
-              {t("meetings.panel.hidden")}
-            </p>
+        {SAYS_HIDDEN_FROM_SHARES && (
+          <div className={ruledRowClass}>
+            <div className="flex min-w-0 flex-col gap-0.5">
+              <label htmlFor={hiddenId} className={rowTitleClass}>
+                {t("meetings.settings.hidden")}
+              </label>
+              <p id={`${hiddenId}-description`} className={rowTextClass}>
+                {t("meetings.panel.hidden")}
+              </p>
+            </div>
+            <input
+              id={hiddenId}
+              type="checkbox"
+              role="switch"
+              aria-checked={device.meetingPanelHidden}
+              aria-describedby={`${hiddenId}-description`}
+              data-testid="help-hidden-setting"
+              checked={device.meetingPanelHidden}
+              onChange={(event) =>
+                void updateSettings({ device: { meetingPanelHidden: event.target.checked } })
+              }
+              className="switch"
+            />
           </div>
-          <input
-            id={hiddenId}
-            type="checkbox"
-            role="switch"
-            aria-checked={device.meetingPanelHidden}
-            aria-describedby={`${hiddenId}-description`}
-            data-testid="help-hidden-setting"
-            checked={device.meetingPanelHidden}
-            onChange={(event) =>
-              void updateSettings({ device: { meetingPanelHidden: event.target.checked } })
-            }
-            className="switch"
-          />
-        </div>
+        )}
       </div>
       <h5 className={`mt-4 mb-1 ${rowTitleClass}`}>{t("meetings.settings.keys")}</h5>
       <p className={`mb-2 ${hintClass}`}>{t("meetings.settings.keysBody")}</p>

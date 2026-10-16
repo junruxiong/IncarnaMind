@@ -84,6 +84,24 @@ async function pressIn(page: Page, name: string): Promise<Locator> {
   return suggestion;
 }
 
+/** Up to three short lines, none starred and none with an arrow. */
+async function expectLines(suggestion: Locator): Promise<void> {
+  const lines = suggestion.getByTestId("help-option");
+  await expect(lines.first()).toBeVisible();
+  expect(await lines.count()).toBeLessThanOrEqual(3);
+  await expect(suggestion.getByTestId("help-option-effect")).toHaveCount(0);
+  await expect(suggestion.locator('[data-recommended="true"]')).toHaveCount(0);
+}
+
+/** Runs a command from ⌘K by its full name. */
+async function fromPalette(window: Page, name: string): Promise<void> {
+  await window.keyboard.press("ControlOrMeta+k");
+  await expect(window.getByTestId("palette-search")).toBeFocused();
+  await window.keyboard.type(name);
+  await window.keyboard.press("Enter");
+  await expect(window.getByTestId("palette-search")).toBeHidden();
+}
+
 /** One or two options, the first recommended and starred, each with what it leads to. */
 async function expectOptions(suggestion: Locator): Promise<void> {
   const options = suggestion.getByTestId("help-option");
@@ -97,14 +115,16 @@ async function expectOptions(suggestion: Locator): Promise<void> {
   }
 }
 
-test("help during the call: the floating panel above the meeting gives one or two options per button in English and Chinese, never takes the focus, changes with the template, and folds to level bars", async () => {
+test("help during the call: the floating panel above the meeting gives one or two options per button in English and Chinese, never takes the focus, and changes with the template", async () => {
+  // Fourteen presses, each one streaming a scripted Answer.
+  test.setTimeout(120_000);
   const { app, window } = await launchApp(dataDir, {
     fakeChat: true,
     transcriber: { theirLines: BUYER },
   });
   await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
-  const bar = await recordingMeeting(window);
+  await recordingMeeting(window);
 
   // With no AI model yet, the assistant and the panel each say so in one line, with Set up.
   await window.getByTestId("mind-editor").click();
@@ -142,9 +162,8 @@ test("help during the call: the floating panel above the meeting gives one or tw
     focused: false,
     hidden: process.platform === "linux" ? null : true,
   });
-  await expect(panel.getByTestId("panel-hidden")).toHaveText(
-    "Hidden from your screen share where your system allows",
-  );
+  // It doesn't say so until real screen shares confirm it.
+  await expect(panel.getByTestId("panel-hidden")).toHaveCount(0);
   const buttons = panel.getByTestId("help-button");
   await expect(buttons).toHaveText([
     /^What should I say\?/,
@@ -179,6 +198,10 @@ test("help during the call: the floating panel above the meeting gives one or tw
     want.getByTestId("help-option-note").first().getByTestId("help-citation"),
   ).toHaveAttribute("data-check", "found");
 
+  // What to ask next writes options; Check what was said, up to three lines.
+  await expectOptions(await pressIn(panel, "What to ask next"));
+  await expectLines(await pressIn(panel, "Check what was said"));
+
   // While the panel shows, the assistant has no second row of the same buttons.
   await expect(window.getByTestId("help-strip")).toHaveCount(0);
 
@@ -191,12 +214,17 @@ test("help during the call: the floating panel above the meeting gives one or tw
   await expect(buttons).toHaveCount(10);
   await expect(buttons.nth(7)).toHaveText("Handle the objection");
   await expect(panel.getByTestId("panel-template")).toHaveText("Sales call");
+  await expectOptions(await pressIn(panel, "Handle the objection"));
   await pointAndClick(panel, panel.getByTestId("panel-template"));
   await pointAndClick(
     panel,
     panel.locator('[data-testid="panel-template-option"][data-template="interview"]'),
   );
   await expect(buttons.nth(8)).toHaveText("Am I leading them?");
+  const leading = await pressIn(panel, "Am I leading them?");
+  await expect(leading.getByTestId("help-heading")).toHaveText(
+    /^Am I leading them\? · You said: “.+”$/,
+  );
   await pointAndClick(panel, panel.getByTestId("panel-template"));
   await pointAndClick(
     panel,
@@ -204,22 +232,37 @@ test("help during the call: the floating panel above the meeting gives one or tw
   );
   await expect(buttons).toHaveCount(9);
   await expect(buttons.nth(8)).toHaveText("Where we disagree");
+  await expectLines(await pressIn(panel, "Where we disagree"));
   await shot(panel, "help-panel-team-en");
 
-  // In Chinese, the same buttons and options in Chinese words.
+  // In a Chinese interface the buttons and headings are Chinese; the options keep the call's
+  // language, here English.
   await (await core(window)).evaluate((bridge) =>
     bridge.updateSettings({ user: { language: "zh-CN" } }),
   );
   await expect(buttons.first()).toContainText("我该怎么说？");
-  await expect(panel.getByTestId("panel-hidden")).toHaveText("在系统支持时，共享屏幕中不显示");
   const sayNoZh = await pressIn(panel, "礼貌地拒绝");
   await expect(sayNoZh.getByTestId("help-heading")).toHaveText(/^礼貌地拒绝 · 对方说：“.+”$/);
   await expectOptions(sayNoZh);
-  await expect(sayNoZh.getByTestId("help-option-say").first()).toContainText("周五前回复你");
+  await expect(sayNoZh.getByTestId("help-option-say").first()).toContainText("Friday");
+  await expectOptions(await pressIn(panel, "接下来问什么"));
+  await expectLines(await pressIn(panel, "核对刚才说的话"));
+  await expectLines(await pressIn(panel, "分歧在哪里"));
   await shot(panel, "help-panel-say-no-zh");
-  await (await core(window)).evaluate((bridge) =>
-    bridge.updateSettings({ user: { language: "en" } }),
-  );
+  await app.close();
+});
+
+test("help during the call: the panel folds to level bars that become Stop, ⌘K folds it, pins and adds its suggestion, and closed, the buttons move to the assistant until ⌘K shows it again", async () => {
+  const { app, window } = await launchApp(dataDir, {
+    fakeChat: true,
+    transcriber: { theirLines: BUYER },
+  });
+  await setWindowSize(app, window, 1440, 900);
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  const bar = await recordingMeeting(window);
+  const panel = await panelOf(app);
+  await expectLines(await pressIn(panel, "Sum up so far"));
 
   // Folded to a pill: the level bars move with the voices, and pointed at or focused, are Stop.
   await pointAndClick(panel, panel.getByTestId("panel-collapse"));
@@ -239,6 +282,19 @@ test("help during the call: the floating panel above the meeting gives one or tw
   await pointAndClick(panel, pill.getByTestId("panel-expand"));
   await expect(panel.getByTestId("help-buttons")).toBeVisible();
 
+  // ⌘K in the app's window folds and unfolds the panel, pins its suggestion and adds it to notes.
+  await fromPalette(window, "Collapse the floating panel");
+  await expect(pill).toBeVisible();
+  await fromPalette(window, "Expand the floating panel");
+  await expect(panel.getByTestId("help-buttons")).toBeVisible();
+  await fromPalette(window, "Pin the latest suggestion");
+  await expect(panel.getByTestId("help-pin").last()).toHaveAttribute("aria-pressed", "true");
+  await fromPalette(window, "Add the latest suggestion to notes");
+  await expect(window.getByTestId("mind-editor")).toContainText("partner preview");
+  await expect(window.getByTestId("undo-message")).toHaveText("Added to notes");
+  await pointAndClick(window, window.getByTestId("undo-action"));
+  await expect(window.getByTestId("mind-editor")).not.toContainText("partner preview");
+
   // Closed, it stays closed for this meeting, and the buttons sit at the top of the assistant,
   // which shows the help asked there; ⌘K shows the panel again.
   // The window goes as the click lands, which a click Playwright waits on would call a failure.
@@ -247,7 +303,7 @@ test("help during the call: the floating panel above the meeting gives one or tw
   await close.evaluate((button) => setTimeout(() => (button as HTMLElement).click(), 0));
   await expect.poll(() => panelOpen(app)).toBe(false);
   const strip = window.getByTestId("help-strip");
-  await expect(strip.getByTestId("help-button")).toHaveCount(9);
+  await expect(strip.getByTestId("help-button")).toHaveCount(7);
   await pointAndClick(
     window,
     strip.getByTestId("help-button").filter({ hasText: "Sum up so far" }),
@@ -367,4 +423,46 @@ test("help during the call: Answer their question cites the price sheet, checked
   await expect.poll(() => held(app, "Ctrl+Alt+9")).toBe(false);
   await app.close();
   await removeDataFolder(sources);
+});
+
+test("help during the call follows the call's language: a Chinese call gets Chinese help in an English interface, for Sum up, What to ask next, Check what was said and a template's button", async () => {
+  const { app, window } = await launchApp(dataDir, {
+    fakeChat: true,
+    transcriber: {
+      lines: ["我们先看一下报价。", "团队版每个席位每月二十五美元。"],
+      theirLines: ["企业版能便宜一点吗？", "四十个席位一共多少钱？"],
+    },
+  });
+  await setWindowSize(app, window, 1440, 900);
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await recordingMeeting(window);
+  const panel = await panelOf(app);
+  const han = /\p{Script=Han}/u;
+
+  const sum = await pressIn(panel, "Sum up so far");
+  await expectLines(sum);
+  await expect(sum.getByTestId("help-option-say").first()).toHaveText(han);
+  const ask = await pressIn(panel, "What to ask next");
+  await expectOptions(ask);
+  await expect(ask.getByTestId("help-option-say").first()).toHaveText(han);
+  await expect(ask.getByTestId("help-option-effect").first()).toHaveText(han);
+  await expect(ask.getByTestId("help-heading")).toHaveText(/^What to ask next · They said: “.+”$/);
+  const check = await pressIn(panel, "Check what was said");
+  await expectLines(check);
+  await expect(check.getByTestId("help-option-say").first()).toHaveText(han);
+
+  await (await core(window)).evaluate((bridge) =>
+    bridge.updateSettings({ user: { language: "zh-CN" } }),
+  );
+  await pointAndClick(panel, panel.getByTestId("panel-template"));
+  await pointAndClick(
+    panel,
+    panel.locator('[data-testid="panel-template-option"][data-template="sales"]'),
+  );
+  const objection = await pressIn(panel, "处理异议");
+  await expectOptions(objection);
+  await expect(objection.getByTestId("help-option-say").first()).toHaveText(han);
+  await expect(objection.getByTestId("help-heading")).toHaveText(/^处理异议 · 对方说：“.+”$/);
+  await app.close();
 });

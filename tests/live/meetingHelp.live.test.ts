@@ -10,7 +10,7 @@ import { appendFile } from "node:fs/promises";
 import { describe, expect, test } from "vitest";
 import type { Core, Meeting, MeetingHelpKind } from "../../src/core";
 import { createAiSdkChatModel } from "../../src/core/providers/models";
-import { readHelpReply } from "../../src/renderer/src/helpReply";
+import { readHelpReply, shownItems } from "../../src/renderer/src/helpReply";
 import { HELP_SHAPE } from "../../src/shared/meetingHelp";
 import { answerEnded } from "../helpers/citations";
 import { createTempDataFolder } from "../helpers/core";
@@ -30,6 +30,12 @@ const THEM = [
   "We like it, but the budget is tight this quarter.",
   "Can you do thirty-five dollars a seat for Enterprise?",
   "Does Enterprise include single sign-on, and what would forty seats cost?",
+];
+const ME_ZH = ["谢谢大家，我们来过一下方案。", "团队版每个席位每月二十五美元。", "试用期三十天。"];
+const THEM_ZH = [
+  "方案不错，但这个季度预算很紧。",
+  "企业版能做到每个席位三十五美元吗？",
+  "企业版包含单点登录吗？四十个席位一共多少钱？",
 ];
 const PRICES = [
   "# Price sheet 2026",
@@ -89,16 +95,16 @@ describe.skipIf(!KEY)("Help during the call, on a real model", { timeout: 300_00
     for (const kind of ["say", "answer", "want", "sum", "no", "ask", "check"] as const) {
       const { answer, ended } = await press(core, meeting, kind);
       expect(ended.event).toBe("finished");
-      const items = readHelpReply(answer.text);
-      if (HELP_SHAPE[kind] === "lines") {
-        expect(items.length).toBeGreaterThan(0);
-        expect(items.length).toBeLessThanOrEqual(3);
-        continue;
-      }
-      const options = items.filter((item) => item.effect !== null);
-      expect(options.length).toBeGreaterThanOrEqual(1);
-      expect(options.length).toBeLessThanOrEqual(2);
-      expect(options[0]?.recommended).toBe(true);
+      const shape = HELP_SHAPE[kind];
+      const shown = shownItems(readHelpReply(answer.text), {
+        shape,
+        leadIn: false,
+        streaming: false,
+      });
+      expect(shown.length).toBeGreaterThan(0);
+      if (shape === "lines") continue;
+      expect(shown[0]?.recommended).toBe(true);
+      expect(shown.every((item) => item.effect !== null)).toBe(true);
       if (kind === "answer") {
         expect(answer.citations).toContainEqual(
           expect.objectContaining({ documentName: "Price sheet", check: "found" }),
@@ -113,5 +119,26 @@ describe.skipIf(!KEY)("Help during the call, on a real model", { timeout: 300_00
     await core.updateSettings({ user: { language: "zh-CN" } });
     const { answer } = await press(core, meeting, "no");
     expect(answer.text).toMatch(/→/);
+  });
+
+  test("a Chinese call gets its help in Chinese in an English interface", async () => {
+    const dataDir = await createTempDataFolder();
+    const { core, record } = await transcribingCore(dataDir, {
+      engine: { lines: ME_ZH, theirLines: THEM_ZH, maxSpeechMs: 1500 },
+      createChatModel: createAiSdkChatModel,
+    });
+    await core.saveChatProvider({ kind: "anthropic", apiKey: KEY ?? "", modelId: MODEL });
+    const meeting = await core.createMeeting();
+    await core.startMeeting({ meetingId: meeting.id, systemAudio: true });
+    record(12_000);
+    await until(core, meeting.id, (transcript) => transcript.lines >= 6);
+    if (REPORT) await appendFile(REPORT, `# ${MODEL}, a Chinese call, an English interface\n\n`);
+    for (const kind of ["sum", "say"] as const) {
+      const { answer } = await press(core, meeting, kind);
+      const words = answer.text.replace(/\[[^\]]*\]/g, "");
+      const han = words.match(/\p{Script=Han}/gu)?.length ?? 0;
+      const latin = words.match(/[A-Za-z]/g)?.length ?? 0;
+      expect(han).toBeGreaterThan(latin);
+    }
   });
 });

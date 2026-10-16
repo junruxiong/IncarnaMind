@@ -4,7 +4,7 @@
  * and short lines, while it streams too.
  */
 import { describe, expect, test } from "vitest";
-import { quoted, readHelpReply } from "../../src/renderer/src/helpReply";
+import { quoted, readHelpReply, shownItems } from "../../src/renderer/src/helpReply";
 
 const textOf = (pieces: ReturnType<typeof readHelpReply>[number]["lead"]) =>
   pieces.map((piece) => (piece.kind === "text" ? piece.text : `[${piece.marker}]`)).join("");
@@ -54,6 +54,41 @@ describe("A help reply", () => {
   test("only the first star is a recommendation", () => {
     const items = readHelpReply("★ One\n→ a\n\n★ Two\n→ b");
     expect(items.map((item) => item.recommended)).toEqual([true, false]);
+  });
+
+  test("the panel shows at most two options, dropping a lead-in or a remark a model adds anyway", () => {
+    const items = readHelpReply(
+      "I'll answer from the transcript.\n\n★ One\n→ a\n\nTwo\n→ b\n\nThree\n→ c\n\nNote: check the price.",
+    );
+    const shown = shownItems(items, { shape: "options", leadIn: false, streaming: false });
+    expect(shown.map((item) => textOf(item.lead))).toEqual(["One", "Two"]);
+  });
+
+  test("Am I leading them? keeps its first line; an option being written shows as it streams", () => {
+    const leading = readHelpReply(
+      "A little: it suggests the answer.\n★ Ask instead: what happened?\n→ hears",
+    );
+    expect(
+      shownItems(leading, { shape: "options", leadIn: true, streaming: false }).map((item) =>
+        textOf(item.lead),
+      ),
+    ).toEqual(["A little: it suggests the answer.", "Ask instead: what happened?"]);
+    const writing = readHelpReply("★ We can extend the pil");
+    expect(shownItems(writing, { shape: "options", leadIn: false, streaming: true })).toHaveLength(
+      1,
+    );
+    expect(shownItems(writing, { shape: "options", leadIn: false, streaming: false })).toHaveLength(
+      0,
+    );
+  });
+
+  test("short lines keep only the marked ones, at most three", () => {
+    const items = readHelpReply("Here is the summary:\n- a\n- b\n- c\n- d");
+    expect(
+      shownItems(items, { shape: "lines", leadIn: false, streaming: false }).map((item) =>
+        textOf(item.lead),
+      ),
+    ).toEqual(["a", "b", "c"]);
   });
 
   test("while it streams, an option before its arrow has no effect yet", () => {

@@ -8,8 +8,27 @@ import type { GeneralHelpKind } from "./meetingHelp";
 export const MEETING_PANEL_ARGUMENT = "--incarnamind-meeting-panel";
 export const MEETING_PANEL_BRIDGE_KEY = "incarnamindMeetingPanel";
 
+/**
+ * Whether the panel and Settings say the panel is left out of the User's screen share. Off until
+ * real Zoom, Teams and Meet shares on macOS 15 and 26 and on Windows confirm it: capture built on
+ * ScreenCaptureKit may not honour content protection on every macOS version. The protection is
+ * on either way.
+ */
+export const SAYS_HIDDEN_FROM_SHARES: boolean = false;
+
 /** The help buttons' global shortcuts the main process holds now, by button. */
 export type HeldKeys = Partial<Record<GeneralHelpKind, string>>;
+
+/** What ⌘K in the app's window asks of the panel: pin its latest suggestion, or fold or unfold it. */
+export type PanelCommand = "pin" | "fold";
+
+/** The panel as the app's window knows it, for ⌘K's labels. */
+export interface PanelState {
+  shown: boolean;
+  folded: boolean;
+  /** Its latest suggestion is pinned. */
+  pinned: boolean;
+}
 
 export const MEETING_PANEL_CHANNELS = {
   /** Page → main: make the window this size, in CSS pixels, keeping its top right corner. */
@@ -24,6 +43,10 @@ export const MEETING_PANEL_CHANNELS = {
   keysChanged: "meetingPanel:keysChanged",
   /** Main → page: a button's shortcut was pressed. */
   help: "meetingPanel:help",
+  /** Page → main: whether it is folded and its latest suggestion pinned. */
+  state: "meetingPanel:state",
+  /** Main → page: ⌘K asked for a `PanelCommand`. */
+  command: "meetingPanel:command",
 } as const;
 
 export interface MeetingPanelBridge {
@@ -33,4 +56,6 @@ export interface MeetingPanelBridge {
   keys(): Promise<HeldKeys>;
   onKeys(listener: (keys: HeldKeys) => void): () => void;
   onHelp(listener: (kind: GeneralHelpKind) => void): () => void;
+  state(state: Omit<PanelState, "shown">): void;
+  onCommand(listener: (command: PanelCommand) => void): () => void;
 }

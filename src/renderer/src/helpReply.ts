@@ -4,6 +4,7 @@
  * or readings, the recommended first after "★", each followed by "→" and what
  * it leads to; or up to three short lines. It reads a part still streaming.
  */
+import type { HelpShape } from "../../shared/meetingHelp";
 
 /** A run of text, a Citation's marker ("[^2]") or a calculated figure's ("[=1]"). */
 export type ReplyPiece =
@@ -13,6 +14,8 @@ export type ReplyPiece =
 
 export interface ReplyItem {
   recommended: boolean;
+  /** It began with a list's mark ("- "), as each of the short lines does. */
+  bullet: boolean;
   /** The sentence to say, the reading, or the line. */
   lead: ReplyPiece[];
   /** Lines between it and its "→": a reading's moment of the transcript. */
@@ -68,6 +71,28 @@ export function quoted(lead: readonly ReplyPiece[]): ReplyPiece[] {
 /** Bold and italics marks a model may add, which the panel doesn't show. */
 const plain = (line: string) => line.replace(/\*\*|__/g, "").trim();
 
+/**
+ * What the panel shows of a reply in its button's shape: at most two options or readings, after
+ * the one line "Am I leading them?" puts first (`leadIn`), the one still being written included
+ * while it `streaming`; or at most three short lines. What a model adds anyway around them (a
+ * lead-in, a remark, a third option) is left out.
+ */
+export function shownItems(
+  items: readonly ReplyItem[],
+  { shape, leadIn, streaming }: { shape: HelpShape; leadIn: boolean; streaming: boolean },
+): ReplyItem[] {
+  if (shape === "lines") {
+    const bullets = items.filter((item) => item.bullet);
+    return (bullets.length > 0 ? bullets : items).slice(0, 3);
+  }
+  const [first] = items;
+  const lead = leadIn && first && first.effect === null ? [first] : [];
+  const last = items.at(-1);
+  const writing = streaming && last && last.effect === null && !lead.includes(last) ? [last] : [];
+  const options = [...items.filter((item) => item.effect !== null), ...writing].slice(0, 2);
+  return [...lead, ...options];
+}
+
 export function readHelpReply(markdown: string): ReplyItem[] {
   const items: ReplyItem[] = [];
   for (const raw of markdown.split("\n")) {
@@ -77,7 +102,7 @@ export function readHelpReply(markdown: string): ReplyItem[] {
     if (EFFECT.test(line)) {
       const effect = pieces(line.replace(EFFECT, ""));
       if (current && current.effect === null) current.effect = effect;
-      else items.push({ recommended: false, lead: [], notes: [], effect });
+      else items.push({ recommended: false, bullet: false, lead: [], notes: [], effect });
       continue;
     }
     const recommended = RECOMMENDED.test(line);
@@ -87,7 +112,7 @@ export function readHelpReply(markdown: string): ReplyItem[] {
       current.notes.push(pieces(text));
       continue;
     }
-    items.push({ recommended, lead: pieces(text), notes: [], effect: null });
+    items.push({ recommended, bullet, lead: pieces(text), notes: [], effect: null });
   }
   // One recommendation: a second star a model adds is dropped.
   const first = items.findIndex((item) => item.recommended);

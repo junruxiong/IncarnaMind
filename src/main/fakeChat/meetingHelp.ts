@@ -1,8 +1,9 @@
 /**
  * Help during a call: a button's Question gets the shape it asks for. Options cite the
  * first Passage found ahead in the User's Documents, its line in the recommended option, and
- * without one, they cite nothing; readings and lines cite the transcript's newest line. In
- * Chinese when the button's name is.
+ * without one, they cite nothing; readings and lines cite the transcript's newest line. In the
+ * call's language: Chinese when its newest line is, or before anyone has spoken, when the button's
+ * name is.
  */
 import { passagesIn, recordFor } from "./passages";
 import {
@@ -59,10 +60,11 @@ export function helpReply(prompt: Prompt, tools: readonly string[]): Reply | nul
   const system = systemOf(prompt);
   if (!HELP.test(system)) return null;
   const question = lastQuestion(prompt);
-  const language = /\p{Script=Han}/u.test(question) ? "zh" : "en";
   const asked = lastUserText(prompt);
   const found = passagesIn(block(asked, "found-in-documents"));
   const heard = passagesIn(block(asked, "live-transcript"));
+  const newest = heard.at(-1)?.text ?? question;
+  const language = /\p{Script=Han}/u.test(newest) ? "zh" : "en";
   const shape = /One or two readings/.test(system)
     ? "readings"
     : /At most three short lines/.test(system)

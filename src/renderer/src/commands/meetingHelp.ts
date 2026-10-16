@@ -9,7 +9,14 @@ import {
   templateLabel,
 } from "../../../shared/meetingHelp";
 import { core, files } from "../core";
-import { askHelpInAssistant, helpKeysLabel, liveMeetingNow, useMeetingHelp } from "../meetingHelp";
+import { translateNow } from "../i18n";
+import {
+  addHelpToNotes,
+  askHelpInAssistant,
+  helpKeysLabel,
+  liveMeetingNow,
+  useMeetingHelp,
+} from "../meetingHelp";
 import { canRecordMeetings } from "../meetings";
 import { useAppStore } from "../store";
 import type { Command } from "./registry";
@@ -23,6 +30,9 @@ const meetingsOn = () => canRecordMeetings(useAppStore.getState().settings);
 
 const whileLive = () =>
   liveMeetingNow() ? true : ({ reason: "meetings.command.noneLive" } as const);
+
+const whilePanelShown = () =>
+  useMeetingHelp.getState().panel.shown ? true : ({ reason: "meetings.panel.notShown" } as const);
 
 const helpCommand = (kind: MeetingHelpKind, general: boolean): Command => ({
   id: `meeting.help.${kind}`,
@@ -65,13 +75,64 @@ export const meetingHelpCommands: readonly Command[] = [
   {
     id: "meeting.panel",
     label: (_ctx, t) =>
-      t(useMeetingHelp.getState().panelShown ? "meetings.panel.hide" : "meetings.panel.show"),
+      t(useMeetingHelp.getState().panel.shown ? "meetings.panel.hide" : "meetings.panel.show"),
     group: "main",
     // Pressed again, it undoes itself.
     reversible: true,
     when: meetingsOn,
     enabled: whileLive,
-    run: () => files.showMeetingPanel(!useMeetingHelp.getState().panelShown),
+    run: () => files.showMeetingPanel(!useMeetingHelp.getState().panel.shown),
+  },
+  {
+    id: "meeting.panel-fold",
+    label: (_ctx, t) =>
+      t(
+        useMeetingHelp.getState().panel.folded
+          ? "meetings.panel.expandCommand"
+          : "meetings.panel.collapseCommand",
+      ),
+    group: "main",
+    // Pressed again, it undoes itself.
+    reversible: true,
+    when: meetingsOn,
+    enabled: whilePanelShown,
+    run: () => files.meetingPanelCommand("fold"),
+  },
+  {
+    id: "meeting.help-pin",
+    label: (_ctx, t) =>
+      t(
+        useMeetingHelp.getState().panel.pinned
+          ? "meetings.help.unpinCommand"
+          : "meetings.help.pinCommand",
+      ),
+    group: "main",
+    // Pressed again, it undoes itself.
+    reversible: true,
+    when: meetingsOn,
+    enabled: () => {
+      const shown = whilePanelShown();
+      if (shown !== true) return shown;
+      return liveMeetingNow()?.help ? true : { reason: "meetings.help.none" };
+    },
+    run: () => files.meetingPanelCommand("pin"),
+  },
+  {
+    id: "meeting.help-add",
+    label: "meetings.help.addCommand",
+    group: "main",
+    reversible: true,
+    when: meetingsOn,
+    enabled: () => (liveMeetingNow()?.help ? true : { reason: "meetings.help.none" }),
+    async run() {
+      const meeting = liveMeetingNow();
+      if (!meeting?.help) return;
+      const { mindId, blockIds } = await addHelpToNotes(meeting, meeting.help);
+      return {
+        message: translateNow("meetings.help.added"),
+        undo: () => core.undoAddToNote({ mindId, blockIds }),
+      };
+    },
   },
   templateCommand(null),
   ...MEETING_TEMPLATES.map(templateCommand),

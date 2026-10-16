@@ -33,6 +33,8 @@ import {
   MEETING_PANEL_BRIDGE_KEY,
   MEETING_PANEL_CHANNELS,
   type MeetingPanelBridge,
+  type PanelCommand,
+  type PanelState,
 } from "../shared/meetingPanel";
 import { titleBarOf } from "../shared/titleBar";
 
@@ -123,8 +125,9 @@ const files: FilesBridge = {
   onMeetingHelp: (listener) => listen<GeneralHelpKind>(FILES_CHANNELS.meetingHelp, listener),
   globalKeysFree: (keys) => ipcRenderer.invoke(FILES_CHANNELS.globalKeysFree, keys),
   showMeetingPanel: (shown) => ipcRenderer.send(FILES_CHANNELS.showMeetingPanel, shown),
+  meetingPanelCommand: (command) => ipcRenderer.send(FILES_CHANNELS.meetingPanelCommand, command),
   onMeetingPanel: (listener) => {
-    const stop = listen<boolean>(FILES_CHANNELS.meetingPanel, listener);
+    const stop = listen<PanelState>(FILES_CHANNELS.meetingPanel, listener);
     ipcRenderer.send(FILES_CHANNELS.meetingPanelWanted);
     return stop;
   },
@@ -154,6 +157,8 @@ if (process.argv.includes(MEETING_PANEL_ARGUMENT)) {
     keys: () => ipcRenderer.invoke(MEETING_PANEL_CHANNELS.keys),
     onKeys: (listener) => listen<HeldKeys>(MEETING_PANEL_CHANNELS.keysChanged, listener),
     onHelp: (listener) => listen<GeneralHelpKind>(MEETING_PANEL_CHANNELS.help, listener),
+    state: (state) => ipcRenderer.send(MEETING_PANEL_CHANNELS.state, state),
+    onCommand: (listener) => listen<PanelCommand>(MEETING_PANEL_CHANNELS.command, listener),
   };
   contextBridge.exposeInMainWorld(MEETING_PANEL_BRIDGE_KEY, panel);
 }

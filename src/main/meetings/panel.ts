@@ -25,12 +25,14 @@ import {
 } from "electron";
 import type { Core, Logger } from "../../core";
 import type { Meeting, Settings } from "../../core/api";
+import { isRecord } from "../../core/errors";
 import { FILES_CHANNELS } from "../../shared/bridge";
 import { GENERAL_HELP, type GeneralHelpKind, helpKeysOf } from "../../shared/meetingHelp";
 import {
   type HeldKeys,
   MEETING_PANEL_ARGUMENT,
   MEETING_PANEL_CHANNELS,
+  type PanelState,
 } from "../../shared/meetingPanel";
 import { handle } from "../ipc";
 
@@ -66,15 +68,23 @@ export function serveMeetingPanel(core: Core, options: MeetingPanelOptions): voi
   /** The panel's top right corner where the User left it, for the next one this session. */
   let corner: { right: number; top: number } | null = null;
   const held = new Map<GeneralHelpKind, string>();
+  /**
+   * Keys the system refused while recording, by button: not asked for again, nor logged, on
+   * every Meeting update, until those keys or the recording change.
+   */
+  const refused = new Map<GeneralHelpKind, string>();
 
   const liveMeeting = () =>
     meetings.find((meeting) => meeting.status === "recording" || meeting.status === "paused");
 
   const heldKeys = (): HeldKeys => Object.fromEntries(held);
 
+  /** What the panel's page last said of itself; reset when a panel opens. */
+  let reported = { folded: false, pinned: false };
+  const panelState = (): PanelState => ({ shown: !!panel, ...reported });
   const tellShown = () => {
     for (const window of options.appWindows()) {
-      if (!window.isDestroyed()) window.webContents.send(FILES_CHANNELS.meetingPanel, !!panel);
+      if (!window.isDestroyed()) window.webContents.send(FILES_CHANNELS.meetingPanel, panelState());
     }
   };
 
@@ -95,6 +105,7 @@ export function serveMeetingPanel(core: Core, options: MeetingPanelOptions): voi
         if (keys) wanted.set(kind, keys);
       }
     }
+    if (!recording) refused.clear();
     let changed = false;
     for (const [kind, keys] of held) {
       if (wanted.get(kind) === keys) continue;
@@ -103,8 +114,8 @@ export function serveMeetingPanel(core: Core, options: MeetingPanelOptions): voi
       changed = true;
     }
     for (const [kind, keys] of wanted) {
-      if (held.has(kind)) continue;
-      changed = true;
+      if (held.has(kind) || refused.get(kind) === keys) continue;
+      refused.delete(kind);
       let taken = false;
       try {
         taken = !globalShortcut.register(keys, () => press(kind));
@@ -113,11 +124,17 @@ export function serveMeetingPanel(core: Core, options: MeetingPanelOptions): voi
           kind,
           message: error instanceof Error ? error.message : String(error),
         });
+        refused.set(kind, keys);
         continue;
       }
       // Another app holds them: the button works without its shortcut.
-      if (taken) options.log.info("meeting.helpKeysTaken", { kind });
-      else held.set(kind, keys);
+      if (taken) {
+        options.log.info("meeting.helpKeysTaken", { kind });
+        refused.set(kind, keys);
+      } else {
+        held.set(kind, keys);
+        changed = true;
+      }
     }
     if (changed && panel && !panel.isDestroyed()) {
       panel.webContents.send(MEETING_PANEL_CHANNELS.keysChanged, heldKeys());
@@ -168,6 +185,7 @@ export function serveMeetingPanel(core: Core, options: MeetingPanelOptions): voi
     });
     panelWindows.add(window);
     panel = window;
+    reported = { folded: false, pinned: false };
     window.setAlwaysOnTop(true, "screen-saver");
     window.setVisibleOnAllWorkspaces(true, {
       visibleOnFullScreen: true,
@@ -259,13 +277,27 @@ export function serveMeetingPanel(core: Core, options: MeetingPanelOptions): voi
     sync();
   });
   ipcMain.on(FILES_CHANNELS.meetingPanelWanted, (event) => {
-    if (options.trusted(event)) event.sender.send(FILES_CHANNELS.meetingPanel, !!panel);
+    if (options.trusted(event)) event.sender.send(FILES_CHANNELS.meetingPanel, panelState());
+  });
+  ipcMain.on(FILES_CHANNELS.meetingPanelCommand, (event, command: unknown) => {
+    if (!options.trusted(event) || (command !== "pin" && command !== "fold")) return;
+    if (panel && !panel.isDestroyed())
+      panel.webContents.send(MEETING_PANEL_CHANNELS.command, command);
+  });
+  ipcMain.on(MEETING_PANEL_CHANNELS.state, (event, state: unknown) => {
+    if (!fromPanel(event) || !isRecord(state)) return;
+    const { folded, pinned } = state;
+    if (typeof folded !== "boolean" || typeof pinned !== "boolean") return;
+    reported = { folded, pinned };
+    tellShown();
   });
 
-  core.onAnyEvent((name, payload) => {
-    if (name === "meetings.changed") meetings = payload as Meeting[];
-    else if (name === "settings.changed") settings = payload as Settings;
-    else return;
+  core.on("meetings.changed", (listed) => {
+    meetings = listed;
+    sync();
+  });
+  core.on("settings.changed", (changed) => {
+    settings = changed;
     sync();
   });
   Promise.all([core.listMeetings(), core.getSettings()]).then(
@@ -281,11 +313,11 @@ export function serveMeetingPanel(core: Core, options: MeetingPanelOptions): voi
   );
 
   if (options.testHooks) {
-    (globalThis as { incarnamindPressHelpKeys?: unknown }).incarnamindPressHelpKeys = (
-      kind: GeneralHelpKind,
-    ) => {
-      if (!held.has(kind)) throw new Error(`The shortcut for ${kind} isn't held.`);
-      press(kind);
-    };
+    Object.assign(globalThis, {
+      incarnamindPressHelpKeys(kind: GeneralHelpKind) {
+        if (!held.has(kind)) throw new Error(`The shortcut for ${kind} isn't held.`);
+        press(kind);
+      },
+    });
   }
 }
