@@ -100,7 +100,7 @@ import { useAppStore } from "../store";
 import { askForSuggestion, describeSuggestion } from "../suggestions";
 import { CompareSheet } from "./CompareSheet";
 import { StartGuide, useGettingStarted, useIsExample } from "./GettingStarted";
-import { CheckLineIcon, MineLineIcon, SearchLineIcon, SparkLineIcon } from "./lineIcons";
+import { CheckLineIcon, MineLineIcon, SparkLineIcon } from "./lineIcons";
 import { MindNotice } from "./MindNotice";
 
 /** Stands in for the hint's button in its translated words, which are split around it. */
@@ -493,16 +493,6 @@ function MindEditorView({
         run: () => undefined,
       },
       { id: "explain", label: "editor.ai.explain", icon: "?", available, run: run("explain") },
-      {
-        id: "find-support",
-        label: hasDocuments ? "editor.ai.findSupport" : "editor.ai.addDocumentsToFindSupport",
-        icon: <SearchLineIcon className="size-3.5" />,
-        available,
-        run: (current) =>
-          hasDocuments
-            ? void checkSentences(current, mindId, doc, "find-support")
-            : void useAppStore.getState().pickDocuments(),
-      },
       {
         id: "check-against-documents",
         label: hasDocuments ? "editor.ai.checkAgainstDocuments" : "editor.ai.addDocumentsToCheck",

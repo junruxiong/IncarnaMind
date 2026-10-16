@@ -140,7 +140,7 @@ test("Verify a PDF: its Mind opens beside it, its claims are checked, and the co
   await pointAndClick(window, done.getByTestId("verify-need-look"));
   await expect(editor).toBeFocused();
 
-  // Editing a claim makes its check need a re-check, as Find support's do.
+  // Editing a claim makes its check need a re-check, as Check against Documents' do.
   const first = editor.locator(":scope > p").nth(1);
   await slideSelect(window, first, "Spring");
   await window.keyboard.type("Some spring");

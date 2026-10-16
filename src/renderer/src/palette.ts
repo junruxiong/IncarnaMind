@@ -90,6 +90,8 @@ export type PaletteItem =
       ranges: TextRange[];
       /** What it acts on, when one thing: "Supplier review: Aldermoor Freight". */
       meta: string;
+      /** What it is for, under its name; "" for most. */
+      purpose: string;
       shortcut: string | null;
     }
   | {
@@ -262,6 +264,7 @@ export function actionGroup(
       name,
       ranges: byName?.ranges ?? [],
       meta: command.appliesTo ? targetName : "",
+      purpose: command.purpose ? t(command.purpose) : "",
       shortcut: command.shortcut ? shortcutLabel(command.id) : null,
     };
     // A match by keyword or in the other language ranks below one by its name.

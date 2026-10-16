@@ -74,7 +74,7 @@ function checked(
   return {
     id: randomUUID(),
     request: "request-1",
-    action: "find-support",
+    action: "check-against-documents",
     state,
     reason: state === "not-checked" ? "refused" : null,
     detail: null,
