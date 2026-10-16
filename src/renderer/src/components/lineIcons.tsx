@@ -275,6 +275,15 @@ export function SparkLineIcon(props: IconProps) {
   );
 }
 
+export function KeyLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <circle cx="8" cy="15" r="4.5" />
+      <path d="m11.2 11.8 8.8-8.8M16.5 6.5l2.5 2.5M14 9l2 2" />
+    </LineIcon>
+  );
+}
+
 export function CalculatorLineIcon(props: IconProps) {
   return (
     <LineIcon {...props}>
