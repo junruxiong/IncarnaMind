@@ -83,13 +83,14 @@ export function openCompareSheet(
   setProblem(mindId, null);
 }
 
-/** The Documents a sheet offers: those of its Folder (or every one), less those checks leave out (#80). */
+/** The Documents a sheet offers: those of its Folder (or every one), less those checks leave out (#80) and those kept as own workings. */
 export function sheetDocuments(source: SheetSource): Document[] {
   const { documents, library, settings } = useAppStore.getState();
   const folderOf = new Map(library?.assignments.map((each) => [each.documentId, each.groupId]));
   return documents.filter(
     (document) =>
       (source === "all" || folderOf.get(document.id) === source) &&
+      !document.notCited &&
       !leftOutOfEvidence(document, settings, library),
   );
 }

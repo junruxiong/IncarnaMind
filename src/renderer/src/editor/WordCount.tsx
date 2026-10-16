@@ -63,6 +63,7 @@ function useCounts(editor: Editor): MindCount | null {
     const counter = createMindCounter();
     let timer: ReturnType<typeof setTimeout> | undefined;
     let idle: number | undefined;
+    let showsSelection = false;
     const count = (slice = COUNT_SLICE_MS) => {
       timer = undefined;
       idle = undefined;
@@ -74,7 +75,10 @@ function useCounts(editor: Editor): MindCount | null {
         { from, to },
         () => performance.now() > until,
       );
-      if (counted) setCounts(counted);
+      if (counted) {
+        showsSelection = counted.selection !== null;
+        setCounts(counted);
+      }
       // Not starved while the renderer is busy for long, as when an Answer streams.
       else idle = requestIdleCallback(() => count(), { timeout: 1000 });
     };
@@ -94,13 +98,22 @@ function useCounts(editor: Editor): MindCount | null {
       stop();
       count(COUNT_AT_ONCE_MS);
     };
+    // A selection closed over unchanged text counts at once: a check closes it as it starts, and a later count would move the check's line (#968).
+    const selected = ({ transaction }: { transaction: Transaction }) => {
+      if (!showsSelection || transaction.docChanged || !editor.state.selection.empty) {
+        later();
+        return;
+      }
+      stop();
+      count();
+    };
     count();
     editor.on("update", updated);
-    editor.on("selectionUpdate", later);
+    editor.on("selectionUpdate", selected);
     return () => {
       stop();
       editor.off("update", updated);
-      editor.off("selectionUpdate", later);
+      editor.off("selectionUpdate", selected);
     };
   }, [editor]);
 

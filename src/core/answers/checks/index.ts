@@ -9,8 +9,8 @@
  *    check Run that can only search and cite.
  * 3. Each result is written onto its sentence's mark as it comes, with what
  *    it was made from: the sentence's text, the Document versions it read
- *    and the scope, so it shows "needs re-check" once any of them changes
- *    (src/shared/claimChecks.ts). A mark whose sentence was deleted meanwhile
+ *    and the scope, so it shows "needs re-check" once any of them changes, or
+ *    a Document its result rests on goes (src/shared/claimChecks.ts). A mark whose sentence was deleted meanwhile
  *    is simply gone. What the scope couldn't read as the request started is
  *    kept beside the Mind's Blocks, by request (src/shared/unreadFiles.ts).
  *
@@ -25,7 +25,9 @@
 
 import { randomUUID } from "node:crypto";
 import type * as Y from "yjs";
+import { caseCitations } from "../../../shared/caseCitations";
 import { type LiveDocument, withShownName } from "../../../shared/citations";
+import { restsOn } from "../../../shared/claimChecks";
 import { judgesUnreliably } from "../../../shared/smallModel";
 import { recordCheckUnread } from "../../../shared/unreadFiles";
 import {
@@ -62,7 +64,7 @@ import { parseMindId } from "../../minds";
 import type { PreparedChatModel } from "../../providers/chat";
 import { parseSearchScope } from "../../scope";
 import type { AnswerEngine } from "../engine";
-import { type ClaimCheckDependencies, createClaimCheck } from "./claimCheck";
+import { type ClaimCheckDependencies, createClaimCheck, recordJudged } from "./claimCheck";
 import { createMindCheck } from "./mindCheck";
 import { markedSentences, markSentence, selectedSentences, updateCheck } from "./sentences";
 import { createVerify, type VerifyOptions } from "./verify";
@@ -81,7 +83,14 @@ const MAX_CLAIM_CHARACTERS = 2_000;
 export interface ChecksOptions
   extends Pick<
     VerifyOptions,
-    "requireFolder" | "addFile" | "document" | "onStatus" | "readText" | "createMind" | "unread"
+    | "requireFolder"
+    | "addFile"
+    | "document"
+    | "onStatus"
+    | "readText"
+    | "createMind"
+    | "recordAiUse"
+    | "unread"
   > {
   /** The interface language: what a check's sentence is written in. */
   language(): Language;
@@ -227,6 +236,8 @@ function withResult(
         evidence: evidenceOf(result.evidence),
         says: result.says,
         calculation: result.calculation,
+        citedCaseUnchecked: result.citedCaseUnchecked,
+        citedCaseFound: result.citedCaseFound,
       };
 }
 
@@ -284,14 +295,9 @@ export function createChecks(options: ChecksOptions) {
    */
   function retainEvidence(mindId: string): void {
     const versions = content.read(mindId, (blocks) =>
-      markedSentences(blocks).flatMap(({ check }): RetainVersion[] => {
-        const inputs = check.calculation?.figure.inputs ?? [];
-        const shown = [
-          check.evidence,
-          ...inputs.flatMap((input) => [input.citation, input.unitStatement?.citation ?? null]),
-        ];
-        return shown.flatMap((evidence) =>
-          evidence?.documentId && evidence.contentHash
+      markedSentences(blocks).flatMap(({ check }): RetainVersion[] =>
+        restsOn(check).flatMap((evidence) =>
+          evidence.documentId && evidence.contentHash
             ? [
                 {
                   documentId: evidence.documentId,
@@ -302,8 +308,8 @@ export function createChecks(options: ChecksOptions) {
                 },
               ]
             : [],
-        );
-      }),
+        ),
+      ),
     );
     options.retention.retain("check-result", mindId, versions);
   }
@@ -386,10 +392,14 @@ export function createChecks(options: ChecksOptions) {
           state: "checking",
           reason: null,
           detail: null,
+          providerId: ready.prepared.provider.id,
+          modelId: ready.prepared.modelId,
           text: sentence.text,
           evidence: null,
           says: null,
           calculation: null,
+          citedCaseUnchecked: false,
+          citedCaseFound: false,
           scope,
           versions: [],
           excluded: [],
@@ -425,6 +435,7 @@ export function createChecks(options: ChecksOptions) {
       if (signal.aborted) break;
       if (result.verdict !== "not-checked") checked++;
       const at = options.now().toISOString();
+      recordJudged(options.recordAiUse, mindId, ready.prepared, result, at);
       const kept = content.edit(mindId, (blocks) =>
         updateCheck(blocks, sentence.id, (check) => withResult(check, result, at)),
       );
@@ -582,6 +593,8 @@ export function createChecks(options: ChecksOptions) {
           evidence: null,
           says: null,
           calculation: null,
+          citedCaseUnchecked: caseCitations(parsed.claim).length > 0,
+          citedCaseFound: false,
           versions: [],
           excluded: [],
         };

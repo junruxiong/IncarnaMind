@@ -25,9 +25,11 @@ export { LOCAL_MODEL_TIERS, LOCAL_MODELS, recommendedLocalModels } from "./local
 export {
   CATALOG_PROVIDERS,
   type CatalogProviderId,
+  CHATGPT_PLAN_ROLES,
   catalogProvider,
   catalogProviderOf,
   catalogProviderOfKind,
+  catalogRoleModel,
   endpointOf,
   isPreset,
   kindOfCatalogId,
@@ -148,10 +150,11 @@ export function otherModel(
 
 /**
  * The model set a provider kind uses on an endpoint: the kind's own, or its
- * preset's (`catalogId`), and OpenAI's for the ChatGPT plan, which serves
- * OpenAI's models. A provider whose regions differ in their models has a set
- * for each region after the first ("qwen/intl"); an endpoint without a set of
- * its own, or none given, uses the provider's.
+ * preset's (`catalogId`), OpenAI's for the ChatGPT plan, which serves
+ * OpenAI's models, and Anthropic's for a Claude account. A provider whose
+ * regions differ in their models has a set for each region after the first
+ * ("qwen/intl"); an endpoint without a set of its own, or none given, uses
+ * the provider's.
  */
 export function modelsProviderOfKind(
   kind: ChatProviderKind,
@@ -159,6 +162,7 @@ export function modelsProviderOfKind(
   catalogId?: string | null,
 ): string {
   if (kind === "chatgpt") return "openai";
+  if (kind === "claude-account") return "anthropic";
   const set = catalogProviderOf(kind, catalogId)?.id ?? kind;
   const regional = endpoint ? `${set}/${endpoint}` : undefined;
   return regional && MODELS.has(regional) ? regional : set;
