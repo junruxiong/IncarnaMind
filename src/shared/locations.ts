@@ -171,8 +171,8 @@ export function formatLocation(location: CitationLocation, t: Translate, speaker
 }
 
 /** A Location's label in English: for the model's prompt and for Citations copied as text. */
-export const englishLocation = (location: CitationLocation): string =>
-  formatLocation(location, (key, params) => translate("en", key, params));
+export const englishLocation = (location: CitationLocation, speaker = true): string =>
+  formatLocation(location, (key, params) => translate("en", key, params), speaker);
 
 /** The kinds of Location the card's "Open …" button names: the page, the slide, the section… */
 export const openKind = (location: CitationLocation | null) =>
