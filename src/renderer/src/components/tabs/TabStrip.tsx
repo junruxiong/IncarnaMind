@@ -1,9 +1,17 @@
-import { type KeyboardEvent, type RefObject, useEffect, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  type KeyboardEvent,
+  type RefObject,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import type { LayoutGroup, LayoutTab } from "../../../../core/api";
 import { shortcutLabel } from "../../commands/keymap";
 import { useT } from "../../i18n";
 import { focusedGroupOf, groupOfTab } from "../../layoutSlice";
 import { useAppStore } from "../../store";
+import { tabLabelEm } from "../../tabLabel";
 import { InlineName } from "../InlineName";
 import { CloseLineIcon, PinLineIcon, PlusLineIcon, SplitLineIcon } from "../lineIcons";
 import { ObjectMenu, useObjectMenu } from "../ObjectMenu";
@@ -211,6 +219,7 @@ function Tab({ tab, groupId, selected, focusedGroup, divider, dragged, drag }: T
       data-focused-group={focusedGroup || undefined}
       data-divider={divider || undefined}
       data-dragging={dragged || undefined}
+      style={{ "--tab-label-min": `${tabLabelEm(title)}em` } as CSSProperties}
       className="tab"
       onPointerDown={(event) => {
         if (!renaming && !fromInside(event)) drag.onTabPointerDown(event, tab.id);
