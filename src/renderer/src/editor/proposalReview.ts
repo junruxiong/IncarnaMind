@@ -14,6 +14,7 @@ import {
   CITATION_NODE,
   type CitationAttributes,
   type KeptCitationText,
+  MIND_PROPOSAL_REQUESTS_FIELD,
   PROPOSAL_ATTRIBUTE,
   PROPOSAL_DELETE_MARK,
   PROPOSAL_INSERT_MARK,
@@ -23,13 +24,13 @@ import {
 import { citationState } from "../../../shared/citations";
 import { type MessageKey, type MessageParams, translate } from "../../../shared/i18n";
 import {
+  decideProposals,
   INLINE_NODES,
   NODE_CHARACTER,
   proposalRequestOf,
   type ResolvedProposal,
   readProposalAttribute,
   readProposalRef,
-  resolveProposals,
   targetHash,
 } from "../../../shared/proposals";
 
@@ -753,7 +754,7 @@ export function changeReason(
 /**
  * Accepts or rejects Proposals in the editor's copy of the Mind, as one step
  * of its Undo (⌘Z takes it back), the same way the core does anywhere
- * (`resolveProposals`). The change reaches the core as the User's edits do.
+ * (`decideProposals`). The change reaches the core as the User's edits do.
  * `"all"` takes every Proposal the Mind holds when it runs, ones an Undo has
  * just brought back included, rather than a list read earlier, but those an
  * edit is applying and those of the requests `except` names.
@@ -766,15 +767,15 @@ export function resolveInEditor(
 ): ResolvedProposal[] {
   const binding = bindingOf(editor);
   if (!binding || (ids !== "all" && ids.size === 0)) return [];
-  const undo: { stopCapturing(): void } | undefined = yUndoPluginKey.getState(
-    editor.state,
-  )?.undoManager;
+  const undo: Y.UndoManager | undefined = yUndoPluginKey.getState(editor.state)?.undoManager;
+  // The counts of what was decided (`decideProposals`) go back with the Blocks.
+  undo?.addToScope(binding.doc.getMap(MIND_PROPOSAL_REQUESTS_FIELD));
   undo?.stopCapturing();
   let resolved: ResolvedProposal[] = [];
   const applying = applyingIn(editor.state);
   // As the editor's own change, so its Undo takes it back.
   binding.doc.transact(() => {
-    resolved = resolveProposals(
+    resolved = decideProposals(
       binding.type,
       (proposal) =>
         ids === "all"
