@@ -325,6 +325,7 @@ test("A figure worked out from an amount in brackets says the amount was counted
   await expect(inputs.first()).toContainText("counted as negative");
   await expect(inputs.last()).toContainText("$400m");
   await expect(inputs.last()).not.toContainText("counted as negative");
+  await motionSettled(window);
   await screenshot(window, "check-calculated-negative-en");
   await window.keyboard.press("Escape");
 
@@ -332,6 +333,7 @@ test("A figure worked out from an amount in brackets says the amount was counted
   await pointAndClick(window, contradicted);
   await expect(inputs.first()).toContainText("按负数计算");
   await expect(inputs.last()).not.toContainText("按负数计算");
+  await motionSettled(window);
   await screenshot(window, "check-calculated-negative-zh");
 });
 
