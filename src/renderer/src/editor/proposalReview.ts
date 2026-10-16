@@ -23,13 +23,13 @@ import {
 import { citationState } from "../../../shared/citations";
 import { type MessageKey, type MessageParams, translate } from "../../../shared/i18n";
 import {
+  decideProposals,
   INLINE_NODES,
   NODE_CHARACTER,
   proposalRequestOf,
   type ResolvedProposal,
   readProposalAttribute,
   readProposalRef,
-  resolveProposals,
   targetHash,
 } from "../../../shared/proposals";
 
@@ -718,7 +718,7 @@ export function changeReason(
 /**
  * Accepts or rejects Proposals in the editor's copy of the Mind, as one step
  * of its Undo (⌘Z takes it back), the same way the core does anywhere
- * (`resolveProposals`). The change reaches the core as the User's edits do.
+ * (`decideProposals`). The change reaches the core as the User's edits do.
  * `"all"` takes every Proposal the Mind holds when it runs, ones an Undo has
  * just brought back included, rather than a list read earlier.
  */
@@ -736,7 +736,7 @@ export function resolveInEditor(
   let resolved: ResolvedProposal[] = [];
   // As the editor's own change, so its Undo takes it back.
   binding.doc.transact(() => {
-    resolved = resolveProposals(
+    resolved = decideProposals(
       binding.type,
       (proposal) => ids === "all" || ids.has(proposal.id),
       outcome,

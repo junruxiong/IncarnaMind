@@ -47,7 +47,12 @@ import { runsByDefault } from "../../shared/approvalRules";
 import { citationNode, withCitations } from "../../shared/blockJson";
 import type { LiveDocument } from "../../shared/citations";
 import { withFigures, withFigureText } from "../../shared/figureMarkers";
-import { recordProposalRequest, resolveProposals } from "../../shared/proposals";
+import {
+  decisionsOn,
+  pendingProposals,
+  recordProposalRequest,
+  resolveProposals,
+} from "../../shared/proposals";
 import { searchScopeOf } from "../../shared/searchScope";
 import { setTextOrigin } from "../../shared/textOrigins";
 import {
@@ -184,6 +189,7 @@ import {
   webInstructions,
 } from "./prompt";
 import { quotedWordsIn, withoutQuotationMarks } from "./quotedWords";
+import type { ChangeStates } from "./toolRecord";
 
 export type { AnswerDocuments } from "./citations";
 export { createAiSdkAnswerEngine } from "./engine";
@@ -1855,6 +1861,17 @@ export function createAnswers(options: AnswersOptions) {
       ? { mindId: mind.mindId, version: mind.reading.version, partial: mind.section.partial }
       : null;
 
+  /** What became of the changes an earlier Answer made, read from their Mind as it is now. */
+  const changeStatesOf: ChangeStates = (change) => {
+    if (options.readableMindName(change.mindId) === null) {
+      return { waiting: 0, accepted: 0, rejected: 0, gone: true };
+    }
+    return options.content.read(change.mindId, (blocks) => ({
+      waiting: pendingProposals(blocks).filter((each) => each.request === change.request).length,
+      ...(blocks.doc ? decisionsOn(blocks.doc, change.request) : { accepted: 0, rejected: 0 }),
+    }));
+  };
+
   /**
    * Writes the Answer of a Question in a conversation, added or emptied in `turn`, from
    * the messages before it, the Mind it reads and its Search scope as it is now.
@@ -1882,6 +1899,7 @@ export function createAnswers(options: AnswersOptions) {
       mind: section,
       documents,
       mindNames: options.readableMindName,
+      changeStates: changeStatesOf,
     });
     const requestOf = (reading: MindReading, kept: MindCut): RequestMind => ({
       text: kept.text,
@@ -1913,6 +1931,7 @@ export function createAnswers(options: AnswersOptions) {
                   mind: smaller,
                   documents,
                   mindNames: options.readableMindName,
+                  changeStates: changeStatesOf,
                 }).context,
                 request: requestOf(mind.reading, smaller),
                 share: smaller.share,
