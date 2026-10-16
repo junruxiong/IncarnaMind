@@ -670,7 +670,7 @@ function markRemoved(element: Y.XmlElement, from: number, to: number, ref: Propo
 }
 
 /** Sets a node's `proposal` attribute. Yjs types attributes as text, but keeps any JSON value. */
-function setProposal(element: Y.XmlElement, value: ProposalAttribute): void {
+export function setProposal(element: Y.XmlElement, value: ProposalAttribute): void {
   (element as unknown as Y.XmlElement<Record<string, ProposalAttribute>>).setAttribute(
     PROPOSAL_ATTRIBUTE,
     value,
