@@ -150,7 +150,7 @@ export function chatGroupClassifier(
 
 /**
  * A classifier whose scans, PDFs with no text, go to another that reads their
- * pages (the image model, #180), made when the first one comes. The rest go
+ * pages (the image model), made when the first one comes. The rest go
  * to `text`, which reads no images.
  */
 export function withPageReader(

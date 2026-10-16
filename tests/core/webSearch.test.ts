@@ -8,7 +8,7 @@
 import { readFileSync } from "node:fs";
 import type { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, test } from "vitest";
-import type { AnswerToolCall, ChatProvider } from "../../src/core";
+import type { AnswerToolCall, ChatProvider, CoreAdapters, PageLook } from "../../src/core";
 import { textOriginOf } from "../../src/shared/textOrigins";
 import { askAndFinish, onlyCitation, shownPassages } from "../helpers/citations";
 import { createTempDataFolder, queryDatabase, startCore } from "../helpers/core";
@@ -73,13 +73,14 @@ function researcher(): MockLanguageModelV4 {
 async function setUp(
   model: MockLanguageModelV4,
   { webSearch = true, allowSearch = true }: { webSearch?: boolean; allowSearch?: boolean } = {},
+  overrides: Partial<CoreAdapters> = {},
 ) {
   const web = await startWeb({
     "/tea": () => ({ status: 200, body: fixture("article.html") }),
     "/members": () => ({ status: 200, body: fixture("login.html") }),
   });
   const dataDir = await createTempDataFolder();
-  const core = startCore(dataDir, { createChatModel: () => model, ...web.adapters });
+  const core = startCore(dataDir, { createChatModel: () => model, ...web.adapters, ...overrides });
   const provider = await core.saveChatProvider({
     kind: "anthropic",
     apiKey: "sk-ant-test",
@@ -106,6 +107,26 @@ const offeredTools = (model: MockLanguageModelV4) =>
   (model.doStreamCalls[0]?.tools ?? []).map((each) => each.name);
 
 describe("Web search in an Answer", { timeout: 30_000 }, () => {
+  test("with pages kept as they look by default, a page an Answer saves is never loaded whole", async () => {
+    const asked: string[] = [];
+    const pageLook: PageLook = {
+      async render(address) {
+        asked.push(address);
+        return { pdf: new TextEncoder().encode("%PDF-1.7") };
+      },
+    };
+    const { model } = webSearchingModel(researcher(), FOUND);
+    const { core, client, mind } = await setUp(model, {}, { pageLook });
+    await core.updateSettings({ user: { keepWebPageLook: true } });
+
+    await askAndFinish(core, client, mind.id, "Search the web: how did tea reach Europe?");
+
+    const [page] = await core.listDocuments();
+    expect(page?.web?.address).toBe(TEA);
+    expect(page?.web?.look).toBeNull();
+    expect(asked).toEqual([]);
+  });
+
   test("searches through the model's provider, saves the page it reads as a Document in the Mind's Folder, and cites it by section and paragraph, found", async () => {
     const { model, searches } = webSearchingModel(researcher(), FOUND);
     const { core, dataDir, web, asked, folder, mind, client } = await setUp(model);

@@ -330,7 +330,7 @@ export interface AnswerRequest {
   /** The model to answer with, from `Core.prepareChatModel`. */
   model: ChatLanguageModel;
   /**
-   * The quick-tasks model (#180), for the calls that don't write the Answer:
+   * The quick-tasks model, for the calls that don't write the Answer:
    * rewriting a follow-up Question into a search query, and translating the
    * query. Asked for only when one is made; without it, or when it can't be
    * had (e.g. its flow was declined), the Answer's model makes them.

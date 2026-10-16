@@ -158,6 +158,7 @@ import { CHAT_FLOW_SENDS, createChat, type PreparedChatModel } from "./providers
 import { CHATGPT_PLAN_ENDPOINTS, createChatGptPlan } from "./providers/chatgpt/plan";
 import { createAiSdkEmbeddingModel } from "./providers/embeddings";
 import { defaultOllamaUrl, ollamaBaseUrl } from "./providers/kinds";
+import { createLocalServers } from "./providers/localServers";
 import { createAiSdkChatModel } from "./providers/models";
 import {
   detectOllama,
@@ -671,7 +672,9 @@ export function createCore(adapters: CoreAdapters): Core {
     languages: () =>
       settings.get().language === "zh-CN" ? ["zh-CN", "zh;q=0.9", "en;q=0.8"] : ["en", "*;q=0.5"],
     pictureFetch: pictureFetcher.fetch,
-    reportError: (error) => console.error("A web page's picture couldn't be fetched:", error),
+    ...(adapters.pageLook ? { look: adapters.pageLook } : {}),
+    keepLookByDefault: () => settings.get().user.keepWebPageLook,
+    reportError: (error) => console.error("A web page's picture or look couldn't be kept:", error),
     ...adapters.webPages,
   });
   webPages.dropPurged().catch((error: unknown) => console.error(error));
@@ -957,7 +960,8 @@ export function createCore(adapters: CoreAdapters): Core {
       }
     },
     async savePage(address, folderId, added) {
-      const result = await webPages.save({ address }, added);
+      // A found source's copy is the text the User asked for, not how its page looks.
+      const result = await webPages.save({ address, keepLook: false }, added);
       if (result.outcome === "failed") return null;
       if (!result.existing && folderId !== null) library.assign(result.document.id, folderId);
       return { document: documents.get(result.document.id), existing: result.existing };
@@ -1063,7 +1067,8 @@ export function createCore(adapters: CoreAdapters): Core {
     enabled: () => settings.get().user.webSearch && !embedding.localOnly(),
     readiness: (model) => chat.readiness(model),
     prepare: (model) => chat.prepareModel(model, "web-search", "off"),
-    savePage: (address, fetch) => webPages.save({ address }, undefined, fetch),
+    // A page an Answer saves is never loaded whole: that is for the User to ask for, page by page.
+    savePage: (address, fetch) => webPages.save({ address, keepLook: false }, undefined, fetch),
     folderOf: (place) => {
       try {
         if (place.mindId !== null) return minds.get(place.mindId).folderId;
@@ -1224,6 +1229,7 @@ export function createCore(adapters: CoreAdapters): Core {
       },
     },
     resolveScope,
+    interfaceLanguage: () => settings.get().language,
     emptyScopeAnswer: () => translate(settings.get().language, "scope.answer.empty"),
     onWritingChange: (writing) => {
       background.setAnswering(writing);
@@ -1577,6 +1583,8 @@ export function createCore(adapters: CoreAdapters): Core {
     liveDocuments: () => documents.list(),
     keptCitationTexts: () => documents.keptCitationTexts(),
     language: () => settings.get().language,
+    folderName: (folderId) =>
+      library.folders().find((folder) => folder.id === folderId)?.name ?? null,
     citationStyle: (mindId) => mindCitationStyle(mindId).style,
     bibliography: (mindId) => content.readSettings(mindId, bibliographyShown),
     formatCitations: (request) => citationStyles.format(request),
@@ -1669,7 +1677,7 @@ export function createCore(adapters: CoreAdapters): Core {
     hostedUrl: adapters.jevHostedUrl,
     signal: lifetime.signal,
   });
-  // Tagging on a ChatGPT plan goes gently, and waits while the plan's limit holds (#180).
+  // Tagging on a ChatGPT plan goes gently, and waits while the plan's limit holds.
   const planPace = createPlanPace({
     pace,
     timers: paceTimers,
@@ -1679,7 +1687,7 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     signal: lifetime.signal,
   });
-  // The one Tagging setting (#180): the model automatic tagging uses, and Organize when picked by hand.
+  // The one Tagging setting: the model automatic tagging uses, and Organize when picked by hand.
   const tagging = createTagging({
     setting: () => library.settings().classifier,
     chat: {
@@ -1695,14 +1703,11 @@ export function createCore(adapters: CoreAdapters): Core {
     planPausedUntil: () => planPace.pausedUntil(),
     now: () => paceTimers.now(),
   });
-  /** What the Tagging setting tags with: the model chosen, or Automatic's last pick. */
   const tagsWith = (): TaggingClassifier | null => {
     const setting = library.settings().classifier;
     return setting.kind === "automatic" ? tagging.lastResolved() : setting;
   };
-  /** Requests to the ChatGPT plan, one at a time and spaced, waiting while its limit holds. */
   const onPlan = <T>(run: () => Promise<T>, signal: AbortSignal) => planPace.run(run, signal);
-  /** The service automatic tagging sends to, if it isn't on this computer. */
   const taggingServices = async (): Promise<ExternalService[]> => {
     const classifier = await tagging.resolve();
     const service = classifier && tagging.service(classifier);
@@ -1736,11 +1741,21 @@ export function createCore(adapters: CoreAdapters): Core {
   };
   /**
    * Until there are Folders and Organize has a model, automatic tagging decides
-   * Tags alone; then Organize does both. Automatic covers tagging only (#180).
+   * Tags alone; then Organize does both. Automatic covers tagging only.
    */
   const organizing = () =>
     organizeModelOf(library.settings()) !== null &&
     !!db.get("SELECT 1 FROM library_groups WHERE deleted_at IS NULL LIMIT 1");
+  // Ollama's decision models run only on this computer, as when one is picked by hand: elsewhere
+  // they would get Document text with no consent asked.
+  const decisionModelElsewhere = (classifier: TaggingClassifier) =>
+    (classifier.kind === "auto" || classifier.kind === "ollama") &&
+    tagging.service(classifier) !== null;
+  const notOnThisComputer = (classifier: TaggingClassifier) =>
+    new TaggingNotReadyError({
+      key:
+        classifier.kind === "auto" ? "error.library.autoNotLocal" : "error.library.ollamaNotLocal",
+    });
   const tagger = createTagger({
     db,
     now,
@@ -1755,11 +1770,11 @@ export function createCore(adapters: CoreAdapters): Core {
         const readiness = await chat.readiness(classifier.choice, "tagging");
         return readiness.ready && readiness.consent !== "needed";
       }
-      return true;
+      return !decisionModelElsewhere(classifier);
     },
     mightBeReady: () => {
       const classifier = tagsWith();
-      if (!classifier) return false;
+      if (!classifier || decisionModelElsewhere(classifier)) return false;
       if (embedding.localOnly() && tagging.service(classifier)) return false;
       if (classifier.kind === "jev") return jev.mightBeReady();
       if (classifier.kind === "chat") return chat.mightBeReady("tagging", classifier.choice);
@@ -1768,6 +1783,7 @@ export function createCore(adapters: CoreAdapters): Core {
     prepare: async () => {
       const classifier = await tagging.resolve();
       if (!classifier) throw new TaggingNotReadyError({ key: "error.tagging.noModel" });
+      if (decisionModelElsewhere(classifier)) throw notOnThisComputer(classifier);
       if (embedding.localOnly() && tagging.service(classifier))
         throw new TaggingNotReadyError({ key: "error.tagging.cloudPaused" });
       switch (classifier.kind) {
@@ -1846,6 +1862,7 @@ export function createCore(adapters: CoreAdapters): Core {
     async prepare(settings) {
       const classifier = organizeModelOf(settings);
       if (!classifier) throw new TaggingNotReadyError({ key: "error.library.noClassifier" });
+      if (decisionModelElsewhere(classifier)) throw notOnThisComputer(classifier);
       if (classifier.kind === "auto") {
         let automatic = automaticClassifiers.get(classifier.baseUrl);
         if (!automatic) {
@@ -1883,7 +1900,7 @@ export function createCore(adapters: CoreAdapters): Core {
         ...chatGroupClassifier(prepared.model, prepared.provider.service === null, images),
         model: { id: choice.modelId, images, reason: "selected" as const },
       };
-      // A scan goes to the image model when this one can't read its pages (#180).
+      // A scan goes to the image model when this one can't read its pages.
       const imageModel = images ? null : chat.imageModel(choice);
       if (imageModel) {
         chosen = withPageReader(chosen, async () => {
@@ -2251,6 +2268,7 @@ export function createCore(adapters: CoreAdapters): Core {
     return ollamaBaseUrl(input?.baseUrl);
   };
   const ollamaInstalled = async () => (await adapters.ollamaApp?.installed()) ?? false;
+  const localServers = adapters.localServers ?? createLocalServers();
 
   // Transcripts (#136): a Meeting is transcribed on this computer as it records, where this copy can.
   let listMeetings: (() => Meeting[]) | undefined;
@@ -2602,7 +2620,7 @@ export function createCore(adapters: CoreAdapters): Core {
       }
       const flowChanged = syncChatFlow();
       if (chatModel !== undefined || flowChanged) await readinessChanged();
-      // Automatic may tag with another model now (#180).
+      // Automatic may tag with another model now.
       else if (user.quickTasksModel !== undefined || user.imageModel !== undefined)
         await taggingChanged();
       // The examples follow the new language before this returns, so whoever awaits it can rely on it.
@@ -2637,6 +2655,7 @@ export function createCore(adapters: CoreAdapters): Core {
         ? { ...result, document: documents.get(result.document.id) }
         : result;
     },
+    keepWebPageLook: async (documentId) => webPages.keepLook(documentId),
     fetchWebPageAgain: async (documentId) => webPages.fetchAgain(documentId),
     saveTextAsDocument: async (input) => {
       if (!isRecord(input) || typeof input.text !== "string" || input.text.trim() === "") {
@@ -2900,6 +2919,20 @@ export function createCore(adapters: CoreAdapters): Core {
     acceptPlainTextSecretStorage: async () => secrets.acceptPlainText(),
 
     detectOllama: (input) => detectOllama(ollamaUrl(input), ollamaInstalled),
+    detectLocalServer: async (input) => {
+      if (!isRecord(input) || typeof input.catalogId !== "string") {
+        throw new InvalidInputError({
+          key: "error.provider.unknown",
+          values: { provider: String(isRecord(input) ? input.catalogId : input) },
+        });
+      }
+      const apiKey = typeof input.apiKey === "string" && input.apiKey.trim() ? input.apiKey : null;
+      return localServers.detect(
+        input.catalogId,
+        apiKey,
+        typeof input.address === "string" ? input.address : null,
+      );
+    },
     openOllama: async (input) => {
       const baseUrl = ollamaUrl(input);
       if (!(await ollamaInstalled())) {

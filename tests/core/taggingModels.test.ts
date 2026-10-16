@@ -1,5 +1,5 @@
 /**
- * The models for the jobs that aren't Answers (#180): the quick-tasks model for
+ * The models for the jobs that aren't Answers: the quick-tasks model for
  * an Answer's search query, its translation and automatic tagging, the image
  * model for a scan's pages, and the one Tagging setting, Automatic unless the
  * User picks a model, which Organize uses too. Through the core's public
@@ -177,6 +177,51 @@ describe("Automatic picks the model that tags", () => {
     });
     const { options } = await core.getTaggingModels();
     expect(options.map((option) => option.name)).toContain("llama-lan");
+  });
+
+  test("3. Ollama at another computer's address, from OLLAMA_HOST, is never asked or tagged with", async () => {
+    const asked: string[] = [];
+    const { core, calls } = await start({
+      ollamaUrl: "http://192.168.1.20:11434",
+      localModels: async (baseUrl) => {
+        asked.push(baseUrl);
+        return ["tev1:4b", "clef-flash:latest"];
+      },
+    });
+    expect(await automaticOf(core)).toBeNull();
+    expect((await core.getTaggingModels()).options).toEqual([]);
+    const document = await addText(core, "Notes.md", "Notes from the first meeting.");
+    expect(document.tagging).toBe("waiting-for-provider");
+    expect(asked).toEqual([]);
+    expect(calls).toEqual([]);
+  });
+
+  test("3. a decision model kept from before at another computer's address counts as sending there", async () => {
+    const dataDir = await createTempDataFolder();
+    const before = startCore(dataDir, { localModels: async () => ["tev1:4b"] });
+    await before.saveLibrarySettings({
+      classifier: { kind: "auto", baseUrl: "http://127.0.0.1:11434" },
+      automatic: true,
+    });
+    before.close();
+    queryDatabase(
+      dataDir,
+      "UPDATE device_settings SET value = ? WHERE key = 'library' AND deleted_at IS NULL RETURNING key",
+      [
+        JSON.stringify({
+          classifier: { kind: "auto", baseUrl: "http://192.168.1.20:11434" },
+          automatic: true,
+        }),
+      ],
+    );
+    const core = startCore(dataDir, { localModels: async () => ["tev1:4b"] });
+    const tagging = (await core.listRegisteredDataFlows()).find((flow) => flow.id === "tagging");
+    expect(tagging?.services.map((each) => each.flow.service.id)).toEqual([
+      "http://192.168.1.20:11434",
+    ]);
+    const document = await addText(core, "Notes.md", "Notes from the first meeting.");
+    expect(document.tagging).toBe("waiting-for-provider");
+    core.close();
   });
 
   test("3. a local decision model in Ollama, before the chat model on this computer", async () => {
