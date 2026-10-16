@@ -25,8 +25,14 @@ describe("A provider's refusal", () => {
       ),
     );
     expect(error.kind).toBe("data-retention");
-    expect(en["answer.error.data-retention"]).toContain("30 days");
-    expect(zhCN["answer.error.data-retention"]).toContain("30 天");
+    // Each line names the model it was asked for, and neither tells the User what to change in the Console.
+    for (const key of ["answer.error.data-retention", "providers.test.data-retention"] as const) {
+      expect(en[key], key).toContain("{model}");
+      expect(zhCN[key], key).toContain("{model}");
+      expect(en[key], key).toContain("30-day data retention");
+      expect(zhCN[key], key).toContain("30 天数据保留");
+      expect(`${en[key]}${zhCN[key]}`, key).not.toMatch(/Console/);
+    }
   });
 
   test("with another 400 stays the provider's own error", () => {

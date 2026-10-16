@@ -25,7 +25,7 @@ import { dayOf } from "../../dates";
 import { errorMessage } from "../../errors";
 import { useLanguage, useT } from "../../i18n";
 import type { KeyRefusal } from "../../keyRefusals";
-import { ProblemMark } from "../ProblemLine";
+import { LineAction, type ProblemAction, ProblemMark } from "../ProblemLine";
 import {
   buttonClass,
   errorTextClass,
@@ -148,6 +148,15 @@ export function ProviderForm({
   );
   const refusedHere = refused !== null && refused.catalogId === kind;
   const keyField = useRef<HTMLInputElement>(null);
+  const modelPicker = useRef<HTMLSelectElement>(null);
+  const modelText = useRef<HTMLInputElement>(null);
+  /** Opens the model list where it is, or puts the cursor in the field a model is typed in. */
+  const openModelPicker = () => {
+    if (modelPicker.current) {
+      modelPicker.current.focus();
+      modelPicker.current.showPicker?.();
+    } else modelText.current?.focus();
+  };
   // A refused key's field is where "Check the key" leads: in view, focused, and under "More
   // providers" opened when its provider is listed there.
   // biome-ignore lint/correctness/useExhaustiveDependencies: once, as the form opens on it.
@@ -305,6 +314,7 @@ export function ProviderForm({
   const modelIdField = (
     <input
       id={`${id}-model-id`}
+      ref={modelText}
       required
       value={modelId}
       onChange={(event) => setModelId(event.target.value)}
@@ -479,6 +489,7 @@ export function ProviderForm({
               <label className={fieldLabelClass}>
                 {t("providers.form.model")}
                 <select
+                  ref={modelPicker}
                   data-testid="provider-model"
                   value={!otherModel && choices.includes(modelId) ? modelId : OTHER_MODEL}
                   onChange={(event) => {
@@ -545,9 +556,17 @@ export function ProviderForm({
           {test && !test.ok && (
             <TestResult
               result={test}
+              model={shownName(modelId)}
               {...(test.error.kind === "auth" && site
                 ? { authLine: t("providers.form.badKey", { provider: providerName, site }) }
                 : {})}
+              {...(test.error.kind === "data-retention" && {
+                action: {
+                  label: t("answer.error.chooseModel"),
+                  testId: "connection-test-choose-model",
+                  onClick: openModelPicker,
+                },
+              })}
             />
           )}
           {error && (
@@ -618,10 +637,16 @@ function readableMessage(message: string): string {
 export function TestResult({
   result,
   authLine,
+  model,
+  action,
 }: {
   result: ConnectionTestResult;
   /** Says a refused key in the provider's own terms, in place of the general line. */
   authLine?: string;
+  /** The model that was tried, for a line that names it. */
+  model?: string;
+  /** What the User can do about it, after the line. */
+  action?: ProblemAction;
 }) {
   const t = useT();
   if (result.ok) {
@@ -631,11 +656,13 @@ export function TestResult({
       </p>
     );
   }
+  const line = authLine ?? t(testErrorKey(result.error.kind), { model: model ?? "" });
   return (
     <div data-testid="connection-test" role="alert" className={errorTextClass}>
       <p>
         <ProblemMark />
-        {authLine ?? t(testErrorKey(result.error.kind))}
+        {line}
+        {action && <LineAction action={action} afterStop={/[。！？]$/.test(line)} />}
       </p>
       {/* The provider's own words help with its errors. */}
       {result.error.message && (
