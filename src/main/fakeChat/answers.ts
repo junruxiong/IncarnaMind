@@ -101,10 +101,8 @@ const wideTableAnswer = (marker: string) =>
     "That is all.",
   ].join("\n");
 
-/** A Question that asks for a comparison in nine rows. */
 const NINE_ROWS = /\bnine rows\b|九行/i;
 
-/** The scripted Answer to it: three peers' figures, each row labelled in its first column. */
 function nineRowsAnswer(question: string, marker: string): string {
   const chinese = /\p{Script=Han}/u.test(question);
   const rows = chinese
@@ -147,7 +145,6 @@ function nineRowsAnswer(question: string, marker: string): string {
   ].join("\n");
 }
 
-/** The scripted Answer to a Question that asks for forty Citations: a sentence for each, in paragraphs of eight. */
 function fortyCitationsAnswer(question: string): string {
   const chinese = /\p{Script=Han}/u.test(question);
   const sentences = Array.from({ length: 40 }, (_, index) =>
@@ -161,7 +158,6 @@ function fortyCitationsAnswer(question: string): string {
   return paragraphs.join("\n\n");
 }
 
-/** The scripted Answer to a Question that asks for twelve Citations in a row: one sentence, its markers side by side. */
 const twelveInARowAnswer = (question: string) => {
   const markers = Array.from({ length: 12 }, (_, index) => `[^${index + 1}]`).join("");
   return /\p{Script=Han}/u.test(question)

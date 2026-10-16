@@ -106,11 +106,9 @@ export function recordFor(
   return { record, shared: best, quoted };
 }
 
-/** Questions that ask for many Citations: forty, one to a sentence, or twelve in a row after one sentence. */
 export const FORTY_CITATIONS = /\bforty citations\b|四十条引用/i;
 export const TWELVE_IN_A_ROW = /\btwelve in a row\b|连续十二条/i;
 
-/** How many Citations the Question asks for, or 0. */
 export const citationsAsked = (question: string) =>
   FORTY_CITATIONS.test(question) ? 40 : TWELVE_IN_A_ROW.test(question) ? 12 : 0;
 

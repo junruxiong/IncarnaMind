@@ -8,7 +8,6 @@ import { withoutCitationGlue } from "./citationGlue";
 export const TABLE_SLOT_CLASS = "answer-table-slot";
 export const TABLE_SLOT_INDEX = "data-table-index";
 
-/** The slot after a table, where `OpenAsTable` draws its button: an empty element the editor keeps in place. */
 const slotFor = (index: number) => {
   const slot = document.createElement("div");
   slot.className = TABLE_SLOT_CLASS;
@@ -16,7 +15,6 @@ const slotFor = (index: number) => {
   return slot;
 };
 
-/** An Answer's top-level tables as the Answer wrote them, in order. */
 export function tablesOf(doc: ProseMirrorNode): NodeJSON[] {
   const tables: NodeJSON[] = [];
   doc.forEach((node) => {
