@@ -19,7 +19,7 @@ import {
 import { PlusLineIcon } from "../components/lineIcons";
 import { ProblemLine } from "../components/ProblemLine";
 import { ReadinessLine } from "../components/providers/ChatReadinessNotice";
-import { runStopText } from "../cost";
+import { runStopParts } from "../cost";
 import { resolveProposalsIn } from "../editWithAi";
 import { useLanguage, useT } from "../i18n";
 import { useAppStore } from "../store";
@@ -283,13 +283,14 @@ export function ComparisonTableView({ node, editor }: ReactNodeViewProps) {
         <div contentEditable={false} data-comparison-ui className="comparison-problem">
           <ProblemLine
             testId="comparison-stopped"
+            details={runStopParts(stop, t, language).slice(1)}
             action={
               stop.reason === "cost-cap"
                 ? { label: t("answer.error.changeCap"), onClick: () => openSettings("general") }
                 : undefined
             }
           >
-            {runStopText(stop, t, language)}
+            {runStopParts(stop, t, language)[0]}
           </ProblemLine>
         </div>
       )}

@@ -19,7 +19,7 @@ import {
   useChecks,
 } from "./checks";
 import { core } from "./core";
-import { estimateText } from "./cost";
+import { type EstimateLine, estimateLine } from "./cost";
 import { languageNow, translateNow } from "./i18n";
 import { useAppStore } from "./store";
 
@@ -34,7 +34,7 @@ interface Asking {
   sentences: number;
   /** Checked against the Mind's Folder: the question names it. */
   inFolder: boolean;
-  estimate: string;
+  estimate: EstimateLine;
 }
 
 /** A run that only checks again asks first, with the estimate, when it checks this many or more. */
@@ -106,7 +106,7 @@ export async function startMindCheck(
     return checkMind(mindId, mode, { allDocuments });
   const estimate = await core
     .estimateRun({ items: plan.sentences, ...(plan.model && { model: plan.model }) })
-    .then((result) => estimateText(result, translateNow, languageNow()))
+    .then((result) => estimateLine(result, translateNow, languageNow()))
     .catch((error: unknown) => {
       console.warn(`Couldn't estimate checking Mind ${mindId}; it checks without asking.`, error);
       return null;

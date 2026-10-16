@@ -9,8 +9,10 @@ import {
   askInAssistant,
   checkCard,
   useLocalChatModel as connectLocalChatModel,
+  copyFrom,
   createDataFolder,
   dismissChatSetup,
+  expectDotsBetweenParts,
   interceptOpenDialog,
   launchApp,
   newMind,
@@ -251,6 +253,49 @@ for (const language of ["en", "zh-CN"] as const) {
       await expect(unread).toContainText(WORDS[language].count);
       await pointAndClick(window, unread.getByTestId("verify-unread-show"));
       await expectReasons(unread, card, language, app, window, "verify");
+      await app.close();
+    } finally {
+      await removeDataFolder(outside);
+    }
+  });
+}
+
+for (const language of ["en", "zh-CN"] as const) {
+  test(`beside its PDF, each line of the Verify card wraps only between its parts and none starts or ends with a dot (${language})`, async () => {
+    test.setTimeout(120_000);
+    const outside = await createDataFolder();
+    try {
+      const report = join(
+        outside,
+        "Harbour trade statistics report for the second half of 2026.pdf",
+      );
+      await writeFile(report, buildPdf([{ lines: ["Harbour report", SENTENCE] }]));
+      const { app, window } = await start(language);
+      await interceptOpenDialog(app, report);
+      await pointAndClick(window, window.getByTestId("plus-menu"));
+      await pointAndClick(window, window.getByTestId("plus-verify-document"));
+      await expect(window.getByTestId("check-card").getByTestId("verify-ask")).toBeVisible();
+      const card = await checkCard(window);
+      await pointAndClick(window, card.getByTestId("verify-check"));
+      await expect(card.getByTestId("verify-done")).toContainText(
+        language === "en" ? "Checked 1 claim" : "已核对 1 条说法",
+      );
+      const unread = card.getByTestId("verify-unread");
+      await expect(unread).toContainText(WORDS[language].count);
+
+      // The PDF is open beside the Mind, so the Mind's column is half the window.
+      await setWindowSize(app, window, 1440, 900);
+      await expect(window.getByTestId("viewer")).toBeVisible();
+      await screenshot(window, `verify-wrap-${language}`);
+      for (const row of await card.locator(".meta-line").all()) await expectDotsBetweenParts(row);
+
+      // Copied across its parts, a line reads as one line, "A · B", and within a part the browser copies it.
+      const whole = unread.locator(".meta-line").first();
+      const across = await copyFrom(whole);
+      expect(across.taken).toBe(true);
+      expect(across.text).not.toContain("\n");
+      expect(across.text.split(" · ")).toHaveLength(2);
+      expect((await copyFrom(whole, ".meta-part")).taken).toBe(false);
       await app.close();
     } finally {
       await removeDataFolder(outside);

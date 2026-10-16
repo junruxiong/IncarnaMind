@@ -1146,12 +1146,36 @@
     }
   }
 
-  /* A Mind made by "Verify a document…" (#97): where its text came from. */
-  .mind-verify {
+  /*
+   * Parts joined by middle dots wrap only between parts, and no line starts or
+   * ends with a dot (#684): each part draws the dot in the gap before it, and
+   * the row clips what sticks out of its start, where a part begins a line.
+   * The 4px of padding keeps focus rings and hover backgrounds unclipped.
+   */
+  .meta-line {
     display: flex;
     flex-wrap: wrap;
-    align-items: center;
-    gap: 4px 8px;
+    column-gap: 12px;
+    min-width: 0;
+    overflow-x: clip;
+    padding-left: 4px;
+    margin-left: -4px;
+  }
+  .meta-part {
+    position: relative;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .meta-dot {
+    content: "·" / "";
+    position: absolute;
+    right: 100%;
+    width: 12px;
+    text-align: center;
+  }
+
+  /* A Mind made by "Verify a document…" (#97): where its text came from. */
+  .mind-verify {
     min-width: 0;
     margin: -16px 0 16px;
     font-family: var(--font-sans);
@@ -1195,14 +1219,16 @@
       background: var(--color-hover);
     }
   }
-
   /* The count under the title: quiet status text, pulled up into the title's margin. */
   .mind-count {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 8px;
-    margin: -16px 0 16px;
+    column-gap: 12px;
+    row-gap: 8px;
+    padding-left: 4px;
+    margin: -16px 0 16px -4px;
+    overflow-x: clip;
     font-family: var(--font-sans);
     font-size: 12px;
     line-height: 16px;
@@ -1421,6 +1447,7 @@
     }
   }
   .check-card-summary {
+    margin: 0;
     padding: 0 8px 6px;
   }
   .check-card-note {
@@ -4549,6 +4576,11 @@
   .references-style {
     max-width: 100%;
     font-weight: 600;
+  }
+  .references-default {
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--color-ink-meta);
   }
   .references-status {
     margin: 8px 0 0;

@@ -85,6 +85,16 @@ test("a Mind with nothing to check is bare; a claim no check has looked at shows
   const card = await checkCard(window);
   await expect(card.getByTestId("health-unchecked")).toContainText("1 claim not checked yet");
   await screenshot(window, "check-badge-card-en");
+  // At 1,100 px the badge keeps its words, and the card stays inside the Mind's pane.
+  await setWindowSize(app, window, 1100, 720);
+  await expect(badge.locator(".check-badge-words")).toBeVisible();
+  await expect(card).toBeVisible();
+  const narrowPane = await window.getByTestId("mind-pane").boundingBox();
+  const cardBox = await card.boundingBox();
+  if (!narrowPane || !cardBox) throw new Error("The card isn't drawn.");
+  expect(cardBox.x + cardBox.width).toBeLessThanOrEqual(narrowPane.x + narrowPane.width + 1);
+  await screenshot(window, "check-badge-card-en-1100");
+  await setWindowSize(app, window, 1440, 900);
   await pointAndClick(window, card.getByTestId("health-check"));
   // A check the User started: the badge says what it checked, until they type.
   await expect(window.getByTestId("claim-mark")).toHaveAttribute("data-check", "supported");
