@@ -578,6 +578,7 @@ function pageOf(
     cards: new Map(footnotes.map((each, index) => [each, cards[index] ?? card("found")])),
     pictures: [],
     checkedLine: false,
+    font: null,
   });
   return { html, document: parseHTML(html).document };
 }

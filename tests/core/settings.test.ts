@@ -47,6 +47,7 @@ describe("Settings", () => {
         monthlyCap: null,
         webSearch: false,
         keepWebPageLook: false,
+        newMindStyle: { font: "default", size: "default" },
       },
       device: {
         sidebarWidth: 248,
@@ -144,6 +145,7 @@ describe("Settings", () => {
       monthlyCap: null,
       webSearch: false,
       keepWebPageLook: false,
+      newMindStyle: { font: "default", size: "default" },
     });
     expect(settings.device).toEqual({
       sidebarWidth: 320,
