@@ -222,6 +222,7 @@ export async function exportWordPatch(input: WordPatchInput): Promise<WordPatchR
             textOf,
             reading,
             counterpart.wholeAi,
+            options.sentenceChecks,
           ),
         };
         tokens.set(counterpart.node, each.tokens ?? []);
@@ -259,7 +260,14 @@ export async function exportWordPatch(input: WordPatchInput): Promise<WordPatchR
     tokensOf: (node): Token[] => {
       const known = written.get(node)?.tokens ?? tokens.get(node);
       if (known) return known;
-      const read = currentTokens(node.content ?? [], specialOf, textOf, reading);
+      const read = currentTokens(
+        node.content ?? [],
+        specialOf,
+        textOf,
+        reading,
+        false,
+        options.sentenceChecks,
+      );
       tokens.set(node, read);
       return read;
     },
