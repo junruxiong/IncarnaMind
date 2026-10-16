@@ -7,18 +7,12 @@ import { useAppStore } from "../../store";
 import { ProblemMark } from "../ProblemLine";
 import { buttonStyle, errorTextClass, fieldClass } from "../ui";
 
-/** What a sign-in's paste field says, and how its test ids start. */
 export type PasteWords = {
   testId: string;
   continue: MessageKey;
   problems: Record<PastedAddressProblem, MessageKey>;
   placeholder?: string;
-} & /** A fallback: the question, then the link that opens the field. */
-(
-  | { question: MessageKey; open: MessageKey }
-  /** The way on: the field is open at once, under its label. */
-  | { label: MessageKey }
-);
+} & ({ question: MessageKey; open: MessageKey } | { label: MessageKey });
 
 const CHATGPT: PasteWords = {
   testId: "chatgpt-paste",

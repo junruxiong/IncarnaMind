@@ -1854,6 +1854,9 @@ export const zhCN = {
   "claudePlan.paste.problem.other-sign-in":
     "这个代码来自之前的一次登录。在刚打开的页面上登录后，再粘贴那里的代码。",
   "claudePlan.failed": "未能登录 Claude",
+  "claudePlan.failure.timedOut": "Claude 登录未在时限内完成，未保存任何内容",
+  "claudePlan.failure.secretStorage":
+    "系统中没有可用的密钥环，IncarnaMind 无法安全地保存你的 Claude 登录",
   "claudePlan.details": "详细信息",
   "claudePlan.settings.line": "用你的 Claude 账号登录。",
   "claudePlan.signedIn": "已登录：{account}",

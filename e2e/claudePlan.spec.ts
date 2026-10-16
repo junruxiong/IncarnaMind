@@ -220,14 +220,48 @@ test("Settings: Cancel keeps nothing; signed in, the row names the account and S
     await expired.getByTestId("plans-claude-sign-in").click();
     // Signing in again skips the words already read, straight to the browser.
     await expect(expired.getByTestId("claude-plan-notice")).toHaveCount(0);
-    const second = await codeAfterApproving(app, 3);
-    await expired.getByTestId("claude-paste-address").fill(second);
+    const [, state] = (await codeAfterApproving(app, 3)).split("#");
+    await expired.getByTestId("claude-paste-address").fill(`not-the-code#${state}`);
+    await expired.getByTestId("claude-paste-continue").click();
+    // A sign-in again that fails says so in the row, which stays open for another try.
+    await expect(expired.getByTestId("claude-plan-error")).toContainText(
+      "The Claude sign-in didn't work",
+    );
+    await expired.getByTestId("claude-plan-sign-in").click();
+    const third = await codeAfterApproving(app, 4);
+    await expired.getByTestId("claude-paste-address").fill(third);
     await expired.getByTestId("claude-paste-continue").click();
     await expect(expired.getByTestId("claude-plan-sign-out")).toBeVisible();
+    await expect(expired.getByTestId("claude-plan-error")).toHaveCount(0);
 
     await expired.getByTestId("claude-plan-sign-out").click();
     await expect(expired.getByTestId("plans-claude-sign-in")).toBeVisible();
     expect((await account(window)).account).toEqual({ state: "signed-out" });
+  } finally {
+    await app.close();
+  }
+});
+
+test("a sign-in not finished in time says so in the row, in English and Chinese", async () => {
+  const { app, window } = await launchApp(dataDir, { claude: fake.origin, claudeSignInMs: 1500 });
+  try {
+    await interceptOpenExternal(app);
+    await acceptPlainTextKeys(window);
+    const settings = await openSettings(window, "models");
+    const row = settings.getByTestId("plans-claude-account");
+    await row.getByTestId("plans-claude-sign-in").click();
+    await row.getByTestId("claude-plan-sign-in").click();
+    await expect(row.getByTestId("claude-plan-waiting")).toBeVisible();
+
+    const error = row.getByTestId("claude-plan-error");
+    await expect(error).toContainText(
+      "The Claude sign-in wasn't finished in time: nothing was kept",
+    );
+    await expect(row.getByTestId("claude-plan-sign-in")).toBeVisible();
+    expect((await account(window)).account).toEqual({ state: "signed-out" });
+
+    await setLanguage(window, "zh-CN");
+    await expect(error).toContainText("Claude 登录未在时限内完成，未保存任何内容");
   } finally {
     await app.close();
   }

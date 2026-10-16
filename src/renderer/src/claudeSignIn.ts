@@ -6,6 +6,7 @@
 import { useEffect } from "react";
 import { create } from "zustand";
 import type { ClaudeAccountStatus, ClaudeSignInErrorKind } from "../../core/api";
+import { EXPERIMENTAL_SIGN_IN_ROUTES } from "../../core/buildFlags";
 import { catalogProvider } from "../../core/providers/catalog/providers";
 import { core } from "./core";
 import { errorMessage } from "./errors";
@@ -36,7 +37,7 @@ let asked = false;
 function load(): void {
   if (asked) return;
   asked = true;
-  Promise.resolve(core.getClaudeAccount()).then(
+  core.getClaudeAccount().then(
     (status) => useClaudeSignIn.setState({ status }),
     (error: unknown) => {
       asked = false;
@@ -45,17 +46,14 @@ function load(): void {
   );
 }
 
-/** The account's status, read once something shows it. */
 export function useClaudeAccount(): ClaudeAccountStatus | null {
   useEffect(load, []);
   return useClaudeSignIn((state) => state.status);
 }
 
-/** For ⌘K: whether Sign in with Claude can be offered now. Null status (not read yet) offers nothing. */
 export function claudeSignInOffered(): boolean {
-  load();
   const status = useClaudeSignIn.getState().status;
-  return status?.available === true && status.account.state !== "signed-in";
+  return EXPERIMENTAL_SIGN_IN_ROUTES && status?.account.state !== "signed-in";
 }
 
 // A newer sign-in replaces one still waiting, which then ends as cancelled and must say nothing.
@@ -89,15 +87,12 @@ export async function signInWithClaude(options: { keepDefault?: boolean } = {}):
   try {
     const current = await core.getClaudeAccount();
     // Signed in already (e.g. its provider was removed since): no need for the browser again.
-    const result =
-      current.account.state === "signed-in"
-        ? { ok: true as const, status: current }
-        : await core.signInToClaude();
-    if (!result.ok) {
+    const result = current.account.state === "signed-in" ? null : await core.signInToClaude();
+    if (result && !result.ok) {
       failure = result.error;
       return false;
     }
-    useClaudeSignIn.setState({ status: result.status });
+    useClaudeSignIn.setState({ status: result?.status ?? current });
     await chooseClaudePlan(options.keepDefault === true);
     return true;
   } catch (error) {
