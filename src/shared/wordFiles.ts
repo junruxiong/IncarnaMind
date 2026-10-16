@@ -91,13 +91,13 @@ export function wordAtomText(atom: Pick<WordAtomAttributes, "kind" | "label" | "
 }
 
 /**
- * Whether a Word file lays text out in tables without lines or in columns of
- * tab stops, which the Mind doesn't draw yet, so the import screen says they
- * are kept (#735). The bars sit above what the Word corpus's memos, contracts
- * and reports reach; its résumés and forms pass them.
+ * Whether a Word file lays text out in columns of tab stops, which the Mind
+ * doesn't draw yet, so the import screen says they are kept (#735). The bar
+ * sits above what the Word corpus's memos, contracts and reports reach; its
+ * résumés and forms pass it.
  */
 export function layoutNotShown(layout: WordLayout | undefined): boolean {
-  return layout !== undefined && (layout.layoutTables >= 1 || layout.tabStops >= 4);
+  return layout !== undefined && layout.tabStops >= 4;
 }
 
 const wordMap = (doc: Y.Doc) => doc.getMap<unknown>(MIND_WORD_FIELD);
