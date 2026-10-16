@@ -62,6 +62,7 @@ import {
   type OwnFileKind,
   type ProviderError,
   type SavedExport,
+  type ScannedQuoteInput,
   type SearchScope,
   type Task,
   type UnlockDocumentInput,
@@ -348,6 +349,22 @@ function parseUnlock(input: unknown): UnlockDocumentInput {
     throw new InvalidInputError({ key: "error.document.passwordMissing" });
   }
   return { documentId: parseDocumentId(input.documentId), password };
+}
+
+/** A Citation's Document, Units and quote, as `readScannedQuote` and `readableQuote` take them. */
+function parseQuoted(input: unknown): ScannedQuoteInput {
+  if (!isRecord(input) || typeof input.quote !== "string") {
+    throw new InvalidInputError("A Citation's Document, Units and quote are needed.");
+  }
+  const unit = (value: unknown) =>
+    typeof value === "number" && Number.isInteger(value) && value >= 1 ? value : null;
+  return {
+    documentId: typeof input.documentId === "string" ? input.documentId : "",
+    contentHash: typeof input.contentHash === "string" ? input.contentHash : null,
+    pageFrom: unit(input.pageFrom),
+    pageTo: unit(input.pageTo),
+    quote: input.quote,
+  };
 }
 
 export function createCore(adapters: CoreAdapters): Core {
@@ -1096,7 +1113,8 @@ export function createCore(adapters: CoreAdapters): Core {
     readiness: (model) => chat.readiness(model),
     prepare: (model) => chat.prepareModel(model, "web-search", "off"),
     // A page an Answer saves is never loaded whole: that is for the User to ask for, page by page.
-    savePage: (address, fetch) => webPages.save({ address, keepLook: false }, undefined, fetch),
+    savePage: (address, fetch) =>
+      webPages.save({ address, keepLook: false }, undefined, fetch, "search"),
     folderOf: (place) => {
       try {
         if (place.mindId !== null) return minds.get(place.mindId).folderId;
@@ -1590,6 +1608,7 @@ export function createCore(adapters: CoreAdapters): Core {
       searchableCount: (documentIds) => documents.searchableCount(documentIds ?? undefined),
       names: () => documents.names(),
       searchableLanguages: (documentIds) => documents.searchableLanguages(documentIds ?? undefined),
+      savedBySearch: (documentId) => documents.getMany([documentId])[0]?.web?.origin === "search",
       citationSource: (passageId) => documents.citationSource(passageId),
       pageTexts: (documentId, contentHash, from, to) =>
         documents.pageTexts(documentId, contentHash, from, to),
@@ -1635,6 +1654,16 @@ export function createCore(adapters: CoreAdapters): Core {
     read: (mindId, look) => content.read(mindId, look),
     liveDocuments: () => documents.list(),
     keptCitationTexts: () => documents.keptCitationTexts(),
+    readableQuote: ({ documentId, contentHash, pageFrom, pageTo, quote }) =>
+      documentId && quote
+        ? documents.readableQuote({
+            documentId,
+            contentHash: contentHash ?? null,
+            pageFrom: pageFrom ?? null,
+            pageTo: pageTo ?? null,
+            quote,
+          })
+        : null,
     language: () => settings.get().language,
     folderName: (folderId) =>
       library.folders().find((folder) => folder.id === folderId)?.name ?? null,
@@ -1821,6 +1850,7 @@ export function createCore(adapters: CoreAdapters): Core {
     now,
     tags,
     enabled: () => !organizing(),
+    stopped: (id) => library.taggingStoppedFor(id),
     canRun: async () => {
       const classifier = await tagging.resolve();
       if (!classifier) return false;
@@ -2838,22 +2868,8 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     readDocumentText: async (id) => documents.readText(id),
     readScannedText: async (id) => documents.readScannedText(id),
-    readScannedQuote: async (input) => {
-      if (!isRecord(input) || typeof input.quote !== "string") {
-        throw new InvalidInputError(
-          "readScannedQuote needs a Citation's Document, Units and quote.",
-        );
-      }
-      const unit = (value: unknown) =>
-        typeof value === "number" && Number.isInteger(value) && value >= 1 ? value : null;
-      return documents.readScannedQuote({
-        documentId: typeof input.documentId === "string" ? input.documentId : "",
-        contentHash: typeof input.contentHash === "string" ? input.contentHash : null,
-        pageFrom: unit(input.pageFrom),
-        pageTo: unit(input.pageTo),
-        quote: input.quote,
-      });
-    },
+    readScannedQuote: async (input) => documents.readScannedQuote(parseQuoted(input)),
+    readableQuote: async (input) => documents.readableQuote(parseQuoted(input)),
     previewLinkedFolder: (path) => documents.linkedFolders.preview(path),
     addLinkedFolder: async (path, options) => {
       const groupId = library.target(options);
@@ -3314,6 +3330,19 @@ export function createCore(adapters: CoreAdapters): Core {
     retagDocuments: async (documentIds) => {
       if (organizing()) return library.classify(documentIds);
       tagger.retag(documentIds);
+    },
+    stopTagging: async () => {
+      const places = library.taggingPlaces();
+      library.setTaggingStopped(places, true);
+      tagger.resume();
+      return places;
+    },
+    setTaggingWithAi: async (folderId, on) => {
+      if ((folderId !== null && typeof folderId !== "string") || typeof on !== "boolean") {
+        throw new InvalidInputError({ key: "error.tagging.place" });
+      }
+      library.setTaggingStopped([folderId], !on);
+      tagger.resume();
     },
 
     getJevSettings: () => jev.status(),
