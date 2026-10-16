@@ -5,7 +5,6 @@ import { useAppStore } from "../store";
 
 export interface TaggingService {
   service: ExternalService;
-  /** Whether the User has allowed Document text to go to it. */
   allowed: boolean;
 }
 

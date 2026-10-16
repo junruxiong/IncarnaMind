@@ -11,7 +11,7 @@ export type TaggingPlace = string | null;
 
 type Translate = (key: MessageKey, params?: MessageParams) => string;
 
-/** The live Folder a Document is in, a Suggested Folder included, as the core has it; null for Not in a Folder. */
+// As the core places a Document: a Suggested Folder counts, a deleted Folder doesn't.
 function placeOf(library: LibrarySnapshot | null, documentId: string): TaggingPlace {
   const groupId = library?.assignments.find((each) => each.documentId === documentId)?.groupId;
   return groupId && library?.groups.some((group) => group.id === groupId) ? groupId : null;
@@ -34,7 +34,7 @@ export const stoppedPlaces = (library: LibrarySnapshot | null): TaggingPlace[] =
     (place) => place === null || library?.groups.some((group) => group.id === place),
   );
 
-/** The places in words: “in “Contracts” and “Board”” and “not in a Folder”, joined as the language joins a list. */
+/** The places in words, joined as the language joins a list: in “Contracts” and “Board”, and not in a Folder. */
 export function placesText(
   places: readonly TaggingPlace[],
   library: LibrarySnapshot | null,
