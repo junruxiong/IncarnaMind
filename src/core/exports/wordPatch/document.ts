@@ -219,7 +219,7 @@ export class DocumentPatch {
     };
   }
 
-  /** A paragraph that holds a sentence to comment on is written again, however little else changed. */
+  /** Copied as it was, a paragraph has no runs a comment's range could start and end in. */
   private forceForComments(counterpart: Counterpart): void {
     const based = counterpart.key ? this.based.get(counterpart.key) : undefined;
     if (

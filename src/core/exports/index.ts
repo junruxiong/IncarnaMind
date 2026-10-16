@@ -129,7 +129,6 @@ interface Prepared {
   word: { importing: boolean } | null;
   blocks: Block[];
   preview: MindExportPreview;
-  /** The sentences in the text whose check isn't good, and the changes waiting that a Word file holds. */
   failedSentences: FailedSentence[];
   trackedChanges: number;
   language: Language;
@@ -370,7 +369,6 @@ export function createExports(deps: ExportsDependencies) {
   }
 }
 
-/** What a file says for review of the sentences whose check isn't good and the changes waiting. */
 function reviewOf(prepared: Prepared): Pick<MindExport, "sentenceChecks" | "trackedChanges"> {
   const count = (check: FailedSentence["check"]) =>
     prepared.failedSentences.filter((each) => each.check === check).length;
