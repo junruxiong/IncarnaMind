@@ -706,7 +706,7 @@ export const zhCN = {
   "edit.problem.failed": "用 AI 编辑未能完成：{message}",
   "edit.problem.retry": "重试",
   "edit.problem.cant-regenerate": "这处修订无法重新生成。拒绝它后，选中文字再用 AI 编辑。",
-  "edit.problem.no-table": "AI 生成的表格格式有误，没有改动。请重试，或改成列表。",
+  "edit.problem.no-table": "AI 生成的表格不完整，因此没有改动。请重试，或改为要求生成列表。",
   "composer.edit.placeholder": "说说要怎么改…",
   "composer.edit.label": "说明要怎么修改选中的文字",
   "composer.edit.quote": "正在编辑“{text}”",
@@ -3880,7 +3880,7 @@ export const zhCN = {
   "mindCall.failed.changed": "无法修改“{mind}”：读取时文字有了变化",
   "mindCall.failed.contentNotOwn": "无法修改“{mind}”：只有助手自己待确认的文字可以整段重写",
   "mindCall.failed.stopped": "已停止，“{mind}”没有改动",
-  "mindCall.failed.noTable": "无法生成表格，没有添加到“{mind}”",
+  "mindCall.failed.noTable": "未能生成表格，因此没有向“{mind}”添加内容",
   "mindCall.failed.localMode":
     "无法修改“{mind}”：已开启“所有内容都留在这台电脑上”，而这个模型不在这台电脑上",
   "mindCall.failed.notReady": "无法修改“{mind}”：现在无法使用这个模型",
