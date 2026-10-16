@@ -868,7 +868,8 @@ export interface AnswerToolCall {
  * still wait in the text it was to change, which the assistant can't revise
  * (someone else's, or the User's own requests), `count` of them in the Mind;
  * "mixed": its own waiting text sits beside the User's there. "model": the
- * model failed, as `message` says.
+ * model failed, as `message` says. "no-table": a table it wrote couldn't be
+ * made, so none of its text went in (#961).
  */
 export type MindProblem =
   | { kind: "waiting"; mindId: string; count: number; mixed: boolean }
@@ -879,7 +880,7 @@ export type MindProblem =
   | { kind: "no-place"; mindId: string; place: string }
   | { kind: "several-places"; mindId: string; name: string; adding: boolean }
   | {
-      kind: "no-text" | "too-long" | "changed" | "content-not-own" | "stopped";
+      kind: "no-text" | "too-long" | "changed" | "content-not-own" | "stopped" | "no-table";
       mindId: string;
     }
   | { kind: "local-mode" | "not-ready" }
@@ -912,6 +913,12 @@ export interface MindChange {
   proposals: number;
   /** How many paragraphs the whole Blocks it wrote hold (a heading or a table holds none). Absent: none. */
   paragraphs?: number;
+  /** How many tables it added. Absent: none. */
+  tables?: number;
+  /** Sources in its tables' cells written as a name in brackets that matched no Citation, kept as text. Absent: none. */
+  unlinkedSources?: number;
+  /** Cells beyond its tables' columns, their text kept in their row's last cell. Absent: none. */
+  extraCells?: number;
   /**
    * It revised the assistant's own changes still waiting there: they
    * are gone, and its request holds the new text and the rest of them.
@@ -1490,14 +1497,15 @@ export const MAX_CITED_PAGES = 2;
  *   web page, the paragraphs of the section the quote covers, from 1 (#261).
  * - "lines": the lines the quote covers, or the cited block's.
  * - "time": in a Transcript, from the start of the cue the quote starts in to
- *   the end of the one it ends in, in ms from the Transcript's start (#136).
+ *   the end of the one it ends in, in ms from the Transcript's start (#136);
+ *   `speaker`: who said the cue it starts in, where the Transcript says (#941).
  */
 export type CitationLocation =
   | { kind: "page"; from: number; to: number; printed?: { from: string; to: string } }
   | { kind: "slide"; from: number; to: number }
   | { kind: "rows"; sheet: string | null; from: number; to: number }
   | { kind: "lines"; from: number; to: number }
-  | { kind: "time"; from: number; to: number }
+  | { kind: "time"; from: number; to: number; speaker?: string }
   | {
       kind: "section";
       heading: string | null;
@@ -2190,6 +2198,8 @@ export interface DocumentScanProgress {
  * - "failed": the tagger's provider failed (see `taggingError`); a re-tag, a
  *   change of model or a restart tries again.
  * - "skipped": the Document has no text to tag (processing failed, or found none).
+ * - "stopped": Tagging with AI is stopped where it is, in its Folder or Not in
+ *   a Folder (see `stopTagging`): nothing is sent until it is turned back on.
  */
 export type TaggingState =
   | "pending"
@@ -2197,7 +2207,8 @@ export type TaggingState =
   | "tagging"
   | "tagged"
   | "failed"
-  | "skipped";
+  | "skipped"
+  | "stopped";
 
 /** Who put a Tag on a Document: automatic tagging, or the User. */
 export type TagSource = "automatic" | "user";
@@ -4213,6 +4224,12 @@ export type EditWithAiResult =
       proposals: number;
       droppedCitations: number;
       outOfDate: number;
+      /** Markers the text had for none of the passage's Citations, left out. Absent: none. */
+      unmatchedMarkers?: number;
+      /** Sources in a table's cells written as a name in brackets that matched none of its Citations, kept as text (#961). Absent: none. */
+      unlinkedSources?: number;
+      /** Cells beyond a table's columns, their text kept in their row's last cell. Absent: none. */
+      extraCells?: number;
       /** An edit the User asked for that waits for them instead of applying (#880). */
       held?: true;
       /** What its new text left out of the selection, kept; absent when nothing. */
@@ -4235,6 +4252,11 @@ export type EditWithAiResult =
   | { kind: "too-long" }
   /** The User stopped it (`cancelEdit`). */
   | { kind: "cancelled" }
+  /**
+   * The model wrote lines that read as a table's rows but make no table
+   * (#961): nothing was written. `text`: the passage's new text, as it wrote it.
+   */
+  | { kind: "no-table"; text: string }
   /** The model failed, or gave nothing back. */
   | { kind: "failed"; error: ProviderError };
 
@@ -7147,8 +7169,11 @@ export interface MeetingTranscript {
   state: TranscriptState;
   /** How many lines it has. */
   lines: number;
-  /** The speech being transcribed now, while live: where it starts, in the Meeting's time, and its words so far. */
-  partial: { startMs: number; text: string } | null;
+  /**
+   * The speech being transcribed now, while live: where it starts, in the Meeting's time, its
+   * words so far, and whose they are ("Me", "Them" or "Speaker ?", see src/shared/speakers.ts).
+   */
+  partial: { startMs: number; text: string; speaker: string } | null;
   /** The speech-to-text model, while it is downloading or failed to. */
   model: TranscriptionModelStatus | null;
   /** The WebVTT file in the Output location, once saved. */
@@ -7421,7 +7446,7 @@ export interface CoreApi {
    * classifier of null is Automatic; `organizeWith` left out stays as it was.
    */
   saveLibrarySettings(
-    settings: Omit<LibrarySettings, "classifier" | "organizeWith"> & {
+    settings: Omit<LibrarySettings, "classifier" | "organizeWith" | "taggingStopped"> & {
       classifier: LibraryClassifier | null;
       organizeWith?: TaggingClassifier | null;
     },
@@ -7439,6 +7464,17 @@ export interface CoreApi {
    * only their Tags suggested.
    */
   classifyDocuments(documentIds?: string[]): Promise<void>;
+  /**
+   * Stops automatic Tagging with AI where the Documents waiting to be
+   * tagged, or being tagged, are: each of their Folders, and Not in a Folder
+   * (null). Nothing more from there is sent to tag, by automatic tagging or by
+   * Organize on its own, until `setTaggingWithAi` turns it back on; a re-tag
+   * or Organize the User asks for still goes. Kept across restarts. Returns
+   * the places it stopped.
+   */
+  stopTagging(): Promise<(string | null)[]>;
+  /** Turns automatic Tagging with AI on, or stops it, in a Folder or Not in a Folder (null). */
+  setTaggingWithAi(folderId: string | null, on: boolean): Promise<void>;
   /**
    * A manual choice, including Not in a Folder (null), wins over in-flight classification.
    * Returns the assignment before, for `restoreAssignment` (null: it had none).
@@ -9253,6 +9289,8 @@ const methods: Record<CoreApiMethod, true> = {
   saveLibrarySettings: true,
   getTaggingModels: true,
   classifyDocuments: true,
+  stopTagging: true,
+  setTaggingWithAi: true,
   assignDocumentGroup: true,
   acceptAssignments: true,
   rejectAssignments: true,
