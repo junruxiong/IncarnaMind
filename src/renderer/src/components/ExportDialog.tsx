@@ -508,8 +508,9 @@ function ExportOptionsForm({ mind, onDone }: { mind: Mind; onDone(): void }) {
           />
         )}
 
-        {/* A shared page numbers its Citations whatever the style: its readers click a number for each. */}
-        {format !== "share-page" && <CitationStyleRow mindId={mind.id} />}
+        {(format !== "share-page" || !draft["share-page"].citationCards) && (
+          <CitationStyleRow mindId={mind.id} />
+        )}
         <SaveToRow />
       </div>
 
