@@ -10,7 +10,7 @@
 import { readdir, realpath } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { describe, expect, test } from "vitest";
-import type { AnswerToolCall } from "../../src/core";
+import type { AnswerToolCall, PageLook } from "../../src/core";
 import { asksForSources } from "../../src/core/sources/intent";
 import { licenceOf } from "../../src/core/sources/licences";
 import { createPace } from "../../src/core/sources/pace";
@@ -519,6 +519,26 @@ describe("Find sources: adding", () => {
       existing: true,
       document: { id: document?.id },
     });
+  });
+
+  test("with pages kept as they look by default, a web page it adds is never loaded whole", async () => {
+    const asked: string[] = [];
+    const pageLook: PageLook = {
+      async render(address) {
+        asked.push(address);
+        return { pdf: new TextEncoder().encode("%PDF-1.7") };
+      },
+    };
+    const { core } = await setUp({ pageLook });
+    answerConsent(core);
+    await core.updateSettings({ user: { keepWebPageLook: true } });
+    const result = found(await core.findSources({ query: "CRISPR off-target detection" }));
+
+    const { document } = await add(core, work(result.works, /^CHOPOFF/).key);
+
+    expect(document?.kind).toBe("web");
+    expect(document?.web?.look).toBeNull();
+    expect(asked).toEqual([]);
   });
 
   test("a web page that can't be saved leaves the reference record, with its page; tried again, it is saved", async () => {
