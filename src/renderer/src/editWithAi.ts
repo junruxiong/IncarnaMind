@@ -67,6 +67,8 @@ interface Pending {
   action: EditAction;
   /** The language, for "translate". */
   language: string | null;
+  /** Stopped by the User: it still settles before another edit can start, so its Undo stays its own. */
+  stopped?: boolean;
 }
 
 interface EditsState {
@@ -231,17 +233,19 @@ async function arrived(
   applying: Applying | null = null,
 ): Promise<void> {
   const edits = useEdits.getState();
-  const stopped = edits.pending[mindId]?.requestId !== requestId;
-  if (stopped) {
-    // Stopped: nothing waits on the text any more, unless another request or the composer does.
-    if (!edits.pending[mindId] && !edits.editing[mindId] && !editor.isDestroyed) {
-      setEditTarget(editor, null);
-    }
-  } else {
-    set("pending", mindId, null);
-    if (!editor.isDestroyed) setEditTarget(editor, null);
+  const mine = edits.pending[mindId]?.requestId === requestId;
+  const stopped = !mine || edits.pending[mindId]?.stopped === true;
+  // Stopped: nothing waits on the text any more, unless another request or the composer does.
+  const waitedOn =
+    stopped &&
+    (edits.editing[mindId] !== undefined || (!mine && edits.pending[mindId] !== undefined));
+  if (!waitedOn && !editor.isDestroyed) setEditTarget(editor, null);
+  let outcome: { applied: number } | "held" | null = null;
+  try {
+    outcome = applying ? await finishApplying(applying, result) : null;
+  } finally {
+    if (mine) set("pending", mindId, null);
   }
-  const outcome = applying ? await finishApplying(applying, result) : null;
   if (outcome !== null && outcome !== "held") {
     if (outcome.applied > 0) speak(mindId, appliedMessage(outcome.applied));
     return;
@@ -353,8 +357,8 @@ function questionOfAnswer(editor: Editor, answerId: string): string | null {
 /** Stops the request the AI is working on in a Mind; the text stays as it was. */
 export function stopEdit(mindId: string): void {
   const pending = useEdits.getState().pending[mindId];
-  if (!pending) return;
-  set("pending", mindId, null);
+  if (!pending || pending.stopped) return;
+  set("pending", mindId, { ...pending, stopped: true });
   void core.cancelEdit(pending.requestId).catch(useAppStore.getState().reportError);
 }
 

@@ -68,7 +68,6 @@ export interface Applying {
 
 const latest = new WeakMap<Editor, Applying>();
 
-/** Part of the edit's Undo, kept apart from the User's typing before and after it. */
 function asEditStep(edit: Applying, change: () => void): void {
   const stack = undoStackOf(edit.editor);
   const last = edit.steps.at(-1);
@@ -86,7 +85,6 @@ function asEditStep(edit: Applying, change: () => void): void {
   }
 }
 
-/** One step of Undo for the whole edit, even when the User typed while it streamed in. */
 function foldSteps(edit: Applying): void {
   const stack = undoStackOf(edit.editor);
   const last = edit.steps.at(-1);
@@ -190,7 +188,6 @@ const kindOf = (node: ProseMirrorNode): "insert" | "delete" | null => {
   return readProposalAttribute(node.attrs[PROPOSAL_ATTRIBUTE])?.kind ?? null;
 };
 
-/** A node as it was before a change took it out: none of the change's marks or attribute. */
 function asItWas(node: ProseMirrorNode): ProseMirrorNode {
   const marks = node.marks.filter((mark) => !isProposalMark(mark.type.name));
   if (node.isText) return node.mark(marks);
@@ -207,14 +204,22 @@ function changesOf(state: EditorState, request: string): AppliedChange[] {
     absolutePositionToRelativePosition(pos, binding.type, binding.mapping);
   const { doc } = state;
   return ofRequest(state, request).map((proposal: PendingProposal): AppliedChange => {
-    if (proposal.block) {
-      const node = doc.nodeAt(proposal.from);
-      const gone = proposal.block === "delete" && node;
+    if (proposal.block === "insert") {
       return {
         from: relative(proposal.from),
-        to: relative(gone ? proposal.from : proposal.to),
-        removed: gone ? Fragment.from(asItWas(node)) : Fragment.empty,
-        block: true,
+        // Inside the new Block's end: at the Mind's end, the end itself would take in what comes after it.
+        to: relative(proposal.to - 1),
+        removed: Fragment.empty,
+        block: "added",
+      };
+    }
+    if (proposal.block === "delete") {
+      const node = doc.nodeAt(proposal.from);
+      return {
+        from: relative(proposal.from),
+        to: relative(proposal.from),
+        removed: node ? Fragment.from(asItWas(node)) : Fragment.empty,
+        block: "removed",
       };
     }
     const removed: ProseMirrorNode[] = [];
@@ -241,7 +246,7 @@ function changesOf(state: EditorState, request: string): AppliedChange[] {
       from: relative(words.from),
       to: relative(words.to),
       removed: Fragment.from(removed),
-      block: false,
+      block: null,
     };
   });
 }
@@ -342,7 +347,6 @@ export async function finishApplying(
   return { applied: apply(edit, result.request) };
 }
 
-/** The whole edit, with what was done since to its changes and to what it left out. */
 function undoEdit(editor: Editor): void {
   const edit = latest.get(editor);
   const stack = undoStackOf(editor);
@@ -399,7 +403,6 @@ export function restoreChange(editor: Editor, index: number): void {
   offerEditorUndo(editor, t("edit.review.restored.one"));
 }
 
-/** "Apply" and "Discard" for an edit held back. */
 function resolveHeld(editor: Editor, outcome: "accept" | "reject"): void {
   const line = appliedLineIn(editor.state);
   if (line?.kind !== "held") return;
@@ -419,7 +422,6 @@ function resolveHeld(editor: Editor, outcome: "accept" | "reject"): void {
   }
 }
 
-/** "Remove them": what the edit left out and kept goes after all, one step of Undo. */
 function removeKept(editor: Editor): void {
   const edit = latest.get(editor);
   const line = appliedLineIn(editor.state);

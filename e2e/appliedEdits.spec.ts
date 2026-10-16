@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
+import type { CoreBridge } from "../src/core/api";
 import {
   createDataFolder,
   dismissChatSetup,
@@ -251,13 +252,18 @@ test("Remove them, then Review changes: only the edit's own change is shown agai
   await expect(paragraphs).toHaveText([FORMAL, NEXT]);
 });
 
-test("an edit that would remove most of what was selected, and can't be mapped onto it, waits for the User: Discard leaves the text, Apply applies it", async () => {
+test("an edit that would remove most of what was selected, and can't be mapped onto it, waits for the User through typing elsewhere: Discard leaves the text, Apply applies it", async () => {
   const { window } = await launch();
   await useLocalChatModel(window);
-  const { editor, paragraphs } = await mindWith(window, [FIRST, SECOND, THIRD]);
+  const { editor, paragraphs } = await mindWith(window, [FIRST, SECOND, THIRD, "Notes:"]);
   const line = lineOf(editor);
+  const selectThree = () =>
+    slideSelect(window, paragraphs.first(), "Tides rise", {
+      line: paragraphs.nth(2),
+      words: "each week.",
+    });
 
-  await selectAll(window, editor);
+  await selectThree();
   await askToChange(window, "replace it all with a haiku");
   await expect(line.getByTestId("applied-count")).toHaveText(
     "This edit would remove most of what you selected, so it's waiting for you",
@@ -274,22 +280,61 @@ test("an edit that would remove most of what was selected, and can't be mapped o
   await expect(line.getByTestId("applied-discard")).toHaveText("放弃");
   await setLanguage(window, "en");
 
+  // Typing elsewhere leaves it waiting for its own Apply or Discard, not for Accept all.
+  await pointAndClick(window, paragraphs.last());
+  await window.keyboard.press("End");
+  await window.keyboard.type(" tide tables");
+  await expect(paragraphs.last()).toHaveText("Notes: tide tables");
+  await expect(line.getByTestId("applied-discard")).toBeVisible();
+  await expect(window.getByTestId("proposals-bar")).toHaveCount(0);
+
   await pointAndClick(window, line.getByTestId("applied-discard"));
-  await expect(paragraphs).toHaveText([FIRST, SECOND, THIRD]);
+  await expect(paragraphs).toHaveText([FIRST, SECOND, THIRD, "Notes: tide tables"]);
   await expect(line).toHaveCount(0);
 
-  await selectAll(window, editor);
+  await selectThree();
   await askToChange(window, "replace it all with a haiku");
   await pointAndClick(window, line.getByTestId("applied-apply"));
   await expect(paragraphs).toHaveText([
     "Gulls wheel, crying",
     "salt wind on stone",
     "night falls soft",
+    "Notes: tide tables",
   ]);
   await expect(line.getByTestId("applied-count")).toHaveText(/^Changed \d+ places$/);
   await editor.focus();
   await window.keyboard.press("ControlOrMeta+z");
-  await expect(paragraphs).toHaveText([FIRST, SECOND, THIRD]);
+  await expect(paragraphs).toHaveText([FIRST, SECOND, THIRD, "Notes: tide tables"]);
+});
+
+test("under Review changes, a paragraph that arrives after an edit's new Block at the Mind's end stays when that Block is restored", async () => {
+  const { window } = await launch();
+  await useLocalChatModel(window);
+  const { editor, paragraphs } = await mindWith(window, [FIRST, THIRD]);
+  const line = lineOf(editor);
+
+  await slideSelect(window, paragraphs.last(), THIRD);
+  await askToChange(window, "add a closing paragraph");
+  await expect(paragraphs).toHaveText([FIRST, THIRD, "That is all for now."]);
+  await pointAndClick(window, line.getByTestId("applied-review"));
+
+  await window.evaluate(async () => {
+    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    const [mind] = (await bridge.listMinds()).toSorted((a, b) =>
+      b.createdAt.localeCompare(a.createdAt),
+    );
+    await bridge.addToNote({
+      mindId: mind?.id ?? "",
+      blocks: [{ type: "paragraph", content: [{ type: "text", text: "Added later." }] }],
+      origin: null,
+      model: null,
+    });
+  });
+  await expect(paragraphs.last()).toHaveText("Added later.");
+
+  await pointAndClick(window, editor.locator(".applied-new--block").last());
+  await pointAndClick(window, window.getByTestId("change-restore"));
+  await expect(paragraphs).toHaveText([FIRST, THIRD, "Added later."]);
 });
 
 test("“delete the second paragraph” applies at once", async () => {
