@@ -1465,7 +1465,11 @@ export const assistantAnswers = (window: Page) =>
  * assistant's conversation (#201); resolves with its Answer there once it is
  * written (the scripted model's, with `fakeChat`).
  */
-export async function askInAssistant(window: Page, question: string): Promise<Locator> {
+export async function askInAssistant(
+  window: Page,
+  question: string,
+  { timeout = 15_000 }: { timeout?: number } = {},
+): Promise<Locator> {
   const answers = assistantAnswers(window);
   const before = await answers.count();
   await window.keyboard.press("ControlOrMeta+j");
@@ -1476,7 +1480,7 @@ export async function askInAssistant(window: Page, question: string): Promise<Lo
   await expect(questions.last()).toContainText(question);
   await expect(answers).toHaveCount(before + 1);
   const answer = answers.last();
-  await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+  await expect(answer).toHaveAttribute("data-status", "done", { timeout });
   return answer;
 }
 
