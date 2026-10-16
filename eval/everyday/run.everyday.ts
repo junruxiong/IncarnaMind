@@ -292,11 +292,12 @@ async function runModel(
     papers: await fetchPapers(config.cacheDir, log),
     reports: await reports(),
   };
+  const judging = config.judge ?? chat;
   const judge = createAiSdkChatModel({
-    kind: chat.kind,
-    modelId: chat.modelId,
-    apiKey: chat.apiKey,
-    baseUrl: chat.baseUrl,
+    kind: judging.kind,
+    modelId: judging.modelId,
+    apiKey: judging.apiKey,
+    baseUrl: judging.baseUrl,
     thinking: "off",
   });
   const model = `${chat.kind}/${chat.modelId}`;
@@ -367,7 +368,11 @@ async function runModel(
 
 const passedRun = (result: CaseResult) => !result.error && result.failures.length === 0;
 
-function report(results: readonly CaseResult[], rows: ReturnType<typeof rowRates>): string {
+function report(
+  results: readonly CaseResult[],
+  rows: ReturnType<typeof rowRates>,
+  judge: string,
+): string {
   const runs: RequestRun[] = results.map((each) => ({
     id: each.id,
     language: each.language,
@@ -379,7 +384,7 @@ function report(results: readonly CaseResult[], rows: ReturnType<typeof rowRates
   return [
     "# Everyday requests",
     "",
-    `${rows.length - under.length} of ${rows.length} requests at or above their floor; ${runs.filter((run) => run.passed).length} of ${runs.length} runs passed.`,
+    `${rows.length - under.length} of ${rows.length} requests at or above their floor; ${runs.filter((run) => run.passed).length} of ${runs.length} runs passed. Claims judged by ${judge}.`,
     "",
     "## By language",
     "",
@@ -460,7 +465,11 @@ test("everyday requests", async () => {
     `${new Date().toISOString().replace(/[:.]/g, "-")}-everyday`,
   );
   await mkdir(folder, { recursive: true });
-  await writeFile(join(folder, "report.md"), report(results, rows));
+  const judging = config.judge ?? config.chat;
+  await writeFile(
+    join(folder, "report.md"),
+    report(results, rows, `${judging.kind}/${judging.modelId}`),
+  );
   await writeFile(join(folder, "report.json"), JSON.stringify({ rows, results }, null, 2));
   const under = rows.filter((row) => row.under);
   log(

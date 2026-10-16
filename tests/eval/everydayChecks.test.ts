@@ -202,5 +202,10 @@ describe("The judge of claims", () => {
     expect(asked).toContain("The new page replaces the earlier version.");
     expect(verdict).toEqual({ unbacked: ["The new page replaces the earlier version."] });
     expect(verdictIn("no idea").unbacked).toHaveLength(1);
+    expect(
+      verdictIn(
+        '{"unbacked": ["Here is a shorter version:"]}\n\nWait, that is no claim.\n\n{"unbacked": []}',
+      ),
+    ).toEqual({ unbacked: [] });
   });
 });
