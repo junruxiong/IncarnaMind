@@ -10,6 +10,8 @@ import { createSignedFetch, errorOf, isAnswer } from "../signedFetch";
 const POLICY = /polic|organi[sz]ation|enterprise|administrator/i;
 const MODEL_UNAVAILABLE = /model.*not (supported|available|enabled)|unsupported model/i;
 const QUOTA = /quota|allowance|premium requests?/i;
+/** Only GitHub's own words say the account has no Copilot. */
+const NO_PLAN = /copilot|subscription|seat/i;
 
 /** Null for what the AI SDK handles as it does any server's: an answer, a passing rate limit, a server error. */
 async function refusalOf(response: Response): Promise<SignInRouteError | null> {
@@ -20,17 +22,20 @@ async function refusalOf(response: Response): Promise<SignInRouteError | null> {
   }
   if (status === 403) {
     const { message, code } = await errorOf(response);
-    return new SignInRouteError(
-      POLICY.test(`${code ?? ""} ${message}`) ? "policy-blocked" : "no-plan",
-      `GitHub Copilot refused the request (403): ${message}`,
-    );
+    const said = `${code ?? ""} ${message}`;
+    const problem = POLICY.test(said)
+      ? "policy-blocked"
+      : NO_PLAN.test(said)
+        ? "no-plan"
+        : "refused";
+    return new SignInRouteError(problem, `GitHub Copilot refused the request (403): ${message}`);
   }
   if (status === 402 || status === 429) {
     const { message, code } = await errorOf(response);
     if (status === 402 || code === "quota_exceeded" || QUOTA.test(message)) {
       return new SignInRouteError("plan-limit", `Your Copilot plan's limit is reached: ${message}`);
     }
-    return null;
+    return new SignInRouteError("rate-limited", `GitHub Copilot asked to slow down: ${message}`);
   }
   if (status === 400 || status === 404 || status === 422) {
     const { message, code } = await errorOf(response);

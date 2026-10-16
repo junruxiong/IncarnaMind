@@ -15,6 +15,7 @@ import { isRecord, SecretStorageError } from "../../errors";
 import {
   type DeviceCode,
   OAuthFlowError,
+  type OAuthFlowFailure,
   OAuthTokenError,
   type OAuthTokens,
   refreshOAuthTokens,
@@ -45,6 +46,16 @@ const parseStored = (record: Record<string, unknown>): StoredAccount => ({
   profile: record.profile === "editor" ? "editor" : "own",
 });
 
+/** The token exchange's refusal, with what GitHub said, as a refresh refusal too. */
+class ExchangeRefusal extends OAuthTokenError {
+  constructor(
+    status: number | null,
+    readonly said: string,
+  ) {
+    super(status, null, `GitHub didn't give a Copilot token (${status ?? "no token"}): ${said}`);
+  }
+}
+
 async function exchangeToken(options: {
   exchange: NonNullable<CopilotProfile["tokenExchange"]>;
   githubToken: string;
@@ -64,11 +75,8 @@ async function exchangeToken(options: {
   const body: unknown = await response.json().catch(() => undefined);
   const token = isRecord(body) && typeof body.token === "string" ? body.token : null;
   if (!response.ok || !token || !isRecord(body)) {
-    throw new OAuthTokenError(
-      response.ok ? null : response.status,
-      null,
-      `GitHub didn't give a Copilot token (${response.status}).`,
-    );
+    const said = isRecord(body) && typeof body.message === "string" ? body.message : "";
+    throw new ExchangeRefusal(response.ok ? null : response.status, said);
   }
   const expiresAt = typeof body.expires_at === "number" ? body.expires_at : null;
   return {
@@ -81,21 +89,52 @@ async function exchangeToken(options: {
   };
 }
 
+/** GitHub says the account has no Copilot this way: no token for it (404), or a refusal naming Copilot's plan. */
+const NO_COPILOT = /copilot|subscription|seat|plan/i;
+
+/** Why the second way's token exchange failed: only GitHub's own word says there's no plan. */
+class ExchangeFailure extends Error {
+  override name = "ExchangeFailure";
+  constructor(
+    readonly kind: CopilotSignInErrorKind,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+function exchangeFailure(error: unknown): ExchangeFailure {
+  const message = error instanceof Error ? error.message : String(error);
+  if (!(error instanceof ExchangeRefusal)) return new ExchangeFailure("unreachable", message);
+  const { status } = error;
+  if (status === null) return new ExchangeFailure("unexpected-response", message);
+  if (status === 404 || (status === 403 && NO_COPILOT.test(error.said))) {
+    return new ExchangeFailure("no-plan", message);
+  }
+  if (status >= 500) return new ExchangeFailure("service-error", message);
+  return new ExchangeFailure("refused", message);
+}
+
+const FLOW_KINDS: Record<OAuthFlowFailure, CopilotSignInErrorKind> = {
+  cancelled: "sign-in-cancelled",
+  "timed-out": "code-expired",
+  denied: "declined",
+  "port-in-use": "failed",
+};
+
 function signInError(error: unknown): { kind: CopilotSignInErrorKind; message: string } {
   const message = error instanceof Error ? error.message : String(error);
   if (error instanceof SecretStorageError) return { kind: "secret-storage", message };
-  if (error instanceof SignInRouteError && error.problem === "no-plan") {
-    return { kind: "no-plan", message };
-  }
+  if (error instanceof ExchangeFailure) return { kind: error.kind, message };
   if (error instanceof OAuthFlowError) {
-    if (error.reason === "cancelled" || error.reason === "timed-out") {
-      return { kind: "sign-in-cancelled", message };
-    }
-    return { kind: error.reason === "denied" ? "refused" : "failed", message };
+    return { kind: FLOW_KINDS[error.reason], message };
   }
   if (error instanceof OAuthTokenError) {
-    return { kind: error.status === null ? "unexpected-response" : "refused", message };
+    if (error.status === null) return { kind: "unexpected-response", message };
+    return { kind: error.status >= 500 ? "service-error" : "refused", message };
   }
+  // fetch rejects with a TypeError when the network fails.
+  if (error instanceof TypeError) return { kind: "unreachable", message };
   return { kind: "failed", message };
 }
 
@@ -259,11 +298,9 @@ export function createCopilotAccount(options: {
                 ...fetcher,
               });
             } catch (error) {
-              // Signed in to GitHub, but nothing to use Copilot with.
-              throw new SignInRouteError(
-                "no-plan",
-                error instanceof Error ? error.message : String(error),
-              );
+              if (signal.aborted)
+                throw new OAuthFlowError("cancelled", "The sign-in was cancelled.");
+              throw exchangeFailure(error);
             }
           }
           listed = null;

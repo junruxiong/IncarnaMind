@@ -88,9 +88,11 @@ function refusal(error: unknown): RefreshRefusal | "passing" {
   if (!(error instanceof OAuthTokenError) || error.status === null) return "passing";
   if (error.code === "invalid_client") return "client-gone";
   if (error.code && UNUSABLE_REFRESH.has(error.code)) return "unusable";
-  // A refusal without a known code: only an overloaded or slow server is worth waiting for.
-  const { status } = error;
-  return status >= 400 && status < 500 && status !== 408 && status !== 429 ? "unusable" : "passing";
+  // Only an overloaded or slow server is worth waiting for. GitHub refuses with 200 and a code.
+  const { status, code } = error;
+  const waiting =
+    status >= 500 || status === 408 || status === 429 || code === "temporarily_unavailable";
+  return waiting ? "passing" : "unusable";
 }
 
 const PASTE_PROBLEMS: Record<Exclude<PastedRedirect, "accepted">, PastedAddressProblem> = {

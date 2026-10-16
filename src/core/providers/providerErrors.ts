@@ -73,6 +73,7 @@ const ROUTE_KINDS: Record<SignInRouteError["problem"], ProviderErrorKind> = {
   "no-plan": "blocked",
   "policy-blocked": "blocked",
   "model-unavailable": "model",
+  "rate-limited": "rate-limit",
 };
 
 /** When a reached limit resets, as ISO 8601, from an error that says (epoch milliseconds). */
