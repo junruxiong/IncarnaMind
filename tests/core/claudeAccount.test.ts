@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { generateText, streamText } from "ai";
-import { describe, expect, test, vi } from "vitest";
+import { describe, expect, onTestFinished, test, vi } from "vitest";
 import { version } from "../../package.json";
 import { type Core, createAiSdkChatModel } from "../../src/core";
 import type { SignInRouteProblem } from "../../src/core/api";
@@ -27,14 +27,20 @@ import {
 import {
   ANSWER,
   BETA_FLAG,
+  createFakeAnthropic,
   createFakeClaudeBrowser,
   type FakeAnthropic,
   type FakeClaudeBrowser,
   SYSTEM_BLOCK,
-  startFakeAnthropic,
 } from "../helpers/fakeAnthropic";
 
 const MODEL = "claude-sonnet-5-5";
+
+async function startFakeAnthropic(): Promise<FakeAnthropic> {
+  const fake = await createFakeAnthropic();
+  onTestFinished(() => fake.close());
+  return fake;
+}
 
 interface Setup {
   dataDir: string;
