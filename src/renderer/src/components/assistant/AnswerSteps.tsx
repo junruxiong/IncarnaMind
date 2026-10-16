@@ -57,6 +57,7 @@ const SHOWN_SOURCES = 3;
 export function AnswerSteps({
   answer,
   question,
+  askedAgain,
   streaming,
   waitingForApproval,
   wait,
@@ -64,6 +65,8 @@ export function AnswerSteps({
 }: {
   answer: ConversationAnswer;
   question: ConversationQuestion | undefined;
+  /** It was asked again with this many Documents an earlier Answer didn't use: the line says so. */
+  askedAgain?: number;
   streaming: boolean;
   waitingForApproval: boolean;
   wait: { usual: number | null } | null;
@@ -106,6 +109,7 @@ export function AnswerSteps({
       <FoldedToggle
         line={line}
         scopeOf={scopeOf}
+        askedAgain={askedAgain}
         open={open}
         onToggle={() => setOpen((was) => !was)}
       />
@@ -333,18 +337,26 @@ const NAME = "\u0001";
 function FoldedToggle({
   line,
   scopeOf,
+  askedAgain,
   open,
   onToggle,
 }: {
   line: FoldedLine;
   scopeOf(extra: number): string;
+  askedAgain?: number | undefined;
   open: boolean;
   onToggle(): void;
 }) {
   const t = useT();
   const nameOf = useModelNames();
-  const label = foldedText(t, line, scopeOf, (id) => nameOf(id).name);
-  const step = line.kind === "read" || line.kind === "asked" ? line : null;
+  const label =
+    askedAgain === undefined
+      ? foldedText(t, line, scopeOf, (id) => nameOf(id).name)
+      : askedAgain === 1
+        ? t("coverage.askedAgain.one")
+        : t("coverage.askedAgain", { count: askedAgain });
+  const step =
+    askedAgain === undefined && (line.kind === "read" || line.kind === "asked") ? line : null;
   const mind = step?.mind;
   const Icon = mind ? MindLineIcon : line.kind === "answered" ? SparkLineIcon : SearchIcon;
   const parts = step && !step.mind.deleted ? mindStepText(t, step, NAME).split(NAME) : [];

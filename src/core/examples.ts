@@ -553,6 +553,24 @@ export function createExamples(options: ExamplesOptions) {
   return {
     status,
 
+    /**
+     * Every example still there: its Mind and its Documents, which an Answer
+     * asked from another Mind leaves out of "these documents".
+     */
+    made(): { mindIds: string[]; documentIds: string[] } {
+      const all = [...GROUPS.map(stored), read(LEGACY_VALUE)].flatMap((each) =>
+        each ? [each] : [],
+      );
+      return {
+        mindIds: all.map((each) => each.mindId).filter((id) => options.mindExists(id)),
+        documentIds: all.flatMap((each) =>
+          options.linkedFolderExists(each.linkedFolderId)
+            ? options.documentsIn(each.linkedFolderId).map((document) => document.id)
+            : [],
+        ),
+      };
+    },
+
     create,
 
     readyAnswer,
