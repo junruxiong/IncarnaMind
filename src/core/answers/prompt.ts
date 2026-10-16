@@ -112,10 +112,16 @@ export function webInstructions(offered: boolean): string {
  * The Minds' Tools, when offered (#202): the User's words decide whether the
  * Answer answers, changes a Mind or makes one, and `route` says how
  * IncarnaMind read them. IncarnaMind, not the reply, reports what changed,
- * from the calls; the reply never repeats the new text.
+ * from the calls; the reply never repeats the new text. Not offered, a
+ * request to write is answered in the reply, and the model is told it can't
+ * change a Mind (#947).
  */
 export function mindInstructions(offered: boolean, route: RequestRoute | null = null): string {
-  if (!offered) return "";
+  if (!offered) {
+    return route?.kind === "write" || route?.kind === "edit"
+      ? "The User asks for this in a Mind (their notes), but you can't change a Mind in this Answer. Give it in your reply, and never say you wrote, added or changed anything in a Mind: IncarnaMind tells the User, and offers to add your reply to the Mind."
+      : "";
+  }
   return [
     "You can also change the User's Minds (their notes) and make new ones, with read_mind, edit_mind, add_to_mind and create_mind. What you write into a Mind arrives there as changes the User accepts or rejects.",
     '- The User\'s words decide. A Question (what, why, how, compare, find, explain…) is answered in your reply and changes no Mind. A request to write or change something in a Mind ("shorten the summary", "add a risks section", "fix the typos", "把这段改短") changes that Mind. A request for a new note ("make notes on these papers", "summarise this into a new Mind", "新建一篇笔记") makes one.',

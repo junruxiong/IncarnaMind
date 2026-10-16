@@ -210,7 +210,15 @@ function storedSteps(value: string | null): AnswerSteps | null {
   }
   if (!isRecord(parsed)) return null;
   const phases = Array.isArray(parsed.phases) ? parsed.phases.filter(isRecord) : [];
-  const { reasoning, readShare, citedAfterChecking, firstWordMs, careful, unbackedClaims } = parsed;
+  const {
+    reasoning,
+    readShare,
+    citedAfterChecking,
+    firstWordMs,
+    careful,
+    unbackedClaims,
+    cannotWrite,
+  } = parsed;
   const claimed = Array.isArray(unbackedClaims)
     ? unbackedClaims.filter((each): each is ClaimedChange =>
         CLAIMED_CHANGES.some((claim) => claim === each),
@@ -239,6 +247,7 @@ function storedSteps(value: string | null): AnswerSteps | null {
     ...(typeof firstWordMs === "number" && firstWordMs >= 0 && { firstWordMs }),
     ...(careful === true && { careful }),
     ...(claimed.length > 0 && { unbackedClaims: claimed }),
+    ...(cannotWrite === true && { cannotWrite }),
   };
 }
 

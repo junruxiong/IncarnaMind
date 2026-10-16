@@ -2337,6 +2337,8 @@ export const en = {
   "answer.wait.usually.minute": "Usually about a minute with {model}",
   "answer.wait.usually.minutes": "Usually about {count} minutes with {model}",
   "answer.regenerate": "Regenerate",
+  "answer.cannotWrite": "This model can't write into your Mind itself.",
+  "answer.cannotWrite.add": "Add to Mind",
   "answer.more": "More for this Answer",
   "answer.error.thisModel": "this model",
   "answer.error.auth": "The key for {model} was refused",
