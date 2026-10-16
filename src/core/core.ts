@@ -1824,6 +1824,8 @@ export function createCore(adapters: CoreAdapters): Core {
     http: createSourceHttp(pace, paceTimers),
     urls: adapters.referenceLookup,
     content,
+    db,
+    now,
     progress: (event) => events.emit("referenceCheck.progress", event),
     signal: lifetime.signal,
   });

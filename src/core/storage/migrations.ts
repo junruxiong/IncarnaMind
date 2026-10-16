@@ -1710,6 +1710,27 @@ export const migrations: readonly Migration[] = [
       ALTER TABLE web_pages ADD COLUMN look_failure TEXT;
     `,
   },
+  {
+    version: 96,
+    description:
+      "Reference lookups kept for good, so checking a list again asks no service twice (#711)",
+    // OpenAlex's free allowance is per network and per day; a student re-checks the same list often.
+    // `service` is where the answer came from, which the check still names.
+    sql: `
+      CREATE TABLE reference_lookups (
+        id TEXT PRIMARY KEY NOT NULL,
+        service TEXT NOT NULL CHECK (service IN ('crossref', 'openalex', 'arxiv')),
+        kind TEXT NOT NULL,
+        lookup_key TEXT NOT NULL,
+        answer TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE UNIQUE INDEX reference_lookups_by_key
+        ON reference_lookups (service, kind, lookup_key) WHERE deleted_at IS NULL;
+    `,
+  },
 ];
 
 /**
