@@ -615,6 +615,7 @@ describe("A name that fits several places asks which one", { timeout: 30_000 }, 
       kind: "several-places",
       mindId: set.mind.id,
       name: "Summary",
+      adding: false,
     });
     expect(changesIn(answer)).toEqual([]);
     expect(lastResult(model)).toContain(`"${ASKS_WHICH}"`);
@@ -646,6 +647,89 @@ describe("A name that fits several places asks which one", { timeout: 30_000 }, 
       "Summary",
       "Part two was [-very -]late, and the courier was [-really -]slow.",
     ]);
+  });
+
+  // protects=the headings a name is under are matched like any name, whole text first: "Chapter 1" is not "Chapter 10", the quotes round each heading are dropped, and a start under the named parent counts though a whole name sits elsewhere; fails_when=a section under Chapter 10 is changed for Chapter 1, the quoted path isn't found, or "Part 2 > Summary" fails because Part 2 holds only "Summary of Q3"; no_claim=none beyond protects.
+  test.each([
+    {
+      what: "Chapter 1 is not Chapter 10",
+      part: "Chapter 1 > Notes",
+      blocks: [
+        heading(1, "Chapter 1"),
+        heading(2, "Notes"),
+        note("One was very short."),
+        heading(1, "Chapter 10"),
+        heading(2, "Notes"),
+        note("Ten was very long."),
+      ],
+      shown: [
+        "Chapter 1",
+        "Notes",
+        "One was [-very -]short.",
+        "Chapter 10",
+        "Notes",
+        "Ten was very long.",
+      ],
+    },
+    {
+      what: "quotes round each heading",
+      part: "“Part 2” > “Summary”",
+      blocks: TWO_SUMMARIES(),
+      shown: [
+        "Part 1",
+        "Summary",
+        PART_1,
+        "Part 2",
+        "Summary",
+        "Part two was [-very -]late, and the courier was [-really -]slow.",
+      ],
+    },
+    {
+      what: "a start under the named parent, a whole name elsewhere",
+      part: "Part 2 > Summary",
+      blocks: [
+        heading(1, "Part 1"),
+        heading(2, "Summary"),
+        note("One was very short."),
+        heading(1, "Part 2"),
+        heading(2, "Summary of Q3"),
+        note("Two was very long."),
+      ],
+      shown: [
+        "Part 1",
+        "Summary",
+        "One was very short.",
+        "Part 2",
+        "Summary of Q3",
+        "Two was [-very -]long.",
+      ],
+    },
+  ])("a path to a section: $what", async ({ part, blocks, shown }) => {
+    const model = toolModel(
+      { tool: "edit_mind", input: { part, instruction: "Shorten it" } },
+      "Shortened it.",
+    );
+    const set = await withBlocks(model, blocks);
+
+    const answer = await ask(set.core, { text: "Shorten that section", mindId: set.mind.id });
+
+    await set.client.settled();
+    expect(mindCalls(answer)[0]?.status).toBe("done");
+    expect(shownWithChanges(set.client)).toEqual(shown);
+  });
+
+  // protects=the question echoes the heading's own case, not the model's; fails_when=a heading typed in lower case is asked about in lower case; no_claim=none beyond protects.
+  test("the question names the heading as written in the Mind", async () => {
+    const model = toolModel(
+      { tool: "edit_mind", input: { part: "summary", instruction: "Shorten it" } },
+      "Which one?",
+    );
+    const set = await withBlocks(model, TWO_SUMMARIES());
+
+    await ask(set.core, { text: "Make the summary shorter", mindId: set.mind.id });
+
+    expect(lastResult(model)).toContain(`"${ASKS_WHICH}"`);
+    expect(lastResult(model)).toContain(`as in part: "Part 1 > Summary"`);
   });
 
   // protects=a name on one heading behaves as before: the whole text wins over a start, and a start is enough alone; fails_when=either case asks which, or changes another section; no_claim=none beyond protects.
@@ -748,7 +832,10 @@ describe("A name that fits several places asks which one", { timeout: 30_000 }, 
       });
 
       expect(mindCalls(answer)[0]?.status).toBe("failed");
-      expect(mindCalls(answer)[0]?.mindProblem).toMatchObject({ kind: "several-places" });
+      expect(mindCalls(answer)[0]?.mindProblem).toMatchObject({
+        kind: "several-places",
+        adding: true,
+      });
       expect(lastResult(model)).toContain(`"${ASKS_WHICH}"`);
       expect(lastResult(model)).toContain(`as in after: "Part 1 > Summary"`);
       await expectUntouched(set, ["Part 1", "Summary", PART_1, "Part 2", "Summary", PART_2]);
