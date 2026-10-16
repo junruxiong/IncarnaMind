@@ -1653,6 +1653,7 @@ export const en = {
   "providers.form.needsKey": "Paste the key first.",
   "providers.form.needsAddress": "Enter the server's address first.",
   "providers.form.needsField": "Fill in {field} first.",
+  "providers.form.needsServer": "Start {provider} first.",
   "providers.form.needsModel": "Choose a model first.",
   "providers.form.badKey": "This key isn’t valid for {provider}. Check it on {site}.",
 
@@ -1691,6 +1692,15 @@ export const en = {
   "providers.ollama.use": "Use local models ({model}, 3.3 GB)",
   "providers.ollama.pulling": "Downloading {model} (3.3 GB)… This can take a while.",
   "providers.ollama.checkAgain": "Check again",
+  "providers.local.checking": "Looking for {provider} on this computer…",
+  "providers.local.running":
+    "{provider} is running on this computer. Your Questions and Documents stay on it.",
+  "providers.local.notRunning":
+    "Nothing answers at {address}. Start {provider} and its local server, or change the address.",
+  "providers.local.runningAway": "{provider} answers at {address}.",
+  "providers.local.also": "Also works with",
+  "providers.local.rowRunning": "Running on this computer.",
+  "providers.local.rowNotRunning": "Not running yet.",
   "providers.ollama.get": "Get Ollama",
 
   "providers.readiness.no-provider":
@@ -2729,9 +2739,9 @@ export const en = {
     "Your edits since the import, as tracked changes by {name}. Your name is in Settings › General.",
   "export.markAiText": "Mark AI-written text with a comment",
   "export.markAiText.hint": "Each passage gets a comment: “Written by IncarnaMind”.",
-  "export.commentFailedChecks": "Comment on Citations whose check failed",
+  "export.commentFailedChecks": "Comment on checks that failed",
   "export.commentFailedChecks.hint":
-    "When the quote wasn't found, or your Documents don't support the claim or contradict it.",
+    "When a quote wasn't found, or a sentence is Contradicted, Unsupported or Needs re-check.",
   "aiStatement.command": "Export AI use statement",
   "aiStatement.keywords": "AI use disclosure declaration thesis dissertation paper record",
   "aiStatement.made": "Made “{name}”",
@@ -2817,6 +2827,20 @@ export const en = {
   "export.done": "Saved {name}",
   "export.doneIn": "Saved “{name}” in {folder}",
   "export.changeFolder": "Change folder…",
+  "export.parts.separator": ", ",
+  "export.parts.last": " and ",
+  "export.commented": "{list}, as comments",
+  "export.commented.contradicted": "{count} Contradicted",
+  "export.commented.unsupported": "{count} Unsupported",
+  "export.commented.recheck": "{count} Needs re-check",
+  "export.tracked.one": "1 change waiting, as tracked changes",
+  "export.tracked": "{count} changes waiting, as tracked changes",
+  "export.unmarked.one": "{list} sentence went out unmarked",
+  "export.unmarked.other": "{list} sentences went out unmarked",
+  "export.unmarked.contradicted": "{count} Contradicted",
+  "export.unmarked.unsupported": "{count} Unsupported",
+  "export.unmarked.recheck": "{count} Needs re-check",
+  "export.unmarked.word": "Export as Word instead",
   "export.word.review.one": "1 thing in the Word file can't be kept",
   "export.word.review.other": "{count} things in the Word file can't be kept",
   "export.word.anyway": "Export anyway",
@@ -2842,6 +2866,21 @@ export const en = {
   "export.comment.notFound.noQuote": "Quote not found in {source}",
   "export.comment.unsupported": "Unsupported by the Documents checked ({source})",
   "export.comment.contradicted": "Contradicted by the Documents checked ({source})",
+  "export.comment.sentence.contradicted": "Contradicted: {says}",
+  "export.comment.sentence.contradicted.worked":
+    "Contradicted: your Documents give {shown}, and the sentence says {stated}.",
+  "export.comment.sentence.contradicted.plain": "Contradicted by your Documents.",
+  "export.comment.sentence.unsupported": "Unsupported: nothing in your Documents says this.",
+  "export.comment.sentence.unsupported.folder": "Unsupported: nothing in “{folder}” says this.",
+  "export.comment.sentence.unsupported.differs":
+    "Unsupported: your Documents say something different (“{quote}”, {source})",
+  "export.comment.sentence.needs-recheck.edited": "Needs re-check: changed since it was checked.",
+  "export.comment.sentence.needs-recheck.new-version":
+    "Needs re-check: a Document it was checked against has a new version.",
+  "export.comment.sentence.needs-recheck.document-removed":
+    "Needs re-check: a Document it was checked against was deleted.",
+  "export.comment.sentence.needs-recheck.scope":
+    "Needs re-check: the Mind is in another Folder now.",
   "export.html.notes": "Notes",
   "export.html.back": "Back to text",
   "export.citation.location": "{document}, {location}",
@@ -4190,7 +4229,7 @@ export const en = {
   "wordImport.addOriginal": "Also add the original to the Library, so Answers can cite it",
   "wordImport.newerDraft": "A newer draft of “{name}”? Keep both as versions",
   "wordImport.layoutNotShown":
-    "Some of this file’s layout (table lines and aligned columns) isn’t shown in the Mind yet. It’s kept, and comes back when you export to Word.",
+    "Some of this file’s layout (aligned columns) isn’t shown in the Mind yet. It’s kept, and comes back when you export to Word.",
   "wordImport.import": "Import",
   "wordImport.importing": "Importing…",
   "wordImport.cancel": "Cancel",
