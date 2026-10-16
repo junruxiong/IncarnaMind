@@ -7,7 +7,7 @@
  */
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import {
   acceptPlainTextKeys,
@@ -30,10 +30,31 @@ async function screenshot(window: Page, name: string): Promise<void> {
   if (SCREENSHOTS) await window.screenshot({ path: join(SCREENSHOTS, `${name}.png`) });
 }
 
-const SENDS_EN =
-  "Your Questions, the Mind you're in, passages from your Documents, and Document text for Tags go to OpenAI when you use it.";
-const SENDS_ZH =
-  "你的问题、当前 Mind、文档中的相关段落，以及用于打标签的文档文字，会在使用时发送给 OpenAI。";
+const SENDS_EN = {
+  lead: "When you use it, OpenAI receives:",
+  items: [
+    "your Questions, the Mind you're in, and matching passages with their Document names and pages",
+    "each sentence you check",
+    "the paragraph you pause on, for writing suggestions",
+    "each Document's name, outline and short excerpts, to tag and file it (page images for scans with no text)",
+    "the text the assistant edits when you ask it to",
+  ],
+};
+const SENDS_ZH = {
+  lead: "使用时，以下内容会发送给 OpenAI：",
+  items: [
+    "你的问题、当前 Mind，以及相关段落及其文档名称和页码",
+    "你核对的每一句话",
+    "写作建议时你停下的那一段",
+    "每个文档的名称、目录和简短摘录，用于打标签和整理（没有文字的扫描件会发送页面图片）",
+    "你让助手修改时被修改的文字",
+  ],
+};
+
+async function expectSends(sends: Locator, words: typeof SENDS_EN): Promise<void> {
+  await expect(sends.locator("p")).toHaveText(words.lead);
+  await expect(sends.getByRole("listitem")).toHaveText(words.items);
+}
 
 let dataDir: string;
 let sources: string;
@@ -84,7 +105,7 @@ test("first run: choosing a provider with a key is the consent, so no dialog com
     .locator("label")
     .filter({ hasText: /^OpenAI$/ })
     .click();
-  await expect(form.getByTestId("provider-sends")).toHaveText(SENDS_EN);
+  await expectSends(form.getByTestId("provider-sends"), SENDS_EN);
   await acceptPlainTextKeys(window, form);
   await form.getByLabel(/^API key/).fill("sk-not-a-real-key");
   await form.getByTestId("provider-sends").scrollIntoViewIfNeeded();
@@ -162,6 +183,21 @@ test("before a model is chosen, a new Document's tagging waits with its line, an
   await app.close();
 });
 
+test("the ChatGPT plan's card in Settings › Models names the same list, with ChatGPT", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  const settings = await openSettings(window, "models");
+
+  const plan = settings.getByTestId("chatgpt-settings");
+  await plan.getByTestId("provider-sends").scrollIntoViewIfNeeded();
+  await expectSends(plan.getByTestId("provider-sends"), {
+    ...SENDS_EN,
+    lead: "When you use it, ChatGPT receives:",
+  });
+  await screenshot(window, "choosing-line-chatgpt-en");
+  await app.close();
+});
+
 test("in Chinese, Settings › Models says what goes to the provider above its button", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
@@ -176,7 +212,7 @@ test("in Chinese, Settings › Models says what goes to the provider above its b
     .click();
 
   const line = form.getByTestId("provider-sends");
-  await expect(line).toHaveText(SENDS_ZH);
+  await expectSends(line, SENDS_ZH);
   await line.scrollIntoViewIfNeeded();
   // Right above the button it is said for.
   const lineBox = await line.boundingBox();

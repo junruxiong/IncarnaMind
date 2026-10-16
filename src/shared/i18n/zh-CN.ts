@@ -1565,8 +1565,13 @@ export const zhCN = {
   "providers.form.test": "测试连接",
   "providers.form.testing": "正在测试…",
   "providers.form.save": "使用此服务",
-  "providers.sends":
-    "你的问题、当前 Mind、文档中的相关段落，以及用于打标签的文档文字，会在使用时发送给 {provider}。",
+  "providers.sends": "使用时，以下内容会发送给 {provider}：",
+  "providers.sends.chat": "你的问题、当前 Mind，以及相关段落及其文档名称和页码",
+  "providers.sends.checks": "你核对的每一句话",
+  "providers.sends.suggestions": "写作建议时你停下的那一段",
+  "providers.sends.tagging":
+    "每个文档的名称、目录和简短摘录，用于打标签和整理（没有文字的扫描件会发送页面图片）",
+  "providers.sends.edits": "你让助手修改时被修改的文字",
   "providers.form.saving": "正在保存…",
   "providers.form.moreShort": "更多…",
   "providers.form.whereKey": "在哪里找到密钥？",
