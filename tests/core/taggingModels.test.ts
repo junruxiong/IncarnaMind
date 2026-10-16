@@ -54,9 +54,7 @@ function scriptedProviders() {
         modelId: spec.modelId,
         generate: ({ system, options }) => {
           const schema =
-            options.responseFormat?.type === "json"
-              ? (options.responseFormat.schema as { properties?: Record<string, unknown> })
-              : undefined;
+            options.responseFormat?.type === "json" ? options.responseFormat.schema : undefined;
           const purpose: SmallCall["purpose"] = schema?.properties?.groupId
             ? "organize"
             : schema?.properties?.tags

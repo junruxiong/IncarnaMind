@@ -454,6 +454,36 @@ describe("Automatic tagging", { timeout: 30_000 }, () => {
     await retag(core, [document.id]);
     expect(await tagNamesOf(core, document.id)).toEqual(["Paper"]);
   });
+
+  test("back online, the Documents that couldn't reach the model are tagged again, once however many windows say so", async () => {
+    const { core, tagging } = await startTagging(["Paper"]);
+    const failure = (statusCode?: number) =>
+      new APICallError({
+        message: statusCode ? "Too many requests" : "fetch failed",
+        url: "http://127.0.0.1:11434/v1/chat/completions",
+        requestBodyValues: {},
+        ...(statusCode && { statusCode }),
+        isRetryable: false,
+      });
+    await core.saveChatProvider(LOCAL);
+    tagging.fail(failure());
+    const offline = await addDocument(core, "Attention.md", PAPER_TEXT);
+    await waitForTagging(core, [offline.id], (each) => each.tagging === "failed");
+    tagging.fail(failure(429));
+    const limited = await addDocument(core, "Limited.md", PAPER_TEXT);
+    const [refused] = await waitForTagging(core, [limited.id], (each) => each.tagging === "failed");
+    expect(refused?.taggingError?.kind).toBe("rate-limit");
+
+    tagging.fail(null);
+    await Promise.all([core.backOnline(), core.backOnline()]);
+    await waitForTagging(core, [offline.id]);
+
+    expect(tagging.requests).toHaveLength(3);
+    expect(await tagNamesOf(core, offline.id)).toEqual(["Paper"]);
+    expect((await core.listDocuments()).find((each) => each.id === limited.id)?.tagging).toBe(
+      "failed",
+    );
+  });
 });
 
 describe("Consent for automatic tagging (ADR-0022)", { timeout: 30_000 }, () => {
