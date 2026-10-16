@@ -462,6 +462,7 @@ describe("Get started's Add your Documents", () => {
       linkedFolderId,
       answerId: "a",
       more: [],
+      ready: null,
     }) satisfies CoreEvents["examples.changed"];
   const ticked = () => useAppStore.getState().settings?.device.gettingStarted.indexed;
 
@@ -477,6 +478,7 @@ describe("Get started's Add your Documents", () => {
             citationChecked: false,
             indexed: false,
             askedOwn: false,
+            askedReady: false,
           },
         },
       } as unknown as NonNullable<ReturnType<typeof useAppStore.getState>["settings"]>,

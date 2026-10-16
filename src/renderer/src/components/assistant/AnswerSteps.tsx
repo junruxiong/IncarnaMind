@@ -91,6 +91,15 @@ export function AnswerSteps({
       </>
     );
   }
+  if (answer.steps?.example) {
+    return (
+      <div className="answer-steps">
+        <p data-testid="answer-example" className="answer-steps-line">
+          {t("examples.answer")}
+        </p>
+      </div>
+    );
+  }
   const line = foldedLine({ answer, askedFrom, meeting, selection });
   if (!line) return null;
   return (
