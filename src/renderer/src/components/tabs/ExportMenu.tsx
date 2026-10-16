@@ -15,7 +15,7 @@ import {
   MoreLineIcon,
   SettingsLineIcon,
 } from "../lineIcons";
-import { menuClass, menuItemClass, menuRuleClass } from "../ui";
+import { menuClass, menuItemClass, menuRuleClass, tallMenuItemClass } from "../ui";
 import { usePopoverMenu, useSubmenu } from "../usePopoverMenu";
 
 const MAIN_FORMATS: readonly ExportFormat[] = ["docx", "pdf"];
@@ -58,7 +58,7 @@ function Item({
       data-testid={testId}
       onClick={onClick}
       // A long hint (a style's name) wraps under itself rather than being cut short.
-      className={`${menuItemClass.replace("h-7", "min-h-7 py-1")} pl-2`}
+      className={`${tallMenuItemClass} pl-2`}
     >
       {icon}
       <span className="flex-1 whitespace-nowrap">{label}</span>
