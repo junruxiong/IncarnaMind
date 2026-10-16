@@ -1,5 +1,5 @@
 import { generateText, streamText } from "ai";
-import { describe, expect, test, vi } from "vitest";
+import { describe, expect, onTestFinished, test, vi } from "vitest";
 import { version } from "../../package.json";
 import { type CopilotProfileId, type Core, createAiSdkChatModel } from "../../src/core";
 import type { SignInRouteProblem } from "../../src/core/api";
@@ -12,7 +12,14 @@ import {
   wayBackLabel,
 } from "../../src/core/providers/signInRoutes";
 import { translate } from "../../src/shared/i18n";
-import { askAndFinish, citationsIn, shownPassages } from "../helpers/citations";
+import { askAssistant } from "../helpers/assistant";
+import {
+  answerEnded,
+  askAndFinish,
+  askNew,
+  citationsIn,
+  shownPassages,
+} from "../helpers/citations";
 import {
   createMemoryKeychain,
   createTempDataFolder,
@@ -24,17 +31,19 @@ import {
 import { addAndProcess, createSourceFolder, writeSourceFile } from "../helpers/documents";
 import {
   ANSWER,
+  createFakeGitHub,
   createRecordingBrowser,
   EDITOR_HEADER,
   type FakeGitHub,
-  startFakeGitHub,
   USER_CODE,
 } from "../helpers/fakeGitHub";
 import { connectToMind } from "../helpers/mindClient";
+import { answerIn } from "../helpers/minds";
 
 const MODEL = "gpt-5.5";
 
 interface Setup {
+  dataDir: string;
   core: Core;
   fake: FakeGitHub;
   browser: ReturnType<typeof createRecordingBrowser>;
@@ -42,12 +51,19 @@ interface Setup {
   clock: ReturnType<typeof manualClock>;
 }
 
+async function startFakeGitHub(): Promise<FakeGitHub> {
+  const fake = await createFakeGitHub();
+  onTestFinished(() => fake.close());
+  return fake;
+}
+
 async function setUp(overrides: TestAdapters = {}): Promise<Setup> {
   const clock = manualClock();
   const fake = await startFakeGitHub();
   const browser = createRecordingBrowser();
   const keychain = createMemoryKeychain();
-  const core = startCore(await createTempDataFolder(), {
+  const dataDir = await createTempDataFolder();
+  const core = startCore(dataDir, {
     keychain,
     browser,
     now: clock.now,
@@ -55,7 +71,7 @@ async function setUp(overrides: TestAdapters = {}): Promise<Setup> {
     copilotProfiles: { own: fake.profile("own"), editor: fake.profile("editor") },
     ...overrides,
   });
-  return { core, fake, browser, keychain, clock };
+  return { dataDir, core, fake, browser, keychain, clock };
 }
 
 /**
@@ -598,6 +614,17 @@ describe("Failures", () => {
 
       expect(await failure(core)).toMatchObject({ kind, signInRoute: problem });
     });
+
+    test(`${name} stops an Answer in the assistant, which keeps "${problem}" for its line`, async () => {
+      const { core, fake } = await signedIn();
+      const reply = { kind: "error" as const, status, body: JSON.stringify(body) };
+      // Every request fails alike, a search rewrite included.
+      fake.replies.push(reply, reply, reply, reply);
+
+      const answer = await askAssistant(core, { text: "What does my plan cover?" }, "failed");
+
+      expect(answer).toMatchObject({ errorKind: kind, errorSignInRoute: problem });
+    });
   }
 
   test("a passing rate limit is asked again after the wait GitHub gives, then has its own line", async () => {
@@ -658,5 +685,52 @@ describe("Failures", () => {
     for (const language of ["en", "zh-CN"] as const) {
       for (const { line } of signIn) expect(translate(language, line)).not.toBe(line);
     }
+  });
+});
+
+describe("A failed Answer in a Mind", () => {
+  test("keeps its route's problem with the Answer, for the route's own line", async () => {
+    const { core, fake } = await signedIn();
+    const refusal = {
+      kind: "error" as const,
+      status: 403,
+      body: JSON.stringify({
+        error: { message: "Copilot is disabled by your organization's policy." },
+      }),
+    };
+    fake.replies.push(refusal, refusal, refusal, refusal);
+    const mind = await core.createMind({ title: "Plan" });
+    const client = await connectToMind(core, mind.id);
+
+    const answerId = await askNew(core, client, mind.id, "What does my plan cover?");
+
+    expect((await answerEnded(core, answerId)).event).toBe("failed");
+    await client.settled();
+    expect(answerIn(client, answerId).attrs).toMatchObject({
+      errorKind: "blocked",
+      errorSignInRoute: "policy-blocked",
+    });
+  });
+});
+
+describe("A failed Answer in the assistant", () => {
+  test("keeps an expired sign-in as its route's problem, after a restart too", async () => {
+    const setup = await setUp();
+    const { core, fake, keychain, dataDir } = await signedIn(undefined, setup);
+    fake.revoke();
+    const answer = await askAssistant(core, { text: "What does my plan cover?" }, "failed");
+    expect(answer.errorSignInRoute).toBe("sign-in-expired");
+    core.close();
+
+    const again = startCore(dataDir, {
+      keychain,
+      copilotProfiles: { own: fake.profile("own"), editor: fake.profile("editor") },
+    });
+    const { messages } = await again.getConversation(answer.conversationId);
+
+    expect(messages.find((message) => message.id === answer.id)).toMatchObject({
+      errorKind: "not-signed-in",
+      errorSignInRoute: "sign-in-expired",
+    });
   });
 });
