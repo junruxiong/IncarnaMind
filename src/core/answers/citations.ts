@@ -322,6 +322,8 @@ export interface AnswerDocuments {
   ): PageText[];
   /** A live Document's date, shown with its Passages (see `documentDate` in ../documents); null if none is known. */
   documentDate(documentId: string): string | null;
+  /** The id of the Document to search named `name`, as the instructions list it; null for none. */
+  documentNamed?(name: string): string | null;
 }
 
 /** What re-checking a Citation against the current version needs from Documents. */
@@ -995,9 +997,20 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
       signal?: AbortSignal,
       options?: AnswerSearchOptions,
     ): Promise<SearchResultForModel> {
-      const same = sameSearch(query);
+      // The same words over another Document are a new search.
+      const same = sameSearch(options?.document ? `${options.document}\n${query}` : query);
       if (searched.has(same)) return { text: SEARCHED_ALREADY, passageCount: 0 };
       searched.add(same);
+      if (options?.document) {
+        const id = documents.documentNamed?.(options.document) ?? null;
+        if (!id) {
+          return {
+            text: `No Document to search is called “${options.document}”: name one as the instructions list it, or leave document out.`,
+            passageCount: 0,
+          };
+        }
+        return search(query, signal, [id], options);
+      }
       return search(query, signal, undefined, options);
     },
 

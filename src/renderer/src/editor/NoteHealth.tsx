@@ -22,7 +22,7 @@ import { UnreadFilesLine } from "../components/UnreadFilesLine";
 import { useContradictionLine } from "../contradictions";
 import { errorMessage } from "../errors";
 import { useLanguage, useT } from "../i18n";
-import { checkMind, startMindCheck, useMindCheck, useMindCheckRun } from "../mindCheck";
+import { startMindCheck, useMindCheck, useMindCheckRun } from "../mindCheck";
 import { useAppStore } from "../store";
 import { useCheckUnread } from "../unreadFiles";
 import { AnswerError } from "./AnswerView";
@@ -303,7 +303,7 @@ export function NoteHealth({
           signInRoute={problem.error.signInRoute ?? null}
           details={problem.error.message}
           onRetry={() =>
-            void checkMind(mindId, problem.mode, { allDocuments: problem.allDocuments })
+            void startMindCheck(mindId, problem.mode, { allDocuments: problem.allDocuments })
           }
           onOpenSettings={openSettings}
         />

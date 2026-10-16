@@ -5772,6 +5772,13 @@
       color: var(--color-accent-strong);
     }
   }
+  .answer-coverage {
+    margin: 0;
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 22px;
+    color: var(--color-ink);
+  }
   .mind-changes-no-mind {
     display: flex;
     flex-wrap: wrap;

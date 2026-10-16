@@ -7,7 +7,7 @@
  */
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import {
   acceptPlainTextKeys,
@@ -30,10 +30,33 @@ async function screenshot(window: Page, name: string): Promise<void> {
   if (SCREENSHOTS) await window.screenshot({ path: join(SCREENSHOTS, `${name}.png`) });
 }
 
-const SENDS_EN =
-  "Your Questions, the Mind you're in and Passages from your Documents go to OpenAI when you use it, and the first lines of each Document, to tag it. Tagging starts when you save the key.";
-const SENDS_ZH =
-  "你的问题、当前 Mind 和文档中的相关段落会在使用时发送给 OpenAI；每个文档的开头几行也会发送给它，用来打标签。保存密钥后就开始打标签。";
+const SENDS_EN = {
+  lead: "When you use it, OpenAI receives:",
+  after: "Tagging starts when you save the key.",
+  items: [
+    "your Questions, the Mind you're in, matching passages with their Document names and pages, and the names of other Documents in scope",
+    "each sentence you check",
+    "the paragraph you pause on, for writing suggestions",
+    "the text you ask the assistant to change",
+    "each Document's name, outline and short excerpts, with your Folder and Tag names, to tag and file it (page images for scans with no text)",
+  ],
+};
+const SENDS_ZH = {
+  lead: "使用时，以下内容会发送给 OpenAI：",
+  after: "保存密钥后就开始打标签。",
+  items: [
+    "你的问题、你所在的 Mind、相关段落及其文档名称和页码，以及范围内其他文档的名称",
+    "你核对的每一句话",
+    "写作建议时你停下的那一段",
+    "你让助手修改的文字",
+    "每个文档的名称、目录和简短摘录，以及你的文件夹和标签名称，用于打标签和归档（没有文字的扫描件会发送页面图片）",
+  ],
+};
+
+async function expectSends(sends: Locator, words: typeof SENDS_EN): Promise<void> {
+  await expect(sends.locator("p")).toHaveText([words.lead, words.after]);
+  await expect(sends.getByRole("listitem")).toHaveText(words.items);
+}
 
 let dataDir: string;
 let sources: string;
@@ -84,7 +107,7 @@ test("first run: choosing a provider with a key is the consent, so no dialog com
     .locator("label")
     .filter({ hasText: /^OpenAI$/ })
     .click();
-  await expect(form.getByTestId("provider-sends")).toHaveText(SENDS_EN);
+  await expectSends(form.getByTestId("provider-sends"), SENDS_EN);
   await acceptPlainTextKeys(window, form);
   await form.getByLabel(/^API key/).fill("sk-not-a-real-key");
   await form.getByTestId("provider-sends").scrollIntoViewIfNeeded();
@@ -162,6 +185,26 @@ test("before a model is chosen, a new Document's tagging waits with its line, an
   await app.close();
 });
 
+test("Settings › Models says in one phrase what the ChatGPT plan and an API key send", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  const settings = await openSettings(window, "models");
+
+  const phrase =
+    "your Questions with the Mind you're in, matching passages and the names of Documents in scope; sentences you check; the paragraph you pause on; text you ask the assistant to change; and Document names, outlines and excerpts with your Folder and Tag names, to tag and file them (page images for scans)";
+  const plan = settings.getByTestId("chatgpt-settings");
+  await expect(plan).toContainText(
+    `OpenAI receives, under your ChatGPT account: ${phrase}. It counts against your plan's limits.`,
+  );
+  await expect(plan.getByTestId("provider-sends")).toHaveCount(0);
+  await expect(settings.getByTestId("chat-provider-choices")).toContainText(
+    `The service you choose receives: ${phrase}.`,
+  );
+  await plan.scrollIntoViewIfNeeded();
+  await screenshot(window, "choosing-line-chatgpt-en");
+  await app.close();
+});
+
 test("in Chinese, Settings › Models says what goes to the provider above its button", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
@@ -176,7 +219,7 @@ test("in Chinese, Settings › Models says what goes to the provider above its b
     .click();
 
   const line = form.getByTestId("provider-sends");
-  await expect(line).toHaveText(SENDS_ZH);
+  await expectSends(line, SENDS_ZH);
   await line.scrollIntoViewIfNeeded();
   // Right above the button it is said for.
   const lineBox = await line.boundingBox();
