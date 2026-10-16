@@ -2188,6 +2188,8 @@ export interface DocumentScanProgress {
  * - "failed": the tagger's provider failed (see `taggingError`); a re-tag, a
  *   change of model or a restart tries again.
  * - "skipped": the Document has no text to tag (processing failed, or found none).
+ * - "stopped": Tagging with AI is stopped where it is, in its Folder or Not in
+ *   a Folder (see `stopTagging`): nothing is sent until it is turned back on.
  */
 export type TaggingState =
   | "pending"
@@ -2195,7 +2197,8 @@ export type TaggingState =
   | "tagging"
   | "tagged"
   | "failed"
-  | "skipped";
+  | "skipped"
+  | "stopped";
 
 /** Who put a Tag on a Document: automatic tagging, or the User. */
 export type TagSource = "automatic" | "user";
@@ -7412,7 +7415,7 @@ export interface CoreApi {
    * classifier of null is Automatic; `organizeWith` left out stays as it was.
    */
   saveLibrarySettings(
-    settings: Omit<LibrarySettings, "classifier" | "organizeWith"> & {
+    settings: Omit<LibrarySettings, "classifier" | "organizeWith" | "taggingStopped"> & {
       classifier: LibraryClassifier | null;
       organizeWith?: TaggingClassifier | null;
     },
@@ -7430,6 +7433,17 @@ export interface CoreApi {
    * only their Tags suggested.
    */
   classifyDocuments(documentIds?: string[]): Promise<void>;
+  /**
+   * Stops automatic Tagging with AI where the Documents waiting to be
+   * tagged, or being tagged, are: each of their Folders, and Not in a Folder
+   * (null). Nothing more from there is sent to tag, by automatic tagging or by
+   * Organize on its own, until `setTaggingWithAi` turns it back on; a re-tag
+   * or Organize the User asks for still goes. Kept across restarts. Returns
+   * the places it stopped.
+   */
+  stopTagging(): Promise<(string | null)[]>;
+  /** Turns automatic Tagging with AI on, or stops it, in a Folder or Not in a Folder (null). */
+  setTaggingWithAi(folderId: string | null, on: boolean): Promise<void>;
   /**
    * A manual choice, including Not in a Folder (null), wins over in-flight classification.
    * Returns the assignment before, for `restoreAssignment` (null: it had none).
@@ -9235,6 +9249,8 @@ const methods: Record<CoreApiMethod, true> = {
   saveLibrarySettings: true,
   getTaggingModels: true,
   classifyDocuments: true,
+  stopTagging: true,
+  setTaggingWithAi: true,
   assignDocumentGroup: true,
   acceptAssignments: true,
   rejectAssignments: true,
