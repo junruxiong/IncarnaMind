@@ -4209,6 +4209,9 @@ export interface ClaimCheckAttributes {
   reason: ClaimCheckFailure | null;
   /** "failed": the provider's message. */
   detail: string | null;
+  /** The model that checked it; null on a mark made before it was kept. */
+  providerId: string | null;
+  modelId: string | null;
   /** The sentence as it was checked: an inline node as U+FFFC, a line break as "\n". */
   text: string;
   /** "supported" and "contradicted": the Passage that decides it, as a Citation found. */
@@ -5562,6 +5565,8 @@ export const aiUseKinds = [
   "edit-with-ai-accepted",
   /** A comparison table from Compare Documents accepted (#98). */
   "comparison-table-accepted",
+  /** A sentence of the Mind's checked against the Documents (#906). */
+  "sentence-checked",
 ] as const;
 export type AiUseKind = (typeof aiUseKinds)[number];
 
@@ -5587,7 +5592,7 @@ export interface AiUseEntry {
   modelId: string | null;
   /** How much the AI wrote, in characters. */
   characters: number;
-  /** The Blocks it made, by their stable ids; none for a rejected proposal or a suggestion. */
+  /** The Blocks it made, by their stable ids; none for a rejected proposal, a suggestion or a check. */
   blockIds: string[];
   /** When the User accepted or rejected it, ISO 8601 UTC. */
   occurredAt: string;

@@ -10,9 +10,12 @@ import type { NodeJSON } from "../answers/blocks";
 import type { Language } from "../language";
 import {
   type AiUseFigures,
+  type CheckedSentence,
   type CitationCounts,
+  SENTENCE_WORDS,
   type SectionCount,
   type SentenceCounts,
+  type SentenceResult,
   totalCitations,
   totalSentences,
   type Use,
@@ -29,6 +32,7 @@ const USE_LABELS: Readonly<Record<Use, MessageKey>> = {
   "search-documents": "aiStatement.use.search-documents",
   "search-sources": "aiStatement.use.search-sources",
   "search-web": "aiStatement.use.search-web",
+  "sentence-checked": "aiStatement.use.sentence-checked",
 };
 
 const CITATION_ROWS: readonly [keyof CitationCounts, MessageKey][] = [
@@ -40,13 +44,18 @@ const CITATION_ROWS: readonly [keyof CitationCounts, MessageKey][] = [
   ["checking", "aiStatement.citations.checking"],
 ];
 
-const SENTENCE_ROWS: readonly [keyof SentenceCounts, MessageKey][] = [
-  ["supported", "aiStatement.sentences.supported"],
-  ["unsupported", "aiStatement.sentences.unsupported"],
-  ["contradicted", "aiStatement.sentences.contradicted"],
-  ["needsRecheck", "aiStatement.sentences.recheck"],
-  ["notChecked", "aiStatement.sentences.notChecked"],
-];
+const SENTENCE_LABELS: Readonly<Record<SentenceResult, MessageKey>> = {
+  supported: "aiStatement.sentences.supported",
+  unsupported: "aiStatement.sentences.unsupported",
+  contradicted: "aiStatement.sentences.contradicted",
+  needsRecheck: "aiStatement.sentences.recheck",
+  notChecked: "aiStatement.sentences.notChecked",
+  changed: "aiStatement.sentences.changed",
+};
+
+const SENTENCE_ROWS: readonly [keyof SentenceCounts, MessageKey][] = (
+  ["supported", "unsupported", "contradicted", "needsRecheck", "notChecked"] as const
+).map((key) => [key, SENTENCE_LABELS[key]]);
 
 const text = (value: string): NodeJSON => ({ type: "text", text: value });
 
@@ -83,7 +92,7 @@ export function statementBlocks(
   const t = (key: MessageKey, params?: Record<string, string | number>) =>
     translate(language, key, params);
   const number = new Intl.NumberFormat(language === "zh-CN" ? "zh-CN" : "en").format;
-  const { uses, sections, removed, citations, sentences } = figures;
+  const { uses, sections, removed, citations, sentences, checked } = figures;
   const citationTotal = totalCitations(citations);
   const sentenceTotal = totalSentences(sentences);
   const intro = paragraph(t("aiStatement.intro", { date: formatDate(date, language) }));
@@ -154,6 +163,13 @@ export function statementBlocks(
           ...(removed > 0 ? [paragraph(t("aiStatement.text.removed", { count: removed }))] : []),
         ];
 
+  const checkedRow = ({ sentence, result, model, checkedAt }: CheckedSentence) => [
+    sentence,
+    t(SENTENCE_LABELS[result]),
+    model ?? t("aiStatement.uses.modelUnknown"),
+    formatDate(checkedAt, language),
+  ];
+
   const resultRows = <K extends string>(
     counts: Record<K, number>,
     rows: readonly [K, MessageKey][],
@@ -191,6 +207,17 @@ export function statementBlocks(
                   ],
                   resultRows(sentences, SENTENCE_ROWS, []),
                   1,
+                ),
+                paragraph(t("aiStatement.sentences.list.intro", { count: SENTENCE_WORDS })),
+                table(
+                  [
+                    t("aiStatement.sentences.column.sentence"),
+                    t("aiStatement.citations.column.result"),
+                    t("aiStatement.uses.column.model"),
+                    t("aiStatement.sentences.column.checked"),
+                  ],
+                  checked.map(checkedRow),
+                  4,
                 ),
               ]),
         ];

@@ -184,6 +184,8 @@ export function createMindCheck(options: MindCheckOptions) {
           state: "checking",
           reason: null,
           detail: null,
+          providerId: ready.prepared.provider.id,
+          modelId: ready.prepared.modelId,
           text: sentence.text,
           evidence: null,
           says: null,

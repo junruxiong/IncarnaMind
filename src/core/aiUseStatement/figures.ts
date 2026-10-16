@@ -8,10 +8,11 @@
  */
 import * as Y from "yjs";
 import { citationState, type LiveDocument } from "../../shared/citations";
-import { claimCheckShown } from "../../shared/claimChecks";
+import { type ClaimCheckShown, claimCheckShown } from "../../shared/claimChecks";
 import { readProposalAttribute } from "../../shared/proposals";
+import { comparableSentence } from "../../shared/sentences";
 import { toolCallsOf } from "../../shared/toolCalls";
-import { countFor, countText } from "../../shared/wordCount";
+import { countFor, countText, firstWords } from "../../shared/wordCount";
 import { isEdited, textAttribute } from "../answers/blocks";
 import { checkedSentences } from "../answers/checks/sentences";
 import {
@@ -53,6 +54,7 @@ export const USES: readonly Use[] = [
   "search-documents",
   "search-sources",
   "search-web",
+  "sentence-checked",
 ];
 
 /** How often one model was used for one thing. `model` is null when the record doesn't say. */
@@ -94,6 +96,35 @@ export interface SentenceCounts {
   notChecked: number;
 }
 
+export const SENTENCE_WORDS = 12;
+
+/** A checked sentence's result as the statement lists it: a count's key, or "changed" once its words were edited. */
+export type SentenceResult = keyof SentenceCounts | "changed";
+
+function resultOf(shown: ClaimCheckShown): SentenceResult | null {
+  switch (shown.state) {
+    case "checking":
+      return null;
+    case "needs-recheck":
+      return shown.why === "edited" ? "changed" : "needsRecheck";
+    case "not-checked":
+      return "notChecked";
+    default:
+      return shown.state;
+  }
+}
+
+/** One sentence checked against the Documents, with the latest result of its check. */
+export interface CheckedSentence {
+  /** Its first words, with "…" when it goes on, as it reads in the Mind now. */
+  sentence: string;
+  result: SentenceResult;
+  /** The model that checked it; null when the mark doesn't say. */
+  model: string | null;
+  /** When it was checked. ISO 8601, UTC. */
+  checkedAt: string;
+}
+
 export interface AiUseFigures {
   uses: UseCount[];
   /** Whether the Mind has headings, which its sections follow. */
@@ -104,6 +135,7 @@ export interface AiUseFigures {
   removed: number;
   citations: CitationCounts;
   sentences: SentenceCounts;
+  checked: CheckedSentence[];
 }
 
 export interface FigureSources {
@@ -296,13 +328,25 @@ export function readFigures(sources: FigureSources): AiUseFigures {
     notChecked: 0,
   };
   const versions = new Map(documents.map((document) => [document.id, document.contentHash]));
+  const checked: CheckedSentence[] = [];
   for (const { check, sentence } of checkedSentences(fragment)) {
     const shown = claimCheckShown(check, { text: sentence, versions, folderId: sources.folderId });
-    if (shown.state === "supported") sentences.supported++;
-    else if (shown.state === "unsupported") sentences.unsupported++;
-    else if (shown.state === "contradicted") sentences.contradicted++;
-    else if (shown.state === "needs-recheck") sentences.needsRecheck++;
-    else if (shown.state === "not-checked") sentences.notChecked++;
+    const result = resultOf(shown);
+    if (!result) continue;
+    sentences[result === "changed" ? "needsRecheck" : result]++;
+    const quoted = firstWords(comparableSentence(sentence), SENTENCE_WORDS);
+    checked.push({
+      sentence: quoted.cut ? `${quoted.text}…` : quoted.text,
+      result,
+      model: sources.modelName(check.providerId, check.modelId),
+      checkedAt: check.checkedAt,
+    });
+  }
+  // A Mind whose record holds no check (made before checks were recorded, or cleared) still used the model.
+  if (!uses.some((each) => each.use === "sentence-checked")) {
+    for (const { result, model } of checked) {
+      if (result !== "notChecked") use("sentence-checked", model);
+    }
   }
 
   const order = (use: Use) => USES.indexOf(use);
@@ -318,5 +362,6 @@ export function readFigures(sources: FigureSources): AiUseFigures {
     removed,
     citations,
     sentences,
+    checked,
   };
 }
