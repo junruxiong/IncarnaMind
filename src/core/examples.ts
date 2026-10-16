@@ -265,7 +265,7 @@ export function createExamples(options: ExamplesOptions) {
         evidence,
         says: check.says,
         calculation: null,
-        citesDecision: false,
+        citedDecision: null,
         scope: { folderId, widened: false },
         versions: documents.flatMap((each) =>
           each.contentHash ? [{ documentId: each.id, contentHash: each.contentHash }] : [],

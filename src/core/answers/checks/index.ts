@@ -228,7 +228,7 @@ function withResult(
         evidence: evidenceOf(result.evidence),
         says: result.says,
         calculation: result.calculation,
-        citesDecision: result.citesDecision === true,
+        citedDecision: result.citedDecision,
       };
 }
 
@@ -392,7 +392,7 @@ export function createChecks(options: ChecksOptions) {
           evidence: null,
           says: null,
           calculation: null,
-          citesDecision: false,
+          citedDecision: null,
           scope,
           versions: [],
           excluded: [],
@@ -585,7 +585,7 @@ export function createChecks(options: ChecksOptions) {
           evidence: null,
           says: null,
           calculation: null,
-          citesDecision: caseCitations(parsed.claim).length > 0,
+          citedDecision: caseCitations(parsed.claim).length > 0 ? "missing" : null,
           versions: [],
           excluded: [],
         };
