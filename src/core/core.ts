@@ -1169,6 +1169,7 @@ export function createCore(adapters: CoreAdapters): Core {
       names: () => documents.names(),
       searchableNames: (documentIds, limit) =>
         documents.searchableNames(documentIds ?? undefined, limit),
+      searchableBySize: (documentIds) => documents.searchableBySize(documentIds ?? undefined),
       searchableLanguages: (documentIds) => documents.searchableLanguages(documentIds ?? undefined),
       unread: (documentIds) => findUnreadDocuments(documents.unread(documentIds ?? undefined)),
       search: searchDocuments,
@@ -1283,6 +1284,12 @@ export function createCore(adapters: CoreAdapters): Core {
       },
     },
     resolveScope,
+    unscopedDocuments: (mindId) => {
+      const made = examples.made();
+      if (made.documentIds.length === 0 || (mindId && made.mindIds.includes(mindId))) return null;
+      const left = new Set(made.documentIds);
+      return documents.ids({}).filter((id) => !left.has(id));
+    },
     interfaceLanguage: () => settings.get().language,
     emptyScopeAnswer: () => translate(settings.get().language, "scope.answer.empty"),
     onWritingChange: (writing) => {
