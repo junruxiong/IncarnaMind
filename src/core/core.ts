@@ -1085,7 +1085,7 @@ export function createCore(adapters: CoreAdapters): Core {
     liveTranscript: (mindId) => liveTranscriptOf(mindId),
     providerExists: (providerId) => chat.exists(providerId),
     readiness: async (choice) => chat.readiness(await chat.answeringModel(choice)),
-    prepareModel: (choice) => chat.prepareModel(choice),
+    prepareModel: (choice, thinking) => chat.prepareModel(choice, "chat", thinking),
     documents: {
       searchableCount: (documentIds) => documents.searchableCount(documentIds ?? undefined),
       names: () => documents.names(),

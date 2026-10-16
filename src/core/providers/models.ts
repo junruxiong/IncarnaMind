@@ -50,9 +50,11 @@ export interface ChatModelSpec {
    * which asks a model that thinks to skip it, where the provider lets it.
    * "summary": a call that writes the Answer, which asks a model that thinks
    * for its provider's summary of its reasoning, where there is one
-   * (`reasoningSummaryOptions`).
+   * (`reasoningSummaryOptions`), with a modest budget.
+   * "careful": the same with a larger budget, for a Question that asks to
+   * check or calculate.
    */
-  thinking?: "off" | "summary";
+  thinking?: "off" | "summary" | "careful";
   apiKey: string | null;
   modelId: string;
   /** "chatgpt" only: the User's ChatGPT sign-in, which signs (and refreshes) every request. */
@@ -106,7 +108,8 @@ export const createAiSdkChatModel: ChatModelFactory = (spec) => {
   if (spec.thinking === "off" && request?.thinkingOff && canSkipThinking(spec, request)) {
     model = withThinkingOff(model, spec, request.thinkingOff);
   }
-  const summary = spec.thinking === "summary" ? reasoningSummaryOptions(spec) : null;
+  const summary =
+    spec.thinking === "summary" || spec.thinking === "careful" ? reasoningSummaryOptions(spec) : null;
   if (summary) model = withProviderOptions(model, summary);
   return model;
 };
@@ -129,13 +132,14 @@ export const summarizesReasoning = (kind: ChatProviderKind): boolean =>
  * isn't turned on for one), or one the catalog knows doesn't reason.
  */
 export function reasoningSummaryOptions(
-  spec: Pick<ChatModelSpec, "kind" | "modelId" | "endpoint" | "catalogId">,
-): Record<string, Record<string, unknown>> | null {
+  spec: Pick<ChatModelSpec, "kind" | "modelId" | "endpoint" | "catalogId" | "thinking">,
+): ProviderOptions | null {
   const summary = summaryQuirk(spec.kind);
   if (!summary) return null;
   if (summary.only && !summary.only.some((prefix) => spec.modelId.startsWith(prefix))) return null;
   const set = modelsProviderOfKind(spec.kind, spec.endpoint, spec.catalogId);
-  return catalogFacts(set, spec.modelId)?.reasoning === false ? null : summary.options;
+  if (catalogFacts(set, spec.modelId)?.reasoning === false) return null;
+  return spec.thinking === "careful" ? (summary.careful ?? summary.options) : summary.options;
 }
 
 /** Whether thinking can be turned off on this model: not on one the provider says always thinks, nor one the catalog knows doesn't think. */
