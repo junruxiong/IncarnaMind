@@ -37,6 +37,8 @@ function whyNot(problem: MindProblem | undefined): string {
       return `it has no heading ${quoted(problem.heading)}`;
     case "no-place":
       return `it has no heading or paragraph ${quoted(problem.place)}`;
+    case "several-places":
+      return `more than one place is called ${quoted(problem.name)}, and the User didn't say which`;
     case "no-text":
       return "there was no text there to change";
     case "too-long":

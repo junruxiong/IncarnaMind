@@ -70,6 +70,7 @@ describe("Why a call changed nothing, on its row", () => {
     { kind: "several", name: "Notes" },
     { kind: "no-heading", mindId: "a", heading: "Risks" },
     { kind: "no-place", mindId: "a", place: "Risks" },
+    { kind: "several-places", mindId: "a", name: "Summary" },
     { kind: "no-text", mindId: "a" },
     { kind: "too-long", mindId: "a" },
     { kind: "changed", mindId: "a" },

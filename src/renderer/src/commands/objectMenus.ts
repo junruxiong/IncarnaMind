@@ -45,6 +45,8 @@ registerMenu("document", [
   "document.fetchAgain",
   "document.countAsEvidence",
   "document.leaveOutOfEvidence",
+  "document.dontCite",
+  "document.citeAgain",
   "document.rename",
   "document.openExternally",
   "document.showInFolder",

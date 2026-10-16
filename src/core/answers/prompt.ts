@@ -202,6 +202,20 @@ export function datedDocumentsNote(passages: string): string {
   return `These Passages come from Documents of different dates: ${listed}. Take each Document's figure only from a sentence that states it for that Document, never from a passing mention. Where they give different figures for the same thing, lead with the newer Document, then write one sentence naming the older one, its date and its figure, with a Citation.`;
 }
 
+/** What marks a Passage of a Document the User keeps as their own workings, in a search's result. */
+export const NOT_CITED_ATTRIBUTE = ' cite="never"';
+
+const NOT_CITED_PASSAGE = new RegExp(`<passage [^>]*${NOT_CITED_ATTRIBUTE}`);
+
+/**
+ * A reminder after Passages from the User's own workings: read them to
+ * understand the Question, never cite them. Empty when none is among them.
+ */
+export function notCitedNote(passages: string): string {
+  if (!NOT_CITED_PASSAGE.test(passages)) return "";
+  return `A Passage marked cite="never" is from the User's own working file. Read it to understand the Question, but never cite it, never offer it as support for or agreement with another Document, and rest nothing on it: a record naming it is refused. Where only such a Passage states something, say in one sentence that only the User's own working file says it, with no marker.`;
+}
+
 const RECORD =
   'the Passage\'s id, where the quote is, and a short quote copied exactly from the Passage, without its marks. Where: the page, slide, section, or rows or lines the quote is in, or two in a row, written as the Passage names them (its pages or location, and marks where each new one starts, like [p. 4], [slide 4], [§ 2.1 Sensitivity], [Revenue, rows 2–41] or [lines 51–100]; name rows or lines more narrowly when you can, e.g. "Revenue, rows 12–14")';
 
@@ -317,8 +331,8 @@ export function documentInstructions(
   calculate = false,
 ): string {
   const documents = `${listed.total} Document${listed.total === 1 ? "" : "s"}`;
-  const note = datedDocumentsNote(passages);
-  const dated = note ? [note] : [];
+  const dated = datedDocumentsNote(passages);
+  const notes = [dated, notCitedNote(passages)].filter(Boolean);
   const added = `${scoped ? `The User limited this Question to ${documents} of theirs` : `The User has added ${documents}`} (PDF, Word, PowerPoint, Excel, CSV, text and Markdown files).`;
   switch (mode) {
     case "no-documents":
@@ -345,7 +359,7 @@ export function documentInstructions(
         "",
         "Passages found in the User's Documents for this Question:",
         passages,
-        ...dated,
+        ...notes,
         "",
         // The example's location is a placeholder: a small model copied a real-looking one ("p. 3") as its own (#67).
         calculate
@@ -366,7 +380,7 @@ export function documentInstructions(
         "",
         "Passages found in the User's Documents for this Question:",
         passages,
-        ...dated,
+        ...(dated ? [dated] : []),
         "",
         "Use them where they help. Don't write citation markers or a list of sources.",
         notCovered(false),
