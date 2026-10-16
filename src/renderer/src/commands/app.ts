@@ -157,7 +157,7 @@ const appCommands: readonly Command[] = [
     reversible: true,
     when: claudeSignInOffered,
     // The words come before any request, so it opens the Claude row in Settings › Models.
-    run: () => useAppStore.getState().openSettings("models", "claude-plan"),
+    run: () => useAppStore.getState().openSettings("models", "claude-account"),
   },
   {
     ...fromMenu("sidebar.toggle"),
