@@ -2844,7 +2844,6 @@ export const zhCN = {
   "export.failed.notAllowed": "你没有允许在同步文件夹“{folder}”中添加文件",
   "export.changeLocation": "更改保存位置…",
   "export.allow": "允许",
-  "export.done": "已保存“{name}”",
   "export.doneIn": "已保存“{name}”到“{folder}”",
   "export.changeFolder": "更改文件夹…",
   "export.parts.separator": "、",

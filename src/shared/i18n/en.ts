@@ -2977,7 +2977,6 @@ export const en = {
   "export.failed.notAllowed": "you haven't allowed new files in “{folder}”, a Linked folder",
   "export.changeLocation": "Change output location…",
   "export.allow": "Allow",
-  "export.done": "Saved {name}",
   "export.doneIn": "Saved “{name}” in {folder}",
   "export.changeFolder": "Change folder…",
   "export.parts.separator": ", ",
