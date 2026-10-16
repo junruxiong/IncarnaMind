@@ -115,6 +115,7 @@ import { createLocalExecutor } from "./execution";
 import { createExports } from "./exports";
 import { exportLabels } from "./exports/labels";
 import { renderMarkdown } from "./exports/markdown";
+import { setTextOnlyDocuments, textOnlyDocuments } from "./exports/sharedPictures";
 import { createFileLock } from "./fileLock";
 import { safeFileName, writeNewFile } from "./fileNames";
 import { createFolders } from "./folders";
@@ -387,8 +388,8 @@ export function createCore(adapters: CoreAdapters): Core {
   // The assistant's conversations (ADR-0017); Answers a quit left being written are settled now.
   const conversations = createConversations(db, now);
   const conversationsChanged = () => events.emit("conversations.changed", null);
-  const content = createMindContent(db, now, (mindId, update) => {
-    events.emit("mind.update", { mindId, update });
+  const content = createMindContent(db, now, (mindId, update, cause) => {
+    events.emit("mind.update", { mindId, update, ...(cause && { cause }) });
     // Only notes the change; what became of AI text is worked out once the Mind is quiet.
     aiUse.contentStored(mindId);
     checkpoints.edited(mindId);
@@ -1471,6 +1472,9 @@ export function createCore(adapters: CoreAdapters): Core {
     localOnly: () => embedding.localOnly(),
     recheck: (attributes) => recheckKept(documents, attributes),
     writing: (mindId, place) => events.emit("mind.writing", { mindId, place }),
+    checkpoint: (mindId) => {
+      checkpoints.save(mindId, "accept");
+    },
     now: () => adapters.now?.() ?? new Date(),
   });
 
@@ -1592,6 +1596,7 @@ export function createCore(adapters: CoreAdapters): Core {
       const to = from === null ? null : Math.max(from, typeof pageTo === "number" ? pageTo : from);
       return documents.pageTexts(documentId, contentHash, from, to);
     },
+    sharePageTextOnly: (mindId) => content.readSettings(mindId, textOnlyDocuments),
     printer: adapters.printer ?? null,
     paper: () => paperFor(systemRegion(adapters.systemRegion?.(), adapters.systemLanguages())),
     ...(adapters.pictures && { pictures: adapters.pictures }),
@@ -3175,6 +3180,16 @@ export function createCore(adapters: CoreAdapters): Core {
     },
 
     previewMindExport: async (mindId, options) => mindExports.preview(mindId, options),
+    previewSharePage: (mindId, options) => mindExports.previewSharePage(mindId, options),
+    setSharePageTextOnly: async (mindId, documentIds) => {
+      if (!Array.isArray(documentIds) || documentIds.some((each) => typeof each !== "string")) {
+        throw new InvalidInputError({ key: "error.export.textOnly" });
+      }
+      const mind = writableMind(mindId);
+      content.editSettings(mind.id, (mindSettings) =>
+        setTextOnlyDocuments(mindSettings, documentIds),
+      );
+    },
     exportMind: async (mindId, options) => {
       const exported = await mindExports.export(mindId, options);
       // The host saves these bytes as a file: IncarnaMind's, wherever it goes.

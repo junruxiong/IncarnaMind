@@ -54,7 +54,13 @@ export function problemText(t: Translate, problem: MindProblem, mind: string): s
     case "no-place":
       return t("mindCall.failed.noPlace", { mind, place: problem.place });
     case "several-places":
-      return t("mindCall.failed.severalPlaces", { mind, name: problem.name });
+      return t(
+        problem.adding ? "mindCall.failed.severalPlaces.add" : "mindCall.failed.severalPlaces",
+        {
+          mind,
+          name: problem.name,
+        },
+      );
     case "no-text":
       return t("mindCall.failed.noText", { mind });
     case "too-long":

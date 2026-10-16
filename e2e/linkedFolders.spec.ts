@@ -440,9 +440,9 @@ test("after unlinking, a Citation of a Document in the folder still says its quo
   await expect(row).toHaveCount(0);
   await expect(window.getByTestId("document-list-item")).toHaveCount(0);
 
-  // The page it quotes is kept, so its check stands, in the text and in the margin.
+  // The page it quotes is kept, so its check stands.
   await expect(citation).toHaveAttribute("data-check", "found");
-  await expect(answer.getByTestId("margin-check")).toHaveAttribute("data-check", "found");
+  await expect(citation.locator(".citation-marker-icon")).toBeVisible();
   await citation.getByTestId("citation-chip").click();
   await expect(window.getByTestId("citation-badge")).toHaveText("Quote found on p. 2");
   // The viewer shows the quote, and says the folder was unlinked: the Document wasn't deleted.
