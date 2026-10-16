@@ -42,7 +42,6 @@ const isPrintedName = (value: unknown): value is string =>
   value.length <= MAX_PRINTED_PAGE_LENGTH &&
   !/\p{C}/u.test(value);
 
-/** A page's printed names, checked; null if they aren't two. */
 function parsePrinted(value: unknown): { from: string; to: string } | null {
   if (typeof value !== "object" || value === null) return null;
   const { from, to } = value as Record<string, unknown>;
@@ -192,10 +191,13 @@ export function formatLocation(location: CitationLocation, t: Translate): string
  */
 export function formatLocationWithPdf(location: CitationLocation, t: Translate): string | null {
   if (location.kind !== "page" || !location.printed) return null;
-  return t(location.to !== location.from ? "location.page.withPdf.other" : "location.page.withPdf.one", {
-    printed: formatLocation(location, t),
-    range: span(location.from, location.to),
-  });
+  return t(
+    location.to !== location.from ? "location.page.withPdf.other" : "location.page.withPdf.one",
+    {
+      printed: formatLocation(location, t),
+      range: span(location.from, location.to),
+    },
+  );
 }
 
 const english: Translate = (key, params) => translate("en", key, params);
@@ -383,7 +385,6 @@ function figureAt(where: UnitText, offset: number): number | null {
   return null;
 }
 
-/** What the first and last of cited pages call themselves, when neither is just its number in the PDF; null if either has no name. */
 function printedNames(first: UnitText, last: UnitText): { from: string; to: string } | null {
   const from = first.label?.printed;
   const to = last.label?.printed;

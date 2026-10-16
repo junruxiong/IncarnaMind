@@ -7,11 +7,8 @@
 import { normaliseText } from "../../shared/text";
 import { MAX_PRINTED_PAGE_LENGTH } from "../../shared/units";
 
-/** How many lines at each end of a page may print its number. */
 const EDGE_LINES = 3;
-
-/** The number must be read on at least this many pages, at the same offset from the PDF's. */
-const MIN_PAGES = 3;
+const MIN_PAGES_AT_ONE_OFFSET = 3;
 
 /** A line that is only a page number: "68", "- 68 -", "Page 68 of 120", "68 / 120", "第 68 页". */
 const PAGE_NUMBER_LINES = [
@@ -21,10 +18,10 @@ const PAGE_NUMBER_LINES = [
   /^第(\d{1,4})页(?:[,/]?共\d{1,4}页)?$/,
 ];
 
-/** A page's first or last line with its number before other text: "68 | Annual Report". */
+/** A page's first or last line with its number before other text ("68 | Annual Report"). */
 const NUMBER_BEFORE_TEXT = /^(\d{1,3})(?:\s*[|·•-]\s*|\s+)\p{L}.{0,80}$/u;
 
-/** A page's first or last line with its number after other text: "Annual Report 2024 | 68". */
+/** As above, with the number after the text ("Annual Report 2024 | 68"). */
 const NUMBER_AFTER_TEXT = /^(?=.*\p{L}).{0,80}[\p{L}\p{N}](?:\s*[|·•-]\s*|\s+)(\d{1,3})$/u;
 
 interface Readings {
@@ -61,11 +58,11 @@ function readPage(text: string): Readings {
 }
 
 /**
- * The number each page prints, as its text, from a steady offset: the same
- * on at least three pages, with no page that prints only a page number
- * saying another. A page between the first and the last that print it gets
- * the number the offset gives it, though it prints none itself. Null for
- * every page when no offset is steady.
+ * The number each page prints, as text, when the offset from the PDF's page
+ * index is steady: the same on at least three pages, with no page that prints
+ * only a page number saying another. A page between the first and the last
+ * that print it gets the number the offset gives it, though it prints none
+ * itself. Null for every page when no offset is steady.
  */
 export function printedNumbers(texts: readonly string[]): (string | null)[] {
   const none = texts.map(() => null);
@@ -80,7 +77,7 @@ export function printedNumbers(texts: readonly string[]): (string | null)[] {
   });
   const ranked = [...votes].sort((a, b) => b[1] - a[1]);
   const [best, runnerUp] = ranked;
-  if (!best || best[1] < MIN_PAGES || best[1] === runnerUp?.[1]) return none;
+  if (!best || best[1] < MIN_PAGES_AT_ONE_OFFSET || best[1] === runnerUp?.[1]) return none;
 
   const offset = best[0];
   if (pages.some((page, index) => page.alone.size > 0 && !page.alone.has(index + 1 - offset))) {
@@ -89,10 +86,11 @@ export function printedNumbers(texts: readonly string[]): (string | null)[] {
   const printed = pages.flatMap((page, index) => (read(page, index + 1 - offset) ? [index] : []));
   const first = printed[0] as number;
   const last = printed.at(-1) as number;
-  return texts.map((_, index) => (index >= first && index <= last ? String(index + 1 - offset) : null));
+  return texts.map((_, index) =>
+    index >= first && index <= last ? String(index + 1 - offset) : null,
+  );
 }
 
-/** A page label as the name kept for a page; null when it is empty or isn't a page's name. */
 function nameOf(label: string | undefined): string | null {
   const name = label?.trim() ?? "";
   return name === "" || name.length > MAX_PRINTED_PAGE_LENGTH || /\p{C}/u.test(name) ? null : name;
