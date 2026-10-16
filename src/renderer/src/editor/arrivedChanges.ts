@@ -244,30 +244,24 @@ export function writeAccepted(
   }
 }
 
-/** How much of the User's own text, not AI text, the requests' changes would take out of the Blocks they touch: a share from 0 to 1. */
+/** How much of the User's own text in the Mind, not AI text, the requests' changes would take out: a share from 0 to 1. */
 export function ownTextRemoved(state: EditorState, requests: ReadonlySet<string>): number {
-  const { doc } = state;
-  const touched = new Set<number>();
   let removed = 0;
-  for (const proposal of proposalsIn(doc)) {
-    if (!requests.has(proposal.request)) continue;
-    for (const range of proposal.ranges) {
-      touched.add(doc.resolve(range.from).index(0));
-      doc.nodesBetween(range.from, range.to, (node, pos) => {
-        if (!node.isText || proposalKindOf(node) !== "delete") return true;
-        if (node.marks.some((mark) => mark.type.name === GENERATED_MARK)) return false;
-        removed += Math.min(pos + node.nodeSize, range.to) - Math.max(pos, range.from);
-        return false;
-      });
-    }
-  }
   let own = 0;
-  for (const index of touched) {
-    doc.child(index).descendants((node) => {
-      if (!node.isText || proposalKindOf(node) === "insert") return true;
-      if (!node.marks.some((mark) => mark.type.name === GENERATED_MARK)) own += node.nodeSize;
-      return false;
+  const asked = (request: unknown) => typeof request === "string" && requests.has(request);
+  state.doc.descendants((block) => {
+    if (!block.isTextblock) return true;
+    const proposal = readProposalAttribute(block.attrs[PROPOSAL_ATTRIBUTE]);
+    if (proposal?.kind === "insert") return false;
+    const goes = proposal?.kind === "delete" && asked(proposal.request);
+    block.forEach((node) => {
+      if (!node.isText || node.marks.some((mark) => mark.type.name === GENERATED_MARK)) return;
+      if (node.marks.some((mark) => mark.type.name === PROPOSAL_INSERT_MARK)) return;
+      own += node.nodeSize;
+      const deleted = node.marks.find((mark) => mark.type.name === PROPOSAL_DELETE_MARK);
+      if (goes || (deleted && asked(deleted.attrs.request))) removed += node.nodeSize;
     });
-  }
+    return false;
+  });
   return own === 0 ? 0 : removed / own;
 }

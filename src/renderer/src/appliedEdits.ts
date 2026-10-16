@@ -309,6 +309,24 @@ class SettingAside {}
 /** Most of the User's own text in the Blocks they touch: the assistant's changes then wait (D224). */
 const MOST_OF_YOUR_TEXT = 0.5;
 
+/** A translation rewrites all of the text by asking, so it never waits, as Edit with AI's never does. */
+const TRANSLATION =
+  /\btranslat|\bin(?:to)? (?:chinese|english)\b|翻译|译成|(?:改成|用)(?:中文|英文)/i;
+
+function translates(editor: Editor, requests: ReadonlySet<string>): boolean {
+  const doc = editorDoc(editor);
+  return (
+    doc !== null &&
+    [...requests].every((request) => {
+      const made = proposalRequestOf(doc, request);
+      return (
+        made?.source === "edit-with-ai" &&
+        (made.action === "translate" || TRANSLATION.test(made.instruction ?? ""))
+      );
+    })
+  );
+}
+
 /**
  * Applies the assistant's changes the User asked for (#880, D224), now that
  * they are all in the Mind, as one step of the editor's Undo, with the line
@@ -325,7 +343,11 @@ export function applyArrived(
   const first = proposalsIn(editor.state.doc).find((each) => requests.has(each.request));
   if (!first || editor.isDestroyed) return null;
   for (const request of requests) drawApplying(editor, request, false);
-  if (holds && ownTextRemoved(editor.state, requests) > MOST_OF_YOUR_TEXT) {
+  if (
+    holds &&
+    !translates(editor, requests) &&
+    ownTextRemoved(editor.state, requests) > MOST_OF_YOUR_TEXT
+  ) {
     setAppliedLine(editor, {
       kind: "held",
       blockId: topBlockAt(editor.state, first.from),

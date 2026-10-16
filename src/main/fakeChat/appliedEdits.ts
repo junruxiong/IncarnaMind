@@ -9,7 +9,8 @@ const formal = (paragraph: string) =>
  * Replies the guards on an applied edit are for (#880), or null: "make the
  * second paragraph more formal" gives only that paragraph back, as Claude
  * Haiku 5.5 did with the whole note selected; "add a closing paragraph" adds
- * a Block after the passage.
+ * a Block after the passage; "make it longer" adds a sentence to each
+ * paragraph, and "… to be clearer" writes two new paragraphs in place of the passage.
  */
 export function appliedEditReply(passage: string, asked: string): string | null {
   const paragraphs = passage.split(/\n\n+/);
@@ -19,7 +20,10 @@ export function appliedEditReply(passage: string, asked: string): string | null 
   }
   if (/add a closing paragraph|加一段结尾/iu.test(asked))
     return `${passage}\n\nThat is all for now.`;
-  if (/\blonger\b|长一点|更长/iu.test(asked)) {
+  if (/to be clearer|写清楚/iu.test(asked)) {
+    return "Gulls wheel over the quay at dawn.\n\nBoats rest on the mud at low water.";
+  }
+  if (/\bmake it longer\b|长一点|更长/iu.test(asked)) {
     return paragraphs
       .map((each) => (each.startsWith("#") ? each : `${each} It says more.`))
       .join("\n\n");
