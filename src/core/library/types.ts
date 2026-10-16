@@ -14,12 +14,81 @@ export interface LibraryGroup {
   updatedAt: string;
 }
 
-/** Explicit selection: classification never falls back to another provider. */
+/**
+ * The model that tags and organizes Documents: "automatic" picks one
+ * from what the User has set up (see ./tagging), the default. The others are
+ * chosen by hand, and never fall back to another provider:
+ * - "chat": a model on a saved chat provider;
+ * - "jev": TypeSafe Jev, with the key saved on this device;
+ * - "auto": the local decision models in Ollama, picked per Document;
+ * - "ollama": one local decision model, by name.
+ */
 export type LibraryClassifier =
+  | { kind: "automatic" }
   | { kind: "chat"; choice: ChatModelChoice }
   | { kind: "jev" }
   | { kind: "auto"; baseUrl: string }
   | { kind: "ollama"; baseUrl: string; modelId: string; usePageImages?: boolean };
+
+/** A model that tags: a classifier chosen by hand, or the one Automatic picked. */
+export type TaggingClassifier = Exclude<LibraryClassifier, { kind: "automatic" }>;
+
+/** Where a model that tags runs, grouped as the composer's model chip groups models. */
+export type TaggingModelGroup = "keys" | "plan" | "local";
+
+/** About what tagging and organizing 100 Documents costs with a model. */
+export type TaggingCost =
+  /** On this computer. */
+  | { kind: "free" }
+  /** It counts against the User's ChatGPT plan. */
+  | { kind: "plan" }
+  /** At the model's price in the catalog, for a typical Document (an excerpt of about 1,500 tokens). */
+  | { kind: "estimate"; currency: "USD" | "CNY"; amount: number }
+  | { kind: "unknown" };
+
+/** A model the User can tag with, as the Tagging section lists it. */
+export interface TaggingModelOption {
+  /** What choosing it saves (`LibrarySettings.classifier`). */
+  classifier: TaggingClassifier;
+  group: TaggingModelGroup;
+  /** Its name in the catalog, else its id, e.g. "Claude Haiku 5.5", "tev1:4b". */
+  name: string;
+  /** The provider it is reached through, in English and Chinese; null for Ollama's decision models. */
+  provider: { en: string; zh: string } | null;
+  /** The provider's tagging model, or a local decision model: picked for tagging. */
+  goodForTagging: boolean;
+  /** A local decision model in Ollama, or Ollama's decision models picked per Document ("auto"). */
+  decisionModel: boolean;
+  /** It says how likely each Tag is, so the Tags it isn't sure of are marked for review (Jev, decision models). */
+  likelihoods: boolean;
+  cost: TaggingCost;
+}
+
+/**
+ * Why Automatic picked its model: TypeSafe Jev; the chat provider's tagging
+ * model, its quick-tasks model, or its Answers model when it names neither;
+ * the ChatGPT plan's; Ollama's local decision models; the chat model on this computer.
+ */
+export type AutomaticTaggingReason =
+  | "jev"
+  | "tagging-model"
+  | "quick-model"
+  | "answers-model"
+  | "plan"
+  | "decision-models"
+  | "local-chat";
+
+/** What the Tagging section shows (see `CoreApi.getTaggingModels`). */
+export interface TaggingModels {
+  /** What Automatic tags with now, and why; null when there is nothing it can use, so tagging waits. */
+  automatic: (TaggingModelOption & { reason: AutomaticTaggingReason }) | null;
+  /** The models to choose by hand: Your keys, the ChatGPT plan, then this computer. */
+  options: TaggingModelOption[];
+  /** "Keep everything on this computer" is on: Automatic picks only local models, and a cloud one waits. */
+  localMode: boolean;
+  /** Tagging on the ChatGPT plan waits for its limit to reset, until this time (ISO 8601, UTC); null when it doesn't. */
+  planPausedUntil: string | null;
+}
 
 export interface ClassificationModel {
   id: string;
@@ -28,7 +97,14 @@ export interface ClassificationModel {
 }
 
 export interface LibrarySettings {
-  classifier: LibraryClassifier | null;
+  /** The one model choice for automatic tagging and Organize; "automatic" until the User picks one. */
+  classifier: LibraryClassifier;
+  /**
+   * While `classifier` is "automatic", the model Organize uses: Automatic's pick
+   * at the moment the User answered Organize's "Use {company}", kept from then
+   * on; null until they do. Automatic covers tagging only.
+   */
+  organizeWith: TaggingClassifier | null;
   /**
    * Organize new and changed Documents by itself, once a classifier is chosen.
    * On until the User turns it off.
