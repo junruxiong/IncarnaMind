@@ -868,7 +868,8 @@ export interface AnswerToolCall {
  * still wait in the text it was to change, which the assistant can't revise
  * (someone else's, or the User's own requests), `count` of them in the Mind;
  * "mixed": its own waiting text sits beside the User's there. "model": the
- * model failed, as `message` says.
+ * model failed, as `message` says. "no-table": a table it wrote couldn't be
+ * made, so none of its text went in (#961).
  */
 export type MindProblem =
   | { kind: "waiting"; mindId: string; count: number; mixed: boolean }
@@ -879,7 +880,7 @@ export type MindProblem =
   | { kind: "no-place"; mindId: string; place: string }
   | { kind: "several-places"; mindId: string; name: string; adding: boolean }
   | {
-      kind: "no-text" | "too-long" | "changed" | "content-not-own" | "stopped";
+      kind: "no-text" | "too-long" | "changed" | "content-not-own" | "stopped" | "no-table";
       mindId: string;
     }
   | { kind: "local-mode" | "not-ready" }
@@ -912,6 +913,12 @@ export interface MindChange {
   proposals: number;
   /** How many paragraphs the whole Blocks it wrote hold (a heading or a table holds none). Absent: none. */
   paragraphs?: number;
+  /** How many tables it added. Absent: none. */
+  tables?: number;
+  /** Sources in its tables' cells written as a name in brackets that matched no Citation, kept as text. Absent: none. */
+  unlinkedSources?: number;
+  /** Cells beyond its tables' columns, their text kept in their row's last cell. Absent: none. */
+  extraCells?: number;
   /**
    * It revised the assistant's own changes still waiting there: they
    * are gone, and its request holds the new text and the rest of them.
@@ -4210,6 +4217,12 @@ export type EditWithAiResult =
       proposals: number;
       droppedCitations: number;
       outOfDate: number;
+      /** Markers the text had for none of the passage's Citations, left out. Absent: none. */
+      unmatchedMarkers?: number;
+      /** Sources in a table's cells written as a name in brackets that matched none of its Citations, kept as text (#961). Absent: none. */
+      unlinkedSources?: number;
+      /** Cells beyond a table's columns, their text kept in their row's last cell. Absent: none. */
+      extraCells?: number;
       /** An edit the User asked for that waits for them instead of applying (#880). */
       held?: true;
       /** What its new text left out of the selection, kept; absent when nothing. */
@@ -4232,6 +4245,11 @@ export type EditWithAiResult =
   | { kind: "too-long" }
   /** The User stopped it (`cancelEdit`). */
   | { kind: "cancelled" }
+  /**
+   * The model wrote lines that read as a table's rows but make no table
+   * (#961): nothing was written. `text`: the passage's new text, as it wrote it.
+   */
+  | { kind: "no-table"; text: string }
   /** The model failed, or gave nothing back. */
   | { kind: "failed"; error: ProviderError };
 

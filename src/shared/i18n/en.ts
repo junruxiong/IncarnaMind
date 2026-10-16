@@ -738,6 +738,8 @@ export const en = {
   "edit.problem.retry": "Try again",
   "edit.problem.cant-regenerate":
     "This change can't be made again. Reject it, then select the text and edit it with AI.",
+  "edit.problem.no-table":
+    "The AI's table wasn't complete, so nothing was changed. Try again, or ask for a list instead.",
   "composer.edit.placeholder": "Say what to change…",
   "composer.edit.label": "Say what to change in the selected text",
   "composer.edit.quote": "Editing “{text}”",
@@ -4204,6 +4206,17 @@ export const en = {
   "mindChanges.wrote.one": "Wrote 1 paragraph in “{mind}”",
   "mindChanges.created": "Created “{mind}” and wrote {count} paragraphs",
   "mindChanges.created.one": "Created “{mind}” and wrote 1 paragraph",
+  "mindChanges.tables": "Added {tables} to “{mind}”",
+  "mindChanges.wrote.tables": "Wrote {paragraphs} and {tables} in “{mind}”",
+  "mindChanges.changed.tables": "Changed {places} and added {tables} in “{mind}”",
+  "mindChanges.created.tables": "Created “{mind}” and added {tables}",
+  "mindChanges.created.wrote.tables": "Created “{mind}” and wrote {paragraphs} and {tables}",
+  "mindChanges.count.tables": "{count} tables",
+  "mindChanges.count.tables.one": "a table",
+  "mindChanges.count.paragraphs": "{count} paragraphs",
+  "mindChanges.count.paragraphs.one": "1 paragraph",
+  "mindChanges.count.places": "{count} places",
+  "mindChanges.count.places.one": "1 place",
   "mindChanges.left": "· {count} waiting",
   "mindChanges.left.one": "· 1 waiting",
   "mindChanges.left.none": "· none waiting",
@@ -4256,6 +4269,12 @@ export const en = {
   "mindCall.failed.contentNotOwn":
     "Couldn't change “{mind}”: only the assistant's own waiting text can be written anew",
   "mindCall.failed.stopped": "Stopped before “{mind}” changed",
+  "mindCall.failed.noTable": "Couldn't make the table, so nothing was added to “{mind}”",
+  "mindChanges.unlinked":
+    "· {count} sources in the table couldn't be linked, so they're shown as text",
+  "mindChanges.unlinked.one": "· 1 source in the table couldn't be linked, so it's shown as text",
+  "mindChanges.extraCells": "· {count} extra cells were kept as text",
+  "mindChanges.extraCells.one": "· 1 extra cell was kept as text",
   "mindCall.failed.localMode":
     "Couldn't change “{mind}”: “Keep everything on this computer” is on, and the model isn't on this computer",
   "mindCall.failed.notReady": "Couldn't change “{mind}”: the model can't be used now",
@@ -4305,6 +4324,8 @@ export const en = {
     "There are {count} paragraphs starting “{name}”: {places}. Which one?",
   "assistant.place.under": "under “{heading}”",
   "assistant.place.number": "number {n}",
+  "assistant.table.unmade":
+    "I couldn't make this into a table, so it's below as text. Nothing was added to “{mind}”.",
   // Outside agents (#351): the consent for each agent the User connects, and what IncarnaMind
   // tells an agent when a call can't be done, which the agent passes on to the User.
   "consent.flow.agents": "Your AI agents",
