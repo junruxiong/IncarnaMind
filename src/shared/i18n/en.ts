@@ -2034,7 +2034,7 @@ export const en = {
     "Skill scripts run on this computer and can make their own network requests, sending anything they can read. This page doesn't control them: the approval you give before each run does, and you can turn them off in Settings, under Skills.",
   "privacy.aiUse.title": "AI use record",
   "privacy.aiUse.body":
-    "IncarnaMind keeps a record of what the AI wrote into your Minds and whether you kept, edited or deleted it, so you can say how you used AI. It holds no text of yours or the AI's, stays on this computer, and is never sent anywhere, whatever you choose about usage data.",
+    "IncarnaMind keeps a record of what the AI wrote into your Minds, how many sentences it checked, and whether you kept, edited or deleted what it wrote, so you can say how you used AI. It holds no text of yours or the AI's, stays on this computer, and is never sent anywhere, whatever you choose about usage data.",
   "privacy.aiUse.entries": "Entries: {count}",
   "privacy.aiUse.clear": "Clear record",
   "privacy.aiUse.cleared": "Cleared the AI use record.",
@@ -2191,6 +2191,10 @@ export const en = {
   "answer.figures.uncalculated.one": "1 figure couldn't be calculated",
   "answer.status.stopped": "Stopped",
   "answer.stop": "Stop",
+  "answer.wait.still": "Still working",
+  "answer.wait.usually.seconds": "Usually about {count} seconds with {model}",
+  "answer.wait.usually.minute": "Usually about a minute with {model}",
+  "answer.wait.usually.minutes": "Usually about {count} minutes with {model}",
   "answer.regenerate": "Regenerate",
   "answer.more": "More for this Answer",
   "answer.error.thisModel": "this model",
@@ -2710,6 +2714,7 @@ export const en = {
   "export.format.pdf": "PDF",
   "export.format.source-pack": "Source pack (PDF)",
   "export.format.html": "HTML",
+  "export.format.share-page": "Web page to share (.html)",
   "export.format.markdown": "Markdown (.md)",
   "export.more": "More formats",
   "export.options": "Export options…",
@@ -2721,6 +2726,12 @@ export const en = {
   "export.options.pdf": "Citations become footnotes with the Document and Location.",
   "export.options.html":
     "One file that opens in any browser. Citations become footnotes linked both ways.",
+  "export.options.share-page":
+    "One file anyone can open in a browser, to send or put on your own site. Nothing is uploaded.",
+  "export.share.cards": "Readers can open each Citation",
+  "export.share.cards.hint": "Each quote, with the passage it comes from",
+  "export.share.checkedLine": "Say “Citations checked with IncarnaMind” at the foot",
+  "export.share.checkedLine.hint": "One line of plain text that links to how the check works.",
   "export.options.markdown": "Citations become footnotes. Questions are kept.",
   "export.options.source-pack":
     "A cover list, then each cited page as it was saved, its quotes highlighted and numbered like the Mind's Citations.",
@@ -2763,7 +2774,7 @@ export const en = {
     "There is nothing to report: IncarnaMind has no record of AI use in this document, and the document has no Citations or checks.",
   "aiStatement.uses.heading": "AI models and what they were used for",
   "aiStatement.uses.none":
-    "IncarnaMind has no record of AI writing, suggesting changes or searching for this document.",
+    "IncarnaMind has no record of AI writing, suggesting changes, searching or checking sentences for this document.",
   "aiStatement.uses.column.use": "Use",
   "aiStatement.uses.column.model": "Model",
   "aiStatement.uses.column.times": "Times",
@@ -2777,6 +2788,7 @@ export const en = {
   "aiStatement.use.search-documents": "Searches of the author's own Documents",
   "aiStatement.use.search-sources": "Searches of public scholarly sources (Find sources)",
   "aiStatement.use.search-web": "Web searches",
+  "aiStatement.use.sentence-checked": "Sentences checked against the Documents",
   "aiStatement.text.heading": "AI text, by section",
   "aiStatement.text.none": "This document has no AI text.",
   "aiStatement.text.intro":
@@ -2810,6 +2822,11 @@ export const en = {
   "aiStatement.sentences.contradicted": "Contradicted",
   "aiStatement.sentences.recheck": "Needs re-check",
   "aiStatement.sentences.notChecked": "Not checked",
+  "aiStatement.sentences.changed": "Changed since checked",
+  "aiStatement.sentences.list.intro":
+    "Each sentence checked, cut after its first {count} words, with the latest result of its check:",
+  "aiStatement.sentences.column.sentence": "Sentence",
+  "aiStatement.sentences.column.checked": "Checked",
   "aiStatement.unread.one":
     "When these sentences were checked, 1 file they were checked against couldn't be read, so the checks didn't search it:",
   "aiStatement.unread":
@@ -2898,6 +2915,29 @@ export const en = {
   "export.citation.document": "{document}",
   "export.citation.separator": ", ",
   "export.citation.accessed": "accessed {date}",
+  "share.page.shared": "Shared from IncarnaMind · {date}",
+  "share.page.about":
+    "Each Citation's card shows its quote, where it is, and what the check found.",
+  "share.page.made": "Made with IncarnaMind",
+  "share.page.found.all": "Every quote was found on its page, checked on {date}.",
+  "share.page.found.some":
+    "Checked on {date}: {found} of {total} quotes found on their pages. Each other Citation's card says why.",
+  "share.page.found.none.one":
+    "Checked on {date}: the quote wasn't found on its page. Its card says why.",
+  "share.page.found.none.other":
+    "Checked on {date}: none of the {total} quotes was found on its page. Each Citation's card says why.",
+  "share.page.checkedLine": "Citations checked with IncarnaMind",
+  "share.card.label": "Citation {number}: {source}",
+  "share.card.page": "page {range}",
+  "share.card.pages": "pages {range}",
+  "share.card.checked": "as of {date}",
+  "share.card.close": "Close",
+  "share.card.unsupported": "Unsupported by the Documents checked",
+  "share.card.unchecked": "Not checked when this was shared",
+  "share.card.row": "Row {row}",
+  "share.card.part": "Only this part of the Document is in this file.",
+  "share.card.missing": "The source wasn't available when this was shared",
+  "share.card.swipe": "Swipe down or tap outside to close.",
   "export.unnamedDocument": "Untitled Document",
   "export.chart": "Chart",
   "export.chart.titled": "Chart: {title}",
@@ -3968,6 +4008,7 @@ export const en = {
   "steps.live.searching": "Searching {scope}…",
   "steps.live.checking": "Checking {count} Citations…",
   "steps.live.checking.one": "Checking 1 Citation…",
+  "steps.live.thinking": "Thinking…",
   "steps.label": "Steps",
   "steps.scope.all": "All Documents",
   "steps.scope.named": "{name}",

@@ -116,7 +116,16 @@ export interface RequestQuirks {
    * `only`, they go to the models whose id starts with one of its prefixes,
    * the ones that think by default.
    */
-  reasoningSummary?: { options: ProviderOptions; only?: readonly string[] };
+  reasoningSummary?: {
+    options: ProviderOptions;
+    /** The same with a modest thinking budget, for an Answer. */
+    answer?: ProviderOptions;
+    /** The same with a larger thinking budget, for an Answer to a Question that asks to check or calculate. */
+    careful?: ProviderOptions;
+    /** What to leave out when a refusal names `names`, for a model that takes no budget: an option set to undefined. */
+    refused?: readonly { names: string; options: ProviderOptions }[];
+    only?: readonly string[];
+  };
 }
 
 /**
