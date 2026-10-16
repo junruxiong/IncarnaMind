@@ -2541,15 +2541,15 @@ export function createCore(adapters: CoreAdapters): Core {
   };
   /** The conversation each live Meeting's help went to last: the panel's goes on there. */
   const helpConversations = new Map<string, string>();
-  const askMeetingHelp = async (input: unknown): Promise<ConversationAskResult> => {
-    if (!isRecord(input)) throw new InvalidInputError("askMeetingHelp expects an object.");
+  const askMeetingHelp = async (given: unknown): Promise<ConversationAskResult> => {
+    const input = isRecord(given) ? given : {};
     const meeting = meetings.get(input.meetingId);
     if (meeting.status !== "recording" && meeting.status !== "paused") {
       throw new InvalidInputError({ key: "error.meeting.notBeingRecorded" });
     }
     const { kind } = input;
     if (!isMeetingHelpKind(kind) || !helpKindsFor(meeting.helpTemplate).includes(kind)) {
-      throw new InvalidInputError("That isn't one of this meeting's help buttons.");
+      throw new InvalidInputError({ key: "error.meeting.helpButton" });
     }
     const { folderId } = minds.get(meeting.mindId);
     const question = (conversationId: unknown) =>
@@ -3600,12 +3600,11 @@ export function createCore(adapters: CoreAdapters): Core {
     openAudioSettings: (source) => meetings.openSettings(source),
     askMeetingHelp,
     setMeetingTemplate: async (input) => {
-      if (!isRecord(input)) throw new InvalidInputError("setMeetingTemplate expects an object.");
-      const { template } = input;
+      const { meetingId, template } = isRecord(input) ? input : {};
       if (template !== null && !isMeetingTemplate(template)) {
-        throw new InvalidInputError("A meeting template must be sales, interview, team or null.");
+        throw new InvalidInputError({ key: "error.meeting.template" });
       }
-      return meetings.setTemplate(input.meetingId, template);
+      return meetings.setTemplate(meetingId, template);
     },
 
     openDocumentFile: async (documentId) => {

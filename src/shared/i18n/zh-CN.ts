@@ -3179,6 +3179,8 @@ export const zhCN = {
   "error.meeting.notRecording": "这个会议没有在录制。",
   "error.meeting.notPaused": "这个会议没有暂停。",
   "error.meeting.notBeingRecorded": "这个会议不在录制中。",
+  "error.meeting.helpButton": "这不是这场会议的帮助按钮。",
+  "error.meeting.template": "会议模板只能是销售电话、用户访谈或团队会议。",
   "error.comparison.noQuestion": "先添加一个要对比的问题。",
   "error.comparison.tooManyQuestions": "对比表最多可以有 {max} 个问题。",
   "error.comparison.noDocuments": "没有可以对比的文档。",
