@@ -7,6 +7,7 @@
  */
 import type { Editor } from "@tiptap/core";
 import type { EditorState } from "@tiptap/pm/state";
+import { useEditorState } from "@tiptap/react";
 import { useEffect, useRef, useState } from "react";
 import type * as Y from "yjs";
 import { create } from "zustand";
@@ -16,18 +17,20 @@ import {
   MIND_SETTINGS_FIELD,
   type StyledRun,
 } from "../../core/api";
+import { LANGUAGE_SAMPLE, writtenInChinese } from "../../core/documents/textLanguage";
 import type { CitationStyleId } from "../../shared/citationStyles";
 import { displayName } from "../../shared/documentNames";
 import { bibliographyShown } from "../../shared/mindBibliography";
 import {
   chosenCitationStyle,
-  citationStyleIn,
   citationStylePromptDismissed,
+  resolvedCitationStyle,
 } from "../../shared/mindCitationStyle";
+import { isCitableWork } from "../../shared/references";
 import { core } from "./core";
 import { citationClusters, citedWorkOf } from "./editor/citationClusters";
 import { errorMessage } from "./errors";
-import { translateNow } from "./i18n";
+import { translateNow, useLanguage } from "./i18n";
 import { useAppStore } from "./store";
 
 /** A Mind's formatting, as last answered. */
@@ -76,9 +79,8 @@ export const useMindFormatting = (mindId: string | null) =>
 
 /** What a Mind's document says of its citation style, following its changes. */
 export interface MindStyleChoice {
-  style: CitationStyleId;
-  /** The Mind chose it; otherwise it is Numbered, the default. */
-  chosen: boolean;
+  /** The style the Mind chose; null when it follows the default (`useMindCitationStyle`). */
+  chosen: CitationStyleId | null;
   /** The User closed the prompt that offers a style, for this Mind. */
   promptDismissed: boolean;
   /** The Mind shows its Bibliography without a style (#102); a styled Mind always does. */
@@ -86,13 +88,12 @@ export interface MindStyleChoice {
 }
 
 const choiceIn = (settings: Y.Map<unknown>): MindStyleChoice => ({
-  style: citationStyleIn(settings),
-  chosen: chosenCitationStyle(settings) !== null,
+  chosen: chosenCitationStyle(settings),
   promptDismissed: citationStylePromptDismissed(settings),
   bibliography: bibliographyShown(settings),
 });
 
-/** The Mind's style, whether it chose it, and whether it closed the offer of one. */
+/** The Mind's chosen style, if any, and whether it closed the offer of one. */
 export function useMindStyleChoice(doc: Y.Doc): MindStyleChoice {
   const settings = doc.getMap<unknown>(MIND_SETTINGS_FIELD);
   const [choice, setChoice] = useState(() => choiceIn(settings));
@@ -100,8 +101,7 @@ export function useMindStyleChoice(doc: Y.Doc): MindStyleChoice {
     const read = () =>
       setChoice((before) => {
         const now = choiceIn(settings);
-        return now.style === before.style &&
-          now.chosen === before.chosen &&
+        return now.chosen === before.chosen &&
           now.promptDismissed === before.promptDismissed &&
           now.bibliography === before.bibliography
           ? before
@@ -112,6 +112,52 @@ export function useMindStyleChoice(doc: Y.Doc): MindStyleChoice {
     return () => settings.unobserve(read);
   }, [settings]);
   return choice;
+}
+
+/** The Documents a Mind cites, each once, as one string, so the editor re-renders only when they change. */
+const citedDocuments = (editor: Editor) =>
+  [
+    ...new Set(
+      citationClusters(editor.state).flatMap((cluster) =>
+        cluster.members.flatMap((member) => member.attributes.documentId ?? []),
+      ),
+    ),
+  ]
+    .sort()
+    .join(" ");
+
+/** Whether the Mind cites a paper or a book: a reference record of a known type, with authors or a year. */
+export function useCitesWorks(editor: Editor): boolean {
+  const cited = useEditorState({
+    editor,
+    selector: ({ editor: current }) => citedDocuments(current),
+  });
+  return useAppStore((state) => {
+    if (cited === "") return false;
+    const ids = new Set(cited.split(" "));
+    return state.documents.some(
+      (document) => ids.has(document.id) && isCitableWork(document.reference),
+    );
+  });
+}
+
+/**
+ * The style the Mind is in: its choice, else the default for the interface's language, the
+ * Mind's text and what it cites (`resolvedCitationStyle`), as the core works it out for exports.
+ */
+export function useMindCitationStyle(editor: Editor, choice: MindStyleChoice): CitationStyleId {
+  const language = useLanguage();
+  const citesWorks = useCitesWorks(editor);
+  const chineseText = useEditorState({
+    editor,
+    selector: ({ editor: current }) => {
+      const { doc } = current.state;
+      // Positions count each Block's edges too: twice the sample holds at least as many characters.
+      const end = Math.min(doc.content.size, LANGUAGE_SAMPLE * 2);
+      return writtenInChinese(doc.textBetween(0, end, "\n"));
+    },
+  });
+  return resolvedCitationStyle(choice, { language, chineseText, citesWorks });
 }
 
 /** How long the editor waits after a change before it asks again: a run of changes asks once. */
