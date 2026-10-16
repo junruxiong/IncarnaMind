@@ -21,6 +21,8 @@
 import type { ChatModelChoice, ChatProvider, ExternalService } from "../api";
 import { catalogProvider, catalogRoleModel } from "../providers/catalog";
 import type { DescribedModel } from "../providers/chat";
+import { serviceForUrl } from "../providers/kinds";
+import { hasOllamaModel } from "../providers/ollama";
 import type {
   AutomaticTaggingReason,
   LibraryClassifier,
@@ -43,10 +45,6 @@ const TYPICAL_REQUEST = { input: 1_500, output: 25 };
 const INSTALLED_TTL_MS = 30_000;
 
 const OLLAMA = { kind: "ollama", catalogId: "ollama" } as const;
-
-/** Ollama lists a model pulled without a tag as "name:latest". */
-const installed = (models: readonly string[], name: string) =>
-  models.includes(name) || (!name.includes(":") && models.includes(`${name}:latest`));
 
 /** Reasons whose model was picked for tagging (a provider's quick model counts). */
 const PICKED_FOR_TAGGING: ReadonlySet<AutomaticTaggingReason> = new Set([
@@ -101,10 +99,10 @@ export function automaticTagging(input: {
     return { classifier: { kind: "chat", choice: chat.tagging.choice }, reason: chat.reason };
   }
   if (decision) {
-    if (TEXT_DECISION_MODELS.some((model) => installed(decision.models, model))) {
+    if (TEXT_DECISION_MODELS.some((model) => hasOllamaModel(decision.models, model))) {
       return { classifier: { kind: "auto", baseUrl: decision.baseUrl }, reason: "decision-models" };
     }
-    if (installed(decision.models, PAGE_DECISION_MODEL)) {
+    if (hasOllamaModel(decision.models, PAGE_DECISION_MODEL)) {
       return {
         classifier: {
           kind: "ollama",
@@ -168,10 +166,14 @@ export function createTagging(options: TaggingOptions) {
   /** What the last resolution gave, for the checks that can't wait (see `lastResolved`). */
   let last: TaggingClassifier | null = null;
 
-  /** Ollama's address: a saved Ollama provider's on this computer, else the default. */
-  const ollamaUrl = (providers: readonly ChatProvider[]) =>
+  /**
+   * Ollama on this computer: a saved Ollama provider's address there, else the
+   * default (OLLAMA_HOST's when set) when that is on this computer; null when
+   * it isn't, as Document text must not reach another computer unasked.
+   */
+  const ollamaUrl = (providers: readonly ChatProvider[]): string | null =>
     providers.find((each) => each.kind === "ollama" && each.baseUrl && each.service === null)
-      ?.baseUrl ?? options.ollamaUrl;
+      ?.baseUrl ?? (serviceForUrl(options.ollamaUrl) ? null : options.ollamaUrl);
 
   async function installedModels(baseUrl: string, fresh = false): Promise<readonly string[]> {
     const cached = lists.get(baseUrl);
@@ -207,7 +209,7 @@ export function createTagging(options: TaggingOptions) {
   async function automatic(fresh = false): Promise<AutomaticTagging | null> {
     const providers = await chat.list();
     const baseUrl = ollamaUrl(providers);
-    const models = await installedModels(baseUrl, fresh);
+    const models = baseUrl ? await installedModels(baseUrl, fresh) : [];
     const defaultModel = chat.defaultModel();
     const described = defaultModel ? chat.describeModel(defaultModel) : undefined;
     // On this computer: the default chat model, else Ollama's own small model when it is installed.
@@ -216,14 +218,14 @@ export function createTagging(options: TaggingOptions) {
     const localChat =
       described && described.service === null
         ? described.choice
-        : ollama && ollamaModel && installed(models, ollamaModel)
+        : ollama && ollamaModel && hasOllamaModel(models, ollamaModel)
           ? { providerId: ollama.id, modelId: ollamaModel }
           : null;
     return automaticTagging({
       localOnly: options.localOnly(),
       jev: { enabled: jev.enabled(), local: jev.service() === null },
       chat: described ? providerTagging(described) : null,
-      decision: { baseUrl, models },
+      decision: baseUrl ? { baseUrl, models } : null,
       localChat,
     });
   }
@@ -327,14 +329,14 @@ export function createTagging(options: TaggingOptions) {
      */
     async textDecisionModel(baseUrl: string): Promise<string | null> {
       const models = await installedModels(baseUrl);
-      return DECISION_MODELS.find((model) => installed(models, model)) ?? null;
+      return DECISION_MODELS.find((model) => hasOllamaModel(models, model)) ?? null;
     },
 
     /** Where a model that tags sends its requests; null for one on this computer. */
     service(classifier: TaggingClassifier): ExternalService | null {
       if (classifier.kind === "jev") return jev.service();
       if (classifier.kind === "chat") return chat.describeModel(classifier.choice)?.service ?? null;
-      return null;
+      return serviceForUrl(classifier.baseUrl);
     },
 
     /** What the Tagging section shows (see `CoreApi.getTaggingModels`). */
@@ -342,7 +344,7 @@ export function createTagging(options: TaggingOptions) {
       const picked = await automatic(true);
       const providers = await chat.list();
       const baseUrl = ollamaUrl(providers);
-      const models = await installedModels(baseUrl);
+      const models = baseUrl ? await installedModels(baseUrl) : [];
       const defaultModel = chat.defaultModel();
       const list: TaggingModelOption[] = [];
       const add = (option: TaggingModelOption | null) => {
@@ -367,26 +369,28 @@ export function createTagging(options: TaggingOptions) {
         if (answers && !local) add(chatOption(answers, false));
         // Ollama's own small model, when it is installed: the one measured with IncarnaMind.
         const small = on(catalogRoleModel(OLLAMA, "quickTasks"));
-        if (provider.kind === "ollama" && local && small && installed(models, small.modelId)) {
+        if (provider.kind === "ollama" && local && small && hasOllamaModel(models, small.modelId)) {
           add(chatOption(small, false));
         }
       }
-      const decision = DECISION_MODELS.filter((model) => installed(models, model));
-      if (decision.some((model) => model !== PAGE_DECISION_MODEL)) {
-        add(decisionOption({ kind: "auto", baseUrl }, AUTO_DECISION_NAME));
-      }
-      for (const model of decision) {
-        add(
-          decisionOption(
-            {
-              kind: "ollama",
-              baseUrl,
-              modelId: model,
-              ...(model === PAGE_DECISION_MODEL && { usePageImages: true }),
-            },
-            decisionModelName(model),
-          ),
-        );
+      const decision = DECISION_MODELS.filter((model) => hasOllamaModel(models, model));
+      if (baseUrl) {
+        if (decision.some((model) => model !== PAGE_DECISION_MODEL)) {
+          add(decisionOption({ kind: "auto", baseUrl }, AUTO_DECISION_NAME));
+        }
+        for (const model of decision) {
+          add(
+            decisionOption(
+              {
+                kind: "ollama",
+                baseUrl,
+                modelId: model,
+                ...(model === PAGE_DECISION_MODEL && { usePageImages: true }),
+              },
+              decisionModelName(model),
+            ),
+          );
+        }
       }
       const order: Record<TaggingModelGroup, number> = { keys: 0, plan: 1, local: 2 };
       // By group, as the chip groups them; in each, the models picked for tagging first.
