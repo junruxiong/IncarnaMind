@@ -502,6 +502,7 @@ function copilotStandIn(): CoreAdapters["copilotProfiles"] {
       scopes: ["read:user"],
       format: "json",
       apiBaseUrl: origin,
+      accountUrl: `${origin}/user`,
       tokenExchange: { url: `${origin}/copilot_internal/v2/token` },
     },
   };
