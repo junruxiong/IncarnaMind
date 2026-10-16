@@ -4287,7 +4287,7 @@ export type ClaimVerdict = "supported" | "unsupported" | "contradicted";
  * - "malformed": its reply held no verdict that could be read.
  * - "empty": its reply was empty.
  * - "no-evidence": it gave a verdict, but no quote the Citation check finds in the Passage it named.
- * - "unread": twice it gave a verdict without searching the Documents.
+ * - "unread": it gave a verdict without searching the Documents, even when asked once more.
  * - "rate-limit": the model's service refused more requests for now.
  * - "cost-cap": it could pass the monthly cap, so nothing was sent.
  * - "plan-limit": the plan's usage limit is reached.

@@ -144,12 +144,14 @@ export function recordJudged(
   ]);
 }
 
+/** What the model is told when it gives a verdict before searching, in the same Run (#972). */
+const SEARCH_FIRST =
+  "You gave a verdict without searching the User's Documents. Search them with search_documents first, then give your verdict from what you find.";
+
 export function createClaimCheck(deps: ClaimCheckDependencies) {
-  async function checkOnce(
-    request: ClaimCheckRequest,
-    searched: () => void,
-  ): Promise<ClaimCheckResult> {
+  return async function checkClaim(request: ClaimCheckRequest): Promise<ClaimCheckResult> {
     const { scope, signal } = request;
+    let searched = false;
     const read = new Map<string, string>();
     const excluded = new Map<string, LeftOutDocument>();
     const decisions = caseCitations(request.claim);
@@ -157,7 +159,7 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
     const scoped: AnswerDocuments = {
       searchableCount: () => deps.documents.searchableCount(scope.documentIds),
       async search(query, searchSignal) {
-        searched();
+        searched = true;
         const found = await deps.evidence.search(query, scope, searchSignal);
         // A web search's result never settles a citation of a court decision.
         const passages =
@@ -281,6 +283,10 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       window: model.window,
       retryQuotes: model.retryQuotes,
       cacheKey: request.cacheKey,
+      // A model may give its verdict before it has looked (Claude Haiku 5.5 did, about one check
+      // in six of a whole Mind): it is asked once more, within the Run's steps.
+      checkReply: (text) =>
+        !searched && readVerdict(text) ? { claims: [], note: SEARCH_FIRST } : null,
       signal,
     })) {
       if (event.type === "text-delta") reply += event.text;
@@ -323,6 +329,7 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
     if (!verdict) {
       return byCalculation ?? notChecked(readsAsRefusal(reply) ? "refused" : "malformed");
     }
+    if (!searched) return notChecked("unread");
     if (byCalculation && verdict.verdict !== "contradicted") return byCalculation;
     /** Unsupported, with the nearest line when it states another value for the same thing (#770). */
     const unsupported = async (): Promise<ClaimCheckResult> => {
@@ -371,27 +378,6 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       calculation: worked?.calculation ?? null,
       ...citedCase(evidence),
       ...facts(),
-    };
-  }
-
-  // A model may give its verdict before it has looked, and nothing it read then decides the
-  // sentence (Claude Haiku 5.5 did, about one check in six of a whole Mind): it is asked again,
-  // and a verdict given unread is never shown. A refusal or a failure keeps its own reason.
-  return async function checkClaim(request: ClaimCheckRequest): Promise<ClaimCheckResult> {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      let read = false;
-      const result = await checkOnce(request, () => {
-        read = true;
-      });
-      const decided = result.verdict !== "not-checked" || result.reason === "no-evidence";
-      if (read || !decided) return result;
-    }
-    return {
-      verdict: "not-checked",
-      reason: "unread",
-      detail: null,
-      versions: [],
-      excluded: [],
     };
   };
 }
