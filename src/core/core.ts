@@ -15,7 +15,7 @@ import {
 import { mindModelOf } from "../shared/mindModel";
 import { mindName } from "../shared/naming";
 import { paperFor } from "../shared/printDocument";
-import { resolveProposals } from "../shared/proposals";
+import { resolveProposals, restoreRevised } from "../shared/proposals";
 import { RESEARCH_TASK } from "../shared/research";
 import { wordFileOf } from "../shared/wordFiles";
 import { logActivity, silentLogger } from "./activityLog";
@@ -1111,6 +1111,7 @@ export function createCore(adapters: CoreAdapters): Core {
         if (!mindExists(change.mindId)) continue;
         const emptied = content.edit(change.mindId, (blocks) => {
           resolveProposals(blocks, (ref) => ref.request === change.request, "reject");
+          if (change.revised) restoreRevised(blocks, change.request);
           return topLevelBlocks(blocks).every(
             (block) => block.nodeName === "paragraph" && block.length === 0,
           );

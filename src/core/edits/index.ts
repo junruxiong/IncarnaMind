@@ -300,7 +300,6 @@ export interface Proposed {
   revised: { blockIds: string[] } | null;
 }
 
-/** An assistant's change as Edit with AI asks it, in the User's own words, on its Answer's model. */
 const askOf = (input: ProposeInput): Ask => ({
   mindId: input.mindId,
   action: "instruction",
@@ -674,8 +673,8 @@ export function createEdits(options: EditsOptions) {
   }
 
   /**
-   * Revises the assistant's own changes still waiting over the stretch
-   * (#893): their text, as it reads once accepted, is rewritten as asked in a
+   * Revises the assistant's own changes still waiting over the stretch:
+   * their text, as it reads once accepted, is rewritten as asked in a
    * copy of the Mind, and the new text takes their place, still waiting, as
    * Blocks of a new request (../proposals/ownWaiting). Nothing goes into the
    * Mind until the model is done; the User's own text isn't touched.
@@ -735,6 +734,7 @@ export function createEdits(options: EditsOptions) {
         modelId: input.prepared.modelId,
         createdAt: options.now().toISOString(),
       };
+      input.beforeWriting();
       const blockIds = content.edit(input.mindId, (mind) => {
         const ids = replaceOwn(mind, own, revised, request);
         if (ids && mind.doc) recordProposalRequest(mind.doc, request, made);
@@ -790,7 +790,7 @@ export function createEdits(options: EditsOptions) {
      * text from `from` to `to`, on the model its Answer is written with, which
      * the User has allowed. As Edit with AI's, it comes back as Proposals,
      * each paragraph as it is finished. Over the assistant's own changes
-     * still waiting, it revises them instead (`revise`, #893). `length`: the
+     * still waiting, it revises them instead (`revise`). `length`: the
      * text before and after, when it proposed; `reason`: why, as the model
      * says; `revised`: the Blocks that took the place of its waiting ones.
      */

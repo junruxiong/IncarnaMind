@@ -141,7 +141,7 @@ import {
   createCitationSession,
   withoutFootnoteDefinitions,
 } from "./citations";
-import { askAgainNote, unbackedClaims as claimsNoCallMade } from "./claimedChanges";
+import { askAgainNote, unbackedClaims as claimsNoCallMade, shownUpTo } from "./claimedChanges";
 import {
   conversationContext,
   conversationContextOf,
@@ -694,8 +694,6 @@ export function createAnswers(options: AnswersOptions) {
      * Blocks it adds link back to. It is offered the Minds' Tools. Absent: none.
      */
     assistant?: Pick<MindToolsOptions, "focused" | "folderId" | "origin">;
-    /** The Tool calls of the conversation's earlier Answers: a claim about one of them holds by theirs (#893). */
-    earlierCalls?: readonly AnswerToolCall[];
   }): void {
     const { home, answerId, model, context, documentIds, forcedSkill } = input;
     const outside = input.outside === true;
@@ -738,7 +736,6 @@ export function createAnswers(options: AnswersOptions) {
     let quoteRetry: QuoteRetry | null = null;
     /** The one request to fix figures, if the engine made it (see ./figureRetry). */
     let figureRetry: FigureRetry | null = null;
-    /** The changes its reply claims that none of its calls made, even once asked again (#893). */
     let unbackedClaims: ClaimedChange[] = [];
     /** What the model calls counted, the cached input tokens too. */
     const usage: AnswerUsage = {
@@ -1007,7 +1004,7 @@ export function createAnswers(options: AnswersOptions) {
     const webPages = new Map<string, WebPageCall>();
     /** What each call of a Minds' Tool changed, by call, for its card when it finishes (#202). */
     const mindChanges = new Map<string, MindChange>();
-    /** Why each call of a Minds' Tool that changed nothing didn't, by call, for its card (#893). */
+    /** Why each call of a Minds' Tool that changed nothing didn't, by call, for its card. */
     const mindProblems = new Map<string, MindProblem>();
     /** Keeps how a script's run went on its card. */
     const setScriptRun = (id: string, run: SkillScriptRun) => {
@@ -1480,12 +1477,14 @@ export function createAnswers(options: AnswersOptions) {
       const learntKey = modelKey(model, prepared);
       let outcome: Outcome = { status: "stopped" };
       const mindNames = (mindId: string) => options.readableMindName(mindId);
-      /** A reply that claims changes to a Mind none of the Answer's calls made (#893): see `AnswerRequest.checkReply`. */
+      let mindsNow: { id: string; name: string }[] | null = null;
+      const mindsListed = () => {
+        mindsNow ??= minds?.list() ?? [];
+        return mindsNow;
+      };
       const checkReply = (text: string) => {
-        const claims = claimsNoCallMade(text, toolCalls, {
-          earlierCalls: input.earlierCalls ?? [],
-          minds: minds?.list().map((mind) => mind.name) ?? [],
-        });
+        mindsNow = null;
+        const claims = claimsNoCallMade(text, toolCalls, mindsListed());
         return claims.length > 0
           ? { claims, note: askAgainNote(claims, toolCalls, mindNames) }
           : null;
@@ -1542,7 +1541,18 @@ export function createAnswers(options: AnswersOptions) {
         window: prepared.window,
         retryQuotes: prepared.retryQuotes,
         cacheKey: place.conversationId ?? place.mindId ?? undefined,
-        ...(input.assistant && { checkReply }),
+        ...(input.assistant && {
+          checkReply,
+          shownUpTo: (text: string) =>
+            shownUpTo(
+              text,
+              mindsListed().map((mind) => mind.name),
+            ),
+          mayEndBlank: () =>
+            [...mindChanges.values()].some(
+              (change) => change.created || change.revised || change.proposals > 0,
+            ),
+        }),
         signal: controller.signal,
       })) {
         if (finished) break;
@@ -1917,9 +1927,6 @@ export function createAnswers(options: AnswersOptions) {
         folderId: oneFolderOf(question.scope),
         origin: { from: messageReference(conversation.id, answer.id), question: question.text },
       },
-      earlierCalls: turn.earlier.flatMap((message) =>
-        message.kind === "answer" ? message.toolCalls : [],
-      ),
     });
     return { asked: true, conversation, questionId: question.id, answerId: answer.id };
   }

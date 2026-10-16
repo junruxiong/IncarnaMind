@@ -4,7 +4,7 @@
  * with who made each and when, and so does an outside agent; a PDF, an HTML
  * file and Markdown show them as Word prints them, or as if accepted. The
  * model reads the AI's own changes still waiting too, marked as waiting
- * (#893), unless they are out of date.
+ *, unless they are out of date.
  */
 import type { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, test } from "vitest";

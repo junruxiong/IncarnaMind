@@ -16,11 +16,11 @@ import {
 
 /**
  * When changes wait in a Mind that the assistant can't revise, it changes
- * nothing and says so (#893): the step names why, and a line under the Answer
- * says how many wait, with Review, which brings the Mind up at its first
- * change. The scripted model (src/main/fakeChatModel.ts) calls edit_mind for
- * a request to shorten, and its changes wait in the Mind, so a second
- * request to shorten meets them.
+ * nothing and says so: the step names why, and a line under the Answer says
+ * how many wait, with Review, which brings the Mind up at its first change.
+ * The scripted model (src/main/fakeChat) calls edit_mind for a request to
+ * shorten, and its changes wait in the Mind, so a second request to shorten
+ * meets them.
  */
 
 let dataDir: string;
@@ -40,7 +40,7 @@ async function writeMind(window: Page, title: string, note: string): Promise<voi
   await expect(window.getByTestId("mind-editor").locator("p")).toHaveText([note]);
 }
 
-test("over changes it can't revise, the assistant changes nothing, says why, and Review shows them; in English and Chinese", async () => {
+test("over changes it can't revise, the assistant changes nothing, says why, and Review shows them; in English and Chinese; the line goes once none wait", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
   await useLocalChatModel(window);
@@ -73,6 +73,10 @@ test("over changes it can't revise, the assistant changes nothing, says why, and
   await setLanguage(window, "zh-CN");
   await expect(line).toHaveText("“Q3 review”中有 2 处修订待确认。先接受或拒绝它们？· 审阅");
   await expect(timeline.getByTestId("answer-mind-call")).toHaveText(
-    /无法修改“Q3 review”：那里有 2 处修订待确认/,
+    /无法修改“Q3 review”：其中有 2 处修订待确认/,
   );
+
+  await pointAndClick(window, bar.getByTestId("proposals-accept-all"));
+  await expect(bar).toHaveCount(0);
+  await expect(line).toHaveCount(0);
 });

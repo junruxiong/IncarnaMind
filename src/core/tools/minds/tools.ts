@@ -23,7 +23,7 @@
  * nothing says why (`MindProblem`). What the model reads back says what was
  * done, or why nothing was, so its reply can say so.
  *
- * Its own changes still waiting are the assistant's to revise (#893):
+ * Its own changes still waiting are the assistant's to revise:
  * `edit_mind` over them rewrites that waiting text in place, by its
  * instruction or with new `content`, so "make it longer" leaves one version.
  * Over changes it can't revise, it changes nothing, and says so.
@@ -333,7 +333,6 @@ const changes = (count: number) => (count === 1 ? "1 change" : `${count} changes
 const WAITING =
   "They wait in the Mind for the User to accept or reject them; until then nothing of the User's text has changed.";
 
-/** Changes waiting where the model asked to change text, which it can't revise (#893): what it reads. */
 function waitingMessage(name: string, count: number, mixed: boolean): string {
   const how =
     "Make no other change for this request: don't add the text elsewhere or make a new Mind.";
@@ -388,13 +387,11 @@ function notProposed(result: EditWithAiResult, mind: ChangeableMind): Refusal | 
   }
 }
 
-/** A change's count of the Citations in the text it wrote, and of the markers left out for want of one. */
 const citedIn = ({ cited, unrecorded }: { cited: number; unrecorded: number }) => ({
   ...(cited > 0 && { cited }),
   ...(unrecorded > 0 && { unrecorded }),
 });
 
-/** What the model reads of the Citations in text it wrote into a Mind that didn't hold. */
 function citationNotes({ notFound, unrecorded }: { notFound: number; unrecorded: number }) {
   return [
     ...(notFound > 0
@@ -410,7 +407,6 @@ function citationNotes({ notFound, unrecorded }: { notFound: number; unrecorded:
   ];
 }
 
-/** The words of a stretch, its paragraphs and headings a blank line apart. */
 function stretchText(blocks: Y.XmlFragment, { from, to }: Stretch): string {
   const all = textBlocks(blocks).map((each) => each.element);
   const first = all.findIndex((element) => idOf(element) === from.blockId);
@@ -673,7 +669,6 @@ export function mindTools(options: MindToolsOptions): Tool[] {
       "The text, in Markdown, cited as an Answer is, with markers like [^1] for Citations recorded with cite. A new section starts with its heading. Write it last, after the other fields.",
   };
 
-  /** What the model reads of a revision of its own waiting text, which `change` holds now. */
   const revisedText = (name: string, change: MindChange, went: string): string =>
     `Revised your own waiting text in “${name}”${went}: the old version of it is gone, and ${changes(change.proposals)} wait there in its place for the User to accept or reject. Nothing of the User's text changed.`;
 
@@ -689,6 +684,7 @@ export function mindTools(options: MindToolsOptions): Tool[] {
   ): { change: MindChange; notFound: number; unrecorded: number } => {
     const { blocks, cited, notFound, unrecorded } = options.blocksOf(markdown);
     const request = randomUUID();
+    minds.checkpoint(mind.id);
     const ids = minds.edit(mind.id, (note) => {
       const written = replaceOwn(note, own, blocks.map(createElement), request);
       const doc = note.doc;
@@ -717,7 +713,6 @@ export function mindTools(options: MindToolsOptions): Tool[] {
     return { change, notFound, unrecorded };
   };
 
-  /** The changes still waiting over a stretch that the assistant can't revise: the call refuses. */
   const refuseWaiting = (mind: ChangeableMind, waiting: { count: number; mixed: boolean }) =>
     new Refusal(
       { kind: "waiting", mindId: mind.id, ...waiting },

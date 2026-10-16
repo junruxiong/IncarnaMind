@@ -1,9 +1,10 @@
 import { describe, expect, test } from "vitest";
-import type { AnswerToolCall } from "../../src/core";
+import type { AnswerToolCall, ConversationAnswer, ConversationMessage } from "../../src/core";
+import { conversationContext, estimateTokens } from "../../src/core/answers/context";
 import { toolRecord, toolRecordLines } from "../../src/core/answers/toolRecord";
 
 /**
- * The record of what an Answer's Tool calls really did (#893), as the next
+ * The record of what an Answer's Tool calls really did, as the next
  * Question reads it: what each changed and in which Mind, or why nothing
  * changed, from the calls' cards alone.
  */
@@ -92,11 +93,11 @@ describe("The record of an Answer's Tool calls", () => {
     ).toEqual([
       "- search_documents “tides”: 8 Passages",
       "- search_documents “moon”: failed",
-      "- create_mind: made the Mind “Tide notes”, its text as 7 changes waiting for the User",
+      "- create_mind: made the Mind “Tide notes” and proposed 7 changes, waiting for the User",
       "- create_mind: made the Mind “Empty”, empty",
       "- add_to_mind “Tide notes”: proposed 1 new Block, waiting for the User",
-      "- edit_mind “Tide notes” (section “Summary”): proposed 2 changes waiting for the User",
-      "- edit_mind “Tide notes”: revised your own waiting text; it is gone, and 7 changes waiting for the User in its place",
+      "- edit_mind “Tide notes” (section “Summary”): proposed 2 changes, waiting for the User",
+      "- edit_mind “Tide notes”: revised your own waiting text in place, and proposed 7 changes, waiting for the User",
       "- edit_mind “Q3 review”: no change was needed",
       "- edit_mind “Tide notes”: nothing changed: 12 changes the assistant can't revise waited there for the User",
       "- read_mind “Chapter 9”: couldn't read it: no Mind is called “Chapter 9”",
@@ -105,7 +106,7 @@ describe("The record of an Answer's Tool calls", () => {
     ]);
   });
 
-  // protects=the record says how many checked Citations a change wrote and how many markers it left out, and that the reply's Citations are real; fails_when=a page whose Citations were lost reads as cited, or the reply's read as made up; no_claim=none beyond protects.
+  // protects=the record says how many Citations a change wrote and how many markers it left out, and how many the reply holds; fails_when=a page whose Citations were lost reads as cited, or the reply's are left out; no_claim=none beyond protects.
   test("the Citations a change wrote, the markers it left out, and the reply's", () => {
     const made = call({
       tool: "create_mind",
@@ -118,9 +119,9 @@ describe("The record of an Answer's Tool calls", () => {
       mindChange: { mindId: "m1", created: false, request: "r", proposals: 2, unrecorded: 3 },
     });
     expect(toolRecord([made, lost], names, 9).split("\n").slice(2, -1)).toEqual([
-      "- create_mind: made the Mind “Tide notes”, its text as 7 changes waiting for the User, with 6 checked Citations",
+      "- create_mind: made the Mind “Tide notes” and proposed 7 changes, waiting for the User, with 6 Citations",
       "- add_to_mind “Tide notes”: proposed 2 new Blocks, waiting for the User; 3 markers had no Citation recorded with cite, so they were left out",
-      "- cite: 9 Citations in your reply, checked against their Documents; each reads as its source in brackets, like [Tides, p. 3]",
+      "- cite: 9 Citations in your reply; each reads as its source in brackets, like [Tides, p. 3]",
     ]);
   });
 
@@ -139,6 +140,83 @@ describe("The record of an Answer's Tool calls", () => {
         "- read_mind “Tide notes”: read it",
         "</tool-record>",
       ].join("\n"),
+    );
+  });
+});
+
+describe("A record within the context's budget", () => {
+  const searches = Array.from({ length: 12 }, (_, at) =>
+    call({
+      tool: "search_documents",
+      source: "documents",
+      input: { query: `tides and the moon, part ${at + 1}` },
+      resultCount: 8,
+    }),
+  );
+  const answer = (toolCalls: AnswerToolCall[], text: string): ConversationAnswer => ({
+    kind: "answer",
+    id: "a1",
+    conversationId: "c",
+    questionId: "q1",
+    text,
+    citations: [],
+    figures: [],
+    model: null,
+    status: "done",
+    errorKind: null,
+    errorMessage: null,
+    citationSupport: null,
+    toolCalls,
+    textOrigin: null,
+    read: null,
+    steps: null,
+    createdAt: "2026-10-16T00:00:00.000Z",
+    updatedAt: "2026-10-16T00:00:00.000Z",
+  });
+  const earlier = (reply: ConversationAnswer): ConversationMessage[] => [
+    {
+      kind: "question",
+      id: "q1",
+      conversationId: "c",
+      text: "write a summary page",
+      askedFrom: null,
+      focus: null,
+      scope: null,
+      model: null,
+      forcedSkill: null,
+      createdAt: "2026-10-16T00:00:00.000Z",
+    },
+    reply,
+  ];
+  const QUESTION = "make it longer";
+  const sent = (messages: ConversationMessage[], budget: number) =>
+    conversationContext(messages, QUESTION, { budget, mindNames: names })
+      .messages.map((message) => message.content)
+      .join("\n\n");
+
+  // protects=a record that doesn't fit whole is left out, never cut, and nothing older than it is kept; fails_when=part of a record is sent, or the Answer before it comes without it; no_claim=none beyond protects.
+  test("a record that doesn't fit whole is left out with all before it", () => {
+    const reply = answer(searches, "The papers say the moon drives the tides. ".repeat(4));
+    const record = toolRecord(searches, names);
+    const budget = estimateTokens(QUESTION) + estimateTokens(record) - 20;
+
+    expect(sent(earlier(reply), budget)).toBe(QUESTION);
+  });
+
+  // protects=a record whose Answer was left out goes too; fails_when=the record is sent without the Answer it is about; no_claim=none beyond protects.
+  test("a record whose Answer was left out goes with it", () => {
+    const made = call({
+      tool: "create_mind",
+      source: "minds",
+      mindChange: { mindId: "m1", created: true, request: "r", proposals: 2 },
+    });
+    const reply = answer([made], "The page sums up both papers. ".repeat(80));
+    const record = toolRecord([made], names);
+    const budget = estimateTokens(QUESTION) + estimateTokens(record) + 10;
+
+    expect(sent(earlier(reply), budget)).toBe(QUESTION);
+    expect(sent(earlier(reply), 100_000)).toContain(
+      `The page sums up both papers.\n\n${record}\n\n${QUESTION}`,
     );
   });
 });
