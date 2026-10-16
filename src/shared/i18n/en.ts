@@ -912,6 +912,19 @@ export const en = {
   "viewer.markdown.imageMissing": "Image not found",
   "viewer.web.picturesLeftOut.one": "1 picture wasn't saved: over the limit for a page",
   "viewer.web.picturesLeftOut": "{count} pictures weren't saved: over the limit for a page",
+  "viewer.web.look.saving": "Saving the page as it looks…",
+  "viewer.web.look.saved": "Saved as it looked on {date}",
+  "viewer.web.look.show": "Show as it looked",
+  "viewer.web.look.showing": "As it looked on {date}",
+  "viewer.web.look.showText": "Show the text",
+  "viewer.web.look.failed.timed-out":
+    "The page as it looks wasn't kept: it didn't finish loading in 30 seconds.",
+  "viewer.web.look.failed.unreachable": "The page as it looks wasn't kept: it couldn't be loaded.",
+  "viewer.web.look.failed.too-large":
+    "The page as it looks wasn't kept: its PDF would be over 50 MB.",
+  "viewer.web.look.failed.stopped":
+    "The page as it looks wasn't kept: IncarnaMind stopped while making it.",
+  "viewer.web.look.failed.failed": "The page as it looks wasn't kept.",
   "viewer.web.pictureNotSaved": "Not saved with the page",
   "viewer.docx.comment": "Comment by {author}",
 
@@ -1192,6 +1205,8 @@ export const en = {
   "webPages.add.title": "Add web pages",
   "webPages.add.note":
     "Paste an address, or several, one per line. Each page is fetched once, from this computer, with the article's pictures, which may come from the site's image servers, and kept as a Document whose quotes can be checked. Nothing else on the page is loaded.",
+  "webPages.add.note.keepLook":
+    "Paste an address, or several, one per line. Each page is fetched once, from this computer, with the article's pictures, which may come from the site's image servers, and kept as a Document whose quotes can be checked.",
   "webPages.add.label": "Addresses",
   "webPages.add.invalid": "Not a web address: {line}",
   "webPages.add.cancel": "Cancel",
@@ -1205,6 +1220,9 @@ export const en = {
   "webPages.notAdded": "Not added: {reason}",
   "webPages.fetchAgainFailed": "Couldn't fetch “{name}” again: {reason}",
   "webPages.tryAgain": "Try again",
+  "webPages.add.keepLook": "Keep the page as it looks",
+  "webPages.keepLook.body":
+    "Also keeps a PDF of the page as you saw it. Making it loads the page again, so the sites it draws from see a visit.",
   "webPages.reason.invalid-address": "it isn't a web address",
   "webPages.reason.unreachable": "the site can't be reached",
   "webPages.reason.timed-out": "the site took too long to answer",
@@ -1528,23 +1546,20 @@ export const en = {
   "setup.waiting": "Waiting for you to choose a model",
   "setup.chatgpt.use": "Use my ChatGPT plan",
   "setup.chatgpt.line":
-    "Plus or Pro · No key needed · Your Questions, the Mind you're in, Passages from your Documents, and Document text for Tags go to OpenAI under your ChatGPT account.",
-  "setup.deepseek.use": "Paste a DeepSeek key",
-  "setup.deepseek.line":
-    "Your Questions, the Mind you're in, Passages from your Documents, and Document text for Tags go to DeepSeek under your own key.",
-  "setup.how": "How do I get one?",
+    "If you pay for ChatGPT Plus or Pro · No key needed · Your Questions, the Mind you're in, Passages from your Documents, and Document text for Tags go to OpenAI under your ChatGPT account.",
+  "setup.chatgpt.line.china":
+    "If you pay for ChatGPT Plus or Pro (not in mainland China) · No key needed · Your Questions, the Mind you're in, Passages from your Documents, and Document text for Tags go to OpenAI under your ChatGPT account.",
+  "setup.key.use": "Paste an API key",
+  "setup.key.for": "From OpenAI, Anthropic, Google, DeepSeek and more, yours or your company's.",
+  "setup.back": "Back",
   "setup.getOllama": "Get Ollama",
   "setup.other": "Other ways",
-  "setup.way.key": "Paste a key",
-  "setup.way.key.line": "From Anthropic, OpenAI, Google, DeepSeek and more.",
   "setup.way.local": "Use a model on this computer",
   "setup.way.local.line":
     "Free and private. Needs the free Ollama app. Slower, and cites less reliably.",
   "setup.way.local.running":
     "Ollama is running here. Free and private; slower, and cites less reliably.",
   "setup.way.local.notRunning": "Ollama isn't running on this computer. It's free to get.",
-  "setup.way.chatgpt": "Sign in with ChatGPT",
-  "setup.way.chatgpt.line": "Plus or Pro. Not available in mainland China.",
   "setup.claude.title": "Already pay for Claude?",
   "setup.claude.line":
     "Anthropic doesn’t let other apps use a Claude plan. You can ask your Documents in the Claude app instead.",
@@ -1622,7 +1637,16 @@ export const en = {
   "providers.form.moreShort": "More…",
   "providers.form.whereKey": "Where do I find it?",
   "providers.form.anotherModel": "Another model…",
-  "providers.form.recommended": "Recommended: {model}",
+  "providers.form.modelHint": "{model} · {hint}",
+  "providers.form.hint.answers": "Recommended",
+  "providers.form.hint.strongest": "Most capable",
+  "providers.form.hint.quickTasks": "Fast and cheap",
+  "providers.form.hint.images": "Good with images and scans",
+  "providers.form.modelExample": "e.g. {model}",
+  "providers.form.modelId": "Model id",
+  "providers.form.modelIdHint": "The model's id, as the company's documentation writes it.",
+  "providers.form.title": "Paste your {provider} key",
+  "providers.form.title.server": "Connect an OpenAI-compatible server",
   "providers.form.useKey": "Use this key",
   "providers.untested": "Not yet tested for checked Citations",
   "providers.form.checking": "Checking the key…",
@@ -2389,7 +2413,9 @@ export const en = {
   "cost.cap.interrupted": "{count} requests were interrupted; their cost isn’t known.",
   "cost.cap.amount": "Monthly cap",
   "cost.cap.currency": "Currency",
-  "cost.provider.thisMonth": "This month: {spent}",
+  "cost.provider.thisMonth": "This month: {spent} spent",
+  "cost.setAside": "{amount} set aside for work in progress",
+  "cost.setAside.hint": "Kept aside so running work can't go over your monthly limit",
   "cost.provider.unpriced": "This month: {tokens} tokens, price unknown",
 
   "citation.label": "Citation {number}: {document}. {badge}",
@@ -2758,6 +2784,10 @@ export const en = {
   "aiStatement.sentences.contradicted": "Contradicted",
   "aiStatement.sentences.recheck": "Needs re-check",
   "aiStatement.sentences.notChecked": "Not checked",
+  "aiStatement.unread.one":
+    "When these sentences were checked, 1 file they were checked against couldn't be read, so the checks didn't search it:",
+  "aiStatement.unread":
+    "When these sentences were checked, {count} files they were checked against couldn't be read, so the checks didn't search them:",
   "aiStatement.note":
     "Schools have their own forms for declaring AI use. Use these counts to fill in yours.",
   "export.questionsLeftOut.one": "1 Question is left out.",
@@ -2871,6 +2901,10 @@ export const en = {
   "error.document.fileGone": "The Document's file isn't there to read.",
   "error.document.fileCantOpen": "The Document's file can't be opened.",
   "error.document.noSuchPicture": "The Document shows no such picture.",
+  "error.document.idRequired": "A Document id is required.",
+  "error.webPage.keepLookNotBoolean": "Whether to keep a page as it looks must be true or false.",
+  "error.webPage.lookNotWebPage": "Only a web page can be kept as it looks.",
+  "error.webPage.lookGone": "The PDF of how this page looked is gone.",
   "error.document.notFailed": "Only a Document that failed to process can be retried.",
   "error.document.notPdf": "Only a PDF is opened with a password.",
   "error.document.passwordMissing": "Type the PDF's password to open it.",
@@ -3047,11 +3081,13 @@ export const en = {
   "error.privacy.usageDataLocalMode":
     "Usage data stays off while “Keep everything on this computer” is on.",
   "error.check.claimTooLong": "The claim is too long to check: at most {max} characters.",
-  "error.check.localMode": "Local mode is on, and the model isn't on this computer.",
+  "error.check.localMode":
+    "“Keep everything on this computer” is on, and the model isn't on this computer.",
   "error.check.declined":
     "You declined sending the claim to the model's service, so nothing was sent.",
   "error.tagging.noModel": "Choose a classification model.",
-  "error.tagging.cloudPaused": "Cloud classification is paused in local mode.",
+  "error.tagging.cloudPaused":
+    "Cloud classification is paused while “Keep everything on this computer” is on.",
   "error.tagging.jevNotSetUp": "Jev isn't set up.",
   "error.tagging.jevKeyUnreadable": "The Jev key can't be read on this device.",
   "error.tagging.startOllama": "Start Ollama to use automatic local classification.",
@@ -3703,6 +3739,8 @@ export const en = {
   "web.call.notSaved": "Couldn't save {address}: {reason}",
   "web.call.open": "Open",
   "web.settings.title": "Search the web",
+  "web.settings.pages.title": "Saved web pages",
+  "web.settings.keepLook": "Keep pages as they look",
   "web.settings.switch": "Let Answers search the web",
   "web.settings.body":
     "Only when a Question asks for it. Each web page an Answer uses is saved as a Document, so its Citation can be checked.",
@@ -4175,7 +4213,7 @@ export const en = {
   "wordImport.addOriginal": "Also add the original to the Library, so Answers can cite it",
   "wordImport.newerDraft": "A newer draft of “{name}”? Keep both as versions",
   "wordImport.layoutNotShown":
-    "This file’s layout (fonts, colours, shading and aligned columns) isn’t shown in the Mind. It’s kept, and comes back when you export to Word.",
+    "Some of this file’s layout (table lines and aligned columns) isn’t shown in the Mind yet. It’s kept, and comes back when you export to Word.",
   "wordImport.import": "Import",
   "wordImport.importing": "Importing…",
   "wordImport.cancel": "Cancel",
@@ -4196,6 +4234,12 @@ export const en = {
     "“{name}” couldn’t be read. It may have moved, or IncarnaMind isn’t allowed to open it.",
   "wordImport.from": "From {name}",
   "wordImport.keepsStyles": "Export keeps its styles",
+  "look.title": "Look",
+  "look.word": "The Word file’s look",
+  "look.plain": "Plain Mind",
+  "look.command.word": "Look: the Word file’s look",
+  "look.command.plain": "Look: Plain Mind",
+  "look.keywords": "Word style format plain",
   "wordImport.from.open": "Open {name} beside it",
   "wordImport.original.more": "More for {name}",
   "wordImport.openOriginal": "Open the original",

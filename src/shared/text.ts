@@ -42,6 +42,13 @@ export const CJK = "\\p{Script=Han}\\p{Script=Hiragana}\\p{Script=Katakana}\\p{S
 
 const cjkCharacter = new RegExp(`[${CJK}]`, "u");
 
+/** A name read for comparing: its letters and digits, in lower case ("Gradient Descent: The Ultimate Optimizer" is a file named without its colon). */
+export const nameKey = (name: string): string =>
+  name
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, "");
+
 export const isCjk = (character: string): boolean => cjkCharacter.test(character);
 
 /**
