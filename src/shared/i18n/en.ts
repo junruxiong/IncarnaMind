@@ -2815,6 +2815,7 @@ export const en = {
   "checkRecord.title": "Check record: {name}",
   "checkRecord.summary.mind": "Mind",
   "checkRecord.summary.exported": "Exported",
+  "checkRecord.summary.exportedUtc": "Exported (UTC)",
   "checkRecord.summary.folder": "Documents searched",
   "checkRecord.summary.allDocuments": "All Documents",
   "checkRecord.summary.folderGone": "A deleted Folder",

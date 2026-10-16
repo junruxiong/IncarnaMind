@@ -34,15 +34,12 @@ import type { ModelDescription } from "../chatModelNames";
 import { type Footnote, type Inline, readBlock, reviewReading } from "../mindText";
 import { layout } from "../proposals/write";
 
-/** Whose words a checked sentence is: the User's, written by an AI model, or someone else's (#78, #95). */
 export type TextOrigin = "user" | "ai" | "other";
 
-/** The Document version a check rests on, as its file was when it was checked. */
 export interface RecordDocument {
   name: string;
   /** The file's name where it is kept, or a web page's address; null once the Document is gone. */
   file: string | null;
-  /** Whether the Document has been deleted, or unlinked with its Linked folder. */
   deleted: boolean;
   /** In bytes, when this version is the file as it is now. */
   size: number | null;
@@ -53,16 +50,13 @@ export interface RecordDocument {
 }
 
 interface RecordItemFields {
-  /** The sentence checked, or the one a Citation stands in. */
   text: string;
   origin: TextOrigin;
-  /** What the evidence says, in the line the check kept. */
   says: string | null;
   /** Null when no Document backs it: an unsupported sentence. */
   evidence: RecordDocument | null;
 }
 
-/** What a model's check of a sentence kept: who ran it, when (ISO 8601 UTC) and where it searched. */
 export interface SentenceCheck {
   model: ModelDescription | null;
   at: string | null;
@@ -88,7 +82,6 @@ export interface RecordSources {
   folderId: string | null;
   t: Translate;
   model(providerId: string | null, modelId: string | null): ModelDescription | null;
-  /** A Citation's quote as its Document's text reads it (#905): a PDF's split words whole again. */
   readQuote(attributes: Partial<CitationAttributes>): string | null;
 }
 
@@ -148,7 +141,6 @@ function holdsAiText(element: Y.XmlElement, from: number, to: number): boolean {
   return false;
 }
 
-/** Every checked sentence and every Citation of the Mind, each in reading order. */
 export function readRecord(sources: RecordSources): {
   sentences: SentenceItem[];
   citations: CitationItem[];
