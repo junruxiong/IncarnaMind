@@ -1912,8 +1912,7 @@ export const zhCN = {
   "claudePlan.way.line": "Pro、Max 或 Team · 用你的 Claude 账号登录",
   "claudePlan.notice.title": "使用你的 Claude 订阅",
   "claudePlan.usage": "回答会计入你 Claude 订阅的用量限额。",
-  "claudePlan.sends":
-    "你的问题、当前 Mind、文档中的相关段落，以及用于打标签的文档文字，会以你的账号发送给 Anthropic。",
+  "claudePlan.sends": "登录后，以下内容会通过你的 Claude 账号发送给 Anthropic：{sends}。",
   "claudePlan.off": "在这里登录之前不会启用，随时可以在“设置 › 模型”中退出登录。",
   "claudePlan.signIn": "用 Claude 账号登录",
   "claudePlan.cancel": "取消",

@@ -119,7 +119,7 @@ export const forgetClaudeSignInFailure = (): void => useClaudeSignIn.setState({ 
  */
 export function signInToClaudeAgain(): Promise<boolean> {
   const signingIn = signInWithClaude({ keepDefault: true });
-  useAppStore.getState().openSettings("models", "claude-plan");
+  useAppStore.getState().openSettings("models", "claude-account");
   return signingIn;
 }
 

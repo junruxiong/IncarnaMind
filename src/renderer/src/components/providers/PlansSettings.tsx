@@ -16,7 +16,7 @@ import { ClaudePlanRow } from "./ClaudePlan";
 
 const GOOGLE_CREDITS = "https://developers.google.com/program";
 
-const ROUTES = ["claude-account", "copilot"] as const;
+const ROUTES = ["copilot"] as const;
 
 /**
  * Settings → Models → "Already pay for a plan?": the routes for a plan the User already has.

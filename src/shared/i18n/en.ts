@@ -2010,8 +2010,7 @@ export const en = {
   "claudePlan.way.line": "Pro, Max or Team · Sign in with your Claude account",
   "claudePlan.notice.title": "Use your Claude plan",
   "claudePlan.usage": "Answers count toward your Claude plan's usage limits.",
-  "claudePlan.sends":
-    "Your Questions, the Mind you're in, passages from your Documents and Document text for Tags go to Anthropic under your account.",
+  "claudePlan.sends": "Signing in lets Anthropic receive, under your Claude account: {sends}.",
   "claudePlan.off":
     "It stays off until you sign in here, and you can sign out any time in Settings › Models.",
   "claudePlan.signIn": "Sign in with Claude",

@@ -1,5 +1,6 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { ClaudeAccount } from "../../../../core/api";
+import { chosenFlowSummary } from "../../chosenFlows";
 import {
   cancelSignInWithClaude,
   forgetClaudeSignInFailure,
@@ -11,6 +12,7 @@ import {
 import { CLAUDE_SIGN_IN_FAILURES } from "../../claudeSignInFailures";
 import { core } from "../../core";
 import { useGap, useT } from "../../i18n";
+import { useSettingsTarget } from "../../settingsTarget";
 import { useAppStore } from "../../store";
 import { ChevronDownLineIcon, ChevronRightLineIcon } from "../lineIcons";
 import { ProblemMark } from "../ProblemLine";
@@ -29,6 +31,8 @@ const PASTE: PasteWords = {
   },
 };
 
+const TARGET = ["claude-account"] as const;
+
 const linkClass = "font-semibold text-accent underline-offset-2 hover:underline";
 
 function useOffered(): boolean {
@@ -38,9 +42,10 @@ function useOffered(): boolean {
 function useRowOpen(): [boolean, (open: boolean) => void] {
   const waiting = useClaudeSignIn((state) => state.waiting);
   const signedIn = useClaudeSignIn((state) => state.status?.account.state === "signed-in");
-  const [open, setOpen] = useState(waiting);
-  // A sign-in started anywhere (this row, ⌘K, a problem line) opens the row, so its wait and
-  // how it ended show here.
+  const [open, setOpen] = useState(false);
+  // A sign-in started anywhere (this row, ⌘K, a problem line) opens the row, so its wait and how
+  // it ended show here. Opened by this effect, not at mount, its field takes the focus after
+  // Settings has given the dialog its own.
   useEffect(() => {
     if (waiting) setOpen(true);
   }, [waiting]);
@@ -91,17 +96,12 @@ export function ClaudePlanRow() {
   const t = useT();
   const status = useClaudeAccount();
   const [open, setOpen] = useRowOpen();
-  const row = useRef<HTMLLIElement>(null);
   const offered = status?.available === true;
-  const openedAt = useAppStore((state) => state.settingsAt === "claude-plan");
   const signedIn = status?.account.state === "signed-in";
-
-  useEffect(() => {
-    if (!offered || !openedAt) return;
-    useAppStore.setState({ settingsAt: null });
+  const reached = useCallback(() => {
     if (!signedIn) setOpen(true);
-    row.current?.scrollIntoView({ block: "center" });
-  }, [offered, openedAt, signedIn, setOpen]);
+  }, [signedIn, setOpen]);
+  const row = useSettingsTarget<HTMLLIElement>(TARGET, offered, reached);
 
   if (!status || !offered) return null;
   const { account } = status;
@@ -258,7 +258,7 @@ function ClaudePlanSignIn({
         <li data-testid="claude-plan-usage" className="font-semibold text-ink">
           {t("claudePlan.usage")}
         </li>
-        <li>{t("claudePlan.sends")}</li>
+        <li>{t("claudePlan.sends", { sends: chosenFlowSummary(t) })}</li>
         <li>{t("claudePlan.off")}</li>
       </ul>
       <ChatGptStorageNotice storage={storage} />
