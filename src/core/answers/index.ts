@@ -2269,7 +2269,7 @@ export function createAnswers(options: AnswersOptions) {
         if (readiness.ready || readiness.reason !== "local-mode") continue;
         generation.finish({
           status: "failed",
-          error: { kind: "local-mode", message: "Stopped: local mode is on." },
+          error: { kind: "local-mode", message: "Stopped: “Keep everything on this computer” is on." },
         });
       }
     },

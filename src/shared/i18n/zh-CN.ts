@@ -2209,7 +2209,7 @@ export const zhCN = {
   "research.plan.webOff": "联网搜索已关闭",
   "research.plan.webOff.action": "开启",
   "research.plan.webUnavailable": "{model} 不能联网搜索",
-  "research.plan.localMode": "本地模式已开启：不会联网搜索",
+  "research.plan.localMode": "已开启“所有内容都留在这台电脑上”：不会联网搜索",
   "task.notify.needsYou": "{task}需要你处理",
   "task.notify.finished": "{task}已完成",
   "task.notify.failed": "{task}未能完成",
