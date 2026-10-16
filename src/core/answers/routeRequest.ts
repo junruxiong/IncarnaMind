@@ -25,11 +25,15 @@ export interface RequestRoute {
 const FILLER =
   /^(?:(?:please|pls|i mean|ok|okay|now|then|no|yes|so|just|actually|great|thanks|let's|help me|go ahead and|i'd like you to|i would like you to)[,!]?\s+)*/;
 const ZH_FILLER = /^(?:请|麻烦你?|帮我|好的，?|那就|就)*/;
-// A question hides in free text too: "add which part to my notes", "把哪些内容加到我的笔记里".
-const ZH_ASKS = /哪|是否|可否|能不能|要不要|怎|啥|什么|(\p{Script=Han})[不没]\1/u;
+// Question words and hedges are a closed class: anywhere, even in free text ("add which part to
+// my notes", "把哪些内容加到我的笔记里"), they leave the request unclear.
+const ASKS =
+  /\b(?:who|whom|whose|what|which|where|when|why|how|whether|if|maybe|perhaps|possibly|probably|unsure|idk|wdyt|lmk|eh|huh|can|could|would|should|do|does|did|you|think|reckon|guess|suppose)\b/;
+const ZH_ASKS =
+  /谁|什么|啥|哪|多少|几|何|如何|怎|是否|可否|能否|如果|要是|或许|也许|大概|可能|吗|呢|吧|么|嘛|(\p{Script=Han})[不没]\1/u;
 
 const WORD =
-  "(?!(?:or|and|if|but|unless|then|is|does|do|did|would|should|could|can|will|you|i|think|reckon|guess|suppose|what|which|how|why|whether|maybe|perhaps|ok|okay|right|yes|yeah|no|not|thoughts|idea|worth|fine)\\b)[\\p{L}\\p{N}'’-]+";
+  "(?!(?:or|and|but|unless|then|is|will|i|ok|okay|right|yes|yeah|no|not|thoughts|idea|worth|fine)\\b)[\\p{L}\\p{N}'’-]+";
 const WORDS = `(?:${WORD} ?){1,8}`;
 const LANGUAGE = "(?:chinese|english|french|german|spanish|japanese|korean|plain english)";
 const SOME = "(?:these|the|both|this|all|my)(?: \\d+| two)?";
@@ -193,9 +197,10 @@ function plainKind(question: string, { followsAChange, followsAnAnswer }: Reques
     .replace(/\s+/g, " ")
     .toLocaleLowerCase()
     .replace(/[.!]$/, "")
-    .replace(/,? (?:thanks|thank you)$/, "")
+    .replace(/,? (?:thanks|thank you|then)$/, "")
     .replace(/,? (?:please|pls)$/, "")
     .replace(FILLER, "");
+  if (ASKS.test(english)) return null;
   if (matches(EDITS, english)) return WHOLE_MIND.test(english) ? null : "edit";
   if (ADD_IT.test(english)) return followsAnAnswer ? "write" : null;
   if (matches(WRITES, english)) return "write";
