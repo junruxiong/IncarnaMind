@@ -869,7 +869,7 @@ export type MindProblem =
   | { kind: "several"; name: string }
   | { kind: "no-heading"; mindId: string; heading: string }
   | { kind: "no-place"; mindId: string; place: string }
-  | { kind: "several-places"; mindId: string; name: string }
+  | { kind: "several-places"; mindId: string; name: string; adding: boolean }
   | {
       kind: "no-text" | "too-long" | "changed" | "content-not-own" | "stopped" | "no-table";
       mindId: string;
@@ -1475,7 +1475,10 @@ export const MAX_CITED_PAGES = 2;
  * gone. Language-neutral: the label is worded when shown ("p. 4", "slide 4",
  * "Revenue, rows 12–14", "§ 2.1 Sensitivity", "§ 2 Costs, comment by
  * Reviewer", "lines 120–134").
- * - "page", "slide": the cited pages or slides.
+ * - "page", "slide": the cited pages or slides. A PDF's `printed` names the
+ *   first and last page as they call themselves ("xii", "68") when that
+ *   isn't their number in the PDF; `from` and `to` stay the PDF's, which
+ *   open the viewer (#901).
  * - "rows": the rows the quote covers in a sheet (a CSV's has no name), or
  *   the cited block's when it wasn't found.
  * - "section": the heading of the section the quote sits under; null before
@@ -1488,7 +1491,8 @@ export const MAX_CITED_PAGES = 2;
  *   the end of the one it ends in, in ms from the Transcript's start (#136).
  */
 export type CitationLocation =
-  | { kind: "page" | "slide"; from: number; to: number }
+  | { kind: "page"; from: number; to: number; printed?: { from: string; to: string } }
+  | { kind: "slide"; from: number; to: number }
   | { kind: "rows"; sheet: string | null; from: number; to: number }
   | { kind: "lines"; from: number; to: number }
   | { kind: "time"; from: number; to: number }
@@ -3440,7 +3444,8 @@ export interface TestRerankConnectionInput {
  * Where Answers can come from. "ollama" is an OpenAI-compatible server run by
  * Ollama, normally on this computer; it also offers one-click model downloads.
  * "chatgpt" is the User's ChatGPT plan, used through Sign in with ChatGPT
- * instead of an API key (see `ChatGptPlanStatus`).
+ * instead of an API key (see `ChatGptPlanStatus`); "claude-account" the
+ * User's Claude plan, signed in with their Claude account (see `ClaudeAccountStatus`).
  */
 export const chatProviderKinds = [
   "openai",
@@ -3457,6 +3462,7 @@ export const chatProviderKinds = [
   "openai-compatible",
   "ollama",
   "chatgpt",
+  "claude-account",
 ] as const;
 
 export type ChatProviderKind = (typeof chatProviderKinds)[number];
@@ -3566,6 +3572,8 @@ export interface ProviderError {
   wording?: ErrorWording;
   /** "plan-limit": when the plan's limit resets (ISO 8601), when the provider says. */
   resetsAt?: string;
+  /** A Claude account's request: which of the route's problems it is, for its own line. */
+  claudeAccount?: ClaudeAccountProblem;
 }
 
 /**
@@ -5295,7 +5303,6 @@ export type ChatGptAccount =
  */
 export interface ChatGptPlanStatus {
   account: ChatGptAccount;
-  /** A browser sign-in is waiting for the User. */
   signingIn: boolean;
   /**
    * The models Questions can use with the plan, the default first: the
@@ -5361,7 +5368,8 @@ export interface ChatGptSignOutResult {
   status: ChatGptPlanStatus;
 }
 
-export type ChatGptPastedAddressProblem =
+/** Why an address pasted into a waiting sign-in (ChatGPT, Claude) wasn't taken. */
+export type PastedAddressProblem =
   /** It isn't the address the sign-in sends the browser back to, with a code and a state. */
   | "not-sign-in-address"
   /** It is, but for another sign-in, e.g. from an older tab. */
@@ -5369,9 +5377,54 @@ export type ChatGptPastedAddressProblem =
   /** The sign-in already finished, or none is waiting. */
   | "finished";
 
-export type ChatGptPastedAddressResult =
-  | { ok: true }
-  | { ok: false; problem: ChatGptPastedAddressProblem };
+export type PastedAddressResult = { ok: true } | { ok: false; problem: PastedAddressProblem };
+
+// ---------------------------------------------------------------------------
+// Claude account
+
+/** Each said where it happened, with a way back (./providers/claudeAccount/problems.ts). */
+export type ClaudeAccountProblem =
+  /** The User cancelled the sign-in, or didn't finish it in time: nothing was kept. */
+  | "sign-in-cancelled"
+  | "signed-out"
+  /** The sign-in can't be renewed any more: sign in again. */
+  | "sign-in-expired"
+  /** Anthropic refused the sign-in, or a request made with it. */
+  | "refused"
+  /** The plan's usage limit is reached, until `ProviderError.resetsAt` when Anthropic says. */
+  | "plan-limit"
+  /** Anthropic answered in a way this route doesn't know. */
+  | "unexpected-response";
+
+export type ClaudeAccount =
+  | { state: "signed-out" }
+  /** Refreshing the sign-in failed: sign in again. */
+  | { state: "expired" }
+  /** The account and organization as Anthropic named them at sign-in, when it did. */
+  | { state: "signed-in"; email: string | null; organization: string | null };
+
+/** The User's Claude plan for Answers instead of an API key; not offered where this build has no profile for it. */
+export interface ClaudeAccountStatus {
+  available: boolean;
+  /** An experimental sign-in route, which the User is told about before signing in. */
+  experimental: boolean;
+  account: ClaudeAccount;
+  /** A browser sign-in is waiting for the User. */
+  signingIn: boolean;
+}
+
+export type ClaudeSignInErrorKind =
+  | Extract<ClaudeAccountProblem, "sign-in-cancelled" | "refused" | "unexpected-response">
+  /** This build has no client profile for the route. */
+  | "unavailable"
+  /** This device can't store the sign-in securely (see `getSecretStorage`). */
+  | "secret-storage"
+  /** The sign-in didn't work, e.g. a code pasted incompletely: sign in again. */
+  | "failed";
+
+export type ClaudeSignInResult =
+  | { ok: true; status: ClaudeAccountStatus }
+  | { ok: false; error: { kind: ClaudeSignInErrorKind; message: string } };
 
 // ---------------------------------------------------------------------------
 // Secrets
@@ -5623,6 +5676,8 @@ export interface RegisteredDataFlow {
  * - "ollama-pull": Ollama downloads a model from its registry, when the User picks local models.
  * - "chatgpt-sign-in": Sign in with ChatGPT, refreshing it, signing out, and
  *   reading OpenAI's signing keys; listed once the User has signed in.
+ * - "claude-sign-in": signing in with a Claude account and refreshing it;
+ *   listed once the User has started signing in.
  * - "remote-connectors": connecting to each remote Connector that is on, and
  *   signing in to it: its server, and the authorization server it names
  *   (discovery, registration, tokens). One entry per server. Tool calls, which
@@ -5639,6 +5694,7 @@ export const networkTrafficIds = [
   "transcription-model",
   "ollama-pull",
   "chatgpt-sign-in",
+  "claude-sign-in",
   "remote-connectors",
   "usage-data",
 ] as const;
@@ -6540,6 +6596,27 @@ export interface SentenceChecksExported {
   needsRecheck: number;
   /** They went into the file as comments: a Word file, with `commentFailedChecks` on. Otherwise they went out unmarked. */
   commented: boolean;
+}
+
+/** What a Mind's web page to share would hold, for the sheet to show before it is made. */
+export interface SharePagePreview {
+  /** Every Document the Mind cites, in the order it is first cited. */
+  documents: SharedDocument[];
+  /** The file's size with every Citation's card as text, in bytes. */
+  textBytes: number;
+}
+
+export interface SharedDocument {
+  documentId: string;
+  name: string;
+  /** The Citations that cite it. */
+  quotes: number;
+  /** The page pictures they carry: none for a Document without pages, or whose pages weren't saved. */
+  pictures: number;
+  /** About what those pictures add to the file, in bytes. */
+  pictureBytes: number;
+  /** Its Citations' cards stay text, as the User chose (`setSharePageTextOnly`). */
+  textOnly: boolean;
 }
 
 /** A Mind exported as a file, for the host to save where the User chooses. */
@@ -8132,7 +8209,23 @@ export interface CoreApi {
    * return, and the waiting `signInToChatGpt` finishes with it. A refused
    * address changes nothing.
    */
-  pasteChatGptSignInAddress(address: string): Promise<ChatGptPastedAddressResult>;
+  pasteChatGptSignInAddress(address: string): Promise<PastedAddressResult>;
+
+  getClaudeAccount(): Promise<ClaudeAccountStatus>;
+  /**
+   * Waits a few minutes at most for the browser or a pasted code. Signing in
+   * doesn't choose a model: saving the "claude-account" provider does, and
+   * allows its flows (ADR-0022).
+   */
+  signInToClaude(): Promise<ClaudeSignInResult>;
+  /** Stops waiting for a browser sign-in. Nothing is kept. */
+  cancelClaudeSignIn(): Promise<void>;
+  /** Opens the waiting sign-in's page in the browser again; false when none is waiting. */
+  reopenClaudeSignIn(): Promise<boolean>;
+  /** A saved Claude account then needs a new sign-in. */
+  signOutOfClaude(): Promise<ClaudeAccountStatus>;
+  /** Checked exactly as the browser's own return; a refused one changes nothing. */
+  pasteClaudeSignInAddress(address: string): Promise<PastedAddressResult>;
 
   /**
    * Every registered external data flow, to each service it currently goes to
@@ -8468,6 +8561,16 @@ export interface CoreApi {
    */
   exportMind(mindId: string, options: ExportMindOptions): Promise<MindExport>;
   /**
+   * What the Mind's web page to share would hold with these options (Questions, someone's changes
+   * waiting): its Documents, their quotes and pictures.
+   */
+  previewSharePage(mindId: string, options: ExportMindOptions): Promise<SharePagePreview>;
+  /**
+   * The Documents whose Citations the Mind's web page to share keeps as text, without their
+   * page pictures; kept with the Mind.
+   */
+  setSharePageTextOnly(mindId: string, documentIds: string[]): Promise<void>;
+  /**
    * Exports a Mind (as `exportMind`) into the Output location, under the
    * next free name, asking where new files go the first time.
    */
@@ -8704,6 +8807,8 @@ export interface CoreEvents {
   "references.importProgress": { done: number; total: number };
   /** The ChatGPT sign-in changed: started, finished, signed out, or expired. */
   "chatGptPlan.changed": ChatGptPlanStatus;
+  /** The Claude account sign-in changed: started, finished, signed out, or expired. */
+  "claudeAccount.changed": ClaudeAccountStatus;
   /** Jev was set up, changed or removed on this device. */
   "jev.changed": JevSettings;
   /**
@@ -8934,6 +9039,12 @@ const methods: Record<CoreApiMethod, true> = {
   reopenChatGptSignIn: true,
   signOutOfChatGpt: true,
   pasteChatGptSignInAddress: true,
+  getClaudeAccount: true,
+  signInToClaude: true,
+  cancelClaudeSignIn: true,
+  reopenClaudeSignIn: true,
+  signOutOfClaude: true,
+  pasteClaudeSignInAddress: true,
   listDataFlows: true,
   listConsentRequests: true,
   respondToConsent: true,
@@ -9023,6 +9134,8 @@ const methods: Record<CoreApiMethod, true> = {
   restoreBuiltInSkills: true,
   previewMindExport: true,
   exportMind: true,
+  previewSharePage: true,
+  setSharePageTextOnly: true,
   saveMindExport: true,
   formatCitations: true,
   getMindCitationStyle: true,
