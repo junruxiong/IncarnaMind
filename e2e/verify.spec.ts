@@ -20,7 +20,7 @@ import {
  * Verify (#97): "Verify a document…" in the + menu takes a PDF someone else
  * wrote. It opens beside the Mind made of its text, whose claims are found;
  * the line under the title checks them, and each gets a mark in the margin.
- * The scripted model (src/main/fakeChatModel.ts) takes every sentence but
+ * The scripted model (src/main/fakeChat/) takes every sentence but
  * thanks for a claim, finds one supported when it shares three words with a
  * line of a Document, contradicted when it also has a number the line
  * doesn't, unsupported otherwise, and refuses a sentence with "refuse". Set

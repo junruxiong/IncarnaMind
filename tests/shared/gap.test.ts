@@ -29,4 +29,21 @@ describe("The gap between two pieces of text on a screen", () => {
     expect(join("zh-CN")).toContain("声音。音频");
     expect(join("en")).toContain("meeting. The audio");
   });
+
+  test("is none beside a space already there, so a name in a spaced template keeps one space", () => {
+    expect(gap("zh-CN", "发送给 ", "OpenAI")).toBe("");
+    expect(gap("zh-CN", "OpenAI", " 拒绝了这个密钥。")).toBe("");
+  });
+
+  test("puts a provider's name in a Chinese sentence by its script (#890)", () => {
+    const title = (provider: string) => translate("zh-CN", "providers.form.title", { provider });
+    expect(title("Anthropic")).toBe("粘贴 Anthropic 密钥");
+    expect(title("通义千问")).toBe("粘贴通义千问密钥");
+    expect(translate("en", "providers.form.title", { provider: "Anthropic" })).toBe(
+      "Paste your Anthropic key",
+    );
+    expect(translate("zh-CN", "providers.form.keyRefusedNow", { provider: "OpenAI" })).toBe(
+      "OpenAI 拒绝了这个密钥。",
+    );
+  });
 });
