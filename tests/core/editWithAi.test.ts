@@ -651,6 +651,32 @@ describe("Edit with AI", () => {
     expect(pendingProposals(client.blocks)).toEqual([]);
   });
 
+  test("asked to remove a paragraph, a reply of no text but why removes it; no text and no why is a failure", async () => {
+    const { core, mind, client } = await setUp(
+      editingModel(({ passage }) => (passage.startsWith("Pensions") ? "<why>Removed.</why>" : "")),
+    );
+    const pensions = paragraph(text("Pensions match up to 5% of salary."));
+    const leave = paragraph(text("Leave is 25 days."));
+    writeMind(client, [pensions, leave]);
+    await client.settled();
+
+    const removed = await core.editWithAi(
+      wholeParagraph(client, mind.id, pensions.attrs.id, "instruction", "Remove it"),
+    );
+    const failed = await core.editWithAi(
+      wholeParagraph(client, mind.id, leave.attrs.id, "instruction", "Remove it"),
+    );
+
+    expect(removed).toMatchObject({ kind: "proposed" });
+    expect(failed).toMatchObject({ kind: "failed" });
+    expect(shownWithChanges(client)).toEqual([
+      "- Pensions match up to 5% of salary.",
+      "Leave is 25 days.",
+    ]);
+    await resolveChanges(client, "accept");
+    expect(shownWithChanges(client)).toEqual(["Leave is 25 days."]);
+  });
+
   test("a model that fails says why, and nothing is written", async () => {
     const { core, mind, client } = await setUp(
       new MockLanguageModelV4({
