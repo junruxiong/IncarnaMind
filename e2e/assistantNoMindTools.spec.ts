@@ -36,12 +36,17 @@ test.afterEach(async () => {
   await removeDataFolder(dataDir);
 });
 
-async function start(language: "en" | "zh-CN", title: string, text: string) {
+async function start(
+  language: "en" | "zh-CN",
+  title: string,
+  text: string,
+  size = { width: 1440, height: 900 },
+) {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
   await connectLocalChatModel(window, "tiny-no-tools");
   await setLanguage(window, language);
-  await setWindowSize(app, window, 1440, 900);
+  await setWindowSize(app, window, size.width, size.height);
   await newMind(window);
   await expect(window.getByTestId("mind-title")).toBeFocused();
   await window.keyboard.type(title);
@@ -51,15 +56,20 @@ async function start(language: "en" | "zh-CN", title: string, text: string) {
   return { app, window, editor: window.getByTestId("mind-editor") };
 }
 
-/** The line is inside the Answer, its action inside the line, and the thread doesn't scroll sideways. */
 async function expectFits(window: Page, answer: Locator) {
   const line = answer.getByTestId("answer-no-mind-tools");
-  const [lineBox, answerBox, buttonBox] = await Promise.all([
+  const [lineBox, answerBox, buttonBox, textBox, actionsBox] = await Promise.all([
     line.boundingBox(),
     answer.boundingBox(),
     line.getByTestId("answer-no-mind-tools-add").boundingBox(),
+    answer.getByTestId("assistant-answer-text").boundingBox(),
+    answer.getByTestId("answer-actions").boundingBox(),
   ]);
-  if (!lineBox || !answerBox || !buttonBox) throw new Error("The line isn't on screen.");
+  if (!lineBox || !answerBox || !buttonBox || !textBox || !actionsBox) {
+    throw new Error("The line isn't on screen.");
+  }
+  expect(lineBox.y).toBeGreaterThanOrEqual(textBox.y + textBox.height - 0.5);
+  expect(lineBox.y + lineBox.height).toBeLessThanOrEqual(actionsBox.y + 0.5);
   expect(lineBox.x).toBeGreaterThanOrEqual(answerBox.x - 0.5);
   expect(lineBox.x + lineBox.width).toBeLessThanOrEqual(answerBox.x + answerBox.width + 0.5);
   expect(buttonBox.x).toBeGreaterThanOrEqual(lineBox.x - 0.5);
@@ -137,3 +147,27 @@ test("in Chinese, “把它改长一点” after a request to write shows the li
   await expect(editor.locator("p")).toHaveText(["销售很好。"]);
   await app.close();
 });
+
+for (const language of ["en", "zh-CN"] as const) {
+  test(`at 900 px the assistant is docked at the bottom and the line fits it, in ${language}`, async () => {
+    const english = language === "en";
+    const { app, window } = await start(
+      language,
+      english ? "Q3 review" : "第三季度",
+      english ? "The quarter was good." : "销售很好。",
+      { width: 900, height: 760 },
+    );
+
+    const answer = await askInAssistant(
+      window,
+      english ? "write a summary page" : "写一个总结页面",
+    );
+
+    await expect(window.getByTestId("assistant")).toHaveAttribute("data-dock", "bottom");
+    await expect(answer.getByTestId("answer-no-mind-tools")).toContainText(
+      english ? "This model can't write into your Mind itself." : "这个模型不能自己写进你的 Mind。",
+    );
+    await expectFits(window, answer);
+    await app.close();
+  });
+}
