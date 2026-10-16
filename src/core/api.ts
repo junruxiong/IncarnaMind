@@ -4352,7 +4352,6 @@ export interface ClaimCheckAttributes {
   says: string | null;
   /** A figure worked out that decided it; null when a Passage did. */
   calculation: ClaimCalculation | null;
-  /** See `ClaimCheckResult`. */
   citedCaseUnchecked: boolean;
   citedCaseFound: boolean;
   scope: ClaimCheckScope;

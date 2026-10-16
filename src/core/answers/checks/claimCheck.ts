@@ -477,13 +477,10 @@ async function confirmContradiction(
 }
 
 interface Opinions {
-  /** The Documents that are the opinion of a decision the sentence cites. */
   documentIds: ReadonlySet<string>;
-  /** A decision the sentence cites has no opinion among the Documents. */
   missing: boolean;
 }
 
-/** The start of a Document's first Unit: where an opinion's caption or citation is. */
 function startOf(documents: AnswerDocuments, documentId: string, contentHash: string): string {
   const [first] = documents.pageTexts(documentId, contentHash, 1, 1);
   return first?.text ?? documents.pageTexts(documentId, contentHash, null, null)[0]?.text ?? "";
