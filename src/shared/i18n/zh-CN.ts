@@ -3705,6 +3705,8 @@ export const zhCN = {
   "citationStyle.prompt.apa": "APA",
   "citationStyle.prompt.gbt": "GB/T 7714",
   "citationStyle.prompt.more": "更多…",
+  "citationStyle.defaulted": "此 Mind 引用了论文，引用格式已设为 {style}",
+  "citationStyle.change": "更改",
   "citationStyle.prompt.dismiss": "在此 Mind 中不再询问",
   "citationStyle.prompt.dismissed": "此 Mind 中不再询问引用格式",
   "references.title": "参考文献",
