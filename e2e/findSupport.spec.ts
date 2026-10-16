@@ -25,7 +25,7 @@ import {
  * support or Check against Documents in the selection menu. Each sentence
  * gets a mark in the margin, its card says what was found, and the Mind's
  * health under its title counts them. The scripted model (see
- * src/main/fakeChatModel.ts) finds a sentence supported when it shares three
+ * src/main/fakeChat/checks.ts) finds a sentence supported when it shares three
  * words with a line of a Document, contradicted when it also has a number the
  * line doesn't, and otherwise unsupported. Set INCARNAMIND_SCREENSHOTS to a
  * folder to also save screenshots.

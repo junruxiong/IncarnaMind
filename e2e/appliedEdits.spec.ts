@@ -18,8 +18,8 @@ import {
  * An edit the User asks for on the text applies at once (#880): ⌘J, the
  * selection menu's AI actions, and a change asked for in the composer with
  * text selected. A line over it says how many places changed, with Undo and
- * Review changes. The scripted model (src/main/fakeChatModel.ts and
- * src/main/fakeAppliedEdits.ts) does what "replace X with Y" says, shortens
+ * Review changes. The scripted model (src/main/fakeChat/edit.ts and
+ * src/main/fakeChat/appliedEdits.ts) does what "replace X with Y" says, shortens
  * by dropping "very" and "really", gives back only the second paragraph
  * made formal, as Claude Haiku 5.5 did, deletes the second paragraph, and
  * writes a haiku like none of the text. Set INCARNAMIND_SCREENSHOTS to a
