@@ -1133,6 +1133,9 @@ describe("Amounts in brackets are negative (#978)", { timeout: 60_000 }, () => {
       ["(£804.00)", -804],
     ]);
     expect(told(model, "calculate")[0]).not.toContain("Check the sign");
+    expect(told(model, "search_documents")[0]).toContain(
+      "An amount in brackets in these Passages is negative",
+    );
   });
 
   // protects=#978; fails_when=a formula that subtracts an amount in brackets is recorded without telling the model it adds it, or the model's fix is called a marker given twice; no_claim=that a model heeds the line, which a hand check with Claude Haiku 5.5 shows.
