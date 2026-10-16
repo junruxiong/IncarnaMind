@@ -1802,6 +1802,7 @@ export const en = {
   "providers.form.testing": "Testing…",
   "providers.form.save": "Use this service",
   "providers.sends": "When you use it, {provider} receives:",
+  "providers.sendsLine": "Sends your questions and document text to {provider}.",
   "providers.sends.chat":
     "your Questions, the Mind you're in, matching passages with their Document names and pages, and the names of other Documents in scope",
   "providers.sends.checks": "each sentence you check",
@@ -2039,12 +2040,8 @@ export const en = {
   "claudeAccount.problem.unexpectedResponse": "Claude answered in a way IncarnaMind didn't expect",
   "claudeAccount.wayBack.signIn": "Sign in with Claude",
   "claudePlan.way.title": "Use my Claude plan",
-  "claudePlan.way.line": "Pro, Max or Team · Sign in with your Claude account",
-  "claudePlan.notice.title": "Use your Claude plan",
+  "claudePlan.way.line": "Pro, Max or Team",
   "claudePlan.usage": "Answers count toward your Claude plan's usage limits.",
-  "claudePlan.sends": "Signing in lets Anthropic receive, under your Claude account: {sends}.",
-  "claudePlan.off":
-    "It stays off until you sign in here, and you can sign out any time in Settings › Models.",
   "claudePlan.signIn": "Sign in with Claude",
   "claudePlan.cancel": "Cancel",
   "claudePlan.waiting": "Sign in to Claude in your browser, then paste the code it shows.",
@@ -2056,10 +2053,8 @@ export const en = {
     "That code is from an earlier sign-in. Sign in on the page just opened, then paste its code.",
   "claudePlan.failed": "The Claude sign-in didn't work",
   "claudePlan.failure.timedOut": "The Claude sign-in wasn't finished in time: nothing was kept",
-  "claudePlan.failure.secretStorage":
-    "This computer has no keyring, so IncarnaMind can't keep your Claude sign-in safely",
+  "claudePlan.failure.secretStorage": "Can't keep the Claude sign-in safely: no keyring",
   "claudePlan.details": "Details",
-  "claudePlan.settings.line": "Sign in with your Claude account.",
   "claudePlan.signedIn": "Signed in as {account}",
   "claudePlan.account.unknown": "your Claude account",
   "claudePlan.signOut": "Sign out",

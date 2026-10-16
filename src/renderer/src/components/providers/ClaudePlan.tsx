@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { ClaudeAccount } from "../../../../core/api";
-import { chosenFlowSummary } from "../../chosenFlows";
 import {
   cancelSignInWithClaude,
   forgetClaudeSignInFailure,
@@ -11,7 +10,7 @@ import {
 } from "../../claudeSignIn";
 import { CLAUDE_SIGN_IN_FAILURES } from "../../claudeSignInFailures";
 import { core } from "../../core";
-import { useGap, useT } from "../../i18n";
+import { useT } from "../../i18n";
 import { useSettingsTarget } from "../../settingsTarget";
 import { useAppStore } from "../../store";
 import { ChevronDownLineIcon, ChevronRightLineIcon } from "../lineIcons";
@@ -85,7 +84,7 @@ export function ClaudePlanWay({ onUseKey }: { onUseKey(): void }) {
       </button>
       {expanded && (
         <div id={panel} className="flex flex-col gap-2 px-2 pt-1 pb-2">
-          <ClaudePlanSignIn titled onClose={() => setOpen(false)} onUseKey={onUseKey} />
+          <ClaudePlanSignIn onClose={() => setOpen(false)} onUseKey={onUseKey} />
         </div>
       )}
     </div>
@@ -154,7 +153,6 @@ export function ClaudePlanRow() {
 
 function AccountLines({ account }: { account: ClaudeAccount }) {
   const t = useT();
-  const gap = useGap();
   if (account.state === "signed-in") {
     const name = account.email ?? account.organization ?? t("claudePlan.account.unknown");
     return (
@@ -175,24 +173,18 @@ function AccountLines({ account }: { account: ClaudeAccount }) {
       </span>
     );
   }
-  const line = t("claudePlan.settings.line");
-  const usage = t("claudePlan.usage");
   return (
     <span data-testid="claude-plan-account" className={rowTextClass}>
-      {line}
-      {gap(line, usage)}
-      {usage}
+      {t("claudePlan.usage")}
     </span>
   );
 }
 
 function ClaudePlanSignIn({
-  titled = false,
   keepDefault = false,
   onClose,
   onUseKey,
 }: {
-  titled?: boolean;
   keepDefault?: boolean;
   onClose(): void;
   onUseKey?(): void;
@@ -253,14 +245,12 @@ function ClaudePlanSignIn({
 
   return (
     <div data-testid="claude-plan-notice" className="flex flex-col gap-2">
-      {titled && <p className="text-ui font-semibold text-ink">{t("claudePlan.notice.title")}</p>}
-      <ul className="flex list-disc flex-col gap-1 pl-4 text-[13px] leading-5 text-ink-secondary">
-        <li data-testid="claude-plan-usage" className="font-semibold text-ink">
-          {t("claudePlan.usage")}
-        </li>
-        <li>{t("claudePlan.sends", { sends: chosenFlowSummary(t) })}</li>
-        <li>{t("claudePlan.off")}</li>
-      </ul>
+      <p data-testid="claude-plan-usage" className="text-[13px] leading-5 font-semibold text-ink">
+        {t("claudePlan.usage")}
+      </p>
+      <p data-testid="claude-plan-sends" className="text-[13px] leading-5 text-ink-secondary">
+        {t("providers.sendsLine", { provider: "Anthropic" })}
+      </p>
       <ChatGptStorageNotice storage={storage} />
       <div className="flex flex-wrap items-center gap-2">
         <button
