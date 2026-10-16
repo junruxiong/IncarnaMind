@@ -134,6 +134,8 @@ describe("Stop", () => {
     expect((await core.getLibrary()).settings.taggingStopped).toEqual([contracts.id]);
     recorder.release();
     await waitForTagging(core, [first.id], (each) => each.tagging === "tagged");
+    await assigned(core, [first.id, second.id], "waiting");
+    expect(await taggingOf(core, first.id)).toBe("tagged");
     expect(await taggingOf(core, second.id)).toBe("stopped");
 
     const third = await add(
