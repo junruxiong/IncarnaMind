@@ -1677,7 +1677,7 @@ export function createCore(adapters: CoreAdapters): Core {
     hostedUrl: adapters.jevHostedUrl,
     signal: lifetime.signal,
   });
-  // Tagging on a ChatGPT plan goes gently, and waits while the plan's limit holds (#180).
+  // Tagging on a ChatGPT plan goes gently, and waits while the plan's limit holds.
   const planPace = createPlanPace({
     pace,
     timers: paceTimers,
@@ -1687,7 +1687,7 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     signal: lifetime.signal,
   });
-  // The one Tagging setting (#180): the model automatic tagging uses, and Organize when picked by hand.
+  // The one Tagging setting: the model automatic tagging uses, and Organize when picked by hand.
   const tagging = createTagging({
     setting: () => library.settings().classifier,
     chat: {
@@ -1703,14 +1703,11 @@ export function createCore(adapters: CoreAdapters): Core {
     planPausedUntil: () => planPace.pausedUntil(),
     now: () => paceTimers.now(),
   });
-  /** What the Tagging setting tags with: the model chosen, or Automatic's last pick. */
   const tagsWith = (): TaggingClassifier | null => {
     const setting = library.settings().classifier;
     return setting.kind === "automatic" ? tagging.lastResolved() : setting;
   };
-  /** Requests to the ChatGPT plan, one at a time and spaced, waiting while its limit holds. */
   const onPlan = <T>(run: () => Promise<T>, signal: AbortSignal) => planPace.run(run, signal);
-  /** The service automatic tagging sends to, if it isn't on this computer. */
   const taggingServices = async (): Promise<ExternalService[]> => {
     const classifier = await tagging.resolve();
     const service = classifier && tagging.service(classifier);
@@ -1744,7 +1741,7 @@ export function createCore(adapters: CoreAdapters): Core {
   };
   /**
    * Until there are Folders and Organize has a model, automatic tagging decides
-   * Tags alone; then Organize does both. Automatic covers tagging only (#180).
+   * Tags alone; then Organize does both. Automatic covers tagging only.
    */
   const organizing = () =>
     organizeModelOf(library.settings()) !== null &&
@@ -1902,7 +1899,7 @@ export function createCore(adapters: CoreAdapters): Core {
         ...chatGroupClassifier(prepared.model, prepared.provider.service === null, images),
         model: { id: choice.modelId, images, reason: "selected" as const },
       };
-      // A scan goes to the image model when this one can't read its pages (#180).
+      // A scan goes to the image model when this one can't read its pages.
       const imageModel = images ? null : chat.imageModel(choice);
       if (imageModel) {
         chosen = withPageReader(chosen, async () => {
@@ -2622,7 +2619,7 @@ export function createCore(adapters: CoreAdapters): Core {
       }
       const flowChanged = syncChatFlow();
       if (chatModel !== undefined || flowChanged) await readinessChanged();
-      // Automatic may tag with another model now (#180).
+      // Automatic may tag with another model now.
       else if (user.quickTasksModel !== undefined || user.imageModel !== undefined)
         await taggingChanged();
       // The examples follow the new language before this returns, so whoever awaits it can rely on it.

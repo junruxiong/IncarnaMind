@@ -765,7 +765,7 @@ export function createChat(options: {
 
     /**
      * The quick-tasks model for Answers asked with `answers` (the default
-     * model when left out), for the calls that don't write the Answer (#180):
+     * model when left out), for the calls that don't write the Answer:
      * the one the User set, else the catalog's for a cloud provider, else the
      * Answers model itself. A model on this computer, or in Ollama anywhere,
      * does its own small calls, as a second one would push it out of memory. In local mode a cloud model

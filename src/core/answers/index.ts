@@ -349,7 +349,7 @@ export interface AnswersOptions {
   prepareModel(choice: ChatModelChoice): Promise<PreparedChatModel>;
   /**
    * The quick-tasks model for an Answer asked with `answers`, prepared as
-   * `answers` was (#180): for the calls that don't write the Answer.
+   * `answers` was: for the calls that don't write the Answer.
    */
   prepareQuickModel?(
     answers: ChatModelChoice,

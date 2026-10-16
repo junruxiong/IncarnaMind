@@ -1,5 +1,5 @@
 /**
- * Tagging on a ChatGPT plan (#180). The plan's limits are shared with ChatGPT
+ * Tagging on a ChatGPT plan. The plan's limits are shared with ChatGPT
  * itself, and adding a folder of 500 Documents could use them up in minutes,
  * so tagging takes it gently:
  *
@@ -27,9 +27,7 @@ export type PlanPace = ReturnType<typeof createPlanPace>;
 export function createPlanPace(options: {
   pace: Pace;
   timers: PaceTimers;
-  /** The wait is over: Documents waiting for the plan may go on. */
   resumed(): void;
-  /** Stops the wait when the core closes. */
   signal: AbortSignal;
 }) {
   const { pace, timers } = options;

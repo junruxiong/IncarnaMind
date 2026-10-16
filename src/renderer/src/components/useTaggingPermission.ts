@@ -21,7 +21,7 @@ export function useTaggingPermission(waiting: boolean): ExternalService | null {
       core.listRegisteredDataFlows().then(
         (flows) => {
           if (stopped) return;
-          // The flow goes only to the service the Tagging setting tags with now (#180).
+          // The flow goes only to the service the Tagging setting tags with now.
           const unallowed = flows
             .find((flow) => flow.id === "tagging")
             ?.services.find((each) => each.consent !== "accepted");

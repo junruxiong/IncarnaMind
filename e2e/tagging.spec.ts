@@ -13,7 +13,7 @@ import {
 } from "./app";
 
 /*
- * Settings → Models → Tagging (#180): one model choice for automatic tagging
+ * Settings → Models → Tagging: one model choice for automatic tagging
  * and Organize. Automatic says which model it uses and why; another model is
  * chosen from a list grouped as the model chip groups them, and saved at once.
  * Ollama is a stand-in at its own address, with a local decision model and a

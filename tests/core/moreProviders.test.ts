@@ -424,7 +424,7 @@ describe("Small calls skip thinking", () => {
     ["siliconflow", "Qwen/Qwen3-8B", "enable_thinking", false],
     ["openrouter", "openai/gpt-6-luna", "reasoning", { effort: "none" }],
     ["xai", "grok-4.3", "reasoning", { effort: "none" }],
-    // On the Organize evaluation, GPT-6 Luna tagged as well with reasoning off (#180).
+    // On the Organize evaluation, GPT-6 Luna tagged as well with reasoning off.
     ["openai", "gpt-6-luna", "reasoning", { effort: "none" }],
     ["openai", "gpt-5.4-nano", "reasoning", { effort: "none" }],
     ["mistral", "mistral-small-2603", "reasoning_effort", "none"],

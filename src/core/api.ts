@@ -1651,7 +1651,7 @@ export interface UserSettings {
   /** The default model for Answers, or null before a chat provider is set up. */
   chatModel: ChatModelChoice | null;
   /**
-   * The model for the calls that don't write the Answer (#180): an Answer's
+   * The model for the calls that don't write the Answer: an Answer's
    * search query and its translation, and automatic tagging where the
    * provider names no tagging model. Null: the quick-tasks model of the
    * Answers model's provider, from the catalog, or the Answers model itself.
@@ -1659,7 +1659,7 @@ export interface UserSettings {
   quickTasksModel: ChatModelChoice | null;
   /**
    * The model that reads a scan's pages when the Answers model can't read
-   * images (#180). Null: the image model of the Answers model's provider,
+   * images. Null: the image model of the Answers model's provider,
    * from the catalog, when it has one.
    */
   imageModel: ChatModelChoice | null;
@@ -7119,7 +7119,7 @@ export interface CoreApi {
     },
   ): Promise<void>;
   /**
-   * What the Tagging section shows (#180): what Automatic tags with now and
+   * What the Tagging section shows: what Automatic tags with now and
    * why, and the models the User can choose instead, grouped by where they
    * run, with what each costs. Asks Ollama on this computer which decision
    * models it has; sends nothing anywhere else.
