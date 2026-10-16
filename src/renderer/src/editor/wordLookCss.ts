@@ -2,9 +2,9 @@ import type { WordLook, WordParagraphLook, WordRunLook } from "../../../core/api
 import { attribute, border, pt, rule } from "./wordCss";
 import { wordLookZoomCss } from "./wordLookZoom";
 import { WORD_LOOK_DOM_ATTRIBUTE, WORD_RUN_DOM_ATTRIBUTE } from "./wordSchema";
+import { wordTableCss } from "./wordTableCss";
 import { alignsColumns } from "./wordTabStops";
 import { WORD_TAB_DOM_ATTRIBUTE } from "./wordTabs";
-import { wordTableCss } from "./wordTableCss";
 
 const LEADERS = [
   ["dot", "."],

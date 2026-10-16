@@ -168,7 +168,9 @@ class TabMeasurer {
   private measure(pending: Pending[]): number {
     const look = this.look;
     if (!look) return 0;
-    const ptToPx = Number.parseFloat(getComputedStyle(this.view.dom).fontSize) / (look.body ?? 11);
+    // The content's point, with the look's zoom to fit the frame in it.
+    const ptToPx = Number.parseFloat(getComputedStyle(this.view.dom).getPropertyValue("--word-pt"));
+    if (!(ptToPx > 0)) return 0;
     let measuring: Measuring[] = [];
     for (const { node, pos } of pending) {
       const paragraph = this.view.nodeDOM(pos);
