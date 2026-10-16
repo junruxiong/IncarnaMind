@@ -4287,6 +4287,8 @@ export const en = {
   "answer.unbacked.removed":
     "This reply says it removed or replaced text, but nothing was removed.",
   "answer.unbacked.changed": "This reply says it changed a Mind, but no change was made.",
+  "answer.noMindTools": "This model can't write into your Mind itself.",
+  "answer.noMindTools.add": "Add to Mind",
   "answer.added": "Added to “{mind}”",
   "answer.addedToNew": "Made the Mind “{mind}” from this Answer",
   "answer.tableOpened": "Made the Mind “{mind}” from this table",

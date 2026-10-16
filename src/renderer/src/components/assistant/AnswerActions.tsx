@@ -6,7 +6,7 @@ import { stopAnswer } from "../../conversations";
 import { useDismissOnEscape } from "../../escapeDismiss";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
-import { answerUndoPlace, useUndo } from "../../undo";
+import { useAnswerLine, useUndo } from "../../undo";
 import { StopIcon } from "../icons";
 import { CheckLineIcon, ChevronDownLineIcon, CopyLineIcon, PlusLineIcon } from "../lineIcons";
 import { useGoesBy } from "../UndoLine";
@@ -45,9 +45,7 @@ export function AnswerActions({
   const pick = useRef<HTMLButtonElement>(null);
   const undoButton = useRef<HTMLButtonElement>(null);
   const [copied, setCopied] = useState(false);
-  const addedLine = useUndo((state) =>
-    state.line?.change?.shownAt === answerUndoPlace(answer.id) ? state.line : null,
-  );
+  const addedLine = useAnswerLine(answer.id);
   const added = addedLine?.change ?? null;
   useGoesBy(addedLine?.id ?? null);
   useDismissOnEscape(added !== null, () => useUndo.getState().dismiss());
