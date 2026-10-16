@@ -40,6 +40,7 @@ export type {
  * the renderer import it.
  */
 import type { CitationForm, CitationStyleId } from "../shared/citationStyles";
+import type { MindStyle } from "../shared/mindStyle";
 import type { FormulaInput, FormulaLiteral, ResultUnit, ShowAs } from "../shared/formula";
 import type { TagColour } from "../shared/tagColours";
 import type { Anchor, UnitKind, UnitLabel } from "../shared/units";
@@ -1782,6 +1783,11 @@ export interface UserSettings {
    * save says otherwise: off until the User turns it on.
    */
   keepWebPageLook: boolean;
+  /**
+   * The font and text size a new Mind starts in (#121): "Make this the default for new
+   * Minds" in a Mind's Style. Minds already made keep theirs.
+   */
+  newMindStyle: MindStyle;
 }
 
 /**
@@ -8934,6 +8940,11 @@ export interface CoreApi {
     options?: SetMindCitationStyleOptions,
   ): Promise<MindCitationStyle>;
 
+  /** The font and text size a Mind is written in (#121): its own choice, else the default style. */
+  getMindStyle(mindId: string): Promise<MindStyle>;
+  /** Sets the Mind's font and text size together, so Undo can put both back. */
+  setMindStyle(mindId: string, style: MindStyle): Promise<MindStyle>;
+
   /** Where new files go, and the Linked folders IncarnaMind may or may not add files to. */
   getOutputSettings(): Promise<OutputSettings>;
   /**
@@ -9496,6 +9507,8 @@ const methods: Record<CoreApiMethod, true> = {
   formatCitations: true,
   getMindCitationStyle: true,
   setMindCitationStyle: true,
+  getMindStyle: true,
+  setMindStyle: true,
   getOutputSettings: true,
   setOutputLocation: true,
   setLinkedFolderWriting: true,

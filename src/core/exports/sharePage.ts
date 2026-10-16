@@ -10,7 +10,7 @@ import type { Translate } from "../../shared/locations";
 import type { Language } from "../language";
 import type { Block, Footnote } from "../mindText";
 import type { CardContent, CardRun, CitationCard } from "./citationCards";
-import { HTML_STYLES, htmlFile, notesSection, withTableBodies } from "./html";
+import { bodyFontStyle, HTML_STYLES, htmlFile, notesSection, withTableBodies } from "./html";
 import type { ExportLabels } from "./labels";
 import { escapeHtml, renderPrintHtml, sourceHtml, webLink } from "./printHtml";
 
@@ -222,6 +222,8 @@ export interface SharePage {
   /** WebP, each written once, whichever cards show it. */
   pictures: readonly SharePicture[];
   checkedLine: boolean;
+  /** The Mind's font by name, or null for the default. */
+  font: string | null;
 }
 
 export interface SharePicture {
@@ -285,7 +287,7 @@ export function renderSharePage(page: SharePage): string {
     language,
     name: page.name,
     policy: POLICY,
-    styles: STYLES,
+    styles: STYLES + bodyFontStyle(page.font),
     body,
   });
 }

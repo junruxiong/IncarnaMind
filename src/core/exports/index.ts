@@ -100,6 +100,8 @@ export interface ExportsDependencies {
   folderName(folderId: string): string | null;
   /** The Mind's citation style (#289). */
   citationStyle(mindId: string): CitationStyleId;
+  /** The family the Mind's font is written as in Word and HTML (#121); null: the default. */
+  font(mindId: string): string | null;
   /** Whether the Mind shows its Bibliography without a citation style (#102). */
   bibliography(mindId: string): boolean;
   /** Formats Citations in a style, as the editor does (see `CoreApi.formatCitations`). */
@@ -157,6 +159,7 @@ interface Prepared {
   style: CitationStyle;
   documents: readonly SourceDocument[];
   bibliography: boolean;
+  font: string | null;
   /** Each Citation's footnote with the attributes it was made from, for the source pack. */
   attributesOf: ReadonlyMap<Footnote, Partial<CitationAttributes>>;
 }
@@ -261,6 +264,7 @@ export function createExports(deps: ExportsDependencies) {
       style,
       documents,
       bibliography: deps.bibliography(mind.id),
+      font: deps.font(mind.id),
       attributesOf,
     };
   };
@@ -353,6 +357,7 @@ export function createExports(deps: ExportsDependencies) {
         cards,
         pictures,
         checkedLine: prepared.options.checkedLine,
+        font: prepared.font,
       }),
     );
   };
@@ -522,6 +527,7 @@ export function createExports(deps: ExportsDependencies) {
           paper: language === "en" ? "letter" : "a4",
           created: deps.now(),
           review: reviewChoices(prepared, false),
+          font: prepared.font,
         }));
       } else if (format === "html" || format === "share-page") {
         const drawn = await withPictures(blocks, language, deps);
@@ -529,6 +535,7 @@ export function createExports(deps: ExportsDependencies) {
           renderHtml(title, drawn, labels, {
             language,
             name: preview.fileName.slice(0, -".html".length),
+            font: prepared.font,
           }),
         );
       } else {
