@@ -3883,6 +3883,7 @@ export const zhCN = {
   "mindCall.failed.noHeading": "无法修改“{mind}”：其中没有标题“{heading}”",
   "mindCall.failed.noPlace": "无法添加到“{mind}”：其中没有标题或段落“{place}”",
   "mindCall.failed.severalPlaces": "无法修改“{mind}”：有多个位置叫“{name}”",
+  "mindCall.failed.severalPlaces.add": "无法添加到“{mind}”：有多个位置叫“{name}”",
   "mindCall.failed.noText": "无法修改“{mind}”：那里没有可修改的文字",
   "mindCall.failed.tooLong": "无法修改“{mind}”：一次要改的文字太多",
   "mindCall.failed.changed": "无法修改“{mind}”：读取时文字有了变化",

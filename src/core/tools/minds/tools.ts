@@ -234,8 +234,11 @@ const levelOf = (element: Y.XmlElement): number => {
   return Number.isInteger(level) && level > 0 ? level : 1;
 };
 
-/** A name as the headings it is under, outermost first, then itself: "Part 2 > Summary". */
-const pathOf = (wanted: string): string[] => bareName(wanted).split(/\s*[>›]\s*/);
+const pathOf = (wanted: string): string[] =>
+  wanted
+    .split(/\s*[>›]\s*/)
+    .map((part) => bareName(part.replace(/^["'“‘「『《]|["'”’」』》]$/gu, "")))
+    .filter((part) => part !== "");
 
 /** The headings a block is under, the nearest first, each higher than the last. */
 function headingsAbove(order: readonly Y.XmlElement[], element: Y.XmlElement): Y.XmlElement[] {
@@ -250,14 +253,15 @@ function headingsAbove(order: readonly Y.XmlElement[], element: Y.XmlElement): Y
   return above;
 }
 
-/** Whether a block is under the headings `path` names, outermost first, others allowed between them. */
-function isUnder(order: readonly Y.XmlElement[], element: Y.XmlElement, path: readonly string[]) {
-  const above = headingsAbove(order, element)
-    .reverse()
-    .map((heading) => nameKey(plainText(heading)));
+function isUnder(
+  order: readonly Y.XmlElement[],
+  element: Y.XmlElement,
+  parents: readonly Set<Y.XmlElement>[],
+) {
+  const above = headingsAbove(order, element).reverse();
   let from = 0;
-  for (const key of path.map(nameKey)) {
-    const at = above.findIndex((text, index) => index >= from && text.startsWith(key));
+  for (const wanted of parents) {
+    const at = above.findIndex((heading, index) => index >= from && wanted.has(heading));
     if (at < 0) return false;
     from = at + 1;
   }
@@ -279,7 +283,12 @@ function namedBlocks(
   const path = pathOf(wanted);
   const name = path.pop() ?? "";
   if (direct.length > 0 || path.length === 0) return direct;
-  return named(elements, name).filter((element) => isUnder(order, element, path));
+  const headings = order.filter((element) => isHeading(element));
+  const parents = path.map((part) => new Set(named(headings, part)));
+  return named(
+    elements.filter((element) => isUnder(order, element, parents)),
+    name,
+  );
 }
 
 /**
@@ -308,7 +317,10 @@ function severalNamed(
         : translate(language, "assistant.place.number", { n: index + 1 }),
     );
   const headings = matches.every((element) => isHeading(element));
-  const name = pathOf(wanted).pop() ?? "";
+  const [first] = matches;
+  const own = first ? plainText(first).trim() : "";
+  const wholly = matches.every((element) => nameKey(plainText(element)) === nameKey(own));
+  const name = headings && wholly ? own : (pathOf(wanted).pop() ?? "");
   const ask = translate(
     language,
     headings ? "assistant.several.headings" : "assistant.several.paragraphs",
@@ -324,7 +336,6 @@ function severalNamed(
   return `“${name}” is the name of ${matches.length} ${headings ? "headings" : "paragraphs"}, and the User didn't say which. Ask them, in their language: "${ask}" ${then}`;
 }
 
-/** The blocks `wanted` names: those with that whole text, else those starting with it. */
 function named(elements: readonly Y.XmlElement[], wanted: string): Y.XmlElement[] {
   const key = nameKey(wanted);
   const keyed = elements.map((element) => ({ element, text: nameKey(plainText(element)) }));
@@ -616,7 +627,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     if ("why" in place) {
       throw new Refusal(
         place.kind === "several-places"
-          ? { kind: "several-places", mindId: mind.id, name: after ?? "" }
+          ? { kind: "several-places", mindId: mind.id, name: after ?? "", adding: true }
           : { kind: "no-place", mindId: mind.id, place: after ?? "" },
         `Nothing was added: ${place.why}. Don't add it to another Mind instead.`,
       );
@@ -944,7 +955,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
           stretch.kind === "no-heading"
             ? { kind: "no-heading", mindId: mind.id, heading: part ?? "" }
             : stretch.kind === "several-places"
-              ? { kind: "several-places", mindId: mind.id, name: part ?? "" }
+              ? { kind: "several-places", mindId: mind.id, name: part ?? "", adding: false }
               : { kind: "no-text", mindId: mind.id },
           `Nothing was changed in “${mind.name}”: ${stretch.why}.`,
         );
