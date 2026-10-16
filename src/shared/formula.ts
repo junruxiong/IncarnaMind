@@ -931,6 +931,21 @@ export function scaleChanges(formula: string, inputs: readonly FormulaInput[]): 
   }
 }
 
+/** The inputs a formula takes away whole, "fee" in "price - fee" but not in "price - fee * 2", as written. */
+export function subtractedNames(formula: string): string[] {
+  try {
+    return nodesIn(
+      parse(formula),
+      (node) => node.type === "binary" && node.op === "-" && node.right.type === "name",
+    ).flatMap((node) =>
+      node.type === "binary" && node.right.type === "name" ? [node.right.name] : [],
+    );
+  } catch (error) {
+    if (error instanceof Refusal) return [];
+    throw error;
+  }
+}
+
 const READ_AS: ReadonlyMap<string, string> = new Map([
   ["*", "×"],
   ["/", "÷"],

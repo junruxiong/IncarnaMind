@@ -759,6 +759,65 @@ describe("A figure the Documents don't state, worked out (#707)", () => {
   });
 });
 
+describe("A memo's figure worked out from amounts in brackets (#978)", () => {
+  const STATEMENT = {
+    name: "Completion statement.md",
+    contents: [
+      "# Completion statement: 14 Mill Lane",
+      "",
+      "Sale price £385,000.00",
+      "",
+      "Less: estate agent's fee (£4,620.00)",
+      "",
+      "Less: legal fees (£1,500.00)",
+      "",
+      "Less: search and other costs (£804.00)",
+    ].join("\n"),
+  };
+  const input = (name: string, label: string, line: string, number: string) => ({
+    name,
+    label,
+    quote: line,
+    number,
+  });
+  const NET = {
+    inputs: [
+      input("price", "Sale price", "Sale price £385,000.00", "£385,000.00"),
+      input("agent", "Agent's fee", "estate agent's fee (£4,620.00)", "(£4,620.00)"),
+      input("legal", "Legal fees", "legal fees (£1,500.00)", "(£1,500.00)"),
+      input("other", "Other costs", "search and other costs (£804.00)", "(£804.00)"),
+    ],
+    formula: "price + agent + legal + other",
+  };
+
+  // protects=#978; fails_when=a correct net figure is Contradicted because a deduction in brackets was read as positive, or the card's inputs don't carry their sign; no_claim=a model that subtracts the brackets, which the line it is told and a hand check with Claude Haiku 5.5 cover.
+  test.each([
+    ["Net sale proceeds £378,076.", "£378,076", "supported"],
+    ["Net sale proceeds £391,924.", "£391,924", "contradicted"],
+  ])("“%s” is %s, by taking the deductions off", async (claim, stated, verdict) => {
+    const said = verdict === "supported" ? "contradicted" : "supported";
+    const plans = { [claim]: { verdict: said, calculation: { ...NET, stated } } } as const;
+    const setup = await setUpWithDocuments(checkingModel(plans), [STATEMENT]);
+    const saved = await setup.core.saveChatProvider({
+      kind: "anthropic",
+      apiKey: "sk-test",
+      modelId: "claude-haiku-5-5",
+    });
+    if (saved.service) await setup.core.allowDataFlow("checks", saved.service.id);
+
+    const result = await setup.core.checkClaim({ claim });
+
+    expect(result).toMatchObject({
+      verdict,
+      calculation: { stated, figure: { shown: "£378,076.00" } },
+    });
+    if (result.verdict === "not-checked") throw new Error("Not checked.");
+    expect(result.calculation?.figure.inputs.map((each) => each.number.value)).toEqual([
+      385_000, -4_620, -1_500, -804,
+    ]);
+  });
+});
+
 describe("When the model can't check a sentence", () => {
   const failing = (reply: ScriptedReply): Plan => ({ reply });
   test.each<{ reason: ClaimCheckAttributes["reason"]; plan: Plan }>([
