@@ -14,17 +14,10 @@ import {
   type EditWithAiResult,
   type LeftOutPart,
   MIND_CONTENT_FIELD,
-  PROPOSAL_ATTRIBUTE,
-  PROPOSAL_DELETE_MARK,
-  PROPOSAL_INSERT_MARK,
   type ProposalRef,
 } from "../../core/api";
-import {
-  aiUseOfAccepted,
-  proposalRequestOf,
-  readProposalAttribute,
-  resolveProposals,
-} from "../../shared/proposals";
+import { aiUseOfAccepted, proposalRequestOf, resolveProposals } from "../../shared/proposals";
+import { type ChangeCounts, changeFact } from "./changeFacts";
 import { core } from "./core";
 import {
   type AppliedAction,
@@ -35,6 +28,14 @@ import {
   placeOfChange,
   setAppliedLine,
 } from "./editor/appliedEditLine";
+import {
+  anchorChanges,
+  asItWas,
+  ownTextRemoved,
+  planChanges,
+  proposalKindOf,
+  writeAccepted,
+} from "./editor/arrivedChanges";
 import { asOneStep, offerEditorUndo, type UndoStep, undoStackOf } from "./editor/editorUndo";
 import {
   applyingIn,
@@ -120,6 +121,18 @@ function drawApplying(editor: Editor, request: string, applying: boolean): void 
 
 /** Before the edit is asked for, so none of its updates is missed. Null before the editor is bound. */
 export function startApplying(editor: Editor, mindId: string, requestId: string): Applying | null {
+  const edit = beginEdit(editor, mindId, requestId);
+  if (!edit) return null;
+  edit.stopTaking = takeEditUpdates(requestId, edit.doc, (update: Uint8Array, cause: EditCause) => {
+    edit.request ??= cause.request;
+    if (cause.apply) drawApplying(editor, cause.request, true);
+    asEditStep(edit, () => Y.applyUpdate(edit.doc, update, EDIT_FROM_CORE));
+  });
+  return edit;
+}
+
+/** The editor's record of an edit applied in it, the latest, which its line acts on. */
+function beginEdit(editor: Editor, mindId: string, requestId: string): Applying | null {
   const doc = editorDoc(editor);
   const stack = undoStackOf(editor);
   if (!doc || !stack || editor.isDestroyed) return null;
@@ -147,11 +160,6 @@ export function startApplying(editor: Editor, mindId: string, requestId: string)
     },
   };
   stack.on("stack-item-popped", popped);
-  edit.stopTaking = takeEditUpdates(requestId, doc, (update: Uint8Array, cause: EditCause) => {
-    edit.request ??= cause.request;
-    if (cause.apply) drawApplying(editor, cause.request, true);
-    asEditStep(edit, () => Y.applyUpdate(doc, update, EDIT_FROM_CORE));
-  });
   latest.set(editor, edit);
   return edit;
 }
@@ -177,23 +185,6 @@ function whenHeld(editor: Editor, request: string): Promise<boolean> {
     const timer = setTimeout(() => done(ofRequest(editor.state, request).length > 0), 5_000);
     editor.on("transaction", check);
   });
-}
-
-const isProposalMark = (name: string) =>
-  name === PROPOSAL_INSERT_MARK || name === PROPOSAL_DELETE_MARK;
-
-const kindOf = (node: ProseMirrorNode): "insert" | "delete" | null => {
-  if (node.marks.some((mark) => mark.type.name === PROPOSAL_DELETE_MARK)) return "delete";
-  if (node.marks.some((mark) => mark.type.name === PROPOSAL_INSERT_MARK)) return "insert";
-  return readProposalAttribute(node.attrs[PROPOSAL_ATTRIBUTE])?.kind ?? null;
-};
-
-function asItWas(node: ProseMirrorNode): ProseMirrorNode {
-  const marks = node.marks.filter((mark) => !isProposalMark(mark.type.name));
-  if (node.isText) return node.mark(marks);
-  const attrs =
-    PROPOSAL_ATTRIBUTE in node.attrs ? { ...node.attrs, [PROPOSAL_ATTRIBUTE]: null } : node.attrs;
-  return node.type.create(attrs, node.content, marks);
 }
 
 /** Where each of the request's changes will be once accepted, and what it takes out, read before accepting. */
@@ -230,7 +221,7 @@ function changesOf(state: EditorState, request: string): AppliedChange[] {
         if (node.isBlock) return true;
         const from = Math.max(pos, range.from);
         const to = Math.min(pos + node.nodeSize, range.to);
-        const kind = kindOf(node);
+        const kind = proposalKindOf(node);
         if (kind === "delete") {
           removed.push(asItWas(node.isText ? node.cut(from - pos, to - pos) : node));
           end = to;
@@ -311,6 +302,69 @@ function apply(edit: Applying, request: string): number {
   offerEditorUndo(editor, appliedMessage(places));
   return places;
 }
+
+// Setting the assistant's changes aside before writing them as the editor's own: no Undo tracks it.
+class SettingAside {}
+
+/** Most of the User's own text in the Blocks they touch: the assistant's changes then wait (D224). */
+const MOST_OF_YOUR_TEXT = 0.5;
+
+/**
+ * Applies the assistant's changes the User asked for (#880, D224), now that
+ * they are all in the Mind, as one step of the editor's Undo, with the line
+ * over them saying what `facts` counts; or, when they would rewrite most of
+ * the User's own text, leaves them waiting with the line that says so.
+ */
+export function applyArrived(
+  editor: Editor,
+  mindId: string,
+  requests: ReadonlySet<string>,
+  facts: ChangeCounts,
+  { holds = true }: { holds?: boolean } = {},
+): "applied" | "held" | null {
+  const first = proposalsIn(editor.state.doc).find((each) => requests.has(each.request));
+  if (!first || editor.isDestroyed) return null;
+  for (const request of requests) drawApplying(editor, request, false);
+  if (holds && ownTextRemoved(editor.state, requests) > MOST_OF_YOUR_TEXT) {
+    setAppliedLine(editor, {
+      kind: "held",
+      blockId: topBlockAt(editor.state, first.from),
+      request: first.request,
+      asked: { mindId, requests: [...requests], facts },
+    });
+    return "held";
+  }
+  const edit = beginEdit(editor, mindId, `assistant:${first.request}`);
+  if (!edit) return null;
+  const planned = planChanges(editor.state, requests);
+  let resolved: ReturnType<typeof writeAccepted> = [];
+  asEditStep(edit, () => {
+    resolved = writeAccepted(edit.doc, requests, new SettingAside(), new AcceptingEdit());
+  });
+  const entries = aiUseOfAccepted(edit.doc, mindId, resolved, new Date().toISOString());
+  if (entries.length > 0) core.recordAiUse(entries).catch(useAppStore.getState().reportError);
+  if (editor.isDestroyed) return "applied";
+  const changes = anchorChanges(editor.state, planned);
+  const message = changeFact(t, facts, null);
+  setAppliedLine(editor, {
+    kind: "applied",
+    blockId: firstBlockOf(editor.state, changes),
+    places: resolved.length,
+    facts,
+    reason: null,
+    changes,
+    kept: null,
+  });
+  offerEditorUndo(editor, message);
+  return "applied";
+}
+
+const topBlockAt = (state: EditorState, pos: number): string | null => {
+  const id: unknown = state.doc.maybeChild(state.doc.resolve(pos).index(0))?.attrs[
+    BLOCK_ID_ATTRIBUTE
+  ];
+  return typeof id === "string" ? id : null;
+};
 
 /** Applies the edit once it is back, or leaves it waiting when the core held it back. */
 export async function finishApplying(
@@ -406,12 +460,23 @@ export function restoreChange(editor: Editor, index: number): void {
 function resolveHeld(editor: Editor, outcome: "accept" | "reject"): void {
   const line = appliedLineIn(editor.state);
   if (line?.kind !== "held") return;
+  if (line.asked && outcome === "accept") {
+    const { mindId, requests, facts } = line.asked;
+    setAppliedLine(editor, null);
+    applyArrived(editor, mindId, new Set(requests), facts, { holds: false });
+    return;
+  }
   const edit = latest.get(editor);
   if (outcome === "accept" && edit?.request === line.request) {
     apply(edit, line.request);
     return;
   }
-  const ids = new Set(ofRequest(editor.state, line.request).map((each) => each.id));
+  const asked = new Set(line.asked?.requests ?? [line.request]);
+  const ids = new Set(
+    proposalsIn(editor.state.doc)
+      .filter((each) => asked.has(each.request))
+      .map((each) => each.id),
+  );
   const count = resolveInEditor(editor, ids, outcome).length;
   setAppliedLine(editor, null);
   if (count > 0) {

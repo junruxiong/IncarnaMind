@@ -67,6 +67,7 @@ import {
 import { NoteHealth } from "../editor/NoteHealth";
 import { NoteKeymap } from "../editor/noteKeymap";
 import { noteExtensions } from "../editor/noteSchema";
+import { registerMindEditor } from "../editor/openEditors";
 import { ProposalBars } from "../editor/ProposalBars";
 import { ProposalReview } from "../editor/proposalReview";
 import { QuestionView } from "../editor/QuestionView";
@@ -426,6 +427,11 @@ function MindEditorView({
   useEffect(() => {
     if (!editor.isDestroyed) setCitationForm(editor.view, citationStyle(style).form);
   }, [editor, style]);
+
+  useEffect(
+    () => (readOnly ? undefined : registerMindEditor(mindId, editor)),
+    [editor, mindId, readOnly],
+  );
 
   // The commands on the Mind's text (⌘K, ⌘↵ and ⌘⌫ on its changes) act on the Mind last written in.
   useEffect(() => {
