@@ -78,6 +78,8 @@ export interface ExportsDependencies {
   liveDocuments(): SourceDocument[];
   /** The text kept of Documents unlinked with their Linked folder: Citations quoting it still check. */
   keptCitationTexts(): KeptCitationText[];
+  /** A Citation's quote as its Document's text reads it, or null when the Document or the quote isn't there. */
+  readableQuote(attributes: Partial<CitationAttributes>): string | null;
   /** The interface language, which the export's own words are in. */
   language(): Language;
   /** The Mind's citation style (#289). */
@@ -145,7 +147,15 @@ export function createExports(deps: ExportsDependencies) {
     const kept = deps.keptCitationTexts();
     const attributesOf = new Map<Footnote, Partial<CitationAttributes>>();
     const footnote = (attributes: Record<string, unknown>): Footnote => {
-      const note = footnoteOf(attributes as Partial<CitationAttributes>, documents, kept, language);
+      const note = footnoteOf(
+        attributes as Partial<CitationAttributes>,
+        documents,
+        kept,
+        language,
+        {
+          readQuote: deps.readableQuote,
+        },
+      );
       attributesOf.set(note, attributes as Partial<CitationAttributes>);
       return note;
     };
@@ -464,6 +474,7 @@ function footnoteOf(
   documents: readonly LiveDocument[],
   kept: readonly KeptCitationText[],
   language: Language,
+  { readQuote }: { readQuote(attributes: Partial<CitationAttributes>): string | null },
 ): Footnote {
   const t: Translate = (key, params) => translate(language, key, params);
   const document = shownDocumentName(attributes, documents) || t("export.unnamedDocument");
@@ -474,7 +485,9 @@ function footnoteOf(
     state.check === "not-found" || state.check === "unsupported" || state.check === "contradicted"
       ? {
           check: state.check,
-          quote: attributes.quote ? readableQuoteText(attributes.quote) : null,
+          quote: attributes.quote
+            ? (readQuote(attributes) ?? readableQuoteText(attributes.quote))
+            : null,
           verdict: attributes.verdict ?? null,
         }
       : null;

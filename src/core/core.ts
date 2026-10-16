@@ -1578,6 +1578,16 @@ export function createCore(adapters: CoreAdapters): Core {
     read: (mindId, look) => content.read(mindId, look),
     liveDocuments: () => documents.list(),
     keptCitationTexts: () => documents.keptCitationTexts(),
+    readableQuote: ({ documentId, contentHash, pageFrom, pageTo, quote }) =>
+      documentId && quote
+        ? documents.readableQuote({
+            documentId,
+            contentHash: contentHash ?? null,
+            pageFrom: pageFrom ?? null,
+            pageTo: pageTo ?? null,
+            quote,
+          })
+        : null,
     language: () => settings.get().language,
     citationStyle: (mindId) => mindCitationStyle(mindId).style,
     bibliography: (mindId) => content.readSettings(mindId, bibliographyShown),
