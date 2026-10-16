@@ -2,15 +2,19 @@ import type {
   AssignmentChange,
   DocumentBatch,
   DocumentGroupAssignment,
+  LibraryClassifier,
   LibraryGroup,
   LibraryGroupInput,
   LibrarySettings,
   LibrarySnapshot,
+  TaggingClassifier,
+  TaggingModels,
 } from "./library/types";
 import type { UiUsageEvent } from "./usageEvents";
 
 export type {
   AssignmentChange,
+  AutomaticTaggingReason,
   ClassificationStatus,
   DocumentBatch,
   DocumentGroupAssignment,
@@ -19,6 +23,11 @@ export type {
   LibraryGroupInput,
   LibrarySettings,
   LibrarySnapshot,
+  TaggingClassifier,
+  TaggingCost,
+  TaggingModelGroup,
+  TaggingModelOption,
+  TaggingModels,
 } from "./library/types";
 
 /**
@@ -1724,6 +1733,19 @@ export interface UserSettings {
   /** The default model for Answers, or null before a chat provider is set up. */
   chatModel: ChatModelChoice | null;
   /**
+   * The model for the calls that don't write the Answer: an Answer's
+   * search query and its translation, and automatic tagging where the
+   * provider names no tagging model. Null: the quick-tasks model of the
+   * Answers model's provider, from the catalog, or the Answers model itself.
+   */
+  quickTasksModel: ChatModelChoice | null;
+  /**
+   * The model that reads a scan's pages when the Answers model can't read
+   * images. Null: the image model of the Answers model's provider,
+   * from the catalog, when it has one.
+   */
+  imageModel: ChatModelChoice | null;
+  /**
    * Suggest as the User writes, from their Documents (see `suggestNext`): off
    * until they turn it on. Turning it on asks for consent to the "suggestions"
    * flow first, when the default chat model sends to a service.
@@ -2261,7 +2283,10 @@ export interface Document {
   tags: DocumentTag[];
   /** Where automatic tagging is, separately from `status`. */
   tagging: TaggingState;
-  /** Set when `tagging` is "failed". */
+  /**
+   * Set when `tagging` is "failed", and when it is "waiting-for-provider" for
+   * a reason worth saying, such as the ChatGPT plan's limit ("plan-limit").
+   */
   taggingError: ProviderError | null;
   /**
    * When the Document itself was created, as its file tells, for the
@@ -7298,7 +7323,24 @@ export interface CoreApi {
    */
   deleteLibraryGroup(groupId: string): Promise<FolderDeletion>;
   addLibraryStarterGroups(keys: string[]): Promise<void>;
-  saveLibrarySettings(settings: LibrarySettings): Promise<void>;
+  /**
+   * Saves the Tagging setting: the model for automatic tagging and Organize,
+   * and whether new and changed Documents are organized automatically. A
+   * classifier of null is Automatic; `organizeWith` left out stays as it was.
+   */
+  saveLibrarySettings(
+    settings: Omit<LibrarySettings, "classifier" | "organizeWith"> & {
+      classifier: LibraryClassifier | null;
+      organizeWith?: TaggingClassifier | null;
+    },
+  ): Promise<void>;
+  /**
+   * What the Tagging section shows: what Automatic tags with now and
+   * why, and the models the User can choose instead, grouped by where they
+   * run, with what each costs. Asks Ollama on this computer which decision
+   * models it has; sends nothing anywhere else.
+   */
+  getTaggingModels(): Promise<TaggingModels>;
   /**
    * Queues selected documents, or all. Organize suggests a Folder for each
    * (a Suggested Folder) and its Tags; manual assignments are preserved, and
@@ -9083,6 +9125,7 @@ const methods: Record<CoreApiMethod, true> = {
   deleteLibraryGroup: true,
   addLibraryStarterGroups: true,
   saveLibrarySettings: true,
+  getTaggingModels: true,
   classifyDocuments: true,
   assignDocumentGroup: true,
   acceptAssignments: true,
