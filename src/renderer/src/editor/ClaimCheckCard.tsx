@@ -370,7 +370,7 @@ function ClaimCard({
       {calculation && <Working calculation={calculation} onOpen={onOpen} />}
       {courtDecision && (
         <p data-testid="claim-court-decision" className="citation-card-note">
-          <strong className="font-semibold text-ink">{t("claim.courtDecision.title")}</strong>{" "}
+          <strong className="block font-semibold text-ink">{t("claim.courtDecision.title")}</strong>
           {t("claim.courtDecision.body")}
         </p>
       )}
