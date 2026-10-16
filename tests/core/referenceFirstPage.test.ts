@@ -300,4 +300,32 @@ describe("reading a first page leaves out what it doesn't plainly print", () => 
       ]).type,
     ).toBe("thesis");
   });
+
+  test("a journal's marks make an article whatever its abstract says of theses, and an affiliation's number is no part of its institution", () => {
+    const read = readFirstPage([
+      line("第 41 卷 第 3 期 学位与研究生教育", 8, 0.04),
+      line("我国博士学位论文抽检结果分析", 16, 0.1),
+      line("王明 1，赵静 2", 11, 0.12),
+      line("摘要：本文分析了博士学位论文抽检的结果与原因。", 9, 0.14),
+      line("1 中国科学院大学，北京 100049", 8, 0.16),
+      line("中图分类号：G643 文献标识码：A", 8, 0.3),
+    ]);
+    expect(read.type).toBe("article-journal");
+    expect(read.institution).toBe("中国科学院大学");
+  });
+
+  test("a cover's 题目： label is no part of the title", () => {
+    for (const label of ["题目：", "论文题目：", "题 目："]) {
+      const read = readFirstPage([
+        line("北京大学", 28, 0.08),
+        line("硕士研究生学位论文", 24, 0.2),
+        line(`${label}城市绿地与夏季降温调查`, 18, 0.35),
+        line("姓名：林小雨", 14, 0.6),
+        line("学位授予单位：北京大学", 14, 0.7),
+      ]);
+      expect(read.title, label).toBe("城市绿地与夏季降温调查");
+      expect(read.institution, label).toBe("北京大学");
+      expect(read.type, label).toBe("thesis");
+    }
+  });
 });

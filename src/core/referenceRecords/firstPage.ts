@@ -39,8 +39,14 @@ const THESIS_STATEMENT =
 const THESIS = /学位论文|毕业论文|\b(?:thesis|dissertation)\b/iu;
 const REPORT =
   /工作报告|研究报告|调查报告|年度报告|白皮书|\b(?:annual|technical|research|working)\s+(?:report|paper)\b|\bwhite\s+paper\b/iu;
-/** What a Chinese journal prints on an article's first page. */
-const JOURNAL = /文献标识码|中图分类号|文章编号/u;
+/**
+ * What a journal prints on an article's first page: a Chinese journal's article marks, a DOI, or
+ * the volume and issue in its running header.
+ */
+const JOURNAL =
+  /文献标识码|中图分类号|文章编号|\bdoi\s*[:：]?\s*10\.|doi\.org\/10\.|第\s*\d+\s*卷|第\s*\d+\s*期|\bvol(?:ume)?\.?\s*\d+\s*,?\s*no\.\s*\d/iu;
+/** A cover's label before its title: "题目：", "论文题目：", "Title:". */
+const TITLE_LABEL = /^(?:论\s*文\s*)?题\s*目\s*[:：]\s*|^title\s*:\s*/iu;
 /** A journal's running header ("第 41 卷 第 3 期…中国科学院院刊"), which names no institution of the work's. */
 const JOURNAL_HEADER =
   /第\s*\d+\s*[卷期]|\bvol(?:ume)?\.?\s*\d|\bno\.\s*\d|\bissn\b|学报|院刊|杂志|期刊|\bjournal\b|\bproceedings\b/iu;
@@ -159,7 +165,10 @@ function titleOf(lines: readonly PageLine[]): { title: string; start: number; en
     const start = lines.findIndex((line) => sized(line, size) && meaningful(line.text));
     let end = start;
     while (sized(lines[end + 1], size)) end++;
-    const title = joinLines(lines.slice(start, end + 1).map((line) => line.text));
+    const title = joinLines(lines.slice(start, end + 1).map((line) => line.text)).replace(
+      TITLE_LABEL,
+      "",
+    );
     if (!isHeading(title) && !ONLY_AN_INSTITUTION.test(title) && title.length <= 300) {
       return { title, start, end };
     }
@@ -251,7 +260,8 @@ function authorsOf(lines: readonly PageLine[], titleEnd: number): ReferenceName[
 function institutionOf(lines: readonly PageLine[]): string | null {
   const tidy = (text: string) =>
     text
-      .replace(/^[（(]?\s*\d+\s*[.．、]\s*|^[*†‡§¶#∗♢]+/u, "")
+      // An affiliation's number, "1 中国科学院大学", "（1. …", or its mark.
+      .replace(/^[（(]?\s*\d{1,2}\s*[.．、)）]?\s*(?=\D)|^[*†‡§¶#∗♢]+/u, "")
       .split(/[，,；;]|\s{2,}|[*†‡§¶#∗♢]/u)[0]
       ?.trim() ?? "";
   const universityIn = (text: string) => UNIVERSITY.exec(text)?.[0]?.trim() || null;
@@ -267,9 +277,11 @@ function institutionOf(lines: readonly PageLine[]): string | null {
     .map(tidy)
     .filter((text) => INSTITUTION.test(text) && text.length <= 60 && /^[\p{L}\p{N}]/u.test(text));
   const [granting, school, unit] = labelled;
-  for (const value of [granting, school]) if (value) return universityIn(value) ?? tidy(value);
+  for (const value of [granting, school]) {
+    if (value) return universityIn(tidy(value)) ?? tidy(value);
+  }
   const university = [unit, ...named]
-    .map((text) => (text ? universityIn(text) : null))
+    .map((text) => (text ? universityIn(tidy(text)) : null))
     .find(Boolean);
   return university ?? (unit ? tidy(unit) : null) ?? named[0] ?? null;
 }
@@ -304,23 +316,23 @@ function yearOf(lines: readonly PageLine[]): string | null {
 }
 
 /**
- * What its cover says the work is: a thesis by a cover's heading or statement, or by a line at the
- * top of the page that isn't the title (a title about theses is no thesis's); a journal article by
- * a Chinese journal's article marks; a report by its title or the top of the page.
+ * What its cover says the work is: a thesis by a cover's heading or statement; else a journal
+ * article by a journal's marks, whatever its abstract says of theses; else a thesis by a line at
+ * the top of the page that isn't the title (a title about theses is no thesis's); a report by its
+ * title or the top of the page.
  */
 function typeOf(
   lines: readonly PageLine[],
   title: { start: number; end: number } | null,
 ): FirstPageReading["type"] {
   const inTitle = (index: number) => title !== null && index >= title.start && index <= title.end;
-  const thesis = lines.some(
-    (line, index) =>
-      THESIS_HEADING.test(line.text) ||
-      THESIS_STATEMENT.test(line.text) ||
-      (line.top < TOP && !inTitle(index) && THESIS.test(line.text)),
-  );
-  if (thesis) return "thesis";
+  if (lines.some((line) => THESIS_HEADING.test(line.text) || THESIS_STATEMENT.test(line.text))) {
+    return "thesis";
+  }
   if (lines.some((line) => JOURNAL.test(line.text))) return "article-journal";
+  if (lines.some((line, index) => line.top < TOP && !inTitle(index) && THESIS.test(line.text))) {
+    return "thesis";
+  }
   const report = lines.some(
     (line, index) => (inTitle(index) || line.top < TOP) && REPORT.test(line.text),
   );
