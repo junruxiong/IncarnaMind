@@ -19,7 +19,22 @@ export function MindCheckAsk({ mindId }: { mindId: string }) {
   const asking = useMindCheck((state) => state.asking[mindId]);
   if (!asking) return null;
   const where = asking.inFolder ? "folder" : "all";
-  const count = new Intl.NumberFormat(language).format(asking.sentences);
+  const format = new Intl.NumberFormat(language).format;
+  const count = format(asking.sentences);
+  const { likely } = asking;
+  const question =
+    likely === null || asking.sentences === 1
+      ? t(asking.sentences === 1 ? `mindCheck.ask.${where}.one` : `mindCheck.ask.${where}`, {
+          count,
+          estimate: asking.estimate,
+        })
+      : likely < asking.sentences
+        ? t(`mindCheck.ask.${where}.range`, {
+            least: format(likely),
+            most: count,
+            estimate: asking.estimate,
+          })
+        : t(`mindCheck.ask.${where}.about`, { count, estimate: asking.estimate });
   return (
     <ProblemLine
       role="status"
@@ -36,10 +51,7 @@ export function MindCheckAsk({ mindId }: { mindId: string }) {
         onClick: () => dismissMindCheck(mindId),
       }}
     >
-      {t(asking.sentences === 1 ? `mindCheck.ask.${where}.one` : `mindCheck.ask.${where}`, {
-        count,
-        estimate: asking.estimate,
-      })}
+      {question}
     </ProblemLine>
   );
 }

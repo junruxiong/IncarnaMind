@@ -656,8 +656,16 @@ export const zhCN = {
   "mindCheck.command.keywords": "核对 全部 整篇 草稿 发送前 说法 句子",
   "mindCheck.ask.folder.one": "要对照这个文件夹中的文档，核对这个 Mind 的这一句吗？{estimate}",
   "mindCheck.ask.folder": "要对照这个文件夹中的文档，核对这个 Mind 的 {count} 句吗？{estimate}",
+  "mindCheck.ask.folder.range":
+    "要对照这个文件夹中的文档，核对这个 Mind 中的说法（约 {least}–{most} 句）吗？{estimate}",
+  "mindCheck.ask.folder.about":
+    "要对照这个文件夹中的文档，核对这个 Mind 中的说法（约 {count} 句）吗？{estimate}",
   "mindCheck.ask.all.one": "要对照你的文档，核对这个 Mind 的这一句吗？{estimate}",
   "mindCheck.ask.all": "要对照你的文档，核对这个 Mind 的 {count} 句吗？{estimate}",
+  "mindCheck.ask.all.range":
+    "要对照你的文档，核对这个 Mind 中的说法（约 {least}–{most} 句）吗？{estimate}",
+  "mindCheck.ask.all.about":
+    "要对照你的文档，核对这个 Mind 中的说法（约 {count} 句）吗？{estimate}",
   "mindCheck.check": "核对",
   "mindCheck.cancel": "暂不",
   "verify.command": "核对文档…",
@@ -2344,8 +2352,8 @@ export const zhCN = {
   "command.researchPlan.keywords": "计划 步骤 研究 运行中",
 
   "cost.and": "{first} 和 {second}",
-  "cost.estimate": "约 {calls} 次调用、{tokens} token、{cost}",
-  "cost.estimate.unpriced": "约 {calls} 次调用、{tokens} token",
+  "cost.estimate": "约 {cost} · {calls} 次模型调用",
+  "cost.estimate.unpriced": "约 {calls} 次模型调用 · {tokens} token",
   "cost.estimate.month": "本月已用 {spent}，上限 {cap}",
   "cost.cap.title": "每月花费上限",
   "cost.cap.switch": "限制 API 密钥每月的花费",

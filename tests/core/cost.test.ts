@@ -5,6 +5,7 @@ import { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, test } from "vitest";
 import type { ChatProvider, Core, MonthlyCap, TaskKind } from "../../src/core";
 import { createAiSdkChatModel, InvalidInputError } from "../../src/core";
+import { readsAsOwnClaim } from "../../src/core/answers/checks/claims";
 import { DATABASE_FILE } from "../../src/core/core";
 import { costOf, inCurrency, rateAt } from "../../src/core/cost/price";
 import { catalogFacts } from "../../src/core/providers/catalog";
@@ -16,6 +17,7 @@ import { openDatabase } from "../../src/core/storage";
 import { createFakeBrowser, startFakeOpenAI } from "../helpers/chatgpt";
 import { answerEnded } from "../helpers/citations";
 import { createTempDataFolder, manualClock, queryDatabase, startCore } from "../helpers/core";
+import { addAndProcess, writeSourceFile } from "../helpers/documents";
 import { connectToMind } from "../helpers/mindClient";
 import { answerIn, note, question, writeMind } from "../helpers/minds";
 
@@ -989,6 +991,110 @@ describe("The estimate before a large run", () => {
       cap: { amount: 20, currency: "USD" },
       spentTowardCap: { currency: "USD", amount: await spentUsd(core) },
     });
+  });
+});
+
+describe("The estimate before a check run (#973)", () => {
+  const AT = new Date("2026-10-12T09:00:00.000Z");
+  /** A real Check this Mind run's calls, as Anthropic reported them (see the fixture's "about"). */
+  const recordedRun = async (): Promise<{ memo: string[][]; checked: number; calls: Counted[] }> =>
+    JSON.parse(
+      await readFile(join(import.meta.dirname, "../fixtures/cost/recorded-checks.json"), "utf8"),
+    );
+  const within = (estimated: number, actual: number) => {
+    expect(estimated / actual).toBeGreaterThan(1 / 1.5);
+    expect(estimated / actual).toBeLessThan(1.5);
+  };
+
+  // protects=the accountant's case: the estimate counts about the sentences checked and comes within 1.5 times the run's calls, tokens and price; fails_when=it counts every sentence, or prices a check as an Answer; no_claim=other models' token counts.
+  test("a memo checked on Claude Haiku 5.5: the sentences that read as claims are about those the model checked, and calls, tokens and price come within 1.5 times the run's", async () => {
+    const run = await recordedRun();
+    const likely = run.memo.flat().filter(readsAsOwnClaim).length;
+    expect(Math.abs(likely - run.checked)).toBeLessThanOrEqual(run.checked / 5);
+    const { core } = await cloudCore(reportingModel([{ input: 0, output: 0 }]));
+
+    const estimate = await core.estimateRun({ items: likely, each: "check" });
+
+    if (estimate.billing !== "per-token" || !estimate.cost) throw new Error("No price.");
+    within(estimate.calls, run.calls.length);
+    within(
+      estimate.tokens,
+      run.calls.reduce((sum, call) => sum + call.input + call.output, 0),
+    );
+    within(
+      estimate.cost.amount,
+      run.calls.reduce(
+        (sum, call) =>
+          sum +
+          costOf(
+            {
+              inputTokens: call.input,
+              cachedInputTokens: call.cached ?? 0,
+              cacheWriteTokens: call.written ?? 0,
+              outputTokens: call.output,
+            },
+            haikuPrice(),
+            AT,
+            { cacheWrites: true },
+          ),
+        0,
+      ),
+    );
+  });
+
+  test("Answers recorded on the model leave a check's estimate as it was, while an Answer's averages them", async () => {
+    // A computer that has asked about long Documents: each call of an Answer read 28,000 tokens.
+    const { core } = await cloudCore(reportingModel([{ input: 28_000, output: 300 }]));
+    for (let call = 0; call < 6; call++) await request(core);
+    const fresh = await cloudCore(reportingModel([{ input: 0, output: 0 }]));
+
+    expect(await core.estimateRun({ items: 14, each: "check" })).toEqual(
+      await fresh.core.estimateRun({ items: 14, each: "check" }),
+    );
+    expect(await core.estimateRun({ items: 14 })).toMatchObject({
+      calls: 42,
+      tokens: 42 * 28_300,
+    });
+  });
+
+  test("checks recorded on the model are what a check's estimate averages", async () => {
+    const { core, provider, dataDir } = await cloudCore(
+      reportingModel([{ input: 5_000, output: 100 }]),
+    );
+    if (provider.service) await core.allowDataFlow("checks", provider.service.id);
+    const sources = await createTempDataFolder();
+    await addAndProcess(core, [
+      await writeSourceFile(
+        sources,
+        "Tides.md",
+        "# Tides\n\nSpring tides come at new and full moon.\n",
+      ),
+    ]);
+    const mind = await core.createMind({ title: "Harbour notes" });
+    const client = await connectToMind(core, mind.id);
+    const text = [
+      "Spring tides come at new and full moon.",
+      "Neap tides come at the quarter moons.",
+      "The harbour office opens at nine.",
+      "The ferry leaves twice a day.",
+      "The lighthouse was built in 1867.",
+    ].join(" ");
+    const block = note(text);
+    writeMind(client, [block]);
+    await client.settled();
+    const blockId = String(block.attrs?.id);
+    await core.checkSentences({
+      requestId: "first",
+      mindId: mind.id,
+      action: "check-against-documents",
+      from: { blockId, offset: 0 },
+      to: { blockId, offset: text.length },
+    });
+    expect(rows(dataDir).filter((row) => row.flow === "checks").length).toBeGreaterThanOrEqual(5);
+
+    const estimate = await core.estimateRun({ items: 10, each: "check" });
+
+    expect(estimate).toMatchObject({ calls: 24, tokens: 24 * 5_100 });
   });
 });
 

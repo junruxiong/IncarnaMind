@@ -3864,9 +3864,11 @@ export interface TaskShown {
   blockId: string | null;
 }
 
-/** A large run to estimate: so many items (a comparison table's cells, verify's sentences…), each about an Answer. */
+/** A large run to estimate: so many items (a comparison table's cells, verify's sentences…). */
 export interface RunEstimateInput {
   items: number;
+  /** What each item is: about an Answer (the default), or a sentence checked against Documents (#973). */
+  each?: "answer" | "check";
   /** The web searches it makes (#128), each billed by the model's provider, on top of its items. */
   searches?: number;
   /** The model it would use; the default model when left out. */
@@ -4473,6 +4475,12 @@ export type MindCheckPlan =
       kind: "ready";
       /** The sentences it sends: to find the claims among, and the checks to make again. */
       sentences: number;
+      /**
+       * How many it is likely to check: the checks made again, and the sentences
+       * whose words read as claims. The model names the claims only once the run
+       * starts, so the number checked is from about this up to `sentences`.
+       */
+      likely: number;
       /** Whether the model first names the claims among them; only checks made again don't need it. */
       findsClaims: boolean;
       /** The Mind's own model; null for the default. */
