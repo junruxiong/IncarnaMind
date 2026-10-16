@@ -4,7 +4,7 @@
  * per picture each version shows (migration 89).
  */
 import { randomUUID } from "node:crypto";
-import type { WebPageInfo, WebPageLook, WebPageLookFailure } from "../../api";
+import type { WebPageInfo, WebPageLook, WebPageLookFailure, WebPageOrigin } from "../../api";
 import type { Database } from "../../storage";
 
 interface WebPageRow {
@@ -15,6 +15,7 @@ interface WebPageRow {
   published: string | null;
   fetched_at: string;
   pictures_left_out: number;
+  origin: WebPageOrigin;
   look_status: "saving" | "saved" | "failed" | null;
   look_hash: string | null;
   look_saved_at: string | null;
@@ -30,6 +31,7 @@ export interface WebPageVersion {
   published: string | null;
   fetchedAt: string;
   picturesLeftOut: number;
+  origin: WebPageOrigin;
 }
 
 /** A picture a version shows, numbered from 1 as the page shows them; its file is named by `pictureHash`. */
@@ -81,7 +83,7 @@ function lookOf(row: WebPageRow): WebPageLook | null {
 export function webPageInfo(db: Database, documentId: string): WebPageInfo | null {
   const rows = db.all<WebPageRow>(
     `SELECT content_hash, address, site_name, author, published, fetched_at, pictures_left_out,
-       look_status, look_hash, look_saved_at, look_failure
+       origin, look_status, look_hash, look_saved_at, look_failure
      FROM web_pages
      WHERE document_id = ? AND deleted_at IS NULL ORDER BY fetched_at DESC, rowid DESC`,
     [documentId],
@@ -90,6 +92,7 @@ export function webPageInfo(db: Database, documentId: string): WebPageInfo | nul
   if (!latest) return null;
   return {
     address: latest.address,
+    origin: latest.origin,
     siteName: latest.site_name,
     author: latest.author,
     published: latest.published,
@@ -179,6 +182,24 @@ export function currentLookHash(db: Database, documentId: string): string | null
   return latest?.look_status === "saved" && isLookHash(latest.look_hash) ? latest.look_hash : null;
 }
 
+export function claimForUser(db: Database, documentId: string, at: string): void {
+  db.run(
+    `UPDATE web_pages SET origin = 'user', updated_at = ?
+     WHERE document_id = ? AND origin <> 'user' AND deleted_at IS NULL`,
+    [at, documentId],
+  );
+}
+
+export function originOf(db: Database, documentId: string): WebPageOrigin | null {
+  return (
+    db.get<{ origin: WebPageOrigin }>(
+      `SELECT origin FROM web_pages WHERE document_id = ? AND deleted_at IS NULL
+       ORDER BY fetched_at DESC, rowid DESC LIMIT 1`,
+      [documentId],
+    )?.origin ?? null
+  );
+}
+
 export function documentAtAddress(db: Database, address: string): string | null {
   return (
     db.get<{ document_id: string }>(
@@ -211,8 +232,8 @@ export function recordVersion(db: Database, version: WebPageVersion, at: string)
   if (updated) return;
   db.run(
     `INSERT INTO web_pages (id, document_id, content_hash, address, site_name, author, published,
-       fetched_at, pictures_left_out, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       fetched_at, pictures_left_out, origin, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       randomUUID(),
       version.documentId,
@@ -223,6 +244,7 @@ export function recordVersion(db: Database, version: WebPageVersion, at: string)
       version.published,
       version.fetchedAt,
       version.picturesLeftOut,
+      version.origin,
       at,
       at,
     ],
