@@ -110,10 +110,14 @@ test("first run: the row is first under Other ways, says the usage limits first 
     await row.getByTestId("claude-plan-sign-in").click();
     const code = await codeAfterApproving(app, 1);
     const waiting = row.getByTestId("claude-plan-waiting");
-    await expect(waiting).toContainText("Finish signing in to Claude in your browser.");
+    await expect(waiting).toContainText(
+      "Sign in to Claude in your browser, then paste the code it shows.",
+    );
     await expect(waiting.getByTestId("claude-plan-usage")).toHaveText(USAGE);
-    const field = waiting.getByTestId("claude-paste-address");
+    // The code is the way on, so its field is open, focused and named for what goes in it.
+    const field = waiting.getByLabel("Code from Claude's page");
     await expect(field).toBeFocused();
+    await expect(waiting.getByTestId("claude-paste-continue")).toHaveText("Finish signing in");
 
     await field.fill("not a code");
     await field.press("Enter");
@@ -251,18 +255,19 @@ test("⌘K: Sign in with Claude opens the words in Settings › Models, before a
   }
 });
 
-test("in Chinese: the row follows a model on this computer, with the usage limits first", async () => {
+test("in Chinese: the row is first under Other ways too and a model on this computer last, with the usage limits first", async () => {
   const { app, window } = await launchApp(dataDir, { claude: fake.origin });
   try {
     await setWindowSize(app, window, 1100, 660);
+    await interceptOpenExternal(app);
     await setLanguage(window, "zh-CN");
     await acceptPlainTextKeys(window);
     const card = await askFirstQuestion(window);
     await card.getByTestId("setup-other").click();
     const ways = card.locator("[data-testid^='way-']:not([data-testid$='-open'])");
     await expect(ways).toHaveCount(2);
-    await expect(ways.nth(0)).toHaveAttribute("data-testid", "way-local");
-    await expect(ways.nth(1)).toHaveAttribute("data-testid", "way-claude");
+    await expect(ways.nth(0)).toHaveAttribute("data-testid", "way-claude");
+    await expect(ways.nth(1)).toHaveAttribute("data-testid", "way-local");
 
     const row = card.getByTestId("way-claude");
     await expect(row).toContainText("使用我的 Claude 订阅");
@@ -272,6 +277,9 @@ test("in Chinese: the row follows a model on this computer, with the usage limit
     await expect(lines.first()).toHaveCSS("font-weight", "600");
     await expect(row.getByTestId("claude-plan-sign-in")).toHaveText("用 Claude 账号登录");
     await expectInside(card, [lines.first(), lines.nth(1), lines.nth(2)]);
+    await row.getByTestId("claude-plan-sign-in").click();
+    await expect(row.getByLabel("Claude 页面上的代码")).toBeFocused();
+    await expect(row.getByTestId("claude-paste-continue")).toHaveText("完成登录");
   } finally {
     await app.close();
   }

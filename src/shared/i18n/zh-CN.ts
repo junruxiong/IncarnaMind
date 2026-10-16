@@ -1846,10 +1846,10 @@ export const zhCN = {
   "claudePlan.off": "在这里登录之前不会启用，随时可以在“设置 › 模型”中退出登录。",
   "claudePlan.signIn": "用 Claude 账号登录",
   "claudePlan.cancel": "取消",
-  "claudePlan.waiting": "请在浏览器中完成 Claude 登录。",
+  "claudePlan.waiting": "请在浏览器中登录 Claude，然后粘贴页面上显示的代码。",
   "claudePlan.reopen": "重新打开登录页面",
-  "claudePlan.paste.question": "已经登录，但这里还在等待？",
-  "claudePlan.paste.open": "粘贴浏览器里显示的代码",
+  "claudePlan.paste.label": "Claude 页面上的代码",
+  "claudePlan.paste.continue": "完成登录",
   "claudePlan.paste.problem.not-sign-in-address": "这不是 Claude 页面上的代码。",
   "claudePlan.paste.problem.other-sign-in":
     "这个代码来自之前的一次登录。在刚打开的页面上登录后，再粘贴那里的代码。",

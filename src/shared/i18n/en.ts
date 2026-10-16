@@ -1941,10 +1941,10 @@ export const en = {
     "It stays off until you sign in here, and you can sign out any time in Settings › Models.",
   "claudePlan.signIn": "Sign in with Claude",
   "claudePlan.cancel": "Cancel",
-  "claudePlan.waiting": "Finish signing in to Claude in your browser.",
+  "claudePlan.waiting": "Sign in to Claude in your browser, then paste the code it shows.",
   "claudePlan.reopen": "Open the sign-in page again",
-  "claudePlan.paste.question": "Signed in, but still waiting here?",
-  "claudePlan.paste.open": "Paste the code from your browser",
+  "claudePlan.paste.label": "Code from Claude's page",
+  "claudePlan.paste.continue": "Finish signing in",
   "claudePlan.paste.problem.not-sign-in-address": "That isn't the code from Claude's page.",
   "claudePlan.paste.problem.other-sign-in":
     "That code is from an earlier sign-in. Sign in on the page just opened, then paste its code.",
