@@ -17,6 +17,7 @@ import {
   useContinueWithChatGpt,
 } from "./ChatGptSignIn";
 import { OllamaAction } from "./ChatProviderChoices";
+import { ClaudePlanWay } from "./ClaudePlan";
 import {
   OllamaProgress,
   type Ollama as OllamaState,
@@ -94,6 +95,7 @@ export function ModelSetupCard() {
               {t("setup.other")}
             </summary>
             <div className="mt-2 flex flex-col gap-2">
+              {!chinese && <ClaudePlanWay onUseKey={() => setView("key")} />}
               <Way
                 testId="way-local"
                 title={t("setup.way.local")}
@@ -109,6 +111,8 @@ export function ModelSetupCard() {
                   link: { label: t("setup.getOllama"), href: "https://ollama.com/download" },
                 })}
               />
+              {/* Claude doesn't serve mainland China, so in Chinese it follows a model on this computer. */}
+              {chinese && <ClaudePlanWay onUseKey={() => setView("key")} />}
               {/* Connecting the Claude app needs the agent connection, which is off (#882). */}
               {SHOW_AGENT_CONNECTION && !chinese && <ClaudeWay />}
             </div>
