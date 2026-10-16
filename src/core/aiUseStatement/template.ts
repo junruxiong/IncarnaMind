@@ -4,6 +4,7 @@
  * counts of. It never scores, rates or compares, and never says anything about
  * AI detection: a test keeps those words out of every template.
  */
+import type { SentenceResult } from "../../shared/claimChecks";
 import { formatDate } from "../../shared/dates";
 import { type MessageKey, translate } from "../../shared/i18n";
 import { UNREAD_REASON_KEYS } from "../../shared/unreadFiles";
@@ -17,7 +18,6 @@ import {
   SENTENCE_WORDS,
   type SectionCount,
   type SentenceCounts,
-  type SentenceResult,
   totalCitations,
   totalSentences,
   type Use,

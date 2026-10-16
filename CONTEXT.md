@@ -325,6 +325,10 @@ _Avoid_: telemetry, tracking
 What the AI put into a Mind, or proposed and the User turned down, and what became of it (kept, edited, deleted), and each sentence a model checked, kept per Mind on this computer. It holds kinds, sizes, the model and times, never text, and is never sent, whatever the User chose about Usage data.
 _Avoid_: AI log, AI history
 
+**Check record**:
+A PDF or CSV the User saves from a Mind, listing each sentence and Citation IncarnaMind checked in it with the result, the Document version (name, size, SHA-256), the Location, the quote, the model and when, and whose text it is. It says what was checked and how, not whether a claim is right, and is written only where the User saves it.
+_Avoid_: audit log, report
+
 ### Window
 
 **Tab**:

@@ -1,7 +1,7 @@
 import { EXPORT_FORMATS } from "../../../core/api";
 import { exportAiUseStatement } from "../aiUseStatement";
 import { useExportDialog } from "../exportDialog";
-import { exportMind, exportPreferences, FORMAT_LABELS } from "../exports";
+import { exportCheckRecord, exportMind, exportPreferences, FORMAT_LABELS } from "../exports";
 import { currentTabOf } from "../layoutSlice";
 import { useAppStore } from "../store";
 import { findTab } from "../tabs";
@@ -87,6 +87,19 @@ export const exportCommands: readonly Command[] = [
     run: (ctx) => {
       const mindId = mindOf(ctx);
       if (mindId) return exportAiUseStatement(mindId);
+    },
+  },
+  {
+    id: "mind.checkRecord",
+    label: "checkRecord.command",
+    keywords: ["checkRecord.keywords"],
+    group: "main",
+    // Two new files under free names: nothing is replaced, and the files stay the User's to delete.
+    reversible: true,
+    when: (ctx) => onlyOne(ctx) && mindOf(ctx) !== null,
+    run: (ctx) => {
+      const mindId = mindOf(ctx);
+      if (mindId) return exportCheckRecord(mindId);
     },
   },
 ];

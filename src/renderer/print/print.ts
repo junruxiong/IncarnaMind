@@ -14,6 +14,9 @@ import { PAPER, PRINT_ENTRY, type PrintDocument } from "../../shared/printDocume
 /** Room left at each page's foot, so rounding never pushes a page onto a second sheet. */
 const SAFETY_PX = 2;
 
+/** What a page's footer takes of the room above the margin's middle, where the page number sits. */
+const FOOTER_PX = 12;
+
 /** What a source pack's sheet keeps for its title and the notes under the picture, in CSS pixels. */
 const PACK_TEXT_PX = 84;
 
@@ -110,6 +113,7 @@ class Paginator {
     private readonly notes: readonly string[],
     /** The height a page's body and notes share. */
     private readonly room: number,
+    private readonly footer?: string,
   ) {
     this.page = this.newPage();
   }
@@ -225,6 +229,12 @@ class Paginator {
       number.className = "page-number";
       number.textContent = String(index + 1);
       page.append(number);
+      if (this.footer) {
+        const footer = document.createElement("div");
+        footer.className = "page-footer";
+        footer.textContent = this.footer;
+        page.append(footer);
+      }
     });
     return this.pages;
   }
@@ -396,7 +406,7 @@ async function print(printed: PrintDocument): Promise<number> {
   document.documentElement.lang = printed.language;
   document.title = printed.title;
   const page = document.createElement("style");
-  const room = paper.height - SAFETY_PX - 2 * paper.margin;
+  const room = paper.height - SAFETY_PX - 2 * paper.margin - (printed.footer ? FOOTER_PX : 0);
   page.textContent = `@page { size: ${paper.css}; margin: 0 }
 :root { --page-width: ${paper.width}px; --page-height: ${paper.height - SAFETY_PX}px; --page-margin: ${paper.margin}px; --pack-height: ${room - PACK_TEXT_PX}px; }`;
   document.head.append(page);
@@ -420,7 +430,7 @@ async function print(printed: PrintDocument): Promise<number> {
   const container = document.createElement("main");
   container.className = "pages";
   document.body.append(container);
-  const pages = new Paginator(container, printed.notes, room).run(blocksOf(source));
+  const pages = new Paginator(container, printed.notes, room, printed.footer).run(blocksOf(source));
   numberCoverList(pages);
   source.remove();
   return pages.length;

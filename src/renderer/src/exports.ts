@@ -1,8 +1,12 @@
 import { create } from "zustand";
 import type {
+  CheckRecordFormat,
   ExportFormat,
   ExportMindOptions,
   ExportPreferences,
+  SavedCheckRecord,
+  SavedExport,
+  SavedMindExport,
   SentenceChecksExported,
   WordExportReport,
 } from "../../core/api";
@@ -66,15 +70,23 @@ export const optionsFor = (
     : { format, theirChanges };
 };
 
+export type ExportKind = ExportFormat | "check-record";
+
+export const isCheckRecord = (kind: ExportKind): kind is "check-record" => kind === "check-record";
+
 /** How the last export went, said in the Mind it exported (`ExportResultLine`). */
 export type ExportResult =
-  | { mindId: string; state: "saving"; format: ExportFormat }
+  | { mindId: string; state: "saving"; format: ExportKind }
   | {
       mindId: string;
       state: "saved";
-      format: ExportFormat;
+      format: ExportKind;
       path: string;
       name: string;
+      /** The check record's CSV, saved beside the PDF named. */
+      withCsv: boolean;
+      /** The check record's files that couldn't be saved, each with why: the other was kept. */
+      failures: { format: CheckRecordFormat; reason: string }[];
       /** The folder it is in, which the line names. */
       folder: string;
       inDefaultFolder: boolean;
@@ -92,13 +104,13 @@ export type ExportResult =
     }
   /** Not saved yet: what a Word file can't keep, for the User to see first (#105). */
   | { mindId: string; state: "review"; format: ExportFormat; word: WordExportReport }
-  | { mindId: string; state: "failed"; format: ExportFormat; message: string }
+  | { mindId: string; state: "failed"; format: ExportKind; message: string }
   /** A source pack of a Mind with no Citations: nothing to make, and nothing went wrong. */
   | { mindId: string; state: "empty"; format: ExportFormat }
   | {
       mindId: string;
       state: "not-allowed";
-      format: ExportFormat;
+      format: ExportKind;
       linkedFolderId: string;
       folder: string;
     };
@@ -111,12 +123,75 @@ export const useExports = create<{
   dismiss: () => set({ result: null }),
 }));
 
+// Null while the same Mind is still exporting, so a held ⇧⌘E makes one file; a newer export or a
+// dismissal wins over a late answer.
+function begin(mindId: string, kind: ExportKind): ((next: ExportResult | null) => void) | null {
+  const { result } = useExports.getState();
+  if (result?.mindId === mindId && result.state === "saving") return null;
+  useExports.setState({ result: { mindId, state: "saving", format: kind } });
+  return (next) => {
+    const current = useExports.getState().result;
+    if (current?.mindId === mindId && current.state === "saving") {
+      useExports.setState({ result: next });
+    }
+  };
+}
+
+const NO_CHECKS: SentenceChecksExported = {
+  contradicted: 0,
+  unsupported: 0,
+  needsRecheck: 0,
+  commented: false,
+};
+
+function savedResult(
+  mindId: string,
+  format: ExportKind,
+  saved: Exclude<SavedMindExport, { status: "review" }> | SavedExport | SavedCheckRecord,
+): ExportResult | null {
+  if (saved.status === "saved") {
+    return {
+      mindId,
+      state: "saved",
+      format,
+      path: saved.file.path,
+      name: saved.file.name,
+      withCsv: "withCsv" in saved && saved.withCsv,
+      failures:
+        "failures" in saved
+          ? saved.failures.map(({ format, message, wording }) => ({
+              format,
+              reason: wording ? translateNow(wording.key, wording.values) : message,
+            }))
+          : [],
+      folder: saved.file.folder,
+      inDefaultFolder: saved.file.inDefaultFolder,
+      at: Date.now(),
+      unverified: "unverifiedCitations" in saved ? saved.unverifiedCitations : 0,
+      checks: "sentenceChecks" in saved ? saved.sentenceChecks : NO_CHECKS,
+      tracked: "trackedChanges" in saved ? saved.trackedChanges : 0,
+      kept: "word" in saved ? (saved.word?.keptFurniture ?? []) : [],
+      defaulted: saved.file.defaulted,
+    };
+  }
+  if (saved.status === "not-allowed") {
+    return {
+      mindId,
+      state: "not-allowed",
+      format,
+      linkedFolderId: saved.linkedFolderId,
+      folder: folderName(saved.linkedFolderPath),
+    };
+  }
+  // The User didn't choose where new files go: nothing was saved, and nothing went wrong.
+  return null;
+}
+
 /**
  * Exports a Mind into the Output location (the first save asks where that is), in `format` or
  * the last one, which it becomes; the result line says how it went. `first` fixes what stopped
  * the last try (another Output location, allowing a Linked folder), unless it returns false.
  * `accept` is what a Word file can't keep that the User has seen and exports anyway (#105).
- * Nothing starts while the same Mind is still exporting: a held ⇧⌘E makes one file.
  */
 export async function exportMind(
   mindId: string,
@@ -124,23 +199,15 @@ export async function exportMind(
   first?: () => Promise<boolean>,
   accept?: readonly string[],
 ): Promise<void> {
-  const { result } = useExports.getState();
-  if (result?.mindId === mindId && result.state === "saving") return;
   const preferences = exportPreferences();
   const chosen = format ?? preferences.format;
-  useExports.setState({ result: { mindId, state: "saving", format: chosen } });
+  const settle = begin(mindId, chosen);
+  if (!settle) return;
   if (chosen !== preferences.format) {
     void useAppStore
       .getState()
       .updateSettings({ user: { exportOptions: { ...preferences, format: chosen } } });
   }
-  const settle = (next: ExportResult | null) => {
-    // A newer export, or a dismissal, wins over this one's late answer.
-    const current = useExports.getState().result;
-    if (current?.mindId === mindId && current.state === "saving") {
-      useExports.setState({ result: next });
-    }
-  };
   try {
     if (chosen === "source-pack") {
       const { citations } = await core.previewMindExport(mindId, { format: chosen });
@@ -157,36 +224,11 @@ export async function exportMind(
       ...optionsFor(chosen, preferences),
       ...(accept && { accept: [...accept] }),
     });
-    if (saved.status === "saved") {
-      settle({
-        mindId,
-        state: "saved",
-        format: chosen,
-        path: saved.file.path,
-        name: saved.file.name,
-        folder: saved.file.folder,
-        inDefaultFolder: saved.file.inDefaultFolder,
-        at: Date.now(),
-        unverified: saved.unverifiedCitations,
-        checks: saved.sentenceChecks,
-        tracked: saved.trackedChanges,
-        kept: saved.word?.keptFurniture ?? [],
-        defaulted: saved.file.defaulted,
-      });
-    } else if (saved.status === "review") {
-      settle({ mindId, state: "review", format: chosen, word: saved.word });
-    } else if (saved.status === "not-allowed") {
-      settle({
-        mindId,
-        state: "not-allowed",
-        format: chosen,
-        linkedFolderId: saved.linkedFolderId,
-        folder: folderName(saved.linkedFolderPath),
-      });
-    } else {
-      // The User didn't choose where new files go: nothing was saved, and nothing went wrong.
-      settle(null);
-    }
+    settle(
+      saved.status === "review"
+        ? { mindId, state: "review", format: chosen, word: saved.word }
+        : savedResult(mindId, chosen, saved),
+    );
   } catch (failure) {
     settle({
       mindId,
@@ -195,6 +237,37 @@ export async function exportMind(
       message: errorMessage(failure, translateNow),
     });
   }
+}
+
+export async function exportCheckRecord(
+  mindId: string,
+  first?: () => Promise<boolean>,
+): Promise<void> {
+  const settle = begin(mindId, "check-record");
+  if (!settle) return;
+  try {
+    if (first && !(await first())) {
+      settle(null);
+      return;
+    }
+    settle(savedResult(mindId, "check-record", await core.saveCheckRecord(mindId)));
+  } catch (failure) {
+    settle({
+      mindId,
+      state: "failed",
+      format: "check-record",
+      message: errorMessage(failure, translateNow),
+    });
+  }
+}
+
+export function exportAgain(
+  mindId: string,
+  kind: ExportKind,
+  first: () => Promise<boolean>,
+): Promise<void> {
+  if (!isCheckRecord(kind)) return exportMind(mindId, kind, first);
+  return exportCheckRecord(mindId, first);
 }
 
 /**

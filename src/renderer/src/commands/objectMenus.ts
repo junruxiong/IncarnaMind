@@ -2,7 +2,7 @@ import { registerMenu } from "./menus";
 
 // Later features add their items with registerMenu: Move to… (#229, #212), Add to note (#201), History (#300), Tag colour and merge (#205).
 
-/** Export as… the last format (⇧⌘E), each other format, the options sheet (#100), then the AI use statement (#739). */
+/** Export as… the last format (⇧⌘E), each other format, the options sheet (#100), the AI use statement (#739), then the check record (#738). */
 const EXPORTS = [
   "mind.export",
   "mind.exportAs.docx",
@@ -13,6 +13,7 @@ const EXPORTS = [
   "mind.exportAs.markdown",
   "mind.exportOptions",
   "mind.aiUseStatement",
+  "mind.checkRecord",
 ] as const;
 
 registerMenu("mind", [

@@ -3,6 +3,7 @@ import type { CitationAttributes } from "../../src/core/api";
 import type { Language } from "../../src/core/language";
 import {
   badgeMessage,
+  citationAttributesOf,
   citationReference,
   citationSource,
   citationState,
@@ -526,5 +527,30 @@ describe("Finding a quote across pages in the viewer", () => {
     expect(findQuoteInPages(pages, "Neap tides are small.")).toEqual([
       { page: 1, piece: 0, start: 0, end: 21 },
     ]);
+  });
+});
+
+describe("a Citation's attributes as a node holds them", () => {
+  test("are read as the Citation they hold, with its Location from the pages", () => {
+    expect(citationAttributesOf({ ...found })).toEqual({
+      ...found,
+      checkReason: undefined,
+      location: { kind: "page", from: 12, to: 13 },
+    });
+  });
+
+  test("leave out what is missing or isn't the right type", () => {
+    expect(
+      citationAttributesOf({ documentId: 7, check: "maybe", pageFrom: "3", quote: ["x"] }),
+    ).toEqual({
+      passageId: null,
+      documentId: null,
+      documentName: null,
+      contentHash: null,
+      pageFrom: null,
+      pageTo: null,
+      location: null,
+      quote: null,
+    });
   });
 });

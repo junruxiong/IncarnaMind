@@ -17,6 +17,8 @@ export interface PrintDocument {
   body: string;
   /** Each footnote's text, as HTML: footnote N is `notes[N - 1]`. */
   notes: string[];
+  /** Plain text for the foot of every page, above its number. */
+  footer?: string;
 }
 
 export type PrintPaper = "a4" | "letter";

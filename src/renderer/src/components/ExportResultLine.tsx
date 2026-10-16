@@ -7,8 +7,10 @@ import { commentedChecks, trackedChanges, unmarkedChecks } from "../exportChecks
 import { useExportDialog } from "../exportDialog";
 import {
   type ExportResult,
+  exportAgain,
   exportMind,
   FORMAT_LABELS,
+  isCheckRecord,
   revealUnverified,
   useExports,
 } from "../exports";
@@ -32,7 +34,10 @@ const SAVED_SHOWN_MS = 10_000;
 type SavedResult = Extract<ExportResult, { state: "saved" }>;
 
 const isPlainSaved = (result: SavedResult, t: ReturnType<typeof useT>): boolean =>
-  result.unverified === 0 && result.kept.length === 0 && unmarkedChecks(result.checks, t) === null;
+  result.unverified === 0 &&
+  result.kept.length === 0 &&
+  result.failures.length === 0 &&
+  unmarkedChecks(result.checks, t) === null;
 
 /**
  * How the last export of this Mind went, floating at the foot of its tab (#100), as problems
@@ -128,14 +133,16 @@ function ResultBody({
     return () => clearTimeout(timer);
   }, [plain, held, dismiss]);
 
-  const format = t(FORMAT_LABELS[result.format]);
+  const saving = isCheckRecord(result.format)
+    ? t("checkRecord.saving")
+    : t("export.saving.line", { format: t(FORMAT_LABELS[result.format]) });
   const fix = (): ProblemAction | undefined => {
     if (result.state === "failed") {
       return {
         label: t("export.changeLocation"),
         testId: "export-change-location",
         onClick: () =>
-          void exportMind(
+          void exportAgain(
             result.mindId,
             result.format,
             async () => (await chooseOutputLocation()) !== null,
@@ -148,7 +155,7 @@ function ResultBody({
         label: t("export.allow"),
         testId: "export-allow",
         onClick: () =>
-          void exportMind(result.mindId, result.format, async () => {
+          void exportAgain(result.mindId, result.format, async () => {
             await core.setLinkedFolderWriting(linkedFolderId, true);
             return true;
           }),
@@ -174,7 +181,7 @@ function ResultBody({
             className="flex items-center gap-2 py-1 text-[13px] leading-5 text-ink-meta"
           >
             <ExportLineIcon className="size-4 shrink-0" />
-            {t("export.saving.line", { format })}
+            {saving}
           </p>
         ) : result.state === "saved" ? (
           <>
@@ -190,6 +197,7 @@ function ResultBody({
                 <CheckIcon />
                 <SavedName
                   name={result.name}
+                  withCsv={result.withCsv}
                   folder={
                     result.inDefaultFolder ? defaultFolderLabel(t) : folderName(result.folder)
                   }
@@ -281,6 +289,11 @@ function ResultBody({
                     )}
               </ProblemLine>
             )}
+            {result.failures.map(({ format, reason }) => (
+              <ProblemLine key={format} role="status" testId={`export-failed-${format}`}>
+                {t(`checkRecord.failed.${format}`, { reason: reasonOf(reason, t) })}
+              </ProblemLine>
+            ))}
             {error && <ProblemLine testId="export-problem">{error}</ProblemLine>}
           </>
         ) : result.state === "empty" ? (
@@ -324,15 +337,17 @@ function ResultBody({
  */
 function SavedName({
   name,
+  withCsv,
   folder,
   withFile,
 }: {
   name: string;
+  withCsv: boolean;
   folder: string;
   withFile: readonly { testId: string; text: string }[];
 }) {
   const t = useT();
-  const said = t("export.doneIn", { name: "\u0000", folder });
+  const said = t(withCsv ? "export.record.doneIn" : "export.doneIn", { name: "\u0000", folder });
   const [before = "", after = ""] = said.split("\u0000");
   const saved = (
     <span className="min-w-0 break-words">

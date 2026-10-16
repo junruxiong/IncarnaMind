@@ -44,6 +44,8 @@ import type { AnswerSearchOptions } from "./answers/engine";
 import {
   type AddDocumentsResult,
   type ChatModelChoice,
+  type CheckRecordFailure,
+  type CheckRecordFormat,
   type CoreApi,
   type CoreEventSource,
   type CreateMindInput,
@@ -61,6 +63,7 @@ import {
   type OwnFileKind,
   type ProviderError,
   type SavedExport,
+  type SavedFile,
   type ScannedQuoteInput,
   type SearchScope,
   type Task,
@@ -71,6 +74,7 @@ import {
 import { createApprovals } from "./approvals";
 import { createBackgroundQueue } from "./backgroundQueue";
 import { createCheckpoints } from "./checkpoints";
+import { createCheckRecord } from "./checkRecord";
 import { createCitationStyles } from "./citationStyles";
 import { type CitedPages, type CitedPlace, createCitedPages } from "./citedPages";
 import { COMPARISON_TASK, createComparisons } from "./comparisons";
@@ -110,6 +114,7 @@ import {
   MindReadOnlyError,
   NotFoundError,
   TaggingNotReadyError,
+  TranslatableError,
 } from "./errors";
 import { type AnyEventListener, createEventHub } from "./events";
 import { createExamples } from "./examples";
@@ -1671,6 +1676,30 @@ export function createCore(adapters: CoreAdapters): Core {
     wordPackage: (mindId) => wordImports.packageOf(mindId),
     author: () => settings.get().author,
     log: adapters.log ?? silentLogger,
+    now,
+  });
+  const checkRecord = createCheckRecord({
+    mind: (mindId) => minds.get(mindId),
+    read: (mindId, look) => content.peek(mindId, look),
+    providers: () => chat.list(),
+    documents: () => documents.list(),
+    keptCitationTexts: () => documents.keptCitationTexts(),
+    readableQuote: ({ documentId, contentHash, pageFrom, pageTo, quote }) =>
+      documentId && quote
+        ? documents.readableQuote({
+            documentId,
+            contentHash: contentHash ?? null,
+            pageFrom: pageFrom ?? null,
+            pageTo: pageTo ?? null,
+            quote,
+          })
+        : null,
+    folderName: (folderId) =>
+      library.folders().find((folder) => folder.id === folderId)?.name ?? null,
+    localMode: () => embedding.localOnly(),
+    language: () => settings.get().language,
+    printer: adapters.printer ?? null,
+    paper: () => paperFor(systemRegion(adapters.systemRegion?.(), adapters.systemLanguages())),
     now,
   });
   const ownFileOf = (options: ExportMindOptions): OwnFileKind =>
@@ -3465,6 +3494,34 @@ export function createCore(adapters: CoreAdapters): Core {
         ownFileOf(options),
       );
       return saved.status === "saved" ? { ...saved, ...counts, word } : saved;
+    },
+    saveCheckRecord: async (mindId) => {
+      const saved: { format: CheckRecordFormat; file: SavedFile }[] = [];
+      const failures: CheckRecordFailure[] = [];
+      let firstError: unknown;
+      for (const { format, make } of await checkRecord.files(mindId)) {
+        try {
+          const { fileName, data } = await make();
+          const result = await saveExport(fileName, data);
+          if (result.status !== "saved") return result;
+          saved.push({ format, file: result.file });
+        } catch (error) {
+          firstError ??= error;
+          failures.push({
+            format,
+            message: error instanceof Error ? error.message : String(error),
+            wording: error instanceof TranslatableError ? error.wording : null,
+          });
+        }
+      }
+      const [first] = saved;
+      if (!first) throw firstError;
+      return {
+        status: "saved",
+        file: first.file,
+        withCsv: first.format === "pdf" && saved.some((each) => each.format === "csv"),
+        failures,
+      };
     },
     saveSkillExport: async (skillId) => {
       const { fileName, data } = await skills.exportZip(skillId);
