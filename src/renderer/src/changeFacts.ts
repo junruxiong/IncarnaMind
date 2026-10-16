@@ -2,7 +2,7 @@
  * What an Answer's calls did in a Mind, in words: on the Answer's card, with
  * the Mind's name ("Changed 3 places in “Q3 review”"), and on the Mind's own
  * line, without it ("Changed 3 places"). One function, so the two counts
- * always agree (#880, D224).
+ * always agree (#880).
  */
 import type { MessageKey, MessageParams } from "../../shared/i18n";
 

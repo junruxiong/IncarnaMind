@@ -131,7 +131,6 @@ export function startApplying(editor: Editor, mindId: string, requestId: string)
   return edit;
 }
 
-/** The editor's record of an edit applied in it, the latest, which its line acts on. */
 function beginEdit(editor: Editor, mindId: string, requestId: string): Applying | null {
   const doc = editorDoc(editor);
   const stack = undoStackOf(editor);
@@ -306,10 +305,10 @@ function apply(edit: Applying, request: string): number {
 // Setting the assistant's changes aside before writing them as the editor's own: no Undo tracks it.
 class SettingAside {}
 
-/** Most of the User's own text in the Blocks they touch: the assistant's changes then wait (D224). */
+// The share of the User's own text in the Mind an assistant change may take out before it waits.
 const MOST_OF_YOUR_TEXT = 0.5;
 
-/** A translation rewrites all of the text by asking, so it never waits, as Edit with AI's never does. */
+// A translation rewrites all of the text by asking, so it never waits, as Edit with AI's never does.
 const TRANSLATION =
   /\btranslat|\bin(?:to)? (?:chinese|english)\b|翻译|译成|(?:改成|用)(?:中文|英文)/i;
 
@@ -328,7 +327,7 @@ function translates(editor: Editor, requests: ReadonlySet<string>): boolean {
 }
 
 /**
- * Applies the assistant's changes the User asked for (#880, D224), now that
+ * Applies the assistant's changes the User asked for (#880), now that
  * they are all in the Mind, as one step of the editor's Undo, with the line
  * over them saying what `facts` counts; or, when they would rewrite most of
  * the User's own text, leaves them waiting with the line that says so.

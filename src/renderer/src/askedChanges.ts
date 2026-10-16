@@ -1,6 +1,6 @@
 /**
  * What the User asked the assistant to write or change applies at once
- * (#880, D224), in the window whose Question asked for it. The core tags the
+ * (#880), in the window whose Question asked for it. The core tags the
  * requests of such a turn (`ProposalRequest.requested`); their changes read
  * as applied in the Mind as they arrive, and a Mind not in view opens in a
  * tab beside the one in focus, never in its place. Once the Answer has
@@ -29,12 +29,10 @@ interface AskedChangesState {
 
 export const useAskedChanges = create<AskedChangesState>()(() => ({ outcomes: {} }));
 
-/** Answers to Questions asked in this window, still being written. */
 const askedHere = new Set<string>();
-/** Each Mind an Answer changed, once looked at: "answer mind". */
 const seen = new Set<string>();
 
-/** How long a Mind just opened in a tab has to show before its changes are applied. */
+// How long a Mind just opened in a tab has to show before its changes are applied.
 const OPEN_WAIT_MS = 10_000;
 
 /** An Answer this window asked for: what it was asked to write or change applies here. */
@@ -42,7 +40,6 @@ export function applyWhatWasAsked(answerId: string): void {
   askedHere.add(answerId);
 }
 
-/** The requests among `requests` that were for what the User asked, as their record in the Mind says. */
 function askedOf(doc: Parameters<typeof proposalRequestOf>[0], requests: readonly string[]) {
   return new Set(
     requests.filter((request) => {
@@ -52,7 +49,6 @@ function askedOf(doc: Parameters<typeof proposalRequestOf>[0], requests: readonl
   );
 }
 
-/** Whether any of a row's requests were asked for, read in a copy of a Mind not open here. */
 function askedInCopy(row: ChangedMind): Promise<boolean> {
   return new Promise((resolve) => {
     const close = openMindCopy(
@@ -72,7 +68,6 @@ const openBeside = (mindId: string) =>
     .changeLayout({ type: "open", item: { kind: "mind", mindId }, where: { in: "place" } })
     .catch(useAppStore.getState().reportError);
 
-/** Draws a row's asked-for changes as applied where its Mind is open; opens it beside the focused one if it isn't. */
 function follow(answerId: string, row: ChangedMind): void {
   const key = `${answerId} ${row.mindId}`;
   const editor = mindEditor(row.mindId);
@@ -99,7 +94,6 @@ function follow(answerId: string, row: ChangedMind): void {
   });
 }
 
-/** Once the Answer has ended: each Mind's asked-for changes applied, or held. */
 async function finish(answer: ConversationAnswer): Promise<void> {
   const outcomes: Record<string, AskedOutcome> = {};
   for (const row of changedMinds(answer)) {

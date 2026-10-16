@@ -7,7 +7,7 @@ import { PencilLineIcon } from "../lineIcons";
 
 /**
  * The card under an Answer whose changes the User asked for applied at once
- * (#880, D224): a line for each Mind with the count its own line shows,
+ * (#880): a line for each Mind with the count its own line shows,
  * "Changed 12 places in “Credit note: draft” · Undo · Review changes", where
  * Undo takes the whole turn back; then a line of their own for the changes
  * it made beyond the request, which wait: "I also suggested 2 changes in

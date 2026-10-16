@@ -1,5 +1,5 @@
 /**
- * Changes the User asked the assistant for (#880, D224), applied once they
+ * Changes the User asked the assistant for (#880), applied once they
  * have all arrived as Proposals in the Mind. The core wrote them before this
  * window could take them in as its own change, as it does for Edit with AI, so
  * they are first set aside and then written again as the editor's change: one
@@ -50,7 +50,7 @@ export function asItWas(node: ProseMirrorNode): ProseMirrorNode {
   return node.type.create(attrs, node.content, marks);
 }
 
-/** A change as it will be once applied, by Block and place in its text, which hold through the rewrite. */
+// By Block and place in its text, which hold through the rewrite, as positions don't.
 type Planned =
   | { kind: "added"; blockId: string }
   | { kind: "removed"; removed: Fragment; before: string | null }
@@ -61,7 +61,6 @@ const idOf = (node: ProseMirrorNode | null | undefined): string | null => {
   return typeof id === "string" ? id : null;
 };
 
-/** The text place of a position in a paragraph or heading, as `placeOnAccept` reads it. */
 function textPlaceAt(
   doc: ProseMirrorNode,
   pos: number,
@@ -72,7 +71,6 @@ function textPlaceAt(
   return block.isTextblock && blockId !== null ? { blockId, offset: $pos.parentOffset } : null;
 }
 
-/** The first top-level Block after `pos` that stays once the changes are applied; null for the Mind's end. */
 function nextStaying(
   doc: ProseMirrorNode,
   pos: number,
@@ -138,7 +136,6 @@ export function planChanges(state: EditorState, requests: ReadonlySet<string>): 
     });
 }
 
-/** Where a top-level Block starts now; null when it is gone. */
 function blockStart(doc: ProseMirrorNode, blockId: string): number | null {
   let found: number | null = null;
   doc.forEach((node, offset) => {
@@ -186,7 +183,7 @@ const blockIdOf = (node: Y.XmlElement | Y.XmlText | Y.XmlHook | undefined): stri
   return typeof id === "string" ? id : null;
 };
 
-/** Makes `blocks` read as `wanted`, a Block at a time: only the Blocks that differ are written again. */
+// Only the Blocks that differ are written again: the rest keep what is anchored in them.
 function writeAs(blocks: Y.XmlFragment, wanted: Y.XmlFragment): void {
   const target = wanted
     .toArray()
