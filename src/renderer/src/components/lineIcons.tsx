@@ -153,6 +153,15 @@ export function DocumentLineIcon({ kind, ...props }: IconProps & { kind: Documen
   );
 }
 
+export function TableLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <rect x="3.5" y="4" width="17" height="16" rx="2" />
+      <path d="M3.5 9.5h17M3.5 14.75h17M9.5 9.5V20" />
+    </LineIcon>
+  );
+}
+
 export function ChevronDownLineIcon(props: IconProps) {
   return (
     <LineIcon strokeWidth={2} {...props}>
