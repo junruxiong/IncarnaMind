@@ -47,6 +47,14 @@ export function RemoteSignIn({ connector }: { connector: RemoteConnector }) {
     </p>
   );
 
+  if (state === "needs-sign-in" && signIn.heldBack) {
+    return (
+      <div data-testid="connector-sign-in-held-back" className={`mt-1 ${noticeClass}`}>
+        <p>{t("remoteConnectors.signIn.heldBack")}</p>
+      </div>
+    );
+  }
+
   if (state === "needs-sign-in") {
     return (
       <div data-testid="connector-sign-in-notice" className={`mt-1 ${noticeClass}`}>

@@ -6178,6 +6178,8 @@ export type ConnectorSignInErrorKind =
   | "client-id-required"
   /** This device can't store the sign-in securely (see `getSecretStorage`). */
   | "secret-storage"
+  /** "Keep everything on this computer" is on and the sign-in's server isn't on this computer: nothing was sent. */
+  | "held-back"
   | "failed";
 
 export interface ConnectorSignInError {
@@ -6192,6 +6194,13 @@ export interface RemoteConnectorSignIn {
   signedIn: boolean;
   /** Renewing the last sign-in failed, so its tokens were removed: the User signs in again. */
   expired: boolean;
+  /**
+   * "Keep everything on this computer" is on, and the server this sign-in is
+   * with isn't on this computer (the MCP server's own is, or the Connector
+   * would be "paused"): it isn't renewed or started, its Tools aren't offered,
+   * and its tokens are kept for when that is off.
+   */
+  heldBack: boolean;
   /** Why the last browser sign-in didn't work; null once one works or starts again. */
   error: ConnectorSignInError | null;
 }
