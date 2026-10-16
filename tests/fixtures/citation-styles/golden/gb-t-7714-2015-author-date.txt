@@ -3,13 +3,13 @@
 ## Citations (34)
 
 1. (Shannon, 1940)
-2. (Kahneman et al., 1979)
-3. (Jumper et al., 2021)
+2. (Kahneman et al., 1979)<sup>265</sup>
+3. (Jumper et al., 2021)<sup>585</sup>
 4. (Vaswani et al., 2017)
 5. (van der Maaten et al., 2008)
 6. (Zhou, 2018)
-7. (Kuhn, 2012)
-8. (Tversky et al., 1982)
+7. (Kuhn, 2012)<sup>52</sup>
+8. (Tversky et al., 1982)<sup>11-12</sup>
 9. (World Health Organization, 2023)
 10. (Citation Style Language, [2026])
 11. (Intergovernmental Panel on Climate Change, 2023)
@@ -18,10 +18,10 @@
 14. (Anon, 2023)
 15. (OECD, 2019a)
 16. (OECD, 2019b)
-17. (钱等, 1990)
+17. (钱等, 1990)<sup>5</sup>
 18. (刘等, 2016)
-19. (费, 2012)
-20. (周, 2016)
+19. (费, 2012)<sup>23</sup>
+20. (周, 2016)<sup>12-15</sup>
 21. (白, 1998)
 22. (吴, 2003)
 23. (贾等, 2011)
@@ -33,8 +33,8 @@
 29. (昂温等, 1988)
 30. (中国力学学会, 1990)
 31. (Vaswani et al., 2017; Kahneman et al., 1979; 刘等, 2016)
-32. (Kuhn, 2012)
-33. (Kuhn, 2012)
+32. (Kuhn, 2012)<sup>60</sup>
+33. (Kuhn, 2012)<sup>61</sup>
 34. (OECD, 2019a; 2019b)
 
 ## Bibliography (30, hanging)

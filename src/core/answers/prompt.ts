@@ -1,9 +1,11 @@
 /** The instructions every Answer is written with. Kept short: every word is sent with every Question. */
+import { figureContextOf, readFigures } from "../../shared/figures";
 import { CJK, nameKey } from "../../shared/text";
 import type { CitationSupport, SkillFile, UnreadFile, UnreadReason } from "../api";
 import { detectLanguage } from "../documents/textLanguage";
 import { LANGUAGE_NAMES, type Language } from "../language";
 import type { LoadedSkill, SkillSummary } from "../skills";
+import type { RequestRoute } from "./routeRequest";
 
 const CJK_CHARACTERS = new RegExp(`[${CJK}]`, "gu");
 const LATIN_WORDS = /\p{Script=Latin}{2,}/gu;
@@ -109,10 +111,11 @@ export function webInstructions(offered: boolean): string {
 
 /**
  * The Minds' Tools, when offered (#202): the User's words decide whether the
- * Answer answers, changes a Mind or makes one. IncarnaMind, not the reply,
- * reports what changed, from the calls; the reply never repeats the new text.
+ * Answer answers, changes a Mind or makes one, and `route` says how
+ * IncarnaMind read them. IncarnaMind, not the reply, reports what changed,
+ * from the calls; the reply never repeats the new text.
  */
-export function mindInstructions(offered: boolean): string {
+export function mindInstructions(offered: boolean, route: RequestRoute | null = null): string {
   if (!offered) return "";
   return [
     "You can also change the User's Minds (their notes) and make new ones, with read_mind, edit_mind, add_to_mind and create_mind. What you write into a Mind arrives there as changes the User accepts or rejects.",
@@ -124,7 +127,23 @@ export function mindInstructions(offered: boolean): string {
     "- If a Tool says nothing was changed, say that first, in one sentence, with why, and don't make the change another way.",
     "- What you write into a Mind follows the same rules as your replies: the language of the Question, and quotation marks only around a Document's own words.",
     "- Don't say what you changed or made in a Mind, nor repeat its new text: IncarnaMind writes under your reply what each call changed, and how much. Once the Tools are done, reply in a sentence or two, with no Citation markers, with only what that line can't say: why, what you left out, or plainly what you couldn't do and why. A Tool that asks you to give its text in your reply instead is the exception.",
-  ].join("\n");
+    routeLine(route),
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function routeLine(route: RequestRoute | null): string {
+  switch (route?.kind) {
+    case "write":
+      return route.newMind
+        ? "- This request asks for a new page or note: write it into a new Mind with create_mind, not in your reply."
+        : "- This request asks for text in a Mind: write it there with add_to_mind, not in your reply. If text of yours still waiting already covers it, revise that with edit_mind instead of writing it again.";
+    case "edit":
+      return "- This request asks to change text in a Mind: change it there with edit_mind, not in your reply.";
+    default:
+      return "";
+  }
 }
 
 /**
@@ -203,6 +222,20 @@ export function datedDocumentsNote(passages: string): string {
   return `These Passages come from Documents of different dates: ${listed}. Take each Document's figure only from a sentence that states it for that Document, never from a passing mention. Where they give different figures for the same thing, lead with the newer Document, then write one sentence naming the older one, its date and its figure, with a Citation.`;
 }
 
+/**
+ * A reminder after Passages in which the reader (../../shared/figures) finds an
+ * amount in brackets read as negative: a deduction written that way is added
+ * to a total, never subtracted (#978). Kept out of the instructions, which go
+ * with every Question. Empty when none does.
+ */
+export function bracketedAmountsNote(passages: string): string {
+  const negative = readFigures(passages, figureContextOf(passages)).some(
+    (figure) => figure.value < 0 && /[(（]/.test(figure.chars),
+  );
+  if (!negative) return "";
+  return 'An amount in brackets in these Passages is negative, as accountants write it: "(12,500)" is minus 12,500, a deduction or a loss, never a plain amount. / 括号里的金额是负数：“（12,500）”是负的 12,500，是扣减或亏损，不是正数。';
+}
+
 /** What marks a Passage of a Document the User keeps as their own workings, in a search's result. */
 export const NOT_CITED_ATTRIBUTE = ' cite="never"';
 
@@ -233,7 +266,7 @@ const CALCULATE = [
 
 /** Structured output's `calculations`, for a model offered them: what `CALCULATE` is to the Tool loop. */
 const CALCULATIONS =
-  '- calculations: one for each number the Answer works out from numbers in Passages (a difference, sum, average, ratio, share, growth rate, a change in percentage points, a conversion between 万 and 亿 or millions and billions), with [=1] in the answer where the number goes, never the number itself: its marker; its inputs, each a name for the formula, a label with its year or period, the marker of the Citation whose quote holds the number, and the number as it is written there; and a formula over the names in Excel\'s syntax, such as (b - a) / a, with "as": "percent" for a growth rate or share. When a number\'s unit or scale is only in a table\'s heading ("单位：万元"), give that line as unitQuote. Inputs are read in base units with that scale applied: give "scale" ("亿", "billion") for the scale a figure is shown in, never a division by 10000 or 1000.';
+  '- calculations: one for each number the Answer works out from numbers in Passages (a difference, sum, average, ratio, share, growth rate, a change in percentage points, a conversion between 万 and 亿 or millions and billions), with [=1] in the answer where the number goes, never the number itself: its marker; its inputs, each a name for the formula, a label with its year or period, the marker of the Citation whose quote holds the number, and the number as it is written there; and a formula over the names in Excel\'s syntax, such as (b - a) / a, with "as": "percent" for a growth rate or share. When a number\'s unit or scale is only in a table\'s heading ("单位：万元"), give that line as unitQuote. Inputs are read in base units with that scale applied: give "scale" ("亿", "billion") for the scale a figure is shown in, never a division by 10000 or 1000. An input keeps its sign as the Passage writes it: an amount in brackets, "(12,500)", is negative, so take a deduction written in brackets off a total by adding it, never by subtracting it.';
 
 /** The Citation check finds a quote with an ellipsis only part by part (see ../../shared/quoteMatch): best avoided. */
 const UNBROKEN_QUOTE =
@@ -333,7 +366,7 @@ export function documentInstructions(
 ): string {
   const documents = `${listed.total} Document${listed.total === 1 ? "" : "s"}`;
   const dated = datedDocumentsNote(passages);
-  const notes = [dated, notCitedNote(passages)].filter(Boolean);
+  const notes = [dated, notCitedNote(passages), bracketedAmountsNote(passages)].filter(Boolean);
   const added = `${scoped ? `The User limited this Question to ${documents} of theirs` : `The User has added ${documents}`} (PDF, Word, PowerPoint, Excel, CSV, text and Markdown files).`;
   switch (mode) {
     case "no-documents":
@@ -381,7 +414,7 @@ export function documentInstructions(
         "",
         "Passages found in the User's Documents for this Question:",
         passages,
-        ...(dated ? [dated] : []),
+        ...[dated, bracketedAmountsNote(passages)].filter(Boolean),
         "",
         "Use them where they help. Don't write citation markers or a list of sources.",
         notCovered(false),
