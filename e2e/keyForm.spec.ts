@@ -198,21 +198,21 @@ test("in Settings the notes and the plan's credits are under the key field, the 
   }
 });
 
-test("the provider's own line on what it does with the data sits under the sentence of where it goes, with a link to its terms, in English and Chinese, at first run and in Settings", async () => {
+test("the provider's own line on what it does with the data sits under the sentence of where it goes, with a link to the page on it, in English and Chinese, at first run and in Settings", async () => {
   const { app, window } = await launchApp(dataDir);
   try {
     await setWindowSize(app, window, 1100, 900);
     await acceptPlainTextKeys(window);
-    for (const [value, terms, lead] of [
-      ["en", "Terms ↗", ""],
-      ["zh-CN", "条款 ↗", "数据使用："],
+    for (const [value, link, lead] of [
+      ["en", "Data use ↗", ""],
+      ["zh-CN", "数据使用 ↗", "数据使用："],
     ] as const) {
       await language(window, value);
       const card = await openKeyForm(window);
       await card.getByTestId("setup-key").click();
       const line = card.getByTestId("provider-form").getByTestId("provider-data-use");
       await expect(line).toContainText(lead);
-      await expect(line.getByRole("link")).toHaveText(terms);
+      await expect(line.getByRole("link")).toHaveText(link);
       await expect(line.getByRole("link")).toHaveAttribute("href", /^https:\/\//);
       await card.getByTestId("setup-back").click();
     }
@@ -221,10 +221,10 @@ test("the provider's own line on what it does with the data sits under the sente
     const settings = await openSettings(window, "models");
     await settings.getByTestId("chat-choice-api-key").check();
     const line = settings.getByTestId("provider-form").getByTestId("provider-data-use");
-    await expect(line.getByRole("link")).toHaveText("Terms ↗");
+    await expect(line.getByRole("link")).toHaveText("Data use ↗");
     await language(window, "zh-CN");
     await expect(line).toContainText("数据使用：");
-    await expect(line.getByRole("link")).toHaveText("条款 ↗");
+    await expect(line.getByRole("link")).toHaveText("数据使用 ↗");
   } finally {
     await app.close();
   }
@@ -265,11 +265,28 @@ test("a way that can't be used yet says why, with the next step: Ollama not runn
   }
 });
 
-/** An OpenAI-compatible server that refuses one key and answers with the other. */
+/**
+ * An OpenAI-compatible server that refuses one key and answers with the other, and answers a
+ * third with Anthropic's 400 for a model that needs 30-day data retention.
+ */
 async function server(): Promise<{ server: Server; url: string }> {
   const http = createServer((request, response) => {
     request.resume();
     request.on("end", () => {
+      if (request.headers.authorization === "Bearer locked-key") {
+        response.writeHead(400, { "content-type": "application/json" });
+        response.end(
+          JSON.stringify({
+            type: "error",
+            error: {
+              type: "invalid_request_error",
+              message:
+                "In order to access this model, your organization or workspace must have data retention enabled.",
+            },
+          }),
+        );
+        return;
+      }
       const good = request.headers.authorization === "Bearer good-key";
       response.writeHead(good ? 200 : 401, { "content-type": "application/json" });
       response.end(
@@ -331,6 +348,40 @@ test("Use this key shows a refused key in place, and with a good one saves and t
     // The waiting Question was asked: the conversation holds its Answer (the server only answers
     // the connection test, so how it ends is not the point).
     await expect(assistantAnswers(window).first()).toBeVisible({ timeout: 15_000 });
+  } finally {
+    await app.close();
+    fake.server.close();
+  }
+});
+
+test("a model that needs 30-day data retention says so with the model's name, and its action puts the cursor where the model is chosen; in English and Chinese", async () => {
+  const fake = await server();
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await setWindowSize(app, window, 1100, 900);
+    await acceptPlainTextKeys(window);
+    await language(window, "en");
+    const settings = await openSettings(window, "models");
+    await settings.getByTestId("chat-choice-api-key").check();
+    const form = settings.getByTestId("provider-form");
+    await form.getByTestId("provider-more-toggle").click();
+    await form.getByRole("radio", { name: "OpenAI-compatible server" }).locator("xpath=..").click();
+    await form.locator('input[type="url"]').fill(fake.url);
+    await form.getByTestId("provider-model-text").fill("claude-fable-5-1");
+    await form.locator('input[type="password"]').fill("locked-key");
+    await form.getByTestId("provider-use-key").click();
+    const result = form.getByTestId("connection-test");
+    await expect(result).toContainText(
+      "The key works, but claude-fable-5-1 needs your Anthropic organization to allow 30-day data retention. Choose another model, or use a key from an organization that allows it. · Choose another model",
+      { timeout: 20_000 },
+    );
+    await expect(result).not.toContainText("Console");
+    await language(window, "zh-CN");
+    await expect(result).toContainText(
+      "密钥可用，但 claude-fable-5-1 要求你的 Anthropic 组织开启 30 天数据保留。请换一个模型，或使用已开启此设置的组织的密钥。· 换一个模型",
+    );
+    await result.getByTestId("connection-test-choose-model").click();
+    await expect(form.getByTestId("provider-model-text")).toBeFocused();
   } finally {
     await app.close();
     fake.server.close();
