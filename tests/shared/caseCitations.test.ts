@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { caseCitations, namesDecision } from "../../src/shared/caseCitations";
+import { caseCitations, citedCases, namesDecision } from "../../src/shared/caseCitations";
 
 describe("Court decisions a sentence cites", () => {
   test.each([
@@ -64,6 +64,54 @@ describe("Court decisions a sentence cites", () => {
     expect(caseCitations(sentence)).toEqual([{ name, cite }]);
   });
 
+  test.each([
+    [
+      "Under Hallmark Builders v. Rio Grande Supply, 512 S.W.3d 101 (Tex. 2017), the lien attaches.",
+      "Hallmark Builders v. Rio Grande Supply",
+    ],
+    ["In Marbury v. Madison, 5 U.S. 137 (1803), the Court said so.", "Marbury v. Madison"],
+    ["As held in Marbury v. Madison, 5 U.S. 137 (1803).", "Marbury v. Madison"],
+    ["But see Roe v. Wade, 410 U.S. 113 (1973).", "Roe v. Wade"],
+    ["Per Donoghue v Stevenson [1932] AC 562.", "Donoghue v Stevenson"],
+    [
+      "The rule in Palsgraf v. Long Island R.R. Co., 248 N.Y. 339 (1928).",
+      "Palsgraf v. Long Island R.R. Co.",
+    ],
+  ])("a name starts at the party, not at the words before it: %j", (sentence, name) => {
+    expect(caseCitations(sentence)).toEqual([expect.objectContaining({ name })]);
+  });
+
+  test.each([
+    ["The duty arises under the Act.", "See Hallmark v. Rio Grande, 512 S.W.3d 101 (Tex. 2017)."],
+    ["The lien attached in Texas.", "See Hallmark v. Rio Grande, 512 S.W.3d 101 (Tex. 2017)."],
+    ["Revenue fell in Q3.", "See Hallmark v. Rio Grande, 512 S.W.3d 101 (Tex. 2017)."],
+    ["The supplier was owned by IBM.", "See Hallmark v. Rio Grande, 512 S.W.3d 101 (Tex. 2017)."],
+    ["Yes.", "See Hallmark v. Rio Grande, 512 S.W.3d 101 (Tex. 2017)."],
+    [
+      "It was formed in Delaware.",
+      "In Hallmark v. Rio Grande, 512 S.W.3d 101 (Tex. 2017), it held.",
+    ],
+    ["The plan is Plan A.", "In Hallmark v. Rio Grande, 512 S.W.3d 101 (Tex. 2017), it held."],
+  ])("a citation doesn't begin in the sentence before it: %j", (before, cited) => {
+    const text = `${before} ${cited}`;
+    const [found] = citedCases(text);
+    expect(found?.name).toBe("Hallmark v. Rio Grande");
+    expect(text.slice(0, found?.from).trim()).toBe(before);
+  });
+
+  test.each([
+    ["Smith v. Jones, 101 S.Ct. 12 (1981).", "101 S.Ct. 12"],
+    ["Smith v. Jones, 55 Cal.App.4th 301 (1997).", "55 Cal.App.4th 301"],
+    ["Smith v. Jones, 12 F.Supp.2d 345 (S.D.N.Y. 1998).", "12 F.Supp.2d 345"],
+    ["Smith v. Jones, 12 Pa. 345 (1850).", "12 Pa. 345"],
+    ["Smith v. Jones, 77 N.J. 12 (1978).", "77 N.J. 12"],
+    ["Smith v. Jones, 40 Ohio St. 3d 12 (1988).", "40 Ohio St. 3d 12"],
+    ["Smith v. Jones, 150 Wn.2d 12 (2003).", "150 Wn.2d 12"],
+    ["Smith Holdings, L.L.C. v. Jones Supply, L.L.C., 150 F.3d 12 (9th Cir. 2003).", "150 F.3d 12"],
+  ])("recognises a reporter written compactly or a state's own: %j", (sentence, cite) => {
+    expect(caseCitations(sentence)).toEqual([expect.objectContaining({ cite })]);
+  });
+
   test("finds each of the decisions a sentence cites, in order", () => {
     expect(
       caseCitations(
@@ -115,6 +163,22 @@ describe("Whether a text names a decision", () => {
   ])("%j does", (text) => {
     expect(namesDecision(text, hallmark)).toBe(true);
   });
+
+  test.each([
+    "Hallmark Builders v. Rio Grande Supply, Opinion of the Court, Supreme Court of Texas",
+    "hallmark_builders_v_rio_grande_supply_2017.pdf",
+  ])(
+    "a slip opinion with no reporter citation, %j, names a decision cited with words before it",
+    (text) => {
+      for (const sentence of [
+        "Under Hallmark Builders v. Rio Grande Supply, 512 S.W.3d 101 (Tex. 2017), it attaches.",
+        "In Hallmark Builders v. Rio Grande Supply, 512 S.W.3d 101 (Tex. 2017), it attached.",
+      ]) {
+        const [decision] = caseCitations(sentence);
+        expect(decision && namesDecision(text, decision)).toBe(true);
+      }
+    },
+  );
 
   test.each([
     "Rio Grande Supply Co. invoiced Hallmark Roofing.",
