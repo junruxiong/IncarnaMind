@@ -752,7 +752,6 @@ export function createAnswers(options: AnswersOptions) {
     let lastReasoningAt: number | null = null;
     /** When the text the Answer keeps began: a preamble taken back doesn't count. */
     let firstTextAt: number | null = null;
-    /** When the first Mind change of a Minds' Tool call began to be written. */
     let firstMindWordAt: number | null = null;
     const careful = asksToCheckOrCalculate(context.question);
     const iso = (ms: number | null) => (ms === null ? null : new Date(ms).toISOString());

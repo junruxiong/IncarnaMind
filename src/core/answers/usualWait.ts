@@ -1,4 +1,3 @@
-/** How many of a model's latest Answers its usual wait is read from, and the fewest that make one. */
 const RECENT = 10;
 const FEWEST = 3;
 

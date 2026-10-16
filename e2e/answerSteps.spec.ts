@@ -2,6 +2,7 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
+import { openDatabase } from "../src/core/storage";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   acceptPlainTextKeys,
@@ -16,6 +17,7 @@ import {
   pointAndClick,
   pointAt,
   removeDataFolder,
+  setSilentWaitMs,
   setWindowSize,
   sidebarFolder,
   slideToHandle,
@@ -166,7 +168,7 @@ const stepsOf = (timeline: Locator) =>
     .getByTestId("answer-step")
     .evaluateAll((rows) => rows.map((row) => row.getAttribute("data-step")));
 
-test("while an Answer is written, its line moves Reading → Searching → Writing → Checking, each up a second or more; written, it folds to what it searched and its sources", async () => {
+test("while an Answer is written, its line moves from Reading through Thinking or Searching to Writing and Checking, each up a second or more; written, it folds to what it searched and its sources", async () => {
   const { app, window } = await start();
   await core(window).mind("Lit review: tides");
   const shown = await watchLiveLine(window);
@@ -174,11 +176,18 @@ test("while an Answer is written, its line moves Reading → Searching → Writi
   // "Slowly": the scripted model takes a while over each step.
   const answer = await ask(window, "When do spring tides happen? Answer slowly.");
 
-  // The Answer's own line takes over from the one on its way, on the same step.
+  // The Answer's own line takes over from the one on its way, on the same step. Between Reading and
+  // Writing the model thinks and searches, and a step that is over before the one before has been up a
+  // second is never shown.
   const steps = (await shown())
     .filter((each) => each.step !== "none")
     .filter((each, index, all) => each.step !== all[index - 1]?.step);
-  expect(steps.map((each) => each.step)).toEqual(["reading", "searching", "writing", "checking"]);
+  const names = steps.map((each) => each.step);
+  expect(names[0]).toBe("reading");
+  expect(names.slice(-2)).toEqual(["writing", "checking"]);
+  const between = names.slice(1, -2);
+  expect(between.length).toBeGreaterThan(0);
+  for (const step of between) expect(["thinking", "searching"]).toContain(step);
   // Each is up at least a second before the next replaces it; the last goes as the Answer ends.
   for (let index = 0; index + 1 < steps.length; index++) {
     const step = steps[index];
@@ -190,6 +199,126 @@ test("while an Answer is written, its line moves Reading → Searching → Writi
   await expect(line).toHaveAttribute("aria-expanded", "false");
   await expect(answer.getByTestId("answer-timeline")).toHaveCount(0);
   await screenshot(window, "steps-folded-en");
+  await app.close();
+});
+
+/** What an Answer being written shows, as it changes: its line only, then how long it takes, then its text. */
+async function watchWait(window: Page): Promise<() => Promise<string[]>> {
+  await window.evaluate(() => {
+    const shown: string[] = [];
+    (globalThis as unknown as { shownWaits: string[] }).shownWaits = shown;
+    const record = () => {
+      const assistant = document.querySelector('[data-testid="assistant"]');
+      const text = assistant?.querySelector('[data-testid="assistant-answer-text"]')?.textContent;
+      const state = text?.trim()
+        ? "text"
+        : assistant?.querySelector('[data-testid="answer-wait"]')
+          ? "wait"
+          : assistant?.querySelector('[data-testid="answer-steps-live"]')
+            ? "line"
+            : "none";
+      if (shown.at(-1) !== state) shown.push(state);
+    };
+    new MutationObserver(record).observe(document.body, {
+      subtree: true,
+      childList: true,
+      characterData: true,
+    });
+  });
+  return () =>
+    window.evaluate(() => (globalThis as unknown as { shownWaits: string[] }).shownWaits);
+}
+
+/** Asks slowly in the assistant, as a person does, without waiting for the Answer. */
+async function askSlowly(window: Page, question: string): Promise<void> {
+  await window.keyboard.press("ControlOrMeta+j");
+  await window.keyboard.type(question);
+  await window.keyboard.press("Enter");
+}
+
+test("a slow Answer shows its step line from the start, then how long it is taking with Stop, then its text; Stop works from that line", async () => {
+  const { app, window } = await start();
+  await core(window).mind("Lit review: tides");
+  await setSilentWaitMs(window, 600);
+  const shown = await watchWait(window);
+
+  await askSlowly(window, "When do spring tides happen? Answer slowly.");
+  const answer = assistantAnswers(window).last();
+  await expect(answer.getByTestId("answer-wait")).toBeVisible();
+  // Nothing in its history yet: it says it is working, and Stop is on that line, once.
+  await expect(answer.getByTestId("answer-wait")).toHaveText("Still working · Stop");
+  await expect(answer.getByTestId("answer-steps-live")).toBeVisible();
+  await expect(answer.getByTestId("answer-stop")).toHaveCount(1);
+  await expect(answer.getByTestId("answer-stop")).toBeVisible();
+  await screenshot(window, "wait-still-en");
+  await expect(answer).toHaveAttribute("data-status", "done", { timeout: 30_000 });
+  expect((await shown()).filter((state) => state !== "none")).toEqual(["line", "wait", "text"]);
+  await expect(answer.getByTestId("answer-wait")).toHaveCount(0);
+
+  // Stop, from the line, keeps what is written and says so.
+  await askSlowly(window, "When do neap tides happen? Answer slowly.");
+  const second = assistantAnswers(window).last();
+  await expect(second.getByTestId("answer-wait")).toBeVisible();
+  await pointAndClick(window, second.getByTestId("answer-wait").getByTestId("answer-stop"));
+  await expect(second).toHaveAttribute("data-status", "stopped");
+  await expect(second.getByTestId("answer-stopped")).toHaveText("Stopped");
+  await expect(second.getByTestId("answer-wait")).toHaveCount(0);
+  await app.close();
+});
+
+test("in Chinese, the step line and the wait line say so in Chinese", async () => {
+  const { app, window } = await start();
+  await core(window).mind("Lit review: tides");
+  await core(window).language("zh-CN");
+  await setSilentWaitMs(window, 600);
+
+  await askSlowly(window, "春潮什么时候出现？ Answer slowly.");
+  const answer = assistantAnswers(window).last();
+  await expect(answer.getByTestId("answer-wait")).toHaveText("仍在处理 · 停止");
+  await expect(answer.getByTestId("answer-steps-live")).toHaveText(/^正在/);
+  await screenshot(window, "wait-still-zh");
+  await pointAndClick(window, answer.getByTestId("answer-wait").getByTestId("answer-stop"));
+  await expect(answer).toHaveAttribute("data-status", "stopped");
+  await app.close();
+});
+
+test("with earlier Answers that took about a minute, the line says how long this model usually takes", async () => {
+  const first = await start();
+  await core(first.window).mind("Lit review: tides");
+  for (const question of ["When do spring tides happen?", "When do neap tides happen?"]) {
+    await ask(first.window, question);
+  }
+  await ask(first.window, "Why are there two tides a day?");
+  await first.app.close();
+  const db = openDatabase(join(dataDir, "incarnamind.db"));
+  try {
+    db.run(
+      "UPDATE conversation_messages SET steps = json_set(steps, '$.firstWordMs', 62000) WHERE kind = 'answer'",
+    );
+  } finally {
+    db.close();
+  }
+
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await setWindowSize(app, window, 1440, 900);
+  await setSilentWaitMs(window, 600);
+  await pointAndClick(window, window.getByTestId("mind-list-item"));
+  await askSlowly(window, "Where do neap tides come from? Answer slowly.");
+  const answer = assistantAnswers(window).last();
+  await expect(answer.getByTestId("answer-wait")).toHaveText(
+    `Usually about a minute with ${MODEL_NAME} · Stop`,
+  );
+  await screenshot(window, "wait-usually-en");
+  await window.evaluate(async () => {
+    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    await bridge.updateSettings({ user: { language: "zh-CN" } });
+  });
+  await expect(answer.getByTestId("answer-wait")).toHaveText(
+    `用 ${MODEL_NAME} 通常要 1 分钟左右 · 停止`,
+  );
+  await screenshot(window, "wait-usually-zh");
+  await pointAndClick(window, answer.getByTestId("answer-wait").getByTestId("answer-stop"));
+  await expect(answer).toHaveAttribute("data-status", "stopped");
   await app.close();
 });
 

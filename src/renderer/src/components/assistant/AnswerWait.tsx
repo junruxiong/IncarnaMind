@@ -21,15 +21,17 @@ export function AnswerWait({
   return (
     <p data-testid="answer-wait" aria-live="polite" className="answer-steps-wait">
       {waitText(t, usual, model)}
-      <span aria-hidden="true"> · </span>
-      <button
-        type="button"
-        data-testid="answer-stop"
-        onClick={() => stopAnswer(answer.id)}
-        className="answer-steps-wait-stop"
-      >
-        {t("answer.stop")}
-      </button>
+      <span className="whitespace-nowrap">
+        <span aria-hidden="true"> · </span>
+        <button
+          type="button"
+          data-testid="answer-stop"
+          onClick={() => stopAnswer(answer.id)}
+          className="answer-steps-wait-stop"
+        >
+          {t("answer.stop")}
+        </button>
+      </span>
     </p>
   );
 }
