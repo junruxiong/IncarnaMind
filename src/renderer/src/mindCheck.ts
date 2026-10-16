@@ -32,6 +32,8 @@ interface Asking {
   mode: CheckMindMode;
   allDocuments: boolean;
   sentences: number;
+  /** About how many it will check, when the model names the claims first: the run's likely count. */
+  likely: number | null;
   /** Checked against the Mind's Folder: the question names it. */
   inFolder: boolean;
   estimate: string;
@@ -105,7 +107,7 @@ export async function startMindCheck(
   if (!plan.findsClaims && plan.sentences < ASK_FROM)
     return checkMind(mindId, mode, { allDocuments });
   const estimate = await core
-    .estimateRun({ items: plan.sentences, ...(plan.model && { model: plan.model }) })
+    .estimateRun({ items: plan.likely, each: "check", ...(plan.model && { model: plan.model }) })
     .then((result) => estimateText(result, translateNow, languageNow()))
     .catch((error: unknown) => {
       console.warn(`Couldn't estimate checking Mind ${mindId}; it checks without asking.`, error);
@@ -118,7 +120,14 @@ export async function startMindCheck(
   useMindCheck.setState((state) => ({
     asking: {
       ...state.asking,
-      [mindId]: { mode, allDocuments, sentences: plan.sentences, inFolder, estimate },
+      [mindId]: {
+        mode,
+        allDocuments,
+        sentences: plan.sentences,
+        likely: plan.findsClaims ? plan.likely : null,
+        inFolder,
+        estimate,
+      },
     },
   }));
 }

@@ -32,6 +32,7 @@ import { parseModel } from "../../edits";
 import { InvalidInputError, isRecord } from "../../errors";
 import type { MindContent } from "../../mindContent";
 import { parseMindId } from "../../minds";
+import { readsAsOwnClaim } from "./claims";
 import { claimsAmong } from "./findClaims";
 import { type QueuedClaim, type RunChecksOptions, runChecks } from "./runChecks";
 import { everySentence, markedSentences, markSentence, type SelectedSentence } from "./sentences";
@@ -137,6 +138,7 @@ export function createMindCheck(options: MindCheckOptions) {
     return {
       kind: "ready",
       sentences: fresh.length + again.length,
+      likely: fresh.filter((sentence) => readsAsOwnClaim(sentence.text)).length + again.length,
       findsClaims: fresh.length > 0,
       model: modelOf(mindId),
     };

@@ -109,11 +109,12 @@ async function shownChecks(core: Core, client: MindClient, folderId: string | nu
 }
 
 describe("Check this Mind", () => {
-  test("checks every claim, each marked; the heading, the question and the User's opinion aren't; the run is recorded", async () => {
+  test("checks every claim, each marked, as many as the plan said it likely would; the heading, the question and the User's opinion aren't; the run is recorded", async () => {
     const { core, client, mindId, folderId, checks, finds } = await setUp();
     expect(await core.planMindCheck(mindId, "all")).toEqual({
       kind: "ready",
       sentences: 5,
+      likely: 3,
       findsClaims: true,
       model: null,
     });
@@ -163,6 +164,7 @@ describe("Check this Mind", () => {
     expect(await core.planMindCheck(mindId, "changed")).toEqual({
       kind: "ready",
       sentences: 2,
+      likely: 2,
       findsClaims: false,
       model: null,
     });

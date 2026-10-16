@@ -128,10 +128,12 @@ test("Check this Mind from ⌘K: the estimate first on a cloud model, then every
   const item = window.getByTestId("palette-item").filter({ hasText: "Check this Mind" }).first();
   await pointAndClick(window, item);
 
-  // Billed per token: the line asks first, with the estimate.
+  // Billed per token: the line asks first, with the estimate, its price first. Of the 20
+  // sentences, the 15 whose words read as claims are likely checked, and are.
   const ask = window.getByTestId("mind-check-ask");
-  await expect(ask).toContainText("Check this Mind’s 20 sentences against your Documents?");
-  await expect(ask).toContainText("About");
+  await expect(ask).toContainText(
+    "Check the claims in this Mind, about 15–20 sentences, against your Documents? About $",
+  );
   await expect(window.getByTestId("palette-search")).toBeHidden();
   await screenshot(window, "mind-check-ask-en");
   await pointAndClick(window, ask.getByTestId("mind-check-check"));

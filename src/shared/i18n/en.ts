@@ -684,8 +684,16 @@ export const en = {
     "Check this Mind’s sentence against this Folder’s Documents? {estimate}",
   "mindCheck.ask.folder":
     "Check this Mind’s {count} sentences against this Folder’s Documents? {estimate}",
+  "mindCheck.ask.folder.range":
+    "Check the claims in this Mind, about {least}–{most} sentences, against this Folder’s Documents? {estimate}",
+  "mindCheck.ask.folder.about":
+    "Check the claims in this Mind, about {count} sentences, against this Folder’s Documents? {estimate}",
   "mindCheck.ask.all.one": "Check this Mind’s sentence against your Documents? {estimate}",
   "mindCheck.ask.all": "Check this Mind’s {count} sentences against your Documents? {estimate}",
+  "mindCheck.ask.all.range":
+    "Check the claims in this Mind, about {least}–{most} sentences, against your Documents? {estimate}",
+  "mindCheck.ask.all.about":
+    "Check the claims in this Mind, about {count} sentences, against your Documents? {estimate}",
   "mindCheck.check": "Check",
   "mindCheck.cancel": "Not now",
   "verify.command": "Verify a document…",
@@ -2449,8 +2457,8 @@ export const en = {
   "command.researchPlan.keywords": "plan steps research running",
 
   "cost.and": "{first} and {second}",
-  "cost.estimate": "About {calls} calls, {tokens} tokens, {cost}",
-  "cost.estimate.unpriced": "About {calls} calls, {tokens} tokens",
+  "cost.estimate": "About {cost} · {calls} model calls",
+  "cost.estimate.unpriced": "About {calls} model calls · {tokens} tokens",
   "cost.estimate.month": "{spent} of {cap} used this month",
   "cost.cap.title": "Monthly spending cap",
   "cost.cap.switch": "Cap what your keys spend each month",

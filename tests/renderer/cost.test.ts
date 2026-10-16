@@ -92,7 +92,7 @@ describe("Cost in words", () => {
     expect(translate("zh-CN", notCheckedKey({ reason: "cost-cap" }))).toBe("未核对：已达花费上限");
   });
 
-  test("the estimate names calls, tokens and price, with the month so far under a cap; a plan or a local model shows none", () => {
+  test("the estimate leads with its price, then its calls, with the month so far under a cap; with no price, calls and tokens; a plan or a local model shows none", () => {
     const estimate = {
       billing: "per-token" as const,
       calls: 24,
@@ -103,7 +103,7 @@ describe("Cost in words", () => {
       cap: { amount: 20, currency: "USD" as const },
     };
     expect(estimateText(estimate, t("en"), "en")).toBe(
-      "About 24 calls, 310K tokens, $0.40 · $12.40 of $20.00 used this month",
+      "About $0.40 · 24 model calls · $12.40 of $20.00 used this month",
     );
     expect(
       estimateText(
@@ -112,7 +112,7 @@ describe("Cost in words", () => {
         "en",
       ),
     ).toBe(
-      "About 24 calls, 310K tokens, $0.40 · $12.40 of $20.00 used this month · $1.28 set aside for work in progress",
+      "About $0.40 · 24 model calls · $12.40 of $20.00 used this month · $1.28 set aside for work in progress",
     );
     expect(
       estimateText(
@@ -120,9 +120,9 @@ describe("Cost in words", () => {
         t("en"),
         "en",
       ),
-    ).toBe("About 24 calls, 310K tokens, $0.40");
+    ).toBe("About $0.40 · 24 model calls");
     expect(estimateText({ ...estimate, cost: null, cap: null }, t("zh-CN"), "zh-CN")).toBe(
-      "约 24 次调用、31万 token",
+      "约 24 次模型调用 · 31万 token",
     );
     expect(estimateText({ billing: "plan" }, t("en"), "en")).toBeNull();
     expect(estimateText({ billing: "free" }, t("en"), "en")).toBeNull();

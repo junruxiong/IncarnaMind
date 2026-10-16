@@ -70,7 +70,8 @@ export const notCheckedKey = (stop: RunStop): MessageKey =>
 
 /**
  * The line before a large run on a model billed per token, shown and never
- * asked: "About 24 calls, 310K tokens, $0.40 · $12.40 of $20 used this month".
+ * asked: "About $0.40 · 24 model calls · $12.40 of $20 used this month", the
+ * price first (#684).
  * Null for a plan or a model on this computer, which show nothing.
  */
 export function estimateText(
@@ -81,11 +82,7 @@ export function estimateText(
   if (estimate.billing !== "per-token") return null;
   const tokens = new Intl.NumberFormat(language, { notation: "compact" }).format(estimate.tokens);
   const run = estimate.cost
-    ? t("cost.estimate", {
-        calls: estimate.calls,
-        tokens,
-        cost: formatMoney(estimate.cost, language),
-      })
+    ? t("cost.estimate", { calls: estimate.calls, cost: formatMoney(estimate.cost, language) })
     : t("cost.estimate.unpriced", { calls: estimate.calls, tokens });
   if (!estimate.cap || !estimate.spentTowardCap) return run;
   const month = t("cost.estimate.month", {
