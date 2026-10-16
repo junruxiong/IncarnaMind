@@ -7,18 +7,19 @@ import { MEETING_SAMPLE_RATE } from "../../src/core/adapters";
  * one does, and an addon that still holds the result.
  */
 const RESULTS: string[] = [];
+const latest = () => RESULTS.at(-1) ?? "";
 
 vi.mock("sherpa-onnx-node", () => ({
   OfflineRecognizer: {
     createAsync: async () => ({
       createStream: () => ({ acceptWaveform: () => {}, handle: { id: RESULTS.length } }),
-      decodeAsync: async () => JSON.parse(RESULTS.at(-1) as string),
+      decodeAsync: async () => JSON.parse(latest()),
     }),
   },
   Vad: class {},
 }));
 vi.mock("sherpa-onnx-node/addon.js", () => ({
-  default: { getOfflineStreamResultAsJson: () => RESULTS.at(-1) },
+  default: { getOfflineStreamResultAsJson: latest },
 }));
 
 const { createSherpaEngine } = await import("../../src/core/transcription/sherpa");
@@ -35,7 +36,7 @@ describe("The sherpa-onnx recognizer", () => {
   test("keeps the words of a stretch whose result has a control character, which the package's reader refuses", async () => {
     const engine = await createSherpaEngine(model);
     RESULTS.push('{"lang": "", "text": "The launch\nmoves to the eighteenth.", "tokens": []}');
-    expect(() => JSON.parse(RESULTS.at(-1) as string)).toThrow(SyntaxError);
+    expect(() => JSON.parse(latest())).toThrow(SyntaxError);
 
     expect(await engine.recognizer.decode(samples)).toBe("The launch\nmoves to the eighteenth.");
   });

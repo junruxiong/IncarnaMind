@@ -151,7 +151,8 @@ describe("A Meeting's live Transcript", { timeout: 60_000 }, () => {
     await core.startMeeting({ meetingId: meeting.id });
     record(5 * SECOND);
     const live = await until(core, meeting.id, (transcript) => transcript.lines >= 2);
-    const document = await documentOf(core, live.documentId as string);
+    if (!live.documentId) throw new Error("The Transcript has no Document yet.");
+    const document = await documentOf(core, live.documentId);
     const file = readFileSync(document.path, "utf8");
 
     const cues = readVtt(file).cues;
