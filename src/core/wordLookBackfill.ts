@@ -16,16 +16,17 @@ import {
   WORD_LOOK_ATTRIBUTE,
   WORD_RUN_MARK,
   WORD_TAB_MARK,
+  type WordLook,
   type WordSource,
 } from "./api";
 import { nodesByPlace, type WordStructure } from "./documents/formats/docxImport";
 import { CONDITIONAL_FORMATTING_VERSION } from "./documents/formats/docxLook";
+import { isRecord } from "./errors";
 
-/** Marks only the look gives, which an earlier version's look takes away with it. */
-const LOOK_MARKS: ReadonlySet<string> = new Set([WORD_RUN_MARK, WORD_TAB_MARK]);
 /** The look's marks, and formatting the import reads with styles resolved. */
 const GIVEN_MARKS: ReadonlySet<string> = new Set([
-  ...LOOK_MARKS,
+  WORD_RUN_MARK,
+  WORD_TAB_MARK,
   "bold",
   "italic",
   "underline",
@@ -241,22 +242,31 @@ export function planLook(
   return plan;
 }
 
-/** Takes away a look an earlier version gave, so keys it named don't outlive it. */
-export function clearLook(doc: Y.Doc, blocks: Y.XmlFragment): void {
+/**
+ * Takes away the keys an earlier version gave that `look` doesn't have. Keys
+ * name a look by its content, so a Block the User edited keeps every look
+ * that reads the same.
+ */
+export function clearLook(doc: Y.Doc, blocks: Y.XmlFragment, look: WordLook): void {
+  const kept = new Set(
+    [look.paragraphs, look.runs, look.tables, look.cells].flatMap((styles) => Object.keys(styles)),
+  );
+  const stale = (key: unknown) => typeof key !== "string" || !kept.has(key);
   const clear = (element: Y.XmlElement) => {
-    if (element.getAttribute(WORD_LOOK_ATTRIBUTE) !== undefined) {
-      element.removeAttribute(WORD_LOOK_ATTRIBUTE);
-    }
+    const key = element.getAttribute(WORD_LOOK_ATTRIBUTE);
+    if (key !== undefined && stale(key)) element.removeAttribute(WORD_LOOK_ATTRIBUTE);
     for (const child of element.toArray()) {
       if (child instanceof Y.XmlElement) clear(child);
       else if (child instanceof Y.XmlText) {
         let at = 0;
-        for (const run of child.toDelta() as { insert: unknown; attributes?: object }[]) {
+        for (const run of child.toDelta() as {
+          insert: unknown;
+          attributes?: Record<string, unknown>;
+        }[]) {
           const length = typeof run.insert === "string" ? run.insert.length : 1;
-          const attributes = run.attributes ?? {};
-          const looks = Object.keys(attributes).filter((mark) => LOOK_MARKS.has(mark));
-          if (looks.length > 0) {
-            child.format(at, length, Object.fromEntries(looks.map((mark) => [mark, null])));
+          const mark = run.attributes?.[WORD_RUN_MARK];
+          if (mark !== undefined && stale(isRecord(mark) ? mark.k : null)) {
+            child.format(at, length, { [WORD_RUN_MARK]: null });
           }
           at += length;
         }

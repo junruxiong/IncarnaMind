@@ -146,11 +146,11 @@ export interface CreateMindInput {
  * - 21: a Word file's look (#746): the `wordLook` attribute and the
  *   `wordRun` mark, which an older version's editor would strip. Older
  *   content is version 21 content as it is.
- * - 22: the `wordTab` mark on a Word file's tab characters (#746), which an
- *   older version's editor would strip. Older content is version 22 content
+ * - 23: the `wordTab` mark on a Word file's tab characters (#746), which an
+ *   older version's editor would strip. Older content is version 23 content
  *   as it is.
  */
-export const CONTENT_SCHEMA_VERSION = 22;
+export const CONTENT_SCHEMA_VERSION = 23;
 
 /**
  * The key, in the Mind's settings map (`MIND_SETTINGS_FIELD`), of the content
