@@ -107,6 +107,7 @@ export const Answer = Node.create<AnswerOptions>({
       errorKind: stored(),
       errorMessage: stored(),
       errorResetsAt: stored(),
+      errorSignInRoute: stored(),
       generatedHash: stored(),
       generatedMarks: stored(),
       citationSupport: stored(),

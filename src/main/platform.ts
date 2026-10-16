@@ -486,6 +486,29 @@ function chatGptStandIn(): CoreAdapters["chatGptPlan"] {
 }
 
 /**
+ * Test-only launch flag: a local server standing in for GitHub and Copilot, at
+ * this origin, where the experimental way of signing in with GitHub signs in
+ * and asks, so the smoke tests reach neither. Only a test build honours it.
+ */
+function copilotStandIn(): CoreAdapters["copilotProfiles"] {
+  const origin = import.meta.env.MODE === "test" ? process.env.INCARNAMIND_TEST_COPILOT : undefined;
+  if (!origin) return undefined;
+  return {
+    editor: {
+      experimental: true,
+      clientId: "test-editor-app",
+      deviceCodeUrl: `${origin}/login/device/code`,
+      tokenUrl: `${origin}/login/oauth/access_token`,
+      scopes: ["read:user"],
+      format: "json",
+      apiBaseUrl: origin,
+      accountUrl: `${origin}/user`,
+      tokenExchange: { url: `${origin}/copilot_internal/v2/token` },
+    },
+  };
+}
+
+/**
  * What records Meetings: the hidden capture window (ADR-0015). Test-only
  * launch flags: the smoke tests record a fake that makes a tone in real time,
  * so no device is ever opened (INCARNAMIND_TEST_AUDIO=fake), its computer's
@@ -533,6 +556,7 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
   const usageData = createUsageDataSender();
   const chatGptStore = chatGptTestProfile(log);
   const chatGptPlan = chatGptStandIn();
+  const copilotProfiles = copilotStandIn();
   const web = webStandIn();
   const standIn = standInPort();
   const connectorDirectory = testConnectorDirectory();
@@ -547,6 +571,7 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
     ...(connectorRegistryUrl && { connectorRegistryUrl }),
     ...(chatGptStore && { chatGptStore }),
     ...(chatGptPlan && { chatGptPlan }),
+    ...(copilotProfiles && { copilotProfiles }),
     ...(web && { web }),
     ...(standIn !== undefined && { webPages: { fetch: standInPageFetch(standIn) } }),
     ...(crashReporter && { crashReporter }),

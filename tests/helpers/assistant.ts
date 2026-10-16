@@ -13,10 +13,11 @@ import { answerEnded } from "./citations";
 export async function askAssistant(
   core: Core,
   input: AskInConversationInput,
+  ends: "finished" | "failed" = "finished",
 ): Promise<ConversationAnswer> {
   const result = await core.askInConversation(input);
   if (!result.asked) throw new Error(`The Question wasn't asked: ${JSON.stringify(result)}`);
-  expect((await answerEnded(core, result.answerId)).event).toBe("finished");
+  expect((await answerEnded(core, result.answerId)).event).toBe(ends);
   const { messages } = await core.getConversation(result.conversation.id);
   const answer = messages.find((message) => message.id === result.answerId);
   if (answer?.kind !== "answer") throw new Error("No Answer.");

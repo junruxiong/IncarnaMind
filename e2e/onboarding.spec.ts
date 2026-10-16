@@ -7,8 +7,10 @@ import {
   assistantAnswers,
   createDataFolder,
   dismissChatSetup,
+  expectReadyDocuments,
   interceptOpenDialog,
   launchApp,
+  leaveFirstOpen,
   linkedFolderRow,
   newMind,
   removeDataFolder,
@@ -96,14 +98,10 @@ test("a first run opens on the credit paper with no model set up: its Citations 
   const banner = pane.getByTestId("example-banner");
   await expect(banner).toContainText("This is an example Mind.");
   await expect(banner).toContainText("click the red mark beside it to see what the results say");
-  // "Example" on the Mind and on its Documents' Linked folder; both Documents are listed.
   await expect(window.getByTestId("mind-list-item").getByTestId("example-chip")).toHaveText(
     "Example",
   );
-  await expect(window.getByTestId("document-list-item")).toHaveText([
-    /Northwind Retail · (Q3 2026 results|Senior facilities agreement \(excerpt\))/,
-    /Northwind Retail · (Q3 2026 results|Senior facilities agreement \(excerpt\))/,
-  ]);
+  await expectReadyDocuments(window, 2);
   // No model needed: no setup over it, and no "set up a chat model" notice in it.
   await expect(window.getByTestId("chat-setup")).toBeHidden();
   await expect(pane.getByTestId("chat-readiness")).toHaveCount(0);
@@ -121,12 +119,6 @@ test("a first run opens on the credit paper with no model set up: its Citations 
   const mark = pane.getByTestId("claim-mark");
   await expect(mark).toHaveCount(1);
   await expect(mark).toHaveAttribute("data-check", "contradicted");
-
-  // The Linked folder's chip, as on disk, once its status (indexing) leaves the room for it.
-  await showSourceLocations(window);
-  await expect(linkedFolderRow(window, "Examples").getByTestId("example-chip")).toBeVisible({
-    timeout: 30_000,
-  });
 
   // The red mark's card says what the results say, and quotes them where they say it.
   await expect(progress(window)).toHaveText("· 0 of 3");
@@ -179,6 +171,18 @@ test("a first run opens on the credit paper with no model set up: its Citations 
   await expect(addOwn).toHaveText("添加你的文档");
   await pointAndClick(window, addOwn);
   await expect(ways.getByRole("menuitem")).toHaveText(["添加文件…", "添加同步文件夹…"]);
+  await window.keyboard.press("Escape");
+
+  await setLanguage(window, "en");
+  await leaveFirstOpen(window);
+  await expect(window.getByTestId("document-list-item")).toHaveText([
+    /Northwind Retail · (Q3 2026 results|Senior facilities agreement \(excerpt\))/,
+    /Northwind Retail · (Q3 2026 results|Senior facilities agreement \(excerpt\))/,
+  ]);
+  await showSourceLocations(window);
+  await expect(linkedFolderRow(window, "Examples").getByTestId("example-chip")).toBeVisible({
+    timeout: 30_000,
+  });
 });
 
 test("removing the examples deletes the example Mind, its Documents and the copies of their files, and they aren't made again", async () => {
@@ -220,6 +224,7 @@ test("with only the example Documents, the footer doesn't ask for a model to tag
   const own = join(sources, "Harbour notes.md");
   await writeFile(own, "# Harbour notes\n\nThe harbour master publishes the tide tables.\n");
   const { app, window } = await launchApp(dataDir, { examples: true });
+  await leaveFirstOpen(window);
   const items = window.getByTestId("document-list-item");
   const notice = window.getByTestId("sidebar-footer").getByTestId("tagging-waiting");
 
@@ -416,6 +421,7 @@ test("Get started can be hidden, and stays hidden", async () => {
 
 test("the hint at the end of a Mind focuses the composer when its link is clicked once the cursor is on its line, and is otherwise the line to write on", async () => {
   const { window } = await launchApp(dataDir, { examples: true, fakeChat: true });
+  await leaveFirstOpen(window);
   const editor = window.getByTestId("mind-editor");
   const hint = window.getByTestId("end-hint");
   await expect(hint).toHaveAttribute("data-place", "afterAnswer");
@@ -507,7 +513,7 @@ test("the banner offers the other examples in an order picked once per install; 
   const order = await groupsShown(window);
   expect([...order].sort()).toEqual(["contracts", "meetings", "papers"]);
   const tabs = window.getByTestId("tab-title");
-  await expect(tabs).toHaveText(["Draft: credit committee paper"]);
+  await expect(tabs).toHaveCount(0);
 
   // Contracts opens beside the first example, which stays in its own tab.
   await moreLinks(window).and(window.locator('[data-group="contracts"]')).click();
