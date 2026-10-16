@@ -164,6 +164,7 @@ interface DocumentRow {
   title: string | null;
   own_file: string | null;
   counted_as_evidence: number;
+  not_cited: number;
   processing_version: number;
   file_mtime_ms: number | null;
   created_at: string;
@@ -200,7 +201,8 @@ const toUnitText = (row: UnitRow): PageText => ({
 const COLUMNS = `id, content_hash, name, kind, size, page_count, status,
   failure_reason, failure_message, folder_id, tagging_status, tagging_error_kind,
   tagging_error_message, embedding_model, path, linked_folder_id, file_status,
-  creation_date, title, own_file, counted_as_evidence, processing_version, file_mtime_ms, created_at, updated_at`;
+  creation_date, title, own_file, counted_as_evidence, not_cited, processing_version, file_mtime_ms,
+  created_at, updated_at`;
 
 /** What IncarnaMind wrote the file as (#80), from its stored kind; a kind a newer version wrote counts as an export. */
 const ownFileOf = (row: Pick<DocumentRow, "own_file" | "counted_as_evidence">): OwnFile | null =>
@@ -353,6 +355,8 @@ export interface CitationSource {
   contentHash: string;
   /** The Document has been deleted since. */
   documentDeleted: boolean;
+  /** The User keeps the Document as their own workings: its Passages are read, never cited. */
+  notCited: boolean;
 }
 
 /** A live Document's file, opened for reading. */
@@ -543,6 +547,7 @@ export function createDocuments(options: DocumentsOptions) {
       web: row.kind === "web" ? webPageInfo(db, row.id) : null,
       reference: referenceOf(db, row.id),
       ownFile: ownFileOf(row),
+      notCited: row.not_cited === 1,
       found: foundSourceOf(db, row.id),
       importedAs: importedMindOf(row.id),
       createdAt: row.created_at,
@@ -1869,9 +1874,10 @@ export function createDocuments(options: DocumentsOptions) {
         kind: string;
         content_hash: string;
         deleted_at: string | null;
+        not_cited: number;
       }>(
         `SELECT p.id, p.text, p.page_from, p.page_to, p.document_id, d.name, d.kind,
-           coalesce(p.content_hash, d.content_hash) AS content_hash, d.deleted_at
+           coalesce(p.content_hash, d.content_hash) AS content_hash, d.deleted_at, d.not_cited
          FROM passages p JOIN documents d ON d.id = p.document_id
          WHERE p.id = ?`,
         [passageId],
@@ -1887,6 +1893,7 @@ export function createDocuments(options: DocumentsOptions) {
         documentKind: row.kind as DocumentKind,
         contentHash: row.content_hash,
         documentDeleted: row.deleted_at !== null,
+        notCited: row.not_cited === 1,
       };
     },
 
@@ -2217,6 +2224,30 @@ export function createDocuments(options: DocumentsOptions) {
       if ((row.counted_as_evidence === 1) !== countedInput) {
         db.run("UPDATE documents SET counted_as_evidence = ?, updated_at = ? WHERE id = ?", [
           countedInput ? 1 : 0,
+          now(),
+          id,
+        ]);
+        announce(id);
+      }
+      const updated = find(id);
+      if (!updated) throw new NotFoundError({ key: "error.document.notFound" });
+      return toDocument(updated);
+    },
+
+    /**
+     * Keeps a Document as the User's own workings, or cites it as any again
+     * (see `Document.notCited`), and says so.
+     */
+    setNotCited(idInput: unknown, notCitedInput: unknown): Document {
+      const id = parseId(idInput);
+      if (typeof notCitedInput !== "boolean") {
+        throw new InvalidInputError({ key: "error.document.notCitedChoice" });
+      }
+      const row = find(id);
+      if (!row) throw new NotFoundError({ key: "error.document.notFound" });
+      if ((row.not_cited === 1) !== notCitedInput) {
+        db.run("UPDATE documents SET not_cited = ?, updated_at = ? WHERE id = ?", [
+          notCitedInput ? 1 : 0,
           now(),
           id,
         ]);

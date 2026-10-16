@@ -82,6 +82,10 @@ _Avoid_: loose files, imports
 A short span of a Document that can be retrieved and cited.
 _Avoid_: chunk, snippet
 
+**Own workings**:
+A Document the User marks with "Don't cite this Document", such as a spreadsheet of figures copied from a report, with their own ratios. It is still searched and read to understand a Question, but an Answer never cites it and no check uses it as evidence, so it can't corroborate the report it was copied from. A check that finds only an own working file stating a claim says so. The interface says "Not cited" beside its name.
+_Avoid_: private Document, hidden Document, excluded Document
+
 **Citation**:
 A reference, anchored in the text of an Answer, to the Passage a claim was drawn from: the Location it cites, and a quote from the Passage that is checked against the text at that Location. Copied into a Note, it stays a Citation; Question context shows it as a plain reference to its Document. It names its Document as the Document is named now, so a rename shows in every Citation of it, on screen, in exports and in what a model or an outside agent reads; the name it was made with is kept, never rewritten, and shown only when the Document can't be found. A History comparison keeps each Checkpoint's own names.
 _Avoid_: source, reference
@@ -202,7 +206,7 @@ _Avoid_: default Skill, system Skill
 ### Changes
 
 **Proposal**:
-A change to a Mind, made by the AI or brought in from another person's Word file, that waits for the User to accept or reject it. Until it is accepted it does not count as part of the Mind, though the assistant and exports show another person's as changes, with who made each, and it is out of date once the text it changes has changed. Each Proposal is one change in one place (the words it removes and those it adds there, or a whole Block), accepted or rejected on its own; one request, such as an Edit with AI, can make several. The interface calls them changes: "3 changes from the assistant".
+A change to a Mind, made by the AI or brought in from another person's Word file, that waits for the User to accept or reject it. Until it is accepted it does not count as part of the Mind, though the assistant reads every one as a change (the AI's as waiting, another person's with who made each) and exports show another person's, and it is out of date once the text it changes has changed. The assistant revises its own while they wait, rather than adding a second version. Each Proposal is one change in one place (the words it removes and those it adds there, or a whole Block), accepted or rejected on its own; one request, such as an Edit with AI, can make several. The interface calls them changes: "3 changes from the assistant".
 _Avoid_: suggestion, edit, draft, diff
 
 **AI text**:
@@ -318,7 +322,7 @@ Anonymous events about using IncarnaMind, such as "a Question was asked with a l
 _Avoid_: telemetry, tracking
 
 **AI use record**:
-What the AI put into a Mind, or proposed and the User turned down, and what became of it (kept, edited, deleted), kept per Mind on this computer. It holds kinds, sizes, the model and times, never text, and is never sent, whatever the User chose about Usage data.
+What the AI put into a Mind, or proposed and the User turned down, and what became of it (kept, edited, deleted), and each sentence a model checked, kept per Mind on this computer. It holds kinds, sizes, the model and times, never text, and is never sent, whatever the User chose about Usage data.
 _Avoid_: AI log, AI history
 
 ### Window
