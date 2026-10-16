@@ -35,6 +35,7 @@
 import * as Y from "yjs";
 import { originOf } from "../shared/blockOrigins";
 import { type ChartAttributes, chartSources, chosenSeries, readChart } from "../shared/charts";
+import { type RecheckReason, readClaimCheck } from "../shared/claimChecks";
 import { cellProblemMessage, comparisonCellOf, comparisonQuestionsOf } from "../shared/comparisons";
 import { type MessageKey, type MessageParams, translate } from "../shared/i18n";
 import { citationLocation } from "../shared/locations";
@@ -52,6 +53,7 @@ import {
   BLOCK_ID_ATTRIBUTE,
   CHART_NODE,
   CITATION_NODE,
+  CLAIM_CHECK_MARK,
   type CitedWork,
   COMPARISON_ROW_NODE,
   COMPARISON_TABLE_NODE,
@@ -101,6 +103,13 @@ export interface FailedCheck {
   verdict: string | null;
 }
 
+/** A sentence whose check isn't good, with what a Word file's comment on it says. */
+export type FailedSentence = { id: string } & (
+  | { check: "contradicted"; says: string | null; worked: { shown: string; stated: string } | null }
+  | { check: "unsupported"; folder: string | null; nearest: { quote: string; source: string } | null }
+  | { check: "needs-recheck"; why: RecheckReason }
+);
+
 /** Part of a change still waiting to be accepted (a Proposal), read for review (#107). */
 export interface Pending {
   /** The Proposal it is part of. */
@@ -133,6 +142,8 @@ export type Inline = (
       marks: Marks;
       /** AI text (`GENERATED_MARK`), when read for review. */
       ai?: true;
+      /** The check of its sentence, when it isn't good (`ReadOptions.sentenceChecks`). */
+      sentenceCheck?: FailedSentence;
     }
   | { kind: "math"; latex: string }
   | { kind: "break" }
@@ -250,6 +261,8 @@ export interface ReadOptions {
    * aren't the Mind's until it is accepted.
    */
   review?: ReviewReading;
+  /** The sentence checks that aren't good, by check id: their text is read with `sentenceCheck`. */
+  sentenceChecks?: ReadonlyMap<string, FailedSentence>;
   /** Set by the reader in an Answer from before AI text was marked, which is the AI's as a whole. */
   wholeAnswerAi?: boolean;
 }
@@ -739,11 +752,15 @@ function readInline(
           const ai =
             options.review !== undefined &&
             (options.wholeAnswerAi === true || GENERATED_MARK in attributes);
+          const checkId = readClaimCheck(attributes[CLAIM_CHECK_MARK])?.id;
+          const sentenceCheck =
+            checkId === undefined ? undefined : options.sentenceChecks?.get(checkId);
           content.push({
             kind: "text",
             text: run.insert,
             marks: marksOf(run.attributes),
             ...(ai && { ai: true }),
+            ...(sentenceCheck && { sentenceCheck }),
             ...(inserted && { inserted }),
             ...(deleted && { deleted }),
           });

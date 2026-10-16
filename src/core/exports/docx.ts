@@ -49,8 +49,7 @@ import {
   XML_DECLARATION,
 } from "./wordml";
 import {
-  type Authorship,
-  passagesOf,
+  type Piece,
   Review,
   type ReviewChoices,
   trackBlocks,
@@ -126,7 +125,7 @@ export function renderDocx(blocks: readonly Block[], options: DocxOptions): Uint
   const review = options.review
     ? new Review(options.review, target.ids, options.labels, () => NEW_DOCUMENT_STYLES.comment)
     : null;
-  review?.mark(passagesOf(piecesOf(blocks)));
+  review?.mark(piecesOf(blocks));
   const writer = new DocxWriter(options.labels, paper.width - 2 * MARGIN, target, review);
   const title = options.title ? paragraph({ style: "Title" }, run(options.title)) : "";
   const body = writer.body(blocks);
@@ -778,13 +777,11 @@ const isWebLink = (href: string) => /^(https?:|mailto:)/i.test(href);
 
 /**
  * The pieces of text in Blocks, in the order the writer writes them, for
- * finding AI text's passages (`passagesOf`): text is the AI's or the User's;
- * what a change still waiting adds, a Citation, a chart's values and the
- * Bibliography are neither.
+ * finding AI text's passages and the sentences to comment on (`Review.mark`):
+ * text is the AI's or the User's; what a change still waiting adds, a
+ * Citation, a chart's values and the Bibliography are neither.
  */
-export function* piecesOf(
-  blocks: readonly Block[],
-): Generator<{ key: object; authorship: Authorship }> {
+export function* piecesOf(blocks: readonly Block[]): Generator<Piece> {
   for (const block of blocks) {
     if (block.inserted) continue;
     switch (block.kind) {
@@ -794,7 +791,7 @@ export function* piecesOf(
         for (const inline of block.content) {
           if (inline.kind !== "text" || inline.inserted) continue;
           const authorship = inline.ai ? "ai" : inline.text.trim() === "" ? "neither" : "own";
-          yield { key: inline, authorship };
+          yield { key: inline, authorship, sentence: inline.sentenceCheck };
         }
         break;
       case "list":

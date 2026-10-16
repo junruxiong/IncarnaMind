@@ -33,13 +33,7 @@ import {
 } from "../../mindText";
 import { type DocxWriter, piecesOf, WRITER_NAMESPACES } from "../docx";
 import { dateAttribute, escapeXml, type WordIds } from "../wordml";
-import {
-  type Authorship,
-  passagesOf,
-  type Review,
-  type Tracking,
-  trackBlocks,
-} from "../wordReview";
+import { type Authorship, type Piece, type Review, type Tracking, trackBlocks } from "../wordReview";
 import type { AtomPlan } from "./atoms";
 import { type Counterpart, counterpartsOf, type ListPlace, NO_MARKS } from "./mind";
 import {
@@ -311,7 +305,7 @@ export class DocumentPatch {
    */
   private *pieces(
     counterparts: readonly Counterpart[],
-  ): Generator<{ key: object; authorship: Authorship }> {
+  ): Generator<Piece> {
     for (const counterpart of counterparts) {
       if (counterpart.pending.inserted) continue;
       const based = counterpart.key ? this.based.get(counterpart.key) : undefined;
@@ -384,7 +378,7 @@ export class DocumentPatch {
     const body = child(this.input.base.root, "w:body");
     if (!body) return this.text;
     const current = this.currentOf(this.input.current);
-    this.input.review.mark(passagesOf(this.pieces(current)));
+    this.input.review.mark(this.pieces(current));
     const splices = this.container({
       element: body,
       contentStart: body.openEnd ?? startOf(body),
