@@ -143,8 +143,10 @@ export interface MindToolsOptions {
   language: Language;
   /**
    * Markdown as a Mind holds it: each Citation marker the Answer recorded a
-   * Citation for, checked, and its figures as their shown text. Says how many
-   * of its Citations weren't found and how many markers had no Citation.
+   * Citation for, checked, and its figures as their shown text, without its
+   * sentences about the Answer's searching. Says how many of its Citations
+   * weren't found, how many markers had no Citation, and how many sentences
+   * it left out.
    */
   blocksOf(markdown: string): {
     blocks: NodeJSON[];
@@ -157,6 +159,7 @@ export interface MindToolsOptions {
     unlinkedSources: number;
     /** Cells beyond its tables' columns, their text kept in the row's last cell. */
     extraCells: number;
+    searchTalk: number;
   };
   /**
    * What the User's words asked for (../../answers/routeRequest), which the
@@ -607,7 +610,13 @@ const citedIn = ({ cited, unrecorded }: { cited: number; unrecorded: number }) =
   ...(unrecorded > 0 && { unrecorded }),
 });
 
-function citationNotes({ notFound, unrecorded }: { notFound: number; unrecorded: number }) {
+interface Written {
+  notFound: number;
+  unrecorded: number;
+  searchTalk: number;
+}
+
+function writtenNotes({ notFound, unrecorded, searchTalk }: Written) {
   return [
     ...(notFound > 0
       ? [
@@ -617,6 +626,11 @@ function citationNotes({ notFound, unrecorded }: { notFound: number; unrecorded:
     ...(unrecorded > 0
       ? [
           `${unrecorded === 1 ? "1 marker has" : `${unrecorded} markers have`} no Citation recorded yet: record ${unrecorded === 1 ? "it" : "them"} with cite.`,
+        ]
+      : []),
+    ...(searchTalk > 0
+      ? [
+          `${searchTalk === 1 ? "1 sentence" : `${searchTalk} sentences`} about your searching ${searchTalk === 1 ? "was" : "were"} left out of the Mind: say in your reply what isn't covered.`,
         ]
       : []),
   ];
@@ -925,11 +939,12 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     after: string | null,
     markdown: string,
     made: boolean,
-  ): { change: MindChange; notFound: number; unrecorded: number } | null => {
+  ): (Written & { change: MindChange }) | null => {
     const stream = streams.get(toolCallId);
     streams.delete(toolCallId);
     ended.add(toolCallId);
-    const { blocks, cited, notFound, unrecorded, ...notes } = options.blocksOf(markdown);
+    const { blocks, cited, notFound, unrecorded, searchTalk, ...notes } =
+      options.blocksOf(markdown);
     const unmade = blocks.some(unmadeTable);
     let writer = stream?.writer ?? null;
     if (writer && (unmade || writer.mind.id !== mind.id || writer.named !== after)) {
@@ -965,7 +980,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         change: () => changeOf(writer, made),
       });
     }
-    return { change, notFound, unrecorded };
+    return { change, notFound, unrecorded, searchTalk };
   };
 
   /** By call: text written with markers `cite` hadn't recorded yet. */
@@ -1005,7 +1020,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       `Proposed ${written.change.proposals === 1 ? "1 new Block" : `${written.change.proposals} new Blocks`} ${where}.`,
       ...tableNotes(written.change),
       WAITING,
-      ...citationNotes(written),
+      ...writtenNotes(written),
     ].join(" ");
 
   const mindProperty = {
@@ -1054,8 +1069,9 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     mind: ChangeableMind,
     own: OwnWaiting,
     markdown: string,
-  ): { change: MindChange; notFound: number; unrecorded: number } => {
-    const { blocks, cited, notFound, unrecorded, ...notes } = options.blocksOf(markdown);
+  ): Written & { change: MindChange } => {
+    const { blocks, cited, notFound, unrecorded, searchTalk, ...notes } =
+      options.blocksOf(markdown);
     if (blocks.some(unmadeTable)) throw noTable(mind);
     const request = randomUUID();
     minds.checkpoint(mind.id);
@@ -1088,7 +1104,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     if (unrecorded > 0) {
       unsettled.set(toolCallId, { mindId: mind.id, ids, markdown, change: revision });
     }
-    return { change, notFound, unrecorded };
+    return { change, notFound, unrecorded, searchTalk };
   };
 
   const unmadeSaid = (name: string) =>
@@ -1172,7 +1188,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         return [
           revisedText(mind.name, revised.change, ` (${lengths(before, markdown)})`),
           ...tableNotes(revised.change),
-          ...citationNotes(revised),
+          ...writtenNotes(revised),
         ].join(" ");
       }
       const { result, length, reason, revised } = await minds.proposeInMind({
