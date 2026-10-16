@@ -103,6 +103,31 @@ function isOwn(element: Y.XmlElement): boolean {
   );
 }
 
+function elementText(element: Y.XmlElement): string {
+  return element
+    .toArray()
+    .map((node) =>
+      node instanceof Y.XmlText
+        ? (node.toDelta() as Run[])
+            .map((run) => (typeof run.insert === "string" ? run.insert : ""))
+            .join("")
+        : node instanceof Y.XmlElement
+          ? elementText(node)
+          : "",
+    )
+    .join(" ");
+}
+
+/** The text of each of the assistant's own waiting Blocks, but those of request `except`. */
+export function ownWaitingTexts(blocks: Y.XmlFragment, except: string | null): string[] {
+  return topLevelBlocks(blocks).flatMap((element) =>
+    isOwn(element) &&
+    readProposalAttribute(element.getAttribute(PROPOSAL_ATTRIBUTE))?.request !== except
+      ? [elementText(element)]
+      : [],
+  );
+}
+
 function rangeOf(blocks: Y.XmlFragment, from: TextPlace, to: TextPlace): Y.XmlElement[] {
   const texts = textBlocks(blocks).map((each) => each.element);
   const first = texts.find((element) => idOf(element) === from.blockId);

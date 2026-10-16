@@ -4016,6 +4016,7 @@ export const en = {
   "mindCall.failed.noText": "Couldn't change “{mind}”: there's no text there to change",
   "mindCall.failed.tooLong": "Couldn't change “{mind}”: that's too much text to change at once",
   "mindCall.failed.changed": "Couldn't change “{mind}”: its text changed while it was being read",
+  "mindCall.failed.copy": "Didn't add to “{mind}”: “{text}” is there already, waiting",
   "mindCall.failed.contentNotOwn":
     "Couldn't change “{mind}”: only the assistant's own waiting text can be written anew",
   "mindCall.failed.stopped": "Stopped before “{mind}” changed",

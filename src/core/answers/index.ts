@@ -1523,7 +1523,6 @@ export function createAnswers(options: AnswersOptions) {
         [...mindChanges.values()].some(
           (change) => change.created || change.revised || change.proposals > 0,
         );
-      // Asked for text in a Mind, a reply that changed none and wasn't refused one is asked for once more.
       const owesAWrite = () => requested !== null && !changedAMind() && mindProblems.size === 0;
       const heldBack = holdBack(() => mindsListed().map((mind) => mind.name));
       const checkReply = (text: string) => {
