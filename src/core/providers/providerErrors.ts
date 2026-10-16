@@ -76,6 +76,11 @@ export function contextOverflow(
   };
 }
 
+/** Anthropic's 400 for a model that requires 30-day data retention, asked by an organization or workspace without it. */
+const refusesWithoutRetention = (error: APICallError) =>
+  error.statusCode === 400 &&
+  /must have data retention enabled/i.test(`${error.message} ${error.responseBody ?? ""}`);
+
 /**
  * Whether a provider refused a request because the model can't use `feature`:
  * e.g. Ollama's "model does not support tools", vLLM's "--enable-auto-tool-choice",
@@ -152,6 +157,7 @@ export function classifyProviderError(error: unknown): ProviderError {
     // No status: the request never got a response.
     if (status === undefined) return { kind: "network", message };
     if (status === 401 || status === 403) return { kind: "auth", message };
+    if (refusesWithoutRetention(cause)) return { kind: "data-retention", message };
     // Google answers a bad key with 400 "API key not valid".
     if (status === 400 && /api[ _-]?key/i.test(message)) return { kind: "auth", message };
     if (status === 404) return { kind: "model", message };

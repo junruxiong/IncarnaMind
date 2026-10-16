@@ -1591,6 +1591,8 @@ export const zhCN = {
   "providers.test.cost-cap": "未发送任何内容：已达到本月花费上限。可在“设置 → 通用”中更改。",
   "providers.test.no-answer": "模型没有回复。",
   "providers.test.ollama-not-running": "Ollama 没有在这台电脑上运行。请先打开它，再测试一次。",
+  "providers.test.data-retention":
+    "这个模型要求你的 Anthropic 组织保留数据 30 天。请换用其他模型，或在 Anthropic Console 中开启数据保留。",
   "providers.test.unknown": "测试未通过。",
 
   "providers.secrets.plainText.title": "没有正在运行的密钥环",
@@ -2084,6 +2086,7 @@ export const zhCN = {
   "answer.error.not-signed-in": "你还没有登录 ChatGPT",
   "answer.error.plan-limit": "ChatGPT 订阅的用量已达上限",
   "answer.error.blocked": "OpenAI 不允许 IncarnaMind 使用你的 ChatGPT 订阅",
+  "answer.error.data-retention": "这个模型要求你的 Anthropic 组织保留数据 30 天",
   "answer.error.checkKey": "检查密钥",
   "answer.error.askAgain": "重新提问",
   "answer.error.removeFromMenu": "从菜单中移除",

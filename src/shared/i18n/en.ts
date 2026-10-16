@@ -1672,6 +1672,8 @@ export const en = {
   "providers.test.no-answer": "The model sent no reply.",
   "providers.test.ollama-not-running":
     "Ollama isn't running on this computer. Open it, then test again.",
+  "providers.test.data-retention":
+    "This model needs your Anthropic organization to keep data for 30 days. Choose another model, or turn on data retention in the Anthropic Console.",
   "providers.test.unknown": "The test didn't work.",
 
   "providers.secrets.plainText.title": "No keyring is running",
@@ -2188,6 +2190,8 @@ export const en = {
   "answer.error.not-signed-in": "You're not signed in to ChatGPT",
   "answer.error.plan-limit": "Your ChatGPT plan's usage limit is reached",
   "answer.error.blocked": "OpenAI didn't let IncarnaMind use your ChatGPT plan",
+  "answer.error.data-retention":
+    "This model needs your Anthropic organization to keep data for 30 days",
   "answer.error.checkKey": "Check the key",
   "answer.error.askAgain": "Ask again",
   "answer.error.removeFromMenu": "Remove from menu",

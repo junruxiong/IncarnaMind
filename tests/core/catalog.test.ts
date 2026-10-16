@@ -242,7 +242,7 @@ describe("The provider catalog", () => {
     ["openrouter", "openai/gpt-6-luna", false],
     ["google", "gemini-3.8-flash", false],
     ["deepseek", "deepseek-flash", false],
-    ["qwen", "qwen3.7-flash", false],
+    ["qwen", "qwen3.8-flash", false],
     ["siliconflow", "deepseek-ai/DeepSeek-V4", false],
     ["ollama", "gpt-oss:20b-cloud", false],
     ["ollama", "qwen3.5:4b", false],
@@ -382,7 +382,7 @@ describe("The providers of #178", () => {
     }
   });
 
-  test("each says whether it may train on API data; DeepSeek may (with an opt-out) and Kimi's pages disagree", () => {
+  test("each says whether it may train on API data: Mistral and Kimi may, DeepSeek's and Z.ai's terms don't say", () => {
     const training = Object.fromEntries(
       added.map((id) => [id, catalogProvider(id)?.dataUse.training]),
     );
@@ -390,13 +390,24 @@ describe("The providers of #178", () => {
       openrouter: "no",
       mistral: "opt-out",
       xai: "no",
-      deepseek: "opt-out",
+      deepseek: "unknown",
       qwen: "no",
-      kimi: "unknown",
+      kimi: "opt-out",
       glm: "unknown",
       siliconflow: "no",
     });
-    expect(catalogProvider("kimi")?.dataUse.summary.en).toContain("disagree");
+    expect(catalogProvider("kimi")?.dataUse.url).toBe(
+      "https://platform.kimi.ai/docs/agreement/modeluse",
+    );
+  });
+
+  test("Anthropic's data line says which model needs 30-day retention, and no link uses an address that has moved", () => {
+    expect(catalogProvider("anthropic")?.dataUse.summary.en).toContain("Fable 5.1");
+    expect(catalogProvider("anthropic")?.dataUse.summary.zh).toContain("Fable 5.1");
+    const links = CATALOG_PROVIDERS.flatMap((each) => [each.docsUrl, each.dataUse.url]);
+    expect(
+      links.filter((url) => /docs\.anthropic\.com|platform\.openai\.com\/docs/.test(url ?? "")),
+    ).toEqual([]);
   });
 
   test("a provider with regions has an endpoint for each, the first the default, and a set of model facts for each", () => {
