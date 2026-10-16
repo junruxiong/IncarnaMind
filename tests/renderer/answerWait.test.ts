@@ -16,22 +16,28 @@ const SONNET = "Claude Sonnet 5.5";
 afterEach(() => setSilentWaitMs(15_000));
 
 describe("The line of an Answer with no words", () => {
-  // protects=a usual wait is said in seconds under a minute, as a minute near 60 seconds and in minutes after, in both languages; fails_when=75 seconds reads "75 seconds", or Chinese keeps English word order; no_claim=the rounding is for reading, not exact.
+  // protects=a usual wait is said in seconds to the nearest ten under a minute, as a minute from 60 to 89 seconds, and in whole minutes from 90, in both languages; fails_when=59 seconds reads "60 seconds", 89 reads "2 minutes", 90 reads "a minute", or Chinese keeps English word order; no_claim=the rounding is for reading, not exact.
   test.each([
     [
-      40,
-      "Usually about 40 seconds with Claude Sonnet 5.5",
-      "用 Claude Sonnet 5.5 通常要 40 秒左右",
+      25,
+      "Usually about 30 seconds with Claude Sonnet 5.5",
+      "用 Claude Sonnet 5.5 通常要 30 秒左右",
     ],
     [
       43,
       "Usually about 40 seconds with Claude Sonnet 5.5",
       "用 Claude Sonnet 5.5 通常要 40 秒左右",
     ],
-    [58, "Usually about a minute with Claude Sonnet 5.5", "用 Claude Sonnet 5.5 通常要 1 分钟左右"],
-    [75, "Usually about a minute with Claude Sonnet 5.5", "用 Claude Sonnet 5.5 通常要 1 分钟左右"],
+    [59, "Usually about a minute with Claude Sonnet 5.5", "用 Claude Sonnet 5.5 通常要 1 分钟左右"],
+    [60, "Usually about a minute with Claude Sonnet 5.5", "用 Claude Sonnet 5.5 通常要 1 分钟左右"],
+    [89, "Usually about a minute with Claude Sonnet 5.5", "用 Claude Sonnet 5.5 通常要 1 分钟左右"],
     [
-      190,
+      90,
+      "Usually about 2 minutes with Claude Sonnet 5.5",
+      "用 Claude Sonnet 5.5 通常要 2 分钟左右",
+    ],
+    [
+      150,
       "Usually about 3 minutes with Claude Sonnet 5.5",
       "用 Claude Sonnet 5.5 通常要 3 分钟左右",
     ],

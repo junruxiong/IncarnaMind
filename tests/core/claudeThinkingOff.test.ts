@@ -173,7 +173,7 @@ async function writeAnswer(modelId: string, thinking: ChatModelSpec["thinking"])
 describe("An Answer's thinking budget", () => {
   // protects=a model that refuses the effort still writes its Answer, asked again once without it, and its later Answers leave the effort out from the start; fails_when=the Answer fails with the refusal, is asked twice with the effort, or a later Answer sends the effort again; no_claim=the refusal is Anthropic's recorded shape, not a live one.
   test.each([
-    ["claude-sonnet-5-9", "summary", "low"],
+    ["claude-sonnet-5-9", "answer", "low"],
     ["claude-opus-5-9", "careful", "high"],
   ] as const)(
     "%s, %s: asked again without the effort, and then without it from the start",
@@ -192,7 +192,7 @@ describe("An Answer's thinking budget", () => {
   test("a call that isn't streamed is asked again without it too", async () => {
     const bodies = anthropic(EFFORT_REFUSAL);
     const reply = await generateText({
-      model: answering("claude-haiku-5-9", "summary"),
+      model: answering("claude-haiku-5-9", "answer"),
       prompt: "Hi",
       maxRetries: 0,
     });
@@ -200,11 +200,26 @@ describe("An Answer's thinking budget", () => {
     expect(bodies.map((body) => body.output_config?.effort)).toEqual(["low", undefined]);
   });
 
+  test("two calls at once that are both refused are both asked again", async () => {
+    const bodies = anthropic(EFFORT_REFUSAL);
+    const model = answering("claude-sonnet-5-7", "answer");
+    const replies = await Promise.all(
+      ["A", "B"].map((prompt) => generateText({ model, prompt, maxRetries: 0 })),
+    );
+    expect(replies.map((reply) => reply.text)).toEqual(["OK", "OK"]);
+    expect(bodies.map((body) => body.output_config?.effort)).toEqual([
+      "low",
+      "low",
+      undefined,
+      undefined,
+    ]);
+  });
+
   test("a refusal that doesn't name the effort is the call's failure, asked once", async () => {
     const bodies = anthropic({ effort: true, message: "max_tokens: too large" });
     await expect(
       generateText({
-        model: answering("claude-sonnet-5-8", "summary"),
+        model: answering("claude-sonnet-5-8", "answer"),
         prompt: "Hi",
         maxRetries: 0,
       }),

@@ -347,7 +347,10 @@ export interface AnswersOptions {
   /** Whether Questions can be asked with this model (the default one when undefined). */
   readiness(choice: ChatModelChoice | undefined): Promise<ChatReadiness>;
   /** The model, once the User has accepted its data flow (see `Core.prepareChatModel`). */
-  prepareModel(choice: ChatModelChoice, thinking?: "careful"): Promise<PreparedChatModel>;
+  prepareModel(
+    choice: ChatModelChoice,
+    thinking: "summary" | "answer" | "careful",
+  ): Promise<PreparedChatModel>;
   /** Searching the User's Documents, and what Citations point to. */
   documents: DocumentsForAnswers;
   /** What an Answer is written in when its Question has no language of its own. */
@@ -747,6 +750,7 @@ export function createAnswers(options: AnswersOptions) {
     const toolCalls: AnswerToolCall[] = [];
     /** When the Question went to the model, and when the Answer ended, in ms since the epoch. */
     let sentAt: number | null = null;
+    const waitsForUser: [from: number, to: number][] = [];
     let finishedAt: number | null = null;
     const phases: AnswerSteps["phases"] = [];
     /** The model's reasoning summary, kept only from a provider that summarizes it. */
@@ -765,6 +769,17 @@ export function createAnswers(options: AnswersOptions) {
           ? firstTextAt
           : (lastReasoningAt ?? Date.now());
       const firstWordAt = Math.min(firstTextAt ?? Infinity, firstMindWordAt ?? Infinity);
+      const wordAfter = (from: number, to: number) =>
+        Math.max(
+          0,
+          to -
+            from -
+            waitsForUser.reduce(
+              (sum, [began, ended]) =>
+                sum + Math.max(0, Math.min(ended, to) - Math.max(began, from)),
+              0,
+            ),
+        );
       return {
         sentAt: iso(sentAt),
         finishedAt: iso(finishedAt),
@@ -776,7 +791,7 @@ export function createAnswers(options: AnswersOptions) {
         ...(read?.partial && { readShare }),
         ...(citedAfterChecking.count > 0 && { citedAfterChecking: citedAfterChecking.count }),
         ...(sentAt !== null &&
-          firstWordAt !== Infinity && { firstWordMs: Math.max(0, firstWordAt - sentAt) }),
+          firstWordAt !== Infinity && { firstWordMs: wordAfter(sentAt, firstWordAt) }),
         ...(careful && { careful: true as const }),
       };
     };
@@ -1038,7 +1053,9 @@ export function createAnswers(options: AnswersOptions) {
       callStarted({ ...card, approval: "waiting" });
       // Already reported by the engine, after all: it waits too.
       setApproval(call.toolCallId, "waiting");
+      const asked = Date.now();
       const allowed = await options.approvals.request(call, controller.signal);
+      waitsForUser.push([asked, Date.now()]);
       setApproval(call.toolCallId, allowed ? "allowed" : "denied");
       return allowed ? null : deniedResult(call);
     };
@@ -1284,7 +1301,10 @@ export function createAnswers(options: AnswersOptions) {
       if (consenting) showPhase();
       let prepared: PreparedChatModel;
       try {
-        prepared = await options.prepareModel(model, careful ? "careful" : undefined);
+        prepared = await options.prepareModel(
+          model,
+          input.task ? "summary" : careful ? "careful" : "answer",
+        );
       } catch (error) {
         finish({ status: "failed", error: failureOf(error) });
         return;
@@ -1479,8 +1499,9 @@ export function createAnswers(options: AnswersOptions) {
           await new Promise((resolve) => setTimeout(resolve, LOAD_POLL_MS).unref?.());
         }
       };
-      // Until a phase is known, the meta line says "Writing…".
+      // Until a phase is known, the meta line says "Writing…". Without a model to load, it is known now.
       if (prepared.loaded) void watchLoading(prepared.loaded);
+      else showPhase();
 
       const learntKey = modelKey(model, prepared);
       let outcome: Outcome = { status: "stopped" };

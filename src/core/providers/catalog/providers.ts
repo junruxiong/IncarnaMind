@@ -65,7 +65,8 @@ const PROVIDERS = [
       // Claude 5 models think by default, and return only an empty block unless asked for the summary.
       // At the default effort, a summary of three Documents took 30 to 85 seconds to start (#899).
       reasoningSummary: {
-        options: {
+        options: { anthropic: { thinking: { type: "adaptive", display: "summarized" } } },
+        answer: {
           anthropic: { thinking: { type: "adaptive", display: "summarized" }, effort: "low" },
         },
         careful: {
