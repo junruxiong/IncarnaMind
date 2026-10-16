@@ -38,6 +38,7 @@ import {
 import { createElement, formattingOf, type NodeJSON } from "../answers/blocks";
 import {
   BLOCK_ID_ATTRIBUTE,
+  type BlockKind,
   CITATION_NODE,
   FOOTNOTE_NODE,
   GENERATED_MARK,
@@ -122,13 +123,6 @@ interface Segment {
    */
   kind: BlockKind;
 }
-
-/**
- * What kind of Block a paragraph of the selection is, as the model reads it
- * and writes it back: a heading of a level ("heading:2"), a bullet, a
- * numbered item, a quote, or a plain paragraph.
- */
-type BlockKind = "paragraph" | "bullet" | "numbered" | "quote" | `heading:${number}`;
 
 /** A paragraph's or heading's kind of Block, from where it is. */
 function kindOf(element: Y.XmlElement): BlockKind {
