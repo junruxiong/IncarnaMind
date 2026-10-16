@@ -57,6 +57,8 @@ export interface EvalConfig {
   /** Keep the temporary data folders, for looking into a run. */
   keepData: boolean;
   chat: ChatSettings | null;
+  /** The model that judges Answers where an eval asks one (INCARNAMIND_EVAL_JUDGE_*); null: the chat model. */
+  judge: ChatSettings | null;
   cloudEmbedding: CloudEmbeddingSettings | null;
   /**
    * Reranking candidates whose reranked modes to report next to the built-in
@@ -121,14 +123,16 @@ function positiveInteger(env: Env, name: string, fallback: number): number {
   return parsed;
 }
 
-function chatSettings(env: Env): ChatSettings | null {
-  const kind = value(env, "CHAT_KIND");
-  const modelId = value(env, "CHAT_MODEL");
-  const apiKey = value(env, "CHAT_KEY");
-  const baseUrl = value(env, "CHAT_BASE_URL");
+function chatSettings(env: Env, role: "CHAT" | "JUDGE" = "CHAT"): ChatSettings | null {
+  const kind = value(env, `${role}_KIND`);
+  const modelId = value(env, `${role}_MODEL`);
+  const apiKey = value(env, `${role}_KEY`);
+  const baseUrl = value(env, `${role}_BASE_URL`);
   if (kind === null) {
     if (modelId || apiKey || baseUrl) {
-      throw new Error(`Set ${PREFIX}CHAT_KIND too, or none of the ${PREFIX}CHAT_* variables.`);
+      throw new Error(
+        `Set ${PREFIX}${role}_KIND too, or none of the ${PREFIX}${role}_* variables.`,
+      );
     }
     return null;
   }
@@ -136,26 +140,26 @@ function chatSettings(env: Env): ChatSettings | null {
   const allowed = chatProviderKinds.filter((each) => each !== "chatgpt");
   const found = allowed.find((each) => each === kind);
   if (!found) {
-    throw new Error(`${PREFIX}CHAT_KIND must be one of ${allowed.join(", ")}, not "${kind}".`);
+    throw new Error(`${PREFIX}${role}_KIND must be one of ${allowed.join(", ")}, not "${kind}".`);
   }
-  if (!modelId) throw new Error(`Set ${PREFIX}CHAT_MODEL to the model to ask, e.g. a model id.`);
+  if (!modelId) throw new Error(`Set ${PREFIX}${role}_MODEL to the model to ask, e.g. a model id.`);
   if ((found === "openai" || found === "anthropic" || found === "google") && !apiKey) {
-    throw new Error(`Set ${PREFIX}CHAT_KEY to an API key for ${found}.`);
+    throw new Error(`Set ${PREFIX}${role}_KEY to an API key for ${found}.`);
   }
   if (found === "openai-compatible" && !baseUrl) {
-    throw new Error(`Set ${PREFIX}CHAT_BASE_URL to the server's URL.`);
+    throw new Error(`Set ${PREFIX}${role}_BASE_URL to the server's URL.`);
   }
   const numCtx =
-    value(env, "CHAT_NUM_CTX") === null ? null : positiveInteger(env, "CHAT_NUM_CTX", 1);
-  const citingValue = value(env, "CHAT_CITING");
+    value(env, `${role}_NUM_CTX`) === null ? null : positiveInteger(env, `${role}_NUM_CTX`, 1);
+  const citingValue = value(env, `${role}_CITING`);
   const citing = citingModes.find((each) => each === citingValue) ?? null;
   if (citingValue !== null && !citing) {
     throw new Error(
-      `${PREFIX}CHAT_CITING must be one of ${citingModes.join(", ")}, not "${citingValue}".`,
+      `${PREFIX}${role}_CITING must be one of ${citingModes.join(", ")}, not "${citingValue}".`,
     );
   }
   if ((numCtx !== null || citing !== null) && found !== "ollama") {
-    throw new Error(`${PREFIX}CHAT_NUM_CTX and ${PREFIX}CHAT_CITING only apply to "ollama".`);
+    throw new Error(`${PREFIX}${role}_NUM_CTX and ${PREFIX}${role}_CITING only apply to "ollama".`);
   }
   return { kind: found, modelId, apiKey, baseUrl, numCtx, citing };
 }
@@ -276,6 +280,7 @@ export function readConfig(root: string, env: Env = process.env): EvalConfig {
     resultsDir: join(root, "eval", "results"),
     keepData: value(env, "KEEP_DATA") === "1",
     chat: chatSettings(env),
+    judge: chatSettings(env, "JUDGE"),
     cloudEmbedding: cloudEmbeddingSettings(env),
     rerank: rerankCandidates(env),
     rerankOnCpu: value(env, "RERANK_CPU") === "1",
