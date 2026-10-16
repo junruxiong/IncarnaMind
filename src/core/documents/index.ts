@@ -2240,7 +2240,7 @@ export function createDocuments(options: DocumentsOptions) {
     setNotCited(idInput: unknown, notCitedInput: unknown): Document {
       const id = parseId(idInput);
       if (typeof notCitedInput !== "boolean") {
-        throw new InvalidInputError("notCited must be true or false.");
+        throw new InvalidInputError({ key: "error.document.notCitedChoice" });
       }
       const row = find(id);
       if (!row) throw new NotFoundError({ key: "error.document.notFound" });
