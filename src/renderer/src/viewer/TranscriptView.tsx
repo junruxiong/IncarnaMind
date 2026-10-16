@@ -141,7 +141,7 @@ function TranscriptContent({
   const [markRoom, setMarkRoom] = useState(0);
   const mark = quoteMarkOf(target.citation);
   const hintId = useId();
-  // The line the User is on, by where it starts: the one Enter, the button and ⌘K add.
+  // The line the User is on, by its id: the one Enter, the button and ⌘K add.
   const [active, setActive] = useState<string | null>(null);
   const activeRef = useRef<Cue | null>(null);
   const [added, setAdded] = useState<LineAdded | null>(null);

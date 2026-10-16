@@ -87,7 +87,7 @@ export function locatorOf(location: CitationLocation | null, language: Language)
     return { locator: span(location.from, location.to), label: "line" };
   }
   return {
-    locator: formatLocation(location, (key, params) => translate(language, key, params)),
+    locator: formatLocation(location, (key, params) => translate(language, key, params), false),
     label: "custom",
   };
 }
