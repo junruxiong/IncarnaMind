@@ -7,6 +7,7 @@
 import {
   type CalculatedFigure,
   type CheckedVersion,
+  type Citation,
   type CitationAttributes,
   type ClaimCalculation,
   type ClaimCheckAction,
@@ -109,6 +110,8 @@ export function readClaimCheck(value: unknown): ClaimCheckAttributes | null {
     evidence: isRecord(value.evidence) ? (value.evidence as unknown as CitationAttributes) : null,
     says: text(value.says),
     calculation: calculationOf(value.calculation),
+    citedCaseUnchecked: value.citedCaseUnchecked === true,
+    citedCaseFound: value.citedCaseFound === true,
     scope: scopeOf(value.scope),
     versions: versionsOf(value.versions),
     excluded: excludedOf(value.excluded),
@@ -119,7 +122,8 @@ export function readClaimCheck(value: unknown): ClaimCheckAttributes | null {
 /**
  * Why a check no longer holds: its sentence was edited (an accepted change
  * or a restored Checkpoint edits it too), a Document it read has a new
- * version or was deleted, or the Mind moved to another Folder.
+ * version, one its result rests on was deleted, or the Mind moved to another
+ * Folder.
  */
 export type RecheckReason = "edited" | "new-version" | "document-removed" | "scope";
 
@@ -140,6 +144,15 @@ export interface ClaimCheckNow {
   folderId: string | null;
 }
 
+/** What a check's result rests on: its evidence, and the quotes a worked-out figure read its numbers from. */
+export function restsOn(check: ClaimCheckAttributes): (CitationAttributes | Citation)[] {
+  const inputs = check.calculation?.figure.inputs ?? [];
+  return [
+    check.evidence,
+    ...inputs.flatMap((input) => [input.citation, input.unitStatement?.citation ?? null]),
+  ].filter((each): each is CitationAttributes | Citation => each !== null);
+}
+
 /** How a check shows, given the sentence, the Documents and the Mind's Folder as they are now. */
 export function claimCheckShown(check: ClaimCheckAttributes, now: ClaimCheckNow): ClaimCheckShown {
   if (check.state === "checking") return { state: "checking" };
@@ -147,10 +160,16 @@ export function claimCheckShown(check: ClaimCheckAttributes, now: ClaimCheckNow)
     return { state: "needs-recheck", why: "edited" };
   }
   if (now.versions) {
+    const relied = new Set(restsOn(check).map((each) => each.documentId));
     for (const version of check.versions) {
       const current = now.versions.get(version.documentId);
-      if (current === undefined) return { state: "needs-recheck", why: "document-removed" };
-      if (current !== version.contentHash) return { state: "needs-recheck", why: "new-version" };
+      // A Document only read, gone, takes nothing from the result: an example's, swapped for the interface language, among them (#962).
+      if (current === undefined && relied.has(version.documentId)) {
+        return { state: "needs-recheck", why: "document-removed" };
+      }
+      if (current !== undefined && current !== version.contentHash) {
+        return { state: "needs-recheck", why: "new-version" };
+      }
     }
   }
   if (!check.scope.widened && check.scope.folderId !== now.folderId) {

@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ConversationAnswer, ConversationQuestion, Task } from "../../../../core/api";
 import { mindName } from "../../../../shared/naming";
-import { type AddTarget, addAnswer } from "../../addToNote";
+import { type AddTarget, addAnswer, openTable } from "../../addToNote";
 import { notesToAdd } from "../../answerEditors";
 import { readsLine, stepsScope } from "../../assistantContext";
 import { readMindHandle } from "../../commands/handles";
@@ -136,6 +136,9 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
     },
     pick(answer, anchor) {
       setPicking({ answer, anchor, blocks: notesToAdd(answer) });
+    },
+    openTable(answer, table) {
+      void openTable({ answer, conversation, blocks: [table] });
     },
   };
 

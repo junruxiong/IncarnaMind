@@ -16,6 +16,7 @@ const seenNames = new Map<string, string>();
 function factText(t: Translate, row: ChangedMind, name: string, waiting: Waiting) {
   if (waiting === "gone") return t("mindChanges.one.removed", { mind: name });
   const count = row.wrote + row.changed;
+  if (row.tables > 0) return tablesFact(t, row, name);
   if (row.created) {
     if (count === 0) return t("mindChanges.one.created.none", { mind: name });
     return count === 1
@@ -33,9 +34,42 @@ function factText(t: Translate, row: ChangedMind, name: string, waiting: Waiting
     : t("mindChanges.changed", { mind: name, count });
 }
 
+function tablesFact(t: Translate, row: ChangedMind, name: string) {
+  const counted = (count: number, what: "tables" | "paragraphs" | "places") =>
+    count === 1 ? t(`mindChanges.count.${what}.one`) : t(`mindChanges.count.${what}`, { count });
+  const tables = counted(row.tables, "tables");
+  const count = row.wrote + row.changed;
+  if (count === 0) {
+    return row.created
+      ? t("mindChanges.created.tables", { mind: name, tables })
+      : t("mindChanges.tables", { mind: name, tables });
+  }
+  const paragraphs = counted(count, "paragraphs");
+  if (row.created) return t("mindChanges.created.wrote.tables", { mind: name, paragraphs, tables });
+  if (row.changed === 0) return t("mindChanges.wrote.tables", { mind: name, paragraphs, tables });
+  return t("mindChanges.changed.tables", { mind: name, places: counted(count, "places"), tables });
+}
+
+/** What of its tables was kept as text, after its count; null when nothing was. */
+function keptText(t: Translate, row: ChangedMind): string | null {
+  const notes = [
+    ...(row.unlinkedSources === 1
+      ? [t("mindChanges.unlinked.one")]
+      : row.unlinkedSources > 1
+        ? [t("mindChanges.unlinked", { count: row.unlinkedSources })]
+        : []),
+    ...(row.extraCells === 1
+      ? [t("mindChanges.extraCells.one")]
+      : row.extraCells > 1
+        ? [t("mindChanges.extraCells", { count: row.extraCells })]
+        : []),
+  ];
+  return notes.length > 0 ? notes.join(" ") : null;
+}
+
 /** How many of what it did still wait, while that is known and there was something. */
 function leftText(t: Translate, row: ChangedMind, waiting: Waiting): string | null {
-  if (typeof waiting !== "number" || row.wrote + row.changed === 0) return null;
+  if (typeof waiting !== "number" || row.wrote + row.changed + row.tables === 0) return null;
   if (waiting === 0) return t("mindChanges.left.none");
   return waiting === 1 ? t("mindChanges.left.one") : t("mindChanges.left", { count: waiting });
 }
@@ -82,10 +116,11 @@ export function MindChangesCard({
       ? factText(t, only, nameOf(only), waiting[0] ?? null)
       : t("mindChanges.minds", { count: rows.length });
   const headLeft = rows.length === 1 && only ? leftText(t, only, waiting[0] ?? null) : null;
+  const headKept = rows.length === 1 && only ? keptText(t, only) : null;
 
   return (
     <section
-      aria-label={headLeft ? `${head} ${headLeft}` : head}
+      aria-label={[head, headLeft, headKept].filter(Boolean).join(" ")}
       data-testid="mind-changes"
       className="mind-changes"
     >
@@ -100,6 +135,14 @@ export function MindChangesCard({
               {" "}
               <span data-testid="mind-changes-left" className="mind-changes-count">
                 {headLeft}
+              </span>
+            </>
+          )}
+          {headKept && (
+            <>
+              {" "}
+              <span data-testid="mind-changes-kept" className="mind-changes-count">
+                {headKept}
               </span>
             </>
           )}
@@ -131,7 +174,8 @@ export function MindChangesCard({
               : t(row.created ? "mindChanges.row.created" : "mindChanges.row.edited", {
                   mind: name,
                 });
-          const fact = factText(t, row, name, count);
+          const kept = keptText(t, row);
+          const fact = [factText(t, row, name, count), kept].filter(Boolean).join(" ");
           const left = leftText(t, row, count);
           return (
             <div

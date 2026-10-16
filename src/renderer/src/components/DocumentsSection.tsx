@@ -398,9 +398,9 @@ const DocumentRow = memo(function DocumentRow({
             <span data-testid="row-text" className="min-w-0 truncate">
               {shownName}
             </span>
+            <NotCitedLabel item={item} />
             <TagMarks chips={chips} />
           </span>
-          <NotCitedLabel item={item} />
           <DocumentStatusLabel item={item} />
         </button>
       )}

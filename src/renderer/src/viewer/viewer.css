@@ -235,31 +235,35 @@
    * the speech being transcribed now, greyed, at the end.
    */
   .transcript-lines {
+    --transcript-time: 44px;
     @apply m-0 list-none p-0 font-sans;
+  }
+  .transcript-lines[data-hours] {
+    --transcript-time: 54px;
   }
   .transcript-line,
   .transcript-gap {
-    @apply grid grid-cols-[3.5rem_minmax(0,1fr)] gap-x-3 border-b border-rule py-3;
+    @apply grid grid-cols-[var(--transcript-time)_minmax(0,1fr)] gap-x-3 border-b border-rule py-1.5;
   }
   .transcript-line:last-child,
   .transcript-gap:last-child {
     @apply border-b-0;
   }
   .transcript-time {
-    @apply pt-0.5 text-[13px] leading-5 text-ink-meta tabular-nums;
+    @apply text-[12px] leading-[22px] whitespace-nowrap text-ink-meta tabular-nums;
   }
   .transcript-speaker {
-    @apply m-0 text-[13px] leading-5 font-semibold text-ink;
+    @apply m-0 text-[12px] leading-[18px] font-semibold text-ink-secondary;
   }
   .transcript-text {
-    @apply m-0 text-[15px] leading-6 break-words text-ink;
+    @apply m-0 text-[14px] leading-[22px] break-words text-ink;
   }
   /*
    * Add to note: in a column of its own at the line's end, reserved always so the
    * words never move or sit under it; shown while pointed at or focused. Enter does it too.
    */
   .transcript-line {
-    @apply relative -mx-2 grid-cols-[3.5rem_minmax(0,1fr)_auto] rounded-sm px-2 outline-offset-[-2px] focus-visible:outline-2 focus-visible:outline-accent;
+    @apply relative -mx-2 grid-cols-[var(--transcript-time)_minmax(0,1fr)_auto] rounded-sm px-2 outline-offset-[-2px] focus-visible:outline-2 focus-visible:outline-accent;
   }
   .transcript-add {
     @apply inline-flex h-7 items-center gap-1.5 self-start rounded-md border border-rule bg-sheet px-2 font-sans text-[12px] leading-5 font-semibold whitespace-nowrap text-ink-secondary opacity-0 shadow-sm hover:bg-hover hover:text-ink focus-visible:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100;

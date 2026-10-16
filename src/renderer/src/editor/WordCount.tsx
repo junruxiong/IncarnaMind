@@ -1,4 +1,6 @@
 import type { Editor } from "@tiptap/core";
+import { isChangeOrigin } from "@tiptap/extension-collaboration";
+import type { Transaction } from "@tiptap/pm/state";
 import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 import type * as Y from "yjs";
 import type { MessageKey } from "../../../shared/i18n";
@@ -12,8 +14,8 @@ import {
 import {
   COUNT_BASES,
   type CountBasis,
+  countedUnit,
   countFor,
-  mostlyCjk,
   parseTarget,
 } from "../../../shared/wordCount";
 import { CheckLineIcon } from "../components/lineIcons";
@@ -36,6 +38,12 @@ export const COUNT_IDLE_MS = 300;
  */
 const COUNT_SLICE_MS = 8;
 
+/**
+ * What a count may take at once for a change the User didn't type, as an
+ * Accept or an Undo: they wait for their result, so it comes within 100 ms.
+ */
+const COUNT_AT_ONCE_MS = 50;
+
 const BASIS_NAMES: Record<CountBasis, MessageKey> = {
   words: "wordCount.basis.words",
   characters: "wordCount.basis.characters",
@@ -55,20 +63,24 @@ function useCounts(editor: Editor): MindCount | null {
     const counter = createMindCounter();
     let timer: ReturnType<typeof setTimeout> | undefined;
     let idle: number | undefined;
-    const count = () => {
+    let showsSelection = false;
+    const count = (slice = COUNT_SLICE_MS) => {
       timer = undefined;
       idle = undefined;
       if (editor.isDestroyed) return;
-      const until = performance.now() + COUNT_SLICE_MS;
+      const until = performance.now() + slice;
       const { from, to } = editor.state.selection;
       const counted = counter.count(
         editor.state.doc,
         { from, to },
         () => performance.now() > until,
       );
-      if (counted) setCounts(counted);
+      if (counted) {
+        showsSelection = counted.selection !== null;
+        setCounts(counted);
+      }
       // Not starved while the renderer is busy for long, as when an Answer streams.
-      else idle = requestIdleCallback(count, { timeout: 1000 });
+      else idle = requestIdleCallback(() => count(), { timeout: 1000 });
     };
     const stop = () => {
       clearTimeout(timer);
@@ -80,13 +92,28 @@ function useCounts(editor: Editor): MindCount | null {
       stop();
       timer = setTimeout(count, COUNT_IDLE_MS);
     };
+    // Typing waits for a pause; what comes through Yjs (an Accept, an Undo, the assistant's text) is waited on.
+    const updated = ({ transaction }: { transaction: Transaction }) => {
+      if (!isChangeOrigin(transaction)) return later();
+      stop();
+      count(COUNT_AT_ONCE_MS);
+    };
+    // A selection closed over unchanged text counts at once: a check closes it as it starts, and a later count would move the check's line (#968).
+    const selected = ({ transaction }: { transaction: Transaction }) => {
+      if (!showsSelection || transaction.docChanged || !editor.state.selection.empty) {
+        later();
+        return;
+      }
+      stop();
+      count();
+    };
     count();
-    editor.on("update", later);
-    editor.on("selectionUpdate", later);
+    editor.on("update", updated);
+    editor.on("selectionUpdate", selected);
     return () => {
       stop();
-      editor.off("update", later);
-      editor.off("selectionUpdate", later);
+      editor.off("update", updated);
+      editor.off("selectionUpdate", selected);
     };
   }, [editor]);
 
@@ -139,12 +166,9 @@ export function WordCount({
   }
 
   const format = (value: number) => new Intl.NumberFormat(language).format(value);
-  // Words, unless the writing is Chinese or Japanese (or the User asked for characters).
-  const counted = basis === "words" && !mostlyCjk(counts.total) ? "words" : "characters";
-  const unit = (value: number) => {
-    const name = counted;
-    return t(value === 1 ? `wordCount.unit.${name}.one` : `wordCount.unit.${name}`);
-  };
+  const counted = countedUnit(counts.total, basis, language === "zh-CN");
+  const unit = (value: number) =>
+    t(value === 1 ? `wordCount.unit.${counted}.one` : `wordCount.unit.${counted}`);
 
   const total = countFor(counts.total, basis);
   const selected = counts.selection ? countFor(counts.selection, basis) : null;

@@ -21,7 +21,7 @@ import {
 } from "../api";
 import type { Consent } from "../consent";
 import { InvalidInputError, isRecord, TaggingNotReadyError } from "../errors";
-import { decisionGroupClassifier } from "../library/classifier";
+import { decisionGroupClassifier, reviewBandFor } from "../library/classifier";
 import {
   askJev,
   JEV_HOSTED_URL,
@@ -36,6 +36,7 @@ import type { SettingsStore } from "../settings";
 import {
   type DocumentExcerpt,
   documentType,
+  excerptFromPassages,
   oneLine,
   type TagClassifier,
   type TagDecision,
@@ -147,6 +148,38 @@ export function decisionsFromProbabilities(
     if (probability === undefined || probability < band.low) return [];
     return [{ tagId: tag.id, confidence: probability, needsReview: probability < band.high }];
   });
+}
+
+/** How much of the excerpt Tev1 gets, in tokens, as Organize gives it (see ../library/classifier). */
+const TEV_EXCERPT_TOKENS = 1_000;
+
+/**
+ * A local decision model in Ollama as the tagger, while there are no Folders:
+ * each Tag a yes or no with its probability, through Ollama's
+ * Jev-style endpoint, as Organize asks it (see ../library/classifier). It
+ * runs on this computer, so it needs no consent and gives way to Answers.
+ */
+export function decisionModelTagger(connection: { baseUrl: string; model: string }): TagClassifier {
+  return {
+    local: true,
+    async decide({ tags, excerpt, signal }) {
+      // Tev1 reads about 2K tokens, questions included, whatever its window says.
+      const text = /^tev1(?::|$)/i.test(connection.model)
+        ? excerptFromPassages([excerpt.text], TEV_EXCERPT_TOKENS)
+        : excerpt.text;
+      const probabilities = await askJev({
+        baseUrl: connection.baseUrl,
+        apiKey: "ollama",
+        model: connection.model,
+        state: jevState({ ...excerpt, text }),
+        questions: tagQuestions(tags),
+        signal,
+        retries: 0,
+        timeoutMs: TAGGING_TIMEOUT_MS,
+      });
+      return decisionsFromProbabilities(tags, probabilities, reviewBandFor(connection.model));
+    },
+  };
 }
 
 export function createJevTagging(options: {

@@ -330,6 +330,31 @@ test("Show transcript opens the live Transcript beside the meeting, Hide transcr
     "Let's start with the launch date.",
   );
   await expect(transcript.getByTestId("transcript-line").nth(1)).toBeVisible({ timeout: 20_000 });
+  // The microphone's lines are Me, the computer sound's Them, from the first line.
+  const speakers = transcript.getByTestId("transcript-speaker");
+  await expect(speakers.first()).toHaveText("Me");
+  await expect(speakers.filter({ hasText: /^Them$/ }).first()).toBeVisible({ timeout: 20_000 });
+  // As the board draws a row: the time in a column of its own, the label above the words, in a grey that isn't a colour.
+  const row = transcript.getByTestId("transcript-line").first();
+  const [timeBox, labelBox, wordsBox] = await Promise.all([
+    row.locator(".transcript-time").boundingBox(),
+    row.getByTestId("transcript-speaker").boundingBox(),
+    row.locator(".transcript-text").boundingBox(),
+  ]);
+  expect((timeBox?.x ?? 0) + (timeBox?.width ?? 0)).toBeLessThanOrEqual(labelBox?.x ?? 0);
+  expect((labelBox?.y ?? 0) + (labelBox?.height ?? 0)).toBeLessThanOrEqual(wordsBox?.y ?? 0);
+  expect(wordsBox?.x).toBe(labelBox?.x);
+  const label = await row.getByTestId("transcript-speaker").evaluate((element) => {
+    const style = getComputedStyle(element);
+    const [red = 0, green = 0, blue = 0] = style.color.match(/\d+/g)?.map(Number) ?? [];
+    return {
+      size: style.fontSize,
+      weight: style.fontWeight,
+      spread: Math.max(red, green, blue) - Math.min(red, green, blue),
+    };
+  });
+  expect(label).toMatchObject({ size: "12px", weight: "600" });
+  expect(label.spread).toBeLessThan(24);
   // A tab of its own in the group beside the meeting's Mind, which stays where it was.
   await expect(window.getByTestId("tab-group")).toHaveCount(2);
   const mindGroup = await window.getByTestId("tab-group").first().boundingBox();
@@ -377,6 +402,8 @@ test("Show transcript opens the live Transcript beside the meeting, Hide transcr
   await toggle.click();
   await expect(toggle).toHaveText("隐藏转写稿");
   await expect(window.getByTestId("transcript-live")).toHaveText("实时");
+  await expect(speakers.filter({ hasText: /^我$/ }).first()).toBeVisible();
+  await expect(speakers.filter({ hasText: /^对方$/ }).first()).toBeVisible();
   await shot(window, "meeting-transcript-wide-zh");
   await setWindowSize(app, window, 900, 700);
   await window.getByTestId("mind-tab").filter({ hasText: "Meeting" }).click();
@@ -385,6 +412,15 @@ test("Show transcript opens the live Transcript beside the meeting, Hide transcr
   // Named when its first line came, the Transcript keeps its name in another language.
   await transcriptTab.click();
   await expect(transcript).toBeVisible();
+  // At the narrowest, a label fits its line.
+  const firstLine = transcript.getByTestId("transcript-line").first();
+  const [narrowLine, narrowLabel] = await Promise.all([
+    firstLine.boundingBox(),
+    firstLine.getByTestId("transcript-speaker").boundingBox(),
+  ]);
+  expect((narrowLabel?.x ?? 0) + (narrowLabel?.width ?? 0)).toBeLessThanOrEqual(
+    (narrowLine?.x ?? 0) + (narrowLine?.width ?? 0),
+  );
   await shot(window, "meeting-transcript-narrow-zh");
   await setWindowSize(app, window, 1440, 900);
 
@@ -613,6 +649,15 @@ test("with the computer's sound denied, a line says so and opens System Settings
   );
   await expect(bar).toHaveAttribute("data-status", "recording");
   await shot(window, "meeting-system-denied-en");
+
+  // Nothing tells the User from the others without the computer's sound: the lines read Speaker ?
+  const toggle = bar.getByTestId("meeting-transcript-toggle");
+  await expect(toggle).toBeEnabled({ timeout: 20_000 });
+  await toggle.hover();
+  await toggle.click();
+  const speakers = window.getByTestId("viewer-transcript").getByTestId("transcript-speaker");
+  await expect(speakers.first()).toHaveText("Speaker ?");
+  await expect(speakers.filter({ hasNotText: /^Speaker \?$/ })).toHaveCount(0);
   const open = line.getByTestId("meeting-settings-system");
   await open.hover();
   await open.click();
@@ -625,6 +670,7 @@ test("with the computer's sound denied, a line says so and opens System Settings
     }),
   );
   await expect(line).toContainText("只录到了你的麦克风：IncarnaMind 没有录制电脑声音的权限。");
+  await expect(speakers.first()).toHaveText("发言人 ?");
   await expect(bar).toContainText("正在录制");
   await shot(window, "meeting-system-denied-zh");
   if (SCREENSHOTS) {
@@ -869,7 +915,7 @@ test("asking during the call: the assistant listens to the live transcript, its 
   const chip = answer.getByTestId("citation-chip").first();
   await expect(chip).toHaveAttribute(
     "aria-label",
-    /^Citation 1: Transcript · Meeting, .+, \d+:\d{2}/,
+    /^Citation 1: Transcript · Meeting, .+, (?:Me|Them) · \d+:\d{2}/,
   );
   await expect(window.getByTestId("mind-editor")).toHaveText("");
   await motionSettled(window);

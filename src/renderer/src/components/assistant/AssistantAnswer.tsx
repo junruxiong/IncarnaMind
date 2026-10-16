@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import type { ConversationAnswer, ConversationQuestion } from "../../../../core/api";
+import type { NodeJSON } from "../../../../shared/blockJson";
 import { answerBlocks, hasText } from "../../answerBlocks";
 import { useAnswers } from "../../answers";
 import { useAnswerWait } from "../../answerWait";
@@ -33,13 +34,14 @@ export interface AnswerKeeping {
   focusedMindName: string | null;
   add(answer: ConversationAnswer): void;
   pick(answer: ConversationAnswer, anchor: HTMLElement): void;
+  openTable(answer: ConversationAnswer, table: NodeJSON): void;
 }
 
 /**
  * An Answer in the assistant (#201): no box, as an Answer in a Mind has none
  * (DESIGN.md, Answer), in the assistant's reading sizes. Its steps first
  * (#391), folded to one line; its text with its Citations and their checks
- * in the margin; the card of the Minds it changed (#202), and what kept it from
+ * in their badges; the card of the Minds it changed (#202), and what kept it from
  * changing one; what went wrong, and the approvals it waits for, under
  * it; then its actions (`AnswerActions`).
  */
@@ -110,7 +112,9 @@ export function AssistantAnswer({
           answerId={answer.id}
           blocks={blocks}
           label={t("answer.label")}
+          streaming={streaming}
           regenerate={regenerate}
+          onOpenTable={(table) => keeping.openTable(answer, table)}
         />
       )}
       <MindChangesCard answer={answer} streaming={streaming} />

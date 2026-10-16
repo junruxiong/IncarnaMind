@@ -7,6 +7,7 @@ import {
   type ConsentRequest,
   type Core,
   type Document,
+  type EditCause,
   type EditWithAiInput,
   MIND_PROPOSAL_REQUESTS_FIELD,
   PROPOSAL_ATTRIBUTE,
@@ -465,7 +466,7 @@ describe("Edit with AI", () => {
     ]);
   });
 
-  test("paragraphs the new text drops are Proposals on their whole Blocks, and those it adds are new Blocks", async () => {
+  test("Shorten that joins two paragraphs takes the second out; an instruction's new text that leaves one out keeps it, unless it asks for text to go; paragraphs it adds are new Blocks", async () => {
     const { core, mind, client } = await setUp(
       editingModel(({ passage }) =>
         passage.includes("Second") ? "First and second, together." : "One line.\n\nAnother line.",
@@ -476,17 +477,18 @@ describe("Edit with AI", () => {
     const third = paragraph(text("Single line."));
     writeMind(client, [first, second, third]);
     await client.settled();
-
-    await core.editWithAi({
-      requestId: "edit-join",
+    const both = (action: EditWithAiInput["action"], instruction?: string): EditWithAiInput => ({
+      requestId: `edit-join-${action}-${++ids}`,
       mindId: mind.id,
       from: { blockId: first.attrs.id, offset: 0 },
       to: { blockId: second.attrs.id, offset: "Second paragraph.".length },
       text: "First paragraph.\nSecond paragraph.",
-      action: "shorten",
+      action,
+      ...(instruction !== undefined && { instruction }),
     });
-    await core.editWithAi(wholeParagraph(client, mind.id, third.attrs.id, "instruction", "Split"));
 
+    expect(await core.editWithAi(both("shorten"))).not.toHaveProperty("leftOut");
+    await core.editWithAi(wholeParagraph(client, mind.id, third.attrs.id, "instruction", "Split"));
     expect(shownWithChanges(client)).toEqual([
       "First [-paragraph-]{+and second, together+}.",
       "- Second paragraph.",
@@ -498,6 +500,35 @@ describe("Edit with AI", () => {
       "First and second, together.",
       "One line.",
       "Another line.",
+    ]);
+
+    writeMind(client, [first, second]);
+    await client.settled();
+    expect(await core.editWithAi(both("instruction", "Make it read better"))).toMatchObject({
+      kind: "proposed",
+      leftOut: [
+        {
+          blockId: second.attrs.id,
+          from: 0,
+          to: "Second paragraph.".length,
+          whole: true,
+          kind: "paragraph",
+        },
+      ],
+    });
+    expect(shownWithChanges(client)).toEqual([
+      "First [-paragraph-]{+and second, together+}.",
+      "Second paragraph.",
+    ]);
+    await resolveChanges(client, "reject");
+
+    const asked = await core.editWithAi(
+      both("instruction", "Join them and delete the second paragraph"),
+    );
+    expect(asked).not.toHaveProperty("leftOut");
+    expect(shownWithChanges(client)).toEqual([
+      "First [-paragraph-]{+and second, together+}.",
+      "- Second paragraph.",
     ]);
   });
 
@@ -1350,6 +1381,122 @@ describe("Edit with AI over Blocks of several kinds", () => {
       "p Steps:⟨hardBreak⟩- check the gauges",
     ]);
   });
+
+  // protects=a list turned into a table gets a table Block beside it, out of the list, its cell keeping the item's Citation (#961); the list, which the instruction doesn't name, is kept as left out (#880); fails_when=the table is pipe text, lands in the list, or the Citation is lost; no_claim=how a real model lays out a table.
+  test("a list made into a table gets a table beside it, its Citation in its cell, the list kept as left out", async () => {
+    const { core, mind, client, tides } = await setUp(
+      editingModel(() =>
+        [
+          "| Tide | When |",
+          "|:--|--:|",
+          "| Spring | At new moon [1] |",
+          "| Neap | Weakest \\| smallest |",
+        ].join("\n"),
+      ),
+    );
+    writeMind(client, [
+      list(
+        "bulletList",
+        [text("Spring tides are strongest at new moon. "), citation(tides)],
+        [text("Neap tides are weakest.")],
+      ),
+    ]);
+    await client.settled();
+
+    const result = await core.editWithAi({
+      ...whole(client, mind.id),
+      instruction: "Make it a table",
+    });
+
+    expect(result).toMatchObject({ kind: "proposed", leftOut: [{}, {}] });
+    await resolveChanges(client, "accept");
+    expect(
+      readMind(client)
+        .toJSON()
+        .content?.map((block: JSONContent) => block.type),
+    ).toEqual(["table", "bulletList"]);
+    expect(await exported(core, mind.id)).toContain(
+      "| Tide | When |\n| :--- | ---: |\n| Spring | At new moon[^1] |\n| Neap | Weakest \\| smallest |",
+    );
+    expect(structure(client)).toEqual([
+      "p Tide",
+      "p When",
+      "p Spring",
+      "p At new moon ⟨found⟩",
+      "p Neap",
+      "p Weakest | smallest",
+      "• Spring tides are strongest at new moon. ⟨found⟩",
+      "• Neap tides are weakest.",
+    ]);
+  });
+
+  // protects=a table written without leading pipes, streamed in a few characters at a time, keeps every row: it isn't written while its next row may still be coming (#961); fails_when=it goes in with only the rows that had arrived when a row's first word did; no_claim=none beyond protects.
+  test("a streamed table without leading pipes keeps all its rows", async () => {
+    const { core, mind, client } = await setUp(
+      editingModel(() =>
+        [
+          "Spring tides are strong.",
+          "",
+          "Tide | When",
+          "--- | ---",
+          "Spring | New moon",
+          "Neap | Quarter moon",
+          "Bore | Rarely",
+          "",
+          "That is all.",
+        ].join("\n"),
+      ),
+    );
+    const note = paragraph(text("Spring tides are strong."));
+    writeMind(client, [note]);
+    await client.settled();
+
+    await core.editWithAi(
+      wholeParagraph(client, mind.id, note.attrs.id, "instruction", "Add a table"),
+    );
+    await resolveChanges(client, "accept");
+
+    expect(await exported(core, mind.id)).toContain(
+      "| Tide | When |\n| --- | --- |\n| Spring | New moon |\n| Neap | Quarter moon |\n| Bore | Rarely |",
+    );
+  });
+
+  // protects=pipe lines that make no table (no row of --- under the first) are written nowhere, and the request says why (#961); fails_when=they land in the Mind as a paragraph of pipes; no_claim=none beyond protects.
+  test("pipe lines that make no table change nothing, and say so", async () => {
+    const { core, mind, client } = await setUp(
+      editingModel(() => "| Tide | When |\n| Spring | At new moon |"),
+    );
+    const note = paragraph(text("Spring tides are strongest at new moon."));
+    writeMind(client, [note]);
+    await client.settled();
+    const before = JSON.stringify(client.blocks.toJSON());
+
+    const result = await core.editWithAi(
+      wholeParagraph(client, mind.id, note.attrs.id, "instruction", "Make it a table"),
+    );
+
+    expect(result).toEqual({ kind: "no-table", text: "| Tide | When |\n| Spring | At new moon |" });
+    await client.settled();
+    expect(JSON.stringify(client.blocks.toJSON())).toBe(before);
+  });
+
+  // protects=pipe lines the User's own text already holds don't stop a rewrite of it; fails_when=shortening a paragraph with a pipe line is refused as a broken table; no_claim=none beyond protects.
+  test("pipe lines already in the User's text can still be rewritten", async () => {
+    const { core, mind, client } = await setUp(
+      editingModel(({ passage }) => passage.replace("really ", "")),
+    );
+    const note = paragraph(
+      text("| Draft | Owner |"),
+      { type: "hardBreak" },
+      text("The tides are really strong."),
+    );
+    writeMind(client, [note]);
+    await client.settled();
+
+    const result = await core.editWithAi(wholeParagraph(client, mind.id, note.attrs.id, "shorten"));
+
+    expect(result).toMatchObject({ kind: "proposed", proposals: 1 });
+  });
 });
 
 describe("Changes out of date", () => {
@@ -1599,5 +1746,254 @@ describe("Edit with AI and the model's service", () => {
       await core.editWithAi(wholeParagraph(client, mind.id, note.attrs.id, "improve")),
     ).toEqual({ kind: "not-ready", readiness: { ready: false, reason: "no-provider" } });
     expect(shownWithChanges(client)).toEqual(["A paragraph."]);
+  });
+});
+
+describe("An edit the User asked for (#880)", () => {
+  const FIRST = "Tides rise twice a day along this coast.";
+  const SECOND = "It's a big harbour and a lot of boats don't leave at low water.";
+  const THIRD = "The harbour office posts the times each week.";
+  const FORMAL = "It is a considerable harbour and a great many boats do not leave at low water.";
+
+  /** A Mind of three paragraphs, all selected, and Edit with AI over them as the window asks. */
+  async function threeParagraphs(edit: (call: EditCall) => string) {
+    const set = await setUp(editingModel(edit));
+    const blocks = [FIRST, SECOND, THIRD].map((words) => paragraph(text(words)));
+    writeMind(set.client, blocks);
+    await set.client.settled();
+    const asked = (instruction: string): EditWithAiInput => ({
+      requestId: `asked-${++ids}`,
+      mindId: set.mind.id,
+      from: { blockId: blocks[0]?.attrs.id ?? "", offset: 0 },
+      to: { blockId: blocks[2]?.attrs.id ?? "", offset: THIRD.length },
+      text: [FIRST, SECOND, THIRD].join("\n"),
+      action: "instruction",
+      instruction,
+    });
+    return { ...set, blocks, asked };
+  }
+
+  test("names its updates, for the window that asked to take them in, and saves a Checkpoint before writing", async () => {
+    const { core, mind, asked } = await threeParagraphs(({ passage }) =>
+      passage.replace("big", "large"),
+    );
+    const causes: (EditCause | undefined)[] = [];
+    const stop = core.on("mind.update", (event) => {
+      if (event.mindId === mind.id) causes.push(event.cause);
+    });
+    const input = asked("Use a better word for big");
+
+    const result = await core.editWithAi(input);
+    stop();
+
+    expect(result).toMatchObject({ kind: "proposed", proposals: 1 });
+    expect(result).not.toHaveProperty("held");
+    expect(result).not.toHaveProperty("leftOut");
+    const request = result.kind === "proposed" ? result.request : "";
+    const named = causes.filter((cause) => cause !== undefined);
+    expect(named.length).toBeGreaterThan(0);
+    expect(named.every((cause) => cause.requestId === input.requestId)).toBe(true);
+    expect(named.every((cause) => cause.request === request && cause.apply)).toBe(true);
+    expect((await core.listCheckpoints(mind.id)).checkpoints).toEqual([
+      expect.objectContaining({ reason: "accept" }),
+    ]);
+  });
+
+  test('whole note selected, "make the second paragraph more formal": the model\'s only paragraph changes the second, and the two it left out are kept, named for the window', async () => {
+    const { core, client, blocks, asked } = await threeParagraphs(() => FORMAL);
+
+    const result = await core.editWithAi(
+      asked("make the second paragraph more formal; leave the others as they are"),
+    );
+
+    expect(result).toMatchObject({
+      kind: "proposed",
+      leftOut: [
+        { blockId: blocks[0]?.attrs.id, from: 0, to: FIRST.length, whole: true, kind: "paragraph" },
+        { blockId: blocks[2]?.attrs.id, from: 0, to: THIRD.length, whole: true, kind: "paragraph" },
+      ],
+    });
+    expect(result).not.toHaveProperty("held");
+    const shown = shownWithChanges(client);
+    expect(shown[0]).toBe(FIRST);
+    expect(shown[1]).toContain("{+");
+    expect(shown[2]).toBe(THIRD);
+    await resolveChanges(client, "accept");
+    expect(shownWithChanges(client)).toEqual([FIRST, FORMAL, THIRD]);
+  });
+
+  test("what it leaves out of a selection that starts and ends inside paragraphs is kept as those parts, and a heading left out is named as one", async () => {
+    const { core, mind, client } = await setUp(editingModel(() => FORMAL));
+    const heading: JSONContent & { attrs: { id: string } } = {
+      type: "heading",
+      attrs: { id: `block-${++ids}`, level: 2 },
+      content: [text("Harbours")],
+    };
+    const blocks = [
+      paragraph(text(FIRST)),
+      heading,
+      paragraph(text(SECOND)),
+      paragraph(text(THIRD)),
+    ];
+    writeMind(client, blocks);
+    await client.settled();
+    const start = "Tides rise ".length;
+    const end = "The harbour office".length;
+
+    const result = await core.editWithAi({
+      requestId: `asked-${++ids}`,
+      mindId: mind.id,
+      from: { blockId: blocks[0]?.attrs.id ?? "", offset: start },
+      to: { blockId: blocks[3]?.attrs.id ?? "", offset: end },
+      text: [FIRST.slice(start), "Harbours", SECOND, THIRD.slice(0, end)].join("\n"),
+      action: "instruction",
+      instruction: "make the second paragraph more formal",
+    });
+
+    expect(result).toMatchObject({
+      kind: "proposed",
+      leftOut: [
+        { blockId: blocks[0]?.attrs.id, from: start, to: FIRST.length, whole: false },
+        {
+          blockId: heading.attrs.id,
+          from: 0,
+          to: "Harbours".length,
+          whole: true,
+          kind: "heading:2",
+        },
+        { blockId: blocks[3]?.attrs.id, from: 0, to: end, whole: false },
+      ],
+    });
+    expect(result).not.toHaveProperty("held");
+    expect(shownWithChanges(client)).toEqual([
+      FIRST,
+      "Harbours",
+      expect.stringContaining("{+"),
+      THIRD,
+    ]);
+  });
+
+  test("in Chinese, a paragraph rewritten between two kept as they were changes that paragraph, not its neighbour", async () => {
+    const lines = [
+      "我们周二和港务局开会，讨论新的潮位计。",
+      "说实话旧的潮位计挺乱的，老是坏，大家都不太信那些数了。",
+      "港务局下个月会就预算投票。",
+    ];
+    const formal = "现有潮位计运行状况不稳定，故障频发，各方对其采集数据的可靠性普遍存疑。";
+    const { core, mind, client } = await setUp(
+      editingModel(() => [lines[0], formal, lines[2]].join("\n\n")),
+    );
+    const blocks = lines.map((line) => paragraph(text(line)));
+    writeMind(client, blocks);
+    await client.settled();
+
+    const result = await core.editWithAi({
+      requestId: `asked-${++ids}`,
+      mindId: mind.id,
+      from: { blockId: blocks[0]?.attrs.id ?? "", offset: 0 },
+      to: { blockId: blocks[2]?.attrs.id ?? "", offset: lines[2]?.length ?? 0 },
+      text: lines.join("\n"),
+      action: "instruction",
+      instruction: "把第二段改得更正式，其他段落保持不变",
+    });
+
+    expect(result).toMatchObject({ kind: "proposed" });
+    expect(result).not.toHaveProperty("held");
+    expect(result).not.toHaveProperty("leftOut");
+    await resolveChanges(client, "accept");
+    expect(shownWithChanges(client)).toEqual([lines[0], formal, lines[2]]);
+  });
+
+  test('an explicit "delete…" takes out what the new text leaves out, and applies', async () => {
+    const { core, client, asked } = await threeParagraphs(() => [FIRST, THIRD].join("\n\n"));
+
+    const result = await core.editWithAi(asked("delete the second paragraph"));
+
+    expect(result).toMatchObject({ kind: "proposed" });
+    expect(result).not.toHaveProperty("held");
+    expect(result).not.toHaveProperty("leftOut");
+    expect(shownWithChanges(client)).toEqual([FIRST, `- ${SECOND}`, THIRD]);
+  });
+
+  test("new text like none of the selection's, which would remove most of it, is held for the User, all of it as changes", async () => {
+    const { core, client, asked } = await threeParagraphs(
+      () => "Gulls wheel, crying\n\nsalt wind on stone\n\nnight falls soft",
+    );
+
+    const result = await core.editWithAi(asked("replace it all with a haiku"));
+
+    expect(result).toMatchObject({ kind: "proposed", held: true });
+    expect(result).not.toHaveProperty("leftOut");
+    const shown = shownWithChanges(client);
+    expect(shown.filter((line) => line.startsWith("- "))).toHaveLength(0);
+    expect(shown.join("\n")).toContain(`[-${FIRST}-]`);
+    expect(shown.join("\n")).toContain(`[-${THIRD}-]`);
+  });
+
+  test("a translation is mapped by its order and never held, however much it changes", async () => {
+    const { core, asked } = await threeParagraphs(({ passage }) => passage.toUpperCase());
+
+    const result = await core.editWithAi({
+      ...asked(""),
+      action: "translate",
+      instruction: "French",
+    });
+
+    expect(result).toMatchObject({ kind: "proposed" });
+    expect(result).not.toHaveProperty("held");
+  });
+
+  test("accepted as the window applies it, its new words are AI text recorded as an edit accepted, as when the User accepted it as a change", async () => {
+    const { core, mind, client, blocks, asked } = await threeParagraphs(() => FORMAL);
+    const result = await core.editWithAi(asked("make the second paragraph more formal"));
+    const request = result.kind === "proposed" ? result.request : "";
+
+    let accepted: ReturnType<typeof resolveProposals> = [];
+    client.doc.transact(() => {
+      accepted = resolveProposals(client.blocks, (ref) => ref.request === request, "accept");
+    });
+    await client.settled();
+    await core.recordAiUse(
+      aiUseOfAccepted(client.doc, mind.id, accepted, "2026-10-15T09:00:00.000Z"),
+    );
+
+    const added = readMind(client)
+      .child(1)
+      .content.content.filter((node) => node.marks.some((mark) => mark.type.name === "generated"))
+      .map((node) => node.text ?? "")
+      .join("");
+    expect(added.length).toBeGreaterThan(0);
+    const recorded = await core.listAiUse(mind.id);
+    expect(recorded.length).toBeGreaterThan(0);
+    for (const entry of recorded) {
+      expect(entry).toMatchObject({
+        kind: "edit-with-ai-accepted",
+        outcome: "kept",
+        modelId: "local-model",
+        blockIds: [blocks[1]?.attrs.id],
+      });
+    }
+    expect(recorded.reduce((sum, entry) => sum + entry.characters, 0)).toBe(added.length);
+  });
+
+  test("Regenerate on a change isn't an edit the User asked for: its updates aren't named", async () => {
+    const { core, mind, client } = await setUp(editingModel(() => "The tides are strong."));
+    const note = paragraph(text("The tides are very strong."));
+    writeMind(client, [note]);
+    await client.settled();
+    const asked = await core.editWithAi(wholeParagraph(client, mind.id, note.attrs.id, "shorten"));
+    expect(asked).toMatchObject({ kind: "proposed" });
+    const [first] = pendingProposals(client.blocks);
+    const causes: (EditCause | undefined)[] = [];
+    const stop = core.on("mind.update", (event) => causes.push(event.cause));
+
+    await core.regenerateProposal({
+      requestId: "again",
+      mindId: mind.id,
+      proposalId: first?.id ?? "",
+    });
+    stop();
+
+    expect(causes.every((cause) => cause === undefined)).toBe(true);
   });
 });

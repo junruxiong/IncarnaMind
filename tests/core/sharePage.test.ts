@@ -576,6 +576,7 @@ function pageOf(
     name: "Tides",
     at: "2026-10-13T12:00:00.000Z",
     cards: new Map(footnotes.map((each, index) => [each, cards[index] ?? card("found")])),
+    pictures: [],
     checkedLine: false,
   });
   return { html, document: parseHTML(html).document };
@@ -639,6 +640,7 @@ describe("what a web page to share says of its checks", () => {
             name: hostile,
             web: {
               address: "javascript:alert(1)",
+              origin: "search",
               siteName: hostile,
               author: null,
               published: null,

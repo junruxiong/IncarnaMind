@@ -138,17 +138,17 @@ async function ask(window: Page, question: string): Promise<Locator> {
   return answer;
 }
 
-/** The steps the live line showed, each with when it showed, from now on. */
-async function watchLiveLine(window: Page): Promise<() => Promise<{ step: string; at: number }[]>> {
+/** The steps the live line showed, in order, from now on. */
+async function watchLiveLine(window: Page): Promise<() => Promise<string[]>> {
   await window.evaluate(() => {
-    const shown: { step: string; at: number }[] = [];
+    const shown: string[] = [];
     (globalThis as unknown as { shownSteps: typeof shown }).shownSteps = shown;
     const record = () => {
       const live = document.querySelector(
         '[data-testid="assistant"] [data-testid="answer-steps-live"]',
       );
       const step = live?.getAttribute("data-step") ?? "none";
-      if (shown.at(-1)?.step !== step) shown.push({ step, at: performance.now() });
+      if (shown.at(-1) !== step) shown.push(step);
     };
     new MutationObserver(record).observe(document.body, {
       subtree: true,
@@ -158,9 +158,7 @@ async function watchLiveLine(window: Page): Promise<() => Promise<{ step: string
     });
   });
   return () =>
-    window.evaluate(
-      () => (globalThis as unknown as { shownSteps: { step: string; at: number }[] }).shownSteps,
-    );
+    window.evaluate(() => (globalThis as unknown as { shownSteps: string[] }).shownSteps);
 }
 
 const stepsOf = (timeline: Locator) =>
@@ -168,7 +166,7 @@ const stepsOf = (timeline: Locator) =>
     .getByTestId("answer-step")
     .evaluateAll((rows) => rows.map((row) => row.getAttribute("data-step")));
 
-test("while an Answer is written, its line moves from Reading through Thinking or Searching to Writing and Checking, each up a second or more; written, it folds to what it searched and its sources", async () => {
+test("while an Answer is written, its line moves from Reading through Thinking or Searching to Writing and Checking; written, it folds to what it searched and its sources", async () => {
   const { app, window } = await start();
   await core(window).mind("Lit review: tides");
   const shown = await watchLiveLine(window);
@@ -177,23 +175,16 @@ test("while an Answer is written, its line moves from Reading through Thinking o
   const answer = await ask(window, "When do spring tides happen? Answer slowly.");
 
   // The Answer's own line takes over from the one on its way, on the same step. Between Reading and
-  // Writing the model thinks and searches, and a step that is over before the one before has been up a
-  // second is never shown.
-  const steps = (await shown())
-    .filter((each) => each.step !== "none")
-    .filter((each, index, all) => each.step !== all[index - 1]?.step);
-  const names = steps.map((each) => each.step);
+  // Writing the model thinks and searches, and a step that is over before the one before has had its
+  // time (see tests/renderer/heldStep.test.ts) is never shown.
+  const names = (await shown())
+    .filter((step) => step !== "none")
+    .filter((step, index, all) => step !== all[index - 1]);
   expect(names[0]).toBe("reading");
   expect(names.slice(-2)).toEqual(["writing", "checking"]);
   const between = names.slice(1, -2);
   expect(between.length).toBeGreaterThan(0);
   for (const step of between) expect(["thinking", "searching"]).toContain(step);
-  // Each is up at least a second before the next replaces it; the last goes as the Answer ends.
-  for (let index = 0; index + 1 < steps.length; index++) {
-    const step = steps[index];
-    const next = steps[index + 1];
-    expect((next?.at ?? 0) - (step?.at ?? 0)).toBeGreaterThanOrEqual(950);
-  }
   const line = answer.getByTestId("answer-steps");
   await expect(line).toHaveText("Searched All Documents · 1 source");
   await expect(line).toHaveAttribute("aria-expanded", "false");

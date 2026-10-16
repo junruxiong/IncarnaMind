@@ -50,6 +50,9 @@ a.cite:focus-visible,.card-close:focus-visible{outline:2px solid var(--accent);o
 .card-body{margin-top:10px;padding:12px 14px;border:1px solid var(--rule);border-radius:6px;background:#fbfbfc;color:var(--ink-answer)}
 .card-passage{margin:0;font-family:var(--serif);font-size:14px;line-height:22px;white-space:pre-line}
 mark.quote{background:var(--success-wash);color:var(--ink)}
+.card-picture{margin-top:10px;overflow:hidden;border:1px solid var(--rule);border-radius:6px;background:#fff}
+.card-picture svg{display:block;width:100%;height:auto}
+.pictures{position:absolute;width:0;height:0;overflow:hidden}
 .card-cells{width:100%;margin:0;border-collapse:collapse;font-size:12.5px;line-height:18px;font-variant-numeric:tabular-nums}
 .card-cells th,.card-cells td{padding:4px 6px;border:1px solid var(--rule);text-align:left;vertical-align:top}
 .card-cells th{background:var(--frame);font-weight:600;color:var(--ink-secondary)}
@@ -216,7 +219,15 @@ export interface SharePage {
   /** When it was made, ISO 8601: the day the head, the cards and the foot name. */
   at: string;
   cards: ReadonlyMap<Footnote, CitationCard>;
+  /** WebP, each written once, whichever cards show it. */
+  pictures: readonly SharePicture[];
   checkedLine: boolean;
+}
+
+export interface SharePicture {
+  data: Uint8Array;
+  width: number;
+  height: number;
 }
 
 export function renderSharePage(page: SharePage): string {
@@ -266,6 +277,7 @@ export function renderSharePage(page: SharePage): string {
     notesSection(printed.notes, labels),
     `<footer class="shared-foot">${foot}</footer>`,
     '<div class="scrim" hidden></div>',
+    picturesHtml(page.pictures),
     ...written.map(({ number, card }) => cardHtml(number, card, date, t)),
     `<script>${SCRIPT}</script>`,
   ].join("\n");
@@ -288,6 +300,16 @@ function checkedStatus(cards: readonly CitationCard[], date: string, t: Translat
   return total === 1
     ? t("share.page.found.none.one", { date })
     : t("share.page.found.none.other", { date, total });
+}
+
+/** Each picture once, out of sight, for the cards that show it to point at. */
+function picturesHtml(pictures: readonly SharePicture[]): string {
+  if (pictures.length === 0) return "";
+  const images = pictures.map(
+    ({ data, width, height }, index) =>
+      `<image id="picture-${index}" width="${width}" height="${height}" href="data:image/webp;base64,${Buffer.from(data).toString("base64")}"></image>`,
+  );
+  return `<svg class="pictures" aria-hidden="true" focusable="false"><defs>${images.join("")}</defs></svg>`;
 }
 
 /** A date never breaks across lines, in Chinese least of all, where any character can end one. */
@@ -313,7 +335,7 @@ function cardHtml(number: number, card: CitationCard, date: string, t: Translate
       ? `<p class="card-verdict">${escapeHtml(t("citation.changedAfterCited"))}</p>`
       : "",
     "</div>",
-    contentHtml(card.content, t),
+    contentHtml(card.content, card.spoken, t),
     `<p class="card-swipe">${escapeHtml(t("share.card.swipe"))}</p>`,
     "</section>",
   ].join("");
@@ -328,7 +350,7 @@ const runsHtml = (runs: readonly CardRun[]) =>
 
 const small = (text: string) => `<p class="card-small">${escapeHtml(text)}</p>`;
 
-function contentHtml(content: CardContent, t: Translate): string {
+function contentHtml(content: CardContent, spoken: string, t: Translate): string {
   const part = small(t("share.card.part"));
   switch (content.kind) {
     case "passage": {
@@ -362,6 +384,11 @@ function contentHtml(content: CardContent, t: Translate): string {
     case "quote":
       if (!content.text) return "";
       return `<div class="card-body"><p class="card-passage">“${escapeHtml(content.text)}”</p></div>${content.scan ? small(t("citation.scan")) : ""}`;
+    case "picture": {
+      const alt = t("share.card.pictureAlt", { source: spoken });
+      const note = t(content.slide ? "share.card.slidePicture" : "share.card.pagePicture");
+      return `<div class="card-picture"><svg viewBox="0 0 ${content.width} ${content.height}" role="img" aria-label="${escapeHtml(alt)}"><use href="#picture-${content.picture}"></use></svg></div>${small(note)}${content.scan ? small(t("citation.scan")) : ""}`;
+    }
     case "missing":
       return `${content.quote ? `<div class="card-body"><p class="card-passage">“${escapeHtml(content.quote)}”</p></div>` : ""}${small(t("share.card.missing"))}`;
   }

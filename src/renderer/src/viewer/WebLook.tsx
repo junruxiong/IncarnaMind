@@ -1,5 +1,6 @@
 import type { Document, WebPageLook } from "../../../core/api";
 import { formatFullDateTime } from "../../../shared/dates";
+import { MetaLine } from "../components/MetaLine";
 import { LineAction, ProblemLine } from "../components/ProblemLine";
 import { core } from "../core";
 import { useLanguage, useT } from "../i18n";
@@ -23,16 +24,22 @@ export function WebLookLine({ document, onShow }: { document: Document; onShow()
       );
     case "saved":
       return (
-        <p data-testid="viewer-web-look" data-status="saved" className="document-web-byline">
-          {t("viewer.web.look.saved", { date: formatFullDateTime(look.savedAt, language) })}
-          <LineAction
-            action={{
-              label: t("viewer.web.look.show"),
-              testId: "viewer-web-show-look",
-              onClick: onShow,
-            }}
-          />
-        </p>
+        <MetaLine
+          data-testid="viewer-web-look"
+          data-status="saved"
+          className="document-web-byline"
+          parts={[
+            t("viewer.web.look.saved", { date: formatFullDateTime(look.savedAt, language) }),
+            <LineAction
+              key="show"
+              action={{
+                label: t("viewer.web.look.show"),
+                testId: "viewer-web-show-look",
+                onClick: onShow,
+              }}
+            />,
+          ]}
+        />
       );
     case "failed":
       return (
@@ -69,13 +76,19 @@ export function WebLookBar({
       data-testid="viewer-web-look-bar"
       className="shrink-0 border-b border-rule px-4 py-1.5 text-[13px] leading-5 text-ink-meta"
     >
-      {t("viewer.web.look.showing", { date: formatFullDateTime(look.savedAt, language) })}
-      <LineAction
-        action={{
-          label: t("viewer.web.look.showText"),
-          testId: "viewer-web-show-text",
-          onClick: onShowText,
-        }}
+      <MetaLine
+        as="div"
+        parts={[
+          t("viewer.web.look.showing", { date: formatFullDateTime(look.savedAt, language) }),
+          <LineAction
+            key="show-text"
+            action={{
+              label: t("viewer.web.look.showText"),
+              testId: "viewer-web-show-text",
+              onClick: onShowText,
+            }}
+          />,
+        ]}
       />
     </div>
   );

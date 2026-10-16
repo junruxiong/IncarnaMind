@@ -74,6 +74,7 @@ const PROVIDER_KINDS = [
   "ollama",
   "chatgpt",
   "claude-account",
+  "copilot",
 ] as const;
 const CITATION_CHECKS = [
   "checking",

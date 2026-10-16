@@ -119,6 +119,7 @@ The words from `CONTEXT.md`, then the ones the interaction rules bring in. Where
 | Meeting | 会议 | |
 | Transcript | 转写稿 | |
 | Speaker | 发言人 | |
+| Me, Them, Speaker ? (a live line before speakers are told apart) | 我, 对方, 发言人 ? | "Me" is the microphone, "Them" the computer's sound, "Speaker ?" a meeting in a room, with no computer sound. |
 | Granted folder | 授权文件夹 | |
 | Output location | 保存位置 | |
 | Usage data | 使用数据 | |

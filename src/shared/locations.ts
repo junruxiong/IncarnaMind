@@ -16,10 +16,19 @@ import type { CitationAttributes, CitationLocation } from "../core/api";
 import { clockTime, parseClockTime } from "./clock";
 import { type MessageKey, type MessageParams, translate } from "./i18n";
 import { findQuote, type MatchOptions, type TextRange } from "./quoteMatch";
-import { anchorsOf, lineAt, parseCellRef, parseCueTarget, type UnitText } from "./units";
+import { speakerName } from "./speakers";
+import {
+  anchorsOf,
+  isPrintedName,
+  lineAt,
+  parseCellRef,
+  parseCueTarget,
+  type UnitText,
+} from "./units";
 
 /** "12" or "12–14". */
-const span = (from: number, to: number) => (to !== from ? `${from}–${to}` : `${from}`);
+const span = (from: number | string, to: number | string) =>
+  to !== from ? `${from}–${to}` : `${from}`;
 
 const isCount = (value: unknown): value is number =>
   typeof value === "number" && Number.isInteger(value) && value >= 1;
@@ -27,6 +36,14 @@ const isCount = (value: unknown): value is number =>
 /** A time in a Transcript, in ms from its start. */
 const isTime = (value: unknown): value is number =>
   typeof value === "number" && Number.isInteger(value) && value >= 0;
+
+function parsePrinted(value: unknown): { from: string; to: string } | null {
+  if (typeof value !== "object" || value === null || !("from" in value) || !("to" in value)) {
+    return null;
+  }
+  const { from, to } = value;
+  return isPrintedName(from) && isPrintedName(to) ? { from, to } : null;
+}
 
 /** A stored Location, checked; null if it isn't one. */
 export function parseLocation(value: unknown): CitationLocation | null {
@@ -41,12 +58,19 @@ export function parseLocation(value: unknown): CitationLocation | null {
   const location = value as Record<string, unknown>;
   const { kind, from, to } = location;
   switch (kind) {
-    case "page":
+    case "page": {
+      if (!isCount(from) || !isCount(to) || to < from) return null;
+      const printed = parsePrinted(location.printed);
+      return printed ? { kind, from, to, printed } : { kind, from, to };
+    }
     case "slide":
     case "lines":
       return isCount(from) && isCount(to) && to >= from ? { kind, from, to } : null;
-    case "time":
-      return isTime(from) && isTime(to) && to >= from ? { kind, from, to } : null;
+    case "time": {
+      if (!isTime(from) || !isTime(to) || to < from) return null;
+      const speaker = typeof location.speaker === "string" ? location.speaker.trim() : "";
+      return speaker ? { kind, from, to, speaker } : { kind, from, to };
+    }
     case "rows":
       if (!isCount(from) || !isCount(to) || to < from) return null;
       return {
@@ -107,11 +131,16 @@ export function citationLocation(
 /** Words a Location in a language: `t` is the renderer's `t` or the core's `translate`. */
 export type Translate = (key: MessageKey, params?: MessageParams) => string;
 
-/** A Location's short label, e.g. "slide 4" or "Revenue, rows 12–14". */
-export function formatLocation(location: CitationLocation, t: Translate): string {
+/**
+ * A Location's short label, e.g. "slide 4" or "Revenue, rows 12–14", and in a
+ * Transcript "Me · 12:03": who said it, then the time, unless `speaker` is false.
+ */
+export function formatLocation(location: CitationLocation, t: Translate, speaker = true): string {
   switch (location.kind) {
-    case "page":
-      return t("location.page", { range: span(location.from, location.to) });
+    case "page": {
+      const { from, to } = location.printed ?? location;
+      return t("location.page", { range: span(from, to) });
+    }
     case "slide":
       return t(location.to !== location.from ? "location.slide.other" : "location.slide.one", {
         range: span(location.from, location.to),
@@ -131,7 +160,12 @@ export function formatLocation(location: CitationLocation, t: Translate): string
         range: span(location.from, location.to),
       });
     case "time":
-      return clockTime(location.from);
+      return speaker && location.speaker
+        ? t("location.time.speaker", {
+            speaker: speakerName(location.speaker, t),
+            time: clockTime(location.from),
+          })
+        : clockTime(location.from);
     case "section": {
       const section = location.notes
         ? t("location.section.notes")
@@ -158,9 +192,31 @@ export function formatLocation(location: CitationLocation, t: Translate): string
   }
 }
 
-/** A Location's label in English: for the model's prompt and for Citations copied as text. */
-export const englishLocation = (location: CitationLocation): string =>
-  formatLocation(location, (key, params) => translate("en", key, params));
+/** "p. 68 · page 69 of the PDF" for a page that calls itself something other than its number in the PDF; null otherwise. */
+export function formatLocationWithPdf(location: CitationLocation, t: Translate): string | null {
+  if (location.kind !== "page" || !location.printed) return null;
+  return t(
+    location.to !== location.from ? "location.page.withPdf.other" : "location.page.withPdf.one",
+    {
+      printed: formatLocation(location, t),
+      range: span(location.from, location.to),
+    },
+  );
+}
+
+const english: Translate = (key, params) => translate("en", key, params);
+
+/** A PDF page by its number in the PDF, which is how a model cites it. */
+export const englishLocation = (location: CitationLocation, speaker = true): string =>
+  formatLocation(
+    location.kind === "page" ? { kind: "page", from: location.from, to: location.to } : location,
+    english,
+    speaker,
+  );
+
+/** A Citation copied as text names the page the Document prints. */
+export const englishPrintedLocation = (location: CitationLocation): string =>
+  formatLocation(location, english);
 
 /** The kinds of Location the card's "Open …" button names: the page, the slide, the section… */
 export const openKind = (location: CitationLocation | null) =>
@@ -334,6 +390,13 @@ function figureAt(where: UnitText, offset: number): number | null {
   return null;
 }
 
+function printedNames(first: UnitText, last: UnitText): { from: string; to: string } | null {
+  const from = first.label?.printed;
+  const to = last.label?.printed;
+  if (!isPrintedName(from) || !isPrintedName(to)) return null;
+  return from === String(first.page) && to === String(last.page) ? null : { from, to };
+}
+
 /** A request for a narrower range than the Units cited: rows or lines the model named. */
 export interface RowsOrLines {
   from: number;
@@ -364,11 +427,15 @@ export function locationOf(
     return from <= to ? { from, to } : whole;
   };
   switch (kind) {
-    case "page":
     case "slide":
       return first.page === null || last.page === null
         ? null
-        : ({ kind, from: first.page, to: last.page } as CitationLocation);
+        : { kind, from: first.page, to: last.page };
+    case "page": {
+      if (first.page === null || last.page === null) return null;
+      const printed = printedNames(first, last);
+      return { kind, from: first.page, to: last.page, ...(printed && { printed }) };
+    }
     case "text":
       return null;
     case "section": {
@@ -403,10 +470,15 @@ export function locationOf(
     }
     case "cues": {
       const times: { startMs: number; endMs: number }[] = [];
+      let speaker: string | null = null;
       for (const part of parts) {
-        for (const anchor of anchorsOf(units[part.unit] as UnitText)) {
+        const unit = units[part.unit] as UnitText;
+        for (const [index, anchor] of anchorsOf(unit).entries()) {
           const cue = parseCueTarget(anchor.target);
-          if (cue && anchor.start < part.end && anchor.end > part.start) times.push(cue);
+          if (cue && anchor.start < part.end && anchor.end > part.start) {
+            if (times.length === 0) speaker = unit.label?.speakers?.[index] ?? null;
+            times.push(cue);
+          }
         }
       }
       const head = times[0];
@@ -415,6 +487,7 @@ export function locationOf(
           kind: "time",
           from: head.startMs,
           to: Math.max(...times.map((cue) => cue.endMs)),
+          ...(speaker && { speaker }),
         };
       }
       const whole = { from: first.label?.from ?? 0, to: last.label?.to ?? first.label?.to ?? 0 };

@@ -7,6 +7,11 @@ export function clockTime(ms: number): string {
   return hours > 0 ? `${hours}:${String(minutes).padStart(2, "0")}:${rest}` : `${minutes}:${rest}`;
 }
 
+export function paddedClockTime(ms: number): string {
+  const time = clockTime(ms);
+  return time.length === 4 ? `0${time}` : time;
+}
+
 /** A clock time read back ("14:26", "1:02:05"), in ms; null if it isn't one. */
 export function parseClockTime(text: string): number | null {
   const match = /^(?:(\d{1,2}):)?(\d{1,3}):([0-5]\d)$/.exec(text.trim());

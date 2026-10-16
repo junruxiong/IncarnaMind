@@ -49,8 +49,10 @@ async function codeFingerprint(): Promise<string> {
   const files = [
     "src/core/tags/classify.ts",
     "src/core/tags/presets.ts",
-    "src/core/providers/imageInput.ts",
+    "src/core/providers/capabilities.ts",
+    "src/core/providers/catalog/providers.ts",
     "src/core/providers/jev.ts",
+    "src/core/providers/models.ts",
     "src/shared/i18n/en.ts",
     "src/shared/i18n/zh-CN.ts",
   ];
@@ -237,6 +239,8 @@ test("Organize on the labelled set", async () => {
             images = await documentPageImages(item.file, item.doc.sha256, signal);
             prediction.renderMs = Math.round(performance.now() - rendering);
           }
+          // Only this Document's calls count: none before it, whatever stopped it.
+          route.tokens?.();
           const started = performance.now();
           const decision = await classifier.organize(
             folders,
@@ -257,6 +261,8 @@ test("Organize on the labelled set", async () => {
         } catch (error) {
           prediction.error = error instanceof Error ? error.message : String(error);
         }
+        const tokens = route.tokens?.();
+        if (tokens) prediction.tokens = tokens;
         predictions.push(prediction);
         cached.set(prediction.id, prediction);
         await save(cacheFile, [...cached.values()]);
@@ -276,7 +282,12 @@ test("Organize on the labelled set", async () => {
     } finally {
       if (route.local) await unload(ollama, route.models);
     }
-    routeResults.push({ route: name, label: route.label, predictions });
+    routeResults.push({
+      route: name,
+      label: route.label,
+      predictions,
+      ...(route.price && { price: route.price }),
+    });
   }
 
   await save(join(output, "results.json"), { info, routes: routeResults });

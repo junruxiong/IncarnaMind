@@ -22,7 +22,10 @@ interface Writing {
 const writingPlaceKey = new PluginKey<Writing>("writingPlace");
 
 /** Where the Block with this id is, at any depth; null when it isn't in the Mind. */
-function blockAt(doc: ProseMirrorNode, id: string): { pos: number; node: ProseMirrorNode } | null {
+export function blockAt(
+  doc: ProseMirrorNode,
+  id: string,
+): { pos: number; node: ProseMirrorNode } | null {
   let found: { pos: number; node: ProseMirrorNode } | null = null;
   doc.descendants((node, pos) => {
     if (found) return false;

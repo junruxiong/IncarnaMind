@@ -370,14 +370,16 @@ test("tabs are 220px while there is room, the shown one keeps 132px as they shri
     expect((await boxOf(tab)).width).toBeCloseTo(220, 0);
   await expect(titlesOf(window)).toHaveText(["Alpha notes", "Beta research", "Gamma draft"]);
 
-  // More tabs than room: the others shrink to 64px, the shown one keeps 132px, and the first
-  // ones scroll out of sight, the strip fading on that side.
+  // More tabs than room: the others shrink to the start of their names (#905), the shown one keeps
+  // 132px, and the first ones scroll out of sight, the strip fading on that side.
   for (let index = 0; index < 13; index++) {
     await window.getByTestId("new-tab").click();
     await expect(tabsOf(window)).toHaveCount(4 + index);
   }
   expect((await boxOf(activeTab(window))).width).toBeGreaterThanOrEqual(132);
-  expect((await boxOf(tabNamed(window, "Beta research"))).width).toBeCloseTo(64, 0);
+  const shrunk = (await boxOf(tabNamed(window, "Beta research"))).width;
+  expect(shrunk).toBeGreaterThan(64);
+  expect(shrunk).toBeLessThan(220);
   const strip = window.getByTestId("tab-list");
   await expect(strip).toHaveAttribute("data-hidden-before", "true");
   // A mouse wheel, turned up, brings them back.

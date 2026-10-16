@@ -1,15 +1,28 @@
 import type { Editor } from "@tiptap/core";
 import { yUndoPluginKey } from "@tiptap/y-tiptap";
+import type * as Y from "yjs";
 import { type Undoable, useUndo } from "../undo";
 
-interface UndoStack {
-  undoStack: unknown[];
-  stopCapturing(): void;
-  on(event: "stack-item-added" | "stack-item-popped", listener: () => void): void;
-  off(event: "stack-item-added" | "stack-item-popped", listener: () => void): void;
+type StackEvent = "stack-item-added" | "stack-item-popped";
+type DeleteSet = ReturnType<typeof Y.createDeleteSet>;
+
+/** One step of Undo: what it inserted and deleted, by Yjs item. */
+export interface UndoStep {
+  insertions: DeleteSet;
+  deletions: DeleteSet;
 }
 
-const undoStackOf = (editor: Editor): UndoStack | undefined =>
+export interface UndoStack {
+  undoStack: UndoStep[];
+  /** A change soon after the last one joins its step. */
+  lastChange: number;
+  stopCapturing(): void;
+  addTrackedOrigin(origin: unknown): void;
+  on(event: StackEvent, listener: (event: { stackItem: UndoStep }) => void): void;
+  off(event: StackEvent, listener: (event: { stackItem: UndoStep }) => void): void;
+}
+
+export const undoStackOf = (editor: Editor): UndoStack | undefined =>
   yUndoPluginKey.getState(editor.state)?.undoManager;
 
 /**
