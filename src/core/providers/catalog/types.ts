@@ -28,13 +28,34 @@ export type Adapter =
   | "openai-compatible"
   | "ollama";
 
+/**
+ * A value the User gives that an endpoint's address is built from, written in
+ * its `baseUrl` as `{name}`: an AWS region, a Cloudflare account.
+ */
+export interface EndpointField {
+  name: string;
+  label: Localized;
+  /** The values to pick from; left out, a typed value that matches `pattern` (a regular expression). */
+  choices?: readonly { value: string; label: Localized }[];
+  pattern?: string;
+  /** Filled in when the provider is chosen, and used when none is given. */
+  default?: string;
+  /** One plain line under the field, for what the User must know to fill it in. */
+  hint?: Localized;
+}
+
 /** Where a provider's API is, for one region. */
 export interface Endpoint {
   /** Stable, stored on the provider row: "global", "cn", "intl". */
   id: string;
   label: Localized;
-  /** The API's base URL, as the AI SDK provider takes it (e.g. "https://api.openai.com/v1"). */
+  /**
+   * The API's base URL, as the AI SDK provider takes it (e.g. "https://api.openai.com/v1"),
+   * with `{name}` for its `field`'s value when it has one.
+   */
   baseUrl: string;
+  /** The value its address needs; each value is a provider of its own, with its own origin. */
+  field?: EndpointField;
   /** Where the User gets a key for this region, when it isn't the provider's `keyUrl` (keys are per region). */
   keyUrl?: string;
 }

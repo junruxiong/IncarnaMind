@@ -4,6 +4,9 @@ import { InvalidInputError } from "../errors";
 import { catalogProviderOf, endpointOf } from "./catalog/providers";
 import type { CatalogProvider, Endpoint } from "./catalog/types";
 import { CHATGPT_SERVICE } from "./chatgpt/service";
+import { serviceAt, serviceForUrl } from "./service";
+
+export { isLoopbackHost, serviceForUrl } from "./service";
 
 /** Ollama's default local address. 127.0.0.1 rather than localhost, which may resolve to IPv6 first. */
 export const OLLAMA_DEFAULT_URL = "http://127.0.0.1:11434";
@@ -61,15 +64,8 @@ interface KindInfo {
   apiKey: "required" | "optional" | "none";
 }
 
-/**
- * The service an endpoint sends data to: its origin, named after its provider.
- * Consent is per origin, so two presets, or two values of a templated address,
- * are two services.
- */
-const endpointService = (provider: CatalogProvider, endpoint: Endpoint): ExternalService => ({
-  id: new URL(endpoint.baseUrl).origin,
-  name: provider.name.en,
-});
+const endpointService = (provider: CatalogProvider, endpoint: Endpoint) =>
+  serviceAt(endpoint.baseUrl, provider.name.en);
 
 function kindInfo(
   kind: ChatProviderKind,
@@ -80,8 +76,10 @@ function kindInfo(
   const provider = catalogProviderOf(kind, catalogId);
   if (!provider) throw new Error(`The catalog has no provider for ${kind}.`);
   const endpoint = endpointOf(provider, endpointId);
+  // An address built from a value the User gives is a service of its own per value.
+  const hosted = endpoint && !endpoint.field ? endpointService(provider, endpoint) : null;
   return {
-    ...(endpoint && { hosted: endpointService(provider, endpoint) }),
+    ...(hosted && { hosted }),
     baseUrl: endpoint ? "none" : (provider.serverUrl ?? "required"),
     apiKey: provider.apiKey,
   };
@@ -101,7 +99,8 @@ export function endpointUrl(
   catalogId?: string | null,
 ): string | null {
   const provider = catalogProviderOf(kind, catalogId);
-  return (provider && endpointOf(provider, endpointId)?.baseUrl) ?? null;
+  const endpoint = provider && endpointOf(provider, endpointId);
+  return endpoint && !endpoint.field ? endpoint.baseUrl : null;
 }
 
 export const requiresApiKey = (kind: ChatProviderKind, catalogId?: string | null) =>
@@ -136,13 +135,16 @@ export function baseUrlFor(
   raw: unknown,
   catalogId?: string | null,
 ): string | null {
-  const { baseUrl: rule, hosted } = kindInfo(kind, null, catalogId);
+  const { baseUrl: rule } = kindInfo(kind, null, catalogId);
   const given = typeof raw === "string" && raw.trim() !== "" ? raw : undefined;
   if (raw !== undefined && raw !== null && typeof raw !== "string") {
     throw new InvalidInputError("The server URL must be text.");
   }
   if (rule === "none") {
-    if (given) throw new InvalidInputError(`${hosted?.name} doesn't take a server URL.`);
+    if (given) {
+      const name = catalogProviderOf(kind, catalogId)?.name.en ?? kind;
+      throw new InvalidInputError(`${name} doesn't take a server URL.`);
+    }
     return null;
   }
   if (!given) {
@@ -156,24 +158,6 @@ export function baseUrlFor(
 export const ollamaBaseUrl = (raw: unknown): string =>
   baseUrlFor("ollama", raw) ?? defaultOllamaUrl();
 
-/** Loopback addresses: data sent there stays on this computer. */
-export function isLoopbackHost(hostname: string): boolean {
-  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  return (
-    host === "localhost" ||
-    host.endsWith(".localhost") ||
-    host === "::1" ||
-    host === "0.0.0.0" ||
-    /^127(\.\d{1,3}){3}$/.test(host)
-  );
-}
-
-/** The service a server URL sends data to, or null when the server runs on this computer. */
-export function serviceForUrl(baseUrl: string): ExternalService | null {
-  const url = new URL(baseUrl);
-  return isLoopbackHost(url.hostname) ? null : { id: url.origin, name: url.host };
-}
-
 /**
  * Where a provider's requests go: its endpoint (the one with this id, else
  * its first), or the server at `baseUrl`; null when that runs on this computer.
@@ -186,5 +170,10 @@ export function serviceFor(
 ): ExternalService | null {
   const { hosted } = kindInfo(kind, endpointId, catalogId);
   if (hosted) return hosted;
-  return baseUrl ? serviceForUrl(baseUrl) : null;
+  if (!baseUrl) return null;
+  const provider = catalogProviderOf(kind, catalogId);
+  const endpoint = provider && endpointOf(provider, endpointId);
+  return provider && endpoint?.field
+    ? serviceAt(baseUrl, provider.name.en)
+    : serviceForUrl(baseUrl);
 }

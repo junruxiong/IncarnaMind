@@ -37,6 +37,7 @@ import {
   recordProposalRequest,
   resolveProposals,
 } from "../../shared/proposals";
+import { topLevelBlocks } from "../answers/blocks";
 import { createWindowBudget } from "../answers/window";
 import {
   BLOCK_ID_ATTRIBUTE,
@@ -57,8 +58,16 @@ import type { MindContent } from "../mindContent";
 import { parseMindId } from "../minds";
 import { docOf, forkChanges } from "../proposals/merge";
 import {
+  acceptOwnIn,
+  boundsOf,
+  type OwnWaiting,
+  replaceOwn,
+  waitingIn,
+} from "../proposals/ownWaiting";
+import {
   createRewriteStream,
   proposeAfter,
+  proposeRewrite,
   type ReadResult,
   type RewritePlace,
   readSelection,
@@ -270,6 +279,103 @@ function placeOf(at: RewritePlace | null): WritingPlace | null {
   return "over" in at ? { over: id } : { after: id };
 }
 
+/** A change the assistant asks for in a Mind (#202, `proposeInMind`). */
+export interface ProposeInput {
+  mindId: string;
+  from: TextPlace;
+  to: TextPlace;
+  instruction: string;
+  prepared: PreparedChatModel;
+  signal: AbortSignal;
+  beforeWriting(): void;
+  written(request: string, count: number): void;
+}
+
+export interface Proposed {
+  result: EditWithAiResult;
+  length: { before: string; after: string } | null;
+  reason: string | null;
+  revised: { blockIds: string[] } | null;
+}
+
+const askOf = (input: ProposeInput): Ask => ({
+  mindId: input.mindId,
+  action: "instruction",
+  instruction: input.instruction,
+  model: { providerId: input.prepared.provider.id, modelId: input.prepared.modelId },
+});
+
+interface EditCall {
+  instructions: string;
+  prompt: string;
+  maxOutputTokens: number;
+}
+
+/** The request for `ask` over `selection`; null when it is more than the model can take at once. */
+function editCall(prepared: PreparedChatModel, ask: Ask, selection: Selection): EditCall | null {
+  const explain = ask.action === "explain";
+  const instructions = explain ? EXPLAIN_INSTRUCTIONS : EDIT_INSTRUCTIONS;
+  const prompt = editPrompt({
+    action: ask.action,
+    instruction: ask.instruction,
+    passage: selection.text,
+    context: selection.context,
+    // Explain writes under the passage, not into it: the words around it don't matter.
+    ...(!explain && { before: selection.before, after: selection.after }),
+  });
+  // The reply is about as long as the passage; a translation into Chinese can count more.
+  let maxOutputTokens = Math.min(16_000, Math.max(1_024, Math.ceil(selection.characters * 1.5)));
+  if (prepared.window) {
+    const budget = createWindowBudget(prepared.window);
+    const expected = explain ? 512 : Math.ceil(budget.tokens(selection.text) * 1.5) + 64;
+    if (expected > prepared.window.outputTokens) return null;
+    if (budget.roomBeside([instructions, prompt], expected) < 0) return null;
+    maxOutputTokens = prepared.window.outputTokens;
+  }
+  return { instructions, prompt, maxOutputTokens };
+}
+
+/**
+ * Streams the model's reply to a request: `onText` hears it grow, the reply
+ * so far and the piece just come, and stops it by returning true. `failure`:
+ * why it failed, or null.
+ */
+async function streamEdit(
+  prepared: PreparedChatModel,
+  call: EditCall,
+  signal: AbortSignal,
+  onText?: (raw: string, piece: string) => boolean,
+): Promise<{ raw: string; failure: unknown }> {
+  let raw = "";
+  let failure: unknown = null;
+  const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+  try {
+    const result = streamText({
+      model: prepared.model,
+      instructions: call.instructions,
+      prompt: call.prompt,
+      maxOutputTokens: call.maxOutputTokens,
+      maxRetries: 1,
+      abortSignal: AbortSignal.any([signal, timeout]),
+      onError: () => undefined,
+    });
+    for await (const part of result.fullStream) {
+      if (part.type === "error") throw part.error;
+      if (part.type === "abort") {
+        // Not the User's Stop: it took too long, and what came isn't the whole text.
+        if (!signal.aborted) failure = timeout.reason;
+        break;
+      }
+      if (part.type !== "text-delta") continue;
+      raw += part.text;
+      if (onText?.(raw, part.text)) break;
+    }
+  } catch (error) {
+    failure = error;
+  }
+  return { raw, failure };
+}
+
 export function createEdits(options: EditsOptions) {
   const { chat, content } = options;
   const running = new Map<string, AbortController>();
@@ -340,27 +446,9 @@ export function createEdits(options: EditsOptions) {
   ): Promise<{ result: EditWithAiResult; reply: string; reason: string | null }> {
     const { mindId, fork, selection } = draft;
     const explain = ask.action === "explain";
-    const instructions = explain ? EXPLAIN_INSTRUCTIONS : EDIT_INSTRUCTIONS;
-    const prompt = editPrompt({
-      action: ask.action,
-      instruction: ask.instruction,
-      passage: selection.text,
-      context: selection.context,
-      // Explain writes under the passage, not into it: the words around it don't matter.
-      ...(!explain && { before: selection.before, after: selection.after }),
-    });
     const ended = (result: EditWithAiResult) => ({ result, reply: "", reason: null });
-    // The reply is about as long as the passage; a translation into Chinese can count more.
-    let maxOutputTokens = Math.min(16_000, Math.max(1_024, Math.ceil(selection.characters * 1.5)));
-    if (prepared.window) {
-      const budget = createWindowBudget(prepared.window);
-      const expected = explain ? 512 : Math.ceil(budget.tokens(selection.text) * 1.5) + 64;
-      if (expected > prepared.window.outputTokens) return ended({ kind: "too-long" });
-      if (budget.roomBeside([instructions, prompt], expected) < 0) {
-        return ended({ kind: "too-long" });
-      }
-      maxOutputTokens = prepared.window.outputTokens;
-    }
+    const call = editCall(prepared, ask, selection);
+    if (!call) return ended({ kind: "too-long" });
 
     const request = randomUUID();
     const blocks = fork.getXmlFragment(MIND_CONTENT_FIELD);
@@ -438,52 +526,33 @@ export function createEdits(options: EditsOptions) {
       if (stream) options.writing(mindId, placeOf(stream.writingAt()));
     };
 
-    let raw = "";
-    let failure: unknown = null;
-    const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+    let shown = false;
+    let afterBreak = false;
+    let streamed: { raw: string; failure: unknown };
     try {
-      const result = streamText({
-        model: prepared.model,
-        instructions,
-        prompt,
-        maxOutputTokens,
-        maxRetries: 1,
-        abortSignal: AbortSignal.any([signal, timeout]),
-        onError: () => undefined,
-      });
-      let shown = false;
-      let afterBreak = false;
-      for await (const part of result.fullStream) {
-        if (part.type === "error") throw part.error;
-        if (part.type === "abort") {
-          // Not the User's Stop: it took too long, and what came isn't the whole text.
-          if (!signal.aborted) failure = timeout.reason;
-          break;
-        }
-        if (part.type !== "text-delta") continue;
-        raw += part.text;
-        if (!stream) continue;
+      streamed = await streamEdit(prepared, call, signal, (raw, piece) => {
+        if (!stream) return false;
         // A paragraph is finished once the next one starts after a line break: the reply is read
         // again only at a break and just after one, not at every word.
-        const reread = part.text.includes("\n") || afterBreak;
-        afterBreak = part.text.includes("\n");
-        if (shown && !reread) continue;
+        const reread = piece.includes("\n") || afterBreak;
+        afterBreak = piece.includes("\n");
+        if (shown && !reread) return false;
         const sofar = passageSoFar(raw, selection.text);
-        if (sofar === null) continue;
+        if (sofar === null) return false;
         if (!shown) {
           shown = true;
           showWriting();
         }
-        if (!reread) continue;
+        if (!reread) return false;
         step(() => stream.write(sofar));
-        if (refused) break;
+        if (refused) return true;
         showWriting();
-      }
-    } catch (error) {
-      failure = error;
+        return false;
+      });
     } finally {
       if (stream) options.writing(mindId, null);
     }
+    const { raw, failure } = streamed;
 
     if (signal.aborted && closing) return ended({ kind: "cancelled" });
     if (signal.aborted && !refused) {
@@ -601,6 +670,91 @@ export function createEdits(options: EditsOptions) {
     }
   }
 
+  /**
+   * Revises the assistant's own changes still waiting over the stretch:
+   * their text, as it reads once accepted, is rewritten as asked in a
+   * copy of the Mind, and the new text takes their place, still waiting, as
+   * Blocks of a new request (../proposals/ownWaiting). Nothing goes into the
+   * Mind until the model is done; the User's own text isn't touched.
+   */
+  async function revise(input: ProposeInput, own: OwnWaiting): Promise<Proposed> {
+    const nothing = (result: EditWithAiResult): Proposed => ({
+      result,
+      length: null,
+      reason: null,
+      revised: null,
+    });
+    const fork = docOf(content.state(input.mindId));
+    try {
+      const blocks = fork.getXmlFragment(MIND_CONTENT_FIELD);
+      fork.transact(() => acceptOwnIn(blocks, own));
+      const read = readSelection(blocks, input.from, input.to);
+      const bounds = boundsOf(blocks, own);
+      if (!read.ok || !bounds) return nothing({ kind: "changed" });
+      const { selection } = read;
+      if (selection.text === "") return nothing({ kind: "unchanged" });
+      if (selection.characters > MAX_SELECTION_CHARACTERS) return nothing({ kind: "too-long" });
+      const call = editCall(input.prepared, askOf(input), selection);
+      if (!call) return nothing({ kind: "too-long" });
+      let streamed: { raw: string; failure: unknown };
+      options.writing(input.mindId, { over: input.from.blockId });
+      try {
+        streamed = await streamEdit(input.prepared, call, input.signal);
+      } finally {
+        options.writing(input.mindId, null);
+      }
+      if (input.signal.aborted) return nothing({ kind: "cancelled" });
+      if (streamed.failure !== null) {
+        return nothing({ kind: "failed", error: classifyProviderError(streamed.failure) });
+      }
+      const reply = readEditReply(streamed.raw, selection.text);
+      if (sameText(reply, selection.text)) return nothing({ kind: "unchanged" });
+      const request = randomUUID();
+      let droppedCitations = 0;
+      fork.transact(() => {
+        const fresh = freshCitations(selection, options.recheck)(reply);
+        droppedCitations = proposeRewrite(
+          selection,
+          reply,
+          request,
+          randomUUID,
+          fresh,
+        ).droppedCitations;
+        resolveProposals(blocks, (each) => each.request === request, "accept");
+      });
+      const top = topLevelBlocks(blocks);
+      const revised = top
+        .slice(bounds.before, top.length - bounds.after)
+        .map((element) => element.clone());
+      const made: ProposalRequest = {
+        source: "answer-added",
+        providerId: input.prepared.provider.id,
+        modelId: input.prepared.modelId,
+        createdAt: options.now().toISOString(),
+      };
+      input.beforeWriting();
+      const blockIds = content.edit(input.mindId, (mind) => {
+        const ids = replaceOwn(mind, own, revised, request);
+        if (ids && mind.doc) recordProposalRequest(mind.doc, request, made);
+        return ids;
+      });
+      if (!blockIds) return nothing({ kind: "changed" });
+      const proposals = content.read(
+        input.mindId,
+        (mind) => pendingProposals(mind).filter((each) => each.request === request).length,
+      );
+      input.written(request, proposals);
+      return {
+        result: { kind: "proposed", request, proposals, droppedCitations, outOfDate: 0 },
+        length: { before: selection.text, after: reply },
+        reason: reasonOf(streamed.raw),
+        revised: { blockIds },
+      };
+    } finally {
+      fork.destroy();
+    }
+  }
+
   /** Runs a request that `cancel` can stop by `requestId`. */
   async function stoppable(
     requestId: string,
@@ -633,51 +787,35 @@ export function createEdits(options: EditsOptions) {
      * A change the assistant asks for in a Mind (#202): `instruction`, over the
      * text from `from` to `to`, on the model its Answer is written with, which
      * the User has allowed. As Edit with AI's, it comes back as Proposals,
-     * each paragraph as it is finished. `length`: the text before and after,
-     * when it proposed; `reason`: why, as the model says.
+     * each paragraph as it is finished. Over the assistant's own changes
+     * still waiting, it revises them instead (`revise`). `length`: the
+     * text before and after, when it proposed; `reason`: why, as the model
+     * says; `revised`: the Blocks that took the place of its waiting ones.
      */
-    async proposeInMind(input: {
-      mindId: string;
-      from: TextPlace;
-      to: TextPlace;
-      instruction: string;
-      prepared: PreparedChatModel;
-      signal: AbortSignal;
-      /** Runs just before the change's first Proposals are written: a Checkpoint (#113). */
-      beforeWriting(): void;
-      /** More of its Proposals are in the Mind, as they come. */
-      written(request: string, count: number): void;
-    }): Promise<{
-      result: EditWithAiResult;
-      length: { before: string; after: string } | null;
-      reason: string | null;
-    }> {
+    async proposeInMind(input: ProposeInput): Promise<Proposed> {
       options.requireMind(input.mindId);
+      const nothing = (result: EditWithAiResult): Proposed => ({
+        result,
+        length: null,
+        reason: null,
+        revised: null,
+      });
       const read = readForEdit(input.mindId, input.from, input.to);
       if (!read.ok) {
-        return {
-          result: { kind: read.reason === "has-proposals" ? "has-proposals" : "changed" },
-          length: null,
-          reason: null,
-        };
+        if (read.reason !== "has-proposals") return nothing({ kind: "changed" });
+        const waiting = content.read(input.mindId, (mind) => waitingIn(mind, input.from, input.to));
+        return waiting.kind === "own"
+          ? await revise(input, waiting)
+          : nothing({ kind: "has-proposals" });
       }
       const { draft } = read;
       try {
         const { selection } = draft;
-        if (selection.text === "") {
-          return { result: { kind: "unchanged" }, length: null, reason: null };
-        }
-        if (selection.characters > MAX_SELECTION_CHARACTERS) {
-          return { result: { kind: "too-long" }, length: null, reason: null };
-        }
+        if (selection.text === "") return nothing({ kind: "unchanged" });
+        if (selection.characters > MAX_SELECTION_CHARACTERS) return nothing({ kind: "too-long" });
         const { result, reply, reason } = await rewrite(
           input.prepared,
-          {
-            mindId: input.mindId,
-            action: "instruction",
-            instruction: input.instruction,
-            model: { providerId: input.prepared.provider.id, modelId: input.prepared.modelId },
-          },
+          askOf(input),
           draft,
           input.signal,
           { beforeWriting: input.beforeWriting, written: input.written },
@@ -686,6 +824,7 @@ export function createEdits(options: EditsOptions) {
           result,
           length: result.kind === "proposed" ? { before: selection.text, after: reply } : null,
           reason,
+          revised: null,
         };
       } finally {
         draft.fork.destroy();
