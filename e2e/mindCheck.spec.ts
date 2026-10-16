@@ -9,6 +9,7 @@ import {
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  motionSettled,
   mindWrittenBefore,
   pointAndClick,
   removeDataFolder,
@@ -135,6 +136,7 @@ test("Check this Mind from ⌘K: the estimate first on a cloud model, then every
     "Check the claims in this Mind, about 15–20 sentences, against your Documents? About $",
   );
   await expect(window.getByTestId("palette-search")).toBeHidden();
+  await motionSettled(window);
   await screenshot(window, "mind-check-ask-en");
   await pointAndClick(window, ask.getByTestId("mind-check-check"));
 
