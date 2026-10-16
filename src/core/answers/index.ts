@@ -1861,7 +1861,6 @@ export function createAnswers(options: AnswersOptions) {
       ? { mindId: mind.mindId, version: mind.reading.version, partial: mind.section.partial }
       : null;
 
-  /** What became of the changes an earlier Answer made, read from their Mind as it is now. */
   const changeStatesOf: ChangeStates = (change) => {
     if (options.readableMindName(change.mindId) === null) {
       return { waiting: 0, accepted: 0, rejected: 0, gone: true };

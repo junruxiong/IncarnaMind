@@ -146,6 +146,7 @@ describe("The record of an Answer's Tool calls", () => {
 });
 
 describe("A record within the context's budget", () => {
+  const KEPT_WITH_SEARCHES = 26;
   const searches = Array.from({ length: 12 }, (_, at) =>
     call({
       tool: "search_documents",
@@ -208,6 +209,30 @@ describe("A record within the context's budget", () => {
     expect(text.endsWith(QUESTION)).toBe(true);
   });
 
+  /** A conversation of `turns` Questions, each Answer with `calls` and a reply as long as a paragraph. */
+  const conversation = (
+    turns: number,
+    calls: (turn: number) => AnswerToolCall[],
+    id = (turn: number) => `a${turn}`,
+  ): ConversationMessage[] =>
+    Array.from({ length: turns }, (_, at): ConversationMessage[] => {
+      const reply = answer(calls(at), `Answer ${at + 1}. ${"Tides follow the moon. ".repeat(8)}`);
+      const [question] = earlier(reply);
+      return [
+        { ...question, id: `q${at + 1}`, text: `Question ${at + 1}` } as ConversationMessage,
+        { ...reply, id: id(at), questionId: `q${at + 1}` },
+      ];
+    }).flat();
+
+  const keptAnswers = (text: string) => [...text.matchAll(/Answer (\d+)\. /g)].length;
+
+  // protects=search-only records compete like Answer text: as many Answers are kept as before records had a share of the budget; fails_when=a conversation of searches keeps fewer Answers (it fell from 13 to 8 with a half-budget cap on every record); no_claim=none beyond protects.
+  test("a conversation of searches keeps as many Answers as before", () => {
+    const turns = conversation(30, () => searches.slice(0, 10));
+
+    expect(keptAnswers(sent(turns, 6_000))).toBe(KEPT_WITH_SEARCHES);
+  });
+
   const made = call({
     tool: "create_mind",
     source: "minds",
@@ -230,6 +255,37 @@ describe("A record within the context's budget", () => {
     expect(sent(earlier(reply), 100_000)).toContain(
       `The page sums up both papers.\n\n${record}\n\n${QUESTION}`,
     );
+  });
+
+  // protects=when the budget holds only one record, the one of a Mind that is still there is kept and the one of a deleted Mind, though newer, goes; fails_when=the deleted Mind's record takes the place of the live one's; no_claim=none beyond protects.
+  test("a record of a deleted Mind goes before one of a Mind that is still there", () => {
+    const page = (mindId: string, title: string) =>
+      call({
+        tool: "create_mind",
+        source: "minds",
+        input: { title },
+        mindChange: { mindId, created: true, request: mindId, proposals: 2 },
+      });
+    const live = page("m1", "Tide notes");
+    const deleted = page("m2", "Notes on the winter storms and the harbour wall");
+    const gone = (change: { mindId: string }) =>
+      change.mindId === "m2" ? { waiting: 0, accepted: 0, rejected: 0, gone: true } : null;
+    const turns = conversation(2, (turn) => [turn === 0 ? live : deleted]);
+    const records = [live, deleted].map((each) => toolRecord([each], names, 0, gone));
+    const [kept = 0, left = 0] = records.map((record) => estimateTokens(record));
+    expect(left).toBeGreaterThan(kept + 8);
+    const budget = estimateTokens(QUESTION) + kept * 2 + 10;
+
+    const text = conversationContext(turns, QUESTION, {
+      budget,
+      mindNames: names,
+      changeStates: gone,
+    })
+      .messages.map((message) => message.content)
+      .join("\n\n");
+
+    expect(text).toContain("made the Mind “Tide notes”");
+    expect(text).not.toContain("winter storms");
   });
 
   // protects=thirty turns with long Answers fit the same budget as before, the first turn's record and the newest Answer in it and the first Answer's text out; fails_when=the context grows past the budget, the first record is lost, or the newest Answer goes; no_claim=none beyond protects.
