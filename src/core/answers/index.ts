@@ -1380,6 +1380,7 @@ export function createAnswers(options: AnswersOptions) {
               minds,
               prepared,
               ...input.assistant,
+              language: answerLanguage(context.question),
               blocksOf: (text) => {
                 let notFound = 0;
                 let unrecorded = 0;
