@@ -1,6 +1,6 @@
 import { parentPort, workerData } from "node:worker_threads";
 import { createCanvas, loadImage } from "@napi-rs/canvas";
-import type { PictureJob } from "./sharedPictures";
+import type { PictureDrawn, PictureJob } from "./sharedPictures";
 
 const WASH = "#dcf3e4";
 const ERROR = "#b42318";
@@ -37,11 +37,13 @@ async function draw({ image, area, width, height, marks, tone }: PictureJob): Pr
 
 const jobs = workerData as PictureJob[];
 void (async () => {
-  try {
-    const pictures: Uint8Array[] = [];
-    for (const job of jobs) pictures.push(await draw(job));
-    parentPort?.postMessage({ pictures });
-  } catch (error) {
-    parentPort?.postMessage({ error: error instanceof Error ? error.message : String(error) });
+  const pictures: PictureDrawn[] = [];
+  for (const job of jobs) {
+    try {
+      pictures.push({ data: await draw(job) });
+    } catch (error) {
+      pictures.push({ failed: error instanceof Error ? error.message : String(error) });
+    }
   }
+  parentPort?.postMessage({ pictures });
 })();

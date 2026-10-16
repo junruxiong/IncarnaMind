@@ -8341,8 +8341,11 @@ export interface CoreApi {
    * its marker.
    */
   exportMind(mindId: string, options: ExportMindOptions): Promise<MindExport>;
-  /** What the Mind's web page to share would hold: its Documents, their quotes and pictures. */
-  previewSharePage(mindId: string): Promise<SharePagePreview>;
+  /**
+   * What the Mind's web page to share would hold with these options (Questions, someone's changes
+   * waiting): its Documents, their quotes and pictures.
+   */
+  previewSharePage(mindId: string, options: ExportMindOptions): Promise<SharePagePreview>;
   /**
    * The Documents whose Citations the Mind's web page to share keeps as text, without their
    * page pictures; kept with the Mind.
