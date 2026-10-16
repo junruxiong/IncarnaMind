@@ -15,7 +15,7 @@ import {
 import { mindModelOf } from "../shared/mindModel";
 import { mindName } from "../shared/naming";
 import { paperFor } from "../shared/printDocument";
-import { resolveProposals } from "../shared/proposals";
+import { resolveProposals, restoreRevised } from "../shared/proposals";
 import { isCitableWork } from "../shared/references";
 import { RESEARCH_TASK } from "../shared/research";
 import { wordFileOf } from "../shared/wordFiles";
@@ -1092,7 +1092,7 @@ export function createCore(adapters: CoreAdapters): Core {
     liveTranscript: (mindId) => liveTranscriptOf(mindId),
     providerExists: (providerId) => chat.exists(providerId),
     readiness: async (choice) => chat.readiness(await chat.answeringModel(choice)),
-    prepareModel: (choice) => chat.prepareModel(choice),
+    prepareModel: (choice, thinking) => chat.prepareModel(choice, "chat", thinking),
     documents: {
       searchableCount: (documentIds) => documents.searchableCount(documentIds ?? undefined),
       names: () => documents.names(),
@@ -1162,6 +1162,7 @@ export function createCore(adapters: CoreAdapters): Core {
         if (!mindExists(change.mindId)) continue;
         const emptied = content.edit(change.mindId, (blocks) => {
           resolveProposals(blocks, (ref) => ref.request === change.request, "reject");
+          if (change.revised) restoreRevised(blocks, change.request);
           return topLevelBlocks(blocks).every(
             (block) => block.nodeName === "paragraph" && block.length === 0,
           );
@@ -1520,6 +1521,7 @@ export function createCore(adapters: CoreAdapters): Core {
     mindFolder: (mindId) => minds.get(mindId).folderId,
     originalOf: (mindId) => wordImports.originalOf(mindId),
     defaultModel: () => settings.get().user.chatModel,
+    recordAiUse: (inputs) => void aiUse.record(inputs),
     chat,
     consent,
     localOnly: () => embedding.localOnly(),
@@ -1582,6 +1584,12 @@ export function createCore(adapters: CoreAdapters): Core {
     bibliography: (mindId) => content.readSettings(mindId, bibliographyShown),
     formatCitations: (request) => citationStyles.format(request),
     citedPage: (citation) => citedPages.image(citation),
+    citedUnits: ({ documentId, contentHash, pageFrom, pageTo }) => {
+      if (!documentId || !contentHash) return [];
+      const from = typeof pageFrom === "number" ? pageFrom : null;
+      const to = from === null ? null : Math.max(from, typeof pageTo === "number" ? pageTo : from);
+      return documents.pageTexts(documentId, contentHash, from, to);
+    },
     printer: adapters.printer ?? null,
     paper: () => paperFor(systemRegion(adapters.systemRegion?.(), adapters.systemLanguages())),
     ...(adapters.pictures && { pictures: adapters.pictures }),
@@ -2319,6 +2327,7 @@ export function createCore(adapters: CoreAdapters): Core {
       passage: (passageId) => documents.passage(passageId),
       passagesBetween: (documentId, from, to) => documents.passagesBetween(documentId, from, to),
       citing,
+      notCited: (passageId) => documents.citationSource(passageId)?.notCited ?? false,
       recheck: (input) => recheckCitation(documents, input),
       minds: () => minds.list().filter((mind) => isKnownKind(mind.kind)),
       liveDocuments: () => documents.names(),
@@ -2427,6 +2436,7 @@ export function createCore(adapters: CoreAdapters): Core {
       return documents.searchableCount((wanted ? resolveScope(wanted) : null) ?? undefined);
     },
     stopConversationAnswer: async (input) => answers.stopInConversation(input),
+    usualAnswerWait: async (answerId) => conversations.usualWait(answerId),
     listConversations: async (options) => conversations.list(options),
     getConversation: async (conversationId) => conversations.content(conversationId),
     searchConversations: async (query) => conversations.search(query),
@@ -2669,6 +2679,7 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     setCountedAsEvidence: async (documentId, counted) =>
       documents.setCountedAsEvidence(documentId, counted),
+    setNotCited: async (documentId, notCited) => documents.setNotCited(documentId, notCited),
     getEmbeddingModel: async () => embeddingModel.status(),
     downloadEmbeddingModel: async () => embeddingModel.retry(),
     getTextRecognitionModel: async () =>

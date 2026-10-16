@@ -132,6 +132,7 @@ test("Export opens a short menu: Word and PDF, the last one used first with â‡§â
   await expect(more.getByRole("menuitem")).toHaveText([
     "Source pack (PDF)",
     "HTML",
+    "Web page to share (.html)",
     "Markdown (.md)",
   ]);
   await expect(more.getByTestId("export-as-source-pack")).toBeFocused();

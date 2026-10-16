@@ -23,6 +23,11 @@ export interface PrintHtml {
   notes: string[];
 }
 
+export interface CitationWriter {
+  note(footnote: Footnote): string;
+  marker(footnote: Footnote, number: number): string;
+}
+
 const ESCAPES: Readonly<Record<string, string>> = {
   "&": "&amp;",
   "<": "&lt;",
@@ -34,15 +39,24 @@ const ESCAPES: Readonly<Record<string, string>> = {
 export const escapeHtml = (text: string) =>
   text.replace(/[&<>"']/g, (char) => ESCAPES[char] ?? char);
 
+type LinkTest = (href: string | null | undefined) => href is string;
+
 /** Only links a PDF reader can follow without running anything. */
-const safeLink = (href: string | null | undefined): href is string =>
+export const safeLink: LinkTest = (href): href is string =>
   typeof href === "string" && /^(https?:|mailto:)/i.test(href);
+
+export const webLink: LinkTest = (href): href is string =>
+  typeof href === "string" && /^https?:/i.test(href);
 
 export function renderPrintHtml(
   title: string,
   blocks: readonly Block[],
   labels: PrintLabels,
-  { linkNotes = false }: { linkNotes?: boolean } = {},
+  {
+    linkNotes = false,
+    citations = null,
+    isLink = safeLink,
+  }: { linkNotes?: boolean; citations?: CitationWriter | null; isLink?: LinkTest } = {},
 ): PrintHtml {
   const notes: string[] = [];
   const writer = new PrintWriter(
@@ -52,6 +66,8 @@ export function renderPrintHtml(
       return notes.length;
     },
     linkNotes,
+    citations,
+    isLink,
   );
   const parts: string[] = [];
   if (title) parts.push(`<h1 class="mind-title">${escapeHtml(title)}</h1>`);
@@ -60,7 +76,7 @@ export function renderPrintHtml(
 }
 
 /** A style's formatted runs: italics, bold, small capitals, underlining, raised text and links. */
-function runsHtml(runs: readonly StyledRun[]): string {
+function runsHtml(runs: readonly StyledRun[], isLink: LinkTest): string {
   return runs
     .map((run) => {
       if (run.text === "") return "";
@@ -70,7 +86,7 @@ function runsHtml(runs: readonly StyledRun[]): string {
       if (run.underline) html = `<u>${html}</u>`;
       if (run.bold) html = `<b>${html}</b>`;
       if (run.italic) html = `<i>${html}</i>`;
-      if (safeLink(run.link)) html = `<a href="${escapeHtml(run.link)}">${html}</a>`;
+      if (isLink(run.link)) html = `<a href="${escapeHtml(run.link)}">${html}</a>`;
       return html;
     })
     .join("");
@@ -81,10 +97,14 @@ const unverifiedHtml = (labels: PrintLabels) =>
   ` <span class="unverified">${escapeHtml(labels.unverified)}</span>`;
 
 /** A Citation's source, as its footnote says it; a web page's address is a link. */
-function sourceHtml(footnote: Footnote, labels: PrintLabels): string {
+export function sourceHtml(
+  footnote: Footnote,
+  labels: PrintLabels,
+  isLink: LinkTest = safeLink,
+): string {
   const link = footnote.link;
   let html = escapeHtml(footnote.source);
-  if (safeLink(link) && footnote.source.includes(link)) {
+  if (isLink(link) && footnote.source.includes(link)) {
     const at = footnote.source.lastIndexOf(link);
     html =
       escapeHtml(footnote.source.slice(0, at)) +
@@ -111,7 +131,7 @@ function imageHtml(src: string, alt: string): string {
 }
 
 /** Marks as HTML, outermost first. */
-function wrap(text: string, marks: Marks): string {
+function wrap(text: string, marks: Marks, isLink: LinkTest): string {
   let html = escapeHtml(text);
   if (marks.code) html = `<code>${html}</code>`;
   if (marks.highlight) html = `<mark>${html}</mark>`;
@@ -119,7 +139,7 @@ function wrap(text: string, marks: Marks): string {
   if (marks.strike) html = `<s>${html}</s>`;
   if (marks.italic) html = `<em>${html}</em>`;
   if (marks.bold) html = `<strong>${html}</strong>`;
-  if (safeLink(marks.link)) html = `<a href="${escapeHtml(marks.link)}">${html}</a>`;
+  if (isLink(marks.link)) html = `<a href="${escapeHtml(marks.link)}">${html}</a>`;
   return html;
 }
 
@@ -130,6 +150,8 @@ class PrintWriter {
     private readonly number: (note: string) => number,
     /** Markers link to their notes, and carry the id the note links back to. */
     private readonly linkNotes: boolean,
+    private readonly citations: CitationWriter | null,
+    private readonly isLink: LinkTest,
   ) {}
 
   blocks(blocks: readonly Block[]): string {
@@ -179,8 +201,10 @@ class PrintWriter {
       case "bibliography": {
         const entries = block.items
           .map((item) => {
-            const label = item.label ? `<span class="label">${runsHtml(item.label)}</span> ` : "";
-            return `<p class="entry">${label}${runsHtml(item.runs)}</p>`;
+            const label = item.label
+              ? `<span class="label">${runsHtml(item.label, this.isLink)}</span> `
+              : "";
+            return `<p class="entry">${label}${runsHtml(item.runs, this.isLink)}</p>`;
           })
           .join("");
         const hanging = block.hangingIndent ? " hanging" : "";
@@ -259,7 +283,7 @@ class PrintWriter {
     for (const item of content) {
       switch (item.kind) {
         case "text":
-          html += wrap(item.text, item.marks);
+          html += wrap(item.text, item.marks, this.isLink);
           break;
         case "break":
           html += "<br>";
@@ -274,9 +298,12 @@ class PrintWriter {
           // In the User's footnote, a Citation is its source, a word of the note's text.
           if (inNote) {
             if (/\S$/.test(html)) html += " ";
-            html += sourceHtml(item.footnote, this.labels);
+            html += sourceHtml(item.footnote, this.labels, this.isLink);
+          } else if (this.citations) {
+            const number = this.number(this.citations.note(item.footnote));
+            html += this.citations.marker(item.footnote, number);
           } else {
-            html += this.marker(sourceHtml(item.footnote, this.labels));
+            html += this.marker(sourceHtml(item.footnote, this.labels, this.isLink));
           }
           break;
         case "footnote":
@@ -284,8 +311,8 @@ class PrintWriter {
           break;
         case "cite": {
           const marker = item.unverified ? unverifiedHtml(this.labels) : "";
-          if (item.note && !inNote) html += this.marker(runsHtml(item.runs) + marker);
-          else html += runsHtml(item.runs) + marker;
+          if (item.note && !inNote) html += this.marker(runsHtml(item.runs, this.isLink) + marker);
+          else html += runsHtml(item.runs, this.isLink) + marker;
           break;
         }
       }
