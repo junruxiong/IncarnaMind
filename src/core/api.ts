@@ -1642,14 +1642,20 @@ export interface EditCause {
   apply: boolean;
 }
 
+/**
+ * What kind of Block a paragraph of a selection is, as the model reads it and
+ * writes it back: a heading of a level ("heading:2"), a bullet, a numbered
+ * item, a quote, or a plain paragraph.
+ */
+export type BlockKind = "paragraph" | "bullet" | "numbered" | "quote" | `heading:${number}`;
+
 /** Part of the selection an edit's new text left out, kept (#880): `from`..`to` of a Block's text. */
 export interface LeftOutPart {
   blockId: string;
   from: number;
   to: number;
   whole: boolean;
-  /** "paragraph", "heading:2", "bullet", "numbered" or "quote". */
-  kind: string;
+  kind: BlockKind;
 }
 
 /** Settings that belong to the User and will sync across their devices (ADR-0003). */
