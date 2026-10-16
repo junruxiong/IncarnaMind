@@ -316,7 +316,6 @@ function untilAborted<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
   });
 }
 
-/** Whether a Connector is a remote one whose server isn't on this computer. */
 function awayFromHere(row: ConnectorRow): boolean {
   const config = storedConfig(row);
   if (config.transport !== "http") return false;
