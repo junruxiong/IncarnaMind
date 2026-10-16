@@ -1912,7 +1912,6 @@ export const zhCN = {
   "signInRoute.wayBack.signInAgain": "重新登录",
   "signInRoute.wayBack.useAnotherModel": "换一个模型",
   "signInRoute.wayBack.pasteApiKey": "改用 API 密钥",
-  "signInRoute.wayBack.useClaudeCode": "改用 Claude Code",
   "chatgpt.welcome.title": "你正在使用 ChatGPT 订阅",
   "chatgpt.welcome.body":
     "在 IncarnaMind 中用 ChatGPT 模型提问，会使用你的 ChatGPT 订阅。你可以在 ChatGPT 的设置中查看和限制用量。",

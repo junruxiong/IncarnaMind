@@ -1858,6 +1858,7 @@ export function createAnswers(options: AnswersOptions) {
             errorKind: outcome.status === "failed" ? outcome.error.kind : null,
             errorMessage: outcome.status === "failed" ? outcome.error.message : null,
             errorResetsAt: (outcome.status === "failed" && outcome.error.resetsAt) || null,
+            errorSignInRoute: (outcome.status === "failed" && outcome.error.signInRoute) || null,
             generatedHash: contentHash(element),
           });
         }
@@ -1888,6 +1889,7 @@ export function createAnswers(options: AnswersOptions) {
               status: "failed",
               errorKind: outcome.error.kind,
               errorMessage: outcome.error.message,
+              errorSignInRoute: outcome.error.signInRoute ?? null,
             });
           }
           return !!found;
@@ -1913,6 +1915,7 @@ export function createAnswers(options: AnswersOptions) {
           status: "done",
           errorKind: null,
           errorMessage: null,
+          errorSignInRoute: null,
           providerId: model.providerId,
           modelId: model.modelId,
           toolCalls: answer.toolCalls.length > 0 ? JSON.stringify(answer.toolCalls) : null,
@@ -2185,6 +2188,7 @@ export function createAnswers(options: AnswersOptions) {
           errorKind: null,
           errorMessage: null,
           errorResetsAt: null,
+          errorSignInRoute: null,
           generatedHash: null,
           generatedMarks: true,
           citationSupport: null,

@@ -52,6 +52,7 @@ const answer: ConversationAnswer = {
   status: "done",
   errorKind: null,
   errorMessage: null,
+  errorSignInRoute: null,
   citationSupport: null,
   toolCalls: [],
   textOrigin: null,
