@@ -1164,6 +1164,11 @@ export const en = {
   "status.tagging.other": "Tagging {count} Documents…",
   "status.taggingWaiting": "No AI model for Tags",
   "status.taggingPermission": "Tags need your OK",
+  "status.taggingFailed.one": "1 Document couldn't be tagged",
+  "status.taggingFailed.other": "{count} Documents couldn't be tagged",
+  "status.taggingFailed.offline":
+    "The AI model couldn't be reached. Tagging tries again when you're back online, or now with Retry.",
+  "status.taggingFailed.full": "The AI model couldn't tag them. Retry to try again.",
   "status.choose": "Choose…",
   "status.downloading": "Search model",
   "status.downloadFailed": "Search model download failed",
