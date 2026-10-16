@@ -26,6 +26,7 @@ import type { WatchFolder } from "./documents/watcher";
 import type { FetchLimits, PageFetch } from "./documents/web/fetch";
 import type { PictureLimits } from "./documents/web/pictures";
 import type { ChatGptPlanEndpoints } from "./providers/chatgpt/plan";
+import type { AnthropicOAuthConfig } from "./providers/claudeAccount/config";
 import type { EmbeddingModelFactory } from "./providers/embeddings";
 import type { LocalServers } from "./providers/localServers";
 import type { ChatModelFactory } from "./providers/models";
@@ -830,6 +831,8 @@ export interface CoreAdapters {
    * OpenAI's servers; tests point it at a local fake authorization server and API.
    */
   chatGptPlan?: Partial<ChatGptPlanEndpoints>;
+  /** In place of this build's Claude account profile: tests point it at a local fake. */
+  claudeAccount?: AnthropicOAuthConfig;
   /**
    * Where the ChatGPT sign-in is kept instead of `keychain`: a store that
    * several data folders on this computer share, and a lock file that keeps

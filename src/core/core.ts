@@ -147,6 +147,8 @@ import { createPrivacy, type NetworkTrafficRegistry } from "./privacy";
 import { readsImages } from "./providers/capabilities";
 import { CHAT_FLOW_SENDS, createChat, type PreparedChatModel } from "./providers/chat";
 import { CHATGPT_PLAN_ENDPOINTS, createChatGptPlan } from "./providers/chatgpt/plan";
+import { createClaudeAccount } from "./providers/claudeAccount/account";
+import { ANTHROPIC_OAUTH } from "./providers/claudeAccount/config";
 import { createAiSdkEmbeddingModel } from "./providers/embeddings";
 import { ollamaBaseUrl } from "./providers/kinds";
 import { createLocalServers } from "./providers/localServers";
@@ -816,6 +818,16 @@ export function createCore(adapters: CoreAdapters): Core {
   chatGpt.forgetCodexSignIn().catch((error: unknown) => {
     console.error("The experimental ChatGPT provider's sign-in couldn't be removed.", error);
   });
+  let claudeAccountChanged = () => {};
+  const claudeProfile = adapters.claudeAccount ?? ANTHROPIC_OAUTH;
+  const claudeAccount = createClaudeAccount({
+    config: claudeProfile,
+    secrets,
+    language: () => settings.get().language,
+    browser: adapters.browser,
+    now: () => (adapters.now?.() ?? new Date()).getTime(),
+    onChange: () => claudeAccountChanged(),
+  });
   const meter = createMeter({
     db,
     now: () => adapters.now?.() ?? new Date(),
@@ -831,6 +843,7 @@ export function createCore(adapters: CoreAdapters): Core {
     consent,
     createModel: adapters.createChatModel ?? createAiSdkChatModel,
     chatGpt,
+    claudeAccount,
     ollamaModels: adapters.ollamaModels ?? createOllamaModels(),
     localOnly: () => embedding.localOnly(),
     meter,
@@ -1966,6 +1979,17 @@ export function createCore(adapters: CoreAdapters): Core {
       if (!lifetime.signal.aborted) console.error(error);
     });
   };
+  claudeAccountChanged = () => {
+    const report = async () => {
+      const status = await claudeAccount.status();
+      if (lifetime.signal.aborted) return;
+      events.emit("claudeAccount.changed", status);
+      await readinessChanged();
+    };
+    report().catch((error: unknown) => {
+      if (!lifetime.signal.aborted) console.error(error);
+    });
+  };
   // Not a readiness change: the renderer keeps its model lists.
   chatGptLimitsChanged = () => {
     chatGpt.status().then(
@@ -2040,6 +2064,20 @@ export function createCore(adapters: CoreAdapters): Core {
     service: { id: chatGptSignIn.origin, name: "OpenAI" },
     listed: () => chatGpt.used(),
   });
+  if (claudeProfile) {
+    const { authorizeUrl, tokenUrl, revokeUrl } = claudeProfile;
+    const signInHosts = new Map(
+      [authorizeUrl, tokenUrl, revokeUrl]
+        .filter((url): url is string => url !== undefined)
+        .map((url) => new URL(url))
+        .map((url) => [url.origin, url.host]),
+    );
+    privacy.traffic.register({
+      id: "claude-sign-in",
+      services: () => [...signInHosts].map(([id, name]) => ({ id, name })),
+      listed: () => claudeAccount.used(),
+    });
+  }
   privacy.traffic.register({
     id: "remote-connectors",
     services: () => connectors.remoteTraffic(),
@@ -2881,6 +2919,13 @@ export function createCore(adapters: CoreAdapters): Core {
     signOutOfChatGpt: () => chatGpt.signOut(),
     pasteChatGptSignInAddress: async (address) =>
       chatGpt.pasteSignInAddress(typeof address === "string" ? address : ""),
+    getClaudeAccount: () => claudeAccount.status(),
+    signInToClaude: () => claudeAccount.signIn(),
+    cancelClaudeSignIn: () => claudeAccount.cancelSignIn(),
+    reopenClaudeSignIn: () => claudeAccount.reopenSignInPage(),
+    signOutOfClaude: () => claudeAccount.signOut(),
+    pasteClaudeSignInAddress: async (address) =>
+      claudeAccount.pasteSignInAddress(typeof address === "string" ? address : ""),
 
     listDataFlows: () => consent.list(),
     listConsentRequests: async () => consent.requests(),

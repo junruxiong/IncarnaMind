@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import {
   type ElectronApplication,
   _electron as electron,
@@ -577,10 +577,17 @@ export async function useOutputLocation(window: Page, folder: string): Promise<v
   }, folder);
 }
 
+/** What the result line says of a file saved in a folder, which it names as well as the file. */
+export function savedLine(name: string, folder: string, language: "en" | "zh-CN" = "en"): string {
+  return language === "zh-CN"
+    ? `已保存“${name}”到“${basename(folder)}”`
+    : `Saved “${name}” in ${basename(folder)}`;
+}
+
 /** The result line's saved file, once it says it saved one. */
 export async function savedPath(window: Page, name: string): Promise<string> {
   const done = window.getByTestId("export-result").getByTestId("export-done");
-  await expect(done).toHaveText(`Saved ${name}`, { timeout: 30_000 });
+  await expect(done).toContainText(`Saved “${name}” in `, { timeout: 30_000 });
   return (await done.getAttribute("title")) ?? "";
 }
 

@@ -46,6 +46,7 @@ import {
 import { billingOf, ollamaCloudPrice } from "./catalog/billing";
 import { endpointOf, fieldAccepts, fieldUrl } from "./catalog/providers";
 import type { ChatGptPlan } from "./chatgpt/plan";
+import type { ClaudeSignIn } from "./claudeAccount/account";
 import {
   acceptsApiKey,
   baseUrlFor,
@@ -261,6 +262,11 @@ export type ChatGptPlanAccess = Pick<
   "hasSignIn" | "credentials" | "apiBaseUrl" | "models" | "limits"
 >;
 
+export type ClaudeAccountAccess = Pick<
+  ClaudeSignIn,
+  "hasSignIn" | "credentials" | "apiBaseUrl" | "request"
+>;
+
 export function createChat(options: {
   db: Database;
   now: () => string;
@@ -269,6 +275,7 @@ export function createChat(options: {
   consent: Consent;
   createModel: ChatModelFactory;
   chatGpt: ChatGptPlanAccess;
+  claudeAccount: ClaudeAccountAccess;
   /** Looks up models in Ollama, for the settings their requests carry and how they cite. */
   ollamaModels: OllamaModels;
   /** Whether "Keep everything on this computer" is on: Questions then go only to a model on this computer. */
@@ -276,8 +283,22 @@ export function createChat(options: {
   /** Counts every cloud request of the models handed out, and holds the monthly cap (see ../cost/meter). */
   meter: Pick<Meter, "wrap">;
 }) {
-  const { db, now, settings, secrets, consent, createModel, chatGpt, ollamaModels, meter } =
-    options;
+  const {
+    db,
+    now,
+    settings,
+    secrets,
+    consent,
+    createModel,
+    chatGpt,
+    claudeAccount,
+    ollamaModels,
+    meter,
+  } = options;
+
+  const needsSignIn = async (kind: ChatProviderKind) =>
+    (kind === "chatgpt" && !(await chatGpt.hasSignIn())) ||
+    (kind === "claude-account" && !(await claudeAccount.hasSignIn()));
 
   /** What the meter needs to know of a model: how it's billed, its price and its output limit. */
   const meteredModel = (
@@ -440,9 +461,9 @@ export function createChat(options: {
 
   /**
    * What the model factory needs: a hosted provider's endpoint from the
-   * catalog, else the server's URL. The ChatGPT plan signs with the sign-in
-   * instead of a key, and a model in Ollama gets its fixed settings, the
-   * defaults when Ollama couldn't say.
+   * catalog, else the server's URL. The ChatGPT plan and a Claude account
+   * sign with the sign-in instead of a key, and a model in Ollama gets its
+   * fixed settings, the defaults when Ollama couldn't say.
    */
   const specFor = (
     server: {
@@ -464,6 +485,17 @@ export function createChat(options: {
         apiKey: null,
         modelId,
         credentials: chatGpt.credentials,
+        ...(thinking && { thinking }),
+      };
+    }
+    if (kind === "claude-account") {
+      return {
+        kind,
+        baseUrl: claudeAccount.apiBaseUrl,
+        apiKey: null,
+        modelId,
+        credentials: claudeAccount.credentials,
+        request: claudeAccount.request,
         ...(thinking && { thinking }),
       };
     }
@@ -561,7 +593,7 @@ export function createChat(options: {
     if (requiresApiKey(provider.kind, provider.catalogId) && !provider.hasApiKey) {
       return { ready: false, reason: "missing-api-key", provider, modelId };
     }
-    if (provider.kind === "chatgpt" && !(await chatGpt.hasSignIn())) {
+    if (await needsSignIn(provider.kind)) {
       return { ready: false, reason: "sign-in-required", provider, modelId };
     }
     if (!provider.service) return { ready: true, provider, modelId, consent: "not-required" };
@@ -829,6 +861,16 @@ export function createChat(options: {
         return {
           ok: false,
           error: { kind: "not-signed-in", message: "Continue with ChatGPT to sign in first." },
+        };
+      }
+      if (server.kind === "claude-account" && !(await claudeAccount.hasSignIn())) {
+        return {
+          ok: false,
+          error: {
+            kind: "not-signed-in",
+            message: "Sign in with your Claude account first.",
+            claudeAccount: "signed-out",
+          },
         };
       }
 

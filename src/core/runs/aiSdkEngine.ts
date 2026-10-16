@@ -75,10 +75,9 @@ function validatorFor(schema: Record<string, unknown>): ValidateFunction | null 
   return validate;
 }
 
-/** A value sent as JSON text, even encoded twice, read; any other value as it is. */
 function readJsonText(value: unknown): unknown {
   let meant = value;
-  for (let encodings = 0; typeof meant === "string" && encodings < 3; encodings++) {
+  for (let encodings = 0; typeof meant === "string" && encodings < 2; encodings++) {
     try {
       meant = JSON.parse(meant);
     } catch {
@@ -88,6 +87,11 @@ function readJsonText(value: unknown): unknown {
   return meant;
 }
 
+const typeWanted = (schema: Record<string, unknown>, name: string): unknown => {
+  const properties = isPlainObject(schema.properties) ? schema.properties : {};
+  return (properties[name] as { type?: unknown } | undefined)?.type;
+};
+
 /**
  * A copy of the arguments to check, as a small model meant them: an optional
  * one sent as null is left out, one sent as JSON text where the schema wants
@@ -96,10 +100,9 @@ function readJsonText(value: unknown): unknown {
  */
 function asMeant(input: Record<string, unknown>, schema: Record<string, unknown>) {
   const copy = structuredClone(input);
-  const properties = isPlainObject(schema.properties) ? schema.properties : {};
   const required = Array.isArray(schema.required) ? schema.required : [];
   for (const [name, value] of Object.entries(copy)) {
-    const wanted = (properties[name] as { type?: unknown } | undefined)?.type;
+    const wanted = typeWanted(schema, name);
     if (value === null && !required.includes(name)) {
       delete copy[name];
     } else if (wanted === "array" || wanted === "object") {
@@ -109,6 +112,16 @@ function asMeant(input: Record<string, unknown>, schema: Record<string, unknown>
     }
   }
   return copy;
+}
+
+/** The arguments a Tool gets: as sent, but an object sent where an array is wanted is that array's only item. */
+function forTool(input: Record<string, unknown>, schema: Record<string, unknown>) {
+  const out: Record<string, unknown> = {};
+  for (const [name, value] of Object.entries(input)) {
+    const meant = typeWanted(schema, name) === "array" ? readJsonText(value) : null;
+    out[name] = isPlainObject(meant) ? [meant] : value;
+  }
+  return out;
 }
 
 /**
@@ -144,7 +157,7 @@ export function toToolSet(tools: readonly RunTool[], signal: AbortSignal): ToolS
       description: each.description,
       inputSchema: checkedSchema(each.inputSchema),
       execute: async (input, { abortSignal, toolCallId }) =>
-        each.call(isPlainObject(input) ? input : {}, {
+        each.call(isPlainObject(input) ? forTool(input, each.inputSchema) : {}, {
           toolCallId,
           signal: abortSignal ?? signal,
         }),

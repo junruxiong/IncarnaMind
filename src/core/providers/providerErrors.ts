@@ -1,5 +1,5 @@
 import { APICallError, RetryError, UnsupportedFunctionalityError } from "ai";
-import type { ProviderError, ProviderErrorKind } from "../api";
+import type { ClaudeAccountProblem, ProviderError, ProviderErrorKind } from "../api";
 import { ConsentDeclinedError, TranslatableError } from "../errors";
 import { OAuthTokenError } from "../oauth";
 import { ChatGptPlanError, ChatGptSignInRequiredError } from "./chatgpt/errors";
@@ -47,6 +47,30 @@ export class PlanLimitError extends Error {
     super(message);
   }
 }
+
+/**
+ * The Claude account route stopped, for one of the reasons its own lines and
+ * ways back explain (`CLAUDE_ACCOUNT_PROBLEMS`).
+ */
+export class ClaudeAccountError extends Error {
+  override name = "ClaudeAccountError";
+  constructor(
+    readonly problem: Exclude<ClaudeAccountProblem, "sign-in-cancelled">,
+    message: string,
+    /** When the plan's limit resets (epoch milliseconds), when Anthropic says. */
+    readonly resetsAt: number | null = null,
+  ) {
+    super(message);
+  }
+}
+
+const CLAUDE_ACCOUNT_KINDS: Record<ClaudeAccountError["problem"], ProviderErrorKind> = {
+  "signed-out": "not-signed-in",
+  "sign-in-expired": "not-signed-in",
+  refused: "blocked",
+  "plan-limit": "plan-limit",
+  "unexpected-response": "provider",
+};
 
 /** When a reached limit resets, as ISO 8601, from an error that says (epoch milliseconds). */
 function resetsAtOf(error: Error): { resetsAt?: string } {
@@ -114,7 +138,8 @@ export function refusesFeature(
  * Sorts a failed provider request into a kind the UI can explain: a bad key,
  * an unknown model, rate limiting, no connection, or the provider's own error.
  * For the ChatGPT plan, also a missing or expired sign-in, a reached plan
- * limit, or OpenAI refusing the sign-in; for an Ollama Cloud model, its
+ * limit, or OpenAI refusing the sign-in; for a Claude account, the same and
+ * an answer the route doesn't know (`claudeAccount`); for an Ollama Cloud model, its
  * used-up allowance; for any priced model, the monthly cap. Jev's errors come sorted already.
  * For a local model, a request too long for its context window.
  * Answers (#29) reuse it for errors shown inside an Answer.
@@ -124,7 +149,9 @@ export function classifyProviderError(error: unknown): ProviderError {
   // A plan's refusal that ends a stream arrives wrapped in the AI SDK's own error.
   const cause =
     retried instanceof Error &&
-    (retried.cause instanceof ChatGptPlanError || retried.cause instanceof PlanLimitError)
+    (retried.cause instanceof ChatGptPlanError ||
+      retried.cause instanceof PlanLimitError ||
+      retried.cause instanceof ClaudeAccountError)
       ? retried.cause
       : retried;
   const message = messageOf(cause);
@@ -143,8 +170,16 @@ export function classifyProviderError(error: unknown): ProviderError {
   if (cause instanceof ChatGptSignInRequiredError) return { kind: "not-signed-in", message };
   if (cause instanceof ChatGptPlanError) return { kind: cause.kind, message, ...resetsAtOf(cause) };
   if (cause instanceof PlanLimitError) return { kind: "plan-limit", message, ...resetsAtOf(cause) };
+  if (cause instanceof ClaudeAccountError) {
+    return {
+      kind: CLAUDE_ACCOUNT_KINDS[cause.problem],
+      message,
+      claudeAccount: cause.problem,
+      ...resetsAtOf(cause),
+    };
+  }
   if (cause instanceof CostCapError) return { kind: "cost-cap", message };
-  // The ChatGPT sign-in couldn't be refreshed for a passing reason (e.g. OpenAI's server failed).
+  // A plan's sign-in couldn't be refreshed for a passing reason (e.g. the provider's server failed).
   if (cause instanceof OAuthTokenError) return { kind: "provider", message };
 
   if (APICallError.isInstance(cause)) {

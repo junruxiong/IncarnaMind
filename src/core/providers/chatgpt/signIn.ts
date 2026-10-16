@@ -12,29 +12,25 @@
  * - The ID token's signature, issuer, audience, expiry and nonce are checked,
  *   and the granted scopes must include `chatgpt.tokens.use.direct`: without
  *   it the User didn't allow plan use, and the next sign-in asks again.
- * - Tokens live only in the secret store, as one record with the
- *   registration. An access token is refreshed when it is within five
- *   minutes of expiring; refresh tokens rotate, so refreshes are serialised,
- *   across processes too when the store is shared (see `RefreshLock`).
- * - Signing out revokes the refresh token at OpenAI, then forgets the tokens
- *   but keeps the registration, so the next sign-in reuses the same client.
+ * - Tokens are kept, refreshed and signed out of as `../../oauthAccount`
+ *   does, as one record with the registration. Signing out revokes the
+ *   refresh token at OpenAI but keeps the registration, so the next sign-in
+ *   reuses the same client.
  *
  * Written from OpenAI's documentation; no code from OpenAI's devkit, whose
  * licence is non-commercial.
  */
 import { randomBytes, randomUUID } from "node:crypto";
 import type { Browser } from "../../adapters";
-import { SecretStorageError } from "../../errors";
+import { nonEmptyText, type OAuthPage, type OAuthTokens, refreshOAuthTokens } from "../../oauth";
 import {
-  authorizeWithLoopback,
-  type LoopbackRedirect,
-  type OAuthPage,
-  OAuthTokenError,
-  type OAuthTokens,
-  type PastedRedirect,
-  refreshOAuthTokens,
-  revokeOAuthToken,
-} from "../../oauth";
+  type Authorize,
+  createOAuthAccount,
+  type OAuthAccountRecord,
+  parseAccountRecord,
+  type RefreshLock,
+  revokeRefreshToken,
+} from "../../oauthAccount";
 import type { Secrets } from "../../secrets";
 import {
   ChatGptOtherAccountError,
@@ -68,34 +64,7 @@ const IDENTITY_SCOPES = "openid profile email";
 const PLAN_SCOPE = "chatgpt.tokens.use.direct";
 const SCOPE = `${IDENTITY_SCOPES} offline_access resource.invoke ${PLAN_SCOPE}`;
 
-/** Refresh this long before the access token expires. */
-const REFRESH_WINDOW_MS = 5 * 60_000;
-
-/** When neither the server nor the token says how long it lasts; OpenAI's are an hour. */
-const ASSUMED_LIFETIME_MS = 60 * 60_000;
-
-/** Waits between tries to revoke the session at sign-out, when OpenAI can't be reached. */
-const REVOKE_RETRIES_MS = [250, 1000];
-
-/**
- * A refresh or revocation gives up after this long, so a hanging token
- * endpoint doesn't hold every request; well under the shared refresh lock's
- * staleness (a minute), so no other process takes the lock over meanwhile.
- * Giving up counts as a passing failure: the sign-in is kept.
- */
-const TOKEN_REQUEST_TIMEOUT_MS = 20_000;
-
 const ACCOUNT_SECRET = "chatgpt:account";
-
-/** Refresh-token errors that mean the token can't be used again (OpenAI's errors and recovery). */
-const UNUSABLE_REFRESH = new Set([
-  "invalid_grant",
-  "invalid_refresh_token",
-  "token_expired",
-  "refresh_token_expired",
-  "refresh_token_invalidated",
-  "refresh_token_reused",
-]);
 
 /** Where the sign-in happens. Tests point these at a local fake server. */
 export interface ChatGptSignInEndpoints {
@@ -107,25 +76,8 @@ export interface ChatGptSignInEndpoints {
   signInTimeoutMs: number;
 }
 
-/**
- * Runs a refresh so that no other process sharing the same store refreshes
- * at the same time. Within one process, refreshes already run one at a time.
- */
-export interface RefreshLock {
-  run<T>(task: () => Promise<T>): Promise<T>;
-}
-
-const NO_LOCK: RefreshLock = { run: (task) => task() };
-
-interface StoredTokens {
-  accessToken: string;
-  refreshToken: string | null;
-  /** Milliseconds since the epoch. */
-  expiresAt: number;
-}
-
 /** Everything about the ChatGPT sign-in on this device, kept as one secret. */
-interface StoredAccount {
+interface StoredAccount extends OAuthAccountRecord {
   /** This computer's `ext_agent_host_id`, chosen before its first sign-in and kept. */
   hostId: string;
   /** The client OpenAI issued at the first sign-in; null until then. */
@@ -135,87 +87,28 @@ interface StoredAccount {
   email: string | null;
   /** The last sign-in's ID token, sent back as `id_token_hint`; dropped at sign-out. */
   idToken: string | null;
-  tokens: StoredTokens | null;
-  /** Why there are no tokens: the User signed out, or a refresh failed. */
-  ended: "signed-out" | "expired" | null;
   /** The last sign-in didn't allow plan use, so the next one asks for consent again. */
   planRefused: boolean;
 }
 
-const text = (value: unknown) => (typeof value === "string" && value !== "" ? value : null);
-
-function parseStored(json: string | null): StoredAccount | null {
-  if (!json) return null;
-  try {
-    const value: unknown = JSON.parse(json);
-    if (typeof value !== "object" || value === null) return null;
-    const record = value as Record<string, unknown>;
-    const hostId = text(record.hostId);
-    if (!hostId) return null;
-    const tokens = record.tokens as Record<string, unknown> | null | undefined;
-    const accessToken = tokens ? text(tokens.accessToken) : null;
-    return {
-      hostId,
-      clientId: text(record.clientId),
-      subject: text(record.subject),
-      email: text(record.email),
-      idToken: text(record.idToken),
-      tokens:
-        tokens && accessToken && typeof tokens.expiresAt === "number"
-          ? {
-              accessToken,
-              refreshToken: text(tokens.refreshToken),
-              expiresAt: tokens.expiresAt,
-            }
-          : null,
-      ended:
-        record.ended === "expired"
-          ? "expired"
-          : record.ended === "signed-out"
-            ? "signed-out"
-            : null,
-      planRefused: record.planRefused === true,
-    };
-  } catch {
-    return null;
-  }
-}
-
-function toTokens(tokens: OAuthTokens, previous: StoredTokens | null, now: number): StoredTokens {
+function parseStored(record: Record<string, unknown>): StoredAccount | null {
+  const hostId = nonEmptyText(record.hostId);
+  if (!hostId) return null;
   return {
-    accessToken: tokens.accessToken,
-    // A refresh that doesn't rotate the refresh token keeps the old one.
-    refreshToken: tokens.refreshToken ?? previous?.refreshToken ?? null,
-    expiresAt: now + (tokens.expiresIn ?? ASSUMED_LIFETIME_MS / 1000) * 1000,
+    ...parseAccountRecord(record),
+    hostId,
+    clientId: nonEmptyText(record.clientId),
+    subject: nonEmptyText(record.subject),
+    email: nonEmptyText(record.email),
+    idToken: nonEmptyText(record.idToken),
+    planRefused: record.planRefused === true,
   };
 }
-
-/** What a refresh refusal means: the token is unusable, the client is gone, or it may pass. */
-function refusal(error: unknown): "unusable" | "client-gone" | "passing" {
-  if (!(error instanceof OAuthTokenError) || error.status === null) return "passing";
-  if (error.code === "invalid_client") return "client-gone";
-  if (error.code && UNUSABLE_REFRESH.has(error.code)) return "unusable";
-  // A refusal without a known code: only an overloaded or slow server is worth waiting for.
-  const { status } = error;
-  return status >= 400 && status < 500 && status !== 408 && status !== 429 ? "unusable" : "passing";
-}
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export type ChatGptAccountState =
   | { state: "signed-out" }
   | { state: "expired" }
   | { state: "signed-in"; email: string | null };
-
-export interface ChatGptCredentials {
-  /**
-   * A current access token, refreshed first when it is about to expire.
-   * `rejected` is a token the API refused: if it is still the current one, it
-   * is refreshed even so. Throws `ChatGptSignInRequiredError` when there is no
-   * sign-in or it can't be refreshed.
-   */
-  access(options?: { rejected?: string }): Promise<{ accessToken: string }>;
-}
 
 export function createChatGptSignIn(options: {
   endpoints: ChatGptSignInEndpoints;
@@ -231,143 +124,57 @@ export function createChatGptSignIn(options: {
   onChange: () => void;
   fetch?: typeof globalThis.fetch;
 }) {
-  const { endpoints, secrets, now, onChange } = options;
-  const lock = options.refreshLock ?? NO_LOCK;
+  const { endpoints, now } = options;
   const jwks = createJwks(endpoints.jwksUrl, options.fetch);
 
-  /** Bumped by every sign-in and sign-out, so a refresh that finishes afterwards changes nothing. */
-  let generation = 0;
-  let refreshing: Promise<StoredAccount> | null = null;
-  let running: {
-    controller: AbortController;
-    done: Promise<unknown>;
-    /** The address the browser was last sent to, for opening the page again. */
-    pageUrl?: string;
-  } | null = null;
-  let pasteRedirect: LoopbackRedirect["paste"] | null = null;
-  let signingOut = false;
-
-  const load = async () => parseStored(await secrets.tryGet(ACCOUNT_SECRET));
-  const save = (account: StoredAccount) => secrets.set(ACCOUNT_SECRET, JSON.stringify(account));
-
-  const expire = async (from: number, account: StoredAccount, clientGone: boolean) => {
-    if (from !== generation) return;
-    generation += 1;
-    await save({
-      ...account,
-      // A client OpenAI no longer knows can't be signed in with again: the next sign-in registers anew.
-      ...(clientGone && { clientId: null, subject: null, idToken: null }),
-      tokens: null,
-      ended: "expired",
+  const revoke = (clientId: string, refreshToken: string) =>
+    revokeRefreshToken({
+      revokeUrl: endpoints.revokeUrl,
+      clientId,
+      refreshToken,
+      provider: "OpenAI",
+      ...(options.fetch && { fetch: options.fetch }),
     });
-    onChange();
-  };
 
-  const isStale = (tokens: StoredTokens) => tokens.expiresAt - now() <= REFRESH_WINDOW_MS;
-
-  /** One refresh at a time: everyone who needs a fresh token while it runs waits for it. */
-  const refresh = (current: StoredAccount, rejected?: string): Promise<StoredAccount> => {
-    if (refreshing) return refreshing;
-    const from = generation;
-    const run = lock.run(async () => {
-      // Another process sharing the store may have refreshed while this one waited for the lock.
-      const latest = (await load()) ?? current;
-      const tokens = latest.tokens;
-      if (!tokens || !latest.clientId) {
-        throw new ChatGptSignInRequiredError(latest.ended === "expired" ? "expired" : "signed-out");
+  const account = createOAuthAccount<StoredAccount>({
+    secretName: ACCOUNT_SECRET,
+    secrets: options.secrets,
+    parse: parseStored,
+    ...(options.refreshLock && { refreshLock: options.refreshLock }),
+    browser: options.browser,
+    pages: options.pages,
+    signInTimeoutMs: endpoints.signInTimeoutMs,
+    now,
+    renew(stored, refreshToken, signal) {
+      if (!stored.clientId) {
+        throw new ChatGptSignInRequiredError(stored.ended === "expired" ? "expired" : "signed-out");
       }
-      const replaced = tokens.accessToken !== current.tokens?.accessToken;
-      if (replaced && !isStale(tokens) && tokens.accessToken !== rejected) return latest;
-      if (!tokens.refreshToken) {
-        await expire(from, latest, false);
-        throw new ChatGptSignInRequiredError("expired");
-      }
-      let fresh: OAuthTokens;
-      try {
-        fresh = await refreshOAuthTokens({
-          tokenUrl: endpoints.tokenUrl,
-          clientId: latest.clientId,
-          refreshToken: tokens.refreshToken,
-          // The grant keeps its scopes: `scope` is left out, as OpenAI asks.
-          params: { resource: CHATGPT_PLAN_RESOURCE },
-          signal: AbortSignal.timeout(TOKEN_REQUEST_TIMEOUT_MS),
-          ...(options.fetch && { fetch: options.fetch }),
-        });
-      } catch (error) {
-        const meaning = refusal(error);
-        if (meaning === "passing") throw error;
-        await expire(from, latest, meaning === "client-gone");
-        throw new ChatGptSignInRequiredError("expired");
-      }
-      if (from !== generation) throw new ChatGptSignInRequiredError("signed-out");
-      const next: StoredAccount = { ...latest, tokens: toTokens(fresh, tokens, now()) };
-      // The access token, its expiry and the rotated refresh token are replaced together.
-      await save(next);
-      return next;
-    });
-    refreshing = run;
-    const clear = () => {
-      if (refreshing === run) refreshing = null;
-    };
-    run.then(clear, clear);
-    return run;
-  };
-
-  const credentials: ChatGptCredentials = {
-    async access(request = {}) {
-      // Join a refresh already under way: its result replaces what is stored.
-      const current = refreshing ? await refreshing : await load();
-      if (signingOut || !current?.tokens) {
-        throw new ChatGptSignInRequiredError(
-          current?.ended === "expired" ? "expired" : "signed-out",
-        );
-      }
-      const stale =
-        isStale(current.tokens) ||
-        (request.rejected !== undefined && request.rejected === current.tokens.accessToken);
-      const usable = stale ? await refresh(current, request.rejected) : current;
-      if (!usable.tokens) throw new ChatGptSignInRequiredError("signed-out");
-      return { accessToken: usable.tokens.accessToken };
+      return refreshOAuthTokens({
+        tokenUrl: endpoints.tokenUrl,
+        clientId: stored.clientId,
+        refreshToken,
+        // The grant keeps its scopes: `scope` is left out, as OpenAI asks.
+        params: { resource: CHATGPT_PLAN_RESOURCE },
+        signal,
+        ...(options.fetch && { fetch: options.fetch }),
+      });
     },
-  };
-
-  const cancel = async () => {
-    const current = running;
-    if (!current) return;
-    current.controller.abort();
-    await current.done.catch(() => undefined);
-  };
-
-  /** Ends the session at OpenAI. True once OpenAI confirms; false if it couldn't be confirmed. */
-  const revoke = async (clientId: string, refreshToken: string): Promise<boolean> => {
-    for (let attempt = 0; ; attempt += 1) {
-      try {
-        await revokeOAuthToken({
-          revokeUrl: endpoints.revokeUrl,
-          clientId,
-          token: refreshToken,
-          tokenTypeHint: "refresh_token",
-          signal: AbortSignal.timeout(TOKEN_REQUEST_TIMEOUT_MS),
-          ...(options.fetch && { fetch: options.fetch }),
-        });
-        return true;
-      } catch (error) {
-        // A refusal won't change by asking again; a server or network failure might.
-        const passing =
-          !(error instanceof OAuthTokenError) || error.status === null || error.status >= 500;
-        const wait = REVOKE_RETRIES_MS[attempt];
-        if (!passing || wait === undefined) {
-          console.error("The ChatGPT sign-out couldn't be confirmed by OpenAI.", error);
-          return false;
-        }
-        await sleep(wait);
-      }
-    }
-  };
+    // A client OpenAI no longer knows can't be signed in with again: the next sign-in registers anew.
+    expired: (stored, refusal) =>
+      refusal === "client-gone"
+        ? { ...stored, clientId: null, subject: null, idToken: null }
+        : stored,
+    revoke: (stored, refreshToken) =>
+      stored.clientId ? revoke(stored.clientId, refreshToken) : Promise.resolve(true),
+    forgetOnSignOut: (stored) => ({ ...stored, idToken: null }),
+    signInRequired: (reason) => new ChatGptSignInRequiredError(reason),
+    onChange: options.onChange,
+    ...(options.fetch && { fetch: options.fetch }),
+  });
 
   /** The record to sign in with, a host ID chosen and kept before the first sign-in. */
   const prepare = async (): Promise<StoredAccount> => {
-    const existing = await load();
+    const existing = await account.load();
     if (existing) return existing;
     const fresh: StoredAccount = {
       hostId: `urn:uuid:${randomUUID()}`,
@@ -379,40 +186,38 @@ export function createChatGptSignIn(options: {
       ended: null,
       planRefused: false,
     };
-    await save(fresh);
+    await account.save(fresh);
     return fresh;
   };
 
-  const signInOnce = async (signal: AbortSignal, anotherAccount: boolean) => {
-    const account = await prepare();
-    const registered = anotherAccount ? null : account.clientId;
+  const signInOnce = async (authorize: Authorize, signal: AbortSignal, anotherAccount: boolean) => {
+    const stored = await prepare();
+    const registered = anotherAccount ? null : stored.clientId;
     const nonce = randomBytes(24).toString("base64url");
     /** The client the code is for: the registered one, or the one OpenAI issues now. */
     let clientId = registered;
     let tokens: OAuthTokens;
-    let paste: LoopbackRedirect["paste"] | null = null;
     try {
-      tokens = await authorizeWithLoopback({
+      tokens = await authorize({
         authorizeUrl: endpoints.authorizeUrl,
         tokenUrl: endpoints.tokenUrl,
         clientId: registered ?? DYNAMIC_CLIENT,
         scope: SCOPE,
-        port: 0,
-        path: CALLBACK_PATH,
+        redirect: { kind: "loopback", port: 0, path: CALLBACK_PATH },
         authorizeParams: {
           resource: CHATGPT_PLAN_RESOURCE,
           nonce,
-          ext_agent_host_id: account.hostId,
+          ext_agent_host_id: stored.hostId,
           ...(registered
             ? {
-                ...(account.email && { login_hint: account.email }),
-                ...(account.idToken && account.ended !== "signed-out"
-                  ? { id_token_hint: account.idToken }
+                ...(stored.email && { login_hint: stored.email }),
+                ...(stored.idToken && stored.ended !== "signed-out"
+                  ? { id_token_hint: stored.idToken }
                   : {}),
               }
             : { agent_name_hint: APP_NAME }),
           // Asked again only after the User didn't allow plan use: not on every sign-in.
-          ...(account.planRefused && registered && { prompt: "consent" }),
+          ...(stored.planRefused && registered && { prompt: "consent" }),
         },
         tokenParams: { resource: CHATGPT_PLAN_RESOURCE },
         verify(params) {
@@ -429,27 +234,13 @@ export function createChatGptSignIn(options: {
           }
         },
         exchangeClientId: () => clientId ?? DYNAMIC_CLIENT,
-        openBrowser: (url) => {
-          if (running) running.pageUrl = url;
-          return options.browser.open(url);
-        },
-        onWaiting(waiting) {
-          paste = waiting;
-          pasteRedirect = waiting;
-        },
-        pages: options.pages(),
-        timeoutMs: endpoints.signInTimeoutMs,
-        signal,
-        ...(options.fetch && { fetch: options.fetch }),
       });
     } catch (error) {
       // A registration that went through stays, so the next attempt reuses its client.
       if (!registered && clientId) {
-        await save({ ...account, clientId, subject: null, idToken: null });
+        await account.save({ ...stored, clientId, subject: null, idToken: null });
       }
       throw error;
-    } finally {
-      if (pasteRedirect === paste) pasteRedirect = null;
     }
     const issued = clientId ?? DYNAMIC_CLIENT;
     if (!tokens.idToken) throw new Error("OpenAI's sign-in returned no ID token.");
@@ -466,15 +257,15 @@ export function createChatGptSignIn(options: {
     const abandon = async () => {
       if (tokens.refreshToken) await revoke(issued, tokens.refreshToken);
     };
-    if (registered && account.subject && claims.subject !== account.subject) {
+    if (registered && stored.subject && claims.subject !== stored.subject) {
       await abandon();
-      throw new ChatGptOtherAccountError(account.email);
+      throw new ChatGptOtherAccountError(stored.email);
     }
     const signedIn: StoredAccount = {
-      hostId: account.hostId,
+      hostId: stored.hostId,
       clientId: issued,
       subject: claims.subject,
-      email: claims.email ?? account.email,
+      email: claims.email ?? stored.email,
       idToken: tokens.idToken,
       tokens: null,
       ended: "signed-out",
@@ -483,30 +274,28 @@ export function createChatGptSignIn(options: {
     if (!scopes.includes(PLAN_SCOPE)) {
       // Signed in, but not allowed to use the plan: nothing IncarnaMind could use is kept.
       await abandon();
-      generation += 1;
-      await save({ ...signedIn, planRefused: true });
+      await account.commit({ ...signedIn, planRefused: true });
       throw new ChatGptPlanNotAllowedError();
     }
-    generation += 1;
-    await save({ ...signedIn, tokens: toTokens(tokens, null, now()), ended: null });
+    await account.commit({ ...signedIn, tokens: account.storedTokens(tokens, null), ended: null });
     return { firstTime: registered === null };
   };
 
   return {
-    credentials,
+    credentials: account.credentials,
 
     async account(): Promise<ChatGptAccountState> {
-      const stored = await load();
+      const stored = await account.load();
       if (stored?.tokens) return { state: "signed-in", email: stored.email };
       return stored?.ended === "expired" ? { state: "expired" } : { state: "signed-out" };
     },
 
-    hasSignIn: async () => (await load())?.tokens != null,
+    hasSignIn: async () => (await account.load())?.tokens != null,
 
     /** Whether this device has signed in with ChatGPT, or is signing in: its traffic can happen. */
-    used: async () => running !== null || (await load())?.clientId != null,
+    used: async () => account.signingIn() || (await account.load())?.clientId != null,
 
-    signingIn: () => running !== null,
+    signingIn: account.signingIn,
 
     /**
      * Opens the browser and waits for the User. Starting again cancels a
@@ -515,65 +304,23 @@ export function createChatGptSignIn(options: {
      * `OAuthTokenError`, `IdTokenError`, `SecretStorageError`,
      * `ChatGptPlanNotAllowedError` or `ChatGptOtherAccountError`.
      */
-    async signIn(
-      signInOptions: { anotherAccount?: boolean } = {},
-    ): Promise<{ firstTime: boolean }> {
-      const storage = secrets.status();
-      // Check before the User signs in, not after: the tokens would have nowhere to go.
-      if (!storage.canSave) throw new SecretStorageError(storage.protection);
-      await cancel();
-      const controller = new AbortController();
-      const done = signInOnce(controller.signal, signInOptions.anotherAccount === true);
-      running = { controller, done };
-      onChange();
-      try {
-        return await done;
-      } finally {
-        if (running?.controller === controller) running = null;
-        onChange();
-      }
-    },
+    signIn: (signInOptions: { anotherAccount?: boolean } = {}): Promise<{ firstTime: boolean }> =>
+      account.signIn((authorize, signal) =>
+        signInOnce(authorize, signal, signInOptions.anotherAccount === true),
+      ),
 
-    cancelSignIn: cancel,
+    cancelSignIn: account.cancelSignIn,
 
-    /** Opens the sign-in page again, for a User who closed its tab: true if one is waiting. */
-    async reopenSignInPage(): Promise<boolean> {
-      const url = running?.pageUrl;
-      if (!url) return false;
-      await options.browser.open(url);
-      return true;
-    },
+    reopenSignInPage: account.reopenSignInPage,
 
     /**
      * Stops using the sign-in, ends its session at OpenAI and forgets its
      * tokens; the registration stays for the next sign-in. `revoked` is false
      * when OpenAI couldn't confirm the session ended. Safe when signed out.
      */
-    async signOut(): Promise<{ revoked: boolean }> {
-      await cancel();
-      generation += 1;
-      signingOut = true;
-      try {
-        const stored = await load();
-        if (!stored?.tokens) return { revoked: true };
-        const { clientId } = stored;
-        const { refreshToken } = stored.tokens;
-        const revoked = clientId && refreshToken ? await revoke(clientId, refreshToken) : true;
-        await save({ ...stored, tokens: null, idToken: null, ended: "signed-out" });
-        return { revoked };
-      } finally {
-        signingOut = false;
-        onChange();
-      }
-    },
+    signOut: account.signOut,
 
-    /**
-     * The address the browser ended on, pasted when it couldn't come back to
-     * IncarnaMind: the waiting sign-in goes on with it as with the browser's
-     * own redirect (see `LoopbackRedirect.paste`). "finished" when no
-     * sign-in is waiting.
-     */
-    pasteAddress: (text: string): PastedRedirect => pasteRedirect?.(text) ?? "finished",
+    pasteAddress: account.pasteAddress,
   };
 }
 
