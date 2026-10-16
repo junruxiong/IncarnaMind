@@ -370,6 +370,22 @@ function named(elements: readonly Y.XmlElement[], wanted: string): Y.XmlElement[
 
 const isHeading = (element: Y.XmlElement | undefined) => element?.nodeName === "heading";
 
+// Fewer words than this could start several paragraphs.
+const MIN_FIRST_WORDS = 12;
+
+/** The one paragraph (not a heading) that starts with `wanted`; none for a start too short or shared. */
+function paragraphNamed(
+  elements: readonly Y.XmlElement[],
+  wanted: string,
+): Y.XmlElement | undefined {
+  const key = nameKey(wanted);
+  if (key.length < MIN_FIRST_WORDS) return undefined;
+  const found = elements.filter(
+    (element) => !isHeading(element) && nameKey(plainText(element)).startsWith(key),
+  );
+  return found.length === 1 ? found[0] : undefined;
+}
+
 /** The stretch of a Mind `edit_mind` changes, from one paragraph or heading to another. */
 interface Stretch {
   from: TextPlace;
@@ -396,14 +412,22 @@ function stretchOf(
       return { why: severalNamed(all, matches, part, "part", language), kind: "several-places" };
     }
     const heading = matches[0];
-    if (!heading) return { why: `there is no heading “${part}” in it`, kind: "no-heading" };
-    const start = all.indexOf(heading);
-    const level = levelOf(heading);
-    const end = all.findIndex(
-      (element, index) =>
-        index > start && element.nodeName === "heading" && levelOf(element) <= level,
-    );
-    chosen = all.slice(start, end < 0 ? all.length : end);
+    if (heading) {
+      const start = all.indexOf(heading);
+      const level = levelOf(heading);
+      const end = all.findIndex(
+        (element, index) =>
+          index > start && element.nodeName === "heading" && levelOf(element) <= level,
+      );
+      chosen = all.slice(start, end < 0 ? all.length : end);
+    } else {
+      // Named by its first words, one paragraph changes and the rest stay as they are.
+      const paragraph = paragraphNamed(all, part);
+      if (!paragraph) {
+        return { why: `there is no heading or paragraph “${part}” in it`, kind: "no-heading" };
+      }
+      chosen = [paragraph];
+    }
   } else if (selected.length > 0) {
     const ids = new Set(selected);
     const inSelection = (element: Y.XmlElement) => {
@@ -1125,7 +1149,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
   const edit: Tool = {
     name: MIND_TOOLS.edit,
     description:
-      "Change text that is already in a Mind, as the User asks: shorten, lengthen, rewrite, restructure, correct, translate or reword it, or remove part of it. Say what to change in instruction, and the text is rewritten for you, its Citations kept. The rewrite reads only that text: it can't search the Documents or cite anything new, so new facts from the Documents, a table of them too, go in with add_to_mind, cited. Text you proposed that still waits ([waiting change, adds: …]) is revised in place; for it you may give its whole new text as content instead, cited as add_to_mind's, e.g. to add more from the Documents. It arrives in the Mind as changes the User accepts or rejects.",
+      "Change text that is already in a Mind, as the User asks: shorten, lengthen, rewrite, restructure, correct, translate or reword it, or remove part of it. Say what to change in instruction, and the text is rewritten for you, its Citations kept. To change one paragraph and leave the others as they are, name its first words in part. The rewrite reads only that text: it can't search the Documents or cite anything new, so new facts from the Documents, a table of them too, go in with add_to_mind, cited. Text you proposed that still waits ([waiting change, adds: …]) is revised in place; for it you may give its whole new text as content instead, cited as add_to_mind's, e.g. to add more from the Documents. It arrives in the Mind as changes the User accepts or rejects.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1133,7 +1157,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         part: {
           type: "string",
           description:
-            'The heading of the section to change, as written in the Mind. Whenever the User names a section, give its name here alone, also when the Mind has that heading more than once: you are then told how to ask the User which. Only when the User names the heading it is under ("the Summary under Part 2"), put that first: "Part 2 > Summary". Leave it out to change what the User selected, or else the whole Mind.',
+            'The heading of the section to change, as written in the Mind, or the first words of the one paragraph to change. Whenever the User names a section, give its name here alone, also when the Mind has that heading more than once: you are then told how to ask the User which. Only when the User names the heading it is under ("the Summary under Part 2"), put that first: "Part 2 > Summary". Leave it out to change what the User selected, or else the whole Mind.',
         },
         instruction: {
           type: "string",

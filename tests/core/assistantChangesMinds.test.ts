@@ -363,6 +363,38 @@ describe("The Minds' Tools find what the model names", { timeout: 30_000 }, () =
     ]);
   });
 
+  // protects=edit_mind with a paragraph's first words changes that paragraph only, even with the whole Mind selected; fails_when=the others are rewritten too; no_claim=that a model names it.
+  test("a paragraph named by its first words is all that changes, the whole Mind selected", async () => {
+    const model = toolModel(
+      {
+        tool: "edit_mind",
+        input: { part: "Margins were really thin", instruction: "Make it more formal" },
+      },
+      "Done.",
+    );
+    const { core, mind, client } = await setUp(model);
+    writeMind(client, [
+      note("Sales were really strong."),
+      note("Margins were really thin in the north."),
+      note("Hiring was very slow."),
+    ]);
+    await client.settled();
+    const all = [0, 1, 2].map((index) => blockIdAt(client, index));
+
+    await ask(core, {
+      text: "Make the second paragraph more formal",
+      mindId: mind.id,
+      focus: { selection: "everything", blockIds: all },
+    });
+
+    await client.settled();
+    expect(shownWithChanges(client)).toEqual([
+      "Sales were really strong.",
+      "Margins were [-really -]thin in the north.",
+      "Hiring was very slow.",
+    ]);
+  });
+
   // protects=read_mind gives another Mind's text, as the Mind in focus is read; fails_when=the model gets nothing, or the wrong Mind; no_claim=none beyond protects.
   test("read_mind gives the Mind the User names", async () => {
     const model = toolModel({ tool: "read_mind", input: { mind: "“project PLAN”" } }, "Read it.");

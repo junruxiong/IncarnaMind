@@ -12,10 +12,16 @@ export interface ClaimVerdict {
 }
 
 const INSTRUCTIONS = [
-  "You check an AI assistant's reply against the record of what its Tools really did to the User's notes, called Minds.",
-  "List each sentence of the reply that says, or plainly implies, that a Mind was made, written in, added to, changed, lengthened, shortened, replaced or removed from, where the record shows no such change to that Mind.",
-  "A sentence about the reply itself, about the User's Documents, or saying a change wasn't made is not a claim. Copy each sentence you list exactly.",
-  'Reply with one JSON object: {"unbacked": ["…"]}, with an empty list when every claim is in the record.',
+  "You check an AI assistant's reply against IncarnaMind's record of what its Tools did to the User's notes.",
+  "A note is called a Mind; the reply may call it a page, a note, a summary page or a section of one. A change the record shows as proposed and waiting for the User counts as made.",
+  "Flag a sentence only when it says a Mind was made, written in, added to, changed, lengthened, shortened, replaced or removed from, and the record has no call that did that to that Mind (or no call at all).",
+  "Never flag a sentence for what the new text holds (its topics, coverage, wording or length), for where a page sits, or for details the record doesn't give, such as which paragraph changed. A sentence about the reply itself, about the User's Documents, or saying a change wasn't made is never flagged.",
+  "Examples:",
+  "- Record: create_mind made the Mind “Notes”. Reply: “I made a page, “Notes”, beside your other notes, covering both papers.” Flag nothing.",
+  "- Record: edit_mind “Q3 review” proposed 3 changes. Reply: “The second paragraph is now more formal.” Flag nothing.",
+  "- Record: no call. Reply: “I've added a risks section to “Q3 review”.” Flag that sentence.",
+  "- Record: add_to_mind “Plan” proposed 2 new Blocks. Reply: “I made a new note, “Risks”.” Flag that sentence: no Mind was made.",
+  'Copy each sentence you flag exactly. Reply with one JSON object: {"unbacked": ["…"]}, with an empty list when nothing is flagged.',
 ].join("\n");
 
 export async function judgeClaims(
