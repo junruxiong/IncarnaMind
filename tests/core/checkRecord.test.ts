@@ -389,6 +389,46 @@ describe("The check record as CSV", () => {
     );
   });
 
+  test("a quote a PDF's line end cut at a hyphen is listed as whole words", async () => {
+    const setup = await setUp();
+    const sources = await createTempDataFolder();
+    const [harbour] = (await addAndProcess(setup.core, [
+      await writeSourceFile(
+        sources,
+        "Harbour.txt",
+        "The committee will review the case for the exist-\nence of tides near the pier.",
+      ),
+    ])) as [Document];
+    writeMind(setup.client, [
+      paragraph(
+        randomUUID(),
+        text("The committee will review the case"),
+        {
+          type: "citation",
+          attrs: {
+            passageId: "passage-2",
+            documentId: harbour.id,
+            documentName: "Harbour",
+            contentHash: harbour.contentHash,
+            pageFrom: 1,
+            pageTo: 1,
+            quote: "The committee will review the case for the exist-",
+            check: "found",
+            checkReason: null,
+          },
+        },
+        text("."),
+      ),
+    ]);
+    await setup.client.settled();
+
+    const csv = readFileSync((await saveRecord(setup, "csv")).path, "utf8");
+
+    expect(rowsOf(csv).map((row) => row.Quote)).toEqual([
+      "The committee will review the case for the existence",
+    ]);
+  });
+
   test("in Chinese, the summary, headings, results and file name are Chinese", async () => {
     const setup = await setUp();
     await writeNotes(setup);

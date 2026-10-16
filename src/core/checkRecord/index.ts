@@ -7,12 +7,14 @@ import type * as Y from "yjs";
 import { translate } from "../../shared/i18n";
 import { mindName } from "../../shared/naming";
 import type { PrintPaper } from "../../shared/printDocument";
+import { readableQuoteText } from "../../shared/readableQuote";
 import type { Printer } from "../adapters";
 import {
   type AiUseEntry,
   CHECK_RECORD_FORMATS,
   type ChatProvider,
   type CheckRecordFormat,
+  type CitationAttributes,
   type Document,
   type KeptCitationText,
   type Mind,
@@ -36,6 +38,8 @@ export interface CheckRecordDependencies {
   providers(): Promise<ChatProvider[]>;
   documents(): readonly Document[];
   keptCitationTexts(): readonly KeptCitationText[];
+  /** A Citation's quote as its Document's text reads it, or null when the Document or the quote isn't there. */
+  readableQuote(attributes: Partial<CitationAttributes>): string | null;
   /** A Folder's name; null for one that isn't there. */
   folderName(folderId: string): string | null;
   /** Whether Local mode is on. */
@@ -90,6 +94,10 @@ export function createCheckRecord(deps: CheckRecordDependencies) {
         folderId: mind.folderId,
         t,
         model: (providerId, modelId) => describeModel(providers, providerId, modelId),
+        readQuote: (attributes) =>
+          attributes.quote
+            ? (deps.readableQuote(attributes) ?? readableQuoteText(attributes.quote))
+            : null,
       }),
     );
     const named = new Set<string>();
