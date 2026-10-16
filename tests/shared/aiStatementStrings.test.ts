@@ -52,6 +52,24 @@ const everything: AiUseFigures = {
       checkedAt: "2026-10-13T09:00:00.000Z",
     },
   ],
+  unread: [
+    {
+      id: "contract",
+      name: "合同.doc",
+      reason: "format",
+      extension: ".doc",
+      documentId: null,
+      pages: [],
+    },
+    {
+      id: "scan",
+      name: "Scan.pdf",
+      reason: "scan",
+      extension: null,
+      documentId: "scan",
+      pages: [],
+    },
+  ],
 };
 const nothing: AiUseFigures = {
   uses: [],
@@ -61,6 +79,7 @@ const nothing: AiUseFigures = {
   citations: { found: 0, notFound: 0, cantCheck: 0, unsupported: 0, contradicted: 0, checking: 0 },
   sentences: { supported: 0, unsupported: 0, contradicted: 0, needsRecheck: 0, notChecked: 0 },
   checked: [],
+  unread: [],
 };
 const FIGURES = { everything, nothing };
 

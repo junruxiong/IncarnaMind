@@ -3,6 +3,7 @@ import {
   type CSSProperties,
   type KeyboardEvent,
   memo,
+  type ReactNode,
   useCallback,
   useContext,
   useEffect,
@@ -105,7 +106,19 @@ function pageIndexAt(elements: readonly (HTMLElement | null)[], y: number): numb
  * highlights the quote if those pages contain it. A PDF with an outline
  * (bookmarks) can show it in a panel beside the pages.
  */
-export function PdfView({ document, target }: { document: Document; target: ViewerTarget }) {
+export function PdfView({
+  document,
+  target,
+  source,
+  banner,
+}: {
+  document: Document;
+  target: ViewerTarget;
+  /** Another PDF the Document serves, instead of its file: a web page's look. */
+  source?: string;
+  /** Under the toolbar, whatever the PDF's state. */
+  banner?: ReactNode;
+}) {
   const t = useT();
   const [loaded, setLoaded] = useState<Loaded>({ kind: "loading" });
   /** Counts the times it was unlocked, to open it again. */
@@ -117,7 +130,7 @@ export function PdfView({ document, target }: { document: Document; target: View
     let task: PDFDocumentLoadingTask | undefined;
     /** Opens the PDF; a locked one with the password the core keeps for it, asked for only then. */
     const open = async (pdfjs: PdfJs): Promise<PDFDocumentProxy | null> => {
-      task = openPdf(pdfjs, document.id);
+      task = openPdf(pdfjs, document.id, source);
       try {
         return await task.promise;
       } catch (error) {
@@ -125,7 +138,7 @@ export function PdfView({ document, target }: { document: Document; target: View
         const password = await core.documentPasswordFor(document.id);
         if (cancelled || password === null) return null;
         await task.destroy();
-        task = openPdf(pdfjs, document.id, password);
+        task = openPdf(pdfjs, document.id, source, password);
         return await task.promise;
       }
     };
@@ -158,13 +171,14 @@ export function PdfView({ document, target }: { document: Document; target: View
       cancelled = true;
       void task?.destroy();
     };
-  }, [document.id, unlocked]);
+  }, [document.id, source, unlocked]);
 
   switch (loaded.kind) {
     case "loading":
       return (
         <>
           <ViewerHeader />
+          {banner}
           <ViewerMessage>{t("viewer.loading")}</ViewerMessage>
         </>
       );
@@ -172,6 +186,7 @@ export function PdfView({ document, target }: { document: Document; target: View
       return (
         <>
           <ViewerHeader openable={false} />
+          {banner}
           <FileGone quote={target.quote} />
         </>
       );
@@ -192,6 +207,7 @@ export function PdfView({ document, target }: { document: Document; target: View
       return (
         <>
           <ViewerHeader />
+          {banner}
           <ViewerMessage tone="error">
             {t("viewer.failed", { message: loaded.message })}
           </ViewerMessage>
@@ -205,6 +221,7 @@ export function PdfView({ document, target }: { document: Document; target: View
           pdf={loaded.pdf}
           firstPage={loaded.firstPage}
           target={target}
+          banner={banner}
         />
       );
   }
@@ -216,6 +233,7 @@ interface PdfPagesProps {
   pdf: PDFDocumentProxy;
   firstPage: PageSize;
   target: ViewerTarget;
+  banner: ReactNode;
 }
 
 /** Whether each PDF's text lost its f-ligatures, read once per PDF, all its pages (see `lostLigatures`). */
@@ -238,7 +256,7 @@ function lostLigaturesOf(pdf: PDFDocumentProxy): Promise<boolean> {
   return known;
 }
 
-function PdfPages({ document, pdfjs, pdf, firstPage, target }: PdfPagesProps) {
+function PdfPages({ document, pdfjs, pdf, firstPage, target, banner }: PdfPagesProps) {
   const pageCount = pdf.numPages;
   // A scanned page's text was read from its picture (#397): it is laid over the picture.
   const scanned = useScannedPages(document);
@@ -632,6 +650,7 @@ function PdfPages({ document, pdfjs, pdf, firstPage, target }: PdfPagesProps) {
           }}
         />
       </ViewerHeader>
+      {banner}
       <UnreadPagesLine document={document} />
       <div className="flex min-h-0 flex-1">
         {hasOutline && outlineOpen && (

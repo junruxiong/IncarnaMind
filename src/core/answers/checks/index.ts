@@ -11,7 +11,8 @@
  *    it was made from: the sentence's text, the Document versions it read
  *    and the scope, so it shows "needs re-check" once any of them changes
  *    (src/shared/claimChecks.ts). A mark whose sentence was deleted meanwhile
- *    is simply gone.
+ *    is simply gone. What the scope couldn't read as the request started is
+ *    kept beside the Mind's Blocks, by request (src/shared/unreadFiles.ts).
  *
  * The evidence of a Mind's checks is retained (#79) under the Mind, so its
  * text stays for the cards and "Add as Citation" after the Document changes.
@@ -26,6 +27,7 @@ import { randomUUID } from "node:crypto";
 import type * as Y from "yjs";
 import { type LiveDocument, withShownName } from "../../../shared/citations";
 import { judgesUnreliably } from "../../../shared/smallModel";
+import { recordCheckUnread } from "../../../shared/unreadFiles";
 import {
   type ChatModelChoice,
   type ChatReadiness,
@@ -46,6 +48,7 @@ import {
   type SearchScope,
   type TextPlace,
   type TextStretch,
+  type UnreadFile,
 } from "../../api";
 import type { Consent } from "../../consent";
 import type { Evidence } from "../../documents/evidence";
@@ -85,6 +88,7 @@ export interface ChecksOptions
     | "readText"
     | "createMind"
     | "recordAiUse"
+    | "unread"
   > {
   /** The interface language: what a check's sentence is written in. */
   language(): Language;
@@ -333,19 +337,25 @@ export function createChecks(options: ChecksOptions) {
     });
   }
 
+  function recordUnread(blocks: Y.XmlFragment, request: string, files: readonly UnreadFile[]) {
+    if (!blocks.doc) return;
+    const requests = new Set(markedSentences(blocks).map(({ check }) => check.request));
+    recordCheckUnread(blocks.doc, request, files, requests);
+  }
+
   /** Where a Mind's sentences are checked: its Folder, or every Document. */
   function scopeOf(mindId: string, allDocuments: boolean, checked?: CheckedDocument) {
     const folderId = options.mindFolder(mindId);
     const marked: ClaimCheckScope = { folderId, widened: allDocuments };
-    const searched =
+    const wanted: SearchScope | null =
       allDocuments || folderId === null
         ? null
-        : options.resolveScope({ folderIds: [folderId], tagIds: [], documentIds: [] });
-    const scope = options.evidence.scope(searched, checked);
+        : { folderIds: [folderId], tagIds: [], documentIds: [] };
+    const scope = options.evidence.scope(wanted && options.resolveScope(wanted), checked);
     return {
       searchable: options.documents.searchableCount(scope.documentIds),
       folderId: allDocuments ? null : folderId,
-      check: { scope, marked },
+      check: { scope, marked, wanted },
     };
   }
 
@@ -369,12 +379,13 @@ export function createChecks(options: ChecksOptions) {
     if (read.sentences.length === 0) return { kind: "waiting", waiting: read.waiting };
 
     const startedAt = options.now().toISOString();
+    const unread = options.unread(check.wanted);
     let { waiting } = read;
     const queued = content.edit(mindId, (blocks: Y.XmlFragment) => {
       const again = selectedSentences(blocks, stretches);
       if (!again.ok) return [];
       waiting = again.waiting;
-      return again.sentences.map((sentence) => {
+      const marked = again.sentences.map((sentence) => {
         const check: ClaimCheckAttributes = {
           id: randomUUID(),
           request: input.requestId,
@@ -401,6 +412,8 @@ export function createChecks(options: ChecksOptions) {
           cited: sentence.cited,
         };
       });
+      if (marked.length > 0) recordUnread(blocks, input.requestId, unread);
+      return marked;
     });
     if (queued.length === 0) {
       return waiting.sentences.length > 0 ? { kind: "waiting", waiting } : { kind: "nothing" };
@@ -489,6 +502,7 @@ export function createChecks(options: ChecksOptions) {
     claimCheck,
     withResult,
     retainEvidence,
+    recordUnread,
     settleStopped,
     track,
   });
@@ -498,6 +512,7 @@ export function createChecks(options: ChecksOptions) {
     documentVersions: options.watch.documentVersions,
     prepare,
     scopeOf: (mindId, allDocuments) => scopeOf(mindId, allDocuments),
+    recordUnread,
     isRunning: (requestId) => running.has(requestId),
     claimCheck,
     withResult,

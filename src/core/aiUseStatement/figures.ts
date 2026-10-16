@@ -3,7 +3,8 @@
  * already records and nothing else: the AI use record (`ai_use`, #292) for the
  * models and what became of each insertion, the AI text marks in the Mind's
  * text (#95), its Answers' models and Tool calls, and the results of its
- * Citation checks and sentence checks (#96). A figure none of these holds is
+ * Citation checks and sentence checks (#96), with the files those checks
+ * couldn't read when they started. A figure none of these holds is
  * not here, and nothing is estimated.
  */
 import * as Y from "yjs";
@@ -12,6 +13,7 @@ import { type ClaimCheckShown, claimCheckShown } from "../../shared/claimChecks"
 import { readProposalAttribute } from "../../shared/proposals";
 import { comparableSentence } from "../../shared/sentences";
 import { toolCallsOf } from "../../shared/toolCalls";
+import { checkUnreadOf } from "../../shared/unreadFiles";
 import { countFor, countText, firstWords } from "../../shared/wordCount";
 import { isEdited, textAttribute } from "../answers/blocks";
 import { checkedSentences } from "../answers/checks/sentences";
@@ -24,6 +26,7 @@ import {
   type KeptCitationText,
   PROPOSAL_ATTRIBUTE,
   QUESTION_BLOCK,
+  type UnreadFile,
 } from "../api";
 import {
   type Block,
@@ -136,6 +139,7 @@ export interface AiUseFigures {
   citations: CitationCounts;
   sentences: SentenceCounts;
   checked: CheckedSentence[];
+  unread: UnreadFile[];
 }
 
 export interface FigureSources {
@@ -329,7 +333,9 @@ export function readFigures(sources: FigureSources): AiUseFigures {
   };
   const versions = new Map(documents.map((document) => [document.id, document.contentHash]));
   const checked: CheckedSentence[] = [];
+  const requests: string[] = [];
   for (const { check, sentence } of checkedSentences(fragment)) {
+    requests.push(check.request);
     const shown = claimCheckShown(check, { text: sentence, versions, folderId: sources.folderId });
     const result = resultOf(shown);
     if (!result) continue;
@@ -363,5 +369,6 @@ export function readFigures(sources: FigureSources): AiUseFigures {
     citations,
     sentences,
     checked,
+    unread: fragment.doc ? checkUnreadOf(fragment.doc, requests) : [],
   };
 }

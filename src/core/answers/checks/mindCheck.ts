@@ -41,6 +41,8 @@ export interface MindCheckOptions extends RunChecksOptions {
   content: Pick<MindContent, "read" | "edit" | "readSettings" | "editSettings">;
   defaultModel(): ChatModelChoice | null;
   prepare: VerifyOptions["prepare"];
+  unread: VerifyOptions["unread"];
+  recordUnread: VerifyOptions["recordUnread"];
   /** Where the Mind's sentences are checked: no Documents, or how many, and the scope. */
   scopeOf(
     mindId: string,
@@ -169,15 +171,16 @@ export function createMindCheck(options: MindCheckOptions) {
     }
 
     const startedAt = options.now().toISOString();
+    const unread = options.unread(scope.wanted);
     // The User may have written on while the model named the claims: each is found again by its words.
     const queued = content.edit(mindId, (blocks) => {
       const now = everySentence(blocks);
-      return claims.flatMap((claim): QueuedClaim[] => {
+      const marked = claims.flatMap((claim): QueuedClaim[] => {
         const sentence = now.find(
           (each) => each.blockId === claim.blockId && each.text === claim.text,
         );
         if (!sentence) return [];
-        const marked: ClaimCheckAttributes = {
+        const mark: ClaimCheckAttributes = {
           id: randomUUID(),
           request: requestId,
           action: "check-against-documents",
@@ -195,11 +198,13 @@ export function createMindCheck(options: MindCheckOptions) {
           excluded: [],
           checkedAt: startedAt,
         };
-        markSentence(sentence.element, sentence.from, sentence.to, marked);
+        markSentence(sentence.element, sentence.from, sentence.to, mark);
         return [
-          { id: marked.id, claim: sentence.text, context: sentence.context, cited: sentence.cited },
+          { id: mark.id, claim: sentence.text, context: sentence.context, cited: sentence.cited },
         ];
       });
+      if (marked.length > 0) options.recordUnread(blocks, requestId, unread);
+      return marked;
     });
 
     const { checked, stop } = await runChecks(options, {

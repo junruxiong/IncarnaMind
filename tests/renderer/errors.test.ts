@@ -154,10 +154,12 @@ describe("a provider's error", () => {
   test("says its wording in the interface language, and its message when the core gave none", () => {
     const worded = {
       kind: "unknown",
-      message: "Cloud classification is paused in local mode.",
+      message: "Cloud classification is paused while “Keep everything on this computer” is on.",
       wording: { key: "error.tagging.cloudPaused" },
     } as const;
-    expect(providerErrorText(worded, words("zh-CN"))).toBe("本地模式下，云端分类已暂停。");
+    expect(providerErrorText(worded, words("zh-CN"))).toBe(
+      "开启“所有内容都留在这台电脑上”时，云端分类会暂停。",
+    );
     expect(providerErrorText(worded, english)).toBe(worded.message);
     const plain = { kind: "rate-limit", message: "Too many requests" } as const;
     expect(providerErrorText(plain, words("zh-CN"))).toBe("Too many requests");

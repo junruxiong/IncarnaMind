@@ -38,6 +38,7 @@ export type {
   LogValue,
   ModelFile,
   OllamaApp,
+  PageLook,
   PagePicture,
   Paths,
   Pictures,
