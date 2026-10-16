@@ -10,44 +10,46 @@ const linkClass = `${hintClass} mt-0 underline`;
  * field, and keeps the steps and the key page in the disclosure.
  */
 export function KeyHelp({
-  provider,
+  catalog,
   keyUrl,
-  name,
+  provider,
   firstRun,
 }: {
-  provider: CatalogProvider;
+  catalog: CatalogProvider;
   keyUrl: string | undefined;
-  name: string;
+  /** Its name, as the interface says it. */
+  provider: string;
   firstRun: boolean;
 }) {
   const t = useT();
   const words = useLanguage() === "zh-CN" ? "zh" : "en";
-  const notes = (provider.notes ?? []).map((note) => (
+  const notes = (catalog.notes ?? []).map((note) => (
     <span key={note.en} data-testid="provider-note" className={hintClass}>
       {note[words]}
     </span>
   ));
-  const plan = provider.planCredits && (
+  const plan = catalog.planCredits && (
     <span data-testid="provider-plan-credits" className={hintClass}>
-      {provider.planCredits[words]}{" "}
-      <a href={provider.planCredits.url} target="_blank" rel="noreferrer" className="underline">
+      {catalog.planCredits[words]}{" "}
+      <a href={catalog.planCredits.url} target="_blank" rel="noreferrer" className="underline">
         {t("providers.form.details")} ↗
       </a>
     </span>
   );
-  const steps = provider.keyGuide ?? [];
+  const aboveHelp =
+    !firstRun && (notes.length > 0 || plan) ? (
+      <div className="flex flex-col">
+        {notes}
+        {plan}
+      </div>
+    ) : null;
+  const steps = catalog.keyGuide ?? [];
   if (!keyUrl && steps.length === 0 && (!firstRun || (notes.length === 0 && !plan))) {
-    return (
-      <>
-        {!firstRun && notes}
-        {!firstRun && plan}
-      </>
-    );
+    return aboveHelp;
   }
   return (
     <>
-      {!firstRun && notes}
-      {!firstRun && plan}
+      {aboveHelp}
       <details data-testid="provider-key-help" className="group">
         <summary
           data-testid="provider-key-help-toggle"
@@ -79,7 +81,7 @@ export function KeyHelp({
               data-testid="provider-key-link"
               className={linkClass}
             >
-              {t("providers.form.keyPage", { name })} ↗
+              {t("providers.form.keyPage", { provider })} ↗
             </a>
           )}
         </div>

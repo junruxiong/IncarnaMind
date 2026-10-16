@@ -38,8 +38,8 @@ const PROVIDERS = [
     keyUrl: "https://platform.claude.com/settings/keys",
     keyGuide: [
       {
-        en: "Open Get a key and sign in to the Anthropic Console.",
-        zh: "点“获取密钥”，登录 Anthropic Console。",
+        en: "Open Anthropic's key page and sign in to the Anthropic Console.",
+        zh: "打开 Anthropic 的密钥页面，登录 Anthropic Console。",
       },
       {
         en: "Add credit under Billing, or link your Claude Max or Team plan there (see below).",
@@ -112,8 +112,8 @@ const PROVIDERS = [
     keyUrl: "https://platform.openai.com/api-keys",
     keyGuide: [
       {
-        en: "Open Get a key and sign in to the OpenAI platform.",
-        zh: "点“获取密钥”，登录 OpenAI 平台。",
+        en: "Open OpenAI's key page and sign in to the OpenAI platform.",
+        zh: "打开 OpenAI 的密钥页面，登录 OpenAI 平台。",
       },
       {
         en: "Add credit under Billing.",
@@ -174,8 +174,8 @@ const PROVIDERS = [
     keyUrl: "https://aistudio.google.com/apikey",
     keyGuide: [
       {
-        en: "Open Get a key and sign in with your Google account.",
-        zh: "点“获取密钥”，用 Google 账号登录。",
+        en: "Open Google's key page and sign in with your Google account.",
+        zh: "打开 Google 的密钥页面，用 Google 账号登录。",
       },
       {
         en: "Choose Create API key, and a project if it asks.",
@@ -225,8 +225,8 @@ const PROVIDERS = [
     keyUrl: "https://openrouter.ai/settings/keys",
     keyGuide: [
       {
-        en: "Open Get a key and sign in to OpenRouter.",
-        zh: "点“获取密钥”，登录 OpenRouter。",
+        en: "Open OpenRouter's key page and sign in.",
+        zh: "打开 OpenRouter 的密钥页面并登录。",
       },
       {
         en: "Add credit under Credits. One balance pays for every model.",
@@ -340,8 +340,8 @@ const PROVIDERS = [
     keyUrl: "https://platform.deepseek.com/api_keys",
     keyGuide: [
       {
-        en: "Open Get a key and sign up or sign in to the DeepSeek platform.",
-        zh: "点“获取密钥”，注册或登录 DeepSeek 开放平台。",
+        en: "Open DeepSeek's key page and sign up or sign in to the DeepSeek platform.",
+        zh: "打开 DeepSeek 的密钥页面，注册或登录 DeepSeek 开放平台。",
       },
       {
         en: "Top up your balance. API use is paid by what you use.",
@@ -401,8 +401,8 @@ const PROVIDERS = [
     keyUrl: "https://bailian.console.aliyun.com/?tab=model#/api-key",
     keyGuide: [
       {
-        en: "Pick the region of your account above, then open Get a key. A key works only in its own region.",
-        zh: "先在上方选择账号所在的地域，再点“获取密钥”。密钥只在创建它的地域有效。",
+        en: "Pick the region of your account above, then open Qwen's key page. A key works only in its own region.",
+        zh: "先在上方选择账号所在的地域，再打开通义千问的密钥页面。密钥只在创建它的地域有效。",
       },
       {
         en: "Sign in to Model Studio and turn it on if it asks. New accounts may get free use for a while.",
@@ -561,8 +561,8 @@ const PROVIDERS = [
     keyUrl: "https://cloud.siliconflow.cn/account/ak",
     keyGuide: [
       {
-        en: "Pick the region of your account above, then open Get a key.",
-        zh: "先在上方选择账号所在的地域，再点“获取密钥”。",
+        en: "Pick the region of your account above, then open SiliconFlow's key page.",
+        zh: "先在上方选择账号所在的地域，再打开硅基流动的密钥页面。",
       },
       {
         en: "Sign in to SiliconFlow. In mainland China it asks you to verify your identity first.",
