@@ -56,6 +56,8 @@ export interface LaunchOptions {
    * only counts (`ollamaAppOpened`). Without it, the scripted chat model's Ollama always runs.
    */
   ollamaApp?: "installed" | "missing";
+  /** The LM Studio and Unsloth Studio on this computer are never asked: those named here, by catalog id, run and list these models. */
+  localServers?: Record<string, string[]>;
   /**
    * Where crash reports go: a test build offers them only with this, and
    * ignores the DSN a real build is made with. Point it at a local server.
@@ -174,6 +176,7 @@ export async function launchApp(
     fakeChat = false,
     ollama,
     ollamaApp,
+    localServers,
     sentryDsn,
     usageData,
     examples = false,
@@ -202,6 +205,8 @@ export async function launchApp(
   if (ollama) env.OLLAMA_HOST = ollama;
   delete env.INCARNAMIND_TEST_OLLAMA_APP;
   if (ollamaApp) env.INCARNAMIND_TEST_OLLAMA_APP = ollamaApp;
+  delete env.INCARNAMIND_TEST_LOCAL_SERVERS;
+  if (localServers) env.INCARNAMIND_TEST_LOCAL_SERVERS = JSON.stringify(localServers);
   delete env.INCARNAMIND_TEST_SENTRY_DSN;
   delete env.INCARNAMIND_TEST_EXAMPLES;
   delete env.INCARNAMIND_TEST_POSTHOG_KEY;
@@ -1037,6 +1042,17 @@ export async function clickNow(window: Page, target: Locator): Promise<void> {
   await window.mouse.up();
 }
 
+/** How long an Answer may have no words before its line says how long it takes (15 seconds), so a test needn't wait that long. */
+export async function setSilentWaitMs(window: Page, ms: number): Promise<void> {
+  await window.evaluate(
+    (value) =>
+      (globalThis as { incarnamindTestHooks?: TestHooks }).incarnamindTestHooks?.setSilentWaitMs(
+        value,
+      ),
+    ms,
+  );
+}
+
 /** Plays every animation at `speed` (0.2: five times slower), so a test can look, or act, during one. */
 export async function setMotionSpeed(window: Page, speed: number): Promise<void> {
   await window.evaluate(
@@ -1527,6 +1543,32 @@ export async function addToNote(window: Page, answer: Locator): Promise<void> {
   await pointAt(window, answer.getByTestId("assistant-answer-text"));
   await pointAndClick(window, answer.getByTestId("answer-add"));
   await expect(answer.getByTestId("answer-added")).toBeVisible();
+}
+
+export type MindChild = Y.XmlElement | string;
+
+/** A node as the editor stores it in a Mind's Yjs document; strings are its text. */
+export function mindNode(
+  name: string,
+  attributes: Record<string, unknown>,
+  children: MindChild[] = [],
+): Y.XmlElement {
+  const element = new Y.XmlElement(name);
+  for (const [key, value] of Object.entries(attributes)) {
+    element.setAttribute(key, value as string);
+  }
+  element.insert(
+    0,
+    children.map((child) => (typeof child === "string" ? new Y.XmlText(child) : child)),
+  );
+  return element;
+}
+
+/** Blocks as one Yjs update, to apply to a Mind (`applyMindUpdate`), as an edit from another device arrives. */
+export function blocksUpdate(blocks: Y.XmlElement[]): Uint8Array {
+  const doc = new Y.Doc();
+  doc.getXmlFragment("blocks").insert(0, blocks);
+  return Y.encodeStateAsUpdate(doc);
 }
 
 /** A Block of a Mind as Minds held them before Questions went to the assistant (#201). */

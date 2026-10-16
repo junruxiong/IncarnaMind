@@ -146,8 +146,12 @@ export interface CreateMindInput {
  * - 21: a Word file's look (#746): the `wordLook` attribute and the
  *   `wordRun` mark, which an older version's editor would strip. Older
  *   content is version 21 content as it is.
+ * - 22: the assistant's own waiting Blocks a revision replaced, kept in
+ *   `MIND_REVISIONS_FIELD` so rejecting the revision brings them back. An
+ *   older version would reject it and lose them. Older content is version
+ *   22 content as it is.
  */
-export const CONTENT_SCHEMA_VERSION = 21;
+export const CONTENT_SCHEMA_VERSION = 22;
 
 /**
  * The key, in the Mind's settings map (`MIND_SETTINGS_FIELD`), of the content
@@ -356,6 +360,15 @@ export interface ProposalAttribute extends ProposalRef {
  * wrote it.
  */
 export const MIND_PROPOSAL_REQUESTS_FIELD = "proposalRequests";
+
+/**
+ * The name of the Y.Map, beside a Mind's Blocks, that keeps the top-level
+ * Blocks each revision of the assistant's own waiting changes replaced, and
+ * the id of the Block before them, by the revising request: rejecting all of
+ * that request, or writing its Answer again, puts them back as they were
+ * (`restoreRevised`); accepting any of it lets them go.
+ */
+export const MIND_REVISIONS_FIELD = "revisions";
 
 /**
  * What made a request's Proposals: Edit with AI (#93), with what it was asked
@@ -589,8 +602,9 @@ export type ComparisonCellStatus = "waiting" | "writing" | "done" | "failed";
 
 /**
  * Why a cell has no Answer: its Document doesn't answer the Question
- * ("not-found"), has no text to search, was deleted, or is a file
- * IncarnaMind wrote, which checks leave out (#80); or why its model didn't
+ * ("not-found"), has no text to search, was deleted, is a file
+ * IncarnaMind wrote, which checks leave out (#80), or is one the User keeps as
+ * their own workings, which Answers never cite; or why its model didn't
  * write one (a `ProviderErrorKind`). "cost-cap" and "plan-limit" stopped the
  * fill (`RunStop`): the cell wasn't checked.
  */
@@ -599,6 +613,7 @@ export type ComparisonProblem =
   | "nothing-to-search"
   | "source-removed"
   | "left-out"
+  | "not-cited"
   | ProviderErrorKind;
 
 /** Attributes of a comparison table's cell. */
@@ -835,7 +850,31 @@ export interface AnswerToolCall {
   uncalculated?: number;
   /** A Minds' Tool that changed a Mind or made one, once it ended (#202). Absent otherwise. */
   mindChange?: MindChange;
+  /** A Minds' Tool that changed nothing: why, as its card says. Absent otherwise. */
+  mindProblem?: MindProblem;
 }
+
+/**
+ * Why a call of a Minds' Tool changed nothing. "waiting": changes
+ * still wait in the text it was to change, which the assistant can't revise
+ * (someone else's, or the User's own requests), `count` of them in the Mind;
+ * "mixed": its own waiting text sits beside the User's there. "model": the
+ * model failed, as `message` says.
+ */
+export type MindProblem =
+  | { kind: "waiting"; mindId: string; count: number; mixed: boolean }
+  | { kind: "no-mind" }
+  | { kind: "not-found"; name: string }
+  | { kind: "several"; name: string }
+  | { kind: "no-heading"; mindId: string; heading: string }
+  | { kind: "no-place"; mindId: string; place: string }
+  | { kind: "several-places"; mindId: string; name: string }
+  | {
+      kind: "no-text" | "too-long" | "changed" | "content-not-own" | "stopped";
+      mindId: string;
+    }
+  | { kind: "local-mode" | "not-ready" }
+  | { kind: "model"; mindId: string; message: string };
 
 /**
  * Where the assistant writes next in a Mind, as its changes come in (#202):
@@ -862,6 +901,17 @@ export interface MindChange {
   request: string;
   /** How many Proposals it made there. */
   proposals: number;
+  /** How many paragraphs the whole Blocks it wrote hold (a heading or a table holds none). Absent: none. */
+  paragraphs?: number;
+  /**
+   * It revised the assistant's own changes still waiting there: they
+   * are gone, and its request holds the new text and the rest of them.
+   */
+  revised?: true;
+  /** How many Citations the text it wrote there holds. Absent: none, or it rewrote text keeping its own. */
+  cited?: number;
+  /** How many of its text's markers had no Citation recorded, and were left out. Absent: none. */
+  unrecorded?: number;
 }
 
 /** What a call of `read_web_page` came to (see `AnswerToolCall.webPage`). */
@@ -1114,15 +1164,13 @@ export interface WordImportReport {
 /**
  * What a Word file's look holds that a Mind doesn't draw (#735), counted from
  * the document's own formatting: paragraphs, runs and cells shaded;
- * paragraphs with a border; tab stops set; tables with no borders, which
- * place text; and how many text colours (other than black), fonts and sizes
- * it sets.
+ * paragraphs with a border; tab stops set; and how many text colours (other
+ * than black), fonts and sizes it sets.
  */
 export interface WordLayout {
   shading: number;
   borders: number;
   tabStops: number;
-  layoutTables: number;
   colours: number;
   fonts: number;
   sizes: number;
@@ -2221,6 +2269,12 @@ export interface Document {
    * (web pages, Transcripts), which count as evidence as usual.
    */
   ownFile: OwnFile | null;
+  /**
+   * The User keeps it as their own workings: a spreadsheet of figures copied from a
+   * report, with their own ratios. Answers search and read it to understand a Question but
+   * never cite it, and checks never use it as evidence (`setNotCited`).
+   */
+  notCited: boolean;
   /** Where its text came from, when Find sources added it (#296); null for any other Document. */
   found: DocumentFoundSource | null;
   /**
@@ -2256,11 +2310,13 @@ export interface OwnFile {
 /**
  * Why a check leaves a Document out of its evidence (#80):
  * - "own-file": IncarnaMind wrote it (see `OwnFile`). Counting it lets it count.
+ * - "own-workings": the User keeps it as their own workings (`Document.notCited`).
+ *   Never evidence, counted or not, until the User cites it again.
  * - "checked-document": it is the document being checked, an earlier version
  *   of it, or a copy of either (the same content fingerprint, at any path).
  *   Never evidence for that check.
  */
-export type EvidenceExclusion = "own-file" | "checked-document";
+export type EvidenceExclusion = "own-file" | "own-workings" | "checked-document";
 
 /** The document a check verifies (#97, #110): it, its earlier versions and their copies are never its evidence. */
 export interface CheckedDocument {
@@ -3509,6 +3565,11 @@ export interface SaveChatProviderInput {
   endpoint?: string;
   /** Required for "openai-compatible"; optional for "ollama" (Ollama's local port); not allowed otherwise. */
   baseUrl?: string;
+  /**
+   * The value an endpoint's address is built from, for an endpoint that needs
+   * one (an AWS region, a Cloudflare account). Each value is its own provider.
+   */
+  endpointValue?: string;
   /** A new API key. Leave it out to keep the stored one; null removes it. */
   apiKey?: string | null;
   /** The model to make the default, e.g. "gpt-5.4-mini". */
@@ -3521,6 +3582,7 @@ export interface TestChatConnectionInput {
   /** The endpoint to test (see `SaveChatProviderInput`). */
   endpoint?: string;
   baseUrl?: string;
+  endpointValue?: string;
   /** The key to test. Leave it out to test the key stored for the same provider. */
   apiKey?: string;
   modelId: string;
@@ -4329,6 +4391,9 @@ export interface ClaimCheckAttributes {
   reason: ClaimCheckFailure | null;
   /** "failed": the provider's message. */
   detail: string | null;
+  /** The model that checked it; null on a mark made before it was kept. */
+  providerId: string | null;
+  modelId: string | null;
   /** The sentence as it was checked: an inline node as U+FFFC, a line break as "\n". */
   text: string;
   /** "supported" and "contradicted": the Passage that decides it, as a Citation found. */
@@ -4667,7 +4732,28 @@ export interface AnswerSteps {
    * it wrote without markers that match the Passages it read (#760).
    */
   citedAfterChecking?: number;
+  /**
+   * How long, in ms, the Question was with the model before the Answer had
+   * words: its text, or a Mind its Tool call began to change. Absent while
+   * there are none, and for an Answer written before #899.
+   */
+  firstWordMs?: number;
+  /** Its Question asked to check or calculate, so it was written with the larger thinking budget. */
+  careful?: true;
+  /**
+   * The changes its reply says it made to a Mind that none of its Tool calls
+   * made, even once the model was asked again with what they did.
+   * Absent: none.
+   */
+  unbackedClaims?: ClaimedChange[];
 }
+
+/**
+ * The changes an Answer's reply can say it made to a Mind: made one,
+ * added text to one, changed text in one, or removed or replaced text in one.
+ */
+export const CLAIMED_CHANGES = ["made", "added", "changed", "removed"] as const;
+export type ClaimedChange = (typeof CLAIMED_CHANGES)[number];
 
 /** A Tool call of an Answer started, or finished (see `call.status`). */
 export interface AnswerToolCallEvent extends AnswerPlace {
@@ -5380,6 +5466,18 @@ export type OllamaStatus =
       recommendedModel: string;
     };
 
+/** What runs at a local preset's address: `address` is its host and port, `models` the language models it lists. */
+export type LocalServerStatus =
+  | { running: false; address: string }
+  | { running: true; address: string; models: string[] };
+
+export interface DetectLocalServerInput {
+  catalogId: string;
+  apiKey?: string;
+  /** A host and port; the preset's default when left out. */
+  address?: string;
+}
+
 export interface SelectOllamaInput {
   /** Defaults to Ollama's local port. */
   baseUrl?: string;
@@ -5688,6 +5786,8 @@ export const aiUseKinds = [
   "edit-with-ai-accepted",
   /** A comparison table from Compare Documents accepted (#98). */
   "comparison-table-accepted",
+  /** A sentence of the Mind's checked against the Documents (#906). */
+  "sentence-checked",
 ] as const;
 export type AiUseKind = (typeof aiUseKinds)[number];
 
@@ -5713,7 +5813,7 @@ export interface AiUseEntry {
   modelId: string | null;
   /** How much the AI wrote, in characters. */
   characters: number;
-  /** The Blocks it made, by their stable ids; none for a rejected proposal or a suggestion. */
+  /** The Blocks it made, by their stable ids; none for a rejected proposal, a suggestion or a check. */
   blockIds: string[];
   /** When the User accepted or rejected it, ISO 8601 UTC. */
   occurredAt: string;
@@ -6374,10 +6474,18 @@ export interface TagMerge {
 
 /**
  * What a Mind exports to: Markdown, for an archive, or Word (.docx), PDF or HTML, for the
- * deliverable; or a source pack, a PDF of the pages the Mind cites (#134). Formats are listed
- * in the order the options sheet offers them.
+ * deliverable; a source pack, a PDF of the pages the Mind cites (#134); or a web page to share,
+ * an HTML file whose readers open each Citation's quote. Formats are listed in the order the
+ * options sheet offers them.
  */
-export const EXPORT_FORMATS = ["docx", "pdf", "source-pack", "html", "markdown"] as const;
+export const EXPORT_FORMATS = [
+  "docx",
+  "pdf",
+  "source-pack",
+  "html",
+  "share-page",
+  "markdown",
+] as const;
 export type ExportFormat = (typeof EXPORT_FORMATS)[number];
 
 /**
@@ -6390,8 +6498,15 @@ export interface ExportPreferences {
   docx: WordExportPreferences;
   pdf: { includeQuestions: boolean };
   html: { includeQuestions: boolean };
+  "share-page": SharePagePreferences;
   /** How a PDF, an HTML file or Markdown shows someone's changes still waiting (#734). Absent: shown. */
   theirChanges?: TheirChangesShown;
+}
+
+export interface SharePagePreferences {
+  includeQuestions: boolean;
+  citationCards: boolean;
+  checkedLine: boolean;
 }
 
 /**
@@ -6436,10 +6551,19 @@ export interface ExportMindOptions {
   theirChanges?: TheirChangesShown;
   /**
    * Word only: a Citation whose check failed (its quote wasn't found, or its
-   * claim is unsupported or contradicted) gets a comment by IncarnaMind
-   * saying so. Absent: off.
+   * claim is unsupported or contradicted), and a sentence checked
+   * Contradicted, Unsupported or Needs re-check, gets a comment by
+   * IncarnaMind saying so. Absent: off.
    */
   commentFailedChecks?: boolean;
+  /**
+   * A web page to share only: each Citation's marker opens a card with
+   * its quote, the part of its Document around it, and its check. Off, the
+   * file is the HTML export. Absent: on.
+   */
+  citationCards?: boolean;
+  /** A web page to share only: its foot says "Citations checked with IncarnaMind". Absent: off. */
+  checkedLine?: boolean;
 }
 
 /** What exporting a Mind will write, for the User to see before the file is written. */
@@ -6466,12 +6590,24 @@ export interface MindExportPreview {
   theirChanges: number;
 }
 
+/** The sentences an export holds whose check isn't good, by result (`MindExport.sentenceChecks`). */
+export interface SentenceChecksExported {
+  contradicted: number;
+  unsupported: number;
+  needsRecheck: number;
+  /** They went into the file as comments: a Word file, with `commentFailedChecks` on. Otherwise they went out unmarked. */
+  commented: boolean;
+}
+
 /** A Mind exported as a file, for the host to save where the User chooses. */
 export interface MindExport extends MindExportPreview {
   /** The file's contents: UTF-8 text for Markdown and HTML, a ZIP package for .docx, a PDF for PDF and a source pack. */
   data: Uint8Array;
   /** For a Mind imported from a Word file, exported back into it: what it kept and couldn't keep. */
   word: WordExportReport | null;
+  sentenceChecks: SentenceChecksExported;
+  /** Changes still waiting that a Word file holds as tracked changes. */
+  trackedChanges: number;
 }
 
 /** What `saveMindExport` did. */
@@ -6480,7 +6616,8 @@ export type SavedMindExport =
   | ({ status: "saved"; file: SavedFile; word: WordExportReport | null } & Omit<
       MindExportPreview,
       "fileName" | "fromWord" | "theirChanges"
-    >)
+    > &
+      Pick<MindExport, "sentenceChecks" | "trackedChanges">)
   /**
    * Not saved: a Mind imported from Word can't keep something in its file
    * (`WordExportReport.notKept`) the User hasn't accepted (`ExportMindOptions.accept`).
@@ -7292,6 +7429,13 @@ export interface CoreApi {
   /** Stops an Answer of a conversation being written, keeping what it has. */
   stopConversationAnswer(input: ConversationAnswerInput): Promise<void>;
   /**
+   * How many seconds the model of an Answer of a conversation usually takes
+   * before its Answers have words, from its latest ones to a Question of the
+   * same kind (one that asks to check or calculate, or not); null with too
+   * few to say (#899).
+   */
+  usualAnswerWait(answerId: string): Promise<number | null>;
+  /**
    * The conversations that aren't deleted, newest first: all of them, or those of one
    * Folder (`folderId` null: Not in a Folder). Only the assistant's History lists them.
    */
@@ -7684,6 +7828,12 @@ export interface CoreApi {
    * IncarnaMind didn't write.
    */
   setCountedAsEvidence(documentId: string, counted: boolean): Promise<Document>;
+  /**
+   * Keeps a Document as the User's own workings, or with false cites it as any
+   * Document again (see `Document.notCited`): its Undo, and its menu. Returns
+   * it, and "document.status" says so.
+   */
+  setNotCited(documentId: string, notCited: boolean): Promise<Document>;
   /** The built-in embedding model and its download. */
   getEmbeddingModel(): Promise<EmbeddingModelStatus>;
   /**
@@ -8003,6 +8153,8 @@ export interface CoreApi {
 
   /** Looks for Ollama, on its default local port unless another URL is given. */
   detectOllama(input?: { baseUrl?: string }): Promise<OllamaStatus>;
+  /** Looks for a preset's server on this computer at its address, and lists its models. */
+  detectLocalServer(input: DetectLocalServerInput): Promise<LocalServerStatus>;
   /**
    * Opens Ollama's app and waits, for up to twenty seconds, until Ollama answers; resolves with
    * what `detectOllama` then finds. Rejects when the app can't be opened from here.
@@ -8721,6 +8873,7 @@ const methods: Record<CoreApiMethod, true> = {
   regenerateConversationAnswer: true,
   countScopeDocuments: true,
   stopConversationAnswer: true,
+  usualAnswerWait: true,
   listConversations: true,
   getConversation: true,
   searchConversations: true,
@@ -8781,6 +8934,7 @@ const methods: Record<CoreApiMethod, true> = {
   searchPassages: true,
   searchEvidence: true,
   setCountedAsEvidence: true,
+  setNotCited: true,
   getEmbeddingModel: true,
   downloadEmbeddingModel: true,
   getEmbeddingSettings: true,
@@ -8840,6 +8994,7 @@ const methods: Record<CoreApiMethod, true> = {
   getSecretStorage: true,
   acceptPlainTextSecretStorage: true,
   detectOllama: true,
+  detectLocalServer: true,
   openOllama: true,
   selectOllama: true,
   getChatGptPlan: true,
