@@ -40,8 +40,8 @@ export type {
  * the renderer import it.
  */
 import type { CitationForm, CitationStyleId } from "../shared/citationStyles";
-import type { MindStyle } from "../shared/mindStyle";
 import type { FormulaInput, FormulaLiteral, ResultUnit, ShowAs } from "../shared/formula";
+import type { MindStyle } from "../shared/mindStyle";
 import type { TagColour } from "../shared/tagColours";
 import type { Anchor, UnitKind, UnitLabel } from "../shared/units";
 import type { ErrorWording } from "./errors";

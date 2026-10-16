@@ -20,6 +20,9 @@ function report(kind: RendererErrorReport["kind"], reason: unknown): void {
   }
 }
 
+/** Writes an error the window caught, and showed in its own words, to the log. */
+export const logCaught = (reason: unknown): void => report("error", reason);
+
 /**
  * Sends errors nothing in the window caught to the log in the data folder.
  * The main process scrubs them of the User's content before writing them.
