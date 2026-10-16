@@ -4,6 +4,7 @@ import { unbackedClaimKey, waitingProblemOf } from "../../changeProblems";
 import { useT } from "../../i18n";
 import { showWaitingChanges, useWaitingIn } from "../../mindChanges";
 import { useAppStore } from "../../store";
+import { useAnswerLine } from "../../undo";
 import { ProblemLine } from "../ProblemLine";
 
 /**
@@ -67,6 +68,37 @@ export function UnbackedClaimLine({
       }}
     >
       {t(key)}
+    </ProblemLine>
+  );
+}
+
+/**
+ * Under the Answer of a model that can't call Tools, to a request to write
+ * into a Mind or change one: it says nothing was written, and Add to Mind puts
+ * the Answer there, as the Answer's own Add to note does. It goes while the
+ * Answer's added line shows.
+ */
+export function NoMindToolsLine({
+  answerId,
+  onAdd,
+}: {
+  answerId: string;
+  onAdd(button: HTMLElement): void;
+}) {
+  const t = useT();
+  const added = useAnswerLine(answerId);
+  if (added) return null;
+  return (
+    <ProblemLine
+      role="status"
+      testId="answer-no-mind-tools"
+      action={{
+        label: t("answer.noMindTools.add"),
+        testId: "answer-no-mind-tools-add",
+        onClick: (event) => onAdd(event.currentTarget),
+      }}
+    >
+      {t("answer.noMindTools")}
     </ProblemLine>
   );
 }
