@@ -136,6 +136,23 @@ export async function openConversation(conversationId: string, answerId?: string
   }
 }
 
+let readyAsking = false;
+
+export async function askReadyQuestion(): Promise<void> {
+  // A double-click asks it once.
+  if (readyAsking) return;
+  readyAsking = true;
+  try {
+    const { conversationId } = await core.askReadyQuestion();
+    useAppStore.getState().updateGettingStarted({ askedReady: true });
+    await openConversation(conversationId);
+  } catch (error) {
+    report(error);
+  } finally {
+    readyAsking = false;
+  }
+}
+
 /**
  * Asks a Question from the composer in the assistant's conversation (a
  * new one for a new chat): it shows at once, and its Answer streams in there.
