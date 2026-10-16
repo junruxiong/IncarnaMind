@@ -65,7 +65,11 @@ function placeOf(window: Page, text: string, body = RESUME_BODY) {
           width: paragraph.scrollWidth,
           shown: paragraph.clientWidth,
           overflow: getComputedStyle(paragraph).overflowX,
-          pt: Number.parseFloat(getComputedStyle(editor ?? paragraph).fontSize) / size,
+          // The look's point, zoomed to fit the column; in Plain Mind, the writing size's.
+          pt:
+            Number.parseFloat(
+              getComputedStyle(editor ?? paragraph).getPropertyValue("--word-pt"),
+            ) || Number.parseFloat(getComputedStyle(editor ?? paragraph).fontSize) / size,
         };
       }
       return null;
