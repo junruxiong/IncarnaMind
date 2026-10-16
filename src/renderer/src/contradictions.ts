@@ -1,10 +1,10 @@
 /**
  * Contradiction watch (#112), the window's side: "Check for contradictions"
  * (⌘K, the Mind's menu) checks the Mind's cited claims against the other
- * Documents in its Folder. On a model billed per token the line under the
- * Mind's title asks first, with the estimate; otherwise it starts at once.
- * While it runs, the line says so with Stop, as #96's checks do; then it says
- * what it found, or why there was nothing to check.
+ * Documents in its Folder. On a model billed per token the check badge's card
+ * asks first, with the estimate; otherwise it starts at once. While it runs,
+ * the badge says so with Stop, as #96's checks do; then the card says what it
+ * found, or why there was nothing to check.
  */
 import { useEffect, useState } from "react";
 import type * as Y from "yjs";
@@ -52,7 +52,7 @@ function setFor<K extends keyof ContradictionsState>(
 const problemOf = (plan: Exclude<ContradictionCheckPlan, { kind: "ready" }>): CheckProblem =>
   plan.kind === "nothing" ? { kind: "no-cited" } : plan;
 
-/** What the line under the Mind's title shows, if anything. */
+/** What the check badge's card shows of it, if anything. */
 export type ContradictionLineShown =
   | { kind: "asking"; claims: number; estimate: string }
   | { kind: "found"; run: ContradictionCheckOutcome }

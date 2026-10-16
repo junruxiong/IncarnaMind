@@ -692,6 +692,8 @@ export const zhCN = {
   "verify.row.contradicted": "{count} 条与文档矛盾",
   "verify.row.unsupported": "{count} 条无依据",
   "verify.row.notChecked": "{count} 条未核对",
+  "verify.row.recheck.one": "1 条需重新核对",
+  "verify.row.recheck": "{count} 条需重新核对",
   "verify.row.supported": "{count} 条有依据",
   "verify.needLook.one": "1 条需要留意",
   "verify.needLook": "{count} 条需要留意",

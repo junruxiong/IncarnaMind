@@ -7,6 +7,7 @@ import { encryptedOfficeFile } from "../tests/helpers/office";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   askInAssistant,
+  checkCard,
   useLocalChatModel as connectLocalChatModel,
   createDataFolder,
   dismissChatSetup,
@@ -216,24 +217,14 @@ for (const language of ["en", "zh-CN"] as const) {
       window.getByTestId("selection-menu").getByTestId("selection-action-find-support"),
     );
     await expect(window.getByTestId("claim-mark")).not.toHaveAttribute("data-check", "checking");
-    await expect(window.getByTestId("checks-running")).toHaveCount(0);
+    await expect(window.getByTestId("badge-stop")).toHaveCount(0);
 
+    // The badge's card says so, under its rows.
+    const card = await checkCard(window);
     await expect(unread).toContainText(WORDS[language].count);
     await expect(unread.getByTestId("unread-file")).toHaveCount(0);
-    const count = window.getByTestId("mind-count");
-    const shown = unread.getByTestId("checks-unread-show");
-    const showBox = await shown.boundingBox();
-    const countBox = await count.boundingBox();
-    expect(
-      showBox && countBox && showBox.y >= countBox.y && showBox.y < countBox.y + countBox.height,
-    ).toBe(true);
-    await pointAndClick(window, shown);
-    await expectReasons(unread, count, language, app, window, "check");
-    const titleBox = await window.getByTestId("mind-title").boundingBox();
-    const lineBox = await line.boundingBox();
-    const listBox = await unread.getByTestId("checks-unread-list").boundingBox();
-    expect(listBox && titleBox && listBox.y >= titleBox.y + titleBox.height).toBe(true);
-    expect(listBox && lineBox && listBox.y + listBox.height <= lineBox.y).toBe(true);
+    await pointAndClick(window, unread.getByTestId("checks-unread-show"));
+    await expectReasons(unread, card, language, app, window, "check");
     await app.close();
   });
 }
@@ -249,24 +240,17 @@ for (const language of ["en", "zh-CN"] as const) {
       await interceptOpenDialog(app, report);
       await pointAndClick(window, window.getByTestId("plus-menu"));
       await pointAndClick(window, window.getByTestId("plus-verify-document"));
-      const line = window.getByTestId("verify-line");
-      await pointAndClick(window, line.getByTestId("verify-check"));
-      await expect(line.getByTestId("verify-done")).toContainText(
+      await expect(window.getByTestId("check-card").getByTestId("verify-ask")).toBeVisible();
+      const card = await checkCard(window);
+      await pointAndClick(window, card.getByTestId("verify-check"));
+      await expect(card.getByTestId("verify-done")).toContainText(
         language === "en" ? "Checked 1 claim" : "已核对 1 条说法",
       );
 
-      const unread = line.getByTestId("verify-unread");
+      const unread = card.getByTestId("verify-unread");
       await expect(unread).toContainText(WORDS[language].count);
-      const lineBox = await line.boundingBox();
-      const showBox = await unread.getByTestId("verify-unread-show").boundingBox();
-      expect(
-        showBox &&
-          lineBox &&
-          showBox.y >= lineBox.y &&
-          showBox.y + showBox.height <= lineBox.y + lineBox.height,
-      ).toBe(true);
       await pointAndClick(window, unread.getByTestId("verify-unread-show"));
-      await expectReasons(unread, line, language, app, window, "verify");
+      await expectReasons(unread, card, language, app, window, "verify");
       await app.close();
     } finally {
       await removeDataFolder(outside);
@@ -345,6 +329,7 @@ test("nothing shows when everything in scope was read", async () => {
     window.getByTestId("selection-menu").getByTestId("selection-action-find-support"),
   );
   await expect(window.getByTestId("claim-mark")).toHaveCount(1);
+  await expect((await checkCard(window)).getByTestId("mind-health")).toBeVisible();
   await expect(window.getByTestId("checks-unread")).toHaveCount(0);
   await app.close();
 });

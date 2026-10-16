@@ -1,10 +1,10 @@
 /**
  * Check this Mind (#737), the window's side: "Check this Mind" (⌘K, the
- * Mind's menu) checks every sentence that makes a claim; the health line's
- * "Check all" and "Check again" check only what changed. When the model is
- * to name the claims and is billed per token, the line under the Mind's title
- * asks first, with the estimate; otherwise it starts at once. While it runs,
- * the health line counts the claims checked, with Stop.
+ * Mind's menu) checks every sentence that makes a claim; the check badge
+ * card's "Check all" and "Check again" check only what changed. When the
+ * model is to name the claims and is billed per token, the card asks first,
+ * with the estimate; otherwise it starts at once. While it runs, the badge
+ * counts the claims checked, with Stop.
  */
 import { useEffect, useState } from "react";
 import type * as Y from "yjs";

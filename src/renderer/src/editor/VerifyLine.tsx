@@ -42,7 +42,7 @@ export function useVerification(doc: Y.Doc): Verification | null {
   return verification;
 }
 
-type VerifyRow = "contradicted" | "unsupported" | "notChecked" | "supported";
+type VerifyRow = "contradicted" | "unsupported" | "notChecked" | "recheck" | "supported";
 
 /** The checks of the document's sentences: how many there are and are going, and where each state's are. */
 function claimMarks(editor: Editor, pages: Verification["pages"]) {
@@ -53,6 +53,7 @@ function claimMarks(editor: Editor, pages: Verification["pages"]) {
     contradicted: [],
     unsupported: [],
     notChecked: [],
+    recheck: [],
     supported: [],
   };
   for (const claim of shownClaims(editor.state)) {
@@ -64,6 +65,7 @@ function claimMarks(editor: Editor, pages: Verification["pages"]) {
     else if (state === "supported") rows.supported.push(claim.from);
     else if (state === "contradicted") rows.contradicted.push(claim.from);
     else if (state === "unsupported") rows.unsupported.push(claim.from);
+    else if (state === "needs-recheck") rows.recheck.push(claim.from);
     else rows.notChecked.push(claim.from);
   }
   return { marked, checking, rows, coverage: coverageOf(shownClaims(editor.state)) };
@@ -159,12 +161,14 @@ const VERIFY_ROWS: readonly VerifyRow[] = [
   "contradicted",
   "unsupported",
   "notChecked",
+  "recheck",
   "supported",
 ];
 const VERIFY_MARKS: Record<VerifyRow, ClaimMarkState> = {
   contradicted: "contradicted",
   unsupported: "unsupported",
   notChecked: "not-checked",
+  recheck: "needs-recheck",
   supported: "supported",
 };
 
@@ -305,7 +309,7 @@ export function VerifyCard({
       </div>
     );
   } else {
-    const look = marks.rows.contradicted.length + marks.rows.unsupported.length;
+    const look = marks.marked - marks.checking - marks.rows.supported.length;
     const stopped = outcome?.kind === "checked" ? outcome.stop : null;
     const summary = [
       t(marks.marked === 1 ? "verify.checked.one" : "verify.checked", {
@@ -320,13 +324,17 @@ export function VerifyCard({
       <div ref={doneRef} data-testid="verify-done" className="check-rows">
         <p className="check-card-summary">{summary}</p>
         {VERIFY_ROWS.filter((row) => marks.rows[row].length > 0).map((row) => {
-          const text = t(`verify.row.${row}`, { count: format(marks.rows[row].length) });
+          const count = marks.rows[row].length;
+          const text = t(
+            row === "recheck" && count === 1 ? "verify.row.recheck.one" : `verify.row.${row}`,
+            { count: format(count) },
+          );
           return (
             <button
               key={row}
               type="button"
               data-testid={`verify-${row}`}
-              data-count={marks.rows[row].length}
+              data-count={count}
               data-part={row === "supported" ? "found" : row}
               className="check-row"
               aria-label={t("verify.needLook.next", { part: text })}

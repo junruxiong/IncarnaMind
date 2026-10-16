@@ -13,8 +13,9 @@ import { stopVerify } from "../verify";
 import { type Badge, type BadgeInput, badgeOf } from "./badgeState";
 import { ContradictionLine } from "./ContradictionLine";
 import { shownClaims } from "./claimChecks";
+import { HEALTH_PARTS } from "./healthCounts";
 import { CheckMarkIcon, ClaimMarkIcon } from "./icons";
-import { MindCheckAsk } from "./MindCheckLine";
+import { MindCheckAsk, useMindCheckProgress } from "./MindCheckLine";
 import { HealthCard, PartMark, useHealth } from "./NoteHealth";
 import { Popover } from "./Popover";
 import { useVerifyState, VerifyCard } from "./VerifyLine";
@@ -87,12 +88,7 @@ function MindBadge({ editor, doc, mindId }: { editor: Editor; doc: Y.Doc; mindId
       : shownClaims(editor.state).filter((each) => each.check.request === finished).length,
   );
   const input: BadgeInput = {
-    marks: {
-      contradicted: health.contradicted.length,
-      unsupported: health.unsupported.length,
-      notFound: health.notFound.length,
-      notChecked: health.notChecked.length,
-    },
+    marks: Object.fromEntries(HEALTH_PARTS.map((part) => [part, health[part].length])),
     toCheck: health.unchecked.length,
     running: running !== undefined,
     asking: askingMind || askingContradictions,
@@ -130,27 +126,6 @@ function RunningText({ editor, mindId }: { editor: Editor; mindId: string }) {
         : t("badge.checking", { done: format(progress.done), total: format(progress.total) })}
     </span>
   );
-}
-
-function useMindCheckProgress(editor: Editor, requestId: string | null) {
-  const [progress, setProgress] = useState({ done: 0, total: 0 });
-  useEffect(() => {
-    if (requestId === null) return;
-    const count = () => {
-      if (editor.isDestroyed) return;
-      const mine = shownClaims(editor.state).filter((each) => each.check.request === requestId);
-      const done = mine.filter((each) => each.shown.state !== "checking").length;
-      setProgress((last) =>
-        last.done === done && last.total === mine.length ? last : { done, total: mine.length },
-      );
-    };
-    count();
-    editor.on("transaction", count);
-    return () => {
-      editor.off("transaction", count);
-    };
-  }, [editor, requestId]);
-  return progress;
 }
 
 /**
@@ -211,25 +186,27 @@ function VerifyBadge({
   const { rows, marked, checking } = state.marks;
   const checked = useJustChecked(editor, state.running, () => (state.problem ? 0 : marked));
   const toCheck = state.asking ? state.total : 0;
+  // No claims to check, or none found yet: the card says why, so the page isn't silently bare.
+  const nothing = state.running === null && !state.asking && marked === 0;
   const format = (value: number) => new Intl.NumberFormat(language).format(value);
   const input: BadgeInput = {
     marks: {
       contradicted: rows.contradicted.length,
       unsupported: rows.unsupported.length,
-      notFound: 0,
       notChecked: rows.notChecked.length,
+      recheck: rows.recheck.length,
     },
     toCheck,
     running: state.running !== null,
     asking: state.asking,
-    problem: state.problem,
+    problem: state.problem || nothing,
     checked: state.running ? null : checked,
   };
   return (
     <BadgeFrame
       mindId={mindId}
       badge={badgeOf(input)}
-      ask={state.asking || state.problem}
+      ask={input.asking || input.problem}
       running={
         state.running === "finding" ? (
           t("verify.finding")

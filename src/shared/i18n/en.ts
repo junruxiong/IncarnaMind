@@ -719,6 +719,8 @@ export const en = {
   "verify.row.contradicted": "{count} contradicted",
   "verify.row.unsupported": "{count} unsupported",
   "verify.row.notChecked": "{count} not checked",
+  "verify.row.recheck.one": "1 needs re-check",
+  "verify.row.recheck": "{count} need re-check",
   "verify.row.supported": "{count} supported",
   "verify.needLook.one": "1 needs a look",
   "verify.needLook": "{count} need a look",

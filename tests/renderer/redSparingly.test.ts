@@ -23,7 +23,7 @@ const RED_RULES = [
   'src/styles.css .citation-marker &[data-check="contradicted"]',
   'src/styles.css .citation-run &[data-check="contradicted"]',
   "src/styles.css .chart-check--contradicted",
-  'src/styles.css .mind-health-part[data-part="contradicted"] .mind-health-icon',
+  'src/styles.css :is(.check-row, .check-badge-mark)[data-part="contradicted"] .mind-health-icon',
   "src/styles.css .claim-wash--contradicted",
   // The outline of a picture a contradicted quote was read from.
   'src/viewer/viewer.css [data-quote-tone="contradicted"]',
