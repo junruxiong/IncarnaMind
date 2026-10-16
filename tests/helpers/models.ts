@@ -51,6 +51,9 @@ export function unreachableModel(): MockLanguageModelV4 {
 type StreamResult = Awaited<ReturnType<MockLanguageModelV4["doStream"]>>;
 type StreamPart = StreamResult["stream"] extends ReadableStream<infer Part> ? Part : never;
 
+/** The tokens a provider reports for a request. */
+export type ReportedUsage = Extract<StreamPart, { type: "finish" }>["usage"];
+
 const STREAM_USAGE = {
   inputTokens: { total: 5, noCache: 5, cacheRead: undefined, cacheWrite: undefined },
   outputTokens: { total: 1, text: 1, reasoning: undefined },
@@ -318,7 +321,7 @@ const providerError = ({ status, message }: { status: number; message: string })
  * (streamed in chunks of `chunkSize`), Tool calls, or a provider error. For
  * scripting the Tool-calling loop: search, cite, then answer. Requests that
  * aren't streamed get `generate`'s reply; without it, they fail. `modelId`:
- * the id the model reports.
+ * the id the model reports; `usage`: the tokens each request reports.
  */
 export function scriptedModel(
   script: (call: ModelCall) => ScriptedReply,
@@ -326,10 +329,12 @@ export function scriptedModel(
     chunkSize = 8,
     modelId,
     generate,
+    usage = STREAM_USAGE,
   }: {
     chunkSize?: number;
     modelId?: string;
     generate?: (call: GenerateCall) => GeneratedReply;
+    usage?: ReportedUsage;
   } = {},
 ): MockLanguageModelV4 {
   let index = 0;
@@ -346,7 +351,7 @@ export function scriptedModel(
       return {
         content: [{ type: "text", text: reply.text }],
         finishReason: { unified: "stop", raw: undefined },
-        usage: STREAM_USAGE,
+        usage,
         warnings: [],
       };
     },
@@ -404,7 +409,7 @@ export function scriptedModel(
           unified: reply.calls?.length ? "tool-calls" : "stop",
           raw: undefined,
         },
-        usage: STREAM_USAGE,
+        usage,
       });
       const { pause } = reply;
       let streamed = 0;

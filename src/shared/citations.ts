@@ -26,6 +26,39 @@ import {
   type Translate,
 } from "./locations";
 
+const CITATION_CHECKS: readonly CitationCheck[] = [
+  "checking",
+  "found",
+  "not-found",
+  "cant-check",
+  "unsupported",
+  "contradicted",
+];
+
+/** A Citation's attributes as a node holds them; what is missing or isn't the right type is left out. */
+export function citationAttributesOf(node: Record<string, unknown>): Partial<CitationAttributes> {
+  const text = (value: unknown) => (typeof value === "string" ? value : null);
+  const count = (value: unknown) => (typeof value === "number" ? value : null);
+  const check = CITATION_CHECKS.find((each) => each === node.check);
+  const verdict = text(node.verdict);
+  return {
+    passageId: text(node.passageId),
+    documentId: text(node.documentId),
+    documentName: text(node.documentName),
+    contentHash: text(node.contentHash),
+    pageFrom: count(node.pageFrom),
+    pageTo: count(node.pageTo),
+    location: citationLocation({
+      pageFrom: count(node.pageFrom),
+      pageTo: count(node.pageTo),
+      location: node.location,
+    }),
+    quote: text(node.quote),
+    ...(check && { check }),
+    ...(verdict !== null && { verdict }),
+  };
+}
+
 export interface CitationState {
   /** What the badge shows. */
   check: CitationCheck;
@@ -107,7 +140,7 @@ function indexOf(documents: readonly LiveDocument[]): DocumentIndex {
 }
 
 /** The live Document a Citation opens: its own, or one with the same content added again after it was deleted. */
-function liveDocumentOf(
+export function liveDocumentOf(
   attributes: Partial<Pick<CitationAttributes, "documentId" | "contentHash">>,
   documents: readonly LiveDocument[],
 ): LiveDocument | undefined {

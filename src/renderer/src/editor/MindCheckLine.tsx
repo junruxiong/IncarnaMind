@@ -52,21 +52,25 @@ export function AskBlock({
   );
 }
 
-/** Check this Mind's question (#737): "Check this Mind's 48 sentences against this Folder's Documents?" */
+/** Check this Mind's question (#737), once the model has named the claims: "Check this Mind's 48 claims against this Folder's Documents?" */
 export function MindCheckAsk({ mindId }: { mindId: string }) {
   const t = useT();
   const language = useLanguage();
   const asking = useMindCheck((state) => state.asking[mindId]);
   if (!asking) return null;
   const where = asking.inFolder ? "folder" : "all";
-  const count = new Intl.NumberFormat(language).format(asking.sentences);
+  const count = new Intl.NumberFormat(language).format(asking.count);
+  const one = asking.count === 1;
   return (
     <AskBlock
       testId="mind-check-ask"
-      question={t(
-        asking.sentences === 1 ? `mindCheck.ask.${where}.one` : `mindCheck.ask.${where}`,
-        { count },
-      )}
+      question={
+        asking.claims
+          ? t(one ? `mindCheck.ask.claims.${where}.one` : `mindCheck.ask.claims.${where}`, {
+              count,
+            })
+          : t(one ? `mindCheck.ask.${where}.one` : `mindCheck.ask.${where}`, { count })
+      }
       estimate={asking.estimate}
       check={{
         label: t("mindCheck.check"),

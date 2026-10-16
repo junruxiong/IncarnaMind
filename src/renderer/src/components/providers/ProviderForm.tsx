@@ -23,13 +23,15 @@ import { serviceForUrl } from "../../../../core/providers/service";
 import type { MessageKey } from "../../../../shared/i18n";
 import { gap } from "../../../../shared/i18n/join";
 import { modelName } from "../../../../shared/modelName";
+import { chosenFlowLines } from "../../chosenFlows";
 import { core } from "../../core";
 import { dayOf } from "../../dates";
 import { errorMessage } from "../../errors";
 import { useLanguage, useT } from "../../i18n";
 import type { KeyRefusal } from "../../keyRefusals";
 import { useAppStore } from "../../store";
-import { ProblemMark } from "../ProblemLine";
+import { MetaLine } from "../MetaLine";
+import { LineAction, type ProblemAction, ProblemMark } from "../ProblemLine";
 import {
   buttonClass,
   errorTextClass,
@@ -172,6 +174,15 @@ export function ProviderForm({
   );
   const refusedHere = refused !== null && refused.catalogId === kind;
   const keyField = useRef<HTMLInputElement>(null);
+  const modelPicker = useRef<HTMLSelectElement>(null);
+  const modelText = useRef<HTMLInputElement>(null);
+  /** Opens the model list where it is, or puts the cursor in the field a model is typed in. */
+  const openModelPicker = () => {
+    if (modelPicker.current) {
+      modelPicker.current.focus();
+      modelPicker.current.showPicker?.();
+    } else modelText.current?.focus();
+  };
   // A refused key's field is where "Check the key" leads: in view, focused, and under "More
   // providers" opened when its provider is listed there.
   // biome-ignore lint/correctness/useExhaustiveDependencies: once, as the form opens on it.
@@ -343,6 +354,7 @@ export function ProviderForm({
   const modelIdField = (
     <input
       id={`${id}-model-id`}
+      ref={modelText}
       required
       value={modelId}
       onChange={(event) => setModelId(event.target.value)}
@@ -543,6 +555,7 @@ export function ProviderForm({
               </div>
               <select
                 id={`${id}-model`}
+                ref={modelPicker}
                 data-testid="provider-model"
                 value={!otherModel && choices.includes(modelId) ? modelId : OTHER_MODEL}
                 onChange={(event) => {
@@ -614,9 +627,17 @@ export function ProviderForm({
           {test && !test.ok && (
             <TestResult
               result={test}
+              model={shownName(modelId)}
               {...(test.error.kind === "auth" && site
                 ? { authLine: t("providers.form.badKey", { provider: providerName, site }) }
                 : {})}
+              {...(test.error.kind === "data-retention" && {
+                action: {
+                  label: t("answer.error.chooseModel"),
+                  testId: "connection-test-choose-model",
+                  onClick: openModelPicker,
+                },
+              })}
             />
           )}
           {error && (
@@ -663,22 +684,28 @@ export function ProviderSendsLine({
   const t = useT();
   const language = useLanguage();
   const words = language === "zh-CN" ? "zh" : "en";
-  const sends = t(tagsOnSave ? "providers.sends.tagsOnSave" : "providers.sends", { provider });
+  const sends = t("providers.sends", { provider });
   const summary = dataUse && t("providers.form.dataUse", { summary: dataUse.summary[words] });
-  const terms = `${t("providers.form.terms")} ↗`;
+  const link = `${t("providers.form.dataUseLink")} ↗`;
   return (
     <div className="flex flex-col">
-      <p data-testid="provider-sends" className={hintClass}>
-        {sends}
-      </p>
+      <div data-testid="provider-sends" className={hintClass}>
+        <p>{sends}</p>
+        <ul data-testid="provider-sends-list" className="list-disc pl-4">
+          {chosenFlowLines().map((line) => (
+            <li key={line}>{t(line)}</li>
+          ))}
+        </ul>
+        {tagsOnSave && <p>{t("providers.sends.tagsOnSave")}</p>}
+      </div>
       {summary && (
         <p data-testid="provider-data-use" className={`${hintClass} mt-0`}>
           {summary}
           {dataUse?.url && (
             <>
-              {gap(language, summary, terms)}
+              {gap(language, summary, link)}
               <a href={dataUse.url} target="_blank" rel="noreferrer" className="underline">
-                {terms}
+                {link}
               </a>
             </>
           )}
@@ -716,10 +743,16 @@ function readableMessage(message: string): string {
 export function TestResult({
   result,
   authLine,
+  model,
+  action,
 }: {
   result: ConnectionTestResult;
   /** Says a refused key in the provider's own terms, in place of the general line. */
   authLine?: string;
+  /** The model that was tried, for a line that names it. */
+  model?: string;
+  /** What the User can do about it, after the line. */
+  action?: ProblemAction;
 }) {
   const t = useT();
   if (result.ok) {
@@ -729,12 +762,13 @@ export function TestResult({
       </p>
     );
   }
+  const line = authLine ?? t(testErrorKey(result.error.kind), { model: model ?? "" });
   return (
     <div data-testid="connection-test" role="alert" className={errorTextClass}>
-      <p>
-        <ProblemMark />
-        {authLine ?? t(testErrorKey(result.error.kind))}
-      </p>
+      <div className="flex items-baseline">
+        <ProblemMark className="mr-1.5 shrink-0 translate-y-0.5" />
+        <MetaLine parts={[line, action && <LineAction action={action} />]} />
+      </div>
       {/* The provider's own words help with its errors. */}
       {result.error.message && (
         <p className="mt-1 text-[12px] leading-[18px] break-words text-ink-meta">

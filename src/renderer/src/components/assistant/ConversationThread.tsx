@@ -13,6 +13,7 @@ import {
   useConversations,
   useOpenConversation,
 } from "../../conversations";
+import { askedAgainCounts } from "../../coverage";
 import { useT } from "../../i18n";
 import { isLive, useMeetings } from "../../meetings";
 import { useModelSetup } from "../../modelSetup";
@@ -147,6 +148,7 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
       message.kind === "question" ? [[message.id, message] as const] : [],
     ),
   );
+  const askedAgain = askedAgainCounts(messages);
   return (
     <div
       ref={log}
@@ -193,6 +195,7 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
             question={questions.get(message.questionId)}
             sought={message.id === sought}
             keeping={keeping}
+            askedAgain={askedAgain.get(message.id)}
           />
         );
       })}
