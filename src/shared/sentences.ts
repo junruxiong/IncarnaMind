@@ -27,7 +27,7 @@ const hasWords = (text: string) => /[\p{L}\p{N}]/u.test(text);
 /** A title or an abbreviation the segmenter takes for a sentence's end: "Mr. Smith", "Fig. 2". */
 const ABBREVIATION = /(?:^|\s)(?:mr|mrs|ms|dr|prof|st|sr|jr|vs|etc|fig|no|inc|ltd|co|corp)\.$/iu;
 
-/** A court decision's citation is one sentence's: "v." and "(Tex. 2017)" end none. */
+/** The segmenter ends a sentence at the "v." and the "(Tex." inside a court decision's citation. */
 function withDecisionsWhole(spans: SentenceSpan[], text: string): SentenceSpan[] {
   const decisions = citedCases(text);
   if (decisions.length === 0) return spans;
