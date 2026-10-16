@@ -1,13 +1,7 @@
 /**
- * Checking a reference list (#711): each entry of a Mind's reference list
- * (./list) looked up in Crossref, then OpenAlex, and an arXiv number on arXiv
- * (./check), so a reference to a work that doesn't exist, or that doesn't
- * say what the work's record says, is flagged. Only the reference is sent,
- * as written, on its own data flow, "reference-check". The User starts a
- * check where a line by its action names the services, so starting it is
- * the consent (ADR-0022); nothing is sent in local mode. A reference checked
- * once isn't asked about again while IncarnaMind runs; one a service
- * couldn't answer is.
+ * Only the reference is sent, on its own flow, "reference-check"; starting a
+ * check is the consent (ADR-0022), and local mode sends nothing. A reference
+ * checked once isn't asked about again while IncarnaMind runs.
  */
 import type {
   CheckReferencesResult,

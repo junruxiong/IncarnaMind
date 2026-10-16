@@ -687,9 +687,9 @@ export const zhCN = {
   "verify.problem.error": "无法核对：{message}",
   "verify.tryAgain": "重试",
   "references.ask":
-    "在 Crossref 中查找列表里的 {count} 条参考文献，必要时再查 OpenAlex 或 arXiv，只发送每条参考文献的原文。",
+    "在 Crossref 中查找列表里的 {count} 条参考文献，必要时再在 OpenAlex 或 arXiv 中查找，只发送每条参考文献的原文。",
   "references.ask.one":
-    "在 Crossref 中查找列表里的这条参考文献，必要时再查 OpenAlex 或 arXiv，只发送这条参考文献的原文。",
+    "在 Crossref 中查找列表里的这条参考文献，必要时再在 OpenAlex 或 arXiv 中查找，只发送这条参考文献的原文。",
   "references.check": "核对参考文献",
   "references.checking": "正在核对参考文献：{done}/{total}…",
   "references.checked": "已核对 {count} 条参考文献",
@@ -717,9 +717,9 @@ export const zhCN = {
   "references.reason.rate-limited": "未核对：{service} 要求放慢速度，请稍后再核对",
   "references.reason.service-error": "未核对：{service} 出错",
   "references.reason.registered-elsewhere":
-    "未核对：它的 DOI 确实存在，但 Crossref 和 OpenAlex 中都没有它的记录",
+    "未核对：DOI 确实存在，但 Crossref 和 OpenAlex 中都没有相应记录",
   "references.notListed.detail":
-    "两者都没有相近的记录，但它们并未收录所有会议论文、预印本和中文期刊，这部作品仍可能存在。",
+    "两者都没有相近的记录，但它们并未收录所有会议论文、预印本和中文期刊，这篇文献仍可能存在。",
   "references.stopped.unreachable": "无法连接 {service}。",
   "references.stopped.rate-limited": "{service} 要求放慢速度，请稍后再试。",
   "references.record.etAl": "{names} 等",

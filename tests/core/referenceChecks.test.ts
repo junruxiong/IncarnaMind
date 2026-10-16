@@ -20,7 +20,7 @@ import {
 } from "../helpers/referenceServices";
 
 /*
- * Checking a reference list (#711): each entry looked up in Crossref, by DOI
+ * Checking a reference list: each entry looked up in Crossref, by DOI
  * or as written, then in OpenAlex, and an arXiv number on arXiv, and marked
  * found, doesn't match, not found, not listed or not checked. A local
  * stand-in answers for all three: no test reaches the real ones.
@@ -125,7 +125,7 @@ async function setUp(
   return { core, services, mindId: mind.id };
 }
 
-describe("Checking a reference list (#711)", { timeout: 30_000 }, () => {
+describe("Checking a reference list", { timeout: 30_000 }, () => {
   // protects=each mark and the service that gave it: found in Crossref by search and by DOI, in OpenAlex by title (a conference paper) and by DOI (an arXiv preprint), on arXiv; not listed (in neither Crossref nor OpenAlex); not found (a DOI or arXiv number leading nowhere); doesn't match (year, author); not checked when another agency holds a DOI neither has; a web page isn't looked up; only the reference is sent; checking again asks nothing twice; fails_when=a mark is wrong, a search miss reads as an invented reference, a preprint reads as not found, more than the reference goes, or a reference is asked about again; no_claim=Crossref's real matching (the evaluation, eval/references).
   test("every entry gets its mark, and only the reference is sent", async () => {
     const entries = [
@@ -347,6 +347,33 @@ describe("Checking a reference list (#711)", { timeout: 30_000 }, () => {
   });
 
   // protects=OpenAlex offline: Crossref's answers stand, the first miss isn't checked with OpenAlex named, and OpenAlex isn't asked again; fails_when=a miss reads as not listed when OpenAlex wasn't asked, or each miss tries OpenAlex; no_claim=none beyond protects.
+  // protects=a record that differs is no verdict while the service that might hold the cited edition can't be asked: the reference isn't checked, with the service named, so the line shows the problem; fails_when=an outage reads as "doesn't match"; no_claim=none beyond protects.
+  test("when OpenAlex can't be reached after Crossref's record differs, the reference isn't checked", async () => {
+    const { core, services, mindId } = await setUp([WRONG_YEAR]);
+    services.fail("unreachable", "openalex");
+
+    expect(await core.checkReferences(mindId)).toMatchObject({
+      kind: "checked",
+      references: [{ mark: "not-checked", service: "openalex", reason: "unreachable" }],
+    });
+  });
+
+  // protects=OpenAlex asking to slow down (429) stops it being asked for the rest of the list, each miss not checked with the reason; fails_when=a 429 reads as a miss or a mismatch, or OpenAlex is asked again; no_claim=none beyond protects.
+  test("when OpenAlex asks to slow down, it isn't asked again and the misses say why", async () => {
+    const { core, services, mindId } = await setUp([REAL, CONFERENCE, INVENTED]);
+    services.fail(429, "openalex");
+
+    expect(await core.checkReferences(mindId)).toMatchObject({
+      kind: "checked",
+      references: [
+        { mark: "found", service: "crossref" },
+        { mark: "not-checked", service: "openalex", reason: "rate-limited" },
+        { mark: "not-checked", service: "openalex", reason: "rate-limited" },
+      ],
+    });
+    expect(services.requests.filter(({ path }) => path.includes("search="))).toHaveLength(1);
+  });
+
   test("when OpenAlex can't be reached, Crossref's answers stand and OpenAlex is asked once", async () => {
     const { core, services, mindId } = await setUp([REAL, INVENTED, CONFERENCE]);
     services.fail("unreachable", "openalex");
@@ -399,8 +426,8 @@ describe("Reading a reference as written", () => {
     ).toMatchObject({ doi: "10.1234/2019.5", year: 2021 });
   });
 
-  // protects=a page in a range, a CoRR arXiv number and a one-year gap aren't read as a wrong year, and a title a PDF joined at its hyphen still holds; fails_when=a real reference in a paper's list reads "doesn't match" for any of these; no_claim=none beyond protects.
-  test("its year, past pages and CoRR numbers, within a year of the record's", () => {
+  // protects=a year is read past pages, CoRR numbers and broken DOIs, and as a date or a range of years; a year's gap is allowed only beside a preprint, so Part II of 2011 isn't Part I of 2010; fails_when=a real paper's entry reads "doesn't match" for any of these, or a year off by one goes unflagged between two published works; no_claim=none beyond protects.
+  test("its year: past pages and numbers, and a year's gap only beside a preprint", () => {
     expect(
       citedReference(
         "Sepp Hochreiter. Long short-term memory. Neural computation, 9(8):1735–1780, 1997.",
@@ -410,7 +437,19 @@ describe("Reading a reference as written", () => {
       citedReference(
         "Denny Britz. Massive exploration of NMT architectures. CoRR, abs/1703.03906, 2017.",
       ),
-    ).toMatchObject({ arxiv: "1703.03906", year: 2017 });
+    ).toMatchObject({ arxiv: "1703.03906", year: 2017, preprint: true });
+    expect(citedReference("Doe, J. (2019-06-12). A note on widgets. Widget News.")).toMatchObject({
+      year: 2019,
+    });
+    expect(citedReference("Doe, J. (2017–2018). Widget surveys. Widget Letters.")).toMatchObject({
+      year: 2017,
+    });
+    expect(
+      citedReference(
+        "Graves, A. (2014). Neural Turing machines. Neural Netw. doi:10.1016/j.neunet. 2014.09.003",
+      ),
+    ).toMatchObject({ doi: "10.1016/j.neunet.2014.09.003", year: 2014 });
+
     const adam = citedReference(
       "Diederik Kingma and Jimmy Ba. Adam: A method for stochastic optimization. In ICLR, 2015.",
     );
@@ -420,10 +459,16 @@ describe("Reading a reference as written", () => {
         authors: [{ family: "Kingma", given: "Diederik P." }],
       },
     };
-    expect(differences(adam, { ...record, years: [2014] })).toEqual([]);
-    expect(differences(adam, { ...record, years: [2012] }).map((each) => each.field)).toEqual([
+    expect(differences(adam, { ...record, years: [2014], preprint: true })).toEqual([]);
+    expect(differences(adam, { ...record, years: [2014] }).map((each) => each.field)).toEqual([
       "year",
     ]);
+    const partTwo = citedReference("Doe, J. (2011). A theory of widgets. Widget Letters, 3.");
+    const partOne = {
+      fields: { title: "A theory of widgets", authors: [{ family: "Doe", given: "J." }] },
+      years: [2010],
+    };
+    expect(differences(partTwo, partOne).map((each) => each.field)).toEqual(["year"]);
     expect(
       titleCoverage(
         "Luong. Effective approaches to attentionbased neural machine translation, 2015.",
@@ -439,6 +484,12 @@ describe("Reading a reference as written", () => {
       titleOf('[3] A. Vaswani et al., "Attention is all you need," in Proc. NeurIPS, 2017.'),
     ).toBe("Attention is all you need");
     expect(titleOf("周志华. 机器学习[M]. 北京: 清华大学出版社, 2016.")).toBe("机器学习");
+    expect(titleOf("1. Smith J, Doe K. Widgets in coastal towns. J Widgets. 2020;12:3-4.")).toBe(
+      "Widgets in coastal towns",
+    );
+    expect(titleOf("A. Vaswani, N. Shazeer. Attention is all you need. NeurIPS 2017.")).toBe(
+      "Attention is all you need",
+    );
     expect(titleOf("Smith J, Doe K. Widgets in coastal towns. J Widgets. 2020;12:3-4.")).toBe(
       "Widgets in coastal towns",
     );
@@ -511,6 +562,46 @@ describe("Reading a reference as written", () => {
       "a",
       "b",
       "d",
+    ]);
+  });
+
+  // protects=entries whose year is written otherwise stay apart, a DOI broken into its own paragraph stays with its entry, a numbered entry without a year or with its last part on a second paragraph is read whole, and prose after the list isn't sent; fails_when=two entries are read as one, a list ends early, or prose is looked up; no_claim=none beyond protects.
+  test("a list's entries, however their years are written, and where it ends", () => {
+    const block = (id: string, text: string, isHeading = false) => ({
+      id,
+      heading: isHeading,
+      text,
+    });
+    const authorYear = [
+      block("h", "References", true),
+      block("a", "Abel, K. (in press). Widgets at the coast. Widget Letters."),
+      block("b", "Baker, L. (n.d.). A field guide to widgets. Widget Society."),
+      block("c", "Cole, M. (2019-06-12). Widgets and the tide. Coast News."),
+      block("d", "Dunn, P. (2017–2018). A survey of coastal widgets. Widget Reports."),
+      block("e", "王五. 海岸小部件研究[N]. 海岸日报, 2020-05-01(3)."),
+      block(
+        "f",
+        "Ellis, R. (2014). Widget memory. Neural Netw., 61, 85–117. doi:10.1016/j.neunet.",
+      ),
+      block("g", "2014.09.003"),
+      block("p", "However, the widgets above were measured at low tide only."),
+      block("q", "Some studies since 2019 measure them at high tide."),
+    ];
+    const read = checkableReferences(authorYear);
+    expect(read.map((entry) => entry.blockId)).toEqual(["a", "b", "c", "d", "e", "f"]);
+    expect(read.at(-1)?.text).toContain("doi:10.1016/j.neunet. 2014.09.003");
+
+    const numbered = [
+      block("h", "References", true),
+      block("a", "1. Smith J, Doe K. Widgets in coastal towns. Widget Press."),
+      block("b", "2. Moore T. Tides and widgets. J Widgets. 2020;12:3-4."),
+      block("c", "3. Zhu M, Chen W. Fast and accurate widget counting. In Proceedings of the"),
+      block("d", "51st Annual Meeting of the Widget Society, pages 434–443, August 2013."),
+    ];
+    expect(checkableReferences(numbered).map((entry) => entry.text)).toEqual([
+      "1. Smith J, Doe K. Widgets in coastal towns. Widget Press.",
+      "2. Moore T. Tides and widgets. J Widgets. 2020;12:3-4.",
+      "3. Zhu M, Chen W. Fast and accurate widget counting. In Proceedings of the 51st Annual Meeting of the Widget Society, pages 434–443, August 2013.",
     ]);
   });
 

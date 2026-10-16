@@ -1,10 +1,4 @@
-/**
- * The services a reference is looked up in (#711): Crossref first; OpenAlex
- * when Crossref has no record of it or one that differs, which holds many conference papers and
- * preprints Crossref doesn't; arXiv for a reference given by its arXiv
- * number. Each on the lane Find sources uses for it, at the pace its terms
- * ask, with no key and no contact address (ADR-0018).
- */
+/** Each service on Find sources' lane for it, at the pace its terms ask, with no key and no contact address (ADR-0018). */
 import type { ExternalService, ReferenceService } from "../api";
 import { ARXIV, CROSSREF } from "../referenceRecords/lookup";
 import type { SourceHttp } from "../sources/http";
@@ -14,7 +8,6 @@ import type { ProviderWork } from "../sources/types";
 import { CROSSREF_URL, type CrossrefClient, createCrossrefClient } from "./crossref";
 import type { WorkRecord } from "./match";
 
-/** How many of OpenAlex's best matches a search reads. */
 const ROWS = 5;
 
 export const OPENALEX: ExternalService = { id: OPENALEX_URL, name: "OpenAlex" };
@@ -51,7 +44,11 @@ function recordOf(work: ProviderWork | null): WorkRecord | null {
   const years = [yearOf(work.fields.issued), yearOf(work.versionDate)].filter(
     (year): year is number => year !== null,
   );
-  return { fields: work.fields, years: [...new Set(years)] };
+  return {
+    fields: work.fields,
+    years: [...new Set(years)],
+    preprint: work.ids.arxiv !== undefined || work.fields.type === "article",
+  };
 }
 
 export function createLookups(
