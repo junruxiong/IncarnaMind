@@ -62,12 +62,15 @@ interface ChecksState {
   problems: Readonly<Record<string, CheckProblem>>;
   /** By Mind: its last verdicts came from a model too small to judge reliably (#680). */
   smallModel: Readonly<Record<string, true>>;
+  /** By Mind: its check badge's card is open (#909). */
+  cardOpen: Readonly<Record<string, true>>;
 }
 
 export const useChecks = create<ChecksState>()(() => ({
   running: {},
   problems: {},
   smallModel: {},
+  cardOpen: {},
 }));
 
 function setFor<K extends keyof ChecksState>(
@@ -93,7 +96,10 @@ export const setCheckRunning = (mindId: string, running: CheckRunning | null) =>
 export const setCheckSmallModel = (mindId: string, small: boolean) =>
   setFor("smallModel", mindId, small ? true : null);
 
-/** Says why a check of a Mind gave no marks, under its title. */
+export const setCheckCardOpen = (mindId: string, open: boolean) =>
+  setFor("cardOpen", mindId, open ? true : null);
+
+/** Says why a check of a Mind gave no marks, in its check badge's card. */
 export const setCheckProblem = (mindId: string, problem: CheckProblem) =>
   setFor("problems", mindId, problem);
 

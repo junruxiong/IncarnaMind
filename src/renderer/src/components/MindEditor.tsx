@@ -23,11 +23,11 @@ import { BlockHandle } from "../editor/BlockHandle";
 import { BlockCommands } from "../editor/blockCommands";
 import { BlockOrigins } from "../editor/blockOrigins";
 import { ChartView } from "../editor/ChartView";
+import { CheckBadge } from "../editor/CheckBadge";
 import { CitationStylePrompt } from "../editor/CitationStylePrompt";
 import { CitationView } from "../editor/CitationView";
 import { CodeBlockView } from "../editor/CodeBlockView";
 import { ComparisonTableView } from "../editor/ComparisonTableView";
-import { ContradictionLine } from "../editor/ContradictionLine";
 import { CitationClusters } from "../editor/citationClusters";
 import { CitationNumbers, redrawFootnotes, setCitationForm } from "../editor/citationNumbers";
 import { ClaimChecks, setClaimContext } from "../editor/claimChecks";
@@ -48,16 +48,15 @@ import { HeldSelection } from "../editor/heldSelection";
 import { LinkBubble } from "../editor/LinkBubble";
 import { MarginChecks } from "../editor/MarginChecks";
 import { MathEditing, MathEditor } from "../editor/MathEditor";
-import { MindCheckAsk } from "../editor/MindCheckLine";
 import { MindOutline } from "../editor/MindOutline";
 import { MeetingNotes } from "../editor/meetingNotes";
 import {
+  BadgeSlotContext,
   CompareSheetSlotContext,
   ComposerDockContext,
   CountSlotContext,
   MindIdContext,
 } from "../editor/mindContext";
-import { NoteHealth } from "../editor/NoteHealth";
 import { NoteKeymap } from "../editor/noteKeymap";
 import { noteExtensions } from "../editor/noteSchema";
 import { ProposalBars } from "../editor/ProposalBars";
@@ -74,7 +73,7 @@ import { Suggestions } from "../editor/suggestions";
 import { TableMenu } from "../editor/TableMenu";
 import { TableKeys } from "../editor/tableCommands";
 import { SmartTypography } from "../editor/typography";
-import { useVerification, VerifyLine } from "../editor/VerifyLine";
+import { useVerification, VerifyFrom } from "../editor/VerifyLine";
 import { wordAtomView, wordBlockView } from "../editor/WordAtomView";
 import { WordCount } from "../editor/WordCount";
 import { OriginalNotAdded, useWordFile, WordOrigin } from "../editor/WordOrigin";
@@ -245,6 +244,7 @@ function MindEditorView({
   const isExample = useIsExample(mindId);
   const dock = useContext(ComposerDockContext);
   const countSlot = useContext(CountSlotContext);
+  const badgeSlot = useContext(BadgeSlotContext);
   const sheetSlot = useContext(CompareSheetSlotContext);
   const comparing = useComparisons((state) => state.sheets[mindId] !== undefined);
   /**
@@ -630,16 +630,17 @@ function MindEditorView({
             <WordOrigin doc={doc} editor={editor} />
             <OriginalNotAdded mindId={mindId} />
             {verification ? (
-              <VerifyLine editor={editor} doc={doc} mindId={mindId} verification={verification} />
+              <VerifyFrom verification={verification} />
             ) : (
-              <WordCount editor={editor} doc={doc}>
-                <NoteHealth editor={editor} doc={doc} mindId={mindId} />
-                <ContradictionLine doc={doc} mindId={mindId} />
-                <MindCheckAsk mindId={mindId} />
-              </WordCount>
+              <WordCount editor={editor} doc={doc} />
             )}
           </>,
           countSlot,
+        )}
+      {badgeSlot &&
+        createPortal(
+          <CheckBadge editor={editor} doc={doc} mindId={mindId} verification={verification} />,
+          badgeSlot,
         )}
       {readOnly && <MindNotice kind="read-only" />}
       <div

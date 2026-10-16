@@ -10,12 +10,13 @@ import {
 import { formatMoney } from "../cost";
 import { useLanguage, useT } from "../i18n";
 import { contradictionOutcomeText } from "./contradictionOutcome";
+import { AskBlock } from "./MindCheckLine";
 
 /**
- * Contradiction watch's line under the Mind's title (#112), beside its
- * health: the question before a run billed per token, with the estimate;
- * what a run on demand found; and what the last run a new version of a
- * Document started found and cost. Each closes; the last for good.
+ * Contradiction watch (#112) in the check badge's card: the question before a
+ * run billed per token, with the estimate; what a run on demand found; and
+ * what the last run a new version of a Document started found and cost.
+ * Each closes; the last for good.
  */
 export function ContradictionLine({ doc, mindId }: { doc: Y.Doc; mindId: string }) {
   const t = useT();
@@ -26,26 +27,23 @@ export function ContradictionLine({ doc, mindId }: { doc: Y.Doc; mindId: string 
 
   if (shown?.kind === "asking") {
     return (
-      <ProblemLine
-        role="status"
+      <AskBlock
         testId="contradictions-ask"
-        className="mind-health-line"
-        action={{
+        question={t(shown.claims === 1 ? "contradictions.ask.one" : "contradictions.ask", {
+          count: format(shown.claims),
+        })}
+        estimate={shown.estimate}
+        check={{
           label: t("contradictions.check"),
           testId: "contradictions-check",
           onClick: () => void checkContradictions(mindId),
         }}
-        also={{
+        notNow={{
           label: t("contradictions.cancel"),
           testId: "contradictions-cancel",
           onClick: () => dismissContradictions(mindId),
         }}
-      >
-        {t(shown.claims === 1 ? "contradictions.ask.one" : "contradictions.ask", {
-          count: format(shown.claims),
-          estimate: shown.estimate,
-        })}
-      </ProblemLine>
+      />
     );
   }
   if (shown?.kind === "found") {

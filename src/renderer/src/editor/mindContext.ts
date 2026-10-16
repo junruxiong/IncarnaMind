@@ -23,6 +23,9 @@ export const ComposerDockContext = createContext<HTMLElement | null>(null);
  */
 export const CountSlotContext = createContext<HTMLElement | null>(null);
 
+/** Where a Mind's check badge is drawn: at the bottom right of its page, over the text (see `MindTab`). */
+export const BadgeSlotContext = createContext<HTMLElement | null>(null);
+
 /**
  * Where a Mind's Compare Documents sheet is drawn: at the foot of its tab,
  * below the note, which scrolls above it (see `MindTab`). Null until it is there.
