@@ -253,7 +253,7 @@ describe("The provider catalog", () => {
     ["openrouter", "openai/gpt-6-luna", false],
     ["google", "gemini-3.8-flash", false],
     ["deepseek", "deepseek-flash", false],
-    ["qwen", "qwen3.7-flash", false],
+    ["qwen", "qwen3.8-flash", false],
     ["siliconflow", "deepseek-ai/DeepSeek-V4", false],
     ["ollama", "gpt-oss:20b-cloud", false],
     ["ollama", "qwen3.5:4b", false],
@@ -393,7 +393,7 @@ describe("The providers of #178", () => {
     }
   });
 
-  test("each says whether it may train on API data; DeepSeek may (with an opt-out) and Kimi's pages disagree", () => {
+  test("each says whether it may train on API data: Mistral may, with an opt-out; Kimi's, DeepSeek's and Z.ai's terms don't say", () => {
     const training = Object.fromEntries(
       added.map((id) => [id, catalogProvider(id)?.dataUse.training]),
     );
@@ -401,13 +401,26 @@ describe("The providers of #178", () => {
       openrouter: "no",
       mistral: "opt-out",
       xai: "no",
-      deepseek: "opt-out",
+      deepseek: "unknown",
       qwen: "no",
       kimi: "unknown",
       glm: "unknown",
       siliconflow: "no",
     });
-    expect(catalogProvider("kimi")?.dataUse.summary.en).toContain("disagree");
+    expect(catalogProvider("kimi")?.dataUse.url).toBe(
+      "https://platform.kimi.ai/docs/agreement/modeluse",
+    );
+  });
+
+  test("Anthropic's data line names every model that needs 30-day retention, and no link uses an address that has moved", () => {
+    for (const model of ["Fable 5.1", "Fable 5", "Mythos 5.1", "Mythos 5"]) {
+      expect(catalogProvider("anthropic")?.dataUse.summary.en, model).toContain(model);
+      expect(catalogProvider("anthropic")?.dataUse.summary.zh, model).toContain(model);
+    }
+    const links = CATALOG_PROVIDERS.flatMap((each) => [each.docsUrl, each.dataUse.url]);
+    expect(
+      links.filter((url) => /docs\.anthropic\.com|platform\.openai\.com\/docs/.test(url ?? "")),
+    ).toEqual([]);
   });
 
   test("a provider with regions has an endpoint for each, the first the default, and a set of model facts for each", () => {

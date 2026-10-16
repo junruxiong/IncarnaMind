@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { ChatGptAccount, ConnectionTestResult } from "../../../../core/api";
-import { CHATGPT_SERVICE } from "../../../../core/providers/chatgpt/service";
+import { chosenFlowSummary } from "../../chosenFlows";
 import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
@@ -24,7 +24,7 @@ import {
   useChatGptStorage,
   useContinueWithChatGpt,
 } from "./ChatGptSignIn";
-import { ProviderSendsLine, TestResult } from "./ProviderForm";
+import { TestResult } from "./ProviderForm";
 
 /**
  * Settings → Models → ChatGPT plan: "Continue with ChatGPT" (Sign in with
@@ -93,8 +93,7 @@ export function ChatGptPlanSettings() {
     <section data-testid="chatgpt-settings" className="flex flex-col gap-3">
       <div className="flex flex-col gap-1">
         <h4 className={sectionTitleClass}>{t("chatgpt.title")}</h4>
-        <p className={rowTextClass}>{t("chatgpt.description")}</p>
-        {!inUse && <ProviderSendsLine provider={CHATGPT_SERVICE.name} />}
+        <p className={rowTextClass}>{t("chatgpt.description", { sends: chosenFlowSummary(t) })}</p>
       </div>
 
       {status && (

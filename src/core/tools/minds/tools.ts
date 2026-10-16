@@ -41,6 +41,7 @@ import {
 } from "../../../shared/proposals";
 import { countFor, countText, mostlyCjk } from "../../../shared/wordCount";
 import { createElement, type NodeJSON, syncContent, topLevelBlocks } from "../../answers/blocks";
+import type { ParagraphAsked } from "../../answers/paragraphAsked";
 import {
   BLOCK_ID_ATTRIBUTE,
   type BlockOrigin,
@@ -143,8 +144,10 @@ export interface MindToolsOptions {
   language: Language;
   /**
    * Markdown as a Mind holds it: each Citation marker the Answer recorded a
-   * Citation for, checked, and its figures as their shown text. Says how many
-   * of its Citations weren't found and how many markers had no Citation.
+   * Citation for, checked, and its figures as their shown text, without its
+   * sentences about the Answer's searching. Says how many of its Citations
+   * weren't found, how many markers had no Citation, and how many sentences
+   * it left out.
    */
   blocksOf(markdown: string): {
     blocks: NodeJSON[];
@@ -157,6 +160,7 @@ export interface MindToolsOptions {
     unlinkedSources: number;
     /** Cells beyond its tables' columns, their text kept in the row's last cell. */
     extraCells: number;
+    searchTalk: number;
   };
   /**
    * What the User's words asked for (../../answers/routeRequest), which the
@@ -164,6 +168,8 @@ export interface MindToolsOptions {
    * only when they asked for a new one.
    */
   requested: { change: RequestedChange; newMind: boolean } | null;
+  /** The one paragraph the User's words name by its place (../../answers/paragraphAsked). */
+  paragraph: ParagraphAsked;
   /** A call changed a Mind: its card says so, as soon as it does, also while it writes. */
   changed(toolCallId: string, change: MindChange): void;
   /** A call changed nothing, and whatever it wrote as its input came was taken back. */
@@ -179,12 +185,17 @@ export interface MindToolsOptions {
  * spaces made alike.
  */
 function bareName(name: string): string {
-  return name
-    .trim()
-    .replace(/^(?:@|#{1,6}\s+|[-*+]\s+|\d{1,3}[.)]\s+|>\s+)/, "")
-    .replace(/^["'“‘「『《](.*)["'”’」』》]$/u, "$1")
-    .replace(/\s+/g, " ")
-    .trim();
+  return (
+    name
+      .trim()
+      .replace(/^(?:@|#{1,6}\s+|[-*+]\s+|\d{1,3}[.)]\s+|>\s+)/, "")
+      // Copied from <mind>: "[waiting change, adds: Results]".
+      .replace(/^\[waiting change, (?:adds|removes): (.*?)\]?$/u, "$1")
+      .replace(/\*\*|__/g, "")
+      .replace(/^["'“‘「『《](.*)["'”’」』》]$/u, "$1")
+      .replace(/\s+/g, " ")
+      .trim()
+  );
 }
 
 const nameKey = (name: string): string => bareName(name).toLocaleLowerCase();
@@ -367,6 +378,34 @@ function named(elements: readonly Y.XmlElement[], wanted: string): Y.XmlElement[
 
 const isHeading = (element: Y.XmlElement | undefined) => element?.nodeName === "heading";
 
+// Fewer than this could start several paragraphs.
+const MIN_FIRST_WORDS = 3;
+const MIN_FIRST_CJK = 6;
+
+function paragraphNamed(
+  elements: readonly Y.XmlElement[],
+  wanted: string,
+): Y.XmlElement | undefined {
+  const key = nameKey(wanted);
+  const count = countText(key);
+  if (count.words < MIN_FIRST_WORDS && count.cjk < MIN_FIRST_CJK) return undefined;
+  const found = elements.filter(
+    (element) => !isHeading(element) && nameKey(plainText(element)).startsWith(key),
+  );
+  return found.length === 1 ? found[0] : undefined;
+}
+
+function paragraphAt(
+  elements: readonly Y.XmlElement[],
+  asked: ParagraphAsked,
+): Y.XmlElement | undefined {
+  if (asked === null) return undefined;
+  const paragraphs = elements.filter(
+    (element) => element.nodeName === "paragraph" && plainText(element).trim() !== "",
+  );
+  return asked === "last" ? paragraphs.at(-1) : paragraphs[asked];
+}
+
 /** The stretch of a Mind `edit_mind` changes, from one paragraph or heading to another. */
 interface Stretch {
   from: TextPlace;
@@ -376,13 +415,16 @@ interface Stretch {
 /**
  * The stretch of a Mind `edit_mind` changes, whole: the section under the
  * heading `part` (to the next heading as high or higher), else the Blocks the
- * User selected, else all of it. Why not, when there is nothing there to change.
+ * User selected, else all of it; of that, only the paragraph the User named
+ * by its place (`asked`, counted in the selection or the whole Mind). Why
+ * not, when there is nothing there to change.
  */
 function stretchOf(
   blocks: Y.XmlFragment,
   part: string | null,
   language: Language,
   selected: readonly string[],
+  asked: ParagraphAsked,
 ): Stretch | { why: string; kind: "no-heading" | "no-text" | "several-places" } {
   const all = textBlocks(blocks).map((each) => each.element);
   let chosen = all;
@@ -393,14 +435,22 @@ function stretchOf(
       return { why: severalNamed(all, matches, part, "part", language), kind: "several-places" };
     }
     const heading = matches[0];
-    if (!heading) return { why: `there is no heading “${part}” in it`, kind: "no-heading" };
-    const start = all.indexOf(heading);
-    const level = levelOf(heading);
-    const end = all.findIndex(
-      (element, index) =>
-        index > start && element.nodeName === "heading" && levelOf(element) <= level,
-    );
-    chosen = all.slice(start, end < 0 ? all.length : end);
+    if (heading) {
+      const start = all.indexOf(heading);
+      const level = levelOf(heading);
+      const end = all.findIndex(
+        (element, index) =>
+          index > start && element.nodeName === "heading" && levelOf(element) <= level,
+      );
+      chosen = all.slice(start, end < 0 ? all.length : end);
+    } else {
+      // A start the model got wrong falls back to the paragraph the User named by its place.
+      const paragraph = paragraphNamed(all, part) ?? paragraphAt(all, asked);
+      if (!paragraph) {
+        return { why: `there is no heading or paragraph “${part}” in it`, kind: "no-heading" };
+      }
+      chosen = [paragraph];
+    }
   } else if (selected.length > 0) {
     const ids = new Set(selected);
     const inSelection = (element: Y.XmlElement) => {
@@ -411,6 +461,11 @@ function stretchOf(
     };
     const picked = all.filter(inSelection);
     if (picked.length > 0) chosen = picked;
+  }
+  if (chosen.length > 1) {
+    // Rewritten with the paragraphs around it, the others would come back reworded.
+    const paragraph = paragraphAt(part === null ? chosen : all, asked);
+    if (paragraph && chosen.includes(paragraph)) chosen = [paragraph];
   }
   const first = chosen[0];
   const last = chosen.at(-1);
@@ -607,7 +662,13 @@ const citedIn = ({ cited, unrecorded }: { cited: number; unrecorded: number }) =
   ...(unrecorded > 0 && { unrecorded }),
 });
 
-function citationNotes({ notFound, unrecorded }: { notFound: number; unrecorded: number }) {
+interface Written {
+  notFound: number;
+  unrecorded: number;
+  searchTalk: number;
+}
+
+function writtenNotes({ notFound, unrecorded, searchTalk }: Written) {
   return [
     ...(notFound > 0
       ? [
@@ -617,6 +678,11 @@ function citationNotes({ notFound, unrecorded }: { notFound: number; unrecorded:
     ...(unrecorded > 0
       ? [
           `${unrecorded === 1 ? "1 marker has" : `${unrecorded} markers have`} no Citation recorded yet: record ${unrecorded === 1 ? "it" : "them"} with cite.`,
+        ]
+      : []),
+    ...(searchTalk > 0
+      ? [
+          `${searchTalk === 1 ? "1 sentence" : `${searchTalk} sentences`} about your searching ${searchTalk === 1 ? "was" : "were"} left out of the Mind: say in your reply what isn't covered.`,
         ]
       : []),
   ];
@@ -925,11 +991,12 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     after: string | null,
     markdown: string,
     made: boolean,
-  ): { change: MindChange; notFound: number; unrecorded: number } | null => {
+  ): (Written & { change: MindChange }) | null => {
     const stream = streams.get(toolCallId);
     streams.delete(toolCallId);
     ended.add(toolCallId);
-    const { blocks, cited, notFound, unrecorded, ...notes } = options.blocksOf(markdown);
+    const { blocks, cited, notFound, unrecorded, searchTalk, ...notes } =
+      options.blocksOf(markdown);
     const unmade = blocks.some(unmadeTable);
     let writer = stream?.writer ?? null;
     if (writer && (unmade || writer.mind.id !== mind.id || writer.named !== after)) {
@@ -965,7 +1032,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         change: () => changeOf(writer, made),
       });
     }
-    return { change, notFound, unrecorded };
+    return { change, notFound, unrecorded, searchTalk };
   };
 
   /** By call: text written with markers `cite` hadn't recorded yet. */
@@ -1005,7 +1072,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       `Proposed ${written.change.proposals === 1 ? "1 new Block" : `${written.change.proposals} new Blocks`} ${where}.`,
       ...tableNotes(written.change),
       WAITING,
-      ...citationNotes(written),
+      ...writtenNotes(written),
     ].join(" ");
 
   const mindProperty = {
@@ -1054,8 +1121,9 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     mind: ChangeableMind,
     own: OwnWaiting,
     markdown: string,
-  ): { change: MindChange; notFound: number; unrecorded: number } => {
-    const { blocks, cited, notFound, unrecorded, ...notes } = options.blocksOf(markdown);
+  ): Written & { change: MindChange } => {
+    const { blocks, cited, notFound, unrecorded, searchTalk, ...notes } =
+      options.blocksOf(markdown);
     if (blocks.some(unmadeTable)) throw noTable(mind);
     const request = randomUUID();
     minds.checkpoint(mind.id);
@@ -1088,7 +1156,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     if (unrecorded > 0) {
       unsettled.set(toolCallId, { mindId: mind.id, ids, markdown, change: revision });
     }
-    return { change, notFound, unrecorded };
+    return { change, notFound, unrecorded, searchTalk };
   };
 
   const unmadeSaid = (name: string) =>
@@ -1109,7 +1177,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
   const edit: Tool = {
     name: MIND_TOOLS.edit,
     description:
-      "Change text that is already in a Mind, as the User asks: shorten, lengthen, rewrite, restructure, correct, translate or reword it, or remove part of it. Say what to change in instruction, and the text is rewritten for you, its Citations kept. The rewrite reads only that text: it can't search the Documents or cite anything new, so new facts from the Documents, a table of them too, go in with add_to_mind, cited. Text you proposed that still waits ([waiting change, adds: …]) is revised in place; for it you may give its whole new text as content instead, cited as add_to_mind's, e.g. to add more from the Documents. It arrives in the Mind as changes the User accepts or rejects.",
+      "Change text that is already in a Mind, as the User asks: shorten, lengthen, rewrite, restructure, correct, translate or reword it, or remove part of it. Say what to change in instruction, and the text is rewritten for you, its Citations kept. To change one paragraph and leave the others as they are, name its first words in part. The rewrite reads only that text: it can't search the Documents or cite anything new, so new facts from the Documents, a table of them too, go in with add_to_mind, cited. Text you proposed that still waits ([waiting change, adds: …]) is revised in place; for it you may give its whole new text as content instead, cited as add_to_mind's, e.g. to add more from the Documents. It arrives in the Mind as changes the User accepts or rejects.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1117,7 +1185,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         part: {
           type: "string",
           description:
-            'The heading of the section to change, as written in the Mind. Whenever the User names a section, give its name here alone, also when the Mind has that heading more than once: you are then told how to ask the User which. Only when the User names the heading it is under ("the Summary under Part 2"), put that first: "Part 2 > Summary". Leave it out to change what the User selected, or else the whole Mind.',
+            'The heading of the section to change, as written in the Mind, or the first words of the one paragraph to change. Whenever the User names a section, give its name here alone, also when the Mind has that heading more than once: you are then told how to ask the User which. Only when the User names the heading it is under ("the Summary under Part 2"), put that first: "Part 2 > Summary". Leave it out to change what the User selected, or else the whole Mind.',
         },
         instruction: {
           type: "string",
@@ -1143,8 +1211,10 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       const part = optional(input.part);
       // The selection counts only in the Mind it is in, and only when no section is named.
       const selected = focused?.mindId === mind.id && part === null ? focused.blockIds : [];
+      // Text the assistant still waits on is revised as a whole, from its heading.
+      const asked = markdown === null ? options.paragraph : null;
       const stretch = minds.read(mind.id, (blocks) =>
-        stretchOf(blocks, part, options.language, selected),
+        stretchOf(blocks, part, options.language, selected, asked),
       );
       if ("why" in stretch) {
         throw new Refusal(
@@ -1172,7 +1242,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         return [
           revisedText(mind.name, revised.change, ` (${lengths(before, markdown)})`),
           ...tableNotes(revised.change),
-          ...citationNotes(revised),
+          ...writtenNotes(revised),
         ].join(" ");
       }
       const { result, length, reason, revised } = await minds.proposeInMind({

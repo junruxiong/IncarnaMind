@@ -1257,6 +1257,62 @@
   .mind-verify-problem {
     margin: -8px 0 16px;
   }
+  /* A checked reference list's entries, under its line: those that need a look first. */
+  .mind-references {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: -8px 0 16px;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 20px;
+  }
+  .mind-reference {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    width: 100%;
+    padding: 6px 8px;
+    margin-left: -8px;
+    border-radius: 6px;
+    text-align: left;
+    color: var(--color-ink-secondary);
+
+    &:hover {
+      background: var(--color-hover);
+    }
+  }
+  .mind-reference-mark {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+    color: var(--color-ink);
+  }
+  .mind-reference-text {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow-wrap: anywhere;
+  }
+  .mind-reference-detail {
+    color: var(--color-ink-meta);
+  }
+  .mind-reference-record {
+    margin: -4px 0 4px;
+    color: var(--color-ink-meta);
+    overflow-wrap: anywhere;
+  }
+  .mind-reference-link {
+    border-radius: 4px;
+    color: var(--color-accent);
+    text-underline-offset: 2px;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
 
   /* The count under the title: quiet status text, pulled up into the title's margin. */
   .mind-count {
@@ -5716,6 +5772,13 @@
       color: var(--color-accent-strong);
     }
   }
+  .answer-coverage {
+    margin: 0;
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 22px;
+    color: var(--color-ink);
+  }
   .mind-changes-no-mind {
     display: flex;
     flex-wrap: wrap;
@@ -5857,11 +5920,15 @@
   }
   .task-progress-meta {
     flex-shrink: 0;
+    max-width: calc(100% - 6rem);
     font-size: 12.5px;
     line-height: 18px;
     font-variant-numeric: tabular-nums;
-    white-space: nowrap;
     color: var(--color-ink-meta);
+
+    .meta-part {
+      white-space: nowrap;
+    }
   }
   .task-progress-bar {
     height: 3px;

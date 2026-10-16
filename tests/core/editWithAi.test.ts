@@ -651,6 +651,57 @@ describe("Edit with AI", () => {
     expect(pendingProposals(client.blocks)).toEqual([]);
   });
 
+  test("asked to remove a paragraph, a reply of no text but why removes it; any other empty reply fails with its reason", async () => {
+    const { core, mind, client } = await setUp(
+      editingModel(({ passage }) =>
+        passage.startsWith("Pensions")
+          ? "<why>Removed.</why>"
+          : passage.startsWith("Health") || passage.startsWith("Sick")
+            ? "<why>I can't do this.</why>"
+            : "",
+      ),
+    );
+    const pensions = paragraph(text("Pensions match up to 5% of salary."));
+    const leave = paragraph(text("Leave is 25 days."));
+    const health = paragraph(text("Health cover starts after three months."));
+    const sick = paragraph(text("Sick pay is full for six weeks, then half for six more."));
+    writeMind(client, [pensions, leave, health, sick]);
+    await client.settled();
+
+    const removed = await core.editWithAi(
+      wholeParagraph(client, mind.id, pensions.attrs.id, "instruction", "Remove it"),
+    );
+    const silent = await core.editWithAi(
+      wholeParagraph(client, mind.id, leave.attrs.id, "instruction", "Remove it"),
+    );
+    const refused = await core.editWithAi(
+      wholeParagraph(client, mind.id, health.attrs.id, "instruction", "Make it more formal"),
+    );
+
+    expect(removed).toMatchObject({ kind: "proposed" });
+    expect(silent).toMatchObject({ kind: "failed" });
+    const shortened = await core.editWithAi(
+      wholeParagraph(client, mind.id, sick.attrs.id, "instruction", "Cut it down to two sentences"),
+    );
+    expect(refused).toMatchObject({
+      kind: "failed",
+      error: { message: "I can't do this." },
+    });
+    expect(shortened).toMatchObject({ kind: "failed" });
+    expect(shownWithChanges(client)).toEqual([
+      "- Pensions match up to 5% of salary.",
+      "Leave is 25 days.",
+      "Health cover starts after three months.",
+      "Sick pay is full for six weeks, then half for six more.",
+    ]);
+    await resolveChanges(client, "accept");
+    expect(shownWithChanges(client)).toEqual([
+      "Leave is 25 days.",
+      "Health cover starts after three months.",
+      "Sick pay is full for six weeks, then half for six more.",
+    ]);
+  });
+
   test("a model that fails says why, and nothing is written", async () => {
     const { core, mind, client } = await setUp(
       new MockLanguageModelV4({
@@ -1382,8 +1433,8 @@ describe("Edit with AI over Blocks of several kinds", () => {
     ]);
   });
 
-  // protects=a list turned into a table gets a table Block beside it, out of the list, its cell keeping the item's Citation (#961); the list, which the instruction doesn't name, is kept as left out (#880); fails_when=the table is pipe text, lands in the list, or the Citation is lost; no_claim=how a real model lays out a table.
-  test("a list made into a table gets a table beside it, its Citation in its cell, the list kept as left out", async () => {
+  // protects=a list made into a table becomes a table Block where the list was, out of it, its cell keeping the item's Citation: asking for a table replaces the text it is made from (#961); fails_when=the table is pipe text or lands in the list, the Citation is lost, or the list is kept as left out; no_claim=how a real model lays out a table.
+  test("a list made into a table becomes a table, out of the list, its Citation in its cell", async () => {
     const { core, mind, client, tides } = await setUp(
       editingModel(() =>
         [
@@ -1408,13 +1459,14 @@ describe("Edit with AI over Blocks of several kinds", () => {
       instruction: "Make it a table",
     });
 
-    expect(result).toMatchObject({ kind: "proposed", leftOut: [{}, {}] });
+    expect(result).toMatchObject({ kind: "proposed" });
+    expect(result).not.toHaveProperty("leftOut");
     await resolveChanges(client, "accept");
     expect(
       readMind(client)
         .toJSON()
         .content?.map((block: JSONContent) => block.type),
-    ).toEqual(["table", "bulletList"]);
+    ).toEqual(["table"]);
     expect(await exported(core, mind.id)).toContain(
       "| Tide | When |\n| :--- | ---: |\n| Spring | At new moon[^1] |\n| Neap | Weakest \\| smallest |",
     );
@@ -1425,8 +1477,6 @@ describe("Edit with AI over Blocks of several kinds", () => {
       "p At new moon ⟨found⟩",
       "p Neap",
       "p Weakest | smallest",
-      "• Spring tides are strongest at new moon. ⟨found⟩",
-      "• Neap tides are weakest.",
     ]);
   });
 

@@ -7,6 +7,7 @@
 import { describe, expect, test } from "vitest";
 import { type RequestOutcome, requestFailures } from "../../eval/everyday/checks";
 import { judgeClaims, verdictIn } from "../../eval/everyday/judge";
+import { languageRates, rowRates } from "../../eval/everyday/rates";
 import type { AnswerToolCall } from "../../src/core";
 import { scriptedModel } from "../helpers/models";
 
@@ -32,6 +33,7 @@ const outcome = (fields: Partial<RequestOutcome>): RequestOutcome => ({
   answer: { text: "", citations: [], toolCalls: [], steps: null },
   verdict: { unbacked: [] },
   citedInMinds: ["tutorial", "graphst"],
+  changedBlocks: [],
   scoped: PAPERS,
   ...fields,
 });
@@ -87,6 +89,22 @@ describe("The everyday request guards", () => {
     expect(failures).toEqual([{ kind: "no-citations" }]);
   });
 
+  // protects=a Question answered by cited text written into a Mind has its Citations; fails_when=it fails for none in the reply; no_claim=whether it should have written.
+  test("a Question answered in a Mind, cited there, has its Citations", () => {
+    const failures = requestFailures(
+      outcome({
+        expected: { write: false, cite: true, coverAll: false },
+        answer: {
+          text: "The summaries are ready.",
+          citations: [],
+          toolCalls: [created],
+          steps: null,
+        },
+      }),
+    );
+    expect(failures).toEqual([]);
+  });
+
   // protects=a Document in scope counts as covered only when cited or named as left out, not merely named; fails_when=a name alone passes; no_claim=none beyond protects.
   test("every Document in scope is cited, or named as left out", () => {
     const one = (text: string) =>
@@ -128,6 +146,57 @@ describe("The everyday request guards", () => {
   });
 });
 
+describe("Only what was asked changes", () => {
+  // protects=asked to change one paragraph, a change to another fails and names it; fails_when=it passes, or the one asked about fails; no_claim=none beyond protects.
+  test("a change outside the paragraph asked about fails", () => {
+    const edit = (changedBlocks: number[]) =>
+      requestFailures(
+        outcome({
+          expected: { write: true, cite: false, coverAll: false, only: 1 },
+          answer: { text: "", citations: [], toolCalls: [created], steps: null },
+          changedBlocks,
+        }),
+      );
+    expect(edit([1])).toEqual([]);
+    expect(edit([0, 1])).toEqual([{ kind: "outside", blocks: [0] }]);
+  });
+});
+
+describe("Pass rates", () => {
+  // protects=a request is held to its floor over its runs, per model, and runs are counted per language; fails_when=one failed run marks a request that meets its floor, or a request under it passes; no_claim=none beyond protects.
+  test("per request against its floor, and per language", () => {
+    const run = (id: string, language: "en" | "zh-CN", passed: boolean) => ({
+      id,
+      language,
+      model: "haiku",
+      passed,
+    });
+    const runs = [
+      run("a", "en", true),
+      run("a", "en", false),
+      run("a", "en", true),
+      run("b", "zh-CN", false),
+      run("b", "zh-CN", true),
+      run("b", "zh-CN", false),
+    ];
+    const rows = rowRates(
+      runs,
+      new Map([
+        ["a", 2 / 3],
+        ["b", 2 / 3],
+      ]),
+    );
+    expect(rows.map((row) => [row.id, row.passed, row.runs, row.under])).toEqual([
+      ["a", 2, 3, false],
+      ["b", 1, 3, true],
+    ]);
+    expect(languageRates(runs)).toEqual([
+      { model: "haiku", language: "en", passed: 2, runs: 3 },
+      { model: "haiku", language: "zh-CN", passed: 1, runs: 3 },
+    ]);
+  });
+});
+
 describe("The judge of claims", () => {
   // protects=the judge reads the record and the reply, and its verdict is read back; fails_when=either is left out of what it reads, or a verdict it can't read passes; no_claim=how well a real model judges.
   test("reads the record and the reply, and its verdict", async () => {
@@ -149,5 +218,10 @@ describe("The judge of claims", () => {
     expect(asked).toContain("The new page replaces the earlier version.");
     expect(verdict).toEqual({ unbacked: ["The new page replaces the earlier version."] });
     expect(verdictIn("no idea").unbacked).toHaveLength(1);
+    expect(
+      verdictIn(
+        '{"unbacked": ["Here is a shorter version:"]}\n\nWait, that is no claim.\n\n{"unbacked": []}',
+      ),
+    ).toEqual({ unbacked: [] });
   });
 });
