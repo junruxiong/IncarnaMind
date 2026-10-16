@@ -3462,7 +3462,10 @@ export const zhCN = {
     "这个服务无法自动注册 IncarnaMind。请填写你在该服务中注册的 OAuth 应用的客户端 ID。",
   "remoteConnectors.signIn.error.secret-storage":
     "此系统没有可用的密钥环，IncarnaMind 无法安全地保存你的登录信息。",
+  "remoteConnectors.signIn.error.held-back": "它的登录服务在另一台电脑上，所以没有发送任何内容。",
   "remoteConnectors.signIn.error.failed": "未能登录。",
+  "remoteConnectors.signIn.heldBack":
+    "已开启“所有内容都留在这台电脑上”，而它的登录服务在另一台电脑上，所以不会续期或开始登录，它的工具也不会使用。关闭这项设置后，它会接着之前的状态继续使用。",
   "remoteConnectors.error.unreachable": "无法访问它的服务器。请检查 URL 和网络连接。",
   "remoteConnectors.consent.note": "工具的参数会通过网络发送到这个服务器。",
   "remoteConnectors.answer.signInRequired": "未使用：{connector} 需要你登录（在“设置 → 连接器”中）",
