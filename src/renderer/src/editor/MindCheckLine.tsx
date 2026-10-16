@@ -99,21 +99,6 @@ export function useMindCheckProgress(editor: Editor, requestId: string | null) {
   });
 }
 
-/** How far the run is: "Finding the claims to check…", then "Checking 12 of 48…". */
-export function MindCheckProgress({ editor, requestId }: { editor: Editor; requestId: string }) {
-  const t = useT();
-  const language = useLanguage();
-  const { done, total } = useMindCheckProgress(editor, requestId);
-  const format = (value: number) => new Intl.NumberFormat(language).format(value);
-  return (
-    <span data-testid="mind-check-progress" className="tabular-nums">
-      {total === 0
-        ? t("verify.finding")
-        : t("verify.checking", { done: format(done), total: format(total) })}
-    </span>
-  );
-}
-
 /** When the whole Mind was last checked: "Checked 48 sentences, 2 Oct, 15:20", and what stopped it. */
 export function CheckedWhen({ run }: { run: MindCheckRun }) {
   const t = useT();

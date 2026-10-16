@@ -5,13 +5,7 @@ import { useEffect, useState } from "react";
 import type * as Y from "yjs";
 import type { CitationAttributes } from "../../../core/api";
 import { citationState } from "../../../shared/citations";
-import {
-  acceptAndCheck,
-  checkSentences,
-  dismissCheckProblem,
-  stopCheck,
-  useChecks,
-} from "../checks";
+import { acceptAndCheck, checkSentences, dismissCheckProblem, useChecks } from "../checks";
 import { ProblemLine } from "../components/ProblemLine";
 import { ReadinessExplanation, readinessAction } from "../components/providers/ChatReadinessNotice";
 import { UnreadFilesLine } from "../components/UnreadFilesLine";
@@ -25,7 +19,7 @@ import { AnswerError } from "./AnswerView";
 import { coverageOf, sameCoverage, shownClaims } from "./claimChecks";
 import { type NoteHealth as Health, type HealthPart, noteHealth } from "./healthCounts";
 import { CheckMarkIcon, ClaimMarkIcon } from "./icons";
-import { CheckedWhen, MindCheckAction, MindCheckProgress } from "./MindCheckLine";
+import { CheckedWhen, MindCheckAction } from "./MindCheckLine";
 import { useRunModel } from "./ModelChip";
 import { UncoveredLine } from "./UncoveredLine";
 import { COUNT_IDLE_MS } from "./WordCount";
@@ -271,24 +265,6 @@ export function HealthCard({
         <p data-testid="checks-small-model" className="mind-health-line mind-health-note">
           {t("checks.smallModel")}
         </p>
-      )}
-      {running && (
-        <ProblemLine
-          role="status"
-          testId="checks-running"
-          className="mind-health-line"
-          action={{
-            label: t("checks.stop"),
-            testId: "checks-stop",
-            onClick: () => stopCheck(mindId),
-          }}
-        >
-          {running.action === "whole-mind" ? (
-            <MindCheckProgress editor={editor} requestId={running.requestId} />
-          ) : (
-            t(`checks.running.${running.action}`)
-          )}
-        </ProblemLine>
       )}
       {!running && problem?.kind === "not-ready" && (
         <ProblemLine

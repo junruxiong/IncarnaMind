@@ -203,7 +203,7 @@ test("In Chinese and a narrow window, from the Mind's tab menu: a model on this 
   const widen = window.getByTestId("checks-uncovered").getByTestId("checks-check-all");
   await expect(widen).toHaveText("对照全部文档核对");
   await pointAndClick(window, widen);
-  await expect(window.getByTestId("checks-running")).toHaveCount(0);
+  await expect(window.getByTestId("badge-stop")).toHaveCount(0);
   await expect(card.getByTestId("health-checked-all")).toBeVisible();
   await expect(marks(window).and(window.locator('[data-check="supported"]'))).toHaveCount(3);
   await expect(marks(window).and(window.locator('[data-check="contradicted"]'))).toHaveCount(1);

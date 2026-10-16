@@ -1,6 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
+import type { Editor } from "@tiptap/core";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   addDocuments,
@@ -123,6 +124,9 @@ test("in Chinese and a narrow pane the badge shows only its marks and numbers; T
   const words = window.getByTestId("check-badge").locator(".check-badge-words");
   await expect(words).toHaveText("句待核对");
   await expect(words).toBeVisible();
+  await setWindowSize(app, window, 1100, 720);
+  await expect(words).toBeVisible();
+  await setWindowSize(app, window, 1440, 900);
   // The Mind beside itself in a narrower window: each page under 400 px keeps the numbers, not the words.
   await pointAndClick(window, window.getByTestId("split-group"));
   const pages = window.locator(".mind-scroller:visible");
@@ -145,8 +149,61 @@ test("in Chinese and a narrow pane the badge shows only its marks and numbers; T
   await motionSettled(window);
   await window.keyboard.press("Tab");
   await expect(card.locator(":focus")).toHaveCount(1);
+  // ↓ and ↑ go through its rows and buttons, round to the first.
+  const focusedId = () =>
+    card.evaluate((element) => element.querySelector(":focus")?.getAttribute("data-testid") ?? "");
+  const first = await focusedId();
+  await window.keyboard.press("ArrowDown");
+  await expect.poll(focusedId).not.toBe(first);
+  await window.keyboard.press("ArrowUp");
+  await expect.poll(focusedId).toBe(first);
   await window.keyboard.press("Escape");
   await expect(card).toHaveCount(0);
   await expect(open.first()).toBeFocused();
+  await app.close();
+});
+
+/** Where the editor's cursor is, as an offset in the text of its first paragraph. */
+const cursorAt = (window: Page) =>
+  window.getByTestId("mind-editor").evaluate((element) => {
+    const view = (element as Element & { editor?: Editor }).editor?.view;
+    if (!view) return -1;
+    return view.state.selection.from - 1;
+  });
+
+test("each row's Next goes through its sentences in order and round to the first; a running check says how far it has got, and Stop stops it", async () => {
+  const { app, window } = await launchWithTides();
+  await setWindowSize(app, window, 1440, 900);
+  await newMind(window);
+  const editor = window.getByTestId("mind-editor");
+  await editor.click();
+  const first = "Penguins nest on the harbour cliffs.";
+  await window.keyboard.type(`${first} Whales sing in the deep bay.`);
+  const card = await checkCard(window);
+  await pointAndClick(window, card.getByTestId("health-check"));
+  const marks = window.getByTestId("claim-mark");
+  await expect(marks.and(window.locator('[data-check="unsupported"]'))).toHaveCount(2);
+  const unsupported = (await checkCard(window)).getByTestId("health-unsupported");
+  await expect(unsupported).toContainText("2 unsupported");
+  await pointAndClick(window, unsupported);
+  await expect.poll(() => cursorAt(window)).toBe(0);
+  await pointAndClick(window, unsupported);
+  await expect.poll(() => cursorAt(window)).toBe(first.length + 1);
+  await pointAndClick(window, unsupported);
+  await expect.poll(() => cursorAt(window)).toBe(0);
+  await window.keyboard.press("Escape");
+
+  // A sentence the scripted model checks slowly: the badge counts, and Stop ends the run.
+  await editor.click();
+  await window.keyboard.press("End");
+  await window.keyboard.type(" Seals sleep on the rocks slowly. Gulls circle the pier slowly.");
+  await pointAndClick(window, (await checkCard(window)).getByTestId("health-check"));
+  const stop = window.getByTestId("badge-stop");
+  await expect(stop).toBeVisible();
+  await expect(window.getByTestId("badge-progress")).toContainText("Checking");
+  await screenshot(window, "check-badge-running-en");
+  await pointAndClick(window, stop);
+  await expect(stop).toHaveCount(0);
+  await expect(marks.and(window.locator('[data-check="checking"]'))).toHaveCount(0);
   await app.close();
 });
