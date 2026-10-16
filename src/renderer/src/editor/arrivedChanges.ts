@@ -5,9 +5,14 @@
  * they are first set aside and then written again as the editor's change: one
  * step of its Undo takes the whole turn back, whenever its tab opened.
  */
-import { Fragment, type Node as ProseMirrorNode } from "@tiptap/pm/model";
+import { Fragment, type Node as ProseMirrorNode, type Schema } from "@tiptap/pm/model";
 import type { EditorState } from "@tiptap/pm/state";
-import { absolutePositionToRelativePosition, ySyncPluginKey } from "@tiptap/y-tiptap";
+import {
+  absolutePositionToRelativePosition,
+  updateYFragment,
+  ySyncPluginKey,
+  yXmlFragmentToProseMirrorRootNode,
+} from "@tiptap/y-tiptap";
 import * as Y from "yjs";
 import {
   BLOCK_ID_ATTRIBUTE,
@@ -183,7 +188,8 @@ const blockIdOf = (node: Y.XmlElement | Y.XmlText | Y.XmlHook | undefined): stri
 };
 
 // Only the Blocks that differ are written again: the rest keep what is anchored in them.
-function writeAs(blocks: Y.XmlFragment, wanted: Y.XmlFragment): void {
+function writeAs(doc: Y.Doc, blocks: Y.XmlFragment, wanted: Y.XmlFragment, schema: Schema): void {
+  const content = yXmlFragmentToProseMirrorRootNode(wanted, schema);
   const target = wanted
     .toArray()
     .filter((node): node is Y.XmlElement | Y.XmlText => !(node instanceof Y.XmlHook));
@@ -196,12 +202,24 @@ function writeAs(blocks: Y.XmlFragment, wanted: Y.XmlFragment): void {
   for (const want of target) {
     while (goes(blocks.get(index))) blocks.delete(index, 1);
     const here = blocks.get(index);
-    if (here && blockIdOf(here) === blockIdOf(want)) {
-      if (here.toString() !== want.toString()) {
+    if (!here || blockIdOf(here) !== blockIdOf(want)) {
+      blocks.insert(index, [want.clone()]);
+    } else if (here.toString() !== want.toString()) {
+      if (
+        here instanceof Y.XmlElement &&
+        want instanceof Y.XmlElement &&
+        here.nodeName === want.nodeName
+      ) {
+        // Earlier reviews are anchored in these Yjs types; replacing a Block loses them.
+        updateYFragment(doc, here, content.child(index), {
+          mapping: new Map(),
+          isOMark: new Map(),
+        });
+      } else {
         blocks.delete(index, 1);
         blocks.insert(index, [want.clone()]);
       }
-    } else blocks.insert(index, [want.clone()]);
+    }
     index += 1;
   }
   if (blocks.length > index) blocks.delete(index, blocks.length - index);
@@ -218,6 +236,7 @@ export function writeAccepted(
   requests: ReadonlySet<string>,
   aside: unknown,
   tracked: unknown,
+  schema: Schema,
 ): ResolvedProposal[] {
   const picked = (ref: ProposalRef) => requests.has(ref.request);
   const scratch = new Y.Doc();
@@ -232,7 +251,7 @@ export function writeAccepted(
     doc.transact(() => {
       resolveProposals(blocks, picked, "reject");
     }, aside);
-    doc.transact(() => writeAs(blocks, accepted), tracked);
+    doc.transact(() => writeAs(doc, blocks, accepted, schema), tracked);
     return resolved;
   } finally {
     scratch.destroy();
