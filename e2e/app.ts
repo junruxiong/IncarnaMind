@@ -42,7 +42,7 @@ export interface RunningApp {
 
 export interface LaunchOptions {
   /**
-   * Every chat model is the scripted one in `src/main/fakeChatModel.ts`, so
+   * Every chat model is the scripted one in `src/main/fakeChat/`, so
    * Questions are answered with no network or keys. Needs a test build
    * (`npm run test:smoke` makes one).
    */
@@ -119,6 +119,8 @@ export interface LaunchOptions {
    * build honours it.
    */
   web?: number;
+  /** How long keeping a page as it looks may take, in milliseconds. A test build honours it. */
+  lookLimit?: number;
   /**
    * What the fake text recognition model reads on each scanned page (#397):
    * a JSON file of a `FakeScanScript`. Without, it reads nothing on them.
@@ -186,6 +188,7 @@ export async function launchApp(
     transcriber,
     scans,
     web,
+    lookLimit,
     scriptedTasks = false,
     contradictionWatchDelayMs,
   }: LaunchOptions = {},
@@ -213,6 +216,7 @@ export async function launchApp(
   delete env.INCARNAMIND_TEST_TRANSCRIBER_OPTIONS;
   delete env.INCARNAMIND_TEST_SCANS;
   delete env.INCARNAMIND_TEST_WEB;
+  delete env.INCARNAMIND_TEST_LOOK_LIMIT;
   delete env.INCARNAMIND_TEST_TASKS;
   delete env.INCARNAMIND_TEST_CONTRADICTION_DELAY_MS;
   // A test never uses the ChatGPT sign-in an agent's shell may point at for checks by hand.
@@ -236,6 +240,7 @@ export async function launchApp(
   if (chatGpt) env.INCARNAMIND_TEST_CHATGPT = chatGpt;
   if (scans) env.INCARNAMIND_TEST_SCANS = scans;
   if (web) env.INCARNAMIND_TEST_WEB = String(web);
+  if (lookLimit) env.INCARNAMIND_TEST_LOOK_LIMIT = String(lookLimit);
   if (scriptedTasks) env.INCARNAMIND_TEST_TASKS = "1";
   if (contradictionWatchDelayMs !== undefined) {
     env.INCARNAMIND_TEST_CONTRADICTION_DELAY_MS = String(contradictionWatchDelayMs);

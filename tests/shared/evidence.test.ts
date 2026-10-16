@@ -23,6 +23,7 @@ const settings = (leaveOutOwnFiles: boolean): Pick<Settings, "user"> => ({
     authorName: null,
     monthlyCap: null,
     webSearch: false,
+    keepWebPageLook: false,
   },
 });
 

@@ -667,6 +667,14 @@ export const MIND_TEXT_ORIGINS_FIELD = "textOrigins";
 export const MIND_BLOCK_TIMES_FIELD = "blockTimes";
 
 /**
+ * The name of the Y.Map, beside a Mind's Blocks, that lists the files a
+ * check's scope couldn't read when it started, by the request that made the
+ * checks (`ClaimCheckAttributes.request`). A request that read everything has
+ * no entry (ADR-0003).
+ */
+export const MIND_CHECK_UNREAD_FIELD = "checkUnread";
+
+/**
  * A Question's Search scope (CONTEXT.md): the Folders, Tags and individual
  * Documents its Document search is limited to. It covers every Document in
  * one of the Folders or their sub-Folders (at any depth), every Document with
@@ -1661,6 +1669,11 @@ export interface UserSettings {
    * pages they use as Documents (#128): off until the User turns it on.
    */
   webSearch: boolean;
+  /**
+   * Web pages are kept as they look when saved (`WebPageLook`), unless the
+   * save says otherwise: off until the User turns it on.
+   */
+  keepWebPageLook: boolean;
 }
 
 /**
@@ -2301,6 +2314,8 @@ export interface WebPageInfo {
    * (#756): over 60, over 5 MB, or past 25 MB for the page.
    */
   picturesLeftOut: number;
+  /** The last fetch kept as it looks; null when it wasn't asked to be. */
+  look: WebPageLook | null;
 }
 
 /** What `saveWebPage` takes. */
@@ -2311,7 +2326,35 @@ export interface SaveWebPageInput {
   html?: string;
   /** The Library Folder to file a new Document in; none or null: Unsorted. */
   folderId?: string | null;
+  /**
+   * Keep the page as it looks too (see `WebPageLook`), whose full load may
+   * reach the other sites the page draws from. Absent: as
+   * `UserSettings.keepWebPageLook` says. Ignored with `html`.
+   */
+  keepLook?: boolean;
 }
+
+/**
+ * A web page's version kept as it looks: a PDF of the page as a browser
+ * showed it, made once, in the background, in a hidden page that reaches
+ * only the public internet (src/main/pageLook.ts).
+ * - "saving": being made.
+ * - "saved": made at `savedAt` (ISO 8601, UTC), served at
+ *   `documentImageUrl(documentId, path)`.
+ * - "failed": it couldn't be made.
+ */
+export type WebPageLook =
+  | { status: "saving" }
+  | { status: "saved"; savedAt: string; path: string }
+  | { status: "failed"; failure: WebPageLookFailure };
+
+/**
+ * Why a page's look couldn't be kept: "timed-out", it didn't load in 30
+ * seconds; "unreachable", it couldn't be loaded; "too-large", its PDF is over
+ * 50 MB; "stopped", IncarnaMind stopped while making it, twice; "failed",
+ * anything else.
+ */
+export type WebPageLookFailure = "timed-out" | "unreachable" | "too-large" | "stopped" | "failed";
 
 /**
  * Why a web page wasn't saved, or wasn't fetched again:
@@ -3474,7 +3517,8 @@ export interface Money {
  * The most IncarnaMind may spend in a calendar month on models billed per
  * token. Before each such request its most (its prompt and its output limit)
  * is reserved, and a request whose reservation would pass the cap isn't sent.
- * Spending in the other currency counts at a fixed rate.
+ * What is spent and what is still reserved both count against it. Spending
+ * in the other currency counts at a fixed rate.
  */
 export interface MonthlyCap {
   amount: number;
@@ -3486,8 +3530,10 @@ export interface ProviderCost {
   providerId: string;
   billing: Billing;
   requests: number;
-  /** What its requests cost, in each currency they were priced in. */
+  /** What its settled requests cost, in each currency they were priced in. */
   spent: Money[];
+  /** Reserved for its open requests, per currency. */
+  setAside: Money[];
   /** Tokens of requests to models with no known price: counted here, not toward the cap. */
   unpricedTokens: number;
   /** Requests a quit cut short with no usage known: counted as costing nothing (#636). */
@@ -3498,10 +3544,14 @@ export interface ProviderCost {
 export interface CostSummary {
   /** When the counted month began (ISO 8601), in the computer's time zone. */
   monthStart: string;
-  /** What per-token requests cost this month, settled and still reserved, per currency. */
+  /** What per-token requests cost this month once settled, per currency. */
   spent: Money[];
-  /** All of it in the cap's currency (the other at a fixed rate), when a cap is set. */
+  /** Reserved for open requests, per currency. */
+  setAside: Money[];
+  /** `spent` in the cap's currency (the other at a fixed rate), when a cap is set. */
   spentTowardCap: Money | null;
+  /** `setAside` in the cap's currency; it counts against the cap too. */
+  setAsideTowardCap: Money | null;
   cap: MonthlyCap | null;
   /** The providers used this month. */
   providers: ProviderCost[];
@@ -3645,7 +3695,7 @@ export interface Task {
   progress: TaskProgress | null;
   /** "failed": why, as a `ProviderErrorKind` or another short kind. */
   problem: string | null;
-  /** What its model requests have cost, settled and reserved; null with none billed. */
+  /** What its model requests have cost once settled; null with none billed. */
   cost: Money | null;
   /** What its kind lets the User ask of it, whatever it is doing now. */
   actions: TaskAction[];
@@ -3767,6 +3817,7 @@ export type RunEstimate =
       /** Null for a model with no known price. */
       cost: Money | null;
       spentTowardCap: Money | null;
+      setAsideTowardCap: Money | null;
       cap: MonthlyCap | null;
     }
   | { billing: "plan" | "free" };
@@ -7284,12 +7335,20 @@ export interface CoreApi {
    * navigation, ads or scripts, kept as a snapshot that Citations point at
    * and the check reads, named by the page's title. The page is fetched from
    * this computer, with a time and size limit, unless `html` is given (a
-   * page the app has open). Its images aren't fetched. An address saved
-   * already gives its Document, as it is. "document.status" events report
-   * its processing. A page that can't be fetched, or that is mostly not text,
-   * isn't saved: the result says why.
+   * page the app has open), with its article's pictures. Kept as it
+   * looks too, if asked, in the background (`WebPageInfo.look`). An address
+   * saved already gives its Document, as it is. "document.status" events
+   * report its processing. A page that can't be fetched, or that is mostly
+   * not text, isn't saved: the result says why.
    */
   saveWebPage(input: SaveWebPageInput): Promise<WebPageResult>;
+  /**
+   * Keeps a web page Document's last version as it looks (`WebPageLook`),
+   * again after it failed, in the background: the User's click is the
+   * consent to its full load. Throws NotFoundError for an unknown Document,
+   * and InvalidInputError for one that isn't a web page.
+   */
+  keepWebPageLook(documentId: string): Promise<Document>;
   /**
    * "Fetch again" on a web page Document: its address is fetched anew, and a
    * page that changed becomes a new version. Citations keep pointing at the
@@ -8614,6 +8673,7 @@ const methods: Record<CoreApiMethod, true> = {
   changeLayout: true,
   addDocuments: true,
   saveWebPage: true,
+  keepWebPageLook: true,
   fetchWebPageAgain: true,
   saveTextAsDocument: true,
   listDocuments: true,

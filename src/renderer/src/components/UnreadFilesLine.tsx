@@ -1,15 +1,16 @@
 import { useId, useState } from "react";
 import type { UnreadFile } from "../../../core/api";
+import { UNREAD_REASON_KEYS } from "../../../shared/unreadFiles";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
-import { UNREAD_REASON_KEYS } from "../unreadFiles";
 import { LineAction, ProblemLine } from "./ProblemLine";
 
 /**
  * "3 files couldn't be read · Show" (#740; DESIGN.md, Problems): beside an
- * Answer, and in the Library, when a file in what was searched couldn't be
- * read. Show lists each with why and what to do. Nothing when there are none:
- * a line that always showed would be one nobody read.
+ * Answer, the Mind's checks and a Verify run, and in the Library, when a file
+ * in what was searched couldn't be read. Show lists each with why and what to
+ * do. Nothing when there are none: a line that always showed would be one
+ * nobody read.
  */
 export function UnreadFilesLine({
   files,

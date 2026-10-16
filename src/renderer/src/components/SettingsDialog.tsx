@@ -22,6 +22,7 @@ import { JevSettingsSection } from "./providers/JevSettings";
 import { OtherModelsSettings } from "./providers/OtherModelsSettings";
 import { PlansSettings } from "./providers/PlansSettings";
 import { RerankSettingsSection } from "./providers/RerankSettings";
+import { SavedWebPagesSettings } from "./SavedWebPagesSettings";
 import { SkillScriptsSettings, SkillsSettings } from "./SkillsSettings";
 import { SpendingCapSettings } from "./SpendingCapSettings";
 import { SuggestionSettings } from "./SuggestionSettings";
@@ -180,6 +181,7 @@ function PageContent({ page }: { page: SettingsPage }) {
           </Titled>
           <RerankSettingsSection />
           <WebSearchSettings />
+          <SavedWebPagesSettings />
           <EvidenceSettings />
         </Page>
       );
