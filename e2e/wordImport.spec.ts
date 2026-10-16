@@ -31,6 +31,7 @@ import {
   openSettings,
   pointAndClick,
   removeDataFolder,
+  savedLine,
   setLanguage,
   setWindowSize,
   tabMenu,
@@ -337,7 +338,9 @@ test("someone else's tracked changes wait in place with who made them and when: 
   // Export: what was resolved leaves no trace; what waits is in the file as it was.
   await exportFromMenu(window);
   const result = window.getByTestId("export-result");
-  await expect(result.getByTestId("export-done")).toContainText("Saved Lease redline.docx");
+  await expect(result.getByTestId("export-done")).toContainText(
+    savedLine("Lease redline.docx", output),
+  );
   await expect(result.getByTestId("export-tracked")).toContainText(
     "1 change waiting, as tracked changes",
   );
@@ -521,7 +524,7 @@ test("Export writes back into the Word file: the User's edits tracked under thei
   // Export: the deleted paragraph stays as Priya's deletion, the comment with it; nothing to say first.
   const result = window.getByTestId("export-result");
   await exportFromMenu(window);
-  await expect(result.getByTestId("export-done")).toHaveText("Saved Memo.docx");
+  await expect(result.getByTestId("export-done")).toHaveText(savedLine("Memo.docx", output));
   const tracked =
     unzip(await readFile(join(output, "Memo.docx")))
       .get("word/document.xml")
@@ -566,7 +569,7 @@ test("Export writes back into the Word file: the User's edits tracked under thei
 
   // Export anyway: saved, the paragraph kept byte for byte, the comment's marks gone with its text.
   await result.getByTestId("export-anyway").click();
-  await expect(result.getByTestId("export-done")).toHaveText("Saved Memo 2.docx");
+  await expect(result.getByTestId("export-done")).toHaveText(savedLine("Memo 2.docx", output));
   await motionSettled(window);
   await screenshot(window, "word-export-saved");
   const document =

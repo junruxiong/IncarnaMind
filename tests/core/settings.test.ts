@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { type Executor, InvalidInputError } from "../../src/core";
+import { type Executor, type ExportPreferences, InvalidInputError } from "../../src/core";
 import { createTempDataFolder, startCore } from "../helpers/core";
 
 /**
@@ -18,6 +18,7 @@ const DEFAULT_EXPORT = {
   docx: DEFAULT_WORD,
   pdf: { includeQuestions: false },
   html: { includeQuestions: false },
+  "share-page": { includeQuestions: false, citationCards: true, checkedLine: false },
 } as const;
 
 const PDF_EXPORT = {
@@ -25,6 +26,7 @@ const PDF_EXPORT = {
   docx: { ...DEFAULT_WORD, markAiText: false },
   pdf: { includeQuestions: true },
   html: { includeQuestions: false },
+  "share-page": { includeQuestions: true, citationCards: false, checkedLine: true },
   theirChanges: "accepted",
 } as const;
 
@@ -36,6 +38,8 @@ describe("Settings", () => {
       user: {
         language: "system",
         chatModel: null,
+        quickTasksModel: null,
+        imageModel: null,
         suggestWhileWriting: false,
         leaveOutOwnFiles: true,
         exportOptions: DEFAULT_EXPORT,
@@ -131,6 +135,8 @@ describe("Settings", () => {
     expect(settings.user).toEqual({
       language: "zh-CN",
       chatModel: null,
+      quickTasksModel: null,
+      imageModel: null,
       suggestWhileWriting: false,
       leaveOutOwnFiles: true,
       exportOptions: DEFAULT_EXPORT,
@@ -157,6 +163,20 @@ describe("Settings", () => {
       meetingSystemAudio: true,
       meetingNoticeAccepted: false,
       motion: "system",
+    });
+  });
+
+  test("export options saved before the web page to share (#72) read its defaults", async () => {
+    const core = startCore(await createTempDataFolder());
+    const { "share-page": _, ...before } = { ...DEFAULT_EXPORT, format: "pdf" as const };
+
+    await core.updateSettings({
+      user: { exportOptions: before as unknown as ExportPreferences },
+    });
+
+    expect((await core.getSettings()).user.exportOptions).toEqual({
+      ...DEFAULT_EXPORT,
+      format: "pdf",
     });
   });
 
@@ -211,6 +231,8 @@ describe("Settings", () => {
       user: {
         language: "zh-CN",
         chatModel: null,
+        quickTasksModel: null,
+        imageModel: null,
         suggestWhileWriting: true,
         leaveOutOwnFiles: false,
         exportOptions: PDF_EXPORT,
@@ -264,6 +286,17 @@ describe("Settings", () => {
     {
       name: "export options whose Questions switch isn't true or false",
       patch: { user: { exportOptions: { ...DEFAULT_EXPORT, pdf: { includeQuestions: "yes" } } } },
+    },
+    {
+      name: "a shared page's choice that isn't true or false",
+      patch: {
+        user: {
+          exportOptions: {
+            ...DEFAULT_EXPORT,
+            "share-page": { includeQuestions: false, citationCards: "yes", checkedLine: false },
+          },
+        },
+      },
     },
     {
       name: "a way to show someone's changes that isn't one",

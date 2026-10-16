@@ -13,7 +13,7 @@
  */
 import type { ChatProviderKind } from "../../api";
 import { PRESETS } from "./presets";
-import type { CatalogProvider, Endpoint, EndpointField, ProviderOptions } from "./types";
+import type { CatalogProvider, Endpoint, EndpointField, ProviderOptions, Role } from "./types";
 
 const GLOBAL = { en: "Global", zh: "全球" };
 
@@ -38,8 +38,8 @@ const PROVIDERS = [
     keyUrl: "https://platform.claude.com/settings/keys",
     keyGuide: [
       {
-        en: "Open Get a key and sign in to the Anthropic Console.",
-        zh: "点“获取密钥”，登录 Anthropic Console。",
+        en: "Open Anthropic's key page and sign in to the Anthropic Console.",
+        zh: "打开 Anthropic 的密钥页面，登录 Anthropic Console。",
       },
       {
         en: "Add credit under Billing, or link your Claude Max or Team plan there (see below).",
@@ -63,8 +63,16 @@ const PROVIDERS = [
         ],
       },
       // Claude 5 models think by default, and return only an empty block unless asked for the summary.
+      // At the default effort, a summary of three Documents took 30 to 85 seconds to start (#899).
       reasoningSummary: {
         options: { anthropic: { thinking: { type: "adaptive", display: "summarized" } } },
+        answer: {
+          anthropic: { thinking: { type: "adaptive", display: "summarized" }, effort: "low" },
+        },
+        careful: {
+          anthropic: { thinking: { type: "adaptive", display: "summarized" }, effort: "high" },
+        },
+        refused: [{ names: "effort", options: { anthropic: { effort: undefined } } }],
         only: [
           "claude-fable-5",
           "claude-mythos-5",
@@ -112,8 +120,8 @@ const PROVIDERS = [
     keyUrl: "https://platform.openai.com/api-keys",
     keyGuide: [
       {
-        en: "Open Get a key and sign in to the OpenAI platform.",
-        zh: "点“获取密钥”，登录 OpenAI 平台。",
+        en: "Open OpenAI's key page and sign in to the OpenAI platform.",
+        zh: "打开 OpenAI 的密钥页面，登录 OpenAI 平台。",
       },
       {
         en: "Add credit under Billing.",
@@ -125,9 +133,35 @@ const PROVIDERS = [
       },
     ],
     docsUrl: "https://platform.openai.com/docs/models",
+    // The Responses API keeps each request on OpenAI's servers unless it says not to. Small
+    // calls run with reasoning off: on the Organize evaluation GPT-6 Luna tagged as well with it
+    // off, writing a quarter of the output tokens. These models refuse "none" (GPT-6.1 Sol and
+    // GPT-6 Astra start at "low", the 2025 GPT-5 models at "minimal"; o-series, Pro and Codex
+    // models aren't checked), so they keep their own.
     request: {
-      // The Responses API keeps each request on OpenAI's servers unless it says not to.
       store: false,
+      thinkingOff: {
+        options: { openai: { reasoningEffort: "none" } },
+        except: [
+          "gpt-6.1-sol",
+          "gpt-6-astra",
+          "gpt-5",
+          "gpt-5-mini",
+          "gpt-5-nano",
+          "gpt-5-pro",
+          "gpt-5.2-pro",
+          "gpt-5.3-codex",
+          "gpt-5.3-codex-spark",
+          "gpt-5.4-pro",
+          "gpt-5.5-pro",
+          "o1",
+          "o1-pro",
+          "o3",
+          "o3-mini",
+          "o3-pro",
+          "o4-mini",
+        ],
+      },
       reasoningSummary: { options: { openai: { reasoningSummary: "auto" } } },
     },
     roles: {
@@ -174,8 +208,8 @@ const PROVIDERS = [
     keyUrl: "https://aistudio.google.com/apikey",
     keyGuide: [
       {
-        en: "Open Get a key and sign in with your Google account.",
-        zh: "点“获取密钥”，用 Google 账号登录。",
+        en: "Open Google's key page and sign in with your Google account.",
+        zh: "打开 Google 的密钥页面，用 Google 账号登录。",
       },
       {
         en: "Choose Create API key, and a project if it asks.",
@@ -225,8 +259,8 @@ const PROVIDERS = [
     keyUrl: "https://openrouter.ai/settings/keys",
     keyGuide: [
       {
-        en: "Open Get a key and sign in to OpenRouter.",
-        zh: "点“获取密钥”，登录 OpenRouter。",
+        en: "Open OpenRouter's key page and sign in.",
+        zh: "打开 OpenRouter 的密钥页面并登录。",
       },
       {
         en: "Add credit under Credits. One balance pays for every model.",
@@ -276,11 +310,15 @@ const PROVIDERS = [
     apiKey: "required",
     keyUrl: "https://console.mistral.ai/api-keys",
     docsUrl: "https://docs.mistral.ai/getting-started/models/models_overview/",
+    request: { thinkingOff: { options: { mistral: { reasoningEffort: "none" } } } },
     roles: {
       answers: "mistral-small-2603",
       strongest: "mistral-medium-2604",
       quickTasks: "ministral-8b-2512",
       images: "mistral-small-2603",
+      // Tagging's cost is nearly all input, which Mistral Small 4 prices as Ministral 8B does,
+      // and it is a much larger model.
+      tagging: "mistral-small-2603",
     },
     dataUse: {
       training: "opt-out",
@@ -340,8 +378,8 @@ const PROVIDERS = [
     keyUrl: "https://platform.deepseek.com/api_keys",
     keyGuide: [
       {
-        en: "Open Get a key and sign up or sign in to the DeepSeek platform.",
-        zh: "点“获取密钥”，注册或登录 DeepSeek 开放平台。",
+        en: "Open DeepSeek's key page and sign up or sign in to the DeepSeek platform.",
+        zh: "打开 DeepSeek 的密钥页面，注册或登录 DeepSeek 开放平台。",
       },
       {
         en: "Top up your balance. API use is paid by what you use.",
@@ -401,8 +439,8 @@ const PROVIDERS = [
     keyUrl: "https://bailian.console.aliyun.com/?tab=model#/api-key",
     keyGuide: [
       {
-        en: "Pick the region of your account above, then open Get a key. A key works only in its own region.",
-        zh: "先在上方选择账号所在的地域，再点“获取密钥”。密钥只在创建它的地域有效。",
+        en: "Pick the region of your account above, then open Qwen's key page. A key works only in its own region.",
+        zh: "先在上方选择账号所在的地域，再打开通义千问的密钥页面。密钥只在创建它的地域有效。",
       },
       {
         en: "Sign in to Model Studio and turn it on if it asks. New accounts may get free use for a while.",
@@ -561,8 +599,8 @@ const PROVIDERS = [
     keyUrl: "https://cloud.siliconflow.cn/account/ak",
     keyGuide: [
       {
-        en: "Pick the region of your account above, then open Get a key.",
-        zh: "先在上方选择账号所在的地域，再点“获取密钥”。",
+        en: "Pick the region of your account above, then open SiliconFlow's key page.",
+        zh: "先在上方选择账号所在的地域，再打开硅基流动的密钥页面。",
       },
       {
         en: "Sign in to SiliconFlow. In mainland China it asks you to verify your identity first.",
@@ -645,6 +683,18 @@ const PROVIDERS = [
 ] as const satisfies readonly CatalogProvider[];
 
 export type CatalogProviderId = (typeof PROVIDERS)[number]["id"];
+
+/**
+ * The ChatGPT plan's models for the jobs that aren't Answers: it has no entry
+ * of its own (it serves OpenAI's models, see ../chatgpt), and the User picks
+ * its Answers model from the plan's list.
+ */
+export const CHATGPT_PLAN_ROLES: Readonly<
+  Pick<Partial<Record<Role, string>>, "quickTasks" | "tagging">
+> = {
+  quickTasks: "gpt-6-luna",
+  tagging: "gpt-6-luna",
+};
 
 /** The providers, in the order the catalog lists them: the presets before a server the User gives. */
 export const CATALOG_PROVIDERS: readonly CatalogProvider[] = PROVIDERS.flatMap(
@@ -752,3 +802,17 @@ export const endpointOf = (
   id: string | null | undefined,
 ): Endpoint | undefined =>
   provider.endpoints.find((each) => each.id === id) ?? provider.endpoints[0];
+
+/**
+ * A provider's model for a job that isn't Answers, from the catalog: the
+ * ChatGPT plan's from its own roles. Undefined when it names none.
+ */
+export const catalogRoleModel = (
+  { kind, catalogId }: { kind: ChatProviderKind; catalogId: string | null },
+  role: "quickTasks" | "images" | "tagging",
+): string | undefined =>
+  kind === "chatgpt"
+    ? role === "images"
+      ? undefined
+      : CHATGPT_PLAN_ROLES[role]
+    : catalogProviderOf(kind, catalogId)?.roles[role];

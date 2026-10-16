@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { nearestLine } from "../../src/core/answers/checks/nearest";
+import { figuresMatch, nearestLine } from "../../src/core/answers/checks/nearest";
 
 const passages = [
   {
@@ -48,5 +48,16 @@ describe("the line of a Passage nearest a sentence (#770)", () => {
     expect(nearestLine("The company reported results for the year 2025.", company)).toMatchObject({
       id: "P1",
     });
+  });
+});
+
+describe("the figures a sentence states, in a text", () => {
+  test("match across separators and percent forms, and differ when one isn't there", () => {
+    const sheet = "Item,2024,2025\nRevenue,1231.0,1482.6\nOperating margin,0.18,0.21";
+    expect(figuresMatch("Operating margin was 21% in 2025.", sheet)).toBe(true);
+    expect(figuresMatch("Revenue was $1,482.6 million in 2025.", sheet)).toBe(true);
+    expect(figuresMatch("Operating margin was 25% in 2025.", sheet)).toBe(false);
+    expect(figuresMatch("Revenue was 1,482.0 in 2025.", sheet)).toBe(false);
+    expect(figuresMatch("Margins improved.", sheet)).toBe(true);
   });
 });

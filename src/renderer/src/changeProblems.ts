@@ -53,6 +53,14 @@ export function problemText(t: Translate, problem: MindProblem, mind: string): s
       return t("mindCall.failed.noHeading", { mind, heading: problem.heading });
     case "no-place":
       return t("mindCall.failed.noPlace", { mind, place: problem.place });
+    case "several-places":
+      return t(
+        problem.adding ? "mindCall.failed.severalPlaces.add" : "mindCall.failed.severalPlaces",
+        {
+          mind,
+          name: problem.name,
+        },
+      );
     case "no-text":
       return t("mindCall.failed.noText", { mind });
     case "too-long":
@@ -63,6 +71,8 @@ export function problemText(t: Translate, problem: MindProblem, mind: string): s
       return t("mindCall.failed.contentNotOwn", { mind });
     case "stopped":
       return t("mindCall.failed.stopped", { mind });
+    case "no-table":
+      return t("mindCall.failed.noTable", { mind });
     case "local-mode":
       return t("mindCall.failed.localMode", { mind });
     case "not-ready":
