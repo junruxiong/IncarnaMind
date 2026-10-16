@@ -2963,6 +2963,7 @@ export const zhCN = {
   "error.check.localMode": "已开启“所有内容都留在这台电脑上”，而这个模型不在这台电脑上。",
   "error.check.declined": "你已拒绝向这个模型的服务发送这条说法，因此没有发送任何内容。",
   "error.tagging.noModel": "先选择分类模型。",
+  "error.tagging.place": "选择要用 AI 打标签的位置：一个文件夹，或“不在文件夹中”。",
   "error.tagging.cloudPaused": "开启“所有内容都留在这台电脑上”时，云端分类会暂停。",
   "error.tagging.jevNotSetUp": "尚未设置 Jev。",
   "error.tagging.jevKeyUnreadable": "无法在这台设备上读取 Jev 密钥。",

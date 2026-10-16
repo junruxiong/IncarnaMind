@@ -174,6 +174,7 @@ test("in Chinese, the status names the company, and Stop names the Folder", asyn
   await setWindowSize(app, window, 1100, 800);
   await setLanguage(window, "zh-CN");
   const folderId = await createFolder(window, FOLDER);
+  await acceptPlainTextKeys(window);
   await window.evaluate(async () => {
     const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
     await core.saveChatProvider({
