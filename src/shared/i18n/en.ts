@@ -2237,6 +2237,7 @@ export const en = {
   "comparison.cell.nothingToSearch": "no text to search",
   "comparison.cell.sourceRemoved": "source removed",
   "comparison.cell.leftOut": "left out: IncarnaMind wrote it",
+  "comparison.cell.notCited": "left out: your own working file",
   "comparison.cell.auth": "key refused",
   "comparison.cell.rateLimit": "provider busy",
   "comparison.cell.network": "provider unreachable",
