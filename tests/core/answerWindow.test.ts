@@ -44,6 +44,13 @@ describe("Cutting the Question context to a window", () => {
     expect(only?.content).not.toContain("Newest:");
   });
 
+  test("a Document's whole text given with the Question goes whole or not at all, never cut (#1036)", () => {
+    const whole = `<document-text>\nThe whole text of "Tides", as Passages.\n\n${passage("P1", 400)}\n</document-text>`;
+    const asked: AnswerMessage[] = [{ role: "user", content: `${whole}\n\n${question}` }];
+    expect(fitQuestionContext(asked, question, 600)).toEqual(asked);
+    expect(fitQuestionContext(asked, question, 300)).toEqual([{ role: "user", content: question }]);
+  });
+
   test("a conversation still starts with the User", () => {
     const fitted = fitQuestionContext(messages, question, 1_050) ?? [];
     expect(fitted[0]?.role).toBe("user");
