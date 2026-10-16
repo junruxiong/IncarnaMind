@@ -9,6 +9,8 @@
  *   in the Mind.
  * - **Every Document is covered**: asked about all the Documents in scope,
  *   each is cited, or named in a sentence saying it wasn't covered.
+ * - **Only what was asked changes**: asked about one paragraph, the others
+ *   read as they did.
  */
 import { changeLogOf } from "../../src/core/answers/claimedChanges";
 import type { ConversationAnswer, MarkedCitation } from "../../src/core/api";
@@ -22,6 +24,8 @@ export interface Expected {
   cite: boolean;
   /** It asks about every Document in scope ("summarise these papers"). */
   coverAll: boolean;
+  /** Only this top-level Block of the Mind it is asked from (from 0) may change. */
+  only?: number;
 }
 
 export interface RequestOutcome {
@@ -32,6 +36,8 @@ export interface RequestOutcome {
   verdict: ClaimVerdict;
   /** The Documents the Citations it wrote into Minds quote, by id. */
   citedInMinds: readonly string[];
+  /** The top-level Blocks of the Mind it was asked from (from 0) that read otherwise once its changes are accepted. */
+  changedBlocks: readonly number[];
   scoped: readonly { id: string; name: string }[];
 }
 
@@ -40,7 +46,8 @@ export type RequestFailure =
   /** `flagged`: the app's own net said so under the reply. */
   | { kind: "unbacked"; sentences: string[]; flagged: boolean }
   | { kind: "no-citations" }
-  | { kind: "uncovered"; documents: string[] };
+  | { kind: "uncovered"; documents: string[] }
+  | { kind: "outside"; blocks: number[] };
 
 const key = (text: string) => text.replace(/\s+/g, " ").trim().toLocaleLowerCase();
 
@@ -84,6 +91,10 @@ export function requestFailures(outcome: RequestOutcome): RequestFailure[] {
       .map((document) => document.name);
     if (uncovered.length > 0) failures.push({ kind: "uncovered", documents: uncovered });
   }
+  if (expected.only !== undefined) {
+    const outside = outcome.changedBlocks.filter((block) => block !== expected.only);
+    if (outside.length > 0) failures.push({ kind: "outside", blocks: outside });
+  }
   return failures;
 }
 
@@ -98,5 +109,7 @@ export function failureLine(failure: RequestFailure): string {
       return "Documents in scope, and nothing it wrote cites them";
     case "uncovered":
       return `neither cites nor names as left out ${failure.documents.map((name) => `“${name}”`).join(", ")}`;
+    case "outside":
+      return `changed what it was asked to leave: Block ${failure.blocks.map((block) => block + 1).join(", ")}`;
   }
 }

@@ -7,6 +7,7 @@
 import { describe, expect, test } from "vitest";
 import { type RequestOutcome, requestFailures } from "../../eval/everyday/checks";
 import { judgeClaims, verdictIn } from "../../eval/everyday/judge";
+import { languageRates, rowRates } from "../../eval/everyday/rates";
 import type { AnswerToolCall } from "../../src/core";
 import { scriptedModel } from "../helpers/models";
 
@@ -32,6 +33,7 @@ const outcome = (fields: Partial<RequestOutcome>): RequestOutcome => ({
   answer: { text: "", citations: [], toolCalls: [], steps: null },
   verdict: { unbacked: [] },
   citedInMinds: ["tutorial", "graphst"],
+  changedBlocks: [],
   scoped: PAPERS,
   ...fields,
 });
@@ -124,6 +126,57 @@ describe("The everyday request guards", () => {
     });
     expect(requestFailures(flagged)).toEqual([
       { kind: "unbacked", sentences: ["I added it."], flagged: true },
+    ]);
+  });
+});
+
+describe("Only what was asked changes", () => {
+  // protects=asked to change one paragraph, a change to another fails and names it; fails_when=it passes, or the one asked about fails; no_claim=none beyond protects.
+  test("a change outside the paragraph asked about fails", () => {
+    const edit = (changedBlocks: number[]) =>
+      requestFailures(
+        outcome({
+          expected: { write: true, cite: false, coverAll: false, only: 1 },
+          answer: { text: "", citations: [], toolCalls: [created], steps: null },
+          changedBlocks,
+        }),
+      );
+    expect(edit([1])).toEqual([]);
+    expect(edit([0, 1])).toEqual([{ kind: "outside", blocks: [0] }]);
+  });
+});
+
+describe("Pass rates", () => {
+  // protects=a request is held to its floor over its runs, per model, and runs are counted per language; fails_when=one failed run marks a request that meets its floor, or a request under it passes; no_claim=none beyond protects.
+  test("per request against its floor, and per language", () => {
+    const run = (id: string, language: "en" | "zh-CN", passed: boolean) => ({
+      id,
+      language,
+      model: "haiku",
+      passed,
+    });
+    const runs = [
+      run("a", "en", true),
+      run("a", "en", false),
+      run("a", "en", true),
+      run("b", "zh-CN", false),
+      run("b", "zh-CN", true),
+      run("b", "zh-CN", false),
+    ];
+    const rows = rowRates(
+      runs,
+      new Map([
+        ["a", 2 / 3],
+        ["b", 2 / 3],
+      ]),
+    );
+    expect(rows.map((row) => [row.id, row.passed, row.runs, row.under])).toEqual([
+      ["a", 2, 3, false],
+      ["b", 1, 3, true],
+    ]);
+    expect(languageRates(runs)).toEqual([
+      { model: "haiku", language: "en", passed: 2, runs: 3 },
+      { model: "haiku", language: "zh-CN", passed: 1, runs: 3 },
     ]);
   });
 });
