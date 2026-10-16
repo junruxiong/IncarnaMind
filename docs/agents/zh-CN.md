@@ -54,17 +54,19 @@ The words from `CONTEXT.md`, then the ones the interaction rules bring in. Where
 | Web page | 网页 | A Document saved from a web address (网址). Its snapshot is 快照, as search engines' 网页快照: "打开快照". Fetching it is 抓取: "重新抓取", "无法抓取：网页需要登录". The live page: 原网页 ("打开原网页"). |
 | Passage | 段落 | |
 | Citation | 引用 | The numbered reference in an Answer, as Kimi, Doubao, Qwen, Cherry Studio and Open WebUI show it. |
+| Own workings | 工作文件 | A Document the User keeps as their own workings: "不作为引用来源", "重新作为引用来源", its label "不引用", and on a check's card "只有你自己的工作文件这样写。" |
 | quote (of a Citation) | 引文 | "已在第 3 页找到引文", "未找到引文". |
 | Quote (block) | 引述 | The "/" menu's block for quoted text; not a Citation (引用) or its quote (引文). |
 | Location | 位置 | "第 3 页", "第 2 张幻灯片", "第 4–6 行", "§ 标题", a web page's "§ 历史，第 3 段". |
 | Cited page | 引用页面 | The saved picture of what a Citation points at: "打开引用页面". |
-| Source pack | PDF 引用页面合集 | The export of a Mind's cited pages. The name starts with PDF so that "导出为 {format}" keeps its space between Latin and Chinese. |
+| Source pack | PDF 引用页面合集 | The export of a Mind's cited pages. |
+| Web page to share | 可分享的网页 | The export a reader opens in a browser, each Citation's quote a click away: "可分享的网页（.html）". A template puts no space around `{format}`: the space comes only beside a Latin name ("导出为 PDF", "导出为可分享的网页（.html）"). |
 | Footnote | 脚注 | As Word, WPS and Feishu. "插入脚注", "脚注 3". |
 | Reference record | 引用信息 | The "Cite as" panel's title too. Its fields: 类型、标题、作者、日期、期刊（出处）、卷、期、页码、出版者、DOI、网址、语言. |
 | Needs details (a reference record) | 信息待补充 | |
 | Look up (a reference record) | 查询 | "按 DOI 从 Crossref 补全空白字段". |
-| Web search | 联网搜索 | Searching the web from an Answer: "允许回答联网搜索", "已联网搜索“…”". As Kimi, Doubao, Yuanbao and DeepSeek show it. |
-| Find sources | 查找资料 | "查找资料…". 资料 matches 资料库 (Library): what is found is added to it. |
+| Web search | 联网搜索 | Searching the web from an Answer: "允许回答联网搜索", "已联网搜索“…”", and the Unsupported card's action. Never 网页搜索. As Kimi, Doubao, Yuanbao and DeepSeek show it. |
+| Find sources | 查找资料 | "查找资料…". One name for the panel, its menu items and the button on a claim's card, never 查找来源. 资料 matches 资料库 (Library): what is found is added to it. |
 | Source provider | 资料来源 | "资料来源：OpenAlex arXiv PubMed". Not 服务, which is an AI model's company. |
 | Open access | 开放获取 | As CNKI and publishers say it. "仅开放获取", "无开放全文". |
 | Preprint / Accepted manuscript | 预印本 / 录用稿 | The version an open copy is. |
@@ -98,6 +100,7 @@ The words from `CONTEXT.md`, then the ones the interaction rules bring in. Where
 | Needs re-check | 需重新核对 | |
 | Not checked | 未核对 | A claim that wasn't checked: the model declined, its reply couldn't be read, or a limit stopped the run ("未核对：已达花费上限"). |
 | Claim | 说法 | What a check looks at, in an Answer, a Mind or a document someone else wrote. Counted with 条: "核对 24 条说法". Not 论断, an argued conclusion, or 主张, a party's claim in law: neither fits a sentence in a contract or a site report. |
+| Shorten (an AI edit) | 精简 | "精简", "正在精简…". Not 缩写, which means abbreviate. The others: 润色, 翻译, 解释. |
 | Find support | 查找出处 | No longer a command: only a ⌘K keyword for Check against Documents, which offers Add as Citation. 出处 is the word for a source a writer cites (注明出处); not 依据, which reads as a check. |
 | Check against Documents | 对照文档核对 | Gives a verdict: 有依据, 无依据 or 与文档矛盾. |
 | Verify (a document) | 核对文档 | The verb is 核对, as for a Citation. |
@@ -115,6 +118,7 @@ The words from `CONTEXT.md`, then the ones the interaction rules bring in. Where
 | Meeting | 会议 | |
 | Transcript | 转写稿 | |
 | Speaker | 发言人 | |
+| Me, Them, Speaker ? (a live line before speakers are told apart) | 我, 对方, 发言人 ? | "Me" is the microphone, "Them" the computer's sound, "Speaker ?" a meeting in a room, with no computer sound. |
 | Granted folder | 授权文件夹 | |
 | Output location | 保存位置 | |
 | Usage data | 使用数据 | |
@@ -161,6 +165,7 @@ The year is left out when it is this year, except in a Date, and a time today is
 | embedding model | 嵌入模型 | |
 | reranking | 重新排序; the model: 重排序模型 | |
 | provider | the company's name, or 服务 | "无法连接 OpenAI"; 服务 for the Settings row. Not 提供商. |
+| money | $1.40、¥1.40 | The narrow symbol of each currency, in both languages: "$", never "US$", and "¥". Two currencies in one line are told apart by them: "$3.20 和 ¥1.40". |
 | API key | API 密钥 | |
 | Server URL (base URL) | API 地址 | As Cherry Studio and Open WebUI. |
 | local / cloud | 本地 / 云端 | "本地模型", "云端模型", "在本机运行". |

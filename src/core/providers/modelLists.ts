@@ -20,6 +20,7 @@ import type { ChatProviderKind, OtherModel } from "../api";
 import { isRecord } from "../errors";
 import type { ModelFactsLayer } from "./capabilities";
 import {
+  catalogModels,
   isNonChatModel,
   MAX_MENU_MODELS,
   type ModelInput,
@@ -211,6 +212,12 @@ async function fetchModels({ kind, baseUrl, apiKey, endpoint, catalogId }: Model
     case "chatgpt":
       // Read with the sign-in by the plan itself (see ./chatgpt/plan); these are its fallback.
       return KNOWN_PLAN_MODELS.map((model) => ({ id: model.id }));
+    case "claude-account":
+      // Nothing is asked: the API key route's catalog says which models there are.
+      return catalogModels(modelsProviderOfKind(kind)).map((model) => ({ id: model.id }));
+    case "copilot":
+      // Read with the sign-in by the route itself (see ./copilot/account).
+      return [];
     case "ollama": {
       const body = await getJson(`${baseUrl}/api/tags`, {});
       const models = isRecord(body) && Array.isArray(body.models) ? body.models : [];

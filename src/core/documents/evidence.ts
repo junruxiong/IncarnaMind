@@ -6,6 +6,8 @@
  * - IncarnaMind's own files (`Document.ownFile`): an export or a source pack
  *   would otherwise let a note support itself. Unless the User counts the
  *   Document ("Count it"), its Folder counts them, or Settings does.
+ * - The User's own workings (`Document.notCited`): read to understand a
+ *   Question, never evidence. Always, until the User cites them again.
  * - The document being checked, its earlier versions, and copies of either:
  *   any Document with one of its content fingerprints, at any path. Always.
  *
@@ -163,6 +165,12 @@ export function createEvidence(deps: EvidenceDependencies) {
         );
         for (const row of own) excluded.set(row.id, "own-file");
       }
+
+      const workings = db.all<{ id: string }>(
+        `SELECT d.id FROM documents d WHERE d.deleted_at IS NULL AND d.not_cited = 1 ${scoped}`,
+        scopeParams,
+      );
+      for (const row of workings) excluded.set(row.id, "own-workings");
 
       const fingerprints = fingerprintsOf(checked);
       const checkedIds = checked.documentIds ?? [];

@@ -13,7 +13,7 @@ import { claimSpans } from "../../src/renderer/src/editor/claimChecks";
 import { claimCheckShown } from "../../src/shared/claimChecks";
 import { textOriginOf } from "../../src/shared/textOrigins";
 import { verificationOf } from "../../src/shared/verification";
-import { checkingModel, type Plan } from "../helpers/checks";
+import { checkGenerate, checkingModel, type Plan, sentenceOf } from "../helpers/checks";
 import { shownPassages } from "../helpers/citations";
 import { createTempDataFolder, manualClock, startCore } from "../helpers/core";
 import { addAndProcess, writeSourceFile } from "../helpers/documents";
@@ -172,6 +172,86 @@ describe("Verify a document", () => {
     );
     expect(searched.length).toBeGreaterThan(0);
     expect(new Set(searched)).toEqual(new Set(["Tides"]));
+  });
+
+  test("a memo opened through Verify is marked Don't cite: its claims stay Unsupported, and turning the mark off lets it support them in a check of its own", async () => {
+    const DREDGING = "The harbour dredging finished in March 2024.";
+    const COST = "The channel dredging cost 4.2 million.";
+    const calls: ModelCall[] = [];
+    const supportsWhatItSees = scriptedModel(
+      (call) => {
+        calls.push(call);
+        const sentence = sentenceOf(call);
+        const searches = call.results.filter((result) => result.tool === "search_documents");
+        if (searches.length === 0) {
+          return { calls: [{ tool: "search_documents", input: { query: sentence } }] };
+        }
+        const quote = sentence.replace(/\.$/, "");
+        const seen = shownPassages(searches.at(-1)?.text ?? "").find((each) =>
+          each.text.includes(quote),
+        );
+        if (!seen) return { text: "Verdict: unsupported" };
+        if (!call.results.some((result) => result.tool === "cite")) {
+          return {
+            calls: [
+              {
+                tool: "cite",
+                input: { citations: [{ marker: 1, passage: seen.id, quote }] },
+              },
+            ],
+          };
+        }
+        return { text: "Verdict: supported\nThe memo says so [^1]" };
+      },
+      {
+        generate: checkGenerate({
+          [DREDGING]: { verdict: "unsupported" },
+          [COST]: { verdict: "unsupported" },
+        }),
+      },
+    );
+    const { core, sources } = await setUp(supportsWhatItSees);
+    const memo = await writeSourceFile(
+      sources,
+      "Dredging memo.pdf",
+      buildPdf([{ lines: ["Dredging memo", DREDGING, COST] }]),
+    );
+    const { mind, documentId, client } = await verified(core, memo);
+    const kept = () =>
+      core.listDocuments().then((all) => all.find((each) => each.id === documentId));
+    expect(await kept()).toMatchObject({ name: "Dredging memo", notCited: true });
+
+    await core.findClaims(request(mind.id));
+    await core.verifyClaims(request(mind.id));
+    expect((await shownChecks(core, client)).map((each) => each.shown)).toEqual([
+      { state: "unsupported" },
+      { state: "unsupported" },
+    ]);
+
+    expect(await core.checkClaim({ claim: DREDGING })).toMatchObject({
+      verdict: "unsupported",
+      excluded: [{ documentId, reason: "own-workings" }],
+    });
+
+    await core.setNotCited(documentId, false);
+    expect(await core.checkClaim({ claim: DREDGING })).toMatchObject({
+      verdict: "supported",
+      evidence: { documentId, documentName: "Dredging memo" },
+    });
+    await core.verifyClaims(request(mind.id));
+    expect((await shownChecks(core, client)).map((each) => each.shown)).toEqual([
+      { state: "unsupported" },
+      { state: "unsupported" },
+    ]);
+  });
+
+  test("a file the Library already had keeps the User's choice when Verify opens it", async () => {
+    const { core, report } = await setUp();
+    await addAndProcess(core, [report]);
+    const { documentId } = await verified(core, report);
+    expect((await core.listDocuments()).find((each) => each.id === documentId)?.notCited).toBe(
+      false,
+    );
   });
 
   test("a claim the model fails on says “not checked”, and the others are checked", async () => {

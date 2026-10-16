@@ -31,9 +31,9 @@ async function screenshot(window: Page, name: string): Promise<void> {
 }
 
 const SENDS_EN =
-  "Your Questions, the Mind you're in, passages from your Documents, and Document text for Tags go to OpenAI when you use it.";
+  "Your Questions, the Mind you're in and Passages from your Documents go to OpenAI when you use it, and the first lines of each Document, to tag it. Tagging starts when you save the key.";
 const SENDS_ZH =
-  "你的问题、当前 Mind、文档中的相关段落，以及用于打标签的文档文字，会在使用时发送给 OpenAI。";
+  "你的问题、当前 Mind 和文档中的相关段落会在使用时发送给 OpenAI；每个文档的开头几行也会发送给它，用来打标签。保存密钥后就开始打标签。";
 
 let dataDir: string;
 let sources: string;

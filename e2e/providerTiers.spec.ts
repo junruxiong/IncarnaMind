@@ -100,8 +100,8 @@ for (const { language, more, first, folded, setUp, rest, link } of LANGUAGES) {
         await expect(form.getByText(name, { exact: false }).first()).toBeVisible();
       }
 
-      // Every provider has its key link.
-      await expect(form.getByRole("link", { name: link })).toBeVisible();
+      // Every provider has its way to a key.
+      await expect(form.getByTestId("provider-key-help-toggle")).toContainText(link);
 
       await settings.getByRole("button", { name: /^(Cancel|取消)$/ }).click();
       await settings.getByRole("button", { name: /^(Close Settings|关闭设置)$/ }).click();

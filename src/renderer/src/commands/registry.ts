@@ -64,6 +64,8 @@ export interface Command {
   menuLabel?: Command["label"];
   keywords?: readonly MessageKey[];
   /** One line under its name in ⌘K, for a command whose name alone doesn't say what it is for. */
+  purpose?: MessageKey;
+  /** What the menu says of it in a tooltip, where its label alone doesn't. */
   hint?: MessageKey;
   icon?: ComponentType<{ className?: string }>;
   shortcut?: Shortcut;

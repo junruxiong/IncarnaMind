@@ -1,6 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
+import { formatDate } from "../src/shared/dates";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   addDocuments,
@@ -16,6 +17,7 @@ import {
   removeDataFolder,
   setLanguage,
   setWindowSize,
+  slideSelect,
   useLocalChatModel,
 } from "./app";
 
@@ -52,6 +54,12 @@ const TEXTS = {
     note: "Schools have their own forms for declaring AI use. Use these counts to fill in yours.",
     empty:
       "There is nothing to report: IncarnaMind has no record of AI use in this document, and the document has no Citations or checks.",
+    checkedUse: "Sentences checked against the Documents",
+    usesColumns: ["Use", "Model", "Times"],
+    sentenceColumns: ["Sentence", "Result", "Model", "Checked"],
+    supported: "Supported",
+    unsupported: "Unsupported",
+    noRecord: "has no record of AI writing",
   },
   "zh-CN": {
     heading: "第一章 绪论",
@@ -68,6 +76,12 @@ const TEXTS = {
     found: "找到引文",
     note: "各学校对 AI 使用声明另有格式要求，请以学校提供的表格为准，可据此处的统计数字填写。",
     empty: "无可说明的内容：IncarnaMind 中没有本文档使用 AI 的记录，文档中也没有引用和核对结果。",
+    checkedUse: "对照文档核对句子",
+    usesColumns: ["用途", "模型", "次数"],
+    sentenceColumns: ["句子", "核对结果", "模型", "核对日期"],
+    supported: "有依据",
+    unsupported: "无依据",
+    noRecord: "中没有本文档使用 AI 撰写",
   },
 } as const;
 
@@ -246,3 +260,56 @@ test("an empty Mind says there is nothing to report, not a table of zeros, in bo
     await screenshot(window, `ai-statement-empty-${language}`);
   }
 });
+
+for (const language of ["en", "zh-CN"] as const) {
+  test(`sentences checked in the Mind are listed in the statement, each with its result, model and date (${language})`, async () => {
+    const text = TEXTS[language];
+    const sentences = [
+      "Spring tides happen at new and full moon.",
+      "Penguins nest on the harbour cliffs.",
+    ];
+    await writeFile(join(sources, "Tides.pdf"), TIDES);
+    const { app, window } = await launchApp(dataDir, { fakeChat: true });
+    await dismissChatSetup(window);
+    await useLocalChatModel(window);
+    await setLanguage(window, language);
+    await setWindowSize(app, window, 1440, 900);
+    await addDocuments(window, [join(sources, "Tides.pdf")]);
+    await newMind(window);
+    await window.getByTestId("mind-title").fill("Thesis");
+    const editor = editorOf(window);
+    await editor.click();
+    await window.keyboard.type(sentences.join(" "));
+    const line = editor.locator(":scope > p").first();
+    await expect(line).toHaveText(sentences.join(" "));
+
+    const started = new Date();
+    await slideSelect(window, line, "Spring tides", { line, words: "harbour cliffs." });
+    await pointAndClick(
+      window,
+      window.getByTestId("selection-menu").getByTestId("selection-action-check-against-documents"),
+    );
+    const marks = window.getByTestId("claim-mark");
+    await expect(marks.and(window.locator("[data-check=supported]"))).toHaveCount(1);
+    await expect(marks.and(window.locator("[data-check=unsupported]"))).toHaveCount(1);
+
+    await runCommand(window, "palette", text, `ai-statement-checks-${language}`);
+
+    const statement = editorOf(window);
+    await expect(statement.getByRole("heading")).toHaveText(text.sections);
+    const [uses, , listed] = await tablesOf(statement);
+    expect(uses).toEqual([text.usesColumns, [text.checkedUse, "fake-model", "2"]]);
+    const days = [formatDate(started, language), formatDate(new Date(), language)];
+    const [head, ...rows] = listed ?? [];
+    expect(head).toEqual(text.sentenceColumns);
+    expect(rows.map((row) => row.slice(0, 3))).toEqual([
+      [sentences[0], text.supported, "fake-model"],
+      [sentences[1], text.unsupported, "fake-model"],
+    ]);
+    for (const row of rows) expect(days).toContain(row[3]);
+    await expect(statement.getByText(text.noRecord)).toHaveCount(0);
+    await screenshot(window, `ai-statement-checks-${language}`);
+    await statement.locator(":scope > p").last().scrollIntoViewIfNeeded();
+    await screenshot(window, `ai-statement-checks-${language}-end`);
+  });
+}

@@ -375,22 +375,22 @@ test("with a sentence selected, ⌘K finds the one check by check, find support,
     await expect(row("check.againstDocuments")).toHaveText("Check against Documents");
     await expect(palette(window).locator('[data-key^="command:check."]')).toHaveCount(1);
     if (query === "check") {
-      await expect(row("mind.checkAll").getByTestId("palette-hint")).toHaveText(
+      await expect(row("mind.checkAll").getByTestId("palette-purpose")).toHaveText(
         "Whether each claim has support in your Documents",
       );
-      await expect(row("mind.checkContradictions").getByTestId("palette-hint")).toHaveText(
+      await expect(row("mind.checkContradictions").getByTestId("palette-purpose")).toHaveText(
         "Where your Documents disagree with this Mind's Citations",
       );
       const verify = row("verify.document");
-      await expect(verify.getByTestId("palette-hint")).toHaveText(
+      await expect(verify.getByTestId("palette-purpose")).toHaveText(
         "Check the claims in a PDF someone else wrote",
       );
       // The hint sits under the name and inside the row.
       const rowBox = await verify.boundingBox();
-      const hintBox = await verify.getByTestId("palette-hint").boundingBox();
+      const purposeBox = await verify.getByTestId("palette-purpose").boundingBox();
       const nameBox = await verify.locator("span.truncate").first().boundingBox();
-      expect(hintBox?.y ?? 0).toBeGreaterThanOrEqual((nameBox?.y ?? 0) + (nameBox?.height ?? 0));
-      expect((hintBox?.x ?? 0) + (hintBox?.width ?? 0)).toBeLessThanOrEqual(
+      expect(purposeBox?.y ?? 0).toBeGreaterThanOrEqual((nameBox?.y ?? 0) + (nameBox?.height ?? 0));
+      expect((purposeBox?.x ?? 0) + (purposeBox?.width ?? 0)).toBeLessThanOrEqual(
         (rowBox?.x ?? 0) + (rowBox?.width ?? 0),
       );
     }
@@ -412,10 +412,10 @@ test("with a sentence selected, ⌘K finds the one check by check, find support,
     await expect(row("check.againstDocuments")).toHaveText("对照文档核对");
     await expect(palette(window).locator('[data-key^="command:check."]')).toHaveCount(1);
     if (query === "核对") {
-      await expect(row("mind.checkAll").getByTestId("palette-hint")).toHaveText(
+      await expect(row("mind.checkAll").getByTestId("palette-purpose")).toHaveText(
         "每个说法在你的文档里有没有依据",
       );
-      await expect(row("verify.document").getByTestId("palette-hint")).toHaveText(
+      await expect(row("verify.document").getByTestId("palette-purpose")).toHaveText(
         "核对别人写的 PDF 里的说法",
       );
     }
@@ -424,7 +424,7 @@ test("with a sentence selected, ⌘K finds the one check by check, find support,
   }
 
   await search("矛盾");
-  await expect(row("mind.checkContradictions").getByTestId("palette-hint")).toHaveText(
+  await expect(row("mind.checkContradictions").getByTestId("palette-purpose")).toHaveText(
     "你的文档与这个 Mind 的引用不一致的地方",
   );
 });
