@@ -30,6 +30,7 @@ import { AnswerError } from "./AnswerView";
 import { coverageOf, sameCoverage, shownClaims } from "./claimChecks";
 import { ClaimMarkIcon, type ClaimMarkState } from "./icons";
 import { useMindModel, useRunModel } from "./ModelChip";
+import { Counted } from "./NoteHealth";
 import { UncoveredLine } from "./UncoveredLine";
 
 /** What a Mind made by "Verify a document…" verifies, as it changes. */
@@ -133,6 +134,15 @@ export function useVerifyState(
 }
 
 export type VerifyState = ReturnType<typeof useVerifyState>;
+
+/** Whether a verify's claims have their checks, so its card says what they found. */
+export const verifyDone = ({ running, outcome, claims, total, marks }: VerifyState) =>
+  running === null &&
+  outcome?.kind !== "no-documents" &&
+  outcome?.kind !== "nothing" &&
+  claims !== null &&
+  total > 0 &&
+  marks.marked > 0;
 
 /**
  * Where a Mind made by "Verify a document…" took its text from, under its
@@ -344,23 +354,15 @@ export function VerifyCard({
               <span className="check-row-mark">
                 <ClaimMarkIcon state={VERIFY_MARKS[row]} className="mind-health-icon" />
               </span>
-              <span className="check-row-text">{text}</span>
+              <span className="check-row-text">
+                <Counted text={text} count={format(count)} />
+              </span>
               <span className="check-row-next" aria-hidden="true">
                 {t("badge.next")}
               </span>
             </button>
           );
         })}
-        <div className="check-card-actions">
-          <button
-            type="button"
-            data-testid="verify-again"
-            className="mind-verify-link"
-            onClick={() => void checkClaims(mindId, doc)}
-          >
-            {t("claim.checkAgain")}
-          </button>
-        </div>
       </div>
     );
   }

@@ -5,6 +5,7 @@ import { buildPdf } from "../tests/helpers/pdf";
 import {
   addDocuments,
   checkCard,
+  useLocalChatModel as connectLocalChatModel,
   createDataFolder,
   dismissChatSetup,
   launchApp,
@@ -14,7 +15,6 @@ import {
   removeDataFolder,
   setLanguage,
   setWindowSize,
-  useLocalChatModel,
 } from "./app";
 
 /*
@@ -54,7 +54,7 @@ async function launchWithTides() {
   await writeFile(join(sources, "Tides.pdf"), TIDES);
   const running = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(running.window);
-  await useLocalChatModel(running.window);
+  await connectLocalChatModel(running.window);
   await addDocuments(running.window, [join(sources, "Tides.pdf")]);
   return running;
 }
