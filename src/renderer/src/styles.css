@@ -170,6 +170,13 @@
   }
 }
 
+/* The Word look's point (wordLookCss.ts): a length, so its zoom to the frame's width is worked out once, not in every rule. */
+@property --word-pt {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+
 @layer base {
   html,
   body,
