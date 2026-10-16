@@ -98,16 +98,18 @@ export function ClaudePlanRow() {
   const [open, setOpen] = useState(false);
   const row = useRef<HTMLLIElement>(null);
   const offered = status?.available === true;
+  const openedAt = useAppStore((state) => state.settingsAt === "claude-plan");
+  const signedIn = status?.account.state === "signed-in";
 
   useEffect(() => {
-    if (!offered || useAppStore.getState().settingsAt !== "claude-plan") return;
+    if (!offered || !openedAt) return;
     useAppStore.setState({ settingsAt: null });
+    if (!signedIn && !useClaudeSignIn.getState().waiting) setOpen(true);
     row.current?.scrollIntoView({ block: "center" });
-  }, [offered]);
+  }, [offered, openedAt, signedIn]);
 
   if (!status || !offered) return null;
   const { account } = status;
-  const signedIn = account.state === "signed-in";
   const steps = !signedIn && (open || waiting);
   return (
     <li ref={row} data-testid="plans-claude-account" className={ruledRowClass}>
