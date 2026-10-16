@@ -7135,7 +7135,7 @@ export interface CoreApi {
    */
   classifyDocuments(documentIds?: string[]): Promise<void>;
   /**
-   * Stops automatic Tagging with AI (#895) where the Documents waiting to be
+   * Stops automatic Tagging with AI where the Documents waiting to be
    * tagged, or being tagged, are: each of their Folders, and Not in a Folder
    * (null). Nothing more from there is sent to tag, by automatic tagging or by
    * Organize on its own, until `setTaggingWithAi` turns it back on; a re-tag
@@ -7143,7 +7143,7 @@ export interface CoreApi {
    * the places it stopped.
    */
   stopTagging(): Promise<(string | null)[]>;
-  /** Turns automatic Tagging with AI on, or stops it, in a Folder or Not in a Folder (null) (#895). */
+  /** Turns automatic Tagging with AI on, or stops it, in a Folder or Not in a Folder (null). */
   setTaggingWithAi(folderId: string | null, on: boolean): Promise<void>;
   /**
    * A manual choice, including Not in a Folder (null), wins over in-flight classification.

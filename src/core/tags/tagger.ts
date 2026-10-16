@@ -18,7 +18,7 @@
  *   picked up again whenever that may have changed.
  * - Only automatic links change: Tags the User added or removed on a
  *   Document stay as they are (see `TagsStore.applyAutomatic`).
- * - Where the User stopped Tagging with AI (#895), Documents are "stopped"
+ * - Where the User stopped Tagging with AI, Documents are "stopped"
  *   and nothing is sent, unless the User asks to re-tag one.
  */
 import type { DocumentKind, ProviderError } from "../api";
@@ -108,7 +108,6 @@ export function createTagger(options: TaggerOptions) {
    * latest request is dropped: the run that request queued decides.
    */
   const requests = new Map<string, number>();
-  /** Documents the User asked to re-tag: they are tagged where Tagging is stopped. */
   const asked = new Set<string>();
 
   const rowOf = (id: string) =>

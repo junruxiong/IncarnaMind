@@ -1,5 +1,5 @@
 /**
- * Stopping Tagging with AI (#895): Stop in the sidebar's status stops it where
+ * Stopping Tagging with AI: Stop in the sidebar's status stops it where
  * the Documents being tagged are, per Folder and for Not in a Folder, kept
  * across a restart, until "Tag with AI" turns it back on. Through the core's
  * public interface, with a scripted model: no network.
@@ -41,9 +41,7 @@ function recordingModel() {
   const model = new MockLanguageModelV4({
     doGenerate: async (options) => {
       const schema =
-        options.responseFormat?.type === "json"
-          ? (options.responseFormat.schema as { properties?: Record<string, unknown> })
-          : undefined;
+        options.responseFormat?.type === "json" ? options.responseFormat.schema : undefined;
       const purpose = schema?.properties?.groupId ? "organize" : "tags";
       calls.push({ purpose, text: textOf(options) });
       if (gate) await gate;
@@ -93,7 +91,8 @@ async function add(core: Core, name: string, text: string, groupId?: string): Pr
   const [added] = documents;
   if (!added) throw new Error("Nothing was added.");
   const [document] = await waitForTagging(core, [added.id], (each) => each.status === "ready");
-  return document as Document;
+  if (!document) throw new Error("Nothing was added.");
+  return document;
 }
 
 const taggingOf = async (core: Core, id: string) =>
@@ -219,6 +218,50 @@ describe("Stop", () => {
 
     await core.classifyDocuments([lease.id]);
     await vi.waitFor(() => expect(recorder.sent("Austin warehouse")).toBe(true));
+  });
+});
+
+describe("Stop while Organize tags", () => {
+  async function organizing(automatic: boolean) {
+    const started = await start();
+    const provider = await started.core.saveChatProvider(ANTHROPIC);
+    const contracts = await started.core.createLibraryGroup({
+      name: "Contracts",
+      description: "Signed contracts",
+    });
+    await started.core.saveLibrarySettings({
+      classifier: { kind: "chat", choice: { providerId: provider.id, modelId: ANTHROPIC.modelId } },
+      automatic,
+    });
+    return { ...started, contracts };
+  }
+
+  test("stops it in the Folder: the Document sent finishes, the rest aren't sent", async () => {
+    const { core, recorder, contracts } = await organizing(true);
+    recorder.hold();
+    const first = await add(
+      core,
+      "Supply.md",
+      "The supply contract with Brazos Steel.",
+      contracts.id,
+    );
+    const second = await add(core, "Lease.md", "The lease for the Austin warehouse.", contracts.id);
+    await vi.waitFor(() => expect(recorder.calls.length).toBe(1));
+    expect(await core.stopTagging()).toEqual([contracts.id]);
+    recorder.release();
+    await waitForTagging(core, [first.id], (each) => each.tagging === "tagged");
+    await stopped(core, second.id);
+    expect(recorder.sent("Austin warehouse")).toBe(false);
+  });
+
+  test("with automatic Organize off, Tag with AI organizes what was stopped", async () => {
+    const { core, recorder, contracts } = await organizing(false);
+    await core.setTaggingWithAi(contracts.id, false);
+    const lease = await add(core, "Lease.md", "The lease for the Austin warehouse.", contracts.id);
+    await stopped(core, lease.id);
+    await core.setTaggingWithAi(contracts.id, true);
+    await vi.waitFor(() => expect(recorder.sent("Austin warehouse")).toBe(true));
+    await waitForTagging(core, [lease.id], (each) => each.tagging === "tagged");
   });
 });
 
