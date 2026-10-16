@@ -6921,11 +6921,15 @@ export interface SavedFile {
   path: string;
   /** Its name: the one asked for, or, when that was taken, the next free one ("Tides 2.docx"). */
   name: string;
+  /** The folder it is in, absolute, symbolic links resolved. */
+  folder: string;
   /**
    * This save took the default Output location, Documents › IncarnaMind,
    * none being chosen yet (D209): what shows it says where, with a way to change it.
    */
   defaulted: boolean;
+  /** The folder is the default Output location, which a line names as this computer names Documents. */
+  inDefaultFolder: boolean;
 }
 
 // ---------------------------------------------------------------------------
