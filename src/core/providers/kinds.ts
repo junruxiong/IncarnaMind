@@ -81,7 +81,8 @@ function kindInfo(
   if (!provider) throw new Error(`The catalog has no provider for ${kind}.`);
   const endpoint = endpointOf(provider, endpointId);
   return {
-    ...(endpoint && { hosted: endpointService(provider, endpoint) }),
+    // An address built from a value the User gives is a service of its own per value.
+    ...(endpoint && !endpoint.field && { hosted: endpointService(provider, endpoint) }),
     baseUrl: endpoint ? "none" : (provider.serverUrl ?? "required"),
     apiKey: provider.apiKey,
   };
@@ -101,7 +102,8 @@ export function endpointUrl(
   catalogId?: string | null,
 ): string | null {
   const provider = catalogProviderOf(kind, catalogId);
-  return (provider && endpointOf(provider, endpointId)?.baseUrl) ?? null;
+  const endpoint = provider && endpointOf(provider, endpointId);
+  return endpoint && !endpoint.field ? endpoint.baseUrl : null;
 }
 
 export const requiresApiKey = (kind: ChatProviderKind, catalogId?: string | null) =>
@@ -186,5 +188,10 @@ export function serviceFor(
 ): ExternalService | null {
   const { hosted } = kindInfo(kind, endpointId, catalogId);
   if (hosted) return hosted;
-  return baseUrl ? serviceForUrl(baseUrl) : null;
+  if (!baseUrl) return null;
+  const provider = catalogProviderOf(kind, catalogId);
+  const endpoint = provider && endpointOf(provider, endpointId);
+  return provider && endpoint?.field
+    ? { id: new URL(baseUrl).origin, name: provider.name.en }
+    : serviceForUrl(baseUrl);
 }
