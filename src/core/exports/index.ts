@@ -22,6 +22,7 @@ import type { Translate } from "../../shared/locations";
 import { mindName } from "../../shared/naming";
 import type { PrintPaper } from "../../shared/printDocument";
 import { pendingProposals } from "../../shared/proposals";
+import { readableQuoteText } from "../../shared/readableQuote";
 import type { SourceDocument } from "../../shared/sources";
 import { wordFileOf, wordImportProgressOf } from "../../shared/wordFiles";
 import type { Logger, Pictures, Printer } from "../adapters";
@@ -471,7 +472,11 @@ function footnoteOf(
   const unverified = state.check !== "found";
   const failed: FailedCheck | null =
     state.check === "not-found" || state.check === "unsupported" || state.check === "contradicted"
-      ? { check: state.check, quote: attributes.quote ?? null, verdict: attributes.verdict ?? null }
+      ? {
+          check: state.check,
+          quote: attributes.quote ? readableQuoteText(attributes.quote) : null,
+          verdict: attributes.verdict ?? null,
+        }
       : null;
   const web = documents.find((each) => each.id === state.documentId)?.web;
   if (!web) {

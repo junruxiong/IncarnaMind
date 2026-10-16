@@ -43,7 +43,7 @@ import {
   memberMarker,
 } from "./citationClusters";
 import { citationNumberOf } from "./citationNumbers";
-import { QuoteWithUnsureWords, ScanLine, useScannedQuote } from "./citationScan";
+import { QuoteWithUnsureWords, ScanLine, useReadableQuote, useScannedQuote } from "./citationScan";
 import { CheckMarkIcon, CheckStateIcon } from "./icons";
 import { InFootnoteContext, MindIdContext, RegenerateAnswerContext } from "./mindContext";
 import { Popover } from "./Popover";
@@ -515,6 +515,7 @@ function CitationCard({
   const removed = state.reason === "document-removed";
   const quotedWords = state.check === "not-found" && parseQuotedWords(attributes.quotedWords);
   const scanned = useScannedQuote(attributes);
+  const quote = useReadableQuote(attributes);
   return (
     <div className={`citation-card citation-card--${state.check}`} contentEditable={false}>
       <div className="citation-card-head">
@@ -535,7 +536,7 @@ function CitationCard({
           <figcaption className="sr-only">{t("citation.quote")}</figcaption>
           <blockquote>
             <span className="citation-card-wash">
-              <QuoteWithUnsureWords quote={attributes.quote} unsure={scanned?.unsure ?? []} />
+              <QuoteWithUnsureWords quote={quote} unsure={scanned?.unsure ?? []} />
             </span>
           </blockquote>
         </figure>
