@@ -602,13 +602,14 @@ export function ProviderSendsLine({ provider, dataUse }: { provider: string; dat
   const summary = dataUse && t("providers.form.dataUse", { summary: dataUse.summary[words] });
   const terms = `${t("providers.form.terms")} ↗`;
   return (
-    <p data-testid="provider-sends" className={hintClass}>
-      {sends}
-      {dataUse && summary && (
-        <span data-testid="provider-data-use">
-          {gap(language, sends, summary)}
+    <div className="flex flex-col">
+      <p data-testid="provider-sends" className={hintClass}>
+        {sends}
+      </p>
+      {summary && (
+        <p data-testid="provider-data-use" className={`${hintClass} mt-0`}>
           {summary}
-          {dataUse.url && (
+          {dataUse?.url && (
             <>
               {gap(language, summary, terms)}
               <a href={dataUse.url} target="_blank" rel="noreferrer" className="underline">
@@ -616,9 +617,9 @@ export function ProviderSendsLine({ provider, dataUse }: { provider: string; dat
               </a>
             </>
           )}
-        </span>
+        </p>
       )}
-    </p>
+    </div>
   );
 }
 
