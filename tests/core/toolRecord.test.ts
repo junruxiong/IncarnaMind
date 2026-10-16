@@ -11,8 +11,9 @@ import { toolRecord, toolRecordLines } from "../../src/core/answers/toolRecord";
 
 const names = (mindId: string) => (mindId === "m1" ? "Tide notes" : null);
 
-const call = (fields: Partial<AnswerToolCall> & Pick<AnswerToolCall, "tool" | "source">) =>
-  ({ id: fields.tool, input: {}, status: "done", resultCount: null, ...fields }) as AnswerToolCall;
+const call = (
+  fields: Partial<AnswerToolCall> & Pick<AnswerToolCall, "tool" | "source">,
+): AnswerToolCall => ({ id: fields.tool, input: {}, status: "done", resultCount: null, ...fields });
 
 describe("The record of an Answer's Tool calls", () => {
   // protects=each kind of call reads as what it really did, its Mind by its name now; fails_when=a failed call reads as done, a change loses its Mind or count, or a revision reads as an addition; no_claim=how a model reads it.

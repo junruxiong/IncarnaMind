@@ -4,6 +4,7 @@
  * from the app's own net (src/core/answers/claimedChanges), which it checks.
  */
 import { generateText, type LanguageModel } from "ai";
+import { isRecord } from "../../src/core/errors";
 
 export interface ClaimVerdict {
   /** The reply's sentences that say a Mind was changed in a way the record doesn't show. */
@@ -42,14 +43,15 @@ export async function judgeClaims(
 /** The verdict in a judge's reply; one it can't read lists the whole reply, so it fails loudly. */
 export function verdictIn(text: string): ClaimVerdict {
   const json = text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1);
+  let parsed: unknown = null;
   try {
-    const parsed: unknown = JSON.parse(json);
-    const unbacked = (parsed as { unbacked?: unknown }).unbacked;
-    if (Array.isArray(unbacked)) {
-      return { unbacked: unbacked.filter((each): each is string => typeof each === "string") };
-    }
+    parsed = JSON.parse(json);
   } catch {
-    // Not JSON: below.
+    parsed = null;
+  }
+  const unbacked = isRecord(parsed) ? parsed.unbacked : null;
+  if (Array.isArray(unbacked)) {
+    return { unbacked: unbacked.filter((each): each is string => typeof each === "string") };
   }
   return { unbacked: [`(the judge's reply couldn't be read: ${text.slice(0, 200)})`] };
 }

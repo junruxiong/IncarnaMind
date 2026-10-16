@@ -26,15 +26,33 @@ describe("The Minds an Answer changed", () => {
       toolCalls: [
         call("read_mind"),
         call("edit_mind", { mindId: "a", created: false, request: "r1", proposals: 2 }),
-        call("create_mind", { mindId: "b", created: true, request: "r2", proposals: 3 }),
-        call("add_to_mind", { mindId: "a", created: false, request: "r3", proposals: 1 }),
-        call("add_to_mind", { mindId: "b", created: false, request: "r4", proposals: 1 }),
+        call("create_mind", {
+          mindId: "b",
+          created: true,
+          request: "r2",
+          proposals: 3,
+          paragraphs: 2,
+        }),
+        call("add_to_mind", {
+          mindId: "a",
+          created: false,
+          request: "r3",
+          proposals: 1,
+          paragraphs: 1,
+        }),
+        call("add_to_mind", {
+          mindId: "b",
+          created: false,
+          request: "r4",
+          proposals: 1,
+          paragraphs: 1,
+        }),
         call("edit_mind"),
       ],
     });
     expect(rows).toEqual([
       { mindId: "a", created: false, requests: ["r1", "r3"], wrote: 1, changed: 2 },
-      { mindId: "b", created: true, requests: ["r2", "r4"], wrote: 4, changed: 0 },
+      { mindId: "b", created: true, requests: ["r2", "r4"], wrote: 3, changed: 0 },
     ]);
   });
 
@@ -48,8 +66,8 @@ describe("The Minds an Answer changed", () => {
     expect(changedMinds({ toolCalls: [call("read_mind")] })).toEqual([]);
   });
 
-  // protects=a revision of the assistant's own waiting text counts as written, not changed in places; fails_when=it reads "Changed N places"; no_claim=none beyond protects.
-  test("a revision of its own waiting text counts as paragraphs written", () => {
+  // protects=a revision of the assistant's own waiting text counts its paragraphs as written, not places changed, and one that only removed text writes none; fails_when=it reads "Changed N places", or a removal reads as written; no_claim=none beyond protects.
+  test("a revision of its own waiting text counts as paragraphs written, a removal as none", () => {
     expect(
       changedMinds({
         toolCalls: [
@@ -58,10 +76,24 @@ describe("The Minds an Answer changed", () => {
             created: false,
             request: "r1",
             proposals: 5,
+            paragraphs: 3,
             revised: true,
           }),
         ],
       }),
-    ).toEqual([{ mindId: "a", created: false, requests: ["r1"], wrote: 5, changed: 0 }]);
+    ).toEqual([{ mindId: "a", created: false, requests: ["r1"], wrote: 3, changed: 0 }]);
+    expect(
+      changedMinds({
+        toolCalls: [
+          call("edit_mind", {
+            mindId: "a",
+            created: false,
+            request: "r1",
+            proposals: 0,
+            revised: true,
+          }),
+        ],
+      }),
+    ).toEqual([{ mindId: "a", created: false, requests: ["r1"], wrote: 0, changed: 0 }]);
   });
 });

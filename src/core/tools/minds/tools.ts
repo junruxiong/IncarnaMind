@@ -33,6 +33,7 @@ import * as Y from "yjs";
 import { setOrigins } from "../../../shared/blockOrigins";
 import {
   pendingProposals,
+  readProposalAttribute,
   recordProposalRequest,
   resolveProposals,
 } from "../../../shared/proposals";
@@ -45,6 +46,7 @@ import {
   type Effect,
   type MindChange,
   type MindProblem,
+  PROPOSAL_ATTRIBUTE,
   type TextPlace,
   type ThirdPartySource,
   type WritingPlace,
@@ -140,7 +142,6 @@ export interface MindToolsOptions {
   };
   /** A call changed a Mind: its card says so, as soon as it does, also while it writes. */
   changed(toolCallId: string, change: MindChange): void;
-  /** A call changed nothing: its card says why. */
   failed(toolCallId: string, problem: MindProblem): void;
   /** The Answer's: once it aborts, calls still writing stop. */
   signal: AbortSignal;
@@ -418,6 +419,23 @@ function stretchText(blocks: Y.XmlFragment, { from, to }: Stretch): string {
 }
 
 /** The Minds' Tools for one Answer in the assistant (see the module's comment). */
+/** The paragraphs in the whole Blocks a request wrote, in lists and quotes too; a heading or a table's cells are none. */
+function paragraphsWritten(note: Y.XmlFragment, request: string): number {
+  let count = 0;
+  const visit = (element: Y.XmlElement) => {
+    if (element.nodeName === "paragraph") count++;
+    else if (element.nodeName !== "table") {
+      for (const child of element.toArray()) if (child instanceof Y.XmlElement) visit(child);
+    }
+  };
+  for (const block of note.toArray()) {
+    if (!(block instanceof Y.XmlElement)) continue;
+    const proposal = readProposalAttribute(block.getAttribute(PROPOSAL_ATTRIBUTE));
+    if (proposal?.kind === "insert" && proposal.request === request) visit(block);
+  }
+  return count;
+}
+
 export function mindTools(options: MindToolsOptions): Tool[] {
   const { minds, focused } = options;
 
@@ -523,15 +541,13 @@ export function mindTools(options: MindToolsOptions): Tool[] {
   };
 
   /** What a request did in a Mind: how many of its changes wait there now. */
-  const changeIn = (mindId: string, request: string, created: boolean): MindChange => ({
-    mindId,
-    created,
-    request,
-    proposals: minds.read(
-      mindId,
-      (note) => pendingProposals(note).filter((each) => each.request === request).length,
-    ),
-  });
+  const changeIn = (mindId: string, request: string, created: boolean): MindChange => {
+    const { proposals, paragraphs } = minds.read(mindId, (note) => ({
+      proposals: pendingProposals(note).filter((each) => each.request === request).length,
+      paragraphs: paragraphsWritten(note, request),
+    }));
+    return { mindId, created, request, proposals, ...(paragraphs > 0 && { paragraphs }) };
+  };
 
   const changeOf = (writer: Writer, created: boolean): MindChange =>
     changeIn(writer.mind.id, writer.request, created);
@@ -805,13 +821,9 @@ export function mindTools(options: MindToolsOptions): Tool[] {
         }
         throw why;
       }
-      const change: MindChange = {
-        mindId: mind.id,
-        created: false,
-        request: result.request,
-        proposals: result.proposals,
-        ...(revised && { revised: true }),
-      };
+      const change: MindChange = revised
+        ? { ...changeIn(mind.id, result.request, false), revised: true }
+        : { mindId: mind.id, created: false, request: result.request, proposals: result.proposals };
       if (revised) {
         minds.edit(mind.id, (note) => {
           if (note.doc) setOrigins(note.doc, revised.blockIds, options.origin);
