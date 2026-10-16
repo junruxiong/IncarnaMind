@@ -292,10 +292,14 @@ async function runCase(
   };
 }
 
-// Not the model under test: it would judge its own claims.
+// Never the model under test, which would judge its own claims.
 const JUDGE_MODEL = "claude-sonnet-5-5";
+const JUDGE_OF_SONNET = "claude-opus-5-5";
 
-/** The model that judges claims: INCARNAMIND_EVAL_JUDGE_*, else Claude Sonnet 5.5 on an Anthropic key. */
+/**
+ * The model that judges claims: INCARNAMIND_EVAL_JUDGE_*, else, on an
+ * Anthropic key, Claude Sonnet 5.5, or Opus 5.5 when Sonnet is under test.
+ */
 function judgeOf(config: ReturnType<typeof readConfig>, chat: ChatSettings): ChatSettings {
   if (config.judge) return config.judge;
   if (chat.kind !== "anthropic") {
@@ -303,7 +307,7 @@ function judgeOf(config: ReturnType<typeof readConfig>, chat: ChatSettings): Cha
       "Set INCARNAMIND_EVAL_JUDGE_KIND, _MODEL and _KEY: the claims are judged by another model than the one asked.",
     );
   }
-  return { ...chat, modelId: JUDGE_MODEL };
+  return { ...chat, modelId: chat.modelId === JUDGE_MODEL ? JUDGE_OF_SONNET : JUDGE_MODEL };
 }
 
 async function runModel(

@@ -90,8 +90,9 @@ import {
   sameText,
 } from "./prompt";
 
+// A structural delete of the whole passage, never a shortening ("Cut it down to two sentences").
 const REMOVAL =
-  /\b(?:remove|delete|cut|drop|take out|get rid of|strike)\b|删掉|删除|删去|去掉|移除|拿掉/i;
+  /^(?:please\s+)?(?:remove|delete|drop|cut|take out|get rid of)\s+(?:it|this|that|them|(?:the|this|that)\s+(?:whole\s+|entire\s+)?(?:paragraph|section|sentence|passage|part|line|text|bullet)(?:\s+about\s+[^,.;]+)?)(?:\s+(?:entirely|completely|altogether))?\s*[.!]?$|^(?:请)?(?:把(?:它|这段|这一段|这部分|这句|整段)?)?(?:删掉|删除|删去|去掉|移除)(?:它|这段|这一段|这部分|这句|整段)?[。！]?$/i;
 
 /** What the "edits" flow sends: the selected text, with the paragraphs it is in. */
 export const EDITS_FLOW_SENDS = ["selection"] as const;
@@ -619,7 +620,7 @@ export function createEdits(options: EditsOptions) {
     const reply = readEditReply(raw, selection.text);
     // No text back removes the passage only when that is what was asked; otherwise its reason
     // ("I can't do this") is why it failed.
-    const removes = ask.action === "instruction" && REMOVAL.test(ask.instruction);
+    const removes = ask.action === "instruction" && REMOVAL.test(ask.instruction.trim());
     if (reply === "" && !wrote && !refused && (explain || !removes || reasonOf(raw) === null)) {
       return ended({
         kind: "failed",

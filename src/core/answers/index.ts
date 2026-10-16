@@ -757,7 +757,11 @@ export function createAnswers(options: AnswersOptions) {
     const { home, answerId, model, context, forcedSkill } = input;
     const scoped = input.scoped ?? input.documentIds !== null;
     const asked =
-      input.outside === true ? { each: false, main: null } : documentsAsked(context.question);
+      input.outside === true
+        ? { each: false, main: null }
+        : documentsAsked(context.question, () =>
+            options.documents.searchableBySize(input.documentIds).map((each) => each.name),
+          );
     const coverage =
       asked.each || asked.main !== null
         ? coverageOf(asked, options.documents.searchableBySize(input.documentIds))

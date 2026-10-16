@@ -2,13 +2,13 @@ import { describe, expect, test } from "vitest";
 import { withoutSearchTalk } from "../../src/core/answers/searchTalk";
 
 describe("Text written into a Mind, without talk of searching", () => {
-  // protects=sentences about the assistant's searching stay out of the Mind, in English and Chinese; fails_when=one is written into the page; no_claim=every wording a model may use.
+  // protects=first-person sentences about the assistant's searching, and about the Passages it got, stay out of the Mind, in English and Chinese; fails_when=one is written into the page; no_claim=every wording a model may use.
   test.each([
-    "Where the searches found little, that is stated.",
     "The Passages retrieved did not include their content.",
     "My searches returned no passages from either tea article.",
     "The search limit cut me off before the last three files.",
-    "检索到的段落中没有关于方法的内容。",
+    "I searched both papers but found nothing on the methods.",
+    "我搜索了两篇论文，但没有找到方法部分。",
   ])("%s", (sentence) => {
     const { markdown, left } = withoutSearchTalk(
       `## Summary\n\nTides follow the moon. ${sentence}`,
@@ -21,6 +21,10 @@ describe("Text written into a Mind, without talk of searching", () => {
   test.each([
     "Search results returned by the engine show a 3.5× lift [^1].",
     "Passages retrieved by dense retrieval improve recall over BM25.",
+    "We found that search results did not improve recall.",
+    "检索结果中没有显著差异。",
+    "我们的检索方法提升了召回率。",
+    "Where the searches found little, the authors say so.",
     "Passages retrieved by dense retrieval improve recall over BM25 [^2].",
     "该方法提升了搜索结果的相关性。",
     "该方法提升了搜索结果的相关性[^3]。",
