@@ -129,8 +129,8 @@ describe("引用信息 from a PDF's first page", () => {
     const before = thesis.reference;
     if (!before) throw new Error("The thesis has no record.");
     expect(needsCheck(before)).toBe(true);
-    // The language picks a style's terms and is never printed, so it isn't asked about.
-    expect(fieldsToCheck(before)).toEqual(["type", "title", "authors", "issued", "publisher"]);
+    // What a style prints; not the type or the language the reading tells from the page.
+    expect(fieldsToCheck(before)).toEqual(["title", "authors", "issued", "publisher"]);
 
     const checked = await core.confirmReference(thesis.id);
     expect(checked.reference && needsCheck(checked.reference)).toBe(false);
@@ -143,7 +143,7 @@ describe("引用信息 from a PDF's first page", () => {
   });
 });
 
-const line = (text: string, size = 10, top = 0.5): PageLine => ({ text, size, top });
+const line = (text: string, size = 10): PageLine => ({ text, size });
 
 describe("reading a first page leaves out what it doesn't plainly print", () => {
   test("a heading under the title is no author, and a body line naming a laboratory is no institution", () => {

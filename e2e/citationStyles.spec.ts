@@ -59,6 +59,36 @@ const setRecord = (window: Page, documentId: string, patch: ReferencePatch) =>
     [documentId, patch] as const,
   );
 
+/** A master's thesis: its cover, set as Chinese universities set one, then a page of its text. */
+const THESIS = buildPdf([
+  {
+    printed: [
+      { text: "硕士学位论文", size: 26 },
+      { text: "城市绿地与夏季降温调查", size: 20 },
+      { text: "作者姓名：林小雨", size: 14 },
+      { text: "指导教师：王建国 教授", size: 14 },
+      { text: "培养单位：华东师范大学地理科学学院", size: 14 },
+      { text: "二〇二六年五月", size: 14 },
+    ],
+  },
+  { chineseLines: ["城市绿地使夏季夜间平均降温一摄氏度。"] },
+]);
+
+/** A Chinese journal article: its title large, its authors under it, and its DOI. */
+const ARTICLE = buildPdf([
+  {
+    printed: [
+      { text: "地理学报 2024 年 3 月", size: 9 },
+      { text: "城市绿地对热岛效应的缓解作用", size: 18 },
+      { text: "张三 1，李四 2", size: 11 },
+      { text: "（1. 北京大学城市与环境学院，北京 100871）", size: 9 },
+      { text: "摘要：城市绿地在夏季夜间缓解城市热岛效应。", size: 10 },
+      { text: "文献标识码：A", size: 9 },
+      { text: "DOI: 10.5555/greenspace-2024", size: 9 },
+    ],
+  },
+]);
+
 let dataDir: string;
 let sources: string;
 test.beforeEach(async () => {
@@ -150,7 +180,8 @@ test("a Mind citing a paper offers a citation style; chosen, its Citations and R
     "Bowler, D. E., & Buyung-Ali, L. (2010). Tides and the Moon. Ocean Review, 12, 1–20.",
   );
   await expect(entries.nth(1)).toHaveAttribute("data-needs-details", "true");
-  await expect(entries.nth(1)).toContainText(/Lease agreement\. Plain text, added \d+ \w+ \d{4}\./);
+  await expect(entries.nth(1)).toContainText("Lease agreement.");
+  await expect(entries.nth(1)).not.toContainText("added");
   await screenshot(window, "references-apa-en");
 
   // "Needs details" opens the Document's "Cite as" right there, at its first gap, its title.
@@ -294,6 +325,110 @@ test("in Chinese: the offer puts GB/T 7714 first; chosen, raised numbers and 参
   if (!column || !head) throw new Error("The References or the Mind aren't on screen.");
   expect(head.x + head.width).toBeLessThanOrEqual(column.x + column.width + 1);
   await screenshot(window, "references-narrow-zh");
+  await app.close();
+});
+
+test("in Chinese, a thesis Mind: 引用信息 read from the PDFs waits to be checked; GB/T 7714 by default, in the Export menu; pages raised, and a thin entry flagged in the Word file and named after the export", async () => {
+  await writeFile(join(sources, "林小雨学位论文.pdf"), THESIS);
+  await writeFile(join(sources, "绿地与热岛.pdf"), ARTICLE);
+  await writeFile(join(sources, "城市绿地调查笔记.txt"), "城市绿地调查：公园比周围街道凉快。");
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await window.evaluate(() =>
+    (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
+      user: { language: "zh-CN" },
+    }),
+  );
+  await useLocalChatModel(window);
+  await addDocuments(
+    window,
+    ["林小雨学位论文.pdf", "绿地与热岛.pdf", "城市绿地调查笔记.txt"].map((name) =>
+      join(sources, name),
+    ),
+  );
+
+  // The thesis's 引用信息 came from its cover, and waits in the Library to be checked.
+  await window.getByTestId("open-library").click();
+  const thesisRow = window.getByTestId("library-document").filter({ hasText: "林小雨学位论文" });
+  const toggle = thesisRow.getByTestId("cite-as-toggle");
+  await expect(toggle).toHaveText("需要核对");
+  await pointAndClick(window, toggle);
+  const panel = thesisRow.getByTestId("cite-as");
+  await expect(panel.getByTestId("reference-type")).toHaveValue("thesis");
+  await expect(panel.getByTestId("reference-title")).toHaveText("城市绿地与夏季降温调查");
+  await expect(panel.getByTestId("reference-authors")).toHaveText("林小雨");
+  await expect(panel.getByTestId("reference-issued")).toHaveText("2026");
+  await expect(panel.getByTestId("reference-publisher")).toHaveText("华东师范大学地理科学学院");
+  await expect(panel.locator("dt[data-unchecked]")).toHaveCount(4);
+  await screenshot(window, "cite-as-check-zh");
+  await pointAndClick(window, panel.getByTestId("reference-confirm"));
+  await expect(panel.locator("dt[data-unchecked]")).toHaveCount(0);
+  await expect(toggle).toHaveText("引用信息");
+  await expect(window.getByTestId("undo-line")).toContainText("已确认“林小雨学位论文”的引用信息");
+
+  // A Mind in Chinese citing the three: GB/T 7714 by default, and it says so.
+  const answer = await ask(window, "城市绿地 each");
+  await pointAndClick(window, answer.locator("p").last());
+  await window.keyboard.press("ControlOrMeta+End");
+  await window.keyboard.press("Enter");
+  await window.keyboard.type("本文梳理城市绿地对夏季降温的作用，并比较不同城市的热岛效应。");
+  const references = window.getByTestId("references");
+  await expect(references).toHaveAttribute("data-style", "gb-t-7714-2015-numeric");
+  await expect(references.getByTestId("references-style")).toHaveText(
+    "GB/T 7714—2015（顺序编码制）",
+  );
+  await expect(references.getByTestId("references-style-default")).toHaveText("默认");
+  await expect(window.getByTestId("citation-style-prompt")).toHaveCount(0);
+  const entries = references.getByTestId("reference-entry");
+  await expect(entries.filter({ hasText: "林小雨" })).toContainText(
+    "林小雨. 城市绿地与夏季降温调查[D]. 华东师范大学地理科学学院, 2026.",
+  );
+  await expect(entries.filter({ hasText: "张三" })).toContainText(
+    "张三, 李四. 城市绿地对热岛效应的缓解作用[J/OL]. 2024. DOI:10.5555/greenspace-2024.",
+  );
+  const thin = entries.filter({ hasText: "城市绿地调查笔记" });
+  await expect(thin).toHaveAttribute("data-needs-details", "true");
+  // Each cited work on its own, its page (or line) raised after its number: "[1]第 1 行[2]1[3]1".
+  await expect(answer.getByTestId("citation-chip").first()).toHaveText(
+    /^(\[\d\](\d+|第 \d+ 行)){3}$/,
+  );
+  await screenshot(window, "references-gbt-default-zh");
+
+  // Where the User exports: the Export menu names the style, and opens the picker.
+  await useOutputLocation(window, sources);
+  await pointAndClick(window, window.getByTestId("export-mind"));
+  const styleItem = window.getByTestId("export-citation-style-menu");
+  await expect(styleItem).toHaveText("引用格式GB/T 7714—2015（顺序编码制）");
+  await screenshot(window, "export-menu-style-zh");
+  await pointAndClick(window, styleItem);
+  const picker = window.getByTestId("citation-style-picker");
+  await expect(picker).toBeVisible();
+  await window.keyboard.press("Escape");
+  await expect(picker).toBeHidden();
+
+  // Exported to Word: raised pages, 参考文献, and the thin entry flagged, never "添加于".
+  await exportFromMenu(window, "docx");
+  const result = window.getByTestId("export-result");
+  const done = result.getByTestId("export-done");
+  await expect(done).toHaveText(/\.docx/);
+  const needs = result.getByTestId("export-needs-details");
+  await expect(needs).toContainText("“城市绿地调查笔记”的引用信息待补充，已在文件中标出");
+  await screenshot(window, "export-needs-details-zh");
+  const saved = (await done.getAttribute("title")) ?? "";
+  const paragraphs = paragraphsOf(part(unzip(await readFile(saved)), "word/document.xml")).map(
+    (each) => each.text,
+  );
+  expect(paragraphs).toContain("参考文献");
+  expect(paragraphs.some((line) => /\[1\]\d/.test(line))).toBe(true);
+  expect(
+    paragraphs.some((line) => line.includes("林小雨. 城市绿地与夏季降温调查[D]. 华东师范大学")),
+  ).toBe(true);
+  expect(paragraphs.some((line) => line.endsWith("城市绿地调查笔记。[信息待补充]"))).toBe(true);
+  expect(paragraphs.join("\n")).not.toContain("添加于");
+
+  // Show goes to the thin entry, whose 信息待补充 fills it in right there.
+  await pointAndClick(window, needs.getByTestId("export-needs-details-show"));
+  await expect(thin.getByTestId("reference-needs-details")).toBeFocused();
   await app.close();
 });
 

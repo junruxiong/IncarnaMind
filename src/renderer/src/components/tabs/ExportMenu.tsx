@@ -59,9 +59,9 @@ function Item({
       className={`${menuItemClass} pl-2`}
     >
       {icon}
-      <span className="flex-1">{label}</span>
+      <span className="flex-1 whitespace-nowrap">{label}</span>
       {hint && (
-        <span title={hint} className="max-w-56 truncate pl-4 text-[13px] text-ink-meta">
+        <span title={hint} className="max-w-56 min-w-0 truncate pl-4 text-[13px] text-ink-meta">
           {hint}
         </span>
       )}

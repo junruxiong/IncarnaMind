@@ -327,12 +327,11 @@ const NAMED = 3;
 function NeedsDetailsLine({ mindId, documentIds }: { mindId: string; documentIds: string[] }) {
   const t = useT();
   const language = useLanguage();
-  const names = useAppStore((state) =>
-    documentIds.flatMap((id) => {
-      const document = state.documents.find((each) => each.id === id);
-      return document ? [displayName(document)] : [];
-    }),
-  );
+  const documents = useAppStore((state) => state.documents);
+  const names = documentIds.flatMap((id) => {
+    const document = documents.find((each) => each.id === id);
+    return document ? [displayName(document)] : [];
+  });
   if (names.length === 0) return null;
   const listed = names.slice(0, NAMED).map((name) => `“${name}”`);
   const separator = language === "zh-CN" ? "、" : ", ";

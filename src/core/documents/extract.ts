@@ -184,44 +184,33 @@ function pageText(items: readonly object[]): string {
   return text.replaceAll("\u0000", "").replace(/\r\n?/g, "\n").replace(CJK_LINE_WRAP, "$1").trim();
 }
 
-/** A line of a page as printed: its text, its largest font size, and how far down the page it starts. */
+/** A line of a page as printed, with its largest font size in points. */
 export interface PageLine {
   text: string;
-  /** In points. */
   size: number;
-  /** From the top of the page, as a fraction of its height. */
-  top: number;
 }
 
 /**
  * A page's lines across it, in the order pdf.js reads them. Text set at an angle (arXiv's stamp
  * up the margin) is left out: it is no line of the page's own.
  */
-function pageLines(items: readonly object[], height: number): PageLine[] {
+function pageLines(items: readonly object[]): PageLine[] {
   const lines: PageLine[] = [];
   let text = "";
   let size = 0;
-  let base: number | null = null;
   const end = () => {
     const tidy = text.replaceAll("\u0000", "").replace(/\s+/g, " ").trim();
-    if (tidy !== "" && base !== null) {
-      lines.push({ text: tidy, size, top: height > 0 ? Math.max(0, 1 - base / height) : 0 });
-    }
+    if (tidy !== "" && size > 0) lines.push({ text: tidy, size });
     text = "";
     size = 0;
-    base = null;
   };
   for (const item of items) {
     if (!("str" in item) || typeof item.str !== "string") continue;
     const transform = "transform" in item && Array.isArray(item.transform) ? item.transform : [];
-    const [a = 0, b = 0, c = 0, d = 0, , f = 0] = transform as number[];
-    const level = Math.abs(b) < 0.01 && Math.abs(c) < 0.01 && a > 0;
-    if (level) {
+    const [a = 0, b = 0, c = 0, d = 0] = transform as number[];
+    if (Math.abs(b) < 0.01 && Math.abs(c) < 0.01 && a > 0) {
       text += item.str;
-      if (item.str.trim() !== "") {
-        size = Math.max(size, Math.round(Math.abs(d) * 10) / 10);
-        base ??= f;
-      }
+      if (item.str.trim() !== "") size = Math.max(size, Math.round(Math.abs(d) * 10) / 10);
     }
     if ("hasEOL" in item && item.hasEOL === true) end();
   }
@@ -286,7 +275,7 @@ export async function pdfMetadata(
       const page = await document.getPage(number);
       const { items } = await page.getTextContent();
       if (number <= pages) firstPages.push(pageText(items));
-      if (number === 1) firstPageLines = pageLines(items, page.getViewport({ scale: 1 }).height);
+      if (number === 1) firstPageLines = pageLines(items);
       page.cleanup();
     }
     return {
