@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { createAiSdkAnswerEngine } from "../../src/core/answers/engine";
 import { matchUnmarked, parseAsked, settleOrphans } from "../../src/core/answers/unmarkedQuotes";
 import { askAndFinish, citationsIn, setUpWithDocuments } from "../helpers/citations";
 import { type ModelCall, type ScriptedReply, scriptedModel } from "../helpers/models";
@@ -157,6 +158,30 @@ describe("An Answer that quotes without markers (#760)", { timeout: 30_000 }, ()
       expect.objectContaining({ check: "found", quote: SECOND }),
     ]);
     expect(finished.citedAfterChecking).toEqual({ count: 1, asked: true });
+  });
+
+  // protects=the one request for Citations is one of the end-of-turn checks' asks (#946): with no step of the budget left it isn't made; fails_when=the model is asked past the step budget; no_claim=none beyond protects.
+  test("with no step left in the budget, the model isn't asked for Citations", async () => {
+    let requests = 0;
+    const model = quotingModel(LOOSE, () => {
+      requests++;
+      return { text: JSON.stringify({ citations: [] }) };
+    });
+    const { core, client, mind } = await setUpWithDocuments(model, [TEA], {
+      answerEngine: createAiSdkAnswerEngine({ maxSteps: 2 }),
+    });
+
+    const { answerId, finished } = await askAndFinish(
+      core,
+      client,
+      mind.id,
+      "How did tea reach Tibet?",
+    );
+
+    expect(requests).toBe(0);
+    expect(model.doStreamCalls).toHaveLength(2);
+    expect(citationsIn(client, answerId)).toEqual([]);
+    expect(finished.citedAfterChecking?.asked ?? false).toBe(false);
   });
 
   // protects=the one request is made at most once, and an Answer it can't help stays uncited; an Answer that shares nothing with the Passages isn't asked about; fails_when=it asks twice, asks for a decline, or invents a Citation; no_claim=none beyond protects.
