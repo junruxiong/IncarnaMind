@@ -203,6 +203,9 @@ test("in Chinese, the card's button and the panel it opens have one name, 查找
   await pointAndClick(window, marks.first());
   const button = window.getByTestId("claim-card").getByTestId("claim-find-sources");
   await expect(button).toHaveText("查找资料");
+  await expect(window.getByTestId("claim-card").getByTestId("claim-search-web")).toHaveText(
+    "联网搜索",
+  );
   await pointAndClick(window, button);
   await expect(window.getByTestId("find-sources").getByRole("heading")).toHaveText("查找资料");
   await app.close();
