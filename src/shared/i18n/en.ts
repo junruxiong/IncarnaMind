@@ -3989,6 +3989,11 @@ export const en = {
   "command.assistant.fold": "Assistant: Fold",
   "command.assistant.unfold": "Assistant: Show",
   "command.assistant.history": "Conversation history",
+  "assistant.several.headings": "There are {count} headings called “{name}”: {places}. Which one?",
+  "assistant.several.paragraphs":
+    "There are {count} paragraphs starting “{name}”: {places}. Which one?",
+  "assistant.place.under": "under “{heading}”",
+  "assistant.place.number": "number {n}",
   // Outside agents (#351): the consent for each agent the User connects, and what IncarnaMind
   // tells an agent when a call can't be done, which the agent passes on to the User.
   "consent.flow.agents": "Your AI agents",
