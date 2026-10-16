@@ -930,6 +930,9 @@ export const en = {
   "viewer.docx.comment": "Comment by {author}",
 
   "location.page": "p. {range}",
+  "location.pages": "pp. {range}",
+  "location.page.withPdf.one": "{printed} · page {range} of the PDF",
+  "location.page.withPdf.other": "{printed} · pages {range} of the PDF",
   "location.slide.one": "slide {range}",
   "location.slide.other": "slides {range}",
   "location.rows.one": "row {range}",
