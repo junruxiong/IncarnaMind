@@ -391,7 +391,7 @@ describe("The AI use statement", () => {
         "local-model",
         on,
       ],
-      [FOURTH, "Not checked", haiku, on],
+      [FOURTH, "Not checked", "", ""],
       [EDITED, "Changed since checked", haiku, on],
     ]);
     expect(paragraphsOf(parts).at(-1)).toBe(NOTE_EN);
@@ -739,7 +739,8 @@ describe("Checks in the statement", () => {
       },
     });
     const { core, mind, documents } = await checking();
-    const tides = documents[0] as Document;
+    const [tides] = documents;
+    if (!tides) throw new Error("Tides was not added");
     const client = await connectToMind(core, mind.id);
     writeMind(client, [
       paragraph(text(`${YEARLY} `), cited(tides), text(` ${PENGUINS} `), cited(tides)),
