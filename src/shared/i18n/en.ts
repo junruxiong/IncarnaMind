@@ -3875,7 +3875,7 @@ export const en = {
   "citedSource.cited": "{entry}. Cited: {locations}",
   "citation.note": "Note",
   "export.citationStyle": "Citation style",
-  "export.citationStyle.default": "The default when both the interface and the Mind are in Chinese",
+  "export.citationStyle.default": "The default for a Mind in Chinese that cites papers or books",
   "references.style.default": "Default",
   "assistant.label": "Assistant",
   "assistant.newChat": "New chat",

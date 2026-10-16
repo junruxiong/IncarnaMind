@@ -174,12 +174,6 @@ const first = (properties: Map<string, string[]>, ...names: string[]) => {
   return null;
 };
 
-/** When an arXiv id says a preprint was first posted: "2310.11511" is October 2023. */
-function arxivMonth(id: string): string | null {
-  const match = /^(\d{2})(0[1-9]|1[0-2])\./.exec(id);
-  return match ? `20${match[1]}-${match[2]}` : null;
-}
-
 /**
  * A Document's reference record as its file gives it. A thesis says so on its
  * first page; a DOI, a journal's name in the XMP or a Chinese journal's article
@@ -216,9 +210,7 @@ export function readReference(meta: FileMetadata): FileReference {
   const issued =
     parseIssued(
       first(xmp, "prism:coverDate", "prism:publicationDate", "prism:coverDisplayDate") ?? "",
-    ) ??
-    (page.issued ? parseIssued(page.issued) : null) ??
-    (arxiv ? arxivMonth(arxiv) : null);
+    ) ?? (page.issued ? parseIssued(page.issued) : null);
   if (issued) read.issued = issued;
 
   const journal = first(xmp, "prism:publicationName");
@@ -250,11 +242,15 @@ export function readReference(meta: FileMetadata): FileReference {
         : arxiv
           ? "article"
           : (page.type ?? "document");
-  // A thesis is published by the university that grants it, a report by its organisation.
+  // A thesis is published by the university that grants it, a report by its organisation,
+  // which is also a report's author when no person is named.
   const publisher =
     first(xmp, "dc:publisher") ??
     (type === "thesis" || type === "report" ? (page.institution ?? null) : null);
   if (publisher) read.publisher = publisher;
+  if (type === "report" && !read.authors && page.institution) {
+    read.authors = [{ literal: page.institution }];
+  }
 
   const url = first(xmp, "prism:url");
   if (arxiv) read.url = arxivUrl(arxiv);

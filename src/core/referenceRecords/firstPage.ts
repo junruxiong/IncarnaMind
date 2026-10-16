@@ -21,9 +21,11 @@ export type FirstPageReading = Partial<
 const HAN = /\p{Script=Han}/u;
 const LETTER = /\p{L}/gu;
 
-/** Headings that open a page but name no work. */
+/** Headings that open a page but name no work, a thesis cover's "硕士学位论文" among them. */
 const GENERIC =
-  /^(?:abstract|summary|executive summary|contents|table of contents|preface|foreword|introduction|acknowledge?ments?|appendix|preprint|draft|chapter\s+\d+|摘\s*要|目\s*录|前\s*言|序\s*言|引\s*言|致\s*谢|附\s*录|第[一二三四五六七八九十\d]+章)(?:$|[\s:：.])/iu;
+  /^(?:abstract|summary|executive summary|contents|table of contents|preface|foreword|introduction|acknowledge?ments?|appendix|preprint|draft|chapter\s+\d+|(?:master|doctoral|bachelor)(?:'s)?\s+(?:thesis|dissertation)|摘\s*要|目\s*录|前\s*言|序\s*言|引\s*言|致\s*谢|附\s*录|第[一二三四五六七八九十\d]+章|(?:硕\s*士|博\s*士|学\s*士)?\s*学\s*位\s*论\s*文|毕\s*业\s*(?:论\s*文|设\s*计))(?:$|[\s:：.])/iu;
+/** A cover's university or organisation, set as large as a title: "华东师范大学". */
+const ONLY_AN_INSTITUTION = /^.{0,14}(?:大学|学院|研究所|研究院|university|college|institute)$/iu;
 
 /**
  * Chinese family names, the common single ones and the compound ones, which a line of names
@@ -52,9 +54,9 @@ const INSTITUTION_LABEL =
   /^(?:培\s*养\s*单\s*位|学\s*位\s*授\s*予\s*单\s*位|授\s*予\s*单\s*位|学\s*校|单\s*位|institution|university)\s*[:：]\s*(.+)$/iu;
 const DATE_LABEL =
   /^(?:完\s*成\s*日\s*期|答\s*辩\s*日\s*期|提\s*交\s*日\s*期|论\s*文\s*日\s*期|日\s*期|date)\s*[:：]/iu;
-/** Dates that aren't the work's: when a paper was received, revised or accepted. */
+/** Dates that aren't the work's: when a paper was received or accepted, or a preprint's version posted. */
 const OTHER_DATE =
-  /收稿|修回|录用|接收|发表日期|基金|received|revised|accepted|submitted|funding/iu;
+  /收稿|修回|录用|接收|基金|received|revised|accepted|submitted|funding|arxiv\s*:/iu;
 const INSTITUTION =
   /大学|学院|研究所|研究院|研究中心|科学院|实验室|university|institute|college|academy|school of|laborator/iu;
 
@@ -136,7 +138,9 @@ function titleOf(lines: readonly PageLine[]): { title: string; end: number } | n
       end++;
     }
     const title = joinLines(lines.slice(start, end + 1).map((line) => line.text));
-    if (!GENERIC.test(title) && title.length <= 300) return { title, end };
+    if (!GENERIC.test(title) && !ONLY_AN_INSTITUTION.test(title) && title.length <= 300) {
+      return { title, end };
+    }
   }
   return null;
 }

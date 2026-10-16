@@ -22,6 +22,7 @@ import { type CitationStyleId, defaultCitationStyle } from "../../shared/citatio
 import { displayName } from "../../shared/documentNames";
 import { bibliographyShown } from "../../shared/mindBibliography";
 import { chosenCitationStyle, citationStylePromptDismissed } from "../../shared/mindCitationStyle";
+import { isCitableWork } from "../../shared/references";
 import { core } from "./core";
 import { citationClusters, citedWorkOf } from "./editor/citationClusters";
 import { errorMessage } from "./errors";
@@ -109,12 +110,40 @@ export function useMindStyleChoice(doc: Y.Doc): MindStyleChoice {
   return choice;
 }
 
+/** The Documents a Mind cites, each once, as one string, so the editor re-renders only when they change. */
+const citedDocuments = (editor: Editor) =>
+  [
+    ...new Set(
+      citationClusters(editor.state).flatMap((cluster) =>
+        cluster.members.flatMap((member) => member.attributes.documentId ?? []),
+      ),
+    ),
+  ]
+    .sort()
+    .join(" ");
+
+/** Whether the Mind cites a paper or a book: a reference record of a known type, with authors or a year. */
+export function useCitesWorks(editor: Editor): boolean {
+  const cited = useEditorState({
+    editor,
+    selector: ({ editor: current }) => citedDocuments(current),
+  });
+  return useAppStore((state) => {
+    if (cited === "") return false;
+    const ids = new Set(cited.split(" "));
+    return state.documents.some(
+      (document) => ids.has(document.id) && isCitableWork(document.reference),
+    );
+  });
+}
+
 /**
- * The style the Mind is in: its choice, else the default for the interface's language and the
- * Mind's text (`defaultCitationStyle`), as the core works it out for its exports.
+ * The style the Mind is in: its choice, else the default for the interface's language, the
+ * Mind's text and what it cites (`defaultCitationStyle`), as the core works it out for exports.
  */
 export function useMindCitationStyle(editor: Editor, choice: MindStyleChoice): CitationStyleId {
   const language = useLanguage();
+  const citesWorks = useCitesWorks(editor);
   const chineseText = useEditorState({
     editor,
     selector: ({ editor: current }) => {
@@ -124,7 +153,7 @@ export function useMindCitationStyle(editor: Editor, choice: MindStyleChoice): C
       return writtenInChinese(doc.textBetween(0, end, "\n"));
     },
   });
-  return choice.chosen ?? defaultCitationStyle(language, chineseText);
+  return choice.chosen ?? defaultCitationStyle(language, { chineseText, citesWorks });
 }
 
 /** How long the editor waits after a change before it asks again: a run of changes asks once. */

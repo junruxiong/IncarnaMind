@@ -3675,7 +3675,7 @@ export const zhCN = {
   "citedSource.cited": "{entry}。引用位置：{locations}",
   "citation.note": "注释",
   "export.citationStyle": "引用格式",
-  "export.citationStyle.default": "界面和正文都是中文，默认使用此格式",
+  "export.citationStyle.default": "中文 Mind 引用了论文或图书，默认使用此格式",
   "references.style.default": "默认",
   "assistant.label": "助手",
   "assistant.newChat": "新对话",

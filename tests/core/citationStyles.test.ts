@@ -256,21 +256,15 @@ describe("formatting a Mind's Citations", () => {
     ).toBe(false);
   });
 
-  test("a Document with no details gets an entry from its name, kind and the day it was added, in every style", async () => {
+  test("a Document with no details gets an entry from its name alone, never its format or the day it was added, in every style", async () => {
     const { core, prospect, lease } = await setUp();
     const style = (id: FormattedCitations["style"]) => format(core, id, [work(lease)]);
-    const added = (locale: string) =>
-      new Intl.DateTimeFormat(locale, { dateStyle: "long", timeZone: "UTC" }).format(
-        new Date(lease.createdAt),
-      );
     for (const id of CITATION_STYLE_IDS.filter((each) => each !== "numbered")) {
       const { bibliography } = await style(id);
       const entry = bibliography.find((each) => each.documentId === lease.id);
       expect(entry?.needsDetails, id).toBe(true);
       expect(plain(entry?.runs), id).toBe(
-        id.startsWith("gb-t")
-          ? `Lease agreement。纯文本，添加于 ${added("zh-CN")}。`
-          : `Lease agreement. Plain text, added ${added("en-GB")}.`,
+        id.startsWith("gb-t") ? "Lease agreement。" : "Lease agreement.",
       );
     }
     // The style's own number stays.
@@ -469,8 +463,9 @@ describe("exporting a Mind in its citation style", () => {
     const exported = await core.exportMind(mind.id, { format: "docx" });
     const document = part(unzip(exported.data), "word/document.xml");
     const paragraphs = paragraphsOf(document);
+    // Each work with a page is cited on its own, its page raised after its number.
     expect(paragraphs[1]?.text).toBe(
-      "Losses loom larger than gains[1,2] [unverified]. Systems are open[2].",
+      "Losses loom larger than gains[1]265[2]5 [unverified]. Systems are open[2].",
     );
     expect(document).toContain('<w:vertAlign w:val="superscript"/>');
     expect(paragraphs[2]?.text).toBe("参考文献");
@@ -525,7 +520,9 @@ describe("exporting a Mind in its citation style", () => {
     const gbt = new TextDecoder().decode(
       (await core.exportMind(mind.id, { format: "markdown" })).data,
     );
-    expect(gbt).toContain("Losses loom larger than gains<sup>\\[1,2\\]</sup> \\[unverified\\].");
+    expect(gbt).toContain(
+      "Losses loom larger than gains<sup>\\[1\\]265\\[2\\]5</sup> \\[unverified\\].",
+    );
     expect(gbt).toContain("## 参考文献");
 
     await core.setMindCitationStyle(mind.id, "chicago-notes");
