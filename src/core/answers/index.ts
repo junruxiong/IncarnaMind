@@ -170,6 +170,7 @@ import {
   readMind,
 } from "./context";
 import { coverageInstructions, coverageOf, documentsAsked, type SizedDocument } from "./coverage";
+import { givenWhole, OPENING_TOKEN_LIMIT, openingWithin, withDocumentText } from "./documentText";
 import type {
   AnswerEngine,
   AnswerSearchOptions,
@@ -186,6 +187,7 @@ import {
   answerInstructions,
   connectorInstructions,
   documentInstructions,
+  documentTextNote,
   LISTED_DOCUMENTS,
   type ListedDocuments,
   languageInstruction,
@@ -397,6 +399,8 @@ export interface AnswersOptions {
    * Mind; null: every Document.
    */
   unscopedDocuments?(mindId: string | null): string[] | null;
+  /** The Document a Mind imported from Word was also added as (#720); null for none. */
+  workingCopyOf?(mindId: string): string | null;
   /** What an Answer says when its Question's Search scope has no Documents to search. */
   emptyScopeAnswer(): string;
   /** The User's Skills. */
@@ -540,6 +544,8 @@ export interface DocumentsForAnswers
   searchableNames(documentIds: readonly string[] | null, limit: number): ListedDocuments;
   /** The Documents to search, the most text first. */
   searchableBySize(documentIds: readonly string[] | null): SizedDocument[];
+  /** A live Document's live Passages, in reading order. */
+  passagesOf(documentId: string): WindowedPassage[];
   /** The languages the Documents to search are in, the most common first, with how many are in each. */
   searchableLanguages(documentIds: readonly string[] | null): DocumentLanguage[];
   /** The Documents among these (null: every Document) whose text couldn't be read, or some of it. */
@@ -867,10 +873,33 @@ export function createAnswers(options: AnswersOptions) {
     };
     let skills: SkillSession | null = null;
     const searched = inScope(options.documents, documentIds);
-    const session = createCitationSession(searched, {
-      onRecord: (marker, citation) =>
-        announce("answer.citationAdded", { ...place, answerId, marker, citation }),
-    });
+    // In the assistant, a short scope's text goes with the Question, and beside a Mind imported
+    // from Word, "this document" means its original (#1036).
+    const inAssistant = !outside && input.assistant !== undefined;
+    const sized = inAssistant ? options.documents.searchableBySize(documentIds) : [];
+    const mindIn = input.assistant?.focused?.mindId ?? null;
+    const originalId =
+      inAssistant && mindIn !== null ? (options.workingCopyOf?.(mindIn) ?? null) : null;
+    const original = sized.find((each) => each.id === originalId) ?? null;
+    const whole = inAssistant
+      ? givenWhole(sized, original?.id ?? null, options.documents.passagesOf)
+      : [];
+    const wholeNames = [...new Set(whole.map((passage) => passage.documentName))];
+    const session = createCitationSession(
+      searched,
+      {
+        onRecord: (marker, citation) =>
+          announce("answer.citationAdded", { ...place, answerId, marker, citation }),
+      },
+      original && !wholeNames.includes(original.name)
+        ? {
+            documentId: original.id,
+            name: original.name,
+            passages: () =>
+              openingWithin(options.documents.passagesOf(original.id), OPENING_TOKEN_LIMIT),
+          }
+        : undefined,
+    );
     /**
      * Whether its model is offered `calculate` and its steer: a fact of the
      * model, once prepared (ADR-0021). Off, the Answer is as it was before them.
@@ -1407,6 +1436,7 @@ export function createAnswers(options: AnswersOptions) {
           listening = true;
         }
       }
+      if (whole.length > 0) messages = withDocumentText(messages, session.show(whole));
       // Stopped while waiting, e.g. for consent: send nothing.
       if (finished) return;
       if (consenting) {
@@ -1685,6 +1715,7 @@ export function createAnswers(options: AnswersOptions) {
             connectorTools ? connectorInstructions(fromConnectors, mode === "no-documents") : "",
             sourcesInstructions(sourceTools),
             webInstructions(withWebTools),
+            documentTextNote(original?.name ?? null, wholeNames),
             mindInstructions(withMindTools, route),
             meetingInstructions(listening),
             signInNeededInstructions(signInNeeded.map((connector) => connector.name)),

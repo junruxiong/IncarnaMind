@@ -110,6 +110,26 @@ export function webInstructions(offered: boolean): string {
 }
 
 /**
+ * The Document the Mind in focus is the working copy of (#1036), and the
+ * Documents whose whole text is in <document-text>, by name.
+ */
+export function documentTextNote(original: string | null, whole: readonly string[]): string {
+  const lines = [
+    ...(original === null
+      ? []
+      : [
+          `The Mind in <mind> is the User's working copy of the Document "${listedName(original)}", imported from it: "this document", "the file", "this résumé" ("这份文档", "这份简历") and the like mean that Document. It is among the User's Documents: never say it isn't there or couldn't be found. If a search finds nothing in it, answer from the Passages you were given of it.`,
+        ]),
+    ...(whole.length === 0
+      ? []
+      : [
+          `<document-text> holds the whole text of ${whole.map((name) => `"${listedName(name)}"`).join(", ")} as Passages. Answer from them and cite them as you cite any Passage; search only for what they don't hold.`,
+        ]),
+  ];
+  return lines.join("\n");
+}
+
+/**
  * The Minds' Tools, when offered (#202): the User's words decide whether the
  * Answer answers, changes a Mind or makes one, and `route` says how
  * IncarnaMind read them. IncarnaMind, not the reply, reports what changed,

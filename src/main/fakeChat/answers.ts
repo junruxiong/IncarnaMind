@@ -36,6 +36,7 @@ import { cellReply, isCell } from "./cells";
 import { FORTY_CITATIONS, passagesIn, recordFor, recordsFor, TWELVE_IN_A_ROW } from "./passages";
 import {
   lastQuestion,
+  lastUserText,
   type Prompt,
   type Reply,
   type StreamPart,
@@ -319,7 +320,9 @@ export function answerReply(prompt: Prompt, tools: readonly string[]): Reply {
   }
   const cites = toolResults(prompt, "cite");
   if (cites.length === 0) {
-    const records = recordsFor(searches.at(-1) ?? "", question);
+    const found = recordsFor(searches.at(-1) ?? "", question);
+    // A short Document's whole text came with the Question (#1036): cited when the search found nothing.
+    const records = found.length > 0 ? found : recordsFor(lastUserText(prompt), question);
     if (records.length > 0) return { tool: "cite", input: { citations: records } };
     return { text: fakeAnswer(question, skill) };
   }
