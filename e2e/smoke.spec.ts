@@ -195,7 +195,7 @@ test("Continue with ChatGPT opens OpenAI's sign-in for IncarnaMind's own registr
   await app.close();
 });
 
-test("first run asks for no model; the first own Question waits while the setup leads with one recommended way, and Set up later gives the words back", async () => {
+test("first run asks for no model; the first own Question waits while the setup leads with the ChatGPT plan and a key, and Set up later gives the words back", async () => {
   const first = await launchApp(dataDir);
   const { window } = first;
   await expect(window.getByTestId("chat-setup")).toHaveCount(0);
@@ -214,29 +214,28 @@ test("first run asks for no model; the first own Question waits while the setup 
     "Waiting for you to choose a model",
   );
   await expect(card).toContainText("Choose where Answers come from");
-  await expect(card.getByTestId("setup-primary")).toHaveText("Use my ChatGPT plan");
+  await expect(card.getByTestId("setup-chatgpt")).toHaveText("Use my ChatGPT plan");
+  await expect(card.getByTestId("setup-key")).toHaveText("Paste an API key");
   // Choosing it is the consent (ADR-0022), so its line names everything that goes.
   await expect(card.getByTestId("setup-chatgpt-sends")).toHaveText(
-    "Plus or Pro · No key needed · Your Questions, the Mind you're in, Passages from your Documents, and Document text for Tags go to OpenAI under your ChatGPT account.",
+    "If you pay for ChatGPT Plus or Pro · No key needed · Your Questions, the Mind you're in, Passages from your Documents, and Document text for Tags go to OpenAI under your ChatGPT account.",
   );
   // The card says what the Mind's "needs an AI model" line would, so that line steps aside.
   await expect(window.getByTestId("chat-readiness")).toHaveCount(0);
-  // The other ways are folded under the one recommended button.
-  await expect(card.getByTestId("way-key")).toBeHidden();
+  // The other ways are folded under the two that lead.
+  await expect(card.getByTestId("way-local")).toBeHidden();
   await card.getByTestId("setup-other").click();
-  await expect(card.getByTestId("way-key")).toBeVisible();
   await expect(card.getByTestId("way-local")).toBeVisible();
-  await expect(card.getByTestId("setup-claude")).toContainText("Already pay for Claude?");
 
-  // In Chinese the recommended button is a DeepSeek key.
+  // In Chinese the key leads.
   await window.evaluate(async () =>
     (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
       user: { language: "zh-CN" },
     }),
   );
-  await expect(card.getByTestId("setup-primary")).toHaveText("粘贴 DeepSeek 密钥");
-  await expect(card.getByTestId("setup-deepseek-sends")).toHaveText(
-    "你的问题、当前 Mind、文档中的相关段落，以及用于打标签的文档文字，会通过你自己的密钥发送给 DeepSeek。",
+  await expect(card.getByTestId("setup-key")).toHaveText("粘贴 API 密钥");
+  await expect(card.getByTestId("setup-chatgpt-sends")).toHaveText(
+    "如果你订阅了 ChatGPT Plus 或 Pro（中国大陆无法使用）· 无需密钥 · 你的问题、当前 Mind、文档中的相关段落，以及用于打标签的文档文字，会通过你的 ChatGPT 账号发送给 OpenAI。",
   );
   await window.evaluate(async () =>
     (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
@@ -252,7 +251,7 @@ test("first run asks for no model; the first own Question waits while the setup 
   await first.app.close();
 });
 
-test("Settings → Models lists the key providers, and “Already pay for a plan?” with its routes", async () => {
+test("Settings → Models lists the key providers, and “Already pay for a plan?” with the ChatGPT plan", async () => {
   const { app, window } = await launchApp(dataDir);
   const settings = await openSettings(window, "models");
   await expect(settings.getByTestId("chat-choice-api-key")).toBeVisible();
@@ -264,8 +263,6 @@ test("Settings → Models lists the key providers, and “Already pay for a plan
   const plans = settings.getByTestId("plans-settings");
   await expect(plans).toContainText("Already pay for a plan?");
   await expect(plans).toContainText("ChatGPT Plus or Pro");
-  await expect(plans).toContainText("Claude Pro, Max or Team");
-  await expect(plans).toContainText("Google AI Pro or Ultra");
   await window.evaluate(async () =>
     (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
       user: { language: "zh-CN" },
