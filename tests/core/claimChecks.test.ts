@@ -956,6 +956,9 @@ describe("Stopping", () => {
       release = resolve;
     });
     const model = scriptedModel((call) => {
+      if (!call.results.some((result) => result.tool === "search_documents")) {
+        return { calls: [{ tool: "search_documents", input: { query: sentenceOf(call) } }] };
+      }
       if (sentenceOf(call) === UNSUPPORTED)
         return { text: "Verdict: unsupported", pause: { after: 0, until: held } };
       return { text: "Verdict: unsupported" };

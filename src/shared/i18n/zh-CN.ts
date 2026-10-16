@@ -588,6 +588,7 @@ export const zhCN = {
   "claim.reason.malformed": "无法读取模型的回复。",
   "claim.reason.empty": "模型的回复是空的。",
   "claim.reason.no-evidence": "模型给出的引文不在它指出的文档中，所以不显示结论。",
+  "claim.reason.unread": "模型没有读你的文档就给出了结论，所以不显示结论。请重新核对。",
   "claim.reason.rate-limit": "模型服务暂时繁忙，请稍后重新核对。",
   "claim.reason.cost-cap": "核对这句话可能超出你设置的每月上限。",
   "claim.reason.plan-limit": "已达到套餐的用量上限。",
