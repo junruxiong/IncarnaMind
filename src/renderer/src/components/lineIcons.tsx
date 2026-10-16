@@ -153,7 +153,6 @@ export function DocumentLineIcon({ kind, ...props }: IconProps & { kind: Documen
   );
 }
 
-/** A table: its frame, heading row and first column ruled. */
 export function TableLineIcon(props: IconProps) {
   return (
     <LineIcon {...props}>

@@ -6,7 +6,6 @@ import { TABLE_SLOT_CLASS, TABLE_SLOT_INDEX, tablesOf } from "../../editor/answe
 import { useT } from "../../i18n";
 import { TableLineIcon } from "../lineIcons";
 
-/** The empty slots the editor keeps after the Answer's tables (`AnswerTableSlots`). */
 function useTableSlots(frame: RefObject<HTMLElement | null>): HTMLElement[] {
   const [slots, setSlots] = useState<HTMLElement[]>([]);
   useEffect(() => {
@@ -28,10 +27,6 @@ function useTableSlots(frame: RefObject<HTMLElement | null>): HTMLElement[] {
   return slots;
 }
 
-/**
- * "Open as a table" under each table of an Answer (DESIGN.md, Answer): the whole table in a tab
- * of its own, beside the Mind, where it can be copied or exported.
- */
 export function OpenAsTable({
   frame,
   editor,
