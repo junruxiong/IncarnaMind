@@ -2226,6 +2226,8 @@ export const zhCN = {
   "answer.wait.usually.minute": "用 {model} 通常要 1 分钟左右",
   "answer.wait.usually.minutes": "用 {model} 通常要 {count} 分钟左右",
   "answer.regenerate": "重新生成",
+  "answer.cannotWrite": "这个模型不能自己写进你的 Mind。",
+  "answer.cannotWrite.add": "添加到 Mind",
   "answer.more": "这条回答的更多操作",
   "answer.error.thisModel": "这个模型",
   "answer.error.auth": "{model} 的密钥被拒绝了",

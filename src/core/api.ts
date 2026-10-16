@@ -4792,6 +4792,8 @@ export interface AnswerSteps {
    * Absent: none.
    */
   unbackedClaims?: ClaimedChange[];
+  /** It was asked to write or change a Mind, and its model can't use the Minds' Tools: it answered in the reply (#947). */
+  cannotWrite?: true;
 }
 
 /**

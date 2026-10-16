@@ -25,7 +25,7 @@ import { UnreadFilesLine } from "../UnreadFilesLine";
 import { AnswerActions } from "./AnswerActions";
 import { AnswerSteps, useStepsScopeOf } from "./AnswerSteps";
 import { AnswerText } from "./AnswerText";
-import { UnbackedClaimLine, WaitingChangesLine } from "./ChangeProblemLines";
+import { CannotWriteLine, UnbackedClaimLine, WaitingChangesLine } from "./ChangeProblemLines";
 import { MindChangesCard, NoMindLine, wantedAMind } from "./MindChangesCard";
 
 /** What adding an Answer needs from the thread around it. */
@@ -122,6 +122,14 @@ export function AssistantAnswer({
         <NoMindLine question={question} />
       )}
       {!streaming && <WaitingChangesLine answer={answer} />}
+      {!streaming && written && (
+        <CannotWriteLine
+          answer={answer}
+          focusedMindName={keeping.focusedMindName}
+          onAdd={() => keeping.add(answer)}
+          onPick={(anchor) => keeping.pick(answer, anchor)}
+        />
+      )}
       {!streaming && <UnbackedClaimLine answer={answer} onRegenerate={regenerate} />}
       {!streaming && scopeEmpty && (
         <ProblemLine

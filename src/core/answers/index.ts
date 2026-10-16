@@ -768,6 +768,7 @@ export function createAnswers(options: AnswersOptions) {
     /** The one request to fix figures, if the engine made it (see ./figureRetry). */
     let figureRetry: FigureRetry | null = null;
     let unbackedClaims: ClaimedChange[] = [];
+    let cannotWrite = false;
     /** What the model calls counted, the cached input tokens too. */
     const usage: AnswerUsage = {
       inputTokens: 0,
@@ -822,6 +823,7 @@ export function createAnswers(options: AnswersOptions) {
           firstWordAt !== Infinity && { firstWordMs: wordAfter(sentAt, firstWordAt) }),
         ...(careful && { careful: true as const }),
         ...(unbackedClaims.length > 0 && { unbackedClaims: [...unbackedClaims] }),
+        ...(cannotWrite && { cannotWrite: true as const }),
       };
     };
     let skills: SkillSession | null = null;
@@ -1584,7 +1586,8 @@ export function createAnswers(options: AnswersOptions) {
         return mindsNow;
       };
       const changedAMind = () => [...mindChanges.values()].some(changesAMind);
-      const owesAWrite = () => requested !== null && !changedAMind() && mindProblems.size === 0;
+      const owesAWrite = () =>
+        requested !== null && !cannotWrite && !changedAMind() && mindProblems.size === 0;
       const heldBack = holdBack(() => mindsListed().map((mind) => mind.name));
       const checkReply = (text: string) => {
         mindsNow = null;
@@ -1607,8 +1610,10 @@ export function createAnswers(options: AnswersOptions) {
             webTools: withWebTools = false,
             mindTools: withMindTools = false,
           } = {},
-        ) =>
-          [
+        ) => {
+          // The model the Answer ends on is the last asked: without Tools, it can't write.
+          cannotWrite = requested !== null && !withMindTools;
+          return [
             base,
             mode === "no-documents"
               ? input.emptyScope
@@ -1631,7 +1636,8 @@ export function createAnswers(options: AnswersOptions) {
             language,
           ]
             .filter(Boolean)
-            .join("\n\n"),
+            .join("\n\n");
+        },
         messages,
         ...(mindRequest && { mind: mindRequest }),
         question: context.question,

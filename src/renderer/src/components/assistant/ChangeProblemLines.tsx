@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import type { ConversationAnswer } from "../../../../core/api";
 import { mindName } from "../../../../shared/naming";
 import { unbackedClaimKey, waitingProblemOf } from "../../changeProblems";
@@ -39,6 +40,42 @@ export function WaitingChangesLine({ answer }: { answer: Pick<ConversationAnswer
     >
       {text}
     </ProblemLine>
+  );
+}
+
+/**
+ * Under an Answer asked to write in a Mind whose model can't use the Minds'
+ * Tools (#947): why nothing was written, and Add to Mind, which adds the
+ * Answer as Add to note does.
+ */
+export function CannotWriteLine({
+  answer,
+  focusedMindName,
+  onAdd,
+  onPick,
+}: {
+  answer: ConversationAnswer;
+  focusedMindName: string | null;
+  onAdd(): void;
+  onPick(anchor: HTMLElement): void;
+}) {
+  const t = useT();
+  const line = useRef<HTMLDivElement>(null);
+  if (!answer.steps?.cannotWrite) return null;
+  return (
+    <div ref={line}>
+      <ProblemLine
+        role="status"
+        testId="answer-cannot-write"
+        action={{
+          label: t("answer.cannotWrite.add"),
+          testId: "answer-cannot-write-add",
+          onClick: () => (focusedMindName ? onAdd() : line.current && onPick(line.current)),
+        }}
+      >
+        {t("answer.cannotWrite")}
+      </ProblemLine>
+    </div>
   );
 }
 
