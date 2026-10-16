@@ -189,6 +189,20 @@ describe("suggestions as the User writes", () => {
     });
   });
 
+  test("a Document the User keeps as their own workings is never suggested from or cited, until they cite it again", async () => {
+    const model = suggestingModel(SPRING);
+    const { core, mind, documents } = await setUp(model);
+    const tides = documents.find((each) => each.name === "Tides");
+    await core.setNotCited(tides?.id ?? "", true);
+
+    expect(await core.suggestNext(requestFor(mind.id, ABOUT_TIDES))).toEqual({ kind: "none" });
+    expect(suggestionCalls(model)).toEqual([]);
+
+    await core.setNotCited(tides?.id ?? "", false);
+    const suggestion = suggestionOf(await core.suggestNext(requestFor(mind.id, ABOUT_TIDES)));
+    expect(suggestion.citation.documentName).toBe("Tides");
+  });
+
   test("a renamed Document is named as it is now, to the model and in the Citation", async () => {
     const model = suggestingModel(SPRING);
     const { core, mind, documents } = await setUp(model);

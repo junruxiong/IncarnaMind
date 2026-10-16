@@ -123,7 +123,9 @@ export interface ComparisonsOptions {
   };
   documents: {
     /** The live Documents among `ids`, in that order, with the version each is at. */
-    live(ids: readonly string[]): { id: string; name: string; contentHash: string }[];
+    live(
+      ids: readonly string[],
+    ): { id: string; name: string; contentHash: string; notCited: boolean }[];
     /** How many of `ids` have Passages to search. */
     searchableCount(ids: readonly string[]): number;
   };
@@ -438,6 +440,7 @@ export function createComparisons(options: ComparisonsOptions) {
     fill.task.started(stepOf(cell));
     const [document] = options.documents.live([cell.documentId]);
     if (!document) return { kind: "problem", problem: "source-removed" };
+    if (document.notCited) return { kind: "problem", problem: "not-cited" };
     const documentIds = options.evidence([document.id]);
     if (documentIds.length === 0) return { kind: "problem", problem: "left-out" };
     if (options.documents.searchableCount(documentIds) === 0) {
