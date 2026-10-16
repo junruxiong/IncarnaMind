@@ -71,6 +71,7 @@ const PROVIDERS = [
         careful: {
           anthropic: { thinking: { type: "adaptive", display: "summarized" }, effort: "high" },
         },
+        refused: [{ names: "effort", options: { anthropic: { effort: undefined } } }],
         only: [
           "claude-fable-5",
           "claude-mythos-5",
