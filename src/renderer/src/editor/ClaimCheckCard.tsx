@@ -325,6 +325,8 @@ function ClaimCard({
   );
   const documents = useAppStore((store) => store.documents);
   const searchedFolder = !check.scope.widened && folderName !== null;
+  const ownWorkings =
+    state === "unsupported" && check.excluded.some((left) => left.reason === "own-workings");
   const reason =
     shown.state === "not-checked"
       ? t(`claim.reason.${shown.reason}`, { detail: check.detail ?? "" })
@@ -367,10 +369,15 @@ function ClaimCard({
       )}
       {calculation && <Working calculation={calculation} onOpen={onOpen} />}
       {state === "unsupported" && !differs && (
-        <p data-testid="claim-nothing" className="citation-card-note">
-          {searchedFolder
-            ? t("claim.unsupported.inFolder", { folder: folderName })
-            : t("claim.unsupported.anywhere")}
+        <p
+          data-testid={ownWorkings ? "claim-own-workings" : "claim-nothing"}
+          className="citation-card-note"
+        >
+          {ownWorkings
+            ? t("claim.unsupported.ownWorkings")
+            : searchedFolder
+              ? t("claim.unsupported.inFolder", { folder: folderName })
+              : t("claim.unsupported.anywhere")}
         </p>
       )}
       {webOffShown && !webSearchOn && (
@@ -392,7 +399,8 @@ function ClaimCard({
         </p>
       )}
       {check.excluded.map((left) => {
-        const document = documents.find((each) => each.id === left.documentId);
+        const document =
+          left.reason === "own-file" && documents.find((each) => each.id === left.documentId);
         return (
           document && (
             <CountItLine key={left.documentId} document={document} testId="claim-left-out">
