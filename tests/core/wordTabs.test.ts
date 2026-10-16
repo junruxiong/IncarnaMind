@@ -1,6 +1,13 @@
 import { describe, expect, onTestFinished, test, vi } from "vitest";
 import * as Y from "yjs";
-import { MIND_WORD_LOOK_FIELD, WORD_TAB_MARK } from "../../src/core";
+import {
+  CONTENT_SCHEMA_VERSION,
+  CONTENT_SCHEMA_VERSION_KEY,
+  MIND_CONTENT_FIELD,
+  MIND_SETTINGS_FIELD,
+  MIND_WORD_LOOK_FIELD,
+  WORD_TAB_MARK,
+} from "../../src/core";
 import { wordLookOf } from "../../src/shared/wordLook";
 import { createTempDataFolder, queryDatabase, startCore } from "../helpers/core";
 import { paragraphsOf, unzip } from "../helpers/docx";
@@ -117,5 +124,35 @@ describe("the tabs of a Mind imported from Word", () => {
     );
     expect(tabs(after).unmarked).toBe(0);
     expect(tabs(after).marked).toBeGreaterThan(4);
+  });
+});
+
+describe("Minds written before tab stops", () => {
+  test("a Mind written at content schema 21 or 22 opens to edit, and records 23 once written to", async () => {
+    const core = startCore(await createTempDataFolder());
+    onTestFinished(() => core.close());
+    for (const version of [21, 22]) {
+      const mind = await core.createMind({ title: `Written at ${version}` });
+      const written = new Y.Doc();
+      const paragraph = new Y.XmlElement("paragraph");
+      paragraph.setAttribute("id", `block-${version}`);
+      paragraph.insert(0, [new Y.XmlText("Plain words.")]);
+      written.getXmlFragment(MIND_CONTENT_FIELD).push([paragraph]);
+      written.getMap(MIND_SETTINGS_FIELD).set(CONTENT_SCHEMA_VERSION_KEY, version);
+      await core.applyMindUpdate(mind.id, Y.encodeStateAsUpdate(written));
+
+      const opened = await core.openMind(mind.id);
+      expect(opened.access, `${version}`).toBe("edit");
+      const client = await connectToMind(core, mind.id);
+      client.doc.transact(() => {
+        const text = client.blocks.get(0);
+        if (text instanceof Y.XmlElement) text.insert(1, [new Y.XmlText(" More.")]);
+      });
+      await client.settled();
+      expect(client.doc.getMap(MIND_SETTINGS_FIELD).get(CONTENT_SCHEMA_VERSION_KEY)).toBe(
+        CONTENT_SCHEMA_VERSION,
+      );
+    }
+    expect(CONTENT_SCHEMA_VERSION).toBe(23);
   });
 });
