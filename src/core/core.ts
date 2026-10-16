@@ -115,6 +115,7 @@ import { createLocalExecutor } from "./execution";
 import { createExports } from "./exports";
 import { exportLabels } from "./exports/labels";
 import { renderMarkdown } from "./exports/markdown";
+import { setTextOnlyDocuments, textOnlyDocuments } from "./exports/sharedPictures";
 import { createFileLock } from "./fileLock";
 import { safeFileName, writeNewFile } from "./fileNames";
 import { createFolders } from "./folders";
@@ -146,6 +147,8 @@ import { createPrivacy, type NetworkTrafficRegistry } from "./privacy";
 import { readsImages } from "./providers/capabilities";
 import { CHAT_FLOW_SENDS, createChat, type PreparedChatModel } from "./providers/chat";
 import { CHATGPT_PLAN_ENDPOINTS, createChatGptPlan } from "./providers/chatgpt/plan";
+import { createClaudeAccount } from "./providers/claudeAccount/account";
+import { ANTHROPIC_OAUTH } from "./providers/claudeAccount/config";
 import { createAiSdkEmbeddingModel } from "./providers/embeddings";
 import { ollamaBaseUrl } from "./providers/kinds";
 import { createLocalServers } from "./providers/localServers";
@@ -385,8 +388,8 @@ export function createCore(adapters: CoreAdapters): Core {
   // The assistant's conversations (ADR-0017); Answers a quit left being written are settled now.
   const conversations = createConversations(db, now);
   const conversationsChanged = () => events.emit("conversations.changed", null);
-  const content = createMindContent(db, now, (mindId, update) => {
-    events.emit("mind.update", { mindId, update });
+  const content = createMindContent(db, now, (mindId, update, cause) => {
+    events.emit("mind.update", { mindId, update, ...(cause && { cause }) });
     // Only notes the change; what became of AI text is worked out once the Mind is quiet.
     aiUse.contentStored(mindId);
     checkpoints.edited(mindId);
@@ -815,6 +818,16 @@ export function createCore(adapters: CoreAdapters): Core {
   chatGpt.forgetCodexSignIn().catch((error: unknown) => {
     console.error("The experimental ChatGPT provider's sign-in couldn't be removed.", error);
   });
+  let claudeAccountChanged = () => {};
+  const claudeProfile = adapters.claudeAccount ?? ANTHROPIC_OAUTH;
+  const claudeAccount = createClaudeAccount({
+    config: claudeProfile,
+    secrets,
+    language: () => settings.get().language,
+    browser: adapters.browser,
+    now: () => (adapters.now?.() ?? new Date()).getTime(),
+    onChange: () => claudeAccountChanged(),
+  });
   const meter = createMeter({
     db,
     now: () => adapters.now?.() ?? new Date(),
@@ -830,6 +843,7 @@ export function createCore(adapters: CoreAdapters): Core {
     consent,
     createModel: adapters.createChatModel ?? createAiSdkChatModel,
     chatGpt,
+    claudeAccount,
     ollamaModels: adapters.ollamaModels ?? createOllamaModels(),
     localOnly: () => embedding.localOnly(),
     meter,
@@ -1090,7 +1104,7 @@ export function createCore(adapters: CoreAdapters): Core {
     liveTranscript: (mindId) => liveTranscriptOf(mindId),
     providerExists: (providerId) => chat.exists(providerId),
     readiness: async (choice) => chat.readiness(await chat.answeringModel(choice)),
-    prepareModel: (choice) => chat.prepareModel(choice),
+    prepareModel: (choice, thinking) => chat.prepareModel(choice, "chat", thinking),
     documents: {
       searchableCount: (documentIds) => documents.searchableCount(documentIds ?? undefined),
       names: () => documents.names(),
@@ -1457,6 +1471,9 @@ export function createCore(adapters: CoreAdapters): Core {
     localOnly: () => embedding.localOnly(),
     recheck: (attributes) => recheckKept(documents, attributes),
     writing: (mindId, place) => events.emit("mind.writing", { mindId, place }),
+    checkpoint: (mindId) => {
+      checkpoints.save(mindId, "accept");
+    },
     now: () => adapters.now?.() ?? new Date(),
   });
 
@@ -1508,6 +1525,7 @@ export function createCore(adapters: CoreAdapters): Core {
     mindFolder: (mindId) => minds.get(mindId).folderId,
     originalOf: (mindId) => wordImports.originalOf(mindId),
     defaultModel: () => settings.get().user.chatModel,
+    recordAiUse: (inputs) => void aiUse.record(inputs),
     chat,
     consent,
     localOnly: () => embedding.localOnly(),
@@ -1570,6 +1588,13 @@ export function createCore(adapters: CoreAdapters): Core {
     bibliography: (mindId) => content.readSettings(mindId, bibliographyShown),
     formatCitations: (request) => citationStyles.format(request),
     citedPage: (citation) => citedPages.image(citation),
+    citedUnits: ({ documentId, contentHash, pageFrom, pageTo }) => {
+      if (!documentId || !contentHash) return [];
+      const from = typeof pageFrom === "number" ? pageFrom : null;
+      const to = from === null ? null : Math.max(from, typeof pageTo === "number" ? pageTo : from);
+      return documents.pageTexts(documentId, contentHash, from, to);
+    },
+    sharePageTextOnly: (mindId) => content.readSettings(mindId, textOnlyDocuments),
     printer: adapters.printer ?? null,
     paper: () => paperFor(systemRegion(adapters.systemRegion?.(), adapters.systemLanguages())),
     ...(adapters.pictures && { pictures: adapters.pictures }),
@@ -1934,6 +1959,17 @@ export function createCore(adapters: CoreAdapters): Core {
       if (!lifetime.signal.aborted) console.error(error);
     });
   };
+  claudeAccountChanged = () => {
+    const report = async () => {
+      const status = await claudeAccount.status();
+      if (lifetime.signal.aborted) return;
+      events.emit("claudeAccount.changed", status);
+      await readinessChanged();
+    };
+    report().catch((error: unknown) => {
+      if (!lifetime.signal.aborted) console.error(error);
+    });
+  };
   // Not a readiness change: the renderer keeps its model lists.
   chatGptLimitsChanged = () => {
     chatGpt.status().then(
@@ -2008,6 +2044,20 @@ export function createCore(adapters: CoreAdapters): Core {
     service: { id: chatGptSignIn.origin, name: "OpenAI" },
     listed: () => chatGpt.used(),
   });
+  if (claudeProfile) {
+    const { authorizeUrl, tokenUrl, revokeUrl } = claudeProfile;
+    const signInHosts = new Map(
+      [authorizeUrl, tokenUrl, revokeUrl]
+        .filter((url): url is string => url !== undefined)
+        .map((url) => new URL(url))
+        .map((url) => [url.origin, url.host]),
+    );
+    privacy.traffic.register({
+      id: "claude-sign-in",
+      services: () => [...signInHosts].map(([id, name]) => ({ id, name })),
+      listed: () => claudeAccount.used(),
+    });
+  }
   privacy.traffic.register({
     id: "remote-connectors",
     services: () => connectors.remoteTraffic(),
@@ -2307,6 +2357,7 @@ export function createCore(adapters: CoreAdapters): Core {
       passage: (passageId) => documents.passage(passageId),
       passagesBetween: (documentId, from, to) => documents.passagesBetween(documentId, from, to),
       citing,
+      notCited: (passageId) => documents.citationSource(passageId)?.notCited ?? false,
       recheck: (input) => recheckCitation(documents, input),
       minds: () => minds.list().filter((mind) => isKnownKind(mind.kind)),
       liveDocuments: () => documents.names(),
@@ -2415,6 +2466,7 @@ export function createCore(adapters: CoreAdapters): Core {
       return documents.searchableCount((wanted ? resolveScope(wanted) : null) ?? undefined);
     },
     stopConversationAnswer: async (input) => answers.stopInConversation(input),
+    usualAnswerWait: async (answerId) => conversations.usualWait(answerId),
     listConversations: async (options) => conversations.list(options),
     getConversation: async (conversationId) => conversations.content(conversationId),
     searchConversations: async (query) => conversations.search(query),
@@ -2656,6 +2708,7 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     setCountedAsEvidence: async (documentId, counted) =>
       documents.setCountedAsEvidence(documentId, counted),
+    setNotCited: async (documentId, notCited) => documents.setNotCited(documentId, notCited),
     getEmbeddingModel: async () => embeddingModel.status(),
     downloadEmbeddingModel: async () => embeddingModel.retry(),
     getTextRecognitionModel: async () =>
@@ -2846,6 +2899,13 @@ export function createCore(adapters: CoreAdapters): Core {
     signOutOfChatGpt: () => chatGpt.signOut(),
     pasteChatGptSignInAddress: async (address) =>
       chatGpt.pasteSignInAddress(typeof address === "string" ? address : ""),
+    getClaudeAccount: () => claudeAccount.status(),
+    signInToClaude: () => claudeAccount.signIn(),
+    cancelClaudeSignIn: () => claudeAccount.cancelSignIn(),
+    reopenClaudeSignIn: () => claudeAccount.reopenSignInPage(),
+    signOutOfClaude: () => claudeAccount.signOut(),
+    pasteClaudeSignInAddress: async (address) =>
+      claudeAccount.pasteSignInAddress(typeof address === "string" ? address : ""),
 
     listDataFlows: () => consent.list(),
     listConsentRequests: async () => consent.requests(),
@@ -3118,6 +3178,16 @@ export function createCore(adapters: CoreAdapters): Core {
     },
 
     previewMindExport: async (mindId, options) => mindExports.preview(mindId, options),
+    previewSharePage: (mindId, options) => mindExports.previewSharePage(mindId, options),
+    setSharePageTextOnly: async (mindId, documentIds) => {
+      if (!Array.isArray(documentIds) || documentIds.some((each) => typeof each !== "string")) {
+        throw new InvalidInputError({ key: "error.export.textOnly" });
+      }
+      const mind = writableMind(mindId);
+      content.editSettings(mind.id, (mindSettings) =>
+        setTextOnlyDocuments(mindSettings, documentIds),
+      );
+    },
     exportMind: async (mindId, options) => {
       const exported = await mindExports.export(mindId, options);
       // The host saves these bytes as a file: IncarnaMind's, wherever it goes.

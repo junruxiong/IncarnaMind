@@ -18,6 +18,7 @@ function accessAnswering(outcome: OutsideAnswer) {
     passage: () => null,
     passagesBetween: () => [],
     citing: { citeQuote: () => null, locate: () => null },
+    notCited: () => false,
     recheck: () => {
       throw new Error("Not called.");
     },
