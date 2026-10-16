@@ -4,6 +4,7 @@ import { type ElectronApplication, expect, type Locator, type Page, test } from 
 import type { Editor } from "@tiptap/core";
 import type { CoreBridge } from "../src/core/api";
 import {
+  acceptPlainTextKeys,
   addToNote,
   assistantAnswers,
   createDataFolder,
@@ -629,6 +630,58 @@ test("finishing the steps with no model asks for one in the card, never says You
   await expect(steps.getByTestId("first-open-next").first()).toBeVisible();
   await expect(setup).toHaveCount(0);
   await expect(window.getByTestId("composer-input")).toBeVisible();
+  await app.close();
+});
+
+test("by keyboard alone: Choose a model takes the focus into the setup, and a saved model brings it to the composer (#1027)", async () => {
+  const { app, window } = await launchApp(dataDir, { examples: true, fakeChat: true });
+  await setWindowSize(app, window, 1440, 900);
+  await acceptPlainTextKeys(window);
+  await markSteps(window, { citationChecked: true, askedReady: true, indexed: true });
+  const choose = window.getByTestId("first-open-steps").getByTestId("first-open-choose-model");
+  await choose.focus();
+  await window.keyboard.press("Enter");
+  const setup = window.getByTestId("model-setup");
+  await expect(setup.locator(":focus")).toHaveCount(1);
+  // The ChatGPT plan comes first where this computer can keep its sign-in; then the key.
+  const plan = setup.getByTestId("setup-chatgpt");
+  if (await plan.evaluate((button) => button === document.activeElement)) {
+    await window.keyboard.press("Tab");
+  }
+  await expect(setup.getByTestId("setup-key")).toBeFocused();
+  await window.keyboard.press("Enter");
+  await expect(setup.getByLabel(/^API key/)).toBeFocused();
+  await window.keyboard.insertText("sk-ant-a-key-from-the-company");
+  await window.keyboard.press("Enter");
+  await expect(setup).toHaveCount(0);
+  await expect(window.getByTestId("first-open-steps")).toContainText("You're set up.");
+  await expect(window.getByTestId("composer-input")).toBeFocused();
+  await app.close();
+});
+
+test("on the quiet first open the tagging question still shows, with Allow, in the footer (#1027)", async () => {
+  const invoice = join(sources, "Invoice 41.txt");
+  await writeFile(invoice, "Invoice 41. Amount due: 120 EUR.\n");
+  const { app, window } = await launchApp(dataDir, { examples: true, fakeChat: true });
+  await acceptPlainTextKeys(window);
+  await window.evaluate(async () => {
+    const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    const provider = await core.saveChatProvider({
+      kind: "openai",
+      apiKey: "sk-test",
+      modelId: "gpt-6-luna",
+    });
+    if (provider.service) await core.revokeConsent("tagging", provider.service.id);
+  });
+  await expect(window.getByTestId("first-open-steps")).toBeVisible();
+  await window.getByTestId("add-documents-input").setInputFiles([invoice]);
+  const item = window.getByTestId("document-list-item").filter({ hasText: "Invoice 41" });
+  await expect(item).toHaveAttribute("data-tagging", "waiting-for-provider");
+  const question = window.getByTestId("sidebar").getByTestId("tagging-waiting");
+  await expect(question).toContainText("Tags need your OK");
+  await expect(window.getByTestId("tab-list")).toHaveCount(0);
+  await question.getByTestId("tagging-waiting-allow").click();
+  await expect(item).toHaveAttribute("data-tagging", "tagged", { timeout: 15_000 });
   await app.close();
 });
 

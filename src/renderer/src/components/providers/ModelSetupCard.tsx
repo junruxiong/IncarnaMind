@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AgentClient, ChatProvider } from "../../../../core/api";
 import { SHOW_AGENT_CONNECTION } from "../../../../shared/agentConnection";
 import { chosenFlowSummary } from "../../chosenFlows";
@@ -55,9 +55,15 @@ export function ModelSetupCard() {
   }, []);
   const running = ollama.status?.running;
   const questionWaits = useModelSetup((state) => state.waiting !== null);
+  const card = useRef<HTMLElement>(null);
+  // It takes the composer's place, or opens from the steps card: either way the focus comes in.
+  useEffect(() => {
+    card.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
+  }, []);
 
   return (
     <section
+      ref={card}
       data-testid="model-setup"
       aria-labelledby="model-setup-title"
       className="flex max-h-[85vh] flex-col gap-2.5 overflow-y-auto px-4 py-2.5"
