@@ -20,6 +20,7 @@ import {
 import {
   citationLocation,
   formatLocation,
+  formatLocationWithPdf,
   isTranscriptLocation,
   openKind,
 } from "../../../shared/locations";
@@ -491,6 +492,7 @@ function CitationCard({
   );
   const location = citationLocation(attributes);
   const where = location ? formatLocation(location, t) : null;
+  const withPdfPage = location ? formatLocationWithPdf(location, t) : null;
   const opens = web ? "web" : openKind(location);
   const name = attributes.documentName ?? "";
   // When the version it quotes was fetched: an older one's, if the page changed since.
@@ -498,14 +500,16 @@ function CitationCard({
     web?.versions.find((each) => each.contentHash === attributes.contentHash)?.fetchedAt ??
     web?.fetchedAt;
   const checked = state.check === "found" || state.check === "not-found";
-  // Once checked, the state line names the place, or the Document if it names none.
-  const source = checked
-    ? where
-      ? name
-      : null
-    : where
-      ? citationSource(attributes, t).text
-      : name;
+  // Once checked, the state line names the place, or the Document if it names none; a page line
+  // under the name says the place, so the name stands alone.
+  const source =
+    checked || withPdfPage
+      ? where
+        ? name
+        : null
+      : where
+        ? citationSource(attributes, t).text
+        : name;
   const reason =
     state.check === "checking"
       ? t("citation.reason.checking")
@@ -523,6 +527,11 @@ function CitationCard({
           <span>{badgeText}</span>
         </p>
         {source && <p className="citation-card-source">{source}</p>}
+        {withPdfPage && (
+          <p data-testid="citation-pdf-page" className="citation-card-source">
+            {withPdfPage}
+          </p>
+        )}
         {scanned && <ScanLine scanned={scanned} />}
         {web && fetchedAt && (
           <p data-testid="citation-web-source" className="citation-card-source">
