@@ -9,13 +9,13 @@
  * - "free": a model on this computer.
  *
  * Only "per-token" requests are priced, reserved against the monthly cap and
- * estimated before large runs. A plan's requests (ChatGPT, a Claude account) are counted, never priced.
+ * estimated before large runs. A plan's requests (ChatGPT, a Claude account, Copilot) are counted, never priced.
  */
 import type { Billing, ChatProviderKind, ExternalService } from "../../api";
 import type { OffPeak, Price } from "./types";
 
 export function billingOf(kind: ChatProviderKind, service: ExternalService | null): Billing {
-  if (kind === "chatgpt" || kind === "claude-account") return "plan";
+  if (kind === "chatgpt" || kind === "claude-account" || kind === "copilot") return "plan";
   return service === null ? "free" : "per-token";
 }
 
