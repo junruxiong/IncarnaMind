@@ -5,6 +5,7 @@ import type {
   SecretStorageStatus,
   TestChatConnectionInput,
 } from "../../../../core/api";
+import type { DataUse } from "../../../../core/providers/catalog";
 import { catalogMenu } from "../../../../core/providers/catalog";
 import {
   catalogProvider,
@@ -20,6 +21,7 @@ import {
 import type { Role } from "../../../../core/providers/catalog/types";
 import { serviceForUrl } from "../../../../core/providers/service";
 import type { MessageKey } from "../../../../shared/i18n";
+import { gap } from "../../../../shared/i18n/join";
 import { modelName } from "../../../../shared/modelName";
 import { core } from "../../core";
 import { dayOf } from "../../dates";
@@ -38,6 +40,7 @@ import {
   primaryButtonClass,
   successTextClass,
 } from "../ui";
+import { KeyHelp } from "./KeyHelp";
 import { LocalServerLine, useLocalServer } from "./LocalServerLine";
 import { keyProviderName, testErrorKey, useProviderKey } from "./shared";
 import { useJevSettings } from "./useJevSettings";
@@ -498,18 +501,16 @@ export function ProviderForm({
             {saved?.hasApiKey && (
               <span className={hintClass}>{t("providers.form.apiKeySaved")}</span>
             )}
-            {(endpoint?.keyUrl ?? catalog?.keyUrl) && (
-              <a
-                href={endpoint?.keyUrl ?? catalog?.keyUrl}
-                target="_blank"
-                rel="noreferrer"
-                data-testid="provider-key-link"
-                className={`${hintClass} underline`}
-              >
-                {t("providers.form.whereKey")} ↗
-              </a>
-            )}
           </label>
+          {catalog && (
+            <KeyHelp
+              key={`${kind}:${endpoint?.id}`}
+              catalog={catalog}
+              keyUrl={endpoint?.keyUrl ?? catalog.keyUrl}
+              provider={shortName(kind)}
+              firstRun={standalone}
+            />
+          )}
 
           {secretStorage && !secretStorage.canSave && (
             <SecretStorageNotice status={secretStorage} onAccept={() => void acceptPlainText()} />
@@ -524,28 +525,42 @@ export function ProviderForm({
             </div>
           ) : (
             <div>
-              <label className={fieldLabelClass}>
-                {t("providers.form.model")}
-                <select
-                  data-testid="provider-model"
-                  value={!otherModel && choices.includes(modelId) ? modelId : OTHER_MODEL}
-                  onChange={(event) => {
-                    const chosen = event.target.value;
-                    setOtherModel(chosen === OTHER_MODEL);
-                    setModelId(chosen === OTHER_MODEL ? "" : chosen);
-                    setTest(null);
-                    setError(null);
-                  }}
-                  className={inputClass}
-                >
-                  {choices.map((id) => (
-                    <option key={id} value={id} title={id}>
-                      {optionName(id)}
-                    </option>
-                  ))}
-                  <option value={OTHER_MODEL}>{t("providers.form.anotherModel")}</option>
-                </select>
-              </label>
+              <div className="flex items-baseline justify-between gap-3">
+                <label htmlFor={`${id}-model`} className={fieldLabelClass}>
+                  {t("providers.form.model")}
+                </label>
+                {!standalone && catalog?.docsUrl && (
+                  <a
+                    href={catalog.docsUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    data-testid="provider-docs-link"
+                    className="text-[12px] leading-5 text-ink-meta underline"
+                  >
+                    {t("providers.form.modelsAndPrices")} ↗
+                  </a>
+                )}
+              </div>
+              <select
+                id={`${id}-model`}
+                data-testid="provider-model"
+                value={!otherModel && choices.includes(modelId) ? modelId : OTHER_MODEL}
+                onChange={(event) => {
+                  const chosen = event.target.value;
+                  setOtherModel(chosen === OTHER_MODEL);
+                  setModelId(chosen === OTHER_MODEL ? "" : chosen);
+                  setTest(null);
+                  setError(null);
+                }}
+                className={inputClass}
+              >
+                {choices.map((id) => (
+                  <option key={id} value={id} title={id}>
+                    {optionName(id)}
+                  </option>
+                ))}
+                <option value={OTHER_MODEL}>{t("providers.form.anotherModel")}</option>
+              </select>
               {otherModel ? (
                 <div className="mt-2">
                   <label htmlFor={`${id}-model-id`} className="sr-only">
@@ -573,6 +588,7 @@ export function ProviderForm({
                   : providerName
               }
               tagsOnSave={tagsAutomatically}
+              dataUse={catalog?.dataUse}
             />
           )}
           <div className="flex flex-wrap items-center gap-2">
@@ -637,16 +653,38 @@ function KeyRefusedLine({ id, refused }: { id: string; refused: KeyRefusal }) {
  */
 export function ProviderSendsLine({
   provider,
+  dataUse,
   tagsOnSave = false,
 }: {
   provider: string;
+  dataUse?: DataUse;
   tagsOnSave?: boolean;
 }) {
   const t = useT();
+  const language = useLanguage();
+  const words = language === "zh-CN" ? "zh" : "en";
+  const sends = t(tagsOnSave ? "providers.sends.tagsOnSave" : "providers.sends", { provider });
+  const summary = dataUse && t("providers.form.dataUse", { summary: dataUse.summary[words] });
+  const terms = `${t("providers.form.terms")} ↗`;
   return (
-    <p data-testid="provider-sends" className={hintClass}>
-      {t(tagsOnSave ? "providers.sends.tagsOnSave" : "providers.sends", { provider })}
-    </p>
+    <div className="flex flex-col">
+      <p data-testid="provider-sends" className={hintClass}>
+        {sends}
+      </p>
+      {summary && (
+        <p data-testid="provider-data-use" className={`${hintClass} mt-0`}>
+          {summary}
+          {dataUse?.url && (
+            <>
+              {gap(language, summary, terms)}
+              <a href={dataUse.url} target="_blank" rel="noreferrer" className="underline">
+                {terms}
+              </a>
+            </>
+          )}
+        </p>
+      )}
+    </div>
   );
 }
 

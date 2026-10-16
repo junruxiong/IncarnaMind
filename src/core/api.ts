@@ -1477,7 +1477,10 @@ export const MAX_CITED_PAGES = 2;
  * gone. Language-neutral: the label is worded when shown ("p. 4", "slide 4",
  * "Revenue, rows 12–14", "§ 2.1 Sensitivity", "§ 2 Costs, comment by
  * Reviewer", "lines 120–134").
- * - "page", "slide": the cited pages or slides.
+ * - "page", "slide": the cited pages or slides. A PDF's `printed` names the
+ *   first and last page as they call themselves ("xii", "68") when that
+ *   isn't their number in the PDF; `from` and `to` stay the PDF's, which
+ *   open the viewer (#901).
  * - "rows": the rows the quote covers in a sheet (a CSV's has no name), or
  *   the cited block's when it wasn't found.
  * - "section": the heading of the section the quote sits under; null before
@@ -1490,7 +1493,8 @@ export const MAX_CITED_PAGES = 2;
  *   the end of the one it ends in, in ms from the Transcript's start (#136).
  */
 export type CitationLocation =
-  | { kind: "page" | "slide"; from: number; to: number }
+  | { kind: "page"; from: number; to: number; printed?: { from: string; to: string } }
+  | { kind: "slide"; from: number; to: number }
   | { kind: "rows"; sheet: string | null; from: number; to: number }
   | { kind: "lines"; from: number; to: number }
   | { kind: "time"; from: number; to: number }
@@ -1693,6 +1697,34 @@ export interface MindUpdate {
   mindId: string;
   /** A Yjs update (the default v1 encoding). */
   update: Uint8Array;
+  /** The edit the User asked for that wrote it (#880). */
+  cause?: EditCause;
+}
+
+/** An edit the User asked for (#880): the window that asked takes its updates in as its own change, one step of Undo. */
+export interface EditCause {
+  /** `EditWithAiInput.requestId`. */
+  requestId: string;
+  /** Its Proposals' `ProposalRef.request`. */
+  request: string;
+  /** Drawn as applied while it streams in; false until its new text maps onto the selection. */
+  apply: boolean;
+}
+
+/**
+ * What kind of Block a paragraph of a selection is, as the model reads it and
+ * writes it back: a heading of a level ("heading:2"), a bullet, a numbered
+ * item, a quote, or a plain paragraph.
+ */
+export type BlockKind = "paragraph" | "bullet" | "numbered" | "quote" | `heading:${number}`;
+
+/** Part of the selection an edit's new text left out, kept (#880): `from`..`to` of a Block's text. */
+export interface LeftOutPart {
+  blockId: string;
+  from: number;
+  to: number;
+  whole: boolean;
+  kind: BlockKind;
 }
 
 /** Settings that belong to the User and will sync across their devices (ADR-0003). */
@@ -4167,6 +4199,10 @@ export type EditWithAiResult =
       proposals: number;
       droppedCitations: number;
       outOfDate: number;
+      /** An edit the User asked for that waits for them instead of applying (#880). */
+      held?: true;
+      /** What its new text left out of the selection, kept; absent when nothing. */
+      leftOut?: LeftOutPart[];
     }
   /** The model gave the text back as it was: there is nothing to propose. */
   | { kind: "unchanged" }
