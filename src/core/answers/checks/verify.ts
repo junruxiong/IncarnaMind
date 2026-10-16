@@ -37,6 +37,7 @@ import {
   type FindClaimsResult,
   MIND_SETTINGS_FIELD,
   type Mind,
+  type RecordAiUseInput,
   type SearchScope,
   type UnreadFile,
   type VerifyClaimsResult,
@@ -94,6 +95,7 @@ export interface VerifyOptions {
   ): ClaimCheckAttributes;
   /** Keeps the text of the evidence the Mind's checks show (#79). */
   retainEvidence(mindId: string): void;
+  recordAiUse(inputs: RecordAiUseInput[]): void;
   /** The files `listUnreadFiles` lists for a Search scope; null for every Document. */
   unread(scope: SearchScope | null): UnreadFile[];
   /** Runs inside the edit that adds the request's marks: what it keeps goes when no mark names it. */
@@ -245,10 +247,14 @@ export function createVerify(options: VerifyOptions) {
           state: "checking",
           reason: null,
           detail: null,
+          providerId: ready.prepared.provider.id,
+          modelId: ready.prepared.modelId,
           text: sentence.text,
           evidence: null,
           says: null,
           calculation: null,
+          citedCaseUnchecked: false,
+          citedCaseFound: false,
           scope: check.marked,
           versions: [],
           excluded: [],

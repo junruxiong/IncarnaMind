@@ -52,6 +52,8 @@ export interface FoundPassage {
   /** Where it is, for its label ("p. 11", "§ History", "rows 40–44"); null as for `pageFrom`. */
   location: CitationLocation | null;
   text: string;
+  /** Its Document is the User's own workings: shown to the User, never cited without their say. */
+  notCited: boolean;
   /**
    * How relevant the reranker found it, when search reranked it (see
    * `WindowedPassage.relevance`), or null.
@@ -158,6 +160,7 @@ export function createCiting(documents: CitingDocuments): Citing {
           pageTo: passage.pageTo,
           location: passageLocation(passage),
           text: passage.text,
+          notCited: documents.citationSource(passage.passageId)?.notCited ?? false,
           relevance: passage.relevance ?? null,
           matches: matchingTerms(terms, passage.text),
         }));
