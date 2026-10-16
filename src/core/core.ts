@@ -1576,11 +1576,9 @@ export function createCore(adapters: CoreAdapters): Core {
     log: adapters.log ?? silentLogger,
     now,
   });
-  // The check record (#738): what a Mind's checks left, as a file for the User to keep.
   const checkRecord = createCheckRecord({
     mind: (mindId) => minds.get(mindId),
     read: (mindId, look) => content.peek(mindId, look),
-    entries: (mindId) => aiUse.list(mindId),
     providers: () => chat.list(),
     documents: () => documents.list(),
     keptCitationTexts: () => documents.keptCitationTexts(),

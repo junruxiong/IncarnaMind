@@ -47,6 +47,10 @@ const TEXTS = {
     supported: "Supported",
     unsupported: "Unsupported",
     sentence: "Sentence",
+    model: "Model",
+    service: "Service",
+    checked: "Checked (UTC)",
+    thisComputer: "On this computer",
   },
   "zh-CN": {
     csv: "将核对记录导出为 CSV",
@@ -57,6 +61,10 @@ const TEXTS = {
     supported: "有依据",
     unsupported: "无依据",
     sentence: "句子",
+    model: "模型",
+    service: "服务",
+    checked: "核对时间（UTC）",
+    thisComputer: "在这台电脑上",
   },
 } as const;
 
@@ -129,7 +137,9 @@ for (const language of ["en", "zh-CN"] as const) {
     // The supported sentence names the Document version it rests on: the file's own fingerprint.
     const sha = createHash("sha256").update(TIDES).digest("hex");
     expect(items[0]?.[column("SHA-256")]).toBe(sha);
-    expect(items[0]?.[column(language === "en" ? "Model" : "模型")]).toBe("fake-model");
+    expect(items[0]?.[column(text.model)]).toBe("fake-model");
+    expect(items[0]?.[column(text.service)]).toBe(text.thisComputer);
+    expect(items[0]?.[column(text.checked)]).toMatch(/^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/);
     expect(items[1]?.[column("SHA-256")]).toBe("");
 
     // From ⌘K, as a PDF.

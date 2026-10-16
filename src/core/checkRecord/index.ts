@@ -4,13 +4,11 @@
  * checks (see ./read), on this computer; the host decides where the bytes go, and nothing is sent.
  */
 import type * as Y from "yjs";
-import { translate } from "../../shared/i18n";
 import { mindName } from "../../shared/naming";
 import type { PrintPaper } from "../../shared/printDocument";
 import { readableQuoteText } from "../../shared/readableQuote";
 import type { Printer } from "../adapters";
 import {
-  type AiUseEntry,
   CHECK_RECORD_FORMATS,
   type ChatProvider,
   type CheckRecordFormat,
@@ -26,15 +24,14 @@ import { safeFileName } from "../fileNames";
 import type { Language } from "../language";
 import { renderCsv } from "./csv";
 import { renderRecordHtml } from "./html";
-import { type RecordItem, readRecord } from "./read";
+import { modelLabel, translatorFor } from "./labels";
+import { type CitationItem, readRecord, type SentenceItem } from "./read";
 
 export interface CheckRecordDependencies {
   /** Throws `NotFoundError` unless the Mind exists. */
   mind(mindId: unknown): Mind;
   /** Reads a Mind's Blocks; the Mind is left as it is. */
   read<T>(mindId: string, look: (blocks: Y.XmlFragment) => T): T;
-  /** The Mind's entries in the record of AI use. */
-  entries(mindId: string): AiUseEntry[];
   providers(): Promise<ChatProvider[]>;
   documents(): readonly Document[];
   keptCitationTexts(): readonly KeptCitationText[];
@@ -56,13 +53,13 @@ export interface CheckRecord {
   mind: string;
   /** When it was made, ISO 8601 UTC. */
   exportedAt: string;
-  /** The Folder the Mind's checks search; null for every Document. */
-  folder: string | null;
+  /** What the sentence checks searched; empty when none ran. */
+  searched: string[];
   localMode: boolean;
-  /** The models in it, each as "Name (Service)", or "Name" alone for one on this computer. */
+  /** The models that checked sentences, each with how many checks. */
   models: string[];
-  sentences: RecordItem[];
-  citations: RecordItem[];
+  sentences: SentenceItem[];
+  citations: CitationItem[];
   language: Language;
 }
 
@@ -83,12 +80,10 @@ export function createCheckRecord(deps: CheckRecordDependencies) {
     const mind = deps.mind(mindId);
     const language = deps.language();
     const providers = await deps.providers();
-    const t = (key: Parameters<typeof translate>[1], params?: Parameters<typeof translate>[2]) =>
-      translate(language, key, params);
-    const read = deps.read(mind.id, (fragment) =>
+    const t = translatorFor(language);
+    const { sentences, citations } = deps.read(mind.id, (fragment) =>
       readRecord({
         fragment,
-        entries: deps.entries(mind.id),
         documents: deps.documents(),
         kept: deps.keptCitationTexts(),
         folderId: mind.folderId,
@@ -100,17 +95,35 @@ export function createCheckRecord(deps: CheckRecordDependencies) {
             : null,
       }),
     );
-    const named = new Set<string>();
-    for (const { model } of [...read.sentences, ...read.citations]) {
-      if (model) named.add(model.service ? `${model.name} (${model.service})` : model.name);
+
+    const searched = new Set<string>();
+    const models = new Map<string, number>();
+    for (const { check } of sentences) {
+      if (!check) continue;
+      const { folderId, widened } = check.scope;
+      searched.add(
+        widened || folderId === null
+          ? t("checkRecord.summary.allDocuments")
+          : (deps.folderName(folderId) ?? t("checkRecord.summary.folderGone")),
+      );
+      const label = check.model ? modelLabel(check.model, t) : t("checkRecord.notRecorded");
+      models.set(label, (models.get(label) ?? 0) + 1);
     }
+
     return {
       mind: mindName(mind) || t("mind.untitled"),
       exportedAt: deps.now(),
-      folder: mind.folderId === null ? null : deps.folderName(mind.folderId),
+      searched: [...searched],
       localMode: deps.localMode(),
-      models: [...named].sort((a, b) => a.localeCompare(b)),
-      ...read,
+      models: [...models]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([model, count]) =>
+          count === 1
+            ? t("checkRecord.models.one", { model })
+            : t("checkRecord.models.other", { model, count }),
+        ),
+      sentences,
+      citations,
       language,
     };
   }
@@ -122,8 +135,8 @@ export function createCheckRecord(deps: CheckRecordDependencies) {
       const chosen = parseFormat(format);
       const record = await build(mindId);
       const { language } = record;
-      const name = safeFileName(record.mind, "Mind");
-      const base = translate(language, "checkRecord.fileName", { name });
+      const t = translatorFor(language);
+      const base = t("checkRecord.fileName", { name: safeFileName(record.mind, "Mind") });
       if (chosen === "csv") {
         return {
           fileName: `${base}.csv`,
@@ -137,7 +150,7 @@ export function createCheckRecord(deps: CheckRecordDependencies) {
         title: base,
         body: renderRecordHtml(record),
         notes: [],
-        footer: translate(language, "checkRecord.note"),
+        footer: t("checkRecord.note"),
       });
       return { fileName: `${base}.pdf`, data: unifyIdeographs(printed) };
     },

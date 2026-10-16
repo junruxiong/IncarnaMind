@@ -95,7 +95,6 @@ export const exportCommands: readonly Command[] = [
       if (mindId) return exportAiUseStatement(mindId);
     },
   },
-  // What a Mind's checks left, saved as a file to keep with the work, beside the other exports (#738).
   ...CHECK_RECORD_FORMATS.map(
     (format): Command => ({
       id: `mind.checkRecord.${format}`,

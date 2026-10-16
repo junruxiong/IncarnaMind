@@ -13,6 +13,9 @@ const NO_TRANSLATION = new Set<MessageKey>([
   "checkRecord.format.csv",
   "checkRecord.summary.mind",
   "checkRecord.column.sha256",
+  "checkRecord.checker",
+  "checkRecord.time",
+  "checkRecord.modelAt",
 ]);
 
 describe("the words of the check record", () => {
