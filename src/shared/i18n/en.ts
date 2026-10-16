@@ -2938,6 +2938,7 @@ export const en = {
   "error.connector.notInDirectory": "That Connector isn't in the directory.",
   "error.document.notFound": "There is no such Document.",
   "error.export.choice": "{name} must be true or false.",
+  "error.export.textOnly": "The Documents kept as text must be a list of their ids.",
   "error.export.theirChanges": "theirChanges must be “shown” or “accepted”.",
   "error.document.gone": "That Document no longer exists.",
   "error.document.nameEmpty": "A Document's name can't be empty.",

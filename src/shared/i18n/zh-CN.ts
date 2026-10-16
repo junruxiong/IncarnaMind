@@ -2807,6 +2807,7 @@ export const zhCN = {
   "error.connector.notInDirectory": "目录里没有这个连接器。",
   "error.document.notFound": "找不到这个文档。",
   "error.export.choice": "{name} 只能是 true 或 false。",
+  "error.export.textOnly": "保留为文字的文档必须以文档 ID 列表的形式给出。",
   "error.export.theirChanges": "theirChanges 只能是“shown”或“accepted”。",
   "error.document.gone": "这个文档已不存在。",
   "error.document.nameEmpty": "文档名称不能为空。",
