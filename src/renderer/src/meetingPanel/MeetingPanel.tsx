@@ -1,25 +1,12 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type {
-  ConversationAnswer,
-  Meeting,
-  MeetingHelp,
-  MeetingHelpKind,
-  MeetingHelpTemplate,
-} from "../../../core/api";
-import { messageReference } from "../../../core/references";
-import {
-  GENERAL_HELP,
-  helpLabel,
-  MEETING_TEMPLATES,
-  templateLabel,
-} from "../../../shared/meetingHelp";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { Meeting, MeetingHelp, MeetingHelpKind, MeetingHelpTemplate } from "../../../core/api";
+import { GENERAL_HELP, MEETING_TEMPLATES, templateLabel } from "../../../shared/meetingHelp";
 import {
   type HeldKeys,
   MEETING_PANEL_BRIDGE_KEY,
   type MeetingPanelBridge,
+  SAYS_HIDDEN_FROM_SHARES,
 } from "../../../shared/meetingPanel";
-import { withoutFraming } from "../../../shared/noteBlocks";
-import { answerBlocks } from "../answerBlocks";
 import { keysHere } from "../commands/keymap";
 import {
   ChevronDownLineIcon,
@@ -39,7 +26,7 @@ import { ReadinessExplanation } from "../components/providers/ChatReadinessNotic
 import { core } from "../core";
 import { errorMessage } from "../errors";
 import { translateNow, useT } from "../i18n";
-import { askHelp, useMeetingHelp } from "../meetingHelp";
+import { addHelpToNotes, askHelp, useMeetingHelp } from "../meetingHelp";
 import { isLive, useMeetings, useMeetingTime } from "../meetings";
 import { clockTime } from "../meetingTime";
 import { useAppStore } from "../store";
@@ -52,10 +39,8 @@ declare global {
 
 const bridge = window[MEETING_PANEL_BRIDGE_KEY];
 
-/** How long "Added to notes" stays, with its Undo. */
 const ADDED_MS = 6000;
 
-/** The shortcuts held, as this system writes them; "⌃⌥1–7" when they run in order. */
 function keyLabels(held: HeldKeys) {
   const labels: Partial<Record<MeetingHelpKind, string>> = {};
   for (const kind of GENERAL_HELP) {
@@ -80,6 +65,7 @@ function keyLabels(held: HeldKeys) {
 export function MeetingPanel() {
   const meeting = useMeetings((state) => state.meetings.find((each) => isLive(each)));
   const [folded, setFolded] = useState(false);
+  const [pinned, setPinned] = useState<MeetingHelp[]>([]);
   const [held, setHeld] = useState<HeldKeys>({});
   const root = useRef<HTMLDivElement>(null);
 
@@ -101,18 +87,38 @@ export function MeetingPanel() {
     return () => observer.disconnect();
   });
 
+  const togglePin = useCallback(
+    (help: MeetingHelp) =>
+      setPinned((now) =>
+        now.some((each) => each.answerId === help.answerId)
+          ? now.filter((each) => each.answerId !== help.answerId)
+          : [...now, help],
+      ),
+    [],
+  );
+  const latestPinned = pinned.some((each) => each.answerId === meeting?.help?.answerId);
+  useEffect(() => bridge.state({ folded, pinned: latestPinned }), [folded, latestPinned]);
+
   const meetingRef = useRef(meeting);
   meetingRef.current = meeting;
-  useEffect(
-    () =>
+  useEffect(() => {
+    const stops = [
       bridge.onHelp((kind) => {
         const live = meetingRef.current;
         if (!live) return;
         setFolded(false);
         void askHelp(live, kind);
       }),
-    [],
-  );
+      bridge.onCommand((command) => {
+        if (command === "fold") setFolded((now) => !now);
+        const help = meetingRef.current?.help;
+        if (command === "pin" && help) togglePin(help);
+      }),
+    ];
+    return () => {
+      for (const stop of stops) stop();
+    };
+  }, [togglePin]);
 
   if (!meeting) return null;
   const { labels, run } = keyLabels(held);
@@ -121,7 +127,13 @@ export function MeetingPanel() {
       {folded ? (
         <Pill meeting={meeting} keys={run} onExpand={() => setFolded(false)} />
       ) : (
-        <Panel meeting={meeting} keys={labels} onFold={() => setFolded(true)} />
+        <Panel
+          meeting={meeting}
+          keys={labels}
+          pinned={pinned}
+          onPin={togglePin}
+          onFold={() => setFolded(true)}
+        />
       )}
     </div>
   );
@@ -189,16 +201,19 @@ function Pill({
 function Panel({
   meeting,
   keys,
+  pinned,
+  onPin,
   onFold,
 }: {
   meeting: Meeting;
   keys: Partial<Record<MeetingHelpKind, string>>;
+  pinned: readonly MeetingHelp[];
+  onPin(help: MeetingHelp): void;
   onFold(): void;
 }) {
   const t = useT();
   const hidden = useAppStore((state) => state.settings?.device.meetingPanelHidden ?? true);
   const [choosing, setChoosing] = useState(false);
-  const [pinned, setPinned] = useState<MeetingHelp[]>([]);
   const help = meeting.help;
   const shownPinned = pinned.filter((each) => each.answerId !== help?.answerId);
   return (
@@ -248,7 +263,7 @@ function Panel({
           }}
         />
       )}
-      {hidden && (
+      {SAYS_HIDDEN_FROM_SHARES && hidden && (
         <p data-testid="panel-hidden" className="panel-hidden">
           <EyeOffLineIcon className="size-3 shrink-0" />
           <span>{t("meetings.panel.hidden")}</span>
@@ -261,24 +276,12 @@ function Panel({
         onPress={(kind) => void askHelp(meeting, kind)}
       />
       {shownPinned.map((each) => (
-        <Suggestion
-          key={each.answerId}
-          meeting={meeting}
-          help={each}
-          pinned
-          onPin={() => setPinned(pinned.filter((one) => one.answerId !== each.answerId))}
-        />
+        <Suggestion key={each.answerId} meeting={meeting} help={each} pinned onPin={onPin} />
       ))}
       <Latest
         meeting={meeting}
         pinned={pinned.some((each) => each.answerId === help?.answerId)}
-        onPin={(given) =>
-          setPinned(
-            pinned.some((each) => each.answerId === given.answerId)
-              ? pinned.filter((each) => each.answerId !== given.answerId)
-              : [...pinned, given],
-          )
-        }
+        onPin={onPin}
       />
     </section>
   );
@@ -355,8 +358,8 @@ function Latest({
       </div>
     );
   }
-  if (!meeting.help || pinned) return null;
-  return <Suggestion meeting={meeting} help={meeting.help} pinned={false} onPin={onPin} />;
+  if (!meeting.help) return null;
+  return <Suggestion meeting={meeting} help={meeting.help} pinned={pinned} onPin={onPin} />;
 }
 
 function Suggestion({
@@ -387,18 +390,10 @@ function Suggestion({
       </div>
     );
   }
-  const addToNotes = async (written: ConversationAnswer) => {
+  const addToNotes = async () => {
     setProblem(null);
     try {
-      const { blockIds } = await core.addToNote({
-        mindId: meeting.mindId,
-        blocks: withoutFraming(answerBlocks({ ...written, status: "done" })),
-        origin: {
-          from: messageReference(written.conversationId, written.id),
-          question: translateNow(helpLabel(help.kind)),
-        },
-        model: written.model,
-      });
+      const { blockIds } = await addHelpToNotes(meeting, help);
       setAdded({ blockIds });
     } catch (error) {
       setProblem(errorMessage(error, translateNow));
@@ -412,7 +407,11 @@ function Suggestion({
   };
   return (
     <div className="panel-suggestion" data-pinned={pinned}>
-      <HelpSuggestion help={help} answer={answer} />
+      <HelpSuggestion
+        help={help}
+        answer={answer}
+        onRetry={() => void askHelp(meeting, help.kind)}
+      />
       {answer.status === "done" && (
         <div className="panel-actions">
           <button
@@ -436,7 +435,7 @@ function Suggestion({
             <button
               type="button"
               data-testid="help-add"
-              onClick={() => void addToNotes(answer)}
+              onClick={() => void addToNotes()}
               className="panel-ghost"
             >
               {t("meetings.help.addToNotes")}

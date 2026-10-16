@@ -10,7 +10,7 @@ export function HelpStrip({ mindId }: { mindId: string | null }) {
   const meeting = useMeetings((state) =>
     state.meetings.find((each) => each.mindId === mindId && isLive(each)),
   );
-  const panelShown = useMeetingHelp((state) => state.panelShown);
+  const panelShown = useMeetingHelp((state) => state.panel.shown);
   if (!meeting || panelShown) return null;
   return (
     <div data-testid="help-strip" className="help-strip">

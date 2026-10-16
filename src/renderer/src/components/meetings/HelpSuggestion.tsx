@@ -10,7 +10,13 @@ import { isTranscriptLocation } from "../../../../shared/locations";
 import { HELP_SHAPE, helpLabel } from "../../../../shared/meetingHelp";
 import { SPEAKER_ME, SPEAKER_THEM } from "../../../../shared/speakers";
 import { core } from "../../core";
-import { quoted, type ReplyItem, type ReplyPiece, readHelpReply } from "../../helpReply";
+import {
+  quoted,
+  type ReplyItem,
+  type ReplyPiece,
+  readHelpReply,
+  shownItems,
+} from "../../helpReply";
 import { useT } from "../../i18n";
 import { CheckLineIcon, DocumentLineIcon } from "../lineIcons";
 
@@ -25,15 +31,13 @@ export function useHelpAnswer(
     setAnswer(null);
     if (!conversationId || !answerId) return;
     let live = true;
-    const take = (message: unknown) => {
-      const found = message as ConversationAnswer;
-      if (live && found.kind === "answer" && found.id === answerId) setAnswer(found);
-    };
-    const stop = core.on("conversation.message", take);
+    const stop = core.on("conversation.message", (message) => {
+      if (live && message.kind === "answer" && message.id === answerId) setAnswer(message);
+    });
     core.getConversation(conversationId).then(
       ({ messages }) => {
         const found = messages.find((message) => message.id === answerId);
-        if (found) setAnswer((now) => now ?? (found as ConversationAnswer));
+        if (found?.kind === "answer") setAnswer((now) => now ?? found);
       },
       // Deleted meanwhile: the panel shows no suggestion.
       () => undefined,
@@ -213,13 +217,19 @@ function Sources({ answer, markers }: { answer: ConversationAnswer; markers: rea
 export function HelpSuggestion({
   help,
   answer,
+  onRetry,
 }: {
   help: Pick<MeetingHelp, "kind" | "heard">;
   answer: ConversationAnswer;
+  onRetry(): void;
 }) {
   const t = useT();
-  const items = readHelpReply(answer.text);
   const streaming = answer.status === "streaming";
+  const items = shownItems(readHelpReply(answer.text), {
+    shape: HELP_SHAPE[help.kind],
+    leadIn: help.kind === "leading",
+    streaming,
+  });
   const markers = [
     ...new Set(
       items.flatMap((item) =>
@@ -250,6 +260,10 @@ export function HelpSuggestion({
       {answer.status === "failed" && (
         <p role="alert" data-testid="help-failed" className="help-failed">
           {t("meetings.help.failed", { message: answer.errorMessage ?? "" })}
+          <span aria-hidden="true"> · </span>
+          <button type="button" onClick={onRetry} className="panel-link">
+            {t("meetings.help.retry")}
+          </button>
         </p>
       )}
       <Sources answer={answer} markers={markers} />

@@ -134,7 +134,7 @@ import { setTextOnlyDocuments, textOnlyDocuments } from "./exports/sharedPicture
 import { createFileLock } from "./fileLock";
 import { safeFileName, writeNewFile } from "./fileNames";
 import { createFolders } from "./folders";
-import { LANGUAGE_NAMES, type Language, systemRegion } from "./language";
+import { LANGUAGES, systemRegion } from "./language";
 import { createLayouts } from "./layout";
 import { CLASSIFICATION_FLOW_SENDS, createLibrary } from "./library";
 import { automaticGroupClassifier } from "./library/automatic";
@@ -2581,13 +2581,12 @@ export function createCore(adapters: CoreAdapters): Core {
     log: adapters.log ?? silentLogger,
   });
   listMeetings = () => meetings.list();
-  const helpLanguages = Object.keys(LANGUAGE_NAMES) as Language[];
   meetingHelpOf = (mindId, question) => {
     const meeting = meetings.liveOf(mindId);
     if (!meeting) return null;
     return (
       helpKindsFor(meeting.helpTemplate).find((kind) =>
-        helpLanguages.some((language) => translate(language, helpLabel(kind)) === question),
+        LANGUAGES.some((language) => translate(language, helpLabel(kind)) === question),
       ) ?? null
     );
   };

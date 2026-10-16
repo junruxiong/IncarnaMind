@@ -2,6 +2,7 @@
 import type { CoreApiMethod } from "../core/api";
 import type { MenuCommandId } from "./commands";
 import type { GeneralHelpKind } from "./meetingHelp";
+import type { PanelCommand, PanelState } from "./meetingPanel";
 import type { TitleBar } from "./titleBar";
 
 /** The renderer reaches the core as `window.incarnamind`. */
@@ -113,8 +114,10 @@ export interface FilesBridge {
   globalKeysFree(keys: string): Promise<boolean>;
   /** Shows the floating panel during a call again after the User closed it, or hides it. */
   showMeetingPanel(shown: boolean): void;
-  /** Calls `listener` with whether the floating panel shows, now and when that changes. Returns how to stop. */
-  onMeetingPanel(listener: (shown: boolean) => void): () => void;
+  /** Calls `listener` with the floating panel's state, now and when it changes. Returns how to stop. */
+  onMeetingPanel(listener: (state: PanelState) => void): () => void;
+  /** ⌘K: pins the floating panel's latest suggestion, or folds or unfolds the panel. */
+  meetingPanelCommand(command: PanelCommand): void;
   /** Calls `listener` when the floating panel's Set up was clicked: the window shows where a model is chosen. */
   onSetUpModel(listener: () => void): () => void;
 }
@@ -178,8 +181,10 @@ export const FILES_CHANNELS = {
   showMeetingPanel: "app:showMeetingPanel",
   /** From the page: what the floating panel's state is now; the main process answers on `meetingPanel`. */
   meetingPanelWanted: "app:meetingPanelWanted",
-  /** From the main process: whether the floating panel shows. */
+  /** From the main process: the floating panel's state (`PanelState`). */
   meetingPanel: "app:meetingPanel",
+  /** From the page: a `PanelCommand` for the floating panel. */
+  meetingPanelCommand: "app:meetingPanelCommand",
   /** From the main process: the floating panel's Set up was clicked. */
   setUpModel: "app:setUpModel",
 } as const;

@@ -183,14 +183,15 @@ import type {
 } from "./engine";
 import { listenedTokens, newestWithin, withTranscript } from "./liveTranscript";
 import { markdownToBlocks } from "./markdown";
-import { paragraphAsked } from "./paragraphAsked";
 import {
   FOUND_TOKEN_LIMIT,
   foundWithin,
+  languageSaid,
   meetingHelpInstructions,
   newestSaid,
   withFound,
 } from "./meetingHelp";
+import { paragraphAsked } from "./paragraphAsked";
 import {
   answerInstructions,
   connectorInstructions,
@@ -823,6 +824,8 @@ export function createAnswers(options: AnswersOptions) {
     let listening = false;
     const { help } = input;
     let foundAhead = false;
+    /** The language the call's newest lines are in, which a help Answer is written in. */
+    let callLanguage: string | null = null;
     let timer: ReturnType<typeof setTimeout> | null = null;
     let finished = false;
     let support: CitationSupport | null = null;
@@ -1434,6 +1437,7 @@ export function createAnswers(options: AnswersOptions) {
         if (kept.length > 0) {
           messages = withTranscript(messages, session.show(kept));
           listening = true;
+          if (help) callLanguage = languageSaid(kept);
         }
         // Help gets what the User's Documents say about the newest lines at once, with no search
         // the model has to call first.
@@ -1737,14 +1741,14 @@ export function createAnswers(options: AnswersOptions) {
             webInstructions(withWebTools),
             mindInstructions(withMindTools, route),
             meetingInstructions(listening),
+            signInNeededInstructions(signInNeeded.map((connector) => connector.name)),
             help
               ? meetingHelpInstructions(help, {
                   found: foundAhead,
                   language: options.interfaceLanguage(),
+                  callLanguage,
                 })
-              : "",
-            signInNeededInstructions(signInNeeded.map((connector) => connector.name)),
-            language,
+              : language,
           ]
             .filter(Boolean)
             .join("\n\n"),

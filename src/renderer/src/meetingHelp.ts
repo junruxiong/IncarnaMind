@@ -5,8 +5,18 @@
  */
 import { useEffect } from "react";
 import { create } from "zustand";
-import type { ChatReadiness, Meeting, MeetingHelpKind, Settings } from "../../core/api";
-import { helpKeysOf, isGeneralHelpKind } from "../../shared/meetingHelp";
+import type {
+  ChatReadiness,
+  Meeting,
+  MeetingHelp,
+  MeetingHelpKind,
+  Settings,
+} from "../../core/api";
+import { messageReference } from "../../core/references";
+import { helpKeysOf, helpLabel, isGeneralHelpKind } from "../../shared/meetingHelp";
+import type { PanelState } from "../../shared/meetingPanel";
+import { withoutFraming } from "../../shared/noteBlocks";
+import { answerBlocks } from "./answerBlocks";
 import { keysHere } from "./commands/keymap";
 import { openConversation, useConversations } from "./conversations";
 import { core, files } from "./core";
@@ -24,14 +34,13 @@ interface HelpState {
   blocked: Readonly<
     Record<string, { readiness: Extract<ChatReadiness, { ready: false }> } | { message: string }>
   >;
-  /** Whether the floating panel shows now. */
-  panelShown: boolean;
+  panel: PanelState;
 }
 
 export const useMeetingHelp = create<HelpState>()(() => ({
   pending: {},
   blocked: {},
-  panelShown: false,
+  panel: { shown: false, folded: false, pinned: false },
 }));
 
 function settle(meetingId: string, blocked?: HelpState["blocked"][string]): void {
@@ -89,7 +98,6 @@ export async function askHelp(
   }
 }
 
-/** The Meeting recording or paused now, if there is one. */
 export const liveMeetingNow = (): Meeting | undefined =>
   useMeetings.getState().meetings.find((meeting) => isLive(meeting));
 
@@ -104,6 +112,31 @@ export async function askHelpInAssistant(kind: MeetingHelpKind): Promise<void> {
   if (asked && useConversations.getState().openId !== asked.conversationId) {
     await openConversation(asked.conversationId);
   }
+}
+
+/**
+ * Puts a help Answer into its meeting's notes, at their end, with a link back to it; resolves to
+ * the Blocks added, for Undo. Throws while it is still being written.
+ */
+export async function addHelpToNotes(
+  meeting: Meeting,
+  help: MeetingHelp,
+): Promise<{ mindId: string; blockIds: string[] }> {
+  const { messages } = await core.getConversation(help.conversationId);
+  const answer = messages.find((message) => message.id === help.answerId);
+  if (answer?.kind !== "answer" || answer.status !== "done") {
+    throw new Error(translateNow("meetings.help.stillWriting"));
+  }
+  const { blockIds } = await core.addToNote({
+    mindId: meeting.mindId,
+    blocks: withoutFraming(answerBlocks(answer)),
+    origin: {
+      from: messageReference(answer.conversationId, answer.id),
+      question: translateNow(helpLabel(help.kind)),
+    },
+    model: answer.model,
+  });
+  return { mindId: meeting.mindId, blockIds };
 }
 
 /** A button's shortcut on this device, as this system writes it; null for none. */
@@ -122,7 +155,7 @@ export function useMeetingHelpInWindow(): void {
     const stops = [
       files.onMeetingHelp((kind) => void askHelpInAssistant(kind)),
       files.onSetUpModel(() => useAppStore.getState().openSettings("models")),
-      files.onMeetingPanel((panelShown) => useMeetingHelp.setState({ panelShown })),
+      files.onMeetingPanel((panel) => useMeetingHelp.setState({ panel })),
     ];
     return () => {
       for (const stop of stops) stop();
