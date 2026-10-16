@@ -1,8 +1,9 @@
-import { readdir, readFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "vite";
-import { describe, expect, test } from "vitest";
+import { describe, expect, onTestFinished, test } from "vitest";
 import { ANTHROPIC_OAUTH } from "../../src/core/providers/claudeAccount/config";
 import { COPILOT_PROFILES } from "../../src/core/providers/copilot/config";
 
@@ -74,6 +75,18 @@ describe("The experimental sign-in routes", () => {
         expect(without, text).not.toContain(text);
       }
     }
+  });
+
+  test("leave Copilot no way to sign in in a build without them, until IncarnaMind's own app has a client ID", async () => {
+    const folder = await mkdtemp(join(tmpdir(), "copilot-config-"));
+    onTestFinished(() => rm(folder, { recursive: true, force: true }));
+    const file = join(folder, "config.mjs");
+    await writeFile(file, await bundle("src/core/providers/copilot/config.ts", false));
+    const built: { COPILOT_PROFILES: Record<string, unknown> } = await import(
+      pathToFileURL(file).href
+    );
+
+    expect(Object.keys(built.COPILOT_PROFILES)).toEqual([]);
   });
 
   test("are named only in their config module", async () => {

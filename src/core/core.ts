@@ -2336,6 +2336,7 @@ export function createCore(adapters: CoreAdapters): Core {
         profile.tokenUrl,
         profile.tokenExchange?.url,
         profile.apiBaseUrl,
+        profile.accountUrl,
       ])
       .filter((url): url is string => url !== undefined)
       .map((url) => new URL(url))

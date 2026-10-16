@@ -12,10 +12,11 @@ import {
   sectionTitleClass,
 } from "../ui";
 import { useContinueWithChatGpt } from "./ChatGptSignIn";
+import { CopilotPlanRow } from "./CopilotPlan";
 
 const GOOGLE_CREDITS = "https://developers.google.com/program";
 
-const ROUTES = ["claude-account", "copilot"] as const;
+const ROUTES = ["claude-account"] as const;
 
 /**
  * Settings → Models → "Already pay for a plan?": the routes for a plan the User already has.
@@ -54,6 +55,7 @@ export function PlansSettings() {
             {t("chatgpt.continue")}
           </button>,
         )}
+        <CopilotPlanRow />
         {SHOW_AGENT_CONNECTION && (
           <>
             {row(

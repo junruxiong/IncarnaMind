@@ -7,6 +7,7 @@ import { formatSpent, setAsideText } from "../../cost";
 import { useLanguage, useT } from "../../i18n";
 import { useKeyRefusals } from "../../keyRefusals";
 import { useModelNames } from "../../modelNames";
+import { useSettingsTarget } from "../../settingsTarget";
 import { useAppStore } from "../../store";
 import { useCostSummary } from "../SpendingCapSettings";
 import { UndoLineAt } from "../UndoLine";
@@ -30,6 +31,8 @@ import { providerLabel } from "./shared";
 
 /** Where Settings shows the undo line of a change made here: the sidebar's is behind it. */
 const MODELS_UNDO_PLACE = "settings:models";
+
+const TARGET = ["chat-model"] as const;
 
 /**
  * Settings → Models → Chat model: the provider in use and the default model, as rows
@@ -68,6 +71,7 @@ export function ChatModelSettings() {
     setChoice("api-key");
   }, [refused]);
   useEffect(() => () => useKeyRefusals.getState().done(), []);
+  const section = useSettingsTarget<HTMLElement>(TARGET, true, () => setChanging(true));
 
   const done = (provider?: ChatProvider) => {
     if (provider) useKeyRefusals.getState().saved(provider);
@@ -116,7 +120,7 @@ export function ChatModelSettings() {
   };
 
   return (
-    <section data-testid="chat-model-settings" className="flex flex-col gap-3">
+    <section ref={section} data-testid="chat-model-settings" className="flex flex-col gap-3">
       {readiness && !readiness.ready && readiness.reason !== "no-provider" && (
         <p role="note" className={noticeClass}>
           <ReadinessExplanation readiness={readiness} />
