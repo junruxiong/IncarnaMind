@@ -129,8 +129,67 @@ export function FirstOpenSteps({ mindId }: { mindId: string }) {
           </button>
         )}
       </div>
-      {allDone ? (
-        <p className="pt-1 text-[13px] leading-5 text-ink-secondary">
+      {!allDone && (
+        <p className="pb-3 text-[13px] leading-5 text-ink-secondary">{t("firstOpen.lead")}</p>
+      )}
+      <ol className={`flex flex-col gap-3 ${allDone ? "pt-2" : ""}`}>
+        <Step step="citation" number={1} state={stateOf("citation")}>
+          <p className="text-[13px] leading-5 text-ink-secondary">
+            {t("firstOpen.step.citation.body")}
+          </p>
+        </Step>
+        <Step step="question" number={2} state={stateOf("question")}>
+          {ready ? (
+            <>
+              <p className="text-[13px] leading-5 text-ink-secondary">
+                {t("firstOpen.step.question.body")}
+              </p>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                <button
+                  type="button"
+                  data-testid="first-open-ready"
+                  onClick={() => void askReadyQuestion()}
+                  className={buttonStyle("secondary", "sm")}
+                >
+                  {t("firstOpen.step.question.ready", { question: ready })}
+                </button>
+                <span className="text-[13px] leading-5 text-ink-meta">
+                  <OwnQuestion message="firstOpen.step.question.own" />
+                </span>
+              </div>
+            </>
+          ) : (
+            <p className="text-[13px] leading-5 text-ink-secondary">
+              <OwnQuestion message="firstOpen.step.question.ownOnly" />
+            </p>
+          )}
+        </Step>
+        <Step step="files" number={3} state={stateOf("files")}>
+          <p className="text-[13px] leading-5 text-ink-secondary">
+            {t("firstOpen.step.files.body")}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              data-testid="first-open-add-files"
+              onClick={() => void pickDocuments()}
+              className={buttonStyle("primary", "sm")}
+            >
+              {t("startGuide.documents.addFiles")}
+            </button>
+            <button
+              type="button"
+              data-testid="first-open-link-folder"
+              onClick={() => void addLinkedFolder()}
+              className={buttonStyle("secondary", "sm")}
+            >
+              {t("startGuide.documents.linkFolder")}
+            </button>
+          </div>
+        </Step>
+      </ol>
+      {allDone && (
+        <p className="pt-3 text-[13px] leading-5 text-ink-secondary">
           {t("firstOpen.next.lead")}{" "}
           {NEXT.flatMap(({ id, label }) => {
             const command = commands.get(id);
@@ -150,66 +209,6 @@ export function FirstOpenSteps({ mindId }: { mindId: string }) {
             </span>
           ))}
         </p>
-      ) : (
-        <>
-          <p className="pb-3 text-[13px] leading-5 text-ink-secondary">{t("firstOpen.lead")}</p>
-          <ol className="flex flex-col gap-3">
-            <Step step="citation" number={1} state={stateOf("citation")}>
-              <p className="text-[13px] leading-5 text-ink-secondary">
-                {t("firstOpen.step.citation.body")}
-              </p>
-            </Step>
-            <Step step="question" number={2} state={stateOf("question")}>
-              {ready ? (
-                <>
-                  <p className="text-[13px] leading-5 text-ink-secondary">
-                    {t("firstOpen.step.question.body")}
-                  </p>
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                    <button
-                      type="button"
-                      data-testid="first-open-ready"
-                      onClick={() => void askReadyQuestion()}
-                      className={buttonStyle("secondary", "sm")}
-                    >
-                      {t("firstOpen.step.question.ready", { question: ready })}
-                    </button>
-                    <span className="text-[13px] leading-5 text-ink-meta">
-                      <OwnQuestion message="firstOpen.step.question.own" />
-                    </span>
-                  </div>
-                </>
-              ) : (
-                <p className="text-[13px] leading-5 text-ink-secondary">
-                  <OwnQuestion message="firstOpen.step.question.ownOnly" />
-                </p>
-              )}
-            </Step>
-            <Step step="files" number={3} state={stateOf("files")}>
-              <p className="text-[13px] leading-5 text-ink-secondary">
-                {t("firstOpen.step.files.body")}
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  data-testid="first-open-add-files"
-                  onClick={() => void pickDocuments()}
-                  className={buttonStyle("primary", "sm")}
-                >
-                  {t("startGuide.documents.addFiles")}
-                </button>
-                <button
-                  type="button"
-                  data-testid="first-open-link-folder"
-                  onClick={() => void addLinkedFolder()}
-                  className={buttonStyle("secondary", "sm")}
-                >
-                  {t("startGuide.documents.linkFolder")}
-                </button>
-              </div>
-            </Step>
-          </ol>
-        </>
       )}
       <div className="mt-3 flex items-baseline justify-between gap-3 border-t border-rule pt-1">
         <OtherExamples mindId={mindId} />
