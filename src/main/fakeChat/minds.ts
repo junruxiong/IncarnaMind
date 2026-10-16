@@ -14,10 +14,12 @@
  * adds X to the Mind in focus; "add X to <Mind> and make a new note called Y"
  * calls both. Each then replies with the first sentence of what its calls
  * came to; add_to_mind's and create_mind's input streams in word by word,
- * slowly for a Question asked "slowly", as does edit_mind's edit.
+ * slowly for a Question asked "slowly", as does edit_mind's edit. "Write three
+ * paragraphs" is `paragraphsReply`'s.
  */
 
 import { answerReply, CITED_ANSWER } from "./answers";
+import { paragraphsReply } from "./paragraphs";
 import {
   lastQuestion,
   lastResult,
@@ -88,6 +90,8 @@ export function mindsReply(prompt: Prompt, asked: string, names: readonly string
   if (!names.includes("edit_mind")) return null;
   // Asked "slowly", only its pace changes.
   const question = asked.replace(/\s+slowly$/i, "");
+  const paragraphs = paragraphsReply(prompt, question);
+  if (paragraphs) return paragraphs;
   const both = ADD_AND_NEW.exec(question);
   if (both) {
     if (lastResult(prompt, "add_to_mind") === undefined) {
