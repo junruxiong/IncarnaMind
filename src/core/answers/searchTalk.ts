@@ -1,19 +1,19 @@
 /**
- * Sentences about the assistant's own searching ("The Passages retrieved did
- * not include their content", "my search limit ran out", "检索到的段落中没有…")
- * belong in its reply, never in the User's Mind, where they stay after a
- * later request fills the gap and the page contradicts itself.
+ * Sentences about the assistant's own searching, in the first person ("I
+ * searched both papers…", "my search limit ran out", "我搜索了…") or about
+ * the Passages its searches returned, belong in its reply, never in the
+ * User's Mind, where they stay after a later request fills the gap and the
+ * page contradicts itself. A Document's words about search or retrieval stay
+ * ("We found that search results…", "我们的检索方法…").
  */
 
-const PROCESS =
-  /\b(?:passages?|search(?:es|ed|ing)?|search results?)\b[^.!?]{0,80}?\b(?:found|retrieved|returned|turned up|did not|didn't|do not|don't|does not|doesn't|covered?|include[sd]?|show(?:ed|s)?|gave|give)\b|\b(?:retrieved|found) passages?\b/i;
-// The assistant's own: in the first person, or the Passages and searches of this Answer. A
-// Document's words about retrieval ("Passages retrieved by dense retrieval…") have neither.
-const SELF =
-  /\b(?:I|my|me|we|our)\b|\b(?:the|these|those) (?:passages?|searches)\b|\b(?:the|these|your) (?:documents|files)\b/i;
-const LIMIT = /\bsearch(?:ing)? limit\b|\blimit (?:on|of) (?:my )?searches\b/i;
-const CHINESE =
-  /检索到的?(?:段落|内容|资料)|未检索到|没有检索到|(?:检索|搜索)结果(?:中|里)?(?:没有|未|不包括|不含)|搜索(?:次数|上限|限制)|找到的段落|段落中(?:没有|未)|我们?的?(?:检索|搜索)/;
+// The first person singular: a Document's "we" is its authors.
+const SELF = /\bI\b|\b[Mm](?:y|e)\b/;
+const SEARCHING =
+  /\bsearch(?:es|ed|ing)?\b|\bpassages?\b|\bretriev(?:e|ed|al)\b|\blooked\b|\bfound\b/i;
+// IncarnaMind's word, capitalised as only it writes it: "the Passages retrieved…".
+const PASSAGES = /\b[Tt]h(?:e|ese|ose) Passages?\b/;
+const CHINESE = /我(?!们)[^，。！？]{0,6}?(?:搜索|检索|查找|找到|搜到|查到)|我的(?:搜索|检索)/;
 // A cited sentence is the Document's.
 const CITED = /\[\^?\d+\]/;
 
@@ -21,9 +21,9 @@ const SENTENCE = /[^.!?。！？\n]+(?:[.!?。！？]+["”’)]*|$)\s*/g;
 
 const aboutSearching = (sentence: string) =>
   !CITED.test(sentence) &&
-  (LIMIT.test(sentence) ||
-    CHINESE.test(sentence) ||
-    (PROCESS.test(sentence) && SELF.test(sentence)));
+  ((SELF.test(sentence) && SEARCHING.test(sentence)) ||
+    PASSAGES.test(sentence) ||
+    CHINESE.test(sentence));
 
 /**
  * Markdown to write into a Mind without its sentences about searching, and

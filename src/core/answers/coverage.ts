@@ -23,9 +23,22 @@ const THE_SET = new RegExp(
   `\\b(?:these|those|the|all(?: of)?(?: the| my)?|both|my|each of the|every one of the)\\s+(?:\\d+\\s+|two\\s+|three\\s+|four\\s+|five\\s+|six\\s+|seven\\s+|eight\\s+|nine\\s+|ten\\s+)?${DOCUMENT_WORDS}\\b|\\b(?:each|every)\\s+(?:document|doc|paper|file|report)\\b|这些${ZH_DOCUMENT_WORDS}|这(?:两|几|[二三四五六七八九十]|\\d+)(?:份|篇|个)${ZH_DOCUMENT_WORDS}|(?:所有|全部)的?${ZH_DOCUMENT_WORDS}|每一?(?:份|篇|个)${ZH_DOCUMENT_WORDS}`,
   "i",
 );
-// "What the documents say about leverage" asks about a topic: every Document is searched for it.
-const TOPIC =
-  /\b(?:about|on|regarding|concerning)\s+(?!(?:a|the|my)?\s*(?:new\s+)?(?:page|note|mind)\b)\p{L}|关于|有关|对于/iu;
+// "What the documents say about leverage" asks about a topic, which every Document is searched for;
+// "a summary about these 2 papers" and "关于这些文档的总结" are about the Documents themselves.
+const TOPIC_WORD = /\b(?:about|on|regarding|concerning)\s+|关于|有关|对于/giu;
+const SET_FIRST = new RegExp(`^(?:${THE_SET.source})`, "i");
+const PLACE_FIRST = /^(?:a|the|my)?\s*(?:new\s+)?(?:page|note|mind)\b/i;
+
+function asksAboutATopic(question: string, names: () => readonly string[]): boolean {
+  for (const match of question.matchAll(TOPIC_WORD)) {
+    const after = question.slice(match.index + match[0].length).trimStart();
+    if (PLACE_FIRST.test(after) || SET_FIRST.test(after)) continue;
+    const lower = after.toLocaleLowerCase();
+    if (names().some((name) => lower.startsWith(name.toLocaleLowerCase()))) continue;
+    return true;
+  }
+  return false;
+}
 
 const NUMBER_WORDS: Record<string, number> = {
   one: 1,
@@ -49,14 +62,17 @@ const THE_MAIN =
 const ZH_MAIN =
   /(\d|[一两二三四五])(?:份|篇|个)(?:最)?(?:主要|重要|核心)的?(?:文档|论文|文件|报告)|(?:主要|最重要|核心)的(\d|[一两二三四五])(?:份|篇|个)/;
 
-/** What a Question asks of the Documents in scope: each of them, the main `main`, or neither. */
-export function documentsAsked(question: string): { each: boolean; main: number | null } {
+/** What a Question asks of the Documents in scope, `names` theirs: each of them, the main `main`, or neither. */
+export function documentsAsked(
+  question: string,
+  names: () => readonly string[] = () => [],
+): { each: boolean; main: number | null } {
   const main = MAIN.exec(question) ?? ZH_MAIN.exec(question);
   const count = main ? (main[1] ?? main[2] ?? "") : "";
   const parsed = Number.parseInt(count, 10);
   const asked = Number.isNaN(parsed) ? (NUMBER_WORDS[count.toLowerCase()] ?? null) : parsed;
   return {
-    each: SUMMARY.test(question) && THE_SET.test(question) && !TOPIC.test(question),
+    each: SUMMARY.test(question) && THE_SET.test(question) && !asksAboutATopic(question, names),
     main: asked ?? (THE_MAIN.test(question) ? 1 : null),
   };
 }

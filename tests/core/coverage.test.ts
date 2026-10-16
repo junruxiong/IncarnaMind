@@ -18,6 +18,9 @@ describe("What a Question asks of the Documents in scope", () => {
     "总结这些文档",
     "把这几篇论文概括一下",
     "写一份所有文件的摘要",
+    "I mean write a summary about these 2 papers",
+    "Write a summary page on these documents",
+    "写一份关于这些文档的总结",
   ])("%s asks about each", (question) => {
     expect(documentsAsked(question)).toEqual({ each: true, main: null });
   });
@@ -45,6 +48,15 @@ describe("What a Question asks of the Documents in scope", () => {
     ["比较最重要的三篇", 3],
   ])("%s asks for the main %i", (question, main) => {
     expect(documentsAsked(question).main).toBe(main);
+  });
+
+  // protects=a summary about Documents named by their names is of each of them, not a topic; fails_when=it reads as a topic; no_claim=none beyond protects.
+  test("a summary about the Documents by name is of each", () => {
+    expect(
+      documentsAsked("Write a summary about GraphST and the tutorial, the 2 papers here", () => [
+        "GraphST",
+      ]).each,
+    ).toBe(true);
   });
 
   // protects=only Document words ask for the main few; fails_when=a Question about something else cuts the search to a few Documents; no_claim=none beyond protects.

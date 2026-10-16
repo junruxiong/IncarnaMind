@@ -656,7 +656,7 @@ describe("Edit with AI", () => {
       editingModel(({ passage }) =>
         passage.startsWith("Pensions")
           ? "<why>Removed.</why>"
-          : passage.startsWith("Health")
+          : passage.startsWith("Health") || passage.startsWith("Sick")
             ? "<why>I can't do this.</why>"
             : "",
       ),
@@ -664,7 +664,8 @@ describe("Edit with AI", () => {
     const pensions = paragraph(text("Pensions match up to 5% of salary."));
     const leave = paragraph(text("Leave is 25 days."));
     const health = paragraph(text("Health cover starts after three months."));
-    writeMind(client, [pensions, leave, health]);
+    const sick = paragraph(text("Sick pay is full for six weeks, then half for six more."));
+    writeMind(client, [pensions, leave, health, sick]);
     await client.settled();
 
     const removed = await core.editWithAi(
@@ -679,19 +680,25 @@ describe("Edit with AI", () => {
 
     expect(removed).toMatchObject({ kind: "proposed" });
     expect(silent).toMatchObject({ kind: "failed" });
+    const shortened = await core.editWithAi(
+      wholeParagraph(client, mind.id, sick.attrs.id, "instruction", "Cut it down to two sentences"),
+    );
     expect(refused).toMatchObject({
       kind: "failed",
       error: { message: "I can't do this." },
     });
+    expect(shortened).toMatchObject({ kind: "failed" });
     expect(shownWithChanges(client)).toEqual([
       "- Pensions match up to 5% of salary.",
       "Leave is 25 days.",
       "Health cover starts after three months.",
+      "Sick pay is full for six weeks, then half for six more.",
     ]);
     await resolveChanges(client, "accept");
     expect(shownWithChanges(client)).toEqual([
       "Leave is 25 days.",
       "Health cover starts after three months.",
+      "Sick pay is full for six weeks, then half for six more.",
     ]);
   });
 
