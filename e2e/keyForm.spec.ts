@@ -181,7 +181,7 @@ test("in Settings the notes and the plan's credits are under the key field, the 
   }
 });
 
-test("the provider's own line on what it does with the data follows the sentence of where it goes, with a link to its terms, in English and Chinese, at first run and in Settings", async () => {
+test("the provider's own line on what it does with the data sits under the sentence of where it goes, with a link to its terms, in English and Chinese, at first run and in Settings", async () => {
   const { app, window } = await launchApp(dataDir);
   try {
     await setWindowSize(app, window, 1100, 900);
@@ -193,8 +193,8 @@ test("the provider's own line on what it does with the data follows the sentence
       await language(window, value);
       const card = await openKeyForm(window);
       await card.getByTestId("setup-key").click();
-      const line = card.getByTestId("provider-form").getByTestId("provider-sends");
-      await expect(line.getByTestId("provider-data-use")).toContainText(lead);
+      const line = card.getByTestId("provider-form").getByTestId("provider-data-use");
+      await expect(line).toContainText(lead);
       await expect(line.getByRole("link")).toHaveText(terms);
       await expect(line.getByRole("link")).toHaveAttribute("href", /^https:\/\//);
       await card.getByTestId("setup-back").click();
@@ -203,10 +203,10 @@ test("the provider's own line on what it does with the data follows the sentence
     await language(window, "en");
     const settings = await openSettings(window, "models");
     await settings.getByTestId("chat-choice-api-key").check();
-    const line = settings.getByTestId("provider-form").getByTestId("provider-sends");
+    const line = settings.getByTestId("provider-form").getByTestId("provider-data-use");
     await expect(line.getByRole("link")).toHaveText("Terms ↗");
     await language(window, "zh-CN");
-    await expect(line.getByTestId("provider-data-use")).toContainText("数据使用：");
+    await expect(line).toContainText("数据使用：");
     await expect(line.getByRole("link")).toHaveText("条款 ↗");
   } finally {
     await app.close();
