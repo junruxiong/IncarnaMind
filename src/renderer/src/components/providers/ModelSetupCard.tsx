@@ -18,6 +18,7 @@ import {
   useContinueWithChatGpt,
 } from "./ChatGptSignIn";
 import { OllamaAction } from "./ChatProviderChoices";
+import { ClaudePlanWay } from "./ClaudePlan";
 import { CopilotSetupWay } from "./CopilotPlan";
 import {
   OllamaProgress,
@@ -92,6 +93,7 @@ export function ModelSetupCard() {
               {t("setup.other")}
             </summary>
             <div className="mt-2 flex flex-col gap-2">
+              <ClaudePlanWay onUseKey={() => setView("key")} />
               <CopilotSetupWay onKey={() => setView("key")} />
               <Way
                 testId="way-local"
