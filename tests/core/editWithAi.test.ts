@@ -522,7 +522,9 @@ describe("Edit with AI", () => {
     ]);
     await resolveChanges(client, "reject");
 
-    const asked = await core.editWithAi(both("instruction", "Join them and delete the second paragraph"));
+    const asked = await core.editWithAi(
+      both("instruction", "Join them and delete the second paragraph"),
+    );
     expect(asked).not.toHaveProperty("leftOut");
     expect(shownWithChanges(client)).toEqual([
       "First [-paragraph-]{+and second, together+}.",
