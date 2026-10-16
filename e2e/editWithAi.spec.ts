@@ -24,7 +24,7 @@ import {
  * Edit with AI (#93): select text, ask for a change from the selection menu
  * or with ⌘J, and review what comes back as changes in the note, each with
  * its own bar, by mouse and keyboard, with Undo. The scripted model (see
- * src/main/fakeChatModel.ts) shortens by dropping "very" and "really" (非常),
+ * src/main/fakeChat/edit.ts) shortens by dropping "very" and "really" (非常),
  * and does what "replace X with Y" (把 X 换成 Y) says. Set
  * INCARNAMIND_SCREENSHOTS to a folder to also save screenshots.
  *

@@ -12,12 +12,13 @@
  *    the claim-check function, against the Mind's Folder, the PDF, its earlier
  *    versions and its copies left out (#80), in Runs third-party from their
  *    start. Each claim's mark shows its result as it comes; the monthly cap or
- *    a plan's limit stops the run, and the claims after it say so (#83).
+ *    a plan's limit stops the run, and the claims after it say so (#83). What
+ *    the scope couldn't read as the run started is kept with it.
  *
  * One verify run, finding or checking, goes at a time.
  */
 import { randomUUID } from "node:crypto";
-import { generateText } from "ai";
+import type * as Y from "yjs";
 import { isClaim } from "../../../shared/sentences";
 import { setTextOrigin } from "../../../shared/textOrigins";
 import {
@@ -36,7 +37,8 @@ import {
   type FindClaimsResult,
   MIND_SETTINGS_FIELD,
   type Mind,
-  type ProviderError,
+  type SearchScope,
+  type UnreadFile,
   type VerifyClaimsResult,
   type VerifyDocumentResult,
 } from "../../api";
@@ -45,22 +47,12 @@ import { InvalidInputError, isRecord, NotFoundError } from "../../errors";
 import type { MindContent } from "../../mindContent";
 import { parseFolderChoice, parseMindId } from "../../minds";
 import type { PreparedChatModel } from "../../providers/chat";
-import { classifyProviderError } from "../../providers/providerErrors";
-import { RunItemError, runItems } from "../../runs/stop";
 import { createElement } from "../blocks";
-import { answerTemperature } from "../engine";
 import type { ClaimCheckRequest } from "./claimCheck";
-import {
-  CLAIM_BATCH,
-  FIND_CLAIMS_INSTRUCTIONS,
-  findClaimsPrompt,
-  paragraphsOf,
-  readClaimNumbers,
-} from "./claims";
-import { everySentence, markSentence, updateCheck } from "./sentences";
-
-/** Claims a cloud model checks at once; a model on this computer checks one at a time. */
-const CLOUD_CLAIMS_AT_ONCE = 3;
+import { paragraphsOf } from "./claims";
+import { claimsAmong } from "./findClaims";
+import { runChecks } from "./runChecks";
+import { everySentence, markSentence } from "./sentences";
 
 /** A Document whose text is read: its Passages can be searched and its pages read. */
 const READ: readonly DocumentStatus[] = ["waiting-for-model", "embedding", "ready"];
@@ -102,6 +94,10 @@ export interface VerifyOptions {
   ): ClaimCheckAttributes;
   /** Keeps the text of the evidence the Mind's checks show (#79). */
   retainEvidence(mindId: string): void;
+  /** The files `listUnreadFiles` lists for a Search scope; null for every Document. */
+  unread(scope: SearchScope | null): UnreadFile[];
+  /** Runs inside the edit that adds the request's marks: what it keeps goes when no mark names it. */
+  recordUnread(blocks: Y.XmlFragment, request: string, files: readonly UnreadFile[]): void;
   /** Marks a request's sentences not checked yet "stopped". */
   settleStopped(mindId: string, request: string): void;
   /** Records a request as running, so `cancelCheck` stops it; `done` when it ends. */
@@ -113,6 +109,7 @@ export interface VerifyOptions {
 export interface CheckScope {
   scope: ClaimCheckRequest["scope"];
   marked: ClaimCheckAttributes["scope"];
+  wanted: SearchScope | null;
 }
 
 function parseRequest(input: unknown) {
@@ -127,14 +124,6 @@ function parseRequest(input: unknown) {
     allDocuments: input.allDocuments === true,
     model: parseModel(input.model),
   };
-}
-
-/** A claim check's failure that the run's other claims share: waited out, or it stops the run. */
-function runFailureOf(result: ClaimCheckResult): ProviderError | null {
-  if (result.verdict !== "not-checked") return null;
-  const { reason } = result;
-  if (reason !== "rate-limit" && reason !== "cost-cap" && reason !== "plan-limit") return null;
-  return { kind: reason, message: result.detail ?? reason };
 }
 
 export function createVerify(options: VerifyOptions) {
@@ -206,43 +195,14 @@ export function createVerify(options: VerifyOptions) {
         .filter((each) => each.blockId in verification.pages && isClaim(each.text))
         .map(({ blockId, text }) => ({ blockId, text })),
     );
-    const { prepared } = ready;
-    const named = new Set<number>();
-    for (let start = 0; start < sentences.length; start += CLAIM_BATCH) {
-      const batch = sentences
-        .slice(start, start + CLAIM_BATCH)
-        .map((each, index) => ({ number: start + index + 1, text: each.text }));
-      let numbers: number[] | null = null;
-      // A reply that names nothing readable is asked for once more.
-      for (let tries = 0; tries < 2 && numbers === null; tries++) {
-        try {
-          const { text } = await generateText({
-            model: prepared.model,
-            instructions: FIND_CLAIMS_INSTRUCTIONS,
-            prompt: findClaimsPrompt(batch),
-            temperature: answerTemperature(prepared.capabilities.facts.temperature),
-            maxOutputTokens: 4_000,
-            maxRetries: 1,
-            abortSignal: signal,
-          });
-          numbers = readClaimNumbers(text);
-        } catch (error) {
-          if (signal.aborted) return { kind: "cancelled" };
-          return { kind: "failed", error: classifyProviderError(error) };
-        }
-      }
-      if (numbers === null) {
-        return {
-          kind: "failed",
-          error: { kind: "no-answer", message: "The model's reply named no sentences." },
-        };
-      }
-      const first = start + 1;
-      const last = start + batch.length;
-      for (const number of numbers) if (number >= first && number <= last) named.add(number);
-    }
-    if (signal.aborted) return { kind: "cancelled" };
-    const claims = sentences.filter((_, index) => named.has(index + 1));
+    const found = await claimsAmong(
+      ready.prepared,
+      sentences.map((each) => each.text),
+      "someone-else",
+      signal,
+    );
+    if (found.kind !== "found") return found;
+    const claims = sentences.filter((_, index) => found.claims.has(index));
     content.edit(mindId, (blocks) => {
       const settings = blocks.doc?.getMap<unknown>(MIND_SETTINGS_FIELD);
       const now = settings && readVerification(settings);
@@ -270,9 +230,10 @@ export function createVerify(options: VerifyOptions) {
 
     const startedAt = options.now().toISOString();
     const claims = verification.claims;
+    const unread = options.unread(check.wanted);
     const queued = content.edit(mindId, (blocks) => {
       const sentences = everySentence(blocks);
-      return claims.flatMap((claim) => {
+      const marked = claims.flatMap((claim) => {
         const sentence = sentences.find(
           (each) => each.blockId === claim.blockId && each.text === claim.text,
         );
@@ -296,65 +257,19 @@ export function createVerify(options: VerifyOptions) {
         markSentence(sentence.element, sentence.from, sentence.to, marked);
         return [{ id: marked.id, claim: sentence.text, context: sentence.context }];
       });
+      if (marked.length > 0) options.recordUnread(blocks, requestId, unread);
+      return marked;
     });
     if (queued.length === 0) return { kind: "nothing" };
 
-    const write = (id: string, change: (check: ClaimCheckAttributes) => ClaimCheckAttributes) => {
-      if (signal.aborted) return;
-      const kept = content.edit(mindId, (blocks) => updateCheck(blocks, id, change));
-      if (kept) options.retainEvidence(mindId);
-    };
-    const notChecked =
-      (reason: ClaimCheckAttributes["reason"], detail: string | null = null) =>
-      (check: ClaimCheckAttributes): ClaimCheckAttributes => ({
-        ...check,
-        state: "not-checked",
-        reason,
-        detail,
-        checkedAt: options.now().toISOString(),
-      });
-
-    let checked = 0;
-    const { prepared } = ready;
-    const { stop } = await runItems(
+    const { checked, stop } = await runChecks(options, {
+      mindId,
       queued,
-      async (claim) => {
-        const result = await options.claimCheck({
-          claim: claim.claim,
-          context: claim.context,
-          scope: check.scope,
-          model: prepared,
-          thirdParty: [{ via: "read", source: "checked-document" }],
-          cacheKey: mindId,
-          signal,
-        });
-        const failure = runFailureOf(result);
-        if (failure) throw new RunItemError(failure);
-        return result;
-      },
-      {
-        concurrency: prepared.provider.service ? CLOUD_CLAIMS_AT_ONCE : 1,
-        signal,
-        onOutcome(claim, outcome) {
-          if (outcome.status === "done") {
-            const at = options.now().toISOString();
-            if (outcome.value.verdict !== "not-checked") checked++;
-            write(claim.id, (each) => options.withResult(each, outcome.value, at));
-          } else if (outcome.status === "not-checked") {
-            write(claim.id, notChecked(outcome.stop.reason));
-          } else if (outcome.status === "failed") {
-            const rateLimited = outcome.error.kind === "rate-limit";
-            write(
-              claim.id,
-              notChecked(
-                rateLimited ? "rate-limit" : "failed",
-                rateLimited ? null : outcome.error.message,
-              ),
-            );
-          }
-        },
-      },
-    );
+      scope: check.scope,
+      prepared: ready.prepared,
+      thirdParty: [{ via: "read", source: "checked-document" }],
+      signal,
+    });
     if (signal.aborted) {
       options.settleStopped(mindId, requestId);
       return { kind: "cancelled" };

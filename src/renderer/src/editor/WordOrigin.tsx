@@ -129,10 +129,7 @@ export function WordOrigin({ doc, editor }: { doc: Y.Doc; editor: Editor | null 
         <OriginalLink
           original={original}
           name={file.name}
-          open={() => {
-            const wordPlace = caretWordPlace(editor, doc);
-            openDocumentBeside(original.id, wordPlace ? { wordPlace } : {});
-          }}
+          open={() => openOriginalAtCaret(original.id, editor, doc)}
         >
           {icon}
           <span className="min-w-0 truncate">{from}</span>
@@ -146,6 +143,12 @@ export function WordOrigin({ doc, editor }: { doc: Y.Doc; editor: Editor | null 
       <span className="shrink-0">{` · ${t("wordImport.keepsStyles")}`}</span>
     </div>
   );
+}
+
+/** Beside the Mind, at the paragraph or table of the Block the caret is in. */
+export function openOriginalAtCaret(originalId: string, editor: Editor | null, doc: Y.Doc): void {
+  const wordPlace = caretWordPlace(editor, doc);
+  openDocumentBeside(originalId, wordPlace ? { wordPlace } : {});
 }
 
 /** The paragraph's or table's place in the Word file, of the Block the caret is in, as the import recorded it. */

@@ -1,7 +1,7 @@
 /** What each kind of chat provider needs, and where its data goes. */
 import { type ChatProviderKind, chatProviderKinds, type ExternalService } from "../api";
 import { InvalidInputError } from "../errors";
-import { catalogProviderOfKind, endpointOf } from "./catalog/providers";
+import { catalogProviderOf, endpointOf } from "./catalog/providers";
 import type { CatalogProvider, Endpoint } from "./catalog/types";
 import { CHATGPT_SERVICE } from "./chatgpt/service";
 import { CLAUDE_ACCOUNT_SERVICE } from "./claudeAccount/service";
@@ -62,22 +62,31 @@ interface KindInfo {
   apiKey: "required" | "optional" | "none";
 }
 
-/** The service an endpoint sends data to: its origin, named after its provider. */
+/**
+ * The service an endpoint sends data to: its origin, named after its provider.
+ * Consent is per origin, so two presets, or two values of a templated address,
+ * are two services.
+ */
 const endpointService = (provider: CatalogProvider, endpoint: Endpoint): ExternalService => ({
   id: new URL(endpoint.baseUrl).origin,
   name: provider.name.en,
 });
 
-function kindInfo(kind: ChatProviderKind, endpointId?: string | null): KindInfo {
+function kindInfo(
+  kind: ChatProviderKind,
+  endpointId?: string | null,
+  catalogId?: string | null,
+): KindInfo {
   if (kind === "chatgpt") return { hosted: CHATGPT_SERVICE, baseUrl: "none", apiKey: "none" };
   if (kind === "claude-account") {
     return { hosted: CLAUDE_ACCOUNT_SERVICE, baseUrl: "none", apiKey: "none" };
   }
-  const provider = catalogProviderOfKind(kind);
+  const provider = catalogProviderOf(kind, catalogId);
   if (!provider) throw new Error(`The catalog has no provider for ${kind}.`);
   const endpoint = endpointOf(provider, endpointId);
   return {
-    ...(endpoint && { hosted: endpointService(provider, endpoint) }),
+    // An address built from a value the User gives is a service of its own per value.
+    ...(endpoint && !endpoint.field && { hosted: endpointService(provider, endpoint) }),
     baseUrl: endpoint ? "none" : (provider.serverUrl ?? "required"),
     apiKey: provider.apiKey,
   };
@@ -91,13 +100,20 @@ export function isChatProviderKind(value: unknown): value is ChatProviderKind {
  * The base URL of a hosted provider's API, as its AI SDK provider takes it:
  * its endpoint with this id, else its first. Null for a server the User gives.
  */
-export function endpointUrl(kind: ChatProviderKind, endpointId?: string | null): string | null {
-  const provider = catalogProviderOfKind(kind);
-  return (provider && endpointOf(provider, endpointId)?.baseUrl) ?? null;
+export function endpointUrl(
+  kind: ChatProviderKind,
+  endpointId?: string | null,
+  catalogId?: string | null,
+): string | null {
+  const provider = catalogProviderOf(kind, catalogId);
+  const endpoint = provider && endpointOf(provider, endpointId);
+  return endpoint && !endpoint.field ? endpoint.baseUrl : null;
 }
 
-export const requiresApiKey = (kind: ChatProviderKind) => kindInfo(kind).apiKey === "required";
-export const acceptsApiKey = (kind: ChatProviderKind) => kindInfo(kind).apiKey !== "none";
+export const requiresApiKey = (kind: ChatProviderKind, catalogId?: string | null) =>
+  kindInfo(kind, null, catalogId).apiKey === "required";
+export const acceptsApiKey = (kind: ChatProviderKind, catalogId?: string | null) =>
+  kindInfo(kind, null, catalogId).apiKey !== "none";
 
 /**
  * Checks a server URL and returns it without a trailing slash. Credentials,
@@ -121,8 +137,12 @@ export function normalizeBaseUrl(raw: string): string {
 }
 
 /** The base URL to store for a kind, from what the User entered. */
-export function baseUrlFor(kind: ChatProviderKind, raw: unknown): string | null {
-  const { baseUrl: rule, hosted } = kindInfo(kind);
+export function baseUrlFor(
+  kind: ChatProviderKind,
+  raw: unknown,
+  catalogId?: string | null,
+): string | null {
+  const { baseUrl: rule, hosted } = kindInfo(kind, null, catalogId);
   const given = typeof raw === "string" && raw.trim() !== "" ? raw : undefined;
   if (raw !== undefined && raw !== null && typeof raw !== "string") {
     throw new InvalidInputError("The server URL must be text.");
@@ -168,8 +188,14 @@ export function serviceFor(
   kind: ChatProviderKind,
   baseUrl: string | null,
   endpointId?: string | null,
+  catalogId?: string | null,
 ): ExternalService | null {
-  const { hosted } = kindInfo(kind, endpointId);
+  const { hosted } = kindInfo(kind, endpointId, catalogId);
   if (hosted) return hosted;
-  return baseUrl ? serviceForUrl(baseUrl) : null;
+  if (!baseUrl) return null;
+  const provider = catalogProviderOf(kind, catalogId);
+  const endpoint = provider && endpointOf(provider, endpointId);
+  return provider && endpoint?.field
+    ? { id: new URL(baseUrl).origin, name: provider.name.en }
+    : serviceForUrl(baseUrl);
 }

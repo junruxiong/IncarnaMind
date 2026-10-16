@@ -61,7 +61,7 @@ const UNKNOWN = { id: "unknown", name: "" };
 const LOCAL_MODE: AddFoundSourceResult = {
   outcome: "failed",
   reason: "local-mode",
-  message: "Local mode is on.",
+  message: "“Keep everything on this computer” is on.",
 };
 
 /** How many works each provider is asked for. */

@@ -12,9 +12,19 @@
  * and defaults without the generated data (see ./index).
  */
 import type { ChatProviderKind } from "../../api";
-import type { CatalogProvider, Endpoint } from "./types";
+import { PRESETS } from "./presets";
+import type { CatalogProvider, Endpoint, EndpointField, ProviderOptions } from "./types";
 
 const GLOBAL = { en: "Global", zh: "全球" };
+
+export const CLAUDE_BETWEEN_TOOLS: ProviderOptions = {
+  anthropic: { thinking: { type: "between_tools" } },
+};
+
+// A model that always thinks adaptively can only be asked for less (#907).
+export const CLAUDE_LOW_EFFORT: ProviderOptions = {
+  anthropic: { thinking: { type: "adaptive" }, effort: "low" },
+};
 
 const PROVIDERS = [
   {
@@ -43,8 +53,15 @@ const PROVIDERS = [
     docsUrl: "https://docs.anthropic.com/en/docs/about-claude/models",
     request: {
       // Claude 5.5 thinks by default (adaptively): a small call with a short reply runs out of room
-      // before it writes anything (#282).
-      thinkingOff: { options: { anthropic: { thinking: { type: "disabled" } } } },
+      // before it writes anything (#282). The newest refuse `disabled`, and their refusal names
+      // the setting they take instead (#907).
+      thinkingOff: {
+        options: { anthropic: { thinking: { type: "disabled" } } },
+        refused: [
+          { names: "between_tools", options: CLAUDE_BETWEEN_TOOLS },
+          { names: "output_config.effort", options: CLAUDE_LOW_EFFORT },
+        ],
+      },
       // Claude 5 models think by default, and return only an empty block unless asked for the summary.
       reasoningSummary: {
         options: { anthropic: { thinking: { type: "adaptive", display: "summarized" } } },
@@ -629,29 +646,63 @@ const PROVIDERS = [
 
 export type CatalogProviderId = (typeof PROVIDERS)[number]["id"];
 
-/** The providers, in the order the catalog lists them. */
-export const CATALOG_PROVIDERS: readonly CatalogProvider[] = PROVIDERS;
+/** The providers, in the order the catalog lists them: the presets before a server the User gives. */
+export const CATALOG_PROVIDERS: readonly CatalogProvider[] = PROVIDERS.flatMap(
+  (each): readonly CatalogProvider[] =>
+    each.id === "openai-compatible" ? [...PRESETS, each] : [each],
+);
 
 const byId = new Map<string, CatalogProvider>(CATALOG_PROVIDERS.map((each) => [each.id, each]));
+const presetIds = new Set(PRESETS.map((each) => each.id));
+const kinds = new Map<string, ChatProviderKind>(PROVIDERS.map((each) => [each.id, each.id]));
 
 /** The provider with this catalog id, if the catalog has it. */
 export const catalogProvider = (id: string | null | undefined): CatalogProvider | undefined =>
   id ? byId.get(id) : undefined;
 
 /**
- * The catalog provider a provider kind stands for: each kind is one today,
- * except the ChatGPT plan, which signs in instead (see ../chatgpt).
+ * The catalog provider a provider kind stands for: each kind is one, except
+ * the ChatGPT plan, which signs in instead (see ../chatgpt).
  */
 export const catalogProviderOfKind = (kind: ChatProviderKind): CatalogProvider | undefined =>
   catalogProvider(kind);
 
+export type Preset = CatalogProvider & { adapter: "openai-compatible" };
+
+export const isPreset = (provider: CatalogProvider | undefined): provider is Preset =>
+  provider !== undefined && presetIds.has(provider.id);
+
+export const catalogProviderOf = (
+  kind: ChatProviderKind,
+  catalogId: string | null | undefined,
+): CatalogProvider | undefined =>
+  (catalogId && presetIds.has(catalogId) ? catalogProvider(catalogId) : undefined) ??
+  catalogProviderOfKind(kind);
+
+/** Throws for an id the catalog doesn't have. */
+export function kindOfCatalogId(id: string): ChatProviderKind {
+  if (presetIds.has(id)) return "openai-compatible";
+  const kind = kinds.get(id);
+  if (!kind) throw new Error(`The catalog has no provider kind "${id}".`);
+  return kind;
+}
+
 /**
- * The providers set up with a key or a server address, in catalog order: every
- * hosted provider, then a server the User gives. Ollama has its own card.
+ * A preset whose Answers model hasn't passed the citing evaluation (#185): its
+ * models are labelled "Not yet tested for checked Citations" and it is never
+ * recommended, whatever else its row says.
  */
-export const KEY_PROVIDER_KINDS: readonly ChatProviderKind[] = CATALOG_PROVIDERS.filter(
+export const untestedForCitations = (provider: CatalogProvider | undefined): boolean =>
+  isPreset(provider) && provider.citingTested === undefined;
+
+/**
+ * The providers set up with a key or a server address, by catalog id, in
+ * catalog order: every hosted provider and preset, then a server the User
+ * gives. Ollama has its own card.
+ */
+export const KEY_PROVIDERS: readonly string[] = CATALOG_PROVIDERS.filter(
   (each) => each.endpoints.length > 0 || each.id === "openai-compatible",
-).map((each) => each.id as ChatProviderKind);
+).map((each) => each.id);
 
 /**
  * The providers to offer for a key, in the two groups the screens show: `main`,
@@ -659,19 +710,33 @@ export const KEY_PROVIDER_KINDS: readonly ChatProviderKind[] = CATALOG_PROVIDERS
  * stays among their providers whatever its tier), and `more`, under "More
  * providers". The first-run setup shows `main` for a User with none set up.
  */
-export function keyProviderGroups(setUp: readonly ChatProviderKind[] = []): {
-  main: ChatProviderKind[];
-  more: ChatProviderKind[];
+export function keyProviderGroups(setUp: readonly string[] = []): {
+  main: string[];
+  more: string[];
 } {
-  const firstClass = KEY_PROVIDER_KINDS.filter(
-    (kind) => catalogProviderOfKind(kind)?.support === "first-class",
-  );
+  const firstClass = KEY_PROVIDERS.filter((id) => catalogProvider(id)?.support === "first-class");
   // Set up, then listed after the first-class ones rather than among them.
-  const keptSetUp = KEY_PROVIDER_KINDS.filter(
-    (kind) => !firstClass.includes(kind) && setUp.includes(kind),
-  );
+  const keptSetUp = KEY_PROVIDERS.filter((id) => !firstClass.includes(id) && setUp.includes(id));
   const main = [...firstClass, ...keptSetUp];
-  return { main, more: KEY_PROVIDER_KINDS.filter((kind) => !main.includes(kind)) };
+  return { main, more: KEY_PROVIDERS.filter((id) => !main.includes(id)) };
+}
+
+export const fieldAccepts = (field: EndpointField, value: string): boolean =>
+  field.choices
+    ? field.choices.some((each) => each.value === value)
+    : new RegExp(`^(?:${field.pattern ?? ".+"})$`).test(value);
+
+/** An endpoint's address with its field's value in it. */
+export const fieldUrl = (endpoint: Endpoint, value: string): string =>
+  endpoint.field ? endpoint.baseUrl.replace(`{${endpoint.field.name}}`, value) : endpoint.baseUrl;
+
+/** The field's value a saved address was built with; null when it wasn't built from this endpoint. */
+export function fieldValueOf(endpoint: Endpoint, baseUrl: string | null): string | null {
+  if (!endpoint.field || !baseUrl) return null;
+  const [before = "", after = ""] = endpoint.baseUrl.split(`{${endpoint.field.name}}`);
+  if (!baseUrl.startsWith(before) || !baseUrl.endsWith(after)) return null;
+  const value = baseUrl.slice(before.length, baseUrl.length - after.length);
+  return fieldAccepts(endpoint.field, value) ? value : null;
 }
 
 /** The provider's endpoint with this id, else its first (the default); none for a server the User gives. */

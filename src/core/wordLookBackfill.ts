@@ -10,7 +10,6 @@ import {
   wordFingerprintBeforeLook,
   wordSourceOf,
 } from "../shared/wordFiles";
-import { runLookOf } from "../shared/wordLook";
 import {
   BLOCK_ID_ATTRIBUTE,
   MIND_WORD_LOOK_FIELD,
@@ -18,29 +17,33 @@ import {
   WORD_RUN_MARK,
   type WordSource,
 } from "./api";
-import type { WordStructure } from "./documents/formats/docxImport";
+import { nodesByPlace, type WordStructure } from "./documents/formats/docxImport";
+
+/** The look's mark, and formatting the import reads with styles resolved. */
+const GIVEN_MARKS: ReadonlySet<string> = new Set([
+  WORD_RUN_MARK,
+  "bold",
+  "italic",
+  "underline",
+  "strike",
+]);
 
 type LookChange =
   | { kind: "attribute"; element: Y.XmlElement; value: string }
-  | { kind: "run"; text: Y.XmlText; index: number; length: number; key: string }
-  | { kind: "source"; id: string; source: WordSource };
+  | {
+      kind: "marks";
+      text: Y.XmlText;
+      index: number;
+      length: number;
+      marks: Record<string, Record<string, unknown>>;
+    }
+  | { kind: "source"; id: string; source: WordSource }
+  | { kind: "fingerprint"; element: Y.XmlElement };
 
 export interface LookPlan {
   changes: LookChange[];
   given: number;
   editedSinceImport: number;
-}
-
-function nodesByPlace(structure: WordStructure): Map<string, NodeJSON> {
-  const byPlace = new Map<string, NodeJSON>();
-  const visit = (node: NodeJSON) => {
-    const id = node.attrs?.[BLOCK_ID_ATTRIBUTE];
-    const source = typeof id === "string" ? structure.sources.get(id) : undefined;
-    if (source) byPlace.set(source.n, node);
-    for (const each of node.content ?? []) visit(each);
-  };
-  for (const block of structure.blocks) visit(block);
-  return byPlace;
 }
 
 function grouped(content: readonly NodeJSON[]): (NodeJSON[] | NodeJSON)[] {
@@ -80,9 +83,13 @@ function changesFor(element: Y.XmlElement, node: NodeJSON): LookChange[] | null 
       let at = 0;
       for (const each of group) {
         const length = each.text?.length ?? 0;
-        const run = runLookOf(each);
-        if (run !== null && length > 0) {
-          changes.push({ kind: "run", text: child, index: at, length, key: run });
+        const marks = Object.fromEntries(
+          (each.marks ?? [])
+            .filter((mark) => GIVEN_MARKS.has(mark.type))
+            .map((mark) => [mark.type, mark.attrs ?? {}]),
+        );
+        if (Object.keys(marks).length > 0 && length > 0) {
+          changes.push({ kind: "marks", text: child, index: at, length, marks });
         }
         at += length;
       }
@@ -102,6 +109,7 @@ const asImported = (element: Y.XmlElement, source: WordSource) =>
 export function planLook(doc: Y.Doc, blocks: Y.XmlFragment, structure: WordStructure): LookPlan {
   const byPlace = nodesByPlace(structure);
   const plan: LookPlan = { changes: [], given: 0, editedSinceImport: 0 };
+  const given = new Set<Y.XmlElement>();
   const sourced = (element: Y.XmlElement) => {
     const id = element.getAttribute(BLOCK_ID_ATTRIBUTE);
     const source = typeof id === "string" ? wordSourceOf(doc, id) : null;
@@ -113,7 +121,9 @@ export function planLook(doc: Y.Doc, blocks: Y.XmlFragment, structure: WordStruc
       const node = byPlace.get(found.source.n);
       const changes = node && asImported(element, found.source) ? changesFor(element, node) : null;
       if (changes) {
-        plan.changes.push(...changes);
+        // Resolved formatting is content, so the fingerprints are taken again once it's given.
+        plan.changes.push(...changes, { kind: "fingerprint", element });
+        given.add(element);
         plan.given++;
         return;
       }
@@ -125,6 +135,7 @@ export function planLook(doc: Y.Doc, blocks: Y.XmlFragment, structure: WordStruc
   };
   // Fingerprints recorded before the look rejoined text are recorded again, so export still finds the Block unchanged.
   const recordAgain = (element: Y.XmlElement) => {
+    if (given.has(element)) return;
     const found = sourced(element);
     if (found && wordFingerprintBeforeLook(element) === found.source.f) {
       const f = wordFingerprint(element);
@@ -170,14 +181,25 @@ export function clearLook(doc: Y.Doc, blocks: Y.XmlFragment): void {
   doc.getMap(MIND_WORD_LOOK_FIELD).clear();
 }
 
+function fingerprintAgain(doc: Y.Doc, element: Y.XmlElement): void {
+  const id = element.getAttribute(BLOCK_ID_ATTRIBUTE);
+  const source = typeof id === "string" ? wordSourceOf(doc, id) : null;
+  if (id && source) setWordSource(doc, id, { ...source, f: wordFingerprint(element) });
+  for (const child of element.toArray()) {
+    if (child instanceof Y.XmlElement) fingerprintAgain(doc, child);
+  }
+}
+
 export function applyLook(doc: Y.Doc, plan: LookPlan): void {
   for (const change of plan.changes) {
     if (change.kind === "attribute") {
       change.element.setAttribute(WORD_LOOK_ATTRIBUTE, change.value);
-    } else if (change.kind === "run") {
-      change.text.format(change.index, change.length, { [WORD_RUN_MARK]: { k: change.key } });
-    } else {
+    } else if (change.kind === "marks") {
+      change.text.format(change.index, change.length, change.marks);
+    } else if (change.kind === "source") {
       setWordSource(doc, change.id, change.source);
+    } else {
+      fingerprintAgain(doc, change.element);
     }
   }
 }

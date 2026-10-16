@@ -28,13 +28,32 @@ export type Adapter =
   | "openai-compatible"
   | "ollama";
 
+/**
+ * A value the User gives that an endpoint's address is built from, written in
+ * its `baseUrl` as `{name}`: an AWS region, a Cloudflare account.
+ */
+export interface EndpointField {
+  name: string;
+  label: Localized;
+  /** The values to pick from; left out, a typed value that matches `pattern` (a regular expression). */
+  choices?: readonly { value: string; label: Localized }[];
+  pattern?: string;
+  /** One plain line under the field, for what the User must know to fill it in. */
+  hint?: Localized;
+}
+
 /** Where a provider's API is, for one region. */
 export interface Endpoint {
   /** Stable, stored on the provider row: "global", "cn", "intl". */
   id: string;
   label: Localized;
-  /** The API's base URL, as the AI SDK provider takes it (e.g. "https://api.openai.com/v1"). */
+  /**
+   * The API's base URL, as the AI SDK provider takes it (e.g. "https://api.openai.com/v1"),
+   * with `{name}` for its `field`'s value when it has one.
+   */
   baseUrl: string;
+  /** The value its address needs; each value is a provider of its own, with its own origin. */
+  field?: EndpointField;
   /** Where the User gets a key for this region, when it isn't the provider's `keyUrl` (keys are per region). */
   keyUrl?: string;
 }
@@ -62,6 +81,8 @@ export interface DataUse {
   url?: string;
 }
 
+export type ProviderOptions = Record<string, Record<string, unknown>>;
+
 /** What every request to a provider carries, whatever the model. */
 export interface RequestQuirks {
   /** Ask the provider not to keep requests (the Responses API of OpenAI and xAI keeps them otherwise). */
@@ -79,7 +100,12 @@ export interface RequestQuirks {
    * the small calls that don't write the Answer. A model whose id starts with
    * one of `unless` can't turn it off.
    */
-  thinkingOff?: { options: Record<string, Record<string, unknown>>; unless?: readonly string[] };
+  thinkingOff?: {
+    options: ProviderOptions;
+    unless?: readonly string[];
+    /** The form to retry with when a refusal of `options` names it, for a model the catalog has none for. */
+    refused?: readonly { names: string; options: ProviderOptions }[];
+  };
   /**
    * Provider options that ask for the provider's summary of a model's
    * reasoning, for the calls that write the Answer (#391). Only providers
@@ -88,7 +114,7 @@ export interface RequestQuirks {
    * `only`, they go to the models whose id starts with one of its prefixes,
    * the ones that think by default.
    */
-  reasoningSummary?: { options: Record<string, Record<string, unknown>>; only?: readonly string[] };
+  reasoningSummary?: { options: ProviderOptions; only?: readonly string[] };
 }
 
 /**
@@ -135,6 +161,12 @@ export interface CatalogProvider {
    * under the key field. Left out where no plan does.
    */
   planCredits?: Localized & { url: string };
+  /**
+   * A preset only: the run of the citing evaluation (#185) its Answers model
+   * passed. Until then it is labelled not yet tested and never recommended
+   * (see `untestedForCitations`).
+   */
+  citingTested?: string;
   /** When a person last checked this entry against the provider's own pages (YYYY-MM-DD). */
   checked: string;
 }
@@ -187,6 +219,8 @@ export interface ModelFacts {
   temperature: boolean;
   /** It accepts a forced Tool choice ("required" or a named Tool). */
   forcedToolChoice: boolean;
+  /** How a small call asks it not to think, where its provider's way (`RequestQuirks.thinkingOff`) is refused. */
+  thinkingOff: ProviderOptions;
   /** Its context window, in tokens, input and output together. */
   context: number;
   /** The most a request may send, when the provider limits input below the window. */

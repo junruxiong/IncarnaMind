@@ -18,15 +18,20 @@
 import type { CannotAnswerReason, ChatProviderKind, OtherModel } from "../../api";
 import generated from "./models.json";
 import { OVERRIDES } from "./overrides";
-import type { CatalogModel, GeneratedProviderModels, ModelFacts } from "./types";
+import { catalogProvider, catalogProviderOf, kindOfCatalogId } from "./providers";
+import type { CatalogModel, GeneratedProviderModels, ModelFacts, Role } from "./types";
 
 export { LOCAL_MODEL_TIERS, LOCAL_MODELS, recommendedLocalModels } from "./local";
 export {
   CATALOG_PROVIDERS,
   type CatalogProviderId,
   catalogProvider,
+  catalogProviderOf,
   catalogProviderOfKind,
   endpointOf,
+  isPreset,
+  kindOfCatalogId,
+  untestedForCitations,
 } from "./providers";
 export type * from "./types";
 
@@ -142,15 +147,57 @@ export function otherModel(
 }
 
 /**
- * The model set a provider kind uses on an endpoint: the kind's own, OpenAI's
- * for the ChatGPT plan, which serves OpenAI's models, and Anthropic's for a
- * Claude account. A provider whose regions differ in their models has a set
- * for each region after the first ("qwen/intl"); an endpoint without a set of
- * its own, or none given, uses the provider's.
+ * The model set a provider kind uses on an endpoint: the kind's own, or its
+ * preset's (`catalogId`), OpenAI's for the ChatGPT plan, which serves
+ * OpenAI's models, and Anthropic's for a Claude account. A provider whose
+ * regions differ in their models has a set for each region after the first
+ * ("qwen/intl"); an endpoint without a set of its own, or none given, uses
+ * the provider's.
  */
-export function modelsProviderOfKind(kind: ChatProviderKind, endpoint?: string | null): string {
+export function modelsProviderOfKind(
+  kind: ChatProviderKind,
+  endpoint?: string | null,
+  catalogId?: string | null,
+): string {
   if (kind === "chatgpt") return "openai";
   if (kind === "claude-account") return "anthropic";
-  const regional = endpoint ? `${kind}/${endpoint}` : undefined;
-  return regional && MODELS.has(regional) ? regional : kind;
+  const set = catalogProviderOf(kind, catalogId)?.id ?? kind;
+  const regional = endpoint ? `${set}/${endpoint}` : undefined;
+  return regional && MODELS.has(regional) ? regional : set;
+}
+
+export const MAX_MENU_MODELS = 100;
+
+/** One order for Settings' Default model menu and the key form's list, so the two agree (#890). */
+export const withRolesFirst = (
+  roles: Partial<Record<Role, string>> | undefined,
+  inMenu: readonly string[],
+): string[] => [
+  ...new Set([
+    ...[roles?.answers, roles?.strongest, roles?.quickTasks].filter(
+      (id): id is string => id !== undefined && inMenu.includes(id),
+    ),
+    ...inMenu,
+  ]),
+];
+
+/** Before a key is saved its provider can't be asked for its list, so the catalog stands in for it. */
+export function catalogMenu(catalogId: string, endpoint?: string | null): string[] {
+  const provider = catalogProvider(catalogId);
+  if (!provider) return [];
+  const providerId = modelsProviderOfKind(kindOfCatalogId(catalogId), endpoint, catalogId);
+  const models = MODELS.get(providerId);
+  const ids = new Set(models?.keys());
+  const current = models
+    ? [...ids]
+        .filter((id) => {
+          const base = withoutDateSuffix(id);
+          // A provider lists a model or its dated snapshot, never both.
+          return !(base !== id && ids.has(base)) && !otherModel(providerId, id, ids);
+        })
+        .sort((a, b) => a.localeCompare(b))
+    : [provider.roles.answers, provider.roles.strongest, provider.roles.quickTasks].filter(
+        (id): id is string => id !== undefined,
+      );
+  return withRolesFirst(provider.roles, current).slice(0, MAX_MENU_MODELS);
 }

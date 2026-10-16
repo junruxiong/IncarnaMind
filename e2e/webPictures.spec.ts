@@ -78,25 +78,23 @@ test.afterEach(async () => {
   await removeDataFolder(home);
 });
 
-/** Adds a web page from the "+" menu and opens it once it is read. */
-async function addAndOpen(window: Page, path: string, title: string): Promise<void> {
+async function add(window: Page, path: string, title: string) {
   await window.getByTestId("plus-menu").click();
   await window.getByTestId("plus-add-web-page").click();
   const dialog = window.getByTestId("add-web-page-dialog");
   await dialog.getByTestId("add-web-page-addresses").fill(`http://127.0.0.1:${port}${path}`);
   await dialog.getByTestId("add-web-page-confirm").click();
-  // One page added closes the dialog.
   await expect(dialog).toBeHidden({ timeout: 30_000 });
-  const row = window.getByTestId("document-list-item").filter({ hasText: title });
-  await expect(row).toHaveAttribute("data-status", "ready");
-  await row.getByTestId("open-document").click();
+  return window.getByTestId("document-list-item").filter({ hasText: title });
 }
 
 test("the article's pictures show in place in the reader, and one not saved is a labelled box, in English and Chinese", async () => {
   const { app, window } = await launchApp(dataDir, { home, web: port });
   await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
-  await addAndOpen(window, "/report", "Harbour trade in 2026");
+  const row = await add(window, "/report", "Harbour trade in 2026");
+  await expect(row).toHaveAttribute("data-status", "ready", { timeout: 30_000 });
+  await row.getByTestId("open-document").click();
 
   const article = window.getByTestId("viewer").getByTestId("viewer-web-article");
   const pictures = article.getByTestId("web-picture");
@@ -130,18 +128,31 @@ test("the article's pictures show in place in the reader, and one not saved is a
   await app.close();
 });
 
-test("a page with more pictures than a page keeps shows the first ones and says how many were left out, in English and Chinese", async () => {
+test("a page with more pictures than a page keeps says while their text is read, shows the first ones and says how many were left out, in English and Chinese", async () => {
   const { app, window } = await launchApp(dataDir, { home, web: port });
   await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
-  await addAndOpen(window, "/ships", "Every ship in port");
+  const row = await add(window, "/ships", "Every ship in port");
+  const status = row.getByTestId("document-status");
+  await expect(status).toHaveAttribute(
+    "title",
+    /^Reading the text in 60 pictures… \d+ read so far\.$/,
+  );
+  if (SCREENSHOTS) await window.screenshot({ path: join(SCREENSHOTS, "pictures-reading-en.png") });
+  await setLanguage(window, "zh-CN");
+  await expect(status).toHaveAttribute("title", /^正在识别 60 张图片中的文字…已识别 \d+ 张。$/);
+  if (SCREENSHOTS) {
+    await window.screenshot({ path: join(SCREENSHOTS, "pictures-reading-zh-CN.png") });
+  }
+  await expect(row).toHaveAttribute("data-status", "ready", { timeout: 60_000 });
+  await row.getByTestId("open-document").click();
 
   const article = window.getByTestId("viewer").getByTestId("viewer-web-article");
   await expect(article.getByTestId("web-picture")).toHaveCount(60);
   await expect(article.getByTestId("web-picture").last()).toHaveAttribute("alt", "Ship 60");
   const leftOut = window.getByTestId("viewer-web-left-out");
-  await expect(leftOut).toHaveText("1 picture wasn't saved: over the limit for a page");
-  await setLanguage(window, "zh-CN");
   await expect(leftOut).toHaveText("有 1 张图片超出单页上限，未保存");
+  await setLanguage(window, "en");
+  await expect(leftOut).toHaveText("1 picture wasn't saved: over the limit for a page");
   await app.close();
 });
