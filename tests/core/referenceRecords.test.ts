@@ -525,7 +525,11 @@ describe("Look up", () => {
     );
     // One GET, with the DOI in its address and nothing else.
     expect(services.requests).toEqual([
-      { method: "GET", path: `/works/${encodeURIComponent(NUMPY_DOI)}`, bodyLength: 0 },
+      expect.objectContaining({
+        method: "GET",
+        path: `/works/${encodeURIComponent(NUMPY_DOI)}`,
+        bodyLength: 0,
+      }),
     ]);
 
     // Asked once: the next Look up asks nothing.

@@ -150,6 +150,29 @@ describe("A Meeting's live Transcript", { timeout: 60_000 }, () => {
     expect(new Set(late.map((cue) => cue.speaker))).toEqual(new Set(["Me", "Them"]));
   });
 
+  test("a line whose words hold control characters is kept as one line, and the file reads back (#981)", async () => {
+    const dataDir = await createTempDataFolder();
+    const { core, record } = await transcribingCore(dataDir, {
+      engine: { lines: ["The launch\nmoves to the\u0007 eighteenth.\n\nDone", "Next\tline."] },
+    });
+    const meeting = await core.createMeeting();
+    await core.startMeeting({ meetingId: meeting.id });
+    record(5 * SECOND, ["microphone"]);
+    const live = await until(core, meeting.id, (transcript) => transcript.lines >= 2);
+    if (!live.documentId) throw new Error("The Transcript has no Document yet.");
+    const document = await documentOf(core, live.documentId);
+    const file = readFileSync(document.path, "utf8");
+
+    const cues = readVtt(file).cues;
+    expect(cues.slice(0, 2).map((cue) => cue.text)).toEqual([
+      "The launch moves to the eighteenth. Done",
+      "Next line.",
+    ]);
+    // No blank line inside a cue, which would end it.
+    expect(file).not.toMatch(/-->[^\n]*\n[^\n]*\n\n[^\n]*\n\n/);
+    expect(cues.length).toBe(live.lines);
+  });
+
   test("a Meeting where nothing was said saves no Transcript", async () => {
     const dataDir = await createTempDataFolder();
     const { core, record } = await transcribingCore(dataDir);

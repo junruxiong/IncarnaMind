@@ -145,6 +145,40 @@ describe("Live text from VAD segments, decoded again as speech goes on", () => {
   });
 });
 
+describe("Speech whose words hold control characters (#981)", () => {
+  test("is kept as one line of words, the stretch not marked as one the engine couldn't read", async () => {
+    const segments: SpeechSegment[] = [];
+    const failures: string[] = [];
+    const said = ["The launch\nmoves to the\u0007 eighteenth.\t\n\nDone", "\n\u0001\n"];
+    let decoded = 0;
+    const host = createSpeechHost(
+      {
+        ...lengthEngine([
+          [0, 2],
+          [3, 5],
+        ]),
+        recognizer: { decode: async () => said[decoded++] ?? "" },
+      },
+      {
+        segment: (segment) => segments.push(segment),
+        progress: () => {},
+        failed: (_stream, message) => failures.push(message),
+      },
+    );
+
+    host.push("live", new Float32Array(6 * RATE));
+    await host.finish("live");
+
+    expect(failures).toEqual([]);
+    const finals = segments.filter((segment) => segment.final);
+    expect(finals.map((segment) => segment.text)).toEqual([
+      "The launch moves to the eighteenth. Done",
+      "",
+    ]);
+    expect(finals.some((segment) => segment.failed)).toBe(false);
+  });
+});
+
 describe("The microphone and the computer's sound as two tracks", () => {
   const tone = (value: number, length: number) => new Int16Array(length).fill(value);
 
