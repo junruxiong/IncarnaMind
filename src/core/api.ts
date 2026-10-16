@@ -3485,6 +3485,11 @@ export interface SaveChatProviderInput {
   endpoint?: string;
   /** Required for "openai-compatible"; optional for "ollama" (Ollama's local port); not allowed otherwise. */
   baseUrl?: string;
+  /**
+   * The value an endpoint's address is built from, for an endpoint that needs
+   * one (an AWS region, a Cloudflare account). Each value is its own provider.
+   */
+  endpointValue?: string;
   /** A new API key. Leave it out to keep the stored one; null removes it. */
   apiKey?: string | null;
   /** The model to make the default, e.g. "gpt-5.4-mini". */
@@ -3497,6 +3502,7 @@ export interface TestChatConnectionInput {
   /** The endpoint to test (see `SaveChatProviderInput`). */
   endpoint?: string;
   baseUrl?: string;
+  endpointValue?: string;
   /** The key to test. Leave it out to test the key stored for the same provider. */
   apiKey?: string;
   modelId: string;

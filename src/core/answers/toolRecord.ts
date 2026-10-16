@@ -48,7 +48,7 @@ function whyNot(problem: MindProblem | undefined): string {
     case "stopped":
       return "it was stopped";
     case "local-mode":
-      return "Local mode is on";
+      return "“Keep everything on this computer” is on";
     case "not-ready":
       return "the model couldn't be used";
     case "model":
