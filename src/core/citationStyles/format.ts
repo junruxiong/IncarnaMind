@@ -1,13 +1,15 @@
 /**
  * What the binding adds to Hayagriva's output (ADR-0016), for one request: English references
  * in a Chinese style in English terms, no italics on Chinese text, and no space between a
- * Chinese name and 等, each as Zotero's citeproc-js writes them. Pure: it only calls
- * `render`, so tests run it on the engine directly and the worker runs it on its own instance.
+ * Chinese name and 等, each as Zotero's citeproc-js writes them; a work cited twice in one
+ * cluster written once; and Locations raised after the work in a style whose file leaves them
+ * out (GB/T 7714). Pure: it only calls `render`, so tests run it on the engine directly and the
+ * worker runs it on its own instance.
  */
 import { CJK } from "../../shared/text";
 import { type CslItem, isChineseItem } from "./csl";
 import type { EngineRun } from "./types";
-import type { EngineCitation, EngineEntry, EngineOutput, EngineRequest } from "./wasm";
+import type { EngineCitation, EngineCite, EngineEntry, EngineOutput, EngineRequest } from "./wasm";
 
 export interface FormatJob {
   items: CslItem[];
@@ -17,6 +19,64 @@ export interface FormatJob {
    * terms ("et al.", "4th ed."), as the standard asks, rather than the style's ("等", "4 版").
    */
   englishTermsForOthers: boolean;
+  /**
+   * The style's file leaves Locations out of its citations, and its standard raises them after
+   * each work (`CitationStyle.locators`): "[3]⁵⁻⁶", "（钱学森，1990）³⁰".
+   */
+  raisedLocators: boolean;
+}
+
+/**
+ * One citation as the engine is asked for it: a job's citation with each work once, or, when
+ * Locations are raised, one of its works on its own. `works` maps each of its items to the
+ * job citation's, and `raised` is the Location written after it.
+ */
+interface Part {
+  citation: EngineCitation;
+  works: number[];
+  raised: string | null;
+}
+
+/** One work's Locations in a cluster as one: "12" and "15" are "12, 15", the first's label kept. */
+function mergedLocator(cites: readonly EngineCite[], separator: string): Partial<EngineCite> {
+  const given = cites.filter((cite) => cite.locator);
+  const [first] = given;
+  if (!first) return {};
+  const locator = [...new Set(given.map((cite) => cite.locator))].join(separator);
+  return first.label === undefined ? { locator } : { locator, label: first.label };
+}
+
+/**
+ * A job's citation as the engine is asked for it: a work it cites twice cited once, so a
+ * cluster never reads "[1,1]"; and, with raised Locations, each work on its own once any has
+ * a Location, so each is followed by its own.
+ */
+function partsOf(citation: EngineCitation, raised: boolean): Part[] {
+  const firstOf = new Map<string, number>();
+  const merged: { cites: EngineCite[]; work: number }[] = [];
+  citation.items.forEach((cite, index) => {
+    const at = firstOf.get(cite.id);
+    if (at === undefined) {
+      firstOf.set(cite.id, merged.length);
+      merged.push({ cites: [cite], work: index });
+    } else {
+      merged[at]?.cites.push(cite);
+    }
+  });
+  const items = merged.map(({ cites }) => {
+    const { locator: _, label: __, ...rest } = cites[0] as EngineCite;
+    return { ...rest, ...mergedLocator(cites, raised ? "," : ", ") };
+  });
+  const works = merged.map((each) => each.work);
+  const noteIndex = citation.noteIndex === undefined ? {} : { noteIndex: citation.noteIndex };
+  if (!raised || !items.some((item) => item.locator)) {
+    return [{ citation: { ...noteIndex, items }, works, raised: null }];
+  }
+  return items.map(({ locator, label: _, ...item }, index) => ({
+    citation: { ...noteIndex, items: [item] },
+    works: [works[index] as number],
+    raised: locator ?? null,
+  }));
 }
 
 const hasCjk = new RegExp(`[${CJK}]`, "u");
@@ -98,7 +158,12 @@ export function formatJob(
   job: FormatJob,
   render: (request: EngineRequest) => EngineOutput,
 ): EngineOutput {
-  const request: EngineRequest = { items: job.items, citations: job.citations };
+  const partsByCitation = job.citations.map((citation) => partsOf(citation, job.raisedLocators));
+  const parts = partsByCitation.flat();
+  const request: EngineRequest = {
+    items: job.items,
+    citations: parts.map((part) => part.citation),
+  };
   let output = render(request);
   const others = new Set(job.items.filter((item) => !isChineseItem(item)).map((item) => item.id));
   if (job.englishTermsForOthers && others.size > 0) {
@@ -107,7 +172,7 @@ export function formatJob(
     output = {
       ...output,
       citations: output.citations.map((runs, index) => {
-        const items = job.citations[index]?.items ?? [];
+        const items = request.citations[index]?.items ?? [];
         return spliceCitation(runs, english.citations[index] ?? [], (item) =>
           others.has(items[item]?.id ?? ""),
         );
@@ -118,11 +183,21 @@ export function formatJob(
       }),
     };
   }
+  let next = 0;
+  const citations = partsByCitation.map((each) =>
+    each.flatMap((part) => {
+      const runs = (output.citations[next++] ?? []).map(({ item, ...run }): EngineRun =>
+        item === undefined ? run : { ...run, item: part.works[item] as number },
+      );
+      if (part.raised === null) return runs;
+      return [...runs, { text: part.raised, script: "sup" as const, item: part.works[0] as number }];
+    }),
+  );
   const chinese = <T extends EngineRun>(runs: readonly T[]) =>
     noSpaceBeforeDeng(uprightChinese(runs));
   return {
     ...output,
-    citations: output.citations.map(chinese),
+    citations: citations.map(chinese),
     bibliography: output.bibliography.map((entry) => ({
       ...entry,
       firstField: entry.firstField && chinese(entry.firstField),

@@ -79,11 +79,17 @@ const span = (from: number, to: number) => (to > from ? `${from}-${to}` : String
  * A Citation's Location as a locator: pages and lines as CSL's own ("p. 4", "pp. 4–5"); a slide,
  * rows of a sheet or a section as the Location's own words in the style's language ("slide 4",
  * "§ History"), which the style prints with no label rather than as an invented page.
+ * `raised`: written raised after the work with no label (`FormatJob.raisedLocators`), where a
+ * bare number reads as a page, so lines are words too ("第 3–4 行").
  */
-export function locatorOf(location: CitationLocation | null, language: Language): Locator {
+export function locatorOf(
+  location: CitationLocation | null,
+  language: Language,
+  raised = false,
+): Locator {
   if (!location) return {};
   if (location.kind === "page") return { locator: span(location.from, location.to), label: "page" };
-  if (location.kind === "lines") {
+  if (location.kind === "lines" && !raised) {
     return { locator: span(location.from, location.to), label: "line" };
   }
   return {

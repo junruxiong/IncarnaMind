@@ -1,11 +1,11 @@
 /**
  * The citation style a Mind is written in (#289). Like its model (`mindModel.ts`), it lives in
  * the Mind's Yjs settings (`MIND_SETTINGS_FIELD`), not in its Blocks, so it goes wherever the
- * Mind goes and its content schema stays as it is. A Mind with no choice is Numbered
- * (`DEFAULT_CITATION_STYLE`).
+ * Mind goes and its content schema stays as it is. A Mind with no choice is in the default
+ * style (`defaultCitationStyle`).
  */
 import type * as Y from "yjs";
-import { type CitationStyleId, DEFAULT_CITATION_STYLE, isCitationStyleId } from "./citationStyles";
+import { type CitationStyleId, isCitationStyleId } from "./citationStyles";
 
 const STYLE_KEY = "citationStyle";
 /** The User's "not for this Mind" to the prompt that offers a style (`CitationStylePrompt`). */
@@ -17,9 +17,12 @@ export function chosenCitationStyle(settings: Y.Map<unknown>): CitationStyleId |
   return isCitationStyleId(value) ? value : null;
 }
 
-/** The style the Mind's Citations and Bibliography are in. */
-export function citationStyleIn(settings: Y.Map<unknown>): CitationStyleId {
-  return chosenCitationStyle(settings) ?? DEFAULT_CITATION_STYLE;
+/** The style the Mind's Citations and Bibliography are in: its choice, else `fallback`. */
+export function citationStyleIn(
+  settings: Y.Map<unknown>,
+  fallback: CitationStyleId,
+): CitationStyleId {
+  return chosenCitationStyle(settings) ?? fallback;
 }
 
 /** Chooses a style for the Mind; null forgets the choice, so it follows the default again. */

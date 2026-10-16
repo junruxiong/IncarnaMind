@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 import * as Y from "yjs";
-import { isCitationStyleId } from "../shared/citationStyles";
+import { defaultCitationStyle, isCitationStyleId } from "../shared/citationStyles";
 import type { DrawnPage } from "../shared/citedPage";
 import { translate } from "../shared/i18n";
 import { bibliographyShown } from "../shared/mindBibliography";
@@ -93,6 +93,7 @@ import { createVersionRetention, type VersionRetention } from "./documents/reten
 import { BUILT_IN_TEXT_RECOGNITION_MODEL, createTextRecognitionModel } from "./documents/scan";
 import type { WindowedPassage } from "./documents/search";
 import { tunedSearch } from "./documents/searchTuning";
+import { LANGUAGE_SAMPLE, writtenInChinese } from "./documents/textLanguage";
 import { findUnreadDocuments } from "./documents/unread";
 import { createViewing } from "./documents/viewing";
 import { fsWatchFolder } from "./documents/watcher";
@@ -139,7 +140,7 @@ import {
   parseIds,
   parseMindId,
 } from "./minds";
-import { firstLineOf, readBlocks, theirChangesReading } from "./mindText";
+import { firstLineOf, readBlocks, textStart, theirChangesReading } from "./mindText";
 import { createNoteAdding, insertBlocks } from "./noteAdding";
 import { createOutputFiles } from "./outputFiles";
 import { createPrivacy, type NetworkTrafficRegistry } from "./privacy";
@@ -1425,8 +1426,12 @@ export function createCore(adapters: CoreAdapters): Core {
   });
   const mindCitationStyle = (mindId: string): MindCitationStyle => {
     const { folderId } = minds.get(mindId);
+    const chineseText = content.read(mindId, (blocks) =>
+      writtenInChinese(textStart(blocks, LANGUAGE_SAMPLE)),
+    );
+    const fallback = defaultCitationStyle(settings.get().language, chineseText);
     return content.readSettings(mindId, (mindSettings) => ({
-      style: citationStyleIn(mindSettings),
+      style: citationStyleIn(mindSettings, fallback),
       chosen: chosenCitationStyle(mindSettings) !== null,
       folderDefault: folderId === null ? null : library.citationStyle(folderId),
     }));

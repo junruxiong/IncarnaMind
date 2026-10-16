@@ -6426,6 +6426,11 @@ export interface MindExport extends MindExportPreview {
   sentenceChecks: SentenceChecksExported;
   /** Changes still waiting that a Word file holds as tracked changes. */
   trackedChanges: number;
+  /**
+   * The Documents whose Bibliography entries are too thin to cite (`BibliographyEntry.needsDetails`),
+   * each marked so in the file. None in Numbered, which lists Documents by name.
+   */
+  needsDetails: string[];
 }
 
 /** What `saveMindExport` did. */
@@ -6435,7 +6440,7 @@ export type SavedMindExport =
       MindExportPreview,
       "fileName" | "fromWord" | "theirChanges"
     > &
-      Pick<MindExport, "sentenceChecks" | "trackedChanges">)
+      Pick<MindExport, "sentenceChecks" | "trackedChanges" | "needsDetails">)
   /**
    * Not saved: a Mind imported from Word can't keep something in its file
    * (`WordExportReport.notKept`) the User hasn't accepted (`ExportMindOptions.accept`).
