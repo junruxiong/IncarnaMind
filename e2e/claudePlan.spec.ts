@@ -90,23 +90,26 @@ test("first run: the row is first under Other ways, says the usage limits first 
     await expect(ways.first()).toHaveAttribute("data-testid", "way-claude");
     const row = card.getByTestId("way-claude");
     await expect(row.getByText("Use my Claude plan", { exact: true })).toBeVisible();
-    await expect(
-      row.getByText("Pro, Max or Team · Sign in with your Claude account", { exact: true }),
-    ).toBeVisible();
+    await expect(row.getByText("Pro, Max or Team", { exact: true })).toBeVisible();
     await expect(row.getByTestId("claude-plan-notice")).toHaveCount(0);
 
     await row.getByTestId("way-claude-open").click();
     const notice = row.getByTestId("claude-plan-notice");
-    const lines = notice.getByRole("listitem");
-    await expect(lines).toHaveCount(3);
-    await expect(lines.first()).toHaveText(USAGE);
-    await expect(lines.first()).toHaveCSS("font-weight", "600");
-    await expect(lines.nth(1)).toHaveCSS("font-weight", "400");
+    // Two lines, the usage limits first and in weight 600, then what goes to Anthropic.
+    const usage = notice.getByTestId("claude-plan-usage");
+    const sends = notice.getByTestId("claude-plan-sends");
+    await expect(usage).toHaveText(USAGE);
+    await expect(usage).toHaveCSS("font-weight", "600");
+    await expect(sends).toHaveText("Sends your questions and document text to Anthropic.");
+    await expect(sends).toHaveCSS("font-weight", "400");
+    const [usageBox, sendsBox] = await Promise.all([usage.boundingBox(), sends.boundingBox()]);
+    expect(usageBox?.y ?? 0).toBeLessThan(sendsBox?.y ?? 0);
     await expect(notice).not.toContainText("Claude Code");
+    await expect(notice).not.toContainText("stays off");
     // The safe choice has the focus, and nothing has been sent.
     await expect(notice.getByTestId("claude-plan-cancel")).toBeFocused();
     expect(await urlsOpened(app)).toHaveLength(0);
-    await expectInside(card, [lines.first(), lines.nth(1), lines.nth(2)]);
+    await expectInside(card, [usage, sends]);
 
     await notice.getByTestId("claude-plan-cancel").click();
     await expect(notice).toBeHidden();
@@ -179,9 +182,7 @@ test("Settings: Cancel keeps nothing; signed in, the row names the account and S
     await acceptPlainTextKeys(window);
     const settings = await openSettings(window, "models");
     const row = settings.getByTestId("plans-claude-account");
-    await expect(row.getByTestId("claude-plan-account")).toHaveText(
-      `Sign in with your Claude account. ${USAGE}`,
-    );
+    await expect(row.getByTestId("claude-plan-account")).toHaveText(USAGE);
 
     await row.getByTestId("plans-claude-sign-in").click();
     await expect(row.getByTestId("claude-plan-usage")).toHaveCSS("font-weight", "600");
@@ -311,12 +312,16 @@ test("in Chinese: the row is first under Other ways too and a model on this comp
 
     const row = card.getByTestId("way-claude");
     await expect(row).toContainText("使用我的 Claude 订阅");
+    await expect(row).toContainText("Pro、Max 或 Team");
     await row.getByTestId("way-claude-open").click();
-    const lines = row.getByTestId("claude-plan-notice").getByRole("listitem");
-    await expect(lines.first()).toHaveText("回答会计入你 Claude 订阅的用量限额。");
-    await expect(lines.first()).toHaveCSS("font-weight", "600");
+    const notice = row.getByTestId("claude-plan-notice");
+    const usage = notice.getByTestId("claude-plan-usage");
+    const sends = notice.getByTestId("claude-plan-sends");
+    await expect(usage).toHaveText("回答会计入你 Claude 订阅的用量限额。");
+    await expect(usage).toHaveCSS("font-weight", "600");
+    await expect(sends).toHaveText("会把你的问题和文档内容发送给 Anthropic。");
     await expect(row.getByTestId("claude-plan-sign-in")).toHaveText("用 Claude 账号登录");
-    await expectInside(card, [lines.first(), lines.nth(1), lines.nth(2)]);
+    await expectInside(card, [usage, sends]);
     await row.getByTestId("claude-plan-sign-in").click();
     await expect(row.getByLabel("Claude 页面上的代码")).toBeFocused();
     await expect(row.getByTestId("claude-paste-continue")).toHaveText("完成登录");
