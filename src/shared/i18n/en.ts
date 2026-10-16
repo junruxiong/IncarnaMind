@@ -98,8 +98,10 @@ export const en = {
   "library.inside.failed": "The words inside Documents couldn't be searched: {reason}",
   "library.inside.retry": "Try again",
   "library.classify": "Organize",
-  "library.progress": "Organizing {count} Documents…",
-  "library.progressWith": "Organizing {count} Documents with {service}…",
+  "library.progress.one": "Organizing 1 Document…",
+  "library.progress.other": "Organizing {count} Documents…",
+  "library.progressWith.one": "Organizing 1 Document with {service}…",
+  "library.progressWith.other": "Organizing {count} Documents with {service}…",
   "library.waiting":
     "{count} Documents need text, a model or permission. Open their details to check.",
   "library.count": "{count} Documents",

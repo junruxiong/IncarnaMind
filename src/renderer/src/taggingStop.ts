@@ -17,12 +17,20 @@ function placeOf(library: LibrarySnapshot | null, documentId: string): TaggingPl
   return groupId && library?.groups.some((group) => group.id === groupId) ? groupId : null;
 }
 
+// Organize may have queued a changed Document whose Tags are otherwise up to date.
 export function taggingPlaces(
   documents: readonly Document[],
   library: LibrarySnapshot | null,
 ): TaggingPlace[] {
+  const organizing = new Set(
+    (library?.assignments ?? []).flatMap((each) =>
+      each.status === "pending" || each.status === "classifying" ? [each.documentId] : [],
+    ),
+  );
   const tagging = documents.filter(
-    (each) => each.status === "ready" && (each.tagging === "pending" || each.tagging === "tagging"),
+    (each) =>
+      (each.status === "ready" && (each.tagging === "pending" || each.tagging === "tagging")) ||
+      organizing.has(each.id),
   );
   return [...new Set(tagging.map((each) => placeOf(library, each.id)))];
 }
