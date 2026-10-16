@@ -11,6 +11,7 @@ import { join, resolve } from "node:path";
 import { test } from "vitest";
 import * as Y from "yjs";
 import {
+  type AnswerUsage,
   BLOCK_ID_ATTRIBUTE,
   CITATION_NODE,
   type ConversationAnswer,
@@ -100,6 +101,8 @@ interface CaseResult {
   changes: { block: number; before: string; after: string }[];
   seconds: number;
   error: string | null;
+  /** The Answers' tokens, its earlier requests' included (not Edit with AI's or the judge's). */
+  usage: AnswerUsage;
 }
 
 /** Asks in the assistant and resolves with the Answer as stored once it has ended. */
@@ -193,6 +196,18 @@ async function runCase(
 ): Promise<CaseResult> {
   const { core } = library;
   const started = Date.now();
+  const usage: AnswerUsage = {
+    inputTokens: 0,
+    outputTokens: 0,
+    cachedInputTokens: 0,
+    cacheWriteTokens: 0,
+  };
+  const counting = core.on("answer.finished", (event) => {
+    usage.inputTokens += event.usage.inputTokens;
+    usage.outputTokens += event.usage.outputTokens;
+    usage.cachedInputTokens += event.usage.cachedInputTokens;
+    usage.cacheWriteTokens += event.usage.cacheWriteTokens;
+  });
   const mind = each.mind ? await core.createMind({ title: each.mind.title }) : null;
   const client = mind ? await connectToMind(core, mind.id) : null;
   if (client && each.mind) {
@@ -232,6 +247,7 @@ async function runCase(
     conversationId,
     focus,
   });
+  counting();
   const minds = await core.listMinds();
   const names = (id: string) => minds.find((each) => each.id === id)?.title ?? null;
   const record = toolRecordLines(answer.toolCalls, names);
@@ -278,6 +294,7 @@ async function runCase(
     changes,
     seconds: (Date.now() - started) / 1000,
     error: answer.status === "failed" ? `${answer.errorKind}: ${answer.errorMessage}` : null,
+    usage,
   };
 }
 
@@ -348,6 +365,7 @@ async function runModel(
             changes: [],
             seconds: 0,
             error: error instanceof Error ? error.message : String(error),
+            usage: { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, cacheWriteTokens: 0 },
           };
         }
         log(
@@ -381,10 +399,14 @@ function report(
   }));
   const percent = (passed: number, total: number) => `${Math.round((100 * passed) / total)}%`;
   const under = rows.filter((row) => row.under);
+  const sum = (key: keyof AnswerUsage) =>
+    results.reduce((total, each) => total + each.usage[key], 0).toLocaleString("en");
   return [
     "# Everyday requests",
     "",
     `${rows.length - under.length} of ${rows.length} requests at or above their floor; ${runs.filter((run) => run.passed).length} of ${runs.length} runs passed. Claims judged by ${judge}.`,
+    "",
+    `The Answers' tokens: ${sum("inputTokens")} in (${sum("cachedInputTokens")} of them from the cache), ${sum("outputTokens")} out. Edit with AI's and the judge's aren't counted.`,
     "",
     "## By language",
     "",
