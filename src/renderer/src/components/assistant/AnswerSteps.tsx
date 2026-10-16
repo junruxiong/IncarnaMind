@@ -41,6 +41,7 @@ import {
   SparkLineIcon,
 } from "../lineIcons";
 import { ProblemLine } from "../ProblemLine";
+import { AnswerWait } from "./AnswerWait";
 import { mindCallText, namedMind } from "./MindCall";
 
 /** The least time a live step stays up while another replaces it, so the line never flickers. */
@@ -59,12 +60,14 @@ export function AnswerSteps({
   question,
   streaming,
   waitingForApproval,
+  wait,
   onRegenerate,
 }: {
   answer: ConversationAnswer;
   question: ConversationQuestion | undefined;
   streaming: boolean;
   waitingForApproval: boolean;
+  wait: { usual: number | null } | null;
   onRegenerate(): void;
 }) {
   const t = useT();
@@ -78,11 +81,14 @@ export function AnswerSteps({
   if (streaming && open) setOpen(false);
   if (streaming) {
     return (
-      <LiveLine
-        step={liveStep({ answer, phase, waitingForApproval })}
-        scope={scopeOf(0)}
-        askedFrom={askedFrom}
-      />
+      <>
+        <LiveLine
+          step={liveStep({ answer, phase, waitingForApproval })}
+          scope={scopeOf(0)}
+          askedFrom={askedFrom}
+        />
+        {wait && <AnswerWait answer={answer} usual={wait.usual} />}
+      </>
     );
   }
   const line = foldedLine({ answer, askedFrom, meeting, selection });
@@ -214,6 +220,8 @@ function liveText(
       return t("steps.live.searching", { scope });
     case "call":
       return runningText(t, step.call, mindOf);
+    case "thinking":
+      return t("steps.live.thinking");
     case "writing":
       return t("answer.phase.writing");
     case "checking":
