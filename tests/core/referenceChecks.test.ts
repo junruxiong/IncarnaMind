@@ -206,8 +206,8 @@ describe("Checking a reference list (#711)", { timeout: 30_000 }, () => {
     });
   });
 
-  // protects=starting the check is the consent (ADR-0022): no dialog, and Settings › Privacy lists it as chosen; fails_when=a dialog opens or nothing is listed; no_claim=the line by the action, which the e2e covers.
-  test("starting it is the consent: nothing asks, and Privacy lists it", async () => {
+  // protects=starting the check is the consent (ADR-0022): no dialog, and Settings › Privacy lists it as chosen for each of Crossref, OpenAlex and arXiv; fails_when=a dialog opens, or a service a reference may go to isn't listed; no_claim=the line by the action, which the e2e covers.
+  test("starting it is the consent: nothing asks, and Privacy lists every service", async () => {
     const { core, mindId } = await setUp([REAL]);
     const asked: string[] = [];
     core.on("consent.requested", (request) => asked.push(request.flow.id));
@@ -215,13 +215,21 @@ describe("Checking a reference list (#711)", { timeout: 30_000 }, () => {
     await core.checkReferences(mindId);
 
     expect(asked).toEqual([]);
-    expect(await core.listDataFlows()).toContainEqual(
-      expect.objectContaining({
-        flow: expect.objectContaining({ id: "reference-check", sends: ["references"] }),
+    const listed = (await core.listDataFlows()).filter(
+      (status) => status.flow.id === "reference-check",
+    );
+    expect(listed.map((status) => status.flow.service.name).sort()).toEqual([
+      "Crossref",
+      "OpenAlex",
+      "arXiv",
+    ]);
+    for (const status of listed) {
+      expect(status).toMatchObject({
+        flow: { sends: ["references"] },
         consent: "accepted",
         chosen: true,
-      }),
-    );
+      });
+    }
   });
 
   // protects=local mode sends nothing and says so for each entry; fails_when=a request is made; no_claim=none beyond protects.

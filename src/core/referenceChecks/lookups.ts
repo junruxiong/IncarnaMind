@@ -1,6 +1,6 @@
 /**
  * The services a reference is looked up in (#711): Crossref first; OpenAlex
- * when Crossref has no record of it, which holds many conference papers and
+ * when Crossref has no record of it or one that differs, which holds many conference papers and
  * preprints Crossref doesn't; arXiv for a reference given by its arXiv
  * number. Each on the lane Find sources uses for it, at the pace its terms
  * ask, with no key and no contact address (ADR-0018).
