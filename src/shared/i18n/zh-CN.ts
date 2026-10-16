@@ -1583,7 +1583,7 @@ export const zhCN = {
   "providers.form.getKey": "获取密钥",
   "providers.form.planCredits": "了解更多",
   "providers.form.dataUse": "数据使用：{summary}",
-  "providers.form.terms": "条款",
+  "providers.form.dataUseLink": "数据使用",
   "providers.form.details": "详情",
   "providers.form.keyPage": "打开{provider}的密钥页面",
   "providers.form.modelsAndPrices": "模型和价格",

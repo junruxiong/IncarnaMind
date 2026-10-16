@@ -1660,7 +1660,7 @@ export const en = {
   "providers.form.getKey": "Get a key",
   "providers.form.planCredits": "Learn more",
   "providers.form.dataUse": "{summary}",
-  "providers.form.terms": "Terms",
+  "providers.form.dataUseLink": "Data use",
   "providers.form.details": "Details",
   "providers.form.keyPage": "Open {provider}'s key page",
   "providers.form.modelsAndPrices": "Models and prices",

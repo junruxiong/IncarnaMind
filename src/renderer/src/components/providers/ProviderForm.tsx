@@ -664,7 +664,7 @@ export function ProviderSendsLine({ provider, dataUse }: { provider: string; dat
   const words = language === "zh-CN" ? "zh" : "en";
   const sends = t("providers.sends", { provider });
   const summary = dataUse && t("providers.form.dataUse", { summary: dataUse.summary[words] });
-  const terms = `${t("providers.form.terms")} ↗`;
+  const link = `${t("providers.form.dataUseLink")} ↗`;
   return (
     <div className="flex flex-col">
       <p data-testid="provider-sends" className={hintClass}>
@@ -675,9 +675,9 @@ export function ProviderSendsLine({ provider, dataUse }: { provider: string; dat
           {summary}
           {dataUse?.url && (
             <>
-              {gap(language, summary, terms)}
+              {gap(language, summary, link)}
               <a href={dataUse.url} target="_blank" rel="noreferrer" className="underline">
-                {terms}
+                {link}
               </a>
             </>
           )}
