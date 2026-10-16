@@ -50,6 +50,7 @@ import type {
 } from "../api";
 import { CLAIMED_CHANGES } from "../api";
 import { InvalidInputError, isRecord, NotFoundError } from "../errors";
+import { isSignInRouteProblem } from "../providers/signInRoutes";
 import { parseSearchScope } from "../scope";
 import { isChatModelChoice } from "../settings";
 import type { Database, SqlValue } from "../storage";
@@ -121,6 +122,7 @@ interface MessageRow {
   status: string | null;
   error_kind: string | null;
   error_message: string | null;
+  error_sign_in_route: string | null;
   citation_support: string | null;
   citations: string;
   figures: string;
@@ -339,6 +341,10 @@ function toAnswer(row: MessageRow): ConversationAnswer {
     errorKind:
       status !== "failed" ? null : isErrorKind(row.error_kind) ? row.error_kind : "unknown",
     errorMessage: status === "failed" ? row.error_message : null,
+    errorSignInRoute:
+      status === "failed" && isSignInRouteProblem(row.error_sign_in_route)
+        ? row.error_sign_in_route
+        : null,
     citationSupport: SUPPORTS.find((each) => each === row.citation_support) ?? null,
     toolCalls: storedList<AnswerToolCall>(row.tool_calls),
     textOrigin: parseThirdPartySource(row.text_origin),
@@ -795,7 +801,7 @@ export function createConversations(db: Database, now: () => string) {
         db.run(
           `UPDATE conversation_messages SET text = '', citations = '[]', figures = '[]', tool_calls = '[]',
              status = 'streaming', error_kind = NULL, error_message = NULL,
-             citation_support = NULL, text_origin = NULL, steps = NULL, provider_id = ?,
+             error_sign_in_route = NULL, citation_support = NULL, text_origin = NULL, steps = NULL, provider_id = ?,
              model_id = ?, read_mind_id = ?, read_mind_version = ?, read_partial = ?,
              updated_at = ?
            WHERE id = ?`,
@@ -825,7 +831,7 @@ export function createConversations(db: Database, now: () => string) {
           `UPDATE conversation_messages SET text = ?, citations = ?, figures = ?, tool_calls = ?,
              citation_support = ?, text_origin = ?, read_mind_id = ?, read_mind_version = ?,
              read_partial = ?, steps = ?, status = ?, error_kind = ?, error_message = ?,
-             updated_at = ?
+             error_sign_in_route = ?, updated_at = ?
            WHERE id = ?`,
           [
             write.text,
@@ -839,6 +845,7 @@ export function createConversations(db: Database, now: () => string) {
             outcome?.status ?? "streaming",
             outcome?.error?.kind ?? null,
             outcome?.error?.message ?? null,
+            outcome?.error?.signInRoute ?? null,
             now(),
             answerId,
           ],

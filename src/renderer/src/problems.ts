@@ -1,5 +1,6 @@
 import type { ChatProviderKind, ProviderErrorKind } from "../../core/api";
 import { OLLAMA_USAGE_URL } from "../../core/providers/catalog/billing";
+import { isSignInRoute } from "../../core/providers/signInRoutes";
 import type { MessageKey } from "../../shared/i18n";
 import { CHATGPT_USAGE_URL } from "./chatGptUsage";
 import type { SettingsPage } from "./settingsPages";
@@ -82,11 +83,27 @@ export const ANSWER_PROBLEMS: Record<ProviderErrorKind, AnswerProblem> = {
   },
 };
 
-/** A failed Answer's problem, for the provider that wrote it: an Ollama Cloud allowance is Ollama's to manage. */
+/** The ChatGPT plan's own problems, whose lines name ChatGPT and whose fixes are OpenAI's. */
+const CHATGPT_ONLY: ReadonlySet<ProviderErrorKind> = new Set([
+  "not-signed-in",
+  "plan-limit",
+  "blocked",
+]);
+
+/**
+ * A failed Answer's problem, for the provider that wrote it: an Ollama Cloud allowance is Ollama's
+ * to manage, and a sign-in route without its own words never gets ChatGPT's.
+ */
 export function answerProblem(
   kind: ProviderErrorKind,
   provider: ChatProviderKind | undefined,
 ): AnswerProblem {
+  if (isSignInRoute(provider) && CHATGPT_ONLY.has(kind)) {
+    return {
+      line: "answer.error.provider",
+      fix: { kind: "settings", page: "models", label: "answer.error.chooseModel" },
+    };
+  }
   if (kind === "plan-limit" && provider === "ollama") {
     return {
       line: "answer.error.plan-limit.ollama",

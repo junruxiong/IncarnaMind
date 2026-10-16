@@ -293,6 +293,7 @@ export function NoteHealth({
           modelId={runModel.modelId}
           providerId={runModel.providerId}
           resetsAt={problem.error.resetsAt ?? null}
+          signInRoute={problem.error.signInRoute ?? null}
           details={problem.error.message}
           onRetry={() =>
             void checkMind(mindId, problem.mode, { allDocuments: problem.allDocuments })

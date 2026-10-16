@@ -1,9 +1,11 @@
 import type { ChatReadiness } from "../../../../core/api";
+import { isSignInRoute } from "../../../../core/providers/signInRoutes";
 import { signInAgain } from "../../chatGptSignIn";
 import { useLanguage, useT } from "../../i18n";
 import { turnOffLocalMode } from "../../localMode";
 import { useModelSetup } from "../../modelSetup";
 import { useRequests } from "../../requests";
+import { signInToRoute } from "../../routeSignIn";
 import type { SettingsPage } from "../../settingsPages";
 import { useAppStore } from "../../store";
 import { ProblemLine } from "../ProblemLine";
@@ -16,7 +18,7 @@ export const settingsPageFor = (
 
 /**
  * The one action that fixes `readiness`, labelled `label` (its Settings page
- * by default): for an ended ChatGPT sign-in, "Sign in again", right there;
+ * by default): for an ended sign-in, "Sign in again" with its own provider;
  * else opening the Settings page that fixes it. `before` runs first, e.g. to
  * dismiss the problem.
  */
@@ -28,11 +30,13 @@ export function readinessAction(
   before?: () => void,
 ): { label: string; onClick(): void } {
   if (readiness.reason === "sign-in-required") {
+    const { kind } = readiness.provider;
     return {
-      label: t("chatgpt.signInAgain"),
+      label: t(isSignInRoute(kind) ? "signInRoute.wayBack.signInAgain" : "chatgpt.signInAgain"),
       onClick: () => {
         before?.();
-        void signInAgain(openSettings);
+        if (isSignInRoute(kind)) void signInToRoute(kind);
+        else void signInAgain(openSettings);
       },
     };
   }
@@ -59,7 +63,7 @@ export function ReadinessExplanation({
   const t = useT();
   const language = useLanguage();
   const service = "provider" in readiness ? serviceName(readiness.provider, t, language) : "";
-  const words = t(readinessKey(readiness.reason), { service });
+  const words = t(readinessKey(readiness), { service });
   return <>{inLine ? words.replace(/[.。]$/, "") : words}</>;
 }
 

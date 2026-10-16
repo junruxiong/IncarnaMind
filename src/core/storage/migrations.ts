@@ -1730,6 +1730,15 @@ export const migrations: readonly Migration[] = [
         CHECK (origin IN ('user', 'search'));
     `,
   },
+  {
+    version: 97,
+    description: "A failed Answer keeps which of its sign-in route's problems stopped it",
+    // A Claude account's or a Copilot plan's own problem (SignInRouteProblem, checked in code), so
+    // its line and ways back are the route's after a restart; NULL for any other failure.
+    sql: `
+      ALTER TABLE conversation_messages ADD COLUMN error_sign_in_route TEXT;
+    `,
+  },
 ];
 
 /**
