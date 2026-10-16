@@ -202,7 +202,9 @@ export function ReferencesLine({ editor, mindId }: { editor: Editor; mindId: str
           onClick: () => void turnOffLocalMode(),
         }}
       >
-        {t("references.localMode", { count: format(count) })}
+        {t(count === 1 ? "references.localMode.one" : "references.localMode", {
+          count: format(count),
+        })}
       </ProblemLine>
     );
   }
@@ -210,7 +212,9 @@ export function ReferencesLine({ editor, mindId }: { editor: Editor; mindId: str
   return (
     <>
       <div className="mind-verify" data-testid="references-line">
-        <span data-testid="references-sends">{t("references.ask", { count: format(count) })}</span>
+        <span data-testid="references-sends">
+          {t(count === 1 ? "references.ask.one" : "references.ask", { count: format(count) })}
+        </span>
         <button
           type="button"
           data-testid="references-check"

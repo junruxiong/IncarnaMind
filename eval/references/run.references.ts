@@ -3,12 +3,12 @@
  * OpenAlex, arXiv): each of the 50 references in references.json checked as
  * the app checks one, and its mark compared with what it should be. An
  * invented reference ("expected": "not-found") is caught when it is marked
- * "not-found" (red: its DOI or arXiv number leads nowhere) or "not-listed"
- * (amber: nothing like it in Crossref or OpenAlex). Reports
- * precision (of the references marked so, how many should be) and recall (of
- * those that should be, how many are) for those two together, for red alone
- * and for "doesn't match", and every reference marked otherwise than
- * expected. Writes eval/results/<time>-references.md.
+ * "not-found" (its DOI or arXiv number leads nowhere) or "not-listed"
+ * (nothing like it in Crossref or OpenAlex). Reports precision (of the
+ * references marked so, how many should be) and recall (of those that should
+ * be, how many are) for those two together, for "not-found" alone and for
+ * "doesn't match", and every reference marked otherwise than expected.
+ * Writes eval/results/<time>-references.md.
  */
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -76,7 +76,7 @@ test("references against Crossref, OpenAlex and arXiv", async () => {
   ];
   const rows: [string, Expected["expected"], ReadonlySet<ReferenceCheckMark>][] = [
     ["Not found or not listed", "not-found", MISSING],
-    ["Not found (red) alone", "not-found", new Set(["not-found"])],
+    ["Not found alone", "not-found", new Set(["not-found"])],
     ["Doesn't match", "mismatch", new Set(["mismatch"])],
   ];
   for (const [label, expected, marks] of rows) {

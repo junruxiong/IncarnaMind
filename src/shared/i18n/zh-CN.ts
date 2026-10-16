@@ -688,6 +688,8 @@ export const zhCN = {
   "verify.tryAgain": "重试",
   "references.ask":
     "在 Crossref 中查找列表里的 {count} 条参考文献，必要时再查 OpenAlex 或 arXiv，只发送每条参考文献的原文。",
+  "references.ask.one":
+    "在 Crossref 中查找列表里的这条参考文献，必要时再查 OpenAlex 或 arXiv，只发送这条参考文献的原文。",
   "references.check": "核对参考文献",
   "references.checking": "正在核对参考文献：{done}/{total}…",
   "references.checked": "已核对 {count} 条参考文献",
@@ -725,6 +727,7 @@ export const zhCN = {
   "references.difference.title": "{service} 记录的标题：{found}",
   "references.difference.authors": "{service} 记录的作者：{found}",
   "references.localMode": "已开启“所有内容都留在这台电脑上”，无法查找这 {count} 条参考文献。",
+  "references.localMode.one": "已开启“所有内容都留在这台电脑上”，无法查找这条参考文献。",
   "references.localMode.turnOff": "关闭",
   "references.problem": "无法核对参考文献：{message}",
   "consent.flow.checks": "查找出处与核对文档",

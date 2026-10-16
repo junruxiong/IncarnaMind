@@ -1,10 +1,10 @@
 /**
- * One reference checked (#711). By its DOI (or arXiv number) in Crossref
- * when it gives one, and in OpenAlex when Crossref has no record of it; a
- * preprint neither has, on arXiv. Else by Crossref's matching of the
- * reference as written, and, when Crossref has no record of it or only one
- * that differs from it, by its title in OpenAlex, keeping the record that
- * differs least (Crossref's on a tie).
+ * One reference checked (#711). By its DOI (or arXiv number) in Crossref,
+ * then OpenAlex and, for a preprint, arXiv, until a record is the work as
+ * cited, else keeping the record that differs least. Without either, by
+ * Crossref's matching of the reference as written, and, when Crossref has no
+ * record of it or only one that differs from it, by its title in OpenAlex,
+ * keeping the record that differs least (Crossref's on a tie).
  *
  * It is found (the work exists, as written), doesn't match (a record exists,
  * but its title, year or first author differ), isn't found (its DOI or arXiv
@@ -125,6 +125,13 @@ function bestOf(
   return best?.check ?? null;
 }
 
+/** Of several checks of a reference, the one that differs least; the first on a tie. */
+const fewestDifferences = (checks: readonly ReferenceCheck[]): ReferenceCheck | null =>
+  checks.reduce<ReferenceCheck | null>(
+    (best, check) => (!best || check.differences.length < best.differences.length ? check : best),
+    null,
+  );
+
 /** Checks one reference; throws `ServiceFailure` when a service it needs can't be asked. */
 export async function checkReference(
   cited: CitedReference,
@@ -147,22 +154,43 @@ export async function checkReference(
   // arXiv's own DOI, which DataCite registers for every preprint, so Crossref holds none.
   const doi = cited.doi ?? (cited.arxiv ? `10.48550/arXiv.${cited.arxiv}` : null);
   if (doi) {
-    if (cited.doi) {
-      const record = await ask(run, "crossref", signal, () => crossref.byDoi(doi, signal));
-      if (record) return compared(cited, record, "crossref");
+    // Each record the identifier leads to, until one is the work as cited; else the closest.
+    const checks: ReferenceCheck[] = [];
+    const lookUp = async (
+      service: ReferenceService,
+      call: () => Promise<WorkRecord | null>,
+    ): Promise<ReferenceCheck | null> => {
+      let record: WorkRecord | null;
+      try {
+        record = await ask(run, service, signal, call);
+      } catch (error) {
+        if (checks.length > 0 && error instanceof ServiceFailure) return null;
+        throw error;
+      }
+      if (!record) return null;
+      const check = compared(cited, record, service);
+      checks.push(check);
+      return check.mark === "found" ? check : null;
+    };
+    const found = cited.doi && (await lookUp("crossref", () => crossref.byDoi(doi, signal)));
+    if (found) return found;
+    if (checks.length === 0) {
+      // Crossref says which agency registered a DOI, any agency's: none, and it leads nowhere.
+      const agency = await ask(run, "crossref", signal, () => crossref.agency(doi, signal));
+      if (agency === null) return unmatched("not-found", "crossref");
     }
-    // Crossref says which agency registered a DOI, any agency's: none, and it leads nowhere.
-    const agency = await ask(run, "crossref", signal, () => crossref.agency(doi, signal));
-    if (agency === null) return unmatched("not-found", "crossref");
-    const inOpenAlex = await ask(run, "openalex", signal, () => openalex.byDoi(doi, signal));
-    if (inOpenAlex) return compared(cited, inOpenAlex, "openalex");
+    const inOpenAlex = await lookUp("openalex", () => openalex.byDoi(doi, signal));
+    if (inOpenAlex) return inOpenAlex;
     const { arxiv: id } = cited;
-    if (id) {
-      // Asked only about a number that exists: arXiv's API can hang on one that doesn't.
-      const onArxiv = await ask(run, "arxiv", signal, () => arxiv.byId(id, signal));
-      if (onArxiv) return compared(cited, onArxiv, "arxiv");
-    }
-    return { ...unmatched("not-checked", null), reason: "registered-elsewhere" };
+    // Asked only about a number that exists: arXiv's API can hang on one that doesn't.
+    const onArxiv = id && (await lookUp("arxiv", () => arxiv.byId(id, signal)));
+    if (onArxiv) return onArxiv;
+    return (
+      fewestDifferences(checks) ?? {
+        ...unmatched("not-checked", null),
+        reason: "registered-elsewhere",
+      }
+    );
   }
 
   const inCrossref = bestOf(

@@ -717,6 +717,8 @@ export const en = {
   "verify.tryAgain": "Try again",
   "references.ask":
     "Looks up the list's {count} references in Crossref, then OpenAlex or arXiv if needed, sending only each reference as written.",
+  "references.ask.one":
+    "Looks up the list's reference in Crossref, then OpenAlex or arXiv if needed, sending only the reference as written.",
   "references.check": "Check references",
   "references.checking": "Checking {done} of {total} references…",
   "references.checked": "Checked {count} references",
@@ -755,6 +757,8 @@ export const en = {
   "references.difference.authors": "Authors in {service}: {found}",
   "references.localMode":
     "The {count} references can't be looked up while “Keep everything on this computer” is on.",
+  "references.localMode.one":
+    "The reference can't be looked up while “Keep everything on this computer” is on.",
   "references.localMode.turnOff": "Turn it off",
   "references.problem": "The references couldn't be checked: {message}",
   "consent.flow.checks": "Find support and Verify",
