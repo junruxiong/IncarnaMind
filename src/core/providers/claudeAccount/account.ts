@@ -24,7 +24,7 @@ import {
   revokeRefreshToken,
 } from "../../oauthAccount";
 import type { Secrets } from "../../secrets";
-import { ClaudeAccountError } from "../providerErrors";
+import { SignInRouteError } from "../providerErrors";
 import type { AnthropicOAuthConfig } from "./config";
 
 const ACCOUNT_SECRET = "claude:account";
@@ -107,7 +107,7 @@ export function createClaudeAccount(options: {
     now: options.now,
     renew(_stored, refreshToken, signal) {
       if (!config)
-        throw new ClaudeAccountError("signed-out", "This build doesn't offer Claude sign-in.");
+        throw new SignInRouteError("signed-out", "This build doesn't offer Claude sign-in.");
       return refreshOAuthTokens({
         tokenUrl: config.tokenUrl,
         clientId: config.clientId,
@@ -131,8 +131,8 @@ export function createClaudeAccount(options: {
     forgetOnSignOut: (stored) => ({ ...stored, email: null, organization: null }),
     signInRequired: (reason) =>
       reason === "expired"
-        ? new ClaudeAccountError("sign-in-expired", "Your Claude sign-in expired. Sign in again.")
-        : new ClaudeAccountError("signed-out", "Sign in with your Claude account first."),
+        ? new SignInRouteError("sign-in-expired", "Your Claude sign-in expired. Sign in again.")
+        : new SignInRouteError("signed-out", "Sign in with your Claude account first."),
     onChange: options.onChange,
     ...fetcher,
   });
@@ -170,8 +170,8 @@ export function createClaudeAccount(options: {
         };
       }
       try {
-        await account.signIn(async (authorize) => {
-          const tokens = await authorize({
+        await account.signIn(async (flows) => {
+          const tokens = await flows.browser({
             authorizeUrl: config.authorizeUrl,
             tokenUrl: config.tokenUrl,
             clientId: config.clientId,

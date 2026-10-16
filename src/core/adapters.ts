@@ -12,6 +12,7 @@ import type { AgentLauncher } from "./agents";
 import type { AnswerEngine } from "./answers/engine";
 import type {
   AudioSource,
+  CopilotProfileId,
   EngineSwitchReason,
   ExternalService,
   SandboxLevel,
@@ -27,6 +28,7 @@ import type { FetchLimits, PageFetch } from "./documents/web/fetch";
 import type { PictureLimits } from "./documents/web/pictures";
 import type { ChatGptPlanEndpoints } from "./providers/chatgpt/plan";
 import type { AnthropicOAuthConfig } from "./providers/claudeAccount/config";
+import type { CopilotProfile } from "./providers/copilot/config";
 import type { EmbeddingModelFactory } from "./providers/embeddings";
 import type { LocalServers } from "./providers/localServers";
 import type { ChatModelFactory } from "./providers/models";
@@ -845,6 +847,11 @@ export interface CoreAdapters {
   chatGptPlan?: Partial<ChatGptPlanEndpoints>;
   /** In place of this build's Claude account profile: tests point it at a local fake. */
   claudeAccount?: AnthropicOAuthConfig;
+  /**
+   * The Copilot route's ways to sign in, in place of the ones this build has
+   * (./providers/copilot/config); tests point them at a local fake of GitHub.
+   */
+  copilotProfiles?: Partial<Record<CopilotProfileId, CopilotProfile>>;
   /**
    * Where the ChatGPT sign-in is kept instead of `keychain`: a store that
    * several data folders on this computer share, and a lock file that keeps
