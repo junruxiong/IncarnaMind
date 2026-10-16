@@ -49,6 +49,19 @@ describe("An edit the User asked for (#880)", () => {
     ["不要删除任何段落", false],
     ["别删第二段", false],
     ["保留所有段落，删掉多余的词", false],
+    ["Make this into a table", true],
+    ["Make it a table", true],
+    ["Turn the list into a table", true],
+    ["Convert these bullets to a table", true],
+    ["Rewrite the summary as a table", true],
+    ["改成表格", true],
+    ["把这些要点做成表格", true],
+    ["以表格形式列出", true],
+    ["Add a table of the key terms", false],
+    ["Put the figures from the table into a sentence", false],
+    ["Don't turn it into a table", false],
+    ["不要改成表格", false],
+    ["在后面加一个表格", false],
   ] as const)("“%s” asks to remove a part of the text: %s", (asked, removes) => {
     expect(asksToRemove("instruction", asked)).toBe(removes);
   });
