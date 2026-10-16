@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { caseCitations, namesDecision } from "../../src/core/answers/checks/caseCitations";
+import { caseCitations, namesDecision } from "../../src/shared/caseCitations";
 
 describe("Court decisions a sentence cites", () => {
   test.each([

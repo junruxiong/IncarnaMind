@@ -13,6 +13,12 @@ export interface CaseCitation {
   cite: string;
 }
 
+/** Where a citation is in the text it was found in: from its name or citation to its court and year. */
+export interface CitedCase extends CaseCitation {
+  from: number;
+  to: number;
+}
+
 const REPORTERS = [
   "U.S.",
   "S. Ct.",
@@ -159,28 +165,42 @@ const COMMONWEALTH = new RegExp(`${NEUTRAL_CITE}|${REPORT_CITE}`, "gu");
 const NAME_BEFORE = new RegExp(`(${NAME}),?\\s*$`, "u");
 
 const spaced = (text: string) => text.replace(/\s+/g, " ").trim();
-const bare = (name: string) => name.replace(SIGNAL, "");
+const bare = (name: string) => spaced(name.replace(SIGNAL, ""));
 
-/** The court decisions a sentence cites, in the order it cites them. */
-export function caseCitations(sentence: string): CaseCitation[] {
-  const text = spaced(sentence);
-  const found: (CaseCitation & { at: number })[] = [];
+const MAY_CITE = /\sv\.?\s|\[(?:1[89]|20)\d{2}\]/u;
+/** What follows a citation as part of it: pin cites and the court and year, ", 105 (Tex. 2017)". */
+const TRAILER = /^(?:,\s*\d{1,5}(?:[-–]\d{1,5})?)*(?:\s*\([^()]{0,40}\d{4}\))?/u;
+
+/** The court decisions a text cites, in order, where each is. */
+export function citedCases(text: string): CitedCase[] {
+  if (!MAY_CITE.test(text)) return [];
+  const found: CitedCase[] = [];
+  const add = (name: string | null, cite: string, from: number, citeEnd: number) => {
+    const to = citeEnd + (TRAILER.exec(text.slice(citeEnd))?.[0].length ?? 0);
+    found.push({ name, cite: spaced(cite), from, to });
+  };
   for (const match of text.matchAll(AMERICAN)) {
     const [, name, cite] = match;
     if (name !== undefined && cite !== undefined) {
-      found.push({ at: match.index, name: bare(name), cite });
+      add(bare(name), cite, match.index, match.index + match[0].length);
     }
   }
   for (const match of text.matchAll(COMMONWEALTH)) {
-    const before = NAME_BEFORE.exec(text.slice(0, match.index))?.[1];
-    found.push({
-      at: match.index,
-      name: before === undefined ? null : bare(before),
-      cite: match[0],
-    });
+    const before = NAME_BEFORE.exec(text.slice(0, match.index));
+    const name = before?.[1];
+    add(
+      name === undefined ? null : bare(name),
+      match[0],
+      before ? before.index : match.index,
+      match.index + match[0].length,
+    );
   }
-  return found.sort((a, b) => a.at - b.at).map(({ name, cite }) => ({ name, cite }));
+  return found.sort((a, b) => a.from - b.from);
 }
+
+/** The court decisions a sentence cites, in the order it cites them. */
+export const caseCitations = (sentence: string): CaseCitation[] =>
+  citedCases(sentence).map(({ name, cite }) => ({ name, cite }));
 
 /** Words only, lower case: "Hallmark Builders, Inc. v. Rio Grande" reads "hallmark builders inc v rio grande". */
 const plain = (text: string) =>

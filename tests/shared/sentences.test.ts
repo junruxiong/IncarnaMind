@@ -21,6 +21,19 @@ describe("The sentences of a paragraph", () => {
     ).toEqual([`Spring tides come at full moon.${INLINE_NODE}`, "Neap tides come between."]);
   });
 
+  test("a court decision's citation stays in one sentence, with its court and year", () => {
+    expect(
+      sentences(
+        "See Hallmark Builders v. Rio Grande Supply, 512 S.W.3d 101 (Tex. 2017). Penguins nest here. Cf. Acme Corp. v. Widget Co., 25 F. Supp. 2d 345, 350 (S.D.N.Y. 1998). Donoghue v Stevenson [1932] AC 562 is older.",
+      ),
+    ).toEqual([
+      "See Hallmark Builders v. Rio Grande Supply, 512 S.W.3d 101 (Tex. 2017).",
+      "Penguins nest here.",
+      "Cf. Acme Corp. v. Widget Co., 25 F. Supp. 2d 345, 350 (S.D.N.Y. 1998).",
+      "Donoghue v Stevenson [1932] AC 562 is older.",
+    ]);
+  });
+
   test("Chinese sentences end at 。！？", () => {
     expect(sentences("今天的潮水很高。明天会更高！真的吗？")).toEqual([
       "今天的潮水很高。",
