@@ -1643,8 +1643,14 @@ export const en = {
   "providers.form.test": "Test connection",
   "providers.form.testing": "Testing…",
   "providers.form.save": "Use this service",
-  "providers.sends":
-    "Your Questions, the Mind you're in, passages from your Documents, and Document text for Tags go to {provider} when you use it.",
+  "providers.sends": "When you use it, {provider} receives:",
+  "providers.sends.chat":
+    "your Questions, the Mind you're in, and matching passages with their Document names and pages",
+  "providers.sends.checks": "each sentence you check",
+  "providers.sends.suggestions": "the paragraph you pause on, for writing suggestions",
+  "providers.sends.tagging":
+    "each Document's name, outline and short excerpts, to tag and file it (page images for scans with no text)",
+  "providers.sends.edits": "the text the assistant edits when you ask it to",
   "providers.form.saving": "Saving…",
   "providers.form.moreShort": "More…",
   "providers.form.whereKey": "Where do I find it?",
