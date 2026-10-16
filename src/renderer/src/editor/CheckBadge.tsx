@@ -1,7 +1,7 @@
 import { flip, offset, shift, size } from "@floating-ui/dom";
 import type { Editor } from "@tiptap/core";
 import { ySyncPluginKey } from "@tiptap/y-tiptap";
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type KeyboardEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import type * as Y from "yjs";
 import type { Verification } from "../../../shared/verification";
 import { setCheckCardOpen, stopCheck, useChecks } from "../checks";
@@ -328,6 +328,7 @@ function BadgeFrame({
           data-testid="check-card"
           className="check-card"
           onDismiss={(how) => close(how === "escape")}
+          onKeyDown={stepThroughCard}
         >
           {children}
           <div className="check-card-sep" />
@@ -346,6 +347,20 @@ function BadgeFrame({
       )}
     </div>
   );
+}
+
+/** ↓ and ↑ go from one of the card's rows and buttons to the next, round to the first. */
+function stepThroughCard(event: KeyboardEvent<HTMLDivElement>) {
+  if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+  const buttons = [...event.currentTarget.querySelectorAll<HTMLElement>("button:not(:disabled)")];
+  if (buttons.length === 0) return;
+  const active = document.activeElement;
+  const at = active instanceof HTMLElement ? buttons.indexOf(active) : -1;
+  const step = event.key === "ArrowDown" ? 1 : -1;
+  const next =
+    at < 0 ? (step > 0 ? 0 : buttons.length - 1) : (at + step + buttons.length) % buttons.length;
+  event.preventDefault();
+  buttons[next]?.focus();
 }
 
 // Above the badge, and never taller than the room above it: its rows scroll instead.
