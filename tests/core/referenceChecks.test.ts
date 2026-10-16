@@ -8,7 +8,7 @@ import {
   titleOf,
 } from "../../src/core/referenceChecks/match";
 import { checkableReferences } from "../../src/shared/referenceList";
-import { createTempDataFolder, startCore } from "../helpers/core";
+import { createTempDataFolder, manualClock, startCore } from "../helpers/core";
 import { connectToMind } from "../helpers/mindClient";
 import { heading, note, writeMind } from "../helpers/minds";
 import { unusedLocalUrl } from "../helpers/ollama";
@@ -99,12 +99,14 @@ async function setUp(
     works = [LSTM, DEEP],
     openalex = OPENALEX_WORKS,
     reuse,
+    now,
   }: {
     localOnly?: boolean;
     works?: CrossrefWork[];
     openalex?: OpenAlexWork[];
     /** The data folder and stand-in of an earlier core, as after a restart. */
     reuse?: { dataDir: string; services: ReferenceServices };
+    now?: () => Date;
   } = {},
 ) {
   const services =
@@ -122,6 +124,7 @@ async function setUp(
   if (!reuse) onTestFinished(() => services.close());
   const dataDir = reuse?.dataDir ?? (await createTempDataFolder());
   const core: Core = startCore(dataDir, {
+    ...(now && { now }),
     referenceLookup: { crossref: services.url, arxiv: services.url, openalex: services.url },
   });
   if (localOnly) await core.setLocalOnly(true);
@@ -248,6 +251,47 @@ describe("Checking a reference list", { timeout: 30_000 }, () => {
       null,
       "crossref",
     ]);
+  });
+
+  // protects=a miss (a DOI no agency has registered yet, a work no service lists yet) is kept a week, then asked about again, and Check again asks about it at once; a found record is kept for good; fails_when=a miss is kept for good, Check again serves a kept miss, or a found record is asked about again; no_claim=none beyond protects.
+  test("a miss is asked about again after a week or on Check again; a found record is kept", async () => {
+    const clock = manualClock();
+    const { core, services, mindId } = await setUp([REAL, INVENTED, DEAD_DOI], { now: clock.now });
+    const newRequests = async (again: boolean) => {
+      const before = services.requests.length;
+      await core.checkReferences(mindId, { again });
+      return services.requests
+        .slice(before)
+        .map(({ path }) => decodeURIComponent(path.replaceAll("+", " ")));
+    };
+
+    expect(await newRequests(false)).not.toEqual([]);
+    expect(await newRequests(false)).toEqual([]);
+
+    const askedAgain = await newRequests(true);
+    expect(askedAgain.some((path) => path.includes("Quantum gradient folding"))).toBe(true);
+    expect(askedAgain.some((path) => path.includes("10.9999/nowhere.42"))).toBe(true);
+    expect(askedAgain.some((path) => path.includes("Long short-term memory"))).toBe(false);
+
+    clock.advance(6 * 24 * 60 * 60_000);
+    expect(await newRequests(false)).toEqual([]);
+    clock.advance(2 * 24 * 60 * 60_000);
+    const afterAWeek = await newRequests(false);
+    expect(afterAWeek.some((path) => path.includes("Quantum gradient folding"))).toBe(true);
+    expect(afterAWeek.some((path) => path.includes("Long short-term memory"))).toBe(false);
+  });
+
+  // protects=Crossref is sent the whole entry, so a same-titled entry by other authors is asked about on its own; fails_when=it reuses another entry's candidates; no_claim=none beyond protects.
+  test("a same-titled entry by other authors is asked about on its own", async () => {
+    const { core, services, mindId } = await setUp([
+      REAL,
+      "Smith, A. (1997). Long short-term memory. Neural Computation.",
+    ]);
+
+    await core.checkReferences(mindId);
+
+    const searches = services.requests.filter(({ path }) => path.includes("query.bibliographic"));
+    expect(searches).toHaveLength(2);
   });
 
   // protects=no request to Crossref, OpenAlex or arXiv carries an e-mail address: no mailto parameter, and nothing but IncarnaMind's name and address in the User-Agent; fails_when=a contact address is added to a request; no_claim=none beyond protects.
@@ -745,6 +789,40 @@ describe("Reading a reference as written", () => {
         block("c", "Their notes since 2019 helped."),
       ]).map((entry) => entry.text),
     ).toEqual(["[1] Ann Abel. Widgets at the coast of the northern sea. Widget Press"]);
+  });
+
+  // protects=an undated last entry doesn't take a dated sentence after it, a sentence naming people isn't an entry, and a GB/T entry by an institution starts its own entry; fails_when=prose is looked up, or two entries are read as one; no_claim=none beyond protects.
+  test("prose after a list, and institutions as authors", () => {
+    const block = (id: string, text: string, isHeading = false) => ({
+      id,
+      heading: isHeading,
+      text,
+    });
+    const blockIds = (blocks: ReturnType<typeof block>[]) =>
+      checkableReferences(blocks).map((entry) => entry.blockId);
+
+    expect(
+      blockIds([
+        block("h", "References", true),
+        block("a", "Cole, M. (2019). Widgets and the tide. Coast News."),
+        block("b", "Doe, J. A field guide to the widgets of the coast."),
+        block("p", "Most of the participants were enrolled in 2019."),
+      ]),
+    ).toEqual(["a", "b"]);
+    expect(
+      blockIds([
+        block("h", "References", true),
+        block("a", "Cole, M. (2019). Widgets and the tide. Coast News."),
+        block("p", "Jane Doe and her colleagues counted the widgets in 2019."),
+      ]),
+    ).toEqual(["a"]);
+    expect(
+      blockIds([
+        block("h", "参考文献", true),
+        block("a", "张三,李四.海岸小部件的分布研究[J].海洋科学,2019,12(3):1-10."),
+        block("b", "中华人民共和国国家统计局.中国统计年鉴[M].北京:中国统计出版社,2020."),
+      ]),
+    ).toEqual(["a", "b"]);
   });
 
   // protects=a short title must stand alone in the reference, so a record titled "Introduction" isn't a longer title's work; a short real title still is; fails_when=either is wrong; no_claim=none beyond protects.

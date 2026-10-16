@@ -1732,6 +1732,8 @@ export const migrations: readonly Migration[] = [
         kind TEXT NOT NULL,
         lookup_key TEXT NOT NULL,
         answer TEXT NOT NULL,
+        -- 1: an answer that found the work cited, kept for good; 0: a miss, asked again after a while.
+        kept INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         deleted_at TEXT

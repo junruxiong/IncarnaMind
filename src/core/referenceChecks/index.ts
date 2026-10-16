@@ -1,7 +1,7 @@
 /**
  * Only the reference is sent, on its own flow, "reference-check"; starting a
- * check is the consent (ADR-0022), and local mode sends nothing. A reference
- * checked once isn't asked about again while IncarnaMind runs.
+ * check is the consent (ADR-0022), and local mode sends nothing. What the
+ * services answered is kept (./cache).
  */
 import type {
   CheckReferencesResult,
@@ -16,7 +16,7 @@ import type { MindContent } from "../mindContent";
 import { parseMindId } from "../minds";
 import type { SourceHttp } from "../sources/http";
 import type { Database } from "../storage";
-import { cachedLookups } from "./cache";
+import { createLookupCache } from "./cache";
 import { type CheckRun, checkReference, ServiceFailure } from "./check";
 import { referenceList } from "./list";
 import { createLookups, REFERENCE_SERVICES } from "./lookups";
@@ -40,9 +40,12 @@ export interface ReferenceChecksOptions {
 
 export function createReferenceChecks(options: ReferenceChecksOptions) {
   const { consent } = options;
-  const lookups = cachedLookups(createLookups(options.http, options.urls), options.db, options.now);
+  const cache = createLookupCache(
+    createLookups(options.http, options.urls),
+    options.db,
+    options.now,
+  );
   const services = Object.values(REFERENCE_SERVICES);
-  const checked = new Map<string, ReferenceCheck>();
   const running = new Map<string, AbortController>();
 
   consent.registry.register({
@@ -66,7 +69,8 @@ export function createReferenceChecks(options: ReferenceChecksOptions) {
   });
 
   return {
-    async check(mindIdInput: unknown): Promise<CheckReferencesResult> {
+    /** `again` (Check again) asks about every miss again, however recent. */
+    async check(mindIdInput: unknown, again = false): Promise<CheckReferencesResult> {
       const mindId = parseMindId(mindIdInput);
       const entries = options.content
         .read(mindId, referenceList)
@@ -95,25 +99,27 @@ export function createReferenceChecks(options: ReferenceChecksOptions) {
           throw error;
         }
         const references: (ReferenceCheck & { blockId: string })[] = [];
-        const run: CheckRun = { lookups, stopped: new Map() };
+        const stopped: CheckRun["stopped"] = new Map();
         for (const [index, entry] of entries.entries()) {
           if (signal.aborted) return { kind: "cancelled" };
-          const key = entry.cited.text.toLowerCase();
-          let result = checked.get(key) ?? null;
-          if (!result) {
-            try {
-              result = await checkReference(entry.cited, run, signal);
-              checked.set(key, result);
-            } catch (error) {
-              if (signal.aborted) return { kind: "cancelled" };
-              if (!(error instanceof ServiceFailure)) throw error;
-              result = {
-                ...notChecked(entry.cited.text, error.reason, error.service),
-                ...(error.resetsAt !== null && {
-                  resetsAt: new Date(error.resetsAt).toISOString(),
-                }),
-              };
-            }
+          const lookups = cache.forReference(again);
+          let result: ReferenceCheck;
+          try {
+            result = await checkReference(
+              entry.cited,
+              { lookups: lookups.lookups, stopped },
+              signal,
+            );
+            lookups.settle(result.mark === "found" || result.mark === "mismatch");
+          } catch (error) {
+            if (signal.aborted) return { kind: "cancelled" };
+            if (!(error instanceof ServiceFailure)) throw error;
+            result = {
+              ...notChecked(entry.cited.text, error.reason, error.service),
+              ...(error.resetsAt !== null && {
+                resetsAt: new Date(error.resetsAt).toISOString(),
+              }),
+            };
           }
           references.push({ blockId: entry.blockId, ...result });
           options.progress({ mindId, done: index + 1, total: entries.length });

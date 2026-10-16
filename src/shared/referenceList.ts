@@ -24,17 +24,23 @@ const ENTRY_START = new RegExp(
     `^${PARTICLES}${NAME},\\s+(?:\\p{Lu}\\.|${NAME}(?:,|\\.|\\s+\\p{Lu}\\b|\\s+and\\b))`,
     // "A. Vaswani", "J.-P. Sartre"
     `^\\p{Lu}\\.(?:[\\s-]?\\p{Lu}\\.)*\\s+${PARTICLES}${NAME}`,
-    // "Diederik Kingma and", "Jimmy Lei Ba,", "Sepp Hochreiter."
-    `^${NAME}(?:\\s+(?:${NAME}|\\p{Lu}\\.?)){1,3}(?:,|\\.|\\s+and\\b|\\s+&)`,
+    // "Diederik P. Kingma", not "Jane Doe and"
+    `^${NAME}\\s+(?:\\p{Lu}\\.\\s*)+${PARTICLES}${NAME}`,
     // "Smith J,", "SMITH JA."
     `^${PARTICLES}${NAME}\\s+\\p{Lu}{1,3}[,.]`,
-    // "OpenAI. (2022)", "World Health Organization (2020)"
-    `^(?:${NAME}\\s+){0,5}${NAME}\\.?\\s*\\((?:1[5-9]|20)\\d\\d`,
-    // "张三,", "周志华."
-    "^\\p{Script=Han}{2,4}[,，.。、]",
+    // "OpenAI. (2022).", "World Health Organization (2020)."
+    `^(?:${NAME}\\s+){0,5}${NAME}\\.?\\s*\\((?:1[5-9]|20)\\d\\d[a-z]?\\)\\.`,
+    // "张三,", "周志华.", "中华人民共和国国家统计局."
+    "^\\p{Script=Han}{2,4}[,，.。、]|^\\p{Script=Han}{5,30}\\.",
   ].join("|"),
   "u",
 );
+/** What a reference's last part names besides its year: a venue, a publisher, pages or a volume, an identifier. */
+const VENUE_WORD =
+  /\b(?:proc|proceedings|journal|conference|symposium|workshop|press|report|thesis|review|letters|transactions|arxiv|preprint|edition|publisher|(?:vol|pp|no)\.)/i;
+const VENUE_MARK =
+  /(?:^|[.,;]\s+)In\s+\p{Lu}|\b\p{Lu}{2,}\b|\d+\s*\(\d+\)|\d+\s*[-–—]\s*\d+|doi|https?:\/\//u;
+const endsReference = (text: string) => VENUE_WORD.test(text) || VENUE_MARK.test(text);
 /** An entry's paragraphs before its year, DOI or number run no longer than this. */
 const LONGEST_OPENING = 400;
 /** The longest paragraph read as the end of a last numbered entry broken over two. */
@@ -225,7 +231,10 @@ function referenceEntries(blocks: readonly ListBlock[]): ListedReference[] {
     const numbered = NUMBER_START.test(text);
     const startsEntry = numbered || ENTRY_START.test(text);
     if (state.opening && startsEntry) closeOpening();
-    if (state.opening) {
+    if (state.opening && REFERENCE_SIGN.test(text) && !endsReference(text)) {
+      // A dated sentence after an undated entry is prose, not the entry's end.
+      end();
+    } else if (state.opening) {
       append(state.opening, text);
       if (REFERENCE_SIGN.test(text)) closeOpening();
       else if (state.opening.text.length > LONGEST_OPENING) {
@@ -238,6 +247,7 @@ function referenceEntries(blocks: readonly ListBlock[]): ListedReference[] {
       const lastFinishes =
         yearOf(state.current.text) === null &&
         REFERENCE_SIGN.test(text) &&
+        endsReference(text) &&
         text.length <= SHORT_PART;
       if (numberedLater(at) || continues(text) || lastFinishes) append(state.current, text);
       else end();
