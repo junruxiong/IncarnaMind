@@ -148,7 +148,7 @@ export function VerifyLine({
     if (!asking) return;
     let current = true;
     core
-      .estimateRun({ items: total, ...(model && { model }) })
+      .estimateRun({ items: total, each: "check", ...(model && { model }) })
       .then((result) => {
         if (current) setEstimate(estimateLine(result, t, language));
       })

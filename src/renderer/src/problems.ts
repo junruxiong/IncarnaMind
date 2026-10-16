@@ -59,6 +59,11 @@ export const ANSWER_PROBLEMS: Record<ProviderErrorKind, AnswerProblem> = {
     line: "answer.error.ollama-not-running",
     fix: { kind: "ollama", label: "localModel.open" },
   },
+  // Only the organization's own setting, or another model, helps.
+  "data-retention": {
+    line: "answer.error.data-retention",
+    fix: { kind: "settings", page: "models", label: "answer.error.chooseModel" },
+  },
   "rate-limit": { line: "answer.error.rate-limit", fix: retry },
   network: { line: "answer.error.network", fix: retry },
   provider: { line: "answer.error.provider", fix: retry },

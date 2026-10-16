@@ -20,6 +20,7 @@ const KINDS: ProviderErrorKind[] = [
   "consent-declined",
   "local-mode",
   "ollama-not-running",
+  "data-retention",
   "not-signed-in",
   "plan-limit",
   "blocked",
@@ -174,8 +175,8 @@ describe("a failed Answer's problem line", () => {
     for (const language of ["en", "zh-CN"] as const) {
       for (const { kind, words, label } of labels(language)) {
         expect(words, `${language} ${kind}`).not.toMatch(/\{/);
-        // No full stop: the action follows on the same line.
-        expect(words, `${language} ${kind}`).not.toMatch(/[.。]$/);
+        // No full stop, so the action follows on the same line; but data retention is two sentences, the second a way on.
+        if (kind !== "data-retention") expect(words, `${language} ${kind}`).not.toMatch(/[.。]$/);
         if (ANSWER_PROBLEMS[kind].fix.kind !== "none") expect(label).not.toBe("");
       }
     }

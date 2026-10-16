@@ -2,9 +2,10 @@
  * Check this Mind (#737), the window's side: "Check this Mind" (⌘K, the
  * Mind's menu) checks every sentence that makes a claim; the health line's
  * "Check all" and "Check again" check only what changed. When the model is
- * to name the claims and is billed per token, the line under the Mind's title
- * asks first, with the estimate; otherwise it starts at once. While it runs,
- * the health line counts the claims checked, with Stop.
+ * to name the claims, it does that first, with Stop, and the line under the
+ * Mind's title then asks with their number and, billed per token, the
+ * estimate (#973); a run that only checks again asks so when it is large.
+ * While it runs, the health line counts the claims checked, with Stop.
  */
 import { useEffect, useState } from "react";
 import type * as Y from "yjs";
@@ -31,10 +32,13 @@ interface MindCheckState {
 interface Asking {
   mode: CheckMindMode;
   allDocuments: boolean;
-  sentences: number;
+  /** The claims the model named and the checks to make again, or, when only checking again, the checks. */
+  count: number;
+  claims: boolean;
   /** Checked against the Mind's Folder: the question names it. */
   inFolder: boolean;
-  estimate: EstimateLine;
+  /** Null for a plan or a model on this computer, or when `estimateRun` failed. */
+  estimate: EstimateLine | null;
 }
 
 /** A run that only checks again asks first, with the estimate, when it checks this many or more. */
@@ -84,9 +88,32 @@ export async function checkMind(
   }
 }
 
+async function findClaims(
+  mindId: string,
+  mode: CheckMindMode,
+  allDocuments: boolean,
+): Promise<number | null> {
+  const requestId = crypto.randomUUID();
+  setCheckRunning(mindId, { requestId, action: "whole-mind" });
+  try {
+    const found = await core.findMindClaims({ requestId, mindId, mode, allDocuments });
+    if (found.kind === "found") return found.claims;
+    if (found.kind === "failed") {
+      setCheckProblem(mindId, { kind: "find-failed", error: found.error, mode, allDocuments });
+    } else if (found.kind === "nothing") setCheckProblem(mindId, { kind: "no-claims" });
+    else if (found.kind !== "cancelled") setCheckProblem(mindId, found);
+  } catch (error) {
+    setCheckProblem(mindId, { kind: "failed", error });
+  } finally {
+    setCheckRunning(mindId, null);
+  }
+  return null;
+}
+
 /**
- * Shows the Mind, then asks first with the estimate when the run names the
- * claims, or checks many again, on a model billed per token; or checks at once.
+ * Shows the Mind, has the model name the claims, then asks with their number
+ * and the estimate; a run that only checks again checks at once when small,
+ * or when nothing is billed per token.
  */
 export async function startMindCheck(
   mindId: string,
@@ -104,21 +131,24 @@ export async function startMindCheck(
   }
   if (!plan.findsClaims && plan.sentences < ASK_FROM)
     return checkMind(mindId, mode, { allDocuments });
+  dismissMindCheck(mindId);
+  dismissCheckProblem(mindId);
+  const count = plan.findsClaims ? await findClaims(mindId, mode, allDocuments) : plan.sentences;
+  if (count === null) return;
   const estimate = await core
-    .estimateRun({ items: plan.sentences, ...(plan.model && { model: plan.model }) })
+    .estimateRun({ items: count, each: "check", ...(plan.model && { model: plan.model }) })
     .then((result) => estimateLine(result, translateNow, languageNow()))
     .catch((error: unknown) => {
-      console.warn(`Couldn't estimate checking Mind ${mindId}; it checks without asking.`, error);
+      console.warn(`Couldn't estimate checking Mind ${mindId}; it asks without one.`, error);
       return null;
     });
-  if (estimate === null) return checkMind(mindId, mode, { allDocuments });
+  if (estimate === null && !plan.findsClaims) return checkMind(mindId, mode, { allDocuments });
   const inFolder =
     !allDocuments && (minds.find((each) => each.id === mindId)?.folderId ?? null) !== null;
-  dismissCheckProblem(mindId);
   useMindCheck.setState((state) => ({
     asking: {
       ...state.asking,
-      [mindId]: { mode, allDocuments, sentences: plan.sentences, inFolder, estimate },
+      [mindId]: { mode, allDocuments, count, claims: plan.findsClaims, inFolder, estimate },
     },
   }));
 }
