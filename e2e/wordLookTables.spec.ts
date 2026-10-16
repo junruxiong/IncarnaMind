@@ -139,7 +139,7 @@ test("the résumé's tables as the file draws them: layout tables without lines,
   await shot(window, "word-look-tables-resume-1440");
 
   await setLanguage(window, "zh-CN");
-  await expect(window.getByTestId("mind-title")).toBeVisible();
+  await expect(window.getByTestId("page-menu")).toHaveAttribute("aria-label", /的更多操作$/);
   await shot(window, "word-look-tables-resume-zh-1440");
   // As on the 1,100 px board, with the assistant folded.
   await window.getByTestId("assistant-fold").click();
@@ -215,7 +215,7 @@ test("the contract's tables: the bordered definitions with a shaded heading row 
   await expect.poll(() => fitsItsFrame(definitions)).toBe(true);
   await shot(window, "word-look-tables-contract-1100");
   await setLanguage(window, "zh-CN");
-  await expect(window.getByTestId("mind-title")).toBeVisible();
+  await expect(window.getByTestId("page-menu")).toHaveAttribute("aria-label", /的更多操作$/);
   await shot(window, "word-look-tables-contract-zh-1100");
 
   await window.getByTestId("group-menu").click();

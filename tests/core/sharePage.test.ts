@@ -361,7 +361,9 @@ describe("a web page to share (#72)", { timeout: 60_000 }, () => {
     expect(document.querySelector(".shared-from")?.textContent).toBe(
       "Shared from IncarnaMind · 13 Oct 2026",
     );
-    expect(document.querySelector("h1")?.textContent).toBe("Credit memo: Northwind <Retail>");
+    // The page has no title line (#908): the name names the file and the browser's tab.
+    expect(document.querySelector("h1")).toBeNull();
+    expect(document.querySelector("title")?.textContent).toBe("Credit memo Northwind Retail");
     expect(document.querySelector(".shared-about")?.textContent).toBe(
       "Each Citation's card shows its quote, where it is, and what the check found.",
     );
@@ -560,7 +562,6 @@ function pageOf(
     ...footnote,
   }));
   const html = renderSharePage({
-    title: "Tides",
     blocks: [
       {
         kind: "paragraph",

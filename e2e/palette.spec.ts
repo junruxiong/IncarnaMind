@@ -8,6 +8,7 @@ import {
   createDataFolder,
   dismissChatSetup,
   enterContent,
+  frontMindName,
   launchApp,
   newMind,
   pointAndClick,
@@ -74,13 +75,10 @@ test("a word only inside a Mind is found, and so is a Chinese word, and Enter op
   // Nothing is named so: names come first, and there are none.
   await expect(group(window, "minds")).toHaveCount(0);
 
-  // Opened from the other Mind: Enter shows this one, its title in the front tab.
+  // Opened from the other Mind: Enter shows this one, its name in the front tab.
   await window.keyboard.press("Enter");
   await expect(palette(window)).toBeHidden();
-  await expect(window.getByTestId("mind-title").locator("visible=true")).toHaveAttribute(
-    "placeholder",
-    "Supplier review",
-  );
+  await expect(frontMindName(window)).toHaveText("Supplier review");
   await expect.poll(() => focusInNote(window)).toBe(true);
   // The cursor is in the line the words were found in.
   await expect

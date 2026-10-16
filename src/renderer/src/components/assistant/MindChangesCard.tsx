@@ -259,7 +259,6 @@ export function NoMindLine({ question }: { question: ConversationQuestion }) {
   const askInNewMind = () =>
     void useAppStore.getState().createMind({
       folderId,
-      focusBody: true,
       made: (mindId) =>
         void askInAssistant({
           mindId,

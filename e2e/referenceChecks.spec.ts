@@ -12,6 +12,7 @@ import {
 import {
   createDataFolder,
   dismissChatSetup,
+  frontMindName,
   interceptOpenDialog,
   launchApp,
   pointAndClick,
@@ -110,7 +111,7 @@ async function verifyPaper(width: number) {
   await interceptOpenDialog(app, join(sources, "Memory paper.pdf"));
   await pointAndClick(window, window.getByTestId("plus-menu"));
   await pointAndClick(window, window.getByTestId("plus-verify-document"));
-  await expect(window.getByTestId("mind-title")).toHaveValue("Checking: Memory paper");
+  await expect(frontMindName(window)).toHaveText("Checking: Memory paper");
   return { app, window };
 }
 

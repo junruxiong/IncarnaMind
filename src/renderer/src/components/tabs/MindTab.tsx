@@ -1,16 +1,13 @@
-import { type KeyboardEvent, useContext, useEffect, useRef, useState } from "react";
-import type { Mind } from "../../../../core/api";
+import { useContext, useEffect, useState } from "react";
 import { files } from "../../core";
 import {
-  BadgeSlotContext,
   CompareSheetSlotContext,
   ComposerDockContext,
-  CountSlotContext,
+  PageSlotsContext,
 } from "../../editor/mindContext";
 import { useT } from "../../i18n";
 import { assistantTabOf } from "../../layoutSlice";
 import { useAppStore } from "../../store";
-import { useFittedName } from "../../useFittedName";
 import { useGroupsMerged } from "../../useWindowWidth";
 import { isWordFile, useWordImport } from "../../wordImport";
 import { ExportResultLine } from "../ExportResultLine";
@@ -20,20 +17,23 @@ import { MakeSkillCard } from "../MakeSkillCard";
 import { MeetingInMind } from "../MeetingInMind";
 import { MindEditor } from "../MindEditor";
 import { ChatReadinessNotice } from "../providers/ChatReadinessNotice";
-import { TypingTextarea } from "../TypingTextarea";
 import { buttonStyle } from "../ui";
 import { useTabPlace } from "./tabItems";
 
 /**
- * A Mind's tab: its title and its Blocks. When it is the Mind the assistant
- * reads, its composer is drawn in the assistant (#253).
+ * A Mind's tab: its page, which holds only its text (#908), with the ⋯
+ * button at its top right and the count while writing and the check badge at
+ * its foot. When it is the Mind the assistant reads, its composer is drawn in
+ * the assistant (#253).
  */
 export function MindTab({ mindId }: { mindId: string }) {
   const mind = useAppStore((state) => state.minds.find((each) => each.id === mindId));
   const isExample = useIsExample(mindId);
-  const [countSlot, setCountSlot] = useState<HTMLElement | null>(null);
+  const [top, setTop] = useState<HTMLElement | null>(null);
+  const [menu, setMenu] = useState<HTMLElement | null>(null);
+  const [count, setCount] = useState<HTMLElement | null>(null);
+  const [badge, setBadge] = useState<HTMLElement | null>(null);
   const [sheetSlot, setSheetSlot] = useState<HTMLElement | null>(null);
-  const [badgeSlot, setBadgeSlot] = useState<HTMLElement | null>(null);
   const assistantSlot = useContext(ComposerDockContext);
   const tabId = useTabPlace()?.tabId;
   const merged = useGroupsMerged();
@@ -49,25 +49,26 @@ export function MindTab({ mindId }: { mindId: string }) {
           <article data-testid="mind-pane" data-mind-id={mind.id} className="mind-column">
             <div className="mind-measure">
               {isExample && <ExampleBanner mindId={mindId} />}
-              <MindTitle mind={mind} />
-              <div ref={setCountSlot} data-testid="mind-count-slot" />
+              <div ref={setTop} data-testid="mind-top-slot" />
               <MeetingInMind mindId={mind.id} />
               {/* The example works without a chat model: it says so in its Answer instead. */}
               {!isExample && <ChatReadinessNotice />}
               <ComposerDockContext.Provider value={read ? assistantSlot : null}>
-                <CountSlotContext.Provider value={countSlot}>
+                <PageSlotsContext.Provider value={{ top, menu, count, badge }}>
                   <CompareSheetSlotContext.Provider value={sheetSlot}>
-                    <BadgeSlotContext.Provider value={badgeSlot}>
-                      <MindEditor mindId={mind.id} />
-                    </BadgeSlotContext.Provider>
+                    <MindEditor mindId={mind.id} />
                   </CompareSheetSlotContext.Provider>
-                </CountSlotContext.Provider>
+                </PageSlotsContext.Provider>
               </ComposerDockContext.Provider>
               <MakeSkillCard mindId={mind.id} />
             </div>
           </article>
         </div>
-        <div ref={setBadgeSlot} className="mind-badge-slot" />
+        <div ref={setMenu} className="mind-menu-slot" />
+        <div className="mind-foot-slot">
+          <div ref={setCount} className="mind-foot-count" />
+          <div ref={setBadge} className="mind-foot-badge" />
+        </div>
       </div>
       {/* The Compare Documents sheet docks here, in the column's measure, below the note. */}
       <div ref={setSheetSlot} className="compare-sheet-dock" />
@@ -120,83 +121,5 @@ export function NoTabOpen() {
         {t("sidebar.newMind")}
       </button>
     </div>
-  );
-}
-
-/**
- * The Mind's title, edited in place. Every change is saved as it is typed; while
- * the field has focus it shows what was typed, not the saved (trimmed) title.
- */
-function MindTitle({ mind }: { mind: Mind }) {
-  const t = useT();
-  const renameMind = useAppStore((state) => state.renameMind);
-  const [draft, setDraft] = useState<string | null>(null);
-  const field = useRef<HTMLTextAreaElement>(null);
-  /** The title as it was when the User started typing it, for Undo. */
-  const titleBefore = useRef(mind.title);
-  const focusNow = useAppStore((state) => state.titleToFocus === mind.id);
-  // The name it takes while it has no title, one line of it; the whole name is in the tooltip.
-  const name = mind.autoTitle || t("mind.untitled");
-  const placeholder = useFittedName(field, name);
-  const value = draft ?? mind.title;
-
-  // A Mind just created: its title takes the focus from the button that made it.
-  useEffect(() => {
-    if (!focusNow) return;
-    field.current?.focus();
-    useAppStore.getState().titleFocused();
-  }, [focusNow]);
-
-  const moveIntoContent = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
-    event.preventDefault();
-    const title = event.currentTarget;
-    const article = title.closest("article");
-    const content = () => article?.querySelector<HTMLElement>(".mind-editor");
-    const now = content();
-    if (now || !article) {
-      now?.focus();
-      return;
-    }
-    // A new Mind's text comes a moment after its title (its document is still opening):
-    // the cursor goes there once it does, unless it has left the title by then.
-    const observer = new MutationObserver(() => {
-      const editor = content();
-      if (!editor) return;
-      observer.disconnect();
-      if (document.activeElement === title) editor.focus();
-    });
-    observer.observe(article, { childList: true, subtree: true });
-    title.addEventListener("blur", () => observer.disconnect(), { once: true });
-  };
-
-  return (
-    <h1 className="mind-title">
-      {/* A text area, so a long title wraps instead of being cut off; it is still one line of text. */}
-      <TypingTextarea
-        ref={field}
-        rows={1}
-        data-testid="mind-title"
-        aria-label={t("mind.title.label")}
-        placeholder={placeholder}
-        title={value === "" && placeholder !== name ? name : undefined}
-        value={value}
-        onFocus={() => {
-          setDraft(mind.title);
-          titleBefore.current = mind.title;
-        }}
-        onBlur={() => {
-          setDraft(null);
-          useAppStore.getState().titleLeft(mind.id, titleBefore.current, draft ?? mind.title);
-        }}
-        onChange={(event) => {
-          // A title has no line breaks, even pasted ones.
-          const title = event.target.value.replace(/\s*[\r\n]+\s*/g, " ");
-          setDraft(title);
-          void renameMind(mind.id, title, { typing: true });
-        }}
-        onKeyDown={moveIntoContent}
-      />
-    </h1>
   );
 }

@@ -11,6 +11,7 @@ import {
   clickNotification,
   createDataFolder,
   dismissChatSetup,
+  enterContent,
   forceQuit,
   launchApp,
   motionSettled,
@@ -535,7 +536,7 @@ test("at the monthly cap a Research pauses and lists what it has still to do; Re
 
   // Force-quit halfway: at the next start it goes on by itself.
   await window.keyboard.press("ControlOrMeta+t");
-  await expect(window.getByTestId("mind-title").last()).toBeFocused();
+  await enterContent(window);
   await window.keyboard.type("Notes");
   await forceQuit(app);
   const again = await launchApp(dataDir, { fakeChat: true, home });

@@ -8,6 +8,7 @@ import {
   dismissChatSetup,
   launchApp,
   leaveFirstOpen,
+  nameMind,
   newMind,
   pointAndClick,
   removeDataFolder,
@@ -49,7 +50,7 @@ test("a Contradicted result keeps its mark and card after a change of language a
   await useLocalChatModel(first.window);
   await addDocuments(first.window, [join(sources, "Tides.pdf")]);
   await newMind(first.window);
-  await first.window.getByTestId("mind-title").fill("Memo");
+  await nameMind(first.window, "Memo");
   const editor = first.window.getByTestId("mind-editor");
   await editor.click();
   await first.window.keyboard.type(WRONG);

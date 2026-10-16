@@ -137,6 +137,7 @@ describe("The assistant revises its own changes still waiting", { timeout: 30_00
     expect(seen.read).toContain("[waiting change, adds: The paper is about spring tides.]");
     await page.settled();
     expect(shownWithChanges(page)).toEqual([
+      "Tide notes",
       "+ Summary",
       "+ The paper is about spring tides. It also covers neap tides.",
     ]);
@@ -181,7 +182,11 @@ describe("The assistant revises its own changes still waiting", { timeout: 30_00
     });
 
     await page.settled();
-    expect(shownWithChanges(page)).toEqual(["+ Spring tides", "+ They come at new moon."]);
+    expect(shownWithChanges(page)).toEqual([
+      "Tide notes",
+      "+ Spring tides",
+      "+ They come at new moon.",
+    ]);
     const [revised] = changesIn(second);
     expect(revised).toMatchObject({ revised: true, proposals: 0 });
     expect(pendingProposals(page.blocks)).toHaveLength(2);
@@ -224,6 +229,7 @@ describe("The assistant revises its own changes still waiting", { timeout: 30_00
 
     await page.settled();
     expect(shownWithChanges(page)).toEqual([
+      "Tide notes",
       "+ Summary",
       "+ The paper is about spring tides, and how the moon drives them.",
     ]);
@@ -510,6 +516,7 @@ describe("The owner's four turns", { timeout: 30_000 }, () => {
     expect(retold).toMatchObject({ revised: true, proposals: 2 });
     await page.settled();
     expect(shownWithChanges(page)).toEqual([
+      PAGE,
       "+ Summary",
       "+ Both papers train random neural networks, one by gradient descent.",
     ]);

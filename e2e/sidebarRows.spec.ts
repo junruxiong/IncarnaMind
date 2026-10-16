@@ -8,7 +8,9 @@ import {
   coreOf,
   createDataFolder,
   dismissChatSetup,
+  enterContent,
   launchApp,
+  nameMind,
   newMind,
   pointAt,
   removeDataFolder,
@@ -186,8 +188,8 @@ for (const language of ["en", "zh-CN"] as const) {
       for (const [index, width] of [DEFAULT, NARROWEST].entries()) {
         await setSidebarWidth(window, width);
         const name = `${renamed} ${index + 1}`;
-        await window.getByTestId("mind-title").fill(name);
-        await window.getByTestId("mind-title").press("Enter");
+        await nameMind(window, name);
+        await enterContent(window);
         await expect(undo).toBeVisible();
         const [messageBox, undoBox, sidebarBox] = await Promise.all([
           boxOf(message),

@@ -10,6 +10,7 @@ import {
   dismissChatSetup,
   interceptOpenDialog,
   launchApp,
+  nameMind,
   newMind,
   pointAndClick,
   removeDataFolder,
@@ -118,7 +119,7 @@ test("a Mind in an empty Folder checks nothing: its line offers Add files… and
   await useLocalChatModel(window);
   await addDocuments(window, [join(sources, "Tides.pdf")]);
   await newMind(window);
-  await window.getByTestId("mind-title").fill("Deal memo");
+  await nameMind(window, "Deal memo");
   // The Mind is filed in a Folder that holds no Document: its checks have nothing to check against.
   await window.evaluate(async () => {
     const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;

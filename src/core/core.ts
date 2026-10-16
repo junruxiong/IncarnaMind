@@ -154,7 +154,7 @@ import {
   parseIds,
   parseMindId,
 } from "./minds";
-import { firstLineOf, readBlocks, textStart, theirChangesReading } from "./mindText";
+import { firstLineOf, plainText, readBlocks, textStart, theirChangesReading } from "./mindText";
 import { createNoteAdding, insertBlocks } from "./noteAdding";
 import { createOutputFiles } from "./outputFiles";
 import { createPrivacy, type NetworkTrafficRegistry } from "./privacy";
@@ -1232,11 +1232,15 @@ export function createCore(adapters: CoreAdapters): Core {
     withdrawChanges: (changes) => {
       for (const change of changes) {
         if (!mindExists(change.mindId)) continue;
+        const { title } = minds.get(change.mindId);
         const emptied = content.edit(change.mindId, (blocks) => {
           resolveProposals(blocks, (ref) => ref.request === change.request, "reject");
           if (change.revised) restoreRevised(blocks, change.request);
+          // A Mind the assistant made starts with its title (#908), which isn't the User's words.
           return topLevelBlocks(blocks).every(
-            (block) => block.nodeName === "paragraph" && block.length === 0,
+            (block, index) =>
+              (block.nodeName === "paragraph" && block.length === 0) ||
+              (index === 0 && block.nodeName === "heading" && plainText(block) === title),
           );
         });
         if (change.created && emptied) removeMind(change.mindId);

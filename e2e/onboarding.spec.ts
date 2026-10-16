@@ -94,7 +94,9 @@ test("a first run opens on the credit paper with no model set up: its Citations 
   await setWindowSize(app, window, 1440, 900);
 
   const pane = window.getByTestId("mind-pane");
-  await expect(window.getByTestId("mind-title")).toHaveValue("Draft: credit committee paper");
+  await expect(window.getByTestId("mind-editor").locator("h1")).toHaveText(
+    "Draft: credit committee paper",
+  );
   const banner = pane.getByTestId("example-banner");
   await expect(banner).toContainText("This is an example Mind.");
   await expect(banner).toContainText("click the red mark beside it to see what the results say");
@@ -163,7 +165,9 @@ test("a first run opens on the credit paper with no model set up: its Citations 
   const ways = window.getByTestId("example-add-items");
   await expect(ways.getByRole("menuitem")).toHaveText(["Add files…", "Link a folder…"]);
   await expect(ways.getByRole("menuitem").first()).toBeFocused();
-  await expect(window.getByTestId("mind-title")).toHaveValue("Draft: credit committee paper");
+  await expect(window.getByTestId("mind-editor").locator("h1")).toHaveText(
+    "Draft: credit committee paper",
+  );
   await expect(window.getByTestId("chat-setup")).toHaveCount(0);
   await window.keyboard.press("Escape");
   await expect(addOwn).toBeFocused();
@@ -338,7 +342,9 @@ test('Get started\'s "Add your Documents" opens Add files… and Link a folder�
   await expect(ways.getByRole("menuitem")).toHaveText(["Add files…", "Link a folder…"]);
   await expect(ways.getByRole("menuitem").first()).toBeFocused();
   // No Mind of its own first, and no model setup over it.
-  await expect(window.getByTestId("mind-title")).toHaveValue("Draft: credit committee paper");
+  await expect(window.getByTestId("mind-editor").locator("h1")).toHaveText(
+    "Draft: credit committee paper",
+  );
   await expect(window.getByTestId("chat-setup")).toBeHidden();
   await window.keyboard.press("Escape");
   await expect(ways).toBeHidden();
