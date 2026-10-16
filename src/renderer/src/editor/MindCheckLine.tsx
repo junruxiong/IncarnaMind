@@ -150,7 +150,7 @@ export function MindCheckAction({
     <button
       type="button"
       data-testid="health-check"
-      className="mind-verify-link"
+      className="check-row-action"
       onMouseDown={(event) => event.preventDefault()}
       onClick={onCheck}
     >

@@ -41,6 +41,19 @@ export const NO_HEALTH: Health = {
   unchecked: [],
 };
 
+/** A count's words with the number in bold, as the badge shows it: "**3** claims not checked yet". */
+export function Counted({ text, count }: { text: string; count: string }) {
+  const at = text.indexOf(count);
+  if (at < 0) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, at)}
+      <b className="check-count">{count}</b>
+      {text.slice(at + count.length)}
+    </>
+  );
+}
+
 /** Each part's small mark, as the margin draws its state; none for sentences with no Citation. */
 export function PartMark({ part }: { part: HealthPart }) {
   switch (part) {
@@ -202,7 +215,9 @@ export function HealthCard({
         <span className="check-row-mark">
           <PartMark part={part} />
         </span>
-        <span className="check-row-text">{text}</span>
+        <span className="check-row-text">
+          <Counted text={text} count={format(health[part].length)} />
+        </span>
         <span className="check-row-next" aria-hidden="true">
           {t("badge.next")}
         </span>
@@ -218,9 +233,13 @@ export function HealthCard({
           <div className="check-row" data-testid="health-unchecked">
             <span className="check-row-mark" />
             <span className="check-row-text">
-              {t(health.unchecked.length === 1 ? "health.unchecked.one" : "health.unchecked", {
-                count: format(health.unchecked.length),
-              })}
+              <Counted
+                text={t(
+                  health.unchecked.length === 1 ? "health.unchecked.one" : "health.unchecked",
+                  { count: format(health.unchecked.length) },
+                )}
+                count={format(health.unchecked.length)}
+              />
             </span>
             {canCheck && (
               <MindCheckAction

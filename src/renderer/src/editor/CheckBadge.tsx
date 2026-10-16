@@ -6,6 +6,7 @@ import type * as Y from "yjs";
 import type { Verification } from "../../../shared/verification";
 import { setCheckCardOpen, stopCheck, useChecks } from "../checks";
 import { useTabPlace } from "../components/tabs/tabItems";
+import { buttonStyle } from "../components/ui";
 import { startContradictionCheck, useContradictions } from "../contradictions";
 import { useLanguage, useT } from "../i18n";
 import { frontTabOfMind } from "../layoutSlice";
@@ -13,16 +14,16 @@ import { startMindCheck, useMindCheck, useMindCheckRun } from "../mindCheck";
 import { useFade } from "../motion";
 import { useAppStore } from "../store";
 import { useGroupsMerged } from "../useWindowWidth";
-import { stopVerify } from "../verify";
+import { checkClaims, stopVerify } from "../verify";
 import { type Badge, type BadgeInput, badgeOf } from "./badgeState";
-import { ContradictionLine } from "./ContradictionLine";
+import { ContradictionAsk, ContradictionLine } from "./ContradictionLine";
 import { shownClaims } from "./claimChecks";
 import { HEALTH_PARTS } from "./healthCounts";
 import { CheckMarkIcon, ClaimMarkIcon } from "./icons";
 import { MindCheckAsk, useMindCheckProgress } from "./MindCheckLine";
 import { HealthCard, PartMark, useHealth } from "./NoteHealth";
 import { Popover } from "./Popover";
-import { useVerifyState, VerifyCard } from "./VerifyLine";
+import { useVerifyState, VerifyCard, verifyDone } from "./VerifyLine";
 
 /**
  * What a check the User started checked, from the render its run ends in
@@ -110,7 +111,8 @@ function MindBadge({ editor, doc, mindId }: { editor: Editor; doc: Y.Doc; mindId
       <p className="check-card-title">{t("health.label")}</p>
       <HealthCard editor={editor} doc={doc} mindId={mindId} health={health} />
       <ContradictionLine doc={doc} mindId={mindId} />
-      <CheckActions mindId={mindId} askingMind={askingMind} />
+      <div className="check-card-sep" />
+      <CheckActions doc={doc} mindId={mindId} askingMind={askingMind} />
     </BadgeFrame>
   );
 }
@@ -137,7 +139,15 @@ function RunningText({ editor, mindId }: { editor: Editor; mindId: string }) {
  * "Check for contradictions"); each becomes its question, with the
  * estimate, Check and Not now, while it waits before a paid run.
  */
-function CheckActions({ mindId, askingMind }: { mindId: string; askingMind: boolean }) {
+function CheckActions({
+  doc,
+  mindId,
+  askingMind,
+}: {
+  doc: Y.Doc;
+  mindId: string;
+  askingMind: boolean;
+}) {
   const t = useT();
   const running = useChecks((state) => state.running[mindId] !== undefined);
   const askingContradictions = useContradictions((state) => state.asking[mindId] !== undefined);
@@ -162,13 +172,16 @@ function CheckActions({ mindId, askingMind }: { mindId: string; askingMind: bool
           startMindCheck(mindId, "all"),
         )
       )}
-      {!askingContradictions &&
+      {askingContradictions ? (
+        <ContradictionAsk doc={doc} mindId={mindId} />
+      ) : (
         action(
           "badge-check-contradictions",
           t("contradictions.command"),
           t("badge.checkContradictions.about"),
           () => void startContradictionCheck(mindId),
-        )}
+        )
+      )}
     </div>
   );
 }
@@ -222,6 +235,18 @@ function VerifyBadge({
         ) : null
       }
       onStop={() => stopVerify(mindId)}
+      foot={
+        verifyDone(state) && (
+          <button
+            type="button"
+            data-testid="verify-again"
+            className={buttonStyle("ghost", "sm")}
+            onClick={() => void checkClaims(mindId, doc)}
+          >
+            {t("claim.checkAgain")}
+          </button>
+        )
+      }
     >
       <VerifyCard
         editor={editor}
@@ -249,6 +274,7 @@ function BadgeFrame({
   ask,
   running,
   onStop,
+  foot,
   children,
 }: {
   mindId: string;
@@ -256,6 +282,8 @@ function BadgeFrame({
   ask: boolean;
   running: ReactNode;
   onStop(): void;
+  /** Beside Close, at the card's foot. */
+  foot?: ReactNode;
   children: ReactNode;
 }) {
   const t = useT();
@@ -302,11 +330,13 @@ function BadgeFrame({
           onDismiss={(how) => close(how === "escape")}
         >
           {children}
+          <div className="check-card-sep" />
           <div className="check-card-foot">
+            {foot}
             <button
               type="button"
               data-testid="check-card-close"
-              className="check-card-close"
+              className={buttonStyle("secondary", "sm")}
               onClick={() => close(true)}
             >
               {t("checks.close")}
