@@ -38,6 +38,7 @@ export function AskedChangesCard({
     <section data-testid="mind-changes" className="mind-changes">
       {applied.map((row) => {
         const outcome = outcomes[row.mindId];
+        const left = waiting[rows.indexOf(row)];
         return (
           <div key={row.mindId} className="mind-changes-head">
             <PencilLineIcon aria-hidden="true" className="mind-changes-icon" />
@@ -77,6 +78,14 @@ export function AskedChangesCard({
               )}
               {outcome === "held" && (
                 <>
+                  {typeof left === "number" && left > 0 && (
+                    <span data-testid="mind-changes-left" className="mind-changes-count">
+                      {" "}
+                      {left === 1
+                        ? t("mindChanges.left.one")
+                        : t("mindChanges.left", { count: left })}
+                    </span>
+                  )}
                   <Dot />
                   <button
                     type="button"
