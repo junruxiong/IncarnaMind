@@ -12,7 +12,7 @@ import type { Block, Footnote } from "../mindText";
 import type { CardContent, CardRun, CitationCard } from "./citationCards";
 import { HTML_STYLES, htmlFile, notesSection, withTableBodies } from "./html";
 import type { ExportLabels } from "./labels";
-import { escapeHtml, renderPrintHtml, safeLink, sourceHtml } from "./printHtml";
+import { escapeHtml, renderPrintHtml, sourceHtml, webLink } from "./printHtml";
 
 const HOW_CHECKS_WORK: Readonly<Record<Language, string>> = {
   en: "https://github.com/IncarnaMind/IncarnaMind#what-you-can-do",
@@ -226,18 +226,22 @@ export function renderSharePage(page: SharePage): string {
   const written: { number: number; card: CitationCard }[] = [];
   const printed = renderPrintHtml("", page.blocks, labels, {
     linkNotes: true,
+    isLink: webLink,
     citations: {
       note: (footnote) => {
-        const quote = cards.get(footnote)?.quote;
-        const source = sourceHtml(footnote, labels);
-        return quote ? `${source} · “${escapeHtml(quote)}”` : source;
+        const card = cards.get(footnote);
+        // The card's own words say how its check went, in place of "[unverified]".
+        const source = sourceHtml({ ...footnote, unverified: false }, labels, webLink);
+        const quote = card?.quote ? ` · “${escapeHtml(card.quote)}”` : "";
+        const check = card && card.check !== "found" ? ` · ${escapeHtml(card.heading)}` : "";
+        return source + quote + check;
       },
       marker: (footnote, number) => {
         const card = cards.get(footnote);
         if (!card) return `<a class="cite" id="ref-${number}" href="#note-${number}">${number}</a>`;
         written.push({ number, card });
         const label = t("share.card.label", { number, source: card.spoken });
-        return `<a class="cite" id="ref-${number}" href="#note-${number}" data-card="${number}" data-check="${checkOf(card)}" aria-label="${escapeHtml(label)}">${number}</a>`;
+        return `<a class="cite" id="ref-${number}" href="#note-${number}" data-card="${number}" data-check="${card.check}" aria-label="${escapeHtml(label)}">${number}</a>`;
       },
     },
   });
@@ -274,15 +278,11 @@ export function renderSharePage(page: SharePage): string {
   });
 }
 
-/** A check the page has no mark for, from a newer version, reads as one it can't vouch for. */
-const checkOf = (card: CitationCard): CitationCard["check"] =>
-  Object.hasOwn(MARKS, card.check) ? card.check : "cant-check";
-
 /** "Found" counts only quotes found: every other card, whatever its state, says why it isn't. */
 function checkedStatus(cards: readonly CitationCard[], date: string, t: Translate): string | null {
   const total = cards.length;
   if (total === 0) return null;
-  const found = cards.filter((card) => checkOf(card) === "found").length;
+  const found = cards.filter((card) => card.check === "found").length;
   if (found === total) return t("share.page.found.all", { date });
   if (found > 0) return t("share.page.found.some", { date, found, total });
   return total === 1
@@ -298,7 +298,7 @@ function cardHtml(number: number, card: CitationCard, date: string, t: Translate
   const label = t("share.card.label", { number, source: card.spoken });
   const checked = card.dated ? ` · ${withDate(t("share.card.checked", { date }), date)}` : "";
   const close = t("share.card.close");
-  const check = checkOf(card);
+  const { check } = card;
   return [
     `<section class="card check-${check}" id="card-${number}" role="dialog" aria-label="${escapeHtml(label)}" tabindex="-1" hidden>`,
     '<div class="card-top"><div class="card-grab"></div>',
@@ -334,7 +334,7 @@ function contentHtml(content: CardContent, t: Translate): string {
     case "passage": {
       const { address } = content;
       const shown = address
-        ? `<p class="card-address">${safeLink(address) ? `<a href="${escapeHtml(address)}" rel="noreferrer">${escapeHtml(address)}</a>` : escapeHtml(address)}</p>`
+        ? `<p class="card-address">${webLink(address) ? `<a href="${escapeHtml(address)}" rel="noreferrer">${escapeHtml(address)}</a>` : escapeHtml(address)}</p>`
         : "";
       return `<div class="card-body"><p class="card-passage">${runsHtml(content.runs)}</p></div>${shown}${part}`;
     }

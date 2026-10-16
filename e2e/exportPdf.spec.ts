@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
-import * as Y from "yjs";
+import type * as Y from "yjs";
 import {
   CHART_NODE,
   type CitationAttributes,
