@@ -1,6 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { expect, test } from "@playwright/test";
+import type { CoreBridge } from "../src/core/api";
 import { startFakeRegistry } from "../tests/helpers/fakeRegistry";
 import { type FakeRemote, startFakeRemote } from "../tests/helpers/remoteMcp";
 import {
@@ -127,6 +128,89 @@ test("a local Connector added in Settings starts and reaches ready, and turning 
   await expect(connector).toHaveAttribute("data-state", "off");
   await expect(connector.getByTestId("connector-state")).toHaveText("Off");
   await app.close();
+});
+
+test("in Local mode a Connector on another computer is paused and says why, in English and Chinese; its page offers no sign-in", async () => {
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await dismissChatSetup(window);
+    // Added in Local mode, it is never connected to: the address need not exist.
+    await window.evaluate(async () => {
+      const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      await bridge.setLocalOnly(true);
+      await bridge.addConnector({ name: "Wiki", url: "https://wiki.example.test/mcp" });
+    });
+
+    await openSettings(window, "connectors");
+    const page = window.getByTestId("settings-page-connectors");
+    const row = page.getByTestId("connected-connector");
+    await expect(row).toHaveAttribute("data-state", "paused");
+    await expect(row.getByTestId("connected-connector-state")).toHaveText(
+      "Not used while everything stays on this computer",
+    );
+    await setLanguage(window, "zh-CN");
+    await expect(row.getByTestId("connected-connector-state")).toHaveText(
+      "所有内容都留在这台电脑上时不会使用",
+    );
+    await setLanguage(window, "en");
+
+    // Its page says the same, and offers no sign-in to a server that would hear of it.
+    await row.getByTestId("connector-manage").click();
+    const connector = page.getByTestId("connector");
+    await expect(connector).toHaveAttribute("data-state", "paused");
+    await expect(connector.getByTestId("connector-state")).toHaveText(
+      "Not used while everything stays on this computer",
+    );
+    await expect(connector.getByTestId("connector-sign-in")).toHaveCount(0);
+  } finally {
+    await app.close();
+  }
+});
+
+test("in Local mode a Connector on this computer whose sign-in is on another waits and says why, in English and Chinese; its page offers no sign-in", async () => {
+  // The service is on this computer, but its metadata names a sign-in server on another one.
+  const fake = await startFakeRemote();
+  fake.authorizationServer = "https://auth.example.test";
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await dismissChatSetup(window);
+    await window.evaluate(async (url) => {
+      const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      await bridge.setLocalOnly(true);
+      await bridge.addConnector({ name: "Wiki", url });
+    }, fake.url);
+
+    await openSettings(window, "connectors");
+    const page = window.getByTestId("settings-page-connectors");
+    const row = page.getByTestId("connected-connector");
+    await expect(row).toHaveAttribute("data-state", "needs-sign-in");
+    await expect(row.getByTestId("connected-connector-state")).toHaveText(
+      "Not used while everything stays on this computer",
+    );
+    await setLanguage(window, "zh-CN");
+    await expect(row.getByTestId("connected-connector-state")).toHaveText(
+      "所有内容都留在这台电脑上时不会使用",
+    );
+    await setLanguage(window, "en");
+
+    // Its page says why, and offers no sign-in to a server that would hear of it.
+    await row.getByTestId("connector-manage").click();
+    const connector = page.getByTestId("connector");
+    await expect(connector.getByTestId("connector-state")).toHaveText(
+      "Not used while everything stays on this computer",
+    );
+    const why = connector.getByTestId("connector-sign-in-held-back");
+    await expect(why).toContainText("“Keep everything on this computer” is on");
+    await setLanguage(window, "zh-CN");
+    await expect(why).toContainText("已开启“所有内容都留在这台电脑上”");
+    await expect(connector.getByTestId("connector-sign-in")).toHaveCount(0);
+
+    // Nothing reached the sign-in server, or its address.
+    expect(fake.requests.filter((request) => request.path.startsWith("auth:"))).toEqual([]);
+  } finally {
+    await app.close();
+    await fake.close();
+  }
 });
 
 test("a remote Connector added by URL needs a sign-in, which goes through the browser", async () => {

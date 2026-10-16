@@ -25,6 +25,7 @@ import { ClientForm, RemoteSignIn } from "./RemoteSignIn";
 /** A state's dot: working (blue), or waiting for the User (amber). Green and red are for checks only. */
 const stateDot: Record<ConnectorState, string | null> = {
   off: null,
+  paused: null,
   connecting: "bg-accent",
   "signing-in": "bg-accent",
   "needs-sign-in": "bg-attention",
@@ -281,7 +282,8 @@ export function ConnectorDetail({
 function ConnectorControls({ connector }: { connector: Connector }) {
   const t = useT();
   const { id, name } = connector;
-  const dot = stateDot[connector.state];
+  const heldBack = connector.transport === "http" && connector.signIn.heldBack;
+  const dot = heldBack ? null : stateDot[connector.state];
   const [editing, setEditing] = useState(false);
   return (
     <div
@@ -293,7 +295,9 @@ function ConnectorControls({ connector }: { connector: Connector }) {
       <div className="flex items-center gap-3">
         <span className="flex min-w-0 flex-1 items-center gap-1.5 text-[13px] leading-5 text-ink-meta">
           {dot && <span aria-hidden="true" className={`size-1.5 rounded-full ${dot}`} />}
-          <span data-testid="connector-state">{t(stateKey(connector.state))}</span>
+          <span data-testid="connector-state">
+            {t(heldBack ? "connectors.state.paused" : stateKey(connector.state))}
+          </span>
         </span>
         <input
           type="checkbox"
@@ -345,7 +349,7 @@ function ConnectorControls({ connector }: { connector: Connector }) {
           onRetry={() => void act(() => core.restartConnector(id))}
         />
       )}
-      {connector.transport === "http" && connector.enabled && (
+      {connector.transport === "http" && connector.enabled && connector.state !== "paused" && (
         <RemoteSignIn connector={connector} />
       )}
     </div>

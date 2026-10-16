@@ -806,6 +806,8 @@ export function createCore(adapters: CoreAdapters): Core {
   if (documents.searchableCount() > 0) rerank.prepare();
   /** Set once outside agents exist: Local mode pauses them. */
   let agentsLocalModeChanged = () => {};
+  /** Set once Connectors exist: Local mode pauses those on other computers. */
+  let connectorsLocalModeChanged = () => {};
   /**
    * Local mode on or off: embeddings may switch back to the built-in model,
    * rerank pauses, usage data stops, and outside agents pause.
@@ -818,6 +820,7 @@ export function createCore(adapters: CoreAdapters): Core {
       usageData.localModeChanged();
       privacyChanged();
       agentsLocalModeChanged();
+      connectorsLocalModeChanged();
       await rerankChanged();
       // Questions to a cloud model are refused now (or allowed again): the chat model's readiness changed.
       await readinessChanged();
@@ -901,6 +904,7 @@ export function createCore(adapters: CoreAdapters): Core {
     processes: adapters.processes,
     browser: adapters.browser,
     consent,
+    localOnly: () => embedding.localOnly(),
     signInPages: (name) => {
       const { language } = settings.get();
       return {
@@ -921,6 +925,7 @@ export function createCore(adapters: CoreAdapters): Core {
       timing: { signInTimeoutMs: adapters.connectorSignInTimeoutMs },
     }),
   });
+  connectorsLocalModeChanged = () => connectors.localModeChanged();
   /** Skill scripts can run: the User hasn't turned them off, and a Skill that is on has some. */
   const scriptsOffered = () =>
     settings.get().device.skillScriptsEnabled && skills.anyEnabledWithScripts();

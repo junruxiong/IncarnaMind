@@ -3267,6 +3267,8 @@ export const en = {
   "error.connector.nameTooLong": "A Connector's name can't be longer than {max} characters.",
   "error.connector.nameTaken": "A Connector named “{name}” already exists.",
   "error.connector.off": "Turn the Connector on first.",
+  "error.connector.localMode":
+    "“Keep everything on this computer” is on, and this Connector isn't on this computer, so it isn't used.",
   "error.connector.urlMissing": "Enter the server's URL.",
   "error.connector.urlTooLong": "That URL is too long.",
   "error.connector.urlInvalid": "“{url}” isn't a valid URL.",
@@ -3549,6 +3551,7 @@ export const en = {
   "connectors.custom.import": "Import from Claude or Cursor",
   "connectors.custom.note": "Connectors you add yourself aren't reviewed.",
   "connectors.state.off": "Off",
+  "connectors.state.paused": "Not used while everything stays on this computer",
   "connectors.state.connecting": "Connecting…",
   "connectors.state.ready": "Connected",
   "connectors.state.error": "Not connected",
@@ -3646,7 +3649,11 @@ export const en = {
     "This service can't register IncarnaMind by itself. Enter the client ID of an OAuth app you registered with it.",
   "remoteConnectors.signIn.error.secret-storage":
     "IncarnaMind can't store your sign-in securely on this system, because no keyring is available.",
+  "remoteConnectors.signIn.error.held-back":
+    "Its sign-in is with a server on another computer, so nothing was sent.",
   "remoteConnectors.signIn.error.failed": "The sign-in didn't work.",
+  "remoteConnectors.signIn.heldBack":
+    "“Keep everything on this computer” is on, and this sign-in is with a server on another computer, so it isn't renewed or started and its Tools aren't used. Turn that off and it goes on from where it was.",
   "remoteConnectors.error.unreachable":
     "Its server can't be reached. Check the URL and your internet connection.",
   "remoteConnectors.consent.note": "The Tool's arguments go to this server over the network.",
