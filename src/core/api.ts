@@ -5201,7 +5201,6 @@ export type ChatGptAccount =
  */
 export interface ChatGptPlanStatus {
   account: ChatGptAccount;
-  /** A browser sign-in is waiting for the User. */
   signingIn: boolean;
   /**
    * The models Questions can use with the plan, the default first: the
@@ -5281,14 +5280,10 @@ export type PastedAddressResult = { ok: true } | { ok: false; problem: PastedAdd
 // ---------------------------------------------------------------------------
 // Claude account
 
-/**
- * Why the Claude account route stopped, each said where it happened in its
- * own line with a way back (src/core/providers/claudeAccount/problems.ts).
- */
+/** Each said where it happened, with a way back (./providers/claudeAccount/problems.ts). */
 export type ClaudeAccountProblem =
   /** The User cancelled the sign-in, or didn't finish it in time: nothing was kept. */
   | "sign-in-cancelled"
-  /** There is no sign-in on this device. */
   | "signed-out"
   /** The sign-in can't be renewed any more: sign in again. */
   | "sign-in-expired"
@@ -5299,20 +5294,14 @@ export type ClaudeAccountProblem =
   /** Anthropic answered in a way this route doesn't know. */
   | "unexpected-response";
 
-/** The Claude account sign-in on this device. */
 export type ClaudeAccount =
   | { state: "signed-out" }
   /** Refreshing the sign-in failed: sign in again. */
   | { state: "expired" }
-  | { state: "signed-in" };
+  /** The account and organization as Anthropic named them at sign-in, when it did. */
+  | { state: "signed-in"; email: string | null; organization: string | null };
 
-/**
- * The Claude account route: the User's Claude plan, signed in with
- * Anthropic's OAuth, used for Answers instead of an API key. What it sends
- * goes to Anthropic under the User's account and counts toward the plan's
- * usage limits. It is opt-in, and not offered at all where this build has
- * no client profile for it (`available`).
- */
+/** The User's Claude plan for Answers instead of an API key; not offered where this build has no profile for it. */
 export interface ClaudeAccountStatus {
   available: boolean;
   /** An experimental sign-in route, which the User is told about before signing in. */
@@ -5328,6 +5317,7 @@ export type ClaudeSignInErrorKind =
   | "unavailable"
   /** This device can't store the sign-in securely (see `getSecretStorage`). */
   | "secret-storage"
+  /** The sign-in didn't work, e.g. a code pasted incompletely: sign in again. */
   | "failed";
 
 export type ClaudeSignInResult =
@@ -8032,27 +8022,20 @@ export interface CoreApi {
    */
   pasteChatGptSignInAddress(address: string): Promise<PastedAddressResult>;
 
-  /** The Claude account route: whether this build offers it, and its sign-in. */
   getClaudeAccount(): Promise<ClaudeAccountStatus>;
   /**
-   * "Sign in with Claude": opens Anthropic's sign-in in the User's browser
-   * and waits, for a few minutes at most, until they finish there or paste
-   * what the page shows. Starting again cancels a sign-in still waiting.
-   * Signing in doesn't choose a model: `saveChatProvider` with the
-   * "claude-account" kind does, and that choice allows its flows (ADR-0022).
+   * Waits a few minutes at most for the browser or a pasted code. Signing in
+   * doesn't choose a model: saving the "claude-account" provider does, and
+   * allows its flows (ADR-0022).
    */
   signInToClaude(): Promise<ClaudeSignInResult>;
   /** Stops waiting for a browser sign-in. Nothing is kept. */
   cancelClaudeSignIn(): Promise<void>;
   /** Opens the waiting sign-in's page in the browser again; false when none is waiting. */
   reopenClaudeSignIn(): Promise<boolean>;
-  /** Forgets the Claude account's tokens on this device. A saved Claude account then needs a new sign-in. */
+  /** A saved Claude account then needs a new sign-in. */
   signOutOfClaude(): Promise<ClaudeAccountStatus>;
-  /**
-   * The address the browser ended on, or the code Anthropic's page shows,
-   * pasted by the User: checked exactly as the browser's own return, and the
-   * waiting `signInToClaude` finishes with it. A refused one changes nothing.
-   */
+  /** Checked exactly as the browser's own return; a refused one changes nothing. */
   pasteClaudeSignInAddress(address: string): Promise<PastedAddressResult>;
 
   /**

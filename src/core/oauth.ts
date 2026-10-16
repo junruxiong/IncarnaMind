@@ -4,17 +4,9 @@
  * service: the caller passes every URL, the client ID and where the browser
  * comes back to.
  *
- * - `openLoopbackRedirect` is where the browser comes back to: a one-off
- *   server on 127.0.0.1 (RFC 8252) that accepts only the sign-in's own
- *   `state`, shows a "you can close this tab" page, times out, and frees its
- *   port. Remote Connectors use it on its own: the MCP SDK discovers their
- *   authorization server, registers IncarnaMind and builds the request with PKCE.
- * - `authorizeInBrowser` runs the whole flow on top of it, or on top of a
- *   page of the authorization server's own whose code the User pastes, for a
- *   server whose endpoints are known.
- *
- * The browser is opened through the core's `Browser` adapter; this module
- * never imports Electron.
+ * `openLoopbackRedirect` (RFC 8252) is used on its own by remote Connectors,
+ * whose sign-in the MCP SDK builds; `authorizeInBrowser` runs the whole flow
+ * on it, or on a page of the server's own whose code the User pastes.
  */
 import { createHash, randomBytes } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
@@ -52,7 +44,6 @@ export interface LoopbackRedirectOptions {
   stateBytes?: number;
 }
 
-/** Where the authorization server sends the browser back to with the code. */
 export type RedirectShape =
   /** A loopback server (`openLoopbackRedirect`); pasting the browser's address is the fallback. */
   | { kind: "loopback"; port: number; path: string }
@@ -81,7 +72,6 @@ export interface BrowserAuthorizationOptions {
   stateBytes?: number;
   /** Extra query parameters for the authorization request (e.g. RFC 8707 `resource`). */
   authorizeParams?: Readonly<Record<string, string>>;
-  /** Extra parameters for the code exchange. */
   tokenParams?: Readonly<Record<string, string>>;
   /** How the token endpoint takes a request. Defaults to a form (RFC 6749). */
   tokenFormat?: TokenRequestFormat;
@@ -120,6 +110,8 @@ export interface OAuthTokens {
   /** Lifetime of the access token in seconds, as the server sent it. */
   expiresIn: number | null;
   scope: string | null;
+  /** The whole answer, for what a provider adds to it, such as the account signed in. */
+  response: Record<string, unknown>;
 }
 
 export type OAuthFlowFailure =
@@ -225,6 +217,7 @@ async function readTokenResponse(response: Response, action: string): Promise<OA
     idToken: nonEmptyText(body.id_token),
     expiresIn: typeof body.expires_in === "number" ? body.expires_in : null,
     scope: nonEmptyText(body.scope),
+    response: body,
   };
 }
 
@@ -242,6 +235,8 @@ async function postToken(
       accept: "application/json",
     },
     body: format === "json" ? JSON.stringify(params) : new URLSearchParams(params),
+    // A redirect would carry the code, a refresh token or a verifier to another address.
+    redirect: "error",
     ...(signal ? { signal } : {}),
   });
 }
@@ -359,11 +354,9 @@ export interface SignInRedirect {
    */
   receive<T>(receipt: RedirectReceipt<T>): Promise<T>;
   /**
-   * The address the browser ended on, pasted by the User when it couldn't
-   * come back to IncarnaMind (or, from a server's own page, its "code#state"):
-   * checked exactly as the browser's own request, and taken in its place.
-   * Only surrounding whitespace and one pair of quotes are ignored. A refused
-   * address changes nothing.
+   * The browser's address, or a server page's "code#state", checked exactly
+   * as the browser's own request; only surrounding whitespace and one pair of
+   * quotes are ignored. A refused one changes nothing.
    */
   paste(text: string): PastedRedirect;
   /** Stops waiting and frees the port. Safe to call more than once. */
@@ -419,11 +412,7 @@ interface RedirectWait {
   fail(error: Error): void;
 }
 
-/**
- * The part of a redirect that doesn't depend on how the browser comes back:
- * its `state`, its one `claim`, its timeout and cancelling, `receive` and
- * `paste`. `release` frees what the caller holds for it (a loopback server).
- */
+/** What a redirect is however the browser comes back; `release` frees what the caller holds. */
 function waitForRedirect(options: {
   redirectUri: string;
   pages: { success: OAuthPage; failure: OAuthPage };
@@ -542,11 +531,7 @@ function waitForRedirect(options: {
   };
 }
 
-/**
- * Starts listening on 127.0.0.1 for the browser's redirect, with a fresh
- * random `state`. Rejects with `OAuthFlowError` ("port-in-use") when the port
- * is taken. The timeout runs from now; call `close` when done, whatever happened.
- */
+/** Rejects with "port-in-use" when the port is taken. The timeout runs from now; always `close` it. */
 export async function openLoopbackRedirect(
   options: LoopbackRedirectOptions,
 ): Promise<SignInRedirect> {
@@ -614,13 +599,7 @@ export async function openLoopbackRedirect(
   return opened.redirect;
 }
 
-/**
- * Runs the whole browser sign-in: opens the redirect, opens the
- * authorization URL, waits for the redirect (or a pasted one), checks its
- * state, exchanges the code with the PKCE verifier, shows a "you can close
- * this tab" page when the browser came back, and frees the port. Rejects with
- * `OAuthFlowError` or `OAuthTokenError`.
- */
+/** Rejects with `OAuthFlowError` or `OAuthTokenError`. */
 export async function authorizeInBrowser(
   options: BrowserAuthorizationOptions,
 ): Promise<OAuthTokens> {

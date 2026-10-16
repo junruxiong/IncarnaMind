@@ -1,18 +1,8 @@
 /**
- * Requests that use the User's Claude plan: Anthropic's Messages API with the
- * access token of a Claude account sign-in (see ./account). This adapter is
- * the only place that knows how they differ from an API key's:
- *
- * - the token goes as a bearer token, only to the API's own origin, and no
- *   API key is sent;
- * - the User-Agent names IncarnaMind, and they carry what the route's
- *   profile adds (./config: system blocks first, headers), so they follow
- *   the shape the subscription endpoint accepts;
- * - a token the API refuses is refreshed once and the request retried;
- * - refusals become `ClaudeAccountError`: the plan's usage limit, a refused
- *   sign-in, and an answer the route doesn't know.
- *
- * Everything else is the AI SDK's Anthropic model, given a custom `fetch`.
+ * Requests with a Claude account's token instead of an API key: the token
+ * only to the API's origin, the profile's additions first, one refresh on a
+ * refused token, and refusals as `ClaudeAccountError`. Everything else is
+ * the AI SDK's Anthropic model, given a custom `fetch`.
  */
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { version } from "../../../../package.json";
@@ -90,11 +80,7 @@ async function errorMessage(response: Response): Promise<string> {
   return raw.slice(0, 200) || response.statusText;
 }
 
-/**
- * A response the route can't use, as `ClaudeAccountError`; null for one the
- * AI SDK handles as it does an API key's (an answer, an unknown model, a
- * passing rate limit, a server error).
- */
+/** Null for what the AI SDK handles as it does an API key's: an answer, a passing rate limit, a server error. */
 async function refusalOf(response: Response): Promise<ClaudeAccountError | null> {
   const { status } = response;
   if (status === 401 || status === 403) {
@@ -168,7 +154,9 @@ export function createAccountFetch(
         );
       }
       headers.delete("content-length");
-      return { accessToken, response: await fetcher(url, { ...init, headers, body }) };
+      // A redirect would carry the token to another address.
+      const response = await fetcher(url, { ...init, headers, body, redirect: "error" });
+      return { accessToken, response };
     };
 
     const first = await send();
@@ -189,7 +177,6 @@ export function createClaudeAccountChatModel(options: {
   baseUrl: string;
   modelId: string;
   credentials: OAuthCredentials;
-  /** What the route's profile adds to every request. */
   request: RequestTransform;
   fetch?: typeof globalThis.fetch;
 }): ChatLanguageModel {
