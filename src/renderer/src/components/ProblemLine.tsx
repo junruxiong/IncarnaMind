@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { ExclamationIcon } from "../viewer/icons";
+import { MetaLine } from "./MetaLine";
 
 /**
  * The amber "!" that leads the words of an error (DESIGN.md, Colors: Red,
@@ -24,27 +25,17 @@ export interface ProblemAction {
   disabled?: boolean;
 }
 
-/** An action after a line's words: " · Show"; after a full-width stop "。· 重试", as Chinese sets it. */
-export function LineAction({
-  action,
-  afterStop = false,
-}: {
-  action: ProblemAction;
-  afterStop?: boolean;
-}) {
+export function LineAction({ action }: { action: ProblemAction }) {
   return (
-    <>
-      <span aria-hidden="true">{afterStop ? "· " : " · "}</span>
-      <button
-        type="button"
-        data-testid={action.testId}
-        disabled={action.disabled}
-        onClick={action.onClick}
-        className="rounded-sm font-semibold text-accent underline-offset-2 hover:underline disabled:opacity-50 disabled:hover:no-underline"
-      >
-        {action.label}
-      </button>
-    </>
+    <button
+      type="button"
+      data-testid={action.testId}
+      disabled={action.disabled}
+      onClick={action.onClick}
+      className="rounded-sm font-semibold text-accent underline-offset-2 hover:underline disabled:opacity-50 disabled:hover:no-underline"
+    >
+      {action.label}
+    </button>
   );
 }
 
@@ -61,6 +52,7 @@ export function ProblemLine({
   children,
   action,
   also,
+  details = [],
   role = "alert",
   testId,
   title,
@@ -70,30 +62,32 @@ export function ProblemLine({
   action?: ProblemAction | undefined;
   /** A second choice, after the first, where the problem has two ways out (local mode refusing a Question). */
   also?: ProblemAction | undefined;
+  /** More parts of the line between its words and its actions, such as a run's estimate. */
+  details?: readonly string[];
   role?: "alert" | "status";
   testId?: string;
   /** More to read on hover, such as the provider's own words. */
   title?: string | undefined;
   className?: string;
 }) {
+  const buttons = [action, also].filter(
+    (each): each is ProblemAction => each !== undefined && each.label !== "",
+  );
   return (
-    <p
+    <div
       role={role}
       data-testid={testId}
       title={title}
       className={`font-sans text-[13px] leading-5 break-words text-ink-meta ${className}`}
     >
-      <span>{children}</span>
-      {[action, also].map(
-        (each, index) =>
-          each && (
-            <LineAction
-              key={each.label}
-              action={each}
-              afterStop={index === 0 && typeof children === "string" && /[。！？]$/.test(children)}
-            />
-          ),
-      )}
-    </p>
+      <MetaLine
+        as="div"
+        parts={[
+          children,
+          ...details,
+          ...buttons.map((each) => <LineAction key={each.label} action={each} />),
+        ]}
+      />
+    </div>
   );
 }
