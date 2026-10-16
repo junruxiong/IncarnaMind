@@ -42,6 +42,7 @@ describe("Settings", () => {
         authorName: null,
         monthlyCap: null,
         webSearch: false,
+        keepWebPageLook: false,
       },
       device: {
         sidebarWidth: 248,
@@ -136,6 +137,7 @@ describe("Settings", () => {
       authorName: null,
       monthlyCap: null,
       webSearch: false,
+      keepWebPageLook: false,
     });
     expect(settings.device).toEqual({
       sidebarWidth: 320,
@@ -197,6 +199,7 @@ describe("Settings", () => {
         authorName: "P. Raman",
         monthlyCap: { amount: 20, currency: "USD" },
         webSearch: true,
+        keepWebPageLook: true,
       },
       device,
     });
@@ -214,6 +217,7 @@ describe("Settings", () => {
         authorName: "P. Raman",
         monthlyCap: { amount: 20, currency: "USD" },
         webSearch: true,
+        keepWebPageLook: true,
       },
       device,
       language: "zh-CN",

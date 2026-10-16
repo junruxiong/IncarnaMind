@@ -17,6 +17,7 @@ import type {
   SandboxLevel,
   SecretProtection,
   TranscriptionEngine,
+  WebPageLookFailure,
 } from "./api";
 import type { StatIdentity } from "./documents/files";
 import type { Reranker } from "./documents/searchTool";
@@ -175,6 +176,17 @@ export interface OllamaApp {
  */
 export interface Printer {
   print(document: PrintDocument): Promise<Uint8Array>;
+}
+
+/**
+ * Makes a PDF of a web page as a browser shows it, for "Keep the page as it
+ * looks". The desktop app loads it once in a hidden page that reaches only
+ * the public internet (src/main/pageLook.ts).
+ */
+export interface PageLook {
+  render(
+    address: string,
+  ): Promise<{ pdf: Uint8Array } | { failure: WebPageLookFailure; message: string }>;
 }
 
 /** How Linked folders are watched and checked (see ./documents/library). The defaults suit the app. */
@@ -715,6 +727,8 @@ export interface CoreAdapters {
   ollamaStartTimeoutMs?: number;
   /** Prints PDF exports. Absent (tests that don't export PDFs): a PDF export is refused. */
   printer?: Printer;
+  /** Keeps web pages as they look. Absent (tests that aren't about it): none is kept. */
+  pageLook?: PageLook;
   /**
    * Draws a chart's picture for a Word export. Absent (tests that don't need
    * it): a chart goes into Word as the table of its values instead.

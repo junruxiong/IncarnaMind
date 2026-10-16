@@ -6,13 +6,16 @@
  * The article's pictures are saved with it (#756): fetched once through the
  * fetcher that reaches only the public internet, kept in "Web pages/pictures"
  * as files named by their content, so versions share them and none is
- * written over, and shown by the snapshot from there.
+ * written over, and shown by the snapshot from there. A page kept as it
+ * looks has a PDF of each version made in the background, one at a time, in
+ * "Web pages/looks", named by its content too.
  */
 import { randomUUID } from "node:crypto";
 import { rmSync } from "node:fs";
 import { access, mkdir, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { normaliseAddress } from "../../../shared/webAddresses";
+import type { PageLook } from "../../adapters";
 import type { Document, SaveWebPageInput, WebPageResult } from "../../api";
 import { InvalidInputError, isRecord, NotFoundError } from "../../errors";
 import type { Database } from "../../storage";
@@ -23,7 +26,11 @@ import { type FetchedPicture, fetchPictures, type PictureLimits } from "./pictur
 import { type ShownPicture, type Snapshot, snapshotOf, withPictures } from "./snapshot";
 import {
   documentAtAddress,
+  keptLookHashes,
   keptPictureHashes,
+  lookName,
+  looksUnderWay,
+  recordLook,
   recordPictures,
   recordVersion,
   type WebPagePicture,
@@ -48,6 +55,7 @@ export interface WebPagesOptions {
     get(id: string): Document;
     addSnapshot(id: string, name: string, file: SnapshotFile, record: () => void): Document;
     check(path: string): Promise<void>;
+    announce(id: string): void;
   };
   /** Most preferred first, as Accept-Language lists them. */
   languages(): readonly string[];
@@ -56,6 +64,10 @@ export interface WebPagesOptions {
   /** Fetches the pictures: one that reaches only the public internet, whatever fetched the page. */
   pictureFetch: PageFetch;
   pictureLimits?: PictureLimits;
+  /** Makes a page's look; none: no page is kept as it looks. */
+  look?: PageLook;
+  /** A save that doesn't say keeps the page as it looks: `UserSettings.keepWebPageLook`. */
+  keepLookByDefault: () => boolean;
   reportError?: (error: unknown) => void;
 }
 
@@ -79,24 +91,50 @@ interface PageToWrite {
   leftOut: number;
 }
 
+async function writeOnce(path: string, bytes: Uint8Array): Promise<void> {
+  const there = await access(path).then(
+    () => true,
+    () => false,
+  );
+  if (there) return;
+  await mkdir(dirname(path), { recursive: true });
+  const partial = `${path}.${randomUUID()}.part`;
+  try {
+    await writeFile(partial, bytes);
+    await rename(partial, path);
+  } catch (error) {
+    await rm(partial, { force: true });
+    throw error;
+  }
+}
+
 function parseSaveInput(input: unknown): SaveWebPageInput {
   if (!isRecord(input) || typeof input.address !== "string") {
     throw new InvalidInputError("saveWebPage expects an address.");
   }
-  const { address, html, folderId } = input;
+  const { address, html, folderId, keepLook } = input;
+  if (keepLook !== undefined && typeof keepLook !== "boolean") {
+    throw new InvalidInputError({ key: "error.webPage.keepLookNotBoolean" });
+  }
   if (html !== undefined && typeof html !== "string") {
     throw new InvalidInputError("A web page's HTML must be text.");
   }
   if (folderId !== undefined && folderId !== null && typeof folderId !== "string") {
     throw new InvalidInputError("A Folder id must be text, or null.");
   }
-  return { address, ...(html === undefined ? {} : { html }), folderId: folderId ?? null };
+  return {
+    address,
+    ...(html === undefined ? {} : { html }),
+    folderId: folderId ?? null,
+    ...(keepLook === undefined ? {} : { keepLook }),
+  };
 }
 
 export function createWebPages(options: WebPagesOptions) {
   const { db, now, documents } = options;
   const folder = join(options.dataDir, "Web pages");
   const pictureFolder = join(folder, "pictures");
+  const lookFolder = join(folder, "looks");
   /**
    * Pictures a save has written and not recorded yet, with how many saves:
    * no clean-up takes them meanwhile.
@@ -126,28 +164,12 @@ export function createWebPages(options: WebPagesOptions) {
     throw error;
   };
 
-  /** Writes a picture's file, unless one with its content is there already. */
   async function keepPicture(picture: FetchedPicture): Promise<WebPagePicture> {
     const kept = {
       pictureHash: hashBytes(picture.bytes),
       mediaType: picture.type.mediaType,
     };
-    const path = join(pictureFolder, pictureName(kept));
-    const there = await access(path).then(
-      () => true,
-      () => false,
-    );
-    if (!there) {
-      await mkdir(pictureFolder, { recursive: true });
-      const partial = `${path}.${randomUUID()}.part`;
-      try {
-        await writeFile(partial, picture.bytes);
-        await rename(partial, path);
-      } catch (error) {
-        await rm(partial, { force: true });
-        throw error;
-      }
-    }
+    await writeOnce(join(pictureFolder, pictureName(kept)), picture.bytes);
     return {
       number: 0,
       ...kept,
@@ -237,6 +259,75 @@ export function createWebPages(options: WebPagesOptions) {
     return { path, contentHash: hashBytes(bytes), size: bytes.byteLength, mtimeMs };
   }
 
+  let looks: Promise<void> = Promise.resolve();
+
+  const queueLook = (documentId: string, contentHash: string, address: string) => {
+    const look = options.look;
+    if (!look) return;
+    looks = looks
+      .then(async () => {
+        const made = await look.render(address).catch((error: unknown) => ({
+          failure: "failed" as const,
+          message: error instanceof Error ? error.message : String(error),
+        }));
+        if ("pdf" in made) {
+          const lookHash = hashBytes(made.pdf);
+          const file = join(lookFolder, lookName(lookHash));
+          hold([lookHash], 1);
+          try {
+            await writeOnce(file, made.pdf);
+            const at = now();
+            const recorded = recordLook(
+              db,
+              documentId,
+              contentHash,
+              { status: "saved", lookHash, savedAt: at },
+              at,
+            );
+            // Deleted permanently while it was made: nothing shows it, unless another page does.
+            if (!recorded && !keptLookHashes(db).has(lookHash)) rmSync(file, { force: true });
+          } finally {
+            hold([lookHash], -1);
+          }
+        } else {
+          options.reportError?.(`${address}: ${made.failure}, ${made.message}`);
+          recordLook(
+            db,
+            documentId,
+            contentHash,
+            { status: "failed", failure: made.failure },
+            now(),
+          );
+        }
+        documents.announce(documentId);
+      })
+      .catch((error: unknown) => options.reportError?.(error));
+  };
+
+  const startLook = (documentId: string, contentHash: string, address: string) => {
+    if (!options.look) return;
+    recordLook(db, documentId, contentHash, { status: "saving" }, now());
+    documents.announce(documentId);
+    queueLook(documentId, contentHash, address);
+  };
+
+  // Looks being made when the app last quit were asked for: they are made now, once. One that
+  // was made again already and didn't finish may be what stopped the app: it is given up.
+  for (const each of looksUnderWay(db)) {
+    if (each.resumed) {
+      recordLook(
+        db,
+        each.documentId,
+        each.contentHash,
+        { status: "failed", failure: "stopped" },
+        now(),
+      );
+      continue;
+    }
+    recordLook(db, each.documentId, each.contentHash, { status: "saving", resumed: true }, now());
+    queueLook(each.documentId, each.contentHash, each.address);
+  }
+
   /** Records a version written, and the pictures it shows. */
   const record = (documentId: string, file: SnapshotFile, address: string, page: PageToWrite) => {
     const at = now();
@@ -268,16 +359,20 @@ export function createWebPages(options: WebPagesOptions) {
       // Checked and removed in one turn, with nothing awaited between: a save that holds a
       // picture, or has recorded it, meanwhile keeps it; one that holds it after finds it gone
       // and writes it again.
-      const kept = keptPictureHashes(db);
-      for (const file of files) {
-        const hash = file.split(".")[0] ?? "";
-        if (kept.has(hash) || saving.has(hash)) continue;
-        try {
-          rmSync(join(pictureFolder, file), { force: true });
-        } catch (error) {
-          options.reportError?.(error);
+      const lookFiles = await readdir(lookFolder).catch(() => [] as string[]);
+      const removeUnkept = (from: string, names: readonly string[], kept: Set<string>) => {
+        for (const name of names) {
+          const hash = name.split(".")[0] ?? "";
+          if (kept.has(hash) || saving.has(hash)) continue;
+          try {
+            rmSync(join(from, name), { force: true });
+          } catch (error) {
+            options.reportError?.(error);
+          }
         }
-      }
+      };
+      removeUnkept(pictureFolder, files, keptPictureHashes(db));
+      removeUnkept(lookFolder, lookFiles, keptLookHashes(db));
     },
 
     /**
@@ -290,7 +385,7 @@ export function createWebPages(options: WebPagesOptions) {
       added?: (documentId: string) => void,
       fetch?: PageFetch,
     ): Promise<WebPageResult> {
-      const { address: typed, html } = parseSaveInput(input);
+      const { address: typed, html, keepLook } = parseSaveInput(input);
       const address = normaliseAddress(typed);
       if (!address) {
         return Promise.resolve(
@@ -315,6 +410,9 @@ export function createWebPages(options: WebPagesOptions) {
               record(id, file, address, page);
               added?.(id);
             });
+            if (html === undefined && (keepLook ?? options.keepLookByDefault())) {
+              startLook(id, file.contentHash, address);
+            }
             return { outcome: "saved", document, existing: false };
           });
         } catch (error) {
@@ -339,6 +437,12 @@ export function createWebPages(options: WebPagesOptions) {
             const current = documents.get(document.id);
             const file = await write(current.path, page.xhtml);
             record(current.id, file, info.address, page);
+            const look = webPageInfo(db, current.id)?.look ?? null;
+            // The page's own choice at its save, whatever the setting says now.
+            const wanted = info.look !== null;
+            if (wanted && (look === null || look.status === "failed")) {
+              startLook(current.id, file.contentHash, info.address);
+            }
             await documents.check(current.path);
             return {
               outcome: "saved" as const,
@@ -351,6 +455,23 @@ export function createWebPages(options: WebPagesOptions) {
           return failed(info.address, error);
         }
       });
+    },
+
+    /** See `CoreApi.keepWebPageLook`. */
+    keepLook(documentId: unknown): Document {
+      if (typeof documentId !== "string" || documentId === "") {
+        throw new InvalidInputError({ key: "error.document.idRequired" });
+      }
+      const document = documents.get(documentId);
+      const info = webPageInfo(db, document.id);
+      const latest = info?.versions[0];
+      if (document.kind !== "web" || !info || !latest) {
+        throw new InvalidInputError({ key: "error.webPage.lookNotWebPage" });
+      }
+      if (info.look?.status !== "saving" && info.look?.status !== "saved") {
+        startLook(document.id, latest.contentHash, info.address);
+      }
+      return documents.get(document.id);
     },
   };
 }

@@ -73,8 +73,7 @@ test("the setup card offers only the first-class providers: no preset and no bes
     await window.keyboard.type("What is in my Documents?");
     await window.keyboard.press("Enter");
     const card = window.getByTestId("model-setup");
-    await card.getByTestId("setup-other").click();
-    await card.getByTestId("way-key").click();
+    await card.getByTestId("setup-key").click();
     const form = card.getByTestId("provider-form");
     await form.getByTestId("provider-more-toggle").click();
     await expect(form.getByRole("radio", { name: "OpenRouter", exact: true })).toHaveCount(1);
