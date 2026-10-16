@@ -1172,6 +1172,64 @@ describe("Amounts in brackets are negative (#978)", { timeout: 60_000 }, () => {
     expect(shown(answerBlocks(answer))).toBe("The net sale proceeds were £378,076.00.");
   });
 
+  // protects=#978; fails_when=a correct change between two losses, or from a loss to a profit, is told its sign is wrong; no_claim=the wording of the line a deduction gets.
+  test.each([
+    [
+      "two losses",
+      ["Loss for 2025 (£2,500.00)", "Loss for 2024 (£3,100.00)"],
+      ["(£2,500.00)", "(£3,100.00)"],
+      "£600.00",
+    ],
+    [
+      "a profit and a loss",
+      ["Profit for 2025 £800.00", "Loss for 2024 (£500.00)"],
+      ["£800.00", "(£500.00)"],
+      "£1,300.00",
+    ],
+  ])(
+    "a difference between %s is recorded with no word about its sign",
+    async (_name, lines, numbers, result) => {
+      const input = (name: string, label: string, cited: number[], at: number) => ({
+        name,
+        label,
+        citation: cited[at],
+        number: numbers[at],
+      });
+      const model = calculatingModel({
+        queries: ["profit loss"],
+        steps: [
+          citeStatement("Results", lines, (cited) => [
+            {
+              tool: "calculate",
+              input: {
+                figures: [
+                  {
+                    marker: 1,
+                    label: "Change",
+                    formula: "later - earlier",
+                    inputs: [input("later", "2025", cited, 0), input("earlier", "2024", cited, 1)],
+                  },
+                ],
+              },
+            },
+          ]),
+        ],
+        answer: "The change was [=1][^1].",
+      });
+      const results = {
+        name: "Results.pdf",
+        contents: buildPdf([{ lines: ["Results", ...lines] }]),
+      };
+      const { core } = await setUpCalculating(model, [results]);
+
+      const { answer } = await askAndRead(core, "What was the change in the result?");
+
+      expect(told(model, "calculate")[0]).toMatch(`Recorded [=1] = ${result} `);
+      expect(told(model, "calculate")[0]).not.toContain("Check the sign");
+      expect(shown(answerBlocks(answer))).toBe(`The change was ${result}.`);
+    },
+  );
+
   // protects=#978; fails_when=full-width brackets in a Chinese statement are read as positive; no_claim=English.
   test("in Chinese: （46,200.00） is minus 46,200, and the net proceeds are 3,780,760", async () => {
     const numbers = ["3,850,000.00", "（46,200.00）", "（15,000.00）", "（8,040.00）"];

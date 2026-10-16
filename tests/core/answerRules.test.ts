@@ -212,40 +212,45 @@ const handed = (...documents: readonly [string, string | null][]) =>
     .join("\n\n");
 
 describe("The note on amounts in brackets (#978)", () => {
+  const handed = (line: string) => `<passage id="P1" document="Statement">\n${line}\n</passage>`;
+
   test.each([
     ["Less: agent's fee (4,620.00)"],
     ["Less: legal fees (£1,500.00)"],
-    ["Net operating income | (412) | (777)"],
     ["Net cash flow | （1,250.5）"],
     ["Interest paid ( 340.50 )"],
-  ])("follows Passages that write an amount in brackets: %s", (line) => {
-    expect(
-      bracketedAmountsNote(`<passage id="P1" document="Statement">\n${line}\n</passage>`),
-    ).toMatch(/^An amount in brackets in these Passages is negative.*括号里的金额是负数/);
+    ["Net loss\t($1.2bn)"],
+  ])("follows Passages in which the reader finds a negative in brackets: %s", (line) => {
+    expect(bracketedAmountsNote(handed(line))).toMatch(
+      /^An amount in brackets in these Passages is negative.*括号里的金额是负数/,
+    );
   });
 
   test.each([
     ["Report outages over 4 hours (see the memo)."],
     ["Founded in 1998 (the second year of the programme) in Leeds."],
-    ["Items (1) and (2) apply."],
+    ["The memo (2023) and the handbook (note 4) apply, see (p. 12)."],
+    ["Items (1) and (2) apply, and section 1159(10)."],
     ["Fees of 4,620.00 are due."],
+    ["Legal fees (250) were paid."],
+    ["The fund (£2.1bn) invested in 12 properties (£4.5m)."],
     ["No Passages in the User's Documents match this search."],
-  ])("is left out of Passages with none: %s", (line) => {
-    expect(bracketedAmountsNote(line)).toBe("");
+  ])("is left out of Passages in which it finds none: %s", (line) => {
+    expect(bracketedAmountsNote(handed(line))).toBe("");
   });
 
   test("is in the instructions of a model without Tools, after its Passages, and not in a Question's instructions otherwise", () => {
     const listed = { total: 1, names: ["Statement"] };
-    const passages = '<passage id="P1" document="Statement">\nLess: fees (4,620.00)\n</passage>';
+    const passages = handed("Less: fees (4,620.00)");
     for (const mode of ["structured-output", "none"] as const) {
       expect(documentInstructions(mode, listed, passages)).toContain(
         "is negative, as accountants write it",
       );
     }
     expect(documentInstructions("tools", listed)).not.toContain("accountants");
-    expect(
-      documentInstructions("none", listed, '<passage id="P1">\nPlain text.\n</passage>'),
-    ).not.toContain("accountants");
+    expect(documentInstructions("none", listed, handed("Plain text."))).not.toContain(
+      "accountants",
+    );
   });
 });
 

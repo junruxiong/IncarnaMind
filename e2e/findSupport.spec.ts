@@ -292,7 +292,7 @@ test("A figure worked out from an amount in brackets says the amount was counted
   await writeFile(
     join(sources, "Cash update.pdf"),
     buildPdf([
-      { lines: ["Cash update", "Net cash was $(500)m and EBITDA was $400m at the end of 2025."] },
+      { lines: ["Cash update", "Net cash was $(500.0)m and EBITDA was $400m at the end of 2025."] },
     ]),
   );
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
@@ -321,7 +321,7 @@ test("A figure worked out from an amount in brackets says the amount was counted
   await pointAndClick(window, contradicted);
   const inputs = window.getByTestId("claim-card").getByTestId("claim-input");
   await expect(inputs).toHaveCount(2);
-  await expect(inputs.first()).toContainText("$(500)m");
+  await expect(inputs.first()).toContainText("$(500.0)m");
   await expect(inputs.first()).toContainText("counted as negative");
   await expect(inputs.last()).toContainText("$400m");
   await expect(inputs.last()).not.toContainText("counted as negative");

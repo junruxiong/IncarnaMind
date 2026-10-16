@@ -931,17 +931,28 @@ export function scaleChanges(formula: string, inputs: readonly FormulaInput[]): 
   }
 }
 
-/** The inputs a formula takes away whole, "fee" in "price - fee" but not in "price - fee * 2", as written. */
-export function subtractedNames(formula: string): string[] {
+/**
+ * A formula that is only a sum of inputs, "price - fee - legal + refund": its
+ * first term, and the terms it takes away. Null for any other formula.
+ */
+export function sumOf(formula: string): { total: string; taken: string[] } | null {
+  const terms = (node: Node): { name: string; taken: boolean }[] | null => {
+    if (node.type === "name") return [{ name: node.name, taken: false }];
+    if (node.type !== "binary" || (node.op !== "+" && node.op !== "-")) return null;
+    if (node.right.type !== "name") return null;
+    const left = terms(node.left);
+    return left && [...left, { name: node.right.name, taken: node.op === "-" }];
+  };
   try {
-    return nodesIn(
-      parse(formula),
-      (node) => node.type === "binary" && node.op === "-" && node.right.type === "name",
-    ).flatMap((node) =>
-      node.type === "binary" && node.right.type === "name" ? [node.right.name] : [],
-    );
+    const found = terms(parse(formula));
+    const [first] = found ?? [];
+    if (!found || !first) return null;
+    return {
+      total: first.name,
+      taken: found.filter((term) => term.taken).map((term) => term.name),
+    };
   } catch (error) {
-    if (error instanceof Refusal) return [];
+    if (error instanceof Refusal) return null;
     throw error;
   }
 }
