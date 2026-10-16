@@ -1482,8 +1482,17 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     requireFolder: (folderId) => void library.folder(folderId),
     async addFile(path, folderId) {
-      const added = await addDocuments([path], folderId === null ? {} : { groupId: folderId });
-      return added.documents[0] ?? null;
+      const fresh = new Set<string>();
+      const added = await addDocuments(
+        [path],
+        folderId === null ? {} : { groupId: folderId },
+        (documentId) => fresh.add(documentId),
+      );
+      const [document] = added.documents;
+      // Someone else's file, checked: not proof of its own claims. One the Library already had keeps the User's choice.
+      return document && fresh.has(document.id)
+        ? documents.setNotCited(document.id, true)
+        : (document ?? null);
     },
     document: (documentId) => documents.get(documentId),
     onStatus: (listener) => events.on("document.status", listener),
@@ -2355,11 +2364,18 @@ export function createCore(adapters: CoreAdapters): Core {
     reportError: (error) => console.error(error),
   });
 
-  const addDocuments: CoreApi["addDocuments"] = async (paths, options) => {
+  const addDocuments = async (
+    paths: string[],
+    options?: Parameters<CoreApi["addDocuments"]>[1],
+    onNew?: (documentId: string) => void,
+  ): ReturnType<CoreApi["addDocuments"]> => {
     const batchId = batches.begin(library.target(options));
     const since = now();
     const result = await documents
-      .add(paths, (documentId) => batches.added(batchId, documentId))
+      .add(paths, (documentId) => {
+        batches.added(batchId, documentId);
+        onNew?.(documentId);
+      })
       .finally(() => batches.done(batchId));
     usageData.record({ event: "documents_added", fields: addedCounts(result, since) });
     return { ...result, batchId };
