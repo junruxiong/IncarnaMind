@@ -9,6 +9,8 @@ describe("Text written into a Mind, without talk of searching", () => {
     "The search limit cut me off before the last three files.",
     "I searched both papers but found nothing on the methods.",
     "我搜索了两篇论文，但没有找到方法部分。",
+    "Where the searches found little, that is stated.",
+    "检索到的段落中没有关于方法的内容。",
   ])("%s", (sentence) => {
     const { markdown, left } = withoutSearchTalk(
       `## Summary\n\nTides follow the moon. ${sentence}`,
@@ -24,7 +26,9 @@ describe("Text written into a Mind, without talk of searching", () => {
     "We found that search results did not improve recall.",
     "检索结果中没有显著差异。",
     "我们的检索方法提升了召回率。",
-    "Where the searches found little, the authors say so.",
+    "I found three issues in the lease, and I looked at the break clause twice.",
+    "我找到了租约中的三个问题。",
+    "我查到了两条记录。",
     "Passages retrieved by dense retrieval improve recall over BM25 [^2].",
     "该方法提升了搜索结果的相关性。",
     "该方法提升了搜索结果的相关性[^3]。",
