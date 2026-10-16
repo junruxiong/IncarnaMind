@@ -36,7 +36,6 @@ import {
 } from "../shared/meetingPanel";
 import { titleBarOf } from "../shared/titleBar";
 
-/** Listens on a channel from the main process; returns how to stop. */
 function listen<T>(channel: string, listener: (value: T) => void): () => void {
   const receive = (_event: unknown, value: T) => listener(value);
   ipcRenderer.on(channel, receive);
@@ -145,7 +144,7 @@ if (process.argv.includes(CITED_PAGE_ARGUMENT)) {
   contextBridge.exposeInMainWorld(FILES_BRIDGE_KEY, files);
 }
 
-// The floating panel during a call (#839) has the file helpers too, for the window's error log.
+// The floating panel during a call has the file helpers too, for the window's error log.
 if (process.argv.includes(MEETING_PANEL_ARGUMENT)) {
   const panel: MeetingPanelBridge = {
     resize: (width, height) => ipcRenderer.send(MEETING_PANEL_CHANNELS.size, width, height),

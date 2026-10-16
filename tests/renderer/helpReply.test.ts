@@ -1,5 +1,5 @@
 /**
- * A help button's Answer during a call (#839), read as the floating panel lays it out: options
+ * A help button's Answer during a call, read as the floating panel lays it out: options
  * with the recommended first and what each leads to, readings with the moment they rest on,
  * and short lines, while it streams too.
  */

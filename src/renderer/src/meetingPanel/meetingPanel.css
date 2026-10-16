@@ -1,5 +1,5 @@
 /*
- * The floating panel during a call (#839; the canvas boards Meet-Help-*): 408px wide, its
+ * The floating panel during a call (the canvas boards Meet-Help-*): 408px wide, its
  * window sized to what it holds, or a pill when collapsed. The window has no frame: the header
  * and the pill move it.
  */

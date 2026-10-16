@@ -1,5 +1,5 @@
 /**
- * A help button's Answer during a call (#839), read line by line as the panel
+ * A help button's Answer during a call, read line by line as the panel
  * lays it out (the shape src/core/answers/meetingHelp.ts asks for): options
  * or readings, the recommended first after "★", each followed by "→" and what
  * it leads to; or up to three short lines. It reads a part still streaming.

@@ -1,5 +1,5 @@
 /**
- * One-click help during a call (#839), in a window: the button pressed until
+ * One-click help during a call, in a window: the button pressed until
  * its Answer shows, so its outline is drawn at once; why it couldn't be asked;
  * and the buttons' shortcuts as this system writes them.
  */
@@ -42,7 +42,7 @@ function settle(meetingId: string, blocked?: HelpState["blocked"][string]): void
   });
 }
 
-// The Answer asked for is the Meeting's help now: its outline gives way to it.
+// A press on a Meeting that has since stopped leaves no outline behind.
 useMeetings.subscribe((state) => {
   const { pending } = useMeetingHelp.getState();
   for (const meetingId of Object.keys(pending)) {

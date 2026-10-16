@@ -103,7 +103,7 @@ export interface FilesBridge {
    */
   onFullScreenChange(listener: (fullScreen: boolean) => void): () => void;
   /**
-   * Calls `listener` when a help button's global shortcut is pressed during a call (#839) while
+   * Calls `listener` when a help button's global shortcut is pressed during a call while
    * the floating panel isn't shown: the window asks for that help itself. Returns how to stop.
    */
   onMeetingHelp(listener: (kind: GeneralHelpKind) => void): () => void;

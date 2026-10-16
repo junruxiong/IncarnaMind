@@ -1846,7 +1846,7 @@ export interface DeviceSettings {
    * that the other people should be told. Recording waits for it.
    */
   meetingNoticeAccepted: boolean;
-  /** Settings › Meetings › "Show the floating panel": it appears while a Meeting records (#839). */
+  /** Settings › Meetings › "Show the floating panel": it appears while a Meeting records. */
   meetingPanel: boolean;
   /** Settings › Meetings › "Keep the panel out of my screen share", where the system honours it. */
   meetingPanelHidden: boolean;
@@ -7056,9 +7056,9 @@ export interface Meeting {
   transcript: MeetingTranscript | null;
   /** How well its capture went, so a bad recording can be explained (#161). */
   health: CaptureHealth;
-  /** The help asked for last during the call (#839), whose Answer the floating panel shows; null before any, and after Stop. */
+  /** The help asked for last during the call, whose Answer the floating panel shows; null before any and after Stop. */
   help: MeetingHelp | null;
-  /** The kind of meeting the help buttons are for, as the User chose it in the panel; null: the general buttons only. */
+  /** The kind of meeting the help buttons are for, as the User chose it; null: the general buttons only. */
   helpTemplate: MeetingHelpTemplate | null;
   createdAt: string;
   updatedAt: string;
@@ -7066,7 +7066,7 @@ export interface Meeting {
 
 export type { HelpKeys, MeetingHelpKind, MeetingHelpTemplate };
 
-/** Help asked for during a call (#839): its button, and its Answer in a conversation. */
+/** Help asked for during a call: its button, and its Answer in a conversation. */
 export interface MeetingHelp {
   kind: MeetingHelpKind;
   conversationId: string;
@@ -8884,10 +8884,10 @@ export interface CoreApi {
   /** Opens the system's settings where the User allows IncarnaMind to record this source. */
   openAudioSettings(source: AudioSource): Promise<void>;
   /**
-   * One-click help during the call (#839): asks the button's Question in a conversation, from
+   * One-click help during the call: asks the button's Question in a conversation, from
    * the Meeting's Mind, while it records or is paused; its Answer is one or two options to
-   * say, read from the live transcript, and from the Mind's Folder for the buttons that
-   * search it. The Meeting's `help` names it. As `askInConversation` otherwise.
+   * say, read from the live transcript and from what the Mind's Folder says about its newest
+   * lines. The Meeting's `help` names it. As `askInConversation` otherwise.
    */
   askMeetingHelp(input: AskMeetingHelpInput): Promise<ConversationAskResult>;
   /** Sets the kind of meeting a live Meeting's help buttons are for: its template adds two or three. */

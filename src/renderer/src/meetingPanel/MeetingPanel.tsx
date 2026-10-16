@@ -35,6 +35,7 @@ import {
   useHelpAnswer,
 } from "../components/meetings/HelpSuggestion";
 import { LevelBars } from "../components/meetings/LevelBars";
+import { ReadinessExplanation } from "../components/providers/ChatReadinessNotice";
 import { core } from "../core";
 import { errorMessage } from "../errors";
 import { translateNow, useT } from "../i18n";
@@ -71,7 +72,7 @@ function keyLabels(held: HeldKeys) {
 }
 
 /**
- * The floating panel during a call (#839): above the meeting app, never taking its focus. Its
+ * The floating panel during a call: above the meeting app, never taking its focus. Its
  * header says the recording and holds the template, collapse and close; then the help buttons,
  * and under them the latest suggestion, which a press replaces unless it is pinned. Collapsed,
  * it is a pill with the level bars, which become Stop when pointed at.
@@ -283,7 +284,6 @@ function Panel({
   );
 }
 
-/** The kinds of meeting a template is for, in place under the header: choosing one sets its buttons. */
 function TemplateChoice({ meeting, onChosen }: { meeting: Meeting; onChosen(): void }) {
   const t = useT();
   const choose = (template: MeetingHelpTemplate | null) => {
@@ -312,7 +312,6 @@ function TemplateChoice({ meeting, onChosen }: { meeting: Meeting; onChosen(): v
   );
 }
 
-/** What the latest press brought: its outline at once, the suggestion, or why there is none. */
 function Latest({
   meeting,
   pinned,
@@ -338,7 +337,11 @@ function Latest({
       <div className="panel-suggestion">
         {"readiness" in blocked ? (
           <p data-testid="help-set-up" className="panel-line">
-            {t("meetings.help.setUp")}
+            {blocked.readiness.reason === "no-provider" ? (
+              t("meetings.help.setUp")
+            ) : (
+              <ReadinessExplanation readiness={blocked.readiness} inLine />
+            )}
             <span aria-hidden="true"> · </span>
             <button type="button" onClick={() => bridge.setUp()} className="panel-link">
               {t("providers.readiness.setUp")}

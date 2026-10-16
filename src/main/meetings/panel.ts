@@ -1,5 +1,5 @@
 /**
- * Help during a call (#839), on the desktop: the floating panel and the help
+ * Help during a call, on the desktop: the floating panel and the help
  * buttons' global shortcuts.
  *
  * The panel is a small window above the meeting app, full screen included,
@@ -87,7 +87,6 @@ export function serveMeetingPanel(core: Core, options: MeetingPanelOptions): voi
     front?.webContents.send(FILES_CHANNELS.meetingHelp, kind);
   }
 
-  /** Holds each button's shortcut while `recording`, and lets them all go otherwise. */
   function holdKeys(recording: boolean): void {
     const wanted = new Map<GeneralHelpKind, string>();
     if (recording && settings) {

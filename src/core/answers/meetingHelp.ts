@@ -1,5 +1,5 @@
 /**
- * One-click help during a call (#839): the instructions for a button's
+ * One-click help during a call: the instructions for a button's
  * Question, whose Answer the User reads in a second or two while the call
  * goes on. The floating panel lays each line out by its first character
  * (src/renderer/src/helpReply.ts), so the shape is fixed here.
@@ -69,7 +69,7 @@ export const newestSaid = (heard: readonly WindowedPassage[]): string =>
     .map((passage) => passage.text)
     .join("\n");
 
-/** The Passages found that fit `tokens`, the most relevant first. */
+/** The most relevant Passages found that fit in `tokens`, in the order found. */
 export function foundWithin(found: readonly WindowedPassage[], tokens: number): WindowedPassage[] {
   const kept: WindowedPassage[] = [];
   let left = tokens;

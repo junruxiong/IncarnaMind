@@ -11,14 +11,14 @@ const STARTERS: readonly MessageKey[] = [
 ];
 
 /**
- * A new conversation during a call (#144, #839): quick asks that follow the call, each asked at
+ * A new conversation during a call (#144): quick asks that follow the call, each asked at
  * once from the composer, as if typed there. With no AI model ready, one line and Set up instead.
  */
 export function MeetingStarters() {
   const t = useT();
   const readiness = useAppStore((state) => state.chatReadiness);
   const openSettings = useAppStore((state) => state.openSettings);
-  if (readiness && !readiness.ready) {
+  if (readiness && !readiness.ready && readiness.reason === "no-provider") {
     return (
       <p data-testid="meeting-set-up" className="assistant-empty">
         {t("meetings.help.setUp")}

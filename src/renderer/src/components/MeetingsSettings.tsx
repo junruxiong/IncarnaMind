@@ -16,7 +16,7 @@ import {
 /**
  * Settings → Meetings → Recording: the switch that turns recording on (it is
  * new, and off until transcripts and speakers come), and what is recorded;
- * then help during the call (#839).
+ * then help during the call.
  */
 export function MeetingsSettings() {
   const t = useT();

@@ -24,7 +24,6 @@ import {
 
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
 
-/** The key pressed as an accelerator names it: a letter, a digit or an F-key; null for any other. */
 function keyOf(code: string): string | null {
   const letter = /^Key([A-Z])$/.exec(code)?.[1];
   if (letter) return letter;
@@ -183,7 +182,7 @@ function KeysField({ kind, device }: { kind: GeneralHelpKind; device: Settings["
 }
 
 /**
- * Settings › Meetings › Help during the call (#839): whether the floating panel shows while a
+ * Settings › Meetings › Help during the call: whether the floating panel shows while a
  * meeting records, whether it is kept out of the User's screen share, and the buttons' shortcuts.
  */
 export function HelpSettings() {

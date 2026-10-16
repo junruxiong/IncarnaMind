@@ -1,5 +1,5 @@
 /**
- * One-click help during a call (#839) against a real model: a sales call heard through the fake
+ * One-click help during a call against a real model: a sales call heard through the fake
  * capture and transcriber (no microphone), and a price sheet in the Library. Each button must
  * answer in its shape, "Answer their question" citing the price sheet, "What do they want?"
  * the transcript; and how long each took to its first words and its first whole option is

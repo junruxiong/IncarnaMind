@@ -859,7 +859,7 @@ export function createTranscripts(options: TranscriptsOptions) {
 
     /**
      * The newest line said, by `speaker` when given (a live line's "Me" or "Them"), for the
-     * heading over help during the call (#839); null before there is one.
+     * heading over help during the call; null before there is one.
      */
     newestLine(
       meetingId: string,

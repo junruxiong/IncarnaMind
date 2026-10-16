@@ -5,7 +5,7 @@ import { helpKeysLabel, useMeetingHelp } from "../../meetingHelp";
 import { useAppStore } from "../../store";
 
 /**
- * The help buttons during a call (#839): the general ones with their shortcuts, then the ones
+ * The help buttons during a call: the general ones with their shortcuts, then the ones
  * the meeting's template adds. "grid" in the floating panel, two to a row with the keys on
  * them; "strip" at the top of the assistant, the keys in each tooltip. The one pressed last
  * is marked. `keys`: the shortcuts held now, which the panel shows; else the ones set.
