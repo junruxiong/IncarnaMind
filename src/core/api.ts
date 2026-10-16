@@ -774,6 +774,7 @@ export interface AnswerAttributes {
   errorMessage: string | null;
   /** When the plan's limit that stopped it resets (ISO 8601), when the provider said. */
   errorResetsAt: string | null;
+  errorSignInRoute: SignInRouteProblem | null;
   /** A fingerprint of the content as it was generated: it differs once the User edits the Answer. */
   generatedHash: string | null;
   /**
@@ -4861,6 +4862,11 @@ export interface AnswerSteps {
    * Absent: none.
    */
   unbackedClaims?: ClaimedChange[];
+  /**
+   * Its model can't call Tools, and the User's words asked to write into a
+   * Mind or change one (`routeRequest`): nothing was written. Absent: neither.
+   */
+  withoutMindTools?: true;
   /** It covered only some of the Documents in scope, and offers the rest. Absent: all of them. */
   coverage?: AnswerCoverage;
 }
@@ -5097,6 +5103,7 @@ export interface ConversationAnswer {
   /** Why it failed, when `status` is "failed". */
   errorKind: ProviderErrorKind | null;
   errorMessage: string | null;
+  errorSignInRoute: SignInRouteProblem | null;
   citationSupport: CitationSupport | null;
   /** The Tools it called, in order: its searches, Skills and Connectors' Tools. */
   toolCalls: AnswerToolCall[];

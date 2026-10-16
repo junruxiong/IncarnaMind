@@ -2025,7 +2025,6 @@ export const en = {
   "signInRoute.wayBack.signInAgain": "Sign in again",
   "signInRoute.wayBack.useAnotherModel": "Use another model",
   "signInRoute.wayBack.pasteApiKey": "Use an API key instead",
-  "signInRoute.wayBack.useClaudeCode": "Use Claude Code",
   "chatgpt.welcome.title": "You're using your ChatGPT plan",
   "chatgpt.welcome.body":
     "Questions you ask in IncarnaMind with a ChatGPT model now use your ChatGPT plan. You can see and limit this in ChatGPT's settings.",
@@ -3568,6 +3567,8 @@ export const en = {
   "menu.reload": "Reload",
   "menu.forceReload": "Force Reload",
   "menu.devTools": "Toggle Developer Tools",
+  "menu.export": "Export…",
+  "menu.export.named": "Export “{name}”…",
   "menu.help": "Help",
   "menu.sendFeedback": "Send feedback…",
   "feedback.title": "Send feedback",
@@ -3878,6 +3879,8 @@ export const en = {
   "editor.hint.example": "Try it: write a line here, or {ask}",
   "editor.hint.example.ask": "press {shortcut} to ask your own Question",
   "examples.chip": "Example",
+  "assistant.pill": "Ask anything",
+  "sidebar.examples": "Examples",
   "examples.banner.label": "About this example",
   "examples.banner.title": "This is an example Mind.",
   "examples.banner.body":
@@ -4463,6 +4466,8 @@ export const en = {
   "answer.unbacked.removed":
     "This reply says it removed or replaced text, but nothing was removed.",
   "answer.unbacked.changed": "This reply says it changed a Mind, but no change was made.",
+  "answer.noMindTools": "This model can't write into your Mind itself.",
+  "answer.noMindTools.add": "Add to Mind",
   "answer.added": "Added to “{mind}”",
   "answer.addedToNew": "Made the Mind “{mind}” from this Answer",
   "answer.tableOpened": "Made the Mind “{mind}” from this table",

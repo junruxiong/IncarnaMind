@@ -11,7 +11,11 @@ import {
 import { DocumentLineIcon } from "../components/lineIcons";
 import { MetaLine } from "../components/MetaLine";
 import { ProblemLine } from "../components/ProblemLine";
-import { ReadinessExplanation, readinessAction } from "../components/providers/ChatReadinessNotice";
+import {
+  ReadinessExplanation,
+  readinessAction,
+  readinessAlso,
+} from "../components/providers/ChatReadinessNotice";
 import { UnreadFilesLine } from "../components/UnreadFilesLine";
 import { buttonStyle } from "../components/ui";
 import { core } from "../core";
@@ -403,6 +407,9 @@ export function VerifyCard({
           action={readinessAction(outcome.readiness, t, openSettings, t("question.setUp"), () =>
             dismissVerifyOutcome(mindId),
           )}
+          also={readinessAlso(outcome.readiness, t, openSettings, () =>
+            dismissVerifyOutcome(mindId),
+          )}
         >
           <ReadinessExplanation readiness={outcome.readiness} inLine />
         </ProblemLine>
@@ -423,6 +430,7 @@ export function VerifyCard({
           modelId={runModel.modelId}
           providerId={runModel.providerId}
           resetsAt={outcome.error.resetsAt ?? null}
+          signInRoute={outcome.error.signInRoute ?? null}
           details={outcome.error.message}
           onRetry={() =>
             void (claims === null ? findClaims(mindId, doc) : checkClaims(mindId, doc))
