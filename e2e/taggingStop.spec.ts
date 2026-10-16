@@ -114,7 +114,7 @@ test("the status names where Tagging goes; Stop keeps the Folder's new Documents
   await pasteKey(window);
   const status = footer.getByTestId("tagging-status");
   await expect(status.getByTestId("status-label")).toHaveText(
-    /^Tagging [2-4] Documents with Anthropic: each one's name, outline and short excerpts are sent$/,
+    /^Tagging [2-4] Documents with Anthropic · sends names and excerpts$/,
   );
   await expect(footer.getByTestId("tagging-waiting")).toHaveCount(0);
   const stop = status.getByTestId("tagging-stop");
@@ -201,7 +201,7 @@ test("in Chinese, the status names the company, and Stop names the Folder", asyn
   await openFolder(window, FOLDER);
   const status = window.getByTestId("sidebar-status").getByTestId("tagging-status");
   await expect(status.getByTestId("status-label")).toHaveText(
-    /^正在用 Anthropic 给 [2-4] 个文档打标签：会发送每个文档的名称、目录和简短摘录$/,
+    /^正在用 Anthropic 给 [2-4] 个文档打标签 · 会发送名称和摘录$/,
   );
   const stop = status.getByTestId("tagging-stop");
   await expect(stop).toHaveText("停止");
@@ -289,6 +289,11 @@ test("while Organize runs, the status names the company too, with Stop", async (
     ]);
   const progress = window.getByTestId("sidebar-status").getByTestId("organization-progress");
   await expect(progress.getByTestId("status-label")).toHaveText(
+    /^Organizing [2-5] Documents with Anthropic · sends names and excerpts$/,
+  );
+  // The rest is in its tooltip, which a screen reader reads too.
+  await expect(progress).toHaveAttribute(
+    "title",
     /^Organizing [2-5] Documents with Anthropic: each one's name, outline and short excerpts are sent \(page images for scans\)$/,
   );
   await screenshot(window, "organize-status-stop-en");

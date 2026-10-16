@@ -1,4 +1,3 @@
-import { isMacOS } from "@tiptap/core";
 import { useEffect, useId, useState } from "react";
 import type { Meeting } from "../../../core/api";
 import { formatDateTime } from "../../../shared/dates";
@@ -148,9 +147,7 @@ function MeetingStart({ meeting }: { meeting: Meeting }) {
               </span>
             )}
           </p>
-          <p className="text-[12px] leading-[18px] text-ink-meta">
-            {t(isMacOS() ? "meetings.start.kept.mac" : "meetings.start.kept.other")}
-          </p>
+          <p className="text-[12px] leading-[18px] text-ink-meta">{t("meetings.audio.kept")}</p>
         </div>
       </div>
       {problem && <ProblemLine testId="meeting-start-problem">{problem}</ProblemLine>}

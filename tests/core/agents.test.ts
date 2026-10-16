@@ -307,7 +307,7 @@ describe("outside agents", () => {
     for (const [name, args] of Object.entries(calls)) {
       const paused = await agent.callTool({ name, arguments: args });
       expect(paused.isError, name).toBe(true);
-      expect(resultText(paused), name).toMatch(/Connected agents are paused/);
+      expect(resultText(paused), name).toMatch(/Agents are paused/);
     }
 
     await core.setLocalOnly(false);

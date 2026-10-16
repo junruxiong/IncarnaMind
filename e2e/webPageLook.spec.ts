@@ -146,9 +146,15 @@ test("off by default: the box is unticked, a page saved is never loaded for its 
   await window.getByTestId("plus-add-web-page").click();
   const dialog = window.getByTestId("add-web-page-dialog");
   await expect(dialog.getByTestId("add-web-page-keep-look")).not.toBeChecked();
-  await expect(dialog).toContainText("Nothing else on the page is loaded.");
+  // The fetch is one line; its Details say what else comes with the page.
+  await expect(dialog.getByTestId("add-web-page-fetch")).toContainText(
+    "Each page is fetched once from this computer",
+  );
+  await dialog.getByTestId("add-web-page-fetch-details").click();
+  const fetched = dialog.getByTestId("add-web-page-fetch-list");
+  await expect(fetched).toContainText("Nothing else on the page is loaded.");
   await dialog.getByTestId("add-web-page-keep-look").check();
-  await expect(dialog).not.toContainText("Nothing else on the page is loaded.");
+  await expect(fetched).not.toContainText("Nothing else on the page is loaded.");
   await expect(dialog).toContainText("Making it loads the page again");
   await dialog.getByRole("button", { name: "Cancel" }).click();
 
