@@ -341,6 +341,11 @@ test("an empty Mind of one's own shows the three steps, the example's steps tick
   await pointAndClick(window, checks.nth(0));
   const steps = window.getByTestId("first-open-steps");
   await expect(steps).toContainText("You're set up.");
+  await expect(steps.locator('[data-testid="first-open-step"][data-state="done"]')).toHaveText([
+    /Saw a mistake it caught/,
+    /Asked a question/,
+    /Added your files/,
+  ]);
   await expect(steps.getByTestId("first-open-next").first()).toBeVisible();
   await pointAndClick(window, steps.getByTestId("first-open-hide"));
   await expect(steps).toHaveCount(0);
