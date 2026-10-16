@@ -499,6 +499,18 @@ describe("The Minds' Tools find what the model names", { timeout: 30_000 }, () =
     expect(shown[2]).toContain("[-really -]");
   });
 
+  // protects=the User's own first-person words are written as given, whatever they say of finding or looking; fails_when=they are taken for the assistant's talk of searching and left out; no_claim=none beyond protects.
+  test("“Add to my notes: I found three issues…” writes that sentence", async () => {
+    const sentence = "I found three issues in the lease, and I looked at the break clause twice.";
+    const model = toolModel({ tool: "add_to_mind", input: { content: sentence } }, "Added.");
+    const { core, mind, client } = await setUp(model);
+
+    await ask(core, { text: `Add to my notes: ${sentence}`, mindId: mind.id });
+
+    await client.settled();
+    expect(shownWithChanges(client)).toContain(`+ ${sentence}`);
+  });
+
   // protects=read_mind gives another Mind's text, as the Mind in focus is read; fails_when=the model gets nothing, or the wrong Mind; no_claim=none beyond protects.
   test("read_mind gives the Mind the User names", async () => {
     const model = toolModel({ tool: "read_mind", input: { mind: "“project PLAN”" } }, "Read it.");
