@@ -2,6 +2,23 @@ import type { HTMLAttributes, ReactNode } from "react";
 
 const AFTER_STOP = /[。！？]$/;
 
+/** What a selection across the parts of `line` copies as, on one line: "A · B · C"; null where the browser's copy is right. */
+function selectedAsOneLine(line: HTMLElement): string | null {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return null;
+  const range = selection.getRangeAt(0);
+  if (!line.contains(range.commonAncestorContainer)) return null;
+  const copy = range.cloneContents();
+  if (copy.children.length < 2 || copy.querySelector("ul")) return null;
+  return [...copy.children]
+    .map((part) => {
+      part.querySelector(":scope > .meta-dot")?.remove();
+      return part.textContent?.trim() ?? "";
+    })
+    .filter(Boolean)
+    .reduce((text, part) => `${text}${AFTER_STOP.test(text) ? "· " : " · "}${part}`);
+}
+
 /**
  * A line of parts joined by middle dots ("Checked 4 claims · 3 need a look ·
  * Check again"). It wraps only between parts, and no line starts or ends with
@@ -23,7 +40,16 @@ export function MetaLine({
     (part) => part !== null && part !== undefined && part !== false && part !== "",
   );
   return (
-    <Tag {...rest} className={`meta-line ${className}`}>
+    <Tag
+      {...rest}
+      className={`meta-line ${className}`}
+      onCopy={(event) => {
+        const text = selectedAsOneLine(event.currentTarget);
+        if (text === null) return;
+        event.clipboardData.setData("text/plain", text);
+        event.preventDefault();
+      }}
+    >
       {shown.map((part, index) => {
         const before = shown[index - 1];
         return (

@@ -675,7 +675,6 @@ export const en = {
   "contradictions.noneChecked": "None of the {count} cited claims could be checked",
   "contradictions.found": "{contradicted} of {count} cited claims contradicted",
   "contradictions.after": "After “{document}” changed: {result}",
-  "contradictions.cost": "{result} · {cost}",
   "mindCheck.command": "Check this Mind",
   "mindCheck.command.keywords": "check all whole draft before sending claims sentences verify",
   "mindCheck.ask.folder.one": "Check this Mind’s sentence against this Folder’s Documents?",

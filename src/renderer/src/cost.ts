@@ -50,22 +50,26 @@ export function formatResetTime(iso: string, language: Language, now = new Date(
   return formatDateTime(iso, language, { now });
 }
 
-/** The line a run stopped at the cap or a plan's limit shows: "Plan limit reached · Try again after 14:30". */
-export function runStopText(
+export function runStopParts(
   stop: RunStop,
   t: Translate,
   language: Language,
   now = new Date(),
-): string {
-  if (stop.reason === "cost-cap") return t("run.stopped.cost-cap");
+): string[] {
+  if (stop.reason === "cost-cap") return [t("run.stopped.cost-cap")];
   const line = t("run.stopped.plan-limit");
   return stop.resetsAt
-    ? joinMeta([
-        line,
-        t("run.stopped.tryAfter", { time: formatResetTime(stop.resetsAt, language, now) }),
-      ])
-    : line;
+    ? [line, t("run.stopped.tryAfter", { time: formatResetTime(stop.resetsAt, language, now) })]
+    : [line];
 }
+
+/** For a place that doesn't wrap: "Plan limit reached · Try again after 14:30". */
+export const runStopText = (
+  stop: RunStop,
+  t: Translate,
+  language: Language,
+  now = new Date(),
+): string => joinMeta(runStopParts(stop, t, language, now));
 
 /** What each unfinished item of a stopped run says: "not checked: cost cap". */
 export const notCheckedKey = (stop: RunStop): MessageKey =>
@@ -74,7 +78,6 @@ export const notCheckedKey = (stop: RunStop): MessageKey =>
 /** Parts of a meta line on one line, joined by middle dots; `MetaLine` is for lines that can wrap. */
 export const joinMeta = (parts: readonly string[]): string => parts.filter(Boolean).join(" · ");
 
-/** The estimate as parts for a `MetaLine`, and the tooltip that adds the tokens. */
 export interface EstimateLine {
   parts: string[];
   title: string;

@@ -15,7 +15,7 @@ import { ReadinessExplanation, readinessAction } from "../components/providers/C
 import { UnreadFilesLine } from "../components/UnreadFilesLine";
 import { buttonStyle } from "../components/ui";
 import { core } from "../core";
-import { type EstimateLine, estimateLine, runStopText } from "../cost";
+import { type EstimateLine, estimateLine, runStopParts } from "../cost";
 import { useLanguage, useT } from "../i18n";
 import { enter } from "../motion";
 import { useAppStore } from "../store";
@@ -32,6 +32,8 @@ import { AnswerError } from "./AnswerView";
 import { coverageOf, sameCoverage, shownClaims } from "./claimChecks";
 import { useMindModel, useRunModel } from "./ModelChip";
 import { UncoveredLine } from "./UncoveredLine";
+
+const partsOf = (...parts: ReactNode[]): ReactNode[] => parts;
 
 /** What a Mind made by "Verify a document…" verifies, as it changes. */
 export function useVerification(doc: Y.Doc): Verification | null {
@@ -165,30 +167,24 @@ export function VerifyLine({
   );
   let state: ReactNode[];
   if (running === "finding") {
-    state = [
-      <span key="p158" role="status">
-        {t("verify.finding")}
-      </span>,
-      stop,
-    ];
+    state = partsOf(<span role="status">{t("verify.finding")}</span>, stop);
   } else if (running === "checking") {
     const progress = t("verify.checking", {
       done: format(marks.marked - marks.checking),
       total: format(marks.marked),
     });
-    state = [
-      <span key="p165" role="status" data-testid="verify-progress" className="tabular-nums">
+    state = partsOf(
+      <span role="status" data-testid="verify-progress" className="tabular-nums">
         {progress}
       </span>,
       stop,
-    ];
+    );
   } else if (outcome?.kind === "no-documents") {
-    state = [
-      <span key="p172" data-testid="verify-empty">
+    state = partsOf(
+      <span data-testid="verify-empty">
         {t(inFolder ? "verify.noDocuments.folder" : "verify.noDocuments.all")}
       </span>,
       <button
-        key="add-files"
         type="button"
         data-testid="verify-add-files"
         className={buttonStyle("secondary", "sm")}
@@ -196,12 +192,11 @@ export function VerifyLine({
       >
         {t("checks.addFiles")}
       </button>,
-    ];
+    );
   } else if (claims === null) {
-    state = [
-      <span key="p178">{t("verify.notFound")}</span>,
+    state = partsOf(
+      <span>{t("verify.notFound")}</span>,
       <button
-        key="p179"
         type="button"
         data-testid="verify-find"
         className={buttonStyle("secondary", "sm")}
@@ -209,18 +204,13 @@ export function VerifyLine({
       >
         {t("verify.find")}
       </button>,
-    ];
+    );
   } else if (total === 0 || outcome?.kind === "nothing") {
-    state = [
-      <span key="p189" data-testid="verify-empty">
-        {t("verify.none")}
-      </span>,
-    ];
+    state = partsOf(<span data-testid="verify-empty">{t("verify.none")}</span>);
   } else if (marks.marked === 0) {
-    state = [
-      <span key="p192">{t(inFolder ? "verify.ask.folder" : "verify.ask.all")}</span>,
+    state = partsOf(
+      <span>{t(inFolder ? "verify.ask.folder" : "verify.ask.all")}</span>,
       <button
-        key="p193"
         type="button"
         data-testid="verify-check"
         title={estimate?.title}
@@ -235,15 +225,15 @@ export function VerifyLine({
           {part}
         </span>
       )),
-    ];
+    );
   } else {
     const look = marks.needLook.length;
     const lookText = t(look === 1 ? "verify.needLook.one" : "verify.needLook", {
       count: format(look),
     });
     const stopped = outcome?.kind === "checked" ? outcome.stop : null;
-    state = [
-      <span key="p212">
+    state = partsOf(
+      <span>
         {t(marks.marked === 1 ? "verify.checked.one" : "verify.checked", {
           count: format(marks.marked),
         })}
@@ -261,9 +251,12 @@ export function VerifyLine({
           {lookText}
         </button>
       ),
-      stopped && <span data-testid="verify-stopped">{runStopText(stopped, t, language)}</span>,
+      ...(stopped ? runStopParts(stopped, t, language) : []).map((part) => (
+        <span key={part} data-testid="verify-stopped">
+          {part}
+        </span>
+      )),
       <button
-        key="p231"
         type="button"
         data-testid="verify-again"
         className="mind-verify-link"
@@ -271,7 +264,7 @@ export function VerifyLine({
       >
         {t("claim.checkAgain")}
       </button>,
-    ];
+    );
   }
 
   const name = verification.documentName;
@@ -280,9 +273,8 @@ export function VerifyLine({
       <div ref={lineRef} className="mind-verify" data-testid="verify-line">
         <MetaLine
           as="div"
-          parts={[
+          parts={partsOf(
             <button
-              key="p249"
               type="button"
               data-testid="verify-from"
               className="mind-verify-from"
@@ -293,7 +285,7 @@ export function VerifyLine({
               <span className="min-w-0 truncate">{t("verify.from", { name })}</span>
             </button>,
             ...state,
-          ]}
+          )}
         >
           <UnreadFilesLine files={unread} testId="verify-unread" className="mind-unread" />
         </MetaLine>

@@ -1232,6 +1232,10 @@
       background: var(--color-hover);
     }
   }
+  /* Its negative margin narrows the part by 4px; the cap gives them back, or the name loses its last letters. */
+  .meta-part > .mind-verify-from {
+    max-width: calc(100% + 4px);
+  }
   .mind-verify-link {
     border-radius: 4px;
     font-weight: 600;
