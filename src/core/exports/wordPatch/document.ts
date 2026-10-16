@@ -175,6 +175,7 @@ export class DocumentPatch {
       counterpartsOf(input.current, input.currentKey, input.reading),
       input.currentKey,
       (counterpart) => {
+        this.forceForComments(counterpart);
         if (!counterpart.list) return;
         this.listItems.set(counterpart.list.list, [
           ...(this.listItems.get(counterpart.list.list) ?? []),
@@ -216,6 +217,21 @@ export class DocumentPatch {
       review: input.review,
       removedHere: (source) => !input.plan.writtenElsewhere(source),
     };
+  }
+
+  /** A paragraph that holds a sentence to comment on is written again, however little else changed. */
+  private forceForComments(counterpart: Counterpart): void {
+    const based = counterpart.key ? this.based.get(counterpart.key) : undefined;
+    if (
+      !based ||
+      counterpart.kind !== "paragraph" ||
+      !this.input.review.choices.commentFailedChecks ||
+      !this.input.tokensOf(counterpart.node).some((token) => token.sentence)
+    ) {
+      return;
+    }
+    for (let at: XmlElement | undefined = based.element; at; at = this.parents.get(at))
+      this.forced.add(at);
   }
 
   /** The Mind's counterparts in some of its Blocks, read for review. */
@@ -334,7 +350,7 @@ export class DocumentPatch {
                   : /^\s$/u.test(token.char)
                     ? "neither"
                     : "own";
-          yield { key: token, authorship };
+          yield { key: token, authorship, sentence: token.sentence };
         }
       } else if (counterpart.kind === "table" && based) {
         if (!this.input.edited(counterpart.node) && !this.forced.has(based.element)) {
