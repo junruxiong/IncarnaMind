@@ -39,7 +39,7 @@ import {
   resolveProposals,
 } from "../../../shared/proposals";
 import { countFor, countText, mostlyCjk } from "../../../shared/wordCount";
-import { createElement, type NodeJSON } from "../../answers/blocks";
+import { createElement, type NodeJSON, syncContent, topLevelBlocks } from "../../answers/blocks";
 import {
   BLOCK_ID_ATTRIBUTE,
   type BlockOrigin,
@@ -140,6 +140,8 @@ export interface MindToolsOptions {
     cited: number;
     notFound: number;
     unrecorded: number;
+    /** The first of `blocks` with a marker no Citation is recorded for yet; -1 for none. */
+    firstUnrecorded: number;
   };
   /** A call changed a Mind: its card says so, as soon as it does, also while it writes. */
   changed(toolCallId: string, change: MindChange): void;
@@ -433,7 +435,7 @@ function citationNotes({ notFound, unrecorded }: { notFound: number; unrecorded:
       : []),
     ...(unrecorded > 0
       ? [
-          `${unrecorded === 1 ? "1 marker" : `${unrecorded} markers`} had no Citation recorded with cite and ${unrecorded === 1 ? "was" : "were"} left out.`,
+          `${unrecorded === 1 ? "1 marker has" : `${unrecorded} markers have`} no Citation recorded yet: record ${unrecorded === 1 ? "it" : "them"} with cite.`,
         ]
       : []),
   ];
@@ -468,8 +470,12 @@ function writtenBy(note: Y.XmlFragment, request: string): { paragraphs: number; 
   return counts;
 }
 
-/** The Minds' Tools for one Answer in the assistant (see the module's comment). */
-export function mindTools(options: MindToolsOptions): Tool[] {
+/**
+ * The Minds' Tools for one Answer in the assistant (see the module's
+ * comment), and `settle`, to call once its Run is done: what they wrote
+ * before `cite` gave their markers' records gets its Citations then.
+ */
+export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle(): void } {
   const { minds, focused } = options;
 
   /** The Mind a call means: the one it names, else the one in focus; or why there is none. */
@@ -522,6 +528,8 @@ export function mindTools(options: MindToolsOptions): Tool[] {
     anchor: string | null;
     /** How many of the call's Blocks are in. */
     written: number;
+    /** The ids of those in, in order. */
+    ids: string[];
     made: boolean;
   }
 
@@ -539,6 +547,7 @@ export function mindTools(options: MindToolsOptions): Tool[] {
       request: randomUUID(),
       anchor: place.after,
       written: 0,
+      ids: [],
       made,
     };
   };
@@ -558,6 +567,7 @@ export function mindTools(options: MindToolsOptions): Tool[] {
         );
       const ids = insertBlocks(note, fresh, { after: anchor ?? null, request: writer.request });
       writer.anchor = ids.at(-1) ?? writer.anchor;
+      writer.ids.push(...ids);
       const doc = note.doc;
       if (!doc) return;
       setOrigins(doc, ids, options.origin);
@@ -650,9 +660,14 @@ export function mindTools(options: MindToolsOptions): Tool[] {
       stream.created = opened.created;
     }
     const { writer } = stream;
-    const finished = options.blocksOf(content.value).blocks.slice(0, -1);
-    const unmade = finished.findIndex(unmadeTable);
-    writeMore(writer, unmade < 0 ? finished : finished.slice(0, unmade));
+    const { blocks, firstUnrecorded } = options.blocksOf(content.value);
+    // `cite` may run after this call's input starts: a Block waits for its markers' records.
+    const ready = blocks.slice(
+      0,
+      firstUnrecorded < 0 ? -1 : Math.min(firstUnrecorded, blocks.length - 1),
+    );
+    const unmade = ready.findIndex(unmadeTable);
+    writeMore(writer, unmade < 0 ? ready : ready.slice(0, unmade));
     minds.writing(writer.mind.id, { after: writer.anchor });
     if (writer.written > 0) options.changed(toolCallId, changeOf(writer, stream.created));
   };
@@ -684,9 +699,45 @@ export function mindTools(options: MindToolsOptions): Tool[] {
     writer ??= writerFor(mind, after, made);
     writeMore(writer, blocks);
     minds.writing(writer.mind.id, null);
-    const change = { ...changeOf(writer, made), ...citedIn({ cited, unrecorded }) };
+    // Markers `cite` may still record in this step count as left out only once the Run is done.
+    const change = { ...changeOf(writer, made), ...citedIn({ cited, unrecorded: 0 }) };
     options.changed(toolCallId, change);
+    if (unrecorded > 0) {
+      unsettled.set(toolCallId, {
+        mindId: writer.mind.id,
+        ids: writer.ids,
+        markdown,
+        change: () => changeOf(writer, made),
+      });
+    }
     return { change, notFound, unrecorded };
+  };
+
+  /** By call: text written with markers `cite` hadn't recorded yet. */
+  const unsettled = new Map<
+    string,
+    { mindId: string; ids: readonly string[]; markdown: string; change(): MindChange }
+  >();
+
+  const settle = (): void => {
+    for (const [toolCallId, each] of unsettled) {
+      const { blocks, cited, unrecorded } = options.blocksOf(each.markdown);
+      if (blocks.length !== each.ids.length) {
+        console.warn(
+          `Citations recorded after a Mind was written couldn't go in: the text reads as ${blocks.length} Blocks, ${each.ids.length} were written (Mind ${each.mindId}, call ${toolCallId}).`,
+        );
+        continue;
+      }
+      minds.edit(each.mindId, (note) => {
+        for (const element of topLevelBlocks(note)) {
+          const at = each.ids.indexOf(idOf(element));
+          const block = blocks[at];
+          if (at >= 0 && block) syncContent(element, block.content ?? []);
+        }
+      });
+      options.changed(toolCallId, { ...each.change(), ...citedIn({ cited, unrecorded }) });
+    }
+    unsettled.clear();
   };
 
   /** What the model reads of Blocks it added: how many, and what of their Citations didn't hold. */
@@ -770,12 +821,12 @@ export function mindTools(options: MindToolsOptions): Tool[] {
         `That text of “${mind.name}” changed while it was being read. Nothing was changed.`,
       );
     }
-    const change: MindChange = {
-      ...changeIn(mind.id, request, false),
-      revised: true,
-      ...citedIn({ cited, unrecorded }),
-    };
+    const revision = (): MindChange => ({ ...changeIn(mind.id, request, false), revised: true });
+    const change: MindChange = { ...revision(), ...citedIn({ cited, unrecorded: 0 }) };
     options.changed(toolCallId, change);
+    if (unrecorded > 0) {
+      unsettled.set(toolCallId, { mindId: mind.id, ids, markdown, change: revision });
+    }
     return { change, notFound, unrecorded };
   };
 
@@ -806,7 +857,7 @@ export function mindTools(options: MindToolsOptions): Tool[] {
         content: {
           ...contentProperty,
           description:
-            "Only for text you proposed that still waits: its whole new text, in Markdown, with markers like [^1] for Citations recorded with cite. Give it instead of instruction.",
+            "Only for text you proposed that still waits: its whole new text, in Markdown, from the section's heading on (it replaces the heading too), with markers like [^1] for Citations recorded with cite. Give it instead of instruction.",
         },
       },
       additionalProperties: false,
@@ -1009,5 +1060,5 @@ export function mindTools(options: MindToolsOptions): Tool[] {
     },
   };
 
-  return [read, edit, add, create].map(reporting);
+  return { tools: [read, edit, add, create].map(reporting), settle };
 }
