@@ -18,6 +18,8 @@ const COVERED = 0.8;
 const SPREAD = 1.5;
 /** A shorter line ("Right.") is an echo only when it is a whole line of theirs. */
 const SHORT_WORDS = 4;
+/** A line this short or shorter must have every word from theirs: one word different is the User's own. */
+const EVERY_WORD_UP_TO = 6;
 
 const WORD = /\p{Script=Han}|[\p{L}\p{N}]+/gu;
 
@@ -57,7 +59,8 @@ export function repeats(mine: string, theirs: readonly string[]): boolean {
     if (own.length < SHORT_WORDS) {
       return line.length <= own.length + 1 && inOrder(own, line) === own.length;
     }
-    return inOrderWithin(own, line, Math.ceil(own.length * SPREAD) + 1) >= COVERED * own.length;
+    const found = inOrderWithin(own, line, Math.ceil(own.length * SPREAD) + 1);
+    return found >= (own.length <= EVERY_WORD_UP_TO ? own.length : COVERED * own.length);
   });
 }
 

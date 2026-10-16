@@ -74,6 +74,40 @@ describe("Lines of the microphone that are the echo of the other side's (#941)",
     expect(isEcho(line("Me", 12_800, 14_500, said), [them])).toBe(false);
   });
 
+  test("a short line with a word of its own is the User's, though most of its words are theirs", () => {
+    const them = line(
+      "Them",
+      10_000,
+      14_000,
+      "That sounds like a plan to me, shall we start on Monday?",
+    );
+    expect(isEcho(line("Me", 10_300, 12_500, "That sounds good to me"), [them])).toBe(false);
+    expect(isEcho(line("Me", 10_300, 12_500, "That sounds like a plan to me"), [them])).toBe(true);
+    const good = line("Them", 10_000, 13_000, "That sounds good to me");
+    expect(isEcho(line("Me", 10_200, 12_800, "That sounds good to me"), [good])).toBe(true);
+    expect(isEcho(line("Me", 10_200, 12_800, "That sounds great to me"), [good])).toBe(false);
+  });
+
+  test("a longer line may miss a word of theirs: the echo is read badly", () => {
+    const them = line(
+      "Them",
+      10_000,
+      15_000,
+      "Please send the revised budget to the whole committee before Friday",
+    );
+    expect(
+      isEcho(
+        line(
+          "Me",
+          10_200,
+          14_800,
+          "Please send the revised budget to the whole committee by Friday",
+        ),
+        [them],
+      ),
+    ).toBe(true);
+  });
+
   test("the same words in another order are the User's", () => {
     const them = line("Them", 10_000, 13_000, THEIRS);
     expect(
