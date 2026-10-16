@@ -6,7 +6,6 @@
  * where the real model would put it on the page's picture.
  */
 import { readFile, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "vitest";
@@ -15,14 +14,13 @@ import { unsureWords } from "../../src/core/documents/scan/layout";
 import { BUILT_IN_TEXT_RECOGNITION_MODEL } from "../../src/core/documents/scan/model";
 import { createOnnxTextRecognizer } from "../../src/core/documents/scan/onnx";
 import { downloadModel, isModelDownloaded } from "../../src/core/embedding/download";
+import { evalCache } from "../lib/cache";
 import { greyPicture } from "./lib/engines";
 import type { SetPage } from "./lib/score";
 
 const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const setDir = join(root, "tests/fixtures/scans");
-const cacheDir = resolve(
-  process.env.INCARNAMIND_EVAL_CACHE ?? join(homedir(), ".cache", "incarnamind-eval"),
-);
+const cacheDir = evalCache();
 const round = (value: number) => Math.round(value);
 
 test.runIf(process.env.INCARNAMIND_OCR_RECORD === "1")("record what the model reads", async () => {

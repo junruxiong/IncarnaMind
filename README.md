@@ -5,8 +5,8 @@
 <h1 align="center">IncarnaMind</h1>
 
 <p align="center">
-  <b>The AI notebook that checks its own citations.</b><br>
-  Write and ask in one place, with answers from your own files and the AI model you choose. Free and open source, on your computer.
+  <b>Your files, your AI: write, ask, check and compare in one place.</b><br>
+  Every sentence and figure checked against your own documents, with the AI model you choose. Free and open source, on your computer.
 </p>
 
 <p align="center"><a href="https://tally.so/r/rjN2jL?ref=readme"><img src="docs/images/notify-en.svg" width="278" height="40" alt="Get notified when the alpha opens"></a></p>
@@ -26,7 +26,7 @@
 
 <p align="center"><sub>Everything shown is in the app today.</sub></p>
 
-**IncarnaMind** is a free, open-source desktop app for macOS, Windows and Linux where you ask questions about your own documents (PDF, Word, PowerPoint, Excel and more) and write with AI. Every answer cites the exact page, and IncarnaMind checks that each quoted passage is really there. It works with your ChatGPT plan, your own API key or a local model through Ollama.
+**IncarnaMind** is a free, open-source desktop app for macOS, Windows and Linux where you write with AI and ask questions about your own documents (PDF, Word, PowerPoint, Excel and more). It can check every sentence and figure in a draft against those documents, whoever wrote it, and every answer cites the exact page it comes from. It works with the AI you already use: your ChatGPT plan or your own API key.
 
 ## Download
 
@@ -62,13 +62,11 @@ Windows releases will be signed through the SignPath Foundation's free signing f
 
 **Find and add sources.** Search OpenAlex, arXiv and PubMed and add open-access papers as Documents, save a web page by its address so it can be cited and checked like a file, and import your references from Zotero or any CSL JSON, BibTeX or RIS file.
 
-**Write with AI you can check.** Select text and choose Edit with AI: the changes come back for you to accept or reject. Turn on suggestions as you write, and when you pause, grey text offers how the paragraph could go on, only where your Documents support it and always with a citation; Tab accepts.
+**Write with AI you can check.** Tell the assistant what to change ("shorten the summary", "add today's decision to the project plan", "summarise these papers into a new note") and it changes the Mind, or makes a new one, as changes waiting for you to accept or reject, coming in paragraph by paragraph as it writes; a question still gets an answer. Or select text and choose Edit with AI, and each change says why it was made. Turn on suggestions as you write, and when you pause, grey text offers how the paragraph could go on, only where your Documents support it and always with a citation; Tab accepts.
 
 **Keep a big library tidy.** Tags are added for you, IncarnaMind suggests a Folder for each Document for you to accept, and the choices you make yourself are kept.
 
-**Choose your AI.** Already pay for ChatGPT Plus or Pro? Continue with ChatGPT and ask on your plan, no key needed. Or use your own key from OpenAI, Anthropic, Google, DeepSeek, Qwen, SiliconFlow or OpenRouter, and more, such as Kimi, GLM, Mistral, xAI or any OpenAI-compatible server, or a free local model through Ollama, so nothing leaves your computer.
-
-**Ask from the AI agent you already use** (experimental, off by default). Connect Claude, Codex, Cursor and others in **Settings → Agents**, on their own plan: they read only the folders you choose, every quote they get from IncarnaMind is checked, and what they read goes to their AI service under its terms. [How to connect each one](docs/agents.md).
+**Choose your AI.** Already pay for ChatGPT Plus or Pro? Continue with ChatGPT and ask on your plan, no key needed. Or use your own key from OpenAI, Anthropic, Google, DeepSeek, Qwen, SiliconFlow or OpenRouter, and more, such as Kimi, GLM, Mistral, xAI or any OpenAI-compatible server.
 
 **Hand it in.** Export a Mind to Word or Markdown, with its citations and bibliography in the style you pick: APA, MLA, Chicago, Harvard, IEEE, Vancouver, GB/T 7714 or IncarnaMind's numbered style. A citation that didn't pass the check is marked "[unverified]". Open a Word file as a Mind and export it back into the same file: the parts you didn't touch stay exactly as they were, and your edits can go in as tracked changes.
 
@@ -80,7 +78,7 @@ Windows releases will be signed through the SignPath Foundation's free signing f
 
 ## Your files stay yours
 
-There's no account and no IncarnaMind server. Your Minds and the search index stay in one data folder on your computer, and your files stay where you keep them, unchanged. A question and the passages found for it go only to the AI model you picked, or nowhere with a local model. API keys are encrypted in your system's secure storage. Usage data is collected only if you agree, as [anonymous events](docs/privacy.md#usage-data), never your files or questions, and you can turn it off any time in **Settings → Privacy**. Crash reports are off unless you turn them on, and are stripped of your content.
+You don't need an account. Your Minds and the search index stay in one data folder on your computer, and your files stay where you keep them, unchanged. A question and the passages found for it go only to the AI model you picked, or nowhere with a local model. API keys are encrypted in your system's secure storage. Usage data is collected only if you agree, as [anonymous events](docs/privacy.md#usage-data), never your files or questions, and you can turn it off any time in **Settings → Privacy**. Crash reports are off unless you turn them on, and are stripped of your content.
 
 - **You're asked before anything leaves.** The first time IncarnaMind would send anything to an outside service, it shows what would be sent and to whom, and waits for your OK. **Settings → Privacy** lists each one and lets you take it back.
 - **Providers are asked not to keep it.** Where a provider offers the choice, IncarnaMind asks it not to store your requests; every request to OpenAI and xAI says so, and requests to OpenRouter ask it to use only providers that keep and train on nothing.
@@ -89,11 +87,11 @@ There's no account and no IncarnaMind server. Your Minds and the search index st
 <details>
 <summary><b>Questions</b></summary>
 
-- **Is it free?** Yes: it's open source under the Apache 2.0 licence. With a cloud AI model, you pay its provider for what you use; a local model costs nothing.
-- **Do I need an API key?** No. Continue with ChatGPT on a Plus or Pro plan, or, if [Ollama](https://ollama.com) is running, download a local model in one click. If you pay for Claude, connect the Claude app in **Settings → Agents** (experimental) and ask your Documents there. Or paste a key from OpenAI, Anthropic, Google, DeepSeek, Qwen, SiliconFlow or OpenRouter, and more in Settings, such as Kimi, GLM, Mistral, xAI or any OpenAI-compatible server.
-- **Is it an alternative to NotebookLM (now Gemini Notebook)?** Yes. IncarnaMind runs on your computer and your files stay there, it works with the model you choose (your own key, a ChatGPT plan, or a local model through Ollama), every citation is checked against the page it quotes, and a Mind exports to Word with its citations.
+- **Is it free?** Yes: it's open source under the Apache 2.0 licence. The AI model is billed by its provider: use the ChatGPT plan you already pay for, or your own API key and pay for what you use.
+- **Do I need an API key?** Not if you have ChatGPT Plus or Pro: choose Continue with ChatGPT and ask on your plan. Or paste a key from OpenAI, Anthropic, Google, DeepSeek, Qwen, SiliconFlow or OpenRouter, and more in Settings, such as Kimi, GLM, Mistral, xAI or any OpenAI-compatible server.
+- **Is it an alternative to NotebookLM (now Gemini Notebook)?** Yes. IncarnaMind runs on your computer and reads your files where they are, and no account is needed. It works with the model you choose (your ChatGPT plan or your own key), every citation is checked against the page it quotes, your own sentences can be checked too, and a Mind exports to Word with its citations.
 - **Can I use my ChatGPT plan?** Yes, with ChatGPT Plus or Pro. In **Settings → Models**, choose **Continue with ChatGPT** and sign in in your browser: Questions then go to OpenAI under your account and count against your plan's limits, with no key.
-- **Does it work offline?** Yes, with a local model through Ollama: reading your files, search and the citation check all run on your computer. Cloud models need the internet. Meaning-based search (embeddings) is optional and off by default.
+- **Does it work offline?** Reading your files and search do. Answers and checks need an AI model, which for most people means the internet. A local model through [Ollama](https://ollama.com) can answer offline, but more slowly and less reliably than a cloud model. Meaning-based search (embeddings) is optional and off by default.
 - **Will it change my files?** No. It reads them where they are, and writes only to its own data folder and the files you export.
 - **What does "Quote found" mean?** That the quoted words are in the place the citation names, not that they prove your sentence, which is why the page is one click away. "Can't check" means there's no text to compare against, as on a scanned page.
 - **How do I back up?** Copy the data folder: it holds your Minds, the search index and your settings.
@@ -102,7 +100,7 @@ There's no account and no IncarnaMind server. Your Minds and the search index st
 
 ## Coming next
 
-Planned, not available yet, with no dates (see the [roadmap](https://github.com/IncarnaMind/IncarnaMind/issues/74)): asking during a meeting, with answers that cite its live transcript; the assistant editing your Minds, each change waiting for you to accept it; a reviewing pane for other people's tracked changes in a Word file; and research Tasks that run in the background.
+Planned, not available yet, with no dates (see the [roadmap](https://github.com/IncarnaMind/IncarnaMind/issues/74)): asking during a meeting, with answers that cite its live transcript; a reviewing pane for other people's tracked changes in a Word file; and research Tasks that run in the background.
 
 ## Contributing
 

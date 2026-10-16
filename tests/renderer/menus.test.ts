@@ -48,7 +48,7 @@ beforeAll(async () => {
 });
 
 describe("the menus", () => {
-  test("a Mind's is Open, Open to the side, Outline, Export as… and Export options…, History, Make this a Skill, Move to and New Folder with this Mind, Rename, then Delete after a rule", () => {
+  test("a Mind's is Open, Open to the side, Outline, Export as… and Export options…, Export AI use statement, History, Check this Mind, Check for contradictions, Make this a Skill, Move to and New Folder with this Mind, Rename, then Delete after a rule", () => {
     const here = {
       "mind.citationStyle": () => undefined,
       "mind.moveTo": () => undefined,
@@ -65,7 +65,10 @@ describe("the menus", () => {
       "mind.exportAs.html",
       "mind.exportAs.markdown",
       "mind.exportOptions",
+      "mind.aiUseStatement",
       "mind.history",
+      "mind.checkAll",
+      "mind.checkContradictions",
       "mind.citationStyle",
       "skill.fromMind",
       "—",
@@ -88,7 +91,10 @@ describe("the menus", () => {
       "mind.exportAs.html",
       "mind.exportAs.markdown",
       "mind.exportOptions",
+      "mind.aiUseStatement",
       "mind.history",
+      "mind.checkAll",
+      "mind.checkContradictions",
       "skill.fromMind",
       "—",
       "folder.newWith",

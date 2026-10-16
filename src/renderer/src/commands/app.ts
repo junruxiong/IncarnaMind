@@ -1,18 +1,18 @@
 import type { BlockOrigin } from "../../../core/api";
 import { signInAgain } from "../chatGptSignIn";
 import { useCitationStylePicker } from "../citationStylePicker";
+import { startContradictionCheck } from "../contradictions";
 import { blockMenuOpeners } from "../editor/blockMenuOpeners";
 import { originOf } from "../editor/blockOrigins";
 import { blockAt, noteHolding } from "../editor/noteKeymap";
 import { openOrigin } from "../editor/originActions";
 import { useFindSources } from "../findSources";
 import { useHistory } from "../history";
-import { currentTabOf } from "../layoutSlice";
 import { startSkillFromMind } from "../makeSkill";
+import { startMindCheck } from "../mindCheck";
 import { useMindTools } from "../mindTools";
 import { useReferenceImport } from "../referenceImport";
 import { useAppStore } from "../store";
-import { findTab } from "../tabs";
 import { verifyDocument } from "../verify";
 import { useWordImport } from "../wordImport";
 import { assistantCommands } from "./assistant";
@@ -24,6 +24,7 @@ import { deletedCommands } from "./deleted";
 import { editCommands } from "./edit";
 import { evidenceCommands } from "./evidence";
 import { exportCommands } from "./exports";
+import { feedbackCommands } from "./feedback";
 import { fileCommands } from "./fileInfo";
 import { footnoteCommands } from "./footnotes";
 import { citationHandle, findHandle, readMindHandle, sidebarHandle } from "./handles";
@@ -42,6 +43,7 @@ import {
 import { paletteCommands } from "./palette";
 import { peekCommands } from "./peek";
 import { proposalCommands } from "./proposals";
+import { researchCommands } from "./research";
 import { sortCommands } from "./sort";
 import "./objectMenus";
 import { type Command, type CommandContext, commands, fromMenu } from "./registry";
@@ -49,9 +51,10 @@ import { selectionCommands } from "./selection";
 import { settingsPageCommands } from "./settings";
 import { tableCommands } from "./tables";
 import { tabCommands } from "./tabs";
-import { onlyOne } from "./targets";
+import { mindInFront, mindShown, onlyOne } from "./targets";
 import { taskCommands } from "./tasks";
 import { webPageCommands } from "./webPages";
+import { wordLookCommands } from "./wordLook";
 
 /** What opens the menu of the Block with this ID, if its Mind is open. */
 function blockMenuFor(blockId: string) {
@@ -69,23 +72,6 @@ function originShown(ctx: CommandContext): BlockOrigin | null {
   if (!editor || editor.isDestroyed) return null;
   const block = blockAt(editor.state.selection);
   return block ? originOf(editor.state, block.id) : null;
-}
-
-/** The Mind in the tab the User is in, if that tab holds one. */
-function mindInFront(): string | null {
-  const item = currentTabOf(useAppStore.getState().layout)?.item;
-  return item?.kind === "mind" ? item.mindId : null;
-}
-
-/** The Mind a menu or the keyboard names: the Mind's row, the Mind a tab shows, else the one in front. */
-function mindShown(ctx: CommandContext): string | null {
-  const target = ctx.selection[0] ?? ctx.focus;
-  if (target?.kind === "mind") return target.id;
-  if (target?.kind === "tab") {
-    const item = findTab(useAppStore.getState().layout, target.id)?.item;
-    return item?.kind === "mind" ? item.mindId : null;
-  }
-  return mindInFront();
 }
 
 /** The Mind a command acts on: the one a menu names, else the one in front (⌘K, the assistant). */
@@ -132,12 +118,15 @@ const appCommands: readonly Command[] = [
   ...tabCommands,
   ...meetingCommands,
   ...webPageCommands,
+  ...feedbackCommands,
   ...sortCommands,
   ...fileCommands,
   ...evidenceCommands,
   ...comparisonCommands,
+  ...researchCommands,
   ...exportCommands,
   ...taskCommands,
+  ...wordLookCommands,
   {
     ...fromMenu("settings.open"),
     group: "open",
@@ -217,6 +206,32 @@ const appCommands: readonly Command[] = [
     run: (ctx) => {
       const mindId = mindShown(ctx);
       if (mindId) useHistory.getState().open(mindId);
+    },
+  },
+  {
+    id: "mind.checkAll",
+    label: "mindCheck.command",
+    keywords: ["mindCheck.command.keywords"],
+    group: "main",
+    // It changes no words: its marks go with Check again, or when the sentence is edited.
+    reversible: true,
+    when: (ctx) => onlyOne(ctx) && mindShown(ctx) !== null,
+    run: (ctx) => {
+      const mindId = mindShown(ctx);
+      if (mindId) return startMindCheck(mindId, "all");
+    },
+  },
+  {
+    id: "mind.checkContradictions",
+    label: "contradictions.command",
+    keywords: ["contradictions.command.keywords"],
+    group: "main",
+    // It changes no words: its marks go with Check again, or when the sentence is edited.
+    reversible: true,
+    when: (ctx) => onlyOne(ctx) && mindShown(ctx) !== null,
+    run: (ctx) => {
+      const mindId = mindShown(ctx);
+      if (mindId) return startContradictionCheck(mindId);
     },
   },
   {

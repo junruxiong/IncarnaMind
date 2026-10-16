@@ -1,5 +1,6 @@
 import { mkdirSync } from "node:fs";
-import { homedir, tmpdir, userInfo } from "node:os";
+import { readFile } from "node:fs/promises";
+import { tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 import * as Y from "yjs";
 import { isCitationStyleId } from "../shared/citationStyles";
@@ -14,13 +15,19 @@ import {
 import { mindModelOf } from "../shared/mindModel";
 import { mindName } from "../shared/naming";
 import { paperFor } from "../shared/printDocument";
+import { resolveProposals } from "../shared/proposals";
+import { RESEARCH_TASK } from "../shared/research";
+import { wordFileOf } from "../shared/wordFiles";
 import { logActivity, silentLogger } from "./activityLog";
 import type { CoreAdapters } from "./adapters";
 import { agentSocketPath, createAgents } from "./agents";
 import { createAgentSetup, skillInstalled } from "./agents/setup";
 import { createAiUse } from "./aiUse";
+import { createAiUseStatement } from "./aiUseStatement";
 import { createAiSdkAnswerEngine, createAnswers } from "./answers";
+import { topLevelBlocks } from "./answers/blocks";
 import { createChecks } from "./answers/checks";
+import { AFTER_NEW_VERSION_MS, CLAIM_TIME_LIMIT_MS } from "./answers/checks/watch";
 import { recheckCitation, recheckKept } from "./answers/citations";
 import {
   addCitedUnits,
@@ -41,6 +48,7 @@ import {
   type CreateMindInput,
   DEFAULT_MIND_KIND,
   type Document,
+  type DocumentStatus,
   type EmbeddingModelStatus,
   type EmbeddingSettings,
   type ExportMindOptions,
@@ -48,11 +56,13 @@ import {
   type Meeting,
   type Mind,
   type MindCitationStyle,
+  NOT_IN_A_FOLDER_ID,
   type OwnFileKind,
   type ProviderError,
   type SavedExport,
   type SearchScope,
   type Task,
+  type UnlockDocumentInput,
   type UnreadFile,
   type Unsubscribe,
 } from "./api";
@@ -75,12 +85,16 @@ import {
   parseListOptions,
 } from "./documents";
 import { createEvidence, parseCheckedDocument, passageResult } from "./documents/evidence";
+import { pdfIsLocked, pdfOpensWith } from "./documents/extract";
 import { statIdentity } from "./documents/files";
 import { createOwnFiles } from "./documents/ownFiles";
+import { createPdfPasswords } from "./documents/pdfPasswords";
 import { createVersionRetention, type VersionRetention } from "./documents/retention";
 import { BUILT_IN_TEXT_RECOGNITION_MODEL, createTextRecognitionModel } from "./documents/scan";
+import type { WindowedPassage } from "./documents/search";
 import { tunedSearch } from "./documents/searchTuning";
 import { findUnreadDocuments } from "./documents/unread";
+import { createViewing } from "./documents/viewing";
 import { fsWatchFolder } from "./documents/watcher";
 import { createWebPages } from "./documents/web";
 import { createEdits } from "./edits";
@@ -125,8 +139,8 @@ import {
   parseIds,
   parseMindId,
 } from "./minds";
-import { firstLineOf, readBlocks } from "./mindText";
-import { createNoteAdding } from "./noteAdding";
+import { firstLineOf, readBlocks, theirChangesReading } from "./mindText";
+import { createNoteAdding, insertBlocks } from "./noteAdding";
 import { createOutputFiles } from "./outputFiles";
 import { createPrivacy, type NetworkTrafficRegistry } from "./privacy";
 import { readsImages } from "./providers/capabilities";
@@ -139,8 +153,10 @@ import {
   detectOllama,
   hasOllamaModel,
   OLLAMA_REGISTRY,
+  OLLAMA_START_TIMEOUT_MS,
   pullOllamaModel,
   RECOMMENDED_OLLAMA_MODEL,
+  waitForOllama,
 } from "./providers/ollama";
 import { isCloudModelName } from "./providers/ollamaCloud";
 import { createOllamaModels } from "./providers/ollamaModels";
@@ -155,6 +171,7 @@ import {
 } from "./referenceRecords";
 import { parseReference } from "./references";
 import { BUILT_IN_RERANKING_MODEL, createRerankingModel } from "./reranking";
+import { createResearch } from "./research";
 import { createTasks, type TaskKind, type TaskNotice } from "./runs/tasks";
 import { parseSearchScope, resolveSearchScope } from "./scope";
 import { createSecrets } from "./secrets";
@@ -168,11 +185,12 @@ import { createPace, realTimers } from "./sources/pace";
 import { createSourceProviders, sourceKeySecret } from "./sources/providers";
 import { migrate, openDatabase } from "./storage";
 import { createSuggestions } from "./suggestions";
-import { createTags } from "./tags";
+import { createTags, tagsOfDocument } from "./tags";
 import { chatClassifier } from "./tags/classify";
 import { createJevTagging } from "./tags/jev";
 import { createTagger, TAGGING_FLOW_SENDS } from "./tags/tagger";
 import { createWebSearch, WEB_SEARCH_SENDS } from "./tools/web";
+import { createPublicFetch } from "./tools/web/fetcher";
 import {
   createTranscriptionModel,
   QWEN3_ASR_0_6B,
@@ -198,9 +216,11 @@ export interface Core extends CoreApi, CoreEventSource {
   openDocumentFile(documentId: string): Promise<DocumentFile>;
   /**
    * Opens a picture a live Markdown Document shows from beside it, by the
-   * relative path written in the file ("figures/map.png"), for the host to
-   * serve to the viewer: only images, only from the file's folder or below
-   * it. Throws NotFoundError for anything else.
+   * relative path written in the file ("figures/map.png"), or one a saved web
+   * page shows, by its path in the snapshot ("pictures/<hash>.png", #756),
+   * for the host to serve to the viewer: only images, only from the file's
+   * folder or below it, only those the page's versions show. Throws
+   * NotFoundError for anything else.
    */
   openDocumentImage(documentId: string, path: string): Promise<DocumentImage>;
   /**
@@ -284,10 +304,34 @@ export interface Core extends CoreApi, CoreEventSource {
   close(): void;
 }
 
+/** How long a Question asked during a call waits for the live transcript's newest lines to be indexed (#144). */
+const LIVE_TRANSCRIPT_WAIT_MS = 3_000;
+
 /**
  * Opens (or creates) the data folder and its database, brings the schema up to
  * date, and returns the core. The host passes in every platform capability.
  */
+
+/** The longest password a PDF is unlocked with: far beyond any real one, short enough to refuse junk. */
+const MAX_PDF_PASSWORD = 1_024;
+
+const parseDocumentId = (input: unknown): string => {
+  if (typeof input !== "string" || input === "") {
+    throw new InvalidInputError({ key: "error.document.notFound" });
+  }
+  return input;
+};
+
+/** `unlockDocument`'s input. Its errors never repeat the password. */
+function parseUnlock(input: unknown): UnlockDocumentInput {
+  if (!isRecord(input)) throw new InvalidInputError({ key: "error.document.passwordMissing" });
+  const { password } = input;
+  if (typeof password !== "string" || password === "" || password.length > MAX_PDF_PASSWORD) {
+    throw new InvalidInputError({ key: "error.document.passwordMissing" });
+  }
+  return { documentId: parseDocumentId(input.documentId), password };
+}
+
 export function createCore(adapters: CoreAdapters): Core {
   const { dataDir } = adapters.paths;
   mkdirSync(dataDir, { recursive: true });
@@ -408,6 +452,16 @@ export function createCore(adapters: CoreAdapters): Core {
     file: (documentId, groupId) => library.file(documentId, groupId),
   });
   const secrets = createSecrets(adapters.keychain, settings);
+  const pdfPasswords = createPdfPasswords(secrets, settings);
+  const viewing = createViewing();
+  /** Forgets the passwords of Documents gone from the Library (#763), and says which are kept. */
+  const forgetPasswords = async (ids: readonly string[]) => {
+    const kept = pdfPasswords.kept();
+    const gone = ids.filter((id) => kept.includes(id));
+    if (gone.length === 0) return;
+    for (const id of gone) await pdfPasswords.forget(id);
+    events.emit("documentPasswords.changed", pdfPasswords.kept());
+  };
   const consent = createConsent(db, events, now);
   /** Aborts work still running (model downloads, a ChatGPT sign-in, provider requests) when the core closes. */
   const lifetime = new AbortController();
@@ -484,8 +538,10 @@ export function createCore(adapters: CoreAdapters): Core {
       db,
       dataDir,
       now,
+      log: adapters.log ?? silentLogger,
       model: embedding.model,
       textRecognition: textRecognitionModel,
+      pdfPassword: (id) => pdfPasswords.of(id),
       folders,
       emitStatus: (document) => {
         events.emit("document.status", document);
@@ -497,6 +553,9 @@ export function createCore(adapters: CoreAdapters): Core {
       emitRemoved: (ids) => {
         events.emit("documents.removed", ids);
         batches.changed(ids);
+        forgetPasswords(ids).catch((error: unknown) =>
+          console.error("A removed Document's PDF password couldn't be forgotten.", error),
+        );
       },
       emitKept: (kept) => events.emit("keptCitationTexts.changed", kept),
       foldersChanged,
@@ -548,7 +607,8 @@ export function createCore(adapters: CoreAdapters): Core {
       background,
       document: (id) => documents.getMany([id])[0] ?? null,
       filePath: (id) => documents.filePath(id),
-      drawPdf: documentCitedPages,
+      drawPdf: async (documentId, file, contentHash, pages, signal) =>
+        documentCitedPages(file, contentHash, pages, signal, await pdfPasswords.of(documentId)),
       capturePage: adapters.capturePage,
       log: adapters.log ?? silentLogger,
     });
@@ -591,6 +651,8 @@ export function createCore(adapters: CoreAdapters): Core {
     db.close();
     throw error;
   }
+  // A saved page's pictures may come from any host: only the public internet is reached (#756).
+  const pictureFetcher = createPublicFetch(adapters.web);
   const webPages = createWebPages({
     db,
     dataDir,
@@ -598,6 +660,10 @@ export function createCore(adapters: CoreAdapters): Core {
     documents,
     languages: () =>
       settings.get().language === "zh-CN" ? ["zh-CN", "zh;q=0.9", "en;q=0.8"] : ["en", "*;q=0.5"],
+    pictureFetch: pictureFetcher.fetch,
+    ...(adapters.pageLook ? { look: adapters.pageLook } : {}),
+    keepLookByDefault: () => settings.get().user.keepWebPageLook,
+    reportError: (error) => console.error("A web page's picture or look couldn't be kept:", error),
     ...adapters.webPages,
   });
   webPages.dropPurged().catch((error: unknown) => console.error(error));
@@ -728,6 +794,7 @@ export function createCore(adapters: CoreAdapters): Core {
 
   // Sign-in changes can happen in the middle of a request (a refresh that fails), so they report through events.
   let chatGptChanged = () => {};
+  let chatGptLimitsChanged = () => {};
   const chatGptStore = adapters.chatGptStore;
   const chatGpt = createChatGptPlan({
     endpoints: { ...CHATGPT_PLAN_ENDPOINTS, ...adapters.chatGptPlan },
@@ -742,6 +809,7 @@ export function createCore(adapters: CoreAdapters): Core {
     browser: adapters.browser,
     now: () => (adapters.now?.() ?? new Date()).getTime(),
     onChange: () => chatGptChanged(),
+    onLimitsChange: () => chatGptLimitsChanged(),
   });
   // What the experimental ChatGPT provider left on this device goes (see migration 53).
   chatGpt.forgetCodexSignIn().catch((error: unknown) => {
@@ -881,7 +949,8 @@ export function createCore(adapters: CoreAdapters): Core {
       }
     },
     async savePage(address, folderId, added) {
-      const result = await webPages.save({ address }, added);
+      // A found source's copy is the text the User asked for, not how its page looks.
+      const result = await webPages.save({ address, keepLook: false }, added);
       if (result.outcome === "failed") return null;
       if (!result.existing && folderId !== null) library.assign(result.document.id, folderId);
       return { document: documents.get(result.document.id), existing: result.existing };
@@ -923,6 +992,50 @@ export function createCore(adapters: CoreAdapters): Core {
       organizedFolderDocuments: (folderId) => library.documentIds(folderId),
       documentIds: (filter) => documents.ids(filter),
     });
+  // A Folder of the Library holds no file that isn't a Document, so it names the folders on disk
+  // its Documents are in: a Linked folder filed into it whole names the Linked folder.
+  const foldersOnDisk = (folderIds: readonly string[]) => {
+    const all = folders.list();
+    const named = all.filter((folder) => folderIds.includes(folder.id));
+    const filed = new Set(
+      folderIds
+        .filter((id) => !named.some((folder) => folder.id === id))
+        .flatMap((id) => documents.getMany(library.documentIds(id)))
+        .map((document) => document.folderId),
+    );
+    return [...named, ...all.filter((folder) => filed.has(folder.id))];
+  };
+  const unreadIn = (wanted: SearchScope | null): UnreadFile[] => {
+    const inScope = wanted ? resolveScope(wanted) : null;
+    const unread = findUnreadDocuments(documents.unread(inScope ?? undefined));
+    // Files in a format not read belong to folders on disk only: a Tag or a Document can't name
+    // them. A folder holds those in it and under it, even where no Document is.
+    const named = wanted ? foldersOnDisk(wanted.folderIds) : null;
+    const files = documents.linkedFolders
+      .unsupportedFiles()
+      .filter(
+        (file) =>
+          named === null ||
+          named.some(
+            (folder) =>
+              folder.linkedFolderId === file.linkedFolderId &&
+              (folder.relativePath === "" ||
+                file.relativeFolder === folder.relativePath ||
+                file.relativeFolder.startsWith(`${folder.relativePath}/`)),
+          ),
+      )
+      .map(
+        (file): UnreadFile => ({
+          id: file.path,
+          name: file.name,
+          reason: "format",
+          extension: file.extension,
+          documentId: null,
+          pages: [],
+        }),
+      );
+    return [...unread, ...files];
+  };
   // What checks and comparison tables search (#80): as Answers do, without IncarnaMind's own
   // files and the document being checked. Answers themselves search everything, as before.
   const evidence = createEvidence({
@@ -943,7 +1056,8 @@ export function createCore(adapters: CoreAdapters): Core {
     enabled: () => settings.get().user.webSearch && !embedding.localOnly(),
     readiness: (model) => chat.readiness(model),
     prepare: (model) => chat.prepareModel(model, "web-search", "off"),
-    savePage: (address, fetch) => webPages.save({ address }, undefined, fetch),
+    // A page an Answer saves is never loaded whole: that is for the User to ask for, page by page.
+    savePage: (address, fetch) => webPages.save({ address, keepLook: false }, undefined, fetch),
     folderOf: (place) => {
       try {
         if (place.mindId !== null) return minds.get(place.mindId).folderId;
@@ -973,8 +1087,9 @@ export function createCore(adapters: CoreAdapters): Core {
       if (!found || found.deletedAt !== null) return null;
       return isKnownKind(minds.get(mindId).kind) ? found.name : null;
     },
+    liveTranscript: (mindId) => liveTranscriptOf(mindId),
     providerExists: (providerId) => chat.exists(providerId),
-    readiness: (choice) => chat.readiness(choice),
+    readiness: async (choice) => chat.readiness(await chat.answeringModel(choice)),
     prepareModel: (choice) => chat.prepareModel(choice),
     documents: {
       searchableCount: (documentIds) => documents.searchableCount(documentIds ?? undefined),
@@ -982,6 +1097,7 @@ export function createCore(adapters: CoreAdapters): Core {
       searchableNames: (documentIds, limit) =>
         documents.searchableNames(documentIds ?? undefined, limit),
       searchableLanguages: (documentIds) => documents.searchableLanguages(documentIds ?? undefined),
+      unread: (documentIds) => findUnreadDocuments(documents.unread(documentIds ?? undefined)),
       search: searchDocuments,
       citationSource: (passageId) => documents.citationSource(passageId),
       pageTexts: (documentId, contentHash, from, to) =>
@@ -1036,7 +1152,20 @@ export function createCore(adapters: CoreAdapters): Core {
       },
       folderName: (folderId) =>
         library.folders().find((folder) => folder.id === folderId)?.name ?? null,
+      writing: (mindId, place) => events.emit("mind.writing", { mindId, place }),
       proposeInMind: (input) => edits.proposeInMind(input),
+    },
+    withdrawChanges: (changes) => {
+      for (const change of changes) {
+        if (!mindExists(change.mindId)) continue;
+        const emptied = content.edit(change.mindId, (blocks) => {
+          resolveProposals(blocks, (ref) => ref.request === change.request, "reject");
+          return topLevelBlocks(blocks).every(
+            (block) => block.nodeName === "paragraph" && block.length === 0,
+          );
+        });
+        if (change.created && emptied) removeMind(change.mindId);
+      }
     },
     approvals: {
       decide: (call) => approvals.decide(call),
@@ -1080,6 +1209,7 @@ export function createCore(adapters: CoreAdapters): Core {
       },
     },
     resolveScope,
+    interfaceLanguage: () => settings.get().language,
     emptyScopeAnswer: () => translate(settings.get().language, "scope.answer.empty"),
     onWritingChange: (writing) => {
       background.setAnswering(writing);
@@ -1121,7 +1251,11 @@ export function createCore(adapters: CoreAdapters): Core {
   const taskName = (kind: string) =>
     translate(
       settings.get().language,
-      kind === COMPARISON_TASK ? "task.kind.comparison" : "task.kind.other",
+      kind === COMPARISON_TASK
+        ? "task.kind.comparison"
+        : kind === RESEARCH_TASK
+          ? "task.kind.research"
+          : "task.kind.other",
     );
   /** Whether a Mind is the tab shown in a group of one of these windows. */
   const mindShown = (mindId: string | null, windowIds: readonly string[]) =>
@@ -1152,12 +1286,13 @@ export function createCore(adapters: CoreAdapters): Core {
           : "task.notify.finished",
       { task: name },
     );
-    let body = "";
+    let mind = "";
     try {
-      body = task.mindId ? minds.get(task.mindId).title : "";
+      mind = task.mindId ? minds.get(task.mindId).title : "";
     } catch {
-      body = "";
+      mind = "";
     }
+    const body = [mind, what === "finished" ? task.summary : null].filter(Boolean).join(" · ");
     notifications.show(
       { title, body: body || translate(language, "task.notify.body") },
       (windowIds) => mindShown(task.mindId, windowIds),
@@ -1165,8 +1300,75 @@ export function createCore(adapters: CoreAdapters): Core {
         events.emit("task.shown", { taskId: task.id, mindId: task.mindId, blockId: task.blockId }),
     );
   };
-  // Tasks (#126): their journal survives a force-quit; comparison tables fill as one.
-  const taskKinds: TaskKind[] = [comparisons.taskKind, ...(adapters.taskKinds ?? [])];
+  const research = createResearch({
+    requireMind: (mindId) => writableMind(mindId).id,
+    mindExists,
+    mindName: (mindId) => (mindExists(mindId) ? mindName(minds.get(mindId)) || null : null),
+    folderOfMind: (mindId) => (mindExists(mindId) ? minds.get(mindId).folderId : null),
+    createMind: (title, folderId) => makeMind({ title, kind: DEFAULT_MIND_KIND, folderId }).id,
+    documents: {
+      webPagesSince: (ids, since) =>
+        documents
+          .getMany(ids)
+          .filter((document) => document.kind === "web" && document.createdAt >= since)
+          .map((document) => ({ id: document.id, name: document.name })),
+      live: (ids) => documents.getMany(ids).map((document) => document.id),
+    },
+    library: {
+      folderExists: (folderId) => library.folders().some((folder) => folder.id === folderId),
+      folderNames: () => library.folders().map((folder) => folder.name),
+      createFolder: (name, description) => library.create({ name, description }).id,
+      file: (documentIds, folderId) => {
+        db.transaction(() => library.move(documentIds, folderId));
+        library.moved([...documentIds]);
+      },
+    },
+    tags: {
+      list: () => tags.list().map((tag) => ({ id: tag.id, name: tag.name })),
+      create: (name, description) => {
+        const tag = tags.create({ name, description });
+        tagsChanged();
+        return tag.id;
+      },
+      apply: (documentId, tagIds) => {
+        const kept = tagsOfDocument(db, documentId)
+          .filter((link) => link.source === "automatic")
+          .map((link) => link.tagId);
+        const decided = [...new Set([...kept, ...tagIds])].map((tagId) => ({
+          tagId,
+          confidence: null,
+          needsReview: false,
+        }));
+        if (tags.applyAutomatic(documentId, decided)) announceTagged([documentId]);
+      },
+    },
+    notes: {
+      proposed: (mindId, request) => noteAdding.proposed(mindId, request),
+      propose: (mindId, blocks, request, made) => noteAdding.propose(mindId, blocks, request, made),
+    },
+    now: () => adapters.now?.() ?? new Date(),
+    reportError: (error) => console.error(error),
+    chat: {
+      providerExists: (providerId) => chat.exists(providerId),
+      readiness: (choice) => chat.readiness(choice),
+      prepareModel: (choice) => chat.prepareModel(choice),
+      runsLocally: (choice) => chat.metered(choice)?.billing === "free",
+    },
+    answers,
+    resolveScope,
+    tasks: {
+      start: (kind, mindId, input) => tasks.start(kind, mindId, input),
+      get: (taskId) => tasks.record(taskId),
+      steps: (taskId) => tasks.steps(taskId),
+    },
+    say: (key, params) => translate(settings.get().language, key, params),
+  });
+  // Tasks (#126): their journal survives a force-quit; comparison tables fill as one, and Research is one.
+  const taskKinds: TaskKind[] = [
+    comparisons.taskKind,
+    research.taskKind,
+    ...(adapters.taskKinds ?? []),
+  ];
   const tasks = createTasks({
     db,
     now,
@@ -1229,6 +1431,19 @@ export function createCore(adapters: CoreAdapters): Core {
       folderDefault: folderId === null ? null : library.citationStyle(folderId),
     }));
   };
+  /** Sends a Mind to Recently deleted; its tabs close. */
+  const removeMind = (mindId: unknown) => {
+    const at = now();
+    const deleted = db.transaction(() => {
+      const mind = minds.delete(mindId, at);
+      content.remove(mind.id, at);
+      return mind;
+    });
+    meetings.mindDeleted(deleted.id);
+    mindsChanged();
+    layouts.forgetDeletedMinds();
+  };
+
   // Edit with AI (#93): the change comes back as Proposals; Citations it keeps are checked again.
   const edits = createEdits({
     content,
@@ -1240,6 +1455,7 @@ export function createCore(adapters: CoreAdapters): Core {
     consent,
     localOnly: () => embedding.localOnly(),
     recheck: (attributes) => recheckKept(documents, attributes),
+    writing: (mindId, place) => events.emit("mind.writing", { mindId, place }),
     now: () => adapters.now?.() ?? new Date(),
   });
 
@@ -1271,7 +1487,23 @@ export function createCore(adapters: CoreAdapters): Core {
     document: (documentId) => documents.get(documentId),
     onStatus: (listener) => events.on("document.status", listener),
     readText: (documentId) => documents.readText(documentId),
-    createMind: (title, folderId) => makeMind({ title, kind: DEFAULT_MIND_KIND, folderId }),
+    // Named so it doesn't share its Document's name in ⌘K and the sidebar.
+    createMind: (title, folderId) =>
+      makeMind({
+        title: translate(settings.get().language, "verify.mindTitle", { name: title }),
+        kind: DEFAULT_MIND_KIND,
+        folderId,
+      }),
+    watch: {
+      minds: () => minds.list().map((mind) => ({ id: mind.id, folderId: mind.folderId })),
+      documentVersions: () =>
+        new Map(documents.list().map((document) => [document.id, document.contentHash])),
+      background,
+      runCost: (runId) => meter.taskCost(runId),
+      delayMs: adapters.contradictionWatch?.delayMs ?? AFTER_NEW_VERSION_MS,
+      claimTimeLimitMs: adapters.contradictionWatch?.claimTimeLimitMs ?? CLAIM_TIME_LIMIT_MS,
+      log: adapters.log ?? silentLogger,
+    },
     mindFolder: (mindId) => minds.get(mindId).folderId,
     originalOf: (mindId) => wordImports.originalOf(mindId),
     defaultModel: () => settings.get().user.chatModel,
@@ -1279,6 +1511,7 @@ export function createCore(adapters: CoreAdapters): Core {
     consent,
     localOnly: () => embedding.localOnly(),
     resolveScope,
+    unread: unreadIn,
     evidence,
     documents: {
       searchableCount: (documentIds) => documents.searchableCount(documentIds ?? undefined),
@@ -1301,6 +1534,20 @@ export function createCore(adapters: CoreAdapters): Core {
     recheck: (input) => recheckCitation(documents, input),
     recordAiUse: (inputs) => void aiUse.record(inputs),
     now: () => adapters.now?.() ?? new Date(),
+  });
+
+  // The AI use statement (#739): a new Mind, made from what the Mind records.
+  const aiUseStatement = createAiUseStatement({
+    mind: (mindId) => minds.get(mindId),
+    read: (mindId, look) => content.peek(mindId, look),
+    entries: (mindId) => aiUse.list(mindId),
+    providers: () => chat.list(),
+    documents: () => documents.list(),
+    keptCitationTexts: () => documents.keptCitationTexts(),
+    language: () => settings.get().language,
+    createMind: makeMind,
+    write: (mindId, blocks) => content.edit(mindId, (note) => void insertBlocks(note, blocks)),
+    now,
   });
 
   // The fingerprints of the files IncarnaMind writes (#80). A Document already indexed with
@@ -1367,7 +1614,7 @@ export function createCore(adapters: CoreAdapters): Core {
     events,
     now,
     settings,
-    suggested: join(adapters.paths.documents ?? join(homedir(), "Documents"), "IncarnaMind"),
+    suggested: join(adapters.paths.documents, "IncarnaMind"),
     linkedFolders: () => documents.linkedFolders.list(),
     recordOwnFile,
   });
@@ -1483,7 +1730,12 @@ export function createCore(adapters: CoreAdapters): Core {
     chatReadsImages: (choice) => chat.readsImages(choice),
     async pageImages(id, contentHash, signal) {
       try {
-        return await documentPageImages(await documents.filePath(id), contentHash, signal);
+        return await documentPageImages(
+          await documents.filePath(id),
+          contentHash,
+          signal,
+          await pdfPasswords.of(id),
+        );
       } catch (error) {
         // A missing source file is a visible classification failure, not a retry loop.
         throw new Error(error instanceof Error ? error.message : String(error), { cause: error });
@@ -1613,6 +1865,12 @@ export function createCore(adapters: CoreAdapters): Core {
   });
   wordImports.resume();
   wordImports.dropPurged().catch((error: unknown) => console.error(error));
+  wordImports.addLooks().catch((error: unknown) =>
+    (adapters.log ?? silentLogger).error("word.look.failed", {
+      error: error instanceof Error ? error.name : "unknown",
+      message: error instanceof Error ? error.message : String(error),
+    }),
+  );
 
   const recentlyDeleted = createRecentlyDeleted({
     db,
@@ -1683,6 +1941,17 @@ export function createCore(adapters: CoreAdapters): Core {
     report().catch((error: unknown) => {
       if (!lifetime.signal.aborted) console.error(error);
     });
+  };
+  // Not a readiness change: the renderer keeps its model lists.
+  chatGptLimitsChanged = () => {
+    chatGpt.status().then(
+      (status) => {
+        if (!lifetime.signal.aborted) events.emit("chatGptPlan.changed", status);
+      },
+      (error: unknown) => {
+        if (!lifetime.signal.aborted) console.error(error);
+      },
+    );
   };
 
   // Tagging a quit interrupted starts again; Documents waiting for a chat model are checked.
@@ -1846,10 +2115,16 @@ export function createCore(adapters: CoreAdapters): Core {
     linkedFolderExists: (linkedFolderId) =>
       documents.linkedFolders.list().some((folder) => folder.id === linkedFolderId),
     documentsIn: (linkedFolderId) => documents.list({ linkedFolderId }),
+    mindFolder: (mindId) => minds.get(mindId).folderId,
+    now,
+    checksRelyOn: (documentIds) => retention.isRetained("check-result", documentIds),
     recheck: (input) => recheckCitation(documents, input),
     changed: (value) => events.emit("examples.changed", value),
   });
   events.on("document.status", () => examples.documentChanged());
+  // A new version of a Document in a Folder: its Minds' cited claims are checked for contradictions (#112).
+  checks.startWatching();
+  events.on("document.status", (document) => checks.documentChanged(document));
   // Linked folders and single files are compared with the disk, then watched.
   documents.start();
 
@@ -1857,9 +2132,12 @@ export function createCore(adapters: CoreAdapters): Core {
     if (input !== undefined && !isRecord(input)) throw new InvalidInputError("Expected an object.");
     return ollamaBaseUrl(input?.baseUrl);
   };
+  const ollamaInstalled = async () => (await adapters.ollamaApp?.installed()) ?? false;
 
   // Transcripts (#136): a Meeting is transcribed on this computer as it records, where this copy can.
   let listMeetings: (() => Meeting[]) | undefined;
+  /** See `AnswersOptions.liveTranscript`; set once Meetings are. */
+  let liveTranscriptOf = async (_mindId: string): Promise<WindowedPassage[] | null> => null;
   const meetingsChanged = () => {
     if (listMeetings) events.emit("meetings.changed", listMeetings());
   };
@@ -1959,12 +2237,51 @@ export function createCore(adapters: CoreAdapters): Core {
     log: adapters.log ?? silentLogger,
   });
   listMeetings = () => meetings.list();
+  /** Resolves once a Document's newest version has its Passages, or after `ms` with the last version's. */
+  const extracted = (documentId: string, ms: number) =>
+    new Promise<void>((resolve) => {
+      const busy = (status: DocumentStatus | null) =>
+        status === "queued" || status === "extracting";
+      let status: DocumentStatus | null = null;
+      try {
+        status = documents.get(documentId).status;
+      } catch {
+        // Deleted meanwhile: there is nothing to wait for.
+      }
+      if (!busy(status)) {
+        resolve();
+        return;
+      }
+      const done = () => {
+        clearTimeout(timer);
+        stop();
+        resolve();
+      };
+      const timer = setTimeout(done, ms);
+      const stop = events.on("document.status", (document) => {
+        if (document.id === documentId && !busy(document.status)) done();
+      });
+    });
+  liveTranscriptOf = async (mindId) => {
+    const meeting = meetings
+      .list()
+      .find(
+        (each) =>
+          each.mindId === mindId && (each.status === "recording" || each.status === "paused"),
+      );
+    const documentId = meeting?.transcript?.documentId;
+    if (!meeting || !documentId || !transcripts) return null;
+    await transcripts.refresh(meeting.id);
+    await extracted(documentId, LIVE_TRANSCRIPT_WAIT_MS);
+    return documents.passagesBetween(documentId, 0, Number.MAX_SAFE_INTEGER);
+  };
 
   // Outside agents (#351): the User's own agent, paired in Settings, reads its Folders over the
   // socket and gets Citations IncarnaMind minted and checked. Off until the User turns it on.
-  // Where agents keep their settings and skills.
-  const home = adapters.agents?.home ?? homedir();
+  const { home } = adapters.paths;
   const agents = createAgents({
+    offered: adapters.agents?.offered ?? true,
+    log: adapters.log ?? silentLogger,
     db,
     now,
     clock: () => performance.now(),
@@ -1980,10 +2297,16 @@ export function createCore(adapters: CoreAdapters): Core {
     access: {
       say: (key, params) => translate(settings.get().language, key, params),
       folders: () => library.folders().map((folder) => ({ id: folder.id, name: folder.name })),
-      documentsIn: (folderIds) =>
-        folderIds.length === 0
-          ? []
-          : (resolveScope({ folderIds: [...folderIds], tagIds: [], documentIds: [] }) ?? []),
+      documentsIn: (folderIds) => {
+        const folders = folderIds.filter((id) => id !== NOT_IN_A_FOLDER_ID);
+        const filed =
+          folders.length === 0
+            ? []
+            : (resolveScope({ folderIds: folders, tagIds: [], documentIds: [] }) ?? []);
+        return folders.length === folderIds.length
+          ? filed
+          : [...new Set([...filed, ...library.unfiledDocumentIds()])];
+      },
       // Without the reranker: it costs about a second a search (ADR-0009), and an agent's
       // search must answer in well under 100 ms.
       search: (query, documentIds, parameters, signal) =>
@@ -1997,8 +2320,16 @@ export function createCore(adapters: CoreAdapters): Core {
       mindMarkdown: (mindId, footnote) => {
         const mind = minds.get(mindId);
         const { language } = settings.get();
+        // Someone's changes from a Word file read as changes, as the assistant reads them (#734).
         const blocks = content.peek(mind.id, (fragment) =>
-          readBlocks(fragment, { includeQuestions: true, footnote, trimBeforeCitation: true }),
+          readBlocks(fragment, {
+            includeQuestions: true,
+            footnote,
+            trimBeforeCitation: true,
+            ...(fragment.doc && wordFileOf(fragment.doc)
+              ? { review: theirChangesReading(fragment.doc) }
+              : {}),
+          }),
         );
         return renderMarkdown(mind.title || mind.autoTitle, blocks, exportLabels(language));
       },
@@ -2059,17 +2390,7 @@ export function createCore(adapters: CoreAdapters): Core {
       mindsChanged();
       return mind;
     },
-    deleteMind: async (mindId) => {
-      const at = now();
-      const deleted = db.transaction(() => {
-        const mind = minds.delete(mindId, at);
-        content.remove(mind.id, at);
-        return mind;
-      });
-      meetings.mindDeleted(deleted.id);
-      mindsChanged();
-      layouts.forgetDeletedMinds();
-    },
+    deleteMind: async (mindId) => removeMind(mindId),
     openMind: async (mindId) => {
       const mind = minds.get(mindId);
       // A Mind this version may only read is shown from what is stored: nothing is
@@ -2151,11 +2472,6 @@ export function createCore(adapters: CoreAdapters): Core {
       }
       const languageWas = settings.get().language;
       const updated = settings.update(change);
-      if (updated.language !== languageWas) {
-        examples
-          .followLanguage()
-          .catch((error) => console.error("The example Minds didn't follow the language:", error));
-      }
       if (!updated.user.suggestWhileWriting) suggestions.stop();
       events.emit("settings.changed", updated);
       // Skill scripts turned off: none runs any more, and none waits to.
@@ -2165,6 +2481,12 @@ export function createCore(adapters: CoreAdapters): Core {
       }
       const flowChanged = syncChatFlow();
       if (chatModel !== undefined || flowChanged) await readinessChanged();
+      // The examples follow the new language before this returns, so whoever awaits it can rely on it.
+      if (updated.language !== languageWas) {
+        await examples
+          .followLanguage()
+          .catch((error) => console.error("The example Minds didn't follow the language:", error));
+      }
       return updated;
     },
     addDocuments,
@@ -2191,6 +2513,7 @@ export function createCore(adapters: CoreAdapters): Core {
         ? { ...result, document: documents.get(result.document.id) }
         : result;
     },
+    keepWebPageLook: async (documentId) => webPages.keepLook(documentId),
     fetchWebPageAgain: async (documentId) => webPages.fetchAgain(documentId),
     saveTextAsDocument: async (input) => {
       if (!isRecord(input) || typeof input.text !== "string" || input.text.trim() === "") {
@@ -2225,6 +2548,31 @@ export function createCore(adapters: CoreAdapters): Core {
       activity.documentDeleted(id as string);
     },
     retryDocument: async (id) => documents.retry(id),
+    unlockDocument: async (input) => {
+      const { documentId, password } = parseUnlock(input);
+      const document = documents.getMany([documentId])[0];
+      if (!document) throw new NotFoundError({ key: "error.document.notFound" });
+      if (document.kind !== "pdf") throw new InvalidInputError({ key: "error.document.notPdf" });
+      const bytes = await readFile(await documents.filePath(documentId));
+      if (!(await pdfIsLocked(bytes))) {
+        throw new InvalidInputError({ key: "error.document.notLocked" });
+      }
+      if (!(await pdfOpensWith(bytes, password))) return { kind: "wrong-password" };
+      await pdfPasswords.keep(documentId, password);
+      events.emit("documentPasswords.changed", pdfPasswords.kept());
+      const failed = document.status === "failed";
+      return { kind: "unlocked", document: failed ? documents.retry(documentId) : document };
+    },
+    forgetDocumentPassword: async (id) => forgetPasswords([parseDocumentId(id)]),
+    documentPasswordFor: async (id) => {
+      const document = documents.getMany([parseDocumentId(id)])[0];
+      if (document?.kind !== "pdf" || !viewing.isShown(document.id)) return null;
+      return (await pdfPasswords.of(document.id)) ?? null;
+    },
+    listDocumentPasswords: async () => {
+      const kept = pdfPasswords.kept();
+      return documents.getMany(kept).map((each) => each.id);
+    },
     readDocumentText: async (id) => documents.readText(id),
     readScannedText: async (id) => documents.readScannedText(id),
     readScannedQuote: async (input) => {
@@ -2257,42 +2605,7 @@ export function createCore(adapters: CoreAdapters): Core {
       return { ...linked, batchId };
     },
     listLinkedFolders: async () => documents.linkedFolders.list(),
-    listUnreadFiles: async (scope) => {
-      const wanted = parseSearchScope(scope);
-      const inScope = wanted ? resolveScope(wanted) : null;
-      const kept = inScope === null ? null : new Set(inScope);
-      const unread = findUnreadDocuments(
-        documents.list().filter((each) => kept === null || kept.has(each.id)),
-      );
-      // Files in a format not read belong to Folders only: a Tag or a Document can't name them.
-      // A Folder holds those in it and under it, even where no Document is.
-      const named = wanted
-        ? folders.list().filter((folder) => wanted.folderIds.includes(folder.id))
-        : null;
-      const files = documents.linkedFolders
-        .unsupportedFiles()
-        .filter(
-          (file) =>
-            named === null ||
-            named.some(
-              (folder) =>
-                folder.linkedFolderId === file.linkedFolderId &&
-                (folder.relativePath === "" ||
-                  file.relativeFolder === folder.relativePath ||
-                  file.relativeFolder.startsWith(`${folder.relativePath}/`)),
-            ),
-        )
-        .map(
-          (file): UnreadFile => ({
-            id: file.path,
-            name: file.name,
-            reason: "format",
-            extension: file.extension,
-            documentId: null,
-          }),
-        );
-      return [...unread, ...files];
-    },
+    listUnreadFiles: async (scope) => unreadIn(parseSearchScope(scope)),
     locateLinkedFolder: (linkedFolderId, path) =>
       documents.linkedFolders.locate(linkedFolderId, path),
     removeLinkedFolder: async (linkedFolderId) => unlinkFolder(linkedFolderId),
@@ -2405,16 +2718,24 @@ export function createCore(adapters: CoreAdapters): Core {
     getCostSummary: async () => meter.summary(),
     estimateRun: async (input) => {
       if (!isRecord(input)) throw new InvalidInputError("estimateRun expects an object.");
-      const { items, model } = input;
+      const { items, model, searches = 0 } = input;
       if (typeof items !== "number" || !Number.isInteger(items) || items < 0 || items > 100_000) {
         throw new InvalidInputError("items must be a whole number from 0 to 100,000.");
       }
       if (model !== undefined && !isChatModelChoice(model)) {
         throw new InvalidInputError("model must be a provider and a model.");
       }
+      if (
+        typeof searches !== "number" ||
+        !Number.isInteger(searches) ||
+        searches < 0 ||
+        searches > 1_000
+      ) {
+        throw new InvalidInputError({ key: "error.estimate.searches", values: { max: 1_000 } });
+      }
       const metered = chat.metered(model);
       if (!metered) throw new InvalidInputError("There is no model to estimate for.");
-      return meter.estimate(metered, items);
+      return meter.estimate(metered, items, searches);
     },
     compareDocuments: (input) => comparisons.compareDocuments(input),
     fillComparisonTable: (input) => comparisons.fillComparisonTable(input),
@@ -2426,6 +2747,11 @@ export function createCore(adapters: CoreAdapters): Core {
     stopTask: (taskId) => tasks.stop(taskId),
     answerTaskAsk: (taskId, answer) => tasks.answer(taskId, answer),
     listTaskSteps: async (taskId) => tasks.listSteps(taskId),
+    tellTask: async (taskId, text) => tasks.tell(taskId, text),
+    untellTask: async (taskId, messageId) => tasks.untell(taskId, messageId),
+    getResearchPlan: async (taskId) => research.planView(taskId),
+    planResearch: (input) => research.plan(input),
+    startResearch: (input) => research.start(input),
 
     askQuestion: async (input) => answers.ask(input),
     regenerateAnswer: async (input) =>
@@ -2444,11 +2770,25 @@ export function createCore(adapters: CoreAdapters): Core {
     verifyDocument: (input) => checks.verifyDocument(input),
     findClaims: (input) => checks.findClaims(input),
     verifyClaims: (input) => checks.verifyClaims(input),
+    planContradictionCheck: (mindId) => checks.planContradictionCheck(mindId),
+    checkContradictions: (input) => checks.checkContradictions(input),
+    planMindCheck: (mindId, mode, allDocuments) => checks.planMindCheck(mindId, mode, allDocuments),
+    checkMind: (input) => checks.checkMind(input),
 
     getSecretStorage: async () => secrets.status(),
     acceptPlainTextSecretStorage: async () => secrets.acceptPlainText(),
 
-    detectOllama: (input) => detectOllama(ollamaUrl(input)),
+    detectOllama: (input) => detectOllama(ollamaUrl(input), ollamaInstalled),
+    openOllama: async (input) => {
+      const baseUrl = ollamaUrl(input);
+      if (!(await ollamaInstalled())) {
+        throw new InvalidInputError({ key: "error.provider.ollamaCantOpen" });
+      }
+      await adapters.ollamaApp?.open();
+      return waitForOllama(baseUrl, ollamaInstalled, {
+        timeoutMs: adapters.ollamaStartTimeoutMs ?? OLLAMA_START_TIMEOUT_MS,
+      });
+    },
     selectOllama: async (input) => {
       const baseUrl = ollamaUrl(input);
       const model = input?.model ?? RECOMMENDED_OLLAMA_MODEL;
@@ -2478,10 +2818,29 @@ export function createCore(adapters: CoreAdapters): Core {
     },
 
     getChatGptPlan: () => chatGpt.status(),
+    answerWithPlanModel: async (input) => {
+      const models = await chatGpt.models();
+      if (
+        !isRecord(input) ||
+        typeof input.insteadOf !== "string" ||
+        !models.some((model) => model.id === input.modelId)
+      ) {
+        throw new InvalidInputError({ key: "error.chatgpt.notPlanModel" });
+      }
+      chatGpt.limits.answerWith(input.insteadOf, input.modelId);
+      return chatGpt.status();
+    },
+    endPlanStandIn: async () => {
+      chatGpt.limits.endStandIn();
+      return chatGpt.status();
+    },
     signInToChatGpt: (input) =>
       chatGpt.signIn({ anotherAccount: isRecord(input) && input.anotherAccount === true }),
     cancelChatGptSignIn: () => chatGpt.cancelSignIn(),
+    reopenChatGptSignIn: () => chatGpt.reopenSignInPage(),
     signOutOfChatGpt: () => chatGpt.signOut(),
+    pasteChatGptSignInAddress: async (address) =>
+      chatGpt.pasteSignInAddress(typeof address === "string" ? address : ""),
 
     listDataFlows: () => consent.list(),
     listConsentRequests: async () => consent.requests(),
@@ -2513,6 +2872,7 @@ export function createCore(adapters: CoreAdapters): Core {
     getAiUseStatus: async () => aiUse.status(),
     clearAiUse: async () => aiUse.clear(),
     restoreAiUse: async (clearedAt) => aiUse.restore(clearedAt),
+    createAiUseStatement: async (mindId) => aiUseStatement.create(mindId),
 
     listFolders: async () => folders.list(),
 
@@ -2764,6 +3124,7 @@ export function createCore(adapters: CoreAdapters): Core {
       const {
         fileName,
         fromWord: _,
+        theirChanges: _waiting,
         data,
         word,
         ...counts
@@ -2824,7 +3185,10 @@ export function createCore(adapters: CoreAdapters): Core {
     retryTranscript: async (meetingId) => meetings.retryTranscript(meetingId),
     openAudioSettings: (source) => meetings.openSettings(source),
 
-    openDocumentFile: (documentId) => documents.openFile(documentId),
+    openDocumentFile: async (documentId) => {
+      const file = await documents.openFile(documentId);
+      return { ...file, stream: viewing.watch(file.document.id, file.stream) };
+    },
     openDocumentImage: (documentId, path) => documents.openImage(documentId, path),
     readCellNumber: (documentId, sheet, ref) => documents.cellNumber(documentId, sheet, ref),
     openDocumentInApp: async (documentId) => {
@@ -2898,6 +3262,7 @@ export function createCore(adapters: CoreAdapters): Core {
       // the User's approval are denied, and Skill scripts running are stopped.
       answers.stopAll();
       void webSearch.close().catch((error: unknown) => console.error(error));
+      void pictureFetcher.close().catch((error: unknown) => console.error(error));
       suggestions.stop();
       edits.stopAll();
       checks.stopAll();

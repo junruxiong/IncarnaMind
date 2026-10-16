@@ -84,6 +84,7 @@ import {
   type ThirdPartyReason,
   type ThirdPartySource,
   type ToolCallApproval,
+  type UnreadFile,
   type WebPageCall,
 } from "../api";
 import type { CallToDecide, ToolCallToApprove } from "../approvals";
@@ -92,6 +93,7 @@ import type { WindowedPassage } from "../documents/search";
 import { ChatNotReadyError, InvalidInputError, isRecord, NotFoundError } from "../errors";
 import type { createEventHub } from "../events";
 import type { ExecAccess } from "../execution";
+import type { Language } from "../language";
 import type { MindContent } from "../mindContent";
 import { plainText } from "../mindText";
 import { docOf } from "../proposals/merge";
@@ -126,6 +128,7 @@ import {
   contentHash,
   createElement,
   findBlock,
+  isEdited,
   type NodeJSON,
   syncContent,
   textAttribute,
@@ -160,6 +163,7 @@ import type {
   GatedCall,
   ToolSet,
 } from "./engine";
+import { listenedTokens, newestWithin, withTranscript } from "./liveTranscript";
 import { markdownToBlocks } from "./markdown";
 import {
   answerInstructions,
@@ -169,12 +173,14 @@ import {
   type ListedDocuments,
   languageInstruction,
   loadedSkillText,
+  meetingInstructions,
   mindInstructions,
   signInNeededInstructions,
   skillInstructions,
   sourcesInstructions,
   webInstructions,
 } from "./prompt";
+import { quotedWordsIn, withoutQuotationMarks } from "./quotedWords";
 
 export type { AnswerDocuments } from "./citations";
 export { createAiSdkAnswerEngine } from "./engine";
@@ -256,8 +262,12 @@ export interface AnswerConversations {
    * written, which reads `read`.
    */
   add(input: QuestionInput, answerModel: ChatModelChoice | null, read: AnswerRead | null): Turn;
-  /** The Question of an Answer, to write the Answer again. */
-  questionOf(input: unknown): { answerId: string; question: ConversationQuestion };
+  /** The Question of an Answer, and the Tool calls it made, to write the Answer again. */
+  questionOf(input: unknown): {
+    answerId: string;
+    question: ConversationQuestion;
+    toolCalls: AnswerToolCall[];
+  };
   /** Takes the Search scope off a Question: its Answers search every Document (#748). */
   clearScope(questionId: string): ConversationQuestion | null;
   /** Empties an Answer, where it is, to write it again, reading `read`. */
@@ -327,6 +337,11 @@ export interface AnswersOptions {
    * deleted, of a kind this version knows; null for any other.
    */
   readableMindName(mindId: string): string | null;
+  /**
+   * The live Transcript of the Meeting a Mind records now (#144), indexed up to now: its
+   * Passages in reading order; null when the Mind's Meeting isn't recording or has no lines yet.
+   */
+  liveTranscript(mindId: string): Promise<WindowedPassage[] | null>;
   providerExists(providerId: string): boolean;
   /** Whether Questions can be asked with this model (the default one when undefined). */
   readiness(choice: ChatModelChoice | undefined): Promise<ChatReadiness>;
@@ -334,6 +349,8 @@ export interface AnswersOptions {
   prepareModel(choice: ChatModelChoice): Promise<PreparedChatModel>;
   /** Searching the User's Documents, and what Citations point to. */
   documents: DocumentsForAnswers;
+  /** What an Answer is written in when its Question has no language of its own. */
+  interfaceLanguage(): Language;
   /** The ids of the live Documents a Search scope covers; null with no Search scope (every Document). */
   resolveScope(scope: SearchScope): string[] | null;
   /** What an Answer says when its Question's Search scope has no Documents to search. */
@@ -357,6 +374,12 @@ export interface AnswersOptions {
    * Proposals (#202, ../tools/minds); absent: it changes none.
    */
   minds?: MindsForTools;
+  /**
+   * Takes back the changes an Answer proposed in Minds, before it is written
+   * again (#202): those still waiting are rejected, and a Mind it made goes
+   * once nothing else is in it.
+   */
+  withdrawChanges?(changes: readonly MindChange[]): void;
   /** Asking the User before a Connector Tool or a Skill script runs. */
   approvals: AnswerApprovals;
   /** Running Skill scripts. */
@@ -473,6 +496,8 @@ export interface DocumentsForAnswers
   searchableNames(documentIds: readonly string[] | null, limit: number): ListedDocuments;
   /** The languages the Documents to search are in, the most common first, with how many are in each. */
   searchableLanguages(documentIds: readonly string[] | null): DocumentLanguage[];
+  /** The Documents among these (null: every Document) whose text couldn't be read, or some of it. */
+  unread(documentIds: readonly string[] | null): UnreadFile[];
   search(
     query: string,
     documentIds: readonly string[] | null,
@@ -522,12 +547,6 @@ function pickedModel(question: Y.XmlElement): ChatModelChoice | null {
 /** The Skill forced on a Question, if any. */
 const forcedSkillOf = (question: Y.XmlElement): string | null =>
   textAttribute(question, "forcedSkill") || null;
-
-/** The User has changed the Answer since it was written. */
-function isEdited(answer: Y.XmlElement): boolean {
-  const hash = textAttribute(answer, "generatedHash");
-  return hash !== null && hash !== contentHash(answer);
-}
 
 function setAttributes(element: Y.XmlElement, attributes: Partial<AnswerAttributes>): void {
   for (const [key, value] of Object.entries(attributes)) {
@@ -658,8 +677,17 @@ export function createAnswers(options: AnswersOptions) {
     outside?: boolean;
     /** Which Tools its Run is offered (see `ToolSet`); absent: every Tool. */
     toolSet?: ToolSet;
+    /**
+     * Asked from a Mind whose Meeting may be recording (#144): its live Transcript, indexed up
+     * to now, to go with the Question. Absent: none.
+     */
+    listening?: () => Promise<WindowedPassage[] | null>;
     /** Written for a Task (#126), which gives way to Answers itself (see ../runs/tasks). */
     task?: boolean;
+    /** Offers web search's Tools whatever the Question says: a Research Task's Web source (#130). */
+    web?: boolean;
+    /** Hears each Tool call as it ends. */
+    onCall?(call: AnswerToolCall): void;
     /**
      * An Answer in the assistant (#202): the Mind it was asked from and the
      * Blocks the User selected there, where a Mind it makes goes, and what
@@ -696,6 +724,8 @@ export function createAnswers(options: AnswersOptions) {
     let readShare = input.mind?.share ?? 1;
     let { messages } = context;
     let mindRequest = input.mind?.request;
+    /** It listened to a meeting's live transcript: the Question went with it. */
+    let listening = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
     let finished = false;
     let support: CitationSupport | null = null;
@@ -873,6 +903,10 @@ export function createAnswers(options: AnswersOptions) {
       try {
         session.check();
         figures.check();
+        const translated = session.checkQuotedWords(
+          quotedWordsIn(withoutFootnoteDefinitions(markdown)),
+        );
+        if (translated.length > 0) markdown = withoutQuotationMarks(markdown, new Set(translated));
       } catch (error) {
         options.reportError(error);
       }
@@ -921,10 +955,26 @@ export function createAnswers(options: AnswersOptions) {
     announce("answer.started", { ...place, answerId, questionId: input.questionId, model });
 
     const base = answerInstructions();
-    const language = languageInstruction(context.question);
+    const language = languageInstruction(
+      context.question,
+      options.interfaceLanguage(),
+      options.documents
+        .names()
+        .flatMap((document) =>
+          [document.name, document.title].filter((each) => typeof each === "string"),
+        ),
+    );
     const callStarted = (call: AnswerToolCall) => {
-      // A call that asks the User first may already be there (see `ask`).
-      if (toolCalls.some((each) => each.id === call.id)) return;
+      // A call that asks the User first may already be there (see `ask`), and one whose input
+      // streams in is there from its start (#202): it now has all of its input.
+      const there = toolCalls.find((each) => each.id === call.id);
+      if (there) {
+        if (Object.keys(there.input).length === 0) {
+          there.input = call.input;
+          writeSoon();
+        }
+        return;
+      }
       toolCalls.push(call);
       announce("answer.toolCallStarted", { ...place, answerId, call: { ...call } });
       writeSoon();
@@ -946,6 +996,7 @@ export function createAnswers(options: AnswersOptions) {
       if (found.webPage) call.webPage = found.webPage;
       if (found.mindChange) call.mindChange = found.mindChange;
       announce("answer.toolCallFinished", { ...place, answerId, call: { ...call } });
+      input.onCall?.({ ...call });
       writeSoon();
     };
     const setApproval = (id: string, approval: ToolCallApproval) => {
@@ -1103,6 +1154,19 @@ export function createAnswers(options: AnswersOptions) {
     };
 
     /**
+     * Whether a Tool may act on a call's input as it comes, before the gate
+     * (#202): only when the gate lets every call of it through. A Connector's
+     * Tool and a Skill's scripts never do: the User's "ask" and "off" are
+     * theirs, and they ask by default. Any other Tool does when each of its
+     * Effects runs without asking, whatever the input: the Minds' Tools, whose
+     * only write is a Proposal.
+     */
+    const streamsInput = (tool: Tool): boolean =>
+      tool.provider.kind !== "connector" &&
+      tool.name !== SKILL_TOOLS.runScript &&
+      tool.effects({}).every(runsByDefault);
+
+    /**
      * `run_skill_script`'s call, once the gate let it through: runs the script
      * it checked, stopping it if the Answer stops. Its card keeps how the run
      * went, or why it couldn't run. A script the gate didn't let through never runs.
@@ -1226,6 +1290,20 @@ export function createAnswers(options: AnswersOptions) {
         readShare = within.share;
         if (read) read = within.request.text ? { ...read, partial: true } : null;
       }
+      if (input.listening) {
+        let heard: WindowedPassage[] | null = null;
+        try {
+          heard = await input.listening();
+        } catch (error) {
+          options.reportError(error);
+        }
+        if (finished) return;
+        const kept = newestWithin(heard ?? [], listenedTokens(prepared.window));
+        if (kept.length > 0) {
+          messages = withTranscript(messages, session.show(kept));
+          listening = true;
+        }
+      }
       // Stopped while waiting, e.g. for consent: send nothing.
       if (finished) return;
       if (consenting) {
@@ -1271,9 +1349,9 @@ export function createAnswers(options: AnswersOptions) {
       }
       // Web search's Tools, only for a Question that asks for the web, with a model whose provider
       // searches it, while the User has it on (#128).
-      const web = outside ? undefined : options.web;
+      const web = outside && !input.web ? undefined : options.web;
       let webService: ExternalService | null = null;
-      if (web && asksForWeb(context.question)) {
+      if (web && (input.web || asksForWeb(context.question))) {
         try {
           webService = await web.service(model);
         } catch (error) {
@@ -1325,7 +1403,16 @@ export function createAnswers(options: AnswersOptions) {
                 );
                 return { blocks, notFound, unrecorded };
               },
-              changed: (toolCallId, change) => mindChanges.set(toolCallId, change),
+              changed: (toolCallId, change) => {
+                mindChanges.set(toolCallId, change);
+                // On its card at once: a Mind changes while the call is still being written.
+                const call = toolCalls.find((each) => each.id === toolCallId);
+                if (call && !finished) {
+                  call.mindChange = change;
+                  writeSoon();
+                }
+              },
+              signal: controller.signal,
               now: () => new Date(),
             })
           : [];
@@ -1335,6 +1422,7 @@ export function createAnswers(options: AnswersOptions) {
         },
         // So the model can search again in the Documents' language (see the search Tool).
         documentLanguages: options.documents.searchableLanguages(documentIds),
+        unreadDocuments: () => options.documents.unread(documentIds),
         searchDocuments: (query, signal, searchOptions) =>
           session.tools.searchDocuments(query, signal, searchOptions),
         cite: (records, citeOptions) => session.tools.cite(records, citeOptions),
@@ -1418,6 +1506,7 @@ export function createAnswers(options: AnswersOptions) {
             sourcesInstructions(sourceTools),
             webInstructions(withWebTools),
             mindInstructions(withMindTools),
+            meetingInstructions(listening),
             signInNeededInstructions(signInNeeded.map((connector) => connector.name)),
             language,
           ]
@@ -1430,6 +1519,7 @@ export function createAnswers(options: AnswersOptions) {
         documents,
         tools: [...provided, ...fromSkills, ...fromWeb, ...fromMinds],
         gate,
+        streamsInput,
         toolSet: input.toolSet,
         thirdParty: contextReasons,
         support: startingSupport(prepared.support, supportByModel.get(learntKey)),
@@ -1793,6 +1883,7 @@ export function createAnswers(options: AnswersOptions) {
       emptyScope,
       forcedSkill: question.forcedSkill,
       consentNeeded: ready.consentNeeded,
+      ...(mind && { listening: () => options.liveTranscript(mind.mindId) }),
       assistant: {
         focused: mind && {
           mindId: mind.mindId,
@@ -1976,10 +2067,12 @@ export function createAnswers(options: AnswersOptions) {
       if (isRecord(input) && input.clearScope === true) {
         options.conversations.clearScope(asked.question.id);
       }
-      const { answerId, question } = options.conversations.questionOf(input);
+      const { answerId, question, toolCalls } = options.conversations.questionOf(input);
       const ready = await readyModel(question.model, question.forcedSkill);
       if ("asked" in ready) return ready;
       active.get(answerId)?.finish({ status: "stopped" });
+      // Written again, it proposes its changes again: those still waiting from before go.
+      options.withdrawChanges?.(toolCalls.flatMap((call) => call.mindChange ?? []));
       const { documentIds, emptyScope } = scopeNow(question.scope);
       const from = question.askedFrom;
       const mind =
@@ -2102,6 +2195,64 @@ export function createAnswers(options: AnswersOptions) {
           outside: true,
           toolSet: "check",
           task: true,
+        });
+        const stop = () => active.get(answerId)?.finish({ status: "stopped" });
+        if (input.signal.aborted) stop();
+        else input.signal.addEventListener("abort", stop, { once: true });
+      });
+    },
+
+    /**
+     * Does one step of a Research Task (#130) as an Answer kept nowhere, as a
+     * cell is: from the Documents of `documentIds` (null: every Document)
+     * and, with `web`, the web, whatever the step's words; a page it reads is
+     * saved into the Folder of `mindId`. It uses no Connector and no Skill
+     * script, so nothing it does waits for the User. The model is ready and
+     * allowed already. `onCall` hears each Tool call as it ends.
+     */
+    answerResearch(input: {
+      mindId: string;
+      context: QuestionContext;
+      documentIds: string[] | null;
+      web: boolean;
+      model: ChatModelChoice;
+      signal: AbortSignal;
+      onCall(call: AnswerToolCall): void;
+    }): Promise<CellAnswer> {
+      const answerId = randomUUID();
+      return new Promise<CellAnswer>((resolve) => {
+        start({
+          home: {
+            place: { mindId: input.mindId },
+            write(answer, outcome) {
+              if (outcome) {
+                resolve({
+                  status: outcome.status,
+                  markdown: answer.markdown,
+                  blocks: answer.blocks(),
+                  citations: answer.citations(),
+                  error: outcome.status === "failed" ? outcome.error : null,
+                });
+              }
+              return true;
+            },
+          },
+          answerId,
+          questionId: answerId,
+          model: input.model,
+          context: input.context,
+          contextReasons: [],
+          documentIds: input.documentIds,
+          emptyScope:
+            !input.web &&
+            input.documentIds !== null &&
+            options.documents.searchableCount(input.documentIds) === 0,
+          forcedSkill: null,
+          consentNeeded: false,
+          outside: true,
+          task: true,
+          web: input.web,
+          onCall: input.onCall,
         });
         const stop = () => active.get(answerId)?.finish({ status: "stopped" });
         if (input.signal.aborted) stop();

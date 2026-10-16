@@ -96,10 +96,13 @@ function parseCitation(value: unknown): TabCitation {
   return citation;
 }
 
+/** A paragraph's or a table's place in a Word file's main document part (`WordSource.n`). */
+const WORD_PLACE = /^w:(p|tbl)#\d+$/;
+
 function parsePlace(value: unknown): DocumentPlace {
   if (!isRecord(value)) throw new InvalidInputError("A place in a Document is an object.");
   const place: DocumentPlace = {};
-  for (const key of ["pageFrom", "pageTo"] as const) {
+  for (const key of ["pageFrom", "pageTo", "figure"] as const) {
     if (value[key] === undefined) continue;
     if (!isUnit(value[key])) throw new InvalidInputError("Units count from 1.");
     place[key] = value[key];
@@ -111,6 +114,12 @@ function parsePlace(value: unknown): DocumentPlace {
     place.quote = value.quote;
   }
   if (value.citation !== undefined) place.citation = parseCitation(value.citation);
+  if (value.wordPlace !== undefined) {
+    if (typeof value.wordPlace !== "string" || !WORD_PLACE.test(value.wordPlace)) {
+      throw new InvalidInputError({ key: "error.layout.wordPlace" });
+    }
+    place.wordPlace = value.wordPlace;
+  }
   return place;
 }
 

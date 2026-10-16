@@ -1,6 +1,8 @@
 import type { Document } from "../../../core/api";
+import { currentTabOf } from "../layoutSlice";
 import type { ObjectKind, ObjectRef } from "../objects";
 import { useAppStore } from "../store";
+import { findTab } from "../tabs";
 import type { CommandContext } from "./registry";
 
 export const targetsOf = (ctx: CommandContext): readonly ObjectRef[] =>
@@ -22,4 +24,21 @@ export function everyDocument(ctx: CommandContext, test: (document: Document) =>
   const count = targetsOf(ctx).length;
   const documents = documentsOf(ctx);
   return count > 0 && documents.length === count && documents.every(test);
+}
+
+/** The Mind in the tab the User is in, if that tab holds one. */
+export function mindInFront(): string | null {
+  const item = currentTabOf(useAppStore.getState().layout)?.item;
+  return item?.kind === "mind" ? item.mindId : null;
+}
+
+/** The Mind a menu or the keyboard names: the Mind's row, the Mind a tab shows, else the one in front. */
+export function mindShown(ctx: CommandContext): string | null {
+  const target = ctx.selection[0] ?? ctx.focus;
+  if (target?.kind === "mind") return target.id;
+  if (target?.kind === "tab") {
+    const item = findTab(useAppStore.getState().layout, target.id)?.item;
+    return item?.kind === "mind" ? item.mindId : null;
+  }
+  return mindInFront();
 }

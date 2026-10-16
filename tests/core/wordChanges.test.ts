@@ -6,8 +6,6 @@
  * rejected without a trace and the rest back as they were. What can't be
  * accepted or rejected here is kept as is, and listed.
  */
-import { writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import type { JSONContent } from "@tiptap/core";
 import { describe, expect, test } from "vitest";
 import type { Core } from "../../src/core";
@@ -17,12 +15,13 @@ import {
   pendingProposals,
   proposalRequestOf,
 } from "../../src/shared/proposals";
-import { wordFileOf, wordImportProgressOf, wordReportOf } from "../../src/shared/wordFiles";
+import { wordReportOf } from "../../src/shared/wordFiles";
 import { createTempDataFolder, startCore } from "../helpers/core";
 import { acceptedParagraphs, checkWellFormed, unzip } from "../helpers/docx";
-import { connectToMind, type MindClient } from "../helpers/mindClient";
+import type { MindClient } from "../helpers/mindClient";
 import { editMind, readMind, resolveChanges, shownWithChanges } from "../helpers/minds";
 import { field, NUMBERING, paragraph, run, wordFile } from "../helpers/word";
+import { importWordBytes } from "../helpers/wordMinds";
 
 const PRIYA = 'w:author="Priya Nair" w:date="2026-10-02T09:00:00Z"';
 const LARS = 'w:author="Lars Berg" w:date="2026-10-05T16:20:00Z"';
@@ -65,22 +64,11 @@ async function imported(body: string): Promise<{
   const dataDir = await createTempDataFolder();
   const core = startCore(dataDir);
   const bytes = wordFile({ body, numbering: NUMBERING });
-  const path = join(dataDir, "Lease.docx");
-  await writeFile(path, bytes);
-  const result = await core.importWordFile({ path, origin: "someone-else" });
-  if (!result.ok) throw new Error(`Refused: ${result.refusal}`);
-  const client = await connectToMind(core, result.mind.id);
-  await new Promise<void>((resolve) => {
-    const check = () => {
-      if (wordFileOf(client.doc) && wordImportProgressOf(client.doc) === null) {
-        client.doc.off("update", check);
-        resolve();
-      }
-    };
-    client.doc.on("update", check);
-    check();
-  });
-  return { core, mindId: result.mind.id, client, bytes };
+  return {
+    core,
+    bytes,
+    ...(await importWordBytes(core, dataDir, bytes, { origin: "someone-else" })),
+  };
 }
 
 async function exported(core: Core, mindId: string, trackChanges = true) {
@@ -209,6 +197,37 @@ describe("someone else's tracked changes", () => {
       "Pets are not allowed.",
       "Repairs:",
       "Roof",
+    ]);
+  });
+
+  // protects=a line break someone removed, resolved here, goes back resolved, in a paragraph or a table's cell; fails_when=the paragraph is kept as it was and the removal comes back waiting (#858); no_claim=none beyond protects.
+  test("a line break someone removed, rejected or accepted, goes back resolved, in a paragraph and in a table's cell", async () => {
+    const brokenOff = (id: number, before: string, after: string) =>
+      `${run(before)}<w:del w:id="${id}" ${LARS}><w:r><w:br/></w:r></w:del>${run(after)}`;
+    const cell = (content: string) => `<w:tc><w:p>${content}</w:p></w:tc>`;
+    const { core, mindId, client } = await imported(
+      [
+        paragraph(brokenOff(1, "First line", "second line")),
+        paragraph(brokenOff(2, "Kept", "apart")),
+        `<w:tbl><w:tr>${cell(brokenOff(3, "Cell one", "after"))}${cell(brokenOff(4, "Cell two", "after"))}</w:tr></w:tbl>`,
+      ].join(""),
+    );
+    const [first, kept, inCell, keptInCell] = pendingProposals(client.blocks).map(
+      (change) => change.id,
+    );
+    expect([first, kept, inCell, keptInCell].every(Boolean)).toBe(true);
+
+    await resolveChanges(client, "accept", (id) => id === first || id === inCell);
+    await resolveChanges(client, "reject", (id) => id === kept || id === keptInCell);
+
+    const { document } = await exported(core, mindId);
+    expect(document).not.toContain("<w:del");
+    expect(document).not.toContain("Lars Berg");
+    expect(acceptedParagraphs(document)).toEqual([
+      "First linesecond line",
+      "Kept\napart",
+      "Cell oneafter",
+      "Cell two\nafter",
     ]);
   });
 

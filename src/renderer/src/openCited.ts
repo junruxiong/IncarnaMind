@@ -16,6 +16,7 @@ export const quoteSaysSo = (check: CitationCheck) =>
 export function openCited(
   citation: Pick<CitationAttributes, "pageFrom" | "pageTo" | "quote" | "contentHash"> & {
     documentId: string;
+    location?: CitationAttributes["location"];
   },
   how: {
     check: CitationCheck;
@@ -33,6 +34,9 @@ export function openCited(
       pageFrom: citation.pageFrom ?? undefined,
       pageTo: citation.pageTo ?? undefined,
       quote: how.withQuote && citation.quote ? citation.quote : undefined,
+      ...(citation.location?.kind === "section" && citation.location.figure
+        ? { figure: citation.location.figure }
+        : {}),
       citation: {
         check: how.check,
         ...(how.number && how.number > 0 ? { number: how.number } : {}),

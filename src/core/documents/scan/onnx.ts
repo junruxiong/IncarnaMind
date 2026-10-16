@@ -16,6 +16,7 @@ import { availableParallelism } from "node:os";
 import type { PagePicture, RecognizedLine, TextRecognizer } from "../../adapters";
 import { textBoxes } from "./detect";
 import { onnxMetadata } from "./onnxMetadata";
+import { readDrawn } from "./picture";
 import {
   decodeLine,
   type GreyImage,
@@ -231,6 +232,12 @@ export function createOnnxTextRecognizer(): TextRecognizer {
     async read(picture) {
       if (!loaded) throw new Error("The text recognition model isn't loaded.");
       return read(loaded, picture);
+    },
+
+    async readFile(file) {
+      const model = loaded;
+      if (!model) throw new Error("The text recognition model isn't loaded.");
+      return readDrawn(file, (picture) => read(model, picture));
     },
 
     close() {

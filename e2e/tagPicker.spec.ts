@@ -508,7 +508,7 @@ test("Manage Tags shows how many Documents carry each, edits, merges and deletes
     await expect(row("Report").getByTestId("tag-count")).toHaveText("1 Document");
 
     // The explanation names Organize's routes as they are.
-    await expect(dialog).toContainText("your connected chat model, Auto · local models");
+    await expect(dialog).toContainText("your connected AI model, Auto · local models");
     // Each Tag has its colour; editing says the description guides automatic tagging, and
     // offers the palette.
     await expect(row("Report").getByTestId("tag-row-name")).toHaveAttribute("data-colour", "blue");

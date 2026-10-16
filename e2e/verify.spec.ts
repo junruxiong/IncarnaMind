@@ -20,7 +20,7 @@ import {
  * Verify (#97): "Verify a document…" in the + menu takes a PDF someone else
  * wrote. It opens beside the Mind made of its text, whose claims are found;
  * the line under the title checks them, and each gets a mark in the margin.
- * The scripted model (src/main/fakeChatModel.ts) takes every sentence but
+ * The scripted model (src/main/fakeChat/) takes every sentence but
  * thanks for a claim, finds one supported when it shares three words with a
  * line of a Document, contradicted when it also has a number the line
  * doesn't, unsupported otherwise, and refuses a sentence with "refuse". Set
@@ -95,7 +95,7 @@ test("Verify a PDF: its Mind opens beside it, its claims are checked, and the co
   await verifyFromPlusMenu(window, "Verify a document…");
 
   const line = window.getByTestId("verify-line");
-  await expect(window.getByTestId("mind-title")).toHaveValue("Harbour report");
+  await expect(window.getByTestId("mind-title")).toHaveValue("Checking: Harbour report");
   await expect(line.getByTestId("verify-from")).toHaveText("From Harbour report");
   // The PDF is open beside the Mind, on the right, as a tab of its own.
   const viewer = window.getByTestId("viewer");
@@ -196,7 +196,9 @@ test("Empty states: nothing to check against, then no claims found", async () =>
   await interceptOpenDialog(app, join(sources, "Thanks.pdf"));
   await verifyFromPlusMenu(window, "Verify a document…");
   // The first Mind's tab stays open behind it.
-  await expect(window.locator('[data-testid="mind-title"]:visible')).toHaveValue("Thanks");
+  await expect(window.locator('[data-testid="mind-title"]:visible')).toHaveValue(
+    "Checking: Thanks",
+  );
   await expect(
     window.locator('[data-testid="verify-line"]:visible').getByTestId("verify-empty"),
   ).toHaveText("No claims found");

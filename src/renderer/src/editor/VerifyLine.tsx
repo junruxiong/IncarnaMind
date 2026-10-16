@@ -11,12 +11,14 @@ import {
 import { DocumentLineIcon, VerifyLineIcon } from "../components/lineIcons";
 import { ProblemLine } from "../components/ProblemLine";
 import { ReadinessExplanation, readinessAction } from "../components/providers/ChatReadinessNotice";
+import { UnreadFilesLine } from "../components/UnreadFilesLine";
 import { buttonStyle } from "../components/ui";
 import { core } from "../core";
 import { estimateText, runStopText } from "../cost";
 import { useLanguage, useT } from "../i18n";
 import { enter } from "../motion";
 import { useAppStore } from "../store";
+import { useCheckUnread } from "../unreadFiles";
 import {
   checkClaims,
   dismissVerifyOutcome,
@@ -26,8 +28,8 @@ import {
   useVerify,
 } from "../verify";
 import { AnswerError } from "./AnswerView";
-import { type Coverage, coverageOf, sameCoverage, shownClaims } from "./claimChecks";
-import { useMindModel } from "./ModelChip";
+import { coverageOf, sameCoverage, shownClaims } from "./claimChecks";
+import { useMindModel, useRunModel } from "./ModelChip";
 import { ReferencesLine } from "./ReferencesLine";
 import { UncoveredLine } from "./UncoveredLine";
 
@@ -64,7 +66,8 @@ function claimMarks(editor: Editor, pages: Verification["pages"]) {
  * against this Folder's Documents? [Check 24 claims]" with the estimate on a
  * cloud model, "Checking 12 of 24…" with Stop, then "Checked 24 claims · 2
  * need a look", which moves to the next such claim and fades in once as the
- * run finishes; or why there is nothing to check.
+ * run finishes; or why there is nothing to check. Last on the line, the files
+ * the checks couldn't read, if any.
  */
 export function VerifyLine({
   editor,
@@ -85,13 +88,7 @@ export function VerifyLine({
   );
   const outcome = useVerify((state) => state.outcomes[mindId]);
   const openSettings = useAppStore((state) => state.openSettings);
-  // The model the run used: the Mind's own, else the default the composer shows.
-  const defaultProvider = useAppStore((state) =>
-    state.chatReadiness?.ready ? state.chatReadiness.provider.id : null,
-  );
-  const defaultModelId = useAppStore((state) =>
-    state.chatReadiness?.ready ? state.chatReadiness.modelId : null,
-  );
+  const runModel = useRunModel(doc);
   const inFolder = useAppStore(
     (state) => (state.minds.find((each) => each.id === mindId)?.folderId ?? null) !== null,
   );
@@ -102,10 +99,11 @@ export function VerifyLine({
       b !== null &&
       a.marked === b.marked &&
       a.checking === b.checking &&
-      sameCoverage(a.coverage, b.coverage as Coverage | null) &&
+      sameCoverage(a.coverage, b.coverage) &&
       a.needLook.length === b.needLook.length &&
       a.needLook.every((at, index) => at === b.needLook[index]),
   });
+  const unread = useCheckUnread(editor, doc);
   const claims = verification.claims;
   const total = claims?.length ?? 0;
   const asking = claims !== null && total > 0 && marks.marked === 0 && running === null;
@@ -150,7 +148,9 @@ export function VerifyLine({
     // The PDF beside it turns to the claim's page.
     const id: unknown = place.parent.attrs.id;
     const page = typeof id === "string" ? verification.pages[id] : undefined;
-    if (page !== undefined) openDocumentBeside(verification.documentId, page);
+    if (page !== undefined) {
+      openDocumentBeside(verification.documentId, { pageFrom: page, pageTo: page });
+    }
   };
 
   const stop = (
@@ -305,6 +305,7 @@ export function VerifyLine({
         </button>
         {dot}
         {state}
+        <UnreadFilesLine files={unread} testId="verify-unread" className="mind-unread" />
       </div>
       {running === null && marks.marked > 0 && marks.coverage.mostlyUncovered && (
         <UncoveredLine
@@ -338,8 +339,8 @@ export function VerifyLine({
         // The Answer errors' own wordings: the company or model named, and what to do next.
         <AnswerError
           kind={outcome.error.kind}
-          modelId={model?.modelId ?? defaultModelId}
-          providerId={model?.providerId ?? defaultProvider}
+          modelId={runModel.modelId}
+          providerId={runModel.providerId}
           resetsAt={outcome.error.resetsAt ?? null}
           details={outcome.error.message}
           onRetry={() =>

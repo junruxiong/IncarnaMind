@@ -283,7 +283,6 @@ test("onboarding offers starter folders, and Organize with no model chosen opens
   try {
     await window.getByTestId("onboarding-groups").click();
     await expect(window.getByTestId("library")).toBeVisible();
-    await expect(window.getByTestId("chat-setup")).not.toBeVisible();
     await window.evaluate(async () =>
       (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
         user: { language: "zh-CN" },
@@ -292,6 +291,10 @@ test("onboarding offers starter folders, and Organize with no model chosen opens
     await window.getByTestId("library").getByRole("button", { name: "添加所选文件夹" }).click();
     await expect(sidebarFolder(window, "研究论文").getByTestId("folder-row")).toBeVisible();
     await pointAndClick(window, organize(window.getByTestId("library")));
+    await expect(window.getByTestId("library-organize-needs-model")).toContainText(
+      "“整理”需要 AI 模型",
+    );
+    await pointAndClick(window, window.getByTestId("library-organize-set-up"));
     await expect(window.getByTestId("settings-page-title")).toHaveText("模型");
     await expect(window.getByTestId("organization-settings")).toContainText("文档整理");
     await window.getByTestId("settings-close").click();
@@ -533,7 +536,7 @@ test("organized folders remain separate from source locations and follow changes
     const row = rowOf(library, "Membrane separation");
     await moveRow(window, row, "Finance");
     await expect(rowOf(section(library, "Finance"), "Membrane separation")).toHaveCount(1);
-    await window.getByRole("button", { name: "Source locations", exact: true }).click();
+    await window.getByRole("button", { name: "Folders on disk", exact: true }).click();
     await expect(window.getByTestId("folder-item")).toHaveCount(1);
     await window.getByRole("button", { name: "Folders", exact: true }).click();
     await expect(window.getByTestId("library-folders")).toBeVisible();
@@ -545,7 +548,7 @@ test("organized folders remain separate from source locations and follow changes
     });
     await expect(rowOf(section(library, "Finance"), "Membrane separation")).toHaveCount(1);
     expect(await readFile(path, "utf8")).toBe(revised);
-    await expect(window.getByTestId("sidebar-status")).not.toContainText("Tags need a model");
+    await expect(window.getByTestId("sidebar-status")).not.toContainText("No AI model for Tags");
     await window.setViewportSize({ width: 1000, height: 760 });
     // The viewer opens beside the Library: at 1,000px, with the assistant at the bottom (#253).
     await placeAssistant(window, { dock: "bottom" });
@@ -762,8 +765,8 @@ test("a bulk Organize leaves the Library's sections, filters and sidebar as the 
       .click({ position: { x: 120, y: 12 } });
     await expect(library.getByTestId("library-filter")).toHaveCount(0);
 
-    // Source locations: every Document's row, each done.
-    await browse.getByRole("button", { name: "Source locations", exact: true }).click();
+    // Folders on disk: every Document's row, each done.
+    await browse.getByRole("button", { name: "Folders on disk", exact: true }).click();
     const rows = window.getByTestId("sidebar").getByTestId("document-list-item");
     await expect(rows).toHaveCount(count);
     await expect(rows.and(window.locator('[data-tagging="tagged"]'))).toHaveCount(count);

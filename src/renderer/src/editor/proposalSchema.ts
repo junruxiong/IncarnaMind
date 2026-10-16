@@ -1,4 +1,7 @@
 import { Extension, Mark } from "@tiptap/core";
+import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
+import { Plugin, PluginKey, type Transaction } from "@tiptap/pm/state";
+import { ySyncPluginKey } from "@tiptap/y-tiptap";
 import {
   PROPOSAL_ATTRIBUTE,
   PROPOSAL_DELETE_MARK,
@@ -83,6 +86,25 @@ export const ProposalDelete = Mark.create({
   },
 });
 
+/** Blocks that hold others: a Block the User adds inside one keeps it as it is. */
+const HOLDERS: ReadonlySet<string> = new Set([
+  "listItem",
+  "bulletList",
+  "orderedList",
+  "blockquote",
+]);
+
+/** A Block with no text: an empty paragraph or heading, or a list item or quote of only those. */
+const blank = (node: ProseMirrorNode): boolean =>
+  node.isTextblock
+    ? node.content.size === 0
+    : HOLDERS.has(node.type.name) &&
+      node.childCount > 0 &&
+      Array.from({ length: node.childCount }, (_, index) => node.child(index)).every(blank);
+
+/** The User's own edit, not a change that came from the Mind's document. */
+const typedHere = (tr: Transaction) => tr.docChanged && !tr.getMeta(ySyncPluginKey)?.isChangeOrigin;
+
 /** The `proposal` attribute of whole Blocks and inline nodes a Proposal adds or removes. */
 export const ProposalAttributes = Extension.create({
   name: "proposalAttributes",
@@ -102,6 +124,29 @@ export const ProposalAttributes = Extension.create({
           },
         },
       },
+    ];
+  },
+
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: new PluginKey("proposalBlocksTyped"),
+        // Enter at the end of a Block the assistant proposes makes an empty one that would carry
+        // its Proposal: it is the User's, as words typed beside a Proposal are (#202).
+        appendTransaction(transactions, _before, state) {
+          if (!transactions.some(typedHere)) return null;
+          let tr: Transaction | null = null;
+          state.doc.descendants((node, pos) => {
+            if (!node.isBlock) return false;
+            if (readProposalAttribute(node.attrs[PROPOSAL_ATTRIBUTE])?.kind !== "insert")
+              return true;
+            if (!blank(node)) return true;
+            tr = (tr ?? state.tr).setNodeAttribute(pos, PROPOSAL_ATTRIBUTE, null);
+            return false;
+          });
+          return tr;
+        },
+      }),
     ];
   },
 });

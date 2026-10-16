@@ -1,9 +1,17 @@
-import { mergeAttributes, Node, type NodeViewRenderer } from "@tiptap/core";
-import { isChangeOrigin } from "@tiptap/extension-collaboration";
-import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
-import { Plugin, PluginKey, type Transaction } from "@tiptap/pm/state";
-import { IMAGE_NODE, WORD_ATOM_NODE, WORD_BLOCK_NODE } from "../../../core/api";
+import { Extension, Mark, mergeAttributes, Node, type NodeViewRenderer } from "@tiptap/core";
+import { Fragment, type Node as ProseMirrorNode, Slice } from "@tiptap/pm/model";
+import { Plugin } from "@tiptap/pm/state";
+import type * as Y from "yjs";
+import {
+  IMAGE_NODE,
+  WORD_ATOM_NODE,
+  WORD_BLOCK_NODE,
+  WORD_LOOK_ATTRIBUTE,
+  WORD_RUN_MARK,
+} from "../../../core/api";
 import { readWordAtom, wordAtomText } from "../../../shared/wordFiles";
+import { wordLookOf } from "../../../shared/wordLook";
+import { editorDoc } from "./proposalReview";
 
 /**
  * An attribute kept in the HTML as `data-word-<name>`, so an atom copied and
@@ -44,54 +52,13 @@ const atomAttributes = () => ({
 export interface WordAtomOptions {
   /** Draws the atom: its chip, mark or box, and what it says on hover. */
   view: NodeViewRenderer | null;
-  /**
-   * Called instead of a change that would delete a section break: `retry`
-   * makes the change after all. Without it, such a change goes through.
-   */
-  onSectionBreakDelete: ((retry: () => void) => void) | null;
-}
-
-/** Set on a transaction to let it delete section breaks: the User was asked. */
-const SECTION_BREAKS_ASKED = "wordSectionBreaksAsked";
-
-const isSectionBreak = (node: ProseMirrorNode) =>
-  node.type.name === WORD_ATOM_NODE && node.attrs.kind === "sectionBreak";
-
-const sectionBreaksIn = (doc: ProseMirrorNode) => {
-  let total = 0;
-  doc.descendants((node) => {
-    if (isSectionBreak(node)) total++;
-  });
-  return total;
-};
-
-/**
- * Whether a transaction removes a section break: only where it changes the
- * document is looked at, and only then is the whole counted, so typing stays fast.
- */
-function deletesSectionBreak(tr: Transaction): boolean {
-  let touched = false;
-  tr.steps.forEach((step, index) => {
-    const before = tr.docs[index];
-    if (!before || touched) return;
-    step.getMap().forEach((from, to) => {
-      if (touched || to <= from) return;
-      before.nodesBetween(from, to, (node) => {
-        if (isSectionBreak(node)) touched = true;
-        return !touched;
-      });
-    });
-  });
-  // One moved, not removed (a paragraph dragged elsewhere), keeps the count.
-  return touched && sectionBreaksIn(tr.doc) < sectionBreaksIn(tr.before);
 }
 
 /**
  * What a Word import kept as it is, inside a paragraph's text (#104): a
  * field, a content control, a text box, a footnote's mark, another person's
  * tracked change… (see `WordAtomAttributes`). It can't be edited inside; it
- * moves with the text and goes when that text is deleted, except a section
- * break, whose deletion asks first (`onSectionBreakDelete`).
+ * moves with the text and goes when that text is deleted.
  */
 export const WordAtom = Node.create<WordAtomOptions>({
   name: WORD_ATOM_NODE,
@@ -102,7 +69,7 @@ export const WordAtom = Node.create<WordAtomOptions>({
   draggable: false,
 
   addOptions() {
-    return { view: null, onSectionBreakDelete: null };
+    return { view: null };
   },
 
   addAttributes() {
@@ -127,28 +94,6 @@ export const WordAtom = Node.create<WordAtomOptions>({
 
   addNodeView() {
     return this.options.view;
-  },
-
-  addProseMirrorPlugins() {
-    const ask = this.options.onSectionBreakDelete;
-    if (!ask) return [];
-    return [
-      new Plugin({
-        key: new PluginKey("wordSectionBreaks"),
-        filterTransaction: (tr) => {
-          // Changes from Yjs (another device, or undo) are never held back.
-          if (!tr.docChanged || tr.getMeta(SECTION_BREAKS_ASKED) || isChangeOrigin(tr)) return true;
-          if (!deletesSectionBreak(tr)) return true;
-          ask(() => {
-            const view = this.editor.view;
-            const retry = view.state.tr;
-            for (const step of tr.steps) retry.maybeStep(step);
-            view.dispatch(retry.setMeta(SECTION_BREAKS_ASKED, true));
-          });
-          return false;
-        },
-      }),
-    ];
   },
 });
 
@@ -240,4 +185,100 @@ export const InlineImage = Node.create({
   renderText({ node }) {
     return typeof node.attrs.alt === "string" ? node.attrs.alt : "";
   },
+});
+
+export const WORD_LOOK_TYPES = ["paragraph", "heading", "table", "tableCell", "tableHeader"];
+export const WORD_LOOK_DOM_ATTRIBUTE = "data-word-look";
+export const WORD_RUN_DOM_ATTRIBUTE = "data-word-run";
+
+function lookKeysOf(doc: Y.Doc | null): ReadonlySet<string> {
+  const look = doc ? wordLookOf(doc) : null;
+  if (!look) return new Set();
+  return new Set(
+    [look.paragraphs, look.runs, look.tables, look.cells].flatMap((styles) => Object.keys(styles)),
+  );
+}
+
+/**
+ * Keys name a look by its content, so a pasted key the Mind has is the same
+ * look; one it doesn't have came from another file and is dropped.
+ */
+function withKnownLooks(fragment: Fragment, known: ReadonlySet<string>): Fragment {
+  const nodes: ProseMirrorNode[] = [];
+  fragment.forEach((node) => {
+    const marks = node.marks.filter(
+      (mark) => mark.type.name !== WORD_RUN_MARK || known.has(String(mark.attrs.k)),
+    );
+    if (node.isText) {
+      nodes.push(node.mark(marks));
+      return;
+    }
+    const key = node.attrs[WORD_LOOK_ATTRIBUTE];
+    const attrs =
+      typeof key === "string" && !known.has(key)
+        ? { ...node.attrs, [WORD_LOOK_ATTRIBUTE]: null }
+        : node.attrs;
+    nodes.push(node.type.create(attrs, withKnownLooks(node.content, known), marks));
+  });
+  return Fragment.fromArray(nodes);
+}
+
+/** `keepOnSplit`: Word gives a new paragraph the properties of the one before. */
+export const WordLookAttribute = Extension.create({
+  name: "wordLookAttribute",
+
+  addProseMirrorPlugins() {
+    const editor = this.editor;
+    return [
+      new Plugin({
+        props: {
+          transformPasted: (slice) =>
+            new Slice(
+              withKnownLooks(slice.content, lookKeysOf(editorDoc(editor))),
+              slice.openStart,
+              slice.openEnd,
+            ),
+        },
+      }),
+    ];
+  },
+
+  addGlobalAttributes() {
+    return [
+      {
+        types: WORD_LOOK_TYPES,
+        attributes: {
+          [WORD_LOOK_ATTRIBUTE]: {
+            default: null,
+            keepOnSplit: true,
+            parseHTML: (element: HTMLElement) => element.getAttribute(WORD_LOOK_DOM_ATTRIBUTE),
+            renderHTML: (attributes: Record<string, unknown>) => {
+              const key = attributes[WORD_LOOK_ATTRIBUTE];
+              return typeof key === "string" ? { [WORD_LOOK_DOM_ATTRIBUTE]: key } : {};
+            },
+          },
+        },
+      },
+    ];
+  },
+});
+
+/** Inclusive: text typed at a run's end takes its formatting, as in Word. */
+export const WordRun = Mark.create({
+  name: WORD_RUN_MARK,
+  inclusive: true,
+
+  addAttributes() {
+    return {
+      k: {
+        default: null,
+        parseHTML: (element: HTMLElement) => element.getAttribute(WORD_RUN_DOM_ATTRIBUTE),
+        renderHTML: (attributes: Record<string, unknown>) =>
+          typeof attributes.k === "string" ? { [WORD_RUN_DOM_ATTRIBUTE]: attributes.k } : {},
+      },
+    };
+  },
+
+  parseHTML: () => [{ tag: `span[${WORD_RUN_DOM_ATTRIBUTE}]` }],
+  renderHTML: ({ HTMLAttributes }) => ["span", HTMLAttributes, 0],
 });

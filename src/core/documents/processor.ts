@@ -7,7 +7,7 @@
  */
 import type { Worker } from "node:worker_threads";
 import type { TextUnit } from "../../shared/units";
-import type { PagePicture, RecognizedLine } from "../adapters";
+import type { LogFields, PagePicture, PictureRead, RecognizedLine } from "../adapters";
 import type {
   MetadataJob,
   MetadataResult,
@@ -38,8 +38,14 @@ export interface ProcessorHandlers {
    * when no page can be read now (the model can't be had).
    */
   read(job: ProcessingJob, page: number, picture: PagePicture): Promise<RecognizedLine[]>;
+  /** As `read`, for a picture file (`TextRecognizer.readFile`). */
+  readFile(job: ProcessingJob, page: number, file: Uint8Array): Promise<PictureRead>;
+  /** What a job logs. */
+  onLog(job: ProcessingJob, entry: { event: string; fields: LogFields }): void;
   /** Whether an error from `read` means no page can be read now. */
   isUnavailable(error: unknown): boolean;
+  /** The password that opens a job's PDF, when it is locked and one is kept (#763). */
+  password?(job: WorkerJob): Promise<string | undefined>;
 }
 
 export interface Processor {
@@ -66,7 +72,11 @@ export function createProcessor(
 ): Processor {
   const queue: WorkerJob[] = [];
   let worker: Worker | undefined;
-  let current: { id: number; job: WorkerJob } | undefined;
+  /**
+   * The job under way. `posted`: it has gone to the worker; until then (its
+   * PDF's password is being read) a stop is kept in `stopped`.
+   */
+  let current: { id: number; job: WorkerJob; posted: boolean; stopped: boolean } | undefined;
   let nextId = 1;
   let pumpScheduled = false;
   let closed = false;
@@ -97,15 +107,25 @@ export function createProcessor(
     if (current) finish(current.id, { outcome: "crashed", message });
   }
 
-  /** A job's request to read a page's picture: answered once the model has read it. */
-  function read(from: Worker, id: number, request: number, page: number, picture: PagePicture) {
+  /** A job's request to read a page's picture, or a picture file: answered once the model has read it. */
+  function read(
+    from: Worker,
+    id: number,
+    request: number,
+    page: number,
+    what: { picture: PagePicture } | { file: Uint8Array },
+  ) {
     const asked = current;
     if (asked?.id !== id || asked.job.task !== "process") return;
     const answer = (message: WorkerRequest) => {
       if (worker === from && current?.id === id) from.postMessage(message);
     };
-    handlers.read(asked.job, page, picture).then(
-      (lines) => answer({ id, request, lines }),
+    const reading: Promise<Pick<Extract<WorkerRequest, { request: number }>, "lines" | "read">> =
+      "picture" in what
+        ? handlers.read(asked.job, page, what.picture).then((lines) => ({ lines }))
+        : handlers.readFile(asked.job, page, what.file).then((read) => ({ read }));
+    reading.then(
+      (answered) => answer({ id, request, ...answered }),
       (error: unknown) =>
         answer({
           id,
@@ -122,8 +142,13 @@ export function createProcessor(
     const started = startDocumentWorker({ name: "incarnamind-documents" });
     started.on("message", (response: WorkerResponse) => {
       if ("result" in response) finish(response.id, response.result);
-      else if ("picture" in response) {
-        read(started, response.id, response.request, response.page, response.picture);
+      else if ("picture" in response || "file" in response) {
+        read(started, response.id, response.request, response.page, response);
+      } else if ("log" in response) {
+        if (current?.id === response.id && current.job.task === "process") {
+          const { job } = current;
+          call(() => handlers.onLog(job, response.log));
+        }
       } else if (current?.id === response.id && current.job.task === "process") {
         const { job } = current;
         call(() => handlers.onProgress(job, response.progress));
@@ -153,10 +178,34 @@ export function createProcessor(
     if (closed || current) return;
     const job = take();
     if (!job) return;
-    current = { id: nextId++, job };
+    const id = nextId++;
+    const started = { id, job, posted: false, stopped: false };
+    current = started;
     if (job.task === "process") call(() => handlers.onStart(job));
     worker ??= startWorker();
-    worker.postMessage({ id: current.id, job } satisfies WorkerRequest);
+    const running = worker;
+    const send = (password: string | undefined) => {
+      if (closed || current?.id !== id || worker !== running) return;
+      // Stopped while its password was read: it never starts.
+      if (started.stopped) {
+        finish(id, { outcome: "stopped" });
+        return;
+      }
+      started.posted = true;
+      running.postMessage({
+        id,
+        job,
+        ...(password !== undefined && { password }),
+      } satisfies WorkerRequest);
+    };
+    if (job.kind !== "pdf" || !handlers.password) {
+      send(undefined);
+      return;
+    }
+    handlers.password(job).then(send, (error: unknown) => {
+      reportError(error);
+      send(undefined);
+    });
   }
 
   // Deferred, so a job enqueued while the core starts up runs after it has returned.
@@ -178,7 +227,9 @@ export function createProcessor(
       );
       if (index !== -1) queue.splice(index, 1);
       if (current?.job.task === "process" && current.job.documentId === documentId) {
-        worker?.postMessage({ id: current.id, stop: true } satisfies WorkerRequest);
+        if (current.posted) {
+          worker?.postMessage({ id: current.id, stop: true } satisfies WorkerRequest);
+        } else current.stopped = true;
       }
     },
     hold(value) {

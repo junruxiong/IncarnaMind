@@ -9,6 +9,7 @@ import {
   launchApp,
   openPrivacySettings,
   removeDataFolder,
+  setLanguage,
 } from "./app";
 
 let dataDir: string;
@@ -42,7 +43,7 @@ test("the Privacy page lists the data flows and the update check, and offers no 
   await expect(chat).toContainText(
     "The Mind you're in: its text, your Notes and earlier Answers, except Notes you've excluded",
   );
-  await expect(chat).toContainText("Passages from your Documents");
+  await expect(chat).toContainText("passages from your Documents");
   await expect(privacy.locator('[data-flow-id="tagging"]')).toContainText("Automatic Tags");
   const service = chat.getByTestId("data-flow-service");
   await expect(service).toContainText("to llm.example.com");
@@ -51,8 +52,14 @@ test("the Privacy page lists the data flows and the update check, and offers no 
     "Allowed when you chose llm.example.com, ",
   );
 
-  // Revoked, it asks again next time; allowed from here, with the date.
-  await service.getByTestId("data-flow-revoke").click();
+  // Stop allowing it, and it asks again next time; allowed from here, with the date.
+  // Not "Revoke", which is 撤销 in Chinese, the same word as Undo (#763).
+  const revoke = service.getByTestId("data-flow-revoke");
+  await expect(revoke).toHaveText("Stop allowing");
+  await setLanguage(window, "zh-CN");
+  await expect(revoke).toHaveText("停止允许");
+  await setLanguage(window, "en");
+  await revoke.click();
   await expect(service).toHaveAttribute("data-consent", "not-asked");
   await service.getByTestId("data-flow-allow").click();
   await expect(service).toHaveAttribute("data-consent", "accepted");
@@ -97,7 +104,7 @@ test("the Privacy page lists the data flows and the update check, and offers no 
     },
   });
   await expect(privacy.locator('[data-traffic-id="usage-data"]')).toHaveCount(0);
-  await expect(window.getByTestId("usage-data-dialog")).toBeHidden();
+  await expect(window.getByTestId("usage-data-card")).toBeHidden();
 
   // In Chinese, what the chat flow sends.
   const language = (value: "en" | "zh-CN") =>

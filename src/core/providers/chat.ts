@@ -36,8 +36,12 @@ import {
 import {
   cannotAnswerReason,
   catalogFacts,
+  catalogProvider,
+  catalogProviderOf,
   catalogProviderOfKind,
+  isPreset,
   modelsProviderOfKind,
+  withRolesFirst,
 } from "./catalog";
 import { billingOf, ollamaCloudPrice } from "./catalog/billing";
 import { endpointOf } from "./catalog/providers";
@@ -64,7 +68,7 @@ import {
   type OllamaModelProfile,
   type OllamaModels,
 } from "./ollamaModels";
-import { classifyProviderError, LocalModelError } from "./providerErrors";
+import { classifyProviderError, LocalModelError, OllamaNotRunningError } from "./providerErrors";
 
 /** How long a provider's model list is kept before it is asked again. */
 const MODEL_LIST_TTL_MS = 5 * 60_000;
@@ -89,6 +93,13 @@ interface ProviderRow {
 }
 
 const ROW_COLUMNS = "id, kind, base_url, catalog_id, endpoint";
+
+/** A row of a kind this version knows, and of a preset it knows: a newer version's isn't used. */
+const isKnownRow = (row: ProviderRow): row is ProviderRow & { kind: ChatProviderKind } =>
+  isChatProviderKind(row.kind) &&
+  (row.catalog_id === null ||
+    row.catalog_id === row.kind ||
+    isPreset(catalogProvider(row.catalog_id)));
 
 interface ParsedServer {
   kind: ChatProviderKind;
@@ -147,18 +158,36 @@ function parseServer(input: Record<string, unknown>): ParsedServer {
   if (!isChatProviderKind(input.kind)) {
     throw new InvalidInputError(`Unknown chat provider "${String(input.kind)}".`);
   }
-  const provider = catalogProviderOfKind(input.kind);
+  const catalogId = parseCatalogId(input.kind, input.catalogId);
   return {
     kind: input.kind,
-    baseUrl: baseUrlFor(input.kind, input.baseUrl),
-    endpoint: parseEndpoint(input.kind, input.endpoint),
-    catalogId: provider?.id ?? null,
+    baseUrl: baseUrlFor(input.kind, input.baseUrl, catalogId),
+    endpoint: parseEndpoint(input.kind, input.endpoint, catalogId),
+    catalogId,
   };
 }
 
+function parseCatalogId(kind: ChatProviderKind, value: unknown): string | null {
+  if (value === undefined || value === null || value === kind) {
+    return catalogProviderOfKind(kind)?.id ?? null;
+  }
+  const preset = typeof value === "string" ? catalogProvider(value) : undefined;
+  if (kind !== "openai-compatible" || !preset || !isPreset(preset)) {
+    throw new InvalidInputError({
+      key: "error.provider.unknown",
+      values: { provider: String(value) },
+    });
+  }
+  return preset.id;
+}
+
 /** A hosted provider's endpoint: the one given, which it must have, else its first. Null for a server the User gives. */
-function parseEndpoint(kind: ChatProviderKind, value: unknown): string | null {
-  const provider = catalogProviderOfKind(kind);
+function parseEndpoint(
+  kind: ChatProviderKind,
+  value: unknown,
+  catalogId: string | null,
+): string | null {
+  const provider = catalogProviderOf(kind, catalogId);
   const given = typeof value === "string" && value !== "" ? value : undefined;
   if (value !== undefined && value !== null && typeof value !== "string") {
     throw new InvalidInputError("The endpoint must be text.");
@@ -189,22 +218,27 @@ function parseModelId(value: unknown): string {
 }
 
 /** undefined: keep the stored key. null: remove it. Blank text counts as "keep". */
-function parseApiKey(value: unknown, kind: ChatProviderKind): string | null | undefined {
+function parseApiKey(
+  value: unknown,
+  { kind, catalogId }: { kind: ChatProviderKind; catalogId: string | null },
+): string | null | undefined {
   if (value === undefined || value === null) return value;
   if (typeof value !== "string") throw new InvalidInputError("The API key must be text.");
   const key = value.trim();
   if (key === "") return undefined;
-  if (!acceptsApiKey(kind)) throw new InvalidInputError("This provider doesn't take an API key.");
+  if (!acceptsApiKey(kind, catalogId)) {
+    throw new InvalidInputError("This provider doesn't take an API key.");
+  }
   return key;
 }
 
-const displayName = (kind: ChatProviderKind, baseUrl: string | null) =>
-  serviceFor(kind, baseUrl)?.name ?? baseUrl ?? kind;
+const displayName = ({ kind, baseUrl, endpoint, catalogId }: ParsedServer) =>
+  serviceFor(kind, baseUrl, endpoint, catalogId)?.name ?? baseUrl ?? kind;
 
 /** What chat providers need from the ChatGPT plan provider. */
 export type ChatGptPlanAccess = Pick<
   ChatGptPlan,
-  "hasSignIn" | "credentials" | "apiBaseUrl" | "models"
+  "hasSignIn" | "credentials" | "apiBaseUrl" | "models" | "limits"
 >;
 
 export function createChat(options: {
@@ -279,10 +313,15 @@ export function createChat(options: {
 
   /** Where a request to the model goes: the server's service, else ollama.com for a cloud model in Ollama. Asks Ollama. */
   const remoteService = async (
-    server: { kind: ChatProviderKind; baseUrl: string | null; endpoint?: string | null },
+    server: {
+      kind: ChatProviderKind;
+      baseUrl: string | null;
+      endpoint?: string | null;
+      catalogId?: string | null;
+    },
     modelId: string,
   ): Promise<ExternalService | null> =>
-    serviceFor(server.kind, server.baseUrl, server.endpoint) ??
+    serviceFor(server.kind, server.baseUrl, server.endpoint, server.catalogId) ??
     ((await refreshRemote(server.kind, server.baseUrl, modelId)) ? OLLAMA_CLOUD : null);
 
   /** `remoteService` without asking: what was last learnt, else what the name says. */
@@ -321,18 +360,18 @@ export function createChat(options: {
       [catalogId ?? kind, baseUrl ?? "", endpoint ?? ""],
     );
 
-  /** Rows of a kind this version knows; rows from a newer version are left alone. */
+  /** Rows of a kind, and a preset, this version knows; rows from a newer version are left alone. */
   const knownRows = () =>
     db
       .all<ProviderRow>(
         `SELECT ${ROW_COLUMNS} FROM chat_providers WHERE deleted_at IS NULL
          ORDER BY created_at, rowid`,
       )
-      .filter((row) => isChatProviderKind(row.kind));
+      .filter(isKnownRow);
 
   /** Where a row's requests go. */
   const rowService = (row: ProviderRow) =>
-    serviceFor(row.kind as ChatProviderKind, row.base_url, row.endpoint);
+    serviceFor(row.kind as ChatProviderKind, row.base_url, row.endpoint, row.catalog_id);
 
   /**
    * What is known of a model on a provider, by precedence (see ./capabilities):
@@ -347,7 +386,7 @@ export function createChat(options: {
     resolveCapabilities({
       server: server ?? modelLists.get(listKey(row))?.models.find((m) => m.id === modelId)?.facts,
       catalog: catalogFacts(
-        modelsProviderOfKind(row.kind as ChatProviderKind, row.endpoint),
+        modelsProviderOfKind(row.kind as ChatProviderKind, row.endpoint, row.catalog_id),
         modelId,
       ),
     });
@@ -359,7 +398,12 @@ export function createChat(options: {
    * defaults when Ollama couldn't say.
    */
   const specFor = (
-    server: { kind: ChatProviderKind; baseUrl: string | null; endpoint?: string | null },
+    server: {
+      kind: ChatProviderKind;
+      baseUrl: string | null;
+      endpoint?: string | null;
+      catalogId?: string | null;
+    },
     apiKey: string | null,
     modelId: string,
     profile: OllamaModelProfile | null = null,
@@ -376,7 +420,7 @@ export function createChat(options: {
         ...(thinking && { thinking }),
       };
     }
-    const baseUrl = endpointUrl(kind, server.endpoint) ?? server.baseUrl;
+    const baseUrl = endpointUrl(kind, server.endpoint, server.catalogId) ?? server.baseUrl;
     if (kind === "ollama") {
       return {
         kind,
@@ -393,16 +437,22 @@ export function createChat(options: {
       modelId,
       // Only a provider's other regions say which they are; its first is the default.
       ...(server.endpoint &&
-        server.endpoint !== catalogProviderOfKind(kind)?.endpoints[0]?.id && {
+        server.endpoint !== catalogProviderOf(kind, server.catalogId)?.endpoints[0]?.id && {
           endpoint: server.endpoint,
         }),
+      ...(server.catalogId &&
+        isPreset(catalogProvider(server.catalogId)) && { catalogId: server.catalogId }),
       ...(thinking && { thinking }),
     };
   };
 
+  const watchedPlan = (kind: ChatProviderKind, model: ChatLanguageModel, modelId: string) =>
+    kind === "chatgpt" ? chatGpt.limits.watch(model, modelId) : model;
+
   const toProvider = async (row: ProviderRow, modelId?: string): Promise<ChatProvider> => {
     const kind = row.kind as ChatProviderKind;
-    const hasApiKey = acceptsApiKey(kind) && (await secrets.tryGet(keyName(row.id))) !== null;
+    const hasApiKey =
+      acceptsApiKey(kind, row.catalog_id) && (await secrets.tryGet(keyName(row.id))) !== null;
     return {
       id: row.id,
       kind,
@@ -439,7 +489,7 @@ export function createChat(options: {
   const defaultRow = () => {
     const choice = settings.get().user.chatModel;
     const row = choice && rowById(choice.providerId);
-    return row && isChatProviderKind(row.kind) ? row : undefined;
+    return row && isKnownRow(row) ? row : undefined;
   };
 
   /**
@@ -451,7 +501,7 @@ export function createChat(options: {
     flow: DataFlowId,
   ): Promise<ChatReadiness> => {
     const row = choice && rowById(choice.providerId);
-    if (!choice || !row || !isChatProviderKind(row.kind)) {
+    if (!choice || !row || !isKnownRow(row)) {
       return { ready: false, reason: "no-provider" };
     }
     const { modelId } = choice;
@@ -461,7 +511,7 @@ export function createChat(options: {
     if (flow === "chat" && provider.service && options.localOnly()) {
       return { ready: false, reason: "local-mode", provider, modelId };
     }
-    if (requiresApiKey(provider.kind) && !provider.hasApiKey) {
+    if (requiresApiKey(provider.kind, provider.catalogId) && !provider.hasApiKey) {
       return { ready: false, reason: "missing-api-key", provider, modelId };
     }
     if (provider.kind === "chatgpt" && !(await chatGpt.hasSignIn())) {
@@ -480,7 +530,7 @@ export function createChat(options: {
     };
   };
 
-  return {
+  const chat = {
     async list(): Promise<ChatProvider[]> {
       return Promise.all(knownRows().map(withDefaultModel));
     },
@@ -494,7 +544,7 @@ export function createChat(options: {
     async save(input: unknown): Promise<ChatProvider> {
       if (!isRecord(input)) throw new InvalidInputError("saveChatProvider expects an object.");
       const server = parseServer(input);
-      const apiKey = parseApiKey(input.apiKey, server.kind);
+      const apiKey = parseApiKey(input.apiKey, server);
       const modelId = parseModelId(input.modelId);
 
       const existing = rowByServer(server);
@@ -503,10 +553,10 @@ export function createChat(options: {
         apiKey === undefined
           ? existing !== undefined && (await secrets.tryGet(keyName(id))) !== null
           : apiKey !== null;
-      if (requiresApiKey(server.kind) && !keyAfterSave) {
+      if (requiresApiKey(server.kind, server.catalogId) && !keyAfterSave) {
         throw new InvalidInputError({
           key: "error.provider.keyMissing",
-          values: { provider: displayName(server.kind, server.baseUrl) },
+          values: { provider: displayName(server) },
         });
       }
 
@@ -563,7 +613,7 @@ export function createChat(options: {
     metered(choice?: ChatModelChoice): MeteredModel | null {
       const chosen = choice ?? settings.get().user.chatModel;
       const row = chosen && rowById(chosen.providerId);
-      if (!chosen || !row || !isChatProviderKind(row.kind)) return null;
+      if (!chosen || !row || !isKnownRow(row)) return null;
       return meteredModel(
         { kind: row.kind, service: knownService(row, chosen.modelId) },
         row.id,
@@ -577,7 +627,7 @@ export function createChat(options: {
     /** A provider's kind, and whether its model runs on this computer (it sends to no service); null when it's gone. */
     describe(id: string): { kind: ChatProviderKind; local: boolean } | null {
       const row = rowById(id);
-      if (!row || !isChatProviderKind(row.kind)) return null;
+      if (!row || !isKnownRow(row)) return null;
       const choice = settings.get().user.chatModel;
       const service =
         choice?.providerId === row.id ? knownService(row, choice.modelId) : rowService(row);
@@ -590,9 +640,7 @@ export function createChat(options: {
      */
     readsImages(choice: ChatModelChoice): boolean {
       const row = rowById(choice.providerId);
-      return (
-        !!row && isChatProviderKind(row.kind) && readsImages(capabilitiesOf(row, choice.modelId))
-      );
+      return !!row && isKnownRow(row) && readsImages(capabilitiesOf(row, choice.modelId));
     },
 
     /**
@@ -654,13 +702,12 @@ export function createChat(options: {
               baseUrl: row.base_url,
               apiKey,
               endpoint: row.endpoint,
+              catalogId: row.catalog_id,
             });
             if (listed.length > 0) modelLists.set(cacheKey, { at: Date.now(), models: listed });
           }
           const defaultModel = chatModel?.providerId === row.id ? [chatModel.modelId] : [];
           const inMenu = listed.filter((each) => !each.other).map((each) => each.id);
-          const roles = catalogProviderOfKind(provider.kind)?.roles;
-          const roleModels = [roles?.answers, roles?.strongest, roles?.quickTasks];
           const addedIds = menuModelsOf(row.id);
           const other = listed.flatMap((each): OtherModel[] =>
             each.other ? [{ id: each.id, ...each.other }] : [],
@@ -672,8 +719,7 @@ export function createChat(options: {
           const models = [
             ...new Set([
               ...defaultModel,
-              ...roleModels.filter((id): id is string => id !== undefined && inMenu.includes(id)),
-              ...inMenu,
+              ...withRolesFirst(catalogProviderOf(provider.kind, row.catalog_id)?.roles, inMenu),
               ...added,
             ]),
           ];
@@ -711,7 +757,7 @@ export function createChat(options: {
       if (
         inMenu === true &&
         cannotAnswerReason(
-          modelsProviderOfKind(row.kind as ChatProviderKind, row.endpoint),
+          modelsProviderOfKind(row.kind as ChatProviderKind, row.endpoint, row.catalog_id),
           modelId,
         )
       ) {
@@ -743,15 +789,15 @@ export function createChat(options: {
       if (!isRecord(input)) throw new InvalidInputError("testChatConnection expects an object.");
       const server = parseServer(input);
       const modelId = parseModelId(input.modelId);
-      let apiKey = parseApiKey(input.apiKey, server.kind) ?? null;
-      if (apiKey === null && acceptsApiKey(server.kind)) {
+      let apiKey = parseApiKey(input.apiKey, server) ?? null;
+      if (apiKey === null && acceptsApiKey(server.kind, server.catalogId)) {
         const saved = rowByServer(server);
         if (saved) apiKey = await secrets.tryGet(keyName(saved.id));
       }
-      if (requiresApiKey(server.kind) && !apiKey) {
+      if (requiresApiKey(server.kind, server.catalogId) && !apiKey) {
         throw new InvalidInputError({
           key: "error.provider.keyMissing",
-          values: { provider: displayName(server.kind, server.baseUrl) },
+          values: { provider: displayName(server) },
         });
       }
       if (server.kind === "chatgpt" && !(await chatGpt.hasSignIn())) {
@@ -767,10 +813,13 @@ export function createChat(options: {
         const profile = await profileFor(server.kind, server.baseUrl, modelId);
         checkCanChat(profile, modelId);
         const facts = resolveCapabilities({
-          catalog: catalogFacts(modelsProviderOfKind(server.kind, server.endpoint), modelId),
+          catalog: catalogFacts(
+            modelsProviderOfKind(server.kind, server.endpoint, server.catalogId),
+            modelId,
+          ),
         });
         const model = meter.wrap(
-          createModel(specFor(server, apiKey, modelId, profile)),
+          watchedPlan(server.kind, createModel(specFor(server, apiKey, modelId, profile)), modelId),
           meteredModel(
             { kind: server.kind, service },
             rowByServer(server)?.id ?? server.catalogId ?? server.kind,
@@ -794,6 +843,23 @@ export function createChat(options: {
     },
 
     /**
+     * The model a Question for `choice` (or the default model) goes to: the
+     * ChatGPT plan's stand-in the User chose with "Answer with …" while the
+     * chosen model's limit is used up. With no reset time, the chosen model
+     * gets one small try an hour first, and takes the Question once it answers.
+     */
+    async answeringModel(choice?: ChatModelChoice): Promise<ChatModelChoice | undefined> {
+      const picked = choice ?? settings.get().user.chatModel ?? undefined;
+      if (!picked || rowById(picked.providerId)?.kind !== "chatgpt") return choice;
+      const standIn = chatGpt.limits.standInFor(picked.modelId);
+      if (!standIn) return choice;
+      if (standIn.retry && (await chat.test({ kind: "chatgpt", modelId: picked.modelId })).ok) {
+        return choice;
+      }
+      return { providerId: picked.providerId, modelId: standIn.modelId };
+    },
+
+    /**
      * For Answers (#29): the default model, or `choice` from a Question's model
      * picker, after checking readiness and getting consent for its service on
      * `flow` (automatic tagging passes "tagging"). `thinking: "off"` skips
@@ -810,18 +876,34 @@ export function createChat(options: {
       if (!readiness.ready) throw new ChatNotReadyError(readiness);
       const { provider, modelId } = readiness;
       if (provider.service) await consent.ensure(flow, provider.service);
-      const apiKey = acceptsApiKey(provider.kind) ? await secrets.get(keyName(provider.id)) : null;
+      const apiKey = acceptsApiKey(provider.kind, provider.catalogId)
+        ? await secrets.get(keyName(provider.id))
+        : null;
+      // Ollama on this computer (its cloud models too, which it forwards) is asked first, so that
+      // it not running is said at once rather than after a request's retries.
+      if (
+        provider.kind === "ollama" &&
+        provider.baseUrl &&
+        serviceFor("ollama", provider.baseUrl) === null &&
+        !(await ollamaModels.running(provider.baseUrl))
+      ) {
+        throw new OllamaNotRunningError();
+      }
       const profile = await profileFor(provider.kind, provider.baseUrl, modelId);
       checkCanChat(profile, modelId);
       // The calls that don't write the Answer (tagging, classifying) skip thinking where they can.
-      const model = createModel(
-        specFor(
-          provider,
-          apiKey,
-          modelId,
-          profile,
-          thinking ?? (flow === "chat" ? "summary" : "off"),
+      const model = watchedPlan(
+        provider.kind,
+        createModel(
+          specFor(
+            provider,
+            apiKey,
+            modelId,
+            profile,
+            thinking ?? (flow === "chat" ? "summary" : "off"),
+          ),
         ),
+        modelId,
       );
       const row: ProviderRow = {
         id: provider.id,
@@ -866,4 +948,5 @@ export function createChat(options: {
       };
     },
   };
+  return chat;
 }

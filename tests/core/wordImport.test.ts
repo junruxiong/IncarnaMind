@@ -79,25 +79,42 @@ function importDone(client: MindClient): Promise<void> {
   });
 }
 
-/** The Mind's top-level Blocks as the editor reads them, each node's id left out. */
+/** The Mind's top-level Blocks as the editor reads them, ids and the Word look left out. */
 function blocksOf(client: MindClient): JSONContent[] {
   const strip = (node: JSONContent): JSONContent => {
     const attrs = Object.fromEntries(
       Object.entries(node.attrs ?? {}).filter(
-        ([key, value]) => value !== null && !["id", "includeInContext", "proposal"].includes(key),
+        ([key, value]) =>
+          value !== null && !["id", "includeInContext", "proposal", "wordLook"].includes(key),
       ),
     );
+    const marks = node.marks?.map((mark) => mark.type).filter((mark) => mark !== "wordRun");
     return {
       type: node.type,
       ...(Object.keys(attrs).length > 0 && { attrs }),
       ...(node.text !== undefined && { text: node.text }),
-      ...(node.marks && {
-        marks: node.marks.map((mark) => mark.type) as unknown as JSONContent["marks"],
-      }),
-      ...(node.content && { content: node.content.map(strip) }),
+      ...(marks && marks.length > 0 && { marks: marks as unknown as JSONContent["marks"] }),
+      ...(node.content && { content: joinTexts(node.content.map(strip)) }),
     };
   };
   return (readMind(client).toJSON().content ?? []).map(strip);
+}
+
+function joinTexts(content: JSONContent[]): JSONContent[] {
+  const joined: JSONContent[] = [];
+  for (const node of content) {
+    const last = joined.at(-1);
+    if (
+      node.type === "text" &&
+      last?.type === "text" &&
+      JSON.stringify(last.marks ?? []) === JSON.stringify(node.marks ?? [])
+    ) {
+      joined[joined.length - 1] = { ...last, text: `${last.text ?? ""}${node.text ?? ""}` };
+    } else {
+      joined.push(node);
+    }
+  }
+  return joined;
 }
 
 /** Every atom in the Mind, in order: inline and as Blocks. */
@@ -404,12 +421,13 @@ describe("a Word file becomes a Mind", () => {
       { source: "word-change", author: "Priya Nair", date: "2026-10-02T09:00:00Z" },
     ]);
 
-    // Until it is accepted, a change isn't the Mind's text, as with the AI's; no comment is in it either.
+    // An export shows them as changes, with who made each (#734); no comment is in the text.
     const markdown = new TextDecoder().decode(
       (await core.exportMind(mindId, { format: "markdown" })).data,
     );
-    expect(markdown).toContain("Gives up vacant possession substantially.");
-    expect(markdown).not.toContain("in full");
+    expect(markdown).toContain(
+      "Gives up vacant possession{++ in full++}{>>Inserted by Priya Nair, 2 Oct 2026<<}{-- substantially--}{>>Deleted by Priya Nair, 2 Oct 2026<<}.",
+    );
     expect(markdown).not.toContain("We can't accept");
     expect(wordReportOf(client.doc)).toMatchObject({ changes: 2, comments: 1, sections: 2 });
   });

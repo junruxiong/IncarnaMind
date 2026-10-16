@@ -1,8 +1,9 @@
 /**
  * What each example Mind says (src/core/examples.ts): its folder of shipped
  * Documents, its Question and its Answer, whose `[^n]` markers are Citations
- * of the nth quote. Every quote is word for word from a shipped Document;
- * the core test runs the Citation check over every one of them.
+ * of the nth quote, and for the first-run default a draft of the User's own,
+ * one of whose sentences is already checked (#802). Every quote is word for
+ * word from a shipped Document; the core test checks every one of them.
  *
  * The Documents of each group and language are listed, with their sources and
  * licences, in resources/examples/LICENSE. The group examples have Documents
@@ -17,6 +18,17 @@ export interface ExampleQuote {
   quote: string;
 }
 
+/** A check of one of the draft's sentences, written in advance (#802). */
+export interface ExampleCheck {
+  /** The sentence, word for word as the draft has it. */
+  sentence: string;
+  verdict: "supported" | "contradicted";
+  /** The Passage that decides it. */
+  evidence: ExampleQuote;
+  /** What the Document says, in one plain sentence. */
+  says: string;
+}
+
 export interface ExampleSet {
   /** The shipped folder to copy, relative to the examples folder. */
   source: string;
@@ -24,49 +36,100 @@ export interface ExampleSet {
   folder: string;
   title: string;
   intro: string;
+  /** The User's own draft after the intro, in Markdown (#802); none when the example is only a Question. */
+  draft?: string;
+  /** Checks of the draft's sentences, already made. */
+  checks?: readonly ExampleCheck[];
   question: string;
   /** Markdown; `[^n]` is the nth quote's Citation. */
   answer: string;
   quotes: readonly ExampleQuote[];
 }
 
-const TEA_QUOTES = [
-  {
-    document: "Tea · Wikipedia",
-    quote:
-      "Tea drinking may have begun in the region of Yunnan, where it was used for medicinal purposes.",
-  },
-  { document: "茶 · 维基百科", quote: "18世纪，英国已成为欧洲最大的茶叶消费国。" },
-] as const;
-
 export const EXAMPLE_SETS: Record<ExampleGroup, Record<Language, ExampleSet>> = {
-  tea: {
+  credit: {
     en: {
-      source: "tea",
+      source: "credit/en",
       folder: "Examples",
-      title: "Where tea comes from",
+      title: "Draft: credit committee paper",
       intro:
-        "A short reading note on the history of tea. Two articles are linked as Documents: one in English, one in Chinese.",
-      question: "Where does tea come from, and how did it spread around the world?",
-      answer: [
-        "Tea was probably first drunk in Yunnan, in southwest China, where it was used as a medicine [^1].",
+        "A short credit paper on Northwind Retail, a UK grocer. Its two Documents are the Q3 results and the facilities agreement.",
+      draft: [
+        "## Recommendation",
         "",
-        "It spread with trade, across Asia and later by sea to Europe, and by the 18th century Britain drank more tea than any other country in Europe [^2].",
+        "Hold the facility at its current limit and ask Northwind for a monthly margin report.",
+        "",
+        "## Why",
+        "",
+        "Gross margin fell to 36.8% in Q3, mostly in online. The facilities run to February 2029, so refinancing is not this year’s risk.",
       ].join("\n"),
-      quotes: TEA_QUOTES,
+      checks: [
+        {
+          sentence: "Gross margin fell to 36.8% in Q3, mostly in online.",
+          verdict: "contradicted",
+          evidence: {
+            document: "Northwind Retail · Q3 2026 results",
+            quote:
+              "Group gross margin was 38.6%, down from 40.3% a year earlier, with online the main drag.",
+          },
+          says: "The Q3 results say gross margin was 38.6%, not 36.8%.",
+        },
+      ],
+      question: "Is Northwind inside its leverage covenant?",
+      answer:
+        "Yes, with some room. Net debt to EBITDA was 3.1 times at the end of the quarter [^1], and the facilities agreement allows up to 3.5 times [^2].",
+      quotes: [
+        {
+          document: "Northwind Retail · Q3 2026 results",
+          quote:
+            "Net debt to EBITDA was 3.1 times at the end of the quarter, up from 2.7 times at the half year.",
+        },
+        {
+          document: "Northwind Retail · Senior facilities agreement (excerpt)",
+          quote:
+            "The Company shall ensure that Leverage in respect of each Relevant Period does not exceed 3.5:1.",
+        },
+      ],
     },
     "zh-CN": {
-      source: "tea",
+      source: "credit/zh-CN",
       folder: "示例文档",
-      title: "茶从哪里来",
-      intro: "一篇关于茶的历史的简短阅读笔记。两篇文章作为文档链接在这里：一篇英文，一篇中文。",
-      question: "茶起源于哪里？又是如何传遍世界的？",
-      answer: [
-        "人们最早饮茶可能是在中国西南的云南，当时茶被用作药物 [^1]。",
+      title: "授信委员会报告（草稿）",
+      intro:
+        "一份关于英国连锁超市 Northwind Retail 的简短授信报告。它的两份文档是第三季度业绩和贷款协议。",
+      draft: [
+        "## 建议",
         "",
-        "茶随着贸易传遍亚洲，后来经海路传入欧洲；到 18 世纪，英国已成为欧洲饮茶最多的国家 [^2]。",
+        "维持现有授信额度，并要求 Northwind 每月提供毛利率报告。",
+        "",
+        "## 理由",
+        "",
+        "第三季度毛利率降至 36.8%，主要拖累来自线上业务。贷款于 2029 年 2 月到期，因此再融资不是今年的风险。",
       ].join("\n"),
-      quotes: TEA_QUOTES,
+      checks: [
+        {
+          sentence: "第三季度毛利率降至 36.8%，主要拖累来自线上业务。",
+          verdict: "contradicted",
+          evidence: {
+            document: "Northwind Retail · 2026 年第三季度业绩",
+            quote: "集团毛利率为 38.6%，上年同期为 40.3%，主要受线上业务拖累。",
+          },
+          says: "第三季度业绩写的是毛利率 38.6%，不是 36.8%。",
+        },
+      ],
+      question: "Northwind 的杠杆率还在贷款协议的上限之内吗？",
+      answer:
+        "在上限之内，但余地不大。季末净债务与 EBITDA 之比为 3.1 倍 [^1]，而贷款协议规定杠杆率不超过 3.5 倍 [^2]。",
+      quotes: [
+        {
+          document: "Northwind Retail · 2026 年第三季度业绩",
+          quote: "季末净债务与 EBITDA 之比为 3.1 倍，半年末为 2.7 倍。",
+        },
+        {
+          document: "Northwind Retail · 优先级贷款协议（节选）",
+          quote: "公司应确保每一相关期间的杠杆率不超过 3.5 倍。",
+        },
+      ],
     },
   },
 

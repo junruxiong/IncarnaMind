@@ -1,5 +1,7 @@
+import { computePosition, flip, offset, shift } from "@floating-ui/dom";
 import {
   type KeyboardEvent,
+  type PointerEvent,
   type ToggleEvent,
   useEffect,
   useId,
@@ -37,7 +39,8 @@ function sourceOf(button: HTMLElement | null): Element | Box | null {
 function place(
   button: HTMLElement | null,
   menu: HTMLElement | null,
-  around: HTMLElement | null = null,
+  around: HTMLElement | null,
+  align: "start" | "end",
 ): Box | null {
   const point = pointOf(button);
   const atPoint = point !== null;
@@ -53,7 +56,9 @@ function place(
   const outer = around?.getBoundingClientRect();
   const anchor = outer
     ? { left: box.right + GAP_PX - width, top: outer.top, bottom: outer.bottom }
-    : box;
+    : align === "end" && !atPoint
+      ? { left: box.right - width, top: box.top, bottom: box.bottom }
+      : box;
   // At the pointer the menu overlaps it by 1px, so letting go of the button lands inside the menu
   // and doesn't dismiss it.
   const gap = atPoint ? -1 : GAP_PX;
@@ -84,6 +89,31 @@ function focusFirst(menu: HTMLElement | null, first = false): void {
   firstItem(menu, first)?.focus();
 }
 
+function itemForKey(key: string, all: readonly HTMLElement[]): HTMLElement | undefined {
+  const index = all.indexOf(document.activeElement as HTMLElement);
+  switch (key) {
+    case "ArrowDown":
+      return all[(index + 1) % all.length];
+    case "ArrowUp":
+      return all[(index - 1 + all.length) % all.length];
+    case "Home":
+      return all[0];
+    case "End":
+      return all.at(-1);
+    default:
+      return undefined;
+  }
+}
+
+function closeSubmenusBut(menu: HTMLElement | null, item: Element): void {
+  for (const each of menu?.querySelectorAll<HTMLButtonElement>('[aria-haspopup="menu"]') ?? []) {
+    const submenu = each.popoverTargetElement;
+    if (each !== item && submenu instanceof HTMLElement && submenu.matches(":popover-open")) {
+      submenu.hidePopover();
+    }
+  }
+}
+
 /**
  * Marks the item the browser focuses as the popover shows. Opened from the
  * keyboard, the menu renders just before it shows, when nothing in it can take
@@ -91,10 +121,14 @@ function focusFirst(menu: HTMLElement | null, first = false): void {
  * between went to the button (#584).
  */
 function autofocusFirst(menu: HTMLElement | null, first = false): void {
+  clearAutofocus(menu);
+  firstItem(menu, first)?.setAttribute("autofocus", "");
+}
+
+function clearAutofocus(menu: HTMLElement | null): void {
   for (const marked of menu?.querySelectorAll("[autofocus]") ?? []) {
     marked.removeAttribute("autofocus");
   }
-  firstItem(menu, first)?.setAttribute("autofocus", "");
 }
 
 /**
@@ -144,13 +178,17 @@ export function openMenuFromRightClick(
  * below rather than covering it (e.g. the composer, for its model chip).
  * `focus: "first"` focuses the first item even when one is checked: for a
  * menu of actions with a switch among them, rather than a choice of options.
+ * `align: "end"` lines its right edge up with the button's, for a button at
+ * the right of what it sits in.
  */
 export function usePopoverMenu({
   around,
   focus = "checked",
+  align = "start",
 }: {
   around?: (button: HTMLElement) => HTMLElement | null;
   focus?: "checked" | "first";
+  align?: "start" | "end";
 } = {}) {
   const id = useId();
   const button = useRef<HTMLButtonElement>(null);
@@ -177,13 +215,18 @@ export function usePopoverMenu({
       return;
     }
     const anchor = button.current;
-    const box = place(anchor, menu.current, anchor && outer.current ? outer.current(anchor) : null);
+    const box = place(
+      anchor,
+      menu.current,
+      anchor && outer.current ? outer.current(anchor) : null,
+      align,
+    );
     // Once each time it opens: a menu that stays open is never animated again.
     if (menu.current && box && !entered.current) enterFrom(menu.current, sourceOf(anchor), box);
     entered.current = true;
     if (menu.current?.matches(":popover-open")) focusFirst(menu.current, first);
     else autofocusFirst(menu.current, first);
-  }, [open, first]);
+  }, [open, first, align]);
 
   // Items that come after it opened, such as models still being listed then: placed again for
   // the menu's new size, and the checked one focused, as it would have been had it been there.
@@ -192,12 +235,12 @@ export function usePopoverMenu({
     if (!open || !element) return;
     const observer = new MutationObserver(() => {
       const anchor = button.current;
-      place(anchor, element, anchor && outer.current ? outer.current(anchor) : null);
+      place(anchor, element, anchor && outer.current ? outer.current(anchor) : null, align);
       if (!touched.current && element.matches(":popover-open")) focusFirst(element, first);
     });
     observer.observe(element, { childList: true, subtree: true });
     return () => observer.disconnect();
-  }, [open, first]);
+  }, [open, first, align]);
 
   const onKeyDown = (event: KeyboardEvent) => {
     touched.current = true;
@@ -208,21 +251,11 @@ export function usePopoverMenu({
       button.current?.focus();
       return;
     }
-    const all = itemsOf(menu.current);
-    const index = all.indexOf(document.activeElement as HTMLElement);
-    const next =
-      event.key === "ArrowDown"
-        ? all[(index + 1) % all.length]
-        : event.key === "ArrowUp"
-          ? all[(index - 1 + all.length) % all.length]
-          : event.key === "Home"
-            ? all[0]
-            : event.key === "End"
-              ? all.at(-1)
-              : undefined;
+    const next = itemForKey(event.key, itemsOf(menu.current));
     if (!next) return;
     event.preventDefault();
     next.focus();
+    closeSubmenusBut(menu.current, next);
   };
 
   return {
@@ -259,6 +292,104 @@ export function usePopoverMenu({
       onKeyDown,
       onPointerDown: () => {
         touched.current = true;
+      },
+      onPointerOver: (event: PointerEvent) => {
+        const item = event.target instanceof Element ? event.target.closest(ITEMS) : null;
+        if (item) closeSubmenusBut(menu.current, item);
+      },
+    },
+  };
+}
+
+/**
+ * A submenu of an item in a `usePopoverMenu` menu, such as Export's More
+ * formats. It opens beside its item as the pointer comes onto it, on a
+ * click, or with →, Enter or Space, which also focus its first item; ← and
+ * Esc close it, back on its item. In it, ↑↓, Home and End move between
+ * items. Moving to another item of the menu, with the pointer or the keys,
+ * closes it, and so does closing the menu.
+ *
+ * Spread `itemProps` on its item, a `<button>` in the menu, and `menuProps`
+ * on the submenu's element, outside the menu's, which also takes
+ * `role="menu"`, an `aria-label` and `menuClass` (./ui).
+ */
+export function useSubmenu() {
+  const id = useId();
+  const item = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+
+  const show = (focus: boolean) => {
+    const submenu = menu.current;
+    if (!submenu) return;
+    if (focus) autofocusFirst(submenu, true);
+    else clearAutofocus(submenu);
+    // Its item names it as its source, so it opens nested in the menu rather than closing it.
+    if (!submenu.matches(":popover-open"))
+      submenu.showPopover({ source: item.current ?? undefined });
+    if (focus) focusFirst(submenu, true);
+  };
+  const hide = () => {
+    if (menu.current?.matches(":popover-open")) menu.current.hidePopover();
+  };
+
+  const placeBeside = () => {
+    const anchor = item.current;
+    const submenu = menu.current;
+    if (!anchor || !submenu) return;
+    void computePosition(anchor, submenu, {
+      placement: "right-start",
+      strategy: "fixed",
+      middleware: [
+        offset({ mainAxis: GAP_PX, crossAxis: -GAP_PX }),
+        flip(),
+        shift({ padding: EDGE_PX }),
+      ],
+    }).then(({ x, y }) => {
+      Object.assign(submenu.style, { left: `${x}px`, top: `${y}px` });
+      enterFrom(submenu, anchor);
+    });
+  };
+
+  return {
+    open,
+    itemProps: {
+      ref: item,
+      role: "menuitem" as const,
+      "aria-haspopup": "menu" as const,
+      "aria-expanded": open,
+      popoverTarget: id,
+      // Shown already by the pointer coming onto it, a click mustn't close it again.
+      popoverTargetAction: "show" as const,
+      onPointerEnter: () => show(false),
+      onKeyDown: (event: KeyboardEvent) => {
+        if (event.key !== "ArrowRight" && event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        show(true);
+      },
+    },
+    menuProps: {
+      ref: menu,
+      id,
+      popover: "auto" as const,
+      onBeforeToggle: (event: ToggleEvent<HTMLDivElement>) => {
+        setOpen(event.newState === "open");
+        if (event.newState === "open") placeBeside();
+        else if (menu.current) exitToward(menu.current, item.current);
+      },
+      onKeyDown: (event: KeyboardEvent) => {
+        if (event.key === "ArrowLeft" || event.key === "Escape") {
+          // Only the submenu closes, not the menu it is in.
+          event.preventDefault();
+          event.stopPropagation();
+          hide();
+          item.current?.focus();
+          return;
+        }
+        const next = itemForKey(event.key, itemsOf(menu.current));
+        if (!next) return;
+        event.preventDefault();
+        next.focus();
       },
     },
   };

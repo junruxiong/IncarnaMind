@@ -11,6 +11,7 @@ import {
   launchApp,
   openSettings,
   removeDataFolder,
+  setLanguage,
   showSettingsPage,
   urlsOpened,
 } from "./app";
@@ -90,7 +91,15 @@ test("a local Connector added in Settings starts and reaches ready, and turning 
   await expect(policy).toHaveCount(1);
   await expect(policy).toContainText("Tides · lookup_tide");
   await expect(policy.getByTestId("approval-policy-value")).toHaveText("Ask every time");
-  await policy.getByRole("button", { name: "Revoke the setting for Tides · lookup_tide" }).click();
+  const reset = policy.getByRole("button", { name: "Reset Tides · lookup_tide to its default" });
+  await expect(reset).toHaveText("Reset");
+  // Not 撤销, which is Undo's word (#763).
+  await setLanguage(window, "zh-CN");
+  await expect(policy.getByRole("button", { name: "将 Tides · lookup_tide 恢复默认" })).toHaveText(
+    "恢复默认",
+  );
+  await setLanguage(window, "en");
+  await reset.click();
   await expect(policy).toHaveCount(0);
   await showSettingsPage(window, "connectors");
   await expect(lookup).toHaveAttribute("data-asks", "false");

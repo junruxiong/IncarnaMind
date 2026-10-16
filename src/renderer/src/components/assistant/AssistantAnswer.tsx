@@ -4,9 +4,17 @@ import { answerBlocks, hasText } from "../../answerBlocks";
 import { useAnswers } from "../../answers";
 import { useApprovals, waitingFor } from "../../approvals";
 import { regenerateAnswer } from "../../conversations";
-import { AnswerError, ApprovalCard, figuresOf, UncalculatedLine } from "../../editor/AnswerView";
+import {
+  AnswerError,
+  ApprovalCard,
+  figuresOf,
+  NoCitationsLine,
+  UncalculatedLine,
+} from "../../editor/AnswerView";
 import { AskProblem } from "../../editor/AskProblem";
+import { PlanLimitLine } from "../../editor/PlanLimitLine";
 import { useT } from "../../i18n";
+import { useStoppedByPlanLimit } from "../../planLimits";
 import { useScopeEmpty } from "../../scopeDocuments";
 import { useAppStore } from "../../store";
 import { useUnreadFiles } from "../../unreadFiles";
@@ -15,6 +23,7 @@ import { UnreadFilesLine } from "../UnreadFilesLine";
 import { AnswerActions } from "./AnswerActions";
 import { AnswerSteps, useStepsScopeOf } from "./AnswerSteps";
 import { AnswerText } from "./AnswerText";
+import { MindChangesCard, NoMindLine, wantedAMind } from "./MindChangesCard";
 
 /** What adding an Answer needs from the thread around it. */
 export interface AnswerKeeping {
@@ -28,8 +37,8 @@ export interface AnswerKeeping {
  * An Answer in the assistant (#201): no box, as an Answer in a Mind has none
  * (DESIGN.md, Answer), in the assistant's reading sizes. Its steps first
  * (#391), folded to one line; its text with its Citations and their checks
- * in the margin; what went wrong, and the approvals it waits for, under it;
- * then its actions (`AnswerActions`).
+ * in the margin; the card of the Minds it changed (#202); what went wrong,
+ * and the approvals it waits for, under it; then its actions (`AnswerActions`).
  */
 export function AssistantAnswer({
   answer,
@@ -61,6 +70,12 @@ export function AssistantAnswer({
   const scopeEmpty = useScopeEmpty(question?.scope ?? null);
   const scopeName = useStepsScopeOf(question)(0);
   const unread = useUnreadFiles(question?.scope ?? null);
+  const planModel = useStoppedByPlanLimit(
+    status === "failed" ? (answer.errorKind ?? null) : null,
+    answer.model?.providerId ?? null,
+  )
+    ? (answer.model?.modelId ?? null)
+    : null;
 
   return (
     <article
@@ -79,9 +94,10 @@ export function AssistantAnswer({
         onRegenerate={regenerate}
       />
       {answer.citationSupport === "none" && (
-        <p data-testid="answer-no-citations" className="answer-info">
-          {t("citation.unsupported")}
-        </p>
+        <NoCitationsLine
+          modelId={answer.model?.modelId ?? null}
+          providerId={answer.model?.providerId ?? null}
+        />
       )}
       {(written || streaming) && (
         <AnswerText
@@ -90,6 +106,10 @@ export function AssistantAnswer({
           label={t("answer.label")}
           regenerate={regenerate}
         />
+      )}
+      <MindChangesCard answer={answer} streaming={streaming} />
+      {!streaming && question && !question.askedFrom && wantedAMind(answer) && (
+        <NoMindLine question={question} />
       )}
       {!streaming && scopeEmpty && (
         <ProblemLine
@@ -106,7 +126,7 @@ export function AssistantAnswer({
       )}
       {!streaming && uncalculated > 0 && <UncalculatedLine count={uncalculated} />}
       {!streaming && status !== "failed" && <UnreadFilesLine files={unread} />}
-      {!streaming && status === "failed" && (
+      {!streaming && status === "failed" && !planModel && (
         <AnswerError
           kind={answer.errorKind ?? "unknown"}
           modelId={answer.model?.modelId ?? null}
@@ -114,8 +134,17 @@ export function AssistantAnswer({
           // A conversation doesn't keep when a plan's limit resets: the line says so without it.
           resetsAt={null}
           details={answer.errorMessage}
+          failedAt={answer.updatedAt}
           onRetry={regenerate}
           onOpenSettings={openSettings}
+        />
+      )}
+      {!streaming && status === "failed" && planModel && (
+        <PlanLimitLine
+          modelId={planModel}
+          providerId={answer.model?.providerId ?? null}
+          details={answer.errorMessage}
+          onAnswerAgain={() => regenerateAnswer(answer.id)}
         />
       )}
       {problem && (
