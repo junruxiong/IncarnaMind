@@ -3,7 +3,7 @@ import type { ConversationAnswer, ConversationQuestion } from "../../../../core/
 import { mindName } from "../../../../shared/naming";
 import { useAskedChanges } from "../../askedChanges";
 import { type ChangedMind, changedMinds } from "../../changedMinds";
-import { changeFact } from "../../changeFacts";
+import { changeFact, leftText } from "../../changeFacts";
 import { askInAssistant } from "../../conversations";
 import { useT } from "../../i18n";
 import { resolveAllChanges, showChanges, useWaitingChanges, type Waiting } from "../../mindChanges";
@@ -36,13 +36,6 @@ function keptText(t: Translate, row: ChangedMind): string | null {
         : []),
   ];
   return notes.length > 0 ? notes.join(" ") : null;
-}
-
-/** How many of what it did still wait, while that is known and there was something. */
-function leftText(t: Translate, row: ChangedMind, waiting: Waiting): string | null {
-  if (typeof waiting !== "number" || row.wrote + row.changed + row.tables === 0) return null;
-  if (waiting === 0) return t("mindChanges.left.none");
-  return waiting === 1 ? t("mindChanges.left.one") : t("mindChanges.left", { count: waiting });
 }
 
 /**

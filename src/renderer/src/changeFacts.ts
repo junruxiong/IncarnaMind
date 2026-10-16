@@ -19,6 +19,17 @@ export interface ChangeCounts {
 const counted = (t: Translate, count: number, what: "tables" | "paragraphs" | "places") =>
   count === 1 ? t(`mindChanges.count.${what}.one`) : t(`mindChanges.count.${what}`, { count });
 
+/** How many of what was done still wait, while that is known and there was something. */
+export function leftText(
+  t: Translate,
+  row: ChangeCounts,
+  waiting: number | "gone" | null | undefined,
+): string | null {
+  if (typeof waiting !== "number" || row.wrote + row.changed + row.tables === 0) return null;
+  if (waiting === 0) return t("mindChanges.left.none");
+  return waiting === 1 ? t("mindChanges.left.one") : t("mindChanges.left", { count: waiting });
+}
+
 /** The facts in words, with the Mind's name, or without it (`null`) for the Mind's own line. */
 export function changeFact(t: Translate, row: ChangeCounts, name: string | null): string {
   const count = row.wrote + row.changed;
