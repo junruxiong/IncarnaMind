@@ -8,6 +8,8 @@ describe("What the composer's words ask for, with text selected (#880)", () => {
     expect(kinds("replace coast with shore")).toBe("edit");
     expect(kinds("把第二段改得更正式")).toBe("edit");
     expect(kinds("make sense of this for me")).toBe("answer");
+    expect(kinds("Clarify what the authors mean by tidal range")).toBe("answer");
+    expect(kinds("翻译一下这篇论文的摘要")).toBe("answer");
     expect(kinds("What does this clause mean?")).toBe("answer");
     expect(kinds("make a list of the risks")).toBe("write");
     expect(routeRequest("turn this into a new note")).toEqual({ kind: "write", newMind: true });
