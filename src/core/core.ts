@@ -3110,7 +3110,7 @@ export function createCore(adapters: CoreAdapters): Core {
     previewSharePage: (mindId) => mindExports.previewSharePage(mindId),
     setSharePageTextOnly: async (mindId, documentIds) => {
       if (!Array.isArray(documentIds) || documentIds.some((each) => typeof each !== "string")) {
-        throw new InvalidInputError("The Documents kept as text must be a list of their ids.");
+        throw new InvalidInputError({ key: "error.export.textOnly" });
       }
       const mind = writableMind(mindId);
       content.editSettings(mind.id, (mindSettings) =>
