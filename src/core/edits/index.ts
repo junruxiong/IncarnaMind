@@ -49,6 +49,7 @@ import {
   editActions,
   MIND_CONTENT_FIELD,
   type ProposalRequest,
+  type RequestedChange,
   type TextPlace,
   type WritingPlace,
 } from "../api";
@@ -73,6 +74,7 @@ import {
   type RewriteStream,
   readSelection,
   type Selection,
+  someNotes,
   takeBackForRegenerate,
 } from "../proposals/write";
 import type { PreparedChatModel } from "../providers/chat";
@@ -130,6 +132,7 @@ interface Ask {
   action: EditAction;
   instruction: string;
   model: ChatModelChoice | null;
+  requested?: RequestedChange;
 }
 
 interface ParsedInput extends Ask {
@@ -295,6 +298,8 @@ export interface ProposeInput {
   signal: AbortSignal;
   beforeWriting(): void;
   written(request: string, count: number): void;
+  /** What the User's words asked for, which its request records; null: neither. Not for a revision. */
+  requested: RequestedChange | null;
 }
 
 export interface Proposed {
@@ -309,6 +314,7 @@ const askOf = (input: ProposeInput): Ask => ({
   action: "instruction",
   instruction: input.instruction,
   model: { providerId: input.prepared.provider.id, modelId: input.prepared.modelId },
+  ...(input.requested && { requested: input.requested }),
 });
 
 interface EditCall {
@@ -486,6 +492,7 @@ export function createEdits(options: EditsOptions) {
       createdAt: options.now().toISOString(),
       action: ask.action,
       instruction: ask.instruction,
+      ...(ask.requested && { requested: ask.requested }),
     };
     const mine = (mind: Y.XmlFragment) =>
       pendingProposals(mind).filter((each) => each.request === request);
@@ -508,6 +515,7 @@ export function createEdits(options: EditsOptions) {
         proposals: count,
         droppedCitations: stream?.written().droppedCitations ?? 0,
         outOfDate: now.outOfDate.length,
+        ...(stream && someNotes(stream.written().notes)),
         ...(held && { held: true as const }),
         ...(leftOut.length > 0 && { leftOut }),
       };
@@ -624,6 +632,7 @@ export function createEdits(options: EditsOptions) {
         return proposed > 0;
       }
       const more = stream.write(reply, true);
+      if (stream.written().unmadeTable) return false;
       const finished = stream.finish();
       if (requestId !== undefined) {
         held = holdsBack(stream);
@@ -635,6 +644,10 @@ export function createEdits(options: EditsOptions) {
     if (refused) {
       takeBackWritten();
       return ended({ kind: "changed" });
+    }
+    if (stream?.written().unmadeTable) {
+      takeBackWritten();
+      return ended({ kind: "no-table", text: reply });
     }
     if (!wrote) return ended({ kind: "unchanged" });
     return { result: arrived(), reply, reason };
@@ -761,18 +774,14 @@ export function createEdits(options: EditsOptions) {
       const reply = readEditReply(streamed.raw, selection.text);
       if (sameText(reply, selection.text)) return nothing({ kind: "unchanged" });
       const request = randomUUID();
-      let droppedCitations = 0;
-      fork.transact(() => {
+      const written = fork.transact(() => {
         const fresh = freshCitations(selection, options.recheck)(reply);
-        droppedCitations = proposeRewrite(
-          selection,
-          reply,
-          request,
-          randomUUID,
-          fresh,
-        ).droppedCitations;
+        const rewritten = proposeRewrite(selection, reply, request, randomUUID, fresh);
         resolveProposals(blocks, (each) => each.request === request, "accept");
+        return rewritten;
       });
+      if (written.unmadeTable) return nothing({ kind: "no-table", text: reply });
+      const { droppedCitations, notes } = written;
       const top = topLevelBlocks(blocks);
       const revised = top
         .slice(bounds.before, top.length - bounds.after)
@@ -796,7 +805,14 @@ export function createEdits(options: EditsOptions) {
       );
       input.written(request, proposals);
       return {
-        result: { kind: "proposed", request, proposals, droppedCitations, outOfDate: 0 },
+        result: {
+          kind: "proposed",
+          request,
+          proposals,
+          droppedCitations,
+          outOfDate: 0,
+          ...someNotes(notes),
+        },
         length: { before: selection.text, after: reply },
         reason: reasonOf(streamed.raw),
         revised: { blockIds },

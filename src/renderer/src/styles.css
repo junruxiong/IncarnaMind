@@ -646,7 +646,8 @@
     align-items: center;
     /* As well as the basis: the strip sizes to its tabs' widths, which would otherwise be their text's. */
     width: 220px;
-    min-width: 64px;
+    /* Its chrome and the start of its name (#905): the strip scrolls rather than shrink a tab past it. */
+    min-width: calc(70px + var(--tab-label-min, 0px));
     height: 34px;
     color: var(--color-ink-secondary);
     font-size: 13px;
@@ -659,7 +660,7 @@
     &[aria-selected="true"] {
       z-index: 1;
       /* Its title stays readable while the others shrink. */
-      min-width: min(132px, 100%);
+      min-width: max(min(132px, 100%), calc(70px + var(--tab-label-min, 0px)));
       height: 32px;
       border-radius: 10px 10px 0 0;
       background: var(--color-sheet);
@@ -1145,12 +1146,57 @@
     }
   }
 
-  /* A Mind made by "Verify a document…" (#97): where its text came from, then where its verify is. */
-  .mind-verify {
+  /*
+   * Parts joined by middle dots wrap only between parts, and no line starts or
+   * ends with a dot (#684): each part draws the dot in the gap before it, and
+   * the row clips what sticks out of its start, where a part begins a line.
+   * The 4px of padding keeps focus rings and hover backgrounds unclipped.
+   */
+  .meta-line {
     display: flex;
     flex-wrap: wrap;
-    align-items: center;
-    gap: 4px 8px;
+    column-gap: 12px;
+    min-width: 0;
+    overflow-x: clip;
+    padding-left: 4px;
+    margin-left: -4px;
+  }
+  .meta-part {
+    position: relative;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .meta-dot,
+  .mind-health-part::before,
+  .mind-health-when::before,
+  .mind-health-action::before,
+  .mind-health-line::before,
+  .mind-unread > :first-child::before {
+    content: "·" / "";
+    position: absolute;
+    right: 100%;
+    width: 12px;
+    text-align: center;
+  }
+  .mind-health-when,
+  .mind-health-action,
+  .mind-health-line,
+  .mind-unread > :first-child {
+    position: relative;
+  }
+  .mind-health-line {
+    color: inherit;
+  }
+  .mind-health-part::before,
+  .mind-health-when::before,
+  .mind-health-action::before,
+  .mind-health-line::before,
+  .mind-unread > :first-child::before {
+    color: var(--color-rule-strong);
+  }
+
+  /* A Mind made by "Verify a document…" (#97): where its text came from, then where its verify is. */
+  .mind-verify {
     min-width: 0;
     margin: -16px 0 16px;
     font-family: var(--font-sans);
@@ -1194,9 +1240,9 @@
       background: var(--color-hover);
     }
   }
-  .mind-verify-done {
-    display: contents;
-    font-variant-numeric: tabular-nums;
+  /* Its negative margin narrows the part by 4px; the cap gives them back, or the name loses its last letters. */
+  .meta-part > .mind-verify-from {
+    max-width: calc(100% + 4px);
   }
   .mind-verify-link {
     border-radius: 4px;
@@ -1217,8 +1263,11 @@
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 8px;
-    margin: -16px 0 16px;
+    column-gap: 12px;
+    row-gap: 8px;
+    padding-left: 4px;
+    margin: -16px 0 16px -4px;
+    overflow-x: clip;
     font-family: var(--font-sans);
     font-size: 12px;
     line-height: 16px;
@@ -1226,19 +1275,14 @@
   }
   /* The Mind's health under its title (#96), on the count's line: each part moves to its next sentence or Citation. */
   .mind-health {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    column-gap: 4px;
+    display: contents;
     min-width: 0;
     margin: 0;
     padding: 0;
     border: 0;
   }
-  .mind-health-dot {
-    color: var(--color-rule-strong);
-  }
   .mind-health-part {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 4px;
@@ -1283,12 +1327,6 @@
   .mind-health-part[data-part="contradicted"] .mind-health-icon {
     box-shadow: inset 0 0 0 1.25px var(--color-danger);
     color: var(--color-danger);
-  }
-  .mind-health-line::before,
-  .mind-unread > p::before {
-    content: "·";
-    margin-right: 8px;
-    color: var(--color-rule-strong);
   }
   /* The files the checks couldn't read sit on the line of the checks' state, never a line of their own; Show's list opens under it. */
   .mind-unread {

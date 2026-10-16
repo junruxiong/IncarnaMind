@@ -9,12 +9,13 @@ import {
   verificationOf,
 } from "../../../shared/verification";
 import { DocumentLineIcon, VerifyLineIcon } from "../components/lineIcons";
+import { MetaLine } from "../components/MetaLine";
 import { ProblemLine } from "../components/ProblemLine";
 import { ReadinessExplanation, readinessAction } from "../components/providers/ChatReadinessNotice";
 import { UnreadFilesLine } from "../components/UnreadFilesLine";
 import { buttonStyle } from "../components/ui";
 import { core } from "../core";
-import { estimateText, runStopText } from "../cost";
+import { type EstimateLine, estimateLine, runStopParts } from "../cost";
 import { errorMessage } from "../errors";
 import { useLanguage, useT } from "../i18n";
 import { enter } from "../motion";
@@ -32,6 +33,8 @@ import { AnswerError } from "./AnswerView";
 import { coverageOf, sameCoverage, shownClaims } from "./claimChecks";
 import { useMindModel, useRunModel } from "./ModelChip";
 import { UncoveredLine } from "./UncoveredLine";
+
+const partsOf = (...parts: ReactNode[]): ReactNode[] => parts;
 
 /** What a Mind made by "Verify a document…" verifies, as it changes. */
 export function useVerification(doc: Y.Doc): Verification | null {
@@ -108,14 +111,14 @@ export function VerifyLine({
   const total = claims?.length ?? 0;
   const asking = claims !== null && total > 0 && marks.marked === 0 && running === null;
 
-  const [estimate, setEstimate] = useState<string | null>(null);
+  const [estimate, setEstimate] = useState<EstimateLine | null>(null);
   useEffect(() => {
     if (!asking) return;
     let current = true;
     core
       .estimateRun({ items: total, ...(model && { model }) })
       .then((result) => {
-        if (current) setEstimate(estimateText(result, t, language));
+        if (current) setEstimate(estimateLine(result, t, language));
       })
       .catch(() => {
         // No model to estimate for: checking says why.
@@ -163,83 +166,66 @@ export function VerifyLine({
       {t("checks.stop")}
     </button>
   );
-  const dot = (
-    <span className="mind-health-dot" aria-hidden="true">
-      ·
-    </span>
-  );
-
-  let state: ReactNode;
+  let state: ReactNode[];
   if (running === "finding") {
-    state = (
-      <>
-        <span role="status">{t("verify.finding")}</span>
-        {dot}
-        {stop}
-      </>
-    );
+    state = partsOf(<span role="status">{t("verify.finding")}</span>, stop);
   } else if (running === "checking") {
     const progress = t("verify.checking", {
       done: format(marks.marked - marks.checking),
       total: format(marks.marked),
     });
-    state = (
-      <>
-        <span role="status" data-testid="verify-progress" className="tabular-nums">
-          {progress}
-        </span>
-        {dot}
-        {stop}
-      </>
+    state = partsOf(
+      <span role="status" data-testid="verify-progress" className="tabular-nums">
+        {progress}
+      </span>,
+      stop,
     );
   } else if (outcome?.kind === "no-documents") {
-    state = (
-      <>
-        <span data-testid="verify-empty">
-          {t(inFolder ? "verify.noDocuments.folder" : "verify.noDocuments.all")}
-        </span>
-        <button
-          type="button"
-          data-testid="verify-add-files"
-          className={buttonStyle("secondary", "sm")}
-          onClick={() => void useAppStore.getState().pickDocuments()}
-        >
-          {t("checks.addFiles")}
-        </button>
-      </>
+    state = partsOf(
+      <span data-testid="verify-empty">
+        {t(inFolder ? "verify.noDocuments.folder" : "verify.noDocuments.all")}
+      </span>,
+      <button
+        type="button"
+        data-testid="verify-add-files"
+        className={buttonStyle("secondary", "sm")}
+        onClick={() => void useAppStore.getState().pickDocuments()}
+      >
+        {t("checks.addFiles")}
+      </button>,
     );
   } else if (claims === null) {
-    state = (
-      <>
-        <span>{t("verify.notFound")}</span>
-        <button
-          type="button"
-          data-testid="verify-find"
-          className={buttonStyle("secondary", "sm")}
-          onClick={() => void findClaims(mindId, doc)}
-        >
-          {t("verify.find")}
-        </button>
-      </>
+    state = partsOf(
+      <span>{t("verify.notFound")}</span>,
+      <button
+        type="button"
+        data-testid="verify-find"
+        className={buttonStyle("secondary", "sm")}
+        onClick={() => void findClaims(mindId, doc)}
+      >
+        {t("verify.find")}
+      </button>,
     );
   } else if (total === 0 || outcome?.kind === "nothing") {
-    state = <span data-testid="verify-empty">{t("verify.none")}</span>;
+    state = partsOf(<span data-testid="verify-empty">{t("verify.none")}</span>);
   } else if (marks.marked === 0) {
-    state = (
-      <>
-        <span>{t(inFolder ? "verify.ask.folder" : "verify.ask.all")}</span>
-        <button
-          type="button"
-          data-testid="verify-check"
-          title={estimate ?? undefined}
-          className={buttonStyle("secondary", "sm")}
-          onClick={() => void checkClaims(mindId, doc)}
-        >
-          <VerifyLineIcon className="size-3.5 text-ink-secondary" />
-          {t(total === 1 ? "verify.check.one" : "verify.check", { count: format(total) })}
-        </button>
-        {estimate && <span data-testid="verify-estimate">{estimate}</span>}
-      </>
+    state = partsOf(
+      <span>{t(inFolder ? "verify.ask.folder" : "verify.ask.all")}</span>,
+      <button
+        type="button"
+        data-testid="verify-check"
+        title={estimate?.title}
+        className={buttonStyle("secondary", "sm")}
+        onClick={() => void checkClaims(mindId, doc)}
+      >
+        <VerifyLineIcon className="size-3.5 text-ink-secondary" />
+        {t(total === 1 ? "verify.check.one" : "verify.check", { count: format(total) })}
+      </button>,
+      ...(estimate?.parts ?? []).map((part) => (
+        <span key={part} data-testid="verify-estimate">
+          {part}
+        </span>
+      )),
     );
   } else {
     const look = marks.needLook.length;
@@ -247,45 +233,38 @@ export function VerifyLine({
       count: format(look),
     });
     const stopped = outcome?.kind === "checked" ? outcome.stop : null;
-    state = (
-      <span data-testid="verify-done" className="mind-verify-done">
-        <span>
-          {t(marks.marked === 1 ? "verify.checked.one" : "verify.checked", {
-            count: format(marks.marked),
-          })}
-        </span>
-        {look > 0 && (
-          <>
-            {dot}
-            <button
-              type="button"
-              data-testid="verify-need-look"
-              className="mind-health-part"
-              aria-label={t("verify.needLook.next", { part: lookText })}
-              title={t("verify.needLook.next", { part: lookText })}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={goToNext}
-            >
-              {lookText}
-            </button>
-          </>
-        )}
-        {stopped && (
-          <>
-            {dot}
-            <span data-testid="verify-stopped">{runStopText(stopped, t, language)}</span>
-          </>
-        )}
-        {dot}
+    state = partsOf(
+      <span>
+        {t(marks.marked === 1 ? "verify.checked.one" : "verify.checked", {
+          count: format(marks.marked),
+        })}
+      </span>,
+      look > 0 && (
         <button
           type="button"
-          data-testid="verify-again"
-          className="mind-verify-link"
-          onClick={() => void checkClaims(mindId, doc)}
+          data-testid="verify-need-look"
+          className="mind-health-part"
+          aria-label={t("verify.needLook.next", { part: lookText })}
+          title={t("verify.needLook.next", { part: lookText })}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={goToNext}
         >
-          {t("claim.checkAgain")}
+          {lookText}
         </button>
-      </span>
+      ),
+      ...(stopped ? runStopParts(stopped, t, language) : []).map((part) => (
+        <span key={part} data-testid="verify-stopped">
+          {part}
+        </span>
+      )),
+      <button
+        type="button"
+        data-testid="verify-again"
+        className="mind-verify-link"
+        onClick={() => void checkClaims(mindId, doc)}
+      >
+        {t("claim.checkAgain")}
+      </button>,
     );
   }
 
@@ -293,19 +272,24 @@ export function VerifyLine({
   return (
     <>
       <div ref={lineRef} className="mind-verify" data-testid="verify-line">
-        <button
-          type="button"
-          data-testid="verify-from"
-          className="mind-verify-from"
-          title={t("verify.from.title", { name })}
-          onClick={() => openDocumentBeside(verification.documentId)}
+        <MetaLine
+          as="div"
+          parts={partsOf(
+            <button
+              type="button"
+              data-testid="verify-from"
+              className="mind-verify-from"
+              title={t("verify.from.title", { name })}
+              onClick={() => openDocumentBeside(verification.documentId)}
+            >
+              <DocumentLineIcon kind="pdf" className="size-3.5 shrink-0" />
+              <span className="min-w-0 truncate">{t("verify.from", { name })}</span>
+            </button>,
+            ...state,
+          )}
         >
-          <DocumentLineIcon kind="pdf" className="size-3.5 shrink-0" />
-          <span className="min-w-0 truncate">{t("verify.from", { name })}</span>
-        </button>
-        {dot}
-        {state}
-        <UnreadFilesLine files={unread} testId="verify-unread" className="mind-unread" />
+          <UnreadFilesLine files={unread} testId="verify-unread" className="mind-unread" />
+        </MetaLine>
       </div>
       {running === null && marks.marked > 0 && marks.coverage.mostlyUncovered && (
         <UncoveredLine

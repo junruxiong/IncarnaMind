@@ -5,15 +5,12 @@ import { generateText, streamText } from "ai";
 import { describe, expect, test, vi } from "vitest";
 import { version } from "../../package.json";
 import { type Core, createAiSdkChatModel } from "../../src/core";
-import type { ClaudeAccountProblem } from "../../src/core/api";
+import type { SignInRouteProblem } from "../../src/core/api";
 import { createClaudeAccount } from "../../src/core/providers/claudeAccount/account";
 import { createAccountFetch } from "../../src/core/providers/claudeAccount/messages";
-import {
-  CLAUDE_ACCOUNT_PROBLEMS,
-  CLAUDE_ACCOUNT_WAYS_BACK,
-} from "../../src/core/providers/claudeAccount/problems";
 import { CLAUDE_ACCOUNT_SERVICE } from "../../src/core/providers/claudeAccount/service";
 import { classifyProviderError } from "../../src/core/providers/providerErrors";
+import { SIGN_IN_ROUTES, wayBackLabel } from "../../src/core/providers/signInRoutes";
 import { createFileKeychain, SECRETS_FILE } from "../../src/main/secretsFile";
 import { translate } from "../../src/shared/i18n";
 import { createFakeCipher } from "../helpers/cipher";
@@ -408,7 +405,7 @@ describe("Tokens", () => {
 
     const error = await failure(core);
 
-    expect(error).toMatchObject({ kind: "not-signed-in", claudeAccount: "sign-in-expired" });
+    expect(error).toMatchObject({ kind: "not-signed-in", signInRoute: "sign-in-expired" });
     expect(fake.messages).toHaveLength(sent);
     expect((await core.getClaudeAccount()).account).toEqual({ state: "expired" });
     expect(await core.getChatReadiness()).toMatchObject({
@@ -656,7 +653,7 @@ describe("Failures", () => {
     name: string;
     reply: { status: number; headers?: Record<string, string>; body: string };
     kind: string;
-    problem: ClaudeAccountProblem;
+    problem: SignInRouteProblem;
   }[] = [
     {
       name: "the plan's usage limit",
@@ -705,7 +702,7 @@ describe("Failures", () => {
       const { core, fake } = await signedIn();
       fake.replies.push({ kind: "error", ...reply });
 
-      expect(await failure(core)).toMatchObject({ kind, claudeAccount: problem });
+      expect(await failure(core)).toMatchObject({ kind, signInRoute: problem });
     });
   }
 
@@ -732,7 +729,7 @@ describe("Failures", () => {
     const error = await failure(core);
 
     expect(error.kind).toBe("provider");
-    expect(error.claudeAccount).toBeUndefined();
+    expect(error.signInRoute).toBeUndefined();
   });
 
   test("a passing rate limit isn't the plan's", async () => {
@@ -746,35 +743,31 @@ describe("Failures", () => {
     const error = await failure(core);
 
     expect(error.kind).toBe("rate-limit");
-    expect(error.claudeAccount).toBeUndefined();
+    expect(error.signInRoute).toBeUndefined();
   });
 
   test("each problem has its own line naming Claude, and its ways back, in English and Chinese", () => {
-    const expected: Record<ClaudeAccountProblem, string[]> = {
+    const { problems } = SIGN_IN_ROUTES["claude-account"];
+    expect(Object.fromEntries(Object.entries(problems).map(([p, w]) => [p, w.waysBack]))).toEqual({
       "sign-in-cancelled": ["sign-in"],
       "signed-out": ["sign-in"],
       "sign-in-expired": ["sign-in-again"],
       refused: ["paste-api-key", "use-claude-code"],
       "plan-limit": ["use-another-model"],
       "unexpected-response": ["paste-api-key", "use-claude-code"],
-    };
+    });
     for (const language of ["en", "zh-CN"] as const) {
-      const lines = Object.values(CLAUDE_ACCOUNT_PROBLEMS).map(({ line }) =>
-        translate(language, line),
-      );
+      const lines = Object.values(problems).map(({ line }) => translate(language, line));
       expect(new Set(lines).size).toBe(lines.length);
       for (const line of lines) expect(line).toMatch(/Claude/);
-      for (const key of Object.values(CLAUDE_ACCOUNT_WAYS_BACK)) {
+      const waysBack = Object.values(problems).flatMap((words) => words.waysBack);
+      for (const wayBack of waysBack) {
+        const key = wayBackLabel("claude-account", wayBack);
         expect(translate(language, key)).not.toBe(key);
       }
       expect(
         translate(language, "claudeAccount.problem.planLimitUntil", { time: "15:20" }),
       ).toContain("15:20");
     }
-    const waysBack = Object.entries(CLAUDE_ACCOUNT_PROBLEMS).map(([problem, words]) => [
-      problem,
-      words.waysBack,
-    ]);
-    expect(Object.fromEntries(waysBack)).toEqual(expected);
   });
 });
