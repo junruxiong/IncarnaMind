@@ -109,7 +109,7 @@ describe("Asking during a call", { timeout: 60_000 }, () => {
       expect.objectContaining({
         documentId: live.documentId,
         quote: NEWEST,
-        location: expect.objectContaining({ kind: "time" }),
+        location: expect.objectContaining({ kind: "time", speaker: "Speaker ?" }),
         check: "found",
       }),
     ]);
@@ -127,10 +127,13 @@ describe("Asking during a call", { timeout: 60_000 }, () => {
       text: "What did they say about the payment provider?",
     });
 
-    const sent = userText(calls[0] as ModelCall);
+    const [firstCall] = calls;
+    if (!firstCall) throw new Error("The model wasn't asked.");
+    const sent = userText(firstCall);
     expect(sent).toMatch(/\[\d+:\d{2} Me\] /);
     expect(sent).toMatch(/\[\d+:\d{2} Them\] /);
-    expect(calls[0]?.system).toContain('"Them" is the other side of the call');
+    expect(firstCall.system).toContain('"Them" is the other side of the call');
+    expect(firstCall.system).toContain("never guess");
   });
 
   test("a Question from another Mind, or after Stop, goes without the transcript", async () => {

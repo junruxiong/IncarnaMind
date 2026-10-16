@@ -22,7 +22,6 @@ const msAt = (sample: number) => (sample * 1000) / MEETING_SAMPLE_RATE;
 export interface TrackedAudio {
   /** Where both tracks start, in the Meeting's time. */
   atMs: number;
-  /** The microphone, with the computer's echo taken out. */
   microphone: Int16Array;
   /** The computer's sound; null while none has been heard: a Meeting in a room has none. */
   system: Int16Array | null;

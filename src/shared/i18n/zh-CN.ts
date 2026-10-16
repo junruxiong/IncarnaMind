@@ -3415,6 +3415,7 @@ export const zhCN = {
   "meetings.transcript.retry": "重试",
   "meetings.transcript.save": "保存",
   "transcript.live": "实时",
+  "location.time.speaker": "{speaker} · {time}",
   "transcript.speaker.me": "我",
   "transcript.speaker.them": "对方",
   "transcript.speaker.unknown": "发言人 ?",

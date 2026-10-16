@@ -1,4 +1,4 @@
-import type { MessageKey } from "./i18n";
+import type { MessageKey, MessageParams } from "./i18n";
 
 /**
  * Who a live line of a Meeting's Transcript is from, before speakers are told
@@ -16,5 +16,12 @@ const KEYS: Readonly<Record<string, MessageKey>> = {
   [SPEAKER_UNKNOWN]: "transcript.speaker.unknown",
 };
 
-/** The words for one of the three labels in the interface's language; null for any other speaker, who is named as is. */
 export const speakerKey = (speaker: string): MessageKey | null => KEYS[speaker] ?? null;
+
+export function speakerName(
+  speaker: string,
+  t: (key: MessageKey, params?: MessageParams) => string,
+): string {
+  const key = speakerKey(speaker);
+  return key ? t(key) : speaker;
+}

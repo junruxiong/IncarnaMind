@@ -50,7 +50,7 @@ import { FileWriteCancelledError } from "../errors";
 import type { NewFile } from "../outputFiles";
 import type { TranscriptionModel } from "../transcription/model";
 import type { AudioPart } from "./audioFiles";
-import { echoedBy, isEcho, repeatsTheirs } from "./echoLines";
+import { echoedBy, isEcho, repeats } from "./echoLines";
 import type { CaptureHealthRecords } from "./health";
 import { createTracks, type TrackedAudio, type Tracks } from "./tracks";
 
@@ -99,13 +99,11 @@ interface Saved {
 }
 
 interface LiveStream {
-  /** The Meeting's time at its first sample. */
   baseMs: number;
   doneMs: number;
 }
 
 interface Live {
-  /** Names the engine's streams (`streamName`): one for each source. */
   stream: string;
   tracks: Tracks;
   /** The streams opened, each with its source's first audio: the computer's sound may come later, or never. */
@@ -123,18 +121,15 @@ interface Live {
    * is done with it, only audio after it counts towards falling behind.
    */
   backlogEnd: number;
-  /** Whether the computer's sound is recorded now: then the microphone is "Me"; without it, "Speaker ?". */
   callSound(): boolean;
 }
 
-/** A stream read back from the Meeting's audio, or a live one that is ending: where it starts, and whose words it holds. */
 interface Reading {
   baseMs: number;
   source: AudioSource;
-  speaker: string;
+  speaker(): string;
 }
 
-/** Speech being decoded on a stream, shown greyed. */
 interface Heard {
   startMs: number;
   text: string;
@@ -200,7 +195,6 @@ const SOURCES: readonly AudioSource[] = ["microphone", "system"];
 
 const streamName = (prefix: string, source: AudioSource) => `${prefix}:${source}`;
 
-/** Whose words a source's lines are: the computer's sound is the other side's; the microphone the User's, if there is another side. */
 const speakerOf = (source: AudioSource, callSound: boolean) =>
   source === "system" ? SPEAKER_THEM : callSound ? SPEAKER_ME : SPEAKER_UNKNOWN;
 
@@ -374,7 +368,6 @@ export function createTranscripts(options: TranscriptsOptions) {
 
   // ---- What the engine says ----
 
-  /** The stream's Meeting, where the stream starts in the Meeting's time, and whose words it holds. */
   function owner(
     stream: string,
   ): { state: State; baseMs: number; live: boolean; source: AudioSource; speaker: string } | null {
@@ -393,12 +386,19 @@ export function createTranscripts(options: TranscriptsOptions) {
         }
       }
       const reading = state.catchUps.get(stream);
-      if (reading) return { state, live: false, ...reading };
+      if (reading) {
+        return {
+          state,
+          live: false,
+          baseMs: reading.baseMs,
+          source: reading.source,
+          speaker: reading.speaker(),
+        };
+      }
     }
     return null;
   }
 
-  /** Adds a line in time order, unless it is the echo of the other side's (#941). */
   function addCue(state: State, cue: Cue): void {
     if (isEcho(cue, state.cues)) return;
     // Lines caught up from disk fill in before later ones: keep them in time order.
@@ -409,12 +409,11 @@ export function createTranscripts(options: TranscriptsOptions) {
     for (const echo of echoedBy(cue, state.cues)) state.cues.splice(state.cues.indexOf(echo), 1);
   }
 
-  /** The speech shown greyed: the newest, unless it is the echo of what the other side is saying. */
   function shownPartial(state: State): MeetingTranscript["partial"] {
     const all = [...state.partials.values()];
     const theirs = all.filter((each) => each.speaker === SPEAKER_THEM).map((each) => each.text);
     const newest = all
-      .filter((each) => each.speaker !== SPEAKER_ME || !repeatsTheirs(each.text, theirs))
+      .filter((each) => each.speaker !== SPEAKER_ME || !repeats(each.text, theirs))
       .sort((a, b) => b.startMs - a.startMs)[0];
     return newest ? { startMs: newest.startMs, text: newest.text, speaker: newest.speaker } : null;
   }
@@ -668,7 +667,7 @@ export function createTranscripts(options: TranscriptsOptions) {
     }
     if (parts.length === 0) return;
     const prefix = `${state.meetingId}:catch-up:${++streams}`;
-    const callSound = parts.some((part) => part.source === "system");
+    let callSound = false;
     const opened: string[] = [];
     try {
       const tracks = createTracks(range.fromMs);
@@ -693,6 +692,7 @@ export function createTranscripts(options: TranscriptsOptions) {
           }
         }
         const audio = tracks.flush();
+        callSound ||= audio?.system?.some((sample) => sample !== 0) ?? false;
         for (const source of SOURCES) {
           const track = audio?.[source];
           if (!audio || !track) continue;
@@ -701,7 +701,7 @@ export function createTranscripts(options: TranscriptsOptions) {
             state.catchUps.set(stream, {
               baseMs: audio.atMs,
               source,
-              speaker: speakerOf(source, callSound),
+              speaker: () => speakerOf(source, callSound),
             });
             opened.push(stream);
           }
@@ -802,7 +802,11 @@ export function createTranscripts(options: TranscriptsOptions) {
           ? [
               {
                 stream: streamName(live.stream, source),
-                reading: { baseMs: own.baseMs, source, speaker: speakerOf(source, callSound) },
+                reading: {
+                  baseMs: own.baseMs,
+                  source,
+                  speaker: () => speakerOf(source, callSound),
+                },
               },
             ]
           : [];

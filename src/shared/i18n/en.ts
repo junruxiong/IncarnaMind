@@ -3603,6 +3603,7 @@ export const en = {
   "meetings.transcript.retry": "Try again",
   "meetings.transcript.save": "Save it",
   "transcript.live": "Live",
+  "location.time.speaker": "{speaker} · {time}",
   "transcript.speaker.me": "Me",
   "transcript.speaker.them": "Them",
   "transcript.speaker.unknown": "Speaker ?",

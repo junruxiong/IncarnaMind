@@ -16,6 +16,7 @@ import type { CitationAttributes, CitationLocation } from "../core/api";
 import { clockTime, parseClockTime } from "./clock";
 import { type MessageKey, type MessageParams, translate } from "./i18n";
 import { findQuote, type MatchOptions, type TextRange } from "./quoteMatch";
+import { speakerName } from "./speakers";
 import { anchorsOf, lineAt, parseCellRef, parseCueTarget, type UnitText } from "./units";
 
 /** "12" or "12–14". */
@@ -45,8 +46,11 @@ export function parseLocation(value: unknown): CitationLocation | null {
     case "slide":
     case "lines":
       return isCount(from) && isCount(to) && to >= from ? { kind, from, to } : null;
-    case "time":
-      return isTime(from) && isTime(to) && to >= from ? { kind, from, to } : null;
+    case "time": {
+      if (!isTime(from) || !isTime(to) || to < from) return null;
+      const speaker = typeof location.speaker === "string" ? location.speaker.trim() : "";
+      return speaker ? { kind, from, to, speaker } : { kind, from, to };
+    }
     case "rows":
       if (!isCount(from) || !isCount(to) || to < from) return null;
       return {
@@ -107,8 +111,11 @@ export function citationLocation(
 /** Words a Location in a language: `t` is the renderer's `t` or the core's `translate`. */
 export type Translate = (key: MessageKey, params?: MessageParams) => string;
 
-/** A Location's short label, e.g. "slide 4" or "Revenue, rows 12–14". */
-export function formatLocation(location: CitationLocation, t: Translate): string {
+/**
+ * A Location's short label, e.g. "slide 4" or "Revenue, rows 12–14", and in a
+ * Transcript "Me · 12:03": who said it, then the time, unless `speaker` is false.
+ */
+export function formatLocation(location: CitationLocation, t: Translate, speaker = true): string {
   switch (location.kind) {
     case "page":
       return t("location.page", { range: span(location.from, location.to) });
@@ -131,7 +138,12 @@ export function formatLocation(location: CitationLocation, t: Translate): string
         range: span(location.from, location.to),
       });
     case "time":
-      return clockTime(location.from);
+      return speaker && location.speaker
+        ? t("location.time.speaker", {
+            speaker: speakerName(location.speaker, t),
+            time: clockTime(location.from),
+          })
+        : clockTime(location.from);
     case "section": {
       const section = location.notes
         ? t("location.section.notes")
@@ -403,10 +415,15 @@ export function locationOf(
     }
     case "cues": {
       const times: { startMs: number; endMs: number }[] = [];
+      let speaker: string | null = null;
       for (const part of parts) {
-        for (const anchor of anchorsOf(units[part.unit] as UnitText)) {
+        const unit = units[part.unit] as UnitText;
+        for (const [index, anchor] of anchorsOf(unit).entries()) {
           const cue = parseCueTarget(anchor.target);
-          if (cue && anchor.start < part.end && anchor.end > part.start) times.push(cue);
+          if (cue && anchor.start < part.end && anchor.end > part.start) {
+            if (times.length === 0) speaker = unit.label?.speakers?.[index] ?? null;
+            times.push(cue);
+          }
         }
       }
       const head = times[0];
@@ -415,6 +432,7 @@ export function locationOf(
           kind: "time",
           from: head.startMs,
           to: Math.max(...times.map((cue) => cue.endMs)),
+          ...(speaker && { speaker }),
         };
       }
       const whole = { from: first.label?.from ?? 0, to: last.label?.to ?? first.label?.to ?? 0 };
