@@ -25,7 +25,7 @@ describe("What a Question asks of the Documents in scope", () => {
     expect(documentsAsked(question)).toEqual({ each: true, main: null });
   });
 
-  // protects=Questions about a topic, or one Document, don't; fails_when=one raises the search limit or caps the scope; no_claim=none beyond protects.
+  // protects=Questions about a topic, or one Document, don't; fails_when=one is read as a summary of each, or caps the scope; no_claim=none beyond protects.
   test.each([
     "What do the documents say about leverage?",
     "Overview of what the documents say about leverage",

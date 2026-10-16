@@ -147,7 +147,6 @@ import { asksToCheckOrCalculate } from "./carefulIntent";
 import {
   type AnswerDocuments,
   createCitationSession,
-  MAX_SEARCHES,
   withoutFootnoteDefinitions,
 } from "./citations";
 import {
@@ -202,6 +201,7 @@ import { quotedWordsIn, withoutQuotationMarks } from "./quotedWords";
 import { type RequestContext, routeRequest } from "./routeRequest";
 import { withoutSearchTalk } from "./searchTalk";
 import type { ChangeStates } from "./toolRecord";
+import type { TurnCheck } from "./turnChecks";
 
 export type { AnswerDocuments } from "./citations";
 export { createAiSdkAnswerEngine } from "./engine";
@@ -767,10 +767,6 @@ export function createAnswers(options: AnswersOptions) {
         ? coverageOf(asked, options.documents.searchableBySize(input.documentIds))
         : null;
     const documentIds = coverage ? coverage.used.map((each) => each.id) : input.documentIds;
-    // A summary of each Document searches each: more than an Answer's usual few searches.
-    const maxSearches = asked.each
-      ? Math.max(MAX_SEARCHES, 2 * options.documents.searchableCount(documentIds) + 2)
-      : MAX_SEARCHES;
     const outside = input.outside === true;
     const { place } = home;
     const announce = <E extends CoreEventName>(event: E, payload: CoreEvents[E]) => {
@@ -871,14 +867,10 @@ export function createAnswers(options: AnswersOptions) {
     };
     let skills: SkillSession | null = null;
     const searched = inScope(options.documents, documentIds);
-    const session = createCitationSession(
-      searched,
-      {
-        onRecord: (marker, citation) =>
-          announce("answer.citationAdded", { ...place, answerId, marker, citation }),
-      },
-      maxSearches,
-    );
+    const session = createCitationSession(searched, {
+      onRecord: (marker, citation) =>
+        announce("answer.citationAdded", { ...place, answerId, marker, citation }),
+    });
     /**
      * Whether its model is offered `calculate` and its steer: a fact of the
      * model, once prepared (ADR-0021). Off, the Answer is as it was before them.
@@ -1638,16 +1630,25 @@ export function createAnswers(options: AnswersOptions) {
       const changedAMind = () => [...mindChanges.values()].some(changesAMind);
       const owesAWrite = () => requested !== null && !changedAMind() && mindProblems.size === 0;
       const heldBack = holdBack(() => mindsListed().map((mind) => mind.name));
-      const checkReply = (text: string) => {
-        mindsNow = null;
-        const claims = claimsNoCallMade(text, toolCalls, mindsListed());
-        if (claims.length > 0) {
-          return { claims, note: askAgainNote(claims, toolCalls, options.readableMindName) };
-        }
-        return owesAWrite()
-          ? { claims, note: askToWriteNote(toolCalls, options.readableMindName) }
-          : null;
-      };
+      const turnChecks: TurnCheck[] = [
+        {
+          name: "claimed-change",
+          check: (text) => {
+            mindsNow = null;
+            const claims = claimsNoCallMade(text, toolCalls, mindsListed());
+            return claims.length > 0
+              ? { claims, note: askAgainNote(claims, toolCalls, options.readableMindName) }
+              : null;
+          },
+        },
+        {
+          name: "owed-write",
+          check: () =>
+            owesAWrite()
+              ? { claims: [], note: askToWriteNote(toolCalls, options.readableMindName) }
+              : null,
+        },
+      ];
       for await (const event of engine.generate({
         instructions: (
           mode,
@@ -1709,7 +1710,7 @@ export function createAnswers(options: AnswersOptions) {
         retryQuotes: prepared.retryQuotes,
         cacheKey: place.conversationId ?? place.mindId ?? undefined,
         ...(input.assistant && {
-          checkReply,
+          turnChecks,
           shownUpTo: (text: string) => (owesAWrite() ? 0 : heldBack(text)),
           mayEndBlank: changedAMind,
         }),

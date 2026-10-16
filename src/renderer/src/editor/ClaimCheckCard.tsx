@@ -245,7 +245,11 @@ function Working({ calculation, onOpen }: { calculation: ClaimCalculation; onOpe
         {figure.inputs.map((input) => {
           const location = citationLocation(input.citation);
           const where = location ? formatLocation(location, t) : null;
-          const source = [shownDocumentName(input.citation, documents), where]
+          const source = [
+            shownDocumentName(input.citation, documents),
+            where,
+            input.number.value < 0 ? t("claim.calculated.negative") : null,
+          ]
             .filter(Boolean)
             .join(" · ");
           return (
