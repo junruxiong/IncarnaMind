@@ -70,6 +70,7 @@ import {
   type ChatReadiness,
   type CitationSupport,
   type ClaimedChange,
+  type ConversationAnswer,
   type ConversationAskResult,
   type ConversationQuestion,
   type CoreEventName,
@@ -345,6 +346,11 @@ const NO_SCOPE: SearchScope = { folderIds: [], tagIds: [], documentIds: [] };
 
 const changesAMind = (change: MindChange) =>
   change.created || change.revised === true || change.proposals > 0;
+
+const followsAChange = (answer: ConversationAnswer | undefined) =>
+  answer !== undefined &&
+  (answer.steps?.withoutMindTools === true ||
+    answer.toolCalls.some((call) => call.mindChange && changesAMind(call.mindChange)));
 
 /** The Folder a Search scope is, when it is one Folder alone; null otherwise. */
 const oneFolderOf = (scope: SearchScope | null): string | null =>
@@ -808,6 +814,7 @@ export function createAnswers(options: AnswersOptions) {
     /** The one request to fix figures, if the engine made it (see ./figureRetry). */
     let figureRetry: FigureRetry | null = null;
     let unbackedClaims: ClaimedChange[] = [];
+    let withoutMindTools = false;
     /** What the model calls counted, the cached input tokens too. */
     const usage: AnswerUsage = {
       inputTokens: 0,
@@ -862,6 +869,7 @@ export function createAnswers(options: AnswersOptions) {
           firstWordAt !== Infinity && { firstWordMs: wordAfter(sentAt, firstWordAt) }),
         ...(careful && { careful: true as const }),
         ...(unbackedClaims.length > 0 && { unbackedClaims: [...unbackedClaims] }),
+        ...(withoutMindTools && { withoutMindTools: true as const }),
         ...(coverage && { coverage }),
       };
     };
@@ -1752,6 +1760,9 @@ export function createAnswers(options: AnswersOptions) {
             unbackedClaims = event.claims;
             writeSoon();
             break;
+          case "without-tools":
+            withoutMindTools = requested !== null;
+            break;
           case "usage":
             usage.inputTokens += event.usage.inputTokens ?? 0;
             usage.outputTokens += event.usage.outputTokens ?? 0;
@@ -1858,6 +1869,7 @@ export function createAnswers(options: AnswersOptions) {
             errorKind: outcome.status === "failed" ? outcome.error.kind : null,
             errorMessage: outcome.status === "failed" ? outcome.error.message : null,
             errorResetsAt: (outcome.status === "failed" && outcome.error.resetsAt) || null,
+            errorSignInRoute: (outcome.status === "failed" && outcome.error.signInRoute) || null,
             generatedHash: contentHash(element),
           });
         }
@@ -1888,6 +1900,7 @@ export function createAnswers(options: AnswersOptions) {
               status: "failed",
               errorKind: outcome.error.kind,
               errorMessage: outcome.error.message,
+              errorSignInRoute: outcome.error.signInRoute ?? null,
             });
           }
           return !!found;
@@ -1913,6 +1926,7 @@ export function createAnswers(options: AnswersOptions) {
           status: "done",
           errorKind: null,
           errorMessage: null,
+          errorSignInRoute: null,
           providerId: model.providerId,
           modelId: model.modelId,
           toolCalls: answer.toolCalls.length > 0 ? JSON.stringify(answer.toolCalls) : null,
@@ -2101,10 +2115,9 @@ export function createAnswers(options: AnswersOptions) {
         },
         folderId: oneFolderOf(question.scope),
         origin: { from: messageReference(conversation.id, answer.id), question: question.text },
-        followsAChange:
-          turn.earlier
-            .findLast((message) => message.kind === "answer")
-            ?.toolCalls.some((call) => call.mindChange && changesAMind(call.mindChange)) ?? false,
+        followsAChange: followsAChange(
+          turn.earlier.findLast((message) => message.kind === "answer"),
+        ),
         followsAnAnswer: turn.earlier.some((message) => message.kind === "answer"),
       },
     });
@@ -2185,6 +2198,7 @@ export function createAnswers(options: AnswersOptions) {
           errorKind: null,
           errorMessage: null,
           errorResetsAt: null,
+          errorSignInRoute: null,
           generatedHash: null,
           generatedMarks: true,
           citationSupport: null,
