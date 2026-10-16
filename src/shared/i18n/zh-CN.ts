@@ -1888,7 +1888,7 @@ export const zhCN = {
     "技能脚本在这台电脑上运行，可以自行发起网络请求，发送它能读取的任何内容。本页的设置对它们不起作用：它们只受每次运行前你的批准控制。你也可以在“设置”的“技能”中关闭它们。",
   "privacy.aiUse.title": "AI 使用记录",
   "privacy.aiUse.body":
-    "IncarnaMind 会记录 AI 向你的 Mind 写入了什么，以及你保留、修改还是删除了它，方便你说明自己如何使用 AI。记录不含你或 AI 的任何文字，只保存在这台电脑上；无论你如何设置使用数据，都不会发送到任何地方。",
+    "IncarnaMind 会记录 AI 向你的 Mind 写入了什么、核对了多少句子，以及你保留、修改还是删除了写入的内容，方便你说明自己如何使用 AI。记录不含你或 AI 的任何文字，只保存在这台电脑上；无论你如何设置使用数据，都不会发送到任何地方。",
   "privacy.aiUse.entries": "共 {count} 条",
   "privacy.aiUse.clear": "清除记录",
   "privacy.aiUse.cleared": "已清除 AI 使用记录。",
@@ -2589,7 +2589,8 @@ export const zhCN = {
   "aiStatement.empty":
     "无可说明的内容：IncarnaMind 中没有本文档使用 AI 的记录，文档中也没有引用和核对结果。",
   "aiStatement.uses.heading": "一、使用的 AI 模型及用途",
-  "aiStatement.uses.none": "IncarnaMind 中没有本文档使用 AI 撰写、提出修订或检索资料的记录。",
+  "aiStatement.uses.none":
+    "IncarnaMind 中没有本文档使用 AI 撰写、提出修订、检索资料或核对句子的记录。",
   "aiStatement.uses.column.use": "用途",
   "aiStatement.uses.column.model": "模型",
   "aiStatement.uses.column.times": "次数",
@@ -2603,6 +2604,7 @@ export const zhCN = {
   "aiStatement.use.search-documents": "检索作者自己的文档",
   "aiStatement.use.search-sources": "检索公开学术资料（查找资料）",
   "aiStatement.use.search-web": "联网搜索",
+  "aiStatement.use.sentence-checked": "对照文档核对句子",
   "aiStatement.text.heading": "二、AI 生成文字的保留与改写（按章节）",
   "aiStatement.text.none": "本文档中没有 AI 生成的文字。",
   "aiStatement.text.intro":
@@ -2636,6 +2638,11 @@ export const zhCN = {
   "aiStatement.sentences.contradicted": "与文档矛盾",
   "aiStatement.sentences.recheck": "需重新核对",
   "aiStatement.sentences.notChecked": "未核对",
+  "aiStatement.sentences.changed": "核对后已修改",
+  "aiStatement.sentences.list.intro":
+    "已核对的每条句子（只列开头的 {count} 个字），附最新的核对结果：",
+  "aiStatement.sentences.column.sentence": "句子",
+  "aiStatement.sentences.column.checked": "核对日期",
   "aiStatement.note":
     "各学校对 AI 使用声明另有格式要求，请以学校提供的表格为准，可据此处的统计数字填写。",
   "export.questionsLeftOut.one": "有 1 个问题不会导出。",

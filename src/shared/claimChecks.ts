@@ -103,6 +103,8 @@ export function readClaimCheck(value: unknown): ClaimCheckAttributes | null {
     state,
     reason: FAILURES.find((each) => each === value.reason) ?? null,
     detail: text(value.detail),
+    providerId: text(value.providerId),
+    modelId: text(value.modelId),
     text: text(value.text) ?? "",
     evidence: isRecord(value.evidence) ? (value.evidence as unknown as CitationAttributes) : null,
     says: text(value.says),

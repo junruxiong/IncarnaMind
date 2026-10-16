@@ -59,7 +59,7 @@ import { parseMindId } from "../../minds";
 import type { PreparedChatModel } from "../../providers/chat";
 import { parseSearchScope } from "../../scope";
 import type { AnswerEngine } from "../engine";
-import { type ClaimCheckDependencies, createClaimCheck } from "./claimCheck";
+import { type ClaimCheckDependencies, createClaimCheck, recordJudged } from "./claimCheck";
 import { createMindCheck } from "./mindCheck";
 import { markedSentences, markSentence, selectedSentences, updateCheck } from "./sentences";
 import { createVerify, type VerifyOptions } from "./verify";
@@ -78,7 +78,13 @@ const MAX_CLAIM_CHARACTERS = 2_000;
 export interface ChecksOptions
   extends Pick<
     VerifyOptions,
-    "requireFolder" | "addFile" | "document" | "onStatus" | "readText" | "createMind"
+    | "requireFolder"
+    | "addFile"
+    | "document"
+    | "onStatus"
+    | "readText"
+    | "createMind"
+    | "recordAiUse"
   > {
   /** The interface language: what a check's sentence is written in. */
   language(): Language;
@@ -376,6 +382,8 @@ export function createChecks(options: ChecksOptions) {
           state: "checking",
           reason: null,
           detail: null,
+          providerId: ready.prepared.provider.id,
+          modelId: ready.prepared.modelId,
           text: sentence.text,
           evidence: null,
           says: null,
@@ -413,6 +421,7 @@ export function createChecks(options: ChecksOptions) {
       if (signal.aborted) break;
       if (result.verdict !== "not-checked") checked++;
       const at = options.now().toISOString();
+      recordJudged(options.recordAiUse, mindId, ready.prepared, result, at);
       const kept = content.edit(mindId, (blocks) =>
         updateCheck(blocks, sentence.id, (check) => withResult(check, result, at)),
       );

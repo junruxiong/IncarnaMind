@@ -35,6 +35,7 @@ import {
   type FindClaimsResult,
   MIND_SETTINGS_FIELD,
   type Mind,
+  type RecordAiUseInput,
   type VerifyClaimsResult,
   type VerifyDocumentResult,
 } from "../../api";
@@ -90,6 +91,7 @@ export interface VerifyOptions {
   ): ClaimCheckAttributes;
   /** Keeps the text of the evidence the Mind's checks show (#79). */
   retainEvidence(mindId: string): void;
+  recordAiUse(inputs: RecordAiUseInput[]): void;
   /** Marks a request's sentences not checked yet "stopped". */
   settleStopped(mindId: string, request: string): void;
   /** Records a request as running, so `cancelCheck` stops it; `done` when it ends. */
@@ -235,6 +237,8 @@ export function createVerify(options: VerifyOptions) {
           state: "checking",
           reason: null,
           detail: null,
+          providerId: ready.prepared.provider.id,
+          modelId: ready.prepared.modelId,
           text: sentence.text,
           evidence: null,
           says: null,
