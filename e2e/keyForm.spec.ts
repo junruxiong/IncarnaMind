@@ -198,21 +198,21 @@ test("in Settings the notes and the plan's credits are under the key field, the 
   }
 });
 
-test("the provider's own line on what it does with the data sits under the sentence of where it goes, with a link to its terms, in English and Chinese, at first run and in Settings", async () => {
+test("the provider's own line on what it does with the data sits under the sentence of where it goes, with a link to the page on it, in English and Chinese, at first run and in Settings", async () => {
   const { app, window } = await launchApp(dataDir);
   try {
     await setWindowSize(app, window, 1100, 900);
     await acceptPlainTextKeys(window);
-    for (const [value, terms, lead] of [
-      ["en", "Terms ↗", ""],
-      ["zh-CN", "条款 ↗", "数据使用："],
+    for (const [value, link, lead] of [
+      ["en", "Data use ↗", ""],
+      ["zh-CN", "数据使用 ↗", "数据使用："],
     ] as const) {
       await language(window, value);
       const card = await openKeyForm(window);
       await card.getByTestId("setup-key").click();
       const line = card.getByTestId("provider-form").getByTestId("provider-data-use");
       await expect(line).toContainText(lead);
-      await expect(line.getByRole("link")).toHaveText(terms);
+      await expect(line.getByRole("link")).toHaveText(link);
       await expect(line.getByRole("link")).toHaveAttribute("href", /^https:\/\//);
       await card.getByTestId("setup-back").click();
     }
@@ -221,10 +221,10 @@ test("the provider's own line on what it does with the data sits under the sente
     const settings = await openSettings(window, "models");
     await settings.getByTestId("chat-choice-api-key").check();
     const line = settings.getByTestId("provider-form").getByTestId("provider-data-use");
-    await expect(line.getByRole("link")).toHaveText("Terms ↗");
+    await expect(line.getByRole("link")).toHaveText("Data use ↗");
     await language(window, "zh-CN");
     await expect(line).toContainText("数据使用：");
-    await expect(line.getByRole("link")).toHaveText("条款 ↗");
+    await expect(line.getByRole("link")).toHaveText("数据使用 ↗");
   } finally {
     await app.close();
   }
