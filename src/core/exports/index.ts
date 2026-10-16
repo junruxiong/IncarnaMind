@@ -81,7 +81,6 @@ export interface ExportsDependencies {
   keptCitationTexts(): KeptCitationText[];
   /** The interface language, which the export's own words are in. */
   language(): Language;
-  /** A Folder's name; null if it doesn't exist. */
   folderName(folderId: string): string | null;
   /** The Mind's citation style (#289). */
   citationStyle(mindId: string): CitationStyleId;
@@ -284,17 +283,18 @@ export function createExports(deps: ExportsDependencies) {
             : prepared.blocks;
       const labels = exportLabels(language);
       let data: Uint8Array;
+      let commented: readonly FailedSentence[] = [];
       if (format === "markdown") {
         data = new TextEncoder().encode(renderMarkdown(title, blocks, labels));
       } else if (format === "docx") {
-        data = renderDocx(await withPictures(blocks, language, deps), {
+        ({ data, commented } = renderDocx(await withPictures(blocks, language, deps), {
           title,
           labels,
           language: language === "zh-CN" ? "zh-CN" : "en-US",
           paper: language === "en" ? "letter" : "a4",
           created: deps.now(),
           review: reviewChoices(prepared, false),
-        });
+        }));
       } else if (format === "html") {
         const drawn = await withPictures(blocks, language, deps);
         data = new TextEncoder().encode(
@@ -316,7 +316,7 @@ export function createExports(deps: ExportsDependencies) {
         });
         data = unifyIdeographs(printed);
       }
-      return { ...preview, data, word: null, ...reviewOf(prepared) };
+      return { ...preview, data, word: null, ...reviewOf(prepared, commented) };
     },
   };
 
@@ -345,7 +345,7 @@ export function createExports(deps: ExportsDependencies) {
     const doc = new Y.Doc();
     try {
       if (state) Y.applyUpdate(doc, state);
-      const { data, report } = await exportWordPatch({
+      const { data, report, commented } = await exportWordPatch({
         bytes: await deps.wordPackage(prepared.mindId),
         blocks: doc.getXmlFragment(MIND_CONTENT_FIELD),
         readOptions: prepared.readOptions,
@@ -362,22 +362,27 @@ export function createExports(deps: ExportsDependencies) {
         notKept: report.notKept.length,
         unknownParts: report.unknownParts.length,
       });
-      return { ...prepared.preview, data, word: report, ...reviewOf(prepared) };
+      return { ...prepared.preview, data, word: report, ...reviewOf(prepared, commented) };
     } finally {
       doc.destroy();
     }
   }
 }
 
-function reviewOf(prepared: Prepared): Pick<MindExport, "sentenceChecks" | "trackedChanges"> {
+function reviewOf(
+  prepared: Prepared,
+  commented: readonly FailedSentence[],
+): Pick<MindExport, "sentenceChecks" | "trackedChanges"> {
+  const asComments = prepared.format === "docx" && prepared.options.commentFailedChecks;
+  const counted = asComments ? commented : prepared.failedSentences;
   const count = (check: FailedSentence["check"]) =>
-    prepared.failedSentences.filter((each) => each.check === check).length;
+    counted.filter((each) => each.check === check).length;
   return {
     sentenceChecks: {
       contradicted: count("contradicted"),
       unsupported: count("unsupported"),
       needsRecheck: count("needs-recheck"),
-      commented: prepared.format === "docx" && prepared.options.commentFailedChecks,
+      commented: asComments,
     },
     trackedChanges: prepared.trackedChanges,
   };

@@ -413,6 +413,40 @@ describe("sentences whose check isn't good", () => {
     expect(unzip(exported.data).has("word/comments.xml")).toBe(false);
   });
 
+  test("an Unsupported sentence with a nearest line says what the Documents say instead, and where", async () => {
+    const core = startCore(await createTempDataFolder());
+    const document = await tides(core);
+    const nearest = {
+      passageId: "p1",
+      documentId: document.id,
+      documentName: "Tides",
+      contentHash: document.contentHash,
+      pageFrom: 1,
+      pageTo: 1,
+      quote: "Spring tides happen at new moon.",
+      check: "found",
+    };
+    const { id } = await mindWith(core, [
+      paragraph(
+        text("Spring tides happen at half moon.", [
+          checkOf(document, "c1", "unsupported", "Spring tides happen at half moon.", {
+            evidence: nearest,
+          }),
+        ]),
+      ),
+    ]);
+
+    const exported = await word(core, id, { commentFailedChecks: true });
+
+    expect(commentsOn(exported)).toEqual([
+      {
+        comment:
+          "Unsupported: your Documents say something different (“Spring tides happen at new moon.”, Tides, p. 1)",
+        on: "Spring tides happen at half moon.",
+      },
+    ]);
+  });
+
   test("a Document with a new version since the check makes it need a re-check", async () => {
     const core = startCore(await createTempDataFolder());
     const document = await tides(core);

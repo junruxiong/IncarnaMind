@@ -20,6 +20,7 @@ import type { StyledRun } from "../api";
 import { writeZip } from "../documents/formats/zip";
 import {
   type Block,
+  type FailedSentence,
   type Footnote,
   type Image,
   type Inline,
@@ -113,7 +114,10 @@ const HANGING = 360;
 const EMU_PER_TWIP = 635;
 const EMU_PER_PIXEL = 9525;
 
-export function renderDocx(blocks: readonly Block[], options: DocxOptions): Uint8Array {
+export function renderDocx(
+  blocks: readonly Block[],
+  options: DocxOptions,
+): { data: Uint8Array; commented: FailedSentence[] } {
   const paper = PAPER[options.paper];
   const target = new NewDocxTarget();
   const review = options.review
@@ -142,7 +146,7 @@ export function renderDocx(blocks: readonly Block[], options: DocxOptions): Uint
     ...target.relationships,
   ];
 
-  return writeZip(
+  const data = writeZip(
     [
       { name: "[Content_Types].xml", data: contentTypes(comments.length > 0) },
       {
@@ -173,6 +177,7 @@ export function renderDocx(blocks: readonly Block[], options: DocxOptions): Uint
     ],
     deflateRawSync,
   );
+  return { data, commented: review?.commentedSentences() ?? [] };
 }
 
 interface Relationship {

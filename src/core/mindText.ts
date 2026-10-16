@@ -146,7 +146,6 @@ export type Inline = (
       marks: Marks;
       /** AI text (`GENERATED_MARK`), when read for review. */
       ai?: true;
-      /** The check of its sentence, when it isn't good (`ReadOptions.sentenceChecks`). */
       sentenceCheck?: FailedSentence;
     }
   | { kind: "math"; latex: string }

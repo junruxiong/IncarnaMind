@@ -34,6 +34,7 @@ import { openWordPackage, relationshipsOf, reviewOf } from "../../documents/form
 import { child, elements, type XmlElement } from "../../documents/formats/xml";
 import {
   type Block,
+  type FailedSentence,
   plainText,
   type ReadOptions,
   readBlock,
@@ -87,6 +88,7 @@ export interface WordPatchInput {
 export interface WordPatchResult {
   data: Uint8Array;
   report: WordExportReport;
+  commented: FailedSentence[];
 }
 
 /** The text width a section leaves, in twips, for new tables and pictures: US Letter's with 1 inch margins if it doesn't say. */
@@ -314,7 +316,7 @@ export async function exportWordPatch(input: WordPatchInput): Promise<WordPatchR
   ) {
     report.notKept.push(signatureLoss);
   }
-  return { data, report };
+  return { data, report, commented: review.commentedSentences() };
 }
 
 const signatureLoss: WordExportLoss = {

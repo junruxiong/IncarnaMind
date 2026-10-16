@@ -321,9 +321,10 @@ export class DocumentPatch {
   }
 
   /**
-   * The pieces of text written, in document order, for finding AI text's
-   * passages: a paragraph written as it was is the User's; one written again,
-   * its new words by who wrote them; new Blocks as the native writer writes them.
+   * The pieces of text written, in document order, for finding where comments
+   * go: a paragraph written as it was is the User's; one written again, its
+   * new words by who wrote them, and its sentences with a check that isn't
+   * good; new Blocks as the native writer writes them.
    */
   private *pieces(counterparts: readonly Counterpart[]): Generator<Piece> {
     for (const counterpart of counterparts) {

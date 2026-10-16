@@ -2726,12 +2726,12 @@ export const zhCN = {
   "export.comment.contradicted": "与核对的文档矛盾（{source}）",
   "export.comment.sentence.contradicted": "与文档矛盾：{says}",
   "export.comment.sentence.contradicted.worked":
-    "与文档矛盾：文档算出 {shown}，句子里写的是 {stated}。",
+    "与文档矛盾：根据文档算出 {shown}，句子里写的是 {stated}。",
   "export.comment.sentence.contradicted.plain": "与文档矛盾。",
   "export.comment.sentence.unsupported": "无依据：你的文档里没有这样写。",
   "export.comment.sentence.unsupported.folder": "无依据：“{folder}”里没有这样写。",
   "export.comment.sentence.unsupported.differs":
-    "无依据：你的文档里是另一种说法：“{quote}”（{source}）",
+    "无依据：你的文档里是另一种说法（“{quote}”，{source}）",
   "export.comment.sentence.needs-recheck.edited": "需重新核对：核对后已修改。",
   "export.comment.sentence.needs-recheck.new-version": "需重新核对：核对时用到的文档有了新版本。",
   "export.comment.sentence.needs-recheck.document-removed": "需重新核对：核对时用到的文档已删除。",
