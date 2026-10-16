@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { type Core, type Document, InvalidInputError, NotFoundError } from "../../src/core";
+import { readClaimCheck } from "../../src/shared/claimChecks";
 import { checkingModel } from "../helpers/checks";
 import {
   askAndFinish,
@@ -227,4 +228,11 @@ describe("A Document the User keeps as their own workings", () => {
       }),
     ).rejects.toThrow(InvalidInputError);
   });
+});
+
+test("a check's mark keeps the working file it names, as the Mind stores it", () => {
+  const left = { documentId: "doc-1", documentName: "Workings", reason: "own-workings" as const };
+  expect(
+    readClaimCheck({ id: "check-1", state: "unsupported", excluded: [left] })?.excluded,
+  ).toEqual([left]);
 });
