@@ -1623,9 +1623,9 @@ export const zhCN = {
   "setup.waiting": "等待你选择模型",
   "setup.chatgpt.use": "使用我的 ChatGPT 订阅",
   "setup.chatgpt.line":
-    "如果你订阅了 ChatGPT Plus 或 Pro · 无需密钥 · 你的问题、当前 Mind、文档中的相关段落，以及用于打标签的文档文字，会通过你的 ChatGPT 账号发送给 OpenAI。",
+    "如果你订阅了 ChatGPT Plus 或 Pro · 无需密钥 · 登录后，以下内容会通过你的 ChatGPT 账号发送给 OpenAI：{sends}。",
   "setup.chatgpt.line.china":
-    "如果你订阅了 ChatGPT Plus 或 Pro（中国大陆无法使用）· 无需密钥 · 你的问题、当前 Mind、文档中的相关段落，以及用于打标签的文档文字，会通过你的 ChatGPT 账号发送给 OpenAI。",
+    "如果你订阅了 ChatGPT Plus 或 Pro（中国大陆无法使用）· 无需密钥 · 登录后，以下内容会通过你的 ChatGPT 账号发送给 OpenAI：{sends}。",
   "setup.key.use": "粘贴 API 密钥",
   "setup.key.for": "来自 OpenAI、Anthropic、Google、DeepSeek 等，你自己的或公司的。",
   "setup.back": "返回",
@@ -1661,9 +1661,9 @@ export const zhCN = {
   "providers.choice.local": "数据留在本机",
   "providers.choice.apiKey": "使用 API 密钥",
   "providers.choice.apiKey.body":
-    "OpenAI、Anthropic、Google、DeepSeek、通义千问、Kimi、智谱 GLM、Mistral、xAI、OpenRouter、硅基流动，或兼容 OpenAI 的服务器。你的问题和为它找到的段落会发送给所选服务。",
+    "OpenAI、Anthropic、Google、DeepSeek、通义千问、Kimi、智谱 GLM、Mistral、xAI、OpenRouter、硅基流动，或兼容 OpenAI 的服务器。所选服务会收到：{sends}。",
   "providers.choice.apiKey.firstRun.body":
-    "{providers}。更多服务在“设置”中。你的问题和为它找到的段落会发送给所选服务。",
+    "{providers}。更多服务在“设置”中。所选服务会收到：{sends}。",
   "providers.list.separator": "、",
   "providers.list.last": "{rest}、{last}",
   "providers.kind.short.qwen": "通义千问",
@@ -1711,10 +1711,23 @@ export const zhCN = {
   "providers.form.test": "测试连接",
   "providers.form.testing": "正在测试…",
   "providers.form.save": "使用此服务",
-  "providers.sends":
-    "你的问题、当前 Mind、文档中的相关段落，以及用于打标签的文档文字，会在使用时发送给 {provider}。",
-  "providers.sends.tagsOnSave":
-    "你的问题、当前 Mind 和文档中的相关段落会在使用时发送给 {provider}；每个文档的开头几行也会发送给它，用来打标签。保存密钥后就开始打标签。",
+  "providers.sends": "使用时，以下内容会发送给 {provider}：",
+  "providers.sends.chat":
+    "你的问题、你所在的 Mind、相关段落及其文档名称和页码，以及范围内其他文档的名称",
+  "providers.sends.checks": "你核对的每一句话",
+  "providers.sends.suggestions": "写作建议时你停下的那一段",
+  "providers.sends.edits": "你让助手修改的文字",
+  "providers.sends.tagging":
+    "每个文档的名称、目录和简短摘录，以及你的文件夹和标签名称，用于打标签和归档（没有文字的扫描件会发送页面图片）",
+  "providers.sendsShort.chat": "你的问题连同你所在的 Mind、相关段落和范围内文档的名称",
+  "providers.sendsShort.checks": "你核对的句子",
+  "providers.sendsShort.suggestions": "写作建议时你停下的段落",
+  "providers.sendsShort.edits": "你让助手修改的文字",
+  "providers.sendsShort.tagging":
+    "文档名称、目录和摘录，连同你的文件夹和标签名称，用于打标签和归档（扫描件发送页面图片）",
+  "providers.sendsShort.separator": "；",
+  "providers.sendsShort.last": "{rest}；以及{last}",
+  "providers.sends.tagsOnSave": "保存密钥后就开始打标签。",
   "providers.form.saving": "正在保存…",
   "providers.form.moreShort": "更多…",
   "providers.form.whereKey": "在哪里找到密钥？",
@@ -1819,7 +1832,7 @@ export const zhCN = {
 
   "chatgpt.title": "ChatGPT 订阅",
   "chatgpt.description":
-    "使用你的 ChatGPT Plus 或 Pro 订阅，无需 API 密钥。问题会以你的 ChatGPT 账号发送给 OpenAI，并计入订阅的用量。",
+    "用你的 ChatGPT Plus 或 Pro 订阅代替 API 密钥。OpenAI 会通过你的 ChatGPT 账号收到：{sends}。用量计入你的订阅额度。",
   "chatgpt.continue": "使用 ChatGPT 继续",
   "chatgpt.account.signedOut": "尚未登录。",
   "chatgpt.account.expired": "ChatGPT 登录已失效。重新登录后才能继续使用订阅。",
