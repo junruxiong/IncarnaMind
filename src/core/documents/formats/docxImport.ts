@@ -528,21 +528,12 @@ const drawsLine = (borders: XmlElement | undefined): boolean =>
   borders !== undefined &&
   elements(borders).some((side) => !["nil", "none"].includes(side.attrs["w:val"] ?? "none"));
 
-/** A table with no lines of its own or from a style: its cells only place text. */
-function placesText(tbl: XmlElement): boolean {
-  const tblPr = child(tbl, "w:tblPr");
-  if (tblPr && child(tblPr, "w:tblStyle")) return false;
-  if (drawsLine(tblPr && child(tblPr, "w:tblBorders"))) return false;
-  return !descendants(tbl, "w:tcBorders").some((borders) => drawsLine(borders));
-}
-
-/** Counts a document's layout (`WordLayout`) from its own formatting; the Word look draws all but tables' lines and aligned columns. */
+/** Counts a document's layout (`WordLayout`) from its own formatting; the Word look draws all but aligned columns. */
 export function layoutOf(document: XmlElement): WordLayout {
   const layout: WordLayout = {
     shading: 0,
     borders: 0,
     tabStops: 0,
-    layoutTables: 0,
     colours: 0,
     fonts: 0,
     sizes: 0,
@@ -565,9 +556,6 @@ export function layoutOf(document: XmlElement): WordLayout {
         break;
       case "w:tabs":
         layout.tabStops += elements(element).filter((tab) => tab.attrs["w:val"] !== "clear").length;
-        break;
-      case "w:tbl":
-        if (placesText(element)) layout.layoutTables++;
         break;
       case "w:color":
         if (value && !NO_COLOUR.has(value.toUpperCase())) colours.add(value.toUpperCase());
@@ -1251,10 +1239,22 @@ class Reader {
     const content = new Map<Placed, NodeJSON[]>();
     const outer = this.tableLook;
     const tableLook = this.look.table(tbl);
-    this.tableLook = tableLook;
-    placed.forEach((row) => {
+    const cellLooks = new Map<Placed, TableLookContext>();
+    const rowSpanOf = (at: Placed, r: number) =>
+      Math.max(1, Math.min(rowspans.get(at) ?? 1, placed.length - r));
+    const spanOf = (at: Placed) => Math.min(at.span, width - at.column);
+    placed.forEach((row, r) => {
       for (const at of row) {
         if (at.merge === "continue" && mergedInto.has(at)) continue;
+        this.tableLook = this.look.cellAt(tableLook, {
+          row: r,
+          rows: placed.length,
+          rowSpan: rowSpanOf(at, r),
+          column: at.column,
+          span: spanOf(at),
+          columns: width,
+        });
+        cellLooks.set(at, this.tableLook);
         const blocks: NodeJSON[] = [];
         this.blocks(at.cell, blocks, true);
         content.set(at, blocks);
@@ -1267,6 +1267,7 @@ class Reader {
         !["w:drawing", "w:pict", "w:object", "w:bookmarkStart"].some(
           (name) => descendants(cell.cell, name).length > 0,
         );
+      this.tableLook = cellLooks.get(into) ?? tableLook;
       if (!empty) this.blocks(cell.cell, content.get(into) ?? [], true);
     }
     this.tableLook = outer;
@@ -1283,8 +1284,8 @@ class Reader {
       for (let column = 0; column < width; ) {
         const at = starts.get(column);
         if (at) {
-          const rowspan = Math.max(1, Math.min(rowspans.get(at) ?? 1, placed.length - r));
-          const colspan = Math.min(at.span, width - column);
+          const rowspan = rowSpanOf(at, r);
+          const colspan = spanOf(at);
           for (let down = r; down < r + rowspan; down++) {
             for (let across = column; across < column + colspan; across++) {
               const line = occupied[down];
@@ -1292,7 +1293,7 @@ class Reader {
             }
           }
           const blocks = content.get(at) ?? [];
-          const cellLook = this.look.cell(at.cell, tableLook);
+          const cellLook = this.look.cell(at.cell, cellLooks.get(at) ?? tableLook);
           const cellNode: NodeJSON = {
             type: cellType,
             attrs: { colspan, rowspan, ...(cellLook && { [WORD_LOOK_ATTRIBUTE]: cellLook }) },
@@ -1336,7 +1337,7 @@ class Reader {
       type: "table",
       attrs: {
         [BLOCK_ID_ATTRIBUTE]: id,
-        ...(tableLook.key && { [WORD_LOOK_ATTRIBUTE]: tableLook.key }),
+        [WORD_LOOK_ATTRIBUTE]: tableLook.key,
       },
       content: tableRows,
     };

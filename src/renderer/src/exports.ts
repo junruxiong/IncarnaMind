@@ -3,6 +3,7 @@ import type {
   ExportFormat,
   ExportMindOptions,
   ExportPreferences,
+  SentenceChecksExported,
   WordExportReport,
 } from "../../core/api";
 import type { MessageKey } from "../../shared/i18n";
@@ -18,6 +19,7 @@ export const FORMAT_LABELS: Readonly<Record<ExportFormat, MessageKey>> = {
   pdf: "export.format.pdf",
   "source-pack": "export.format.source-pack",
   html: "export.format.html",
+  "share-page": "export.format.share-page",
   markdown: "export.format.markdown",
 };
 
@@ -32,6 +34,7 @@ const DEFAULT_PREFERENCES: ExportPreferences = {
   },
   pdf: { includeQuestions: false },
   html: { includeQuestions: false },
+  "share-page": { includeQuestions: false, citationCards: true, checkedLine: false },
 };
 
 export const exportPreferences = (): ExportPreferences =>
@@ -50,6 +53,13 @@ export const optionsFor = (
 ): ExportMindOptions => {
   if (format === "docx") return { format, ...preferences.docx };
   if (format === "source-pack") return { format };
+  if (format === "share-page") {
+    return {
+      format,
+      ...preferences["share-page"],
+      theirChanges: preferences.theirChanges ?? "shown",
+    };
+  }
   const theirChanges = preferences.theirChanges ?? "shown";
   return hasQuestionsOption(format)
     ? { format, includeQuestions: preferences[format].includeQuestions, theirChanges }
@@ -66,6 +76,10 @@ export type ExportResult =
       path: string;
       name: string;
       unverified: number;
+      /** The sentences whose check isn't good: how many, and whether they went in as comments. */
+      checks: SentenceChecksExported;
+      /** The changes waiting that went into a Word file as tracked changes. */
+      tracked: number;
       /** The header and footer kept in a Word file though deleted from the Mind (#105). */
       kept: ("header" | "footer")[];
       /** The first save, which took Documents › IncarnaMind: the line says where (D209). */
@@ -146,6 +160,8 @@ export async function exportMind(
         path: saved.file.path,
         name: saved.file.name,
         unverified: saved.unverifiedCitations,
+        checks: saved.sentenceChecks,
+        tracked: saved.trackedChanges,
         kept: saved.word?.keptFurniture ?? [],
         defaulted: saved.file.defaulted,
       });

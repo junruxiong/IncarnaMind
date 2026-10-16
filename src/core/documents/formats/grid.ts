@@ -64,7 +64,7 @@ export interface Workbook {
 const NUMERIC = /^[-+(]?[£$€¥]?\d[\d,.]*%?\)?$/;
 
 /** Whether a row looks like a header: two cells or more, mostly words. */
-function looksLikeHeader(cells: readonly Cell[]): boolean {
+export function looksLikeHeader(cells: readonly Pick<Cell, "value" | "numeric">[]): boolean {
   if (cells.length < 2) return false;
   const words = cells.filter((cell) => !cell.numeric && !NUMERIC.test(cell.value)).length;
   return words * 2 > cells.length;
