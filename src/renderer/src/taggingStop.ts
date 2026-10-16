@@ -3,10 +3,10 @@ import type { Language } from "../../core/language";
 import type { MessageKey, MessageParams } from "../../shared/i18n";
 import { core } from "./core";
 import { languageNow, translateNow } from "./i18n";
+import type { Undoable } from "./objects";
 import { useAppStore } from "./store";
-import { useUndo } from "./undo";
 
-/** Where Tagging with AI can be stopped (#895): a Folder's id, or null for Not in a Folder. */
+/** Where Tagging with AI can be stopped: a Folder's id, or null for Not in a Folder. */
 export type TaggingPlace = string | null;
 
 type Translate = (key: MessageKey, params?: MessageParams) => string;
@@ -17,7 +17,6 @@ function placeOf(library: LibrarySnapshot | null, documentId: string): TaggingPl
   return groupId && library?.groups.some((group) => group.id === groupId) ? groupId : null;
 }
 
-/** Where the Documents being tagged are: what Stop stops. */
 export function taggingPlaces(
   documents: readonly Document[],
   library: LibrarySnapshot | null,
@@ -28,7 +27,6 @@ export function taggingPlaces(
   return [...new Set(tagging.map((each) => placeOf(library, each.id)))];
 }
 
-/** The places where Tagging is stopped that are still there. */
 export const stoppedPlaces = (library: LibrarySnapshot | null): TaggingPlace[] =>
   (library?.settings.taggingStopped ?? []).filter(
     (place) => place === null || library?.groups.some((group) => group.id === place),
@@ -60,28 +58,24 @@ const setTagging = (places: readonly TaggingPlace[], on: boolean) => async () =>
   for (const place of places) await core.setTaggingWithAi(place, on);
 };
 
-/** Stop in the sidebar's status: nothing more is sent from where these Documents are, with Undo. */
-export async function stopTagging(): Promise<void> {
+export async function stopTagging(): Promise<Undoable | undefined> {
   const places = await core.stopTagging();
-  if (places.length === 0) return;
-  useUndo.getState().push({
+  if (places.length === 0) return undefined;
+  return {
     message: translateNow(
       places.includes(null) ? "tagging.stopped.notInFolder" : "tagging.stopped",
-      {
-        places: placesNow(places),
-      },
+      { places: placesNow(places) },
     ),
     undo: setTagging(places, true),
     redo: setTagging(places, false),
-  });
+  };
 }
 
-/** "Tag with AI": Tagging goes on where it was stopped, with Undo. */
-export async function tagWithAi(places: readonly TaggingPlace[]): Promise<void> {
+export async function tagWithAi(places: readonly TaggingPlace[]): Promise<Undoable> {
   await setTagging(places, true)();
-  useUndo.getState().push({
+  return {
     message: translateNow("tagging.restarted", { places: placesNow(places) }),
     undo: setTagging(places, false),
     redo: setTagging(places, true),
-  });
+  };
 }

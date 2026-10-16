@@ -1,5 +1,5 @@
 /**
- * Tagging says where it goes, and can be stopped per Folder (#895): once a key
+ * Tagging says where it goes, and can be stopped per Folder: once a key
  * is saved, the sidebar's status names the company the Documents go to, with
  * Stop. Stop keeps that Folder's new Documents from being sent, across a
  * restart, until "Tag with AI" in the Folder's ⋯ menu turns it back on.
@@ -204,5 +204,87 @@ test("in Chinese, the status names the company, and Stop names the Folder", asyn
   await screenshot(window, "tagging-status-stop-zh");
   await stop.click();
   await expect(window.getByTestId("undo-message")).toHaveText(`已停止给“${FOLDER}”里的文档打标签`);
+  await app.close();
+});
+
+async function runFromPalette(window: Page, label: string): Promise<void> {
+  await window.keyboard.press("ControlOrMeta+k");
+  await expect(window.getByTestId("palette-search")).toBeFocused();
+  await window.keyboard.type(label);
+  const item = window.getByTestId("palette-item").filter({ hasText: label }).first();
+  await expect(item).toBeVisible();
+  await item.click();
+}
+
+async function saveAnthropicKey(window: Page): Promise<string> {
+  await acceptPlainTextKeys(window);
+  return window.evaluate(async () => {
+    const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    const provider = await core.saveChatProvider({
+      kind: "anthropic",
+      apiKey: "sk-ant-not-a-real-key",
+      modelId: "claude-sonnet-5-5",
+    });
+    return provider.id;
+  });
+}
+
+const stoppedItems = (window: Page) =>
+  window.locator('[data-testid="document-list-item"][data-tagging="stopped"]');
+
+test("⌘K stops Tagging, and turns it back on for Documents not in a Folder", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await setWindowSize(app, window, 1280, 800);
+  await saveAnthropicKey(window);
+  await window
+    .getByTestId("add-documents-input")
+    .setInputFiles(
+      await Promise.all(["Field notes", "Site visit", "Interview", "Survey"].map(slowFile)),
+    );
+  const status = window.getByTestId("sidebar-status").getByTestId("tagging-status");
+  await expect(status).toBeVisible();
+
+  await runFromPalette(window, "Stop Tagging");
+  await expect(window.getByTestId("undo-message")).toHaveText(
+    "Stopped Tagging Documents not in a Folder",
+  );
+  await expect(status).toHaveCount(0);
+  await expect(stoppedItems(window).first()).toBeVisible();
+
+  await runFromPalette(window, "Tag Documents not in a Folder with AI");
+  await expect(window.getByTestId("undo-message")).toHaveText(
+    "Tagging Documents not in a Folder with AI again",
+  );
+  await expect(stoppedItems(window)).toHaveCount(0);
+  await app.close();
+});
+
+test("while Organize runs, the status names the company too, with Stop", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await setWindowSize(app, window, 1440, 900);
+  const providerId = await saveAnthropicKey(window);
+  await createFolder(window, FOLDER);
+  await window.evaluate(async (providerId) => {
+    const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    await core.saveLibrarySettings({
+      classifier: { kind: "chat", choice: { providerId, modelId: "claude-sonnet-5-5" } },
+      automatic: true,
+    });
+  }, providerId);
+  await window
+    .getByTestId("add-documents-input")
+    .setInputFiles(
+      await Promise.all(["Field notes", "Site visit", "Interview", "Survey"].map(slowFile)),
+    );
+  const progress = window.getByTestId("sidebar-status").getByTestId("organization-progress");
+  await expect(progress.getByTestId("status-label")).toHaveText(
+    /^Organizing [2-4] Documents with Anthropic…$/,
+  );
+  await screenshot(window, "organize-status-stop-en");
+  await progress.getByTestId("tagging-stop").click();
+  await expect(window.getByTestId("undo-message")).toHaveText(
+    "Stopped Tagging Documents not in a Folder",
+  );
+  await expect(progress).toHaveCount(0);
   await app.close();
 });

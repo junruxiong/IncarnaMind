@@ -18,6 +18,7 @@ import { errorMessage } from "../errors";
 import { translateNow, useLanguage, useT } from "../i18n";
 import { useAppStore } from "../store";
 import { placesText, stoppedPlaces, tagWithAi } from "../taggingStop";
+import { useUndo } from "../undo";
 import { ProblemMark } from "./ProblemLine";
 import { JevSettingsSection } from "./providers/JevSettings";
 import {
@@ -265,8 +266,9 @@ export function TaggingSettings() {
               type="button"
               data-testid="tagging-restart"
               onClick={() =>
-                void tagWithAi(stopped).catch((failure: unknown) =>
-                  setError(errorMessage(failure, t)),
+                void tagWithAi(stopped).then(
+                  (change) => useUndo.getState().push(change),
+                  (failure: unknown) => setError(errorMessage(failure, t)),
                 )
               }
               className="text-accent underline-offset-2 hover:text-accent-strong hover:underline"
