@@ -14,7 +14,8 @@
  * asks "by quarter" (按季度) gets a table of quarterly figures, its marker in each cell
  * but the last, to chart (#436); "分季度" gets the same in Chinese, in 万元, and
  * "in millions" each figure as "$289.4 million"; one that asks for "four columns" gets a
- * table of four, wider than the assistant (#612); one that asks for "nine rows" (九行) gets
+ * table of four, wider than the assistant (#612); one that asks for "two tables" (两个表) gets
+ * two small ones; one that asks for "nine rows" (九行) gets
  * three peers' figures in nine rows, with the first column's labels; one that asks for "forty
  * citations" (四十条引用) gets forty sentences, each with a marker, and one that asks for "twelve in a
  * row" (连续十二条) gets one sentence with twelve markers side by side; one with "cited below" (or 引用在下) gets a
@@ -100,6 +101,41 @@ const wideTableAnswer = (marker: string) =>
     "",
     "That is all.",
   ].join("\n");
+
+const TWO_TABLES = /\btwo tables\b|两个表/i;
+
+function twoTablesAnswer(question: string): string {
+  const chinese = /\p{Script=Han}/u.test(question);
+  return (
+    chinese
+      ? [
+          "| 季度 | 收入 |",
+          "|:--|--:|",
+          "| 一季度 | 289.4 |",
+          "| 二季度 | 301.2 |",
+          "",
+          "| 地区 | 占比 |",
+          "|:--|--:|",
+          "| 北方 | 41% |",
+          "| 南方 | 59% |",
+          "",
+          "以上。",
+        ]
+      : [
+          "| Quarter | Revenue |",
+          "|:--|--:|",
+          "| Q1 | 289.4 |",
+          "| Q2 | 301.2 |",
+          "",
+          "| Region | Share |",
+          "|:--|--:|",
+          "| North | 41% |",
+          "| South | 59% |",
+          "",
+          "That is all.",
+        ]
+  ).join("\n");
+}
 
 const NINE_ROWS = /\bnine rows\b|九行/i;
 
@@ -330,18 +366,20 @@ export function answerReply(prompt: Prompt, tools: readonly string[]): Reply {
         )
       : FOUR_COLUMNS.test(question)
         ? wideTableAnswer(recorded[0] ?? "")
-        : NINE_ROWS.test(question)
-          ? nineRowsAnswer(question, recorded[0] ?? "")
-          : FORTY_CITATIONS.test(question)
-            ? fortyCitationsAnswer(question)
-            : TWELVE_IN_A_ROW.test(question)
-              ? twelveInARowAnswer(question)
-              : CITED_BELOW.test(question) || FRAMED.test(question)
-                ? citedBelowAnswer(question, recorded[0] ?? "")
-                : AS_A_TABLE.test(question)
-                  ? tableAnswer(recorded.join(" "))
-                  : recorded.length > 1
-                    ? `Your Documents answer this ${recorded.join(" ")}.\n\nThat is all.`
-                    : CITED_ANSWER;
+        : TWO_TABLES.test(question)
+          ? twoTablesAnswer(question)
+          : NINE_ROWS.test(question)
+            ? nineRowsAnswer(question, recorded[0] ?? "")
+            : FORTY_CITATIONS.test(question)
+              ? fortyCitationsAnswer(question)
+              : TWELVE_IN_A_ROW.test(question)
+                ? twelveInARowAnswer(question)
+                : CITED_BELOW.test(question) || FRAMED.test(question)
+                  ? citedBelowAnswer(question, recorded[0] ?? "")
+                  : AS_A_TABLE.test(question)
+                    ? tableAnswer(recorded.join(" "))
+                    : recorded.length > 1
+                      ? `Your Documents answer this ${recorded.join(" ")}.\n\nThat is all.`
+                      : CITED_ANSWER;
   return { text: skill ? `Following the Skill ${skill}.\n\n${answer}` : answer };
 }

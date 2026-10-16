@@ -281,3 +281,100 @@ for (const { width, height } of SIZES) {
     });
   }
 }
+
+const COMMAND = {
+  en: { open: "Open as a table", nth: (n: number) => `Open table ${n} as a table`, find: "table" },
+  "zh-CN": { open: "以表格打开", nth: (n: number) => `以表格打开第 ${n} 个表格`, find: "表格" },
+} as const;
+
+for (const language of ["en", "zh-CN"] as const) {
+  test(`⌘K opens a table of the Answer as a table: the one the cursor is in, or one listed, in ${language}`, async () => {
+    test.setTimeout(240_000);
+    const window = await start(language, 1440, 900);
+    const words = COMMAND[language];
+    const asked = language === "en" ? "What do tides do in two tables" : "两个表 tides";
+    const answer = await askInAssistant(window, asked);
+    const frames = answer.locator(".tableWrapper");
+    await expect(frames).toHaveCount(2);
+    const tabs = window.getByTestId("mind-tab");
+    await expect(tabs).toHaveCount(1);
+    const items = window.getByTestId("palette").getByTestId("palette-item");
+
+    const ask = async () => {
+      await window.keyboard.press("ControlOrMeta+k");
+      await expect(window.getByTestId("palette-search")).toBeFocused();
+      await window.keyboard.type(words.find);
+    };
+    const opened = async (header: string[]) => {
+      await expect(tabs).toHaveCount(2);
+      await expect(tabs.nth(1)).toHaveAttribute("aria-selected", "true");
+      const table = window.getByTestId("mind-editor").locator("table");
+      await expect(table.locator("tr")).toHaveCount(3);
+      await expect(table.locator("th")).toHaveText(header);
+      await pointAndClick(window, answer.getByTestId("answer-added-undo"));
+      await expect(tabs).toHaveCount(1);
+    };
+
+    await test.step("with the cursor in no table, both are listed, and the second is chosen", async () => {
+      await ask();
+      await expect(items.filter({ hasText: words.nth(1) })).toHaveCount(1);
+      await expect(items.filter({ hasText: words.nth(2) })).toHaveCount(1);
+      await items.filter({ hasText: words.nth(2) }).click();
+      await opened(language === "en" ? ["Region", "Share"] : ["地区", "占比"]);
+    });
+
+    await test.step("with the cursor in a table, only that one is offered, and it opens", async () => {
+      const second = frames.nth(1);
+      await pointAndClick(window, second.locator("td").first());
+      await ask();
+      await expect(items.filter({ hasText: words.open })).toHaveCount(1);
+      await expect(items.filter({ hasText: words.nth(1) })).toHaveCount(0);
+      await items.filter({ hasText: words.open }).click();
+      await opened(language === "en" ? ["Region", "Share"] : ["地区", "占比"]);
+    });
+  });
+
+  test(`an Answer with one table is offered "Open as a table" from ⌘K, and its tab is open before the table is in, in ${language}`, async () => {
+    test.setTimeout(240_000);
+    const window = await start(language, 1440, 900);
+    const words = COMMAND[language];
+    const answer = await askInAssistant(
+      window,
+      language === "en" ? "What do tides do in nine rows" : "九行 tides",
+    );
+    const tabs = window.getByTestId("mind-tab");
+    await expect(tabs).toHaveCount(1);
+
+    await window.keyboard.press("ControlOrMeta+k");
+    await expect(window.getByTestId("palette-search")).toBeFocused();
+    await window.keyboard.type(words.find);
+    const item = window.getByTestId("palette").getByTestId("palette-item");
+    await expect(item.filter({ hasText: words.open })).toHaveCount(1);
+
+    // The Mind it opens holds no table the first moment its tab shows (openTable.test.ts pins
+    // that the table is put in after the tab opens).
+    await window.evaluate(() => {
+      const seen: number[] = [];
+      Object.assign(window, { tableWhenTabShown: seen });
+      new MutationObserver(() => {
+        const tabsNow = document.querySelectorAll('[data-testid="mind-tab"]').length;
+        if (tabsNow === 2 && seen.length === 0) {
+          seen.push(document.querySelectorAll('[data-testid="mind-editor"] table').length);
+        }
+      }).observe(document.body, { subtree: true, childList: true, attributes: true });
+    });
+    await item.filter({ hasText: words.open }).click();
+
+    await expect(tabs).toHaveCount(2);
+    const table = window.getByTestId("mind-editor").locator("table");
+    await expect(table.locator("tr")).toHaveCount(10);
+    expect(
+      await window.evaluate(
+        () => (window as unknown as { tableWhenTabShown: number[] }).tableWhenTabShown,
+      ),
+    ).toEqual([0]);
+    await expect(answer.getByTestId("answer-added")).toContainText(
+      language === "en" ? "from this table" : "已用这个表格新建 Mind",
+    );
+  });
+}
