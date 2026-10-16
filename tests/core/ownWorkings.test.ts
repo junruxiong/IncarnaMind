@@ -34,8 +34,8 @@ const WORKINGS = {
 const FIGURE = "Revenue was $1,482.6 million in 2025.";
 const REPORT_QUOTE = "Revenue was $1,482.6 million in 2025";
 const ONLY_IN_WORKINGS = "Operating margin was 21% in 2025.";
+const DIFFERENT_FIGURE = "Operating margin was 25% in 2025.";
 
-/** Documents by name, so a test needn't rely on the order they were indexed in. */
 const named = (documents: readonly Document[]) => {
   const byName = new Map(documents.map((each) => [each.name, each]));
   const get = (name: string) => {
@@ -46,7 +46,6 @@ const named = (documents: readonly Document[]) => {
   return { report: get("Annual report"), workings: get("Workings") };
 };
 
-/** A model that searches for the figure and records a Citation for every Passage it was shown. */
 const citesEverything = () =>
   citingModel({
     query: "revenue 2025",
@@ -111,7 +110,6 @@ describe("A Document the User keeps as their own workings", () => {
     const { core, documents, client, mind } = await setUpWithDocuments(model, [REPORT, WORKINGS]);
     const { workings } = named(documents);
 
-    // Cited like any Document until it is marked.
     const before = await askAndFinish(core, client, mind.id, "What was revenue in 2025?");
     expect(
       citationsIn(client, before.answerId)
@@ -125,7 +123,6 @@ describe("A Document the User keeps as their own workings", () => {
       "Annual report",
     ]);
 
-    // The model read it, told what it is, and its record for it was refused.
     const read = JSON.stringify(model.doStreamCalls.at(-1)?.prompt ?? []);
     expect(read).toContain('document=\\"Workings\\"');
     expect(read).toContain('cite=\\"never\\"');
@@ -150,7 +147,6 @@ describe("A Document the User keeps as their own workings", () => {
       { documentId: workings.id, documentName: "Workings", reason: "own-workings" },
     ]);
 
-    // No setting counts it: Count it is for the files IncarnaMind wrote.
     await core.updateSettings({ user: { leaveOutOwnFiles: false } });
     expect(await evidenceFrom(core, "revenue 2025")).toEqual(["Annual report"]);
 
@@ -191,11 +187,13 @@ describe("A Document the User keeps as their own workings", () => {
   });
 
   test("a figure only the marked file states is Unsupported, and the result says whose it is", async () => {
-    const model = checkingModel({ [ONLY_IN_WORKINGS]: { verdict: "unsupported" } });
+    const model = checkingModel({
+      [ONLY_IN_WORKINGS]: { verdict: "unsupported" },
+      [DIFFERENT_FIGURE]: { verdict: "unsupported" },
+    });
     const { core, documents } = await setUpWithDocuments(model, [REPORT, WORKINGS]);
     const { workings } = named(documents);
 
-    // Unmarked, the spreadsheet is evidence like any Document: nothing is left out.
     expect(await core.checkClaim({ claim: ONLY_IN_WORKINGS })).toMatchObject({
       verdict: "unsupported",
       excluded: [],
@@ -207,7 +205,11 @@ describe("A Document the User keeps as their own workings", () => {
       excluded: [{ documentId: workings.id, documentName: "Workings", reason: "own-workings" }],
     });
 
-    // A sentence the file merely shares a word or two with isn't said to be its.
+    expect(await core.checkClaim({ claim: DIFFERENT_FIGURE })).toMatchObject({
+      verdict: "unsupported",
+      excluded: [],
+    });
+
     expect(await core.checkClaim({ claim: "Penguins nest above the harbour." })).toMatchObject({
       verdict: "unsupported",
       excluded: [],

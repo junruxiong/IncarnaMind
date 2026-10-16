@@ -399,8 +399,8 @@ const DocumentRow = memo(function DocumentRow({
               {shownName}
             </span>
             <TagMarks chips={chips} />
-            <NotCitedLabel item={item} />
           </span>
+          <NotCitedLabel item={item} />
           <DocumentStatusLabel item={item} />
         </button>
       )}

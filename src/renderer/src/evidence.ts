@@ -24,7 +24,6 @@ export function useLeftOutOfEvidence(document: Document | undefined): boolean {
 
 interface Choice {
   set(documentId: string, on: boolean): Promise<unknown>;
-  /** What the undo line says about one Document and about several, once it is on and once it is off. */
   one: Record<"on" | "off", MessageKey>;
   many: Record<"on" | "off", MessageKey>;
 }
@@ -66,13 +65,16 @@ async function choose(
   return undoable;
 }
 
-/** Counts Documents IncarnaMind wrote as evidence from now on ("Count it"), or leaves them out again. */
+/**
+ * Counts Documents IncarnaMind wrote as evidence from now on ("Count it"),
+ * or leaves them out again, and offers Undo, which puts each back. Every
+ * window hears of it from the core's "document.status".
+ */
 export const countAsEvidence = (
   documents: readonly Pick<Document, "id" | "name" | "title">[],
   counted: boolean,
 ) => choose(documents, COUNTING, counted);
 
-/** Keeps Documents as the User's own workings ("Don't cite this Document"), or cites them again. */
 export const markNotCited = (
   documents: readonly Pick<Document, "id" | "name" | "title">[],
   notCited: boolean,

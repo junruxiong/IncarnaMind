@@ -46,7 +46,6 @@ test.afterEach(async () => {
   await removeDataFolder(sources);
 });
 
-/** The Annual report and the User's workings, added: a spreadsheet of their own figures and a line of notes. */
 async function addReportAndWorkings(window: Page) {
   await writeFile(join(sources, "Annual report.pdf"), REPORT);
   await writeFile(
@@ -84,7 +83,6 @@ test("Don't cite this Document in the sidebar: the label shows beside its name, 
   const label = workings.getByTestId("document-not-cited");
   await expect(label).toHaveCount(0);
 
-  // The item has the hint, and the report has the item too.
   await openDocumentMenu(workings);
   const item = workings.getByTestId("document.dontCite");
   await expect(item).toHaveText("Don't cite this Document");
@@ -99,7 +97,6 @@ test("Don't cite this Document in the sidebar: the label shows beside its name, 
   await expect(report.getByTestId("document-not-cited")).toHaveCount(0);
   const undo = window.getByTestId("undo-line");
   await expect(undo.getByTestId("undo-message")).toHaveText("“Workings” won't be cited");
-  // The label sits right of the name, inside the row, and the name stays on one line.
   const [name, labelBox, row] = await Promise.all([
     workings.getByTestId("row-text").boundingBox(),
     label.boundingBox(),
@@ -111,7 +108,6 @@ test("Don't cite this Document in the sidebar: the label shows beside its name, 
   expect(labelBox.height).toBeLessThanOrEqual(row.height);
   await screenshot(window.getByTestId("sidebar"), "not-cited-sidebar-en");
 
-  // ⌘Z takes it back; the menu offers it again, and Undo takes that back too.
   await window.keyboard.press("ControlOrMeta+z");
   await expect(label).toHaveCount(0);
   await openDocumentMenu(workings);
@@ -151,7 +147,6 @@ test("In the Library and in Chinese: the same menu item and label, one Undo for 
   await expect(window.getByTestId("undo-line").getByTestId("undo-message")).toHaveText(
     "“Workings”不再作为引用来源",
   );
-  // In the row: after the name, before the Tags column, never wrapping or leaving the row.
   const [name, labelBox, rowBox] = await Promise.all([
     workings.getByTestId("library-document-name").boundingBox(),
     label.boundingBox(),
@@ -163,12 +158,10 @@ test("In the Library and in Chinese: the same menu item and label, one Undo for 
   expect(labelBox.height).toBeLessThan(24);
   await screenshot(window.getByTestId("library"), "not-cited-library-zh-narrow");
 
-  // The sidebar shows it too.
   await expect(sidebarRow(window, "Workings").getByTestId("document-not-cited")).toHaveText(
     "不引用",
   );
 
-  // ⌘Z takes it back. Two selected: one item names both, one undo line, and one ⌘Z.
   await window.keyboard.press("ControlOrMeta+z");
   await expect(label).toHaveCount(0);
   await pointAndClick(window, workings.getByTestId("library-document-name"), {
@@ -195,7 +188,15 @@ test("A sentence only the marked file states is Unsupported, and its card says s
   await addReportAndWorkings(window);
   await openDocumentMenu(sidebarRow(window, "Field notes"));
   await pointAndClick(window, sidebarRow(window, "Field notes").getByTestId("document.dontCite"));
-  await expect(sidebarRow(window, "Field notes").getByTestId("document-not-cited")).toBeVisible();
+  const notes = sidebarRow(window, "Field notes");
+  await expect(notes.getByTestId("document-not-cited")).toBeVisible();
+  await expect(notes.getByTestId("tag-marks")).toBeVisible();
+  const [marks, notCited] = await Promise.all([
+    notes.getByTestId("tag-marks").boundingBox(),
+    notes.getByTestId("document-not-cited").boundingBox(),
+  ]);
+  if (!marks || !notCited) throw new Error("The row isn't laid out.");
+  expect(notCited.x).toBeGreaterThanOrEqual(marks.x + marks.width);
 
   await newMind(window);
   const editor = window.getByTestId("mind-editor");

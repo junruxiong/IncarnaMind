@@ -56,7 +56,7 @@ import {
   type DocumentLanguage,
 } from "../engine";
 import { agreesWith, statedFigure } from "./calculated";
-import { nearestLine } from "./nearest";
+import { figuresMatch, nearestLine } from "./nearest";
 import {
   CONFIRM_INSTRUCTIONS,
   checkInstructions,
@@ -196,9 +196,10 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
     const workingsSayingIt = (): LeftOutDocument[] =>
       [...workings].flatMap(([documentId, passages]) => {
         const left = excluded.get(documentId);
-        const speaks = nearestLine(
-          request.claim,
-          passages.map((passage) => ({ id: passage.passageId, text: passage.text })),
+        const speaks = passages.some(
+          (passage) =>
+            figuresMatch(request.claim, passage.text) &&
+            nearestLine(request.claim, [{ id: passage.passageId, text: passage.text }]),
         );
         return left && speaks ? [left] : [];
       });
