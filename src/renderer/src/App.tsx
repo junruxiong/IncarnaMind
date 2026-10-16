@@ -31,6 +31,7 @@ import { WordImportDialog } from "./components/WordImportDialog";
 import { files } from "./core";
 import { useEscapeToDismiss } from "./escapeDismiss";
 import { useLanguage, useT } from "./i18n";
+import { useMeetingHelpInWindow } from "./meetingHelp";
 import { useMeetings } from "./meetings";
 import { setMotionPreference } from "./motion";
 import { importReferenceFile, isReferenceFile } from "./referenceImport";
@@ -195,6 +196,7 @@ function Workspace() {
   });
   const openSettings = useAppStore((state) => state.openSettings);
   useKeymap();
+  useMeetingHelpInWindow();
   useEditMenu();
   useEscapeToDismiss();
   useRememberSidebarWidth(device?.sidebarWidth);

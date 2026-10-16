@@ -26,7 +26,24 @@ import {
   CITED_PAGE_CHANNELS,
   type CitedPageBridge,
 } from "../shared/citedPage";
+import type { GeneralHelpKind } from "../shared/meetingHelp";
+import {
+  type HeldKeys,
+  MEETING_PANEL_ARGUMENT,
+  MEETING_PANEL_BRIDGE_KEY,
+  MEETING_PANEL_CHANNELS,
+  type MeetingPanelBridge,
+} from "../shared/meetingPanel";
 import { titleBarOf } from "../shared/titleBar";
+
+/** Listens on a channel from the main process; returns how to stop. */
+function listen<T>(channel: string, listener: (value: T) => void): () => void {
+  const receive = (_event: unknown, value: T) => listener(value);
+  ipcRenderer.on(channel, receive);
+  return () => {
+    ipcRenderer.removeListener(channel, receive);
+  };
+}
 
 const methods = Object.fromEntries(
   coreApiMethods.map((method) => [
@@ -103,6 +120,15 @@ const files: FilesBridge = {
       ipcRenderer.removeListener(FILES_CHANNELS.fullScreen, receive);
     };
   },
+  onMeetingHelp: (listener) => listen<GeneralHelpKind>(FILES_CHANNELS.meetingHelp, listener),
+  globalKeysFree: (keys) => ipcRenderer.invoke(FILES_CHANNELS.globalKeysFree, keys),
+  showMeetingPanel: (shown) => ipcRenderer.send(FILES_CHANNELS.showMeetingPanel, shown),
+  onMeetingPanel: (listener) => {
+    const stop = listen<boolean>(FILES_CHANNELS.meetingPanel, listener);
+    ipcRenderer.send(FILES_CHANNELS.meetingPanelWanted);
+    return stop;
+  },
+  onSetUpModel: (listener) => listen<void>(FILES_CHANNELS.setUpModel, () => listener()),
 };
 
 // The hidden window that draws a cited page (#133) shows the viewer's views, which need the core,
@@ -117,4 +143,17 @@ if (process.argv.includes(CITED_PAGE_ARGUMENT)) {
   contextBridge.exposeInMainWorld(CITED_PAGE_BRIDGE_KEY, citedPage);
 } else {
   contextBridge.exposeInMainWorld(FILES_BRIDGE_KEY, files);
+}
+
+// The floating panel during a call (#839) has the file helpers too, for the window's error log.
+if (process.argv.includes(MEETING_PANEL_ARGUMENT)) {
+  const panel: MeetingPanelBridge = {
+    resize: (width, height) => ipcRenderer.send(MEETING_PANEL_CHANNELS.size, width, height),
+    close: () => ipcRenderer.send(MEETING_PANEL_CHANNELS.close),
+    setUp: () => ipcRenderer.send(MEETING_PANEL_CHANNELS.setUp),
+    keys: () => ipcRenderer.invoke(MEETING_PANEL_CHANNELS.keys),
+    onKeys: (listener) => listen<HeldKeys>(MEETING_PANEL_CHANNELS.keysChanged, listener),
+    onHelp: (listener) => listen<GeneralHelpKind>(MEETING_PANEL_CHANNELS.help, listener),
+  };
+  contextBridge.exposeInMainWorld(MEETING_PANEL_BRIDGE_KEY, panel);
 }

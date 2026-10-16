@@ -315,9 +315,14 @@ export interface GatedCall extends RunToolCall {
  * - "check": a check Run's (find support, verify, a comparison table's
  *   cells, contradiction watch): the Documents' search and `cite` only,
  *   whatever the request brings, so the text it checks can't steer a write or
- *   a send.
+ *   a send;
+ * - "documents": the Documents' Tools as an Answer has them, and nothing the
+ *   request brings: help during a call (#839), which reads a transcript
+ *   someone else spoke;
+ * - "cite": the same without the search, for help that answers from the
+ *   transcript alone, sooner.
  */
-export type ToolSet = "answer" | "check";
+export type ToolSet = "answer" | "check" | "documents" | "cite";
 
 export interface AnswerRequest {
   /**
@@ -972,8 +977,9 @@ function createWritingEngine(options: AiSdkAnswerEngineOptions): AnswerEngine {
 
   return {
     async *generate(asked) {
-      // A check Run is offered the Documents' search and `cite` only (see `ToolSet`).
-      const request: AnswerRequest = asked.toolSet === "check" ? { ...asked, tools: [] } : asked;
+      // Only an ordinary Answer is offered the Tools the request brings (see `ToolSet`).
+      const request: AnswerRequest =
+        asked.toolSet && asked.toolSet !== "answer" ? { ...asked, tools: [] } : asked;
       const failed = (error: unknown): AnswerEngineEvent => ({
         type: "failed",
         error: classifyProviderError(error),
@@ -1512,7 +1518,11 @@ async function* toolLoop(
   /** The Tools offered, by the name the model calls them; never a Connector's with one of ours. */
   const offered = new Map(
     offeredTools([
-      ...(documents ? [documents.search, documents.cite] : []),
+      ...(documents
+        ? request.toolSet === "cite"
+          ? [documents.cite]
+          : [documents.search, documents.cite]
+        : []),
       ...(calculate ? [calculate] : []),
       ...request.tools,
     ]).map((each) => [each.name, each]),
