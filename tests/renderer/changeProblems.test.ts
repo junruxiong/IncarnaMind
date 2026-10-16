@@ -81,6 +81,7 @@ describe("Why a call changed nothing, on its row", () => {
     { kind: "local-mode" },
     { kind: "not-ready" },
     { kind: "model", mindId: "a", message: "Overloaded" },
+    { kind: "copy", mindId: "a", text: "Risks" },
   ];
 
   // protects=every reason a change failed reads in plain words, in English and Chinese; fails_when=one shows a bare "Couldn't change", or a key instead of words; no_claim=how the row is drawn.
