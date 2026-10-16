@@ -1,85 +1,86 @@
 /**
  * Leftover echo (#941). The echo canceller (./echo) takes most of the
  * computer's sound out of the microphone, and what is left can still be read
- * as words. A line from the microphone that repeats a line of the computer's
- * sound said at the same time is that echo, and the other side's words must
- * not show as the User's.
+ * as words. A line from the microphone that says what a line of the computer's
+ * sound says, at the same moment, is that echo, and the other side's words
+ * must not show as the User's. Losing the User's own words is worse than
+ * keeping an echo, so a line is dropped only when it follows theirs word for
+ * word, and in order.
  */
 import { SPEAKER_ME, SPEAKER_THEM } from "../../shared/speakers";
 import type { Cue } from "../documents/formats/vtt";
 
-/**
- * How much of the shorter line the two must share in time: the two streams cut speech in different
- * places, but a reply that begins as the other side ends only touches their line.
- */
-const TOGETHER = 0.5;
-/** How much of a line must be found in what they said: the echo is read from a degraded copy. */
-const CONTAINED = 0.6;
-/** A line of fewer pairs of letters than this ("Right.") is an echo only when it is a whole line of theirs. */
-const SHORT_PAIRS = 8;
-const SAME = 0.8;
+/** The echo starts or ends when their line does, give or take how the two streams cut speech. */
+const NEAR_MS = 1500;
+/** How much of the User's line, in words, must come in the same order from theirs. */
+const COVERED = 0.8;
+/** The words of theirs the User's may be spread over, as a multiple of the User's. */
+const SPREAD = 1.5;
+/** A shorter line ("Right.") is an echo only when it is a whole line of theirs. */
+const SHORT_WORDS = 4;
 
-type Pairs = Map<string, number>;
+const WORD = /\p{Script=Han}|[\p{L}\p{N}]+/gu;
 
-/** Pairs of neighbouring letters, case and punctuation aside: it reads Chinese as it does English. */
-function pairsOf(text: string): Pairs {
-  const letters = Array.from(
-    text
-      .normalize("NFKC")
-      .toLowerCase()
-      .replace(/[^\p{L}\p{N}]/gu, ""),
-  );
-  const pairs: Pairs = new Map();
-  if (letters.length === 1) pairs.set(letters[0] as string, 1);
-  for (let i = 0; i + 1 < letters.length; i++) {
-    const pair = `${letters[i]}${letters[i + 1]}`;
-    pairs.set(pair, (pairs.get(pair) ?? 0) + 1);
+/** Words by case and punctuation alone: a Chinese character is a word. */
+const wordsOf = (text: string) => text.normalize("NFKC").toLowerCase().match(WORD) ?? [];
+
+function inOrder(mine: readonly string[], theirs: readonly string[]): number {
+  let before = new Array<number>(theirs.length + 1).fill(0);
+  for (const word of mine) {
+    const row = new Array<number>(theirs.length + 1).fill(0);
+    for (let at = 1; at <= theirs.length; at++) {
+      row[at] =
+        word === theirs[at - 1]
+          ? (before[at - 1] ?? 0) + 1
+          : Math.max(before[at] ?? 0, row[at - 1] ?? 0);
+    }
+    before = row;
   }
-  return pairs;
+  return before[theirs.length] ?? 0;
 }
 
-const sizeOf = (pairs: Pairs) => [...pairs.values()].reduce((sum, count) => sum + count, 0);
-
-function shared(a: Pairs, b: Pairs): number {
-  let count = 0;
-  for (const [pair, times] of a) count += Math.min(times, b.get(pair) ?? 0);
-  return count;
+/** Words in order from one stretch of `theirs` no longer than `room`, so a long line can't hold them scattered. */
+function inOrderWithin(mine: readonly string[], theirs: readonly string[], room: number): number {
+  let most = 0;
+  for (let start = 0; start < theirs.length; start++) {
+    most = Math.max(most, inOrder(mine, theirs.slice(start, start + room)));
+  }
+  return most;
 }
 
-/** Whether `mine` repeats what is in `theirs`, the lines said at the same time. */
-export function repeatsTheirs(mine: string, theirs: readonly string[]): boolean {
-  const own = pairsOf(mine);
-  const size = sizeOf(own);
-  if (size === 0 || theirs.length === 0) return false;
-  if (size >= SHORT_PAIRS) {
-    return shared(own, pairsOf(theirs.join(" "))) / size >= CONTAINED;
-  }
-  return theirs.some((line) => {
-    const other = pairsOf(line);
-    return (2 * shared(own, other)) / (size + sizeOf(other)) >= SAME;
+export function repeats(mine: string, theirs: readonly string[]): boolean {
+  const own = wordsOf(mine);
+  if (own.length === 0 || theirs.length === 0) return false;
+  const lines = theirs.map(wordsOf);
+  const together = lines.flat();
+  return [...lines, ...(lines.length > 1 ? [together] : [])].some((line) => {
+    if (own.length < SHORT_WORDS) {
+      return line.length <= own.length + 1 && inOrder(own, line) === own.length;
+    }
+    return inOrderWithin(own, line, Math.ceil(own.length * SPREAD) + 1) >= COVERED * own.length;
   });
 }
 
-/** Whether two lines are said at the same time. */
-function together(mine: Cue, theirs: Cue): boolean {
+function near(mine: Cue, theirs: Cue): boolean {
   const shared = Math.min(mine.endMs, theirs.endMs) - Math.max(mine.startMs, theirs.startMs);
-  const shorter = Math.min(mine.endMs - mine.startMs, theirs.endMs - theirs.startMs);
-  return shared > 0 && shared >= TOGETHER * shorter;
+  const edge = Math.min(
+    Math.abs(mine.startMs - theirs.startMs),
+    Math.abs(mine.endMs - theirs.endMs),
+  );
+  return shared > 0 && edge <= NEAR_MS;
 }
 
-/** Whether a line of the microphone is the echo of a line of the computer's sound among `cues`. */
 export function isEcho(mine: Cue, cues: readonly Cue[]): boolean {
   if (mine.speaker !== SPEAKER_ME) return false;
-  const theirs = cues.filter((cue) => cue.speaker === SPEAKER_THEM && together(mine, cue));
-  return repeatsTheirs(
+  const theirs = cues
+    .filter((cue) => cue.speaker === SPEAKER_THEM && near(mine, cue))
+    .sort((a, b) => a.startMs - b.startMs);
+  return repeats(
     mine.text,
     theirs.map((cue) => cue.text),
   );
 }
 
-/** The lines of the microphone among `cues` that are the echo of `theirs`, now it is among them. */
 export function echoedBy(theirs: Cue, cues: readonly Cue[]): Cue[] {
-  return cues.filter(
-    (cue) => cue.speaker === SPEAKER_ME && together(cue, theirs) && isEcho(cue, cues),
-  );
+  return cues.filter((cue) => cue.speaker === SPEAKER_ME && near(cue, theirs) && isEcho(cue, cues));
 }

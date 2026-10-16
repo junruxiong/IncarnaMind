@@ -334,6 +334,27 @@ test("Show transcript opens the live Transcript beside the meeting, Hide transcr
   const speakers = transcript.getByTestId("transcript-speaker");
   await expect(speakers.first()).toHaveText("Me");
   await expect(speakers.filter({ hasText: /^Them$/ }).first()).toBeVisible({ timeout: 20_000 });
+  // As the board draws a row: the time in a column of its own, the label above the words, in a grey that isn't a colour.
+  const row = transcript.getByTestId("transcript-line").first();
+  const [timeBox, labelBox, wordsBox] = await Promise.all([
+    row.locator(".transcript-time").boundingBox(),
+    row.getByTestId("transcript-speaker").boundingBox(),
+    row.locator(".transcript-text").boundingBox(),
+  ]);
+  expect((timeBox?.x ?? 0) + (timeBox?.width ?? 0)).toBeLessThanOrEqual(labelBox?.x ?? 0);
+  expect((labelBox?.y ?? 0) + (labelBox?.height ?? 0)).toBeLessThanOrEqual(wordsBox?.y ?? 0);
+  expect(wordsBox?.x).toBe(labelBox?.x);
+  const label = await row.getByTestId("transcript-speaker").evaluate((element) => {
+    const style = getComputedStyle(element);
+    const [red = 0, green = 0, blue = 0] = style.color.match(/\d+/g)?.map(Number) ?? [];
+    return {
+      size: style.fontSize,
+      weight: style.fontWeight,
+      spread: Math.max(red, green, blue) - Math.min(red, green, blue),
+    };
+  });
+  expect(label).toMatchObject({ size: "12px", weight: "600" });
+  expect(label.spread).toBeLessThan(24);
   // A tab of its own in the group beside the meeting's Mind, which stays where it was.
   await expect(window.getByTestId("tab-group")).toHaveCount(2);
   const mindGroup = await window.getByTestId("tab-group").first().boundingBox();
@@ -393,12 +414,12 @@ test("Show transcript opens the live Transcript beside the meeting, Hide transcr
   await expect(transcript).toBeVisible();
   // At the narrowest, a label fits its line.
   const firstLine = transcript.getByTestId("transcript-line").first();
-  const [lineBox, labelBox] = await Promise.all([
+  const [narrowLine, narrowLabel] = await Promise.all([
     firstLine.boundingBox(),
     firstLine.getByTestId("transcript-speaker").boundingBox(),
   ]);
-  expect((labelBox?.x ?? 0) + (labelBox?.width ?? 0)).toBeLessThanOrEqual(
-    (lineBox?.x ?? 0) + (lineBox?.width ?? 0),
+  expect((narrowLabel?.x ?? 0) + (narrowLabel?.width ?? 0)).toBeLessThanOrEqual(
+    (narrowLine?.x ?? 0) + (narrowLine?.width ?? 0),
   );
   await shot(window, "meeting-transcript-narrow-zh");
   await setWindowSize(app, window, 1440, 900);

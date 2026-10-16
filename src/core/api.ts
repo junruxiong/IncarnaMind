@@ -1428,13 +1428,14 @@ export const MAX_CITED_PAGES = 2;
  *   web page, the paragraphs of the section the quote covers, from 1 (#261).
  * - "lines": the lines the quote covers, or the cited block's.
  * - "time": in a Transcript, from the start of the cue the quote starts in to
- *   the end of the one it ends in, in ms from the Transcript's start (#136).
+ *   the end of the one it ends in, in ms from the Transcript's start (#136);
+ *   `speaker`: who said the cue it starts in, where the Transcript says (#941).
  */
 export type CitationLocation =
   | { kind: "page" | "slide"; from: number; to: number }
   | { kind: "rows"; sheet: string | null; from: number; to: number }
   | { kind: "lines"; from: number; to: number }
-  | { kind: "time"; from: number; to: number }
+  | { kind: "time"; from: number; to: number; speaker?: string }
   | {
       kind: "section";
       heading: string | null;

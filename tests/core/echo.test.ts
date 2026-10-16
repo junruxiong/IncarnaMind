@@ -266,9 +266,9 @@ describe("A Meeting on laptop speakers", () => {
     const fromMicrophone = Float64Array.from(heard.flatMap((samples) => Array.from(samples)));
     const left = Float64Array.from(
       fromMicrophone,
-      (value, i) => value - (meeting.voice[i] as number) - (meeting.floor[i] as number),
+      (value, i) => value - (meeting.voice[i] ?? 0) - (meeting.floor[i] ?? 0),
     );
-    const [from, to] = meeting.spans[2] as readonly [number, number];
+    const [from = 0, to = 0] = meeting.spans[2] ?? [];
     expect(below(meeting.echo, left, from, to)).toBeGreaterThan(15);
     expect(below(meeting.voice, left, meeting.far.length, fromMicrophone.length)).toBeGreaterThan(
       30,
@@ -295,7 +295,8 @@ describe("A Meeting on laptop speakers", () => {
     const meeting = await laptopMeeting(engine.transcriber);
     const saved = await meeting.record();
 
-    const lines = readVtt(readFileSync(saved.savedPath as string, "utf8")).cues;
+    if (!saved.savedPath) throw new Error("The Transcript wasn't saved.");
+    const lines = readVtt(readFileSync(saved.savedPath, "utf8")).cues;
     const said = (speaker: string) => lines.filter((line) => line.speaker === speaker);
     // The microphone's stream did read the others' words: the canceller left enough of them.
     expect(leaked.reads).toBeGreaterThan(0);
@@ -311,7 +312,7 @@ const envelopeOf = (samples: ArrayLike<number>): number[] => {
   const out: number[] = [];
   for (let at = 0; at + 160 <= samples.length; at += 160) {
     let sum = 0;
-    for (let i = at; i < at + 160; i++) sum += (samples[i] as number) ** 2;
+    for (let i = at; i < at + 160; i++) sum += (samples[i] ?? 0) ** 2;
     out.push(Math.sqrt(sum / 160));
   }
   return out;
@@ -322,7 +323,7 @@ function correlation(a: readonly number[], b: readonly number[]): number {
   const [ma, mb] = [mean(a), mean(b)];
   let [ab, aa, bb] = [0, 0, 0];
   for (let i = 0; i < a.length; i++) {
-    const [x, y] = [(a[i] as number) - ma, (b[i] as number) - mb];
+    const [x, y] = [(a[i] ?? 0) - ma, (b[i] ?? 0) - mb];
     ab += x * y;
     aa += x * x;
     bb += y * y;

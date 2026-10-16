@@ -70,7 +70,7 @@ describe("A Meeting's live Transcript", { timeout: 60_000 }, () => {
     const { answerId } = await askAndFinish(core, client, mind.id, "When does the launch move to?");
     expect(onlyCitation(client, answerId)).toMatchObject({
       documentId,
-      location: { kind: "time", from: 1750, to: 4000 },
+      location: { kind: "time", from: 1750, to: 4000, speaker: "Me" },
       quote,
       check: "found",
     });
@@ -254,7 +254,8 @@ describe("Who said each line (#941)", { timeout: 60_000 }, () => {
   /** The lines in the Transcript's file now, in the order it keeps them. */
   async function linesOf(core: Core, meetingId: string) {
     const { documentId } = await transcriptOf(core, meetingId);
-    const document = await documentOf(core, documentId as string);
+    if (!documentId) throw new Error("The Transcript has no Document yet.");
+    const document = await documentOf(core, documentId);
     return readVtt(readFileSync(document.path, "utf8")).cues;
   }
 
@@ -311,6 +312,19 @@ describe("Who said each line (#941)", { timeout: 60_000 }, () => {
     expect(lines[0]?.text).toBe(FAKE_LINES[0]);
   });
 
+  test("the computer's sound that only gives silence, as a macOS that isn't allowing it does, reads Speaker ? until some sound comes", async () => {
+    const { core, record } = await transcribingCore(await createTempDataFolder(), {
+      capture: { system: "silent" },
+    });
+    const meeting = await core.createMeeting();
+    await core.startMeeting({ meetingId: meeting.id, systemAudio: true });
+    record(5 * SECOND);
+    await until(core, meeting.id, (transcript) => transcript.lines >= 2);
+
+    const lines = await linesOf(core, meeting.id);
+    expect(lines.map((line) => line.speaker)).toEqual(lines.map(() => "Speaker ?"));
+  });
+
   test("the computer's sound turned down by the system gives Speaker ? too: nobody else is heard apart", async () => {
     const { core, record } = await transcribingCore(await createTempDataFolder(), {
       capture: { system: "denied" },
@@ -333,7 +347,8 @@ describe("Who said each line (#941)", { timeout: 60_000 }, () => {
     record(5 * SECOND);
 
     const live = await until(core, meeting.id, (transcript) => transcript.partial !== null);
-    const partial = live.partial as NonNullable<typeof live.partial>;
+    const { partial } = live;
+    if (!partial) throw new Error("Nothing was being transcribed.");
     expect(partial.speaker === "Me" ? FAKE_LINES : FAKE_THEIR_LINES).toContain(partial.text);
     expect(["Me", "Them"]).toContain(partial.speaker);
   });
