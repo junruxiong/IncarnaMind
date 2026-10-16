@@ -209,7 +209,7 @@ const NOT_CITED_PASSAGE = new RegExp(`<passage [^>]*${NOT_CITED_ATTRIBUTE}`);
  */
 export function notCitedNote(passages: string): string {
   if (!NOT_CITED_PASSAGE.test(passages)) return "";
-  return `A Passage marked cite="never" is from the User's own working file. Read it to understand the Question, but never cite it or rest the Answer on it: a record naming it is refused. Where only such a Passage states something, say in one sentence that only the User's own working file says it, with no marker.`;
+  return `A Passage marked cite="never" is from the User's own working file. Read it to understand the Question, but never cite it, never offer it as support for or agreement with another Document, and rest nothing on it: a record naming it is refused. Where only such a Passage states something, say in one sentence that only the User's own working file says it, with no marker.`;
 }
 
 const RECORD =
