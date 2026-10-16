@@ -1,12 +1,14 @@
 /**
  *   npx electron-vite build --mode test
  *   AUDIT_OUT=/tmp/word-look npx playwright test -c e2e/audit/playwright.audit.config.ts wordLook.audit.ts
+ *
+ * TAB_CLAUSES sets how many clauses the tabbed contract has, a tab in each of its paragraphs: 550 make about 6,000 tabs.
  */
 import { readdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../../src/core/api";
-import { longContract } from "../../tests/helpers/longContract";
+import { LONG_CONTRACT_CLAUSES, longContract } from "../../tests/helpers/longContract";
 import { resumeFile } from "../../tests/helpers/wordLookFiles";
 import {
   busy,
@@ -194,13 +196,16 @@ test("typing in the 304-page contract with a tab after every clause number, and 
   const dataDir = tempDir("data");
   const files = tempDir("files");
   const contract = join(files, "Framework Services Agreement (tabbed).docx");
-  writeFileSync(contract, longContract(undefined, { tabbed: true }));
+  const clauseCount = Number(process.env.TAB_CLAUSES) || LONG_CONTRACT_CLAUSES;
+  writeFileSync(contract, longContract(clauseCount, { tabbed: true }));
   const launched = await launch(dataDir);
   const { window } = launched;
   try {
     const contractId = await importWord(window, contract);
     await msToOpen(window, contractId, ".ProseMirror h1", 1);
-    await expect(window.locator(".ProseMirror h1")).toHaveCount(241, { timeout: 120_000 });
+    await expect(window.locator(".ProseMirror h1")).toHaveCount(clauseCount + 1, {
+      timeout: 120_000,
+    });
     const tabs = await window.locator("[data-word-tab]").count();
     const drawn: number[] = [];
     for (let run = 0; run < 3; run++) {

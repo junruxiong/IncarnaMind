@@ -1,8 +1,7 @@
 import { Mark } from "@tiptap/core";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
-import { type EditorState, Plugin, TextSelection, type Transaction } from "@tiptap/pm/state";
-import { AddMarkStep, RemoveMarkStep } from "@tiptap/pm/transform";
-import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
+import { type EditorState, Plugin, TextSelection } from "@tiptap/pm/state";
+import type { EditorView } from "@tiptap/pm/view";
 import type * as Y from "yjs";
 import {
   WORD_LOOK_ATTRIBUTE,
@@ -196,22 +195,28 @@ class TabMeasurer {
         const span = item.spans[item.next];
         if (!span) return [];
         const x = (span.getBoundingClientRect().left - item.origin) / item.scale;
-        const stop = tabStopAfter(x / ptToPx, item.look, look.defaultTab ?? undefined);
-        const after = following(span, item.spans[item.next + 1], item.paragraph);
         // Capped at the right margin, so a far stop never runs the line off the column.
-        const stopAt = Math.min(stop.at, look.width ?? Number.POSITIVE_INFINITY);
+        const margin = look.width ?? Number.POSITIVE_INFINITY;
+        // Tabs side by side share one element: each goes on from the stop the one before reached.
+        const tabs = Math.max(1, (span.textContent ?? "").split("\t").length - 1);
+        let stop = tabStopAfter(x / ptToPx, item.look, look.defaultTab ?? undefined);
+        for (let more = 1; more < tabs; more++) {
+          stop = tabStopAfter(Math.min(stop.at, margin), item.look, look.defaultTab ?? undefined);
+        }
+        const after = following(span, item.spans[item.next + 1], item.paragraph);
+        const stopAt = Math.min(stop.at, margin);
         const width = tabWidth(stop, {
           x,
           stopX: stopAt * ptToPx,
           following: after.width / item.scale,
           beforeDecimal: after.beforeDecimal / item.scale,
         });
-        return [{ span, stop, width }];
+        return [{ span, stop, width, tabs }];
       });
-      for (const { span, stop, width } of widths) {
-        // The tab character spans its box, so the caret and a selection of it fall where the text does.
+      for (const { span, stop, width, tabs } of widths) {
+        // The tab characters span their box, so the caret and a selection of them fall where the text does.
         span.style.width = `${width}px`;
-        span.style.tabSize = `${width}px`;
+        span.style.tabSize = `${width / tabs}px`;
         if (stop.leader === "none") delete span.dataset.leader;
         else span.dataset.leader = stop.leader;
       }
@@ -221,84 +226,66 @@ class TabMeasurer {
   }
 }
 
-const BOX_ATTRIBUTES = { [WORD_TAB_DOM_ATTRIBUTE]: "" };
-
-function boxesIn(doc: ProseMirrorNode, from: number, to: number): Decoration[] {
-  const boxes: Decoration[] = [];
-  doc.nodesBetween(from, to, (node, pos) => {
-    if (!node.isText) return true;
-    if (!node.marks.some((mark) => mark.type.name === WORD_TAB_MARK)) return false;
-    const text = node.text ?? "";
-    for (let at = text.indexOf("\t"); at >= 0; at = text.indexOf("\t", at + 1)) {
-      boxes.push(Decoration.inline(pos + at, pos + at + 1, BOX_ATTRIBUTES));
-    }
-    return false;
-  });
-  return boxes;
+function isTab(doc: ProseMirrorNode, at: number): boolean {
+  if (at < 0 || at >= doc.content.size || doc.textBetween(at, at + 1) !== "\t") return false;
+  const mark = doc.type.schema.marks[WORD_TAB_MARK];
+  return mark !== undefined && doc.rangeHasMark(at, at + 1, mark);
 }
 
-function changedRanges(tr: Transaction): [number, number][] {
-  const ranges: [number, number][] = [];
-  const widened = (from: number, to: number) => {
-    const start = tr.doc.resolve(Math.min(from, tr.doc.content.size));
-    const end = tr.doc.resolve(Math.min(to, tr.doc.content.size));
-    ranges.push([
-      start.parent.isTextblock ? start.start() : start.pos,
-      end.parent.isTextblock ? end.end() : end.pos,
-    ]);
-  };
-  tr.steps.forEach((step, index) => {
-    const after = tr.mapping.slice(index + 1);
-    step.getMap().forEach((_from, _to, from, to) => {
-      widened(after.map(from, -1), after.map(to, 1));
-    });
-    // A mark step's map is empty.
-    if (step instanceof AddMarkStep || step instanceof RemoveMarkStep) {
-      widened(after.map(step.from, -1), after.map(step.to, 1));
-    }
-  });
-  return ranges;
+function overTab(view: EditorView, head: number, forward: boolean): number | null {
+  const tab = forward ? head : head - 1;
+  if (!isTab(view.state.doc, tab)) return null;
+  const paragraph = view.nodeDOM(view.state.doc.resolve(head).before());
+  if (!(paragraph instanceof HTMLElement) || getComputedStyle(paragraph).direction === "rtl") {
+    return null;
+  }
+  return forward ? tab + 1 : tab;
 }
 
-// A box for each tab character: tabs side by side share one text node and one mark element.
-const tabBoxes = new Plugin<DecorationSet>({
-  state: {
-    init: (_, state) =>
-      DecorationSet.create(state.doc, boxesIn(state.doc, 0, state.doc.content.size)),
-    apply(tr, boxes) {
-      if (!tr.docChanged) return boxes;
-      let next = boxes.map(tr.mapping, tr.doc);
-      for (const [from, to] of changedRanges(tr)) {
-        const stale = next.find(from, to).filter((box) => box.from >= from && box.to <= to);
-        next = next.remove(stale).add(tr.doc, boxesIn(tr.doc, from, to));
-      }
-      return next;
-    },
-  },
+function lineEdge(view: EditorView, head: number, end: boolean): number | null {
+  if (!isTab(view.state.doc, head - 1)) return null;
+  const $head = view.state.doc.resolve(head);
+  const paragraph = view.nodeDOM($head.before());
+  if (!(paragraph instanceof HTMLElement)) return null;
+  // A line of stops never wraps: its edges are the paragraph's.
+  if (getComputedStyle(paragraph).whiteSpace === "pre") return end ? $head.end() : $head.start();
+  // The paragraph's own edges, its first line's hanging indent out to the left included.
+  const box = paragraph.getBoundingClientRect();
+  const style = getComputedStyle(paragraph);
+  const scale = box.width / paragraph.offsetWidth;
+  const px = (value: string) => Number.parseFloat(value) * scale;
+  const left = box.left + px(style.paddingLeft) + Math.min(0, px(style.textIndent));
+  const right = box.right - px(style.paddingRight);
+  const caret = view.coordsAtPos(head);
+  const found = view.posAtCoords({
+    left: end ? right - 1 : left + 1,
+    top: (caret.top + caret.bottom) / 2,
+  });
+  if (!found) return null;
+  return Math.min(Math.max(found.pos, $head.start()), $head.end());
+}
+
+/**
+ * The caret keys around a tab: at an inline-block's edge Chrome can stop on
+ * the edge itself, which ProseMirror reads as no move, and from inside the
+ * box Home and End reach only the box's own line.
+ */
+const tabKeys = new Plugin({
   props: {
-    decorations(state) {
-      return this.getState(state);
-    },
-    // The arrow keys step over a tab here: at an inline-block's edge Chrome can stop on the edge itself, which ProseMirror reads as no move.
     handleKeyDown(view, event) {
-      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return false;
-      if (event.altKey || event.ctrlKey || event.metaKey) return false;
+      if (event.altKey || event.ctrlKey) return false;
+      const arrow = event.key === "ArrowLeft" || event.key === "ArrowRight";
+      const edge = event.key === "Home" || event.key === "End" || (event.metaKey && arrow);
+      if (!edge && (!arrow || event.metaKey)) return false;
       const { doc, selection } = view.state;
       if (!(selection instanceof TextSelection) || (!event.shiftKey && !selection.empty)) {
         return false;
       }
-      const forward = event.key === "ArrowRight";
-      const tab = forward ? selection.head : selection.head - 1;
-      if (tab < 0 || tab >= doc.content.size || doc.textBetween(tab, tab + 1) !== "\t") {
-        return false;
-      }
-      const mark = doc.type.schema.marks[WORD_TAB_MARK];
-      if (!mark || !doc.rangeHasMark(tab, tab + 1, mark)) return false;
-      const paragraph = view.nodeDOM(selection.$head.before());
-      if (!(paragraph instanceof HTMLElement) || getComputedStyle(paragraph).direction === "rtl") {
-        return false;
-      }
-      const head = forward ? tab + 1 : tab;
+      const forward = event.key === "ArrowRight" || event.key === "End";
+      const head = edge
+        ? lineEdge(view, selection.head, forward)
+        : overTab(view, selection.head, forward);
+      if (head === null) return false;
       const anchor = event.shiftKey ? selection.anchor : head;
       view.dispatch(view.state.tr.setSelection(TextSelection.create(doc, anchor, head)));
       return true;
@@ -319,9 +306,9 @@ export const WordTab = Mark.create({
 
   addMarkView() {
     return () => {
-      // Without renderHTML's attribute: the look draws the boxes inside, one a tab, whose
-      // widths and leaders ProseMirror counts as this element's mutations. They aren't edits.
       const dom = document.createElement("span");
+      dom.setAttribute(WORD_TAB_DOM_ATTRIBUTE, "");
+      // The measuring sets the width and leader; the editor mustn't read them back as an edit.
       return { dom, contentDOM: dom, ignoreMutation: (mutation) => mutation.type === "attributes" };
     };
   },
@@ -329,7 +316,7 @@ export const WordTab = Mark.create({
   addProseMirrorPlugins() {
     const editor = this.editor;
     return [
-      tabBoxes,
+      tabKeys,
       new Plugin({ view: (view) => new TabMeasurer(view, () => editorDoc(editor)) }),
     ];
   },
