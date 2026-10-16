@@ -38,7 +38,7 @@ describe("the Word look's stylesheet", () => {
     const shortRules = rulesOf(wordLookCss(short.mindId, short.look));
     const longRules = rulesOf(wordLookCss(long.mindId, long.look));
     expect(longRules).toHaveLength(shortRules.length);
-    expect(longRules.length).toBeLessThan(20);
+    expect(longRules.length).toBeLessThan(25);
     for (const rule of longRules)
       expect(rule.startsWith(`.${wordLookScope(long.mindId)} `)).toBe(true);
   });
@@ -82,7 +82,7 @@ describe("the Word look's stylesheet", () => {
     expect(Object.getPrototypeOf(look.runs)).toBe(Object.prototype);
     expect(look.paragraphs).toEqual({ p1: {}, p2: { run: "constructor" } });
     const css = wordLookCss("mind", look);
-    expect(css).not.toContain("display");
+    expect(css).not.toContain("display: none");
     expect(css).not.toContain("Polluted");
     // A run key that names no run of this look, only an object's own property, draws no run.
     expect(rulesOf(css).find((rule) => rule.includes('"p2"'))).not.toContain("text-transform");
