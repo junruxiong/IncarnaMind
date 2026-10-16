@@ -1251,6 +1251,12 @@
       outline-offset: 1px;
     }
   }
+  /* When the whole Mind was last checked (#737): text, not a part to go to. */
+  .mind-health-when {
+    padding: 0 3px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
   .mind-health-icon {
     box-sizing: border-box;
     width: 12px;
@@ -1271,10 +1277,19 @@
     box-shadow: inset 0 0 0 1.25px var(--color-danger);
     color: var(--color-danger);
   }
-  .mind-health-line::before {
+  .mind-health-line::before,
+  .mind-unread > p::before {
     content: "·";
     margin-right: 8px;
     color: var(--color-rule-strong);
+  }
+  /* The files the checks couldn't read sit on the line of the checks' state, never a line of their own; Show's list opens under it. */
+  .mind-unread {
+    display: contents;
+
+    & > ul {
+      flex-basis: 100%;
+    }
   }
   .mind-health-note {
     margin: 0;

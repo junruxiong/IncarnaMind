@@ -91,22 +91,13 @@ export function wordAtomText(atom: Pick<WordAtomAttributes, "kind" | "label" | "
 }
 
 /**
- * Whether a Word file's look is mostly what a Mind doesn't draw (#735), so the
- * import screen says it is kept: two kinds of it at least, one of them placing
- * the text (shading, rules, tab stops, tables with no borders) rather than only
- * colouring or sizing it. Each bar sits above what the Word corpus's memos,
- * contracts and reports reach; its résumés and forms pass them.
+ * Whether a Word file lays text out in tables without lines or in columns of
+ * tab stops, which the Mind doesn't draw yet, so the import screen says they
+ * are kept (#735). The bars sit above what the Word corpus's memos, contracts
+ * and reports reach; its résumés and forms pass them.
  */
 export function layoutNotShown(layout: WordLayout | undefined): boolean {
-  if (!layout) return false;
-  const placing = [
-    layout.shading >= 10,
-    layout.borders >= 2,
-    layout.tabStops >= 4,
-    layout.layoutTables >= 1,
-  ].filter(Boolean).length;
-  const type = [layout.colours >= 2, layout.sizes >= 4].filter(Boolean).length;
-  return placing >= 1 && placing + type >= 2;
+  return layout !== undefined && (layout.layoutTables >= 1 || layout.tabStops >= 4);
 }
 
 const wordMap = (doc: Y.Doc) => doc.getMap<unknown>(MIND_WORD_FIELD);

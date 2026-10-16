@@ -46,6 +46,7 @@ import {
   type WordImportReport,
   type WordLayout,
   type WordLook,
+  type WordRunLook,
   type WordSource,
 } from "../../api";
 import { headingLevelOf, textIn } from "./docx";
@@ -91,6 +92,19 @@ export async function readWordStructure(
   review: WordReview,
 ): Promise<WordStructure> {
   return (await readWordDocument(pkg, review)).structure;
+}
+
+/** Each node mapped from the document, by its place ("w:p#12"). */
+export function nodesByPlace(structure: WordStructure): Map<string, NodeJSON> {
+  const byPlace = new Map<string, NodeJSON>();
+  const visit = (node: NodeJSON) => {
+    const id = node.attrs?.[BLOCK_ID_ATTRIBUTE];
+    const source = typeof id === "string" ? structure.sources.get(id) : undefined;
+    if (source) byPlace.set(source.n, node);
+    for (const each of node.content ?? []) visit(each);
+  };
+  for (const block of structure.blocks) visit(block);
+  return byPlace;
 }
 
 /**
@@ -369,6 +383,17 @@ function fieldType(instruction: string): string {
 
 const isOn = (element: XmlElement | undefined) => onOff(element) === true;
 
+const RESOLVED_MARKS: ReadonlySet<string> = new Set(["bold", "italic", "underline", "strike"]);
+
+function formattingMarks(look: WordRunLook): MarkJSON[] {
+  return [
+    look.bold && { type: "bold" },
+    look.italic && { type: "italic" },
+    look.underline && { type: "underline" },
+    (look.strike || look.doubleStrike) && { type: "strike" },
+  ].filter((mark): mark is MarkJSON => Boolean(mark));
+}
+
 /** The editor's marks for a run's own formatting. */
 export function runMarks(rPr: XmlElement | undefined): MarkJSON[] {
   if (!rPr) return [];
@@ -511,7 +536,7 @@ function placesText(tbl: XmlElement): boolean {
   return !descendants(tbl, "w:tcBorders").some((borders) => drawsLine(borders));
 }
 
-/** Counts what the Mind doesn't draw of a document's look (`WordLayout`), from its own formatting. */
+/** Counts a document's layout (`WordLayout`) from its own formatting; the Word look draws all but tables' lines and aligned columns. */
 export function layoutOf(document: XmlElement): WordLayout {
   const layout: WordLayout = {
     shading: 0,
@@ -1450,7 +1475,7 @@ class Reader {
       characters.set(key, (characters.get(key) ?? 0) + node.text.length);
     }
     if (characters.size === 0) {
-      const run = this.look.run(pPr && child(pPr, "w:rPr"), this.paragraphLook, 0);
+      const run = this.look.run(pPr && child(pPr, "w:rPr"), this.paragraphLook, 0).key;
       return run !== null && this.look.canBeParagraphRun(run) ? run : null;
     }
     let main: string | null = null;
@@ -1482,10 +1507,15 @@ class Reader {
     }
   }
 
+  /** Bold, italic, underline and strike as Word resolves them, styles included, so the editor's toggles act on them. */
   private marksOfRun(run: XmlElement): MarkJSON[] {
     const rPr = child(run, "w:rPr");
-    const key = this.look.run(rPr, this.paragraphLook, textIn(run).length);
-    return [...runMarks(rPr), ...(key ? [{ type: WORD_RUN_MARK, attrs: { k: key } }] : [])];
+    const { key, look } = this.look.run(rPr, this.paragraphLook, textIn(run).length);
+    return [
+      ...formattingMarks(look),
+      ...runMarks(rPr).filter((mark) => !RESOLVED_MARKS.has(mark.type)),
+      ...(key ? [{ type: WORD_RUN_MARK, attrs: { k: key } }] : []),
+    ];
   }
 
   private run(run: XmlElement, marks: MarkJSON[], out: NodeJSON[]): void {

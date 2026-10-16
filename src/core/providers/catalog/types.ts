@@ -64,6 +64,8 @@ export interface DataUse {
   url?: string;
 }
 
+export type ProviderOptions = Record<string, Record<string, unknown>>;
+
 /** What every request to a provider carries, whatever the model. */
 export interface RequestQuirks {
   /** Ask the provider not to keep requests (the Responses API of OpenAI and xAI keeps them otherwise). */
@@ -83,9 +85,11 @@ export interface RequestQuirks {
    * can't turn it off.
    */
   thinkingOff?: {
-    options: Record<string, Record<string, unknown>>;
+    options: ProviderOptions;
     unless?: readonly string[];
     except?: readonly string[];
+    /** The form to retry with when a refusal of `options` names it, for a model the catalog has none for. */
+    refused?: readonly { names: string; options: ProviderOptions }[];
   };
   /**
    * Provider options that ask for the provider's summary of a model's
@@ -95,7 +99,7 @@ export interface RequestQuirks {
    * `only`, they go to the models whose id starts with one of its prefixes,
    * the ones that think by default.
    */
-  reasoningSummary?: { options: Record<string, Record<string, unknown>>; only?: readonly string[] };
+  reasoningSummary?: { options: ProviderOptions; only?: readonly string[] };
 }
 
 /**
@@ -142,6 +146,12 @@ export interface CatalogProvider {
    * under the key field. Left out where no plan does.
    */
   planCredits?: Localized & { url: string };
+  /**
+   * A preset only: the run of the citing evaluation (#185) its Answers model
+   * passed. Until then it is labelled not yet tested and never recommended
+   * (see `untestedForCitations`).
+   */
+  citingTested?: string;
   /** When a person last checked this entry against the provider's own pages (YYYY-MM-DD). */
   checked: string;
 }
@@ -194,6 +204,8 @@ export interface ModelFacts {
   temperature: boolean;
   /** It accepts a forced Tool choice ("required" or a named Tool). */
   forcedToolChoice: boolean;
+  /** How a small call asks it not to think, where its provider's way (`RequestQuirks.thinkingOff`) is refused. */
+  thinkingOff: ProviderOptions;
   /** Its context window, in tokens, input and output together. */
   context: number;
   /** The most a request may send, when the provider limits input below the window. */

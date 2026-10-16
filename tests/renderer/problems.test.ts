@@ -125,7 +125,7 @@ describe("a failed Answer's problem line", () => {
     const labels = (language: "en" | "zh-CN") =>
       KINDS.map((kind) => {
         const { line, fix } = ANSWER_PROBLEMS[kind];
-        const words = translate(language, line, { model: "claude-sonnet-5.5" });
+        const words = translate(language, line, { model: "claude-sonnet-5.5", service: "OpenAI" });
         const label = fix.kind === "none" ? "" : translate(language, fix.label);
         return { kind, words, label };
       });
@@ -140,6 +140,12 @@ describe("a failed Answer's problem line", () => {
     expect(translate("en", ANSWER_PROBLEMS.auth.line, { model: "claude-sonnet-5.5" })).toBe(
       "The key for claude-sonnet-5.5 was refused",
     );
+    expect(translate("en", ANSWER_PROBLEMS.network.line, { model: "m", service: "OpenAI" })).toBe(
+      "Couldn't reach OpenAI. Check your internet connection",
+    );
+    expect(
+      translate("zh-CN", ANSWER_PROBLEMS.network.line, { model: "m", service: "OpenAI" }),
+    ).toBe("无法连接 OpenAI，请检查网络连接");
     expect(translate("zh-CN", ANSWER_PROBLEMS.auth.line, { model: "claude-sonnet-5.5" })).toContain(
       "claude-sonnet-5.5",
     );

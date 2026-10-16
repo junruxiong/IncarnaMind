@@ -167,7 +167,7 @@ export function CitationView({
 
   const onClick = () => {
     setPinned(true);
-    // "Check a Citation in the example", in Get started.
+    // "Open a check in the example", in Get started.
     useAppStore.getState().updateGettingStarted({ citationChecked: true });
     recordUsage({ event: "citation_opened", fields: { check: state.check } });
     if (quoteSaysSo(state.check)) openCited(true);
