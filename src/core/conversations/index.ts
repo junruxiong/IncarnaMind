@@ -583,7 +583,6 @@ export function createConversations(db: Database, now: () => string) {
       return { conversation, messages: messagesOf(messageRows(conversation.id)) };
     },
 
-    /** See `CoreApi.usualAnswerWait`. */
     usualWait(answerId: unknown): number | null {
       if (typeof answerId !== "string") return null;
       const asked = db.get<{ provider_id: string | null; model_id: string | null; text: string }>(
@@ -599,7 +598,7 @@ export function createConversations(db: Database, now: () => string) {
         `SELECT steps FROM conversation_messages
          WHERE kind = 'answer' AND status = 'done' AND provider_id = ? AND model_id = ?
            AND steps IS NOT NULL AND id != ? AND deleted_at IS NULL
-         ORDER BY seq DESC LIMIT ?`,
+         ORDER BY created_at DESC LIMIT ?`,
         [asked.provider_id, asked.model_id, answerId, 50],
       );
       return usualWait(

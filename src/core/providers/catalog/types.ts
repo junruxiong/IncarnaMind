@@ -116,7 +116,9 @@ export interface RequestQuirks {
    */
   reasoningSummary?: {
     options: ProviderOptions;
-    /** The same with a larger thinking budget, for a Question that asks to check or calculate. */
+    /** The same with a modest thinking budget, for an Answer. */
+    answer?: ProviderOptions;
+    /** The same with a larger thinking budget, for an Answer to a Question that asks to check or calculate. */
     careful?: ProviderOptions;
     /** What to leave out when a refusal names `names`, for a model that takes no budget: an option set to undefined. */
     refused?: readonly { names: string; options: ProviderOptions }[];

@@ -19,11 +19,10 @@ export function waitText(t: Translate, usualSeconds: number | null, model: strin
   if (usualSeconds === null || model === null || usualSeconds * 1000 <= silentMs) {
     return t("answer.wait.still");
   }
-  if (usualSeconds < 55) {
-    return t("answer.wait.usually.seconds", { count: Math.round(usualSeconds / 10) * 10, model });
-  }
+  const tens = Math.round(usualSeconds / 10) * 10;
+  if (tens < 60) return t("answer.wait.usually.seconds", { count: tens, model });
   const minutes = Math.round(usualSeconds / 60);
-  return minutes === 1
+  return minutes <= 1
     ? t("answer.wait.usually.minute", { model })
     : t("answer.wait.usually.minutes", { count: minutes, model });
 }

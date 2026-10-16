@@ -5852,9 +5852,9 @@
     background: var(--color-attention);
     animation: none;
   }
-  /* Under the live line: how long it takes, with Stop, its words in line with the line's own. */
   .answer-steps-wait {
     margin: 0 0 0 20px;
+    overflow-wrap: anywhere;
     font-size: 13px;
     line-height: 18px;
     color: var(--color-ink-meta);

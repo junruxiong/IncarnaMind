@@ -50,11 +50,12 @@ export interface ChatModelSpec {
    * which asks a model that thinks to skip it, where the provider lets it.
    * "summary": a call that writes the Answer, which asks a model that thinks
    * for its provider's summary of its reasoning, where there is one
-   * (`reasoningSummaryOptions`), with a modest budget.
-   * "careful": the same with a larger budget, for a Question that asks to
-   * check or calculate.
+   * (`reasoningSummaryOptions`).
+   * "answer": the same with a modest budget, for the Answer to a Question.
+   * "careful": the same with a larger budget, for an Answer to a Question
+   * that asks to check or calculate.
    */
-  thinking?: "off" | "summary" | "careful";
+  thinking?: "off" | "summary" | "answer" | "careful";
   apiKey: string | null;
   modelId: string;
   /** "chatgpt" only: the User's ChatGPT sign-in, which signs (and refreshes) every request. */
@@ -108,10 +109,7 @@ export const createAiSdkChatModel: ChatModelFactory = (spec) => {
   if (spec.thinking === "off" && request?.thinkingOff && canSkipThinking(spec, request)) {
     model = withThinkingOff(model, spec, request.thinkingOff);
   }
-  const summary =
-    spec.thinking === "summary" || spec.thinking === "careful"
-      ? reasoningSummaryOptions(spec)
-      : null;
+  const summary = spec.thinking && spec.thinking !== "off" ? reasoningSummaryOptions(spec) : null;
   if (summary) model = withAnswerThinking(model, spec, summary);
   return model;
 };
@@ -141,7 +139,8 @@ export function reasoningSummaryOptions(
   if (summary.only && !summary.only.some((prefix) => spec.modelId.startsWith(prefix))) return null;
   const set = modelsProviderOfKind(spec.kind, spec.endpoint, spec.catalogId);
   if (catalogFacts(set, spec.modelId)?.reasoning === false) return null;
-  return spec.thinking === "careful" ? (summary.careful ?? summary.options) : summary.options;
+  if (spec.thinking === "careful") return summary.careful ?? summary.options;
+  return (spec.thinking === "answer" && summary.answer) || summary.options;
 }
 
 /** Whether thinking can be turned off on this model: not on one the provider says always thinks, nor one the catalog knows doesn't think. */
@@ -157,7 +156,6 @@ function canSkipThinking(
 
 const namedByRefusal = new Map<string, ProviderOptions>();
 
-/** The form a 400 refusal names among `refused`, if it names one. */
 function refusedForm(
   error: unknown,
   refused: readonly { names: string; options: ProviderOptions }[] | undefined,
@@ -169,25 +167,32 @@ function refusedForm(
 
 /**
  * Every call carries the options of the model's form; a call a model refuses is asked again once
- * in the form `named` gives for its refusal, and that form is kept for the model's later calls.
+ * in the form `named` gives for its refusal, judged against the options that call sent, and that
+ * form is kept for the model's later calls.
  */
 function withRememberedForm(
   model: ChatLanguageModel,
   key: string,
   initial: () => ProviderOptions,
-  named: (error: unknown, current: ProviderOptions) => ProviderOptions | undefined,
+  named: (error: unknown, sent: ProviderOptions) => ProviderOptions | undefined,
 ): ChatLanguageModel {
   const options = () => namedByRefusal.get(key) ?? initial();
+  const sentBy = new WeakMap<object, ProviderOptions>();
   return wrapLanguageModel({
     model,
     middleware: {
       specificationVersion: "v4",
-      transformParams: async ({ params }) => withOptionsOver(params, options()),
+      transformParams: async ({ params }) => {
+        const sent = options();
+        const next = withOptionsOver(params, sent);
+        sentBy.set(next, sent);
+        return next;
+      },
       wrapGenerate: async ({ doGenerate, params, model: inner }) => {
         try {
           return await doGenerate();
         } catch (error) {
-          const form = named(error, options());
+          const form = named(error, sentBy.get(params) ?? options());
           if (!form) throw error;
           namedByRefusal.set(key, form);
           return inner.doGenerate(withOptionsOver(params, form));
@@ -197,7 +202,7 @@ function withRememberedForm(
         try {
           return await doStream();
         } catch (error) {
-          const form = named(error, options());
+          const form = named(error, sentBy.get(params) ?? options());
           if (!form) throw error;
           namedByRefusal.set(key, form);
           return inner.doStream(withOptionsOver(params, form));
@@ -218,9 +223,9 @@ function withThinkingOff(
     model,
     `${spec.catalogId ?? spec.kind}\n${spec.modelId}`,
     () => catalogFacts(set, spec.modelId)?.thinkingOff ?? thinkingOff.options,
-    (error, current) => {
+    (error, sent) => {
       const form = refusedForm(error, thinkingOff.refused);
-      return form && form !== current ? form : undefined;
+      return form && form !== sent ? form : undefined;
     },
   );
 }
@@ -236,16 +241,13 @@ function withAnswerThinking(
     model,
     `answers\n${spec.catalogId ?? spec.kind}\n${spec.modelId}`,
     () => options,
-    (error, current) => {
+    (error, sent) => {
       const without = refusedForm(error, refused);
-      const dropsSomething =
-        without &&
-        Object.entries(without).some(([provider, values]) =>
-          Object.keys(values).some((name) => current[provider]?.[name] !== undefined),
-        );
+      const dropsSomething = Object.entries(without ?? {}).some(([provider, values]) =>
+        Object.keys(values).some((name) => sent[provider]?.[name] !== undefined),
+      );
       return without && dropsSomething
-        ? (withOptionsOver({ providerOptions: current }, without)
-            .providerOptions as ProviderOptions)
+        ? withOptionsOver({ providerOptions: sent }, without).providerOptions
         : undefined;
     },
   );

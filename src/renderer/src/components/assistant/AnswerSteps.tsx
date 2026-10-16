@@ -67,7 +67,6 @@ export function AnswerSteps({
   question: ConversationQuestion | undefined;
   streaming: boolean;
   waitingForApproval: boolean;
-  /** What to say about a wait with no words, when it is long enough to say; null before. */
   wait: { usual: number | null } | null;
   onRegenerate(): void;
 }) {

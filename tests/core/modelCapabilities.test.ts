@@ -144,7 +144,7 @@ describe("Models in the app, by the catalog", () => {
       modelId: "claude-sonnet-5-5",
     });
     await askBelow(core, [], "Write a summary page of these documents");
-    expect(models.specs.at(-1)?.thinking).toBe("summary");
+    expect(models.specs.at(-1)?.thinking).toBe("answer");
     await askBelow(core, [], "Calculate the leverage headroom after the step-down");
     expect(models.specs.at(-1)?.thinking).toBe("careful");
   });

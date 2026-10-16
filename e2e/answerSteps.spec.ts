@@ -63,11 +63,11 @@ test.afterEach(async () => {
 
 const core = (window: Page) => ({
   /** An Anthropic key, whose models summarize their reasoning: choosing it allows Questions and tagging. */
-  anthropic: () =>
-    window.evaluate(async (modelId) => {
+  anthropic: (modelId = MODEL) =>
+    window.evaluate(async (id) => {
       const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
-      await bridge.saveChatProvider({ kind: "anthropic", apiKey: "sk-ant-test", modelId });
-    }, MODEL),
+      await bridge.saveChatProvider({ kind: "anthropic", apiKey: "sk-ant-test", modelId: id });
+    }, modelId),
   /** A Mind, in a Folder if given (its id and name), opened from the sidebar. */
   mind: async (title: string, folder: { id: string; name: string } | null = null) => {
     await window.evaluate(
@@ -108,7 +108,7 @@ const core = (window: Page) => ({
 });
 
 /** The app with Tides added; the chat model on an Anthropic key, or, `local`, on this computer. */
-async function start(options: { documents?: boolean; local?: boolean } = {}) {
+async function start(options: { documents?: boolean; local?: boolean; model?: string } = {}) {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
@@ -116,7 +116,7 @@ async function start(options: { documents?: boolean; local?: boolean } = {}) {
     await connectLocalChatModel(window);
   } else {
     await acceptPlainTextKeys(window);
-    await core(window).anthropic();
+    await core(window).anthropic(options.model);
   }
   if (options.documents !== false) {
     await writeFile(join(sources, "Tides.pdf"), TIDES);
@@ -282,13 +282,17 @@ test("in Chinese, the step line and the wait line say so in Chinese", async () =
   await app.close();
 });
 
-test("with earlier Answers that took about a minute, the line says how long this model usually takes", async () => {
-  const first = await start();
+/** Three Answers by `model` that each took 62 seconds to their words, then the app again over the same data. */
+async function startWithMinuteHistory(model?: string) {
+  const first = await start(model ? { model } : {});
   await core(first.window).mind("Lit review: tides");
-  for (const question of ["When do spring tides happen?", "When do neap tides happen?"]) {
+  for (const question of [
+    "When do spring tides happen?",
+    "When do neap tides happen?",
+    "Why are there two tides a day?",
+  ]) {
     await ask(first.window, question);
   }
-  await ask(first.window, "Why are there two tides a day?");
   await first.app.close();
   const db = openDatabase(join(dataDir, "incarnamind.db"));
   try {
@@ -298,11 +302,15 @@ test("with earlier Answers that took about a minute, the line says how long this
   } finally {
     db.close();
   }
-
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await setWindowSize(app, window, 1440, 900);
   await setSilentWaitMs(window, 600);
   await pointAndClick(window, window.getByTestId("mind-list-item"));
+  return { app, window };
+}
+
+test("with earlier Answers that took about a minute, the line says how long this model usually takes", async () => {
+  const { app, window } = await startWithMinuteHistory();
   await askSlowly(window, "Where do neap tides come from? Answer slowly.");
   const answer = assistantAnswers(window).last();
   await expect(answer.getByTestId("answer-wait")).toHaveText(
@@ -318,6 +326,26 @@ test("with earlier Answers that took about a minute, the line says how long this
   );
   await screenshot(window, "wait-usually-zh");
   await pointAndClick(window, answer.getByTestId("answer-wait").getByTestId("answer-stop"));
+  await expect(answer).toHaveAttribute("data-status", "stopped");
+  await app.close();
+});
+
+test("a long model name wraps inside the wait line, and Stop stays inside the Answer", async () => {
+  const { app, window } = await startWithMinuteHistory(
+    "claude-haiku-5-5-with-a-very-long-experimental-identifier-20261016",
+  );
+  await askSlowly(window, "Where do neap tides come from? Answer slowly.");
+  const answer = assistantAnswers(window).last();
+  const wait = answer.getByTestId("answer-wait");
+  await expect(wait).toContainText("Usually about a minute with claude-haiku-5-5-with-a-very-long");
+  const stop = await wait.getByTestId("answer-stop").boundingBox();
+  const inside = await answer.boundingBox();
+  expect((stop?.x ?? 0) + (stop?.width ?? 0)).toBeLessThanOrEqual(
+    (inside?.x ?? 0) + (inside?.width ?? 0) + 1,
+  );
+  expect(await wait.evaluate((line) => line.scrollWidth <= line.clientWidth + 1)).toBe(true);
+  await screenshot(window, "wait-long-name-en");
+  await pointAndClick(window, wait.getByTestId("answer-stop"));
   await expect(answer).toHaveAttribute("data-status", "stopped");
   await app.close();
 });
