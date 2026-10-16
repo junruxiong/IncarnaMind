@@ -60,13 +60,6 @@ function useWatchAddedDocuments(editor: Editor, mindId: string): void {
   useEffect(() => () => setAdded(mindId, null), [mindId]);
 }
 
-/**
- * "2 Documents added since these checks · Check again · Close" (#993), under
- * the Mind's health line, when Documents were added to the scope of checks
- * they could change. Check again checks only those, asking first with their
- * number and the estimate on a model billed per token; the line goes once
- * they are checked again.
- */
 export function AddedDocumentsLine({
   editor,
   doc,

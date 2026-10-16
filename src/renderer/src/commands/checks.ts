@@ -30,7 +30,6 @@ const checkCommand = (
   },
 });
 
-/** The Mind last written in, while Documents added since its checks could change some (#993). */
 function withAdded(): string | null {
   const note = noteHandle.current;
   if (!note || note.editor.isDestroyed || useChecks.getState().running[note.mindId]) return null;

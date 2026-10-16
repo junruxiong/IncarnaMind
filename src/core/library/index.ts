@@ -62,6 +62,8 @@ function taggingClassifierOf(value: unknown): TaggingClassifier | null {
 interface AssignmentRow {
   document_id: string;
   group_id: string | null;
+  created_at: string;
+  filed_at: string | null;
   source: "automatic" | "user";
   suggested: number;
   status: ClassificationStatus;
@@ -104,6 +106,7 @@ const errorOf = (row: AssignmentRow): ProviderError => {
 const assignmentOf = (row: AssignmentRow): DocumentGroupAssignment => ({
   documentId: row.document_id,
   groupId: row.group_id,
+  filedAt: row.filed_at ?? row.created_at,
   source: row.source,
   suggested: row.suggested === 1,
   status: row.status,
@@ -127,8 +130,15 @@ function parsePreviousAssignment(
   if (input === null) return null;
   const invalid = new InvalidInputError("A previous assignment is an assignment, or null.");
   if (!isRecord(input)) throw invalid;
-  const { groupId, source, suggested, status, error, model } = input;
+  const { groupId, filedAt, source, suggested, status, error, model } = input;
   if (groupId !== null && (typeof groupId !== "string" || groupId === "")) throw invalid;
+  if (
+    filedAt !== undefined &&
+    (typeof filedAt !== "string" ||
+      !Number.isFinite(Date.parse(filedAt)) ||
+      new Date(filedAt).toISOString() !== filedAt)
+  )
+    throw invalid;
   if (source !== "automatic" && source !== "user") throw invalid;
   if (typeof suggested !== "boolean" || (suggested && source !== "automatic")) throw invalid;
   const known = CLASSIFICATION_STATUSES.find((each) => each === status);
@@ -141,6 +151,7 @@ function parsePreviousAssignment(
   if (model !== null && !(isRecord(model) && typeof model.id === "string")) throw invalid;
   return {
     groupId,
+    ...(filedAt !== undefined && { filedAt }),
     source,
     suggested,
     status: known,
@@ -840,12 +851,12 @@ export function createLibrary(options: {
       db.run("UPDATE library_groups SET deleted_at = NULL, updated_at = ? WHERE id = ?", [at, id]);
       db.run(
         `UPDATE document_groups SET group_id = item.folder_id, suggested = item.suggested,
-           updated_at = ?, filed_at = ?
+           updated_at = ?
          FROM deleted_folder_items item
          WHERE item.folder_id = ? AND item.item_kind = 'document' AND item.deleted_at IS NULL
            AND item.item_id = document_groups.document_id
            AND document_groups.deleted_at IS NULL AND document_groups.group_id IS NULL`,
-        [at, at, id],
+        [at, id],
       );
       const taken = (kind: "mind" | "conversation") =>
         db
@@ -988,6 +999,11 @@ export function createLibrary(options: {
       const status = previous.status === "classifying" ? "pending" : previous.status;
       db.transaction(() => {
         write(doc, previous.groupId, previous.source, status, previous.model, previous.suggested);
+        if (previous.filedAt !== undefined)
+          db.run(
+            "UPDATE document_groups SET filed_at = ? WHERE document_id = ? AND deleted_at IS NULL",
+            [previous.filedAt, doc.id],
+          );
         if (previous.error)
           db.run(
             "UPDATE document_groups SET error_kind = ?, error_message = ?, error_wording = ? WHERE document_id = ? AND deleted_at IS NULL",

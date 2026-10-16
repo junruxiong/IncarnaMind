@@ -4659,6 +4659,8 @@ export type MindCheckPlan =
       sentences: number;
       /** Whether the model first names the claims among them; only checks made again don't need it. */
       findsClaims: boolean;
+      /** Every sentence searches only the Mind's Folder; false also for mixed scopes. */
+      inFolder: boolean;
       /** The Mind's own model; null for the default. */
       model: ChatModelChoice | null;
     }

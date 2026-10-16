@@ -13,13 +13,11 @@ import { MIND_SETTINGS_FIELD } from "../../core/api";
 const CLOSED_KEY = "addedDocumentsClosed";
 
 interface AddedDocumentsState {
-  /** By Mind, then by check: the Documents added to its scope since it was made. */
   byMind: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>>;
 }
 
 export const useAddedDocuments = create<AddedDocumentsState>()(() => ({ byMind: {} }));
 
-/** The Documents added since any of the Mind's checks, each once. */
 export const documentsAdded = (
   checks: Readonly<Record<string, readonly string[]>> | undefined,
 ): string[] => [...new Set(Object.values(checks ?? {}).flat())];
@@ -43,7 +41,6 @@ const closedOf = (doc: Y.Doc): ReadonlySet<string> => {
   );
 };
 
-/** The Documents the User closed the line for, in this Mind. */
 export function useClosedAdded(doc: Y.Doc): ReadonlySet<string> {
   const [closed, setClosed] = useState(() => closedOf(doc));
   useEffect(() => {
