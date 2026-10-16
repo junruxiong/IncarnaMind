@@ -1,7 +1,8 @@
 import type { EditAction } from "../api";
 
+// "Cut it down to two sentences" shortens.
 const REMOVE =
-  /\b(?:delete|deleting|remove|removing|cut|cutting|drop|dropping|erase|get rid of|take out|strip)\b|删除|删掉|删去|去掉|去除|移除|拿掉/giu;
+  /\b(?:delete|deleting|remove|removing|(?:cut|cutting)(?!\s+(?:[\p{L}]+\s+){0,3}(?:down|back)\b)|drop|dropping|erase|get rid of|take out|strip)\b|删除|删掉|删去|去掉|去除|移除|拿掉/giu;
 /**
  * A part of the text by its kind: "the second paragraph", "the Methods section",
  * 第二段, 最后一句. Words in the text ("these filler words", 所有形容词) are no
