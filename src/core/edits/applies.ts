@@ -1,7 +1,8 @@
 import type { EditAction } from "../api";
 
+// "Cut it down to two sentences" shortens.
 const REMOVE =
-  /\b(?:delete|deleting|remove|removing|cut|cutting|drop|dropping|erase|get rid of|take out|strip)\b|删除|删掉|删去|去掉|去除|移除|拿掉/giu;
+  /\b(?:delete|deleting|remove|removing|(?:cut|cutting)(?!\s+(?:[\p{L}]+\s+){0,3}(?:down|back)\b)|drop|dropping|erase|get rid of|take out|strip)\b|删除|删掉|删去|去掉|去除|移除|拿掉/giu;
 /**
  * A part of the text by its kind: "the second paragraph", "the Methods section",
  * 第二段, 最后一句. Words in the text ("these filler words", 所有形容词) are no
@@ -13,6 +14,9 @@ const PART =
 const NOT =
   /\b(?:don'?t|do not|never|without|no need to|not)\b|不要|别|不用|不必|无需|不需要|没必要|勿/iu;
 const CLAUSE = /[,;:.!?，；：。！？]|\b(?:but|then)\b|但是?/iu;
+/** Asking for the text as a table replaces it, as a delete does: "make this into a table", 改成表格 (#961). */
+const AS_TABLE =
+  /\b(?:make|turn|convert|change|rewrite|reformat|format|put|present|restructure|lay out)\b(?:\s+(?!and\b|but\b)[\w'-]+){0,4}?\s+(?:in(?:to)?|as|to)\s+(?:a\s+)?table\b|\bmake\s+(?:it|this|these|them|that)\s+a\s+table\b|(?:改|做|转|变|整理|转换|改写|换)(?:成|为)(?:一个|一张)?表格|以表格(?:的)?形式/giu;
 /** "the first and second paragraphs" is one part; "the jargon and tighten the paragraph" isn't. */
 const ORDINAL_AND =
   /\b(?:and|or)\s+(?=(?:the\s+)?(?:first|second|third|fourth|fifth|sixth|last|next|\d+(?:st|nd|rd|th)?)\b)/giu;
@@ -20,6 +24,10 @@ const ORDINAL_AND =
 /** Unless asked for, what an edit's new text leaves out is kept, as a model may return only what it changed (#880). */
 export function asksToRemove(action: EditAction, instruction: string): boolean {
   if (action !== "instruction") return false;
+  for (const table of instruction.matchAll(AS_TABLE)) {
+    const opening = instruction.slice(0, table.index).split(CLAUSE).at(-1) ?? "";
+    if (!NOT.test(opening)) return true;
+  }
   const asked = instruction.replace(ORDINAL_AND, "");
   for (const verb of asked.matchAll(REMOVE)) {
     const at = verb.index ?? 0;

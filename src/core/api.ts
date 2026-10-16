@@ -775,6 +775,7 @@ export interface AnswerAttributes {
   errorMessage: string | null;
   /** When the plan's limit that stopped it resets (ISO 8601), when the provider said. */
   errorResetsAt: string | null;
+  errorSignInRoute: SignInRouteProblem | null;
   /** A fingerprint of the content as it was generated: it differs once the User edits the Answer. */
   generatedHash: string | null;
   /**
@@ -2646,6 +2647,77 @@ export type ReferenceLookupFailureReason =
   | "unreachable"
   | "service-error";
 
+/** A service a reference is looked up in. */
+export type ReferenceService = "crossref" | "openalex" | "arxiv";
+
+/**
+ * How a reference in a Mind's reference list checks, looked up in
+ * Crossref, then OpenAlex, and an arXiv number on arXiv:
+ * - "found": the work exists, as written;
+ * - "mismatch": a record exists, but its title, year or first author differ;
+ * - "not-found": the DOI or arXiv number it gives leads nowhere: no agency
+ *   registered it, or arXiv has no such preprint;
+ * - "not-listed": searched for as written, neither Crossref nor OpenAlex has
+ *   a record like it. It may still exist: neither holds every conference
+ *   paper, preprint or Chinese journal;
+ * - "not-checked": it couldn't be asked about (`ReferenceCheck.reason`).
+ */
+export type ReferenceCheckMark = "found" | "mismatch" | "not-found" | "not-listed" | "not-checked";
+
+/**
+ * Why a reference wasn't checked; "registered-elsewhere": its DOI exists,
+ * but another agency than Crossref registered it and OpenAlex has no record
+ * of it either, so its details couldn't be compared.
+ */
+export type ReferenceCheckReason =
+  | "local-mode"
+  | "declined"
+  | "unreachable"
+  | "rate-limited"
+  | "service-error"
+  | "registered-elsewhere";
+
+/** How a reference differs from the record of the work it names. */
+export interface ReferenceDifference {
+  field: "title" | "authors" | "year";
+  /** As the record has it: the authors as "Hochreiter, Schmidhuber". */
+  found: string;
+  /** As the reference has it, when it can be read alone (its year). */
+  cited: string | null;
+}
+
+export interface ReferenceCheck {
+  /** As written, its white space collapsed. */
+  reference: string;
+  mark: ReferenceCheckMark;
+  /** Whose record it is, which said its identifier leads nowhere, or which couldn't be asked. */
+  service: ReferenceService | null;
+  /** The record of the work it names; null when none was found, or it wasn't checked. */
+  record: {
+    title: string;
+    authors: ReferenceName[];
+    year: number | null;
+    doi: string | null;
+  } | null;
+  /** For "mismatch": how it differs. */
+  differences: ReferenceDifference[];
+  /** For "not-checked": why. */
+  reason: ReferenceCheckReason | null;
+  /** "rate-limited": when the service takes requests again, as it said (ISO 8601). */
+  resetsAt?: string;
+}
+
+export type CheckReferencesResult =
+  | {
+      kind: "checked";
+      /** Each entry of the reference list, in order, with the Block it is in. */
+      references: (ReferenceCheck & { blockId: string })[];
+    }
+  /** The Mind has no reference list: no heading such as "References" or "参考文献". */
+  | { kind: "no-references" }
+  /** Stopped by `stopReferenceCheck`, or the Mind went. */
+  | { kind: "cancelled" };
+
 /** What Look up came to. */
 export type ReferenceLookupResult =
   | {
@@ -3616,6 +3688,8 @@ export type ProviderErrorKind =
   | "local-mode"
   /** The model is in Ollama on this computer, and Ollama isn't running: found before anything was sent. */
   | "ollama-not-running"
+  /** Anthropic: a model that requires 30-day data retention (Fable 5.1), asked by an organization or workspace that has it off. */
+  | "data-retention"
   /** ChatGPT plan: there is no sign-in on this device, or it expired: sign in again. */
   | "not-signed-in"
   /** ChatGPT plan: the plan's usage limit, or the one the User set for IncarnaMind, is reached. */
@@ -3943,9 +4017,11 @@ export interface TaskShown {
   blockId: string | null;
 }
 
-/** A large run to estimate: so many items (a comparison table's cells, verify's sentences…), each about an Answer. */
+/** A large run to estimate: so many items (a comparison table's cells, verify's sentences…). */
 export interface RunEstimateInput {
   items: number;
+  /** What each item is: about an Answer (the default), or a sentence checked against Documents (#973). */
+  each?: "answer" | "check";
   /** The web searches it makes (#128), each billed by the model's provider, on top of its items. */
   searches?: number;
   /** The model it would use; the default model when left out. */
@@ -4583,6 +4659,11 @@ export type MindCheckPlan =
     }
   | Extract<CheckSentencesResult, { kind: "no-documents" | "nothing" }>;
 
+/** The claims a Check this Mind run would check, once the model has named them (`findMindClaims`). */
+export type FindMindClaimsResult =
+  /** The fresh sentences it named as claims, and the checks to make again. */
+  { kind: "found"; claims: number } | Exclude<CheckMindResult, { kind: "checked" }>;
+
 export type CheckMindResult =
   /**
    * Each claim has its mark: `checked` of the `sentences` with a verdict, the
@@ -4788,6 +4869,25 @@ export interface AnswerSteps {
    * Absent: none.
    */
   unbackedClaims?: ClaimedChange[];
+  /**
+   * Its model can't call Tools, and the User's words asked to write into a
+   * Mind or change one (`routeRequest`): nothing was written. Absent: neither.
+   */
+  withoutMindTools?: true;
+  /** It covered only some of the Documents in scope, and offers the rest. Absent: all of them. */
+  coverage?: AnswerCoverage;
+}
+
+/**
+ * What an Answer covered of the Documents in scope, when not all of them: the
+ * main few the Question asked for ("main"), or the largest of more than one
+ * summary covers well ("largest"); by name as they were then. `rest`: the
+ * others' ids, which a second Question can be asked from.
+ */
+export interface AnswerCoverage {
+  kind: "main" | "largest";
+  used: { id: string; name: string }[];
+  rest: string[];
 }
 
 /**
@@ -5010,6 +5110,7 @@ export interface ConversationAnswer {
   /** Why it failed, when `status` is "failed". */
   errorKind: ProviderErrorKind | null;
   errorMessage: string | null;
+  errorSignInRoute: SignInRouteProblem | null;
   citationSupport: CitationSupport | null;
   /** The Tools it called, in order: its searches, Skills and Connectors' Tools. */
   toolCalls: AnswerToolCall[];
@@ -5532,13 +5633,21 @@ export interface CopilotModel {
   name: string;
 }
 
+export type CopilotPlan = "free" | "pro" | "pro-plus" | "business" | "enterprise";
+
 /** The User's Copilot plan for Answers instead of an API key; it counts toward the plan's limits. */
 export interface CopilotStatus {
   account:
     | { state: "signed-out" }
     /** Renewing the sign-in failed, or GitHub refused its token: sign in again. */
     | { state: "expired" }
-    | { state: "signed-in"; profile: CopilotProfileId };
+    /** The GitHub login and the plan, as GitHub named them at sign-in, when it did. */
+    | {
+        state: "signed-in";
+        profile: CopilotProfileId;
+        login: string | null;
+        plan: CopilotPlan | null;
+      };
   /** A sign-in is waiting for the User on GitHub's page. */
   signingIn: boolean;
   /** While a sign-in waits, once GitHub has given it: the code the User types, and where. */
@@ -5550,7 +5659,10 @@ export interface CopilotStatus {
 }
 
 export type CopilotSignInErrorKind =
-  | Extract<SignInRouteProblem, "sign-in-cancelled" | "refused" | "no-plan" | "unexpected-response">
+  | Extract<
+      SignInRouteProblem,
+      "sign-in-cancelled" | "refused" | "no-plan" | "policy-blocked" | "unexpected-response"
+    >
   /** The code on GitHub's page expired before the User approved it. */
   | "code-expired"
   /** The User declined on GitHub's page. */
@@ -5673,6 +5785,7 @@ export const dataKinds = [
   "answers",
   "web-searches",
   "verified-document",
+  "references",
   "connector-search",
 ] as const;
 
@@ -5698,6 +5811,10 @@ export type DataKind = (typeof dataKinds)[number];
  * - "reference-lookup": a Document's DOI to Crossref, or its arXiv id to
  *   arXiv, when the User asks Look up to fill its reference record (#286).
  *   Nothing else: no file, text or name. None in local mode.
+ * - "reference-check": each entry of a Mind's reference list, as written,
+ *   to Crossref, then to OpenAlex when Crossref has no record of it or one
+ *   that differs, and an arXiv number to arXiv, when the User checks the
+ *   list's references. Nothing else of the Mind. None in local mode.
  * - "find-sources": what the User (or an Answer, for them) searches for, with
  *   its filters, to each Source provider searched, and the identifier of a
  *   work they add, to the provider that gives its full text or record (#296).
@@ -5731,6 +5848,7 @@ export const dataFlowIds = [
   "rerank",
   "suggestions",
   "reference-lookup",
+  "reference-check",
   "find-sources",
   "edits",
   "checks",
@@ -5743,16 +5861,19 @@ export type DataFlowId = (typeof dataFlowIds)[number];
 
 /**
  * The flows choosing the chat model's provider allows (ADR-0022): everything
- * that sends to it, as the line above "Use this provider" says.
+ * that sends to it, as the line above "Use this provider" says. That line is
+ * made from this list, so a flow added here needs its words (`chosenFlowLines`).
  */
-export const CHOSEN_PROVIDER_FLOWS: readonly DataFlowId[] = [
+export const CHOSEN_PROVIDER_FLOWS = [
   "chat",
-  "edits",
   "checks",
   "suggestions",
+  "edits",
   "tagging",
   "classification",
-];
+] as const satisfies readonly DataFlowId[];
+
+export type ChosenProviderFlow = (typeof CHOSEN_PROVIDER_FLOWS)[number];
 
 /** Data leaving this computer: what one flow sends to one service. */
 export interface DataFlow {
@@ -5821,7 +5942,8 @@ export interface RegisteredDataFlow {
  * - "claude-sign-in": signing in with a Claude account and refreshing it;
  *   listed once the User has started signing in.
  * - "copilot-sign-in": signing in with GitHub for Copilot, renewing it, and
- *   reading the plan's models; listed once the User has started signing in.
+ *   reading the account's name and the plan's models; listed once the User
+ *   has started signing in.
  * - "remote-connectors": connecting to each remote Connector that is on, and
  *   signing in to it: its server, and the authorization server it names
  *   (discovery, registration, tokens). One entry per server. Tool calls, which
@@ -6065,9 +6187,13 @@ export interface TestJevConnectionInput {
  *   the sign-in failed (`signIn.expired`). Answers skip its Tools.
  * - "ready": connected; Answers can use its Tools (see `ApprovalPolicy` for which ask first).
  * - "error": it couldn't start or be reached, or it stopped (see `error`).
+ * - "paused": remote: its server isn't on this computer, and "Keep everything
+ *   on this computer" is on, so IncarnaMind isn't connected to it and Answers
+ *   don't use it. It connects again once that is off.
  */
 export type ConnectorState =
   | "off"
+  | "paused"
   | "connecting"
   | "signing-in"
   | "needs-sign-in"
@@ -6631,6 +6757,10 @@ export const EXPORT_FORMATS = [
   "markdown",
 ] as const;
 export type ExportFormat = (typeof EXPORT_FORMATS)[number];
+
+/** What a Mind's check record (#738) is saved as: a PDF to file with the work, and a CSV for the User's own records. */
+export const CHECK_RECORD_FORMATS = ["pdf", "csv"] as const;
+export type CheckRecordFormat = (typeof CHECK_RECORD_FORMATS)[number];
 
 /**
  * The User's export choices (`UserSettings.exportOptions`): the format Export uses, and each
@@ -7963,6 +8093,18 @@ export interface CoreApi {
    */
   lookUpReference(documentId: string): Promise<ReferenceLookupResult>;
   /**
+   * Looks up each entry of a Mind's reference list in Crossref, by its DOI,
+   * else as written; then in OpenAlex when Crossref has no record of it or
+   * only one that differs; an arXiv number on arXiv. Calling it is the
+   * consent to the "reference-check" flow (ADR-0022); in local mode every
+   * entry is "not-checked". One check of a Mind at a time. Answers are kept:
+   * a found record for good, a miss for seven days; `again` asks about every
+   * miss again.
+   */
+  checkReferences(mindId: string, options?: { again?: boolean }): Promise<CheckReferencesResult>;
+  /** Stops a Mind's `checkReferences`: it gives "cancelled". Stopping none does nothing. */
+  stopReferenceCheck(mindId: string): Promise<void>;
+  /**
    * Imports the references in a CSL JSON, BibTeX or RIS file (#287), from
    * Zotero, EndNote, Mendeley and others. The format is read from what is in
    * the file. Each reference is matched to a Document by DOI, then arXiv id,
@@ -8384,6 +8526,13 @@ export interface CoreApi {
     mode: CheckMindMode,
     allDocuments?: boolean,
   ): Promise<MindCheckPlan>;
+  /**
+   * The first step of "Check this Mind" (#973): the model names the claims
+   * among the sentences `checkMind` would send, so the ask before the run
+   * counts and prices them exactly. What it named is kept, and `checkMind`
+   * doesn't send those sentences to be sorted again. `cancelCheck` stops it.
+   */
+  findMindClaims(input: CheckMindInput): Promise<FindMindClaimsResult>;
   /**
    * "Check this Mind" (#737): the model names the claims among the Mind's
    * sentences, leaving out headings, questions and the User's own opinions,
@@ -8826,6 +8975,12 @@ export interface CoreApi {
    * next free name, asking where new files go the first time.
    */
   saveMindExport(mindId: string, options: ExportMindOptions): Promise<SavedMindExport>;
+  /**
+   * Saves a record of what was checked in a Mind (#738) into the Output location, as
+   * `saveMindExport` does: each checked sentence and each Citation with its result, the Document
+   * version, the model and the time. Nothing is sent anywhere.
+   */
+  saveCheckRecord(mindId: string, format: CheckRecordFormat): Promise<SavedExport>;
 
   /**
    * Formats Citations and their Bibliography in a citation style (#289), from the cited
@@ -9063,6 +9218,8 @@ export interface CoreEvents {
    * "document.status". Carries each Document whole.
    */
   "references.changed": Document[];
+  /** How far a Mind's `checkReferences` is: `done` of `total` entries looked up. */
+  "referenceCheck.progress": { mindId: string; done: number; total: number };
   /** `importReferences` has matched `done` of `total` references. */
   "references.importProgress": { done: number; total: number };
   /** The ChatGPT sign-in changed: started, finished, signed out, or expired. */
@@ -9218,6 +9375,8 @@ const methods: Record<CoreApiMethod, true> = {
   restoreReference: true,
   confirmReference: true,
   lookUpReference: true,
+  checkReferences: true,
+  stopReferenceCheck: true,
   listSourceProviders: true,
   setSourceProviderKey: true,
   findSources: true,
@@ -9290,6 +9449,7 @@ const methods: Record<CoreApiMethod, true> = {
   planContradictionCheck: true,
   checkContradictions: true,
   planMindCheck: true,
+  findMindClaims: true,
   checkMind: true,
   getSecretStorage: true,
   acceptPlainTextSecretStorage: true,
@@ -9410,6 +9570,7 @@ const methods: Record<CoreApiMethod, true> = {
   previewSharePage: true,
   setSharePageTextOnly: true,
   saveMindExport: true,
+  saveCheckRecord: true,
   formatCitations: true,
   getMindCitationStyle: true,
   setMindCitationStyle: true,

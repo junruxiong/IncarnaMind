@@ -30,6 +30,7 @@ import { TabNoticeLine } from "./components/tabs/TabNoticeLine";
 import { WordImportDialog } from "./components/WordImportDialog";
 import { files } from "./core";
 import { useEscapeToDismiss } from "./escapeDismiss";
+import { useExportMenu } from "./exportMenu";
 import { useLanguage, useT } from "./i18n";
 import { useMeetingHelpInWindow } from "./meetingHelp";
 import { useMeetings } from "./meetings";
@@ -203,6 +204,7 @@ function Workspace() {
   const workbench = useRef<HTMLDivElement>(null);
   const beforeSlide = useSidebarSlide(workbench);
   const sidebar = useSidebarControl(device?.sidebarHidden ?? false, beforeSlide);
+  useExportMenu();
   const peek = useSidebarPeek(sidebar.hidden, beforeSlide);
   const [announcement, setAnnouncement] = useState("");
   const announced = useRef(sidebar.hidden);
