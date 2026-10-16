@@ -1114,15 +1114,13 @@ export interface WordImportReport {
 /**
  * What a Word file's look holds that a Mind doesn't draw (#735), counted from
  * the document's own formatting: paragraphs, runs and cells shaded;
- * paragraphs with a border; tab stops set; tables with no borders, which
- * place text; and how many text colours (other than black), fonts and sizes
- * it sets.
+ * paragraphs with a border; tab stops set; and how many text colours (other
+ * than black), fonts and sizes it sets.
  */
 export interface WordLayout {
   shading: number;
   borders: number;
   tabStops: number;
-  layoutTables: number;
   colours: number;
   fonts: number;
   sizes: number;
@@ -5317,6 +5315,18 @@ export type OllamaStatus =
       recommendedModel: string;
     };
 
+/** What runs at a local preset's address: `address` is its host and port, `models` the language models it lists. */
+export type LocalServerStatus =
+  | { running: false; address: string }
+  | { running: true; address: string; models: string[] };
+
+export interface DetectLocalServerInput {
+  catalogId: string;
+  apiKey?: string;
+  /** A host and port; the preset's default when left out. */
+  address?: string;
+}
+
 export interface SelectOllamaInput {
   /** Defaults to Ollama's local port. */
   baseUrl?: string;
@@ -6367,8 +6377,9 @@ export interface ExportMindOptions {
   theirChanges?: TheirChangesShown;
   /**
    * Word only: a Citation whose check failed (its quote wasn't found, or its
-   * claim is unsupported or contradicted) gets a comment by IncarnaMind
-   * saying so. Absent: off.
+   * claim is unsupported or contradicted), and a sentence checked
+   * Contradicted, Unsupported or Needs re-check, gets a comment by
+   * IncarnaMind saying so. Absent: off.
    */
   commentFailedChecks?: boolean;
 }
@@ -6397,12 +6408,24 @@ export interface MindExportPreview {
   theirChanges: number;
 }
 
+/** The sentences an export holds whose check isn't good, by result (`MindExport.sentenceChecks`). */
+export interface SentenceChecksExported {
+  contradicted: number;
+  unsupported: number;
+  needsRecheck: number;
+  /** They went into the file as comments: a Word file, with `commentFailedChecks` on. Otherwise they went out unmarked. */
+  commented: boolean;
+}
+
 /** A Mind exported as a file, for the host to save where the User chooses. */
 export interface MindExport extends MindExportPreview {
   /** The file's contents: UTF-8 text for Markdown and HTML, a ZIP package for .docx, a PDF for PDF and a source pack. */
   data: Uint8Array;
   /** For a Mind imported from a Word file, exported back into it: what it kept and couldn't keep. */
   word: WordExportReport | null;
+  sentenceChecks: SentenceChecksExported;
+  /** Changes still waiting that a Word file holds as tracked changes. */
+  trackedChanges: number;
 }
 
 /** What `saveMindExport` did. */
@@ -6411,7 +6434,8 @@ export type SavedMindExport =
   | ({ status: "saved"; file: SavedFile; word: WordExportReport | null } & Omit<
       MindExportPreview,
       "fileName" | "fromWord" | "theirChanges"
-    >)
+    > &
+      Pick<MindExport, "sentenceChecks" | "trackedChanges">)
   /**
    * Not saved: a Mind imported from Word can't keep something in its file
    * (`WordExportReport.notKept`) the User hasn't accepted (`ExportMindOptions.accept`).
@@ -7924,6 +7948,8 @@ export interface CoreApi {
 
   /** Looks for Ollama, on its default local port unless another URL is given. */
   detectOllama(input?: { baseUrl?: string }): Promise<OllamaStatus>;
+  /** Looks for a preset's server on this computer at its address, and lists its models. */
+  detectLocalServer(input: DetectLocalServerInput): Promise<LocalServerStatus>;
   /**
    * Opens Ollama's app and waits, for up to twenty seconds, until Ollama answers; resolves with
    * what `detectOllama` then finds. Rejects when the app can't be opened from here.
@@ -8757,6 +8783,7 @@ const methods: Record<CoreApiMethod, true> = {
   getSecretStorage: true,
   acceptPlainTextSecretStorage: true,
   detectOllama: true,
+  detectLocalServer: true,
   openOllama: true,
   selectOllama: true,
   getChatGptPlan: true,

@@ -48,20 +48,28 @@ const DETECT_TIMEOUT_MS = 2_000;
 /** How long Open Ollama waits for Ollama to answer: its app takes a few seconds to start. */
 export const OLLAMA_START_TIMEOUT_MS = 20_000;
 
-async function askOllama(baseUrl: string): Promise<Response | null> {
+async function ask(url: string, headers: Record<string, string> = {}): Promise<Response | null> {
   try {
-    return await fetch(`${baseUrl}/api/tags`, { signal: AbortSignal.timeout(DETECT_TIMEOUT_MS) });
+    return await fetch(url, { headers, signal: AbortSignal.timeout(DETECT_TIMEOUT_MS) });
   } catch {
     return null;
   }
 }
 
-/** Whether anything answers at `baseUrl`, whatever the status: the request itself then says what is wrong. */
-export async function ollamaAnswers(baseUrl: string): Promise<boolean> {
-  const response = await askOllama(baseUrl);
+const askOllama = (baseUrl: string) => ask(`${baseUrl}/api/tags`);
+
+/** Whether anything answers at `url`, whatever the status: the request itself then says what is wrong. */
+export async function anythingAnswers(
+  url: string,
+  headers: Record<string, string> = {},
+): Promise<boolean> {
+  const response = await ask(url, headers);
   await response?.body?.cancel().catch(() => undefined);
   return response !== null;
 }
+
+export const ollamaAnswers = (baseUrl: string): Promise<boolean> =>
+  anythingAnswers(`${baseUrl}/api/tags`);
 
 export async function detectOllama(
   baseUrl: string,
