@@ -11,6 +11,7 @@
  * and Silero through sherpa-onnx today (./sherpa), another engine with #137.
  */
 import { MEETING_SAMPLE_RATE, type SpeechSegment } from "../adapters";
+import { cleanSpeech } from "./speechText";
 
 /** Finds speech in one stream. Samples are in [-1, 1], at `MEETING_SAMPLE_RATE`. */
 export interface VoiceDetector {
@@ -178,7 +179,7 @@ export function createSpeechHost(engine: SpeechEngine, report: SpeechReport) {
     let text = "";
     let failed = false;
     try {
-      text = (await engine.recognizer.decode(job.samples, job.stream)).trim();
+      text = cleanSpeech(await engine.recognizer.decode(job.samples, job.stream));
     } catch (error) {
       // A stretch the engine can't read loses its text, not the rest of the stream.
       failed = true;

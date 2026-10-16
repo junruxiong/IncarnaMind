@@ -576,7 +576,11 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
     ...(crashReporter && { crashReporter }),
     ...(usageData && { usageData }),
     ...(referenceLookupUrl && {
-      referenceLookup: { crossref: referenceLookupUrl, arxiv: referenceLookupUrl },
+      referenceLookup: {
+        crossref: referenceLookupUrl,
+        arxiv: referenceLookupUrl,
+        openalex: referenceLookupUrl,
+      },
     }),
     ...(contradictionWatchDelay && {
       contradictionWatch: { delayMs: Number(contradictionWatchDelay) },

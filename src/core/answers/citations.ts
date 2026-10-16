@@ -37,7 +37,7 @@ import {
   resolveRequested,
   unitLocation,
 } from "../../shared/locations";
-import { citesSource, type NamedSource } from "../../shared/markdownTables";
+import { citesSource, type NamedSource } from "../../shared/namedSources";
 import { findQuote, lostLigatures, type MatchOptions } from "../../shared/quoteMatch";
 import { foldRadicals, nameKey } from "../../shared/text";
 import { sameRun } from "../../shared/units";
@@ -66,8 +66,15 @@ import type {
 } from "./engine";
 import { NOT_CITED_ATTRIBUTE } from "./prompt";
 
-/** How many times one Answer may search; later searches are refused, so the model answers. */
-const MAX_SEARCHES_PER_ANSWER = 5;
+const SEARCHED_ALREADY =
+  "You already searched for this, and have its Passages: answer with them, or search for something different.";
+
+const sameSearch = (query: string) =>
+  query
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
 
 const FIX_THESE = "Fix these with another cite call:";
 
@@ -634,7 +641,7 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
   const records = new Map<number, Accepted>();
   /** Records naming no Passage the model was given, or no marker: as given, and why. */
   const rejected: RejectedRecord[] = [];
-  let searches = 0;
+  const searched = new Set<string>();
   /** Markers in the final text, in order of first appearance, and those that had no record. */
   const finalMarkers: number[] = [];
   let removedMarkers = 0;
@@ -988,13 +995,9 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
       signal?: AbortSignal,
       options?: AnswerSearchOptions,
     ): Promise<SearchResultForModel> {
-      searches++;
-      if (searches > MAX_SEARCHES_PER_ANSWER) {
-        return {
-          text: "You have searched enough for this Question: answer with the Passages you have.",
-          passageCount: 0,
-        };
-      }
+      const same = sameSearch(query);
+      if (searched.has(same)) return { text: SEARCHED_ALREADY, passageCount: 0 };
+      searched.add(same);
       return search(query, signal, undefined, options);
     },
 
