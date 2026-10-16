@@ -646,7 +646,8 @@
     align-items: center;
     /* As well as the basis: the strip sizes to its tabs' widths, which would otherwise be their text's. */
     width: 220px;
-    min-width: 64px;
+    /* Its chrome and the start of its name (#905): the strip scrolls rather than shrink a tab past it. */
+    min-width: calc(70px + var(--tab-label-min, 0px));
     height: 34px;
     color: var(--color-ink-secondary);
     font-size: 13px;
@@ -659,7 +660,7 @@
     &[aria-selected="true"] {
       z-index: 1;
       /* Its title stays readable while the others shrink. */
-      min-width: min(132px, 100%);
+      min-width: max(min(132px, 100%), calc(70px + var(--tab-label-min, 0px)));
       height: 32px;
       border-radius: 10px 10px 0 0;
       background: var(--color-sheet);
@@ -3401,6 +3402,67 @@
       color: var(--color-ink-secondary);
     }
   }
+  /* An edit applying as it streams in reads as the text it makes (#880; DESIGN.md, AI edits). */
+  .mind-editor del.proposal-delete:has(.proposal-applying),
+  .mind-editor .proposal-node--delete.proposal-applying {
+    display: none;
+  }
+  .mind-editor ins.proposal-insert:has(.proposal-applying),
+  .mind-editor .proposal-node--insert.proposal-applying:not(.citation-marker) {
+    text-decoration: none;
+  }
+  .mind-editor .proposal-node--insert.proposal-applying .citation-marker,
+  .mind-editor .citation-marker.proposal-node--insert.proposal-applying {
+    box-shadow: none;
+  }
+  /* Review changes draws an applied edit's changes as proposals are drawn, over text that stays applied. */
+  .mind-editor .applied-new {
+    text-decoration: underline 1px var(--color-accent);
+    text-decoration-skip-ink: none;
+    text-underline-offset: 5px;
+  }
+  .mind-editor .applied-old {
+    color: var(--color-ink-meta);
+    text-decoration: line-through 1px var(--color-ink-meta);
+    user-select: none;
+  }
+  .mind-editor .applied-old--block {
+    display: block;
+    margin-block: 4px;
+  }
+  .mind-editor .applied-line,
+  .mind-editor .applied-kept-line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 6px;
+    min-width: 0;
+    margin-block: 4px;
+    font-family: var(--font-sans);
+    font-size: 12px;
+    line-height: 20px;
+    user-select: none;
+    white-space: normal;
+  }
+  .mind-editor .applied-line {
+    color: var(--color-accent-strong);
+  }
+  .mind-editor .applied-kept-line {
+    color: var(--color-ink-meta);
+
+    & .proposal-action {
+      color: var(--color-ink-secondary);
+    }
+  }
+  .mind-editor .applied-keys {
+    padding: 0 4px;
+    border-radius: 3px;
+    background: var(--color-chip);
+    font-family: var(--font-sans);
+    font-size: 11px;
+    line-height: 16px;
+    color: var(--color-ink-meta);
+  }
   /* One change's own bar, over its first line: "Change 1 of 3 · Accept · Reject". */
   .change-bar {
     position: fixed;
@@ -3926,23 +3988,28 @@
   }
   /* Each check's colours: on its mark, and on its card's state line and quote. */
   .margin-check[data-check="found"],
+  .citation-marker[data-check="found"],
   .citation-card--found {
     --check-ink: var(--color-success);
     --check-wash: var(--color-success-wash);
   }
   .margin-check[data-check="not-found"],
   .margin-check[data-check="unsupported"],
+  .citation-marker[data-check="not-found"],
+  .citation-marker[data-check="unsupported"],
   .citation-card--not-found,
   .citation-card--unsupported {
     --check-ink: var(--color-warning);
     --check-wash: var(--color-warning-wash);
   }
   .margin-check[data-check="contradicted"],
+  .citation-marker[data-check="contradicted"],
   .citation-card--contradicted {
     --check-ink: var(--color-danger);
     --check-wash: var(--color-danger-wash);
   }
   .margin-check[data-check="cant-check"],
+  .citation-marker[data-check="cant-check"],
   .citation-card--cant-check {
     --check-ink: var(--color-ink-secondary);
     --check-wash: var(--color-chip);
@@ -3952,6 +4019,7 @@
     --check-wash: none;
   }
   .margin-check[data-check="checking"],
+  .citation-marker[data-check="checking"],
   .citation-card--checking {
     --check-ink: var(--color-ink-meta);
     --check-wash: var(--color-chip);
@@ -5343,18 +5411,6 @@
   [data-just-linked] {
     animation: block-just-added 1600ms ease-in both;
   }
-  .assistant-answer-frame {
-    position: relative;
-    /* Room at the right for the Citations' checks. */
-    margin-right: 36px;
-
-    .margin-check {
-      left: 6px;
-      height: 16px;
-      font-size: 10px;
-      line-height: 16px;
-    }
-  }
   .mind-editor.assistant-answer-text {
     --editor-gutter: 0px;
 
@@ -5411,28 +5467,135 @@
       white-space: pre;
       overflow-wrap: normal;
     }
-    /* A table wider than the Answer scrolls inside its frame; the cut edge fades. */
+    /*
+     * A table wider than the Answer scrolls sideways in its frame: its first column stays in
+     * view, with its edge faded where the rest slides under it, and the cut edge at the right
+     * fades too. A cell never wraps, so a figure is never cut; only the first column's
+     * words do.
+     */
     .tableWrapper[data-more-after] {
-      mask-image: linear-gradient(to left, transparent, #000 32px);
+      mask-image: linear-gradient(to left, transparent, #000 28px);
     }
-    .tableWrapper[data-more-before] {
-      mask-image: linear-gradient(to right, transparent, #000 32px);
+    /* The mask would clip a ring drawn outside the frame: it sits inside, and the fade steps aside. */
+    .tableWrapper:focus-visible {
+      outline-offset: -2px;
+      mask-image: none;
     }
-    .tableWrapper[data-more-before][data-more-after] {
-      mask-image: linear-gradient(
-        to right,
-        transparent,
-        #000 32px,
-        #000 calc(100% - 32px),
-        transparent
-      );
+    table {
+      border: 0;
+      border-radius: 0;
+      font-size: 13px;
+      line-height: 18px;
+      font-variant-numeric: tabular-nums;
     }
+    :is(th, td) {
+      min-width: 0;
+      padding: 5px 8px;
+      border-right: 0;
+      border-radius: 0;
+      font-size: 13px;
+      line-height: 18px;
+      white-space: nowrap;
+    }
+    th {
+      background: none;
+      border-bottom-color: var(--color-rule-strong);
+      font-size: 12px;
+      color: var(--color-ink-meta);
+    }
+    :is(th, td):first-child {
+      position: sticky;
+      left: 0;
+      z-index: 1;
+      min-width: 96px;
+      max-width: 132px;
+      padding-left: 0;
+      border-right: 1px solid var(--color-rule);
+      background: var(--color-sheet);
+      font-weight: 600;
+      color: var(--color-ink-secondary);
+      white-space: normal;
+    }
+    .tableWrapper[data-more-before] :is(th, td):first-child::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      bottom: -1px;
+      left: calc(100% + 1px);
+      width: 16px;
+      background: linear-gradient(to right, var(--color-sheet), transparent);
+      pointer-events: none;
+    }
+    .answer-table-slot {
+      margin-top: 4px;
+
+      &:empty {
+        display: none;
+      }
+    }
+    .answer-table-open {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      height: 26px;
+      margin-left: -6px;
+      padding: 0 7px 0 6px;
+      border-radius: 6px;
+      font-size: 13px;
+      line-height: 18px;
+      font-weight: 600;
+      color: var(--color-ink-secondary);
+      user-select: none;
+
+      &:hover {
+        background: var(--color-hover);
+        color: var(--color-ink);
+      }
+    }
+    /*
+     * A Citation's badge in the line: its check and number, each beside its sentence and wrapping
+     * with it, so no column of checks can run past the text.
+     */
     .citation-marker {
-      min-width: 16px;
+      gap: 1px;
+      min-width: 0;
       height: 16px;
-      font-size: 10px;
+      margin-left: 3px;
+      padding: 0 3px 0 2px;
+      background: var(--check-wash);
+      font-size: 11px;
       line-height: 16px;
+      color: var(--check-ink);
       vertical-align: 1px;
+
+      &:hover {
+        filter: brightness(0.97);
+      }
+      &[data-check="found"] {
+        background: none;
+        color: var(--color-ink-meta);
+
+        .citation-marker-icon {
+          color: var(--color-success);
+        }
+      }
+      &[data-check="contradicted"] {
+        background: var(--color-sheet);
+        box-shadow: inset 0 0 0 1.5px var(--color-danger);
+      }
+      &[data-check="checking"] .citation-marker-icon {
+        animation: mind-pulse 1.6s ease-in-out infinite;
+      }
+    }
+    .node-citation + .node-citation .citation-marker {
+      margin-left: 2px;
+    }
+    /* In a cell, centred on the line: raised, it would make its row taller than the others. */
+    :is(th, td) .citation-marker {
+      vertical-align: middle;
+    }
+    .citation-marker-icon {
+      display: block;
     }
   }
   /*
@@ -5867,6 +6030,23 @@
   .answer-steps-dot--waiting {
     background: var(--color-attention);
     animation: none;
+  }
+  .answer-steps-wait {
+    margin: 0 0 0 20px;
+    overflow-wrap: anywhere;
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--color-ink-meta);
+  }
+  .answer-steps-wait-stop {
+    padding: 0;
+    border-radius: 4px;
+    font-weight: 600;
+    color: var(--color-ink-secondary);
+
+    &:hover {
+      color: var(--color-ink);
+    }
   }
   .answer-timeline {
     display: flex;
