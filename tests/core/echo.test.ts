@@ -2,8 +2,11 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import type { AudioCapture, AudioSink, Transcriber } from "../../src/core";
+import { readVtt } from "../../src/core/documents/formats/vtt";
 import { createEchoCanceller, ECHO_BLOCK } from "../../src/core/meetings/echo";
 import { createRealFft } from "../../src/core/meetings/fft";
+import { createFakeSpeechEngine } from "../../src/core/transcription/fake";
+import type { SpeechEngine } from "../../src/core/transcription/speech";
 import { createTempDataFolder, manualClock, startCore } from "../helpers/core";
 import { inProcessTranscriber, NO_TRANSCRIPTION_FILES, until } from "../helpers/transcription";
 
@@ -91,7 +94,7 @@ function echoOf(far: Float64Array, delayMs: number | ((at: number) => number)): 
   return out;
 }
 
-/** The microphone through the canceller, the far end reaching it 300 ms ahead, as the mixer gives it. */
+/** The microphone through the canceller, the far end reaching it 300 ms ahead, as the tracks give it. */
 function cancel(microphone: Float64Array, far: Float64Array): Float64Array {
   const canceller = createEchoCanceller();
   const pcm = (signal: Float64Array) =>
@@ -190,51 +193,45 @@ describe.each(["en", "zh"])("Taking the far end out of the microphone (%s)", (la
   });
 });
 
-describe("A Meeting on laptop speakers", () => {
-  test("what the others say reaches the Transcript from the computer's sound only, not again from the microphone", async () => {
-    const dataDir = await createTempDataFolder();
-    const clock = manualClock();
-    let sink: AudioSink | null = null;
-    const capture: AudioCapture = {
-      systemAudio: true,
-      start(_request, given) {
-        sink = given;
-        given.state("microphone", "recording");
-        given.state("system", "recording");
-        return { stop: async () => {} };
-      },
-      openSettings: async () => {},
-    };
-    const engine = inProcessTranscriber();
-    const heard: Int16Array[] = [];
-    let live: string | null = null;
-    const transcriber: Transcriber = {
-      ...engine.transcriber,
-      push(stream, samples) {
-        live ??= stream;
-        if (stream === live) heard.push(samples.slice());
-        engine.transcriber.push(stream, samples);
-      },
-    };
-    const core = startCore(dataDir, {
-      audioCapture: capture,
-      transcriber,
-      transcriptionModelSource: NO_TRANSCRIPTION_FILES,
-      now: clock.now,
-    });
-    await core.updateSettings({ device: { meetingsEnabled: true, meetingNoticeAccepted: true } });
-    await core.setOutputLocation(join(dataDir, "Documents", "IncarnaMind"));
+/**
+ * A Meeting on laptop speakers, played into `transcriber`: the others speak three times on the
+ * computer's sound, then the User alone; the microphone hears the User, the others' echo and
+ * the room.
+ */
+async function laptopMeeting(transcriber: Transcriber) {
+  const dataDir = await createTempDataFolder();
+  const clock = manualClock();
+  let sink: AudioSink | null = null;
+  const capture: AudioCapture = {
+    systemAudio: true,
+    start(_request, given) {
+      sink = given;
+      given.state("microphone", "recording");
+      given.state("system", "recording");
+      return { stop: async () => {} };
+    },
+    openSettings: async () => {},
+  };
+  const core = startCore(dataDir, {
+    audioCapture: capture,
+    transcriber,
+    transcriptionModelSource: NO_TRANSCRIPTION_FILES,
+    now: clock.now,
+  });
+  await core.updateSettings({ device: { meetingsEnabled: true, meetingNoticeAccepted: true } });
+  await core.setOutputLocation(join(dataDir, "Documents", "IncarnaMind"));
 
-    // The others speak three times, then the User alone.
-    const { far, spans } = turns(clip("en-far"), 3);
-    const voice = joined(new Float64Array(far.length), clip("en-near"), silence(0.5));
-    const system = joined(far, new Float64Array(voice.length - far.length));
-    const echo = echoOf(system, 45);
-    const floor = noise(voice.length, 5);
-    const microphone = added(voice, echo, floor);
-    const pcm = (signal: Float64Array, from: number) =>
-      Int16Array.from(signal.subarray(from, from + RATE / 10), (value) => Math.round(value));
+  const { far, spans } = turns(clip("en-far"), 3);
+  const voice = joined(new Float64Array(far.length), clip("en-near"), silence(0.5));
+  const system = joined(far, new Float64Array(voice.length - far.length));
+  const echo = echoOf(system, 45);
+  const floor = noise(voice.length, 5);
+  const microphone = added(voice, echo, floor);
+  const pcm = (signal: Float64Array, from: number) =>
+    Int16Array.from(signal.subarray(from, from + RATE / 10), (value) => Math.round(value));
 
+  /** Records the whole call, then stops it and waits for its Transcript to be saved. */
+  async function record() {
     const { id } = await core.createMeeting();
     await core.startMeeting({ meetingId: id, systemAudio: true });
     for (let at = 0; at + RATE / 10 <= microphone.length; at += RATE / 10) {
@@ -243,20 +240,126 @@ describe("A Meeting on laptop speakers", () => {
       (sink as AudioSink | null)?.audio("system", pcm(system, at));
     }
     await core.stopMeeting(id);
-    await until(core, id, (transcript) => transcript.state === "saved");
+    return until(core, id, (transcript) => transcript.state === "saved");
+  }
+  return { record, far, spans, voice, echo, floor };
+}
 
-    // What the transcriber heard, less the computer's sound, is what the microphone added.
-    const mixed = Float64Array.from(heard.flatMap((samples) => Array.from(samples)));
-    const fromMicrophone = Float64Array.from(mixed, (value, i) => value - (system[i] as number));
+describe("A Meeting on laptop speakers", () => {
+  test("the microphone's stream has the User's voice and the others' echo more than 15 dB down", async () => {
+    const engine = inProcessTranscriber();
+    const heard: Int16Array[] = [];
+    let live: string | null = null;
+    const meeting = await laptopMeeting({
+      ...engine.transcriber,
+      push(stream, samples) {
+        if (stream.endsWith(":microphone")) {
+          live ??= stream;
+          if (stream === live) heard.push(samples.slice());
+        }
+        engine.transcriber.push(stream, samples);
+      },
+    });
+    await meeting.record();
+
+    // What the transcriber heard on the microphone's stream, less the User's voice and the room, is what the echo left.
+    const fromMicrophone = Float64Array.from(heard.flatMap((samples) => Array.from(samples)));
     const left = Float64Array.from(
       fromMicrophone,
-      (value, i) => value - (voice[i] as number) - (floor[i] as number),
+      (value, i) => value - (meeting.voice[i] ?? 0) - (meeting.floor[i] ?? 0),
     );
-    const [from, to] = spans[2] as readonly [number, number];
-    expect(below(echo, left, from, to)).toBeGreaterThan(15);
-    expect(below(voice, left, far.length, mixed.length)).toBeGreaterThan(30);
+    const [from = 0, to = 0] = meeting.spans[2] ?? [];
+    expect(below(meeting.echo, left, from, to)).toBeGreaterThan(15);
+    expect(below(meeting.voice, left, meeting.far.length, fromMicrophone.length)).toBeGreaterThan(
+      30,
+    );
+  });
+
+  test("the others' words that the echo leaves on the microphone are read there too, and don't show as the User's", async () => {
+    const SAID = {
+      far: "The major religion in Moldova is Orthodox Christian.",
+      near: "Some festivals have special camping areas for families with young children.",
+    };
+    const leaked = { reads: 0 };
+    const engine = inProcessTranscriber({}, async () =>
+      readingEngine(
+        [
+          { text: SAID.far, loudness: envelopeOf(clip("en-far")) },
+          { text: SAID.near, loudness: envelopeOf(clip("en-near")) },
+        ],
+        (stream, text) => {
+          if (stream.endsWith(":microphone") && text === SAID.far) leaked.reads++;
+        },
+      ),
+    );
+    const meeting = await laptopMeeting(engine.transcriber);
+    const saved = await meeting.record();
+
+    if (!saved.savedPath) throw new Error("The Transcript wasn't saved.");
+    const lines = readVtt(readFileSync(saved.savedPath, "utf8")).cues;
+    const said = (speaker: string) => lines.filter((line) => line.speaker === speaker);
+    // The microphone's stream did read the others' words: the canceller left enough of them.
+    expect(leaked.reads).toBeGreaterThan(0);
+    expect(said("Them").length).toBeGreaterThanOrEqual(2);
+    expect(said("Them").every((line) => line.text === SAID.far)).toBe(true);
+    expect(said("Me").some((line) => line.text === SAID.near)).toBe(true);
+    expect(said("Me").some((line) => line.text === SAID.far)).toBe(false);
   });
 });
+
+/** How loud a clip is, over time: its RMS every 10 ms. */
+const envelopeOf = (samples: ArrayLike<number>): number[] => {
+  const out: number[] = [];
+  for (let at = 0; at + 160 <= samples.length; at += 160) {
+    let sum = 0;
+    for (let i = at; i < at + 160; i++) sum += (samples[i] ?? 0) ** 2;
+    out.push(Math.sqrt(sum / 160));
+  }
+  return out;
+};
+
+function correlation(a: readonly number[], b: readonly number[]): number {
+  const mean = (values: readonly number[]) => values.reduce((sum, v) => sum + v, 0) / values.length;
+  const [ma, mb] = [mean(a), mean(b)];
+  let [ab, aa, bb] = [0, 0, 0];
+  for (let i = 0; i < a.length; i++) {
+    const [x, y] = [(a[i] ?? 0) - ma, (b[i] ?? 0) - mb];
+    ab += x * y;
+    aa += x * x;
+    bb += y * y;
+  }
+  return aa === 0 || bb === 0 ? 0 : ab / Math.sqrt(aa * bb);
+}
+
+/**
+ * A speech engine that reads what a stretch of speech says by its loudness over time, against
+ * the clips it knows (an echo is quieter and coloured, but its words come in the same rhythm).
+ * `read` hears each stream and what it read.
+ */
+function readingEngine(
+  clips: readonly { text: string; loudness: readonly number[] }[],
+  read: (stream: string, text: string) => void,
+): SpeechEngine {
+  const quiet = new Array<number>(100).fill(0);
+  const known = clips.map((each) => ({ ...each, along: [...quiet, ...each.loudness, ...quiet] }));
+  return {
+    ...createFakeSpeechEngine(),
+    recognizer: {
+      async decode(samples, stream) {
+        const loudness = envelopeOf(samples);
+        let best = { text: "", score: 0.5 };
+        for (const each of known) {
+          for (let at = 0; at + loudness.length <= each.along.length; at += 2) {
+            const score = correlation(loudness, each.along.slice(at, at + loudness.length));
+            if (score > best.score) best = { text: each.text, score };
+          }
+        }
+        if (best.text) read(stream, best.text);
+        return best.text;
+      },
+    },
+  };
+}
 
 describe("The canceller's licence", () => {
   test("the notice of the Speex code it is derived from ships with the app", () => {

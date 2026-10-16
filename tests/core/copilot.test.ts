@@ -493,6 +493,7 @@ describe("The editor profile, an experimental sign-in route", () => {
     const cases = [
       { set: (fake: FakeGitHub) => (fake.exchangeStatus = 503), kind: "service-error" },
       { set: (fake: FakeGitHub) => (fake.exchangeStatus = 403), kind: "refused" },
+      { set: (fake: FakeGitHub) => (fake.exchangeStatus = 404), kind: "refused" },
       { set: (fake: FakeGitHub) => (fake.exchangeOffline = true), kind: "unreachable" },
     ];
     for (const { set, kind } of cases) {
@@ -506,9 +507,28 @@ describe("The editor profile, an experimental sign-in route", () => {
     }
   });
 
+  test("cancelling while GitHub's token is being traded keeps nothing", async () => {
+    const setup = await setUp();
+    let release = () => {};
+    setup.fake.holdExchange = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const { result } = await codeShown(setup.core, "editor");
+    setup.fake.approve();
+    await vi.waitFor(() =>
+      expect(setup.fake.requests.some((r) => r.path === "/copilot_internal/v2/token")).toBe(true),
+    );
+
+    await setup.core.cancelCopilotSignIn();
+    release();
+
+    expect(await result).toMatchObject({ ok: false, error: { kind: "sign-in-cancelled" } });
+    expect(setup.keychain.secrets.size).toBe(0);
+  });
+
   test("a GitHub account without Copilot is told so at sign-in, and nothing is kept", async () => {
     const setup = await setUp();
-    setup.fake.exchangeStatus = 404;
+    setup.fake.exchangeNoCopilot = true;
     const { result } = await codeShown(setup.core, "editor");
     setup.fake.approve();
 
@@ -528,7 +548,7 @@ describe("Failures", () => {
     {
       name: "no Copilot plan",
       status: 403,
-      body: { error: { message: "You don't have access to GitHub Copilot." } },
+      body: { error: { message: "No access to GitHub Copilot found.", code: "no_copilot_access" } },
       kind: "blocked",
       problem: "no-plan",
     },
@@ -580,14 +600,19 @@ describe("Failures", () => {
     });
   }
 
-  test("a passing rate limit is a rate limit, with its own line", async () => {
+  test("a passing rate limit is asked again after the wait GitHub gives, then has its own line", async () => {
     const { core, fake } = await signedIn();
-    fake.replies.push({
-      kind: "error",
+    const slowDown = {
+      kind: "error" as const,
       status: 429,
+      headers: { "retry-after-ms": "1" },
       body: JSON.stringify({ error: { message: "Too many requests" } }),
-    });
+    };
+    fake.replies.push(slowDown);
+    const { model } = await core.prepareChatModel();
+    expect((await generateText({ model, prompt: "Hi", maxRetries: 2 })).text).toBe(ANSWER);
 
+    fake.replies.push(slowDown);
     expect(await failure(core)).toMatchObject({ kind: "rate-limit", signInRoute: "rate-limited" });
   });
 

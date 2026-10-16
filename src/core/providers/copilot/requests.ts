@@ -1,20 +1,20 @@
 /** Copilot's OpenAI-compatible chat API, signed as `../signedFetch` signs requests, with the profile's headers. */
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import { APICallError } from "ai";
 import type { CopilotModel } from "../../api";
 import { isRecord } from "../../errors";
 import type { OAuthCredentials } from "../../oauthAccount";
 import type { ChatLanguageModel } from "../models";
 import { SignInRouteError } from "../providerErrors";
 import { createSignedFetch, errorOf, isAnswer } from "../signedFetch";
+import { NO_COPILOT_ACCESS } from "./service";
 
 const POLICY = /polic|organi[sz]ation|enterprise|administrator/i;
 const MODEL_UNAVAILABLE = /model.*not (supported|available|enabled)|unsupported model/i;
 const QUOTA = /quota|allowance|premium requests?/i;
-/** Only GitHub's own words say the account has no Copilot. */
-const NO_PLAN = /copilot|subscription|seat/i;
 
 /** Null for what the AI SDK handles as it does any server's: an answer, a passing rate limit, a server error. */
-async function refusalOf(response: Response): Promise<SignInRouteError | null> {
+async function refusalOf(response: Response): Promise<Error | null> {
   const { status } = response;
   if (status === 401) {
     const { message } = await errorOf(response);
@@ -25,7 +25,7 @@ async function refusalOf(response: Response): Promise<SignInRouteError | null> {
     const said = `${code ?? ""} ${message}`;
     const problem = POLICY.test(said)
       ? "policy-blocked"
-      : NO_PLAN.test(said)
+      : NO_COPILOT_ACCESS.test(said)
         ? "no-plan"
         : "refused";
     return new SignInRouteError(problem, `GitHub Copilot refused the request (403): ${message}`);
@@ -35,7 +35,16 @@ async function refusalOf(response: Response): Promise<SignInRouteError | null> {
     if (status === 402 || code === "quota_exceeded" || QUOTA.test(message)) {
       return new SignInRouteError("plan-limit", `Your Copilot plan's limit is reached: ${message}`);
     }
-    return new SignInRouteError("rate-limited", `GitHub Copilot asked to slow down: ${message}`);
+    // Retryable, so the AI SDK waits and asks again as for any provider; its cause names the route's problem.
+    return new APICallError({
+      message: `GitHub Copilot asked to slow down: ${message}`,
+      url: response.url,
+      requestBodyValues: {},
+      statusCode: status,
+      responseHeaders: Object.fromEntries(response.headers),
+      isRetryable: true,
+      cause: new SignInRouteError("rate-limited", `GitHub Copilot asked to slow down: ${message}`),
+    });
   }
   if (status === 400 || status === 404 || status === 422) {
     const { message, code } = await errorOf(response);

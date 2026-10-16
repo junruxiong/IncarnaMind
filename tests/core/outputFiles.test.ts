@@ -114,13 +114,20 @@ describe("The Output location", () => {
     const location = await realpath(suggested);
     expect(result).toEqual({
       status: "saved",
-      file: { path: join(location, "Tides.md"), name: "Tides.md", defaulted: true },
+      file: {
+        path: join(location, "Tides.md"),
+        name: "Tides.md",
+        folder: location,
+        defaulted: true,
+        inDefaultFolder: true,
+      },
       citations: 0,
       unverifiedCitations: 0,
       questions: 0,
       word: null,
       sentenceChecks: { contradicted: 0, unsupported: 0, needsRecheck: 0, commented: false },
       trackedChanges: 0,
+      needsDetails: [],
     });
     expect(await readFile(join(location, "Tides.md"), "utf8")).toContain(
       "Spring tides come twice a month.",
@@ -130,7 +137,7 @@ describe("The Output location", () => {
     // The next save goes there too, and no longer says it took the default.
     expect(await save()).toMatchObject({
       status: "saved",
-      file: { name: "Tides 2.md", defaulted: false },
+      file: { name: "Tides 2.md", folder: location, defaulted: false, inDefaultFolder: true },
     });
     expect(asked).toEqual([]);
   });
@@ -146,7 +153,9 @@ describe("The Output location", () => {
       expect(file).toEqual({
         path: join(location, file?.name ?? ""),
         name: file?.name,
+        folder: location,
         defaulted: true,
+        inDefaultFolder: true,
       });
     }
     expect((await core.getOutputSettings()).location).toBe(location);
@@ -160,7 +169,12 @@ describe("The Output location", () => {
     expect(settings.location).toBe(picked);
     const asked = questionsAsked(core);
     expect(await save()).toMatchObject({
-      file: { path: join(picked, "Tides.md"), defaulted: false },
+      file: {
+        path: join(picked, "Tides.md"),
+        folder: picked,
+        defaulted: false,
+        inDefaultFolder: false,
+      },
     });
     expect(asked).toEqual([]);
     expect(existsSync(suggested)).toBe(false);
@@ -513,7 +527,9 @@ describe("Saving next to an original (the call other features use)", () => {
     expect(await outputs.save({ name: "Lease.docx", data, folder, ownFile: "export" })).toEqual({
       path: join(folder, "Lease 2.docx"),
       name: "Lease 2.docx",
+      folder,
       defaulted: false,
+      inDefaultFolder: false,
     });
     expect(sha256(await readFile(original))).toBe(before);
     // A name can't climb out of its folder.

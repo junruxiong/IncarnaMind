@@ -185,6 +185,51 @@ function pageText(items: readonly object[]): string {
   return text.replaceAll("\u0000", "").replace(/\r\n?/g, "\n").replace(CJK_LINE_WRAP, "$1").trim();
 }
 
+/** A line of a page as printed, with its largest font size in points. */
+export interface PageLine {
+  text: string;
+  size: number;
+  /** How far down the page its baseline is, from 0 at the top to 1 at the foot. */
+  top: number;
+}
+
+/**
+ * A page's lines across it, in the order pdf.js reads them. Text set at an angle (arXiv's stamp
+ * up the margin) is left out: it is no line of the page's own.
+ */
+function pageLines(items: readonly object[], height: number): PageLine[] {
+  const lines: PageLine[] = [];
+  let text = "";
+  let size = 0;
+  let baseline: number | null = null;
+  const end = () => {
+    const tidy = text.replaceAll("\u0000", "").replace(/\s+/g, " ").trim();
+    if (tidy !== "" && size > 0 && baseline !== null) {
+      const top = height > 0 ? Math.min(1, Math.max(0, 1 - baseline / height)) : 0;
+      lines.push({ text: tidy, size, top });
+    }
+    text = "";
+    size = 0;
+    baseline = null;
+  };
+  for (const item of items) {
+    if (!("str" in item) || typeof item.str !== "string") continue;
+    const transform: number[] =
+      "transform" in item && Array.isArray(item.transform) ? item.transform : [];
+    const [a = 0, b = 0, c = 0, d = 0, , f = 0] = transform;
+    if (Math.abs(b) < 0.01 && Math.abs(c) < 0.01 && a > 0) {
+      text += item.str;
+      if (item.str.trim() !== "") {
+        size = Math.max(size, Math.round(Math.abs(d) * 10) / 10);
+        baseline ??= f;
+      }
+    }
+    if ("hasEOL" in item && item.hasEOL === true) end();
+  }
+  end();
+  return lines;
+}
+
 /** XMP's creation date, written as an element or as an attribute of its description. */
 const XMP_CREATE_DATE = /xmp:CreateDate\s*(?:=\s*(["'])([^"'<>]*)\1|>([^<]*)<)/i;
 
@@ -202,14 +247,16 @@ export interface PdfMetadata {
   xmpPacket: string | null;
   /** The text of its first `pages` pages, as extracted, running headers and all (#286). */
   firstPages: string[];
+  /** Its first page's lines, where a title, its authors and a date are printed. */
+  firstPageLines: PageLine[];
 }
 
 /**
  * A PDF's metadata as written: its document information dictionary's
  * CreationDate (#53), Title (#213) and Author, and its XMP metadata, whose
- * xmp:CreateDate is read here; never its ModDate. With `pages`, the text of
- * its first pages too (#286: a DOI or an arXiv id is printed there).
- * Throws if the PDF can't be opened.
+ * xmp:CreateDate is read here; never its ModDate. Its first page's lines, and
+ * with `pages`, the text of its first pages too (#286: a DOI or an arXiv id is
+ * printed there). Throws if the PDF can't be opened.
  */
 export async function pdfMetadata(
   bytes: Uint8Array,
@@ -221,7 +268,8 @@ export async function pdfMetadata(
   const task = getDocument({
     data: new Uint8Array(bytes),
     ...(password !== undefined && { password }),
-    ...(pages > 0 && { ...pdfjsDataUrls(), cMapPacked: true }),
+    ...pdfjsDataUrls(),
+    cMapPacked: true,
     verbosity: 0,
   });
   try {
@@ -234,9 +282,12 @@ export async function pdfMetadata(
       return typeof value === "string" ? value : null;
     };
     const firstPages: string[] = [];
-    for (let number = 1; number <= Math.min(pages, document.numPages); number++) {
+    let firstPageLines: PageLine[] = [];
+    for (let number = 1; number <= Math.min(Math.max(pages, 1), document.numPages); number++) {
       const page = await document.getPage(number);
-      firstPages.push(pageText((await page.getTextContent()).items));
+      const { items } = await page.getTextContent();
+      if (number <= pages) firstPages.push(pageText(items));
+      if (number === 1) firstPageLines = pageLines(items, page.getViewport({ scale: 1 }).height);
       page.cleanup();
     }
     return {
@@ -246,6 +297,7 @@ export async function pdfMetadata(
       author: entry("Author"),
       xmpPacket: raw,
       firstPages,
+      firstPageLines,
     };
   } finally {
     await task.destroy();

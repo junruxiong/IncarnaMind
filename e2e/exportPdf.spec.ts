@@ -30,6 +30,7 @@ import {
   pathsShown,
   pointAndClick,
   removeDataFolder,
+  savedLine,
   savedPath,
   setWindowSize,
   tabMenu,
@@ -334,9 +335,12 @@ test("a Mind with one chart prints its picture, drawn at twice its size, its cap
   // In Chinese, the words are Chinese.
   await bridge(window).language("zh-CN");
   await exportFromMenu(window);
-  await expect(window.getByTestId("export-done")).toHaveText("已保存“Tides 潮汐 2.pdf”", {
-    timeout: 30_000,
-  });
+  await expect(window.getByTestId("export-done")).toHaveText(
+    savedLine("Tides 潮汐 2.pdf", out, "zh-CN"),
+    {
+      timeout: 30_000,
+    },
+  );
   const chineseText = await pdfText(await readFile(join(out, "Tides 潮汐 2.pdf")));
   expect(chineseText.map(unspaced)).toEqual([
     unspaced(
@@ -440,6 +444,7 @@ test("Export options remembers the format and its options; Export and ⇧⌘E us
     /^Word \(\.docx\)(⇧⌘E|Ctrl\+Shift\+E)$/,
     "PDF",
     "More formats",
+    /^Citation style/,
     "Export options…",
   ]);
   await window.keyboard.press("Escape");
@@ -521,6 +526,7 @@ test("Export options remembers the format and its options; Export and ⇧⌘E us
     /^PDF(⇧⌘E|Ctrl\+Shift\+E)$/,
     "Word（.docx）",
     "更多格式",
+    /^引用格式/,
     "导出选项…",
   ]);
   await window.keyboard.press("Escape");
@@ -546,9 +552,12 @@ test("Export options remembers the format and its options; Export and ⇧⌘E us
   await screenshot(window, "export-options-zh-narrow");
   await window.keyboard.press("Escape");
   await exportFromMenu(window);
-  await expect(result.getByTestId("export-done")).toHaveText("已保存“Tides 4.pdf”", {
-    timeout: 30_000,
-  });
+  await expect(result.getByTestId("export-done")).toHaveText(
+    savedLine("Tides 4.pdf", out, "zh-CN"),
+    {
+      timeout: 30_000,
+    },
+  );
   await screenshot(window, "export-result-zh-narrow");
   await app.close();
   await removeDataFolder(out);

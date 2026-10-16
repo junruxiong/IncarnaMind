@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 import type { SpeechSegment } from "../../src/core";
-import { createMixer } from "../../src/core/meetings/mixer";
+import { createTracks } from "../../src/core/meetings/tracks";
 import {
   chooseModel,
   QWEN3_ASR_0_6B,
@@ -145,25 +145,49 @@ describe("Live text from VAD segments, decoded again as speech goes on", () => {
   });
 });
 
-describe("Mixing the microphone and the computer's sound", () => {
-  test("both sources are summed where they belong in the Meeting's time, clipped, and let out a moment behind", () => {
-    const mixer = createMixer(1000);
-    const tone = (value: number, length: number) => new Int16Array(length).fill(value);
+describe("The microphone and the computer's sound as two tracks", () => {
+  const tone = (value: number, length: number) => new Int16Array(length).fill(value);
+
+  test("each source is placed where it belongs in the Meeting's time, and both tracks go out together, a moment behind", () => {
+    const tracks = createTracks(1000);
     // The computer's sound, 100 ms: held back a moment for the microphone.
-    expect(mixer.add("system", tone(30_000, 1600), 1000)).toBeNull();
+    expect(tracks.add("system", tone(30_000, 1600), 1000)).toBeNull();
     // The microphone, from 50 ms in: what is 300 ms older than the newest goes out, in whole blocks.
-    const out = mixer.add("microphone", tone(5000, 8000), 1050);
+    const out = tracks.add("microphone", tone(5000, 8000), 1050);
     expect(out?.atMs).toBe(1000);
-    expect(out?.samples.length).toBe(3840);
-    expect([out?.samples[0], out?.samples[800], out?.samples[1700]]).toEqual([
-      30_000, 32_767, 5000,
+    expect(out?.microphone.length).toBe(3840);
+    expect(out?.system?.length).toBe(3840);
+    // Not summed: each keeps its own samples.
+    expect([out?.microphone[0], out?.microphone[800], out?.microphone[1700]]).toEqual([
+      0, 5000, 5000,
     ]);
-    const rest = mixer.flush();
+    expect([out?.system?.[0], out?.system?.[1599], out?.system?.[1700]]).toEqual([
+      30_000, 30_000, 0,
+    ]);
+    const rest = tracks.flush();
     expect(rest?.atMs).toBe(1240);
-    expect(rest?.samples.length).toBe(4960);
+    expect(rest?.microphone.length).toBe(4960);
+    expect(rest?.system?.length).toBe(4960);
     // Samples later than what has gone out go to disk only.
-    expect(mixer.add("microphone", tone(5, 160), 1000)).toBeNull();
-    expect(mixer.flush()).toBeNull();
+    expect(tracks.add("microphone", tone(5, 160), 1000)).toBeNull();
+    expect(tracks.flush()).toBeNull();
+  });
+
+  test("a Meeting in a room, whose computer sound never comes, has the microphone's track only", () => {
+    const tracks = createTracks(0);
+    const out = tracks.add("microphone", tone(4000, 16_000), 0);
+    expect(out?.microphone.length).toBeGreaterThan(0);
+    expect(out?.system).toBeNull();
+    expect(tracks.flush()?.system).toBeNull();
+  });
+
+  test("the computer's sound that comes later gives a track from where it comes", () => {
+    const tracks = createTracks(0);
+    expect(tracks.add("microphone", tone(4000, 16_000), 0)?.system).toBeNull();
+    const later = tracks.add("system", tone(3000, 16_000), 1000);
+    tracks.add("microphone", tone(4000, 16_000), 1000);
+    const next = tracks.flush() ?? later;
+    expect(next?.system).not.toBeNull();
   });
 });
 

@@ -1,9 +1,10 @@
 import { describe, expect, test } from "vitest";
 import {
-  estimateText,
+  estimateLine,
   formatMoney,
   formatSpent,
   notCheckedKey,
+  runStopParts,
   runStopText,
   setAsideText,
 } from "../../src/renderer/src/cost";
@@ -78,6 +79,13 @@ describe("Cost in words", () => {
     expect(
       runStopText({ reason: "plan-limit", resetsAt: later }, t("zh-CN"), "zh-CN", now),
     ).toMatch(/^已达到订阅用量上限 · (14:30|下午2:30) 后可重试$/);
+    const parts = runStopParts({ reason: "plan-limit", resetsAt: later }, t("en"), "en", now);
+    expect(parts[0]).toBe("Plan limit reached");
+    expect(parts[1]).toMatch(/^Try again after (14:30|2:30 pm)$/);
+    expect(parts).toHaveLength(2);
+    expect(runStopParts({ reason: "cost-cap" }, t("en"), "en", now)).toEqual([
+      "Monthly cap reached",
+    ]);
     const tomorrow = new Date(2026, 9, 13, 14, 30).toISOString();
     expect(runStopText({ reason: "plan-limit", resetsAt: tomorrow }, t("en"), "en", now)).toMatch(
       /^Plan limit reached · Try again after 13 Oct, (14:30|2:30 pm)$/,
@@ -102,29 +110,42 @@ describe("Cost in words", () => {
       setAsideTowardCap: { amount: 0, currency: "USD" as const },
       cap: { amount: 20, currency: "USD" as const },
     };
-    expect(estimateText(estimate, t("en"), "en")).toBe(
-      "About 24 calls, 310K tokens, $0.40 · $12.40 of $20.00 used this month",
+    const en = estimateLine(estimate, t("en"), "en");
+    expect(en?.parts).toEqual([
+      "About $0.40",
+      "24 model calls",
+      "$12.40 of $20.00 used this month",
+    ]);
+    expect(en?.title).toBe(
+      "About $0.40 · 24 model calls · 310K tokens · $12.40 of $20.00 used this month",
     );
     expect(
-      estimateText(
+      estimateLine(
         { ...estimate, setAsideTowardCap: { amount: 1.28, currency: "USD" } },
         t("en"),
         "en",
-      ),
-    ).toBe(
-      "About 24 calls, 310K tokens, $0.40 · $12.40 of $20.00 used this month · $1.28 set aside for work in progress",
-    );
+      )?.parts,
+    ).toEqual([
+      "About $0.40",
+      "24 model calls",
+      "$12.40 of $20.00 used this month",
+      "$1.28 set aside for work in progress",
+    ]);
     expect(
-      estimateText(
+      estimateLine(
         { ...estimate, cap: null, spentTowardCap: null, setAsideTowardCap: null },
         t("en"),
         "en",
-      ),
-    ).toBe("About 24 calls, 310K tokens, $0.40");
-    expect(estimateText({ ...estimate, cost: null, cap: null }, t("zh-CN"), "zh-CN")).toBe(
-      "约 24 次调用、31万 token",
-    );
-    expect(estimateText({ billing: "plan" }, t("en"), "en")).toBeNull();
-    expect(estimateText({ billing: "free" }, t("en"), "en")).toBeNull();
+      )?.parts,
+    ).toEqual(["About $0.40", "24 model calls"]);
+    expect(estimateLine({ ...estimate, cost: null, cap: null }, t("en"), "en")?.parts).toEqual([
+      "About 24 model calls",
+      "310K tokens",
+    ]);
+    expect(
+      estimateLine({ ...estimate, cost: null, cap: null }, t("zh-CN"), "zh-CN")?.parts,
+    ).toEqual(["约 24 次模型调用", "31万 token"]);
+    expect(estimateLine({ billing: "plan" }, t("en"), "en")).toBeNull();
+    expect(estimateLine({ billing: "free" }, t("en"), "en")).toBeNull();
   });
 });

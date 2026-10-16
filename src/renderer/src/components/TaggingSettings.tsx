@@ -17,6 +17,8 @@ import { core } from "../core";
 import { errorMessage } from "../errors";
 import { translateNow, useLanguage, useT } from "../i18n";
 import { useAppStore } from "../store";
+import { placesText, stoppedPlaces, tagWithAi } from "../taggingStop";
+import { useUndo } from "../undo";
 import { ProblemMark } from "./ProblemLine";
 import { JevSettingsSection } from "./providers/JevSettings";
 import {
@@ -98,7 +100,8 @@ export const providerOf = (option: TaggingModelOption, language: Language) =>
 export function TaggingSettings() {
   const t = useT();
   const language = useLanguage();
-  const settings = useAppStore((state) => state.library?.settings ?? null);
+  const library = useAppStore((state) => state.library);
+  const settings = library?.settings ?? null;
   const [models, setModels] = useState<TaggingModels | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [otherOpen, setOtherOpen] = useState(false);
@@ -162,6 +165,7 @@ export function TaggingSettings() {
           })
         : t("tagging.organize.ask");
   const localDecision = models.options.find((option) => option.decisionModel);
+  const stopped = stoppedPlaces(library);
 
   return (
     <section data-testid="tagging-settings" className="flex flex-col">
@@ -253,6 +257,24 @@ export function TaggingSettings() {
         {inUse && (
           <p data-testid="tagging-review">
             {t(inUse.likelihoods ? "tagging.review.marked" : "tagging.review.kept")}
+          </p>
+        )}
+        {stopped.length > 0 && (
+          <p data-testid="tagging-stopped">
+            {t("tagging.stoppedIn", { places: placesText(stopped, library, t, language) })}{" "}
+            <button
+              type="button"
+              data-testid="tagging-restart"
+              onClick={() =>
+                void tagWithAi(stopped).then(
+                  (change) => useUndo.getState().push(change),
+                  (failure: unknown) => setError(errorMessage(failure, t)),
+                )
+              }
+              className="text-accent underline-offset-2 hover:text-accent-strong hover:underline"
+            >
+              {t("folder.tagWithAi")}
+            </button>
           </p>
         )}
       </div>

@@ -84,10 +84,16 @@ const RANGE_MARK = /[-–—]/;
  * a PDF names with letters or a hyphen ("A-3", "iii–iv"): CSL reads a hyphen in a locator as a
  * range, and only of numbers. Such a range still reads "pp." like a range of numbers, though the
  * app's own labels say "p." for any range.
+ * `raised`: written after the work with no label (`FormatJob.raisedLocators`), where a bare
+ * number reads as a page, so lines are words too ("第 3–4 行").
  */
-export function locatorOf(location: CitationLocation | null, language: Language): Locator {
+export function locatorOf(
+  location: CitationLocation | null,
+  language: Language,
+  raised = false,
+): Locator {
   if (!location) return {};
-  if (location.kind === "lines") {
+  if (location.kind === "lines" && !raised) {
     return { locator: span(location.from, location.to), label: "line" };
   }
   const t = (key: MessageKey, params?: MessageParams) => translate(language, key, params);
@@ -104,7 +110,7 @@ export function locatorOf(location: CitationLocation | null, language: Language)
       label: "custom",
     };
   }
-  return { locator: formatLocation(location, t), label: "custom" };
+  return { locator: formatLocation(location, t, false), label: "custom" };
 }
 
 /**

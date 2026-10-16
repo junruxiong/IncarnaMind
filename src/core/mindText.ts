@@ -112,6 +112,7 @@ export type FailedSentence = { id: string } & (
       nearest: { quote: string; source: string } | null;
     }
   | { check: "needs-recheck"; why: RecheckReason }
+  | { check: "cited-case-unchecked" }
 );
 
 /** Part of a change still waiting to be accepted (a Proposal), read for review (#107). */
@@ -900,6 +901,16 @@ export function blockText(element: Y.XmlElement): string {
     .map((line) => line.trim())
     .filter((line) => line !== "")
     .join("\n");
+}
+
+/** The start of a Mind's text, Block by Block, at least `length` characters of it when it has them. */
+export function textStart(blocks: Y.XmlFragment, length: number): string {
+  let text = "";
+  for (const block of blocks.toArray()) {
+    if (text.length >= length) break;
+    if (block instanceof Y.XmlElement) text += `${blockText(block)}\n`;
+  }
+  return text;
 }
 
 /**

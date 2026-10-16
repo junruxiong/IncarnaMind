@@ -213,7 +213,8 @@ describe("reading Markdown tables", () => {
     return table ? rowsOf(table as JSONContent) : null;
   };
 
-  test("escaped pipes and pipes in code stay in their cell; missing cells are empty and extra ones dropped", () => {
+  // protects=a ragged row loses nothing: an extra cell's text stays, in the row's last cell (#961); fails_when=it is dropped with its words; no_claim=none beyond protects.
+  test("escaped pipes and pipes in code stay in their cell; missing cells are empty and extra ones kept in the last", () => {
     expect(
       rows(
         ["a | b", "--|--", "1 \\| 2 | `x|y`", "| only one |", "| three | cells | here |"].join(
@@ -224,7 +225,7 @@ describe("reading Markdown tables", () => {
       ["#a", "#b"],
       ["1 | 2", "x|y"],
       ["only one", ""],
-      ["three", "cells"],
+      ["three", "cells | here"],
     ]);
   });
 

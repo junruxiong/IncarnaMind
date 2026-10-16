@@ -360,7 +360,8 @@ describe("a chart from a cited table", { timeout: 30_000 }, () => {
     expect(printed[1]?.body).toContain(
       '<p class="caption chart-sources">Source: <sup class="note-ref" data-note="1">1</sup> 1 value',
     );
-    expect(printed[1]?.notes).toEqual(["“Acme,” n.d., 1; “Acme,” 2."]);
+    // One Document cited twice in the cluster is one source with both its pages.
+    expect(printed[1]?.notes).toEqual(["“Acme,” n.d., 1, 2."]);
 
     // A host that can't draw pictures: the table of its values instead.
     const plain = fakePrinter();

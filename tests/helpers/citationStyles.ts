@@ -31,8 +31,11 @@ let engine: CslEngine | undefined;
 const handles = new Map<string, number>();
 
 /** Formats a job with a shipped style, as the worker does, but on this thread. */
-export function formatHere(style: CitationStyleId, job: Omit<FormatJob, "englishTermsForOthers">) {
-  const { file, language } = citationStyle(style);
+export function formatHere(
+  style: CitationStyleId,
+  job: Omit<FormatJob, "englishTermsForOthers" | "raisedLocators">,
+) {
+  const { file, language, locators } = citationStyle(style);
   if (!file) throw new Error(`${style} isn't a CSL style.`);
   if (!engine) {
     engine = new CslEngine(
@@ -52,8 +55,13 @@ export function formatHere(style: CitationStyleId, job: Omit<FormatJob, "english
     handles.set(file, handle);
   }
   const parsed = handle;
-  return formatJob({ ...job, englishTermsForOthers: language === "zh-CN" }, (request) =>
-    live.render(parsed, request),
+  return formatJob(
+    {
+      ...job,
+      englishTermsForOthers: language === "zh-CN",
+      raisedLocators: locators === "raised-after",
+    },
+    (request) => live.render(parsed, request),
   );
 }
 

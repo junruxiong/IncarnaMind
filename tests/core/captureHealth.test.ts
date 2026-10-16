@@ -209,7 +209,7 @@ describe("A Meeting's capture health", { timeout: 60_000 }, () => {
     const { core, record } = await transcribingCore(dataDir, { engine: { failing: [2] }, log });
     const meeting = await core.createMeeting();
     await core.startMeeting({ meetingId: meeting.id });
-    record(7 * SECOND);
+    record(7 * SECOND, ["microphone"]);
 
     await until(core, meeting.id, (transcript) => transcript.lines >= 2);
     const health = await untilHealth(core, meeting.id, (each) => each.events.length > 0);

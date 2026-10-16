@@ -23,13 +23,13 @@ import {
   useChecks,
 } from "./checks";
 import { core } from "./core";
-import { estimateText } from "./cost";
+import { type EstimateLine, estimateLine } from "./cost";
 import { languageNow, translateNow } from "./i18n";
 import { useAppStore } from "./store";
 
 interface ContradictionsState {
   /** By Mind: the question asked before a run billed per token, with its estimate. */
-  asking: Readonly<Record<string, { claims: number; estimate: string }>>;
+  asking: Readonly<Record<string, { claims: number; estimate: EstimateLine }>>;
   /** By Mind: what the last run on demand found, until closed. */
   found: Readonly<Record<string, ContradictionCheckOutcome>>;
 }
@@ -54,7 +54,7 @@ const problemOf = (plan: Exclude<ContradictionCheckPlan, { kind: "ready" }>): Ch
 
 /** What the line under the Mind's title shows, if anything. */
 export type ContradictionLineShown =
-  | { kind: "asking"; claims: number; estimate: string }
+  | { kind: "asking"; claims: number; estimate: EstimateLine }
   | { kind: "found"; run: ContradictionCheckOutcome }
   | { kind: "watched"; run: ContradictionWatchRun };
 
@@ -120,7 +120,7 @@ export async function startContradictionCheck(mindId: string): Promise<void> {
   }
   const estimate = await core
     .estimateRun({ items: plan.claims, ...(plan.model && { model: plan.model }) })
-    .then((result) => estimateText(result, translateNow, languageNow()))
+    .then((result) => estimateLine(result, translateNow, languageNow()))
     .catch(() => null);
   if (estimate === null) return checkContradictions(mindId);
   setFor("found", mindId, null);

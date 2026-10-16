@@ -116,8 +116,9 @@ export const PICTURES_CURRENT_SINCE = 10;
  * job, in the background, without being processed or embedded again. When
  * only the metadata read changes, bump this, not `PROCESSING_VERSION`.
  * 1: #53 (creation dates). 2: #213 (titles). 3: #286 (reference records).
+ * 4: #706 (reference records from a PDF's first page).
  */
-export const METADATA_VERSION = 3;
+export const METADATA_VERSION = 4;
 
 /** How many of a PDF's first pages a DOI or an arXiv id is looked for in (#286). */
 const REFERENCE_PAGES = 2;
@@ -472,6 +473,7 @@ async function readMetadataOf(
       property = pdf.title;
       parts.info = { title: pdf.title, author: pdf.author };
       parts.xmp = pdf.xmpPacket;
+      parts.firstPageLines = pdf.firstPageLines;
       if (firstPages === null) parts.firstPages = pdf.firstPages;
     } else if (hasMetadata(kind)) {
       const office = await officeProperties(bytes);

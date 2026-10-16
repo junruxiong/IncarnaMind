@@ -26,6 +26,8 @@ const ATTRIBUTES: readonly (keyof ClaimCheckAttributes)[] = [
   "evidence",
   "says",
   "calculation",
+  "citedCaseUnchecked",
+  "citedCaseFound",
   "scope",
   "versions",
   "excluded",

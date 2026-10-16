@@ -1,7 +1,7 @@
 import { type KeyboardEvent, memo, type Ref, useId, useRef, useState } from "react";
 import type { Document, ReferenceField, ReferenceRecord } from "../../../../core/api";
 import { displayName, sourceOf } from "../../../../shared/documentNames";
-import { missingDetails } from "../../../../shared/references";
+import { missingDetails, needsCheck } from "../../../../shared/references";
 import { commands } from "../../commands/registry";
 import { useLanguage, useT } from "../../i18n";
 import { FORMAT_LABELS } from "../../libraryFilters";
@@ -339,8 +339,9 @@ export const LibraryRow = memo(function LibraryRow({
 /**
  * A row's way into "Cite as" (#286), after its name: "Needs details", with the
  * waiting dot, while the record is too thin to cite, which opens it at the
- * first missing field; otherwise "Cite as", shown while the row is pointed at
- * or focused.
+ * first missing field; "Needs checking", with the review ring, while what was
+ * read from the file waits for the User to check it; otherwise "Cite as",
+ * shown while the row is pointed at or focused.
  */
 function CiteAsToggle({
   ref,
@@ -361,22 +362,27 @@ function CiteAsToggle({
   const language = useLanguage();
   const missing = missingDetails(record);
   const list = missingList(language, record);
+  const unchecked = missing.length === 0 && needsCheck(record);
   const label = t("reference.citeAs.label", { name: displayName(document) });
+  const said = list
+    ? t("reference.needsDetails.title", { missing: list })
+    : unchecked
+      ? t("reference.toCheck.title")
+      : null;
   return (
     <button
       ref={ref}
       type="button"
       data-testid="cite-as-toggle"
       data-needs-details={missing.length > 0 ? "" : undefined}
+      data-needs-check={unchecked ? "" : undefined}
       aria-expanded={open}
       aria-controls={open ? panelId : undefined}
-      aria-label={
-        list ? `${label}. ${t("reference.needsDetails.title", { missing: list })}` : label
-      }
-      title={list ? t("reference.needsDetails.title", { missing: list }) : undefined}
+      aria-label={said ? `${label}. ${said}` : label}
+      title={said ?? undefined}
       onClick={() => onToggle(missing[0] ?? null)}
       className={`inline-flex shrink-0 items-center gap-1.5 rounded-sm text-[12px] leading-5 whitespace-nowrap text-ink-meta hover:text-ink hover:underline ${
-        missing.length > 0 || open
+        missing.length > 0 || unchecked || open
           ? ""
           : "opacity-0 group-focus-within/row:opacity-100 group-hover/row:opacity-100"
       }`}
@@ -384,7 +390,14 @@ function CiteAsToggle({
       {missing.length > 0 && (
         <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-attention" />
       )}
-      {t(missing.length > 0 ? "reference.needsDetails" : "reference.citeAs")}
+      {unchecked && <ReviewRing />}
+      {t(
+        missing.length > 0
+          ? "reference.needsDetails"
+          : unchecked
+            ? "reference.toCheck"
+            : "reference.citeAs",
+      )}
     </button>
   );
 }

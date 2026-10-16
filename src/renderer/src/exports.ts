@@ -75,6 +75,11 @@ export type ExportResult =
       format: ExportFormat;
       path: string;
       name: string;
+      /** The folder it is in, which the line names. */
+      folder: string;
+      inDefaultFolder: boolean;
+      /** When it was saved, in ms, so a line the User left behind doesn't come back long after. */
+      at: number;
       unverified: number;
       /** The sentences whose check isn't good: how many, and whether they went in as comments. */
       checks: SentenceChecksExported;
@@ -82,6 +87,8 @@ export type ExportResult =
       tracked: number;
       /** The header and footer kept in a Word file though deleted from the Mind (#105). */
       kept: ("header" | "footer")[];
+      /** The Documents whose entries are too thin to cite, marked so in the file. */
+      needsDetails: string[];
       /** The first save, which took Documents › IncarnaMind: the line says where (D209). */
       defaulted: boolean;
     }
@@ -159,10 +166,14 @@ export async function exportMind(
         format: chosen,
         path: saved.file.path,
         name: saved.file.name,
+        folder: saved.file.folder,
+        inDefaultFolder: saved.file.inDefaultFolder,
+        at: Date.now(),
         unverified: saved.unverifiedCitations,
         checks: saved.sentenceChecks,
         tracked: saved.trackedChanges,
         kept: saved.word?.keptFurniture ?? [],
+        needsDetails: saved.needsDetails,
         defaulted: saved.file.defaulted,
       });
     } else if (saved.status === "review") {
@@ -187,6 +198,20 @@ export async function exportMind(
       message: errorMessage(failure, translateNow),
     });
   }
+}
+
+/**
+ * Shows the first entry of the Mind's References too thin to cite, as the result line's Show
+ * does: scrolled to the middle, its "Needs details" focused, which opens its "Cite as" on Enter.
+ */
+export function revealNeedsDetails(mindId: string): boolean {
+  const needs = document.querySelector<HTMLElement>(
+    `article[data-mind-id="${CSS.escape(mindId)}"] [data-testid="reference-entry"][data-needs-details] [data-testid="reference-needs-details"]`,
+  );
+  if (!needs) return false;
+  needs.scrollIntoView({ block: "center" });
+  needs.focus();
+  return true;
 }
 
 /**

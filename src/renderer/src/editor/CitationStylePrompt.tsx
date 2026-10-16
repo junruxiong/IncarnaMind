@@ -1,17 +1,14 @@
 import type { Editor } from "@tiptap/core";
-import { useEditorState } from "@tiptap/react";
 import type * as Y from "yjs";
 import { MIND_SETTINGS_FIELD } from "../../../core/api";
 import { type CitationStyleId, PROMPTED_CITATION_STYLES } from "../../../shared/citationStyles";
 import type { MessageKey } from "../../../shared/i18n";
 import { dismissCitationStylePrompt } from "../../../shared/mindCitationStyle";
-import { isCitableWork } from "../../../shared/references";
+import { useCitesWorks } from "../citationFormatting";
 import { chooseCitationStyle, useCitationStylePicker } from "../citationStylePicker";
 import { CloseLineIcon } from "../components/lineIcons";
 import { useLanguage, useT } from "../i18n";
-import { useAppStore } from "../store";
 import { useUndo } from "../undo";
-import { citationClusters } from "./citationClusters";
 
 /** The prompt's short names: the styles a Chinese and an English academic would pick first. */
 const SHORT_LABEL: Partial<Record<CitationStyleId, MessageKey>> = {
@@ -21,18 +18,6 @@ const SHORT_LABEL: Partial<Record<CitationStyleId, MessageKey>> = {
 
 /** Ends in CJK punctuation or a full-width form (U+3000–U+303F, U+FF00–U+FFEF), such as "？". */
 const fullWidthEnd = /[\u3000-\u303f\uff00-\uffef]$/u;
-
-/** The Documents a Mind cites, each once, as one string, so the editor re-renders only when they change. */
-const citedDocuments = (editor: Editor) =>
-  [
-    ...new Set(
-      citationClusters(editor.state).flatMap((cluster) =>
-        cluster.members.flatMap((member) => member.attributes.documentId ?? []),
-      ),
-    ),
-  ]
-    .sort()
-    .join(" ");
 
 /**
  * A Mind that is Numbered because it never chose a style, and cites papers or books (a
@@ -52,17 +37,7 @@ export function CitationStylePrompt({
 }) {
   const t = useT();
   const language = useLanguage();
-  const cited = useEditorState({
-    editor,
-    selector: ({ editor: current }) => citedDocuments(current),
-  });
-  const citesWorks = useAppStore((state) => {
-    if (cited === "") return false;
-    const ids = new Set(cited.split(" "));
-    return state.documents.some(
-      (document) => ids.has(document.id) && isCitableWork(document.reference),
-    );
-  });
+  const citesWorks = useCitesWorks(editor);
   if (!citesWorks) return null;
 
   const backToNote = () => {
