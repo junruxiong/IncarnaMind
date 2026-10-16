@@ -109,17 +109,20 @@ export function webInstructions(offered: boolean): string {
 
 /**
  * The Minds' Tools, when offered (#202): the User's words decide whether the
- * Answer answers, changes a Mind or makes one, and once it has changed one,
- * the reply says what it did, never the new text.
+ * Answer answers, changes a Mind or makes one. IncarnaMind, not the reply,
+ * reports what changed, from the calls; the reply never repeats the new text.
  */
 export function mindInstructions(offered: boolean): string {
   if (!offered) return "";
   return [
     "You can also change the User's Minds (their notes) and make new ones, with read_mind, edit_mind, add_to_mind and create_mind. What you write into a Mind arrives there as changes the User accepts or rejects.",
     '- The User\'s words decide. A Question (what, why, how, compare, find, explain…) is answered in your reply and changes no Mind. A request to write or change something in a Mind ("shorten the summary", "add a risks section", "fix the typos", "把这段改短") changes that Mind. A request for a new note ("make notes on these papers", "summarise this into a new Mind", "新建一篇笔记") makes one.',
-    "- The Mind is the one in <mind>, unless the User names another. If they ask to change a Mind but none is in <mind> and they name none, change nothing: say so, and that they can open one or ask for a new Mind.",
+    "- A <tool-record> is IncarnaMind's record of what an earlier Answer's Tools really did, and what the User did with the changes since: trust it over that Answer's words, and never write one. A change the User rejected is gone: don't bring it back or say it is still there. In <mind>, earlier Answers and read_mind, a Citation reads as its source in brackets, like [Tides, p. 3].",
+    "- The Mind is the one in <mind>, unless the User names another, or means a page your <tool-record> says you made or changed earlier in this conversation: then give that Mind's name in mind. If they ask to change a Mind but none is in <mind> and they name none, change nothing: say so, and that they can open one or ask for a new Mind.",
+    "- In <mind> and read_mind, [waiting change, adds: …] and [waiting change, removes: …] mark changes still waiting for the User, often your own. To change text that waits (make it longer or shorter, reword it, remove part of it), call edit_mind on it, naming its heading in part: that revises the waiting text itself. Never add a second copy. To add more from the Documents, search and cite first, then give edit_mind the section's whole new text as content.",
+    "- If a Tool says nothing was changed, say that first, in one sentence, with why, and don't make the change another way.",
     "- What you write into a Mind follows the same rules as your replies: the language of the Question, and quotation marks only around a Document's own words.",
-    "- Never write a Mind's new text in your reply. Once the Tools are done, reply in one or two sentences, with no Citation markers (the Mind holds them): which Mind you changed or made, what changed and why, and plainly anything you couldn't do. A card under your reply lists each Mind and how many changes wait there, so don't list them again or say that they wait. E.g. \"Shortened the summary in “Q3 review” from 320 to 150 words: dropped the repeated background and the third example; every Citation kept.\"",
+    "- Don't say what you changed or made in a Mind, nor repeat its new text: IncarnaMind writes under your reply what each call changed, and how much. Once the Tools are done, reply in a sentence or two, with no Citation markers, with only what that line can't say: why, what you left out, or plainly what you couldn't do and why.",
   ].join("\n");
 }
 
@@ -197,6 +200,20 @@ export function datedDocumentsNote(passages: string): string {
     .map(([document, date]) => `"${document}" (${date})`)
     .join(", ");
   return `These Passages come from Documents of different dates: ${listed}. Take each Document's figure only from a sentence that states it for that Document, never from a passing mention. Where they give different figures for the same thing, lead with the newer Document, then write one sentence naming the older one, its date and its figure, with a Citation.`;
+}
+
+/** What marks a Passage of a Document the User keeps as their own workings, in a search's result. */
+export const NOT_CITED_ATTRIBUTE = ' cite="never"';
+
+const NOT_CITED_PASSAGE = new RegExp(`<passage [^>]*${NOT_CITED_ATTRIBUTE}`);
+
+/**
+ * A reminder after Passages from the User's own workings: read them to
+ * understand the Question, never cite them. Empty when none is among them.
+ */
+export function notCitedNote(passages: string): string {
+  if (!NOT_CITED_PASSAGE.test(passages)) return "";
+  return `A Passage marked cite="never" is from the User's own working file. Read it to understand the Question, but never cite it, never offer it as support for or agreement with another Document, and rest nothing on it: a record naming it is refused. Where only such a Passage states something, say in one sentence that only the User's own working file says it, with no marker.`;
 }
 
 const RECORD =
@@ -314,8 +331,8 @@ export function documentInstructions(
   calculate = false,
 ): string {
   const documents = `${listed.total} Document${listed.total === 1 ? "" : "s"}`;
-  const note = datedDocumentsNote(passages);
-  const dated = note ? [note] : [];
+  const dated = datedDocumentsNote(passages);
+  const notes = [dated, notCitedNote(passages)].filter(Boolean);
   const added = `${scoped ? `The User limited this Question to ${documents} of theirs` : `The User has added ${documents}`} (PDF, Word, PowerPoint, Excel, CSV, text and Markdown files).`;
   switch (mode) {
     case "no-documents":
@@ -342,7 +359,7 @@ export function documentInstructions(
         "",
         "Passages found in the User's Documents for this Question:",
         passages,
-        ...dated,
+        ...notes,
         "",
         // The example's location is a placeholder: a small model copied a real-looking one ("p. 3") as its own (#67).
         calculate
@@ -363,7 +380,7 @@ export function documentInstructions(
         "",
         "Passages found in the User's Documents for this Question:",
         passages,
-        ...dated,
+        ...(dated ? [dated] : []),
         "",
         "Use them where they help. Don't write citation markers or a list of sources.",
         notCovered(false),

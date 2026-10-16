@@ -108,6 +108,7 @@ describe("Reading a comparison table", () => {
       "nothing-to-search",
       "source-removed",
       "left-out",
+      "not-cited",
       "cost-cap",
       "plan-limit",
       "auth",

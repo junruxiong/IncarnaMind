@@ -47,7 +47,12 @@ import { runsByDefault } from "../../shared/approvalRules";
 import { citationNode, withCitations } from "../../shared/blockJson";
 import type { LiveDocument } from "../../shared/citations";
 import { withFigures, withFigureText } from "../../shared/figureMarkers";
-import { recordProposalRequest, resolveProposals } from "../../shared/proposals";
+import {
+  decisionsOn,
+  pendingProposals,
+  recordProposalRequest,
+  resolveProposals,
+} from "../../shared/proposals";
 import { searchScopeOf } from "../../shared/searchScope";
 import { setTextOrigin } from "../../shared/textOrigins";
 import {
@@ -63,6 +68,7 @@ import {
   type ChatModelChoice,
   type ChatReadiness,
   type CitationSupport,
+  type ClaimedChange,
   type ConversationAskResult,
   type ConversationQuestion,
   type CoreEventName,
@@ -75,6 +81,7 @@ import {
   MIND_CONTENT_FIELD,
   type MindChange,
   type MindFocus,
+  type MindProblem,
   type ProviderError,
   QUESTION_BLOCK,
   type QuoteRetry,
@@ -135,11 +142,13 @@ import {
   topLevelBlocks,
 } from "./blocks";
 import { answerLanguage, createCalculationSession } from "./calculations";
+import { asksToCheckOrCalculate } from "./carefulIntent";
 import {
   type AnswerDocuments,
   createCitationSession,
   withoutFootnoteDefinitions,
 } from "./citations";
+import { askAgainNote, unbackedClaims as claimsNoCallMade, holdBack } from "./claimedChanges";
 import {
   conversationContext,
   conversationContextOf,
@@ -181,6 +190,7 @@ import {
   webInstructions,
 } from "./prompt";
 import { quotedWordsIn, withoutQuotationMarks } from "./quotedWords";
+import type { ChangeStates } from "./toolRecord";
 
 export type { AnswerDocuments } from "./citations";
 export { createAiSdkAnswerEngine } from "./engine";
@@ -346,7 +356,18 @@ export interface AnswersOptions {
   /** Whether Questions can be asked with this model (the default one when undefined). */
   readiness(choice: ChatModelChoice | undefined): Promise<ChatReadiness>;
   /** The model, once the User has accepted its data flow (see `Core.prepareChatModel`). */
-  prepareModel(choice: ChatModelChoice): Promise<PreparedChatModel>;
+  prepareModel(
+    choice: ChatModelChoice,
+    thinking: "summary" | "answer" | "careful",
+  ): Promise<PreparedChatModel>;
+  /**
+   * The quick-tasks model for an Answer asked with `answers`, prepared as
+   * `answers` was: for the calls that don't write the Answer.
+   */
+  prepareQuickModel?(
+    answers: ChatModelChoice,
+    prepared: PreparedChatModel,
+  ): Promise<PreparedChatModel["model"]>;
   /** Searching the User's Documents, and what Citations point to. */
   documents: DocumentsForAnswers;
   /** What an Answer is written in when its Question has no language of its own. */
@@ -736,6 +757,7 @@ export function createAnswers(options: AnswersOptions) {
     let quoteRetry: QuoteRetry | null = null;
     /** The one request to fix figures, if the engine made it (see ./figureRetry). */
     let figureRetry: FigureRetry | null = null;
+    let unbackedClaims: ClaimedChange[] = [];
     /** What the model calls counted, the cached input tokens too. */
     const usage: AnswerUsage = {
       inputTokens: 0,
@@ -746,6 +768,7 @@ export function createAnswers(options: AnswersOptions) {
     const toolCalls: AnswerToolCall[] = [];
     /** When the Question went to the model, and when the Answer ended, in ms since the epoch. */
     let sentAt: number | null = null;
+    const waitsForUser: [from: number, to: number][] = [];
     let finishedAt: number | null = null;
     const phases: AnswerSteps["phases"] = [];
     /** The model's reasoning summary, kept only from a provider that summarizes it. */
@@ -754,6 +777,8 @@ export function createAnswers(options: AnswersOptions) {
     let lastReasoningAt: number | null = null;
     /** When the text the Answer keeps began: a preamble taken back doesn't count. */
     let firstTextAt: number | null = null;
+    let firstMindWordAt: number | null = null;
+    const careful = asksToCheckOrCalculate(context.question);
     const iso = (ms: number | null) => (ms === null ? null : new Date(ms).toISOString());
     const steps = (): AnswerSteps => {
       const summary = reasoning.trim();
@@ -761,6 +786,18 @@ export function createAnswers(options: AnswersOptions) {
         firstTextAt !== null && reasoningStartedAt !== null && firstTextAt > reasoningStartedAt
           ? firstTextAt
           : (lastReasoningAt ?? Date.now());
+      const firstWordAt = Math.min(firstTextAt ?? Infinity, firstMindWordAt ?? Infinity);
+      const wordAfter = (from: number, to: number) =>
+        Math.max(
+          0,
+          to -
+            from -
+            waitsForUser.reduce(
+              (sum, [began, ended]) =>
+                sum + Math.max(0, Math.min(ended, to) - Math.max(began, from)),
+              0,
+            ),
+        );
       return {
         sentAt: iso(sentAt),
         finishedAt: iso(finishedAt),
@@ -771,6 +808,10 @@ export function createAnswers(options: AnswersOptions) {
             : null,
         ...(read?.partial && { readShare }),
         ...(citedAfterChecking.count > 0 && { citedAfterChecking: citedAfterChecking.count }),
+        ...(sentAt !== null &&
+          firstWordAt !== Infinity && { firstWordMs: wordAfter(sentAt, firstWordAt) }),
+        ...(careful && { careful: true as const }),
+        ...(unbackedClaims.length > 0 && { unbackedClaims: [...unbackedClaims] }),
       };
     };
     let skills: SkillSession | null = null;
@@ -983,7 +1024,10 @@ export function createAnswers(options: AnswersOptions) {
       id: string,
       ok: boolean,
       resultCount: number | null,
-      found: Pick<AnswerToolCall, "passages" | "error" | "webPage" | "mindChange"> = {},
+      found: Pick<
+        AnswerToolCall,
+        "passages" | "error" | "webPage" | "mindChange" | "mindProblem"
+      > = {},
     ) => {
       const call = toolCalls.find((each) => each.id === id);
       if (!call) return;
@@ -995,6 +1039,7 @@ export function createAnswers(options: AnswersOptions) {
       if (found.error) call.error = found.error;
       if (found.webPage) call.webPage = found.webPage;
       if (found.mindChange) call.mindChange = found.mindChange;
+      if (found.mindProblem) call.mindProblem = found.mindProblem;
       announce("answer.toolCallFinished", { ...place, answerId, call: { ...call } });
       input.onCall?.({ ...call });
       writeSoon();
@@ -1009,6 +1054,7 @@ export function createAnswers(options: AnswersOptions) {
     const webPages = new Map<string, WebPageCall>();
     /** What each call of a Minds' Tool changed, by call, for its card when it finishes (#202). */
     const mindChanges = new Map<string, MindChange>();
+    const mindProblems = new Map<string, MindProblem>();
     /** Keeps how a script's run went on its card. */
     const setScriptRun = (id: string, run: SkillScriptRun) => {
       const call = toolCalls.find((each) => each.id === id);
@@ -1031,7 +1077,9 @@ export function createAnswers(options: AnswersOptions) {
       callStarted({ ...card, approval: "waiting" });
       // Already reported by the engine, after all: it waits too.
       setApproval(call.toolCallId, "waiting");
+      const asked = Date.now();
       const allowed = await options.approvals.request(call, controller.signal);
+      waitsForUser.push([asked, Date.now()]);
       setApproval(call.toolCallId, allowed ? "allowed" : "denied");
       return allowed ? null : deniedResult(call);
     };
@@ -1235,6 +1283,7 @@ export function createAnswers(options: AnswersOptions) {
       return true;
     };
 
+    let settleMinds = (): void => undefined;
     const run = async () => {
       // An outside agent's Question, or a table's cell, whose scope has no Documents has nothing to
       // answer from: it says so without asking the model.
@@ -1277,7 +1326,10 @@ export function createAnswers(options: AnswersOptions) {
       if (consenting) showPhase();
       let prepared: PreparedChatModel;
       try {
-        prepared = await options.prepareModel(model);
+        prepared = await options.prepareModel(
+          model,
+          input.task ? "summary" : careful ? "careful" : "answer",
+        );
       } catch (error) {
         finish({ status: "failed", error: failureOf(error) });
         return;
@@ -1374,23 +1426,29 @@ export function createAnswers(options: AnswersOptions) {
           : [];
       // The Minds' Tools, for an Answer in the assistant (#202).
       const minds = outside ? undefined : options.minds;
-      const fromMinds: Tool[] =
+      const mindsTools =
         minds && input.assistant
           ? mindTools({
               minds,
               prepared,
               ...input.assistant,
+              language: answerLanguage(context.question),
               blocksOf: (text) => {
+                let found = 0;
                 let notFound = 0;
                 let unrecorded = 0;
-                const cited = withCitations(
-                  markdownToBlocks(withoutFootnoteDefinitions(text)),
-                  (marker) => {
-                    const node = session.checkedNode(marker);
-                    if (!node) unrecorded++;
-                    else if (node.attrs?.check === "not-found") notFound++;
-                    return node;
-                  },
+                let firstUnrecorded = -1;
+                const cited = markdownToBlocks(withoutFootnoteDefinitions(text)).flatMap(
+                  (block, index) =>
+                    withCitations([block], (marker) => {
+                      const node = session.checkedNode(marker);
+                      if (!node) {
+                        unrecorded++;
+                        if (firstUnrecorded < 0) firstUnrecorded = index;
+                      } else if (node.attrs?.check === "not-found") notFound++;
+                      else found++;
+                      return node;
+                    }),
                 );
                 const blocks = asGenerated(
                   calculating
@@ -1401,9 +1459,16 @@ export function createAnswers(options: AnswersOptions) {
                       )
                     : cited,
                 );
-                return { blocks, notFound, unrecorded };
+                return {
+                  blocks,
+                  cited: found + notFound,
+                  notFound,
+                  unrecorded,
+                  firstUnrecorded,
+                };
               },
               changed: (toolCallId, change) => {
+                firstMindWordAt ??= Date.now();
                 mindChanges.set(toolCallId, change);
                 // On its card at once: a Mind changes while the call is still being written.
                 const call = toolCalls.find((each) => each.id === toolCallId);
@@ -1412,10 +1477,12 @@ export function createAnswers(options: AnswersOptions) {
                   writeSoon();
                 }
               },
+              failed: (toolCallId, problem) => mindProblems.set(toolCallId, problem),
               signal: controller.signal,
               now: () => new Date(),
             })
-          : [];
+          : null;
+      if (mindsTools) settleMinds = () => mindsTools.settle();
       const documents: AnswerTools = {
         get documentCount() {
           return session.tools.documentCount;
@@ -1431,6 +1498,8 @@ export function createAnswers(options: AnswersOptions) {
         correctQuote: (marker, quote) => session.tools.correctQuote?.(marker, quote) ?? false,
         shownPassages: () => session.tools.shownPassages?.() ?? [],
         quoteFound: (passage, quote) => session.tools.quoteFound?.(passage, quote) ?? false,
+        wroteIntoMind: () =>
+          [...mindChanges.values()].some((change) => change.proposals > 0 || change.revised),
         ...(calculating && {
           calculate: (given: readonly unknown[], calculateOptions?: CiteOptions) =>
             figures.calculate(given, calculateOptions),
@@ -1471,11 +1540,25 @@ export function createAnswers(options: AnswersOptions) {
           await new Promise((resolve) => setTimeout(resolve, LOAD_POLL_MS).unref?.());
         }
       };
-      // Until a phase is known, the meta line says "Writing…".
+      // Until a phase is known, the meta line says "Writing…". Without a model to load, it is known now.
       if (prepared.loaded) void watchLoading(prepared.loaded);
+      else showPhase();
 
       const learntKey = modelKey(model, prepared);
+      const prepareQuick = options.prepareQuickModel;
       let outcome: Outcome = { status: "stopped" };
+      let mindsNow: { id: string; name: string }[] | null = null;
+      const mindsListed = () => {
+        mindsNow ??= minds?.list() ?? [];
+        return mindsNow;
+      };
+      const checkReply = (text: string) => {
+        mindsNow = null;
+        const claims = claimsNoCallMade(text, toolCalls, mindsListed());
+        return claims.length > 0
+          ? { claims, note: askAgainNote(claims, toolCalls, options.readableMindName) }
+          : null;
+      };
       for await (const event of engine.generate({
         instructions: (
           mode,
@@ -1516,8 +1599,9 @@ export function createAnswers(options: AnswersOptions) {
         ...(mindRequest && { mind: mindRequest }),
         question: context.question,
         model: prepared.model,
+        ...(prepareQuick && { quickModel: () => prepareQuick(model, prepared) }),
         documents,
-        tools: [...provided, ...fromSkills, ...fromWeb, ...fromMinds],
+        tools: [...provided, ...fromSkills, ...fromWeb, ...(mindsTools?.tools ?? [])],
         gate,
         streamsInput,
         toolSet: input.toolSet,
@@ -1528,6 +1612,14 @@ export function createAnswers(options: AnswersOptions) {
         window: prepared.window,
         retryQuotes: prepared.retryQuotes,
         cacheKey: place.conversationId ?? place.mindId ?? undefined,
+        ...(input.assistant && {
+          checkReply,
+          shownUpTo: holdBack(() => mindsListed().map((mind) => mind.name)),
+          mayEndBlank: () =>
+            [...mindChanges.values()].some(
+              (change) => change.created || change.revised || change.proposals > 0,
+            ),
+        }),
         signal: controller.signal,
       })) {
         if (finished) break;
@@ -1561,6 +1653,10 @@ export function createAnswers(options: AnswersOptions) {
             break;
           case "figures-retried":
             figureRetry = event.retry;
+            break;
+          case "claims-unbacked":
+            unbackedClaims = event.claims;
+            writeSoon();
             break;
           case "usage":
             usage.inputTokens += event.usage.inputTokens ?? 0;
@@ -1610,11 +1706,13 @@ export function createAnswers(options: AnswersOptions) {
           case "tool-call-finished": {
             const webPage = webPages.get(event.id);
             const mindChange = mindChanges.get(event.id);
+            const mindProblem = mindProblems.get(event.id);
             callFinished(event.id, event.ok, event.resultCount, {
               ...(event.passages && { passages: [...event.passages] }),
               ...(event.error && { error: event.error }),
               ...(webPage && { webPage }),
               ...(mindChange && { mindChange }),
+              ...(mindProblem && { mindProblem }),
             });
             break;
           }
@@ -1632,10 +1730,12 @@ export function createAnswers(options: AnswersOptions) {
             break;
         }
       }
+      settleMinds();
       finish(outcome);
     };
     run().catch((error: unknown) => {
       options.reportError(error);
+      settleMinds();
       finish({ status: "failed", error: classifyProviderError(error) });
     });
   }
@@ -1816,6 +1916,16 @@ export function createAnswers(options: AnswersOptions) {
       ? { mindId: mind.mindId, version: mind.reading.version, partial: mind.section.partial }
       : null;
 
+  const changeStatesOf: ChangeStates = (change) => {
+    if (options.readableMindName(change.mindId) === null) {
+      return { waiting: 0, accepted: 0, rejected: 0, gone: true };
+    }
+    return options.content.read(change.mindId, (blocks) => ({
+      waiting: pendingProposals(blocks).filter((each) => each.request === change.request).length,
+      ...(blocks.doc ? decisionsOn(blocks.doc, change.request) : { accepted: 0, rejected: 0 }),
+    }));
+  };
+
   /**
    * Writes the Answer of a Question in a conversation, added or emptied in `turn`, from
    * the messages before it, the Mind it reads and its Search scope as it is now.
@@ -1842,6 +1952,8 @@ export function createAnswers(options: AnswersOptions) {
     const { context, origins } = conversationContextOf(turn.earlier, question.text, {
       mind: section,
       documents,
+      mindNames: options.readableMindName,
+      changeStates: changeStatesOf,
     });
     const requestOf = (reading: MindReading, kept: MindCut): RequestMind => ({
       text: kept.text,
@@ -1872,6 +1984,8 @@ export function createAnswers(options: AnswersOptions) {
                 context: conversationContextOf(turn.earlier, question.text, {
                   mind: smaller,
                   documents,
+                  mindNames: options.readableMindName,
+                  changeStates: changeStatesOf,
                 }).context,
                 request: requestOf(mind.reading, smaller),
                 share: smaller.share,

@@ -22,6 +22,29 @@ describe("withCitationGlue", () => {
     ]);
   });
 
+  it("keeps only the first Citations with the word, and the last with the full stop, so a long run can wrap", () => {
+    const [block] = withCitationGlue([
+      paragraph(text("this "), ...Array.from({ length: 6 }, () => citation), text(". Then")),
+    ]);
+    const marked = block?.content?.map((node) => node.marks?.length === 1);
+    expect(marked).toEqual([true, true, true, true, false, false, true, true, false]);
+  });
+
+  it("marks the word before the next sentence's Citation, after the full stop of the last", () => {
+    const [block] = withCitationGlue([
+      paragraph(text("One "), citation, text(". Two words "), citation, text(".")),
+    ]);
+    expect(block?.content).toEqual([
+      { ...text("One "), marks: [glue] },
+      { ...citation, marks: [glue] },
+      { ...text("."), marks: [glue] },
+      text(" Two "),
+      { ...text("words "), marks: [glue] },
+      { ...citation, marks: [glue] },
+      { ...text("."), marks: [glue] },
+    ]);
+  });
+
   it("takes one character of Chinese", () => {
     const [block] = withCitationGlue([paragraph(text("增长了"), citation, text("。"))]);
     expect(block?.content).toEqual([
