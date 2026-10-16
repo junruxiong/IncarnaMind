@@ -2,7 +2,7 @@
  * What the engine is given (ADR-0016): each cited Document's reference record (#286) as a CSL
  * JSON item, and each Citation's Location as a CSL locator.
  */
-import { translate } from "../../shared/i18n";
+import { type MessageKey, type MessageParams, translate } from "../../shared/i18n";
 import { formatLocation } from "../../shared/locations";
 import { CJK } from "../../shared/text";
 import type { CitationLocation, ReferenceFields, ReferenceName } from "../api";
@@ -75,19 +75,44 @@ export interface Locator {
 
 const span = (from: number, to: number) => (to > from ? `${from}-${to}` : String(from));
 
+const RANGE_MARK = /[-–—]/;
+
 /**
  * A Citation's Location as a locator: pages and lines as CSL's own ("p. 4", "pp. 4–5"); a slide,
  * rows of a sheet or a section as the Location's own words in the style's language ("slide 4",
- * "§ History"), which the style prints with no label rather than as an invented page.
+ * "§ History"), which the style prints with no label rather than as an invented page. So is a page
+ * a PDF names with letters or a hyphen ("A-3", "iii–iv"): CSL reads a hyphen in a locator as a
+ * range, and only of numbers. Such a range still reads "pp." like a range of numbers, though the
+ * app's own labels say "p." for any range.
  */
 export function locatorOf(location: CitationLocation | null, language: Language): Locator {
   if (!location) return {};
-  if (location.kind === "page") return { locator: span(location.from, location.to), label: "page" };
   if (location.kind === "lines") {
     return { locator: span(location.from, location.to), label: "line" };
   }
-  return {
-    locator: formatLocation(location, (key, params) => translate(language, key, params)),
-    label: "custom",
-  };
+  const t = (key: MessageKey, params?: MessageParams) => translate(language, key, params);
+  if (location.kind === "page") {
+    const from = location.printed?.from ?? String(location.from);
+    const to = location.printed?.to ?? String(location.to);
+    const single = from === to;
+    const plain = single ? !RANGE_MARK.test(from) : /^\d+$/.test(from) && /^\d+$/.test(to);
+    if (plain) return { locator: single ? from : `${from}-${to}`, label: "page" };
+    return {
+      locator: single
+        ? t("location.page", { range: from })
+        : t("location.pages", { range: `${from}–${to}` }),
+      label: "custom",
+    };
+  }
+  return { locator: formatLocation(location, t), label: "custom" };
+}
+
+/**
+ * A custom locator as the engine wrote it into a run's text: the engine turns a hyphen between
+ * digits into an en dash, so a page the PDF names "1-3" or a section headed "2023-24" would read
+ * as a range. Put the label's own hyphen back.
+ */
+export function restoreHyphens(text: string, locator: string): string {
+  const written = locator.replace(/(\d)-(?=\d)/g, "$1–");
+  return written === locator ? text : text.replace(written, locator);
 }

@@ -41,7 +41,7 @@ const ALL_PAGES = [
   {
     page: "models",
     name: "Models",
-    sections: ["chat-model-settings", "chatgpt-settings", "jev-settings", "organization-settings"],
+    sections: ["chat-model-settings", "chatgpt-settings", "tagging-settings", "jev-settings"],
   },
   { page: "search", name: "Search", sections: ["embedding-settings", "rerank-settings"] },
   { page: "meetings", name: "Meetings", sections: ["meetings-settings"] },
@@ -95,8 +95,8 @@ test("Settings lists its pages, and each holds its settings", async () => {
       }
       await shot(window, `settings-${page}`);
       if (page === "models") {
-        await content.getByTestId("organization-settings").scrollIntoViewIfNeeded();
-        await shot(window, "settings-models-organization");
+        await content.getByTestId("tagging-settings").scrollIntoViewIfNeeded();
+        await shot(window, "settings-models-tagging");
       }
     }
   } finally {
@@ -129,7 +129,7 @@ test("the list of pages works by keyboard, with a focus ring", async () => {
   }
 });
 
-test("Organize in the Library, with no model chosen yet, opens Models, where Organization is", async () => {
+test("Organize in the Library, with no model chosen yet, opens Models, where Tagging is", async () => {
   const { app, window } = await launchApp(dataDir);
   try {
     await dismissChatSetup(window);
@@ -152,7 +152,7 @@ test("Organize in the Library, with no model chosen yet, opens Models, where Org
     await window.getByTestId("library").getByTestId("library-organize-set-up").click();
     const settings = window.getByTestId("settings");
     await expect(settings).toHaveAttribute("data-page", "models");
-    await expect(settings.getByTestId("organization-settings")).toBeVisible();
+    await expect(settings.getByTestId("tagging-settings")).toBeAttached();
   } finally {
     await app.close();
   }
@@ -189,8 +189,8 @@ test("the pages are named in Chinese too", async () => {
         await expect(window.getByTestId("settings-page-title")).toHaveText("模型");
       await shot(window, `settings-${page}-zh`);
       if (page === "models") {
-        await window.getByTestId("organization-settings").scrollIntoViewIfNeeded();
-        await shot(window, "settings-models-organization-zh");
+        await window.getByTestId("tagging-settings").scrollIntoViewIfNeeded();
+        await shot(window, "settings-models-tagging-zh");
       }
     }
   } finally {

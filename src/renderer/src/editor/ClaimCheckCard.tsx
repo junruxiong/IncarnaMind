@@ -14,6 +14,7 @@ import { translateNow, useT } from "../i18n";
 import { groupsMerged } from "../layoutSlice";
 import { openCited } from "../openCited";
 import { useAppStore } from "../store";
+import { useReadableQuote } from "./citationScan";
 import type { ShownClaim } from "./claimChecks";
 import { ClaimMarkIcon, type ClaimMarkState } from "./icons";
 import { Popover } from "./Popover";
@@ -317,6 +318,7 @@ function ClaimCard({
   const differs = state === "unsupported" && check.evidence !== null;
   const evidence = (decided && fromPassage) || differs ? check.evidence : null;
   const location = evidence ? citationLocation(evidence) : null;
+  const quote = useReadableQuote(evidence);
   const where = location ? formatLocation(location, t) : null;
   const folderName = useAppStore((store) =>
     check.scope.folderId === null
@@ -362,7 +364,7 @@ function ClaimCard({
           <figcaption className="sr-only">{t("citation.quote")}</figcaption>
           <blockquote>
             <span data-testid="claim-quote" className="citation-card-wash">
-              {evidence.quote}
+              {quote}
             </span>
           </blockquote>
         </figure>

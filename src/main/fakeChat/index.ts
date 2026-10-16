@@ -8,6 +8,7 @@
  * does when it finds or checks claims. A key with "refused" in it is refused,
  * as a provider refuses a wrong key (HTTP 401). A model whose id ends "-no-tools" refuses
  * Tools and structured output, as a small server model does, so its Answers have no Citations.
+ * A Document whose text says "unreachable" can't reach the model the first time it is tagged.
  */
 
 import { APICallError } from "ai";
@@ -30,7 +31,7 @@ import {
 import { fakeResearchTags } from "./researchTags";
 import { fakeSkillDraft } from "./skillDraft";
 import { refusal, replyParts } from "./stream";
-import { fakeStructuredOutput } from "./structured";
+import { fakeStructuredOutput, tagsUnreachable } from "./structured";
 
 /** Time between two streamed words: slow enough for a test to watch the Answer grow. */
 const WORD_DELAY_MS = 60;
@@ -80,6 +81,14 @@ export const createFakeChatModel: ChatModelFactory = (spec) =>
           url: "https://fake.invalid/chat",
           requestBodyValues: {},
           statusCode: 404,
+        });
+      }
+      if (tagsUnreachable(options)) {
+        throw new APICallError({
+          message: "Cannot connect to API: fetch failed",
+          url: "https://fake.invalid/chat",
+          requestBodyValues: {},
+          isRetryable: false,
         });
       }
       return {

@@ -7,6 +7,7 @@ import {
   type MindCitationStyle,
   type OutputSettings,
   type SharePagePreferences,
+  type SharePagePreview,
   type TheirChangesShown,
   type WordExportPreferences,
 } from "../../../core/api";
@@ -21,6 +22,7 @@ import { chooseOutputLocation, outputFolderLabel } from "../outputFiles";
 import { useAppStore } from "../store";
 import { ChevronDownLineIcon, CloseLineIcon } from "./lineIcons";
 import { ProblemLine } from "./ProblemLine";
+import { SharePageContents } from "./SharePageContents";
 import {
   buttonClass,
   dialogActionsClass,
@@ -135,9 +137,15 @@ function WordReviewRows({
 function SharePageRows({
   draft,
   onChange,
+  contents,
 }: {
   draft: SharePagePreferences;
   onChange(next: SharePagePreferences): void;
+  contents: {
+    preview: SharePagePreview;
+    textOnly: ReadonlySet<string>;
+    onChange(textOnly: Set<string>): void;
+  } | null;
 }) {
   const t = useT();
   return (
@@ -149,6 +157,7 @@ function SharePageRows({
         onChange={(citationCards) => onChange({ ...draft, citationCards })}
         testId="export-citation-cards"
       />
+      {draft.citationCards && contents && <SharePageContents {...contents} />}
       {draft.citationCards && (
         <SwitchRow
           label={t("export.share.checkedLine")}
@@ -353,6 +362,35 @@ function ExportOptionsForm({ mind, onDone }: { mind: Mind; onDone(): void }) {
   const [saving, setSaving] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const { format } = draft;
+  const [shared, setShared] = useState<SharePagePreview | null>(null);
+  const [textOnly, setTextOnly] = useState<Set<string> | null>(null);
+  const wantsShared = format === "share-page";
+
+  const { includeQuestions, checkedLine } = draft["share-page"];
+  const theirChanges = draft.theirChanges ?? "shown";
+
+  useEffect(() => {
+    if (!wantsShared) return;
+    let current = true;
+    const options = { format: "share-page", includeQuestions, checkedLine, theirChanges } as const;
+    core.previewSharePage(mind.id, options).then(
+      (preview) => {
+        if (!current) return;
+        setShared(preview);
+        setTextOnly(
+          (kept) =>
+            kept ??
+            new Set(
+              preview.documents.filter((each) => each.textOnly).map((each) => each.documentId),
+            ),
+        );
+      },
+      (error: unknown) => useAppStore.getState().reportError(error),
+    );
+    return () => {
+      current = false;
+    };
+  }, [mind.id, wantsShared, includeQuestions, checkedLine, theirChanges]);
 
   // How many Questions the Mind has, which a deliverable leaves out unless asked: said under its
   // switch; and how many Citations a source pack would hold, since with none it says so.
@@ -382,6 +420,16 @@ function ExportOptionsForm({ mind, onDone }: { mind: Mind; onDone(): void }) {
     try {
       const settings = await core.updateSettings({ user: { exportOptions: draft } });
       useAppStore.setState({ settings });
+      const before = shared?.documents
+        .filter((each) => each.textOnly)
+        .map((each) => each.documentId);
+      if (
+        textOnly &&
+        before &&
+        (before.length !== textOnly.size || before.some((id) => !textOnly.has(id)))
+      ) {
+        await core.setSharePageTextOnly(mind.id, [...textOnly]);
+      }
       onDone();
     } catch (failure) {
       setProblem(errorMessage(failure, t));
@@ -453,6 +501,9 @@ function ExportOptionsForm({ mind, onDone }: { mind: Mind; onDone(): void }) {
           <SharePageRows
             draft={draft["share-page"]}
             onChange={(sharePage) => setDraft({ ...draft, "share-page": sharePage })}
+            contents={
+              shared && textOnly ? { preview: shared, textOnly, onChange: setTextOnly } : null
+            }
           />
         )}
 

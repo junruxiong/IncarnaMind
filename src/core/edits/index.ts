@@ -70,12 +70,14 @@ import {
   proposeRewrite,
   type ReadResult,
   type RewritePlace,
+  type RewriteStream,
   readSelection,
   type Selection,
   takeBackForRegenerate,
 } from "../proposals/write";
 import type { PreparedChatModel } from "../providers/chat";
 import { classifyProviderError } from "../providers/providerErrors";
+import { asksToRemove, waitsForUser } from "./applies";
 import {
   EDIT_INSTRUCTIONS,
   EXPLAIN_INSTRUCTIONS,
@@ -117,6 +119,8 @@ export interface EditsOptions {
   recheck(attributes: Attributes): Attributes | null;
   /** Says where a request writes next in a Mind as its changes come in (#202); null once it has stopped. */
   writing(mindId: string, place: WritingPlace | null): void;
+  /** A Checkpoint just before an edit that applies at once writes (#113). */
+  checkpoint(mindId: string): void;
   now(): Date;
 }
 
@@ -162,6 +166,8 @@ interface Hooks {
   beforeWriting?(): void;
   /** More of the request's Proposals are in the Mind: how many there are now. */
   written?(request: string, count: number): void;
+  /** An edit the User asked for (#880): its updates name it. */
+  requestId?: string;
 }
 
 export function parsePlace(value: unknown, what: string): TextPlace {
@@ -452,6 +458,8 @@ export function createEdits(options: EditsOptions) {
 
     const request = randomUUID();
     const blocks = fork.getXmlFragment(MIND_CONTENT_FIELD);
+    const { requestId } = hooks;
+    const removing = asksToRemove(ask.action, ask.instruction);
     // Explain's few sentences go in once they are all there.
     const stream = explain
       ? null
@@ -460,7 +468,17 @@ export function createEdits(options: EditsOptions) {
           request,
           randomUUID,
           freshCitations(selection, options.recheck),
+          {
+            leftOut:
+              requestId !== undefined && ask.action === "instruction" && !removing
+                ? "keep"
+                : "remove",
+          },
         );
+    let held = false;
+    // Counted as written: the window accepts an edit the User asked for, so the Mind no longer holds them.
+    let proposed = 0;
+    let landed = false;
     const made: Extract<ProposalRequest, { source: "edit-with-ai" }> = {
       source: "edit-with-ai",
       providerId: prepared.provider.id,
@@ -481,15 +499,28 @@ export function createEdits(options: EditsOptions) {
         const waiting = mine(mind);
         return { count: waiting.length, outOfDate: waiting.filter((each) => stale.has(each.id)) };
       });
-      if (now.count === 0) return { kind: "changed" };
+      const count = requestId === undefined ? now.count : landed ? proposed : 0;
+      if (count === 0) return { kind: "changed" };
+      const leftOut = held ? [] : (stream?.leftOut() ?? []);
       return {
         kind: "proposed",
         request,
-        proposals: now.count,
+        proposals: count,
         droppedCitations: stream?.written().droppedCitations ?? 0,
         outOfDate: now.outOfDate.length,
+        ...(held && { held: true as const }),
+        ...(leftOut.length > 0 && { leftOut }),
       };
     };
+    const holdsBack = (written: RewriteStream) =>
+      waitsForUser({
+        action: ask.action,
+        removing,
+        ...written.extent(),
+        selected: selection.characters,
+      });
+    const appliesNow = () =>
+      explain || ask.action === "translate" || (stream?.extent().mapped ?? false);
     let wrote = false;
     let refused = false;
     /**
@@ -512,8 +543,15 @@ export function createEdits(options: EditsOptions) {
         refused = true;
         return;
       }
-      content.apply(mindId, update);
-      hooks.written?.(request, content.read(mindId, mine).length);
+      proposed = explain ? proposed : (stream?.written().proposals.length ?? proposed);
+      content.apply(
+        mindId,
+        update,
+        requestId === undefined ? undefined : { requestId, request, apply: appliesNow() },
+      );
+      const inMind = content.read(mindId, mine).length;
+      landed ||= inMind > 0;
+      hooks.written?.(request, inMind);
     };
     /** What was written goes again: the request failed, or its changes can't be merged. */
     const takeBackWritten = () => {
@@ -557,7 +595,10 @@ export function createEdits(options: EditsOptions) {
     if (signal.aborted && closing) return ended({ kind: "cancelled" });
     if (signal.aborted && !refused) {
       // Stopped: what is finished stays.
-      if (stream) step(() => stream.stop());
+      if (stream) {
+        step(() => stream.stop());
+        held = requestId !== undefined && holdsBack(stream);
+      }
       if (!refused) return ended(wrote ? arrived() : { kind: "cancelled" });
     }
     if (failure !== null && !refused) {
@@ -578,11 +619,18 @@ export function createEdits(options: EditsOptions) {
     const reason = explain ? null : reasonOf(raw);
     if (reason) made.reason = reason;
     step(() => {
-      if (!stream)
-        return proposeAfter(blocks, selection, reply, request, randomUUID).proposals.length > 0;
+      if (!stream) {
+        proposed = proposeAfter(blocks, selection, reply, request, randomUUID).proposals.length;
+        return proposed > 0;
+      }
       const more = stream.write(reply, true);
+      const finished = stream.finish();
+      if (requestId !== undefined) {
+        held = holdsBack(stream);
+        if (held) stream.removeLeftOut();
+      }
       // Written before the reason came: recorded again with it.
-      return stream.finish() || more || (wrote && reason !== null);
+      return finished || more || held || (wrote && reason !== null);
     });
     if (refused) {
       takeBackWritten();
@@ -619,7 +667,10 @@ export function createEdits(options: EditsOptions) {
     try {
       if (draft.selection.plain !== input.text) return { kind: "changed" };
       if (draft.selection.text === "") return { kind: "unchanged" };
-      return await run(input, draft, signal);
+      return await run(input, draft, signal, {
+        requestId: input.requestId,
+        beforeWriting: () => options.checkpoint(input.mindId),
+      });
     } finally {
       draft.fork.destroy();
     }

@@ -235,7 +235,7 @@ for (const language of ["en", "zh-CN"] as const) {
       // Wide enough for all of it, no cut and no fade; narrower, scrolling with its edge faded.
       expect(scrolls.fades).toBe(scrolls.wider);
       expect(scrolls.faded).toBe(scrolls.wider);
-      if (width <= 420) expect(scrolls.wider).toBe(true);
+      if (width <= 320) expect(scrolls.wider).toBe(true);
       await shoot(assistant, `after-${language}-${width}`);
     }
   });

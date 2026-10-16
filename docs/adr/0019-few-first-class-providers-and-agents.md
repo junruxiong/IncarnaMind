@@ -30,3 +30,12 @@ A provider or agent moves between tiers with a one-line change: a field in the c
 - `docs/agents/testing.md` names the first-class providers and agents for release checks. The multi-provider rule for AI features stays as it is.
 - Settings → Agents shows the first-class agents and "Other agent". The code that writes other agents' configuration files goes, except what Disconnect needs to remove an entry IncarnaMind wrote before.
 - A best-effort provider can break for a while before anyone notices. Its errors still reach the User in plain words, and a report moves it up the queue.
+
+## Amendment: experimental sign-in routes
+
+A plan can also be reached through an experimental sign-in route, where the User signs in with their own account. Such a route:
+
+- is opt-in: off by default in the interface, never preselected or recommended, and listed under other ways;
+- says before sign-in, in three sentences with focus on the safe choice, that the provider may refuse or block it, that the account is the User's own, and that it can be turned off at any time in Settings › Models;
+- names the provider in a plain line when it stops working, with a way back to an API key;
+- keeps its client profile in its provider's one configuration module, behind one build flag (`EXPERIMENTAL_SIGN_IN_ROUTES`, `src/core/buildFlags.ts`), so every such route leaves the bundle with a one-line change.

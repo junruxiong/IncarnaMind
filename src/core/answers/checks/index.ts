@@ -9,8 +9,8 @@
  *    check Run that can only search and cite.
  * 3. Each result is written onto its sentence's mark as it comes, with what
  *    it was made from: the sentence's text, the Document versions it read
- *    and the scope, so it shows "needs re-check" once any of them changes
- *    (src/shared/claimChecks.ts). A mark whose sentence was deleted meanwhile
+ *    and the scope, so it shows "needs re-check" once any of them changes, or
+ *    a Document its result rests on goes (src/shared/claimChecks.ts). A mark whose sentence was deleted meanwhile
  *    is simply gone. What the scope couldn't read as the request started is
  *    kept beside the Mind's Blocks, by request (src/shared/unreadFiles.ts).
  *
@@ -26,6 +26,7 @@
 import { randomUUID } from "node:crypto";
 import type * as Y from "yjs";
 import { type LiveDocument, withShownName } from "../../../shared/citations";
+import { restsOn } from "../../../shared/claimChecks";
 import { judgesUnreliably } from "../../../shared/smallModel";
 import { recordCheckUnread } from "../../../shared/unreadFiles";
 import {
@@ -291,14 +292,9 @@ export function createChecks(options: ChecksOptions) {
    */
   function retainEvidence(mindId: string): void {
     const versions = content.read(mindId, (blocks) =>
-      markedSentences(blocks).flatMap(({ check }): RetainVersion[] => {
-        const inputs = check.calculation?.figure.inputs ?? [];
-        const shown = [
-          check.evidence,
-          ...inputs.flatMap((input) => [input.citation, input.unitStatement?.citation ?? null]),
-        ];
-        return shown.flatMap((evidence) =>
-          evidence?.documentId && evidence.contentHash
+      markedSentences(blocks).flatMap(({ check }): RetainVersion[] =>
+        restsOn(check).flatMap((evidence) =>
+          evidence.documentId && evidence.contentHash
             ? [
                 {
                   documentId: evidence.documentId,
@@ -309,8 +305,8 @@ export function createChecks(options: ChecksOptions) {
                 },
               ]
             : [],
-        );
-      }),
+        ),
+      ),
     );
     options.retention.retain("check-result", mindId, versions);
   }

@@ -38,9 +38,11 @@ import {
 import { createElement, formattingOf, type NodeJSON } from "../answers/blocks";
 import {
   BLOCK_ID_ATTRIBUTE,
+  type BlockKind,
   CITATION_NODE,
   FOOTNOTE_NODE,
   GENERATED_MARK,
+  type LeftOutPart,
   PROPOSAL_ATTRIBUTE,
   PROPOSAL_DELETE_MARK,
   PROPOSAL_INSERT_MARK,
@@ -48,6 +50,7 @@ import {
   type ProposalRef,
   type TextPlace,
 } from "../api";
+import { mapsOnto } from "../edits/applies";
 import { diffSteps, hunksOf, type Step, splitWords } from "./diff";
 
 /** The Blocks whose text can be edited: Notes' and Answers' paragraphs and headings. */
@@ -120,13 +123,6 @@ interface Segment {
    */
   kind: BlockKind;
 }
-
-/**
- * What kind of Block a paragraph of the selection is, as the model reads it
- * and writes it back: a heading of a level ("heading:2"), a bullet, a
- * numbered item, a quote, or a plain paragraph.
- */
-type BlockKind = "paragraph" | "bullet" | "numbered" | "quote" | `heading:${number}`;
 
 /** A paragraph's or heading's kind of Block, from where it is. */
 function kindOf(element: Y.XmlElement): BlockKind {
@@ -994,7 +990,18 @@ const targetOf = (tokens: readonly OldToken[]) => tokens.map((token) => token.ta
 interface CitationNotes {
   removed: Set<string>;
   added: Set<string>;
+  /** Characters: what the old text loses, what the new text has that the old hadn't, and all the new text. */
+  characters: { removed: number; added: number; written: number };
 }
+
+const notesOf = (): CitationNotes => ({
+  removed: new Set(),
+  added: new Set(),
+  characters: { removed: 0, added: 0, written: 0 },
+});
+
+const lengthOf = (tokens: readonly { text?: string }[]) =>
+  tokens.reduce((sum, token) => sum + (token.text?.length ?? 1), 0);
 
 const noteCitation = (into: Set<string>, token: { key: string }) => {
   const marker = markerOf(token);
@@ -1059,6 +1066,8 @@ function writeHunks(
     if (removed.length > 0) markRemoved(segment.element, removed[0]?.from ?? end, end, ref);
     for (const token of removed) noteCitation(notes.removed, token);
     for (const token of added) noteCitation(notes.added, token);
+    notes.characters.removed += lengthOf(removed);
+    notes.characters.added += lengthOf(added);
   }
 }
 
@@ -1073,15 +1082,33 @@ function proposalsOf(request: string, newId: () => string) {
   return { proposals, next };
 }
 
-/** The words of a run, for telling how alike two runs are: no spaces or punctuation, any case. */
-const wordsOf = (tokens: readonly { key: string; text?: string }[]) =>
-  tokens.flatMap((token) =>
-    token.text === undefined
-      ? [token.key.replace(/\*$/, "")]
-      : /[\p{L}\p{N}]/u.test(token.text)
-        ? [token.text.toLowerCase()]
-        : [],
-  );
+const HAN = /^\p{Script=Han}$/u;
+
+/**
+ * The words of a run, for telling how alike two runs are: no spaces or
+ * punctuation, any case. Chinese runs count by pairs of characters, as any two
+ * Chinese paragraphs share many single ones.
+ */
+function wordsOf(tokens: readonly { key: string; text?: string }[]): string[] {
+  const words: string[] = [];
+  let run: string[] = [];
+  const endRun = () => {
+    if (run.length === 1) words.push(run[0] ?? "");
+    for (let index = 1; index < run.length; index++) words.push(`${run[index - 1]}${run[index]}`);
+    run = [];
+  };
+  for (const token of tokens) {
+    if (token.text !== undefined && HAN.test(token.text)) {
+      run.push(token.text);
+      continue;
+    }
+    endRun();
+    if (token.text === undefined) words.push(token.key.replace(/\*$/, ""));
+    else if (/[\p{L}\p{N}]/u.test(token.text)) words.push(token.text.toLowerCase());
+  }
+  endRun();
+  return words;
+}
 
 /** How alike two runs of words are, from 0 to 1: the share of their words they have in common. */
 function likeness(old: readonly OldToken[], next: readonly NewToken[]): number {
@@ -1224,9 +1251,10 @@ export function createRewriteStream(
   request: string,
   newId: () => string,
   fresh: (text: string) => ReadonlyMap<number, Attributes>,
+  { leftOut: onLeftOut = "remove" }: { leftOut?: "keep" | "remove" } = {},
 ) {
   const { proposals, next } = proposalsOf(request, newId);
-  const notes: CitationNotes = { removed: new Set(), added: new Set() };
+  const notes = notesOf();
   // Only the paragraphs the model was shown: an empty one between two isn't in its text.
   const segments = selection.segments.filter((segment) => segment.shown);
   const first = segments[0];
@@ -1245,25 +1273,33 @@ export function createRewriteStream(
   let unlike = 0;
   /** Two were like none: the text is written anew, and each pairs in order. */
   let anew = false;
+  const kept: Segment[] = [];
 
-  /** The selection's paragraphs before `to` not paired go, each whole one with its Block. */
-  const removeUpTo = (to: number) => {
-    const gone: Y.XmlElement[] = [];
-    for (const segment of segments.slice(at, to)) {
-      if (segment.tokens.length === 0) continue;
-      if (segment.whole) gone.push(removedWith(segment.element));
+  const remove = (gone: readonly Segment[]) => {
+    const blocks: Y.XmlElement[] = [];
+    for (const segment of gone) {
+      if (segment.whole) blocks.push(removedWith(segment.element));
       else markRemoved(segment.element, segment.start, segment.end, next(targetOf(segment.tokens)));
       for (const token of segment.tokens) noteCitation(notes.removed, token);
+      notes.characters.removed += lengthOf(segment.tokens);
     }
-    for (const removed of wholeWrappers(gone)) {
+    for (const removed of wholeWrappers(blocks)) {
       setProposal(removed, { ...refOf(next(targetText(removed))), kind: "delete" });
     }
+  };
+
+  /** The selection's paragraphs before `to` not paired go, or are kept. */
+  const removeUpTo = (to: number) => {
+    const passed = segments.slice(at, to).filter((segment) => segment.tokens.length > 0);
+    if (onLeftOut === "keep") kept.push(...passed);
+    else remove(passed);
     at = Math.max(at, to);
   };
 
   const pairWith = (paragraph: NewParagraph, index: number) => {
     const segment = segments[index];
     if (!segment) return;
+    notes.characters.written += lengthOf(paragraph.tokens);
     removeUpTo(index);
     writeHunks(segment, paragraph.tokens, next, newId, notes);
     place = { element: segment.element, kind: segment.kind, side: "after" };
@@ -1274,6 +1310,8 @@ export function createRewriteStream(
     if (!place) return;
     const kind = paragraph.kind ?? kindByLikeness(segments, paragraph);
     for (const token of paragraph.tokens) noteCitation(notes.added, token);
+    notes.characters.added += lengthOf(paragraph.tokens);
+    notes.characters.written += lengthOf(paragraph.tokens);
     const added = addBlock(place, kind, paragraph.tokens, next(""), newId);
     place = { element: added, kind, side: "after" };
   };
@@ -1281,7 +1319,14 @@ export function createRewriteStream(
   /** The paragraphs held, written: paired with the selection's from `at` to `to` as `pairUp` pairs them. */
   const writeHeld = (to: number) => {
     const from = at;
-    const paired = pairUp(segments.slice(from, to), held);
+    const between = segments.slice(from, to);
+    // As many new paragraphs as old ones between two that held their place: each rewrites its own.
+    const inPlace =
+      between.length === held.length &&
+      held.every(
+        (paragraph, index) => paragraph.kind === null || paragraph.kind === between[index]?.kind,
+      );
+    const paired = inPlace ? held.map((_, index) => index) : pairUp(between, held);
     for (const [index, paragraph] of held.entries()) {
       const pair = paired[index];
       if (pair === null || pair === undefined) addNew(paragraph);
@@ -1290,14 +1335,20 @@ export function createRewriteStream(
     held.length = 0;
   };
 
-  /** The first of the selection's paragraphs from `at` much like `paragraph`, or null. */
+  /** The selection's paragraph from `at` most like `paragraph`, when much like it; else null. */
   const muchLike = (paragraph: NewParagraph): number | null => {
+    let best: number | null = null;
+    let most = MOVED_LIKENESS;
     for (let index = at; index < segments.length; index++) {
       const segment = segments[index] as Segment;
       if (paragraph.kind !== null && paragraph.kind !== segment.kind) continue;
-      if (likeness(segment.tokens, paragraph.tokens) >= MOVED_LIKENESS) return index;
+      const alike = likeness(segment.tokens, paragraph.tokens);
+      if (alike > most || (best === null && alike === most)) {
+        best = index;
+        most = alike;
+      }
     }
-    return null;
+    return best;
   };
 
   const take = (paragraph: NewParagraph) => {
@@ -1362,6 +1413,7 @@ export function createRewriteStream(
             addNew(paragraph);
             continue;
           }
+          notes.characters.written += lengthOf(paragraph.tokens);
           writeHunks(segment, paragraph.tokens, next, newId, notes);
           place = { element: segment.element, kind: segment.kind, side: "after" };
           at += 1;
@@ -1378,6 +1430,35 @@ export function createRewriteStream(
 
     /** The Proposals written so far. */
     written: (): Written => ({ proposals: [...proposals], droppedCitations: droppedOf(notes) }),
+
+    /** Characters removed count the paragraphs it left out. */
+    extent: () => ({
+      mapped: mapsOnto(notes.characters.written - notes.characters.added, notes.characters.written),
+      removed:
+        notes.characters.removed + kept.reduce((sum, segment) => sum + lengthOf(segment.tokens), 0),
+      added: notes.characters.added,
+    }),
+
+    leftOut: (): LeftOutPart[] =>
+      kept.flatMap((segment) => {
+        const blockId = segment.element.getAttribute(BLOCK_ID_ATTRIBUTE);
+        return typeof blockId === "string"
+          ? [
+              {
+                blockId,
+                from: segment.start,
+                to: segment.end,
+                whole: segment.whole,
+                kind: kindOf(segment.element),
+              },
+            ]
+          : [];
+      }),
+
+    removeLeftOut: (): boolean =>
+      wrote(() => {
+        remove(kept.splice(0));
+      }),
 
     /** Where the next paragraph goes; null with no place for any. */
     writingAt(): RewritePlace | null {
@@ -1535,7 +1616,7 @@ export function proposeBlocks(
   newId: () => string,
 ): Written {
   const { proposals, next } = proposalsOf(request, newId);
-  const notes: CitationNotes = { removed: new Set(), added: new Set() };
+  const notes = notesOf();
   const old = container.toArray().filter((child) => child instanceof Y.XmlElement);
   const hunks = hunksOf(diffSteps(old.map(elementKey), content.map(jsonKey)), () => false);
 

@@ -245,6 +245,52 @@ describe("IncarnaMind's comments", () => {
     expect(plain.files.has("word/comments.xml")).toBe(false);
   });
 
+  test("the quote a comment gives, cut at a PDF's line end, reads as words", async () => {
+    const core = startCore(await createTempDataFolder());
+    const document = await tides(core);
+    const { id } = await mindWith(core, [
+      paragraph(
+        text("The harbour office hired staff."),
+        citation(
+          document,
+          "not-found",
+          "The harbour office has em-\nployed more av-\nerage staff.",
+        ),
+      ),
+    ]);
+
+    const { part } = await word(core, id, { commentFailedChecks: true });
+
+    expect(part("word/comments.xml")).toContain(
+      "Quote not found in Tides, p. 1: “The harbour office has employed more average staff.”",
+    );
+  });
+
+  test("a quote that is in its Document reads in the comment as it does on the card: a real hyphen the page writes elsewhere stays", async () => {
+    const core = startCore(await createTempDataFolder());
+    const sources = await createTempDataFolder();
+    const [harbour] = await addAndProcess(core, [
+      await writeSourceFile(
+        sources,
+        "Harbour.txt",
+        "The council will co-\noperate with the office. The two co-operate daily.",
+      ),
+    ]);
+    if (!harbour) throw new Error("Harbour was not added.");
+    const { id } = await mindWith(core, [
+      paragraph(
+        text("The council works with the office."),
+        citation(harbour, "not-found", "council will co-\noperate with the office"),
+      ),
+    ]);
+
+    const { part } = await word(core, id, { commentFailedChecks: true });
+
+    expect(part("word/comments.xml")).toContain(
+      "Quote not found in Harbour, p. 1: “council will co-operate with the office”",
+    );
+  });
+
   test("without any option, a Mind with no change waiting is the file it was before #107", async () => {
     const core = startCore(await createTempDataFolder());
     const { id } = await mindWith(core, [paragraph(text("AI words", ai)), paragraph(text("Mine"))]);

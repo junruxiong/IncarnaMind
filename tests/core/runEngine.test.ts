@@ -772,12 +772,33 @@ describe.each(ENGINES)("A Run engine: $name", ({ create }) => {
 
     const run = await collect(create(), request(model, { tools: [add] }));
 
-    expect(add.calls.map((call) => call.input)).toEqual([sent]);
+    expect(add.calls.map((call) => call.input)).toEqual([{ rows: [{ n: "1" }], tags: sent.tags }]);
     expect(run.events).toContainEqual({ type: "tool-result", id: "call-0-0", ok: true });
     expect(model.doStreamCalls).toHaveLength(2);
   });
 
-  test("an object where the schema wants a list of text, or text that isn't JSON, still doesn't match", async () => {
+  test("an object sent as JSON text for an array reaches the Tool as the array's only item", async () => {
+    const add = testTool("add_rows", {
+      schema: {
+        type: "object",
+        properties: {
+          rows: { type: "array", items: { type: "object" } },
+          note: { type: "string" },
+        },
+        required: ["rows"],
+      },
+    });
+    const model = stepsModel(
+      [[{ tool: "add_rows", input: { rows: '{"n": 1}', note: '{"n": 1}' } }]],
+      "Added.",
+    );
+
+    await collect(create(), request(model, { tools: [add] }));
+
+    expect(add.calls.map((call) => call.input)).toEqual([{ rows: [{ n: 1 }], note: '{"n": 1}' }]);
+  });
+
+  test("an object where the schema wants a list of text, text that isn't JSON, or JSON text encoded three times, still doesn't match", async () => {
     const add = testTool("add_rows", {
       schema: {
         type: "object",
@@ -789,6 +810,12 @@ describe.each(ENGINES)("A Run engine: $name", ({ create }) => {
       [
         [{ tool: "add_rows", input: { tags: { a: 1 } } }],
         [{ tool: "add_rows", input: { tags: "a, b" } }],
+        [
+          {
+            tool: "add_rows",
+            input: { tags: JSON.stringify(JSON.stringify(JSON.stringify(["a"]))) },
+          },
+        ],
       ],
       "Sorry.",
     );
@@ -796,7 +823,11 @@ describe.each(ENGINES)("A Run engine: $name", ({ create }) => {
     await collect(create(), request(model, { tools: [add] }));
 
     expect(add.calls).toEqual([]);
-    expect(resultsSent(model, 2).map((each) => each.type)).toEqual(["error-text", "error-text"]);
+    expect(resultsSent(model, 3).map((each) => each.type)).toEqual([
+      "error-text",
+      "error-text",
+      "error-text",
+    ]);
   });
 });
 

@@ -11,9 +11,10 @@ For every Document, the app's own code path, without the app's database or embed
 3. PDF page images in the preview worker, when the route reads pages.
 4. The classifier each Library setting builds (`eval/organize/lib/routes.ts` mirrors `createLibrary`'s `prepare` in `src/core/core.ts`):
    - `auto`: **Auto · local models**, one controller for the run. Text goes to Tev1 4B, PDFs with sparse text to Clef-Flash with page images.
-   - `tev-0.8b`: the local decision model Tev1 0.8B, chosen by name.
+   - `tev-0.8b`, `tev-4b`: the local decision model Tev1 0.8B or 4B, chosen by name.
    - `clef-flash`: Clef-Flash chosen by name, with PDF page images on.
-   - `chat`: the connected chat model, from `INCARNAMIND_EVAL_CHAT_*` (as `npm run eval` reads them). A model that reads images (`src/core/providers/imageInput.ts`) also gets the page images of a PDF without text, as in the app.
+   - `chat`: the connected chat model, from `INCARNAMIND_EVAL_CHAT_*` (as `npm run eval` reads them), with thinking off as the app asks for it on every call that doesn't write an Answer (OpenAI's small models: reasoning effort `none`). A model that reads images (from the catalog, `src/core/providers/capabilities.ts`) also gets the page images of a PDF without text, as in the app.
+   - `scripted`: the smoke tests' scripted chat model (`src/main/fakeChatModel.ts`) through the chat route: it files a Document in the Folder whose name it contains. No model and no network: it checks that a run goes through.
 
 The Folders and Tags are the app's starter Folders (`library.preset.*` in `src/shared/i18n/`) and preset Tags (`src/core/tags/presets.ts`), read from the source, so a change to their descriptions is measured. A PDF without text is left for a route that can't read pages, as the Library leaves it; it counts as a miss.
 
@@ -31,6 +32,7 @@ The labels and the split were fixed before any model ran. `split` divides the se
 - **Tags**: every Tag the app applies counts, including those marked "needs review". Precision, recall and F1 are micro-averaged over (Document, Tag) pairs. **Exact** is the share of Documents whose Tag set is exactly the labelled one.
 - Errors count as a wrong Folder and no Tags.
 - **Time**: the classifier call per Document, page rendering excluded; the first call includes loading the model.
+- **Tokens and cost**: the chat routes record what each Document's calls used, as the provider counted them, and the report gives the input and output tokens a Document and, at the model's price in the catalog, what 100 Documents cost.
 
 Each report breaks these down per language, per format, per hard case and per Tag, and lists the mistakes.
 
@@ -44,7 +46,7 @@ Needs Ollama on `http://127.0.0.1:11434` with `tev1:4b`, `tev1:0.8b` and `clef-f
 
 | Variable | Default | |
 |---|---|---|
-| `INCARNAMIND_ORGANIZE_ROUTES` | `auto,tev-0.8b,clef-flash`, plus `chat` when a chat model is set | Comma-separated routes. |
+| `INCARNAMIND_ORGANIZE_ROUTES` | `auto,tev-0.8b,clef-flash`, plus `chat` when a chat model is set | Comma-separated routes; `scripted` runs with no model. |
 | `INCARNAMIND_ORGANIZE_SPLIT` | `all` | `tune`, `heldout` or `all`. |
 | `INCARNAMIND_ORGANIZE_LANGUAGE` | `en` | The language of the Folder and Tag definitions: `en` or `zh-CN`. |
 | `INCARNAMIND_ORGANIZE_OLLAMA` | `http://127.0.0.1:11434` | |
@@ -52,6 +54,12 @@ Needs Ollama on `http://127.0.0.1:11434` with `tev1:4b`, `tev1:0.8b` and `clef-f
 | `INCARNAMIND_ORGANIZE_SHOW_HELDOUT` | off | `1` lists the held-out half's mistakes too. |
 | `INCARNAMIND_ORGANIZE_BATCH` | `10` | A local route stops its models after this many Documents, then loads them again. |
 | `INCARNAMIND_EVAL_CHAT_KIND`, `_MODEL`, `_KEY`, `_BASE_URL` | none | The chat route's model, as for `npm run eval`. Setting them is the consent to send the excerpts, Folder and Tag definitions to it, and the scans' page images to a model that reads images. |
+
+With no model, to check a run goes through:
+
+```sh
+INCARNAMIND_ORGANIZE_ROUTES=scripted npm run eval:organize
+```
 
 The chat route with a cloud model, for example:
 

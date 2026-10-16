@@ -4,7 +4,7 @@ import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { updateYFragment, yXmlFragmentToProseMirrorRootNode } from "@tiptap/y-tiptap";
 import { GENERATED_MARK, PROPOSAL_ATTRIBUTE, type SearchScope } from "../../src/core";
 import { noteExtensions } from "../../src/renderer/src/editor/noteSchema";
-import { pendingProposals, resolveProposals } from "../../src/shared/proposals";
+import { decideProposals, pendingProposals } from "../../src/shared/proposals";
 import { SCOPE_ATTRIBUTES } from "../../src/shared/searchScope";
 import type { MindClient } from "./mindClient";
 
@@ -153,9 +153,9 @@ export async function resolveChanges(
   which: (id: string, index: number) => boolean = () => true,
 ) {
   const order = pendingProposals(client.blocks).map((proposal) => proposal.id);
-  let resolved: ReturnType<typeof resolveProposals> = [];
+  let resolved: ReturnType<typeof decideProposals> = [];
   client.doc.transact(() => {
-    resolved = resolveProposals(
+    resolved = decideProposals(
       client.blocks,
       (proposal) => which(proposal.id, order.indexOf(proposal.id)),
       outcome,

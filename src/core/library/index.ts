@@ -2,15 +2,9 @@ import { randomUUID } from "node:crypto";
 import { type CitationStyleId, isCitationStyleId } from "../../shared/citationStyles";
 import { wordingOf } from "../../shared/errorWording";
 import { translate } from "../../shared/i18n";
-import { supportsLibraryImages } from "../../shared/libraryModels";
+import { organizeModelOf, supportsLibraryImages } from "../../shared/libraryModels";
 import { libraryPresetKeys } from "../../shared/libraryPresets";
-import type {
-  ChatModelChoice,
-  DocumentKind,
-  FolderDeletion,
-  MovedDocument,
-  ProviderError,
-} from "../api";
+import type { DocumentKind, FolderDeletion, MovedDocument, ProviderError } from "../api";
 import type { BackgroundQueue } from "../backgroundQueue";
 import {
   ChatNotReadyError,
@@ -21,6 +15,7 @@ import {
   NotFoundError,
   TaggingNotReadyError,
 } from "../errors";
+import { isPlanLimit } from "../providers/chatgpt/errors";
 import { normalizeBaseUrl, serviceForUrl } from "../providers/kinds";
 import { classifyProviderError } from "../providers/providerErrors";
 import { isChatModelChoice, type SettingsStore } from "../settings";
@@ -43,10 +38,26 @@ import type {
   ClassificationModel,
   ClassificationStatus,
   DocumentGroupAssignment,
+  LibraryClassifier,
   LibraryGroup,
   LibrarySettings,
   LibrarySnapshot,
+  TaggingClassifier,
 } from "./types";
+
+const AUTOMATIC: LibraryClassifier = { kind: "automatic" };
+
+function taggingClassifierOf(value: unknown): TaggingClassifier | null {
+  if (!isRecord(value)) return null;
+  const { kind, baseUrl, modelId } = value;
+  if (kind === "jev") return { kind };
+  if (kind === "chat")
+    return isChatModelChoice(value.choice) ? { kind, choice: value.choice } : null;
+  if (typeof baseUrl !== "string") return null;
+  if (kind === "auto") return { kind, baseUrl };
+  if (kind !== "ollama" || typeof modelId !== "string") return null;
+  return { kind, baseUrl, modelId, ...(value.usePageImages === true && { usePageImages: true }) };
+}
 
 interface AssignmentRow {
   document_id: string;
@@ -168,19 +179,63 @@ export function createLibrary(options: {
   tagged(ids: string[]): void;
   prepare(settings: LibrarySettings): Promise<GroupClassifier>;
   providerExists(id: string): boolean;
-  /** Whether a connected chat model reads images, so it can organize a PDF with no text from its pages. */
-  chatReadsImages(choice: ChatModelChoice): boolean;
+  /**
+   * Whether a model that tags reads a PDF's pages, so it can organize one with
+   * no text, a scan: itself, or through the image model.
+   */
+  readsPages(classifier: TaggingClassifier): boolean;
   pageImages(id: string, contentHash: string, signal: AbortSignal): Promise<DocumentPageImage[]>;
 }) {
   const { db, now, settings, background, changed } = options;
   const lifetime = new AbortController();
   const queued = new Set<string>();
   let revision = 0;
-  const getSettings = (): LibrarySettings =>
-    (settings.readDeviceValue("library") as LibrarySettings | null) ?? {
-      classifier: null,
-      automatic: true,
+  /**
+   * The Tagging setting. A Library that never chose a model, or chose
+   * "Organize manually" before there was Automatic, gets Automatic; any other
+   * choice is kept as it was saved.
+   */
+  const getSettings = (): LibrarySettings => {
+    const stored = settings.readDeviceValue("library");
+    const saved = isRecord(stored) ? stored : {};
+    return {
+      classifier: taggingClassifierOf(saved.classifier) ?? AUTOMATIC,
+      automatic: typeof saved.automatic === "boolean" ? saved.automatic : true,
+      organizeWith: taggingClassifierOf(saved.organizeWith),
     };
+  };
+  const checkClassifier = (selected: Record<string, unknown>) => {
+    if (selected.kind === "chat") {
+      if (
+        !isChatModelChoice(selected.choice) ||
+        !options.providerExists(selected.choice.providerId)
+      )
+        throw new InvalidInputError({ key: "error.library.classifierModel" });
+    } else if (selected.kind === "auto") {
+      if (typeof selected.baseUrl !== "string")
+        throw new InvalidInputError("Enter the local Ollama server.");
+      selected.baseUrl = normalizeBaseUrl(selected.baseUrl);
+      if (serviceForUrl(selected.baseUrl as string))
+        throw new InvalidInputError({ key: "error.library.autoNotLocal" });
+    } else if (selected.kind === "ollama") {
+      if (
+        typeof selected.baseUrl !== "string" ||
+        typeof selected.modelId !== "string" ||
+        !selected.modelId.trim() ||
+        selected.modelId.length > 200
+      )
+        throw new InvalidInputError({ key: "error.library.localModelMissing" });
+      if (selected.usePageImages !== undefined && typeof selected.usePageImages !== "boolean")
+        throw new InvalidInputError("Choose whether to include PDF page images.");
+      selected.modelId = selected.modelId.trim();
+      if (selected.usePageImages === true && !supportsLibraryImages(selected.modelId as string))
+        throw new InvalidInputError("PDF page images currently require local Clef-Flash.");
+      selected.baseUrl = normalizeBaseUrl(selected.baseUrl);
+      if (serviceForUrl(selected.baseUrl as string))
+        throw new InvalidInputError({ key: "error.library.ollamaNotLocal" });
+    } else if (selected.kind !== "jev")
+      throw new InvalidInputError("Choose a supported classifier.");
+  };
   const groups = () =>
     db
       .all<GroupRow>(
@@ -230,14 +285,8 @@ export function createLibrary(options: {
     if (changed.length > 0) options.assigned(changed);
   };
   const hasContent = (doc: DocumentRow) => {
-    const classifier = getSettings().classifier;
-    const canReadPages =
-      doc.kind === "pdf" &&
-      (classifier?.kind === "auto" ||
-        (classifier?.kind === "ollama" &&
-          supportsLibraryImages(classifier.modelId) &&
-          classifier.usePageImages === true) ||
-        (classifier?.kind === "chat" && options.chatReadsImages(classifier.choice)));
+    const classifier = doc.kind === "pdf" ? organizeModelOf(getSettings()) : null;
+    const canReadPages = !!classifier && options.readsPages(classifier);
     return (
       (canReadPages && doc.status === "no-text") ||
       (["ready", "waiting-for-model", "embedding"].includes(doc.status) &&
@@ -361,8 +410,19 @@ export function createLibrary(options: {
 
   function enqueue(id: string): void {
     if (lifetime.signal.aborted || queued.has(id)) return;
-    if (!getSettings().classifier || groups().length === 0) {
+    if (groups().length === 0) {
       if (assignment(id)?.status === "pending") state(id, "waiting");
+      return;
+    }
+    // Until Organize has a model, automatic tagging tags this Document: its state is the tagger's.
+    if (!organizeModelOf(getSettings())) {
+      if (assignment(id)?.status === "pending") {
+        db.run(
+          "UPDATE document_groups SET status = 'waiting', updated_at = ? WHERE document_id = ? AND deleted_at IS NULL",
+          [now(), id],
+        );
+        announce([id]);
+      }
       return;
     }
     let doc: DocumentRow;
@@ -392,7 +452,7 @@ export function createLibrary(options: {
           }
           const definitions = groups();
           const tagDefinitions = options.tags.list();
-          if (!getSettings().classifier || definitions.length === 0) {
+          if (definitions.length === 0) {
             state(id, "waiting");
             return;
           }
@@ -449,11 +509,13 @@ export function createLibrary(options: {
         } catch (error) {
           if (!stale()) {
             if (error instanceof NotFoundError) return;
+            // The ChatGPT plan's limit: it waits for the plan to reset (see ./planPace).
             const waiting =
               error instanceof ChatNotReadyError ||
               error instanceof ConsentDeclinedError ||
               error instanceof ConsentNeededError ||
-              error instanceof TaggingNotReadyError;
+              error instanceof TaggingNotReadyError ||
+              isPlanLimit(error);
             state(id, waiting ? "waiting" : "failed", classifyProviderError(error));
           }
         } finally {
@@ -476,7 +538,7 @@ export function createLibrary(options: {
     );
     // Existing batches run text first, then PDFs needing images, avoiding model churn.
     const ordered =
-      getSettings().classifier?.kind === "auto"
+      organizeModelOf(getSettings())?.kind === "auto"
         ? waiting
             .map((row) => ({ ...row, visual: needsPageImages(document(row.document_id)) }))
             .sort((a, b) => Number(a.visual) - Number(b.visual))
@@ -736,53 +798,28 @@ export function createLibrary(options: {
     saveSettings(input: unknown) {
       if (!isRecord(input) || typeof input.automatic !== "boolean")
         throw new InvalidInputError("Choose classification settings.");
-      const selected = input.classifier;
-      if (selected !== null) {
-        if (!isRecord(selected)) throw new InvalidInputError("Choose a classifier.");
-        if (selected.kind === "chat") {
-          if (
-            !isChatModelChoice(selected.choice) ||
-            !options.providerExists(selected.choice.providerId)
-          )
-            throw new InvalidInputError({ key: "error.library.classifierModel" });
-        } else if (selected.kind === "auto") {
-          if (typeof selected.baseUrl !== "string")
-            throw new InvalidInputError("Enter the local Ollama server.");
-          selected.baseUrl = normalizeBaseUrl(selected.baseUrl);
-          if (serviceForUrl(selected.baseUrl as string))
-            throw new InvalidInputError({ key: "error.library.autoNotLocal" });
-        } else if (selected.kind === "ollama") {
-          if (
-            typeof selected.baseUrl !== "string" ||
-            typeof selected.modelId !== "string" ||
-            !selected.modelId.trim() ||
-            selected.modelId.length > 200
-          )
-            throw new InvalidInputError({ key: "error.library.localModelMissing" });
-          if (selected.usePageImages !== undefined && typeof selected.usePageImages !== "boolean")
-            throw new InvalidInputError("Choose whether to include PDF page images.");
-          selected.modelId = selected.modelId.trim();
-          if (selected.usePageImages === true && !supportsLibraryImages(selected.modelId as string))
-            throw new InvalidInputError("PDF page images currently require local Clef-Flash.");
-          selected.baseUrl = normalizeBaseUrl(selected.baseUrl);
-          if (serviceForUrl(selected.baseUrl as string))
-            throw new InvalidInputError({ key: "error.library.ollamaNotLocal" });
-        } else if (selected.kind !== "jev")
-          throw new InvalidInputError("Choose a supported classifier.");
+      // Null was "Organize manually" before there was Automatic: it is Automatic now.
+      const chosen = input.classifier ?? AUTOMATIC;
+      const automaticChosen = isRecord(chosen) && chosen.kind === "automatic";
+      const organizeWith =
+        input.organizeWith === undefined ? getSettings().organizeWith : input.organizeWith;
+      const toCheck: unknown[] = automaticChosen ? [] : [chosen];
+      if (organizeWith !== null) toCheck.push(organizeWith);
+      for (const each of toCheck) {
+        if (!isRecord(each)) throw new InvalidInputError("Choose a classifier.");
+        checkClassifier(each);
       }
-      settings.writeDeviceValue("library", { classifier: selected, automatic: input.automatic });
-      if (selected === null) {
-        db.run(
-          "UPDATE document_groups SET status = 'waiting', updated_at = ? WHERE status IN ('pending', 'classifying') AND deleted_at IS NULL",
-          [now()],
-        );
-      }
+      settings.writeDeviceValue("library", {
+        classifier: automaticChosen ? AUTOMATIC : chosen,
+        automatic: input.automatic,
+        organizeWith,
+      });
       revision++;
       changed();
       resume();
     },
     classify(input: unknown) {
-      if (!getSettings().classifier)
+      if (!organizeModelOf(getSettings()))
         throw new InvalidInputError({ key: "error.library.noClassifier" });
       if (groups().length === 0) throw new InvalidInputError({ key: "error.library.noFolders" });
       if (
@@ -908,8 +945,7 @@ export function createLibrary(options: {
     },
     file(id: string, groupId: string) {
       if (!groups().some((item) => item.id === groupId)) return;
-      const { automatic, classifier } = getSettings();
-      write(document(id), groupId, "user", automatic && classifier ? "pending" : "classified");
+      write(document(id), groupId, "user", getSettings().automatic ? "pending" : "classified");
       announce([id]);
     },
     documentChanged(id: string) {
@@ -926,10 +962,8 @@ export function createLibrary(options: {
           state(id, "classified");
         return;
       }
-      const { automatic, classifier } = getSettings();
       if (
-        automatic &&
-        classifier &&
+        getSettings().automatic &&
         groups().length > 0 &&
         (!existing || existing.content_hash !== doc.content_hash)
       ) {

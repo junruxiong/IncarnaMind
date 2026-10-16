@@ -576,6 +576,7 @@ function pageOf(
     name: "Tides",
     at: "2026-10-13T12:00:00.000Z",
     cards: new Map(footnotes.map((each, index) => [each, cards[index] ?? card("found")])),
+    pictures: [],
     checkedLine: false,
   });
   return { html, document: parseHTML(html).document };

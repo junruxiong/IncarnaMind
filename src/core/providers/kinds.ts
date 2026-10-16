@@ -4,6 +4,8 @@ import { InvalidInputError } from "../errors";
 import { catalogProviderOf, endpointOf } from "./catalog/providers";
 import type { CatalogProvider, Endpoint } from "./catalog/types";
 import { CHATGPT_SERVICE } from "./chatgpt/service";
+import { CLAUDE_ACCOUNT_SERVICE } from "./claudeAccount/service";
+import { COPILOT_SERVICE } from "./copilot/service";
 import { serviceAt, serviceForUrl } from "./service";
 
 export { isLoopbackHost, serviceForUrl } from "./service";
@@ -54,8 +56,9 @@ export const defaultOllamaUrl = (env: NodeJS.ProcessEnv = process.env): string =
 
 /**
  * What a provider kind needs: a key, a server URL. A kind the catalog has
- * takes its rules from there (see ./catalog); the ChatGPT plan signs in
- * instead of taking a key (see ./chatgpt).
+ * takes its rules from there (see ./catalog); the ChatGPT plan, a Claude
+ * account and Copilot sign in instead of taking a key (see ./chatgpt,
+ * ./claudeAccount, ./copilot).
  */
 interface KindInfo {
   /** The hosted API, for a provider whose endpoints the catalog names. */
@@ -73,6 +76,10 @@ function kindInfo(
   catalogId?: string | null,
 ): KindInfo {
   if (kind === "chatgpt") return { hosted: CHATGPT_SERVICE, baseUrl: "none", apiKey: "none" };
+  if (kind === "claude-account") {
+    return { hosted: CLAUDE_ACCOUNT_SERVICE, baseUrl: "none", apiKey: "none" };
+  }
+  if (kind === "copilot") return { hosted: COPILOT_SERVICE, baseUrl: "none", apiKey: "none" };
   const provider = catalogProviderOf(kind, catalogId);
   if (!provider) throw new Error(`The catalog has no provider for ${kind}.`);
   const endpoint = endpointOf(provider, endpointId);

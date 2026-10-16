@@ -10,6 +10,7 @@ import { type ConversationAnswer, NOTE_BLOCK_TYPES } from "../../core/api";
 import type { NodeJSON } from "../../shared/blockJson";
 import { withoutFraming } from "../../shared/noteBlocks";
 import { answerBlocks } from "./answerBlocks";
+import { tablesOf } from "./editor/answerTables";
 import { withoutCitationGlue } from "./editor/citationGlue";
 import { useAppStore } from "./store";
 
@@ -38,6 +39,28 @@ function selectedRange(editor: Editor): { from: number; to: number } | null {
     // A selection ProseMirror can't place (inside a formula's rendering, say): the whole Answer.
     return null;
   }
+}
+
+export function answerTables(answerId: string): NodeJSON[] {
+  const editor = editors.get(answerId);
+  return editor && !editor.isDestroyed ? tablesOf(editor.state.doc) : [];
+}
+
+export function tableHolding(answerId: string, active: Element | null): number | null {
+  const editor = editors.get(answerId);
+  if (!editor || editor.isDestroyed) return null;
+  const anchor = active?.ownerDocument.getSelection()?.anchorNode ?? null;
+  const frames = [active, anchor instanceof Element ? anchor : anchor?.parentElement]
+    .map((element) => element?.closest(".tableWrapper") ?? null)
+    .filter((frame) => frame !== null && editor.view.dom.contains(frame));
+  const frame = frames[0];
+  if (!frame) return null;
+  const { doc } = editor.state;
+  const top = doc.resolve(editor.view.posAtDOM(frame, 0)).index(0);
+  if (doc.child(top).type.name !== "table") return null;
+  let before = 0;
+  for (let at = 0; at < top; at++) if (doc.child(at).type.name === "table") before++;
+  return before;
 }
 
 /** The slice's Notes: its top-level Blocks with something in them (a rule or a formula counts). */

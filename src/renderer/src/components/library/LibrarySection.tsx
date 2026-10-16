@@ -1,8 +1,14 @@
 import { type KeyboardEvent, type ReactNode, useEffect, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
-import type { Document, LibraryGroup } from "../../../../core/api";
+import type {
+  Document,
+  LibraryGroup,
+  LibrarySettings,
+  TaggingModelOption,
+} from "../../../../core/api";
+import { organizeModelOf } from "../../../../shared/libraryModels";
 import { core } from "../../core";
-import { useT } from "../../i18n";
+import { useLanguage, useT } from "../../i18n";
 import { useLibraryFolds, useRevealed } from "../../libraryFolds";
 import {
   FIRST_ROWS,
@@ -19,6 +25,7 @@ import { InlineName } from "../InlineName";
 import { FolderLineIcon } from "../lineIcons";
 import { ObjectMenu, useObjectMenu } from "../ObjectMenu";
 import { rowActionButtonClass } from "../sidebarRows";
+import { providerOf } from "../TaggingSettings";
 import { FolderForm } from "./FolderForm";
 import { LibraryRow } from "./LibraryRow";
 import { SectionHead, sectionNameClass } from "./SectionHead";
@@ -234,6 +241,9 @@ function LooseHead({ documents, open }: { documents: readonly Document[]; open: 
   );
 }
 
+const organizeHasModel = (settings: LibrarySettings | undefined) =>
+  !!settings && organizeModelOf(settings) !== null;
+
 /**
  * Organize, for the Documents in no Folder (its model is chosen in Settings ›
  * Models until #236 chooses it here), or how it is going, or what it couldn't
@@ -251,7 +261,7 @@ function Organize({ documents }: { documents: readonly Document[] }) {
       }
       return {
         hasFolders: (state.library?.groups.length ?? 0) > 0,
-        hasModel: Boolean(state.library?.settings.classifier),
+        hasModel: organizeHasModel(state.library?.settings),
         pending,
         failed,
       };
@@ -332,44 +342,42 @@ function Organize({ documents }: { documents: readonly Document[] }) {
 
 /**
  * Organize with no model chosen (#763): a row under Not in a Folder's head
- * says so where it was asked, with the way on: the AI model already
- * connected, saying what would be sent to it, or one on this computer.
+ * says so where it was asked, with the way on: the model Automatic tags with,
+ * saying what would be sent to its company, or one on this computer. The
+ * answer is kept, so Organize asks once.
  */
 function OrganizeNeedsModel({ documents }: { documents: readonly Document[] }) {
   const t = useT();
+  const language = useLanguage();
   const ids = useOrganizeAsk((state) => state.ids);
-  const hasModel = useAppStore((state) => Boolean(state.library?.settings.classifier));
-  const chosen = useAppStore((state) => state.settings?.user.chatModel ?? null);
-  const [company, setCompany] = useState<{ name: string; cloud: boolean } | null>(null);
+  const hasModel = useAppStore((state) => organizeHasModel(state.library?.settings));
+  const [automatic, setAutomatic] = useState<TaggingModelOption | null>(null);
   const asked = ids !== null && !hasModel;
   useEffect(() => {
-    if (!asked || !chosen) return;
+    if (!asked) return;
     let current = true;
-    core.listChatProviders().then(
-      (providers) => {
-        const provider = providers.find((each) => each.id === chosen.providerId);
-        if (current && provider) {
-          setCompany({
-            name: provider.service?.name ?? t(`providers.kind.${provider.kind}`),
-            cloud: provider.service !== null,
-          });
-        }
-      },
-      (error: unknown) => console.error("Organize couldn't list the AI model's services.", error),
-    );
+    const load = () =>
+      core.getTaggingModels().then(
+        (models) => {
+          if (current) setAutomatic(models.automatic);
+        },
+        (error: unknown) => console.error("Organize couldn't work out the model to offer.", error),
+      );
+    load();
+    const stop = core.on("chatReadiness.changed", () => void load());
     return () => {
       current = false;
+      stop();
     };
-  }, [asked, chosen, t]);
+  }, [asked]);
   if (!asked) return null;
+  const company = automatic && (providerOf(automatic, language) ?? t("providers.kind.ollama"));
   const close = () => useOrganizeAsk.getState().close();
   const use = () => {
-    if (!chosen) return;
+    const settings = useAppStore.getState().library?.settings;
+    if (!automatic || !settings) return;
     core
-      .saveLibrarySettings({
-        classifier: { kind: "chat", choice: chosen },
-        automatic: useAppStore.getState().library?.settings.automatic ?? false,
-      })
+      .saveLibrarySettings({ ...settings, organizeWith: automatic.classifier })
       .then(() => useAppStore.getState().refreshLibrary())
       .then(() => {
         close();
@@ -392,10 +400,8 @@ function OrganizeNeedsModel({ documents }: { documents: readonly Document[] }) {
       className="flex flex-col gap-0.5 border-b border-rule py-2 pl-14 text-[13px] leading-5 text-ink-meta"
     >
       <p>{t("library.organize.needsModel")}</p>
-      {company?.cloud && (
-        <p data-testid="library-organize-sends">
-          {t("library.organize.sends", { company: company.name })}
-        </p>
+      {automatic && automatic.group !== "local" && company && (
+        <p data-testid="library-organize-sends">{t("library.organize.sends", { company })}</p>
       )}
       <p className="flex flex-wrap gap-x-4">
         {company && (
@@ -405,7 +411,7 @@ function OrganizeNeedsModel({ documents }: { documents: readonly Document[] }) {
             onClick={use}
             className={quietButtonClass}
           >
-            {t("library.organize.use", { company: company.name })}
+            {t("library.organize.use", { company })}
           </button>
         )}
         <button

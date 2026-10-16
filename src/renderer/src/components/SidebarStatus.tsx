@@ -2,6 +2,7 @@ import { type ReactNode, type ToggleEvent, useId, useRef, useState } from "react
 import { useShallow } from "zustand/react/shallow";
 import type { DocumentStatus, EmbeddingModelError } from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
+import { organizes } from "../../../shared/libraryModels";
 import { core } from "../core";
 import { useT } from "../i18n";
 import { useCapturing } from "../meetings";
@@ -205,7 +206,7 @@ function useStatuses(): Status[] {
   const model = useAppStore((state) => state.embeddingModel);
   const embedding = useAppStore((state) => state.embedding);
   const library = useAppStore((state) => state.library);
-  const organizing = !!library?.groups.length || !!library?.settings.classifier;
+  const organizing = organizes(library);
   const capturing = useCapturing();
   const counts = useAppStore(
     useShallow((state) => {
@@ -215,6 +216,9 @@ function useStatuses(): Status[] {
       let tagging = 0;
       // Only the User's own Documents: the examples need no model, so they alone don't ask for one.
       let waitingForTagger = 0;
+      let waitingForPlan = 0;
+      let failedTagging = 0;
+      let unreached = 0;
       // A paused Linked folder's Documents wait for the User: its row says so, not the footer.
       const paused = new Set(
         state.linkedFolders.filter((each) => each.status === "paused").map((each) => each.id),
@@ -230,11 +234,24 @@ function useStatuses(): Status[] {
           else if (
             item.tagging === "waiting-for-provider" &&
             isOwnDocument(item, allExamples(state))
-          )
+          ) {
             waitingForTagger++;
+            if (item.taggingError?.kind === "plan-limit") waitingForPlan++;
+          } else if (item.tagging === "failed" && isOwnDocument(item, allExamples(state))) {
+            failedTagging++;
+            if (item.taggingError?.kind === "network") unreached++;
+          }
         }
       }
-      return { processing, scannedPages, tagging, waitingForTagger };
+      return {
+        processing,
+        scannedPages,
+        tagging,
+        waitingForTagger,
+        waitingForPlan,
+        failedTagging,
+        unreached,
+      };
     }),
   );
   const retryDownload = useAppStore((state) => state.downloadEmbeddingModel);
@@ -322,6 +339,35 @@ function useStatuses(): Status[] {
     });
   }
 
+  if (!organizing && counts.failedTagging > 0) {
+    const failed = useAppStore
+      .getState()
+      .documents.filter((each) => each.status === "ready" && each.tagging === "failed");
+    statuses.push({
+      testId: "tagging-failed",
+      tone: "error",
+      short:
+        counts.failedTagging === 1
+          ? t("status.taggingFailed.one")
+          : t("status.taggingFailed.other", { count: counts.failedTagging }),
+      full: [
+        t(
+          counts.unreached === counts.failedTagging
+            ? "status.taggingFailed.offline"
+            : "status.taggingFailed.full",
+        ),
+        failed[0]?.taggingError?.message ?? "",
+      ]
+        .filter(Boolean)
+        .join("\n"),
+      action: {
+        label: t("status.retry"),
+        testId: "tagging-failed-retry",
+        run: () => void useAppStore.getState().retagDocuments(failed.map((each) => each.id)),
+      },
+    });
+  }
+
   for (const problem of pageProblems) {
     const refused = !canTryAgain(problem);
     const reason = t(reasonKey(problem.reason));
@@ -373,7 +419,14 @@ function useStatuses(): Status[] {
     });
   }
 
-  if (taggingWaits && taggingNeedsOk) {
+  if (counts.waitingForPlan > 0) {
+    statuses.push({
+      testId: "tagging-paused",
+      tone: "waiting",
+      short: t("status.taggingPaused"),
+      full: t("status.taggingPaused.full"),
+    });
+  } else if (taggingWaits && taggingNeedsOk) {
     statuses.push({
       testId: "tagging-waiting",
       tone: "waiting",
