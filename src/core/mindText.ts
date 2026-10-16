@@ -53,8 +53,8 @@ import {
   BLOCK_ID_ATTRIBUTE,
   CHART_NODE,
   CITATION_NODE,
-  CLAIM_CHECK_MARK,
   type CitedWork,
+  CLAIM_CHECK_MARK,
   COMPARISON_ROW_NODE,
   COMPARISON_TABLE_NODE,
   DOCUMENT_CHIP_NODE,
@@ -106,7 +106,11 @@ export interface FailedCheck {
 /** A sentence whose check isn't good, with what a Word file's comment on it says. */
 export type FailedSentence = { id: string } & (
   | { check: "contradicted"; says: string | null; worked: { shown: string; stated: string } | null }
-  | { check: "unsupported"; folder: string | null; nearest: { quote: string; source: string } | null }
+  | {
+      check: "unsupported";
+      folder: string | null;
+      nearest: { quote: string; source: string } | null;
+    }
   | { check: "needs-recheck"; why: RecheckReason }
 );
 

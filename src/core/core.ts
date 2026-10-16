@@ -1512,6 +1512,8 @@ export function createCore(adapters: CoreAdapters): Core {
     liveDocuments: () => documents.list(),
     keptCitationTexts: () => documents.keptCitationTexts(),
     language: () => settings.get().language,
+    folderName: (folderId) =>
+      library.folders().find((folder) => folder.id === folderId)?.name ?? null,
     citationStyle: (mindId) => mindCitationStyle(mindId).style,
     bibliography: (mindId) => content.readSettings(mindId, bibliographyShown),
     formatCitations: (request) => citationStyles.format(request),

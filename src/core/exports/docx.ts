@@ -48,13 +48,7 @@ import {
   WordIds,
   XML_DECLARATION,
 } from "./wordml";
-import {
-  type Piece,
-  Review,
-  type ReviewChoices,
-  trackBlocks,
-  trackInline,
-} from "./wordReview";
+import { type Piece, Review, type ReviewChoices, trackBlocks, trackInline } from "./wordReview";
 
 export interface DocxOptions {
   /** The Mind's title, as the document's title. Empty: none. */
