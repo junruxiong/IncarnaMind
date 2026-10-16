@@ -21,11 +21,11 @@ async function importedLook(bytes: Buffer): Promise<WordLook> {
 
 const SCOPE = ".word-look-mind";
 
-const keyOf = (styles: Record<string, unknown>, matches: (style: never) => boolean) => {
-  const found = Object.entries(styles).find(([, style]) => matches(style as never));
+function keyOf<T>(styles: Record<string, T>, matches: (style: T) => boolean): string {
+  const found = Object.entries(styles).find(([, style]) => matches(style));
   if (!found) throw new Error("No such style.");
   return found[0];
-};
+}
 
 const rulesFor = (css: readonly string[], key: string) =>
   css.filter((rule) => rule.includes(`"${key}"`));
@@ -34,8 +34,8 @@ describe("a Word table's stylesheet", () => {
   test("a table with no lines draws none; the skills table draws its own, with insideH and insideV on the cells between", async () => {
     const look = await importedLook(resumeFile());
     const css = wordTableCss(SCOPE, look);
-    const layout = keyOf(look.tables, (table: WordLook["tables"][string]) => !table.borders);
-    const lined = keyOf(look.tables, (table: WordLook["tables"][string]) => !!table.borders);
+    const layout = keyOf(look.tables, (table) => !table.borders);
+    const lined = keyOf(look.tables, (table) => !!table.borders);
 
     expect(rulesFor(css, layout).join("\n")).not.toMatch(/border-(top|bottom|left|right):/);
     const own = rulesFor(css, lined).join("\n");
@@ -49,7 +49,7 @@ describe("a Word table's stylesheet", () => {
 
   test("columns take the file's widths in proportion, one rule a column of each table look; a percent table is that share of the text width", async () => {
     const resume = await importedLook(resumeFile());
-    const lined = keyOf(resume.tables, (table: WordLook["tables"][string]) => !!table.borders);
+    const lined = keyOf(resume.tables, (table) => !!table.borders);
     const widths = rulesFor(wordTableCss(SCOPE, resume), lined).flatMap((rule) => {
       const width = /col:nth-child\(\d\) \{ width: calc\(var\(--word-pt\) \* ([\d.]+)\)/.exec(rule);
       return width ? [Number(width[1])] : [];
@@ -57,10 +57,7 @@ describe("a Word table's stylesheet", () => {
     expect(widths).toEqual([100, 381.9]);
 
     const contract = await importedLook(contractFile());
-    const definitions = keyOf(
-      contract.tables,
-      (table: WordLook["tables"][string]) => !!table.borders,
-    );
+    const definitions = keyOf(contract.tables, (table) => !!table.borders);
     expect(rulesFor(wordTableCss(SCOPE, contract), definitions).join("\n")).toContain(
       `width: calc(var(--word-pt) * ${contract.width})`,
     );
@@ -91,7 +88,7 @@ describe("a Word table's stylesheet", () => {
     };
     const cell = rulesFor(wordTableCss(SCOPE, look), "c1").join("\n");
     expect(cell).toBe(
-      `${SCOPE} :is(td, th)[data-word-look="c1"] { background-color: #F2F2F2; vertical-align: middle; white-space: nowrap; padding-left: calc(var(--word-pt) * 2); border-top: hidden; border-bottom: calc(var(--word-pt) * 1.5) double #000000; }`,
+      `${SCOPE} :is(td, th)[data-word-look="c1"] { background-color: #F2F2F2; vertical-align: middle; text-wrap-mode: nowrap; padding-left: calc(var(--word-pt) * 2); border-top: hidden; border-bottom: calc(var(--word-pt) * 1.5) double #000000; }`,
     );
     // The table's inside lines are :where() rules, so any cell's own rule wins over them.
     for (const rule of rulesFor(wordTableCss(SCOPE, look), "t1").filter((each) =>
@@ -99,6 +96,30 @@ describe("a Word table's stylesheet", () => {
     )) {
       expect(rule.startsWith(`${SCOPE} :where(`)).toBe(true);
     }
+  });
+
+  test("a heading's own bottom line stays above the next row's 'none' tops; inside lines sit only on the cell below or to the right, never on a bottom", () => {
+    const single = { style: "single", width: 0.5, color: null, space: 0 };
+    const look: WordLook = {
+      version: 3,
+      body: 12,
+      width: 450,
+      paragraphs: {},
+      runs: {},
+      tables: { t1: { borders: { insideH: single, insideV: single } } },
+      cells: {
+        c1: { borders: { bottom: { ...single, width: 1.5 } } },
+        c2: { borders: { top: { style: "none", width: 0, color: null, space: 0 } } },
+      },
+    };
+    const css = wordTableCss(SCOPE, look);
+    expect(rulesFor(css, "c2").join("\n")).toContain("border-top: none;");
+    expect(css.join("\n")).not.toContain("hidden");
+    const inside = rulesFor(css, "t1").filter((each) => each.includes("> tr"));
+    expect(inside.join("\n")).not.toContain("border-bottom");
+    expect(inside.some((each) => each.includes("[rowspan]:not(:last-child)) { border-right"))).toBe(
+      true,
+    );
   });
 
   test("rules grow with the file's table styles, never with its tables", async () => {

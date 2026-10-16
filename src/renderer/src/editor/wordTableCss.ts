@@ -1,5 +1,5 @@
 import type { WordBorder, WordCellLook, WordLook, WordTableLook } from "../../../core/api";
-import { border, pt } from "./wordLookCss";
+import { attribute, border, pt, rule } from "./wordCss";
 import { WORD_LOOK_DOM_ATTRIBUTE } from "./wordSchema";
 
 const SIDES = ["top", "right", "bottom", "left"] as const;
@@ -11,13 +11,11 @@ const CELL_MARGIN = 5.4;
 /** Half Word's widest border. */
 const BORDER_ROOM = 3;
 
-const attribute = (key: string) => `[${WORD_LOOK_DOM_ATTRIBUTE}="${key}"]`;
+const looked = (key: string) => attribute(WORD_LOOK_DOM_ATTRIBUTE, key);
 
-const rule = (selector: string, declarations: string[]) =>
-  declarations.length > 0 ? `${selector} { ${declarations.join("; ")}; }` : "";
-
-// "hidden" wins over the table's line on that edge, as a cell's "none" does in Word.
-const line = (value: WordBorder) => (value.style === "nil" ? "hidden" : border(value));
+// On the table's edge a cell's "nil" must beat the table's own line, which only "hidden" does; inside, "none" leaves a neighbour's line.
+const line = (value: WordBorder) =>
+  value.style === "nil" ? "hidden" : value.style === "none" ? "none" : border(value);
 
 const padding = (margins: WordTableLook["margins"]) =>
   SIDES.flatMap((side) => {
@@ -41,9 +39,9 @@ function placement(table: WordTableLook): string[] {
 }
 
 function tableRules(scope: string, key: string, table: WordTableLook, textWidth: number | null) {
-  const selector = `${scope} table${attribute(key)}`;
+  const selector = `${scope} table${looked(key)}`;
   const cells = (rows: string, cell: string) =>
-    `${scope} :where(table${attribute(key)} > tbody > ${rows} > ${cell})`;
+    `${scope} :where(table${looked(key)} > tbody > ${rows} > ${cell})`;
   const outer = table.borders ?? {};
   const across = table.borders?.insideH;
   const down = table.borders?.insideV;
@@ -57,10 +55,10 @@ function tableRules(scope: string, key: string, table: WordTableLook, textWidth:
       }),
     ]),
     rule(cells("tr", "*"), padding(table.margins)),
+    // Each inside line on one cell only, so a cell's own side replaces it; a cell spanning rows also draws the line to its right, where the next row's first cell starts.
     across ? rule(cells("tr + tr", "*"), [`border-top: ${border(across)}`]) : "",
-    across ? rule(cells("tr:not(:last-child)", "*"), [`border-bottom: ${border(across)}`]) : "",
     down ? rule(cells("tr", "* + *"), [`border-left: ${border(down)}`]) : "",
-    down ? rule(cells("tr", ":not(:last-child)"), [`border-right: ${border(down)}`]) : "",
+    down ? rule(cells("tr", "[rowspan]:not(:last-child)"), [`border-right: ${border(down)}`]) : "",
     ...(table.columns ?? []).map(
       (column, index) =>
         `${selector} > colgroup > col:nth-child(${index + 1}) { width: ${pt(column)}; }`,
@@ -70,12 +68,13 @@ function tableRules(scope: string, key: string, table: WordTableLook, textWidth:
 
 function cellRule(scope: string, key: string, cell: WordCellLook): string {
   return rule(
-    `${scope} :is(td, th)${attribute(key)}`,
+    `${scope} :is(td, th)${looked(key)}`,
     [
       cell.shade ? `background-color: #${cell.shade}` : "",
       cell.vertical === "center" ? "vertical-align: middle" : "",
       cell.vertical === "bottom" ? "vertical-align: bottom" : "",
-      cell.noWrap ? "white-space: nowrap" : "",
+      // Not white-space, which would also collapse the spaces typed in the cell.
+      cell.noWrap ? "text-wrap-mode: nowrap" : "",
       ...padding(cell.margins),
       ...SIDES.flatMap((side) => {
         const value = cell.borders?.[side];

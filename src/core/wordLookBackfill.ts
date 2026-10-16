@@ -105,8 +105,7 @@ function changesFor(element: Y.XmlElement, node: NodeJSON): LookChange[] | null 
 
 const span = (value: unknown) => (typeof value === "number" ? value : 1);
 
-/** The looks of an edited table and its cells, when it still has the rows and cells it was imported with. */
-function tableLooks(table: Y.XmlElement, node: NodeJSON): LookChange[] {
+function looksByPosition(table: Y.XmlElement, node: NodeJSON): LookChange[] {
   const rows = table.toArray();
   const imported = node.content ?? [];
   if (table.nodeName !== "table" || rows.length !== imported.length) return [];
@@ -162,7 +161,7 @@ export function planLook(doc: Y.Doc, blocks: Y.XmlFragment, structure: WordStruc
         return;
       }
       plan.editedSinceImport++;
-      if (node?.type === "table") plan.changes.push(...tableLooks(element, node));
+      if (node?.type === "table") plan.changes.push(...looksByPosition(element, node));
     }
     for (const child of element.toArray()) {
       if (child instanceof Y.XmlElement) look(child);

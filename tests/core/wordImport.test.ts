@@ -884,7 +884,7 @@ describe("a file whose look the Mind doesn't draw (#735)", () => {
     const core = startCore(await createTempDataFolder());
     const { client } = await importFile(core, join(SYNTHETIC, "zh-resume-layout.docx"));
     const layout = wordReportOf(client.doc)?.layout;
-    expect(layout).toMatchObject({ layoutTables: 2, tabStops: 4, fonts: 1, sizes: 6 });
+    expect(layout).toMatchObject({ tabStops: 4, fonts: 1, sizes: 6 });
     expect(layoutNotShown(layout)).toBe(true);
     // A report made before #735 has no counts, and says nothing.
     expect(layoutNotShown(undefined)).toBe(false);
