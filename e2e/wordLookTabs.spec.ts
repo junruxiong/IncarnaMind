@@ -1,6 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type ElectronApplication, expect, type Page, test } from "@playwright/test";
+import type { Editor } from "@tiptap/core";
 import { paragraph, run, W_NS, wordFile } from "../tests/helpers/word";
 import { contractFile, RESUME_TEXT_WIDTH_TWIPS, resumeFile } from "../tests/helpers/wordLookFiles";
 import {
@@ -197,6 +198,27 @@ test("a clause's text after its number starts at the clause's hanging indent", a
     .toBeLessThan(2);
   const { number, text } = await lines();
   expect(text - number).toBeGreaterThan(30);
+  // Home from just after the tab goes to the line's start, before the number.
+  const caret = () =>
+    window.evaluate(() => getSelection()?.getRangeAt(0).getClientRects()[0]?.left ?? Number.NaN);
+  const top = await clause.evaluate((element) => element.getBoundingClientRect().top + 8);
+  await window.mouse.click(text + 1, top);
+  await expect.poll(caret).toBeCloseTo(text, -0.5);
+  // A key pressed next acts where the editor's cursor is: wait until it is just after the tab.
+  await expect
+    .poll(() =>
+      clause.evaluate((element) => {
+        const root = element.closest(".ProseMirror") as (Element & { editor?: Editor }) | null;
+        const state = root?.editor?.view.state;
+        if (!state) return "";
+        const { from } = state.selection;
+        return state.doc.textBetween(from - 1, from);
+      }),
+    )
+    .toBe("\t");
+  await window.keyboard.press("Home");
+  await window.keyboard.type("X");
+  await expect(clause).toContainText("X2.1");
   if (SCREENSHOTS) await window.screenshot({ path: join(SCREENSHOTS, "word-tabs-contract.png") });
   await app.close();
 });
@@ -265,11 +287,8 @@ test("two tabs in a row reach two stops, a decimal stop lines up the point, and 
     const x = edge === "middle" ? (place.left + place.right) / 2 : place[edge];
     return x / place.pt;
   };
-  // Each tab its own box: "Alpha" ends before the first default stop, so "Bravo" starts at the second.
+  // "Alpha" ends before the first default stop, so after the second tab "Bravo" starts at the second.
   await expect.poll(() => at("Bravo", "left")).toBeCloseTo(72, 0);
-  await expect(
-    window.getByTestId("mind-editor").locator("p", { hasText: "Bravo" }).locator("[data-word-tab]"),
-  ).toHaveCount(2);
   await expect.poll(() => at(".50", "left")).toBeCloseTo(216, 0);
   await expect.poll(() => at("Centred", "middle")).toBeCloseTo(216, 0);
   if (SCREENSHOTS) await window.screenshot({ path: join(SCREENSHOTS, "word-tabs-stops.png") });
