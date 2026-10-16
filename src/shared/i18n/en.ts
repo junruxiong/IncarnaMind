@@ -251,6 +251,7 @@ export const en = {
   "document.tags": "Tags…",
   "folder.organize": "Organize this Folder",
   "folder.organize.empty": "The Folder has no Documents to organize.",
+  "folder.tagWithAi": "Tag with AI",
   "folder.editDescription": "Edit description…",
   "tag.rename": "Rename",
   "tag.renameLabel": "New name for {name}",
@@ -1149,6 +1150,8 @@ export const en = {
   "status.scanning.other": "Reading {count} scanned pages…",
   "status.tagging.one": "Tagging 1 Document…",
   "status.tagging.other": "Tagging {count} Documents…",
+  "status.taggingWith.one": "Tagging 1 Document with {service}…",
+  "status.taggingWith.other": "Tagging {count} Documents with {service}…",
   "status.taggingWaiting": "No AI model for Tags",
   "status.taggingPermission": "Tags need your OK",
   "status.choose": "Choose…",
@@ -1497,6 +1500,15 @@ export const en = {
     "This model says how likely each Tag is, and marks the ones it isn't sure of for you to review.",
   "tagging.review.kept":
     "This model doesn't say how sure it is, so every Tag it adds is kept. Remove any you don't want.",
+  "tagging.stop": "Stop",
+  "tagging.stop.title":
+    "Stop, and don't tag new Documents {places} with AI until you turn it back on",
+  "tagging.place.folders": "in {names}",
+  "tagging.place.notInFolder": "not in a Folder",
+  "tagging.stopped": "Stopped Tagging {places}",
+  "tagging.stopped.notInFolder": "Stopped Tagging Documents {places}",
+  "tagging.restarted": "Tagging Documents {places} with AI again",
+  "tagging.stoppedIn": "Tagging with AI is stopped for Documents {places}.",
   "status.taggingPaused": "Tagging waits for your ChatGPT plan",
   "status.taggingPaused.full":
     "Your ChatGPT plan's limit is reached, so tagging waits for it to reset, then goes on by itself.",
@@ -1648,6 +1660,8 @@ export const en = {
   "providers.form.save": "Use this service",
   "providers.sends":
     "Your Questions, the Mind you're in, passages from your Documents, and Document text for Tags go to {provider} when you use it.",
+  "providers.sends.tagsOnSave":
+    "Your Questions, the Mind you're in and Passages from your Documents go to {provider} when you use it, and the first lines of each Document, to tag it. Tagging starts when you save the key.",
   "providers.form.saving": "Saving…",
   "providers.form.moreShort": "More…",
   "providers.form.whereKey": "Where do I find it?",

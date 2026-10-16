@@ -23,6 +23,7 @@ import { dayOf } from "../../dates";
 import { errorMessage } from "../../errors";
 import { useLanguage, useT } from "../../i18n";
 import type { KeyRefusal } from "../../keyRefusals";
+import { useAppStore } from "../../store";
 import { ProblemMark } from "../ProblemLine";
 import {
   buttonClass,
@@ -125,6 +126,9 @@ export function ProviderForm({
   const [modelId, setModelId] = useState(refused?.modelId ?? suggestedModel(first));
   const [busy, setBusy] = useState<"saving" | null>(null);
   const [test, setTest] = useState<ConnectionTestResult | null>(null);
+  const tagsAutomatically = useAppStore(
+    (state) => (state.library?.settings.classifier.kind ?? "automatic") === "automatic",
+  );
   const [error, setError] = useState<string | null>(null);
   const [secretStorage, setSecretStorage] = useState<SecretStorageStatus | null>(null);
 
@@ -462,6 +466,7 @@ export function ProviderForm({
                 ? (hostOf(baseUrl) ?? t("providers.kind.openai-compatible"))
                 : providerName
             }
+            tagsOnSave={tagsAutomatically}
           />
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -516,13 +521,20 @@ function KeyRefusedLine({ id, refused }: { id: string; refused: KeyRefusal }) {
 
 /**
  * Above the button that chooses the chat model's provider: what goes to it.
- * Choosing it is the consent for all of that (ADR-0022).
+ * Choosing it is the consent for all of that (ADR-0022). `tagsOnSave`: the
+ * Tagging setting is Automatic, so saving the key starts tagging with it (#895).
  */
-export function ProviderSendsLine({ provider }: { provider: string }) {
+export function ProviderSendsLine({
+  provider,
+  tagsOnSave = false,
+}: {
+  provider: string;
+  tagsOnSave?: boolean;
+}) {
   const t = useT();
   return (
     <p data-testid="provider-sends" className={hintClass}>
-      {t("providers.sends", { provider })}
+      {t(tagsOnSave ? "providers.sends.tagsOnSave" : "providers.sends", { provider })}
     </p>
   );
 }

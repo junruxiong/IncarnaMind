@@ -8,6 +8,7 @@
  * does when it finds or checks claims. A key with "refused" in it is refused,
  * as a provider refuses a wrong key (HTTP 401). A model whose id ends "-no-tools" refuses
  * Tools and structured output, as a small server model does, so its Answers have no Citations.
+ * A Document whose text says "slowly" takes a moment to tag.
  */
 
 import { APICallError } from "ai";
@@ -30,7 +31,7 @@ import {
 import { fakeResearchTags } from "./researchTags";
 import { fakeSkillDraft } from "./skillDraft";
 import { refusal, replyParts } from "./stream";
-import { fakeStructuredOutput } from "./structured";
+import { fakeStructuredOutput, SLOW_TAGGING_MS, tagsSlowly } from "./structured";
 
 /** Time between two streamed words: slow enough for a test to watch the Answer grow. */
 const WORD_DELAY_MS = 60;
@@ -82,6 +83,7 @@ export const createFakeChatModel: ChatModelFactory = (spec) =>
           statusCode: 404,
         });
       }
+      if (tagsSlowly(options)) await new Promise((resolve) => setTimeout(resolve, SLOW_TAGGING_MS));
       return {
         content: [
           {

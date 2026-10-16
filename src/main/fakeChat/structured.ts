@@ -1,14 +1,13 @@
 import { EXCERPT_END, EXCERPT_START } from "../../core/tags/classify";
-import type { GenerateOptions, Prompt } from "./prompt";
+import { type GenerateOptions, type Prompt, SLOWLY } from "./prompt";
 import { fakeSuggestion } from "./suggestion";
+
+/** How long tagging a Document whose text says "slowly" takes: long enough for a test to Stop it (#895). */
+export const SLOW_TAGGING_MS = 1500;
 
 const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-/**
- * The scripted tagger: of the Tag names offered, those that appear as a word
- * (ignoring case) in the Document's excerpt, i.e. its name or text.
- */
-function fakeTags(prompt: Prompt, offered: readonly string[]): string[] {
+function excerptOf(prompt: Prompt): string {
   const text = prompt
     .map((message) =>
       typeof message.content === "string"
@@ -17,7 +16,25 @@ function fakeTags(prompt: Prompt, offered: readonly string[]): string[] {
     )
     .join("\n");
   // The instructions name the markers too: the excerpt is between the last ones.
-  const excerpt = text.slice(text.lastIndexOf(EXCERPT_START), text.lastIndexOf(EXCERPT_END));
+  return text.slice(text.lastIndexOf(EXCERPT_START), text.lastIndexOf(EXCERPT_END));
+}
+
+export function tagsSlowly(options: GenerateOptions): boolean {
+  const format = options.responseFormat;
+  const schema = format?.type === "json" ? format.schema : undefined;
+  return (
+    !!schema?.properties?.tags &&
+    !schema.properties.groupId &&
+    SLOWLY.test(excerptOf(options.prompt))
+  );
+}
+
+/**
+ * The scripted tagger: of the Tag names offered, those that appear as a word
+ * (ignoring case) in the Document's excerpt, i.e. its name or text.
+ */
+function fakeTags(prompt: Prompt, offered: readonly string[]): string[] {
+  const excerpt = excerptOf(prompt);
   return offered.filter((name) =>
     new RegExp(`(?<![\\p{L}\\p{N}])${escapeRegExp(name)}(?![\\p{L}\\p{N}])`, "iu").test(excerpt),
   );
