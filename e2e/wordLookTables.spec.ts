@@ -71,11 +71,16 @@ const sidesOf = (target: Locator) =>
 const widthOf = (target: Locator) =>
   target.evaluate((element) => element.getBoundingClientRect().width);
 
-const zoomOf = (window: Page) =>
-  window
-    .locator(".mind-editor-frame:visible")
-    .first()
-    .evaluate((frame) => Number(getComputedStyle(frame).getPropertyValue("--word-zoom") || 1));
+const frameIn = (window: Page) => window.locator(".mind-editor-frame:visible").first();
+
+/** The content's point over the frame's, which stays whole. */
+const zoomOf = (frame: Locator) =>
+  frame.evaluate((element) => {
+    const unit = (of: Element) =>
+      Number.parseFloat(getComputedStyle(of).getPropertyValue("--word-pt"));
+    const editor = element.querySelector(".mind-editor");
+    return editor ? unit(editor) / unit(element) : 1;
+  });
 
 const fitsItsFrame = (table: Locator) =>
   table.evaluate((element) => {
@@ -120,7 +125,7 @@ test("the résumé's tables as the file draws them: layout tables without lines,
   expect(ratio).toBeLessThan((2000 / 7638) * 1.03);
 
   // The file's text is 780 px at the Mind's writing size, wider than the 680 px measure: it zooms to fit.
-  const zoom = await zoomOf(window);
+  const zoom = await zoomOf(frameIn(window));
   expect(zoom).toBeGreaterThanOrEqual(0.8);
   expect(zoom).toBeLessThan(1);
   expect(await fitsItsFrame(skills)).toBe(true);
@@ -135,7 +140,7 @@ test("the résumé's tables as the file draws them: layout tables without lines,
   await expect(window.getByTestId("assistant")).toHaveAttribute("data-folded", "true");
   await setWindowSize(app, window, 1100, 900);
   await expect.poll(() => fitsItsFrame(skills)).toBe(true);
-  expect(await zoomOf(window)).toBeGreaterThanOrEqual(0.8);
+  expect(await zoomOf(frameIn(window))).toBeGreaterThanOrEqual(0.8);
   await shot(window, "word-look-tables-resume-zh-1100");
   await setLanguage(window, "en");
   await shot(window, "word-look-tables-resume-1100");
@@ -148,7 +153,7 @@ test("the résumé's tables as the file draws them: layout tables without lines,
     .click();
   const pane = window.locator('[data-testid="mind-pane"]:visible').first();
   const narrowSkills = pane.locator("table", { hasText: "语言" });
-  await expect.poll(() => zoomOf(window)).toBe(0.8);
+  await expect.poll(() => zoomOf(frameIn(window))).toBeCloseTo(0.8, 3);
   expect(await fitsItsFrame(narrowSkills)).toBe(false);
   const frame = pane.locator(".mind-editor-frame");
   const bullet = pane.locator("li p", { hasText: "跟踪 12 家" });
@@ -157,7 +162,8 @@ test("the résumé's tables as the file draws them: layout tables without lines,
   expect(bulletBox && frameBox && bulletBox.x + bulletBox.width).toBeLessThanOrEqual(
     (frameBox?.x ?? 0) + (frameBox?.width ?? 0) + 1,
   );
-  expect(await frame.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(
+  const scroller = pane.locator("xpath=..");
+  expect(await scroller.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(
     true,
   );
   await shot(window, "word-look-tables-resume-narrow");
@@ -189,8 +195,8 @@ test("the contract's tables: the bordered definitions with a shaded heading row 
   expect(ratio).toBeGreaterThan((2600 / 6426) * 0.97);
   expect(ratio).toBeLessThan((2600 / 6426) * 1.03);
   // A table 100% wide fills the file's text width, which fits the measure unzoomed.
-  expect(await zoomOf(window)).toBe(1);
-  const frameWidth = await widthOf(window.locator(".mind-editor-frame:visible").first());
+  expect(await zoomOf(frameIn(window))).toBeCloseTo(1, 3);
+  const frameWidth = await widthOf(frameIn(window));
   expect(Math.abs((await widthOf(definitions)) - frameWidth)).toBeLessThan(2);
 
   for (const cell of await signatures.locator("td").all()) {

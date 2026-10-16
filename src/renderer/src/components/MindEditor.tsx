@@ -74,7 +74,6 @@ import { Suggestions } from "../editor/suggestions";
 import { TableMenu } from "../editor/TableMenu";
 import { TableKeys } from "../editor/tableCommands";
 import { SmartTypography } from "../editor/typography";
-import { useWordLookZoom } from "../editor/useWordLookZoom";
 import { useVerification, VerifyLine } from "../editor/VerifyLine";
 import { wordAtomView, wordBlockView } from "../editor/WordAtomView";
 import { WordCount } from "../editor/WordCount";
@@ -622,7 +621,6 @@ function MindEditorView({
   const frame = useRef<HTMLDivElement>(null);
   useClickBelowNote(editor, frame);
   const wordLook = useWordLookStyle(doc, mindId, editor);
-  useWordLookZoom(frame, wordLook?.css ?? null);
 
   return (
     <MindIdContext.Provider value={mindId}>
