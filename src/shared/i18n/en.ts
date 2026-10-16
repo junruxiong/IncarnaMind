@@ -4013,6 +4013,8 @@ export const en = {
   "mindCall.failed.several": "Several Minds are called “{name}”",
   "mindCall.failed.noHeading": "Couldn't change “{mind}”: it has no heading “{heading}”",
   "mindCall.failed.noPlace": "Couldn't add to “{mind}”: it has no heading or paragraph “{place}”",
+  "mindCall.failed.severalPlaces":
+    "Couldn't change “{mind}”: more than one place is called “{name}”",
   "mindCall.failed.noText": "Couldn't change “{mind}”: there's no text there to change",
   "mindCall.failed.tooLong": "Couldn't change “{mind}”: that's too much text to change at once",
   "mindCall.failed.changed": "Couldn't change “{mind}”: its text changed while it was being read",
@@ -4059,6 +4061,11 @@ export const en = {
   "command.assistant.fold": "Assistant: Fold",
   "command.assistant.unfold": "Assistant: Show",
   "command.assistant.history": "Conversation history",
+  "assistant.several.headings": "There are {count} headings called “{name}”: {places}. Which one?",
+  "assistant.several.paragraphs":
+    "There are {count} paragraphs starting “{name}”: {places}. Which one?",
+  "assistant.place.under": "under “{heading}”",
+  "assistant.place.number": "number {n}",
   // Outside agents (#351): the consent for each agent the User connects, and what IncarnaMind
   // tells an agent when a call can't be done, which the agent passes on to the User.
   "consent.flow.agents": "Your AI agents",
