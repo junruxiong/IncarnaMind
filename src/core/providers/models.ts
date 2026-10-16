@@ -27,7 +27,7 @@ import { endpointUrl } from "./kinds";
 import { createOllamaChatModel } from "./ollamaChat";
 import { DEFAULT_OLLAMA_SETTINGS, type OllamaModelSettings } from "./ollamaModels";
 import { withCacheBreakpoints } from "./promptCache";
-import { withOptionsOver, withoutStorage, withProviderOptions } from "./responsesStore";
+import { withOptionsOver, withoutStorage } from "./responsesStore";
 
 /** A model object, never a model id string (which the AI SDK would send to its gateway). */
 export type ChatLanguageModel = Exclude<LanguageModel, string>;
@@ -112,7 +112,7 @@ export const createAiSdkChatModel: ChatModelFactory = (spec) => {
     spec.thinking === "summary" || spec.thinking === "careful"
       ? reasoningSummaryOptions(spec)
       : null;
-  if (summary) model = withProviderOptions(model, summary);
+  if (summary) model = withAnswerThinking(model, spec, summary);
   return model;
 };
 
@@ -157,22 +157,27 @@ function canSkipThinking(
 
 const namedByRefusal = new Map<string, ProviderOptions>();
 
-// A model the catalog doesn't know yet may refuse the provider's form; its refusal names the one it takes (#907).
-function withThinkingOff(
+/** The form a 400 refusal names among `refused`, if it names one. */
+function refusedForm(
+  error: unknown,
+  refused: readonly { names: string; options: ProviderOptions }[] | undefined,
+): ProviderOptions | undefined {
+  if (!APICallError.isInstance(error) || error.statusCode !== 400) return undefined;
+  const said = `${error.message} ${error.responseBody ?? ""}`;
+  return refused?.find((each) => said.includes(each.names))?.options;
+}
+
+/**
+ * Every call carries the options of the model's form; a call a model refuses is asked again once
+ * in the form `named` gives for its refusal, and that form is kept for the model's later calls.
+ */
+function withRememberedForm(
   model: ChatLanguageModel,
-  spec: ChatModelSpec,
-  thinkingOff: NonNullable<RequestQuirks["thinkingOff"]>,
+  key: string,
+  initial: () => ProviderOptions,
+  named: (error: unknown, current: ProviderOptions) => ProviderOptions | undefined,
 ): ChatLanguageModel {
-  const key = `${spec.catalogId ?? spec.kind}\n${spec.modelId}`;
-  const set = modelsProviderOfKind(spec.kind, spec.endpoint, spec.catalogId);
-  const options = () =>
-    namedByRefusal.get(key) ?? catalogFacts(set, spec.modelId)?.thinkingOff ?? thinkingOff.options;
-  const named = (error: unknown): ProviderOptions | undefined => {
-    if (!APICallError.isInstance(error) || error.statusCode !== 400) return undefined;
-    const said = `${error.message} ${error.responseBody ?? ""}`;
-    const form = thinkingOff.refused?.find((each) => said.includes(each.names))?.options;
-    return form && form !== options() ? form : undefined;
-  };
+  const options = () => namedByRefusal.get(key) ?? initial();
   return wrapLanguageModel({
     model,
     middleware: {
@@ -182,7 +187,7 @@ function withThinkingOff(
         try {
           return await doGenerate();
         } catch (error) {
-          const form = named(error);
+          const form = named(error, options());
           if (!form) throw error;
           namedByRefusal.set(key, form);
           return inner.doGenerate(withOptionsOver(params, form));
@@ -192,7 +197,7 @@ function withThinkingOff(
         try {
           return await doStream();
         } catch (error) {
-          const form = named(error);
+          const form = named(error, options());
           if (!form) throw error;
           namedByRefusal.set(key, form);
           return inner.doStream(withOptionsOver(params, form));
@@ -200,6 +205,50 @@ function withThinkingOff(
       },
     },
   });
+}
+
+// A model the catalog doesn't know yet may refuse the provider's form; its refusal names the one it takes (#907).
+function withThinkingOff(
+  model: ChatLanguageModel,
+  spec: ChatModelSpec,
+  thinkingOff: NonNullable<RequestQuirks["thinkingOff"]>,
+): ChatLanguageModel {
+  const set = modelsProviderOfKind(spec.kind, spec.endpoint, spec.catalogId);
+  return withRememberedForm(
+    model,
+    `${spec.catalogId ?? spec.kind}\n${spec.modelId}`,
+    () => catalogFacts(set, spec.modelId)?.thinkingOff ?? thinkingOff.options,
+    (error, current) => {
+      const form = refusedForm(error, thinkingOff.refused);
+      return form && form !== current ? form : undefined;
+    },
+  );
+}
+
+// A model must never fail for its thinking budget: one that refuses it is asked again without it (#899).
+function withAnswerThinking(
+  model: ChatLanguageModel,
+  spec: ChatModelSpec,
+  options: ProviderOptions,
+): ChatLanguageModel {
+  const refused = summaryQuirk(spec.kind)?.refused;
+  return withRememberedForm(
+    model,
+    `answers\n${spec.catalogId ?? spec.kind}\n${spec.modelId}`,
+    () => options,
+    (error, current) => {
+      const without = refusedForm(error, refused);
+      const dropsSomething =
+        without &&
+        Object.entries(without).some(([provider, values]) =>
+          Object.keys(values).some((name) => current[provider]?.[name] !== undefined),
+        );
+      return without && dropsSomething
+        ? (withOptionsOver({ providerOptions: current }, without)
+            .providerOptions as ProviderOptions)
+        : undefined;
+    },
+  );
 }
 
 function providerModel(spec: ChatModelSpec): ChatLanguageModel {
