@@ -162,6 +162,7 @@ for (const { language, width } of [
     const heading = await typeOf(title);
     await pointAndClick(window, panelAgain.getByTestId("mind-style-size-large"));
     await expect.poll(async () => (await typeOf(paragraph)).size).toBeGreaterThan(body.size);
+    expect(await typeOf(paragraph)).toMatchObject({ size: 19, leading: 31 });
     expect((await typeOf(title)).size).toBeGreaterThan(heading.size);
     expect((await typeOf(paragraph)).leading).toBeGreaterThan(body.leading);
     await expect(window.getByTestId("undo-line")).toContainText(words.sizeChanged(words.large));
@@ -357,6 +358,64 @@ for (const { language, width } of [
     await expect.poll(type).toEqual(alpha);
     await open("Gamma");
     await expect.poll(type).toEqual(alpha);
+    await app.close();
+  });
+}
+
+for (const { language, listing } of [
+  { language: "en", listing: "denied" },
+  { language: "zh-CN", listing: "empty" },
+] as const) {
+  test(`Style with no installed fonts to list (${listing}, ${language}): Default, Serif and Mono stay, and nothing alarms`, async () => {
+    const { app, window } = await launchApp(dataDir);
+    await dismissChatSetup(window);
+    await setLanguage(window, language);
+    await setWindowSize(app, window, 1100, WINDOW_HEIGHT);
+    await newMind(window);
+    const editor = window.getByTestId("mind-editor");
+    await editor.click();
+    await window.keyboard.type("Spring tides come at new moon");
+    const paragraph = editor.locator("p").first();
+
+    // Electron never asks: the page has the permission already.
+    expect(
+      await window.evaluate(
+        async () =>
+          (await navigator.permissions.query({ name: "local-fonts" as PermissionName })).state,
+      ),
+    ).toBe("granted");
+
+    await window.evaluate((mode) => {
+      (globalThis as unknown as Window).queryLocalFonts =
+        mode === "denied"
+          ? () => Promise.reject(new DOMException("Permission denied", "NotAllowedError"))
+          : () => Promise.resolve([]);
+    }, listing);
+
+    const panel = await openStyle(window);
+    for (const preset of ["default", "serif", "mono"]) {
+      await expect(panel.getByTestId(`mind-style-font-${preset}`)).toBeVisible();
+    }
+    await pointAndClick(window, panel.getByTestId("mind-style-other-fonts"));
+    const picker = window.getByTestId("mind-style-font-picker");
+    await expect(picker).toBeVisible();
+    await motionSettled(window);
+    await expect(picker.getByTestId("mind-style-font-option")).toHaveCount(0);
+    await expect(picker).toContainText(
+      language === "en" ? "No other fonts found on this computer." : "此电脑上没有找到其他字体。",
+    );
+    await expect(picker.locator('[role="alert"]')).toHaveCount(0);
+    await expect(window.getByTestId("error-notice")).toHaveCount(0);
+    await screenshot(window, `style-no-fonts-${language}`);
+    await window.keyboard.press("Escape");
+    await expect(picker).toBeHidden();
+
+    // The built-in fonts still work.
+    const again = await openStyle(window);
+    await pointAndClick(window, again.getByTestId("mind-style-font-mono"));
+    await expect
+      .poll(async () => (await typeOf(paragraph)).family)
+      .toMatch(startsWithFamily("JetBrains Mono"));
     await app.close();
   });
 }

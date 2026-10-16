@@ -124,16 +124,24 @@ export interface WritingType {
   display: TypeSize;
 }
 
-const DEFAULT_BODY_PX = 16;
-const BODY_PX: Record<TextSize, number> = { small: 14, default: DEFAULT_BODY_PX, large: 18 };
-
-// DESIGN.md › Typography: the writing is 16/26, and 17/28 in the Serif style, which reads smaller.
-const BODY: Record<"serif" | "other", TypeSize> = {
-  serif: { size: 17, leading: 28 },
-  other: { size: 16, leading: 26 },
+// DESIGN.md › Typography: the writing is 16/26 and a step up in the Serif style, which reads
+// smaller (17/28); Small and Large are a step down and up from the default.
+const BODY: Record<"serif" | "other", Record<TextSize, TypeSize>> = {
+  other: {
+    small: { size: 14, leading: 23 },
+    default: { size: 16, leading: 26 },
+    large: { size: 18, leading: 29 },
+  },
+  serif: {
+    small: { size: 15, leading: 24 },
+    default: { size: 17, leading: 28 },
+    large: { size: 19, leading: 31 },
+  },
 };
 const HEADING: TypeSize = { size: 22, leading: 30 };
 const DISPLAY: TypeSize = { size: 34, leading: 42 };
+/** The headings and the title grow with the writing, by the default body size's share. */
+const SCALE: Record<TextSize, number> = { small: 14 / 16, default: 1, large: 18 / 16 };
 
 const scaled = (type: TypeSize, factor: number): TypeSize => ({
   size: Math.round(type.size * factor),
@@ -160,10 +168,10 @@ export function fontFamilyList(font: MindFont, installed: boolean): string {
  * it isn't, the Mind is written in the default font.
  */
 export function writingType(style: MindStyle, installed: boolean): WritingType {
-  const factor = BODY_PX[style.size] / DEFAULT_BODY_PX;
+  const factor = SCALE[style.size];
   return {
     family: fontFamilyList(style.font, installed),
-    body: scaled(style.font === "serif" ? BODY.serif : BODY.other, factor),
+    body: BODY[style.font === "serif" ? "serif" : "other"][style.size],
     heading: scaled(HEADING, factor),
     display: scaled(DISPLAY, factor),
   };

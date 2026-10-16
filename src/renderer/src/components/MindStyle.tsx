@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   cssString,
   FONT_PRESETS,
@@ -9,7 +9,6 @@ import {
   sameStyle,
   TEXT_SIZES,
 } from "../../../shared/mindStyle";
-import { logCaught } from "../errorLog";
 import { useT } from "../i18n";
 import { useMindStylePanel } from "../mindStylePanel";
 import {
@@ -23,7 +22,6 @@ import {
   useNewMindStyle,
 } from "../mindStyles";
 import { CheckLineIcon } from "./lineIcons";
-import { ProblemLine, ProblemMark } from "./ProblemLine";
 import { SearchPicker } from "./SearchPicker";
 import {
   menuClass,
@@ -288,17 +286,12 @@ function FontPicker({
 }) {
   const t = useT();
   const { font } = useMindStyle(mindId);
-  const [families, setFamilies] = useState<readonly string[] | "failed" | null>(null);
-  const load = useCallback(() => {
-    setFamilies(null);
-    installedFamilies().then(setFamilies, (error: unknown) => {
-      logCaught(error);
-      setFamilies("failed");
-    });
+  const [families, setFamilies] = useState<readonly string[] | null>(null);
+  useEffect(() => {
+    void installedFamilies().then(setFamilies);
   }, []);
-  useEffect(load, [load]);
 
-  const options = (families === "failed" || families === null ? [] : families).map((family) => ({
+  const options = (families ?? []).map((family) => ({
     id: family,
     label: family,
     labelStyle: { fontFamily: `${cssString(family)}, var(--font-system)` },
@@ -310,19 +303,11 @@ function FontPicker({
       title={t("mindStyle.font.pickerTitle")}
       searchLabel={t("mindStyle.font.search")}
       noMatch={(query) =>
-        families === "failed" ? (
-          <ProblemLine
-            action={{ label: t("mindStyle.font.retry"), onClick: load }}
-            testId="mind-style-fonts-failed"
-          >
-            <ProblemMark />
-            {t("mindStyle.font.failed")}
-          </ProblemLine>
-        ) : families === null ? (
-          t("mindStyle.font.loading")
-        ) : (
-          t("mindStyle.font.noMatch", { query })
-        )
+        families === null
+          ? t("mindStyle.font.loading")
+          : families.length === 0
+            ? t("mindStyle.font.none")
+            : t("mindStyle.font.noMatch", { query })
       }
       options={options}
       current={familyOf(font) ?? undefined}
