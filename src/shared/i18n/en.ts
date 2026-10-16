@@ -1611,6 +1611,7 @@ export const en = {
   "providers.kind.chatgpt": "ChatGPT plan",
 
   "providers.kind.claude-account": "Claude account",
+  "providers.kind.copilot": "GitHub Copilot plan",
   "providers.form.label": "Service",
   "providers.form.apiKey": "API key",
   "providers.form.apiKeyOptional": "API key (optional)",
@@ -1782,6 +1783,18 @@ export const en = {
   "claudeAccount.page.success.body": "You can close this tab and go back to IncarnaMind.",
   "claudeAccount.page.failure.title": "The Claude sign-in didn't work",
   "claudeAccount.page.failure.body": "Close this tab and try again in IncarnaMind.",
+  "copilot.wayBack.signIn": "Sign in with GitHub",
+  "copilot.problem.signInCancelled": "GitHub sign-in cancelled: nothing was kept",
+  "copilot.problem.signedOut": "You're not signed in to GitHub Copilot",
+  "copilot.problem.signInExpired": "Your GitHub sign-in has expired",
+  "copilot.problem.refused": "GitHub didn't let IncarnaMind use your Copilot plan",
+  "copilot.problem.noPlan": "Your GitHub account has no Copilot plan",
+  "copilot.problem.policyBlocked": "Your organization's GitHub policy doesn't allow Copilot here",
+  "copilot.problem.modelUnavailable": "GitHub Copilot doesn't offer this model to IncarnaMind",
+  "copilot.problem.planLimit": "Your Copilot plan's usage limit is reached",
+  "copilot.problem.planLimitUntil": "Your Copilot plan's usage limit is reached until {time}",
+  "copilot.problem.unexpectedResponse":
+    "GitHub Copilot answered in a way IncarnaMind didn't expect",
   "claudeAccount.problem.signInCancelled": "Claude sign-in cancelled: nothing was kept",
   "claudeAccount.problem.signedOut": "You're not signed in to Claude",
   "claudeAccount.problem.signInExpired": "Your Claude sign-in has expired",
@@ -1790,10 +1803,10 @@ export const en = {
   "claudeAccount.problem.planLimitUntil": "Your Claude plan's usage limit is reached until {time}",
   "claudeAccount.problem.unexpectedResponse": "Claude answered in a way IncarnaMind didn't expect",
   "claudeAccount.wayBack.signIn": "Sign in with Claude",
-  "claudeAccount.wayBack.signInAgain": "Sign in again",
-  "claudeAccount.wayBack.useAnotherModel": "Use another model",
-  "claudeAccount.wayBack.pasteApiKey": "Paste an API key instead",
-  "claudeAccount.wayBack.useClaudeCode": "Use Claude Code",
+  "signInRoute.wayBack.signInAgain": "Sign in again",
+  "signInRoute.wayBack.useAnotherModel": "Use another model",
+  "signInRoute.wayBack.pasteApiKey": "Paste an API key instead",
+  "signInRoute.wayBack.useClaudeCode": "Use Claude Code",
   "chatgpt.welcome.title": "You're using your ChatGPT plan",
   "chatgpt.welcome.body":
     "Questions you ask in IncarnaMind with a ChatGPT model now use your ChatGPT plan. You can see and limit this in ChatGPT's settings.",
@@ -2022,6 +2035,9 @@ export const en = {
   "privacy.traffic.claude-sign-in": "Sign in with Claude",
   "privacy.traffic.claude-sign-in.description":
     "When you sign in with your Claude account, IncarnaMind signs you in with Anthropic and renews the sign-in. Questions asked with your plan are the chat flow above.",
+  "privacy.traffic.copilot-sign-in": "Sign in with GitHub for Copilot",
+  "privacy.traffic.copilot-sign-in.description":
+    "When you sign in with GitHub for Copilot, IncarnaMind signs you in with GitHub, renews the sign-in and reads the models your plan offers. Questions asked with your plan are the chat flow above.",
   "privacy.traffic.remote-connectors": "Remote Connectors and their sign-in",
   "privacy.traffic.remote-connectors.description":
     "IncarnaMind connects to your remote Connectors' servers to list their Tools, and to the sign-in services they name to sign you in and renew the sign-in. What their Tools are sent is the Connectors flow above.",

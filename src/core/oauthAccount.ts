@@ -10,7 +10,9 @@ import type { PastedAddressProblem, PastedAddressResult } from "./api";
 import { isRecord, SecretStorageError } from "./errors";
 import {
   authorizeInBrowser,
+  authorizeWithDevice,
   type BrowserAuthorizationOptions,
+  type DeviceAuthorizationOptions,
   nonEmptyText,
   type OAuthPage,
   OAuthTokenError,
@@ -31,9 +33,10 @@ const REVOKE_RETRIES_MS = [250, 1000];
 /** Well under the shared refresh lock's staleness (a minute); giving up keeps the sign-in. */
 export const TOKEN_REQUEST_TIMEOUT_MS = 20_000;
 
-/** Refresh-token errors that mean the token can't be used again (RFC 6749, and OpenAI's own). */
+/** Refresh-token errors that mean the token can't be used again (RFC 6749, OpenAI's and GitHub's). */
 const UNUSABLE_REFRESH = new Set([
   "invalid_grant",
+  "bad_refresh_token",
   "invalid_refresh_token",
   "token_expired",
   "refresh_token_expired",
@@ -142,12 +145,19 @@ export interface OAuthCredentials {
   access(options?: { rejected?: string }): Promise<{ accessToken: string }>;
 }
 
-export type Authorize = (
-  request: Omit<
-    BrowserAuthorizationOptions,
-    "openBrowser" | "onWaiting" | "pages" | "timeoutMs" | "signal" | "fetch"
-  >,
-) => Promise<OAuthTokens>;
+export interface SignInFlows {
+  /** In the browser, coming back to a redirect (or a pasted one). */
+  browser(
+    request: Omit<
+      BrowserAuthorizationOptions,
+      "openBrowser" | "onWaiting" | "pages" | "timeoutMs" | "signal" | "fetch"
+    >,
+  ): Promise<OAuthTokens>;
+  /** With a code the User types on the provider's page (RFC 8628). */
+  device(
+    request: Omit<DeviceAuthorizationOptions, "openBrowser" | "signal" | "fetch">,
+  ): Promise<OAuthTokens>;
+}
 
 export function createOAuthAccount<A extends OAuthAccountRecord>(options: {
   secretName: string;
@@ -157,8 +167,9 @@ export function createOAuthAccount<A extends OAuthAccountRecord>(options: {
   parse(record: Record<string, unknown>): A | null;
   refreshLock?: RefreshLock;
   browser: Browser;
-  pages(): { success: OAuthPage; failure: OAuthPage };
-  signInTimeoutMs: number;
+  pages?(): { success: OAuthPage; failure: OAuthPage };
+  /** Defaults to five minutes. */
+  signInTimeoutMs?: number;
   /** Milliseconds since the epoch. */
   now(): number;
   renew(account: A, refreshToken: string, signal: AbortSignal): Promise<OAuthTokens>;
@@ -299,15 +310,15 @@ export function createOAuthAccount<A extends OAuthAccountRecord>(options: {
     signingIn: () => running !== null,
 
     /** Cancels a sign-in still waiting; rejects with `SecretStorageError` or what `attempt` throws. */
-    async signIn<T>(
-      attempt: (authorize: Authorize, signal: AbortSignal) => Promise<T>,
-    ): Promise<T> {
+    async signIn<T>(attempt: (flows: SignInFlows, signal: AbortSignal) => Promise<T>): Promise<T> {
       const storage = secrets.status();
       // Check before the User signs in, not after: the tokens would have nowhere to go.
       if (!storage.canSave) throw new SecretStorageError(storage.protection);
       await cancelSignIn();
       const controller = new AbortController();
-      const authorize: Authorize = async (request) => {
+      const browser: SignInFlows["browser"] = async (request) => {
+        const pages = options.pages?.();
+        if (!pages) throw new Error("This sign-in has no browser flow.");
         let paste: SignInRedirect["paste"] | null = null;
         try {
           return await authorizeInBrowser({
@@ -320,8 +331,8 @@ export function createOAuthAccount<A extends OAuthAccountRecord>(options: {
               paste = waiting;
               pasteRedirect = waiting;
             },
-            pages: options.pages(),
-            timeoutMs: options.signInTimeoutMs,
+            pages,
+            ...(options.signInTimeoutMs !== undefined && { timeoutMs: options.signInTimeoutMs }),
             signal: controller.signal,
             ...(options.fetch && { fetch: options.fetch }),
           });
@@ -329,10 +340,20 @@ export function createOAuthAccount<A extends OAuthAccountRecord>(options: {
           if (pasteRedirect === paste) pasteRedirect = null;
         }
       };
+      const device: SignInFlows["device"] = (request) =>
+        authorizeWithDevice({
+          ...request,
+          openBrowser: (url) => {
+            if (running?.controller === controller) running.pageUrl = url;
+            return options.browser.open(url);
+          },
+          signal: controller.signal,
+          ...(options.fetch && { fetch: options.fetch }),
+        });
       // Registered before the attempt starts, which may open the browser before its first await.
       const entry: NonNullable<typeof running> = { controller, done: Promise.resolve() };
       running = entry;
-      const done = attempt(authorize, controller.signal);
+      const done = attempt({ browser, device }, controller.signal);
       entry.done = done;
       onChange();
       try {
