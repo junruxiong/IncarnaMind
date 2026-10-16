@@ -106,9 +106,13 @@ export function recordFor(
   return { record, shared: best, quoted };
 }
 
-/** A Question that asks for forty Citations: the first Passage's record, numbered 1 to 40. */
+/** Questions that ask for many Citations: forty, one to a sentence, or twelve in a row after one sentence. */
 export const FORTY_CITATIONS = /\bforty citations\b|四十条引用/i;
-export const FORTY_CITATIONS_COUNT = 40;
+export const TWELVE_IN_A_ROW = /\btwelve in a row\b|连续十二条/i;
+
+/** How many Citations the Question asks for, or 0. */
+export const citationsAsked = (question: string) =>
+  FORTY_CITATIONS.test(question) ? 40 : TWELVE_IN_A_ROW.test(question) ? 12 : 0;
 
 /**
  * The records for a search result: for the first Passage, or with "each" in
@@ -117,9 +121,10 @@ export const FORTY_CITATIONS_COUNT = 40;
  */
 export function recordsFor(result: string, question: string): Record<string, unknown>[] {
   const passages = passagesIn(result);
-  if (FORTY_CITATIONS.test(question)) {
+  const asked = citationsAsked(question);
+  if (asked > 0) {
     const first = passages[0];
-    return Array.from({ length: FORTY_CITATIONS_COUNT }, (_, index) =>
+    return Array.from({ length: asked }, (_, index) =>
       first ? (recordFor(first, question, index + 1)?.record ?? null) : null,
     ).filter((record) => record !== null);
   }

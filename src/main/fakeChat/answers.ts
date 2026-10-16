@@ -16,7 +16,8 @@
  * "in millions" each figure as "$289.4 million"; one that asks for "four columns" gets a
  * table of four, wider than the assistant (#612); one that asks for "nine rows" (九行) gets
  * three peers' figures in nine rows, with the first column's labels; one that asks for "forty
- * citations" (四十条引用) gets forty sentences, each with a marker; one with "cited below" (or 引用在下) gets a
+ * citations" (四十条引用) gets forty sentences, each with a marker, and one that asks for "twelve in a
+ * row" (连续十二条) gets one sentence with twelve markers side by side; one with "cited below" (or 引用在下) gets a
  * table whose one Citation stands in a paragraph under it, and one with "framed" (or 带说明)
  * gets a lead-in before its content and a closing note after it (#702).
  * One that asks how much something grew (增长) has the growth from the first
@@ -31,13 +32,7 @@
  */
 
 import { cellReply, isCell } from "./cells";
-import {
-  FORTY_CITATIONS,
-  FORTY_CITATIONS_COUNT,
-  passagesIn,
-  recordFor,
-  recordsFor,
-} from "./passages";
+import { FORTY_CITATIONS, passagesIn, recordFor, recordsFor, TWELVE_IN_A_ROW } from "./passages";
 import {
   lastQuestion,
   type Prompt,
@@ -155,7 +150,7 @@ function nineRowsAnswer(question: string, marker: string): string {
 /** The scripted Answer to a Question that asks for forty Citations: a sentence for each, in paragraphs of eight. */
 function fortyCitationsAnswer(question: string): string {
   const chinese = /\p{Script=Han}/u.test(question);
-  const sentences = Array.from({ length: FORTY_CITATIONS_COUNT }, (_, index) =>
+  const sentences = Array.from({ length: 40 }, (_, index) =>
     chinese
       ? `第${index + 1}条说明潮水每天涨落两次，月亮的位置决定了涨落的时间[^${index + 1}]。`
       : `Statement ${index + 1} says the tide rises and falls twice a day, at hours that follow the moon [^${index + 1}].`,
@@ -165,6 +160,14 @@ function fortyCitationsAnswer(question: string): string {
     paragraphs.push(sentences.slice(at, at + 8).join(chinese ? "" : " "));
   return paragraphs.join("\n\n");
 }
+
+/** The scripted Answer to a Question that asks for twelve Citations in a row: one sentence, its markers side by side. */
+const twelveInARowAnswer = (question: string) => {
+  const markers = Array.from({ length: 12 }, (_, index) => `[^${index + 1}]`).join("");
+  return /\p{Script=Han}/u.test(question)
+    ? `潮水每天涨落两次${markers}。`
+    : `The tide rises and falls twice a day ${markers}.`;
+};
 
 /** A Question whose table is cited under it, and one that is framed by a lead-in and a closing note (#702). */
 const CITED_BELOW = /\bcited below\b|引用在下/i;
@@ -335,12 +338,14 @@ export function answerReply(prompt: Prompt, tools: readonly string[]): Reply {
           ? nineRowsAnswer(question, recorded[0] ?? "")
           : FORTY_CITATIONS.test(question)
             ? fortyCitationsAnswer(question)
-            : CITED_BELOW.test(question) || FRAMED.test(question)
-              ? citedBelowAnswer(question, recorded[0] ?? "")
-              : AS_A_TABLE.test(question)
-                ? tableAnswer(recorded.join(" "))
-                : recorded.length > 1
-                  ? `Your Documents answer this ${recorded.join(" ")}.\n\nThat is all.`
-                  : CITED_ANSWER;
+            : TWELVE_IN_A_ROW.test(question)
+              ? twelveInARowAnswer(question)
+              : CITED_BELOW.test(question) || FRAMED.test(question)
+                ? citedBelowAnswer(question, recorded[0] ?? "")
+                : AS_A_TABLE.test(question)
+                  ? tableAnswer(recorded.join(" "))
+                  : recorded.length > 1
+                    ? `Your Documents answer this ${recorded.join(" ")}.\n\nThat is all.`
+                    : CITED_ANSWER;
   return { text: skill ? `Following the Skill ${skill}.\n\n${answer}` : answer };
 }
