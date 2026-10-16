@@ -50,50 +50,78 @@ export function formatResetTime(iso: string, language: Language, now = new Date(
   return formatDateTime(iso, language, { now });
 }
 
-/** The line a run stopped at the cap or a plan's limit shows: "Plan limit reached · Try again after 14:30". */
-export function runStopText(
+export function runStopParts(
   stop: RunStop,
   t: Translate,
   language: Language,
   now = new Date(),
-): string {
-  if (stop.reason === "cost-cap") return t("run.stopped.cost-cap");
+): string[] {
+  if (stop.reason === "cost-cap") return [t("run.stopped.cost-cap")];
   const line = t("run.stopped.plan-limit");
   return stop.resetsAt
-    ? `${line} · ${t("run.stopped.tryAfter", { time: formatResetTime(stop.resetsAt, language, now) })}`
-    : line;
+    ? [line, t("run.stopped.tryAfter", { time: formatResetTime(stop.resetsAt, language, now) })]
+    : [line];
 }
+
+/** For a place that doesn't wrap: "Plan limit reached · Try again after 14:30". */
+export const runStopText = (
+  stop: RunStop,
+  t: Translate,
+  language: Language,
+  now = new Date(),
+): string => joinMeta(runStopParts(stop, t, language, now));
 
 /** What each unfinished item of a stopped run says: "not checked: cost cap". */
 export const notCheckedKey = (stop: RunStop): MessageKey =>
   stop.reason === "cost-cap" ? "run.notChecked.cost-cap" : "run.notChecked.plan-limit";
 
+/** Parts of a meta line on one line, joined by middle dots; `MetaLine` is for lines that can wrap. */
+export const joinMeta = (parts: readonly string[]): string => parts.filter(Boolean).join(" · ");
+
+export interface EstimateLine {
+  parts: string[];
+  title: string;
+}
+
 /**
  * The line before a large run on a model billed per token, shown and never
- * asked: "About 24 calls, 310K tokens, $0.40 · $12.40 of $20 used this month".
- * Null for a plan or a model on this computer, which show nothing.
+ * asked: "About $0.40 · 24 model calls · $12.40 of $20.00 used this month",
+ * with the tokens in its tooltip (price first, as DESIGN.md's plan card writes
+ * it). With no known price: "About 24 model calls · 310K tokens". Null for a
+ * plan or a model on this computer, which show nothing.
  */
-export function estimateText(
+export function estimateLine(
   estimate: RunEstimate,
   t: Translate,
   language: Language,
-): string | null {
+): EstimateLine | null {
   if (estimate.billing !== "per-token") return null;
-  const tokens = new Intl.NumberFormat(language, { notation: "compact" }).format(estimate.tokens);
-  const run = estimate.cost
-    ? t("cost.estimate", {
-        calls: estimate.calls,
-        tokens,
-        cost: formatMoney(estimate.cost, language),
-      })
-    : t("cost.estimate.unpriced", { calls: estimate.calls, tokens });
-  if (!estimate.cap || !estimate.spentTowardCap) return run;
-  const month = t("cost.estimate.month", {
-    spent: formatMoney(estimate.spentTowardCap, language),
-    cap: formatMoney(estimate.cap, language),
+  const tokens = t("cost.estimate.tokens", {
+    tokens: new Intl.NumberFormat(language, { notation: "compact" }).format(estimate.tokens),
   });
+  const { calls } = estimate;
   const aside = estimate.setAsideTowardCap
     ? setAsideText([estimate.setAsideTowardCap], t, language)
     : null;
-  return [run, month, aside].filter(Boolean).join(" · ");
+  const month =
+    estimate.cap && estimate.spentTowardCap
+      ? [
+          t("cost.estimate.month", {
+            spent: formatMoney(estimate.spentTowardCap, language),
+            cap: formatMoney(estimate.cap, language),
+          }),
+          ...(aside ? [aside] : []),
+        ]
+      : [];
+  const run = estimate.cost
+    ? [
+        t("cost.estimate.price", { cost: formatMoney(estimate.cost, language) }),
+        t(calls === 1 ? "cost.estimate.calls.one" : "cost.estimate.calls", { calls }),
+      ]
+    : [
+        t(calls === 1 ? "cost.estimate.callsAbout.one" : "cost.estimate.callsAbout", { calls }),
+        tokens,
+      ];
+  const parts = [...run, ...month];
+  return { parts, title: joinMeta(estimate.cost ? [...run, tokens, ...month] : parts) };
 }
