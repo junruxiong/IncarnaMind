@@ -6,6 +6,7 @@ import { buildPdf } from "../tests/helpers/pdf";
 import {
   acceptPlainTextKeys,
   addDocuments,
+  checkCard,
   createDataFolder,
   dismissChatSetup,
   launchApp,
@@ -32,7 +33,9 @@ import {
 
 const SCREENSHOTS = process.env.INCARNAMIND_SCREENSHOTS;
 const screenshot = async (window: Page, name: string) => {
-  if (SCREENSHOTS) await window.screenshot({ path: join(SCREENSHOTS, `${name}.png`) });
+  if (!SCREENSHOTS) return;
+  await motionSettled(window);
+  await window.screenshot({ path: join(SCREENSHOTS, `${name}.png`) });
 };
 
 const TIDES = buildPdf([
@@ -129,17 +132,17 @@ test("Check this Mind from ⌘K: the estimate first on a cloud model, then every
   const item = window.getByTestId("palette-item").filter({ hasText: "Check this Mind" }).first();
   await pointAndClick(window, item);
 
-  // The model names the claims first; the line then asks with their number and the estimate,
-  // its price first. Of the 20 sentences, the 15 claims are what it checks.
-  const ask = window.getByTestId("mind-check-ask");
+  // The model names the claims first; the badge's card then opens by itself and asks with their
+  // number and the estimate, its price first. Of the 20 sentences, the 15 claims are what it checks.
+  const ask = window.getByTestId("check-card").getByTestId("mind-check-ask");
   await expect(ask).toContainText("Check this Mind’s 15 claims against your Documents?");
   await expect(ask).toContainText("About $");
   await expect(window.getByTestId("palette-search")).toBeHidden();
-  await motionSettled(window);
+  await checkCard(window);
   await screenshot(window, "mind-check-ask-en");
   await pointAndClick(window, ask.getByTestId("mind-check-check"));
 
-  const health = window.getByTestId("mind-health");
+  const health = window.getByTestId("check-card");
   await expect(health.getByTestId("health-checked-all")).toContainText("Checked 15 sentences, ");
   await expect(marks(window)).toHaveCount(15);
   await expect(marks(window).and(window.locator('[data-check="checking"]'))).toHaveCount(0);
@@ -147,6 +150,7 @@ test("Check this Mind from ⌘K: the estimate first on a cloud model, then every
   await expect(marks(window).and(window.locator('[data-check="supported"]'))).toHaveCount(3);
   // Nothing changed since: nothing to check again.
   await expect(health.getByTestId("health-check")).toHaveCount(0);
+  await expect(window.getByTestId("check-badge")).toContainText("1");
   await screenshot(window, "mind-check-done-en");
 
   // An edited claim needs a re-check, and Check again checks it alone.
@@ -155,7 +159,7 @@ test("Check this Mind from ⌘K: the estimate first on a cloud model, then every
   await slideSelect(window, first, "Penguins");
   await window.keyboard.type("Puffins");
   await expect(marks(window).and(window.locator('[data-check="needs-recheck"]'))).toHaveCount(1);
-  const again = health.getByTestId("health-check");
+  const again = (await checkCard(window)).getByTestId("health-check");
   await expect(again).toHaveText("Check again");
   await pointAndClick(window, again);
   await expect(marks(window).and(window.locator('[data-check="needs-recheck"]'))).toHaveCount(0);
@@ -191,29 +195,30 @@ test("In Chinese and a narrow window, from the Mind's tab menu: a model on this 
 
   await window.getByTestId("mind-tab").first().click({ button: "right" });
   await pointAndClick(window, window.getByRole("menuitem", { name: "核对整个 Mind" }));
-  // On this computer it asks too, with the claims the model named and no price.
-  const ask = window.getByTestId("mind-check-ask");
+  // On this computer it asks too, in the badge's card, with the claims the model named and no price.
+  const health = window.getByTestId("check-card");
+  const ask = health.getByTestId("mind-check-ask");
   await expect(ask).toContainText("要对照这个文件夹中的文档，核对这个 Mind 中的 15 条说法吗？");
   await expect(ask).not.toContainText("约");
+  await checkCard(window);
   await pointAndClick(window, ask.getByTestId("mind-check-check"));
-  const health = window.getByTestId("mind-health");
   await expect(health.getByTestId("health-checked-all")).toContainText("已核对 15 句，");
   await expect(marks(window).and(window.locator('[data-check="unsupported"]'))).toHaveCount(15);
 
   // Nothing in the Folder says any of it: checked against every Document, the Tides PDF does.
-  const widen = window.getByTestId("checks-uncovered").getByTestId("checks-check-all");
+  const widen = health.getByTestId("checks-uncovered").getByTestId("checks-check-all");
   await expect(widen).toHaveText("对照全部文档核对");
   await pointAndClick(window, widen);
   // The claims aren't sorted again: the ask comes at once.
   await expect(ask).toContainText("要对照你的文档，核对这个 Mind 中的 15 条说法吗？");
   await pointAndClick(window, ask.getByTestId("mind-check-check"));
-  await expect(window.getByTestId("checks-running")).toHaveCount(0);
+  await expect(window.getByTestId("badge-stop")).toHaveCount(0);
   await expect(health.getByTestId("health-checked-all")).toBeVisible();
   await expect(marks(window).and(window.locator('[data-check="supported"]'))).toHaveCount(3);
   await expect(marks(window).and(window.locator('[data-check="contradicted"]'))).toHaveCount(1);
   await expect(widen).toHaveCount(0);
   await expect(marks(window)).toHaveCount(15);
-  await expect(health.getByTestId("health-unsupported")).toHaveText("11 句无依据");
+  await expect(health.getByTestId("health-unsupported")).toContainText("11 句无依据");
   await screenshot(window, "mind-check-done-zh-narrow");
 
   // A sentence written since: "全部核对" checks it, and the rest stay as they were.
@@ -225,7 +230,7 @@ test("In Chinese and a narrow window, from the Mind's tab menu: a model on this 
   await last.click({ position: { x: box.width - 2, y: box.height - 4 } });
   await window.keyboard.type(" The harbour office opens at nine in the morning.");
   await expect(last).toContainText("worth building. The harbour office opens");
-  const all = health.getByTestId("health-check");
+  const all = (await checkCard(window)).getByTestId("health-check");
   await expect(all).toHaveText("全部核对");
   await pointAndClick(window, all);
   await expect(ask).toContainText("要对照这个文件夹中的文档，核对这个 Mind 中的这条说法吗？");
@@ -246,11 +251,13 @@ test("when the provider can't be reached while the claims are named, Try again n
 
   await window.getByTestId("mind-tab").first().click({ button: "right" });
   await pointAndClick(window, window.getByRole("menuitem", { name: "Check this Mind" }));
-  const failure = window.getByTestId("answer-error");
+  // The failure opens the badge's card to say why, with Try again.
+  const failure = window.getByTestId("check-card").getByTestId("answer-error");
   await expect(failure).toHaveAttribute("data-error-kind", "network");
+  await checkCard(window);
   await pointAndClick(window, failure.getByTestId("answer-error-action"));
 
-  const ask = window.getByTestId("mind-check-ask");
+  const ask = window.getByTestId("check-card").getByTestId("mind-check-ask");
   await expect(ask).toContainText("Check this Mind’s 15 claims against your Documents?");
   await expect(marks(window)).toHaveCount(0);
   await pointAndClick(window, ask.getByTestId("mind-check-check"));

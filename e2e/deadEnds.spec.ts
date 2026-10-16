@@ -5,6 +5,7 @@ import type { CoreBridge } from "../src/core/api";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   addDocuments,
+  checkCard,
   createDataFolder,
   dismissChatSetup,
   interceptOpenDialog,
@@ -134,7 +135,8 @@ test("a Mind in an empty Folder checks nothing: its line offers Add files… and
     window,
     window.getByTestId("selection-menu").getByTestId("selection-action-check-against-documents"),
   );
-  const problem = window.getByTestId("checks-problem");
+  // A check the User started that can't run opens the badge's card to say why.
+  const problem = window.getByTestId("check-card").getByTestId("checks-problem");
   await expect(problem).toContainText("Nothing to check against");
   await expect(problem.getByTestId("checks-add-files")).toHaveText("Add files…");
   await expect(problem.getByTestId("checks-problem-close")).toBeVisible();
@@ -161,9 +163,11 @@ test("most sentences unsupported says so once; an unsupported card offers its th
   );
   const marks = window.getByTestId("claim-mark");
   await expect(marks).toHaveCount(2);
-  const covered = window.getByTestId("checks-uncovered");
+  const covered = (await checkCard(window)).getByTestId("checks-uncovered");
   await expect(covered).toContainText("Your Documents don't cover most of this");
   await expect(covered.getByTestId("checks-add-files")).toHaveText("Add files…");
+  await window.keyboard.press("Escape");
+  await expect(window.getByTestId("check-card")).toHaveCount(0);
 
   await pointAndClick(window, marks.first());
   const card = window.getByTestId("claim-card");

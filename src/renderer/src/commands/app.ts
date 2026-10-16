@@ -1,5 +1,6 @@
 import type { BlockOrigin } from "../../../core/api";
 import { signInAgain } from "../chatGptSignIn";
+import { setCheckCardOpen } from "../checks";
 import { useCitationStylePicker } from "../citationStylePicker";
 import { startContradictionCheck } from "../contradictions";
 import { blockMenuOpeners } from "../editor/blockMenuOpeners";
@@ -8,6 +9,7 @@ import { blockAt, noteHolding } from "../editor/noteKeymap";
 import { openOrigin } from "../editor/originActions";
 import { useFindSources } from "../findSources";
 import { useHistory } from "../history";
+import { frontTabOfMind, groupsMerged } from "../layoutSlice";
 import { startSkillFromMind } from "../makeSkill";
 import { startMindCheck } from "../mindCheck";
 import { useMindTools } from "../mindTools";
@@ -223,6 +225,22 @@ const appCommands: readonly Command[] = [
     run: (ctx) => {
       const mindId = mindShown(ctx);
       if (mindId) return startMindCheck(mindId, "all");
+    },
+  },
+  {
+    id: "mind.checks",
+    label: "health.label",
+    keywords: ["badge.command.keywords"],
+    group: "main",
+    // Opening the card changes nothing.
+    reversible: true,
+    when: (ctx) => onlyOne(ctx) && mindShown(ctx) !== null,
+    run: async (ctx) => {
+      const mindId = mindShown(ctx);
+      if (!mindId) return;
+      await useAppStore.getState().openMind(mindId);
+      const tab = frontTabOfMind(useAppStore.getState().layout, mindId, groupsMerged());
+      setCheckCardOpen(tab?.id ?? mindId, true);
     },
   },
   {

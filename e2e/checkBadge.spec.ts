@@ -1,0 +1,224 @@
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { expect, type Page, test } from "@playwright/test";
+import type { Editor } from "@tiptap/core";
+import { buildPdf } from "../tests/helpers/pdf";
+import {
+  addDocuments,
+  checkCard,
+  useLocalChatModel as connectLocalChatModel,
+  createDataFolder,
+  dismissChatSetup,
+  launchApp,
+  motionSettled,
+  newMind,
+  pointAndClick,
+  removeDataFolder,
+  setLanguage,
+  setWindowSize,
+} from "./app";
+
+/*
+ * The check badge (#909): at a Mind's bottom right, the margin marks' counts
+ * and the claims no check has looked at; nothing on a Mind with nothing to
+ * check. Its card opens from it, and from ⌘K. The scripted model
+ * (src/main/fakeChat/checks.ts) finds a sentence supported when it shares
+ * three words with a line of a Document, and otherwise unsupported. Set
+ * INCARNAMIND_SCREENSHOTS to a folder to also save screenshots.
+ */
+
+const SCREENSHOTS = process.env.INCARNAMIND_SCREENSHOTS;
+const screenshot = async (window: Page, name: string) => {
+  if (!SCREENSHOTS) return;
+  await motionSettled(window);
+  await window.screenshot({ path: join(SCREENSHOTS, `${name}.png`) });
+};
+
+const TIDES = buildPdf([
+  { lines: ["Spring and neap tides", "Spring tides happen at new moon and at full moon."] },
+]);
+const SUPPORTED = "Spring tides happen at new and full moon.";
+const UNSUPPORTED = "Penguins nest on the harbour cliffs.";
+
+let dataDir: string;
+let sources: string;
+test.beforeEach(async () => {
+  dataDir = await createDataFolder();
+  sources = await createDataFolder();
+});
+test.afterEach(async () => {
+  await removeDataFolder(dataDir);
+  await removeDataFolder(sources);
+});
+
+async function launchWithTides() {
+  await writeFile(join(sources, "Tides.pdf"), TIDES);
+  const running = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(running.window);
+  await connectLocalChatModel(running.window);
+  await addDocuments(running.window, [join(sources, "Tides.pdf")]);
+  return running;
+}
+
+test("a Mind with nothing to check is bare; a claim no check has looked at shows the badge, whose card checks it, says so until you type, and closes with Esc", async () => {
+  const { app, window } = await launchWithTides();
+  await setWindowSize(app, window, 1440, 900);
+  await newMind(window);
+  const editor = window.getByTestId("mind-editor");
+  await editor.click();
+  await window.keyboard.type("Thanks!");
+  const badge = window.getByTestId("check-badge");
+  const open = window.getByTestId("check-badge-open");
+  await expect(editor).toContainText("Thanks!");
+  await expect(badge).toHaveCount(0);
+
+  await window.keyboard.type(` ${SUPPORTED}`);
+  await expect(open).toHaveAccessibleName("Sentences and Citations: 1 claim not checked yet");
+  await expect(badge).toContainText("to check");
+  // It sits at the page's bottom right, over the text, never past the Mind's pane.
+  const pane = await window.getByTestId("mind-pane").boundingBox();
+  const box = await badge.boundingBox();
+  if (!pane || !box) throw new Error("The badge isn't drawn.");
+  expect(box.x + box.width).toBeLessThanOrEqual(pane.x + pane.width + 1);
+  await screenshot(window, "check-badge-to-check-en");
+
+  const card = await checkCard(window);
+  await expect(card.getByTestId("health-unchecked")).toContainText("1 claim not checked yet");
+  await screenshot(window, "check-badge-card-en");
+  // At 1,100 px the badge keeps its words, and the card stays over the Mind's page.
+  await setWindowSize(app, window, 1100, 720);
+  await expect(badge.locator(".check-badge-words")).toBeVisible();
+  await expect(card).toBeVisible();
+  const narrowPane = await window.locator(".mind-scroller").first().boundingBox();
+  const cardBox = await card.boundingBox();
+  if (!narrowPane || !cardBox) throw new Error("The card isn't drawn.");
+  expect(cardBox.x + cardBox.width).toBeLessThanOrEqual(narrowPane.x + narrowPane.width + 1);
+  await screenshot(window, "check-badge-card-en-1100");
+  await setWindowSize(app, window, 1440, 900);
+  await pointAndClick(window, card.getByTestId("health-check"));
+  // The model names the claims, and the card asks before it checks them.
+  await pointAndClick(window, card.getByTestId("mind-check-ask").getByTestId("mind-check-check"));
+  // A check the User started: the badge says what it checked, until they type.
+  await expect(window.getByTestId("claim-mark")).toHaveAttribute("data-check", "supported");
+  await expect(badge).toContainText("1 checked");
+  await window.keyboard.press("Escape");
+  await expect(card).toHaveCount(0);
+  await editor.click();
+  await window.keyboard.press("End");
+  await window.keyboard.type(" More.");
+  await expect(badge).toHaveCount(0);
+
+  // ⌘K reaches the card while the badge is hidden; Esc from inside it puts the focus back.
+  await window.keyboard.press("ControlOrMeta+k");
+  await window.keyboard.type("Sentences and Citations");
+  await pointAndClick(
+    window,
+    window.getByTestId("palette-item").filter({ hasText: "Sentences and Citations" }).first(),
+  );
+  await expect(card).toBeVisible();
+  await expect(card.getByTestId("health-found")).toHaveCount(0);
+  await expect(card.getByTestId("badge-check-mind")).toBeVisible();
+  await window.keyboard.press("Escape");
+  await expect(card).toHaveCount(0);
+  await app.close();
+});
+
+test("in Chinese and a narrow pane the badge shows only its marks and numbers; Tab reaches its card and Esc brings the focus back", async () => {
+  const { app, window } = await launchWithTides();
+  await setLanguage(window, "zh-CN");
+  await setWindowSize(app, window, 1440, 900);
+  await newMind(window);
+  const editor = window.getByTestId("mind-editor");
+  await editor.click();
+  await window.keyboard.type(`${SUPPORTED} ${UNSUPPORTED}`);
+  const open = window.getByTestId("check-badge-open");
+  await expect(open).toHaveAccessibleName("句子和引用：2 句待核对");
+  const words = window.getByTestId("check-badge").locator(".check-badge-words");
+  await expect(words).toHaveText("句待核对");
+  await expect(words).toBeVisible();
+  await setWindowSize(app, window, 1100, 720);
+  await expect(words).toBeVisible();
+  await setWindowSize(app, window, 1440, 900);
+  // The Mind beside itself in a narrower window: each page under 400 px keeps the numbers, not the words.
+  await pointAndClick(window, window.getByTestId("split-group"));
+  const pages = window.locator(".mind-scroller:visible");
+  await expect(pages).toHaveCount(2);
+  await setWindowSize(app, window, 1340, 900);
+  for (const width of await pages.evaluateAll((all) => all.map((page) => page.clientWidth))) {
+    expect(width).toBeLessThan(400);
+  }
+  await expect(words).toHaveCount(2);
+  for (const each of await words.all()) await expect(each).toBeHidden();
+  await expect(window.getByTestId("check-badge").first()).toContainText("2");
+  await screenshot(window, "check-badge-zh-narrow");
+
+  await open.first().focus();
+  await window.keyboard.press("Enter");
+  // Only the badge's own pane opens its card.
+  const card = window.getByTestId("check-card");
+  await expect(card).toHaveCount(1);
+  await expect(card).toBeVisible();
+  await motionSettled(window);
+  await window.keyboard.press("Tab");
+  await expect(card.locator(":focus")).toHaveCount(1);
+  // ↓ and ↑ go through its rows and buttons, round to the first.
+  const focusedId = () =>
+    card.evaluate((element) => element.querySelector(":focus")?.getAttribute("data-testid") ?? "");
+  const first = await focusedId();
+  await window.keyboard.press("ArrowDown");
+  await expect.poll(focusedId).not.toBe(first);
+  await window.keyboard.press("ArrowUp");
+  await expect.poll(focusedId).toBe(first);
+  await window.keyboard.press("Escape");
+  await expect(card).toHaveCount(0);
+  await expect(open.first()).toBeFocused();
+  await app.close();
+});
+
+/** Where the editor's cursor is, as an offset in the text of its first paragraph. */
+const cursorAt = (window: Page) =>
+  window.getByTestId("mind-editor").evaluate((element) => {
+    const view = (element as Element & { editor?: Editor }).editor?.view;
+    if (!view) return -1;
+    return view.state.selection.from - 1;
+  });
+
+test("each row's Next goes through its sentences in order and round to the first; a running check says how far it has got, and Stop stops it", async () => {
+  const { app, window } = await launchWithTides();
+  await setWindowSize(app, window, 1440, 900);
+  await newMind(window);
+  const editor = window.getByTestId("mind-editor");
+  await editor.click();
+  const first = "Penguins nest on the harbour cliffs.";
+  await window.keyboard.type(`${first} Whales sing in the deep bay.`);
+  const card = await checkCard(window);
+  await pointAndClick(window, card.getByTestId("health-check"));
+  await pointAndClick(window, card.getByTestId("mind-check-ask").getByTestId("mind-check-check"));
+  const marks = window.getByTestId("claim-mark");
+  await expect(marks.and(window.locator('[data-check="unsupported"]'))).toHaveCount(2);
+  const unsupported = (await checkCard(window)).getByTestId("health-unsupported");
+  await expect(unsupported).toContainText("2 unsupported");
+  await pointAndClick(window, unsupported);
+  await expect.poll(() => cursorAt(window)).toBe(0);
+  await pointAndClick(window, unsupported);
+  await expect.poll(() => cursorAt(window)).toBe(first.length + 1);
+  await pointAndClick(window, unsupported);
+  await expect.poll(() => cursorAt(window)).toBe(0);
+  await window.keyboard.press("Escape");
+
+  // A sentence the scripted model checks slowly: the badge counts, and Stop ends the run.
+  await editor.click();
+  await window.keyboard.press("End");
+  await window.keyboard.type(" Seals sleep on the rocks slowly. Gulls circle the pier slowly.");
+  const again = await checkCard(window);
+  await pointAndClick(window, again.getByTestId("health-check"));
+  await pointAndClick(window, again.getByTestId("mind-check-ask").getByTestId("mind-check-check"));
+  const stop = window.getByTestId("badge-stop");
+  await expect(stop).toBeVisible();
+  await expect(window.getByTestId("badge-progress")).toContainText("Checking");
+  await screenshot(window, "check-badge-running-en");
+  await pointAndClick(window, stop);
+  await expect(stop).toHaveCount(0);
+  await expect(marks.and(window.locator('[data-check="checking"]'))).toHaveCount(0);
+  await app.close();
+});
