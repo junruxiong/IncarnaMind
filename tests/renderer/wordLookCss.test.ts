@@ -50,23 +50,42 @@ describe("the Word look's stylesheet", () => {
     expect(decorationsIn(editor.state)).toBe(0);
   });
 
+  test("zooms the content to fit a frame narrower than the file's text width, down to 80%; the frame keeps the whole width", async () => {
+    const { mindId, look } = await importedLook(longContract(2));
+    const scope = `.${wordLookScope(mindId)}`;
+    const rules = rulesOf(wordLookCss(mindId, look));
+    expect(rules).toContain(`${scope} { max-width: calc(var(--word-pt) * ${look.width}); }`);
+    expect(rules).toContain(
+      `${scope} .mind-editor { --word-pt: clamp(calc(var(--word-unit) * 0.8), calc(100cqw / ${look.width}), var(--word-unit)); }`,
+    );
+    expect(rulesOf(wordLookCss(mindId, { ...look, width: null })).join("\n")).not.toContain("cqw");
+  });
+
   test("a look another device wrote can't reach outside its rule", () => {
     const doc = new Y.Doc();
     const map = doc.getMap(MIND_WORD_LOOK_FIELD);
     map.set("runs", {
       r1: { font: 'Evil"; } body { display: none; } x { font-family: "', color: "red; }" },
       "r2] , body [x": { bold: true },
+      ...JSON.parse('{"__proto__": { "font": "Polluted" }}'),
     });
-    map.set("paragraphs", { p1: { align: "center; } body { display: none", left: "1px" } });
+    map.set("paragraphs", {
+      p1: { align: "center; } body { display: none", left: "1px" },
+      p2: { run: "constructor" },
+    });
     map.set("body", 12);
     map.set("width", null);
     map.set("version", 1);
     const look = wordLookOf(doc);
     if (!look) throw new Error("No look.");
     expect(look.runs).toEqual({ r1: {} });
-    expect(look.paragraphs).toEqual({ p1: {} });
+    expect(Object.getPrototypeOf(look.runs)).toBe(Object.prototype);
+    expect(look.paragraphs).toEqual({ p1: {}, p2: { run: "constructor" } });
     const css = wordLookCss("mind", look);
     expect(css).not.toContain("display");
+    expect(css).not.toContain("Polluted");
+    // A run key that names no run of this look, only an object's own property, draws no run.
+    expect(rulesOf(css).find((rule) => rule.includes('"p2"'))).not.toContain("text-transform");
     expect(css.split("{").length).toBe(css.split("}").length);
     expect(css.split("{").length - 1).toBe(rulesOf(css).length);
   });
