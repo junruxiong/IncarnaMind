@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, type Locator, test } from "@playwright/test";
 import {
   acceptPlainTextKeys,
   createDataFolder,
@@ -15,6 +15,10 @@ import {
  * Presets: a hosted service that speaks OpenAI's API is one chip under More…, with its own name
  * and key page, and until its model passes the citing evaluation it says so.
  */
+
+/** The provider chips are labels around visually hidden radios. */
+const pickProvider = (form: Locator, name: string) =>
+  form.getByRole("radio", { name, exact: true }).locator("xpath=..").click();
 
 let dataDir: string;
 test.beforeEach(async () => {
@@ -38,8 +42,7 @@ test("each preset is a chip under More…; Groq's has its key page and its model
     for (const name of ["Groq", "Together AI", "Fireworks AI", "Cerebras", "Cohere", "Venice"]) {
       await expect(form.getByRole("radio", { name, exact: true })).toHaveCount(1);
     }
-    // The provider chips are labels around visually hidden radios.
-    await form.getByRole("radio", { name: "Groq", exact: true }).locator("xpath=..").click();
+    await pickProvider(form, "Groq");
     await expect(form.getByRole("radio", { name: "Groq", exact: true })).toBeChecked();
     await expect(form.getByTestId("provider-model")).toHaveValue("openai/gpt-oss-120b");
     const reason = form.getByTestId("provider-model-reason");
@@ -96,10 +99,7 @@ test("Amazon Bedrock asks for its region from a list, and Cloudflare for its acc
     await settings.getByTestId("chat-choice-api-key").check();
     const form = settings.getByTestId("provider-form");
     await form.getByTestId("provider-more-toggle").click();
-    const pick = (name: string) =>
-      form.getByRole("radio", { name, exact: true }).locator("xpath=..").click();
-
-    await pick("Amazon Bedrock");
+    await pickProvider(form, "Amazon Bedrock");
     const region = form.getByRole("combobox", { name: /^Region/ });
     await expect(region).toHaveValue("us-east-1");
     await expect(form.getByTestId("provider-field-hint")).toContainText("long-term API key");
@@ -109,7 +109,7 @@ test("Amazon Bedrock asks for its region from a list, and Cloudflare for its acc
     await expect(form.getByTestId("provider-use-key")).toBeEnabled();
     await expect(form.getByTestId("provider-sends")).toContainText("go to Amazon Bedrock");
 
-    await pick("Cloudflare Workers AI");
+    await pickProvider(form, "Cloudflare Workers AI");
     const account = form.getByTestId("provider-field");
     await expect(account).toHaveAccessibleName(/^Account ID/);
     await expect(form.getByTestId("provider-field-hint")).toContainText("Use REST API");
@@ -127,9 +127,94 @@ test("Amazon Bedrock asks for its region from a list, and Cloudflare for its acc
     await expect(account).toHaveAccessibleName(/^账户 ID/);
     await account.fill("");
     await expect(form.getByTestId("provider-use-key-why")).toHaveText("请先填写账户 ID。");
-    await pick("Amazon Bedrock");
+    await pickProvider(form, "Amazon Bedrock");
     await expect(form.getByRole("combobox", { name: /^区域/ })).toBeVisible();
     await expect(form.getByTestId("provider-field-hint")).toContainText("长期 API 密钥");
+  } finally {
+    await app.close();
+  }
+});
+
+test("LM Studio and Unsloth Studio are set up beside Ollama, not under More…, each at its own address; in English and Chinese", async () => {
+  // The app is told what runs: no LM Studio or Unsloth Studio on this computer is asked.
+  const { app, window } = await launchApp(dataDir, {
+    ollama: "http://127.0.0.1:9",
+    localServers: { unsloth: ["qwen3.5-4b", "gemma-4-12b"] },
+  });
+  try {
+    await dismissChatSetup(window);
+    await setWindowSize(app, window, 1440, 900);
+    await acceptPlainTextKeys(window);
+    const settings = await openSettings(window, "models");
+
+    // More… holds cloud presets only.
+    await settings.getByTestId("chat-choice-api-key").check();
+    const cloud = settings.getByTestId("provider-form");
+    await cloud.getByTestId("provider-more-toggle").click();
+    for (const name of ["LM Studio", "Unsloth Studio"]) {
+      await expect(cloud.getByRole("radio", { name, exact: true })).toHaveCount(0);
+    }
+
+    // A server that runs has its row; the other is one quiet line away.
+    const also = settings.getByTestId("local-servers-also");
+    await expect(also).toHaveText("Also works with LM Studio");
+    await expect(settings.getByTestId("chat-choice-local-unsloth")).toBeVisible();
+    await expect(settings.getByTestId("local-unsloth-status")).toHaveText(
+      "Running on this computer.",
+    );
+    await setLanguage(window, "zh-CN");
+    await expect(also).toHaveText("也支持 LM Studio");
+    await setLanguage(window, "en");
+
+    await settings.getByTestId("chat-choice-local-unsloth").check();
+    const form = settings.getByTestId("provider-form");
+    const useIt = form.getByTestId("provider-use-key");
+    await expect(form.getByTestId("provider-more-toggle")).toHaveCount(0);
+    await expect(form.getByTestId("provider-field")).toHaveValue("127.0.0.1:8888");
+    await expect(form.getByTestId("local-server")).toContainText(
+      "Unsloth Studio is running on this computer",
+    );
+    const model = form.getByTestId("provider-model");
+    await expect(model.locator("option")).toHaveText([
+      "qwen3.5-4b",
+      "gemma-4-12b",
+      "Another model…",
+    ]);
+    await expect(form.getByTestId("provider-model-reason")).toHaveText(
+      "Not yet tested for checked Citations",
+    );
+    await expect(useIt).toBeDisabled();
+    await form.getByLabel(/^API key/).fill("sk-unsloth-test");
+    await expect(useIt).toBeEnabled();
+    await expect(form.getByTestId("provider-sends")).toHaveCount(0);
+    // An address on another computer is a service like any other, and says what goes to it.
+    await form.getByTestId("provider-field").fill("192.168.1.20:8888");
+    await form.getByLabel(/^API key/).focus();
+    await expect(form.getByTestId("local-server")).toContainText("answers at 192.168.1.20:8888");
+    await expect(form.getByTestId("provider-sends")).toContainText("go to Unsloth Studio");
+    await form.getByTestId("provider-field").fill("127.0.0.1:8888");
+    await form.getByLabel(/^API key/).focus();
+    await expect(form.getByTestId("provider-sends")).toHaveCount(0);
+    if (process.env.INCARNAMIND_SCREENSHOTS) {
+      await settings.screenshot({
+        path: `${process.env.INCARNAMIND_SCREENSHOTS}/preset-local-en.png`,
+      });
+    }
+
+    await settings.getByTestId("local-open-lmstudio").click();
+    await expect(settings.getByTestId("chat-choice-local-lmstudio")).toBeChecked();
+    await expect(also).toHaveCount(0);
+    await expect(form.getByTestId("provider-field")).toHaveValue("127.0.0.1:1234");
+    await expect(form.getByTestId("local-server")).toContainText(
+      "Nothing answers at 127.0.0.1:1234",
+    );
+    await expect(useIt).toBeDisabled();
+    await expect(form.getByTestId("provider-use-key-why")).toHaveText("Start LM Studio first.");
+    await expect(form.getByTestId("local-server-check")).toBeVisible();
+
+    await setLanguage(window, "zh-CN");
+    await expect(form.getByTestId("local-server")).toContainText("127.0.0.1:1234 没有响应");
+    await expect(form.getByTestId("provider-use-key-why")).toHaveText("请先启动 LM Studio。");
   } finally {
     await app.close();
   }
