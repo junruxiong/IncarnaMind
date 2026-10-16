@@ -26,7 +26,8 @@
  * is asked once more, in one request with the Answer and the Passages it
  * read, for its Citations (as ./quoteRetry asks for quotes); what it gives
  * is taken the same way. Never more than once per Answer, so an Answer
- * saying the Documents don't cover the Question doesn't pay for it.
+ * saying the Documents don't cover the Question doesn't pay for it. In the
+ * Tool loop the ask is one of the end-of-turn checks' (see ./turnChecks): `mayAsk`.
  */
 import { jsonSchema, Output, streamText } from "ai";
 import { sentenceSpans } from "../../shared/sentences";
@@ -361,6 +362,7 @@ export async function* citeUnmarked(
   answer: string,
   temperature: number | undefined,
   budget?: WindowBudget | null,
+  mayAsk: () => boolean = () => true,
 ): AsyncGenerator<AnswerEngineEvent, string> {
   const { documents, signal } = request;
   if (!documents.shownPassages || !documents.quoteFound || !documents.hasRecord) return answer;
@@ -374,7 +376,7 @@ export async function* citeUnmarked(
   const cited = [...answer.matchAll(MARKER)].some((each) => recorded(Number(each[1])));
   if (matches.length === 0 && !cited && drawsOn(answer, passages)) {
     const toAsk = passagesToAsk(answer, passages, budget);
-    if (toAsk.length > 0) {
+    if (toAsk.length > 0 && mayAsk()) {
       asked = true;
       yield { type: "phase", phase: "checking-quotes" };
       const given = await askForCitations(request, answer, toAsk, temperature);
