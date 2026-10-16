@@ -6,9 +6,10 @@
  * network, and it asks for nothing.
  */
 import { join } from "node:path";
-import { BrowserWindow, type Session, session } from "electron";
+import { type Session, session } from "electron";
 import type { Logger, Printer } from "../core";
 import { PRINT_ENTRY } from "../shared/printDocument";
+import { onHiddenPage } from "./hiddenPage";
 
 /** An in-memory session of its own: nothing it loads is kept, or shared with the app's window. */
 const PRINT_PARTITION = "print";
@@ -45,53 +46,34 @@ export function createElectronPrinter({ log, rendererUrl }: PrinterOptions): Pri
   return {
     async print(document) {
       printSession ??= prepareSession(rendererUrl);
-      const window = new BrowserWindow({
-        show: false,
-        width: 900,
-        height: 1200,
-        title: "IncarnaMind print",
-        webPreferences: {
-          contextIsolation: true,
-          nodeIntegration: false,
-          sandbox: true,
-          session: printSession,
-          backgroundThrottling: false,
-          spellcheck: false,
-        },
-      });
-      const contents = window.webContents;
-      contents.setWindowOpenHandler(() => ({ action: "deny" }));
-      contents.on("will-navigate", (event) => event.preventDefault());
-      let timer: ReturnType<typeof setTimeout> | undefined;
       try {
-        const printed = (async () => {
-          if (rendererUrl) await window.loadURL(new URL("print.html", `${rendererUrl}/`).href);
-          else await window.loadFile(join(__dirname, "../renderer/print.html"));
-          await contents.executeJavaScript(`window.${PRINT_ENTRY}(${JSON.stringify(document)})`);
-          return contents.printToPDF({
-            preferCSSPageSize: true,
-            printBackground: true,
-            margins: { top: 0, bottom: 0, left: 0, right: 0 },
-            generateTaggedPDF: true,
-            generateDocumentOutline: true,
-          });
-        })();
-        printed.catch(() => undefined);
-        const timedOut = new Promise<never>((_resolve, reject) => {
-          timer = setTimeout(
-            () => reject(new Error("The PDF took too long to lay out.")),
-            PRINT_TIMEOUT_MS,
-          );
-        });
-        return new Uint8Array(await Promise.race([printed, timedOut]));
+        const pdf = await onHiddenPage(
+          {
+            session: printSession,
+            width: 900,
+            height: 1200,
+            limitMs: PRINT_TIMEOUT_MS,
+            onLimit: () => new Error("The PDF took too long to lay out."),
+          },
+          async (contents) => {
+            if (rendererUrl) await contents.loadURL(new URL("print.html", `${rendererUrl}/`).href);
+            else await contents.loadFile(join(__dirname, "../renderer/print.html"));
+            await contents.executeJavaScript(`window.${PRINT_ENTRY}(${JSON.stringify(document)})`);
+            return contents.printToPDF({
+              preferCSSPageSize: true,
+              printBackground: true,
+              margins: { top: 0, bottom: 0, left: 0, right: 0 },
+              generateTaggedPDF: true,
+              generateDocumentOutline: true,
+            });
+          },
+        );
+        return new Uint8Array(pdf.buffer, pdf.byteOffset, pdf.byteLength);
       } catch (error) {
         log.error("export.printFailed", {
           message: error instanceof Error ? error.message : String(error),
         });
         throw error;
-      } finally {
-        clearTimeout(timer);
-        if (!window.isDestroyed()) window.destroy();
       }
     },
   };

@@ -285,6 +285,13 @@ app.whenReady().then(async () => {
   powerMonitor.on("resume", () => core?.systemAwake());
 });
 
+// Electron would answer a site's request with the first certificate in the system's store: on
+// a managed Mac, an identity with the User's name. No page of IncarnaMind's needs one.
+app.on("select-client-certificate", (event, _contents, _url, _list, callback) => {
+  event.preventDefault();
+  callback();
+});
+
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });

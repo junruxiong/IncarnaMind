@@ -1123,15 +1123,13 @@ export interface WordImportReport {
 /**
  * What a Word file's look holds that a Mind doesn't draw (#735), counted from
  * the document's own formatting: paragraphs, runs and cells shaded;
- * paragraphs with a border; tab stops set; tables with no borders, which
- * place text; and how many text colours (other than black), fonts and sizes
- * it sets.
+ * paragraphs with a border; tab stops set; and how many text colours (other
+ * than black), fonts and sizes it sets.
  */
 export interface WordLayout {
   shading: number;
   borders: number;
   tabStops: number;
-  layoutTables: number;
   colours: number;
   fonts: number;
   sizes: number;
@@ -1691,6 +1689,11 @@ export interface UserSettings {
    * pages they use as Documents (#128): off until the User turns it on.
    */
   webSearch: boolean;
+  /**
+   * Web pages are kept as they look when saved (`WebPageLook`), unless the
+   * save says otherwise: off until the User turns it on.
+   */
+  keepWebPageLook: boolean;
 }
 
 /**
@@ -2334,6 +2337,8 @@ export interface WebPageInfo {
    * (#756): over 60, over 5 MB, or past 25 MB for the page.
    */
   picturesLeftOut: number;
+  /** The last fetch kept as it looks; null when it wasn't asked to be. */
+  look: WebPageLook | null;
 }
 
 /** What `saveWebPage` takes. */
@@ -2344,7 +2349,35 @@ export interface SaveWebPageInput {
   html?: string;
   /** The Library Folder to file a new Document in; none or null: Unsorted. */
   folderId?: string | null;
+  /**
+   * Keep the page as it looks too (see `WebPageLook`), whose full load may
+   * reach the other sites the page draws from. Absent: as
+   * `UserSettings.keepWebPageLook` says. Ignored with `html`.
+   */
+  keepLook?: boolean;
 }
+
+/**
+ * A web page's version kept as it looks: a PDF of the page as a browser
+ * showed it, made once, in the background, in a hidden page that reaches
+ * only the public internet (src/main/pageLook.ts).
+ * - "saving": being made.
+ * - "saved": made at `savedAt` (ISO 8601, UTC), served at
+ *   `documentImageUrl(documentId, path)`.
+ * - "failed": it couldn't be made.
+ */
+export type WebPageLook =
+  | { status: "saving" }
+  | { status: "saved"; savedAt: string; path: string }
+  | { status: "failed"; failure: WebPageLookFailure };
+
+/**
+ * Why a page's look couldn't be kept: "timed-out", it didn't load in 30
+ * seconds; "unreachable", it couldn't be loaded; "too-large", its PDF is over
+ * 50 MB; "stopped", IncarnaMind stopped while making it, twice; "failed",
+ * anything else.
+ */
+export type WebPageLookFailure = "timed-out" | "unreachable" | "too-large" | "stopped" | "failed";
 
 /**
  * Why a web page wasn't saved, or wasn't fetched again:
@@ -3430,6 +3463,11 @@ export interface SaveChatProviderInput {
   endpoint?: string;
   /** Required for "openai-compatible"; optional for "ollama" (Ollama's local port); not allowed otherwise. */
   baseUrl?: string;
+  /**
+   * The value an endpoint's address is built from, for an endpoint that needs
+   * one (an AWS region, a Cloudflare account). Each value is its own provider.
+   */
+  endpointValue?: string;
   /** A new API key. Leave it out to keep the stored one; null removes it. */
   apiKey?: string | null;
   /** The model to make the default, e.g. "gpt-5.4-mini". */
@@ -3442,6 +3480,7 @@ export interface TestChatConnectionInput {
   /** The endpoint to test (see `SaveChatProviderInput`). */
   endpoint?: string;
   baseUrl?: string;
+  endpointValue?: string;
   /** The key to test. Leave it out to test the key stored for the same provider. */
   apiKey?: string;
   modelId: string;
@@ -3507,7 +3546,8 @@ export interface Money {
  * The most IncarnaMind may spend in a calendar month on models billed per
  * token. Before each such request its most (its prompt and its output limit)
  * is reserved, and a request whose reservation would pass the cap isn't sent.
- * Spending in the other currency counts at a fixed rate.
+ * What is spent and what is still reserved both count against it. Spending
+ * in the other currency counts at a fixed rate.
  */
 export interface MonthlyCap {
   amount: number;
@@ -3519,8 +3559,10 @@ export interface ProviderCost {
   providerId: string;
   billing: Billing;
   requests: number;
-  /** What its requests cost, in each currency they were priced in. */
+  /** What its settled requests cost, in each currency they were priced in. */
   spent: Money[];
+  /** Reserved for its open requests, per currency. */
+  setAside: Money[];
   /** Tokens of requests to models with no known price: counted here, not toward the cap. */
   unpricedTokens: number;
   /** Requests a quit cut short with no usage known: counted as costing nothing (#636). */
@@ -3531,10 +3573,14 @@ export interface ProviderCost {
 export interface CostSummary {
   /** When the counted month began (ISO 8601), in the computer's time zone. */
   monthStart: string;
-  /** What per-token requests cost this month, settled and still reserved, per currency. */
+  /** What per-token requests cost this month once settled, per currency. */
   spent: Money[];
-  /** All of it in the cap's currency (the other at a fixed rate), when a cap is set. */
+  /** Reserved for open requests, per currency. */
+  setAside: Money[];
+  /** `spent` in the cap's currency (the other at a fixed rate), when a cap is set. */
   spentTowardCap: Money | null;
+  /** `setAside` in the cap's currency; it counts against the cap too. */
+  setAsideTowardCap: Money | null;
   cap: MonthlyCap | null;
   /** The providers used this month. */
   providers: ProviderCost[];
@@ -3678,7 +3724,7 @@ export interface Task {
   progress: TaskProgress | null;
   /** "failed": why, as a `ProviderErrorKind` or another short kind. */
   problem: string | null;
-  /** What its model requests have cost, settled and reserved; null with none billed. */
+  /** What its model requests have cost once settled; null with none billed. */
   cost: Money | null;
   /** What its kind lets the User ask of it, whatever it is doing now. */
   actions: TaskAction[];
@@ -3800,6 +3846,7 @@ export type RunEstimate =
       /** Null for a model with no known price. */
       cost: Money | null;
       spentTowardCap: Money | null;
+      setAsideTowardCap: Money | null;
       cap: MonthlyCap | null;
     }
   | { billing: "plan" | "free" };
@@ -5293,6 +5340,18 @@ export type OllamaStatus =
       recommendedModel: string;
     };
 
+/** What runs at a local preset's address: `address` is its host and port, `models` the language models it lists. */
+export type LocalServerStatus =
+  | { running: false; address: string }
+  | { running: true; address: string; models: string[] };
+
+export interface DetectLocalServerInput {
+  catalogId: string;
+  apiKey?: string;
+  /** A host and port; the preset's default when left out. */
+  address?: string;
+}
+
 export interface SelectOllamaInput {
   /** Defaults to Ollama's local port. */
   baseUrl?: string;
@@ -6343,8 +6402,9 @@ export interface ExportMindOptions {
   theirChanges?: TheirChangesShown;
   /**
    * Word only: a Citation whose check failed (its quote wasn't found, or its
-   * claim is unsupported or contradicted) gets a comment by IncarnaMind
-   * saying so. Absent: off.
+   * claim is unsupported or contradicted), and a sentence checked
+   * Contradicted, Unsupported or Needs re-check, gets a comment by
+   * IncarnaMind saying so. Absent: off.
    */
   commentFailedChecks?: boolean;
 }
@@ -6373,12 +6433,24 @@ export interface MindExportPreview {
   theirChanges: number;
 }
 
+/** The sentences an export holds whose check isn't good, by result (`MindExport.sentenceChecks`). */
+export interface SentenceChecksExported {
+  contradicted: number;
+  unsupported: number;
+  needsRecheck: number;
+  /** They went into the file as comments: a Word file, with `commentFailedChecks` on. Otherwise they went out unmarked. */
+  commented: boolean;
+}
+
 /** A Mind exported as a file, for the host to save where the User chooses. */
 export interface MindExport extends MindExportPreview {
   /** The file's contents: UTF-8 text for Markdown and HTML, a ZIP package for .docx, a PDF for PDF and a source pack. */
   data: Uint8Array;
   /** For a Mind imported from a Word file, exported back into it: what it kept and couldn't keep. */
   word: WordExportReport | null;
+  sentenceChecks: SentenceChecksExported;
+  /** Changes still waiting that a Word file holds as tracked changes. */
+  trackedChanges: number;
 }
 
 /** What `saveMindExport` did. */
@@ -6387,7 +6459,8 @@ export type SavedMindExport =
   | ({ status: "saved"; file: SavedFile; word: WordExportReport | null } & Omit<
       MindExportPreview,
       "fileName" | "fromWord" | "theirChanges"
-    >)
+    > &
+      Pick<MindExport, "sentenceChecks" | "trackedChanges">)
   /**
    * Not saved: a Mind imported from Word can't keep something in its file
    * (`WordExportReport.notKept`) the User hasn't accepted (`ExportMindOptions.accept`).
@@ -7311,12 +7384,20 @@ export interface CoreApi {
    * navigation, ads or scripts, kept as a snapshot that Citations point at
    * and the check reads, named by the page's title. The page is fetched from
    * this computer, with a time and size limit, unless `html` is given (a
-   * page the app has open). Its images aren't fetched. An address saved
-   * already gives its Document, as it is. "document.status" events report
-   * its processing. A page that can't be fetched, or that is mostly not text,
-   * isn't saved: the result says why.
+   * page the app has open), with its article's pictures. Kept as it
+   * looks too, if asked, in the background (`WebPageInfo.look`). An address
+   * saved already gives its Document, as it is. "document.status" events
+   * report its processing. A page that can't be fetched, or that is mostly
+   * not text, isn't saved: the result says why.
    */
   saveWebPage(input: SaveWebPageInput): Promise<WebPageResult>;
+  /**
+   * Keeps a web page Document's last version as it looks (`WebPageLook`),
+   * again after it failed, in the background: the User's click is the
+   * consent to its full load. Throws NotFoundError for an unknown Document,
+   * and InvalidInputError for one that isn't a web page.
+   */
+  keepWebPageLook(documentId: string): Promise<Document>;
   /**
    * "Fetch again" on a web page Document: its address is fetched anew, and a
    * page that changed becomes a new version. Citations keep pointing at the
@@ -7909,6 +7990,8 @@ export interface CoreApi {
 
   /** Looks for Ollama, on its default local port unless another URL is given. */
   detectOllama(input?: { baseUrl?: string }): Promise<OllamaStatus>;
+  /** Looks for a preset's server on this computer at its address, and lists its models. */
+  detectLocalServer(input: DetectLocalServerInput): Promise<LocalServerStatus>;
   /**
    * Opens Ollama's app and waits, for up to twenty seconds, until Ollama answers; resolves with
    * what `detectOllama` then finds. Rejects when the app can't be opened from here.
@@ -8641,6 +8724,7 @@ const methods: Record<CoreApiMethod, true> = {
   changeLayout: true,
   addDocuments: true,
   saveWebPage: true,
+  keepWebPageLook: true,
   fetchWebPageAgain: true,
   saveTextAsDocument: true,
   listDocuments: true,
@@ -8741,6 +8825,7 @@ const methods: Record<CoreApiMethod, true> = {
   getSecretStorage: true,
   acceptPlainTextSecretStorage: true,
   detectOllama: true,
+  detectLocalServer: true,
   openOllama: true,
   selectOllama: true,
   getChatGptPlan: true,
