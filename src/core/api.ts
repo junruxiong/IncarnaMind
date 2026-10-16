@@ -4664,6 +4664,14 @@ export interface AnswerSteps {
    */
   citedAfterChecking?: number;
   /**
+   * How long, in ms, the Question was with the model before the Answer had
+   * words: its text, or a Mind its Tool call began to change. Absent while
+   * there are none, and for an Answer written before #899.
+   */
+  firstWordMs?: number;
+  /** Its Question asked to check or calculate, so it was written with the larger thinking budget. */
+  careful?: true;
+  /**
    * The changes its reply says it made to a Mind that none of its Tool calls
    * made, even once the model was asked again with what they did.
    * Absent: none.
@@ -7323,6 +7331,13 @@ export interface CoreApi {
   /** Stops an Answer of a conversation being written, keeping what it has. */
   stopConversationAnswer(input: ConversationAnswerInput): Promise<void>;
   /**
+   * How many seconds the model of an Answer of a conversation usually takes
+   * before its Answers have words, from its latest ones to a Question of the
+   * same kind (one that asks to check or calculate, or not); null with too
+   * few to say (#899).
+   */
+  usualAnswerWait(answerId: string): Promise<number | null>;
+  /**
    * The conversations that aren't deleted, newest first: all of them, or those of one
    * Folder (`folderId` null: Not in a Folder). Only the assistant's History lists them.
    */
@@ -8748,6 +8763,7 @@ const methods: Record<CoreApiMethod, true> = {
   regenerateConversationAnswer: true,
   countScopeDocuments: true,
   stopConversationAnswer: true,
+  usualAnswerWait: true,
   listConversations: true,
   getConversation: true,
   searchConversations: true,
