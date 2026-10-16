@@ -108,6 +108,7 @@ import { retryFigures } from "./figureRetry";
 import { missingMarkerEvents, textEdits } from "./markerPlacement";
 import {
   datedDocumentsNote,
+  notCitedNote,
   SEARCH_QUERY_INSTRUCTIONS,
   searchQueryPrompt,
   TRANSLATE_QUERY_INSTRUCTIONS,
@@ -1245,6 +1246,7 @@ export function documentTools(
         // The dates are named from the Passages that fit, so never a Document the model wasn't handed.
         const notes = [
           datedDocumentsNote(result.text),
+          notCitedNote(result.text),
           unreadDocumentsNote(documents.unreadDocuments?.() ?? []),
         ];
         return [result.text, ...notes].filter((part) => part !== "").join("\n\n");
