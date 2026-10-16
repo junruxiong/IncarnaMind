@@ -438,6 +438,15 @@ export function createLibrary(options: {
             state(id, "waiting");
             return;
           }
+          // Until Organize has a model, automatic tagging tags this Document: its state is the tagger's.
+          if (!organizeModelOf(getSettings())) {
+            db.run(
+              "UPDATE document_groups SET status = 'waiting', updated_at = ? WHERE document_id = ? AND deleted_at IS NULL",
+              [now(), id],
+            );
+            announce([id]);
+            return;
+          }
           state(id, "classifying");
           const classifier = await options.prepare(getSettings());
           if (classifier.local) call.runsLocally();
