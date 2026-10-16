@@ -2761,7 +2761,7 @@ export function createCore(adapters: CoreAdapters): Core {
       if (!isRecord(input)) throw new InvalidInputError("estimateRun expects an object.");
       const { items, model, searches = 0, each = "answer" } = input;
       if (each !== "answer" && each !== "check") {
-        throw new InvalidInputError("each must be an answer or a check.");
+        throw new InvalidInputError({ key: "error.estimate.each" });
       }
       if (typeof items !== "number" || !Number.isInteger(items) || items < 0 || items > 100_000) {
         throw new InvalidInputError("items must be a whole number from 0 to 100,000.");

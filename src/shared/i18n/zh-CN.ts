@@ -2943,6 +2943,7 @@ export const zhCN = {
   "error.conversation.notFound": "这个对话不存在或已删除。",
   "error.question.empty": "先输入问题，再提问。",
   "error.estimate.searches": "估算的联网搜索次数应在 0 到 {max} 之间。",
+  "error.estimate.each": "估算只能针对回答或核对。",
   "error.task.tell": "这个任务现在无法接收消息。",
   "error.task.message": "告诉任务的内容应在 1 到 {max} 个字符之间。",
   "error.research.notFound": "这个研究任务不存在。",
