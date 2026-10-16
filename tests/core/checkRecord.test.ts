@@ -92,6 +92,8 @@ function checked(
       : null,
     says: found ? "Tides says spring tides happen at new moon." : null,
     calculation: null,
+    citedCaseUnchecked: false,
+    citedCaseFound: false,
     scope: { folderId: null, widened: true },
     versions: [{ documentId: document.id, contentHash: document.contentHash }],
     excluded: [],
