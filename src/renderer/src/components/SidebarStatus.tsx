@@ -76,8 +76,9 @@ interface Status {
  * the row. Its 28px are kept even when there is nothing to say, so the tree
  * above moves only for a status that takes two lines.
  */
-export function SidebarStatus() {
-  const [first, ...others] = useStatuses();
+export function SidebarStatus({ problemsOnly = false }: { problemsOnly?: boolean }) {
+  const [first, ...others] = useStatuses().filter((status) => !problemsOnly || isProblem(status));
+  if (problemsOnly && !first) return null;
   return (
     <div data-testid="sidebar-status" className="flex min-h-7 shrink-0 flex-col">
       {first && (
@@ -88,6 +89,10 @@ export function SidebarStatus() {
     </div>
   );
 }
+
+// A failure, or a one-off the User dismisses (skipped files, a web page not added): the quiet
+// first open hides the footer's other news, never these (DESIGN.md, Problems).
+const isProblem = (status: Status) => status.tone === "error" || status.dismiss !== undefined;
 
 function StatusRow({ status, children }: { status: Status; children?: ReactNode }) {
   const t = useT();

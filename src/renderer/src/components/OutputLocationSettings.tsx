@@ -5,7 +5,7 @@ import { errorMessage } from "../errors";
 import { translateNow, useT } from "../i18n";
 import { folderName } from "../linkedFolders";
 import { chooseOutputLocation } from "../outputFiles";
-import { useAppStore } from "../store";
+import { useSettingsTarget } from "../settingsTarget";
 import { PathText } from "./PathText";
 import { ProblemLine } from "./ProblemLine";
 import {
@@ -16,6 +16,8 @@ import {
   sectionNoteClass,
   sectionTitleClass,
 } from "./ui";
+
+const TARGET = ["output-location"] as const;
 
 /**
  * Settings → General → Output location: where new files go, the default
@@ -46,15 +48,10 @@ export function OutputLocationSettings() {
     };
   }, []);
 
-  const section = useRef<HTMLElement>(null);
   const changeButton = useRef<HTMLButtonElement>(null);
-  const drawn = settings !== null;
-  useEffect(() => {
-    if (!drawn || useAppStore.getState().settingsAt !== "output-location") return;
-    useAppStore.setState({ settingsAt: null });
-    section.current?.scrollIntoView({ block: "start" });
-    changeButton.current?.focus({ preventScroll: true });
-  }, [drawn]);
+  const section = useSettingsTarget<HTMLElement>(TARGET, settings !== null, () =>
+    changeButton.current?.focus({ preventScroll: true }),
+  );
 
   const change = async (action: () => Promise<OutputSettings | null>) => {
     setProblem(null);

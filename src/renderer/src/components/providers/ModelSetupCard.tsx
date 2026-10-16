@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { AgentClient, ChatProvider } from "../../../../core/api";
 import { SHOW_AGENT_CONNECTION } from "../../../../shared/agentConnection";
+import { chosenFlowSummary } from "../../chosenFlows";
 import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useLanguage, useT } from "../../i18n";
@@ -17,6 +18,7 @@ import {
   useContinueWithChatGpt,
 } from "./ChatGptSignIn";
 import { OllamaAction } from "./ChatProviderChoices";
+import { CopilotSetupWay } from "./CopilotPlan";
 import {
   OllamaProgress,
   type Ollama as OllamaState,
@@ -94,6 +96,7 @@ export function ModelSetupCard() {
               {t("setup.other")}
             </summary>
             <div className="mt-2 flex flex-col gap-2">
+              <CopilotSetupWay onKey={() => setView("key")} />
               <Way
                 testId="way-local"
                 title={t("setup.way.local")}
@@ -172,7 +175,9 @@ function LeadingWays({
       </button>
       {/* It signs in at once, so its line also says what goes to OpenAI (ADR-0022). */}
       <p data-testid="setup-chatgpt-sends" className={lineClass}>
-        {t(chinese ? "setup.chatgpt.line.china" : "setup.chatgpt.line")}
+        {t(chinese ? "setup.chatgpt.line.china" : "setup.chatgpt.line", {
+          sends: chosenFlowSummary(t),
+        })}
       </p>
     </div>
   );

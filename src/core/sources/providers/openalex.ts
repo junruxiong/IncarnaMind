@@ -18,7 +18,7 @@ import type {
   FullTextLocation,
   ProviderContext,
   ProviderWork,
-  SourceProvider,
+  SearchingProvider,
   SourceQuery,
   WorkIdentifier,
   WorkIds,
@@ -241,7 +241,7 @@ function worksOf(body: string): Record<string, unknown>[] {
   return [answer];
 }
 
-export function createOpenAlex(baseUrl: string = OPENALEX_URL): SourceProvider {
+export function createOpenAlex(baseUrl: string = OPENALEX_URL): SearchingProvider {
   const lane = "openalex";
   const terms = {
     url: "https://help.openalex.org/how-to-use-the-api/rate-limits-and-authentication",
