@@ -755,6 +755,49 @@ describe.each(ENGINES)("A Run engine: $name", ({ create }) => {
     expect(add.calls.map((call) => call.input)).toEqual([sent]);
     expect(run.events).toContainEqual({ type: "tool-result", id: "call-0-0", ok: true });
   });
+
+  test("the check also takes one object for an array, and JSON text encoded twice, without another step", async () => {
+    const add = testTool("add_rows", {
+      schema: {
+        type: "object",
+        properties: {
+          rows: { type: "array", items: { type: "object", properties: { n: { type: "number" } } } },
+          tags: { type: "array", items: { type: "string" } },
+        },
+        required: ["rows", "tags"],
+      },
+    });
+    const sent = { rows: { n: "1" }, tags: JSON.stringify(JSON.stringify(["a", "b"])) };
+    const model = stepsModel([[{ tool: "add_rows", input: sent }]], "Added.");
+
+    const run = await collect(create(), request(model, { tools: [add] }));
+
+    expect(add.calls.map((call) => call.input)).toEqual([sent]);
+    expect(run.events).toContainEqual({ type: "tool-result", id: "call-0-0", ok: true });
+    expect(model.doStreamCalls).toHaveLength(2);
+  });
+
+  test("an object where the schema wants a list of text, or text that isn't JSON, still doesn't match", async () => {
+    const add = testTool("add_rows", {
+      schema: {
+        type: "object",
+        properties: { tags: { type: "array", items: { type: "string" } } },
+        required: ["tags"],
+      },
+    });
+    const model = stepsModel(
+      [
+        [{ tool: "add_rows", input: { tags: { a: 1 } } }],
+        [{ tool: "add_rows", input: { tags: "a, b" } }],
+      ],
+      "Sorry.",
+    );
+
+    await collect(create(), request(model, { tools: [add] }));
+
+    expect(add.calls).toEqual([]);
+    expect(resultsSent(model, 2).map((each) => each.type)).toEqual(["error-text", "error-text"]);
+  });
 });
 
 test("the Run engine's interface imports no agent library, so the loop's library can change without what is above it", async () => {

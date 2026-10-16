@@ -27,7 +27,7 @@ const OPENROUTER = "https://openrouter.ai";
 interface SmallCall {
   kind: string;
   modelId: string;
-  thinking: "off" | "summary" | undefined;
+  thinking: ChatModelSpec["thinking"];
   /** What it was for, from its instructions. */
   purpose: "rewrite" | "translate" | "tags" | "organize" | "other";
 }
@@ -358,7 +358,7 @@ describe("Which model each quick call uses", () => {
     ]);
     expect(answers).toEqual(["cohere/command-r7b-12-2024"]);
     expect(specs.find((spec) => spec.modelId === "cohere/command-r7b-12-2024")?.thinking).toBe(
-      "summary",
+      "answer",
     );
     // Counted as the Answer's, as its own call is: 5 input tokens each.
     expect(ended.payload.usage.inputTokens).toBe(15);
