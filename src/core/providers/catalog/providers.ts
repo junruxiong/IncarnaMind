@@ -695,13 +695,20 @@ export function kindOfCatalogId(id: string): ChatProviderKind {
 export const untestedForCitations = (provider: CatalogProvider | undefined): boolean =>
   isPreset(provider) && provider.citingTested === undefined;
 
+/** The presets that run on this computer (LM Studio, Unsloth Studio), by catalog id: set up beside Ollama, not by a key. */
+export const LOCAL_PRESETS: readonly string[] = CATALOG_PROVIDERS.filter(
+  (each) => isPreset(each) && each.group === "local",
+).map((each) => each.id);
+
 /**
  * The providers set up with a key or a server address, by catalog id, in
  * catalog order: every hosted provider and preset, then a server the User
- * gives. Ollama has its own card.
+ * gives. Ollama and the presets on this computer have their own place.
  */
 export const KEY_PROVIDERS: readonly string[] = CATALOG_PROVIDERS.filter(
-  (each) => each.endpoints.length > 0 || each.id === "openai-compatible",
+  (each) =>
+    (each.endpoints.length > 0 || each.id === "openai-compatible") &&
+    !LOCAL_PRESETS.includes(each.id),
 ).map((each) => each.id);
 
 /**
