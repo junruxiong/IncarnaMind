@@ -33,20 +33,29 @@ core.on("claudeAccount.changed", (status) => useClaudeSignIn.setState({ status }
 
 let asked = false;
 
+function load(): void {
+  if (asked) return;
+  asked = true;
+  Promise.resolve(core.getClaudeAccount()).then(
+    (status) => useClaudeSignIn.setState({ status }),
+    (error: unknown) => {
+      asked = false;
+      console.error("The Claude account's status couldn't be read.", error);
+    },
+  );
+}
+
 /** The account's status, read once something shows it. */
 export function useClaudeAccount(): ClaudeAccountStatus | null {
-  useEffect(() => {
-    if (asked) return;
-    asked = true;
-    core.getClaudeAccount().then(
-      (status) => useClaudeSignIn.setState({ status }),
-      (error: unknown) => {
-        asked = false;
-        console.error("The Claude account's status couldn't be read.", error);
-      },
-    );
-  }, []);
+  useEffect(load, []);
   return useClaudeSignIn((state) => state.status);
+}
+
+/** For ⌘K: whether Sign in with Claude can be offered now. Null status (not read yet) offers nothing. */
+export function claudeSignInOffered(): boolean {
+  load();
+  const status = useClaudeSignIn.getState().status;
+  return status?.available === true && status.account.state !== "signed-in";
 }
 
 // A newer sign-in replaces one still waiting, which then ends as cancelled and must say nothing.

@@ -229,6 +229,28 @@ test("Settings: Cancel keeps nothing; signed in, the row names the account and S
   }
 });
 
+test("⌘K: Sign in with Claude opens the words in Settings › Models, before anything is sent", async () => {
+  const { app, window } = await launchApp(dataDir, { claude: fake.origin });
+  try {
+    await interceptOpenExternal(app);
+    await window.keyboard.press("ControlOrMeta+k");
+    await expect(window.getByTestId("palette-search")).toBeFocused();
+    await window.keyboard.type("> Sign in with Claude");
+    const item = window.getByTestId("palette").getByTestId("palette-item").first();
+    await expect(item).toHaveText(/Sign in with Claude/);
+    await window.keyboard.press("Enter");
+
+    const settings = window.getByTestId("settings");
+    await expect(settings).toHaveAttribute("data-page", "models");
+    const row = settings.getByTestId("plans-claude-account");
+    await expect(row.getByTestId("claude-plan-usage")).toHaveText(USAGE);
+    await expect(row.getByTestId("claude-plan-cancel")).toBeFocused();
+    expect(await urlsOpened(app)).toHaveLength(0);
+  } finally {
+    await app.close();
+  }
+});
+
 test("in Chinese: the row follows a model on this computer, with the usage limits first", async () => {
   const { app, window } = await launchApp(dataDir, { claude: fake.origin });
   try {
