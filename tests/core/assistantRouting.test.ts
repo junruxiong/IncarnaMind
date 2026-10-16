@@ -263,8 +263,8 @@ describe("A second copy", { timeout: 30_000 }, () => {
     },
   );
 
-  // protects=a second summary goes in beside the first though they share headings and short fixed lines, as the summarise Skill writes them; fails_when=it is refused as a second copy; no_claim=none beyond protects.
-  test("isn't a second summary that shares only headings and short lines with the first", async () => {
+  // protects=a second summary goes in beside the first though they share headings, short fixed lines, and "not covered" lines under different headings, as the summarise Skill writes them; fails_when=it is refused as a second copy; no_claim=none beyond protects.
+  test("isn't a second summary that shares headings, short lines, and long lines under other headings with the first", async () => {
     const summary = (name: string, claim: string) =>
       [
         `## ${name}`,
@@ -272,7 +272,9 @@ describe("A second copy", { timeout: 30_000 }, () => {
         `${name} claims that ${claim}, in every harbour it measured over two years.`,
         "### Methods",
         "The Passages found don't describe the methods.",
-        "### Limitations",
+        `### ${name === "Paper A" ? "Limitations" : "Open questions"}`,
+        "The Passages found don't say how the tide was measured or over how many harbours.",
+        "Nor do they say which years the measurements cover, or who took them.",
         "Not reported.",
         "Not reported.",
       ].join("\n\n");

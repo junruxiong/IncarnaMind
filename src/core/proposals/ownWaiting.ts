@@ -118,15 +118,25 @@ function elementText(element: Y.XmlElement): string {
     .join(" ");
 }
 
-/** The text of each of the assistant's own waiting Blocks but its headings and those of request `except`. */
-export function ownWaitingTexts(blocks: Y.XmlFragment, except: string | null): string[] {
-  return topLevelBlocks(blocks).flatMap((element) =>
-    isOwn(element) &&
-    element.nodeName !== "heading" &&
-    readProposalAttribute(element.getAttribute(PROPOSAL_ATTRIBUTE))?.request !== except
-      ? [elementText(element)]
-      : [],
-  );
+/**
+ * The text of each of the assistant's own waiting Blocks but its headings and
+ * those of request `except`, with the heading it sits under (null: none).
+ */
+export function ownWaitingTexts(
+  blocks: Y.XmlFragment,
+  except: string | null,
+): { heading: string | null; text: string }[] {
+  let heading: string | null = null;
+  return topLevelBlocks(blocks).flatMap((element) => {
+    if (element.nodeName === "heading") {
+      heading = elementText(element);
+      return [];
+    }
+    return isOwn(element) &&
+      readProposalAttribute(element.getAttribute(PROPOSAL_ATTRIBUTE))?.request !== except
+      ? [{ heading, text: elementText(element) }]
+      : [];
+  });
 }
 
 function rangeOf(blocks: Y.XmlFragment, from: TextPlace, to: TextPlace): Y.XmlElement[] {

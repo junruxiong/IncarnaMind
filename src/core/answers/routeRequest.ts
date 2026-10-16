@@ -1,279 +1,190 @@
 /**
- * Whether a Question in the assistant asks for an answer or for text in a
- * Mind, from its words, in English and Chinese: "write" new text, "edit"
- * text already there, "answer" in the reply, or "unclear". `newMind`: it
- * asks for a new page or note.
+ * Whether a request in the assistant plainly asks for a change in a Mind,
+ * from its words, in English and Chinese: "edit" text there, "write" new
+ * text, or "unclear", which is every other request, questions among them.
+ * `newMind`: a new page or note is asked for.
  *
- * Words can't tell every request apart, so only the plain ones route: an
- * instruction, not a question, that names the User's own text ("this
- * paragraph", "my summary", "第二段") or where new text goes ("a summary
- * page", "add this to my notes", "加到我的笔记里"). Doubt anywhere after it
- * ("Shorten my intro. Would that help?", "删掉第二段，可以吗") leaves it
- * unclear. A follow-up with no object ("make it longer", "简单一点") is an
- * edit only when the conversation's last Answer changed a Mind
- * (`followsAChange`); after a question in the same request it is about the
- * answer. "unclear" behaves as an Answer always has: the model chooses, and
- * its changes wait for the User.
+ * Words can't tell every request apart, so a request routes only when the
+ * whole of it is one of a few plain instructions: "make my summary shorter",
+ * "write a summary page", "add this to my notes", "把第二段改得更正式",
+ * "写一个总结页面". Anything before or after it ("…, does that work",
+ * "这篇论文讲了什么？…", "…，怎么样") leaves it unclear. A follow-up with no
+ * object ("longer", "make it shorter", "简单一点") routes only when the
+ * conversation's last Answer changed a Mind (`followsAChange`). An unclear
+ * request is answered as before: the model chooses, and its changes wait for
+ * the User.
  */
-export type RequestKind = "answer" | "write" | "edit" | "unclear";
+export type RequestKind = "edit" | "write" | "unclear";
 
 export interface RequestRoute {
   kind: RequestKind;
   newMind: boolean;
 }
 
-// "none" asks for nothing ("thanks") and, unlike "answer", leaves a later "make it longer" alone.
-type ClauseKind = RequestKind | "follow-up" | "continue" | "polite" | "none";
+// Never a doubt: "I mean write a summary…", "no, keep it shorter", "帮我润色一下这段".
+const FILLER =
+  /^(?:(?:please|pls|i mean|ok|okay|now|then|no|yes|so|just|actually|great|thanks|let's|help me)[,!]?\s+)*/;
+const ZH_FILLER = /^(?:请|麻烦你?|帮我|好的，?|那就|就)*/;
 
-interface ClauseRead {
-  kind: ClauseKind;
-  asks: boolean;
-  document: boolean;
-  own: boolean;
-  placed: boolean;
-  // "?", "would that help", "is that ok", "你觉得呢", "可以吗".
-  doubts: boolean;
-}
+const WORD =
+  "(?!(?:or|and|if|but|unless|then|is|does|would|should|could|will|maybe|perhaps|ok|okay|right|yes|no|not|whether|thoughts|idea|worth|fine)\\b)[\\p{L}\\p{N}'’-]+";
+const WORDS = `(?:${WORD} ?){1,8}`;
+const LANGUAGE = "(?:chinese|english|french|german|spanish|japanese|korean|plain english)";
+const SOME = "(?:these|the|both|this|all|my)(?: \\d+| two)?";
+const DOCUMENTS = `${SOME} (?:papers?|documents?|reports?|notes)`;
 
-const LEAD =
-  /^(?:(?:ok(?:ay)?|so|now|then|and|also|just|please|pls|i mean|actually|instead|no|nope|yes|yeah|thanks|thank you|great|good|nice|perfect|cool|go ahead and|let's|let us|help me|i want you to|i'd like you to|i would like you to)[,!]?\s+)*/;
-const POLITE = /^(?:can|could|would|will) you\s+(?:please\s+)?/;
-const ASKS =
-  /^(?:what|what's|why|how|when|where|who|whom|which|whose|is|isn't|are|aren't|was|were|does|doesn't|do|don't|did|didn't|should|shall|may|might|must|has|have|had|would|could|can|will)\b/;
-const IDIOM =
-  /^(?:make sense of|make the case|cut to the chase|drop the jargon|correct me|update me|walk me through|fill me in|bring me up to speed|tell me|show me|give me|remind me)\b/;
-const REPLY =
-  /\b(?:your|the|that|this)\s+(?:last\s+|previous\s+|first\s+)?(?:answer|reply|response|explanation)\b|\bwhat you (?:just\s+)?(?:said|wrote)\b|^(?:say|put) (?:that|it|this) (?:more |less )?(?:simply|differently|another way|in other words|in plain|plainly|clearly|briefly)/;
-const MORE_OF =
-  /^(?:(?:a bit|a little|much|even|slightly|way)\s+)?(?:longer|shorter|simpler|clearer|tighter|briefer|more \p{L}+|less \p{L}+)(?:,?\s+(?:please|pls|again|still|then))?$/u;
-const CONTINUE = /^(?:continue|go on|keep going)(?:,?\s+please)?$/;
-const KEEP_IT = /^keep (?:it|this|that|them)\b/;
-const DOUBTS =
-  /\b(?:would|should|could) that\b|\bis that (?:ok|okay|alright|fine|right)\b|\bwhat do you think\b|\bdo you think\b|\bor would\b|\bor (?:keep|leave)\b|\bi (?:don't|do not) (?:get|understand)\b|\bif so\b/;
+const EDIT_VERB =
+  "(?:shorten|lengthen|rewrite|tighten|simplify|translate|delete|remove|cut|fix|proofread|polish|rephrase|reword|condense|expand|edit|revise|correct|tidy up|clean up)";
+const COMPARED =
+  "(?:longer|shorter|simpler|clearer|tighter|briefer|better|punchier|smoother|crisper|plainer|friendlier|stronger)";
+const MORE =
+  "(?:more|less) (?:detail|details|examples|context|formal|casual|concise|precise|specific|technical|accessible|readable|natural|professional|persuasive|neutral|polished|wordy|repetitive|jargon)";
+const OWN_TEXT =
+  "(?:this|the|my) (?:(?:first|second|third|fourth|fifth|last|opening|closing|whole) )?(?:paragraph|section|sentence|summary(?: section)?|intro|introduction|conclusion|page|draft|note|notes|list|table|text|heading|bullet points|typos|wording|part about (?:" +
+  WORD +
+  " ?){1,5})";
+const PLACE_OF_IT = "(?: (?:in|on) (?:my|this|the) (?:notes?|page|summary|draft))?";
+const CHANGE =
+  "(?:(?:a bit|a little|much|even|slightly) )?(?:" +
+  COMPARED +
+  "|" +
+  MORE +
+  "|formal|informal|concise|simple|short|clear|readable|(?:flow|read|sound) better|(?:about )?\\d+ words|(?:in|into) " +
+  LANGUAGE +
+  "|into (?:a|one) (?:table|list|paragraph)|as a (?:table|list)|to be (?:" +
+  COMPARED +
+  "|" +
+  MORE +
+  "))";
+const LEAVE_THE_REST =
+  "(?:,? and (?:leave|keep) the (?:other|others|rest)(?: paragraphs?| sections?)?(?: as (?:they are|it is)| unchanged| alone)?)?";
 
-const CREATE = "write|draft|compose|create|make|generate|produce|prepare|start";
-const PLACE_IT = "add|insert|append|put|save|copy|jot down|note down";
-const EDIT =
-  "shorten|lengthen|condense|trim|tighten|simplify|rewrite|rephrase|reword|paraphrase|translate|fix|correct|proofread|polish|improve|edit|revise|restructure|reorgani[sz]e|reformat|remove|delete|cut|drop|replace|change|update|rename|merge|split|move|tidy up|clean up|expand|extend|turn";
-const EXPLAIN = "clarify|elaborate on|elaborate|expand on|explain|put simply|unpack";
-const VERB = new RegExp(
-  `^(${EXPLAIN}|summari[sz]e|${EDIT}|${CREATE}|${PLACE_IT})\\b\\s*(.*)$`,
-  "u",
-);
-const IS_EXPLAIN = new RegExp(`^(?:${EXPLAIN})$`);
-const IS_CREATE = new RegExp(`^(?:${CREATE}|${PLACE_IT})$`);
-const IS_WRITE = /^(?:write|draft|compose|create|generate|produce|prepare|start)$/;
-const IS_REMOVE = /^(?:delete|remove|cut|drop)$/;
-const WHOLE = /^(?:my|the|this|our)\s+(?:whole\s+)?(?:notes?|draft|text|page|writing)$/;
-const MANNER =
-  /\b(?:more|less|longer|shorter|simpler|clearer|better|again|differently|in (?:english|chinese|french|german|spanish|japanese|plain \p{L}+)|as (?:an?)\b)/u;
-// "Translate this sentence: …" brings its own text, not the Mind's.
-const INLINE =
-  /\b(?:this|these|the following)\s+(?:sentences?|paragraphs?|text|lines?|passage|words?)\s*[:：]/;
+const EDITS = [
+  new RegExp(`^(?:make|turn) ${OWN_TEXT}${PLACE_OF_IT} ${CHANGE}${LEAVE_THE_REST}$`, "u"),
+  new RegExp(`^${EDIT_VERB} ${OWN_TEXT}${PLACE_OF_IT}(?: ${CHANGE})?${LEAVE_THE_REST}$`, "u"),
+  new RegExp(`^write ${OWN_TEXT} (?:in|into) ${LANGUAGE}$`, "u"),
+];
+// "Delete my notes" may mean the Mind itself, which no edit removes.
+const WHOLE_MIND = /^(?:delete|remove|cut) (?:this|the|my) (?:whole )?(?:notes?|page|draft|text)$/;
 
-const DOCUMENT =
-  /\b(?:the|this|that|these|those|its)\s+(?:paper|papers|article|articles|study|studies|abstract|authors?|tutorial|filing|filings|10-k|book|chapter|pdf|pdfs|document|documents|report|reports)\b|\bthe authors?\b|\bwhat (?:the authors?|they|it) (?:means?|say|says|claims?)\b|\b(?:paper|article|study|document|report)'s\b/;
-const OWN_NAMED =
-  /\b(?:this|that|the|my|our)\s+(?:(?:first|second|third|fourth|fifth|last|next|opening|closing|whole)\s+)?(?:paragraphs?|sentences?|sections?|lines?|summary|intro|introduction|conclusion|notes?|draft|text|headings?|list|bullets?|bullet points?|table|selection|wording|writing|parts?|typos?|spelling|grammar|formatting|tone)\b/;
-const BARE_OBJECT =
-  /^(?:(?:it|this|that|them|these|those)\b(?!\s+(?:paper|papers|article|study|document|documents|report|reports)\b)|(?:into|in|to|a bit|a little|more|less|again|please)\b|$)/;
-const INTO_PLACE =
-  /\b(?:to|into|onto)\s+(?:my|the|this|a|a new|our)\s+(?:new\s+)?(?:notes?|page|mind|notebook)\b|\b(?:in|on)\s+(?:a\s+)?new\s+(?:page|note|mind)\b/;
-const IN_PLACE = /\b(?:in|on)\s+(?:my|the|this|our)\s+(?:notes?|page|mind|notebook)\b/;
-const NEW_PAGE =
-  /\b(?:an?|new|separate|another|fresh)\s+(?:[\p{L}-]+\s+){0,2}(?:page|note|handout)\b|^(?:make|take|write) notes\b/u;
-const PIECE =
-  /^(?:write|draft|compose|prepare)\s+(?:me\s+)?(?:an?|one)\s+(?:[\p{L}-]+\s+){0,2}(?:summary|overview|outline|brief|briefing|memo|handout|write-?up)\b/u;
-const ADD_SECTION =
-  /^(?:add|insert|append)\s+(?:an?|another|one more|a new)\s+(?:[\p{L}\p{N}'’-]+\s+){0,3}(?:section|paragraph|heading|bullet|bullet points|list|table)\b/u;
+const WRITES = [
+  new RegExp(
+    `^(?:write|make|create|draft|start|prepare)(?: me)? (?:a|an)(?: new)?(?: (?:short|brief|one-page|summary|separate))? (?:page|note|handout|summary page)(?: (?:of|on|about|for) (?:${DOCUMENTS}|${WORDS}))?(?: with ${WORDS})?(?: called ${WORDS})?(?: in ${LANGUAGE})?$`,
+    "u",
+  ),
+  new RegExp(`^(?:make|take) notes (?:on|about|from) ${DOCUMENTS}$`, "u"),
+  new RegExp(
+    `^(?:write|draft|prepare)(?: me)? (?:a|an)(?: short| brief)? (?:summary|overview|outline|brief|memo)(?: (?:of|about|on) ${DOCUMENTS})?(?: in ${LANGUAGE})?$`,
+    "u",
+  ),
+  new RegExp(
+    `^(?:add|put|save|copy|insert|append) (?:this|that|it|these|them|${WORDS}) (?:to|into|in) (?:my|the) notes?$`,
+    "u",
+  ),
+  new RegExp(
+    `^(?:add|insert|append) (?:a|an|another) (?:[\\p{L}'’-]+ ){0,3}(?:section|paragraph|table|list)(?: (?:on|about) ${WORDS})?$`,
+    "u",
+  ),
+  new RegExp(`^add (?:a|an)(?: short)? note(?: (?:to|about|on) ${WORDS})?$`, "u"),
+  new RegExp(
+    `^summari[sz]e ${DOCUMENTS}(?: and (?:add|put|save) (?:it|this|them))? (?:to|into|in|on) (?:my notes|(?:a )?new (?:note|page)|a (?:note|page))$`,
+    "u",
+  ),
+];
+
+const FOLLOW_UPS = [
+  new RegExp(
+    `^(?:(?:make|keep) it )?(?:(?:a bit|a little|much|even) )?(?:${COMPARED}|${MORE}|short|simple|formal|concise|(?:about )?\\d+ words)$`,
+    "u",
+  ),
+  new RegExp(
+    `^(?:expand|shorten|simplify|translate|rewrite|tighten|condense|fix|polish|lengthen)(?: (?:it|this|that))?(?: up)?(?: a bit)?(?: (?:in|into) ${LANGUAGE})?$`,
+    "u",
+  ),
+  new RegExp(`^(?:write|put) it (?:in|into) (?:${LANGUAGE}|a table|a list|bullet points)$`, "u"),
+  /^(?:remove|delete) it$/,
+  /^turn (?:it|this) into a (?:table|list)$/,
+];
+const CONTINUE = /^(?:continue|go on|keep going)$/;
+
+const ZH_OWN_TEXT =
+  "(?:这段|这一段|这一节|这节|这页|这部分|这一部分|这句话?|这一句|第[一二三四五六七八九十\\d]+段|最后一段|我的(?:总结|笔记|段落|草稿)|关于[^，。？！吗呢吧么]{1,10}的部分)";
+const ZH_EDIT_VERB =
+  "(?:改得|写得|改成|改为|改短|改长|写长|写短|缩短|扩写|翻译成|翻译为|翻译|润色|精简|删掉|删除|删去|去掉|简化|改)";
+const ZH_CHANGE =
+  "(?:更?(?:正式|简洁|简单|清楚|详细|通顺|口语化)|[长短]|中文|英文)?(?:一点|一些|些)?";
+const ZH_LEAVE_THE_REST = "(?:，?其他(?:段落|部分|的)?(?:保持不变|不变|不要动|别动))?";
+const ZH_FREE = "[^，。？！?吗呢吧么]{1,20}";
+
+const ZH_EDITS = [
+  new RegExp(
+    `^(?:在(?:我的)?笔记(?:里|中))?把${ZH_OWN_TEXT}${ZH_EDIT_VERB}${ZH_CHANGE}${ZH_LEAVE_THE_REST}$`,
+  ),
+  new RegExp(`^(?:缩短|删掉|删除|润色一下|精简一下|翻译一下|改一下|扩写|简化)${ZH_OWN_TEXT}$`),
+];
+const ZH_WRITES = [
+  /^写一[个份篇](?:总结|概述)?(?:页面|页)$/,
+  /^写一[份篇](?:关于)?(?:这两篇论文|这些文档|这篇论文|这些论文)的(?:总结|概述)$/,
+  /^(?:新建|创建)一[篇个份](?:叫[“"][^”"]{1,20}[”"]的)?(?:新的?)?(?:笔记|页面)$/,
+  new RegExp(
+    `^把${ZH_FREE}(?:加到|添加到|放到|记到|写到|写进|存到)(?:我的)?(?:笔记|页面)(?:里|中)?$`,
+  ),
+  new RegExp(
+    `^(?:在(?:我的)?笔记(?:里|中))?(?:添加|加上|加|插入|补充)一[个段节]${ZH_FREE}?(?:部分|章节|段落|小节)$`,
+  ),
+  /^总结一下(?:这篇论文|这两篇论文|这些文档|这些论文)，?(?:并|然后)?(?:放到|加到|记到)(?:我的)?笔记(?:里|中)$/,
+];
+const ZH_FOLLOW_UPS = [
+  /^(?:再|更)?(?:长|短|详细|简单|正式|简洁|具体)一?(?:点|些)?$/,
+  /^更(?:正式|简洁|详细|简单)(?:一点|一些)?$/,
+  /^把它(?:写|改)得?更?(?:长|短|简单|正式|简洁|详细)一?[点些]?$/,
+  /^(?:写得|改得|总结得|说得)(?:再|更)?(?:长|短|详细|简单|正式|简洁)一?[点些]?$/,
+  /^改一下$/,
+  /^(?:翻译成|改成)(?:中文|英文)$/,
+];
+const ZH_CONTINUE = /^(?:继续|接着写|继续写)$/;
+
 const NEW_MIND =
-  /\b(?:new|separate|another|fresh|an?)\s+(?:[\p{L}-]+\s+){0,2}(?:page|note|notes|mind|document|doc|handout|report|file)\b|\b(?:make|take|write) notes\b/u;
+  /\b(?:new|separate|another|fresh|an?)\s+(?:[\p{L}-]+\s+){0,2}(?:page|note|handout)\b|\b(?:make|take) notes\b|新建|创建|一[个份篇](?:总结|概述)?(?:页面|页)$/u;
 // "…to Project plan": a Mind the User has, by its name.
 const NAMES_A_MIND =
-  /\b(?:to|into|in)\s+[“"]?(?!(?:English|Chinese|French|German|Spanish|Japanese|Korean|Markdown|Word)\b)\p{Lu}/u;
+  /\b(?:to|into|in)\s+[“"]?(?!(?:English|Chinese|French|German|Spanish|Japanese|Korean)\b)\p{Lu}/u;
 
-const ZH_LEAD = /^(?:请|麻烦你?|帮我|给我|帮忙|再|接着|然后|我想让你|那就|就|你)*/;
-const ZH_POLITE =
-  /^你?(?:可以|能不能|能否|可不可以|能)(?:帮我|帮忙)?|(?<![更会很不太得])(?:可以|行|好)吗$/;
-const ZH_ASKS =
-  /^(?:什么|为什么|怎么|怎样|如何|哪|谁|多少|是否|是不是|有没有)|[吗呢]$|会不会|是不是|要不要|好不好|对不对|行不行|有没有|对吗|怎么样$|如何$/;
-const ZH_DOUBTS =
-  /[吗呢吧]|你觉得|你看|是不是|会不会|还是|比较好|让我看看|能不能|可不可以|能否|如果是/;
-const ZH_REPLY = /刚才的回答|你的回答|上面的回答|这个回答|上一个回答|你刚才说的|你的解释/;
-const ZH_MORE_OF =
-  /^(?:写得|改得|总结得|说得)?(?:再|更)?(?:长|短|正式|简洁|简单|清楚|详细|具体)(?:一点|一些|些)?(?:吧|啊)?$/;
-const ZH_CONTINUE = /^(?:继续|接着写|继续写)(?:吧)?$/;
-const ZH_SUMMARISE = "总结成|整理成|汇总成|归纳成|总结|概括|归纳|汇总|整理";
-const ZH_CREATE = "写|撰写|起草|生成|做成|新建|创建";
-const ZH_PLACE_IT = "添加|加上|加入|加到|补充|插入|记下|记到|放到|存到|加";
-const ZH_EDIT =
-  "缩短|改短|改长|加长|写长|写短|扩写|扩展|扩充|精简|压缩|简化|改写|重写|润色|翻译|修改|改成|改为|改得|写得|改一下|调整|删除|删掉|删去|去掉|移除|替换|更新|校对|修正|纠正|重新组织|改";
-const ZH_EXPLAIN = "解释|说明|阐述|讲讲|讲解|展开讲|展开说";
-const ZH_VERB = new RegExp(
-  `^(?:在[^，。！？]{1,20}?(?:里|中|内|上|后面|前面|末尾|最后))?(把[^，。！？]{1,40})?(${ZH_EXPLAIN}|${ZH_SUMMARISE}|${ZH_EDIT}|${ZH_CREATE}|${ZH_PLACE_IT})(.*)$`,
-);
-const ZH_IS_EXPLAIN = new RegExp(`^(?:${ZH_EXPLAIN})$`);
-const ZH_IS_SUMMARISE = new RegExp(`^(?:${ZH_SUMMARISE})$`);
-const ZH_IS_CREATE = new RegExp(`^(?:${ZH_CREATE}|${ZH_PLACE_IT})$`);
-const ZH_DOCUMENT = /论文|文章|作者|原文|文中|这篇|这份文档|这份报告|文档的|报告的/;
-const ZH_OWN_NAMED =
-  /这段|这一段|第[一二三四五六七八九十\d]+段|最后一段|这部分|这一部分|这句|这一句|我的(?:总结|笔记|段落|摘要|草稿|文章|报告)|选中的|(?:关于|有关)[^，。！？]{1,20}的部分/;
-// "第二段能不能删掉": the text first, then what to do with it.
-const ZH_TOPIC_EDIT = new RegExp(
-  `^(?:${ZH_OWN_NAMED.source})(?:能不能|可不可以|能否|帮我|请你?|给我)(?:${ZH_EDIT})`,
-);
-const ZH_BARE_OBJECT = /^把(?:它们?|这个|这些|其)$/;
-const ZH_BARE_REST =
-  /^(?:一下|一点|一些|下|得[^，。！？]{0,6}|[长短]一?[点些]|成中文|成英文|为中文|为英文)?(?:吧|啊)?$/;
-const ZH_INTO_PLACE =
-  /(?:加到|添加到|放到|写到|写进|记到|存到|加入|放进|放在|写在|记在)(?:我的|这个|这份)?(?:笔记|页面|Mind)|新建|一[篇份个](?:新的?)?(?:总结)?(?:笔记|页面|文档)/;
-const ZH_IN_PLACE = /(?:在|进)(?:我的)?(?:笔记|页面)(?:里|中|上)/;
-const ZH_PIECE = /^写一[份篇个][^，。！？]{0,30}?(?:总结|概述|报告|备忘|讲义|笔记|页面)/;
-const ZH_ADD_SECTION =
-  /^(?:添加|加上|加入|补充|插入|加)一[个段节][^，。！？]{0,10}?(?:部分|章节|段落|小节|段)/;
-const ZH_NEW_MIND =
-  /新建|新的?(?:笔记|页面|文档|Mind)|一[篇份个](?:新的?)?(?:总结)?(?:笔记|页面|文档)|另建/;
+const matches = (patterns: readonly RegExp[], text: string) =>
+  patterns.some((pattern) => pattern.test(text));
 
-function clausesOf(question: string): { text: string; asked: boolean }[] {
-  const sentences =
-    question.toLocaleLowerCase().match(/[^.!?;\n。！？；]+[.!?;\n。！？；]*/gu) ?? [];
-  return sentences.flatMap((sentence) => {
-    const asked = /[?？]/.test(sentence);
-    return sentence
-      .replace(/[.!?;\n。！？；]+$/u, "")
-      .split(
-        /,\s*(?:and|then)\s+|\s+and\s+(?=(?:then\s+)?(?:add|put|write|save|make|create|insert|append)\b)|，(?:然后|再|并且?)?/u,
-      )
-      .map((text) => text.trim())
-      .filter(Boolean)
-      .map((text) => ({ text, asked }));
-  });
-}
-
-function englishImperative(rest: string, document: boolean): ClauseKind {
-  const [, verb = "", object = ""] = VERB.exec(rest) ?? [];
-  if (verb && !IS_EXPLAIN.test(verb) && INTO_PLACE.test(rest)) return "write";
-  if (IDIOM.test(rest) || REPLY.test(rest)) return "answer";
-  if (MORE_OF.test(rest) || KEEP_IT.test(rest)) return "follow-up";
-  if (CONTINUE.test(rest)) return "continue";
-  if (!verb) return "none";
-  if (INLINE.test(rest)) return "unclear";
-  const own = !document && OWN_NAMED.test(rest.replace(IN_PLACE, " "));
-  if (IS_EXPLAIN.test(verb)) return "answer";
-  if (IS_CREATE.test(verb) && (NEW_PAGE.test(rest) || PIECE.test(rest) || ADD_SECTION.test(rest)))
-    return "write";
-  if (/^summari[sz]e$/.test(verb)) return "answer";
-  if (own) {
-    // "Delete my notes" may mean the Mind itself, which no edit removes.
-    if (IS_REMOVE.test(verb) && WHOLE.test(object)) return "unclear";
-    // "Write the conclusion" asks for new text; "write the summary in Chinese" changes it.
-    return IS_WRITE.test(verb) && !MANNER.test(object) ? "write" : "edit";
+function plainKind(question: string, followsAChange: boolean): "edit" | "write" | null {
+  const english = question
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLocaleLowerCase()
+    .replace(/[.!]+$/, "")
+    .replace(/,? (?:please|pls)$/, "")
+    .replace(FILLER, "");
+  const chinese = question
+    .trim()
+    .replace(/[。！]+$/, "")
+    .replace(ZH_FILLER, "");
+  if (/\p{Script=Han}/u.test(question)) {
+    if (matches(ZH_EDITS, chinese)) return "edit";
+    if (matches(ZH_WRITES, chinese)) return "write";
+    if (!followsAChange) return null;
+    if (matches(ZH_FOLLOW_UPS, chinese)) return "edit";
+    return ZH_CONTINUE.test(chinese) ? "write" : null;
   }
-  if (IS_CREATE.test(verb) && IN_PLACE.test(rest)) return "write";
-  if (document) return "answer";
-  return BARE_OBJECT.test(object) ? "follow-up" : "unclear";
+  if (matches(EDITS, english)) return WHOLE_MIND.test(english) ? null : "edit";
+  if (matches(WRITES, english)) return "write";
+  if (!followsAChange) return null;
+  if (matches(FOLLOW_UPS, english)) return "edit";
+  return CONTINUE.test(english) ? "write" : null;
 }
-
-function englishClause(clause: string, asked: boolean): ClauseRead {
-  const read = {
-    document: DOCUMENT.test(clause),
-    own: OWN_NAMED.test(clause),
-    placed: INTO_PLACE.test(clause) || IN_PLACE.test(clause) || NEW_PAGE.test(clause),
-    doubts: asked || DOUBTS.test(clause),
-  };
-  let rest = clause.replace(LEAD, "");
-  const polite = POLITE.test(rest);
-  if (polite) rest = rest.replace(POLITE, "").replace(LEAD, "");
-  else if (asked || ASKS.test(rest)) return { ...read, kind: "answer", asks: true };
-  const kind = englishImperative(rest, read.document);
-  if (!polite) return { ...read, kind, asks: false };
-  return { ...read, kind: kind === "answer" || kind === "none" ? "answer" : "polite", asks: true };
-}
-
-function chineseImperative(clause: string, document: boolean): ClauseKind {
-  const [, object = "", verb = "", after = ""] = ZH_VERB.exec(clause) ?? [];
-  if (verb && !ZH_IS_EXPLAIN.test(verb) && ZH_INTO_PLACE.test(clause)) return "write";
-  if (ZH_REPLY.test(clause)) return "answer";
-  if (ZH_MORE_OF.test(clause)) return "follow-up";
-  if (ZH_CONTINUE.test(clause)) return "continue";
-  if (!verb) return ZH_TOPIC_EDIT.test(clause) && !document ? "edit" : "none";
-  const own = ZH_OWN_NAMED.test(clause.replace(ZH_IN_PLACE, "")) && !document;
-  if (ZH_IS_EXPLAIN.test(verb)) return "answer";
-  if (ZH_IS_CREATE.test(verb) && (ZH_PIECE.test(clause) || ZH_ADD_SECTION.test(clause)))
-    return "write";
-  if (ZH_IS_SUMMARISE.test(verb)) return "answer";
-  if (own) return verb === "写" && !/[得成长短]/.test(after) ? "write" : "edit";
-  if (ZH_IS_CREATE.test(verb) && ZH_IN_PLACE.test(clause)) return "write";
-  if (document) return "answer";
-  const bare = object ? ZH_BARE_OBJECT.test(object) : ZH_BARE_REST.test(after);
-  return bare ? "follow-up" : "unclear";
-}
-
-function chineseClause(clause: string, asked: boolean): ClauseRead {
-  const document = ZH_DOCUMENT.test(clause);
-  const read = {
-    document,
-    own: ZH_OWN_NAMED.test(clause),
-    placed: ZH_INTO_PLACE.test(clause) || ZH_IN_PLACE.test(clause),
-    doubts: asked || ZH_DOUBTS.test(clause),
-  };
-  let rest = clause.replace(ZH_LEAD, "");
-  const polite = ZH_POLITE.test(rest);
-  if (polite) {
-    rest = rest
-      .replace(ZH_POLITE, "")
-      .replace(ZH_LEAD, "")
-      .replace(/[吗呢]$/, "");
-  } else if (asked || ZH_ASKS.test(rest)) {
-    return { ...read, kind: "answer", asks: true };
-  }
-  const kind = chineseImperative(rest, document);
-  if (!polite) return { ...read, kind, asks: false };
-  return { ...read, kind: kind === "answer" || kind === "none" ? "answer" : "polite", asks: true };
-}
-
-const readClause = ({ text, asked }: { text: string; asked: boolean }): ClauseRead =>
-  /\p{Script=Han}/u.test(text) ? chineseClause(text, asked) : englishClause(text, asked);
-
-const CHANGES: readonly ClauseKind[] = ["edit", "write", "follow-up", "continue"];
 
 export function routeRequest(
   question: string,
   { followsAChange }: { followsAChange: boolean },
 ): RequestRoute {
-  const reads = clausesOf(question).map(readClause);
-  const kinds: ClauseKind[] = [];
-  let askedOfOwn = false;
-  let before = false;
-  for (const read of reads) {
-    const changes = CHANGES.includes(read.kind);
-    // "Is my intro too long? Shorten it" may hang on the answer.
-    if (askedOfOwn && changes) kinds.push("unclear");
-    // "What does the abstract say? Translate it": "it" is the answer, or the Document.
-    else if (before && changes && !(read.kind === "write" && read.placed)) kinds.push("answer");
-    else kinds.push(read.kind);
-    askedOfOwn ||= read.asks && read.own;
-    before ||= read.asks || read.document || read.kind === "answer";
-  }
-  // Doubted where it is asked for, or after ("Shorten my intro. Would that help?"), a change is
-  // the User's to decide.
-  const from = kinds.findIndex((kind) => CHANGES.includes(kind));
-  const doubted = from >= 0 && reads.slice(from).some((read) => read.doubts);
-  const asked: RequestKind = kinds.includes("edit")
-    ? "edit"
-    : kinds.includes("write")
-      ? "write"
-      : kinds.includes("follow-up") && followsAChange
-        ? "edit"
-        : kinds.includes("continue") && followsAChange
-          ? "write"
-          : kinds.some((each) => each === "follow-up" || each === "polite" || each === "unclear")
-            ? "unclear"
-            : "answer";
-  const kind = doubted && (asked === "edit" || asked === "write") ? "unclear" : asked;
+  const kind = plainKind(question, followsAChange) ?? "unclear";
   const newMind =
-    kind === "write" &&
-    !NAMES_A_MIND.test(question) &&
-    (NEW_MIND.test(question.toLocaleLowerCase()) || ZH_NEW_MIND.test(question));
+    kind === "write" && !NAMES_A_MIND.test(question) && NEW_MIND.test(question.toLocaleLowerCase());
   return { kind, newMind };
 }
