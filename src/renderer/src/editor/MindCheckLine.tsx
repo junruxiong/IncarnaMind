@@ -3,15 +3,16 @@ import { useEditorState } from "@tiptap/react";
 import type { MindCheckRun } from "../../../core/api";
 import { formatDateTime } from "../../../shared/dates";
 import { ProblemLine } from "../components/ProblemLine";
-import { runStopText } from "../cost";
+import { runStopParts } from "../cost";
 import { useLanguage, useT } from "../i18n";
 import { checkMind, dismissMindCheck, useMindCheck } from "../mindCheck";
 import { shownClaims } from "./claimChecks";
 
 /**
  * Check this Mind's question (#737), on the line under the title before a
- * run billed per token: "Check this Mind's 48 sentences against this
- * Folder's Documents? About 52 calls, … · Check · Not now".
+ * run billed per token: "Check about 30–48 claims in this Mind against this
+ * Folder's Documents? · About $0.40 · 72 model calls · Check · Not now". The
+ * model names the claims once the run starts, so the count is a range.
  */
 export function MindCheckAsk({ mindId }: { mindId: string }) {
   const t = useT();
@@ -26,20 +27,17 @@ export function MindCheckAsk({ mindId }: { mindId: string }) {
     likely === null || asking.sentences === 1
       ? t(asking.sentences === 1 ? `mindCheck.ask.${where}.one` : `mindCheck.ask.${where}`, {
           count,
-          estimate: asking.estimate,
         })
       : likely < asking.sentences
-        ? t(`mindCheck.ask.${where}.range`, {
-            least: format(likely),
-            most: count,
-            estimate: asking.estimate,
-          })
-        : t(`mindCheck.ask.${where}.about`, { count, estimate: asking.estimate });
+        ? t(`mindCheck.ask.${where}.range`, { least: format(likely), most: count })
+        : t(`mindCheck.ask.${where}.about`, { count });
   return (
     <ProblemLine
       role="status"
       testId="mind-check-ask"
       className="mind-health-line"
+      details={asking.estimate.parts}
+      title={asking.estimate.title}
       action={{
         label: t("mindCheck.check"),
         testId: "mind-check-check",
@@ -92,9 +90,17 @@ export function CheckedWhen({ run }: { run: MindCheckRun }) {
     when,
   });
   return (
-    <span data-testid="health-checked-all" className="mind-health-when">
-      {run.stop ? `${said} · ${runStopText(run.stop, t, language)}` : said}
-    </span>
+    <>
+      <span data-testid="health-checked-all" className="mind-health-when">
+        {said}
+      </span>
+      {run.stop &&
+        runStopParts(run.stop, t, language).map((part) => (
+          <span key={part} className="mind-health-when">
+            {part}
+          </span>
+        ))}
+    </>
   );
 }
 
@@ -117,7 +123,7 @@ export function MindCheckAction({
     <button
       type="button"
       data-testid="health-check"
-      className="mind-verify-link"
+      className="mind-verify-link mind-health-action"
       onMouseDown={(event) => event.preventDefault()}
       onClick={onCheck}
     >

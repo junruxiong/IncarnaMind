@@ -132,9 +132,8 @@ test("Check this Mind from ⌘K: the estimate first on a cloud model, then every
   // Billed per token: the line asks first, with the estimate, its price first. Of the 20
   // sentences, the 15 whose words read as claims are likely checked, and are.
   const ask = window.getByTestId("mind-check-ask");
-  await expect(ask).toContainText(
-    "Check about 15–20 claims in this Mind against your Documents? About $",
-  );
+  await expect(ask).toContainText("Check about 15–20 claims in this Mind against your Documents?");
+  await expect(ask).toContainText("About $");
   await expect(window.getByTestId("palette-search")).toBeHidden();
   await motionSettled(window);
   await screenshot(window, "mind-check-ask-en");
