@@ -209,6 +209,10 @@ jobs:
         run: |
           rm -rf dist/win-unpacked
           mv "$RUNNER_TEMP/signed-app" dist/win-unpacked
+          if [ ! -f dist/win-unpacked/resources/app-update.yml ]; then
+            echo "::error title=The signed app can't update itself::It has no resources/app-update.yml."
+            exit 1
+          fi
           npx electron-builder --win --x64 --prepackaged dist/win-unpacked --publish never
 
       - name: Upload the Windows installer for signing
