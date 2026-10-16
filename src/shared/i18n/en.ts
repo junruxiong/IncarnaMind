@@ -3268,6 +3268,8 @@ export const en = {
   "error.connector.nameTooLong": "A Connector's name can't be longer than {max} characters.",
   "error.connector.nameTaken": "A Connector named “{name}” already exists.",
   "error.connector.off": "Turn the Connector on first.",
+  "error.connector.localMode":
+    "“Keep everything on this computer” is on, and this Connector isn't on this computer, so it isn't used.",
   "error.connector.urlMissing": "Enter the server's URL.",
   "error.connector.urlTooLong": "That URL is too long.",
   "error.connector.urlInvalid": "“{url}” isn't a valid URL.",
@@ -3550,6 +3552,7 @@ export const en = {
   "connectors.custom.import": "Import from Claude or Cursor",
   "connectors.custom.note": "Connectors you add yourself aren't reviewed.",
   "connectors.state.off": "Off",
+  "connectors.state.paused": "Not used while everything stays on this computer",
   "connectors.state.connecting": "Connecting…",
   "connectors.state.ready": "Connected",
   "connectors.state.error": "Not connected",
