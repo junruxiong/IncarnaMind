@@ -231,12 +231,22 @@ describe("formatting a Mind's Citations", () => {
       [work(prospect, printed("265"))],
       [work(prospect, printed("68", "69"))],
       [work(prospect, printed("xii"))],
+      [work(prospect, printed("1-3"))],
+      [work(prospect, printed("iii", "iv"))],
     );
     expect(formatted.clusters.map((cluster) => plain(cluster.runs))).toEqual([
       "(Kahneman & Tversky, 1979, p. 265)",
       "(Kahneman & Tversky, 1979, pp. 68–69)",
       "(Kahneman & Tversky, 1979, p. xii)",
+      "(Kahneman & Tversky, 1979, p. 1\u20113)",
+      "(Kahneman & Tversky, 1979, p. iii–iv)",
     ]);
+    expect(locatorOf(printed("1-3"), "en")).toEqual({ locator: "p. 1\u20113", label: "custom" });
+    expect(locatorOf(printed("iii", "iv"), "zh-CN")).toEqual({
+      locator: "第 iii–iv 页",
+      label: "custom",
+    });
+    expect(locatorOf(printed("68", "69"), "en")).toEqual({ locator: "68-69", label: "page" });
   });
 
   test("Citations side by side are one cluster, its runs marked with the Citation each belongs to", async () => {

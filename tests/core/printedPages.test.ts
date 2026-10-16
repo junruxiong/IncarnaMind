@@ -27,6 +27,16 @@ const page = (index: number, ...footer: string[]) =>
 const footed = (printed: readonly string[]) =>
   printed.map((footer, index) => page(index, ...(footer ? [footer] : [])));
 
+const NONE = (count: number) => Array(count).fill(null);
+
+/** Pages with `lines` before the body (headers) and `footers` after it, one string each ("" for none). */
+const framed = (headers: readonly string[], footers: readonly string[] = []) =>
+  Array.from({ length: Math.max(headers.length, footers.length) }, (_, index) =>
+    [headers[index], BODIES[index % BODIES.length], footers[index]]
+      .filter((line): line is string => Boolean(line))
+      .join("\n"),
+  );
+
 describe("Page numbers read from footers and headers", () => {
   test("footers one lower than the PDF's pages give those numbers to the pages that print them", () => {
     expect(printedNumbers(footed(["", "1", "2", "3", "4"]))).toEqual([null, "1", "2", "3", "4"]);
@@ -40,14 +50,31 @@ describe("Page numbers read from footers and headers", () => {
     ]);
   });
 
-  test("a number beside text on a page's first or last line is read, headers as well as footers", () => {
-    const pages = [
-      page(0),
-      ["Annual Report 2024 | 1", BODIES[1]].join("\n"),
-      [BODIES[2], "2 | Annual Report 2024"].join("\n"),
-      [BODIES[3], "Annual Report 2024    3"].join("\n"),
-    ];
-    expect(printedNumbers(pages)).toEqual([null, "1", "2", "3"]);
+  test("a number beside the text of a running footer or header is read", () => {
+    const running = (end: "header" | "footer", ...numbers: number[]) =>
+      framed(
+        end === "header" ? ["", ...numbers.map((n) => `Annual Report 2024 | ${n}`)] : [],
+        end === "footer" ? ["", ...numbers.map((n) => `${n} | Annual Report 2024`)] : [],
+      );
+    expect(printedNumbers(running("footer", 1, 2, 3, 4))).toEqual([null, "1", "2", "3", "4"]);
+    expect(printedNumbers(running("header", 1, 2, 3, 4))).toEqual([null, "1", "2", "3", "4"]);
+  });
+
+  test("a footer's year above the number, or beside it, is not the number", () => {
+    const above = framed([], ["", ...[1, 2, 3, 4].map((n) => `Annual Report 2023\n${n}`)]);
+    const beside = framed([], ["", ...[1, 2, 3, 4].map((n) => `Annual Report 2023 | ${n}`)]);
+    expect(printedNumbers(above)).toEqual([null, "1", "2", "3", "4"]);
+    expect(printedNumbers(beside)).toEqual([null, "1", "2", "3", "4"]);
+  });
+
+  test("a cover that prints a year alone is let off, and the pages after it are named", () => {
+    const pages = ["Annual Report\n2023", ...[1, 2, 3, 4].map((n) => page(n, `${n}`))];
+    expect(printedNumbers(pages)).toEqual([null, "1", "2", "3", "4"]);
+  });
+
+  test("roman front matter that prints no digits is skipped, and the pages after it are named", () => {
+    const printed = ["", "i", "ii", "iii", "1", "2", "3", "4"];
+    expect(printedNumbers(footed(printed))).toEqual([...NONE(4), "1", "2", "3", "4"]);
   });
 
   test("a page between the first and last that print a number gets the one the offset gives it", () => {
@@ -66,29 +93,101 @@ describe("Page numbers read from footers and headers", () => {
     expect(printedNumbers(footed(["100", "101", "102"]))).toEqual(["100", "101", "102"]);
   });
 
+  test("a header and a footer that print the same numbers agree", () => {
+    const both = framed(
+      ["", ...[1, 2, 3, 4].map((n) => `${n}`)],
+      ["", ...[1, 2, 3, 4].map((n) => `${n}`)],
+    );
+    expect(printedNumbers(both)).toEqual([null, "1", "2", "3", "4"]);
+  });
+
+  test("a header and a footer that print numbers at different offsets give nothing", () => {
+    const both = framed(
+      ["", ...[1, 2, 3, 4].map((n) => `${n}`)],
+      ["", ...[2, 3, 4, 5].map((n) => `${n}`)],
+    );
+    expect(printedNumbers(both)).toEqual(NONE(5));
+  });
+
   test("fewer than three pages with the same offset are no steady offset", () => {
-    expect(printedNumbers(footed(["", "1", "2", "", ""]))).toEqual([null, null, null, null, null]);
+    expect(printedNumbers(footed(["", "1", "2", "", ""]))).toEqual(NONE(5));
+  });
+
+  test("numbers at both ends, each end short of three pages, are not added together", () => {
+    const pages = framed(["", "", "", "3", "4", ""], ["", "1", "2", "", "", ""]);
+    expect(printedNumbers(pages)).toEqual(NONE(6));
+  });
+
+  test("numbers on a few pages scattered over many are not a steady offset", () => {
+    const printed = Array(12).fill("");
+    printed[1] = "1";
+    printed[5] = "5";
+    printed[10] = "10";
+    expect(printedNumbers(footed(printed))).toEqual(NONE(12));
   });
 
   test("one page that prints another number than the offset gives it spoils it for every page", () => {
-    expect(printedNumbers(footed(["", "1", "2", "3", "9", "5"]))).toEqual(Array(6).fill(null));
+    expect(printedNumbers(footed(["", "1", "2", "3", "9", "5"]))).toEqual(NONE(6));
+  });
+
+  test("a number beside text that disagrees spoils it as a bare one does", () => {
+    const footers = ["", "Annual Report | 1", "Annual Report | 2", "Annual Report | 3"];
+    expect(printedNumbers(footed([...footers, "Annual Report | 9", "Annual Report | 5"]))).toEqual(
+      NONE(6),
+    );
   });
 
   test("two numberings that run on at different offsets are no steady offset", () => {
-    const printed = ["", "1", "2", "3", "1", "2", "3"];
-    expect(printedNumbers(footed(printed))).toEqual(Array(7).fill(null));
+    expect(printedNumbers(footed(["", "1", "2", "3", "1", "2", "3"]))).toEqual(NONE(7));
+  });
+
+  test("a second part that starts again at 1 spoils the first part's offset", () => {
+    expect(printedNumbers(footed(["", "1", "2", "3", "4", "1", "2", "3"]))).toEqual(NONE(8));
+  });
+
+  test("two pages to a sheet, with two numbers in the footer, give nothing", () => {
+    const sheets = [1, 2, 3, 4, 5, 6].map((sheet) =>
+      page(sheet, `${2 * sheet}`, `${2 * sheet + 1}`),
+    );
+    expect(printedNumbers(sheets)).toEqual(NONE(6));
   });
 
   test("numbers that don't follow the page index, and pages that print none, give nothing", () => {
-    expect(printedNumbers(footed(["12", "4", "88", "7", "3"]))).toEqual(Array(5).fill(null));
-    expect(printedNumbers(footed(["", "", "", ""]))).toEqual(Array(4).fill(null));
+    expect(printedNumbers(footed(["12", "4", "88", "7", "3"]))).toEqual(NONE(5));
+    expect(printedNumbers(footed(["", "", "", ""]))).toEqual(NONE(4));
   });
 
   test("a figure's number, a year or a total in the body is not a page number", () => {
     const pages = [1, 2, 3, 4].map((number) =>
       [BODIES[number], `Figure ${number}`, "Turnover rose to 1,234 in 2024.", "Up 12%"].join("\n"),
     );
-    expect(printedNumbers(pages)).toEqual(Array(4).fill(null));
+    expect(printedNumbers(pages)).toEqual(NONE(4));
+  });
+
+  test("digits after a hyphen are never a page number", () => {
+    const hyphenated = (label: (n: number) => string) => footed(["", ...[1, 2, 3, 4].map(label)]);
+    expect(printedNumbers(hyphenated((n) => `Halden Manual | A-${n + 2}`))).toEqual(NONE(5));
+    expect(printedNumbers(hyphenated((n) => `III-${n + 3}`))).toEqual(NONE(5));
+    expect(printedNumbers(hyphenated((n) => `Page 2-${n + 13}`))).toEqual(NONE(5));
+    expect(printedNumbers(hyphenated((n) => `Manual 5-${n + 11}`))).toEqual(NONE(5));
+    expect(printedNumbers(hyphenated((n) => `5-${n + 11}`))).toEqual(NONE(5));
+  });
+
+  test("numbered headings on consecutive pages are not page numbers", () => {
+    const headings = framed(["", "", "", "3 Methods", "4 Results", "5 Discussion", ""]);
+    expect(printedNumbers(headings)).toEqual(NONE(7));
+  });
+
+  test("captions on consecutive pages are not page numbers", () => {
+    const captions = ["", "", "", "Figure 3", "Figure 4", "Figure 5", ""];
+    expect(printedNumbers(footed(captions))).toEqual(NONE(7));
+    const tables = ["", "", "", "Table 3", "Table 4", "Table 5", ""];
+    expect(printedNumbers(footed(tables))).toEqual(NONE(7));
+  });
+
+  test("footnotes at the foot of consecutive pages are not page numbers", () => {
+    const notes = ["", "", "", "3 See Smith (2020).", "4 See Jones (2019).", "5 Ibid.", ""];
+    expect(printedNumbers(footed(notes))).toEqual(NONE(7));
   });
 
   test("Chinese pages are read as well", () => {
@@ -115,6 +214,11 @@ describe("The name of each page", () => {
       "A-4",
       "A-5",
     ]);
+  });
+
+  test("a label with a hyphen is kept whole, as the PDF gives it", () => {
+    const labels = ["5-12", "5-13", "5-14", "5-15", "5-16"];
+    expect(printedPageNames(labels, texts)).toEqual(labels);
   });
 
   test("labels that give every page its own index are a default, and footers speak instead", () => {
@@ -197,6 +301,18 @@ describe("A PDF's pages, as extracted", () => {
     expect(units.map((unit) => unit.label?.printed ?? null)).toEqual([null, "1", "2", "3", "4"]);
     // The text is as it was extracted: the footer is for Processing to take off.
     expect(units[1]?.text).toContain("Strategic report");
+  });
+
+  test("hyphenated footers give no names: a hyphen's digits are never a page number", async () => {
+    const pdf = buildPdf(
+      [12, 13, 14, 15, 16].map((n, index) =>
+        lines(BODIES[index] as string, "Manual", `Manual 5-${n}`),
+      ),
+    );
+
+    const { units } = await extractText("pdf", pdf);
+
+    expect(units.map((unit) => unit.label)).toEqual(NONE(5));
   });
 
   test("a PDF with inconsistent numbers, or none, keeps its pages as they are, with no label", async () => {

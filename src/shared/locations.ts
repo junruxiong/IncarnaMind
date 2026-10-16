@@ -18,8 +18,8 @@ import { type MessageKey, type MessageParams, translate } from "./i18n";
 import { findQuote, type MatchOptions, type TextRange } from "./quoteMatch";
 import {
   anchorsOf,
+  isPrintedName,
   lineAt,
-  MAX_PRINTED_PAGE_LENGTH,
   parseCellRef,
   parseCueTarget,
   type UnitText,
@@ -36,15 +36,11 @@ const isCount = (value: unknown): value is number =>
 const isTime = (value: unknown): value is number =>
   typeof value === "number" && Number.isInteger(value) && value >= 0;
 
-const isPrintedName = (value: unknown): value is string =>
-  typeof value === "string" &&
-  value !== "" &&
-  value.length <= MAX_PRINTED_PAGE_LENGTH &&
-  !/\p{C}/u.test(value);
-
 function parsePrinted(value: unknown): { from: string; to: string } | null {
-  if (typeof value !== "object" || value === null) return null;
-  const { from, to } = value as Record<string, unknown>;
+  if (typeof value !== "object" || value === null || !("from" in value) || !("to" in value)) {
+    return null;
+  }
+  const { from, to } = value;
   return isPrintedName(from) && isPrintedName(to) ? { from, to } : null;
 }
 
@@ -184,11 +180,7 @@ export function formatLocation(location: CitationLocation, t: Translate): string
   }
 }
 
-/**
- * A PDF page's Location with both its names, "p. 68 · page 69 of the PDF",
- * when the page calls itself something other than its number in the PDF;
- * null otherwise.
- */
+/** "p. 68 · page 69 of the PDF" for a page that calls itself something other than its number in the PDF; null otherwise. */
 export function formatLocationWithPdf(location: CitationLocation, t: Translate): string | null {
   if (location.kind !== "page" || !location.printed) return null;
   return t(
@@ -202,14 +194,14 @@ export function formatLocationWithPdf(location: CitationLocation, t: Translate):
 
 const english: Translate = (key, params) => translate("en", key, params);
 
-/** A Location's label in English, a PDF page by its number in the PDF, as the model's prompt names it. */
+/** A PDF page by its number in the PDF, which is how a model cites it. */
 export const englishLocation = (location: CitationLocation): string =>
   formatLocation(
     location.kind === "page" ? { kind: "page", from: location.from, to: location.to } : location,
     english,
   );
 
-/** A Location's label in English as a reader of the Document writes it, a PDF page by its printed name: for Citations copied as text. */
+/** A Citation copied as text names the page the Document prints. */
 export const englishPrintedLocation = (location: CitationLocation): string =>
   formatLocation(location, english);
 

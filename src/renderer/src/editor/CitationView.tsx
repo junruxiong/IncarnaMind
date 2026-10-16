@@ -500,14 +500,16 @@ function CitationCard({
     web?.versions.find((each) => each.contentHash === attributes.contentHash)?.fetchedAt ??
     web?.fetchedAt;
   const checked = state.check === "found" || state.check === "not-found";
-  // Once checked, the state line names the place, or the Document if it names none.
-  const source = checked
-    ? where
-      ? name
-      : null
-    : where
-      ? citationSource(attributes, t).text
-      : name;
+  // Once checked, the state line names the place, or the Document if it names none; a page line
+  // under the name says the place, so the name stands alone.
+  const source =
+    checked || withPdfPage
+      ? where
+        ? name
+        : null
+      : where
+        ? citationSource(attributes, t).text
+        : name;
   const reason =
     state.check === "checking"
       ? t("citation.reason.checking")

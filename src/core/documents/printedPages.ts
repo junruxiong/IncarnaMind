@@ -1,118 +1,143 @@
 /**
- * What the pages of a PDF call themselves (#901): the names its page labels
- * give them or, when it has none worth the name, the numbers its headers and
- * footers print, when those keep step with the PDF's page index. Pure: it
- * runs in the processing worker and in tests.
+ * The names a PDF's pages give themselves (#901). Nothing is guessed: a page is named by its
+ * page label, or by the number its header or footer prints when that holds at one steady offset
+ * from the PDF's page index; otherwise it is known by its place in the PDF.
  */
 import { normaliseText } from "../../shared/text";
-import { MAX_PRINTED_PAGE_LENGTH } from "../../shared/units";
+import { isPrintedName } from "../../shared/units";
 
-const EDGE_LINES = 3;
-const MIN_PAGES_AT_ONE_OFFSET = 3;
+const ZONE_LINES = 3;
+const MIN_PAGES = 3;
+const MIN_SHARE = 0.6;
 
-/** A line that is only a page number: "68", "- 68 -", "Page 68 of 120", "68 / 120", "第 68 页". */
-const PAGE_NUMBER_LINES = [
-  /^(?:[-|·•([]\s*)?(\d{1,4})(?:\s*[-|·•)\]])?$/,
-  /^(?:page|pg|p)\.?\s*(\d{1,4})(?:\s*(?:of|\/)\s*\d{1,4})?$/i,
-  /^(\d{1,4})\s*(?:of|\/)\s*\d{1,4}$/i,
-  /^第(\d{1,4})页(?:[,/]?共\d{1,4}页)?$/,
+const BARE_NUMBER = [
+  /^(?<n>\d{1,4})$/,
+  /^([-|·•])\s*(?<n>\d{1,4})\s*\1$/,
+  /^\(\s*(?<n>\d{1,4})\s*\)$/,
+  /^\[\s*(?<n>\d{1,4})\s*\]$/,
+  /^(?:page|pg|p)\.?\s*(?<n>\d{1,4})(?:\s*(?:of|\/)\s*\d{1,4})?$/i,
+  /^(?<n>\d{1,4})\s*(?:of|\/)\s*\d{1,4}$/,
+  /^第(?<n>\d{1,4})页(?:,?共\d{1,4}页)?$/,
 ];
+const NUMBER_BEFORE_TEXT = /^(?<n>\d{1,3})(?:\s*[|·•]\s*|\s+)(?<rest>\p{L}.{0,80})$/u;
+const NUMBER_AFTER_TEXT =
+  /^(?<rest>(?=.*\p{L}).{1,80}?[\p{L}\p{N}])(?:\s*[|·•]\s*|\s+)(?<n>\d{1,3})$/u;
+const LABEL_OF_ANOTHER_NUMBER =
+  /(?:^|\s)(?:figure|fig|table|chart|exhibit|section|chapter|appendix|part|note|plate|equation|article|clause|schedule|annex|step|item|no)\.?$/i;
 
-/** A page's first or last line with its number before other text ("68 | Annual Report"). */
-const NUMBER_BEFORE_TEXT = /^(\d{1,3})(?:\s*[|·•-]\s*|\s+)\p{L}.{0,80}$/u;
-
-/** As above, with the number after the text ("Annual Report 2024 | 68"). */
-const NUMBER_AFTER_TEXT = /^(?=.*\p{L}).{0,80}[\p{L}\p{N}](?:\s*[|·•-]\s*|\s+)(\d{1,3})$/u;
-
-interface Readings {
-  /** From lines that are only a page number. */
-  alone: Set<number>;
-  /** From a number beside other text on the page's first or last line. */
-  beside: Set<number>;
+interface Reading {
+  number: number;
+  shape: string | null;
 }
 
-function readPage(text: string): Readings {
-  const lines = text
-    .split("\n")
-    .map((line) => normaliseText(line))
-    .filter((line) => line !== "");
-  const edges =
-    lines.length <= EDGE_LINES * 2
-      ? lines
-      : [...lines.slice(0, EDGE_LINES), ...lines.slice(-EDGE_LINES)];
-  const readings: Readings = { alone: new Set(), beside: new Set() };
-  for (const line of edges) {
-    for (const pattern of PAGE_NUMBER_LINES) {
-      const number = Number(pattern.exec(line)?.[1]);
-      if (number >= 1) readings.alone.add(number);
-    }
+function readLine(line: string, outermost: boolean): Reading | null {
+  for (const pattern of BARE_NUMBER) {
+    const number = Number(pattern.exec(line)?.groups?.n);
+    if (number >= 1) return { number, shape: null };
   }
-  for (const line of [lines[0], lines.at(-1)]) {
-    if (line === undefined) continue;
-    for (const pattern of [NUMBER_BEFORE_TEXT, NUMBER_AFTER_TEXT]) {
-      const number = Number(pattern.exec(line)?.[1]);
-      if (number >= 1) readings.beside.add(number);
-    }
-  }
-  return readings;
+  if (!outermost) return null;
+  const before = NUMBER_BEFORE_TEXT.exec(line)?.groups;
+  const after = NUMBER_AFTER_TEXT.exec(line)?.groups;
+  if (Boolean(before) === Boolean(after)) return null;
+  if (after && LABEL_OF_ANOTHER_NUMBER.test(after.rest ?? "")) return null;
+  const number = Number((before ?? after)?.n);
+  return number >= 1 ? { number, shape: line.toLowerCase().replace(/\d+/g, "#") } : null;
 }
 
-/**
- * The number each page prints, as text, when the offset from the PDF's page
- * index is steady: the same on at least three pages, with no page that prints
- * only a page number saying another. A page between the first and the last
- * that print it gets the number the offset gives it, though it prints none
- * itself. Null for every page when no offset is steady.
- */
-export function printedNumbers(texts: readonly string[]): (string | null)[] {
-  const none = texts.map(() => null);
-  const pages = texts.map(readPage);
-  const read = (page: Readings, number: number) =>
-    page.alone.has(number) || page.beside.has(number);
+function zonesOf(text: string): { header: string[]; footer: string[] } {
+  const lines = text.split("\n").filter((line) => line.trim() !== "");
+  const head = Math.min(ZONE_LINES, Math.floor(lines.length / 2));
+  const foot = Math.min(ZONE_LINES, lines.length - head);
+  return {
+    header: lines.slice(0, head).map(normaliseText),
+    footer: lines
+      .slice(lines.length - foot)
+      .reverse()
+      .map(normaliseText),
+  };
+}
 
+function numbersAt(zones: readonly string[][]): Set<number>[] {
+  const readings = zones.map((lines) =>
+    lines.flatMap((line, depth) => readLine(line, depth === 0) ?? []),
+  );
+  const pagesWithShape = new Map<string, number>();
+  for (const page of readings) {
+    for (const shape of new Set(page.map((reading) => reading.shape))) {
+      if (shape !== null) pagesWithShape.set(shape, (pagesWithShape.get(shape) ?? 0) + 1);
+    }
+  }
+  // A running header or footer has the same shape on page after page; a heading, a caption or a
+  // footnote doesn't.
+  return readings.map(
+    (page) =>
+      new Set(
+        page
+          .filter(
+            (reading) =>
+              reading.shape === null || (pagesWithShape.get(reading.shape) ?? 0) >= MIN_PAGES,
+          )
+          .map((reading) => reading.number),
+      ),
+  );
+}
+
+function steadyNames(numbers: readonly Set<number>[]): (string | null)[] | null {
   const votes = new Map<number, number>();
-  pages.forEach((page, index) => {
-    const offsets = new Set([...page.alone, ...page.beside].map((number) => index + 1 - number));
-    for (const offset of offsets) votes.set(offset, (votes.get(offset) ?? 0) + 1);
+  numbers.forEach((page, index) => {
+    for (const number of page) {
+      const offset = index + 1 - number;
+      votes.set(offset, (votes.get(offset) ?? 0) + 1);
+    }
   });
-  const ranked = [...votes].sort((a, b) => b[1] - a[1]);
-  const [best, runnerUp] = ranked;
-  if (!best || best[1] < MIN_PAGES_AT_ONE_OFFSET || best[1] === runnerUp?.[1]) return none;
+  const [best, runnerUp] = [...votes].sort((a, b) => b[1] - a[1]);
+  if (!best || best[1] < MIN_PAGES || best[1] === runnerUp?.[1]) return null;
 
   const offset = best[0];
-  if (pages.some((page, index) => page.alone.size > 0 && !page.alone.has(index + 1 - offset))) {
-    return none;
-  }
-  const printed = pages.flatMap((page, index) => (read(page, index + 1 - offset) ? [index] : []));
-  const first = printed[0] as number;
-  const last = printed.at(-1) as number;
-  return texts.map((_, index) =>
+  // A cover can print a year or a title's number alone, so the first page is let off.
+  const disagrees = numbers.some(
+    (page, index) => index > 0 && page.size > 0 && !page.has(index + 1 - offset),
+  );
+  if (disagrees) return null;
+  const agreeing = numbers.flatMap((page, index) => (page.has(index + 1 - offset) ? [index] : []));
+  const first = agreeing[0];
+  const last = agreeing.at(-1);
+  if (first === undefined || last === undefined) return null;
+  if (agreeing.length < MIN_SHARE * (last - first + 1)) return null;
+  return numbers.map((_, index) =>
     index >= first && index <= last ? String(index + 1 - offset) : null,
   );
 }
 
-function nameOf(label: string | undefined): string | null {
-  const name = label?.trim() ?? "";
-  return name === "" || name.length > MAX_PRINTED_PAGE_LENGTH || /\p{C}/u.test(name) ? null : name;
+export function printedNumbers(texts: readonly string[]): (string | null)[] {
+  const zones = texts.map(zonesOf);
+  const header = steadyNames(numbersAt(zones.map((zone) => zone.header)));
+  const footer = steadyNames(numbersAt(zones.map((zone) => zone.footer)));
+  if (!header || !footer) return header ?? footer ?? texts.map(() => null);
+  const agree = header.every(
+    (name, index) => name === null || footer[index] === null || name === footer[index],
+  );
+  return agree ? footer.map((name, index) => name ?? header[index] ?? null) : texts.map(() => null);
 }
 
+function nameOf(label: string | undefined): string | null {
+  const name = label?.trim();
+  return isPrintedName(name) ? name : null;
+}
+
+const differsFromIndex = (names: readonly (string | null)[]) =>
+  names.some((name, index) => name !== null && name !== String(index + 1));
+
 /**
- * The name of each page, by the PDF's page index: from its page labels when
- * they name any page differently from its index, else from the numbers its
- * pages print. A page that names itself as its index is no different from
- * one with no name, so a PDF where none does has none (a producer's default
- * labels say nothing). `texts` are the pages' text as extracted, running
- * headers and footers still in it.
+ * The name of each page, by the PDF's page index: from its page labels when they name any page
+ * differently from its index, else from the numbers its pages print. `texts` are the pages' text
+ * as extracted, running headers and footers still in it.
  */
 export function printedPageNames(
   labels: readonly string[] | null,
   texts: readonly string[],
 ): (string | null)[] {
-  const named = labels ? texts.map((_, index) => nameOf(labels[index])) : null;
-  const names = named?.some((name, index) => name !== null && name !== String(index + 1))
-    ? named
-    : printedNumbers(texts);
-  return names.some((name, index) => name !== null && name !== String(index + 1))
-    ? names
-    : texts.map(() => null);
+  const fromLabels = labels && texts.map((_, index) => nameOf(labels[index]));
+  const names = fromLabels && differsFromIndex(fromLabels) ? fromLabels : printedNumbers(texts);
+  return differsFromIndex(names) ? names : texts.map(() => null);
 }
