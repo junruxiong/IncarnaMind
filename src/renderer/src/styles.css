@@ -4143,6 +4143,13 @@
       background: var(--color-sheet);
       box-shadow: inset 0 0 0 1.5px var(--color-danger);
     }
+    /* Step 1 of the first open: a still accent ring, as the focus ring sits, until it is opened. */
+    &[data-check="contradicted"][data-guided] {
+      box-shadow:
+        inset 0 0 0 1.5px var(--check-ink),
+        0 0 0 1px var(--color-sheet),
+        0 0 0 3px var(--color-accent);
+    }
 
     /* Only the dot pulses while it is checked: the number keeps its contrast. */
     &[data-check="checking"] .margin-check-icon {
