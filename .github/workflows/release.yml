@@ -175,7 +175,7 @@ jobs:
       - name: Upload the Windows app for signing
         id: unsigned-app
         if: steps.signpath.outputs.sign == 'true'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: windows-app-unsigned
           path: dist/win-unpacked/
@@ -188,7 +188,7 @@ jobs:
       # Each signing request waits for an approver in SignPath, for up to two hours.
       - name: Sign the Windows app (SignPath)
         if: steps.signpath.outputs.sign == 'true'
-        uses: signpath/github-action-submit-signing-request@v3.0
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
@@ -218,7 +218,7 @@ jobs:
       - name: Upload the Windows installer for signing
         id: unsigned-installer
         if: steps.signpath.outputs.sign == 'true'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: windows-installer-unsigned
           path: dist/IncarnaMind-${{ steps.signpath.outputs.version }}-win-x64.exe
@@ -228,7 +228,7 @@ jobs:
 
       - name: Sign the Windows installer (SignPath)
         if: steps.signpath.outputs.sign == 'true'
-        uses: signpath/github-action-submit-signing-request@v3.0
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
