@@ -93,6 +93,24 @@ describe("A request for text in a Mind", { timeout: 30_000 }, () => {
     });
   });
 
+  // protects=an asked page whose reply both claims a change and writes nothing goes through the one list: the claim's check asks first, the write's asks next, and no more than the total of asks is made, the last reply flagged; fails_when=the model is asked a third time, or the claim isn't flagged; no_claim=none beyond protects.
+  test("a reply that trips both checks is asked twice at most, and flagged", async () => {
+    const notes: string[] = [];
+    const model = scriptedModel((call): ScriptedReply => {
+      notes.push(asked(call));
+      return { text: "I've added a Summary section to “Q3 review”." };
+    });
+    const { core, mind } = await setUp(model);
+
+    const answer = await askAssistant(core, { text: "write a summary page", mindId: mind.id });
+
+    expect(model.doStreamCalls).toHaveLength(3);
+    expect(notes[1]).toContain("but no Tool did that");
+    expect(notes[2]).toContain(ASKED_TO_WRITE);
+    expect(answer.steps?.unbackedClaims).toEqual(["added"]);
+    expect(changesIn(answer)).toEqual([]);
+  });
+
   // protects=a Question, or a request that can't be told, is answered in the reply with no instruction to write and nothing asked again; fails_when=the model is pushed to change a Mind; no_claim=none beyond protects.
   test.each(["how was the quarter?", "Could you shorten my summary?"])(
     "“%s” is answered in the reply, and nothing is asked again",

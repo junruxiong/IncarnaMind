@@ -66,8 +66,15 @@ import type {
 } from "./engine";
 import { NOT_CITED_ATTRIBUTE } from "./prompt";
 
-/** How many times one Answer may search, unless it is given more; later searches are refused, so the model answers. */
-export const MAX_SEARCHES = 5;
+const SEARCHED_ALREADY =
+  "You already searched for this, and have its Passages: answer with them, or search for something different.";
+
+const sameSearch = (query: string) =>
+  query
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
 
 const FIX_THESE = "Fix these with another cite call:";
 
@@ -628,11 +635,7 @@ export interface CitationSessionEvents {
  * as "P3", which is what the model cites), the records it gave, and the Tools
  * the Answer engine offers the model.
  */
-export function createCitationSession(
-  documents: AnswerDocuments,
-  events: CitationSessionEvents,
-  maxSearches = MAX_SEARCHES,
-) {
+export function createCitationSession(documents: AnswerDocuments, events: CitationSessionEvents) {
   const handles = new Map<string, string>();
   const handleOf = new Map<string, string>();
   /** Each Passage's text as the model was given it, by its short id. */
@@ -640,7 +643,7 @@ export function createCitationSession(
   const records = new Map<number, Accepted>();
   /** Records naming no Passage the model was given, or no marker: as given, and why. */
   const rejected: RejectedRecord[] = [];
-  let searches = 0;
+  const searched = new Set<string>();
   /** Markers in the final text, in order of first appearance, and those that had no record. */
   const finalMarkers: number[] = [];
   let removedMarkers = 0;
@@ -994,13 +997,10 @@ export function createCitationSession(
       signal?: AbortSignal,
       options?: AnswerSearchOptions,
     ): Promise<SearchResultForModel> {
-      searches++;
-      if (searches > maxSearches) {
-        return {
-          text: "You have searched enough for this Question: answer with the Passages you have.",
-          passageCount: 0,
-        };
-      }
+      // The same words over another Document are a new search.
+      const same = sameSearch(options?.document ? `${options.document}\n${query}` : query);
+      if (searched.has(same)) return { text: SEARCHED_ALREADY, passageCount: 0 };
+      searched.add(same);
       if (options?.document) {
         const id = documents.documentNamed?.(options.document) ?? null;
         if (!id) {

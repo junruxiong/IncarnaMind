@@ -53,6 +53,7 @@ const CALCULATE = [
   "A figure the sentence states that no Passage states, but that numbers in the Passages give (a ratio, a growth rate or other change, a share, a sum or a difference), isn't judged in your head:",
   "- find the numbers it comes from, for the same thing, period and units as the sentence;",
   '- call calculate with one figure, marker 1: its inputs, a formula that gives the figure as the sentence states it (for "fell 5%", the fall: (a - b) / a), and stated, the number as the sentence writes it ("1.1x");',
+  '- an input keeps its sign as the Passage writes it: an amount in brackets, "(12,500)", is negative, so take a deduction written in brackets off a total by adding it (price + fee), never by subtracting it;',
   "- IncarnaMind works it out and compares it with the sentence's number, to its rounding. Then reply as below.",
 ].join("\n");
 
