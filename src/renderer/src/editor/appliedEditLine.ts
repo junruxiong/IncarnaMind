@@ -4,29 +4,44 @@
  * their buttons, by `data-applied-action`. They go once the User edits.
  */
 import { type Editor, Extension } from "@tiptap/core";
-import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
+import type { Fragment, Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { type EditorState, Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
+import { relativePositionToAbsolutePosition, ySyncPluginKey } from "@tiptap/y-tiptap";
 import type { Language } from "../../../core/language";
 import type { MessageKey, MessageParams } from "../../../shared/i18n";
 import { SPARK_PATH } from "../components/iconPaths";
 import { fromDocument, proposalsIn } from "./proposalReview";
 import { blockAt } from "./writingPlace";
 
-export type AppliedAction =
-  | "undo"
-  | "review"
-  | "undo-all"
-  | "done"
-  | "apply"
-  | "discard"
-  | "remove-kept";
+export const APPLIED_ACTIONS = [
+  "undo",
+  "review",
+  "undo-all",
+  "done",
+  "apply",
+  "discard",
+  "remove-kept",
+] as const;
+export type AppliedAction = (typeof APPLIED_ACTIONS)[number];
+
+export const isAppliedAction = (value: string): value is AppliedAction =>
+  (APPLIED_ACTIONS as readonly string[]).includes(value);
 
 export interface KeptLine {
   blockId: string;
   count: number;
   /** Of more than one kind: named Blocks, not paragraphs. */
   mixed: boolean;
+}
+
+/** One change an applied edit made: where its new words are, as Yjs positions that hold through edits, and the old ones it took out. */
+export interface AppliedChange {
+  from: unknown;
+  to: unknown;
+  removed: Fragment;
+  /** Whole Blocks, added or taken out. */
+  block: boolean;
 }
 
 export type AppliedLine = (
@@ -36,10 +51,10 @@ export type AppliedLine = (
       blockId: string | null;
       places: number;
       reason: string | null;
-      reviewable: boolean;
+      changes: readonly AppliedChange[];
       kept: KeptLine | null;
     }
-  | { kind: "review"; blockId: string | null; request: string }
+  | { kind: "review"; blockId: string | null; changes: readonly AppliedChange[] }
   | { kind: "held"; blockId: string | null; request: string }
 ) & {
   /** The language it was last drawn in, once that changed. */
@@ -126,7 +141,23 @@ function text(className: string, words: string, testId?: string): HTMLSpanElemen
 const waitingOf = (doc: ProseMirrorNode, request: string) =>
   proposalsIn(doc).filter((each) => each.request === request).length;
 
-function mainLine(doc: ProseMirrorNode, line: AppliedLine, options: Options): HTMLElement {
+/** Where a change is in the editor now; null once its words are gone. */
+export function placeOfChange(
+  state: EditorState,
+  change: AppliedChange,
+): { from: number; to: number } | null {
+  const binding = ySyncPluginKey.getState(state)?.binding;
+  if (!binding) return null;
+  const at = (relative: unknown): number | null =>
+    relativePositionToAbsolutePosition(binding.doc, binding.type, relative, binding.mapping);
+  const from = at(change.from);
+  const to = at(change.to);
+  return from === null || to === null || to < from ? null : { from, to };
+}
+
+const textOf = (removed: Fragment) => removed.textBetween(0, removed.size, "\n", "￼");
+
+function mainLine(line: AppliedLine, options: Options): HTMLElement {
   const t = options.translate;
   if (line.kind === "applied") {
     const what = text(
@@ -141,13 +172,13 @@ function mainLine(doc: ProseMirrorNode, line: AppliedLine, options: Options): HT
       button("undo", t("edit.applied.undo")),
       keys(options.undoKeys()),
     ];
-    if (line.reviewable) parts.push(dot(), button("review", t("edit.applied.review")));
+    if (line.changes.length > 0) parts.push(dot(), button("review", t("edit.applied.review")));
     const element = lineElement("applied-line", "applied-line", parts);
     if (line.reason) element.title = t("proposal.why", { reason: line.reason });
     return element;
   }
   if (line.kind === "review") {
-    const count = waitingOf(doc, line.request);
+    const count = line.changes.length;
     return lineElement("applied-line", "applied-line", [
       sparkle(),
       text(
@@ -188,17 +219,56 @@ function placeOf(doc: ProseMirrorNode, blockId: string | null): number | null {
   return blockAt(doc, blockId)?.pos ?? null;
 }
 
-function decorations(doc: ProseMirrorNode, line: AppliedLine, options: Options): DecorationSet {
-  const marks: Decoration[] = [];
+/** An applied edit's changes shown again (Review changes): old words struck, new ones underlined, the doc left as it is. */
+function changeMarks(state: EditorState, changes: readonly AppliedChange[]): Decoration[] {
+  return changes.flatMap((change, index) => {
+    const place = placeOfChange(state, change);
+    if (!place) return [];
+    const marks: Decoration[] = [];
+    if (change.removed.size > 0) {
+      const old = () => {
+        const element = document.createElement(change.block ? "div" : "del");
+        element.className = change.block ? "applied-old applied-old--block" : "applied-old";
+        element.dataset.appliedChange = String(index);
+        element.textContent = textOf(change.removed);
+        return element;
+      };
+      marks.push(
+        Decoration.widget(place.from, old, {
+          side: -1,
+          ignoreSelection: true,
+          key: `applied-old:${index}:${textOf(change.removed)}`,
+        }),
+      );
+    }
+    if (place.to > place.from) {
+      const attributes = { "data-applied-change": String(index) };
+      marks.push(
+        change.block
+          ? Decoration.node(place.from, place.to, {
+              ...attributes,
+              class: "applied-new applied-new--block",
+            })
+          : Decoration.inline(place.from, place.to, { ...attributes, class: "applied-new" }),
+      );
+    }
+    return marks;
+  });
+}
+
+function decorations(state: EditorState, line: AppliedLine, options: Options): DecorationSet {
+  const { doc } = state;
+  const marks: Decoration[] = line.kind === "review" ? changeMarks(state, line.changes) : [];
   const at = placeOf(doc, line.blockId);
   const shared = { side: -1, ignoreSelection: true, stopEvent: () => true };
   if (at !== null) {
-    const count = line.kind === "review" ? waitingOf(doc, line.request) : 0;
+    const count =
+      line.kind === "applied" ? line.places : line.kind === "review" ? line.changes.length : 0;
     marks.push(
-      Decoration.widget(at, () => mainLine(doc, line, options), {
+      Decoration.widget(at, () => mainLine(line, options), {
         ...shared,
         // Drawn again in the interface language once it changes.
-        key: `applied:${line.kind}:${line.kind === "applied" ? line.places : count}:${line.blockId}:${options.translate("edit.applied.undo")}`,
+        key: `applied:${line.kind}:${count}:${line.blockId}:${options.translate("edit.applied.undo")}`,
       }),
     );
   }
@@ -234,16 +304,17 @@ export const AppliedEditLine = Extension.create<Options>({
             const meta = tr.getMeta(appliedLineKey) as AppliedLine | null | undefined;
             const shown =
               meta !== undefined ? meta : tr.docChanged && !fromDocument(tr) ? null : value.line;
-            // Restored, applied or discarded one by one, a reviewed or held edit's changes are all gone.
+            // Applied or discarded one by one, a held edit's changes are all gone; restored, a reviewed one's.
             const gone =
               shown !== null &&
-              shown.kind !== "applied" &&
-              (shown !== value.line || tr.docChanged) &&
-              waitingOf(state.doc, shown.request) === 0;
+              (shown.kind === "held"
+                ? (shown !== value.line || tr.docChanged) &&
+                  waitingOf(state.doc, shown.request) === 0
+                : shown.kind === "review" && shown.changes.length === 0);
             const line = gone ? null : shown;
             if (!line) return { line: null, marks: DecorationSet.empty };
             if (line !== value.line || (tr.docChanged && fromDocument(tr))) {
-              return { line, marks: decorations(state.doc, line, options) };
+              return { line, marks: decorations(state, line, options) };
             }
             return tr.docChanged ? { line, marks: value.marks.map(tr.mapping, tr.doc) } : value;
           },

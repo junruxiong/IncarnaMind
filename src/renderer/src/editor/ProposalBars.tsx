@@ -1,14 +1,20 @@
 import { autoUpdate, computePosition, flip, offset, shift } from "@floating-ui/dom";
 import { type Editor, isMacOS, posToDOMRect } from "@tiptap/core";
 import { useEditorState } from "@tiptap/react";
-import { type MouseEvent as ReactMouseEvent, useEffect, useLayoutEffect, useRef } from "react";
+import {
+  type MouseEvent as ReactMouseEvent,
+  type RefObject,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+} from "react";
 import { formatDate } from "../../../shared/dates";
 import { actOnAppliedEdit } from "../appliedEdits";
 import { PencilLineIcon, SparkLineIcon } from "../components/lineIcons";
 import { regenerateChange, resolveProposalsIn, speak, useEdits } from "../editWithAi";
 import { useLanguage, useT } from "../i18n";
 import { useAppStore } from "../store";
-import { appliedLineIn, redrawAppliedLine } from "./appliedEditLine";
+import { appliedLineIn, isAppliedAction, redrawAppliedLine } from "./appliedEditLine";
 import {
   changeReason,
   clearHovered,
@@ -75,7 +81,7 @@ export function ProposalBars({ editor, mindId }: { editor: Editor; mindId: strin
       if (!button || repeated(event)) return;
       event.preventDefault();
       const applied = button.dataset.appliedAction;
-      if (applied) {
+      if (applied && isAppliedAction(applied)) {
         actOnAppliedEdit(editor, applied);
         if (!editor.isDestroyed) editor.commands.focus();
         return;
@@ -130,8 +136,8 @@ function ProposalsBar({ editor, mindId }: { editor: Editor; mindId: string }) {
       const theirs = new Map<string | null, Group>();
       const assistant: Group = { ids: [], stale: false };
       const line = appliedLineIn(current.state);
-      // A reviewed or held edit has its own line.
-      const ownLine = line && line.kind !== "applied" ? line.request : null;
+      // An edit held back has its own line.
+      const ownLine = line?.kind === "held" ? line.request : null;
       for (const each of pendingIn(current.state)) {
         if (each.request === ownLine) continue;
         let group = assistant;
@@ -274,13 +280,44 @@ interface Shown {
   reason: string | null;
   /** The cursor is in it, not only the pointer on it. */
   focused: boolean;
-  /** One of an applied edit's changes, shown again to restore (#880). */
-  reviewed: boolean;
 }
 
-function reviewedIn(state: Editor["state"], proposal: PendingProposal): boolean {
-  const line = appliedLineIn(state);
-  return line?.kind === "review" && line.request === proposal.request;
+/** A change's bar sits over the first line of its change, following it as the Mind scrolls. */
+export function useBarOver(
+  editor: Editor,
+  bar: RefObject<HTMLDivElement | null>,
+  change: { from: number; to: number } | null,
+): void {
+  useLayoutEffect(() => {
+    const element = bar.current;
+    if (!change || !element || editor.isDestroyed) return;
+    const reference = {
+      getBoundingClientRect: () => posToDOMRect(editor.view, change.from, change.to),
+      contextElement: editor.view.dom,
+    };
+    const place = () => {
+      if (editor.isDestroyed) return;
+      // Never over the Mind's bar of changes, which stays at the top as the Mind scrolls, nor an
+      // applied edit's line above the change: under the change's line then.
+      const covered = editor.view.dom
+        .closest(".mind-editor-frame")
+        ?.querySelector(".proposals-bar")
+        ?.getBoundingClientRect().bottom;
+      const changeTop = reference.getBoundingClientRect().top;
+      const lines = [...editor.view.dom.querySelectorAll(".applied-line")]
+        .map((line) => line.getBoundingClientRect().bottom)
+        .filter((bottom) => bottom <= changeTop + 1);
+      const top = Math.max(8, covered ?? 0, ...lines);
+      void computePosition(reference, element, {
+        placement: "top-start",
+        strategy: "fixed",
+        middleware: [offset(6), flip({ padding: { top } }), shift({ padding: 8 })],
+      }).then(({ x, y }) => {
+        Object.assign(element.style, { left: `${x}px`, top: `${y}px`, visibility: "visible" });
+      });
+    };
+    return autoUpdate(reference, element, place);
+  }, [editor, bar, change]);
 }
 
 function ChangeBar({ editor, mindId }: { editor: Editor; mindId: string }) {
@@ -306,7 +343,6 @@ function ChangeBar({ editor, mindId }: { editor: Editor; mindId: string }) {
         made: proposal.theirs ? theirChange(current, proposal) : null,
         reason: proposal.theirs ? null : changeReason(current, proposal),
         focused: pendingAtSelection(current.state).some((each) => each.id === proposal.id),
-        reviewed: reviewedIn(current.state, proposal),
       };
     },
   });
@@ -340,37 +376,7 @@ function ChangeBar({ editor, mindId }: { editor: Editor; mindId: string }) {
     };
   }, [editor]);
 
-  // Sits over the first line of its change, following it as the Mind scrolls.
-  useLayoutEffect(() => {
-    const element = bar.current;
-    if (!shown || !element || editor.isDestroyed) return;
-    const reference = {
-      getBoundingClientRect: () => posToDOMRect(editor.view, shown.from, shown.to),
-      contextElement: editor.view.dom,
-    };
-    const place = () => {
-      if (editor.isDestroyed) return;
-      // Never over the Mind's bar of changes, which stays at the top as the Mind scrolls, nor an
-      // applied edit's line above the change: under the change's line then.
-      const covered = editor.view.dom
-        .closest(".mind-editor-frame")
-        ?.querySelector(".proposals-bar")
-        ?.getBoundingClientRect().bottom;
-      const changeTop = reference.getBoundingClientRect().top;
-      const lines = [...editor.view.dom.querySelectorAll(".applied-line")]
-        .map((line) => line.getBoundingClientRect().bottom)
-        .filter((bottom) => bottom <= changeTop + 1);
-      const top = Math.max(8, covered ?? 0, ...lines);
-      void computePosition(reference, element, {
-        placement: "top-start",
-        strategy: "fixed",
-        middleware: [offset(6), flip({ padding: { top } }), shift({ padding: 8 })],
-      }).then(({ x, y }) => {
-        Object.assign(element.style, { left: `${x}px`, top: `${y}px`, visibility: "visible" });
-      });
-    };
-    return autoUpdate(reference, element, place);
-  }, [editor, shown]);
+  useBarOver(editor, bar, shown);
 
   if (!shown) return null;
   const removedSources = sourcesRemoved(shown, documents, kept);
@@ -430,44 +436,29 @@ function ChangeBar({ editor, mindId }: { editor: Editor; mindId: string }) {
             {t("proposal.sourceRemoved")}
           </span>
         )}
-        {shown.reviewed ? (
-          <button
-            type="button"
-            data-testid="change-restore"
-            title={`${t("edit.review.restore")} (${keys.reject})`}
-            aria-keyshortcuts={isMacOS() ? "Meta+Backspace" : "Control+Backspace"}
-            onClick={(event) => resolve(event, "reject")}
-            className="proposal-action"
-          >
-            {t("edit.review.restore")}
-          </button>
-        ) : (
-          <>
-            <button
-              type="button"
-              data-testid="change-accept"
-              title={`${t("proposal.accept")} (${keys.accept})`}
-              aria-keyshortcuts={isMacOS() ? "Meta+Enter" : "Control+Enter"}
-              onClick={(event) => resolve(event, "accept")}
-              className="proposal-action"
-            >
-              {t("proposal.accept")}
-            </button>
-            <span aria-hidden="true" className="proposal-dot">
-              ·
-            </span>
-            <button
-              type="button"
-              data-testid="change-reject"
-              title={`${t("proposal.reject")} (${keys.reject})`}
-              aria-keyshortcuts={isMacOS() ? "Meta+Backspace" : "Control+Backspace"}
-              onClick={(event) => resolve(event, "reject")}
-              className="proposal-action"
-            >
-              {t("proposal.reject")}
-            </button>
-          </>
-        )}
+        <button
+          type="button"
+          data-testid="change-accept"
+          title={`${t("proposal.accept")} (${keys.accept})`}
+          aria-keyshortcuts={isMacOS() ? "Meta+Enter" : "Control+Enter"}
+          onClick={(event) => resolve(event, "accept")}
+          className="proposal-action"
+        >
+          {t("proposal.accept")}
+        </button>
+        <span aria-hidden="true" className="proposal-dot">
+          ·
+        </span>
+        <button
+          type="button"
+          data-testid="change-reject"
+          title={`${t("proposal.reject")} (${keys.reject})`}
+          aria-keyshortcuts={isMacOS() ? "Meta+Backspace" : "Control+Backspace"}
+          onClick={(event) => resolve(event, "reject")}
+          className="proposal-action"
+        >
+          {t("proposal.reject")}
+        </button>
       </div>
       {why && shown.focused && (
         <div data-testid="change-bar-why" className="change-bar-why">
