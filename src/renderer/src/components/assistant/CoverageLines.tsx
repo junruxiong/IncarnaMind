@@ -1,6 +1,7 @@
 import type { ConversationAnswer, ConversationQuestion } from "../../../../core/api";
 import { askInAssistant } from "../../conversations";
 import { useLanguage, useT } from "../../i18n";
+import { MetaLine } from "../MetaLine";
 import { LineAction } from "../ProblemLine";
 
 /**
@@ -42,21 +43,24 @@ export function CoverageLine({
       forcedSkill: question.forcedSkill,
     });
   return (
-    <p data-testid="answer-coverage" className="answer-coverage">
-      {text}
-      {rest.length > 0 && (
-        <LineAction
-          action={{
-            label:
-              coverage.kind === "largest"
-                ? t("coverage.largest.rest", { count: rest.length })
-                : t("coverage.main.others"),
-            testId: "answer-coverage-rest",
-            onClick: askAgain,
-          }}
-          afterStop={/[。！？]$/.test(text)}
-        />
-      )}
-    </p>
+    <MetaLine
+      data-testid="answer-coverage"
+      className="answer-coverage"
+      parts={[
+        text,
+        rest.length > 0 && (
+          <LineAction
+            action={{
+              label:
+                coverage.kind === "largest"
+                  ? t("coverage.largest.rest", { count: rest.length })
+                  : t("coverage.main.others"),
+              testId: "answer-coverage-rest",
+              onClick: askAgain,
+            }}
+          />
+        ),
+      ]}
+    />
   );
 }
