@@ -172,7 +172,6 @@ function readingRules(cite: boolean): string {
   return [
     `- If the Question takes for granted what the Passages don't say (an approval, a date, a figure, a cause), say so first, in one plain sentence, then answer from what they say: "The Documents don't record a Board approval; the 14 May memo asks for one." / "文档中没有董事会批准的记录；5 月 14 日的备忘录是在申请批准。"`,
     `- If Passages from different Documents disagree, or give different figures for the same thing (one updates the other), lead with the newer Document by its date (a Passage's date is its Document's: the date it states, else when its file last changed)${cite ? " and cite it" : ""}. Then write one sentence naming the older Document, its date and its figure${cite ? ", with a Citation" : ""}; never leave it out: "Report outages over 4 hours (memo, May 2025)${marker(1)}. The older handbook (January 2024) says 6 hours${marker(2)}." / "2025 年 5 月的备忘录要求报告超过 4 小时的停电${marker(1)}。较早的手册（2024 年 1 月）写的是 6 小时${marker(2)}。" Say "probably" (可能) only when neither is dated or newer.`,
-    '- An amount in brackets is negative, as accountants write it: "(12,500)" and "(£12,500.00)" are minus 12,500 and minus £12,500, a deduction or a loss, never plain amounts. / 括号里的金额是负数：“（12,500）”是负的 12,500，是扣减或亏损，不是正数。',
   ].join("\n");
 }
 
@@ -200,6 +199,20 @@ export function datedDocumentsNote(passages: string): string {
     .map(([document, date]) => `"${document}" (${date})`)
     .join(", ");
   return `These Passages come from Documents of different dates: ${listed}. Take each Document's figure only from a sentence that states it for that Document, never from a passing mention. Where they give different figures for the same thing, lead with the newer Document, then write one sentence naming the older one, its date and its figure, with a Citation.`;
+}
+
+/** An amount in brackets, "(12,500)", "(£4,620.00)", "（412）": how accounts write a negative (#978). */
+const BRACKETED_AMOUNT =
+  /[(（]\s*(?:\p{Sc}\s*)?(?:\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+\.\d+|\d{3,})\s*[)）]/u;
+
+/**
+ * A reminder after Passages that hold an amount in brackets: it is negative, so
+ * a deduction written that way is added to a total, never subtracted. Kept out
+ * of the instructions, which go with every Question. Empty when none does.
+ */
+export function bracketedAmountsNote(passages: string): string {
+  if (!BRACKETED_AMOUNT.test(passages)) return "";
+  return 'An amount in brackets in these Passages is negative, as accountants write it: "(12,500)" is minus 12,500, a deduction or a loss, never a plain amount. / 括号里的金额是负数：“（12,500）”是负的 12,500，是扣减或亏损，不是正数。';
 }
 
 /** What marks a Passage of a Document the User keeps as their own workings, in a search's result. */
@@ -332,7 +345,7 @@ export function documentInstructions(
 ): string {
   const documents = `${listed.total} Document${listed.total === 1 ? "" : "s"}`;
   const dated = datedDocumentsNote(passages);
-  const notes = [dated, notCitedNote(passages)].filter(Boolean);
+  const notes = [dated, notCitedNote(passages), bracketedAmountsNote(passages)].filter(Boolean);
   const added = `${scoped ? `The User limited this Question to ${documents} of theirs` : `The User has added ${documents}`} (PDF, Word, PowerPoint, Excel, CSV, text and Markdown files).`;
   switch (mode) {
     case "no-documents":
@@ -380,7 +393,7 @@ export function documentInstructions(
         "",
         "Passages found in the User's Documents for this Question:",
         passages,
-        ...(dated ? [dated] : []),
+        ...[dated, bracketedAmountsNote(passages)].filter(Boolean),
         "",
         "Use them where they help. Don't write citation markers or a list of sources.",
         notCovered(false),

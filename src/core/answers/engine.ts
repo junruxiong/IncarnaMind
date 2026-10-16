@@ -110,6 +110,7 @@ import { earlierContext, type RequestMind } from "./context";
 import { retryFigures } from "./figureRetry";
 import { missingMarkerEvents, textEdits } from "./markerPlacement";
 import {
+  bracketedAmountsNote,
   datedDocumentsNote,
   notCitedNote,
   SEARCH_QUERY_INSTRUCTIONS,
@@ -1279,6 +1280,7 @@ export function documentTools(
         const notes = [
           datedDocumentsNote(result.text),
           notCitedNote(result.text),
+          bracketedAmountsNote(result.text),
           unreadDocumentsNote(documents.unreadDocuments?.() ?? []),
         ];
         return [result.text, ...notes].filter((part) => part !== "").join("\n\n");
