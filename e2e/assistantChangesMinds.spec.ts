@@ -19,7 +19,7 @@ import {
 
 /**
  * The assistant changes Minds and makes them (#202): what the User types
- * decides. The scripted model (src/main/fakeChatModel.ts) calls edit_mind for
+ * decides. The scripted model (src/main/fakeChat/minds.ts) calls edit_mind for
  * a request to shorten, which drops "very" and "really" (非常), and
  * create_mind for a new note; anything else is answered. Each change waits in
  * its Mind as changes to accept or reject. Set INCARNAMIND_SCREENSHOTS to a

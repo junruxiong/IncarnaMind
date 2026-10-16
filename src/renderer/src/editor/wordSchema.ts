@@ -188,6 +188,8 @@ export const InlineImage = Node.create({
 });
 
 export const WORD_LOOK_TYPES = ["paragraph", "heading", "table", "tableCell", "tableHeader"];
+export const WORD_LOOK_DOM_ATTRIBUTE = "data-word-look";
+export const WORD_RUN_DOM_ATTRIBUTE = "data-word-run";
 
 function lookKeysOf(doc: Y.Doc | null): ReadonlySet<string> {
   const look = doc ? wordLookOf(doc) : null;
@@ -249,10 +251,10 @@ export const WordLookAttribute = Extension.create({
           [WORD_LOOK_ATTRIBUTE]: {
             default: null,
             keepOnSplit: true,
-            parseHTML: (element: HTMLElement) => element.getAttribute("data-word-look"),
+            parseHTML: (element: HTMLElement) => element.getAttribute(WORD_LOOK_DOM_ATTRIBUTE),
             renderHTML: (attributes: Record<string, unknown>) => {
               const key = attributes[WORD_LOOK_ATTRIBUTE];
-              return typeof key === "string" ? { "data-word-look": key } : {};
+              return typeof key === "string" ? { [WORD_LOOK_DOM_ATTRIBUTE]: key } : {};
             },
           },
         },
@@ -270,13 +272,13 @@ export const WordRun = Mark.create({
     return {
       k: {
         default: null,
-        parseHTML: (element: HTMLElement) => element.getAttribute("data-word-run"),
+        parseHTML: (element: HTMLElement) => element.getAttribute(WORD_RUN_DOM_ATTRIBUTE),
         renderHTML: (attributes: Record<string, unknown>) =>
-          typeof attributes.k === "string" ? { "data-word-run": attributes.k } : {},
+          typeof attributes.k === "string" ? { [WORD_RUN_DOM_ATTRIBUTE]: attributes.k } : {},
       },
     };
   },
 
-  parseHTML: () => [{ tag: "span[data-word-run]" }],
+  parseHTML: () => [{ tag: `span[${WORD_RUN_DOM_ATTRIBUTE}]` }],
   renderHTML: ({ HTMLAttributes }) => ["span", HTMLAttributes, 0],
 });

@@ -78,6 +78,7 @@ import { useVerification, VerifyLine } from "../editor/VerifyLine";
 import { wordAtomView, wordBlockView } from "../editor/WordAtomView";
 import { WordCount } from "../editor/WordCount";
 import { OriginalNotAdded, useWordFile, WordOrigin } from "../editor/WordOrigin";
+import { useWordLookStyle } from "../editor/wordLookStyle";
 import { setWritingPlace, WritingPlace } from "../editor/writingPlace";
 import { requestEdit, startEditing, TRANSLATE_LANGUAGES } from "../editWithAi";
 import { translateNow, useT } from "../i18n";
@@ -619,6 +620,7 @@ function MindEditorView({
   const verification = useVerification(doc);
   const frame = useRef<HTMLDivElement>(null);
   useClickBelowNote(editor, frame);
+  const wordLook = useWordLookStyle(doc, mindId, editor);
 
   return (
     <MindIdContext.Provider value={mindId}>
@@ -640,7 +642,11 @@ function MindEditorView({
           countSlot,
         )}
       {readOnly && <MindNotice kind="read-only" />}
-      <div ref={frame} className={`mind-editor-frame ${guide ? "mind-editor-frame--guide" : ""}`}>
+      <div
+        ref={frame}
+        className={`mind-editor-frame ${guide ? "mind-editor-frame--guide" : ""} ${wordLook?.className ?? ""}`}
+      >
+        {wordLook && <style>{wordLook.css}</style>}
         {!readOnly && <ProposalBars editor={editor} mindId={mindId} />}
         <EditorContent editor={editor} />
         {!readOnly && <EndHint editor={editor} text={hintText} onAsk={askOnLine} />}

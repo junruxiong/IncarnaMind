@@ -66,6 +66,11 @@ describe("The provider catalog", () => {
       "siliconflow",
       "ollama",
       "groq",
+      "together",
+      "fireworks",
+      "cerebras",
+      "cohere",
+      "venice",
       "openai-compatible",
     ]);
     for (const provider of CATALOG_PROVIDERS) {
@@ -142,7 +147,10 @@ describe("The provider catalog", () => {
   test("the generated facts cover the hosted providers, with unique ids, and their sources' licences ship with the app", async () => {
     expect(providersWithModels().sort()).toEqual([
       "anthropic",
+      "cerebras",
+      "cohere",
       "deepseek",
+      "fireworks",
       "glm",
       "glm/intl",
       "google",
@@ -156,6 +164,8 @@ describe("The provider catalog", () => {
       "qwen/intl",
       "siliconflow",
       "siliconflow/intl",
+      "together",
+      "venice",
       "xai",
     ]);
     for (const providerId of providersWithModels()) {

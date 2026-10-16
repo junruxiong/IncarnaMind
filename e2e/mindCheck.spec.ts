@@ -22,7 +22,7 @@ import {
  * Check this Mind (#737): "Check this Mind" (⌘K, the Mind's menu) checks
  * every sentence that makes a claim, in one run, then the health line's
  * Check again checks only what changed. The scripted model
- * (src/main/fakeChatModel.ts) names every sentence a claim but questions,
+ * (src/main/fakeChat/claims.ts) names every sentence a claim but questions,
  * thanks and "we think"; a claim sharing three words with a line of the
  * Tides PDF is supported, or contradicted when it has a number the line
  * doesn't; any other is unsupported. Set INCARNAMIND_SCREENSHOTS to a folder
