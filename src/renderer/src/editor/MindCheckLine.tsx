@@ -3,7 +3,7 @@ import { useEditorState } from "@tiptap/react";
 import type { MindCheckRun } from "../../../core/api";
 import { formatDateTime } from "../../../shared/dates";
 import { ProblemLine } from "../components/ProblemLine";
-import { runStopText } from "../cost";
+import { runStopParts } from "../cost";
 import { useLanguage, useT } from "../i18n";
 import { checkMind, dismissMindCheck, useMindCheck } from "../mindCheck";
 import { shownClaims } from "./claimChecks";
@@ -11,7 +11,7 @@ import { shownClaims } from "./claimChecks";
 /**
  * Check this Mind's question (#737), on the line under the title before a
  * run billed per token: "Check this Mind's 48 sentences against this
- * Folder's Documents? About 52 calls, … · Check · Not now".
+ * Folder's Documents? · About $0.40 · 52 model calls · Check · Not now".
  */
 export function MindCheckAsk({ mindId }: { mindId: string }) {
   const t = useT();
@@ -25,6 +25,8 @@ export function MindCheckAsk({ mindId }: { mindId: string }) {
       role="status"
       testId="mind-check-ask"
       className="mind-health-line"
+      details={asking.estimate.parts}
+      title={asking.estimate.title}
       action={{
         label: t("mindCheck.check"),
         testId: "mind-check-check",
@@ -38,7 +40,6 @@ export function MindCheckAsk({ mindId }: { mindId: string }) {
     >
       {t(asking.sentences === 1 ? `mindCheck.ask.${where}.one` : `mindCheck.ask.${where}`, {
         count,
-        estimate: asking.estimate,
       })}
     </ProblemLine>
   );
@@ -80,9 +81,17 @@ export function CheckedWhen({ run }: { run: MindCheckRun }) {
     when,
   });
   return (
-    <span data-testid="health-checked-all" className="mind-health-when">
-      {run.stop ? `${said} · ${runStopText(run.stop, t, language)}` : said}
-    </span>
+    <>
+      <span data-testid="health-checked-all" className="mind-health-when">
+        {said}
+      </span>
+      {run.stop &&
+        runStopParts(run.stop, t, language).map((part) => (
+          <span key={part} className="mind-health-when">
+            {part}
+          </span>
+        ))}
+    </>
   );
 }
 
@@ -105,7 +114,7 @@ export function MindCheckAction({
     <button
       type="button"
       data-testid="health-check"
-      className="mind-verify-link"
+      className="mind-verify-link mind-health-action"
       onMouseDown={(event) => event.preventDefault()}
       onClick={onCheck}
     >

@@ -111,8 +111,8 @@ export interface OAuthTokens {
   /** Lifetime of the access token in seconds, as the server sent it. */
   expiresIn: number | null;
   scope: string | null;
-  /** The whole answer, for what a provider adds to it, such as the account signed in. */
-  response: Record<string, unknown>;
+  /** The account the answer names, where the server adds one (Anthropic's does). */
+  account: { email: string | null; organization: string | null };
 }
 
 export type OAuthFlowFailure =
@@ -217,7 +217,10 @@ function tokensOf(body: Record<string, unknown>, accessToken: string): OAuthToke
     idToken: nonEmptyText(body.id_token),
     expiresIn: typeof body.expires_in === "number" ? body.expires_in : null,
     scope: nonEmptyText(body.scope),
-    response: body,
+    account: {
+      email: isRecord(body.account) ? nonEmptyText(body.account.email_address) : null,
+      organization: isRecord(body.organization) ? nonEmptyText(body.organization.name) : null,
+    },
   };
 }
 

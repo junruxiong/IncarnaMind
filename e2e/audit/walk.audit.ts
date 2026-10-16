@@ -6,9 +6,10 @@
  */
 import { renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { stripVTControlCharacters } from "node:util";
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../../src/core/api";
-import { settingsPages } from "../../src/renderer/src/settingsPages";
+import { offeredSettingsPages, settingsPages } from "../../src/renderer/src/settingsPages";
 import type { TestHooks } from "../../src/shared/testHooks";
 import { writeFixtures } from "./fixtures";
 import {
@@ -37,7 +38,14 @@ async function step(testName: string, name: string, run: () => Promise<void>) {
   try {
     await run();
   } catch (error) {
-    const message = error instanceof Error ? error.message.split("\n")[0] : String(error);
+    const message =
+      error instanceof Error
+        ? stripVTControlCharacters(error.message)
+            .split("\n")
+            .filter((line) => line.trim())
+            .slice(0, 4)
+            .join(" | ")
+        : String(error);
     failures.push({ test: testName, step: name, error: message ?? "" });
     record("walk.failures", failures);
   }
@@ -184,8 +192,9 @@ test("A1 first run: the example Mind and its Citation card", async () => {
       await window.waitForTimeout(300);
       await shot(window, "A02-citation-marker-hover");
     });
-    await step(T, "citation card from the margin", async () => {
-      await click(window, window.getByTestId("margin-check").first());
+    await step(T, "citation card from keyboard focus", async () => {
+      await window.mouse.move(700, 400, { steps: 6 });
+      await window.getByTestId("citation-chip").first().focus();
       const card = window.getByTestId("citation-card");
       await expect(card).toBeVisible();
       await window.waitForTimeout(250);
@@ -404,14 +413,16 @@ test("A3 a working session: a Linked folder, Answers with Citations, the viewer,
       await scan(window, "A26-answers-many-citations");
     });
     await step(T, "the Citation card and its page", async () => {
-      const check = window.getByTestId("margin-check").first();
-      await click(window, check);
+      const chip = window.getByTestId("assistant-answer").first().getByTestId("citation-chip");
+      await glide(window, chip);
       const card = window.getByTestId("citation-card");
       await expect(card).toBeVisible();
       await window.waitForTimeout(250);
       await shot(window, "A27-citation-card");
       const open = card.getByTestId("citation-open");
       record("walk.states.citationOpen", await states(window, open));
+      await glide(window, chip);
+      await expect(card).toBeVisible();
       await click(window, open);
       await expect(window.getByTestId("viewer")).toBeVisible();
       await window.waitForTimeout(1500);
@@ -520,11 +531,13 @@ test("A3 a working session: a Linked folder, Answers with Citations, the viewer,
           }),
         });
       }
-      await click(window, window.getByRole("button", { name: "Back to Mind" }));
+      await click(window, window.getByTestId("library-tab").getByTestId("tab-close"));
+      await expect(window.getByTestId("library")).toBeHidden();
     });
 
     await step(T, "export dialog", async () => {
-      const tab = window.getByRole("tab", { selected: true }).first();
+      const tab = window.getByTestId("mind-tab").filter({ hasText: "Harbour survey" });
+      await click(window, tab);
       await tab.click({ button: "right" });
       await click(window, tab.getByTestId("tab-actions").getByTestId("mind.exportOptions"));
       const dialog = window.getByTestId("export-dialog");
@@ -605,6 +618,7 @@ test("A3 a working session: a Linked folder, Answers with Citations, the viewer,
       await window.waitForTimeout(800);
       await shot(window, "A43-zh-viewer-chinese-doc");
       // A Chinese Note: line height of CJK text in the Mind.
+      await click(window, window.getByTestId("mind-tab").filter({ hasText: "Harbour survey" }));
       await endOfMind(window);
       await window.keyboard.press("Enter");
       await window.keyboard.insertText(
@@ -634,10 +648,8 @@ test("A3 a working session: a Linked folder, Answers with Citations, the viewer,
       );
       await window.waitForTimeout(500);
       const settings = window.getByTestId("settings");
-      for (const page of ["general", "chat-model", "search", "organization", "privacy"]) {
-        const nav = settings.getByTestId(`settings-nav-${page}`);
-        if (!(await nav.count())) continue;
-        await click(window, nav);
+      for (const page of offeredSettingsPages) {
+        await click(window, settings.getByTestId(`settings-nav-${page}`));
         await window.waitForTimeout(600);
         await shot(window, `A45-zh-settings-${page}`);
         record(`walk.overflow.zh-settings-${page}`, await overflowProbe(window));
@@ -652,8 +664,7 @@ test("A3 a working session: a Linked folder, Answers with Citations, the viewer,
         await bridge.updateSettings({ user: { language: "en" } } as never);
       });
       await window.waitForTimeout(600);
-      const back = window.getByRole("button", { name: "Back to Mind" });
-      if (await back.count()) await click(window, back);
+      await click(window, window.getByTestId("library-tab").getByTestId("tab-close"));
     });
 
     await step(
@@ -720,9 +731,11 @@ test("A4 approvals and consent", async () => {
         });
         for (let tries = 0; tries < 300; tries++) {
           const found = (await bridge.listConnectors()).find((each) => each.id === connector.id);
-          if (found?.state === "ready") return;
+          if (found?.state === "ready") break;
           await new Promise((done) => setTimeout(done, 100));
         }
+        // Adding it allowed its Tool calls (ADR-0022); the step shows the dialog that asks.
+        await bridge.revokeConsent("connectors", `connector:${connector.id}`);
       },
       {
         node: process.execPath,
@@ -757,7 +770,8 @@ test("A4 approvals and consent", async () => {
       await click(window, window.getByTestId("settings-nav-connectors"));
       await window.waitForTimeout(800);
       await shot(window, "A64-settings-connectors-with-one");
-      await click(window, window.getByTestId("settings-nav-approvals"));
+      await click(window, window.getByTestId("settings-nav-privacy"));
+      await window.getByTestId("approvals").scrollIntoViewIfNeeded();
       await window.waitForTimeout(600);
       await shot(window, "A65-settings-approvals");
       await window.keyboard.press("Escape");

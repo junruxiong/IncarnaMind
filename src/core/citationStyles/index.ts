@@ -5,7 +5,6 @@
  */
 import { type CitationStyle, citationStyle } from "../../shared/citationStyles";
 import { displayName, titleWithoutSite } from "../../shared/documentNames";
-import { translate } from "../../shared/i18n";
 import { missingDetails } from "../../shared/references";
 import type {
   BibliographyEntry,
@@ -15,7 +14,6 @@ import type {
   FormattedCitations,
   StyledRun,
 } from "../api";
-import type { Language } from "../language";
 import { type CslItem, cslItemOf, locatorOf, nameOnlyItem, restoreHyphens } from "./csl";
 import { CitationFormatError, type CitationStyleEngine, createWorkerEngine } from "./engine";
 import type { FormatJob } from "./format";
@@ -40,8 +38,8 @@ interface Reference {
   /** The Document's name, as the app shows it, or as it was when cited. */
   name: string;
   needsDetails: boolean;
-  /** What the app knows of it, for an entry when its record has no details; null if it has some. */
-  bare: { kind: Document["kind"]; addedAt: string } | "removed" | null;
+  /** Its record gives nothing to cite it by, or its Document is gone: its entry is its name. */
+  bare: boolean;
 }
 
 /** Whether a record gives nothing to cite by, so the style has only the name to print. */
@@ -78,7 +76,7 @@ function referenceOf(work: CitedWork, document: Document | undefined): Reference
       documentId: null,
       name,
       needsDetails: true,
-      bare: "removed",
+      bare: true,
     };
   }
   const fields = document.reference?.fields;
@@ -97,28 +95,20 @@ function referenceOf(work: CitedWork, document: Document | undefined): Reference
     documentId: document.id,
     name,
     needsDetails: thin(document),
-    bare: hasNoDetails(document) ? { kind: document.kind, addedAt: document.createdAt } : null,
+    bare: hasNoDetails(document),
   };
 }
 
 /**
  * The entry for a work with no details, which some styles leave blank (Chicago notes) and the
- * rest print as little more than a title: its name, its kind and the day it was added, in the
- * style's language. The style's own number, if it has one, stays.
+ * rest print as little more than a title: its name, ended as every shipped style ends an entry,
+ * GB/T 7714's included. Nothing the app knows of the file (its format, the day it was added) is
+ * a fact to cite it by, so the entry is flagged as needing details instead. The style's own
+ * number, if it has one, stays.
  */
-function fallbackRuns(reference: Reference, language: Language): StyledRun[] {
-  const { bare } = reference;
-  if (bare === null) return [];
-  const name = reference.name.replace(/[.。]+$/, "");
-  if (bare === "removed") {
-    return [{ text: translate(language, "references.fallback.removed", { name }) }];
-  }
-  const date = new Intl.DateTimeFormat(language === "zh-CN" ? "zh-CN" : "en-GB", {
-    dateStyle: "long",
-    timeZone: "UTC",
-  }).format(new Date(bare.addedAt));
-  const kind = translate(language, `library.format.${bare.kind}`);
-  return [{ text: translate(language, "references.fallback", { name, kind, date }) }];
+function fallbackRuns(reference: Reference): StyledRun[] {
+  if (!reference.bare) return [];
+  return [{ text: `${reference.name.replace(/[.。]+$/, "")}.` }];
 }
 
 /** The version of a web page a Citation quotes, as the page's fetches recorded it. */
@@ -180,23 +170,22 @@ export function createCitationStyles(options: CitationStylesOptions) {
     references: Map<string, Reference>,
     keyOf: (work: CitedWork) => string,
   ): Promise<FormattedCitations> {
+    const raisedLocators = style.locators === "raised-after";
     const job: FormatJob = {
       items: [...references.values()].map((reference) => reference.item),
       citations: request.clusters.map((cluster, index) => ({
         items: cluster.works.map((work) => ({
           id: (references.get(keyOf(work)) as Reference).item.id,
-          ...locatorOf(work.location, style.language),
+          ...locatorOf(work.location, style.language, raisedLocators),
         })),
         // Each cluster is one note, numbered through the Mind.
         noteIndex: index + 1,
       })),
       englishTermsForOthers: style.language === "zh-CN",
+      raisedLocators,
     };
     const fallbacks = new Map(
-      [...references.values()].map((reference) => [
-        reference.item.id,
-        fallbackRuns(reference, style.language),
-      ]),
+      [...references.values()].map((reference) => [reference.item.id, fallbackRuns(reference)]),
     );
     const key = JSON.stringify([style.id, job, [...fallbacks.values()]]);
     const known = cache.get(key);
