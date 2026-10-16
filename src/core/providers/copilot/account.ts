@@ -284,7 +284,8 @@ export function createCopilotAccount(options: {
         signal: AbortSignal.timeout(MODEL_LIST_TIMEOUT_MS),
         ...fetcher,
       });
-      listed = { at: now(), models: fresh };
+      // A plan that lists nothing is asked again next time, as when the list fails.
+      if (fresh.length > 0) listed = { at: now(), models: fresh };
       return fresh;
     } catch (error) {
       console.error("The Copilot plan's model list couldn't be read.", error);

@@ -35,6 +35,7 @@ import {
   createRecordingBrowser,
   EDITOR_HEADER,
   type FakeGitHub,
+  LISTED_MODELS,
   LOGIN,
   USER_CODE,
 } from "../helpers/fakeGitHub";
@@ -587,6 +588,36 @@ describe("The editor profile, an experimental sign-in route", () => {
     expect((await core.getCopilot()).account).toMatchObject({ state: "signed-in", login: null });
     const user = fake.requests.find((request) => request.path === "/user");
     expect(user?.headers["user-agent"]).toBe(`IncarnaMind/${version}`);
+  });
+
+  test("signing in again while signed in keeps the sign-in until the new one succeeds", async () => {
+    const { core, fake } = await signedIn("editor");
+    const { result } = await codeShown(core, "editor");
+
+    await core.cancelCopilotSignIn();
+
+    expect(await result).toMatchObject({ ok: false, error: { kind: "sign-in-cancelled" } });
+    expect((await core.getCopilot()).account).toMatchObject({ state: "signed-in", login: LOGIN });
+    expect((await ask(core)).text).toBe(ANSWER);
+    const again = await codeShown(core, "editor");
+    fake.approve();
+    expect(await again.result).toMatchObject({ ok: true });
+    await ask(core);
+    expect(chats(fake).at(-1)?.headers.authorization).toBe(`Bearer ${fake.exchanged.at(-1)}`);
+  });
+
+  test("a plan that lists no model is asked again, not kept as empty", async () => {
+    const setup = await setUp();
+    setup.fake.listedModels = [];
+    await signIn(setup);
+    expect((await setup.core.getCopilot()).models).toEqual([]);
+
+    setup.fake.listedModels = LISTED_MODELS;
+
+    expect((await setup.core.getCopilot()).models.map((model) => model.id)).toEqual([
+      "gpt-5.5",
+      "claude-sonnet-5",
+    ]);
   });
 
   test("signing out forgets the account's name and plan", async () => {

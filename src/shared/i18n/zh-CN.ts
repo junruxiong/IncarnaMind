@@ -1889,6 +1889,7 @@ export const zhCN = {
   "copilot.plan.enterprise": "Copilot Enterprise",
   "copilot.plan.unknown": "GitHub Copilot",
   "copilot.signedIn.usage": "回答会计入订阅的用量限额。",
+  "copilot.use": "用于提问",
   "copilot.signOut": "退出登录",
   "plans.copilot.title": "GitHub Copilot Pro、Pro+、Business 或 Enterprise",
   "plans.copilot.line": "用 GitHub 登录。回答会计入订阅的用量限额。",

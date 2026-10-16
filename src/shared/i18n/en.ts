@@ -1986,6 +1986,7 @@ export const en = {
   "copilot.plan.enterprise": "Copilot Enterprise",
   "copilot.plan.unknown": "GitHub Copilot",
   "copilot.signedIn.usage": "Answers count toward your plan's usage limits.",
+  "copilot.use": "Use for Questions",
   "copilot.signOut": "Sign out",
   "plans.copilot.title": "GitHub Copilot Pro, Pro+, Business or Enterprise",
   "plans.copilot.line": "Sign in with GitHub. Answers count toward your plan's usage limits.",
