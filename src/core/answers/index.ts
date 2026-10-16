@@ -354,6 +354,14 @@ export interface AnswersOptions {
     choice: ChatModelChoice,
     thinking: "summary" | "answer" | "careful",
   ): Promise<PreparedChatModel>;
+  /**
+   * The quick-tasks model for an Answer asked with `answers`, prepared as
+   * `answers` was: for the calls that don't write the Answer.
+   */
+  prepareQuickModel?(
+    answers: ChatModelChoice,
+    prepared: PreparedChatModel,
+  ): Promise<PreparedChatModel["model"]>;
   /** Searching the User's Documents, and what Citations point to. */
   documents: DocumentsForAnswers;
   /** What an Answer is written in when its Question has no language of its own. */
@@ -1531,6 +1539,7 @@ export function createAnswers(options: AnswersOptions) {
       else showPhase();
 
       const learntKey = modelKey(model, prepared);
+      const prepareQuick = options.prepareQuickModel;
       let outcome: Outcome = { status: "stopped" };
       let mindsNow: { id: string; name: string }[] | null = null;
       const mindsListed = () => {
@@ -1584,6 +1593,7 @@ export function createAnswers(options: AnswersOptions) {
         ...(mindRequest && { mind: mindRequest }),
         question: context.question,
         model: prepared.model,
+        ...(prepareQuick && { quickModel: () => prepareQuick(model, prepared) }),
         documents,
         tools: [...provided, ...fromSkills, ...fromWeb, ...(mindsTools?.tools ?? [])],
         gate,
