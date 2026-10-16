@@ -1,11 +1,13 @@
 import { type FormEvent, useCallback, useEffect, useId, useState } from "react";
-import type { ChatGptPlanModel, ChatProvider } from "../../../../core/api";
+import type { ChatGptPlanModel, ChatModelChoice, ChatProvider } from "../../../../core/api";
 import { modelName } from "../../../../shared/modelName";
 import { useAnswers } from "../../answers";
 import { core } from "../../core";
 import { formatSpent } from "../../cost";
+import { AnswerError } from "../../editor/AnswerView";
 import { useLanguage, useT } from "../../i18n";
 import { useKeyRefusals } from "../../keyRefusals";
+import { clearModelFailure, useModelHealth } from "../../modelHealth";
 import { useModelNames } from "../../modelNames";
 import { useAppStore } from "../../store";
 import { useCostSummary } from "../SpendingCapSettings";
@@ -70,7 +72,10 @@ export function ChatModelSettings() {
   useEffect(() => () => useKeyRefusals.getState().done(), []);
 
   const done = (provider?: ChatProvider) => {
-    if (provider) useKeyRefusals.getState().saved(provider);
+    if (provider) {
+      useKeyRefusals.getState().saved(provider);
+      clearModelFailure(provider.id);
+    }
     setChanging(false);
     setChoice(null);
     refresh();
@@ -194,6 +199,7 @@ export function ChatModelSettings() {
                   {model}
                 </p>
               )}
+              {chatModel && <ModelHealthLine choice={chatModel} />}
             </div>
             <button
               type="submit"
@@ -238,6 +244,29 @@ export function ChatModelSettings() {
         </div>
       )}
     </section>
+  );
+}
+
+function ModelHealthLine({ choice }: { choice: ChatModelChoice }) {
+  const failure = useModelHealth((state) => state.failures[choice.providerId]);
+  const openSettings = useAppStore((state) => state.openSettings);
+  // A model that failed as a model says nothing of another of the provider's models.
+  if (!failure || (failure.error.kind === "model" && failure.modelId !== choice.modelId)) {
+    return null;
+  }
+  return (
+    <div data-testid="model-health" className="flex items-start gap-2">
+      <span aria-hidden="true" className="mt-[11px] size-1.5 shrink-0 rounded-full bg-attention" />
+      <AnswerError
+        kind={failure.error.kind}
+        modelId={failure.modelId}
+        providerId={choice.providerId}
+        resetsAt={failure.error.resetsAt ?? null}
+        details={failure.error.message}
+        failedAt={failure.at}
+        onOpenSettings={openSettings}
+      />
+    </div>
   );
 }
 

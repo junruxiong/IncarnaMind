@@ -6,12 +6,14 @@ import {
   acceptPlainTextKeys,
   addDocuments,
   assistantAnswers,
+  closeSettings,
   createDataFolder,
   dismissChatSetup,
   interceptOpenExternal,
   launchApp,
   motionSettled,
   newMind,
+  openSettings,
   pointAndClick,
   removeDataFolder,
   setLanguage,
@@ -53,6 +55,13 @@ const saveProvider = (window: Page, input: SaveChatProviderInput) =>
     );
   }, input);
 
+const setLocalMode = (window: Page, on: boolean) =>
+  window.evaluate(
+    (value) =>
+      (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.setLocalOnly(value),
+    on,
+  );
+
 /** Asks in the assistant beside the Mind, and returns the Answer once it has ended. */
 async function ask(window: Page, question: string): Promise<Locator> {
   const answers = assistantAnswers(window);
@@ -83,6 +92,17 @@ test("a refused key: Check the key opens its field with the refusal, and once a 
 
   const answer = await ask(window, "What is in my Documents?");
   await expect(answer).toHaveAttribute("data-status", "failed");
+
+  // Settings › Models says it under the default model: the attention dot, the line and its fix.
+  const models = await openSettings(window, "models");
+  const health = models.getByTestId("model-health");
+  await expect(health).toHaveText("The key for Claude Haiku 5.5 was refused · Check the key");
+  await screenshot(models, "model-health-refused");
+  await setLanguage(window, "zh-CN");
+  await expect(health).toHaveText("Claude Haiku 5.5 的密钥被拒绝了 · 检查密钥");
+  await setLanguage(window, "en");
+  await closeSettings(window);
+
   const error = answer.getByTestId("answer-error");
   await expect(error).toContainText("The key for Claude Haiku 5.5 was refused");
   const action = error.getByTestId("answer-error-action");
@@ -116,6 +136,8 @@ test("a refused key: Check the key opens its field with the refusal, and once a 
   const answered = assistantAnswers(window).last();
   await expect(answered).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await expect(answered.getByTestId("assistant-answer-text")).not.toBeEmpty();
+  await openSettings(window, "models");
+  await expect(window.getByTestId("model-health")).toHaveCount(0);
   await app.close();
 });
 
@@ -180,5 +202,72 @@ test("with no Ollama on this computer, the setup card's local way says so, and o
 
   await pointAndClick(window, get);
   await expect.poll(() => urlsOpened(app)).toEqual(["https://ollama.com/download"]);
+  await app.close();
+});
+
+test("a choice that can't be used right now says why, with its next step: Ollama not running, and in local mode the key, the plans and the model menu; English and Chinese", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true, ollama: NO_OLLAMA });
+  await dismissChatSetup(window);
+  await setWindowSize(app, window, 1440, 900);
+  await acceptPlainTextKeys(window);
+  await setLocalMode(window, true);
+
+  const settings = await openSettings(window, "models");
+  const choices = settings.getByTestId("chat-provider-choices");
+  await expect(choices.getByTestId("ollama-status")).toHaveText(
+    "To run models on this computer, install Ollama from ollama.com and start it.",
+  );
+  await expect(choices.getByTestId("chat-choice-ollama")).not.toBeChecked();
+  await expect(choices.getByTestId("ollama-get")).toBeVisible();
+  await expect(choices.getByTestId("ollama-check-again")).toBeVisible();
+  const keyLine = choices.getByTestId("local-mode-unavailable");
+  const plansLine = settings.getByTestId("plans-settings").getByTestId("local-mode-unavailable");
+  const unavailable = "Unavailable: “Keep everything on this computer” is on · Turn off local mode";
+  await expect(keyLine).toHaveText(unavailable);
+  await expect(plansLine).toHaveText(unavailable);
+  await screenshot(settings, "why-unavailable-settings-en");
+
+  await setLanguage(window, "zh-CN");
+  await expect(keyLine).toHaveText("不可用：已开启“所有内容都留在这台电脑上” · 关闭本地模式");
+  await expect(choices.getByTestId("ollama-status")).toHaveText(
+    "如需在本机运行模型，请从 ollama.com 安装并启动 Ollama。",
+  );
+  await screenshot(settings, "why-unavailable-settings-zh");
+  await setLanguage(window, "en");
+
+  await keyLine.getByTestId("local-mode-turn-off").click();
+  await expect(keyLine).toHaveCount(0);
+  await expect(plansLine).toHaveCount(0);
+  await closeSettings(window);
+
+  // A cloud model in the menu while local mode is on: why on the model, and the way out below.
+  await setLocalMode(window, true);
+  await saveProvider(window, {
+    kind: "anthropic",
+    apiKey: "sk-ant-test-0000",
+    modelId: "claude-haiku-5-5",
+  });
+  await newMind(window);
+  await window.getByTestId("composer-model").click();
+  const option = window.getByTestId("composer-model-option").first();
+  await expect(option).toHaveAttribute("aria-disabled", "true");
+  const way = window.getByTestId("composer-model-local-mode");
+  await expect(way).toHaveText(unavailable);
+  await screenshot(window.getByTestId("composer-model-menu"), "why-unavailable-menu-en");
+  await way.getByTestId("composer-model-local-off").click();
+  await expect(window.getByTestId("undo-message")).toHaveText(
+    "Turned off “Keep everything on this computer”",
+  );
+  await expect(way).toHaveCount(0);
+  expect(
+    await window.evaluate(
+      async () =>
+        (
+          await (
+            globalThis as unknown as { incarnamind: CoreBridge }
+          ).incarnamind.getEmbeddingSettings()
+        ).localOnly,
+    ),
+  ).toBe(false);
   await app.close();
 });
