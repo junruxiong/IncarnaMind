@@ -93,21 +93,24 @@ describe("A request for text in a Mind", { timeout: 30_000 }, () => {
     });
   });
 
-  // protects=a Question is answered in the reply, with no instruction to write and nothing asked again; fails_when=the model is pushed to change a Mind; no_claim=none beyond protects.
-  test("a Question is answered in the reply, and nothing is asked again", async () => {
-    let system = "";
-    const model = scriptedModel((call): ScriptedReply => {
-      system = call.system;
-      return { text: "The quarter was good." };
-    });
-    const { core, mind } = await setUp(model);
+  // protects=a Question, or a request that can't be told, is answered in the reply with no instruction to write and nothing asked again; fails_when=the model is pushed to change a Mind; no_claim=none beyond protects.
+  test.each(["how was the quarter?", "Could you shorten my summary?"])(
+    "“%s” is answered in the reply, and nothing is asked again",
+    async (text) => {
+      let system = "";
+      const model = scriptedModel((call): ScriptedReply => {
+        system = call.system;
+        return { text: "The quarter was good." };
+      });
+      const { core, mind } = await setUp(model);
 
-    const answer = await askAssistant(core, { text: "how was the quarter?", mindId: mind.id });
+      const answer = await askAssistant(core, { text, mindId: mind.id });
 
-    expect(answer.text).toBe("The quarter was good.");
-    expect(model.doStreamCalls).toHaveLength(1);
-    expect(system).not.toContain("This request asks");
-  });
+      expect(answer.text).toBe("The quarter was good.");
+      expect(model.doStreamCalls).toHaveLength(1);
+      expect(system).not.toContain("This request asks");
+    },
+  );
 
   // protects=a follow-up with no object is read as a change to what the conversation's last Answer wrote into a Mind, and as unclear with nothing written before; fails_when=the model is pushed to change a Mind with nothing written, or isn't told to after a write; no_claim=that a real model then edits.
   test("“make it longer” asks for an edit after an Answer that changed a Mind, and nothing in a new conversation", async () => {
