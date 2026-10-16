@@ -6814,8 +6814,11 @@ export interface MeetingTranscript {
   state: TranscriptState;
   /** How many lines it has. */
   lines: number;
-  /** The speech being transcribed now, while live: where it starts, in the Meeting's time, and its words so far. */
-  partial: { startMs: number; text: string } | null;
+  /**
+   * The speech being transcribed now, while live: where it starts, in the Meeting's time, its
+   * words so far, and whose they are ("Me", "Them" or "Speaker ?", see src/shared/speakers.ts).
+   */
+  partial: { startMs: number; text: string; speaker: string } | null;
   /** The speech-to-text model, while it is downloading or failed to. */
   model: TranscriptionModelStatus | null;
   /** The WebVTT file in the Output location, once saved. */

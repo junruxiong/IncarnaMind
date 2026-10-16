@@ -10,6 +10,7 @@ import {
 } from "../../../core/documents/formats/vtt";
 import { clockTime } from "../../../shared/clock";
 import type { MessageKey } from "../../../shared/i18n";
+import { speakerKey } from "../../../shared/speakers";
 import { transcriptHandle, useHandle } from "../commands/handles";
 import { PlusLineIcon } from "../components/lineIcons";
 import { useDismissOnEscape } from "../escapeDismiss";
@@ -123,6 +124,11 @@ function TranscriptContent({
   meetingId: string | null;
 }) {
   const t = useT();
+  /** "Me", "Them" and "Speaker ?" in the interface's language; a person's name as it is. */
+  const speakerName = (speaker: string) => {
+    const key = speakerKey(speaker);
+    return key ? t(key) : speaker;
+  };
   const meeting = useMeetings((state) => state.meetings.find((each) => each.id === meetingId));
   const live = meeting?.status === "recording";
   const state = meeting?.transcript?.state;
@@ -354,7 +360,7 @@ function TranscriptContent({
                 {rows.map((row) =>
                   row.kind === "cue" ? (
                     <li
-                      key={`c${row.cue.startMs}-${row.cue.endMs}`}
+                      key={`c${row.cue.startMs}-${row.cue.endMs}-${row.cue.speaker ?? ""}`}
                       data-testid="transcript-line"
                       data-start={row.cue.startMs}
                       tabIndex={
@@ -377,8 +383,12 @@ function TranscriptContent({
                       </span>
                       <div className="min-w-0">
                         {row.cue.speaker && (
-                          <p data-quote-skip="" className="transcript-speaker">
-                            {row.cue.speaker}
+                          <p
+                            data-testid="transcript-speaker"
+                            data-quote-skip=""
+                            className="transcript-speaker"
+                          >
+                            {speakerName(row.cue.speaker)}
                           </p>
                         )}
                         <p className="transcript-text">{row.cue.text}</p>
@@ -428,7 +438,12 @@ function TranscriptContent({
                     className="transcript-line transcript-line--partial"
                   >
                     <span className="transcript-time">{clockTime(partial.startMs)}</span>
-                    <p className="transcript-text">{partial.text}</p>
+                    <div className="min-w-0">
+                      <p data-testid="transcript-speaker" className="transcript-speaker">
+                        {speakerName(partial.speaker)}
+                      </p>
+                      <p className="transcript-text">{partial.text}</p>
+                    </div>
                   </li>
                 )}
               </ol>
