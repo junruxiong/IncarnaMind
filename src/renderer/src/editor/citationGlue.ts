@@ -35,6 +35,11 @@ const glued = (node: NodeJSON): NodeJSON => ({
 
 const isCitation = (node: NodeJSON | undefined) => node?.type === CITATION_NODE;
 
+const citationAt = (nodes: readonly NodeJSON[], index: number): NodeJSON | null => {
+  const node = nodes[index];
+  return node?.type === CITATION_NODE ? node : null;
+};
+
 function glueChildren(content: readonly NodeJSON[]): NodeJSON[] {
   const children = [...content];
   const out: NodeJSON[] = [];
@@ -56,7 +61,9 @@ function glueChildren(content: readonly NodeJSON[]): NodeJSON[] {
       continue;
     }
     const cluster: NodeJSON[] = [];
-    while (isCitation(children[index])) cluster.push(children[index++] as NodeJSON);
+    for (let each = citationAt(children, index); each; each = citationAt(children, ++index)) {
+      cluster.push(each);
+    }
     const after = children[index];
     const stop = after?.type === "text" ? PUNCTUATION_AFTER.exec(after.text ?? "")?.[0] : null;
     // Only the first few stay with the word, so a long run of markers can still wrap; the last

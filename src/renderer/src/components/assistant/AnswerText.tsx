@@ -59,7 +59,6 @@ export function AnswerText({
   streaming: boolean;
   /** Writes the Answer again. */
   regenerate(): void;
-  /** Opens a table of the Answer in a tab of its own. */
   onOpenTable(table: NodeJSON): void;
 }) {
   const t = useT();

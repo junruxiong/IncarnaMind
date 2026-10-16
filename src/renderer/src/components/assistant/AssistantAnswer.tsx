@@ -33,7 +33,6 @@ export interface AnswerKeeping {
   focusedMindName: string | null;
   add(answer: ConversationAnswer): void;
   pick(answer: ConversationAnswer, anchor: HTMLElement): void;
-  /** Opens one table of the Answer in a tab of its own. */
   openTable(answer: ConversationAnswer, table: NodeJSON): void;
 }
 
