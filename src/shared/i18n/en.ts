@@ -3151,6 +3151,7 @@ export const en = {
   "error.startup.newer.quit": "Quit",
 
   "error.connector.notInDirectory": "That Connector isn't in the directory.",
+  "error.examples.reading": "The example's Documents are still being read. Try again in a moment.",
   "error.document.notFound": "There is no such Document.",
   "error.export.choice": "{name} must be true or false.",
   "error.export.textOnly": "The Documents kept as text must be a list of their ids.",
@@ -3731,7 +3732,6 @@ export const en = {
   "firstOpen.step.question.ready": "Ask: “{question}”",
   "firstOpen.step.question.own": "or press {shortcut} to type your own",
   "firstOpen.step.question.ownOnly": "Press {shortcut} to ask your own Question.",
-  "firstOpen.ready.reading": "The example's Documents are still being read. Try again in a moment.",
   "firstOpen.step.files.title": "Add your own files",
   "firstOpen.step.files.done": "Added your files",
   "firstOpen.step.files.body":

@@ -3008,6 +3008,7 @@ export const zhCN = {
   "error.startup.newer.quit": "退出",
 
   "error.connector.notInDirectory": "目录里没有这个连接器。",
+  "error.examples.reading": "示例文档还在读取中，稍后再试一次。",
   "error.document.notFound": "找不到这个文档。",
   "error.export.choice": "{name} 只能是 true 或 false。",
   "error.export.textOnly": "保留为文字的文档必须以文档 ID 列表的形式给出。",
@@ -3540,7 +3541,6 @@ export const zhCN = {
   "firstOpen.step.question.ready": "提问：“{question}”",
   "firstOpen.step.question.own": "或按 {shortcut} 输入你自己的问题",
   "firstOpen.step.question.ownOnly": "按 {shortcut} 提出你自己的问题。",
-  "firstOpen.ready.reading": "示例文档还在读取中，稍后再试一次。",
   "firstOpen.step.files.title": "添加你自己的文件",
   "firstOpen.step.files.done": "已添加你的文件",
   "firstOpen.step.files.body": "你的文件留在原处，IncarnaMind 在这台电脑上读取它们。",

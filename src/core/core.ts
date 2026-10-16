@@ -2692,7 +2692,7 @@ export function createCore(adapters: CoreAdapters): Core {
     askReadyQuestion: async () => {
       const ready = examples.readyAnswer();
       if (!ready) {
-        throw new InvalidInputError(translate(settings.get().language, "firstOpen.ready.reading"));
+        throw new InvalidInputError({ key: "error.examples.reading" });
       }
       const turn = conversations.add(
         {
