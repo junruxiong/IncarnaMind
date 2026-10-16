@@ -3996,7 +3996,7 @@ export const zhCN = {
   "wordImport.addOriginal": "同时把原文件加入资料库，回答可以引用它",
   "wordImport.newerDraft": "这是“{name}”的新稿吗？两稿都作为版本保留",
   "wordImport.layoutNotShown":
-    "这份文件的部分版式（表格边框和对齐的列）在 Mind 里暂不显示，会保留，导出 Word 时原样还原。",
+    "这份文件的部分版式（对齐的列）在 Mind 里暂不显示，会保留，导出 Word 时原样还原。",
   "wordImport.import": "导入",
   "wordImport.importing": "正在导入…",
   "wordImport.cancel": "取消",

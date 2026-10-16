@@ -4214,7 +4214,7 @@ export const en = {
   "wordImport.addOriginal": "Also add the original to the Library, so Answers can cite it",
   "wordImport.newerDraft": "A newer draft of “{name}”? Keep both as versions",
   "wordImport.layoutNotShown":
-    "Some of this file’s layout (table lines and aligned columns) isn’t shown in the Mind yet. It’s kept, and comes back when you export to Word.",
+    "Some of this file’s layout (aligned columns) isn’t shown in the Mind yet. It’s kept, and comes back when you export to Word.",
   "wordImport.import": "Import",
   "wordImport.importing": "Importing…",
   "wordImport.cancel": "Cancel",
