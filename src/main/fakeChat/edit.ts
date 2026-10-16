@@ -6,7 +6,10 @@
  * does so, or "drop the citations" (去掉引用) leaves their markers out.
  * "Restructure" (重新组织) cuts a plain last paragraph and puts the last
  * section, from its heading (a "#" paragraph) on, first, keeping each
- * paragraph's mark, as a model restructuring a whole Mind does (#703). The
+ * paragraph's mark, as a model restructuring a whole Mind does (#703). One
+ * that asks for a table (表格) adds a Markdown table after the passage, a
+ * row for each paragraph, its markers in the cells, and a last row whose
+ * source is a name in brackets no Citation has (#961). The
  * new text streams in word by word, slowly when the instruction says
  * "slowly", then a line saying why (#202).
  */
@@ -25,6 +28,19 @@ function restructured(passage: string): string {
   const last = paragraphs.findLastIndex((paragraph) => paragraph.startsWith("#"));
   if (last <= 0) return paragraphs.join("\n\n");
   return [...paragraphs.slice(last), ...paragraphs.slice(0, last)].join("\n\n");
+}
+
+/** A row for each paragraph but headings: its first two words, then the rest. */
+function withTable(passage: string): string {
+  const rows = passage
+    .split(/\n\n+/)
+    .filter((paragraph) => !paragraph.startsWith("#"))
+    .map((paragraph) => {
+      const words = paragraph.replace(/^(?:- |\d+\. |> )/, "").split(/\s+/);
+      return `| ${words.slice(0, 2).join(" ")} | ${words.slice(2).join(" ")} |`;
+    });
+  const named = "| Source | Board minutes [Board minutes, p. 2] |";
+  return [passage, "", "| Term | What it says |", "|---|---|", ...rows, named].join("\n");
 }
 
 /** Why the scripted Edit with AI changed a passage, by its action, in English and in Chinese. */
@@ -91,6 +107,7 @@ function editedText(action: string, passage: string, asked: string): string {
         return passage.split(replace[1]).join(replace[2]);
       if (/drop the citations|去掉引用/i.test(asked)) return passage.replace(/\s*\[\d+\]/g, "");
       if (/restructure|重新组织/i.test(asked)) return restructured(passage);
+      if (/\btable\b|表格/i.test(asked)) return withTable(passage);
       if (SHORTEN.test(asked)) return passage.replace(FILLER, "");
       return `${passage} (edited)`;
     }
