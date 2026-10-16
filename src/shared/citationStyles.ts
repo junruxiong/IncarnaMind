@@ -1,14 +1,19 @@
 /**
- * The citation styles IncarnaMind ships (#289, ADR-0016): what the core formats with, and what
- * the style picker lists. Each CSL style is an unmodified file from the CSL project's repository
- * in resources/citation-styles/styles. "Numbered" is IncarnaMind's own: Citations numbered in
- * the text, each a footnote naming its Document and Location, as before styles existed.
+ * The citation styles IncarnaMind ships (#289, ADR-0016): every style of the CSL project's
+ * repository, unmodified, in resources/citation-styles/styles.pack, each known by its file's name
+ * ("nature", "the-lancet"), and the common list the picker offers first, with names of its own in
+ * either language. "Numbered" is IncarnaMind's own: Citations numbered in the text, each a
+ * footnote naming its Document and Location, as before styles existed.
  * Pure: the core and the renderer import it.
  */
+import type { CitationFormat } from "../core/citationStyles/pack";
 import type { Language } from "../core/language";
 import type { MessageKey } from "./i18n";
 
-export const CITATION_STYLE_IDS = [
+export type { CitationFormat };
+
+/** The common list's ids, which Minds have kept since before the pack. */
+export const COMMON_CITATION_STYLE_IDS = [
   "numbered",
   "apa",
   "mla",
@@ -23,7 +28,10 @@ export const CITATION_STYLE_IDS = [
   "vancouver",
 ] as const;
 
-export type CitationStyleId = (typeof CITATION_STYLE_IDS)[number];
+export type CommonCitationStyleId = (typeof COMMON_CITATION_STYLE_IDS)[number];
+
+/** A common style's id, or a style's file name in the pack ("nature"). */
+export type CitationStyleId = string;
 
 /**
  * How a style's Citations read in the text:
@@ -34,11 +42,13 @@ export type CitationStyleId = (typeof CITATION_STYLE_IDS)[number];
 export type CitationForm = "numbered" | "in-text" | "note";
 
 export interface CitationStyle {
-  id: CitationStyleId;
+  id: CommonCitationStyleId;
   /** Its name in the picker and on its button: "APA 7". */
   label: MessageKey;
-  /** The CSL file in resources/citation-styles/styles; null for Numbered. */
-  file: string | null;
+  /** Its file's name in the pack; null for Numbered. */
+  packId: string | null;
+  /** How the picker describes its citations. */
+  format: CitationFormat;
   form: CitationForm;
   /**
    * The language its own words are in, and its Location words ("slide 4", "第 4 张幻灯片"):
@@ -67,7 +77,8 @@ export const CITATION_STYLES: readonly CitationStyle[] = [
   {
     id: "numbered",
     label: "citationStyle.numbered",
-    file: null,
+    packId: null,
+    format: "numeric",
     form: "numbered",
     language: "en",
     keywords: ["footnote", "document", "page", "脚注", "编号"],
@@ -77,7 +88,8 @@ export const CITATION_STYLES: readonly CitationStyle[] = [
   {
     id: "apa",
     label: "citationStyle.apa",
-    file: "apa.csl",
+    packId: "apa",
+    format: "author-date",
     form: "in-text",
     language: "en",
     keywords: ["American Psychological Association", "author-date"],
@@ -87,7 +99,8 @@ export const CITATION_STYLES: readonly CitationStyle[] = [
   {
     id: "mla",
     label: "citationStyle.mla",
-    file: "modern-language-association.csl",
+    packId: "modern-language-association",
+    format: "author",
     form: "in-text",
     language: "en",
     keywords: ["Modern Language Association", "works cited"],
@@ -97,7 +110,8 @@ export const CITATION_STYLES: readonly CitationStyle[] = [
   {
     id: "harvard",
     label: "citationStyle.harvard",
-    file: "harvard-cite-them-right.csl",
+    packId: "harvard-cite-them-right",
+    format: "author-date",
     form: "in-text",
     language: "en",
     keywords: ["Cite Them Right", "author-date"],
@@ -107,7 +121,8 @@ export const CITATION_STYLES: readonly CitationStyle[] = [
   {
     id: "chicago-notes",
     label: "citationStyle.chicago-notes",
-    file: "chicago-notes-bibliography.csl",
+    packId: "chicago-notes-bibliography",
+    format: "note",
     form: "note",
     language: "en",
     keywords: ["Chicago Manual of Style", "footnote", "notes and bibliography", "脚注"],
@@ -117,7 +132,8 @@ export const CITATION_STYLES: readonly CitationStyle[] = [
   {
     id: "chicago-author-date",
     label: "citationStyle.chicago-author-date",
-    file: "chicago-author-date.csl",
+    packId: "chicago-author-date",
+    format: "author-date",
     form: "in-text",
     language: "en",
     keywords: ["Chicago Manual of Style", "author-date"],
@@ -127,7 +143,8 @@ export const CITATION_STYLES: readonly CitationStyle[] = [
   {
     id: "ieee",
     label: "citationStyle.ieee",
-    file: "ieee.csl",
+    packId: "ieee",
+    format: "numeric",
     form: "in-text",
     language: "en",
     keywords: ["Institute of Electrical and Electronics Engineers", "numeric"],
@@ -137,7 +154,8 @@ export const CITATION_STYLES: readonly CitationStyle[] = [
   {
     id: "gb-t-7714-2015-numeric",
     label: "citationStyle.gb-t-7714-2015-numeric",
-    file: "china-national-standard-gb-t-7714-2015-numeric.csl",
+    packId: "china-national-standard-gb-t-7714-2015-numeric",
+    format: "numeric",
     form: "in-text",
     language: "zh-CN",
     keywords: [...GB_T, "numeric", "顺序编码"],
@@ -147,7 +165,8 @@ export const CITATION_STYLES: readonly CitationStyle[] = [
   {
     id: "gb-t-7714-2015-author-date",
     label: "citationStyle.gb-t-7714-2015-author-date",
-    file: "china-national-standard-gb-t-7714-2015-author-date.csl",
+    packId: "china-national-standard-gb-t-7714-2015-author-date",
+    format: "author-date",
     form: "in-text",
     language: "zh-CN",
     keywords: [...GB_T, "author-date", "著者-出版年"],
@@ -157,7 +176,8 @@ export const CITATION_STYLES: readonly CitationStyle[] = [
   {
     id: "gb-t-7714-2025-numeric",
     label: "citationStyle.gb-t-7714-2025-numeric",
-    file: "china-national-standard-gb-t-7714-2025-numeric.csl",
+    packId: "china-national-standard-gb-t-7714-2025-numeric",
+    format: "numeric",
     form: "in-text",
     language: "zh-CN",
     keywords: [...GB_T, "numeric", "顺序编码"],
@@ -167,7 +187,8 @@ export const CITATION_STYLES: readonly CitationStyle[] = [
   {
     id: "gb-t-7714-2025-author-date",
     label: "citationStyle.gb-t-7714-2025-author-date",
-    file: "china-national-standard-gb-t-7714-2025-author-date.csl",
+    packId: "china-national-standard-gb-t-7714-2025-author-date",
+    format: "author-date",
     form: "in-text",
     language: "zh-CN",
     keywords: [...GB_T, "author-date", "著者-出版年"],
@@ -177,7 +198,8 @@ export const CITATION_STYLES: readonly CitationStyle[] = [
   {
     id: "vancouver",
     label: "citationStyle.vancouver",
-    file: "nlm-citation-sequence.csl",
+    packId: "nlm-citation-sequence",
+    format: "numeric",
     form: "in-text",
     language: "en",
     keywords: ["NLM", "Citing Medicine", "numeric", "medicine"],
@@ -195,7 +217,7 @@ export const CITATION_STYLES: readonly CitationStyle[] = [
 export function defaultCitationStyle(
   language: Language,
   mind: { chineseText: boolean; citesWorks: boolean },
-): CitationStyleId {
+): CommonCitationStyleId {
   return language === "zh-CN" && mind.chineseText && mind.citesWorks
     ? "gb-t-7714-2015-numeric"
     : "numbered";
@@ -205,16 +227,79 @@ export function defaultCitationStyle(
  * The styles the prompt in a Mind that cites papers or books offers (`CitationStylePrompt`),
  * the interface language's own first.
  */
-export const PROMPTED_CITATION_STYLES: Readonly<Record<Language, readonly CitationStyleId[]>> = {
+export const PROMPTED_CITATION_STYLES: Readonly<
+  Record<Language, readonly CommonCitationStyleId[]>
+> = {
   en: ["apa", "gb-t-7714-2015-numeric"],
   "zh-CN": ["gb-t-7714-2015-numeric", "apa"],
 };
 
+/** Whether a value can be a style's id: a common one, or a CSL file's name, as the pack keeps them. */
 export const isCitationStyleId = (value: unknown): value is CitationStyleId =>
-  typeof value === "string" && (CITATION_STYLE_IDS as readonly string[]).includes(value);
+  typeof value === "string" && /^[a-z0-9][a-z0-9-]{0,199}$/.test(value);
 
-export function citationStyle(id: CitationStyleId): CitationStyle {
-  const style = CITATION_STYLES.find((each) => each.id === id);
-  if (!style) throw new Error(`There is no citation style ${id}.`);
-  return style;
+export const commonCitationStyle = (id: CitationStyleId): CitationStyle | undefined =>
+  CITATION_STYLES.find((each) => each.id === id);
+
+/**
+ * The prefix of a pack style whose file's name is a common style's id meaning another style: the
+ * CSL repository's "chicago-notes" (notes alone) beside the common "chicago-notes" (notes and
+ * bibliography), which Minds chose before the pack.
+ */
+const RENAMED = "csl-";
+
+/** The id the app knows a pack style by: its file's name, unless a common style has it. */
+export function styleIdOf(packId: string): CitationStyleId {
+  const common = commonCitationStyle(packId);
+  return common && common.packId !== packId ? `${RENAMED}${packId}` : packId;
 }
+
+/** The pack file a style formats with, by the id the app knows it by. */
+export function packIdOf(id: CitationStyleId): string | null {
+  const common = commonCitationStyle(id);
+  if (common) return common.packId;
+  const renamed = id.startsWith(RENAMED) ? id.slice(RENAMED.length) : null;
+  return renamed && commonCitationStyle(renamed) ? renamed : id;
+}
+
+/** A style of the pack as the picker lists it, without the common list's own. */
+export interface StyleSummary {
+  id: CitationStyleId;
+  title: string;
+  short?: string;
+  format: CitationFormat;
+  /** Its citations are notes. */
+  note: boolean;
+  fields: readonly string[];
+  /** A journal's style: the title of the style it follows. */
+  follows?: string;
+}
+
+/** Every style of the pack, and how many there are with the common ones: "Search 10,865 styles…". */
+export interface StyleCatalogue {
+  count: number;
+  styles: StyleSummary[];
+}
+
+/**
+ * A style as a Mind is formatted in it: its form and words, and what the engine formats with.
+ * Numbered formats with nothing; so does a style this version doesn't ship (`unavailable`).
+ */
+export interface ResolvedCitationStyle {
+  id: CitationStyleId;
+  form: CitationForm;
+  language: Language;
+  heading: string | null;
+  locators: CitationStyle["locators"];
+  engine: { packId: string; locale?: string } | null;
+  unavailable?: true;
+}
+
+/** Numbered, as a style resolves when it is Numbered or this version doesn't have it. */
+export const NUMBERED_STYLE: Omit<ResolvedCitationStyle, "id"> = {
+  form: "numbered",
+  language: "en",
+  heading: null,
+  locators: "in-citation",
+  engine: null,
+};
