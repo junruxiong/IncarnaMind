@@ -16,6 +16,7 @@ import {
   openSettings,
   removeDataFolder,
   setWindowSize,
+  showSettingsPage,
   urlsOpened,
 } from "./app";
 
@@ -50,11 +51,12 @@ const bridge = (window: Page) => ({
   keyProvider: () =>
     window.evaluate(async () => {
       const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
-      await core.saveChatProvider({
+      const provider = await core.saveChatProvider({
         kind: "anthropic",
         apiKey: "sk-ant-test",
         modelId: "claude-haiku-5-5",
       });
+      return provider.id;
     }),
   cap: () =>
     window.evaluate(
@@ -145,7 +147,7 @@ test("an Answer stopped by the monthly cap says so in place, and Change cap open
     await shot(window, "cap-problem-wide-zh");
     await error.getByTestId("answer-error-action").click();
     await expect(cap.getByTestId("spending-cap-spent")).toHaveText(
-      "本月 API 密钥已花费：US$0，上限 US$0。",
+      "本月 API 密钥已花费：$0，上限 $0。",
     );
     await shot(window, "cap-control-wide-zh");
     await setWindowSize(app, window, NARROW.width, NARROW.height);
@@ -176,12 +178,12 @@ test("Settings → Models shows what a key spent this month, and the ChatGPT pla
     await expect(assistantAnswers(window).first()).toHaveAttribute("data-status", "done");
     const settings = await openSettings(window, "models");
     const cost = settings.getByTestId("chat-provider-cost");
-    await expect(cost).toHaveText("This month: $0");
+    await expect(cost).toHaveText("This month: $0 spent");
     await shot(window, "models-key-wide-en");
     await setWindowSize(app, window, NARROW.width, NARROW.height);
     await shot(window, "models-key-narrow-en");
     await bridge(window).language("zh-CN");
-    await expect(cost).toHaveText("本月：US$0");
+    await expect(cost).toHaveText("本月已花 $0");
     await shot(window, "models-key-narrow-zh");
     await bridge(window).language("en");
 
@@ -254,6 +256,72 @@ test("a request a force-quit cut short counts for nothing, and the cost line say
       "有 1 次请求被中断，费用未知。",
     );
     await shot(window, "cost-interrupted-wide-zh");
+  } finally {
+    await app.close();
+  }
+});
+
+test("work still running is set aside apart from what was spent, and the set-aside part goes when the work ends, in English and Chinese (#891)", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  try {
+    await dismissChatSetup(window);
+    await setWindowSize(app, window, WIDE.width, WIDE.height);
+    await acceptPlainTextKeys(window);
+    const providerId = await bridge(window).keyProvider();
+
+    // One request settled at a cent, and one still open with $1.28 reserved for it.
+    const db = openDatabase(join(dataDir, "incarnamind.db"));
+    const at = new Date().toISOString();
+    const insert = `INSERT INTO model_requests (id, provider_id, model_id, flow, billing, status,
+        currency, reserved, cost, created_at, updated_at)
+      VALUES (?, ?, 'claude-haiku-5-5', 'chat', 'per-token', ?, 'USD', ?, ?, ?, ?)`;
+    db.run(insert, ["settled-1", providerId, "settled", 0.3, 0.01, at, at]);
+    db.run(insert, ["open-1", providerId, "reserved", 1.28, null, at, at]);
+
+    const settings = await openSettings(window, "models");
+    const cost = settings.getByTestId("chat-provider-cost");
+    await expect(cost).toHaveText("This month: $0.01 spent · $1.28 set aside for work in progress");
+    await expect(settings.getByTestId("chat-provider-set-aside")).toHaveAttribute(
+      "title",
+      "Kept aside so running work can't go over your monthly limit",
+    );
+    await shot(window, "set-aside-models-wide-en");
+    await showSettingsPage(window, "general");
+    const cap = settings.getByTestId("spending-cap-settings");
+    await expect(cap.getByTestId("spending-cap-spent")).toHaveText(
+      "Spent this month: $0.01 on your keys.",
+    );
+    await expect(cap.getByTestId("spending-cap-set-aside")).toHaveText(
+      "$1.28 set aside for work in progress",
+    );
+    await shot(window, "set-aside-cap-wide-en");
+
+    await bridge(window).language("zh-CN");
+    await expect(cap.getByTestId("spending-cap-spent")).toHaveText("本月 API 密钥已花费：$0.01。");
+    await expect(cap.getByTestId("spending-cap-set-aside")).toHaveText("进行中的任务预留 $1.28");
+    await expect(cap.getByTestId("spending-cap-set-aside")).toHaveAttribute(
+      "title",
+      "预留出来，避免进行中的任务超出你的月度上限",
+    );
+    await shot(window, "set-aside-cap-wide-zh");
+    await showSettingsPage(window, "models");
+    await expect(cost).toHaveText("本月已花 $0.01 · 进行中的任务预留 $1.28");
+    await setWindowSize(app, window, NARROW.width, NARROW.height);
+    await shot(window, "set-aside-models-narrow-zh");
+    await bridge(window).language("en");
+    await shot(window, "set-aside-models-narrow-en");
+    await closeSettings(window);
+
+    db.run("UPDATE model_requests SET status = 'settled', cost = 0.01 WHERE id = 'open-1'");
+    db.close();
+    await openSettings(window, "models");
+    await expect(cost).toHaveText("This month: $0.02 spent");
+    await expect(settings.getByTestId("chat-provider-set-aside")).toHaveCount(0);
+    await showSettingsPage(window, "general");
+    await expect(cap.getByTestId("spending-cap-spent")).toHaveText(
+      "Spent this month: $0.02 on your keys.",
+    );
+    await expect(cap.getByTestId("spending-cap-set-aside")).toHaveCount(0);
   } finally {
     await app.close();
   }

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, realpath, stat, utimes, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { vi } from "vitest";
-import type { Core, Document, DocumentStatus } from "../../src/core";
+import type { AddDocumentsOptions, Core, Document, DocumentStatus } from "../../src/core";
 import { normaliseText } from "../../src/shared/text";
 import { createTempDataFolder } from "./core";
 
@@ -135,8 +135,12 @@ export function documentAt(documents: readonly Document[], path: string): Docume
 }
 
 /** Links a folder and waits until every file in it is processed. */
-export async function linkAndProcess(core: Core, path: string): Promise<Document[]> {
-  const linked = await core.addLinkedFolder(path);
+export async function linkAndProcess(
+  core: Core,
+  path: string,
+  options?: AddDocumentsOptions,
+): Promise<Document[]> {
+  const linked = await core.addLinkedFolder(path, options);
   await core.reconcileDocuments();
   const documents = await core.listDocuments({ linkedFolderId: linked.id });
   return waitForProcessing(
