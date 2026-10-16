@@ -111,6 +111,7 @@ import { retryFigures } from "./figureRetry";
 import { missingMarkerEvents, textEdits } from "./markerPlacement";
 import {
   datedDocumentsNote,
+  notCitedNote,
   SEARCH_QUERY_INSTRUCTIONS,
   searchQueryPrompt,
   TRANSLATE_QUERY_INSTRUCTIONS,
@@ -247,6 +248,12 @@ export interface AnswerTools {
    * there. Whether it did; if not, the record stays as it was.
    */
   correctQuote?(marker: number, quote: string): boolean;
+  /**
+   * Whether the Answer wrote its text into a Mind: its Citations are
+   * there, so its reply only reports what was done, and no marker the model
+   * left out of the reply is placed in it, nor any asked for.
+   */
+  wroteIntoMind?(): boolean;
   /**
    * Takes calculated figures (ADR-0021, ./calculations); returns what to tell
    * the model about them. Absent: the Answer offers no `calculate`.
@@ -724,13 +731,16 @@ const recordsSchema = {
 
 /** Records from the model's JSON, kept only where they have the right shape. */
 function parseRecords(value: unknown): CitationRecordInput[] {
-  // Some models send the array as a JSON string.
+  // Some models send the array as a JSON string, or one record alone.
   if (typeof value === "string") {
     try {
       return parseRecords(JSON.parse(value));
     } catch {
       return [];
     }
+  }
+  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+    return parseRecords([value]);
   }
   if (!Array.isArray(value)) return [];
   return value.flatMap((item): CitationRecordInput[] => {
@@ -1268,6 +1278,7 @@ export function documentTools(
         // The dates are named from the Passages that fit, so never a Document the model wasn't handed.
         const notes = [
           datedDocumentsNote(result.text),
+          notCitedNote(result.text),
           unreadDocumentsNote(documents.unreadDocuments?.() ?? []),
         ];
         return [result.text, ...notes].filter((part) => part !== "").join("\n\n");
@@ -1537,8 +1548,10 @@ async function* toolLoop(
     yield* flag(keptText);
   }
   async function* endAnswer(): AsyncGenerator<AnswerEngineEvent> {
-    const placed = yield* missingMarkerEvents(keptText, cited, request.documents);
-    yield* citeUnmarked(request, placed, temperature, budget);
+    if (!request.documents.wroteIntoMind?.()) {
+      const placed = yield* missingMarkerEvents(keptText, cited, request.documents);
+      yield* citeUnmarked(request, placed, temperature, budget);
+    }
     yield { type: "finished" };
   }
   const runTools = tools.map(tracked);

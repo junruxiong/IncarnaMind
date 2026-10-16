@@ -594,6 +594,7 @@ export const en = {
   "claim.unsupported.inFolder": "Nothing in “{folder}” says this.",
   "claim.unsupported.anywhere": "Nothing in your Documents says this.",
   "claim.unsupported.differs": "Your Documents say something different:",
+  "claim.unsupported.ownWorkings": "Only your own working file says this.",
   "claim.fixSentence": "Fix the sentence",
   "claim.findSources": "Find sources",
   "claim.searchWeb": "Search the web",
@@ -1028,6 +1029,17 @@ export const en = {
   "evidence.countedMany": "{count} Documents count as evidence now",
   "evidence.leftOut": "“{name}” no longer counts as evidence",
   "evidence.leftOutMany": "{count} Documents no longer count as evidence",
+  "evidence.notCited": "Don't cite this Document",
+  "evidence.notCitedMany": "Don't cite {count} Documents",
+  "evidence.citeAgain": "Cite this Document again",
+  "evidence.citeAgainMany": "Cite {count} Documents again",
+  "evidence.notCited.hint":
+    "IncarnaMind can still read it to understand your question, but won't cite it or use it to support a check.",
+  "evidence.notCited.label": "Not cited",
+  "evidence.notCited.done": "“{name}” won't be cited",
+  "evidence.notCited.doneMany": "{count} Documents won't be cited",
+  "evidence.citeAgain.done": "“{name}” can be cited again",
+  "evidence.citeAgain.doneMany": "{count} Documents can be cited again",
   "evidence.settings.title": "Checks",
   "evidence.settings.switch": "Leave out files IncarnaMind wrote",
   "evidence.settings.body":
@@ -2239,6 +2251,7 @@ export const en = {
   "comparison.cell.nothingToSearch": "no text to search",
   "comparison.cell.sourceRemoved": "source removed",
   "comparison.cell.leftOut": "left out: IncarnaMind wrote it",
+  "comparison.cell.notCited": "left out: your own working file",
   "comparison.cell.auth": "key refused",
   "comparison.cell.rateLimit": "provider busy",
   "comparison.cell.network": "provider unreachable",
@@ -2933,6 +2946,7 @@ export const en = {
   "error.document.gone": "That Document no longer exists.",
   "error.document.nameEmpty": "A Document's name can't be empty.",
   "error.document.nameTooLong": "A Document's name can't be longer than {max} characters.",
+  "error.document.notCitedChoice": "Whether a Document is cited must be true or false.",
   "error.document.fileMissing": "The Document's file is missing.",
   "error.verify.request": "That isn't a request to verify a document that IncarnaMind can read.",
   "error.verify.notVerifying": "This Mind doesn't verify a document.",
@@ -4016,6 +4030,8 @@ export const en = {
   "mindCall.failed.several": "Several Minds are called “{name}”",
   "mindCall.failed.noHeading": "Couldn't change “{mind}”: it has no heading “{heading}”",
   "mindCall.failed.noPlace": "Couldn't add to “{mind}”: it has no heading or paragraph “{place}”",
+  "mindCall.failed.severalPlaces":
+    "Couldn't change “{mind}”: more than one place is called “{name}”",
   "mindCall.failed.noText": "Couldn't change “{mind}”: there's no text there to change",
   "mindCall.failed.tooLong": "Couldn't change “{mind}”: that's too much text to change at once",
   "mindCall.failed.changed": "Couldn't change “{mind}”: its text changed while it was being read",
@@ -4062,6 +4078,11 @@ export const en = {
   "command.assistant.fold": "Assistant: Fold",
   "command.assistant.unfold": "Assistant: Show",
   "command.assistant.history": "Conversation history",
+  "assistant.several.headings": "There are {count} headings called “{name}”: {places}. Which one?",
+  "assistant.several.paragraphs":
+    "There are {count} paragraphs starting “{name}”: {places}. Which one?",
+  "assistant.place.under": "under “{heading}”",
+  "assistant.place.number": "number {n}",
   // Outside agents (#351): the consent for each agent the User connects, and what IncarnaMind
   // tells an agent when a call can't be done, which the agent passes on to the User.
   "consent.flow.agents": "Your AI agents",
