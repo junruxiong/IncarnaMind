@@ -6576,6 +6576,27 @@ export interface SentenceChecksExported {
   commented: boolean;
 }
 
+/** What a Mind's web page to share would hold, for the sheet to show before it is made. */
+export interface SharePagePreview {
+  /** Every Document the Mind cites, in the order it is first cited. */
+  documents: SharedDocument[];
+  /** The file's size with every Citation's card as text, in bytes. */
+  textBytes: number;
+}
+
+export interface SharedDocument {
+  documentId: string;
+  name: string;
+  /** The Citations that cite it. */
+  quotes: number;
+  /** The page pictures they carry: none for a Document without pages, or whose pages weren't saved. */
+  pictures: number;
+  /** About what those pictures add to the file, in bytes. */
+  pictureBytes: number;
+  /** Its Citations' cards stay text, as the User chose (`setSharePageTextOnly`). */
+  textOnly: boolean;
+}
+
 /** A Mind exported as a file, for the host to save where the User chooses. */
 export interface MindExport extends MindExportPreview {
   /** The file's contents: UTF-8 text for Markdown and HTML, a ZIP package for .docx, a PDF for PDF and a source pack. */
@@ -8518,6 +8539,16 @@ export interface CoreApi {
    */
   exportMind(mindId: string, options: ExportMindOptions): Promise<MindExport>;
   /**
+   * What the Mind's web page to share would hold with these options (Questions, someone's changes
+   * waiting): its Documents, their quotes and pictures.
+   */
+  previewSharePage(mindId: string, options: ExportMindOptions): Promise<SharePagePreview>;
+  /**
+   * The Documents whose Citations the Mind's web page to share keeps as text, without their
+   * page pictures; kept with the Mind.
+   */
+  setSharePageTextOnly(mindId: string, documentIds: string[]): Promise<void>;
+  /**
    * Exports a Mind (as `exportMind`) into the Output location, under the
    * next free name, asking where new files go the first time.
    */
@@ -9081,6 +9112,8 @@ const methods: Record<CoreApiMethod, true> = {
   restoreBuiltInSkills: true,
   previewMindExport: true,
   exportMind: true,
+  previewSharePage: true,
+  setSharePageTextOnly: true,
   saveMindExport: true,
   formatCitations: true,
   getMindCitationStyle: true,

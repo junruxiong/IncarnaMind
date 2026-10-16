@@ -115,6 +115,7 @@ import { createLocalExecutor } from "./execution";
 import { createExports } from "./exports";
 import { exportLabels } from "./exports/labels";
 import { renderMarkdown } from "./exports/markdown";
+import { setTextOnlyDocuments, textOnlyDocuments } from "./exports/sharedPictures";
 import { createFileLock } from "./fileLock";
 import { safeFileName, writeNewFile } from "./fileNames";
 import { createFolders } from "./folders";
@@ -1590,6 +1591,7 @@ export function createCore(adapters: CoreAdapters): Core {
       const to = from === null ? null : Math.max(from, typeof pageTo === "number" ? pageTo : from);
       return documents.pageTexts(documentId, contentHash, from, to);
     },
+    sharePageTextOnly: (mindId) => content.readSettings(mindId, textOnlyDocuments),
     printer: adapters.printer ?? null,
     paper: () => paperFor(systemRegion(adapters.systemRegion?.(), adapters.systemLanguages())),
     ...(adapters.pictures && { pictures: adapters.pictures }),
@@ -3173,6 +3175,16 @@ export function createCore(adapters: CoreAdapters): Core {
     },
 
     previewMindExport: async (mindId, options) => mindExports.preview(mindId, options),
+    previewSharePage: (mindId, options) => mindExports.previewSharePage(mindId, options),
+    setSharePageTextOnly: async (mindId, documentIds) => {
+      if (!Array.isArray(documentIds) || documentIds.some((each) => typeof each !== "string")) {
+        throw new InvalidInputError({ key: "error.export.textOnly" });
+      }
+      const mind = writableMind(mindId);
+      content.editSettings(mind.id, (mindSettings) =>
+        setTextOnlyDocuments(mindSettings, documentIds),
+      );
+    },
     exportMind: async (mindId, options) => {
       const exported = await mindExports.export(mindId, options);
       // The host saves these bytes as a file: IncarnaMind's, wherever it goes.
