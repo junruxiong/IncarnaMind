@@ -47,7 +47,7 @@ import {
   withRolesFirst,
 } from "./catalog";
 import { billingOf, ollamaCloudPrice } from "./catalog/billing";
-import { endpointOf } from "./catalog/providers";
+import { endpointOf, fieldAccepts, fieldUrl } from "./catalog/providers";
 import type { ChatGptPlan } from "./chatgpt/plan";
 import {
   acceptsApiKey,
@@ -179,12 +179,32 @@ function parseServer(input: Record<string, unknown>): ParsedServer {
     throw new InvalidInputError(`Unknown chat provider "${String(input.kind)}".`);
   }
   const catalogId = parseCatalogId(input.kind, input.catalogId);
+  const endpoint = parseEndpoint(input.kind, input.endpoint, catalogId);
+  const baseUrl = baseUrlFor(input.kind, input.baseUrl, catalogId);
   return {
     kind: input.kind,
-    baseUrl: baseUrlFor(input.kind, input.baseUrl, catalogId),
-    endpoint: parseEndpoint(input.kind, input.endpoint, catalogId),
+    baseUrl: fieldEndpointUrl(input.kind, catalogId, endpoint, input.endpointValue) ?? baseUrl,
+    endpoint,
     catalogId,
   };
+}
+
+/** The address of an endpoint built from a value the User gives (`endpointValue`); null for any other. */
+function fieldEndpointUrl(
+  kind: ChatProviderKind,
+  catalogId: string | null,
+  endpointId: string | null,
+  value: unknown,
+): string | null {
+  const provider = catalogProviderOf(kind, catalogId);
+  const endpoint = provider && endpointOf(provider, endpointId);
+  if (!endpoint?.field) return null;
+  const given = (typeof value === "string" ? value.trim() : "") || (endpoint.field.default ?? "");
+  if (given === "") throw new InvalidInputError({ key: "error.provider.fieldMissing" });
+  if (!fieldAccepts(endpoint.field, given)) {
+    throw new InvalidInputError({ key: "error.provider.fieldInvalid", values: { value: given } });
+  }
+  return fieldUrl(endpoint, given);
 }
 
 function parseCatalogId(kind: ChatProviderKind, value: unknown): string | null {
@@ -355,6 +375,33 @@ export function createChat(options: {
   /** Model lists by provider and server, with when they were fetched. */
   const modelLists = new Map<string, { at: number; models: ListedModel[] }>();
   const listKey = (row: ProviderRow) => `${row.id}\n${row.base_url ?? ""}\n${row.endpoint ?? ""}`;
+
+  /** The models a saved provider lists, kept for a few minutes; none for a cloud service the User hasn't allowed yet. */
+  const listedModels = async (row: ProviderRow, provider: ChatProvider): Promise<ListedModel[]> => {
+    // A cloud service isn't asked for its list before the User allows the chat flow to it.
+    const mayAsk = !provider.service || consent.status("chat", provider.service) === "accepted";
+    const cacheKey = listKey(row);
+    const cached = modelLists.get(cacheKey);
+    let listed = cached && Date.now() - cached.at < MODEL_LIST_TTL_MS ? cached.models : null;
+    if (provider.kind === "chatgpt") {
+      // The account's own list, read with its sign-in like the sign-in's own traffic, and
+      // kept by the plan itself: it carries nothing of the User's.
+      listed = (await chatGpt.models()).map(({ id, name }) => ({ id, name }));
+    }
+    if (!listed && !mayAsk) listed = [];
+    if (!listed) {
+      const apiKey = provider.hasApiKey ? await secrets.tryGet(keyName(row.id)) : null;
+      listed = await listProviderModels({
+        kind: provider.kind,
+        baseUrl: row.base_url,
+        apiKey,
+        endpoint: row.endpoint,
+        catalogId: row.catalog_id,
+      });
+      if (listed.length > 0) modelLists.set(cacheKey, { at: Date.now(), models: listed });
+    }
+    return listed;
+  };
 
   /** The ids the User added to a provider's menu, in the order added. */
   const menuModelsOf = (providerId: string): string[] =>
@@ -718,7 +765,7 @@ export function createChat(options: {
 
     /**
      * The quick-tasks model for Answers asked with `answers` (the default
-     * model when left out), for the calls that don't write the Answer (#180):
+     * model when left out), for the calls that don't write the Answer:
      * the one the User set, else the catalog's for a cloud provider, else the
      * Answers model itself. A model on this computer, or in Ollama anywhere,
      * does its own small calls, as a second one would push it out of memory. In local mode a cloud model
@@ -789,29 +836,7 @@ export function createChat(options: {
       return Promise.all(
         knownRows().map(async (row) => {
           const provider = await toProvider(row);
-          // A cloud service isn't asked for its list before the User allows the chat flow to it.
-          const mayAsk =
-            !provider.service || consent.status("chat", provider.service) === "accepted";
-          const cacheKey = listKey(row);
-          const cached = modelLists.get(cacheKey);
-          let listed = cached && Date.now() - cached.at < MODEL_LIST_TTL_MS ? cached.models : null;
-          if (provider.kind === "chatgpt") {
-            // The account's own list, read with its sign-in like the sign-in's own traffic, and
-            // kept by the plan itself: it carries nothing of the User's.
-            listed = (await chatGpt.models()).map(({ id, name }) => ({ id, name }));
-          }
-          if (!listed && !mayAsk) listed = [];
-          if (!listed) {
-            const apiKey = provider.hasApiKey ? await secrets.tryGet(keyName(row.id)) : null;
-            listed = await listProviderModels({
-              kind: provider.kind,
-              baseUrl: row.base_url,
-              apiKey,
-              endpoint: row.endpoint,
-              catalogId: row.catalog_id,
-            });
-            if (listed.length > 0) modelLists.set(cacheKey, { at: Date.now(), models: listed });
-          }
+          const listed = await listedModels(row, provider);
           const defaultModel = chatModel?.providerId === row.id ? [chatModel.modelId] : [];
           const inMenu = listed.filter((each) => !each.other).map((each) => each.id);
           const addedIds = menuModelsOf(row.id);
@@ -1019,6 +1044,10 @@ export function createChat(options: {
         catalog_id: provider.catalogId,
         endpoint: provider.endpoint,
       };
+      // Read before the first request: a local preset's list says what its models can do, so one is sized to its window.
+      if (!provider.service && isPreset(catalogProvider(provider.catalogId))) {
+        await listedModels(row, provider);
+      }
       const capabilities = capabilitiesOf(row, modelId, profile ? ollamaFacts(profile) : undefined);
       const metered = meter.wrap(
         model,

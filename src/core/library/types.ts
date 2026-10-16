@@ -15,7 +15,7 @@ export interface LibraryGroup {
 }
 
 /**
- * The model that tags and organizes Documents (#180): "automatic" picks one
+ * The model that tags and organizes Documents: "automatic" picks one
  * from what the User has set up (see ./tagging), the default. The others are
  * chosen by hand, and never fall back to another provider:
  * - "chat": a model on a saved chat provider;
@@ -102,7 +102,7 @@ export interface LibrarySettings {
   /**
    * While `classifier` is "automatic", the model Organize uses: Automatic's pick
    * at the moment the User answered Organize's "Use {company}", kept from then
-   * on; null until they do. Automatic covers tagging only (#180).
+   * on; null until they do. Automatic covers tagging only.
    */
   organizeWith: TaggingClassifier | null;
   /**

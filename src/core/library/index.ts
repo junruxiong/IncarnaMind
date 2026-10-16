@@ -47,6 +47,18 @@ import type {
 
 const AUTOMATIC: LibraryClassifier = { kind: "automatic" };
 
+function taggingClassifierOf(value: unknown): TaggingClassifier | null {
+  if (!isRecord(value)) return null;
+  const { kind, baseUrl, modelId } = value;
+  if (kind === "jev") return { kind };
+  if (kind === "chat")
+    return isChatModelChoice(value.choice) ? { kind, choice: value.choice } : null;
+  if (typeof baseUrl !== "string") return null;
+  if (kind === "auto") return { kind, baseUrl };
+  if (kind !== "ollama" || typeof modelId !== "string") return null;
+  return { kind, baseUrl, modelId, ...(value.usePageImages === true && { usePageImages: true }) };
+}
+
 interface AssignmentRow {
   document_id: string;
   group_id: string | null;
@@ -169,7 +181,7 @@ export function createLibrary(options: {
   providerExists(id: string): boolean;
   /**
    * Whether a model that tags reads a PDF's pages, so it can organize one with
-   * no text, a scan: itself, or through the image model (#180).
+   * no text, a scan: itself, or through the image model.
    */
   readsPages(classifier: TaggingClassifier): boolean;
   pageImages(id: string, contentHash: string, signal: AbortSignal): Promise<DocumentPageImage[]>;
@@ -181,27 +193,21 @@ export function createLibrary(options: {
   /**
    * The Tagging setting. A Library that never chose a model, or chose
    * "Organize manually" before there was Automatic, gets Automatic; any other
-   * choice is kept as it was saved (#180).
+   * choice is kept as it was saved.
    */
   const getSettings = (): LibrarySettings => {
-    const saved = settings.readDeviceValue("library");
-    const automatic =
-      isRecord(saved) && typeof saved.automatic === "boolean" ? saved.automatic : true;
-    const classifier =
-      isRecord(saved) && isRecord(saved.classifier) && typeof saved.classifier.kind === "string"
-        ? (saved.classifier as LibraryClassifier)
-        : AUTOMATIC;
-    const organizeWith =
-      isRecord(saved) && isRecord(saved.organizeWith) && typeof saved.organizeWith.kind === "string"
-        ? (saved.organizeWith as TaggingClassifier)
-        : null;
-    const taggingStopped =
-      isRecord(saved) && Array.isArray(saved.taggingStopped)
+    const stored = settings.readDeviceValue("library");
+    const saved = isRecord(stored) ? stored : {};
+    return {
+      classifier: taggingClassifierOf(saved.classifier) ?? AUTOMATIC,
+      automatic: typeof saved.automatic === "boolean" ? saved.automatic : true,
+      organizeWith: taggingClassifierOf(saved.organizeWith),
+      taggingStopped: Array.isArray(saved.taggingStopped)
         ? saved.taggingStopped.filter(
             (each): each is string | null => each === null || typeof each === "string",
           )
-        : [];
-    return { classifier, automatic, organizeWith, taggingStopped };
+        : [],
+    };
   };
   const placeOf = (id: string): string | null =>
     db.get<{ group_id: string }>(
@@ -437,6 +443,17 @@ export function createLibrary(options: {
       if (assignment(id)?.status === "pending") state(id, "waiting");
       return;
     }
+    // Until Organize has a model, automatic tagging tags this Document: its state is the tagger's.
+    if (!organizeModelOf(getSettings())) {
+      if (assignment(id)?.status === "pending") {
+        db.run(
+          "UPDATE document_groups SET status = 'waiting', updated_at = ? WHERE document_id = ? AND deleted_at IS NULL",
+          [now(), id],
+        );
+        announce([id]);
+      }
+      return;
+    }
     let doc: DocumentRow;
     try {
       doc = document(id);
@@ -466,15 +483,6 @@ export function createLibrary(options: {
           const tagDefinitions = options.tags.list();
           if (definitions.length === 0) {
             state(id, "waiting");
-            return;
-          }
-          // Until Organize has a model, automatic tagging tags this Document: its state is the tagger's.
-          if (!organizeModelOf(getSettings())) {
-            db.run(
-              "UPDATE document_groups SET status = 'waiting', updated_at = ? WHERE document_id = ? AND deleted_at IS NULL",
-              [now(), id],
-            );
-            announce([id]);
             return;
           }
           if (taggingStoppedFor(id) && !asked.has(id)) {

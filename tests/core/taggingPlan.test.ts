@@ -1,5 +1,5 @@
 /**
- * Tagging on a ChatGPT plan (#180): the plan's limits are ChatGPT's own, so
+ * Tagging on a ChatGPT plan: the plan's limits are ChatGPT's own, so
  * tagging takes one Document at a time, its requests spaced, and when the
  * plan's limit is reached it waits for it to reset, sending nothing meanwhile.
  * Through the core, against the fake OpenAI the plan's own tests use.

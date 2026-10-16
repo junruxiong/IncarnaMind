@@ -344,7 +344,7 @@ function Organize({ documents }: { documents: readonly Document[] }) {
  * Organize with no model chosen (#763): a row under Not in a Folder's head
  * says so where it was asked, with the way on: the model Automatic tags with,
  * saying what would be sent to its company, or one on this computer. The
- * answer is kept, so Organize asks once (#180).
+ * answer is kept, so Organize asks once.
  */
 function OrganizeNeedsModel({ documents }: { documents: readonly Document[] }) {
   const t = useT();

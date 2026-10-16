@@ -89,7 +89,7 @@ export const providerOf = (option: TaggingModelOption, language: Language) =>
   option.provider ? (language === "zh-CN" ? option.provider.zh : option.provider.en) : null;
 
 /**
- * Settings → Models → Tagging (#180): the one model choice for automatic
+ * Settings → Models → Tagging: the one model choice for automatic
  * tagging and Organize, Automatic by default, which says what it uses now and
  * why; the models to choose instead, grouped as the model chip groups them,
  * each with what 100 Documents cost; "Other model…" for one the list doesn't

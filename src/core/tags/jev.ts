@@ -154,8 +154,8 @@ export function decisionsFromProbabilities(
 const TEV_EXCERPT_TOKENS = 1_000;
 
 /**
- * A local decision model in Ollama as the tagger, while there are no Folders
- * (#180): each Tag a yes or no with its probability, through Ollama's
+ * A local decision model in Ollama as the tagger, while there are no Folders:
+ * each Tag a yes or no with its probability, through Ollama's
  * Jev-style endpoint, as Organize asks it (see ../library/classifier). It
  * runs on this computer, so it needs no consent and gives way to Answers.
  */

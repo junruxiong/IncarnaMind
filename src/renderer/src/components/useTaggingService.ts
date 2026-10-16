@@ -27,7 +27,7 @@ export function useTaggingService(watching: boolean): TaggingService | null {
       core.listRegisteredDataFlows().then(
         (flows) => {
           if (stopped) return;
-          // The flow goes only to the service the Tagging setting tags with now (#180).
+          // The flow goes only to the service the Tagging setting tags with now.
           const to = flows.find((flow) => flow.id === "tagging")?.services[0];
           setTagging(to ? { service: to.flow.service, allowed: to.consent === "accepted" } : null);
         },

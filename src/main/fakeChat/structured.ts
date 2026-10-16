@@ -19,14 +19,23 @@ function excerptOf(prompt: Prompt): string {
   return text.slice(text.lastIndexOf(EXCERPT_START), text.lastIndexOf(EXCERPT_END));
 }
 
-export function tagsSlowly(options: GenerateOptions): boolean {
+const taggingExcerpt = (options: GenerateOptions): string | null => {
   const format = options.responseFormat;
   const schema = format?.type === "json" ? format.schema : undefined;
-  return (
-    !!schema?.properties?.tags &&
-    !schema.properties.groupId &&
-    SLOWLY.test(excerptOf(options.prompt))
-  );
+  return schema?.properties?.tags && !schema.properties.groupId ? excerptOf(options.prompt) : null;
+};
+
+export const tagsSlowly = (options: GenerateOptions): boolean =>
+  SLOWLY.test(taggingExcerpt(options) ?? "");
+
+const unreachedOnce = new Set<string>();
+
+/** A Document whose text says "unreachable" finds the model unreachable the first time it is tagged, as offline. */
+export function tagsUnreachable(options: GenerateOptions): boolean {
+  const excerpt = taggingExcerpt(options);
+  if (!excerpt || !/\bunreachable\b/i.test(excerpt) || unreachedOnce.has(excerpt)) return false;
+  unreachedOnce.add(excerpt);
+  return true;
 }
 
 /**
