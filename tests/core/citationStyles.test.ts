@@ -217,6 +217,28 @@ describe("formatting a Mind's Citations", () => {
     expect(locatorOf(null, "en")).toEqual({});
   });
 
+  test("a PDF page is cited by the page it prints, not by its number in the PDF", async () => {
+    const { core, prospect } = await setUp();
+    const printed = (from: string, to = from): CitationLocation => ({
+      kind: "page",
+      from: 14,
+      to: 14 + (to === from ? 0 : 1),
+      printed: { from, to },
+    });
+    const formatted = await format(
+      core,
+      "apa",
+      [work(prospect, printed("265"))],
+      [work(prospect, printed("68", "69"))],
+      [work(prospect, printed("xii"))],
+    );
+    expect(formatted.clusters.map((cluster) => plain(cluster.runs))).toEqual([
+      "(Kahneman & Tversky, 1979, p. 265)",
+      "(Kahneman & Tversky, 1979, pp. 68–69)",
+      "(Kahneman & Tversky, 1979, p. xii)",
+    ]);
+  });
+
   test("Citations side by side are one cluster, its runs marked with the Citation each belongs to", async () => {
     const { core, prospect, qian } = await setUp();
     const formatted = await format(core, "ieee", [work(qian), work(prospect)]);

@@ -65,7 +65,8 @@ export interface PdfOutlineEntry {
 export interface PdfPageLabelRange {
   /** The page the range starts at, from 1. */
   page: number;
-  style?: "D" | "R" | "r" | "A" | "a";
+  /** D, R, r, A or a; anything else is a malformed label. */
+  style?: string;
   prefix?: string;
   /** What the first page of the range is numbered, from 1. */
   start?: number;

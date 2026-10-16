@@ -77,9 +77,9 @@ export interface UnitLabel {
   /** page: a scanned page, whose text was read from its picture (#397), not taken from the PDF. */
   scan?: UnitScan;
   /**
-   * page: the page's own name when the PDF has one: a page label ("xii",
-   * "A-3") or the number its header or footer prints (#901). It is kept
-   * for the pages of a PDF that names pages differently from its page index.
+   * page: what the page calls itself, from the PDF's page labels ("xii",
+   * "A-3") or the number its header or footer prints (#901). Kept only for a
+   * PDF with a page named other than by its index.
    */
   printed?: string;
   /** section: a web page's pictures in it whose text was read on this computer. */
