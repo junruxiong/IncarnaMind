@@ -1468,7 +1468,10 @@ export const MAX_CITED_PAGES = 2;
  * gone. Language-neutral: the label is worded when shown ("p. 4", "slide 4",
  * "Revenue, rows 12–14", "§ 2.1 Sensitivity", "§ 2 Costs, comment by
  * Reviewer", "lines 120–134").
- * - "page", "slide": the cited pages or slides.
+ * - "page", "slide": the cited pages or slides. A PDF's `printed` names the
+ *   first and last page as they call themselves ("xii", "68") when that
+ *   isn't their number in the PDF; `from` and `to` stay the PDF's, which
+ *   open the viewer (#901).
  * - "rows": the rows the quote covers in a sheet (a CSV's has no name), or
  *   the cited block's when it wasn't found.
  * - "section": the heading of the section the quote sits under; null before
@@ -1481,7 +1484,8 @@ export const MAX_CITED_PAGES = 2;
  *   the end of the one it ends in, in ms from the Transcript's start (#136).
  */
 export type CitationLocation =
-  | { kind: "page" | "slide"; from: number; to: number }
+  | { kind: "page"; from: number; to: number; printed?: { from: string; to: string } }
+  | { kind: "slide"; from: number; to: number }
   | { kind: "rows"; sheet: string | null; from: number; to: number }
   | { kind: "lines"; from: number; to: number }
   | { kind: "time"; from: number; to: number }

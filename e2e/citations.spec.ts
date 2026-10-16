@@ -1,7 +1,6 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { expect, type Locator, type Page, test } from "@playwright/test";
-import type { Editor } from "@tiptap/core";
+import { expect, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import { xlsxOf } from "../tests/helpers/office";
 import { buildPdf } from "../tests/helpers/pdf";
@@ -18,6 +17,7 @@ import {
   pointAndClick,
   pointAt,
   removeDataFolder,
+  setCheck,
   setWindowSize,
   useLocalChatModel,
 } from "./app";
@@ -52,17 +52,6 @@ async function ask(window: Page, text: string) {
   await window.getByTestId("mind-editor").click();
   return askInAssistant(window, text);
 }
-
-/** Gives the Citations of an Answer in the assistant a check (#96 will produce them for real). */
-const setCheck = (answer: Locator, patch: { check: string; verdict?: string | null }) =>
-  answer.getByTestId("assistant-answer-text").evaluate((dom, attributes) => {
-    const { view } = (dom as unknown as { editor: Editor }).editor;
-    view.state.doc.descendants((node, pos) => {
-      if (node.type.name !== "citation") return true;
-      view.dispatch(view.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, ...attributes }));
-      return false;
-    });
-  }, patch);
 
 test("an Answer cites a PDF: its badge says the quote was found, and clicking it opens the page with the quote highlighted", async () => {
   await writeFile(join(sources, "Tides.pdf"), TIDES);
