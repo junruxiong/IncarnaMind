@@ -32,6 +32,7 @@ async function screenshot(window: Page, name: string): Promise<void> {
 
 const SENDS_EN = {
   lead: "When you use it, OpenAI receives:",
+  after: "Tagging starts when you save the key.",
   items: [
     "your Questions, the Mind you're in, matching passages with their Document names and pages, and the names of other Documents in scope",
     "each sentence you check",
@@ -42,6 +43,7 @@ const SENDS_EN = {
 };
 const SENDS_ZH = {
   lead: "使用时，以下内容会发送给 OpenAI：",
+  after: "保存密钥后就开始打标签。",
   items: [
     "你的问题、你所在的 Mind、相关段落及其文档名称和页码，以及范围内其他文档的名称",
     "你核对的每一句话",
@@ -52,7 +54,7 @@ const SENDS_ZH = {
 };
 
 async function expectSends(sends: Locator, words: typeof SENDS_EN): Promise<void> {
-  await expect(sends.locator("p")).toHaveText(words.lead);
+  await expect(sends.locator("p")).toHaveText([words.lead, words.after]);
   await expect(sends.getByRole("listitem")).toHaveText(words.items);
 }
 

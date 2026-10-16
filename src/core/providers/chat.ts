@@ -50,6 +50,7 @@ import { billingOf, ollamaCloudPrice } from "./catalog/billing";
 import { endpointOf, fieldAccepts, fieldUrl } from "./catalog/providers";
 import type { ChatGptPlan } from "./chatgpt/plan";
 import type { ClaudeSignIn } from "./claudeAccount/account";
+import type { CopilotSignIn } from "./copilot/account";
 import {
   acceptsApiKey,
   baseUrlFor,
@@ -287,6 +288,11 @@ export type ClaudeAccountAccess = Pick<
   "hasSignIn" | "credentials" | "apiBaseUrl" | "request"
 >;
 
+export type CopilotAccess = Pick<
+  CopilotSignIn,
+  "hasSignIn" | "credentials" | "requests" | "models"
+>;
+
 export function createChat(options: {
   db: Database;
   now: () => string;
@@ -296,6 +302,7 @@ export function createChat(options: {
   createModel: ChatModelFactory;
   chatGpt: ChatGptPlanAccess;
   claudeAccount: ClaudeAccountAccess;
+  copilot: CopilotAccess;
   /** Looks up models in Ollama, for the settings their requests carry and how they cite. */
   ollamaModels: OllamaModels;
   /** Whether "Keep everything on this computer" is on: Questions then go only to a model on this computer. */
@@ -312,13 +319,15 @@ export function createChat(options: {
     createModel,
     chatGpt,
     claudeAccount,
+    copilot,
     ollamaModels,
     meter,
   } = options;
 
   const needsSignIn = async (kind: ChatProviderKind) =>
     (kind === "chatgpt" && !(await chatGpt.hasSignIn())) ||
-    (kind === "claude-account" && !(await claudeAccount.hasSignIn()));
+    (kind === "claude-account" && !(await claudeAccount.hasSignIn())) ||
+    (kind === "copilot" && !(await copilot.hasSignIn()));
 
   /** What the meter needs to know of a model: how it's billed, its price and its output limit. */
   const meteredModel = (
@@ -404,10 +413,11 @@ export function createChat(options: {
     const cacheKey = listKey(row);
     const cached = modelLists.get(cacheKey);
     let listed = cached && Date.now() - cached.at < MODEL_LIST_TTL_MS ? cached.models : null;
-    if (provider.kind === "chatgpt") {
+    if (provider.kind === "chatgpt" || provider.kind === "copilot") {
       // The account's own list, read with its sign-in like the sign-in's own traffic, and
       // kept by the plan itself: it carries nothing of the User's.
-      listed = (await chatGpt.models()).map(({ id, name }) => ({ id, name }));
+      const models = provider.kind === "chatgpt" ? chatGpt.models() : copilot.models();
+      listed = (await models).map(({ id, name }) => ({ id, name }));
     }
     if (!listed && !mayAsk) listed = [];
     if (!listed) {
@@ -485,7 +495,7 @@ export function createChat(options: {
    * sign with the sign-in instead of a key, and a model in Ollama gets its
    * fixed settings, the defaults when Ollama couldn't say.
    */
-  const specFor = (
+  const specFor = async (
     server: {
       kind: ChatProviderKind;
       baseUrl: string | null;
@@ -496,7 +506,7 @@ export function createChat(options: {
     modelId: string,
     profile: OllamaModelProfile | null = null,
     thinking?: ChatModelSpec["thinking"],
-  ): ChatModelSpec => {
+  ): Promise<ChatModelSpec> => {
     const { kind } = server;
     if (kind === "chatgpt") {
       return {
@@ -516,6 +526,18 @@ export function createChat(options: {
         modelId,
         credentials: claudeAccount.credentials,
         request: claudeAccount.request,
+        ...(thinking && { thinking }),
+      };
+    }
+    if (kind === "copilot") {
+      const { apiBaseUrl, headers } = await copilot.requests();
+      return {
+        kind,
+        baseUrl: apiBaseUrl,
+        apiKey: null,
+        modelId,
+        credentials: copilot.credentials,
+        request: { headers },
         ...(thinking && { thinking }),
       };
     }
@@ -975,7 +997,17 @@ export function createChat(options: {
           error: {
             kind: "not-signed-in",
             message: "Sign in with your Claude account first.",
-            claudeAccount: "signed-out",
+            signInRoute: "signed-out",
+          },
+        };
+      }
+      if (server.kind === "copilot" && !(await copilot.hasSignIn())) {
+        return {
+          ok: false,
+          error: {
+            kind: "not-signed-in",
+            message: "Sign in with GitHub to use your Copilot plan first.",
+            signInRoute: "signed-out",
           },
         };
       }
@@ -992,7 +1024,11 @@ export function createChat(options: {
           ),
         });
         const model = meter.wrap(
-          watchedPlan(server.kind, createModel(specFor(server, apiKey, modelId, profile)), modelId),
+          watchedPlan(
+            server.kind,
+            createModel(await specFor(server, apiKey, modelId, profile)),
+            modelId,
+          ),
           meteredModel(
             { kind: server.kind, service },
             rowByServer(server)?.id ?? server.catalogId ?? server.kind,
@@ -1071,7 +1107,7 @@ export function createChat(options: {
       const model = watchedPlan(
         provider.kind,
         createModel(
-          specFor(
+          await specFor(
             provider,
             apiKey,
             modelId,
