@@ -8,6 +8,7 @@ import {
   addDocuments,
   addToNote,
   askInAssistant,
+  clickEndOf,
   createDataFolder,
   dismissChatSetup,
   focusEditor,
@@ -22,8 +23,9 @@ import {
 
 /*
  * Edit with AI (#93): select text, ask for a change from the selection menu
- * or with ⌘J, and review what comes back as changes in the note, each with
- * its own bar, by mouse and keyboard, with Undo. The scripted model (see
+ * or with ⌘J, and it applies at once (#880), with a line over it: Undo and
+ * Review changes, which shows the changes again in the note, each with its
+ * own bar, by mouse and keyboard, with Undo. The scripted model (see
  * src/main/fakeChat/edit.ts) shortens by dropping "very" and "really" (非常),
  * and does what "replace X with Y" (把 X 换成 Y) says. Set
  * INCARNAMIND_SCREENSHOTS to a folder to also save screenshots.
@@ -32,7 +34,7 @@ import {
  * accepted, and Regenerate makes it again from their words.
  *
  * Changes stream in paragraph by paragraph (#202), with "Writing…" on the
- * paragraph being written, and the change's bar says why it was made.
+ * paragraph being written, and the line says why the change was made.
  */
 
 const SCREENSHOTS = process.env.INCARNAMIND_SCREENSHOTS;
@@ -44,8 +46,6 @@ const TIDES = buildPdf([
   { lines: ["Tides and the Moon", "The Moon raises two bulges of water on the Earth."] },
   { lines: ["Spring and neap tides", "Spring tides happen at new moon and at full moon."] },
 ]);
-
-const COMMAND = process.platform === "darwin" ? "Command" : "Control";
 
 let dataDir: string;
 let sources: string;
@@ -73,7 +73,7 @@ async function selectWords(window: Page, line: Locator, words: string, more = 0)
   for (let index = 0; index < more; index++) await window.keyboard.press("Shift+ArrowRight");
 }
 
-test("Shorten comes back as changes with their own bars: one accepted by mouse, one rejected by keyboard, Undo, and the Citation is still checked", async () => {
+test("Shorten applies at once; Review changes shows its two changes over the applied text: one restored by mouse, the other by keyboard, ⌘Z; the Citation is still checked", async () => {
   await writeFile(join(sources, "Tides.pdf"), TIDES);
   const { window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
@@ -102,7 +102,7 @@ test("Shorten comes back as changes with their own bars: one accepted by mouse, 
   await window.keyboard.press("Backspace");
   await expect(editor.locator(":scope > p")).toHaveCount(2);
 
-  // Selected, the menu offers the AI's actions; Shorten comes back as two changes.
+  // Selected, the menu offers the AI's actions; Shorten applies at once.
   // The words, then the space, the Citation and the full stop after them.
   await selectWords(window, note, "The tides here are very strong and really regular", 3);
   const menu = window.getByTestId("selection-menu");
@@ -110,58 +110,46 @@ test("Shorten comes back as changes with their own bars: one accepted by mouse, 
   await expect(menu.getByTestId("selection-action-edit")).toContainText("Edit with AI…");
   await screenshot(window, "edit-menu-en");
   await pointAndClick(window, menu.getByTestId("selection-action-shorten"));
+  await expect(note).toContainText("The tides here are strong and regular");
+  const line = editor.getByTestId("applied-line");
+  await expect(line.getByTestId("applied-count")).toHaveText("Changed 2 places");
+  await expect(window.getByTestId("proposal-spoken")).toHaveText("Changed 2 places");
 
-  const bar = window.getByTestId("proposals-bar");
-  await expect(bar.getByTestId("proposals-count")).toHaveText("2 changes from the assistant");
-  const removed = note.locator("del.proposal-delete");
+  // Review changes: what it removed, struck, over the text as it now is, and the cursor in the first change.
+  await pointAndClick(window, line.getByTestId("applied-review"));
+  const removed = note.locator("del.applied-old");
   await expect(removed).toHaveText(["very ", "really "]);
   await expect(removed.first()).toHaveCSS("text-decoration-line", "line-through");
-  // Nothing is applied yet: the words are still there, struck.
-  await expect(note).toContainText("very strong and really regular");
-  // The cursor went into the first change: its bar, and what a screen reader hears.
-  const changeBar = window.getByTestId("change-bar");
+  const changeBar = window.getByTestId("applied-change-bar");
   await expect(changeBar).toBeVisible();
   await expect(changeBar).toContainText("Change 1 of 2");
-  await expect(window.getByTestId("proposal-spoken")).toHaveText(
-    `Suggested change: removes “very”. Accept with ${COMMAND} Enter, reject with ${COMMAND} Backspace.`,
-  );
   await screenshot(window, "edit-changes-en");
-  // Its bar sits over its line.
+  // Its bar keeps clear of the edit's own line over the paragraph.
   const barBox = await changeBar.boundingBox();
-  const wordBox = await removed.first().boundingBox();
-  expect((barBox?.y ?? 0) + (barBox?.height ?? 0)).toBeLessThanOrEqual((wordBox?.y ?? 0) + 1);
+  const lineBox = await line.boundingBox();
+  expect(barBox?.y ?? 0).toBeGreaterThanOrEqual((lineBox?.y ?? 0) + (lineBox?.height ?? 0) - 1);
 
-  // Accept by mouse.
-  await pointAndClick(window, changeBar.getByTestId("change-accept"));
+  await pointAndClick(window, changeBar.getByTestId("change-restore"));
   await expect(removed).toHaveText(["really "]);
-  await expect(note).toContainText("The tides here are strong and really regular");
-  await expect(bar.getByTestId("proposals-count")).toHaveText("1 change from the assistant");
-  await expect(window.getByTestId("undo-message")).toHaveText("Accepted 1 change");
+  await expect(note).toContainText("The tides here are very strong and");
+  await expect(line.getByTestId("applied-count")).toHaveText("1 change made by Edit with AI");
+  await expect(window.getByTestId("undo-message")).toHaveText("Restored the original");
 
-  // Reject by keyboard, with the cursor in the other change.
+  // Restore by keyboard, with the cursor at the other change: then none is left to show.
   await pointAndClick(window, removed.first());
   await expect(changeBar).toContainText("Change 1 of 1");
-  // The change the cursor is in is washed.
-  await expect(note.locator(".proposal-current")).toHaveText("really ");
   await window.keyboard.press("ControlOrMeta+Backspace");
   await expect(removed).toHaveCount(0);
-  await expect(bar).toHaveCount(0);
-  await expect(note).toContainText("The tides here are strong and really regular");
-
-  // Undo brings the rejected change back; Accept all takes it.
+  await expect(line).toHaveCount(0);
+  await expect(note).toContainText("The tides here are very strong and really regular");
   await window.keyboard.press("ControlOrMeta+z");
-  await expect(removed).toHaveText(["really "]);
-  await expect(bar.getByTestId("proposals-count")).toHaveText("1 change from the assistant");
-  await expect(changeBar).toContainText("Change 1 of 1");
-  await pointAndClick(window, bar.getByTestId("proposals-accept-all"));
-  await expect(bar).toHaveCount(0);
-  await expect(note).toContainText("The tides here are strong and regular");
+  await expect(note).toContainText("The tides here are very strong and regular");
   // The Citation in the sentence is kept, and its quote still found.
   await expect(note.getByTestId("citation")).toHaveCount(1);
   await expect(note.getByTestId("citation")).toHaveAttribute("data-check", "found");
 });
 
-test("a whole Mind restructured with ⌘A and ⌘J keeps its headings, lists and Citation through Accept all, and Undo takes it back in one step (#703)", async () => {
+test("a whole Mind restructured with ⌘A and ⌘J keeps its headings, lists and Citation, applied at once, and Undo takes it back in one step (#703)", async () => {
   await writeFile(join(sources, "Tides.pdf"), TIDES);
   const { window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
@@ -236,13 +224,11 @@ test("a whole Mind restructured with ⌘A and ⌘J keeps its headings, lists and
   await expect(window.getByTestId("composer-input")).toBeFocused();
   await window.keyboard.type("Restructure so the decisions come first. Cut the last paragraph.");
   await window.keyboard.press("Enter");
-  const bar = window.getByTestId("proposals-bar");
-  await expect(bar.getByTestId("proposals-count")).toContainText("changes from the assistant");
-  await screenshot(window, "edit-restructure-changes-en");
 
-  // Accept all: decisions first, each Block still the kind it was, the Citation still found.
-  await pointAndClick(window, bar.getByTestId("proposals-accept-all"));
-  await expect(bar).toHaveCount(0);
+  // Decisions first, each Block still the kind it was, the Citation still found.
+  const line = editor.getByTestId("applied-line");
+  await expect(line.getByTestId("applied-count")).toContainText("Changed");
+  await expect(window.getByTestId("proposals-bar")).toHaveCount(0);
   await expect(headings).toHaveText(["Decisions", "Findings"]);
   await expect(numbered).toHaveText([
     "Publish the tide tables in March.",
@@ -254,7 +240,9 @@ test("a whole Mind restructured with ⌘A and ⌘J keeps its headings, lists and
   await expect(bullets.last()).toHaveText("Neap tides are the weakest.");
   await expect(editor.locator(":scope > p")).not.toContainText(["Harbours publish"]);
   const order = await editor.evaluate((dom) =>
-    [...dom.children].map((child) => `${child.tagName}:${child.textContent?.slice(0, 12)}`),
+    [...dom.querySelectorAll(":scope > :is(h2, ol, ul, p)")].map(
+      (child) => `${child.tagName}:${child.textContent?.slice(0, 12)}`,
+    ),
   );
   // An empty paragraph the editor keeps at the end doesn't count.
   expect(order.filter((each) => each !== "P:")).toEqual([
@@ -263,13 +251,12 @@ test("a whole Mind restructured with ⌘A and ⌘J keeps its headings, lists and
     "H2:Findings",
     "UL:Spring tides",
   ]);
-  await screenshot(window, "edit-restructure-accepted-en");
+  await screenshot(window, "edit-restructure-applied-en");
 
-  // One Undo brings every change back; Reject all leaves the Mind as it was.
+  // One Undo takes it all back: the Mind as it was.
+  await editor.focus();
   await window.keyboard.press("ControlOrMeta+z");
-  await expect(bar.getByTestId("proposals-count")).toContainText("changes from the assistant");
-  await pointAndClick(window, bar.getByTestId("proposals-reject-all"));
-  await expect(bar).toHaveCount(0);
+  await expect(line).toHaveCount(0);
   await expect(headings).toHaveText(["Findings", "Decisions"]);
   await expect(bullets).toHaveCount(2);
   await expect(bullets.first().getByTestId("citation")).toHaveAttribute("data-check", "found");
@@ -278,7 +265,7 @@ test("a whole Mind restructured with ⌘A and ⌘J keeps its headings, lists and
   );
 });
 
-test("⌘J with text selected says what to change in the composer, in Chinese; ⌘↵ accepts, Undo, and Reject all", async () => {
+test("⌘J with text selected says what to change in the composer, in Chinese; the change applies at once, ⌘Z takes it back, and the line fits a narrow window", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
   await useLocalChatModel(window);
@@ -303,41 +290,28 @@ test("⌘J with text selected says what to change in the composer, in Chinese; �
   await screenshot(window, "edit-composer-zh");
   await window.keyboard.press("Enter");
 
-  const bar = window.getByTestId("proposals-bar");
-  await expect(bar.getByTestId("proposals-count")).toHaveText("来自助手的 1 处修订");
-  await expect(note.locator("del.proposal-delete")).toHaveText("规律");
-  await expect(note.locator("ins.proposal-insert")).toHaveText("准时");
-  await expect(note.locator("ins.proposal-insert")).toHaveCSS("text-decoration-line", "underline");
-  const changeBar = window.getByTestId("change-bar");
-  await expect(changeBar).toContainText("第 1 处修订，共 1 处");
-  await expect(changeBar.getByTestId("change-accept")).toHaveText("接受");
-  // The cursor is in it: why it was made, under its bar.
-  await expect(changeBar.getByTestId("change-bar-why")).toHaveText("原因：已按你的要求修改。");
-  await expect(window.getByTestId("proposal-spoken")).toContainText(
-    "建议的修订：将“规律”改为“准时”",
-  );
-  await screenshot(window, "edit-changes-zh");
-  // The bar fits in the narrow window.
-  const box = await changeBar.boundingBox();
+  await expect(note).toHaveText("潮水每天非常准时地涨落两次。");
+  await expect(note.locator(".generated-text")).toHaveText("准时");
+  await expect(window.getByTestId("proposals-bar")).toHaveCount(0);
+  const line = editor.getByTestId("applied-line");
+  await expect(line.getByTestId("applied-count")).toHaveText("已修改 1 处");
+  await expect(line).toHaveAttribute("title", "原因：已按你的要求修改。");
+  await expect(window.getByTestId("proposal-spoken")).toHaveText("已修改 1 处");
+  await screenshot(window, "edit-applied-zh");
+  // The line fits in the narrow window.
+  const box = await line.getByTestId("applied-review").boundingBox();
   expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(900);
 
-  // ⌘↵ in the change accepts it; Undo brings it back; Reject all leaves the text as it was.
   await editor.focus();
-  await window.keyboard.press("ControlOrMeta+Enter");
-  await expect(note).toHaveText("潮水每天非常准时地涨落两次。");
-  await expect(bar).toHaveCount(0);
   await window.keyboard.press("ControlOrMeta+z");
-  await expect(note.locator("ins.proposal-insert")).toHaveText("准时");
-  await pointAndClick(window, bar.getByTestId("proposals-reject-all"));
   await expect(note).toHaveText("潮水每天非常规律地涨落两次。");
-  await expect(window.getByTestId("undo-message")).toHaveText("已拒绝 1 处修订");
+  await expect(line).toHaveCount(0);
 
   // Shorten from the menu, in Chinese: 非常 goes.
   await selectWords(window, note, "潮水每天非常规律地涨落两次。");
   await pointAndClick(window, window.getByTestId("selection-action-shorten"));
-  await expect(note.locator("del.proposal-delete")).toHaveText("非常");
-  await window.keyboard.press("ControlOrMeta+Enter");
   await expect(note).toHaveText("潮水每天规律地涨落两次。");
+  await expect(line.getByTestId("applied-count")).toHaveText("已修改 1 处");
 
   // Translate… asks for the language beside it. A text the model gives back as it was (the
   // scripted model only capitalises) says so in the composer, and changes nothing.
@@ -348,12 +322,12 @@ test("⌘J with text selected says what to change in the composer, in Chinese; �
   await pointAndClick(window, languages.getByTestId("selection-choice-en"));
   const problem = window.getByTestId("edit-problem");
   await expect(problem).toContainText("没有要修改的地方");
-  await expect(bar).toHaveCount(0);
+  await expect(line).toHaveCount(0);
   await pointAndClick(window, problem.getByTestId("edit-problem-close"));
   await expect(problem).toHaveCount(0);
 });
 
-test("⌘J's change streams in paragraph by paragraph with Writing… on the next; the bar says why; Stop keeps what is finished (#202)", async () => {
+test("⌘J's change streams in and applies paragraph by paragraph, with Writing… on the next; the line says why; Stop keeps what is finished (#202)", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
   await useLocalChatModel(window);
@@ -370,8 +344,9 @@ test("⌘J's change streams in paragraph by paragraph with Writing… on the nex
     await window.keyboard.press("Enter");
   }
   const paragraphs = editor.locator(":scope > p");
-  const bar = window.getByTestId("proposals-bar");
   const writing = editor.getByTestId("mind-writing");
+  const line = editor.getByTestId("applied-line");
+  const shown = { useInnerText: true };
 
   const ask = async (instruction: string) => {
     await editor.click();
@@ -382,40 +357,74 @@ test("⌘J's change streams in paragraph by paragraph with Writing… on the nex
     await window.keyboard.press("Enter");
   };
 
-  // The first paragraph is a change before the last has come; Writing… is on the one being written.
+  // The first paragraph reads as changed before the last has come; Writing… is on the one being written.
   await ask("Shorten this slowly");
-  await expect(paragraphs.first().locator("del.proposal-delete")).toHaveText(["very ", "really "]);
+  await expect(paragraphs.first()).toHaveText("The tides here are strong and regular.", shown);
+  await expect(paragraphs.first().locator("del.proposal-delete").first()).toBeHidden();
   await expect(writing).toHaveText("Writing…");
   await expect(editor.getByTestId("mind-rewriting")).toHaveCount(1);
-  await expect(paragraphs.nth(2).locator("del.proposal-delete")).toHaveCount(0);
+  await expect(paragraphs.nth(2)).toHaveText(
+    "Harbours are very busy in the spring and really quiet in winter.",
+    shown,
+  );
   await expect(window.getByTestId("edit-pending")).toBeVisible();
+  await expect(window.getByTestId("proposals-bar")).toHaveCount(0);
   await screenshot(window, "edit-streaming-en");
 
-  // Once done, Writing… goes, every change is in, and the cursor's change says why on its bar.
+  // Once done, Writing… goes, every change is in, and the line says why on hover.
   // Asked "slowly", the scripted model takes a few seconds over the rest.
   await expect(writing).toHaveCount(0, { timeout: 30_000 });
-  await expect(bar.getByTestId("proposals-count")).toHaveText("5 changes from the assistant");
-  const changeBar = window.getByTestId("change-bar");
-  await expect(changeBar.getByTestId("change-bar-why")).toHaveText("Why: Changed as you asked.");
-  await expect(changeBar).toHaveAttribute("title", "Why: Changed as you asked.");
+  await expect(line.getByTestId("applied-count")).toHaveText("Changed 5 places");
+  await expect(line).toHaveAttribute("title", "Why: Changed as you asked.");
+  await expect(paragraphs).toHaveText([
+    "The tides here are strong and regular.",
+    "The moon is bright over the harbour tonight.",
+    "Harbours are busy in the spring and quiet in winter.",
+    "",
+  ]);
   await screenshot(window, "edit-reason-en");
-  await pointAndClick(window, bar.getByTestId("proposals-reject-all"));
-  await expect(bar).toHaveCount(0);
-
-  // Stop halfway keeps the finished paragraph's changes; the rest stays as it was.
-  await ask("Shorten this slowly");
-  await expect(paragraphs.first().locator("del.proposal-delete")).toHaveText(["very ", "really "]);
-  await pointAndClick(window, window.getByTestId("edit-stop"));
-  await expect(writing).toHaveCount(0);
-  await expect(window.getByTestId("edit-pending")).toHaveCount(0);
-  await expect(paragraphs.first().locator("del.proposal-delete")).toHaveText(["very ", "really "]);
+  await editor.focus();
+  await window.keyboard.press("ControlOrMeta+z");
+  await expect(paragraphs.first()).toHaveText("The tides here are very strong and really regular.");
   await expect(paragraphs.nth(2)).toHaveText(
     "Harbours are very busy in the spring and really quiet in winter.",
   );
-  await expect(paragraphs.nth(2).locator("del.proposal-delete")).toHaveCount(0);
+
+  // Stop halfway keeps the finished paragraph's changes; the rest stays as it was.
+  await ask("Shorten this slowly");
+  await expect(paragraphs.first()).toHaveText("The tides here are strong and regular.", shown);
+  await pointAndClick(window, window.getByTestId("edit-stop"));
+  await expect(writing).toHaveCount(0);
+  await expect(window.getByTestId("edit-pending")).toHaveCount(0);
+  await expect(paragraphs.first()).toHaveText("The tides here are strong and regular.");
+  await expect(paragraphs.nth(2)).toHaveText(
+    "Harbours are very busy in the spring and really quiet in winter.",
+  );
+  await expect(line.getByTestId("applied-count")).toHaveText(/^Changed \d+ places$/);
+
+  // The next edit, asked right after Stop, has its own Undo: the stopped one's stays its own.
+  await ask("replace tides with waves");
+  await expect(paragraphs.first()).toHaveText("The waves here are strong and regular.");
+  await expect(line.getByTestId("applied-count")).toHaveText("Changed 1 place");
+  await editor.focus();
+  await window.keyboard.press("ControlOrMeta+z");
+  await expect(paragraphs.first()).toHaveText("The tides here are strong and regular.");
+  await window.keyboard.press("ControlOrMeta+z");
+  await expect(paragraphs.first()).toHaveText("The tides here are very strong and really regular.");
 });
 
-test("a double click accepts a change once; a change whose words the User edits is out of date until Regenerate makes it again", async () => {
+/** Asks the assistant, with no text selected: its changes to the Mind wait for the User. */
+async function askTheAssistant(window: Page, request: string) {
+  await window.keyboard.press("ControlOrMeta+j");
+  await expect(window.getByTestId("composer-input")).toBeFocused();
+  // As a person waits for Stop to turn back into Ask before asking again.
+  await expect(window.getByTestId("composer-ask")).toBeVisible();
+  await window.keyboard.type(request);
+  await window.keyboard.press("Enter");
+  await expect(window.getByTestId("proposals-bar")).toBeVisible({ timeout: 15_000 });
+}
+
+test("the assistant's changes wait: a double click accepts one once; a change whose words the User edits is out of date until Regenerate makes it again", async () => {
   const { window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
   await useLocalChatModel(window);
@@ -425,8 +434,7 @@ test("a double click accepts a change once; a change whose words the User edits 
   await window.keyboard.type("The tides are really very strong. They are very high.");
   const note = editor.locator(":scope > p").first();
 
-  await selectWords(window, note, "The tides are really very strong. They are very high.");
-  await pointAndClick(window, window.getByTestId("selection-action-shorten"));
+  await askTheAssistant(window, "Shorten this");
   const bar = window.getByTestId("proposals-bar");
   const count = bar.getByTestId("proposals-count");
   await expect(count).toHaveText("2 changes from the assistant");
@@ -506,7 +514,7 @@ test("a double click accepts a change once; a change whose words the User edits 
   await expect(note).toHaveText("The tides are very strong. They are high.");
 });
 
-test("copying a paragraph with changes waiting gives the text as it stands, in plain text and rich text; accepting them changes the copy", async () => {
+test("copying a paragraph with the assistant's changes waiting gives the text as it stands, in plain text and rich text; accepting them changes the copy", async () => {
   const { window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
   await useLocalChatModel(window);
@@ -531,10 +539,7 @@ test("copying a paragraph with changes waiting gives the text as it stands, in p
   };
 
   // A change that replaces "strong" with "powerful", waiting: the copy is the sentence as it was.
-  await selectWords(window, note, sentence);
-  await window.keyboard.press("ControlOrMeta+j");
-  await window.keyboard.type("replace strong with powerful");
-  await window.keyboard.press("Enter");
+  await askTheAssistant(window, "replace strong with powerful");
   await expect(note.locator("ins.proposal-insert")).toHaveText("powerful");
   const bar = window.getByTestId("proposals-bar");
   const replacing = await copyParagraph();
@@ -548,10 +553,8 @@ test("copying a paragraph with changes waiting gives the text as it stands, in p
   await expect(note).toHaveText("The tides here are powerful and really regular.");
 
   // Shorten drops "really": waiting, the copy still has it; accepted, it doesn't.
-  await focusEditor(window, editor);
-  await window.keyboard.press("ArrowRight");
-  await selectWords(window, note, "The tides here are powerful and really regular.");
-  await pointAndClick(window, window.getByTestId("selection-action-shorten"));
+  await clickEndOf(window, note);
+  await askTheAssistant(window, "Shorten this");
   await expect(note.locator("del.proposal-delete")).toHaveText("really ");
   const shortening = await copyParagraph();
   expect(shortening.plain).toBe("The tides here are powerful and really regular.");

@@ -102,13 +102,17 @@ function useHealth(editor: Editor, skipped: ReadonlySet<string>): Health {
 }
 
 /**
- * The Mind's health under its title (#96): "✓ 1 Citation found · ! 1
+ * The Mind's health under its title (#96). First, while sentences are
+ * checked, what is happening with Stop; or why a check gave nothing, with the
+ * one thing that helps. Then the counts: "✓ 1 Citation found · ! 1
  * unsupported · ≠ 1 contradicted · 3 with no Citation", then those that need
  * a re-check or weren't checked. Each part is a button that moves to the
- * next such sentence or Citation, round to the first. Under it, while
- * sentences are checked, what is happening with Stop; or why a check gave
- * nothing, with the one thing that helps. Last on the line, the files the
- * checks couldn't read, if any, whose list opens below it.
+ * next such sentence or Citation, round to the first. Last on the line, the
+ * files the checks couldn't read, if any, whose list opens below it.
+ *
+ * The counts come after the checks' state because they are worked out a
+ * moment after each change: before it, they would move its buttons from
+ * under the pointer (#968).
  */
 export function NoteHealth({
   editor,
@@ -186,60 +190,6 @@ export function NoteHealth({
 
   return (
     <>
-      {(parts.length > 0 || checkedAll || canCheck) && (
-        <fieldset className="mind-health" data-testid="mind-health" aria-label={t("health.label")}>
-          {checkedAll && !running && (
-            <>
-              <span className="mind-health-dot" aria-hidden="true">
-                ·
-              </span>
-              <CheckedWhen run={checkedAll} />
-            </>
-          )}
-          {parts.map((part) => {
-            const text = label(part, health[part].length);
-            return (
-              <Fragment key={part}>
-                <span className="mind-health-dot" aria-hidden="true">
-                  ·
-                </span>
-                <button
-                  type="button"
-                  data-testid={`health-${part}`}
-                  data-count={health[part].length}
-                  data-part={part}
-                  className="mind-health-part"
-                  aria-label={t("health.next", { part: text })}
-                  title={t("health.next", { part: text })}
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => goToNext(part)}
-                >
-                  <PartMark part={part} />
-                  {text}
-                </button>
-              </Fragment>
-            );
-          })}
-          {canCheck && (
-            <>
-              <span className="mind-health-dot" aria-hidden="true">
-                ·
-              </span>
-              <MindCheckAction
-                unchecked={health.unchecked.length}
-                recheck={health.recheck.length}
-                onCheck={() => void startMindCheck(mindId, "changed")}
-              />
-            </>
-          )}
-        </fieldset>
-      )}
-      {((smallModel && parts.length > 0) ||
-        (contradictions?.kind !== "asking" && contradictions?.run.smallModel)) && (
-        <p data-testid="checks-small-model" className="mind-health-line mind-health-note">
-          {t("checks.smallModel")}
-        </p>
-      )}
       {running && (
         <ProblemLine
           role="status"
@@ -381,6 +331,60 @@ export function NoteHealth({
                 : t(`checks.problem.${problem.kind}`)}
           </ProblemLine>
         )}
+      {(parts.length > 0 || checkedAll || canCheck) && (
+        <fieldset className="mind-health" data-testid="mind-health" aria-label={t("health.label")}>
+          {checkedAll && !running && (
+            <>
+              <span className="mind-health-dot" aria-hidden="true">
+                ·
+              </span>
+              <CheckedWhen run={checkedAll} />
+            </>
+          )}
+          {parts.map((part) => {
+            const text = label(part, health[part].length);
+            return (
+              <Fragment key={part}>
+                <span className="mind-health-dot" aria-hidden="true">
+                  ·
+                </span>
+                <button
+                  type="button"
+                  data-testid={`health-${part}`}
+                  data-count={health[part].length}
+                  data-part={part}
+                  className="mind-health-part"
+                  aria-label={t("health.next", { part: text })}
+                  title={t("health.next", { part: text })}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => goToNext(part)}
+                >
+                  <PartMark part={part} />
+                  {text}
+                </button>
+              </Fragment>
+            );
+          })}
+          {canCheck && (
+            <>
+              <span className="mind-health-dot" aria-hidden="true">
+                ·
+              </span>
+              <MindCheckAction
+                unchecked={health.unchecked.length}
+                recheck={health.recheck.length}
+                onCheck={() => void startMindCheck(mindId, "changed")}
+              />
+            </>
+          )}
+        </fieldset>
+      )}
+      {((smallModel && parts.length > 0) ||
+        (contradictions?.kind !== "asking" && contradictions?.run.smallModel)) && (
+        <p data-testid="checks-small-model" className="mind-health-line mind-health-note">
+          {t("checks.smallModel")}
+        </p>
+      )}
       <UnreadFilesLine files={unread} testId="checks-unread" className="mind-unread" />
     </>
   );

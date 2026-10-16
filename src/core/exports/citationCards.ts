@@ -39,6 +39,15 @@ export type CardContent =
   | { kind: "cells"; columns: string[]; rows: { label: string; cells: CardCell[] }[] }
   | { kind: "lines"; lines: { time: string; speaker: string | null; runs: CardRun[] }[] }
   | { kind: "quote"; text: string; scan: boolean }
+  /** The page's `picture`, in pixels twice its size on the page. */
+  | {
+      kind: "picture";
+      picture: number;
+      width: number;
+      height: number;
+      slide: boolean;
+      scan: boolean;
+    }
   | { kind: "missing"; quote: string };
 
 export interface CitationCard {
