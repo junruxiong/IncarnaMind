@@ -19,6 +19,8 @@ export interface WebPageProblem {
   reason: WebPageFailureReason;
   message: string;
   folderId: string | null;
+  /** As the save asked; absent: as Settings say. */
+  keepLook?: boolean;
   /** Set for "Fetch again". */
   document: { id: string; name: string } | null;
 }
@@ -34,9 +36,9 @@ interface WebPagesState {
   fetching: readonly string[];
   problems: readonly WebPageProblem[];
   openDialog(): void;
-  submitDialog(addresses: readonly string[]): Promise<void>;
+  submitDialog(addresses: readonly string[], keepLook: boolean): Promise<void>;
   closeDialog(): void;
-  add(addresses: readonly string[], folderId?: string | null): Promise<void>;
+  add(addresses: readonly string[], folderId?: string | null, keepLook?: boolean): Promise<void>;
   fetchAgain(document: Pick<Document, "id" | "name">): Promise<void>;
   tryAgain(problem: WebPageProblem): Promise<void>;
   dismiss(problem: WebPageProblem): void;
@@ -101,23 +103,29 @@ export const useWebPages = create<WebPagesState>()((set, get) => {
     result: Extract<WebPageResult, { outcome: "failed" }>,
     folderId: string | null,
     document: WebPageProblem["document"],
+    keepLook?: boolean,
   ): WebPageProblem => ({
     key,
     address: result.address,
     reason: result.failure.reason,
     message: result.failure.message,
     folderId,
+    ...(keepLook === undefined ? {} : { keepLook }),
     document,
   });
   const failedAction = (error: unknown) => useAppStore.getState().reportError(error);
 
-  const save = async (address: string, folderId: string | null) => {
+  const save = async (address: string, folderId: string | null, keepLook?: boolean) => {
     if (get().fetching.includes(address)) return;
     start(address);
     try {
-      const result = await core.saveWebPage({ address, folderId });
+      const result = await core.saveWebPage({
+        address,
+        folderId,
+        ...(keepLook === undefined ? {} : { keepLook }),
+      });
       if (result.outcome === "failed") {
-        finish(address, problemOf(address, result, folderId, null));
+        finish(address, problemOf(address, result, folderId, null, keepLook));
         return;
       }
       finish(address, null);
@@ -141,9 +149,9 @@ export const useWebPages = create<WebPagesState>()((set, get) => {
     openDialog() {
       set({ dialogOpen: true, dialogAddresses: [] });
     },
-    async submitDialog(addresses) {
+    async submitDialog(addresses, keepLook) {
       set({ dialogAddresses: [...new Set(addresses)] });
-      await get().add(addresses);
+      await get().add(addresses, null, keepLook);
     },
     closeDialog() {
       set((state) => ({
@@ -154,11 +162,11 @@ export const useWebPages = create<WebPagesState>()((set, get) => {
       }));
     },
 
-    async add(addresses, folderId = null) {
+    async add(addresses, folderId = null, keepLook) {
       const queue = [...new Set(addresses)];
       const worker = async () => {
         for (let next = queue.shift(); next !== undefined; next = queue.shift()) {
-          await save(next, folderId);
+          await save(next, folderId, keepLook);
         }
       };
       await Promise.all(Array.from({ length: Math.min(AT_ONCE, queue.length) }, worker));
@@ -184,7 +192,7 @@ export const useWebPages = create<WebPagesState>()((set, get) => {
 
     async tryAgain(problem) {
       if (problem.document) return get().fetchAgain(problem.document);
-      await save(problem.address, problem.folderId);
+      await save(problem.address, problem.folderId, problem.keepLook);
     },
 
     dismiss(problem) {
