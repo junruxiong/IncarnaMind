@@ -179,22 +179,8 @@ test("help during the call: the floating panel above the meeting gives one or tw
     want.getByTestId("help-option-note").first().getByTestId("help-citation"),
   ).toHaveAttribute("data-check", "found");
 
-  // The same buttons sit at the top of the assistant, which shows the help asked there.
-  const strip = window.getByTestId("help-strip");
-  await expect(strip.getByTestId("help-button")).toHaveCount(7);
-  await pointAndClick(
-    window,
-    strip.getByTestId("help-button").filter({ hasText: "Sum up so far" }),
-  );
-  await expect(window.getByTestId("assistant-question").last()).toContainText("Sum up so far");
-  await expect(window.getByTestId("assistant-answer").last()).toHaveAttribute(
-    "data-status",
-    "done",
-    {
-      timeout: 20_000,
-    },
-  );
-  await expect(panel.getByTestId("help-heading")).toContainText("Sum up so far");
+  // While the panel shows, the assistant has no second row of the same buttons.
+  await expect(window.getByTestId("help-strip")).toHaveCount(0);
 
   // The template adds its buttons, and takes them back.
   await pointAndClick(panel, panel.getByTestId("panel-template"));
@@ -253,13 +239,28 @@ test("help during the call: the floating panel above the meeting gives one or tw
   await pointAndClick(panel, pill.getByTestId("panel-expand"));
   await expect(panel.getByTestId("help-buttons")).toBeVisible();
 
-  // Closed, it stays closed for this meeting; ⌘K shows it again.
+  // Closed, it stays closed for this meeting, and the buttons sit at the top of the assistant,
+  // which shows the help asked there; ⌘K shows the panel again.
   await pointAndClick(panel, panel.getByTestId("panel-close"));
   await expect.poll(() => panelOpen(app)).toBe(false);
+  const strip = window.getByTestId("help-strip");
+  await expect(strip.getByTestId("help-button")).toHaveCount(9);
+  await pointAndClick(
+    window,
+    strip.getByTestId("help-button").filter({ hasText: "Sum up so far" }),
+  );
+  await expect(window.getByTestId("assistant-question").last()).toContainText("Sum up so far");
+  await expect(window.getByTestId("assistant-answer").last()).toHaveAttribute(
+    "data-status",
+    "done",
+    { timeout: 20_000 },
+  );
   await window.keyboard.press("ControlOrMeta+k");
   await window.keyboard.type("Show the floating panel");
   await window.keyboard.press("Enter");
-  await panelOf(app);
+  const shown = await panelOf(app);
+  await expect(shown.getByTestId("help-heading")).toContainText("Sum up so far");
+  await expect(strip).toHaveCount(0);
 
   // Stop ends the meeting, and the panel goes with it.
   await bar.getByTestId("meeting-stop").click();

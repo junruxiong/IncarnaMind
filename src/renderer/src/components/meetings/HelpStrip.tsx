@@ -1,13 +1,17 @@
-import { askHelpInAssistant } from "../../meetingHelp";
+import { askHelpInAssistant, useMeetingHelp } from "../../meetingHelp";
 import { isLive, useMeetings } from "../../meetings";
 import { HelpButtons } from "./HelpButtons";
 
-/** The help buttons at the top of the assistant while the Mind it reads records. */
+/**
+ * The help buttons at the top of the assistant while the Mind it reads records, when the
+ * floating panel, which has them, isn't shown: one place with the buttons at a time.
+ */
 export function HelpStrip({ mindId }: { mindId: string | null }) {
   const meeting = useMeetings((state) =>
     state.meetings.find((each) => each.mindId === mindId && isLive(each)),
   );
-  if (!meeting) return null;
+  const panelShown = useMeetingHelp((state) => state.panelShown);
+  if (!meeting || panelShown) return null;
   return (
     <div data-testid="help-strip" className="help-strip">
       <HelpButtons
