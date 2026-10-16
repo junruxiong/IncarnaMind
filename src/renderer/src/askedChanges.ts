@@ -40,21 +40,33 @@ export function applyWhatWasAsked(answerId: string): void {
   askedHere.add(answerId);
 }
 
-function askedOf(doc: Parameters<typeof proposalRequestOf>[0], requests: readonly string[]) {
-  return new Set(
-    requests.filter((request) => {
+function askedOf(
+  doc: Parameters<typeof proposalRequestOf>[0],
+  answer: ConversationAnswer,
+  row: ChangedMind,
+): Set<string> {
+  const asked = new Set(
+    row.requests.filter((request) => {
       const made = proposalRequestOf(doc, request);
       return made !== null && "requested" in made && made.requested !== undefined;
     }),
   );
+  if (asked.size === 0) return asked;
+  // The assistant revising what it wrote for the request in the same Answer: still what was asked.
+  for (const call of answer.toolCalls) {
+    const change = call.mindChange;
+    if (change?.revised && change.mindId === row.mindId && change.request)
+      asked.add(change.request);
+  }
+  return asked;
 }
 
-function askedInCopy(row: ChangedMind): Promise<boolean> {
+function askedInCopy(answer: ConversationAnswer, row: ChangedMind): Promise<boolean> {
   return new Promise((resolve) => {
     const close = openMindCopy(
       row.mindId,
       ({ doc }) => {
-        resolve(doc !== null && askedOf(doc, row.requests).size > 0);
+        resolve(doc !== null && askedOf(doc, answer, row).size > 0);
         close();
       },
       () => resolve(false),
@@ -68,12 +80,12 @@ const openBeside = (mindId: string) =>
     .changeLayout({ type: "open", item: { kind: "mind", mindId }, where: { in: "place" } })
     .catch(useAppStore.getState().reportError);
 
-function follow(answerId: string, row: ChangedMind): void {
-  const key = `${answerId} ${row.mindId}`;
+function follow(answer: ConversationAnswer, row: ChangedMind): void {
+  const key = `${answer.id} ${row.mindId}`;
   const editor = mindEditor(row.mindId);
   const doc = editor && editorDoc(editor);
   if (editor && doc) {
-    const asked = askedOf(doc, row.requests);
+    const asked = askedOf(doc, answer, row);
     const now = applyingIn(editor.state);
     if ([...asked].some((request) => !now.has(request))) {
       setApplying(editor, new Set([...now, ...asked]));
@@ -89,7 +101,7 @@ function follow(answerId: string, row: ChangedMind): void {
   seen.add(key);
   // A Mind the Answer made opens anyway (./assistantMinds).
   if (row.created) return;
-  void askedInCopy(row).then((asked) => {
+  void askedInCopy(answer, row).then((asked) => {
     if (asked) void openBeside(row.mindId);
   });
 }
@@ -100,7 +112,7 @@ async function finish(answer: ConversationAnswer): Promise<void> {
     const editor = mindEditor(row.mindId) ?? (await whenMindEditor(row.mindId, OPEN_WAIT_MS));
     const doc = editor && editorDoc(editor);
     if (!editor || !doc) continue;
-    const asked = askedOf(doc, row.requests);
+    const asked = askedOf(doc, answer, row);
     if (asked.size === 0) continue;
     const outcome = applyArrived(editor, row.mindId, asked, row);
     if (outcome) outcomes[row.mindId] = outcome;
@@ -135,7 +147,7 @@ export async function reviewAsked(mindId: string): Promise<void> {
 core.on("conversation.message", (message) => {
   if (message.kind !== "answer" || !askedHere.has(message.id)) return;
   const answer = message;
-  for (const row of changedMinds(answer)) follow(answer.id, row);
+  for (const row of changedMinds(answer)) follow(answer, row);
   if (answer.status === "streaming") return;
   askedHere.delete(answer.id);
   finish(answer).catch(useAppStore.getState().reportError);

@@ -538,6 +538,9 @@ function unmadeTable(node: NodeJSON): boolean {
 
 const WAITING =
   "They wait in the Mind for the User to accept or reject them; until then nothing of the User's text has changed.";
+// The window that asked applies what the User asked for (#880), so the reply mustn't say it waits.
+const APPLIES =
+  "As the User asked for this, it applies in the Mind at once, with Undo: say what changed, not that anything waits. Only a change that would rewrite most of the User's own text waits for them.";
 
 function waitingMessage(name: string, count: number, mixed: boolean): string {
   const how =
@@ -1000,11 +1003,15 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
   };
 
   /** What the model reads of Blocks it added: how many, and what of their Citations didn't hold. */
-  const added = (written: NonNullable<ReturnType<typeof finishContent>>, where: string): string =>
+  const added = (
+    written: NonNullable<ReturnType<typeof finishContent>>,
+    where: string,
+    made: boolean,
+  ): string =>
     [
       `Proposed ${written.change.proposals === 1 ? "1 new Block" : `${written.change.proposals} new Blocks`} ${where}.`,
       ...tableNotes(written.change),
-      WAITING,
+      requestedIn(made) ? APPLIES : WAITING,
       ...citationNotes(written),
     ].join(" ");
 
@@ -1224,7 +1231,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       return [
         revised
           ? revisedText(mind.name, change, went)
-          : `Proposed ${changes(result.proposals)} in “${mind.name}”${went}. ${WAITING}`,
+          : `Proposed ${changes(result.proposals)} in “${mind.name}”${went}. ${requested ? APPLIES : WAITING}`,
         ...tableNotes(change, result.unmatchedMarkers),
         ...(reason ? [`Why, as the rewrite says: ${reason}`] : []),
         ...(result.droppedCitations > 0
@@ -1284,7 +1291,11 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       const after = optional(input.after);
       const written = finishContent(toolCallId, mind, after, markdown, false);
       if (!written) throw noTable(mind);
-      return added(written, `in “${mind.name}”, ${after ? `after “${after}”` : "at its end"}`);
+      return added(
+        written,
+        `in “${mind.name}”, ${after ? `after “${after}”` : "at its end"}`,
+        false,
+      );
     },
   };
 
@@ -1339,7 +1350,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         options.changed(toolCallId, { mindId: mind.id, created: true, request: "", proposals: 0 });
         return `${made}. It is empty. ${noTable(mind).message}`;
       }
-      return `${made}. ${added(written, "in it")}`;
+      return `${made}. ${added(written, "in it", true)}`;
     },
   };
 
