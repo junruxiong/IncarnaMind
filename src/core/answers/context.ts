@@ -30,7 +30,14 @@ import { type ReviewReading, reviewReading } from "../mindText";
 import { attribute, contentMarkdown, textAttribute, toMarkdown } from "./blocks";
 import { answerMarkdown } from "./contextText";
 import type { AnswerMessage } from "./engine";
-import { type MindNames, TOOL_RECORD, toolRecord } from "./toolRecord";
+import {
+  type ChangeStates,
+  type MindNames,
+  RECORD_BLOCK,
+  TOOL_RECORD,
+  toolRecord,
+  withoutItsAnswer,
+} from "./toolRecord";
 
 /** About 12k tokens, the old app's budget for what precedes a Question. */
 export const QUESTION_CONTEXT_TOKEN_BUDGET = 12_000;
@@ -51,16 +58,20 @@ const SEARCH_QUERY_CONTEXT_TOKEN_BUDGET = 2_000;
 /** A Block's share of the budget that is too small to be worth keeping the tail of. */
 const MIN_TAIL_TOKENS = 64;
 
+/** The most of the history's budget the records of earlier Answers' Tool calls keep, newest first. */
+const RECORDS_SHARE = 0.5;
+
 interface Piece {
   role: AnswerMessage["role"];
   text: string;
   /** Where the third-party text in it came from (#78); absent: none. */
   origins?: readonly ThirdPartySource[];
   /**
-   * The record of an earlier Answer's Tool calls, kept whole or not at all,
-   * and only with that Answer's text (the piece of the same `answer`) when it has any.
+   * The record of an earlier Answer's Tool calls, kept whole or not at all.
+   * It outlasts the Answer's text (the piece of the same `answer`), which goes
+   * first when the budget runs out.
    */
-  record?: { answer: string; alone: boolean };
+  record?: { answer: string };
   /** An earlier Answer's text: its id, which its record names. */
   answer?: string;
 }
@@ -540,6 +551,8 @@ interface ConversationContextOptions {
   budget?: number;
   documents?: Documents;
   mindNames?: MindNames;
+  /** What became of the changes the earlier Answers made: waiting, accepted or rejected. */
+  changeStates?: ChangeStates;
 }
 
 /**
@@ -557,18 +570,19 @@ export function conversationContextOf(
     budget = QUESTION_CONTEXT_TOKEN_BUDGET,
     documents = null,
     mindNames = () => null,
+    changeStates,
   }: ConversationContextOptions = {},
 ): QuestionContextWithOrigins {
   const pieces: Piece[] = earlier.flatMap((message): Piece[] => {
     if (message.kind === "question")
       return message.text ? [{ role: "user", text: message.text }] : [];
-    const record = toolRecord(message.toolCalls, mindNames, message.citations.length);
+    const record = toolRecord(message.toolCalls, mindNames, message.citations.length, changeStates);
     const text =
       message.status === "failed"
         ? ""
         : answerMarkdown(message.text, message.citations, message.figures, documents);
     const recorded: Piece[] = record
-      ? [{ role: "user", text: record, record: { answer: message.id, alone: !text } }]
+      ? [{ role: "user", text: record, record: { answer: message.id } }]
       : [];
     if (!text) return recorded;
     return [
@@ -603,33 +617,68 @@ function withMind(mind: string, kept: readonly Piece[], asked: string): AnswerMe
 }
 
 /**
- * The newest pieces above the Question that fit in `remaining` tokens, oldest
- * first: the oldest pieces are the ones left out, and the newest piece that
- * doesn't fit whole keeps its end, marked as cut, when that is worth keeping;
- * a record of Tool calls is kept whole or not at all, and goes with its
- * Answer. Those before the first of the User's are left out too: a
- * conversation starts with the User.
+ * The newest of `newestFirst` that fit in `remaining` tokens, and what is left;
+ * the newest that doesn't fit whole keeps its end, marked as cut, when that is
+ * worth keeping, and the rest are left out. A record of Tool calls is never cut.
  */
-function keptWithinBudget(newestFirst: Iterable<Piece>, remaining: number): Piece[] {
-  const kept: Piece[] = [];
+function fitting(
+  newestFirst: readonly Piece[],
+  remaining: number,
+): { chosen: Map<Piece, Piece>; left: number } {
+  const chosen = new Map<Piece, Piece>();
   for (const piece of newestFirst) {
     if (remaining <= 0) break;
-    const cost = estimateTokens(piece.text);
+    // A record counts as it reads without its Answer, which is the longer.
+    const cost = estimateTokens(piece.record ? withoutItsAnswer(piece.text) : piece.text);
     if (cost <= remaining) {
-      kept.push(piece);
+      chosen.set(piece, piece);
       remaining -= cost;
       continue;
     }
     if (!piece.record && remaining >= MIN_TAIL_TOKENS) {
-      kept.push({ ...piece, text: tail(piece.text, remaining) });
+      chosen.set(piece, { ...piece, text: tail(piece.text, remaining) });
     }
     remaining = 0;
   }
-  kept.reverse();
+  return { chosen, left: remaining };
+}
+
+/**
+ * The pieces above the Question that fit in `remaining` tokens, oldest first:
+ * the oldest pieces are the ones left out, and the newest piece that doesn't
+ * fit whole keeps its end, marked as cut, when that is worth keeping. With
+ * records of Tool calls among them, those are kept first, newest first and
+ * whole or not at all, up to `RECORDS_SHARE` of the budget, so an Answer's
+ * text goes before its record does. Those before the first of the User's are
+ * left out too: a conversation starts with the User.
+ */
+function keptWithinBudget(newestFirst: Iterable<Piece>, remaining: number): Piece[] {
+  const pieces = [...newestFirst];
+  let chosen: Map<Piece, Piece>;
+  if (pieces.some((piece) => piece.record)) {
+    const share = Math.floor(remaining * RECORDS_SHARE);
+    const records = fitting(
+      pieces.filter((piece) => piece.record),
+      share,
+    );
+    const rest = fitting(
+      pieces.filter((piece) => !piece.record),
+      remaining - (share - records.left),
+    );
+    chosen = new Map([...records.chosen, ...rest.chosen]);
+  } else {
+    chosen = fitting(pieces, remaining).chosen;
+  }
+  const kept = pieces
+    .filter((piece) => chosen.has(piece))
+    .reverse()
+    .map((piece) => chosen.get(piece) as Piece);
   while (kept[0]?.role === "assistant") kept.shift();
   const answers = new Set(kept.flatMap((piece) => (piece.answer ? [piece.answer] : [])));
-  return kept.filter(
-    (piece) => !piece.record || piece.record.alone || answers.has(piece.record.answer),
+  return kept.map((piece) =>
+    piece.record && !answers.has(piece.record.answer)
+      ? { ...piece, text: withoutItsAnswer(piece.text) }
+      : piece,
   );
 }
 
@@ -715,20 +764,30 @@ export function fitQuestionContext(
   return withMind(mindText, keptWithinBudget(above.reverse(), remaining), asked);
 }
 
-/** Messages as pieces, a record of an earlier Answer's Tool calls apart from the message it starts. */
+/** Messages as pieces, the records of earlier Answers' Tool calls apart from the messages that hold them. */
 function piecesOf(messages: readonly AnswerMessage[]): Piece[] {
   return messages.flatMap((message, index): Piece[] => {
     if (message.role === "assistant") {
       return [{ role: "assistant", text: message.content, answer: String(index) }];
     }
-    const record = /^<tool-record>[\s\S]*?<\/tool-record>/.exec(message.content)?.[0];
-    if (!record) return [{ role: "user", text: message.content }];
-    const rest = message.content.slice(record.length).trim();
-    const answer = messages[index - 1]?.role === "assistant" ? String(index - 1) : null;
-    return [
-      { role: "user", text: record, record: { answer: answer ?? "", alone: answer === null } },
-      ...(rest ? [{ role: "user" as const, text: rest }] : []),
-    ];
+    const pieces: Piece[] = [];
+    let at = 0;
+    for (const found of message.content.matchAll(RECORD_BLOCK)) {
+      const start = found.index ?? 0;
+      const before = message.content.slice(at, start).trim();
+      if (before) pieces.push({ role: "user", text: before });
+      // A record right after an Answer's text is that Answer's.
+      const follows = start === 0 && messages[index - 1]?.role === "assistant";
+      pieces.push({
+        role: "user",
+        text: found[0],
+        record: { answer: follows ? String(index - 1) : "" },
+      });
+      at = start + found[0].length;
+    }
+    const rest = message.content.slice(at).trim();
+    if (rest || pieces.length === 0) pieces.push({ role: "user", text: rest || message.content });
+    return pieces;
   });
 }
 

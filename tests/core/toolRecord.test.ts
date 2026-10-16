@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import type { AnswerToolCall, ConversationAnswer, ConversationMessage } from "../../src/core";
 import { conversationContext, estimateTokens } from "../../src/core/answers/context";
-import { toolRecord, toolRecordLines } from "../../src/core/answers/toolRecord";
+import { type ChangeState, toolRecord, toolRecordLines } from "../../src/core/answers/toolRecord";
 
 /**
  * The record of what an Answer's Tool calls really did, as the next
@@ -195,29 +195,107 @@ describe("A record within the context's budget", () => {
       .messages.map((message) => message.content)
       .join("\n\n");
 
-  // protects=a record that doesn't fit whole is left out, never cut, and nothing older than it is kept; fails_when=part of a record is sent, or the Answer before it comes without it; no_claim=none beyond protects.
-  test("a record that doesn't fit whole is left out with all before it", () => {
+  // protects=a record that doesn't fit its share of the budget is left out whole, never cut; fails_when=part of a record is sent; no_claim=none beyond protects.
+  test("a record that doesn't fit is left out whole, never cut", () => {
     const reply = answer(searches, "The papers say the moon drives the tides. ".repeat(4));
     const record = toolRecord(searches, names);
     const budget = estimateTokens(QUESTION) + estimateTokens(record) - 20;
 
-    expect(sent(earlier(reply), budget)).toBe(QUESTION);
+    const text = sent(earlier(reply), budget);
+
+    expect(text).not.toContain("tool-record");
+    expect(text).not.toContain("search_documents");
+    expect(text.endsWith(QUESTION)).toBe(true);
   });
 
-  // protects=a record whose Answer was left out goes too; fails_when=the record is sent without the Answer it is about; no_claim=none beyond protects.
-  test("a record whose Answer was left out goes with it", () => {
-    const made = call({
-      tool: "create_mind",
-      source: "minds",
-      mindChange: { mindId: "m1", created: true, request: "r", proposals: 2 },
-    });
+  const made = call({
+    tool: "create_mind",
+    source: "minds",
+    mindChange: { mindId: "m1", created: true, request: "r", proposals: 2 },
+  });
+
+  // protects=the Answer's text goes before its record does, and the record then says its Answer is left out; fails_when=the record goes with the text, or still points at an Answer above; no_claim=none beyond protects.
+  test("a record outlasts its Answer's text", () => {
     const reply = answer([made], "The page sums up both papers. ".repeat(80));
     const record = toolRecord([made], names);
-    const budget = estimateTokens(QUESTION) + estimateTokens(record) + 10;
+    const budget = estimateTokens(QUESTION) + estimateTokens(record) * 4;
 
-    expect(sent(earlier(reply), budget)).toBe(QUESTION);
+    const text = sent(earlier(reply), budget);
+
+    expect(text).not.toContain("The page sums up");
+    expect(text).toContain("What the Tools of an earlier Answer of yours really did");
+    expect(text).not.toContain("your Answer above");
+    expect(text).toContain("- create_mind: made the Mind “Tide notes” and proposed 2 changes");
+    expect(text.endsWith(QUESTION)).toBe(true);
     expect(sent(earlier(reply), 100_000)).toContain(
       `The page sums up both papers.\n\n${record}\n\n${QUESTION}`,
     );
+  });
+
+  // protects=thirty turns with long Answers fit the same budget as before, the first turn's record and the newest Answer in it and the first Answer's text out; fails_when=the context grows past the budget, the first record is lost, or the newest Answer goes; no_claim=none beyond protects.
+  test("thirty turns: the budget holds, the first record stays and the first Answer's text goes", () => {
+    const turns: ConversationMessage[] = Array.from(
+      { length: 30 },
+      (_, at): ConversationMessage[] => {
+        const reply = answer(
+          at === 0 ? [made] : [],
+          `Answer ${at + 1}. ${"Tides follow the moon. ".repeat(120)}`,
+        );
+        return [
+          {
+            ...earlier(reply)[0],
+            id: `q${at + 1}`,
+            text: `Question ${at + 1}`,
+          } as ConversationMessage,
+          { ...reply, id: `a${at + 1}`, questionId: `q${at + 1}` },
+        ];
+      },
+    ).flat();
+    const budget = 12_000;
+
+    const text = sent(turns, budget);
+
+    // The blank lines between pieces aren't counted in the budget, as before.
+    expect(estimateTokens(text)).toBeLessThanOrEqual(budget + 20);
+    expect(text).toContain("- create_mind: made the Mind “Tide notes” and proposed 2 changes");
+    expect(text).not.toContain("Answer 1. ");
+    expect(text).toContain("Answer 30. ");
+  });
+});
+
+describe("What became of a change, in its record", () => {
+  const change = (proposals: number): AnswerToolCall =>
+    call({
+      tool: "add_to_mind",
+      source: "minds",
+      input: { mind: "Tide notes" },
+      mindChange: { mindId: "m1", created: false, request: "r", proposals },
+    });
+  const line = (proposals: number, state: ChangeState | null) =>
+    toolRecordLines([change(proposals)], names, () => state)[0];
+
+  // protects=each fate of a change reads as what the User did: all rejected, all accepted, part accepted with the rest waiting, a mix, and a Mind since deleted; fails_when=a rejected page still reads as waiting; no_claim=none beyond protects.
+  test.each([
+    [5, { waiting: 0, accepted: 0, rejected: 5 }, "then the User rejected all 5"],
+    [3, { waiting: 0, accepted: 3, rejected: 0 }, "then the User accepted all 3"],
+    [1, { waiting: 0, accepted: 0, rejected: 1 }, "then the User rejected it"],
+    [3, { waiting: 1, accepted: 2, rejected: 0 }, "then the User accepted 2 of 3, 1 still waiting"],
+    [3, { waiting: 0, accepted: 2, rejected: 1 }, "then the User accepted 2 and rejected 1"],
+    [3, { waiting: 3, accepted: 0, rejected: 0 }, "waiting for the User"],
+    [3, { waiting: 0, accepted: 0, rejected: 0, gone: true }, "but the Mind is no longer there"],
+  ])("%i changes, %j", (proposals, state, said) => {
+    expect(line(proposals, state)).toBe(
+      `- add_to_mind “Tide notes”: proposed ${proposals} new Block${proposals === 1 ? "" : "s"}, ${said}`,
+    );
+  });
+
+  // protects=decisions that don't fit the change (an Undo brought changes back) are not believed, and no state reads as waiting as before; fails_when=a change brought back reads as rejected; no_claim=none beyond protects.
+  test("decisions that don't fit what waits are left out, and no state reads as waiting", () => {
+    expect(line(3, { waiting: 3, accepted: 0, rejected: 3 })).toContain(", waiting for the User");
+    expect(line(3, { waiting: 2, accepted: 1, rejected: 1 })).toContain(
+      ", 2 of 3 still waiting for the User",
+    );
+    expect(line(3, { waiting: 0, accepted: 3, rejected: 3 })).toContain(", none waiting any more");
+    expect(line(3, null)).toContain(", waiting for the User");
   });
 });
