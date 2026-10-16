@@ -159,8 +159,11 @@ export interface CreateMindInput {
  *   `MIND_REVISIONS_FIELD` so rejecting the revision brings them back. An
  *   older version would reject it and lose them. Older content is version
  *   22 content as it is.
+ * - 23: the `wordTab` mark on a Word file's tab characters (#746), which an
+ *   older version's editor would strip. Older content is version 23 content
+ *   as it is.
  */
-export const CONTENT_SCHEMA_VERSION = 22;
+export const CONTENT_SCHEMA_VERSION = 23;
 
 /**
  * The key, in the Mind's settings map (`MIND_SETTINGS_FIELD`), of the content
@@ -1113,8 +1116,6 @@ export interface WordFileCheck {
   origin: WordOrigin;
   /** Who wrote its tracked changes and comments, in the order they first appear. */
   authors: string[];
-  /** Its look is mostly what a Mind doesn't draw, so the import screen says it is kept (#735). */
-  layoutNotShown: boolean;
   /** Its tracked changes, of every kind (paragraph marks, formatting and moves too). */
   changes: number;
   comments: number;
@@ -1182,23 +1183,6 @@ export interface WordImportReport {
    * Absent on reports from before #108.
    */
   keptChanges?: Partial<Record<KeptChangeKind, number>>;
-  /** What the Mind doesn't draw of the file's look; absent from a report made before #735. */
-  layout?: WordLayout;
-}
-
-/**
- * What a Word file's look holds that a Mind doesn't draw (#735), counted from
- * the document's own formatting: paragraphs, runs and cells shaded;
- * paragraphs with a border; tab stops set; and how many text colours (other
- * than black), fonts and sizes it sets.
- */
-export interface WordLayout {
-  shading: number;
-  borders: number;
-  tabStops: number;
-  colours: number;
-  fonts: number;
-  sizes: number;
 }
 
 /**
@@ -1255,6 +1239,9 @@ export const WORD_LOOK_ATTRIBUTE = "wordLook";
 /** A mark on text whose attribute `k` is a key in `WordLook.runs`. */
 export const WORD_RUN_MARK = "wordRun";
 
+/** A mark on each tab character of a Word file's text, so each is drawn to its tab stop. */
+export const WORD_TAB_MARK = "wordTab";
+
 /** Lengths are in points and colours hex "RRGGBB"; unset properties are left out. */
 export interface WordLook {
   version: number;
@@ -1262,6 +1249,8 @@ export interface WordLook {
   body: number | null;
   /** The text width on the first page; null when the file doesn't say. */
   width: number | null;
+  /** How far apart Word's default tab stops are (`w:defaultTabStop`); null when the file doesn't say. */
+  defaultTab: number | null;
   paragraphs: Record<string, WordParagraphLook>;
   runs: Record<string, WordRunLook>;
   tables: Record<string, WordTableLook>;
