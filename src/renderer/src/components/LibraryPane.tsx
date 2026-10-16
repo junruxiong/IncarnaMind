@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import type { Document, LibraryGroup } from "../../../core/api";
+import { focusComposer } from "../commands/assistant";
+import { useComposer } from "../composer";
 import { LIBRARY_DELETED } from "../deletedItems";
-import { errorMessage } from "../errors";
+import { errorMessage, providerErrorText } from "../errors";
 import { useFindSources } from "../findSources";
 import { useLanguage, useT } from "../i18n";
 import {
@@ -166,9 +168,10 @@ export function LibraryPane() {
   const notSortedOf = useCallback(
     (documentId: string) => {
       const item = assignments.get(documentId);
-      return item?.status === "failed" ? (item.error?.message ?? "") : null;
+      if (item?.status !== "failed") return null;
+      return item.error ? providerErrorText(item.error, t) : "";
     },
-    [assignments],
+    [assignments, t],
   );
   const problem = useMemo(() => problemOf(documents), [documents]);
   // Files in the Linked folders that aren't Documents because their format isn't read yet (#740).
@@ -206,6 +209,21 @@ export function LibraryPane() {
     setFacetFilter({});
     useAppStore.getState().setTagFilter([]);
   };
+  const nothingMatches = narrowing && sections.length === 0 && !inside.waiting;
+  const query = search.trim();
+  /** Nothing in the Library matches what was typed: ask the assistant about it instead (#763). */
+  const askAbout =
+    nothingMatches && query !== ""
+      ? () => {
+          focusComposer();
+          useComposer.getState().requestAsk(query);
+        }
+      : undefined;
+  const clearAction = {
+    label: t("library.noMatch.clear"),
+    testId: "library-clear-narrowing",
+    onClick: clearNarrowing,
+  };
   const closeForm = () => useAppStore.getState().openLibrary();
 
   return (
@@ -223,6 +241,7 @@ export function LibraryPane() {
             count={documents.length}
             search={search}
             onSearch={setSearch}
+            onEnter={askAbout}
             onDown={() =>
               // The first Document found, as Finder's first result; the first head when none is open.
               (
@@ -330,16 +349,21 @@ export function LibraryPane() {
                   {t("library.inside.failed", { reason: errorMessage(inside.failure.error, t) })}
                 </ProblemLine>
               )}
-              {narrowing && sections.length === 0 && !inside.waiting && (
+              {nothingMatches && (
                 <ProblemLine
                   role="status"
                   testId="library-no-match"
                   className="mt-6"
-                  action={{
-                    label: t("library.noMatch.clear"),
-                    testId: "library-clear-narrowing",
-                    onClick: clearNarrowing,
-                  }}
+                  action={
+                    askAbout
+                      ? {
+                          label: t("palette.ask", { text: query }),
+                          testId: "library-ask",
+                          onClick: askAbout,
+                        }
+                      : clearAction
+                  }
+                  also={askAbout ? clearAction : undefined}
                 >
                   {t("library.noMatch")}
                 </ProblemLine>

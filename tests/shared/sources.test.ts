@@ -11,6 +11,8 @@ const WEB = {
     { contentHash: "old", fetchedAt: "2026-10-06T09:00:00.000Z" },
     { contentHash: "new", fetchedAt: "2026-10-08T09:00:00.000Z" },
   ],
+  picturesLeftOut: 0,
+  look: null,
 };
 
 const documents = [

@@ -83,7 +83,7 @@ A short span of a Document that can be retrieved and cited.
 _Avoid_: chunk, snippet
 
 **Citation**:
-A reference, anchored in the text of an Answer, to the Passage a claim was drawn from: the Location it cites, and a quote from the Passage that is checked against the text at that Location. Copied into a Note, it stays a Citation; Question context shows it as a plain reference to its Document. It names its Document as the Document is named now, so a rename shows in every Citation of it; the name it was made with is kept, never rewritten, and shown only when the Document can't be found.
+A reference, anchored in the text of an Answer, to the Passage a claim was drawn from: the Location it cites, and a quote from the Passage that is checked against the text at that Location. Copied into a Note, it stays a Citation; Question context shows it as a plain reference to its Document. It names its Document as the Document is named now, so a rename shows in every Citation of it, on screen, in exports and in what a model or an outside agent reads; the name it was made with is kept, never rewritten, and shown only when the Document can't be found. A History comparison keeps each Checkpoint's own names.
 _Avoid_: source, reference
 
 **Calculated figure**:
@@ -153,6 +153,10 @@ _Avoid_: cluster, category, collection, group
 The view of all of a User's Documents, organised into Folders with visible Tags. Users can search names or Tags, manage Folders, and organise Documents automatically or correct them by hand; manual choices are kept.
 _Avoid_: archive, index, vault
 
+**Peek**:
+A quick preview of a Document beside the list, opened with Space on its row in the sidebar or the Library, without opening the viewer: its first page, slide or sheet drawn small, its facts, and its Tags and Folder, which can be changed there. ↑ and ↓ move it to the next or previous Document; Space or Esc closes it, and Enter opens the Document in the viewer. It floats over the window and never replaces the Mind.
+_Avoid_: Quick Look, preview (a preview Tab is another thing), hover card
+
 ### Tools
 
 **Tool**:
@@ -188,7 +192,7 @@ A script that comes with a Skill, which an Answer can run on the User's computer
 _Avoid_: tool script, code execution
 
 **Outside agent**:
-An AI agent the User runs themselves, such as Claude Code or Codex, connected to IncarnaMind so it can search and read the Folders the User shares with it and cite them with Citations IncarnaMind checks. The User connects each one in Settings, with its own Folders (none until chosen), its own consent and a list of every call it made; disconnecting it stops it at once, and Local mode pauses it. Where the agent reads Skills, connecting it also installs a Skill in the agent's own skills folder that tells it when to use IncarnaMind, and disconnecting removes it if the User hasn't changed it.
+An AI agent the User runs themselves, such as Claude Code or Codex, connected to IncarnaMind so it can search and read the Folders the User shares with it (or the Documents in no Folder at the time of each call) and cite them with Citations IncarnaMind checks. The User connects each one in Settings, with its own Folders (none until chosen), its own consent and a list of every call it made; disconnecting it stops it at once, and Local mode pauses it. Where the agent reads Skills, connecting it also installs a Skill in the agent's own skills folder that tells it when to use IncarnaMind, and disconnecting removes it if the User hasn't changed it.
 _Avoid_: harness, plugin, client, bot
 
 **Built-in Skill**:
@@ -198,7 +202,7 @@ _Avoid_: default Skill, system Skill
 ### Changes
 
 **Proposal**:
-A change to a Mind, made by the AI or brought in from another person's Word file, that waits for the User to accept or reject it. Until it is accepted it does not count as part of the Mind, and it is out of date once the text it changes has changed. Each Proposal is one change in one place (the words it removes and those it adds there, or a whole Block), accepted or rejected on its own; one request, such as an Edit with AI, can make several. The interface calls them changes: "3 changes from the assistant".
+A change to a Mind, made by the AI or brought in from another person's Word file, that waits for the User to accept or reject it. Until it is accepted it does not count as part of the Mind, though the assistant and exports show another person's as changes, with who made each, and it is out of date once the text it changes has changed. Each Proposal is one change in one place (the words it removes and those it adds there, or a whole Block), accepted or rejected on its own; one request, such as an Edit with AI, can make several. The interface calls them changes: "3 changes from the assistant".
 _Avoid_: suggestion, edit, draft, diff
 
 **AI text**:
@@ -220,7 +224,7 @@ _Avoid_: toast, snackbar, notification
 ### Checks
 
 **Citation check**:
-The test of whether a Citation's quote is found in the text at its Location. Its only failing result is quote not found.
+The test of whether a Citation's quote is found in the text at its Location, and of whether the words its sentence puts in quotation marks (at least 4 words, or 6 characters in Chinese or Japanese) are found in the text at the Locations the sentence cites. Its only failing result is quote not found.
 _Avoid_: validation, verification
 
 **Calculation check**:
@@ -232,7 +236,7 @@ A number in an Answer that is neither in a quote of its sentence's Citations nor
 _Avoid_: hallucinated number, unsupported (a claim check's result)
 
 **Quote not found**:
-The result of a Citation check when the Citation's quote is not in the text at its Location. It says nothing about whether the claim is true. "Not found" is used only for this.
+The result of a Citation check when the Citation's quote, or words its sentence puts in quotation marks, are not in the text at its Location. It says nothing about whether the claim is true. "Not found" is used only for this.
 _Avoid_: broken, invalid, failed
 
 **Unsupported**:
@@ -300,7 +304,7 @@ A folder the User has allowed an Answer or a Task to read, once. It is not a Lin
 _Avoid_: shared folder, workspace, permission
 
 **Output location**:
-The folder the User picks for the files IncarnaMind creates, such as exports and Documents a Task saves. IncarnaMind writes nowhere else without asking.
+The folder the files IncarnaMind creates go in, such as exports, Transcripts and Documents a Task saves. Until the User picks one, it is IncarnaMind in their Documents folder (Documents › IncarnaMind; in Chinese, 文稿 › IncarnaMind on a Mac and 文档 › IncarnaMind on Windows and Linux): the first save goes there without asking and says where. IncarnaMind writes nowhere else without asking: a Linked folder asks first, and if the default can't be made or written to, the save asks where instead.
 _Avoid_: export folder, downloads, save path
 
 **Workspace**:

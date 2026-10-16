@@ -297,7 +297,7 @@ export function CompareSheet({
             readiness={problem.readiness}
             testId="compare-sheet-not-ready"
             className="compare-sheet-problem"
-            setUpLabel={t("comparison.notReady")}
+            setUpLabel={t("question.setUp")}
             refused
           />
         ) : (

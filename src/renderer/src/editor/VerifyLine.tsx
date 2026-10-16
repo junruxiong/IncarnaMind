@@ -12,22 +12,26 @@ import { DocumentLineIcon, VerifyLineIcon } from "../components/lineIcons";
 import { MetaLine } from "../components/MetaLine";
 import { ProblemLine } from "../components/ProblemLine";
 import { ReadinessExplanation, readinessAction } from "../components/providers/ChatReadinessNotice";
+import { UnreadFilesLine } from "../components/UnreadFilesLine";
 import { buttonStyle } from "../components/ui";
 import { core } from "../core";
-import { type EstimateLine, estimateLine, joinMeta, runStopText } from "../cost";
+import { type EstimateLine, estimateLine, runStopText } from "../cost";
 import { useLanguage, useT } from "../i18n";
 import { enter } from "../motion";
 import { useAppStore } from "../store";
+import { useCheckUnread } from "../unreadFiles";
 import {
   checkClaims,
   dismissVerifyOutcome,
   findClaims,
-  openVerified,
+  openDocumentBeside,
   stopVerify,
   useVerify,
 } from "../verify";
-import { shownClaims } from "./claimChecks";
-import { useMindModel } from "./ModelChip";
+import { AnswerError } from "./AnswerView";
+import { coverageOf, sameCoverage, shownClaims } from "./claimChecks";
+import { useMindModel, useRunModel } from "./ModelChip";
+import { UncoveredLine } from "./UncoveredLine";
 
 /** What a Mind made by "Verify a document…" verifies, as it changes. */
 export function useVerification(doc: Y.Doc): Verification | null {
@@ -52,7 +56,7 @@ function claimMarks(editor: Editor, pages: Verification["pages"]) {
     if (claim.shown.state === "checking") checking++;
     else if (claim.shown.state !== "supported") needLook.push(claim.from);
   }
-  return { marked, checking, needLook };
+  return { marked, checking, needLook, coverage: coverageOf(shownClaims(editor.state)) };
 }
 
 /**
@@ -62,7 +66,8 @@ function claimMarks(editor: Editor, pages: Verification["pages"]) {
  * against this Folder's Documents? [Check 24 claims]" with the estimate on a
  * cloud model, "Checking 12 of 24…" with Stop, then "Checked 24 claims · 2
  * need a look", which moves to the next such claim and fades in once as the
- * run finishes; or why there is nothing to check.
+ * run finishes; or why there is nothing to check. Last on the line, the files
+ * the checks couldn't read, if any.
  */
 export function VerifyLine({
   editor,
@@ -83,6 +88,7 @@ export function VerifyLine({
   );
   const outcome = useVerify((state) => state.outcomes[mindId]);
   const openSettings = useAppStore((state) => state.openSettings);
+  const runModel = useRunModel(doc);
   const inFolder = useAppStore(
     (state) => (state.minds.find((each) => each.id === mindId)?.folderId ?? null) !== null,
   );
@@ -93,9 +99,11 @@ export function VerifyLine({
       b !== null &&
       a.marked === b.marked &&
       a.checking === b.checking &&
+      sameCoverage(a.coverage, b.coverage) &&
       a.needLook.length === b.needLook.length &&
       a.needLook.every((at, index) => at === b.needLook[index]),
   });
+  const unread = useCheckUnread(editor, doc);
   const claims = verification.claims;
   const total = claims?.length ?? 0;
   const asking = claims !== null && total > 0 && marks.marked === 0 && running === null;
@@ -140,7 +148,9 @@ export function VerifyLine({
     // The PDF beside it turns to the claim's page.
     const id: unknown = place.parent.attrs.id;
     const page = typeof id === "string" ? verification.pages[id] : undefined;
-    if (page !== undefined) openVerified(verification.documentId, page);
+    if (page !== undefined) {
+      openDocumentBeside(verification.documentId, { pageFrom: page, pageTo: page });
+    }
   };
 
   const stop = (
@@ -177,6 +187,15 @@ export function VerifyLine({
       <span key="p172" data-testid="verify-empty">
         {t(inFolder ? "verify.noDocuments.folder" : "verify.noDocuments.all")}
       </span>,
+      <button
+        key="add-files"
+        type="button"
+        data-testid="verify-add-files"
+        className={buttonStyle("secondary", "sm")}
+        onClick={() => void useAppStore.getState().pickDocuments()}
+      >
+        {t("checks.addFiles")}
+      </button>,
     ];
   } else if (claims === null) {
     state = [
@@ -211,7 +230,11 @@ export function VerifyLine({
         <VerifyLineIcon className="size-3.5 text-ink-secondary" />
         {t(total === 1 ? "verify.check.one" : "verify.check", { count: format(total) })}
       </button>,
-      estimate && <span data-testid="verify-estimate">{joinMeta(estimate.parts)}</span>,
+      ...(estimate?.parts ?? []).map((part) => (
+        <span key={part} data-testid="verify-estimate">
+          {part}
+        </span>
+      )),
     ];
   } else {
     const look = marks.needLook.length;
@@ -264,15 +287,25 @@ export function VerifyLine({
               data-testid="verify-from"
               className="mind-verify-from"
               title={t("verify.from.title", { name })}
-              onClick={() => openVerified(verification.documentId)}
+              onClick={() => openDocumentBeside(verification.documentId)}
             >
               <DocumentLineIcon kind="pdf" className="size-3.5 shrink-0" />
               <span className="min-w-0 truncate">{t("verify.from", { name })}</span>
             </button>,
             ...state,
           ]}
-        />
+        >
+          <UnreadFilesLine files={unread} testId="verify-unread" className="mind-unread" />
+        </MetaLine>
       </div>
+      {running === null && marks.marked > 0 && marks.coverage.mostlyUncovered && (
+        <UncoveredLine
+          className="mind-verify-problem"
+          onCheckAll={
+            marks.coverage.canWiden ? () => void checkClaims(mindId, doc, true) : undefined
+          }
+        />
+      )}
       {running === null && outcome?.kind === "not-ready" && (
         <ProblemLine
           testId="verify-problem"
@@ -293,7 +326,21 @@ export function VerifyLine({
           {t("checks.problem.local-mode")}
         </ProblemLine>
       )}
-      {running === null && (outcome?.kind === "failed" || outcome?.kind === "error") && (
+      {running === null && outcome?.kind === "failed" && (
+        // The Answer errors' own wordings: the company or model named, and what to do next.
+        <AnswerError
+          kind={outcome.error.kind}
+          modelId={runModel.modelId}
+          providerId={runModel.providerId}
+          resetsAt={outcome.error.resetsAt ?? null}
+          details={outcome.error.message}
+          onRetry={() =>
+            void (claims === null ? findClaims(mindId, doc) : checkClaims(mindId, doc))
+          }
+          onOpenSettings={openSettings}
+        />
+      )}
+      {running === null && outcome?.kind === "error" && (
         <ProblemLine
           testId="verify-problem"
           className="mind-verify-problem"
@@ -304,9 +351,7 @@ export function VerifyLine({
               void (claims === null ? findClaims(mindId, doc) : checkClaims(mindId, doc)),
           }}
         >
-          {outcome.kind === "failed"
-            ? t("verify.problem.failed", { message: outcome.error.message })
-            : t("verify.problem.error", { message: outcome.message })}
+          {t("verify.problem.error", { message: outcome.message })}
         </ProblemLine>
       )}
     </>

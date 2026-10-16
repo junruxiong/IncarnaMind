@@ -1,11 +1,12 @@
 import { getSchema, type JSONContent } from "@tiptap/core";
+import { CellSelection } from "@tiptap/pm/tables";
 import { parseHTML } from "linkedom";
 import { describe, expect, test } from "vitest";
-import { CITATION_NODE, FOOTNOTE_NODE } from "../../src/core/api";
+import { CHART_NODE, CITATION_NODE, FOOTNOTE_NODE } from "../../src/core/api";
 import {
   addFootnotes,
   citationsIn,
-  textWithSources,
+  copiedText,
   wordFootnoteHtml,
 } from "../../src/renderer/src/editor/copyNotes";
 import { noteExtensions } from "../../src/renderer/src/editor/noteSchema";
@@ -32,7 +33,7 @@ const fragmentOf = (...blocks: JSONContent[]) =>
 
 describe("copying Citations as text", () => {
   test("numbered markers in the text and a list of Sources after it", () => {
-    const copied = textWithSources(
+    const copied = copiedText(
       fragmentOf(paragraph(text("Spring tides"), cite(2)), paragraph(text("Neap tides"), cite(5))),
       schema,
       context,
@@ -44,7 +45,7 @@ describe("copying Citations as text", () => {
 
   test("in Chinese", () => {
     expect(
-      textWithSources(fragmentOf(paragraph(text("大潮"), cite(2))), schema, {
+      copiedText(fragmentOf(paragraph(text("大潮"), cite(2))), schema, {
         ...context,
         language: "zh-CN",
       }),
@@ -52,14 +53,14 @@ describe("copying Citations as text", () => {
   });
 
   test("a copy with no Citation is left to the editor's own text", () => {
-    expect(textWithSources(fragmentOf(paragraph(text("Plain"))), schema, context)).toBe("");
+    expect(copiedText(fragmentOf(paragraph(text("Plain"))), schema, context)).toBe("");
   });
 
   test("a Citation in a footnote the User wrote takes no number", () => {
     const footnote: JSONContent = { type: FOOTNOTE_NODE, content: [text("See "), cite(9)] };
     const fragment = fragmentOf(paragraph(text("Claim"), footnote, cite(2)));
     expect(citationsIn(fragment)).toHaveLength(1);
-    expect(textWithSources(fragment, schema, context)).toContain("Claim^[See [Tides, p. 9]][1]");
+    expect(copiedText(fragment, schema, context)).toContain("Claim^[See [Tides, p. 9]][1]");
   });
 });
 
@@ -99,3 +100,190 @@ describe("copying Citations as Word footnotes", () => {
     expect(html).not.toContain("<!--");
   });
 });
+
+const cell = (type: "tableCell" | "tableHeader", ...blocks: JSONContent[]): JSONContent => ({
+  type,
+  attrs: { colspan: 1, rowspan: 1 },
+  content: blocks,
+});
+const row = (...cells: JSONContent[]): JSONContent => ({ type: "tableRow", content: cells });
+const table = (id: string, ...rows: JSONContent[]): JSONContent => ({
+  type: "table",
+  attrs: { id },
+  content: rows,
+});
+const words = (value: string) => (value === "" ? paragraph() : paragraph(text(value)));
+const tableWithHeadings = (id: string, ...rows: string[][]): JSONContent =>
+  table(
+    id,
+    ...rows.map((each, index) =>
+      row(...each.map((value) => cell(index === 0 ? "tableHeader" : "tableCell", words(value)))),
+    ),
+  );
+
+describe("copying a table as text", () => {
+  const sales = tableWithHeadings("t1", ["Year", "Revenue"], ["2023", "289.4"], ["2024", "301.2"]);
+
+  test("is one row to a line, its cells apart by tabs, and the table once", () => {
+    const copied = copiedText(fragmentOf(sales), schema, context);
+    expect(copied).toBe("Year\tRevenue\n2023\t289.4\n2024\t301.2");
+  });
+
+  test("keeps the text before it and after it", () => {
+    const copied = copiedText(
+      fragmentOf(paragraph(text("Revenue by year")), sales, paragraph(text("In $ million"))),
+      schema,
+      context,
+    );
+    expect(copied).toBe(
+      "Revenue by year\n\nYear\tRevenue\n2023\t289.4\n2024\t301.2\n\nIn $ million",
+    );
+  });
+
+  test("in Chinese", () => {
+    const copied = copiedText(
+      fragmentOf(
+        tableWithHeadings("t1", ["指标", "2024年", "2025年"], ["营业收入", "1.5亿元", "1.8亿元"]),
+      ),
+      schema,
+      { ...context, language: "zh-CN" },
+    );
+    expect(copied).toBe("指标\t2024年\t2025年\n营业收入\t1.5亿元\t1.8亿元");
+  });
+
+  test("keeps an empty cell in its column", () => {
+    const copied = copiedText(
+      fragmentOf(tableWithHeadings("t1", ["A", "B", "C"], ["1", "", "3"], ["", "", ""])),
+      schema,
+      context,
+    );
+    expect(copied).toBe("A\tB\tC\n1\t\t3\n\t\t");
+  });
+
+  test("keeps a cell's line breaks inside the cell, as spaces", () => {
+    const broken = table(
+      "t1",
+      row(cell("tableHeader", words("Note")), cell("tableHeader", words("Value"))),
+      row(
+        cell(
+          "tableCell",
+          paragraph(text("First line"), { type: "hardBreak" }, text("second line")),
+        ),
+        cell("tableCell", words("1")),
+      ),
+      row(
+        cell("tableCell", words("Two"), words("paragraphs")),
+        cell("tableCell", paragraph(text("a\tb"))),
+      ),
+    );
+    const copied = copiedText(fragmentOf(broken), schema, context);
+    expect(copied).toBe("Note\tValue\nFirst line second line\t1\nTwo paragraphs\ta b");
+    expect(copied.split("\n")).toHaveLength(3);
+  });
+
+  test("copies cells selected in a table as their rows, apart by tabs", () => {
+    const doc = schema.nodeFromJSON({
+      type: "doc",
+      content: [
+        tableWithHeadings(
+          "t1",
+          ["Year", "Revenue", "Cost"],
+          ["2023", "289.4", "100"],
+          ["2024", "301.2", "110"],
+        ),
+      ],
+    });
+    const cellAt = (words: string) => {
+      let found = -1;
+      doc.descendants((node, pos) => {
+        if (found < 0 && node.type.name === "tableCell" && node.textContent === words) found = pos;
+        return found < 0;
+      });
+      return found;
+    };
+    const selected = CellSelection.create(doc, cellAt("2023"), cellAt("301.2")).content();
+    expect(selected.content.firstChild?.type.name).toBe("tableRow");
+    expect(copiedText(selected.content, schema, context)).toBe("2023\t289.4\n2024\t301.2");
+  });
+
+  test("leaves the slots a merged cell covers empty, so the columns keep their places", () => {
+    const merged = table(
+      "t1",
+      row(
+        cell("tableHeader", words("Region")),
+        cell("tableHeader", words("2024")),
+        cell("tableHeader", words("2025")),
+      ),
+      row(
+        { ...cell("tableCell", words("North")), attrs: { colspan: 1, rowspan: 2 } },
+        { ...cell("tableCell", words("Total")), attrs: { colspan: 2, rowspan: 1 } },
+      ),
+      row(cell("tableCell", words("7")), cell("tableCell", words("8"))),
+    );
+    expect(copiedText(fragmentOf(merged), schema, context)).toBe(
+      "Region\t2024\t2025\nNorth\tTotal\t\n\t7\t8",
+    );
+  });
+
+  test("writes a Citation in a cell as its marker, with the Sources after the table", () => {
+    const cited = table(
+      "t1",
+      row(cell("tableHeader", words("Year")), cell("tableHeader", words("Revenue"))),
+      row(cell("tableCell", words("2023")), cell("tableCell", paragraph(text("289.4"), cite(2)))),
+    );
+    expect(copiedText(fragmentOf(cited), schema, context)).toBe(
+      "Year\tRevenue\n2023\t289.4[1]\n\nSources\n[1] Tides, p. 2",
+    );
+  });
+
+  test("leaves out a chart of the table when the table is in the copy, so the table is not there twice", () => {
+    const copied = copiedText(fragmentOf(sales, chartOf("t1")), schema, context);
+    expect(copied).toBe("Year\tRevenue\n2023\t289.4\n2024\t301.2");
+  });
+
+  test("keeps a chart of another table, which the copy doesn't hold, and a chart on its own", () => {
+    expect(copiedText(fragmentOf(sales, chartOf("t2")), schema, context)).toBe(
+      "Year\tRevenue\n2023\t289.4\n2024\t301.2\n\nRevenue\nYear\tRevenue\n2023\t289.4",
+    );
+    expect(copiedText(fragmentOf(chartOf("t1")), schema, context)).toBe("");
+  });
+
+  test("a copy with no table and no Citation is left to the editor's own text", () => {
+    expect(copiedText(fragmentOf(paragraph(text("Plain")), chartOf("t1")), schema, context)).toBe(
+      "",
+    );
+  });
+});
+
+function chartOf(tableId: string): JSONContent {
+  return {
+    type: CHART_NODE,
+    attrs: {
+      kind: "bar",
+      title: "Revenue",
+      drawn: null,
+      source: { kind: "table", blockId: tableId },
+      data: {
+        labelHeading: "Year",
+        series: ["Revenue"],
+        rows: [
+          {
+            label: "2023",
+            values: [
+              {
+                shown: "289.4",
+                value: 289.4,
+                unit: null,
+                scale: null,
+                citation: null,
+                from: { kind: "cell", row: 1, column: 1 },
+              },
+            ],
+          },
+        ],
+        cutFrom: null,
+        cutRows: [],
+      },
+    },
+  };
+}

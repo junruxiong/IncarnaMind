@@ -4,8 +4,8 @@
  * Answer can call has this one shape, whichever provider it comes from:
  * Document search, `cite` and `calculate` from the Documents, `use_skill`,
  * `read_skill_file` and `run_skill_script` from the Skills,
- * `find_sources` from Find sources, and each Connector's own Tools from
- * the Connectors. A later capability (Files, a
+ * `find_sources` from Find sources, the Minds' Tools (#202), and each
+ * Connector's own Tools from the Connectors. A later capability (Files, a
  * Browser, a Shell…) is a new provider, not a change to the Answer loop.
  *
  * Each Tool declares its Effects (CONTEXT.md): what a call with a given
@@ -21,8 +21,8 @@
  */
 import type { Effect, ReadThirdPartySource } from "../api";
 
-/** v1's providers, Find sources and web search; later ones add their kind here. */
-export type ToolProviderKind = "documents" | "skills" | "connector" | "sources" | "web";
+/** v1's providers, Find sources, web search and the Minds; later ones add their kind here. */
+export type ToolProviderKind = "documents" | "skills" | "connector" | "sources" | "web" | "minds";
 
 /** Which provider a Tool comes from: for its Tool-call card, its approvals and the log. */
 export interface ToolProviderInfo {
@@ -82,6 +82,14 @@ export interface Tool {
   shownInput?(input: Record<string, unknown>): Record<string, unknown>;
   /** Calls it; resolves with what the model reads, rejects when it fails (the model is told why). */
   call(input: Record<string, unknown>, context: ToolCallContext): Promise<string>;
+  /**
+   * Hears a call's input while the model is still writing it, as the JSON text
+   * so far, before `call`: for a Tool that shows its work as it goes, such as
+   * the Minds' Tools writing a Mind's new text (#202). Only for a Tool whose
+   * Effects run without asking; a provider that doesn't stream Tool inputs
+   * never calls it.
+   */
+  streamInput?(toolCallId: string, text: string): void;
 }
 
 /** Hands out Tools to a Run: the User's Connectors now; later Files, a Browser, a Shell. */
@@ -111,6 +119,14 @@ export const SOURCE_TOOLS = { find: "find_sources" } as const;
 /** The names of web search's Tools (#128). */
 export const WEB_TOOLS = { search: "search_web", read: "read_web_page" } as const;
 
+/** The names of the Minds' Tools, offered to an Answer in the assistant (#202). */
+export const MIND_TOOLS = {
+  read: "read_mind",
+  edit: "edit_mind",
+  add: "add_to_mind",
+  create: "create_mind",
+} as const;
+
 /**
  * IncarnaMind's own Tools' names. They are reserved: a Tool from outside
  * IncarnaMind (a Connector's) never takes one (see `offeredTools`).
@@ -120,6 +136,7 @@ export const RESERVED_TOOL_NAMES: ReadonlySet<string> = new Set<string>([
   ...Object.values(SKILL_TOOLS),
   ...Object.values(SOURCE_TOOLS),
   ...Object.values(WEB_TOOLS),
+  ...Object.values(MIND_TOOLS),
 ]);
 
 /** A Tool from outside IncarnaMind: a Connector's. Every other provider is IncarnaMind's own. */

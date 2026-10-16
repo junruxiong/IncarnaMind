@@ -1,8 +1,10 @@
 import { type ReactNode, useId } from "react";
 import type { ChatProvider, ChatProviderKind } from "../../../../core/api";
-import { keyProviderGroups } from "../../../../core/providers/catalog/providers";
+import type { Language } from "../../../../core/language";
+import { keyProviderGroups, kindOfCatalogId } from "../../../../core/providers/catalog/providers";
 import { CHATGPT_SERVICE } from "../../../../core/providers/chatgpt/service";
-import { useT } from "../../i18n";
+import { useLanguage, useT } from "../../i18n";
+import type { KeyRefusal } from "../../keyRefusals";
 import { OnThisComputer } from "../OnThisComputer";
 import {
   buttonStyle,
@@ -22,6 +24,7 @@ import {
 import { KeepLocalChoice } from "./KeepLocalChoice";
 import { type Ollama, OllamaProgress, ollamaDescription } from "./OllamaCard";
 import { ProviderForm, ProviderSendsLine } from "./ProviderForm";
+import { keyProviderName } from "./shared";
 
 const SHORT_NAMES: Partial<
   Record<ChatProviderKind, "providers.kind.short.qwen" | "providers.kind.short.deepseek">
@@ -48,6 +51,8 @@ interface ChatProviderChoicesProps {
   includeChatGpt?: boolean;
   /** Settings also lists the best-effort providers, under "More providers"; first run lists only first-class ones. */
   withMoreProviders?: boolean;
+  /** A key refused by its provider, whose field the API key's form opens on (#765). */
+  refused?: KeyRefusal | null;
 }
 
 /**
@@ -58,13 +63,15 @@ interface ChatProviderChoicesProps {
 export function ChatProviderChoices(props: ChatProviderChoicesProps) {
   const { choice, onChoose, ollama, providers, onSaved } = props;
   const { ollamaActionInRow = false, includeChatGpt = false, withMoreProviders = false } = props;
+  const { refused = null } = props;
   const t = useT();
+  const language = useLanguage();
   const name = useId();
 
   const apiKeyBody = withMoreProviders
     ? t("providers.choice.apiKey.body")
     : t("providers.choice.apiKey.firstRun.body", {
-        providers: providerList(keyProviderGroups().main, t),
+        providers: providerList(keyProviderGroups().main, t, language),
       });
 
   const radio = (value: ChatProviderChoice) => (
@@ -124,6 +131,7 @@ export function ChatProviderChoices(props: ChatProviderChoicesProps) {
             providers={providers}
             onSaved={onSaved}
             withMoreProviders={withMoreProviders}
+            refused={refused}
           />
         }
       >
@@ -192,7 +200,9 @@ function Choice({
   );
 }
 
-/** Ollama's button: use it (pulling the recommended model), or look for it again. */
+const OLLAMA_DOWNLOAD_URL = "https://ollama.com/download";
+
+/** Ollama's button: use it (pulling the recommended model), or get it and look for it again. */
 export function OllamaAction({ ollama, large = false }: { ollama: Ollama; large?: boolean }) {
   const t = useT();
   const { status, pulling } = ollama;
@@ -211,22 +221,40 @@ export function OllamaAction({ ollama, large = false }: { ollama: Ollama; large?
     );
   }
   return (
-    <button
-      type="button"
-      disabled={status === null}
-      onClick={() => void ollama.detect()}
-      className={buttonStyle("secondary", size)}
-    >
-      {t("providers.ollama.checkAgain")}
-    </button>
+    <span className="flex flex-wrap items-center gap-2">
+      {status !== null && (
+        // The main process opens it in the User's browser.
+        <button
+          type="button"
+          data-testid="ollama-get"
+          onClick={() => window.open(OLLAMA_DOWNLOAD_URL, "_blank", "noreferrer")}
+          className={buttonStyle("primary", size)}
+        >
+          {t("providers.ollama.get")} ↗
+        </button>
+      )}
+      <button
+        type="button"
+        data-testid="ollama-check-again"
+        disabled={status === null}
+        onClick={() => void ollama.detect()}
+        className={buttonStyle("secondary", size)}
+      >
+        {t("providers.ollama.checkAgain")}
+      </button>
+    </span>
   );
 }
 
 /** The providers by their short names, in the language's list: "Anthropic, OpenAI or Google". */
-function providerList(kinds: readonly ChatProviderKind[], t: ReturnType<typeof useT>): string {
-  const names = kinds.map((kind) => {
-    const short = SHORT_NAMES[kind];
-    return t(short ?? `providers.kind.${kind}`);
+function providerList(
+  ids: readonly string[],
+  t: ReturnType<typeof useT>,
+  language: Language,
+): string {
+  const names = ids.map((id) => {
+    const short = SHORT_NAMES[kindOfCatalogId(id)];
+    return short ? t(short) : keyProviderName(id, t, language);
   });
   const last = names.pop();
   if (last === undefined) return "";

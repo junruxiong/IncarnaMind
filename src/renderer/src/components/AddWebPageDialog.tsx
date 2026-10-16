@@ -1,11 +1,15 @@
 import { type FormEvent, useEffect, useId, useState } from "react";
 import { typedAddresses } from "../../../shared/webAddresses";
 import { useT } from "../i18n";
+import { useAppStore } from "../store";
 import { canTryAgain, reasonKey, useWebPages, type WebPageProblem } from "../webPages";
 import { ProblemLine } from "./ProblemLine";
 import { TypingTextarea } from "./TypingTextarea";
 import {
   buttonClass,
+  checkBoxClass,
+  checkHintClass,
+  checkRowClass,
   dialogActionsClass,
   dialogBodyClass,
   dialogClass,
@@ -18,9 +22,10 @@ import {
 import { useModal } from "./useModal";
 
 /**
- * "Add a web page…": the addresses, one per line. Once added, it shows how
- * each goes: fetching, added, or why it couldn't be, with "Try again", and
- * closes by itself once every page is added. ⌘↵ (Ctrl+Enter) adds, Esc closes.
+ * "Add a web page…": the addresses, one per line, and whether to keep the
+ * pages as they look, ticked as Settings say. Once added, it shows how each
+ * goes: fetching, added, or why it couldn't be, with "Try again", and closes
+ * by itself once every page is added. ⌘↵ (Ctrl+Enter) adds, Esc closes.
  */
 export function AddWebPageDialog() {
   const t = useT();
@@ -29,9 +34,11 @@ export function AddWebPageDialog() {
   const fetching = useWebPages((state) => state.fetching);
   const problems = useWebPages((state) => state.problems);
   const close = useWebPages((state) => state.closeDialog);
+  const keepByDefault = useAppStore((state) => state.settings?.user.keepWebPageLook === true);
   const dialog = useModal(open);
   const [text, setText] = useState("");
   const [tried, setTried] = useState(false);
+  const [keepLook, setKeepLook] = useState(keepByDefault);
   const id = useId();
   const lines = typedAddresses(text);
   const invalid = lines.find((line) => line.address === null);
@@ -52,11 +59,15 @@ export function AddWebPageDialog() {
     if (open && allAdded) finish();
   }, [open, allAdded]);
 
+  useEffect(() => {
+    if (open) setKeepLook(keepByDefault);
+  }, [open, keepByDefault]);
+
   const submit = (event?: FormEvent) => {
     event?.preventDefault();
     setTried(true);
     if (invalid || addresses.length === 0) return;
-    void useWebPages.getState().submitDialog(addresses);
+    void useWebPages.getState().submitDialog(addresses, keepLook);
   };
 
   return (
@@ -73,7 +84,9 @@ export function AddWebPageDialog() {
         </h2>
         {submitted.length === 0 ? (
           <>
-            <p className={dialogTextClass}>{t("webPages.add.note")}</p>
+            <p className={dialogTextClass}>
+              {t(keepLook ? "webPages.add.note.keepLook" : "webPages.add.note")}
+            </p>
             <div className="flex flex-col gap-1.5">
               <label htmlFor={`${id}-addresses`} className={fieldLabelClass}>
                 {t("webPages.add.label")}
@@ -98,6 +111,22 @@ export function AddWebPageDialog() {
                   {t("webPages.add.invalid", { line: invalid.line })}
                 </ProblemLine>
               )}
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className={checkRowClass}>
+                <input
+                  type="checkbox"
+                  data-testid="add-web-page-keep-look"
+                  checked={keepLook}
+                  aria-describedby={`${id}-keep-look`}
+                  onChange={(event) => setKeepLook(event.target.checked)}
+                  className={checkBoxClass}
+                />
+                {t("webPages.add.keepLook")}
+              </label>
+              <p id={`${id}-keep-look`} className={checkHintClass}>
+                {t("webPages.keepLook.body")}
+              </p>
             </div>
           </>
         ) : (

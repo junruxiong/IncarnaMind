@@ -1,6 +1,6 @@
 import { APICallError, RetryError, UnsupportedFunctionalityError } from "ai";
 import type { ProviderError, ProviderErrorKind } from "../api";
-import { ConsentDeclinedError } from "../errors";
+import { ConsentDeclinedError, TranslatableError } from "../errors";
 import { OAuthTokenError } from "../oauth";
 import { ChatGptPlanError, ChatGptSignInRequiredError } from "./chatgpt/errors";
 import { JevRequestError } from "./jev";
@@ -15,6 +15,13 @@ export class LocalModelError extends Error {
   ) {
     super(message);
     this.name = "LocalModelError";
+  }
+}
+
+export class OllamaNotRunningError extends TranslatableError {
+  override name = "OllamaNotRunningError";
+  constructor() {
+    super({ key: "error.provider.ollamaNotRunning" });
   }
 }
 
@@ -124,6 +131,13 @@ export function classifyProviderError(error: unknown): ProviderError {
 
   if (cause instanceof ConsentDeclinedError) return { kind: "consent-declined", message };
   if (cause instanceof LocalModelError) return { kind: cause.kind, message };
+  if (cause instanceof OllamaNotRunningError) {
+    return {
+      kind: "ollama-not-running",
+      message,
+      ...(cause.wording && { wording: cause.wording }),
+    };
+  }
   if (contextOverflow(cause)) return { kind: "too-long", message };
   if (cause instanceof JevRequestError) return { kind: cause.kind, message };
   if (cause instanceof ChatGptSignInRequiredError) return { kind: "not-signed-in", message };
@@ -153,5 +167,9 @@ export function classifyProviderError(error: unknown): ProviderError {
       return { kind: "network", message };
     }
   }
-  return { kind: "unknown", message };
+  return {
+    kind: "unknown",
+    message,
+    ...(cause instanceof TranslatableError && cause.wording && { wording: cause.wording }),
+  };
 }

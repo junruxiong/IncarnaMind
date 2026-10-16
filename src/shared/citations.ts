@@ -12,6 +12,8 @@ import type {
   CitationCheckReason,
   Document,
   KeptCitationText,
+  QuotedPiece,
+  QuotedWords,
 } from "../core/api";
 import { displayName } from "./documentNames";
 import type { MessageKey } from "./i18n";
@@ -71,7 +73,7 @@ export function citedTextKept(
 }
 
 /** What a Citation needs of a live Document: whether it is there, and the name to show for it. */
-type LiveDocument = Pick<Document, "id" | "contentHash"> &
+export type LiveDocument = Pick<Document, "id" | "contentHash"> &
   Partial<Pick<Document, "name" | "title">>;
 
 /** A list of Documents by ID and by content: the first in the list with each. */
@@ -223,26 +225,28 @@ export function citationReference(attributes: Partial<CitationAttributes>): stri
   return location ? `[${name}, ${englishLocation(location)}]` : `[${name}]`;
 }
 
+/** How a Citation's place reads in a sentence, and the parameters its message takes. */
+function placeOf(
+  attributes: Partial<CitationAttributes>,
+  t: Translate,
+): { where: "document" | "transcript" | "in" | "on"; params: Record<string, string> } {
+  const location = citationLocation(attributes);
+  if (location === null) {
+    return { where: "document", params: { document: attributes.documentName ?? "" } };
+  }
+  const params = { location: formatLocation(location, t) };
+  // A Transcript's is labelled so, so its check isn't taken for a page's.
+  if (isTranscriptLocation(location)) return { where: "transcript", params };
+  return { where: readsIn(location) ? "in" : "on", params };
+}
+
 /** The message key and parameters of a Citation's badge, its Location worded with `t`. */
 export function badgeMessage(
   state: CitationState,
   attributes: Partial<CitationAttributes>,
   t: Translate,
 ): { key: MessageKey; params?: Record<string, string> } {
-  const location = citationLocation(attributes);
-  const document = attributes.documentName ?? "";
-  const params: Record<string, string> = location
-    ? { location: formatLocation(location, t) }
-    : { document };
-  // A Transcript's is labelled so, so its check isn't taken for a page's.
-  const where =
-    location === null
-      ? "document"
-      : isTranscriptLocation(location)
-        ? "transcript"
-        : readsIn(location)
-          ? "in"
-          : "on";
+  const { where, params } = placeOf(attributes, t);
   switch (state.check) {
     case "checking":
       return { key: "citation.badge.checking" };
@@ -257,4 +261,38 @@ export function badgeMessage(
     case "contradicted":
       return { key: "citation.badge.contradicted" };
   }
+}
+
+/** The label over the Document's words nearest the words an Answer put in quotation marks (#483). */
+export function closestWordsMessage(
+  attributes: Partial<CitationAttributes>,
+  t: Translate,
+): { key: MessageKey; params: Record<string, string> } {
+  const { where, params } = placeOf(attributes, t);
+  return { key: `citation.closest.${where}`, params };
+}
+
+const isPieces = (value: unknown): value is QuotedPiece[] =>
+  Array.isArray(value) &&
+  value.every(
+    (piece) =>
+      typeof piece === "object" &&
+      piece !== null &&
+      typeof (piece as QuotedPiece).text === "string" &&
+      typeof (piece as QuotedPiece).found === "boolean",
+  );
+
+/** The quoted words a Citation stores (#483), checked; null if it has none. */
+export function parseQuotedWords(value: unknown): QuotedWords | null {
+  if (typeof value === "string") {
+    try {
+      return parseQuotedWords(JSON.parse(value));
+    } catch {
+      return null;
+    }
+  }
+  if (typeof value !== "object" || value === null) return null;
+  const { answer, closest } = value as Record<string, unknown>;
+  if (!isPieces(answer) || answer.length === 0) return null;
+  return { answer, closest: isPieces(closest) && closest.length > 0 ? closest : null };
 }

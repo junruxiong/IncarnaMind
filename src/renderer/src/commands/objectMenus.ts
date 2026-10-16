@@ -2,7 +2,7 @@ import { registerMenu } from "./menus";
 
 // Later features add their items with registerMenu: Move to… (#229, #212), Add to note (#201), History (#300), Tag colour and merge (#205).
 
-/** Export as… the last format (⇧⌘E), each other format, then the options sheet (#100). */
+/** Export as… the last format (⇧⌘E), each other format, the options sheet (#100), then the AI use statement (#739). */
 const EXPORTS = [
   "mind.export",
   "mind.exportAs.docx",
@@ -11,6 +11,7 @@ const EXPORTS = [
   "mind.exportAs.html",
   "mind.exportAs.markdown",
   "mind.exportOptions",
+  "mind.aiUseStatement",
 ] as const;
 
 registerMenu("mind", [
@@ -19,6 +20,8 @@ registerMenu("mind", [
   "mind.outline",
   ...EXPORTS,
   "mind.history",
+  "mind.checkAll",
+  "mind.checkContradictions",
   "mind.citationStyle",
   "skill.fromMind",
   "mind.moveTo",
@@ -30,12 +33,15 @@ registerMenu("mind", [
 registerMenu("document", [
   "document.open",
   "document.openTab",
+  "document.peek",
+  "document.openMind",
   "document.ask",
   "document.startMind",
   "document.moveTo",
   "folder.newWith",
   "document.tags",
   "document.retry",
+  "document.unlock",
   "document.fetchAgain",
   "document.countAsEvidence",
   "document.leaveOutOfEvidence",
@@ -46,6 +52,7 @@ registerMenu("document", [
   "document.openLivePage",
   "document.copyAddress",
   "file.info",
+  "document.forgetPassword",
   "document.delete",
 ]);
 
@@ -78,7 +85,22 @@ registerMenu("linkedFolder", [
 registerMenu("deleted", ["deleted.restore", "deleted.deletePermanently"]);
 
 // A tab's menu is its Mind's, then the tab's own.
-registerMenu("tab", ["mind.outline", ...EXPORTS, "mind.history", "mind.moveTo", "mind.delete"], 0);
+registerMenu(
+  "tab",
+  [
+    "mind.outline",
+    "mind.look.word",
+    "mind.look.plain",
+    "mind.openOriginal",
+    ...EXPORTS,
+    "mind.history",
+    "mind.checkAll",
+    "mind.checkContradictions",
+    "mind.moveTo",
+    "mind.delete",
+  ],
+  0,
+);
 registerMenu(
   "tab",
   [
@@ -105,6 +127,7 @@ registerMenu("chart", [
   "chart.kind.line",
   "chart.kind.pie",
   "chart.kind.scatter",
+  "chart.switch",
   "chart.update",
   "chart.rename",
   "block.delete",

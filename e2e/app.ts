@@ -1,4 +1,6 @@
 import { mkdtemp, rm } from "node:fs/promises";
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
@@ -15,11 +17,14 @@ import {
   type AssistantPlace,
   CHOSEN_PROVIDER_FLOWS,
   type CoreBridge,
+  type ExportFormat,
   type SaveChatProviderInput,
 } from "../src/core/api";
 import type { FakeTranscriberOptions } from "../src/core/transcription/fake";
 import type { DocumentLocation } from "../src/shared/documentViewer";
 import type { TestHooks } from "../src/shared/testHooks";
+import { type FakeOpenAIServer, signInAt } from "../tests/helpers/fakeOpenAI";
+import { homeEnv } from "../tests/helpers/home";
 
 const appDir = resolve(__dirname, "..");
 
@@ -37,7 +42,7 @@ export interface RunningApp {
 
 export interface LaunchOptions {
   /**
-   * Every chat model is the scripted one in `src/main/fakeChatModel.ts`, so
+   * Every chat model is the scripted one in `src/main/fakeChat/`, so
    * Questions are answered with no network or keys. Needs a test build
    * (`npm run test:smoke` makes one).
    */
@@ -46,6 +51,11 @@ export interface LaunchOptions {
    * Where Ollama is: a local server standing in for it (the app's `OLLAMA_HOST`).
    */
   ollama?: string;
+  /**
+   * Set, the app really asks the Ollama at `ollama` whether it runs, and opening Ollama's app
+   * only counts (`ollamaAppOpened`). Without it, the scripted chat model's Ollama always runs.
+   */
+  ollamaApp?: "installed" | "missing";
   /**
    * Where crash reports go: a test build offers them only with this, and
    * ignores the DSN a real build is made with. Point it at a local server.
@@ -109,6 +119,8 @@ export interface LaunchOptions {
    * build honours it.
    */
   web?: number;
+  /** How long keeping a page as it looks may take, in milliseconds. A test build honours it. */
+  lookLimit?: number;
   /**
    * What the fake text recognition model reads on each scanned page (#397):
    * a JSON file of a `FakeScanScript`. Without, it reads nothing on them.
@@ -119,6 +131,11 @@ export interface LaunchOptions {
    * started with `startScriptedTask`. Needs a test build.
    */
   scriptedTasks?: boolean;
+  /**
+   * How long after a new version of a Document contradiction watch checks its
+   * Folder's Minds (#112), instead of 30 seconds. Needs a test build.
+   */
+  contradictionWatchDelayMs?: number;
 }
 
 /**
@@ -137,6 +154,9 @@ export interface LaunchOptions {
  */
 export const WINDOW_SIZE = { width: 1600, height: 660 };
 
+/** The default Output location in Chinese, as the system names Documents: 文稿 on macOS, 文档 elsewhere. */
+export const DEFAULT_FOLDER_ZH = `${process.platform === "darwin" ? "文稿" : "文档"} › IncarnaMind`;
+
 /**
  * The key that, held with an arrow, moves the caret a word at a time, and with
  * Shift too selects by word: Option on macOS, Ctrl on Windows and Linux.
@@ -153,6 +173,7 @@ export async function launchApp(
   {
     fakeChat = false,
     ollama,
+    ollamaApp,
     sentryDsn,
     usageData,
     examples = false,
@@ -167,7 +188,9 @@ export async function launchApp(
     transcriber,
     scans,
     web,
+    lookLimit,
     scriptedTasks = false,
+    contradictionWatchDelayMs,
   }: LaunchOptions = {},
 ): Promise<RunningApp> {
   const env: Record<string, string> = {};
@@ -177,6 +200,8 @@ export async function launchApp(
   delete env.ELECTRON_RUN_AS_NODE;
   delete env.OLLAMA_HOST;
   if (ollama) env.OLLAMA_HOST = ollama;
+  delete env.INCARNAMIND_TEST_OLLAMA_APP;
+  if (ollamaApp) env.INCARNAMIND_TEST_OLLAMA_APP = ollamaApp;
   delete env.INCARNAMIND_TEST_SENTRY_DSN;
   delete env.INCARNAMIND_TEST_EXAMPLES;
   delete env.INCARNAMIND_TEST_POSTHOG_KEY;
@@ -191,7 +216,9 @@ export async function launchApp(
   delete env.INCARNAMIND_TEST_TRANSCRIBER_OPTIONS;
   delete env.INCARNAMIND_TEST_SCANS;
   delete env.INCARNAMIND_TEST_WEB;
+  delete env.INCARNAMIND_TEST_LOOK_LIMIT;
   delete env.INCARNAMIND_TEST_TASKS;
+  delete env.INCARNAMIND_TEST_CONTRADICTION_DELAY_MS;
   // A test never uses the ChatGPT sign-in an agent's shell may point at for checks by hand.
   delete env.INCARNAMIND_CHATGPT_PROFILE;
   env.INCARNAMIND_TEST_AUDIO = "fake";
@@ -204,7 +231,7 @@ export async function launchApp(
     if (usageData.testerBuild) env.INCARNAMIND_TEST_TESTER_BUILD = "1";
   }
   const appHome = home ?? (await mkdtemp(join(tmpdir(), "incarnamind-home-")));
-  env.HOME = appHome;
+  Object.assign(env, homeEnv(appHome));
   if (referenceLookup) env.INCARNAMIND_TEST_REFERENCE_LOOKUP = referenceLookup;
   if (sources) env.INCARNAMIND_TEST_SOURCES = sources;
   if (connectorDirectory) env.INCARNAMIND_TEST_CONNECTOR_DIRECTORY = connectorDirectory;
@@ -213,7 +240,11 @@ export async function launchApp(
   if (chatGpt) env.INCARNAMIND_TEST_CHATGPT = chatGpt;
   if (scans) env.INCARNAMIND_TEST_SCANS = scans;
   if (web) env.INCARNAMIND_TEST_WEB = String(web);
+  if (lookLimit) env.INCARNAMIND_TEST_LOOK_LIMIT = String(lookLimit);
   if (scriptedTasks) env.INCARNAMIND_TEST_TASKS = "1";
+  if (contradictionWatchDelayMs !== undefined) {
+    env.INCARNAMIND_TEST_CONTRADICTION_DELAY_MS = String(contradictionWatchDelayMs);
+  }
   env.INCARNAMIND_DATA_DIR = dataDir;
   env.INCARNAMIND_TEST_HOOKS = "1";
   if (fakeChat) env.INCARNAMIND_FAKE_CHAT = "1";
@@ -273,17 +304,29 @@ export const flushUsageData = (app: ElectronApplication) =>
 
 /**
  * Stands in for the system's notifications: each one shown is recorded
- * instead (`notificationsShown`). Notifications made before this aren't.
+ * instead (`notificationsShown`, `clickNotification`). Notifications made
+ * before this aren't.
  */
 export const recordNotifications = (app: ElectronApplication) =>
   app.evaluate(({ Notification }) => {
     const shown: { title: string; body: string }[] = [];
-    (globalThis as { notificationsShown?: typeof shown }).notificationsShown = shown;
+    const held: Electron.Notification[] = [];
+    Object.assign(globalThis, { notificationsShown: shown, notificationsHeld: held });
     Notification.isSupported = () => true;
     Notification.prototype.show = function show(this: Electron.Notification) {
       shown.push({ title: this.title, body: this.body });
+      held.push(this);
     };
   });
+
+/** Clicks the notification recorded `index`th, as the User would in the system's list. */
+export const clickNotification = (app: ElectronApplication, index: number) =>
+  app.evaluate((_electron, at) => {
+    const held = (globalThis as { notificationsHeld?: Electron.Notification[] }).notificationsHeld;
+    const notification = held?.[at];
+    if (!notification) throw new Error(`No notification ${at} was shown.`);
+    notification.emit("click");
+  }, index);
 
 export const notificationsShown = (app: ElectronApplication) =>
   app.evaluate(
@@ -291,6 +334,13 @@ export const notificationsShown = (app: ElectronApplication) =>
       (globalThis as { notificationsShown?: { title: string; body: string }[] })
         .notificationsShown ?? [],
   );
+
+/** Force-quits the app as a crash would: its process killed, nothing saved on the way out. */
+export async function forceQuit(app: ElectronApplication): Promise<void> {
+  const exited = new Promise<void>((resolve) => app.process().once("exit", () => resolve()));
+  app.process().kill("SIGKILL");
+  await exited;
+}
 
 /** Chooses the Edit menu's Undo or Redo, as the application menu has it now. */
 export const clickEditItem = (app: ElectronApplication, id: "edit.undo" | "edit.redo") =>
@@ -342,25 +392,54 @@ export async function editFolderInLibrary(window: Page, name: string): Promise<L
 }
 
 /**
- * Shows the sidebar's Source locations view: each Linked folder with its
+ * Shows the sidebar's Folders on disk view: each Linked folder with its
  * folders as on disk, and "Other Documents".
  */
 export async function showSourceLocations(window: Page): Promise<void> {
   const button = window.getByTestId("browse-views").getByRole("button", {
-    name: "Source locations",
+    name: "Folders on disk",
   });
   await button.click();
   await expect(button).toHaveAttribute("aria-pressed", "true");
 }
 
+/** Shows the sidebar's Folders view: the User's Folders with their Minds and Documents. */
+export async function showFolders(window: Page): Promise<void> {
+  const button = window
+    .getByTestId("browse-views")
+    .getByRole("button", { name: "Folders", exact: true });
+  await button.click();
+  await expect(button).toHaveAttribute("aria-pressed", "true");
+}
+
 /**
- * On a fresh data folder the first-run chat setup covers the window: choose
- * "set up later". The choice is remembered, so later launches don't show it.
+ * First run asks for no model (#103): the setup shows in the composer at the first own Question,
+ * so there is nothing to dismiss. Kept so a spec says where the old dialog used to be.
  */
 export async function dismissChatSetup(window: Page): Promise<void> {
-  const setup = window.getByTestId("chat-setup");
-  await setup.getByTestId("chat-setup-later").click();
-  await setup.waitFor({ state: "hidden" });
+  await expect(window.getByTestId("chat-setup")).toHaveCount(0);
+}
+
+/**
+ * An Ollama server that lists models, for the model chip's menu, after
+ * `delayMs` as a slow provider does. It answers nothing else.
+ */
+export async function ollamaListing(models: string[], { delayMs = 0 }: { delayMs?: number } = {}) {
+  const server: Server = createServer((request, response) => {
+    request.resume();
+    if (request.url === "/api/tags") {
+      setTimeout(() => {
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(JSON.stringify({ models: models.map((name) => ({ name, model: name })) }));
+      }, delayMs);
+      return;
+    }
+    response.writeHead(404);
+    response.end();
+  });
+  await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+  const { port } = server.address() as AddressInfo;
+  return { server, url: `http://127.0.0.1:${port}` };
 }
 
 /**
@@ -509,6 +588,15 @@ export async function tabMenu(window: Page): Promise<Locator> {
   return menu;
 }
 
+/** "Import a Word file…" from the "+" menu; the test answers the system's open dialog first. */
+export async function importWordFromMenu(window: Page): Promise<Locator> {
+  await window.getByTestId("plus-menu").click();
+  await window.getByTestId("plus-import-word").click();
+  const dialog = window.getByTestId("word-import-dialog");
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
 /** Export options…, from the tab's menu; resolves once the sheet shows `title`. */
 export async function openOptions(window: Page, title: string): Promise<void> {
   await pointAndClick(window, (await tabMenu(window)).getByTestId("mind.exportOptions"));
@@ -584,6 +672,36 @@ export async function interceptOpenExternal(app: ElectronApplication) {
 /** The URLs the intercepted system browser was asked to open. */
 export function urlsOpened(app: ElectronApplication) {
   return app.evaluate(() => (globalThis as { urlsOpened?: string[] }).urlsOpened ?? []);
+}
+
+export function ollamaAppOpened(app: ElectronApplication) {
+  return app.evaluate(
+    () =>
+      (globalThis as { incarnamindOllamaApp?: { opened: number } }).incarnamindOllamaApp?.opened ??
+      0,
+  );
+}
+
+/**
+ * Continue with ChatGPT in Settings → Models, as the User does, against the
+ * local stand-in for OpenAI the app was launched with (`chatGpt`); then closes
+ * Settings. With no chat model before, the plan's first model becomes the default.
+ */
+export async function signInWithChatGpt(
+  app: ElectronApplication,
+  window: Page,
+  openai: FakeOpenAIServer,
+): Promise<void> {
+  await interceptOpenExternal(app);
+  const plan = (await openSettings(window, "models")).getByTestId("chatgpt-settings");
+  await acceptPlainTextKeys(window, plan);
+  await plan.getByTestId("chatgpt-continue").click();
+  await expect.poll(() => urlsOpened(app)).toHaveLength(1);
+  const [authorize] = await urlsOpened(app);
+  expect((await signInAt(openai, authorize ?? "")).status).toBe(200);
+  await window.getByTestId("chatgpt-welcome-ok").click();
+  await expect(plan.getByTestId("chatgpt-in-use")).toBeVisible();
+  await closeSettings(window);
 }
 
 /**
@@ -741,6 +859,23 @@ export async function setWindowSize(
   await resizeContent(app, window, width, height);
 }
 
+const SIZE_WAIT_MS = 30_000;
+const REPORT_WAIT_MS = 2_000;
+
+async function within<T>(answer: Promise<T>, otherwise: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<T>((settle) => {
+    timer = setTimeout(() => settle(otherwise), REPORT_WAIT_MS);
+  });
+  try {
+    return await Promise.race([answer, late]);
+  } catch {
+    return otherwise;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
  * Asks for the content size once, waits until the page has it, then until the
  * page has drawn a frame at it. Chromium sends a page its next size only after
@@ -770,14 +905,31 @@ async function resizeContent(
           const page = await look();
           return [page.width, waitForHeight ? page.height : height];
         },
-        { message },
+        // A loaded runner can take far longer than expect's 5 s to draw the frame the size waits
+        // for (#432); this still ends early enough in the test's 60 s to report what it saw.
+        { message, timeout: SIZE_WAIT_MS },
       )
       .toEqual([width, height]);
   } catch (error) {
-    const content = await browserWindow.evaluate((win) => win.getContentSize());
-    const page = await look();
+    // A window that has stopped answering must not take the report down with it.
+    const [content, page, drawing] = await Promise.all([
+      within(
+        browserWindow.evaluate((win) => win.getContentSize().join(" × ")),
+        "unknown (the app's main process isn't answering)",
+      ),
+      within(
+        look().then((size) => `${size.width} × ${size.height}`),
+        "unknown (the page isn't answering)",
+      ),
+      within(
+        window.evaluate(
+          () => new Promise<string>((drawn) => requestAnimationFrame(() => drawn("drawing"))),
+        ),
+        "not drawing frames",
+      ),
+    ]);
     throw new Error(
-      `${message ?? "The window did not reach its size"}: asked ${width} × ${height}; the window's content is ${content.join(" × ")}, the page ${page.width} × ${page.height}.`,
+      `${message ?? "The window did not reach its size"}: asked ${width} × ${height}; the window's content is ${content}; the page is ${page}, ${drawing}.`,
       { cause: error },
     );
   }
@@ -786,6 +938,20 @@ async function resizeContent(
       new Promise((drawn) => requestAnimationFrame(() => requestAnimationFrame(() => drawn(null)))),
   );
 }
+
+/** What the page copies goes to `copied` instead of the machine's clipboard. */
+export async function catchCopies(window: Page): Promise<void> {
+  await window.evaluate(() => {
+    const caught = globalThis as unknown as { copied?: string };
+    navigator.clipboard.writeText = async (text: string) => {
+      caught.copied = text;
+    };
+  });
+}
+
+/** What the page last copied since `catchCopies`. */
+export const copied = (window: Page) =>
+  window.evaluate(() => (globalThis as unknown as { copied?: string }).copied ?? "");
 
 /** Switches the interface's language, as Settings does. */
 export function setLanguage(window: Page, language: "en" | "zh-CN"): Promise<unknown> {
@@ -937,6 +1103,49 @@ export async function widthOf(locator: Locator): Promise<number> {
   const box = await locator.boundingBox();
   if (!box) throw new Error("The element isn't visible.");
   return box.width;
+}
+
+/**
+ * By geometry, for each part after the first of a line of parts joined by
+ * dots (#684): its dot shows only where the part before it is on the same
+ * line, and then sits between the two. So no line starts or ends with a dot.
+ * A part draws its dot as a `.meta-dot` or, as a flex item of the line, in a
+ * `::before` that is out in the gap before it; a `::before` in the part's own
+ * text counts as shown, and not between.
+ */
+export async function dotsOf(line: Locator) {
+  return line.evaluate((element) => {
+    const row = element.getBoundingClientRect();
+    const parts: Element[] = [];
+    const collect = (parent: Element) => {
+      for (const child of parent.children) {
+        if (getComputedStyle(child).display === "contents") collect(child);
+        else if (child.tagName !== "UL") parts.push(child);
+      }
+    };
+    collect(element);
+    return parts.slice(1).map((part, index) => {
+      const before = parts[index]?.getBoundingClientRect();
+      const here = part.getBoundingClientRect();
+      const dot = part.querySelector(":scope > .meta-dot")?.getBoundingClientRect();
+      const pseudo = getComputedStyle(part, "::before");
+      const inText = !dot && pseudo.content !== "none" && pseudo.position !== "absolute";
+      const glyphCentre = dot
+        ? dot.left + dot.width / 2
+        : inText
+          ? here.left + 1
+          : here.left - Number.parseFloat(pseudo.width) / 2;
+      return {
+        sameLine: before !== undefined && Math.abs(before.top - here.top) < 2,
+        shown: inText || glyphCentre > row.left + 4,
+        between:
+          !inText &&
+          before !== undefined &&
+          glyphCentre >= before.right - 1 &&
+          glyphCentre <= here.left + 1,
+      };
+    });
+  });
 }
 
 /**
@@ -1204,6 +1413,60 @@ export async function tabTo(window: Page, target: Locator, max = 40): Promise<vo
     await window.keyboard.press(key);
   }
   await expect(target).toBeFocused();
+}
+
+/**
+ * Whether the focused control shows DESIGN.md's ring: a solid 2px accent outline, its own or,
+ * for the main button of a sidebar row, its row's.
+ */
+export const focusRingShows = (window: Page) =>
+  window.evaluate(() => {
+    const element = document.activeElement as HTMLElement | null;
+    if (!element) return false;
+    const probe = document.createElement("span");
+    probe.style.color = "var(--color-accent)";
+    document.body.append(probe);
+    const accent = getComputedStyle(probe).color;
+    probe.remove();
+    const rings = (holder: Element | null) => {
+      if (!holder) return false;
+      const style = getComputedStyle(holder);
+      return (
+        style.outlineStyle === "solid" &&
+        Number.parseFloat(style.outlineWidth) >= 2 &&
+        style.outlineColor === accent
+      );
+    };
+    return (
+      element.matches(":focus-visible") &&
+      (rings(element) || (element.matches(".row-main") && rings(element.closest(".group"))))
+    );
+  });
+
+/**
+ * Types a name through an input method: the composition is open, its Enter
+ * (the one that picks a candidate) changes nothing, and the next Enter saves.
+ */
+export async function typeWithInputMethod(
+  window: Page,
+  field: Locator,
+  name: string,
+): Promise<void> {
+  const session = await window.context().newCDPSession(window);
+  try {
+    await session.send("Input.imeSetComposition", {
+      text: "xinming",
+      selectionStart: 7,
+      selectionEnd: 7,
+    });
+    await field.dispatchEvent("keydown", { key: "Enter", isComposing: true, bubbles: true });
+    await expect(field).toBeVisible();
+    await session.send("Input.insertText", { text: name });
+    await expect(field).toHaveValue(name);
+  } finally {
+    await session.detach();
+  }
+  await window.keyboard.press("Enter");
 }
 
 /** Sets the sidebar's width, as dragging its edge does (165 is the narrowest), and waits for it. */
@@ -1483,4 +1746,24 @@ export async function leaveText(window: Page): Promise<void> {
   await window.mouse.move(box.x + box.width / 2, box.y + box.height - 8, { steps: 8 });
   await window.mouse.down();
   await window.mouse.up();
+}
+
+/**
+ * Exports the Mind in the shown tab from Export's menu: in `format`, or in the
+ * one it lists first, the last one used.
+ */
+export async function exportFromMenu(window: Page, format?: ExportFormat): Promise<void> {
+  await pointAndClick(window, window.getByTestId("export-mind"));
+  const menu = window.getByTestId("export-menu");
+  await expect(menu).toBeVisible();
+  if (!format) {
+    await pointAndClick(window, menu.getByRole("menuitem").first());
+    return;
+  }
+  const item = window.getByTestId(`export-as-${format}`);
+  if ((await menu.getByTestId(`export-as-${format}`).count()) === 0) {
+    await pointAndClick(window, menu.getByTestId("export-more"));
+    await expect(window.getByTestId("export-more-menu")).toBeVisible();
+  }
+  await pointAndClick(window, item);
 }

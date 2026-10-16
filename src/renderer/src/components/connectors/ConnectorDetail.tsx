@@ -14,10 +14,11 @@ import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
 import { CheckLineIcon, ChevronLeftLineIcon, PencilLineIcon, TrashLineIcon } from "../lineIcons";
+import { ProblemMark } from "../ProblemLine";
 import { buttonStyle, errorTextClass, iconButtonClass, primaryButtonClass } from "../ui";
 import { ConnectorForm } from "./ConnectorForm";
 import { ConnectorTile } from "./ConnectorTile";
-import { ConnectorTools } from "./ConnectorTools";
+import { ConnectorTools, ReviewedTools } from "./ConnectorTools";
 import { commandLine } from "./commandLine";
 import { ClientForm, RemoteSignIn } from "./RemoteSignIn";
 
@@ -211,6 +212,7 @@ export function ConnectorDetail({
       </div>
       {error && (
         <p role="alert" className={errorTextClass}>
+          <ProblemMark />
           {error}
         </p>
       )}
@@ -250,6 +252,8 @@ export function ConnectorDetail({
         <h5 className={sectionHeadClass}>{t("connectors.directory.what")}</h5>
         {connector?.state === "ready" && connector.tools ? (
           <ConnectorTools connectorId={connector.id} tools={connector.tools} policies={policies} />
+        ) : entry?.tools ? (
+          <ReviewedTools tools={entry.tools} />
         ) : (
           <p className={sectionTextClass}>{t("connectors.directory.what.before")}</p>
         )}
@@ -369,7 +373,10 @@ function ErrorNotice({ error, onRetry }: { error: ConnectorError; onRetry(): voi
       data-error-kind={error.kind}
       className="mt-1 flex flex-col gap-1.5 text-[13px] leading-5 text-ink"
     >
-      <p className="break-words">{message}</p>
+      <p className="break-words">
+        <ProblemMark />
+        {message}
+      </p>
       <div className="flex flex-wrap items-center gap-2 text-[12px]">
         {error.retrying ? (
           <span className="text-ink-meta">{t("connectors.restarting")}</span>

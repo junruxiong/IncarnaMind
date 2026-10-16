@@ -12,11 +12,21 @@
  * "supported" or "contradicted" without a quote that is found is not
  * checked. A refusal, a reply with no verdict, an empty one or a provider's
  * failure leaves the claim not checked, with the reason; never supported.
+ *
+ * A model measured to use `calculate` (ADR-0021) is offered it too, for a
+ * figure the sentence states that no Passage does but their numbers give
+ * (#707). It names the sentence's number as `stated`; IncarnaMind works the
+ * figure out and compares, not the model. A figure that disagrees contradicts
+ * the sentence; one that agrees settles that number only, and the model's
+ * verdict on the rest of the sentence still stands.
  */
+
 import { generateText } from "ai";
+import type { FigureContext } from "../../../shared/figures";
 import type {
   CheckedVersion,
   Citation,
+  ClaimCalculation,
   ClaimCheckFailure,
   ClaimCheckResult,
   LeftOutDocument,
@@ -24,15 +34,27 @@ import type {
   ThirdPartyReason,
 } from "../../api";
 import type { Evidence, EvidenceScope } from "../../documents/evidence";
-import { givesStructuredOutput } from "../../providers/capabilities";
+import type { Language } from "../../language";
+import { calculates, givesStructuredOutput } from "../../providers/capabilities";
 import type { PreparedChatModel } from "../../providers/chat";
+import {
+  answerLanguage,
+  type CalculationSession,
+  createCalculationSession,
+  documentFigureContext,
+  givenList,
+  whole,
+} from "../calculations";
 import { type AnswerDocuments, createCitationSession } from "../citations";
 import {
   type AnswerEngine,
   type AnswerTools,
   answerTemperature,
+  type CiteOptions,
   type DocumentLanguage,
 } from "../engine";
+import { agreesWith, statedFigure } from "./calculated";
+import { nearestLine } from "./nearest";
 import {
   CONFIRM_INSTRUCTIONS,
   checkInstructions,
@@ -40,6 +62,7 @@ import {
   confirmPrompt,
   EVIDENCE_INSTRUCTIONS,
   evidencePrompt,
+  NEAREST_INSTRUCTIONS,
   type ReadVerdict,
   readEvidence,
   readJudgement,
@@ -48,6 +71,8 @@ import {
 } from "./prompt";
 
 export interface ClaimCheckDependencies {
+  /** The interface language: what a check's sentence is written in. */
+  language(): Language;
   engine: AnswerEngine;
   evidence: Pick<Evidence, "search">;
   documents: Pick<AnswerDocuments, "citationSource" | "pageTexts" | "documentDate"> & {
@@ -85,6 +110,14 @@ function failureOf(error: ProviderError): { reason: ClaimCheckFailure; detail: s
   }
 }
 
+/** A claim check's failure that the run's other claims share: waited out, or it stops the run. */
+export function runFailureOf(result: ClaimCheckResult): ProviderError | null {
+  if (result.verdict !== "not-checked") return null;
+  const { reason } = result;
+  if (reason !== "rate-limit" && reason !== "cost-cap" && reason !== "plan-limit") return null;
+  return { kind: reason, message: result.detail ?? reason };
+}
+
 export function createClaimCheck(deps: ClaimCheckDependencies) {
   return async function checkClaim(request: ClaimCheckRequest): Promise<ClaimCheckResult> {
     const { scope, signal } = request;
@@ -111,6 +144,15 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       documentDate: (documentId) => deps.documents.documentDate(documentId),
     };
     const session = createCitationSession(scoped, { onRecord: () => undefined });
+    const { model } = request;
+    const calculating = model.support === "tools" && calculates(model.capabilities);
+    const figures = createCalculationSession({
+      documents: scoped,
+      quotes: session.quotes,
+      language: answerLanguage(request.claim),
+    });
+    /** The sentence's number each figure is for, as the model named it, by marker. */
+    const stated = new Map<number, string>();
     const tools: AnswerTools = {
       get documentCount() {
         return session.tools.documentCount;
@@ -122,6 +164,18 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       hasRecord: (marker) => session.tools.hasRecord?.(marker) ?? false,
       unfoundQuotes: () => session.tools.unfoundQuotes?.() ?? [],
       correctQuote: (marker, quote) => session.tools.correctQuote?.(marker, quote) ?? false,
+      ...(calculating && {
+        calculate(given: readonly unknown[], options?: CiteOptions) {
+          for (const each of given) {
+            const fields =
+              typeof each === "object" && each !== null ? (each as Record<string, unknown>) : {};
+            const marker = whole(fields.marker);
+            if (marker !== null && typeof fields.stated === "string" && fields.stated.trim() !== "")
+              stated.set(marker, fields.stated.trim());
+          }
+          return figures.calculate(givenList(given), options);
+        },
+      }),
     };
 
     const facts = () => ({
@@ -143,10 +197,10 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
     let reply = "";
     let failed: ProviderError | null = null;
     let finished = false;
-    const { model } = request;
     for await (const event of deps.engine.generate({
-      instructions: (mode, options) => checkInstructions(mode, options?.passages),
-      messages: [{ role: "user", content: claimPrompt(request) }],
+      instructions: (mode, options) =>
+        checkInstructions(mode, deps.language(), options?.passages, calculating),
+      messages: [{ role: "user", content: claimPrompt({ ...request, language: deps.language() }) }],
       question: request.claim,
       model: model.model,
       documents: tools,
@@ -171,28 +225,106 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       const { reason, detail } = failureOf(failed);
       return notChecked(reason, detail);
     }
-    if (!finished || reply.trim() === "") return notChecked("empty");
-    const verdict = readVerdict(reply);
-    if (!verdict) return notChecked(readsAsRefusal(reply) ? "refused" : "malformed");
-    if (verdict.verdict === "unsupported") {
-      return { verdict: "unsupported", evidence: null, says: null, ...facts() };
+    const worked = calculated(request.claim, figures, stated, (citation) =>
+      documentFigureContext(
+        scoped.pageTexts(citation.documentId, citation.contentHash, null, null),
+      ),
+    );
+    // A figure that disagrees contradicts the sentence. One that agrees settles only that
+    // number: the model's verdict still stands on the rest of the sentence.
+    if (worked && !worked.calculation.agrees) {
+      return {
+        verdict: "contradicted",
+        evidence: worked.evidence,
+        says: null,
+        calculation: worked.calculation,
+        ...facts(),
+      };
     }
+    const byCalculation: ClaimCheckResult | null = worked && {
+      verdict: "supported",
+      evidence: worked.evidence,
+      says: null,
+      calculation: worked.calculation,
+      ...facts(),
+    };
+    if (!finished || reply.trim() === "") return byCalculation ?? notChecked("empty");
+    const verdict = readVerdict(reply);
+    if (!verdict) {
+      return byCalculation ?? notChecked(readsAsRefusal(reply) ? "refused" : "malformed");
+    }
+    if (byCalculation && verdict.verdict !== "contradicted") return byCalculation;
+    /** Unsupported, with the nearest line when it states another value for the same thing (#770). */
+    const unsupported = async (): Promise<ClaimCheckResult> => {
+      const nearest = await nearestDifferent(request, session, signal);
+      if (signal.aborted) return notChecked("stopped");
+      return {
+        verdict: "unsupported",
+        evidence: nearest,
+        says: null,
+        calculation: null,
+        ...facts(),
+      };
+    };
     session.check();
+    if (verdict.verdict === "unsupported") return unsupported();
     const evidence =
       decidingCitation(session.finalCitation) ??
       (await askForEvidence(request, verdict, session, signal));
     if (signal.aborted) return notChecked("stopped");
-    if (!evidence) return notChecked("no-evidence");
+    if (!evidence) return byCalculation ?? notChecked("no-evidence");
     if (verdict.verdict === "contradicted") {
       const judged = await confirmContradiction(request, evidence, session, signal);
       if (signal.aborted) return notChecked("stopped");
-      if (judged === "neither") {
-        return { verdict: "unsupported", evidence: null, says: null, ...facts() };
+      // The Passage is about something else: what is nearest may still say something different.
+      if (judged === "neither") return byCalculation ?? unsupported();
+      if (judged === "same") {
+        return (
+          byCalculation ?? {
+            verdict: "supported",
+            evidence,
+            says: null,
+            calculation: null,
+            ...facts(),
+          }
+        );
       }
-      if (judged === "same") return { verdict: "supported", evidence, says: null, ...facts() };
     }
-    return { verdict: verdict.verdict, evidence, says: verdict.says, ...facts() };
+    return {
+      verdict: verdict.verdict,
+      evidence,
+      says: verdict.says,
+      calculation: worked?.calculation ?? null,
+      ...facts(),
+    };
   };
+}
+
+/**
+ * The figure the model worked out for a number of the sentence, once every
+ * input's quote is found, and whether the number agrees with it. Null when
+ * there is none to decide by: no figure recorded for a number the sentence
+ * has, an input's quote not found, or a result that can't be compared.
+ */
+function calculated(
+  claim: string,
+  figures: CalculationSession,
+  stated: ReadonlyMap<number, string>,
+  contextOf: (citation: Citation) => FigureContext,
+): { evidence: Citation; calculation: ClaimCalculation } | null {
+  figures.check();
+  for (const [marker, named] of stated) {
+    const figure = figures.figure(marker);
+    const first = figure?.inputs[0]?.citation;
+    if (!figure || !first) continue;
+    const number = statedFigure(claim, named, contextOf(first));
+    if (!number) continue;
+    if (figure.inputs.some((input) => input.citation.check !== "found")) continue;
+    const agrees = agreesWith(number, figure);
+    if (agrees === null) continue;
+    return { evidence: first, calculation: { figure, stated: number.chars, agrees } };
+  }
+  return null;
 }
 
 /**
@@ -247,13 +379,14 @@ async function confirmContradiction(
   evidence: Citation,
   session: ReturnType<typeof createCitationSession>,
   signal: AbortSignal,
+  instructions = CONFIRM_INSTRUCTIONS,
 ): Promise<"conflict" | "same" | "neither" | null> {
   const passage = session.shownPassages().find((each) => each.passageId === evidence.passageId);
   const { model } = request;
   try {
     const { text } = await generateText({
       model: model.model,
-      instructions: CONFIRM_INSTRUCTIONS,
+      instructions,
       prompt: confirmPrompt({
         claim: request.claim,
         quote: evidence.quote,
@@ -272,7 +405,44 @@ async function confirmContradiction(
   }
 }
 
+/**
+ * For a sentence found unsupported: the nearest line of what the Run read, as
+ * a Citation whose quote the check found, when judged alone it states another
+ * value for the very thing the sentence says (30 days of leave against the
+ * Document's 27). Never "contradicted": the verdict stays unsupported, and the
+ * card shows what the Document says. Null when nothing read is near enough, or
+ * the nearest line doesn't differ.
+ */
+async function nearestDifferent(
+  request: ClaimCheckRequest,
+  session: ReturnType<typeof createCitationSession>,
+  signal: AbortSignal,
+): Promise<Citation | null> {
+  const line = nearestLine(request.claim, session.shownPassages());
+  if (!line) return null;
+  session.tools.cite(
+    [{ marker: NEAREST_MARKER, passage: line.id, location: null, quote: line.text }],
+    {
+      structured: true,
+    },
+  );
+  session.check();
+  const citation = session.finalCitation(NEAREST_MARKER);
+  if (citation?.check !== "found") return null;
+  const judged = await confirmContradiction(
+    request,
+    citation,
+    session,
+    signal,
+    NEAREST_INSTRUCTIONS,
+  );
+  return judged === "conflict" ? citation : null;
+}
+
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
+/** The marker the nearest line is recorded under: apart from the model's and the evidence's. */
+const NEAREST_MARKER = 98;
 
 /** The marker the record asked for once more is given: apart from any the model gave. */
 const EVIDENCE_MARKER = 99;

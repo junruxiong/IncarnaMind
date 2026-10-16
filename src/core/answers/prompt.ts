@@ -1,13 +1,32 @@
 /** The instructions every Answer is written with. Kept short: every word is sent with every Question. */
-import type { CitationSupport, SkillFile } from "../api";
+import { CJK, nameKey } from "../../shared/text";
+import type { CitationSupport, SkillFile, UnreadFile, UnreadReason } from "../api";
+import { detectLanguage } from "../documents/textLanguage";
+import { LANGUAGE_NAMES, type Language } from "../language";
 import type { LoadedSkill, SkillSummary } from "../skills";
 
-/** A language a Question is clearly written in, judged by its script alone. */
-function scriptLanguage(question: string): string | null {
-  if (/[぀-ヿ]/.test(question)) return "Japanese";
-  if (/[가-힯]/.test(question)) return "Korean";
-  if (/[一-鿿]/.test(question)) return "Chinese";
-  return null;
+const CJK_CHARACTERS = new RegExp(`[${CJK}]`, "gu");
+const LATIN_WORDS = /\p{Script=Latin}{2,}/gu;
+const EXTENSION = /(?<=\S)\.[\p{L}\p{N}]{1,5}$/u;
+
+const countOf = (text: string, pattern: RegExp) => text.match(pattern)?.length ?? 0;
+
+// A Question is short, so two common words tell its language where a Document's sample needs three.
+const QUESTION_COMMON_WORDS = 2;
+
+function questionLanguage(question: string): string | null {
+  const cjk = countOf(question, CJK_CHARACTERS);
+  const words = countOf(question, LATIN_WORDS);
+  // A few CJK characters among Latin words are a name, as in "What does 合同条款 say?".
+  return cjk > 0 && cjk >= 2 * words
+    ? detectLanguage(question.replace(LATIN_WORDS, " "))
+    : detectLanguage(question.replace(CJK_CHARACTERS, " "), QUESTION_COMMON_WORDS);
+}
+
+function isWritten(question: string, documentNames: readonly string[]): boolean {
+  const keys = [question.trim(), question.trim().replace(EXTENSION, "")].map(nameKey);
+  if (documentNames.some((name) => keys.includes(nameKey(name)))) return false;
+  return countOf(question, LATIN_WORDS) + Math.floor(countOf(question, CJK_CHARACTERS) / 2) >= 2;
 }
 
 /** The system prompt for answering Questions, before anything about Documents. The same for every Question. */
@@ -24,14 +43,23 @@ export function answerInstructions(): string {
 }
 
 /**
- * The one line of the instructions that depends on the Question, for a
- * Question clearly written in one script. It goes last, after everything that
- * stays the same from one Question to the next, so a change of language
- * doesn't change the start of the prompt (a provider caches that: #343).
+ * The one line of the instructions that depends on the Question. It goes last,
+ * after everything that stays the same from one Question to the next, so a
+ * change of language doesn't change the start of the prompt (a provider
+ * caches that: #343).
  */
-export function languageInstruction(question: string): string {
-  const language = scriptLanguage(question);
-  return language ? `- The Question is written in ${language}, so answer in ${language}.` : "";
+export function languageInstruction(
+  question: string,
+  interfaceLanguage: Language,
+  documentNames: readonly string[],
+): string {
+  if (!isWritten(question, documentNames)) {
+    return `- The Question is only a name or a figure, which has no language: answer in ${LANGUAGE_NAMES[interfaceLanguage]}, even when the Question's characters and the Documents are in another language.`;
+  }
+  const language = questionLanguage(question);
+  return language
+    ? `- The Question is written in ${language}, so answer in ${language}.`
+    : "- Write the Answer in the language of the Question itself, not the Documents'.";
 }
 
 /**
@@ -76,6 +104,37 @@ export function webInstructions(offered: boolean): string {
     "You can also search the web with search_web when the Question asks for the web, and read the pages it finds with read_web_page, which saves each page as one of the User's Documents and gives its Passages.",
     "- Use only what read_web_page gives you from the web, and cite it with cite as any Passage. Never state or cite anything from search_web's list itself, or from a page you didn't read.",
     "- Read the few pages most likely to answer, one call each. When a page couldn't be saved, say so in one short line that names it, and use the others.",
+  ].join("\n");
+}
+
+/**
+ * The Minds' Tools, when offered (#202): the User's words decide whether the
+ * Answer answers, changes a Mind or makes one, and once it has changed one,
+ * the reply says what it did, never the new text.
+ */
+export function mindInstructions(offered: boolean): string {
+  if (!offered) return "";
+  return [
+    "You can also change the User's Minds (their notes) and make new ones, with read_mind, edit_mind, add_to_mind and create_mind. What you write into a Mind arrives there as changes the User accepts or rejects.",
+    '- The User\'s words decide. A Question (what, why, how, compare, find, explain…) is answered in your reply and changes no Mind. A request to write or change something in a Mind ("shorten the summary", "add a risks section", "fix the typos", "把这段改短") changes that Mind. A request for a new note ("make notes on these papers", "summarise this into a new Mind", "新建一篇笔记") makes one.',
+    "- The Mind is the one in <mind>, unless the User names another. If they ask to change a Mind but none is in <mind> and they name none, change nothing: say so, and that they can open one or ask for a new Mind.",
+    "- What you write into a Mind follows the same rules as your replies: the language of the Question, and quotation marks only around a Document's own words.",
+    "- Never write a Mind's new text in your reply. Once the Tools are done, reply in one or two sentences, with no Citation markers (the Mind holds them): which Mind you changed or made, what changed and why, and plainly anything you couldn't do. A card under your reply lists each Mind and how many changes wait there, so don't list them again or say that they wait. E.g. \"Shortened the summary in “Q3 review” from 320 to 150 words: dropped the repeated background and the third example; every Citation kept.\"",
+  ].join("\n");
+}
+
+/**
+ * A Question asked while the meeting the User is in records (#144): the live transcript goes
+ * with it (see ./liveTranscript), and is what Questions about the call are answered from.
+ */
+export function meetingInstructions(listening: boolean): string {
+  if (!listening) return "";
+  return [
+    "The User is in a meeting that is being recorded, and asks this during the call.",
+    "Before their Question, <live-transcript> holds what has been said so far, newest last: Passages of the meeting's Transcript, each at its time in the call.",
+    "- Answer what they ask about the call from it, and cite its lines as you cite any Passage, by its id.",
+    '- "Just now", "the last few minutes" and "what was just said" mean its newest Passages.',
+    "- Search the User's Documents too when the Question needs them, for instance to check what was said against them.",
   ].join("\n");
 }
 
@@ -161,6 +220,10 @@ const CALCULATIONS =
 const UNBROKEN_QUOTE =
   "- Copy each quote as one unbroken stretch of the Passage: don't leave words out with an ellipsis (... or …); quote less instead.";
 
+/** The Citation check also looks for the words an Answer puts in quotation marks (#483): a reader takes them for the Document's own. */
+const QUOTATION_MARKS =
+  "- Use quotation marks only around a Document's exact words, in its own language, the same as the record's quote, never a translation of them: that goes after the closing mark, as “…”（译：…）.";
+
 /** The most Document names the instructions list: the most recently added. */
 export const LISTED_DOCUMENTS = 50;
 
@@ -179,6 +242,41 @@ export interface ListedDocuments {
 function listedName(name: string): string {
   const line = name.replace(/\s+/g, " ").trim();
   return line.length > MAX_NAME_LENGTH ? `${line.slice(0, MAX_NAME_LENGTH - 1)}…` : line;
+}
+
+/** How many Documents `unreadDocumentsNote` names before "and N more". */
+const NAMED_UNREAD = 5;
+
+/** Why a Document couldn't be read, as the note tells the model. */
+const UNREAD_WORDS: Record<UnreadReason, (pages: readonly number[]) => string> = {
+  scan: () => "a scan with no text",
+  pages: (pages) => {
+    if (pages.length === 0) return "its scanned pages weren't read";
+    const shown = pages.slice(0, 10).join(", ") + (pages.length > 10 ? ", …" : "");
+    return pages.length === 1
+      ? `scanned page ${shown} wasn't read`
+      : `scanned pages ${shown} weren't read`;
+  },
+  password: () => "password-protected",
+  damaged: () => "damaged or couldn't be opened",
+  "too-large": () => "too large to open",
+  format: () => "a format IncarnaMind doesn't read",
+};
+
+/**
+ * A reminder after a search's Passages when Documents in the Search scope
+ * have no text to search, or pages with none (#485): no search finds
+ * anything in them, so a model that finds nothing says the answer may be
+ * there instead of taking another Document's figure for it. Names each, with
+ * why; empty when there are none.
+ */
+export function unreadDocumentsNote(unread: readonly UnreadFile[]): string {
+  if (unread.length === 0) return "";
+  const named = unread
+    .slice(0, NAMED_UNREAD)
+    .map((file) => `"${listedName(file.name)}" (${UNREAD_WORDS[file.reason](file.pages)})`);
+  const more = unread.length - named.length;
+  return `IncarnaMind couldn't read the text of some Documents in the search, so no Passage comes from that text: ${named.join(", ")}${more > 0 ? `, and ${more} more` : ""}. If the Passages don't clearly answer the Question and it may be about one of them, say in one sentence that it couldn't be read, so the answer may be there, rather than taking another Document's figure for it.`;
 }
 
 /**
@@ -229,6 +327,7 @@ export function documentInstructions(
         "Cite every claim you draw from a Passage:",
         `- Before writing the Answer, call cite once with a record for each quote you will use: a marker number (1, 2, …), ${RECORD}.`,
         UNBROKEN_QUOTE,
+        QUOTATION_MARKS,
         "- In the Answer, put the marker as [^1] right after each claim it supports, in a table's cell too. Use only markers you recorded, and add no list of sources.",
         "- Write nothing before your Tool calls: only the Answer, after them.",
         notCovered(true),
@@ -251,6 +350,7 @@ export function documentInstructions(
         "- answer: the Answer, in Markdown. Cite every claim you draw from a Passage by putting a marker such as [^1] right after it, in a table's cell too. Add no list of sources.",
         `- citations: one record for each marker: ${RECORD}.`,
         UNBROKEN_QUOTE,
+        QUOTATION_MARKS,
         ...(calculate ? [CALCULATIONS] : []),
         notCovered(true),
         readingRules(true),
@@ -375,6 +475,34 @@ export function quoteRetryPrompt(records: readonly QuoteToRetry[]): string {
       ].join("\n"),
     )
     .join("\n\n");
+}
+
+/**
+ * Once an Answer is written with no Citation though it read Passages, and no
+ * sentence of it matches one: the one request for its Citations (see
+ * ./unmarkedQuotes).
+ */
+export const CITE_RETRY_INSTRUCTIONS = [
+  "You add the Citations an Answer left out. The Answer was written from the Passages below, but none of its sentences says which Passage it comes from.",
+  "- For each sentence of the Answer that a Passage supports, give the sentence as the Answer has it, the Passage's id, and a quote from the Passage that supports it: one unbroken stretch, copied character for character, no longer than a sentence. Don't reword, translate, join sentences, change characters or leave words out.",
+  "- Leave out sentences that no Passage supports. Don't change the Answer.",
+  'Reply with one JSON object: {"citations": [{"sentence": "…", "passage": "P1", "quote": "…"}]}, or {"citations": []} if no Passage supports any sentence.',
+].join("\n");
+
+/** The one request for an Answer's Citations: the Answer, then the Passages it read. */
+export function citeRetryPrompt(
+  answer: string,
+  passages: readonly { id: string; text: string }[],
+): string {
+  return [
+    "<answer>",
+    answer,
+    "</answer>",
+    "",
+    ...passages.map((passage) =>
+      [`<passage id="${attribute(passage.id)}">`, passage.text, "</passage>"].join("\n"),
+    ),
+  ].join("\n");
 }
 
 /** The request to rewrite `question` into a search query, with the notebook text above it. */

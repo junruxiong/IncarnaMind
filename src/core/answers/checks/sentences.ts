@@ -6,16 +6,19 @@
  */
 import * as Y from "yjs";
 import { readClaimCheck } from "../../../shared/claimChecks";
+import { readProposalAttribute, readProposalRef } from "../../../shared/proposals";
 import { INLINE_NODE, sentenceSpans } from "../../../shared/sentences";
 import {
   BLOCK_ID_ATTRIBUTE,
   CITATION_NODE,
+  type CitedQuote,
   CLAIM_CHECK_MARK,
   type ClaimCheckAttributes,
   PROPOSAL_ATTRIBUTE,
   PROPOSAL_DELETE_MARK,
   PROPOSAL_INSERT_MARK,
-  type TextPlace,
+  type TextStretch,
+  type WaitingSentences,
 } from "../../api";
 import { layout, textBlocks } from "../../proposals/write";
 
@@ -39,12 +42,12 @@ export interface SelectedSentence {
   /** Its paragraph's text, for what its words refer to. */
   context: string;
   /** What its Citations quote. */
-  cited: { documentName: string; quote: string }[];
+  cited: CitedQuote[];
 }
 
 export type SelectedSentences =
-  | { ok: true; sentences: SelectedSentence[] }
-  | { ok: false; reason: "nothing" | "has-proposals" };
+  | { ok: true; sentences: SelectedSentence[]; waiting: WaitingSentences }
+  | { ok: false; reason: "nothing" };
 
 /** A Block's text as checks read it. */
 function textOf(element: Y.XmlElement): string {
@@ -61,85 +64,108 @@ function textOf(element: Y.XmlElement): string {
     .join("");
 }
 
-/** Whether `from`..`to` of a Block holds a change still waiting. */
-function holdsProposal(element: Y.XmlElement, from: number, to: number): boolean {
+function changesIn(element: Y.XmlElement, from: number, to: number): string[] {
+  const found = new Set<string>();
+  const add = (ref: { id: string } | null) => {
+    if (ref) found.add(ref.id);
+  };
   for (let at: unknown = element; at instanceof Y.XmlElement; at = at.parent) {
-    if (at.getAttribute(PROPOSAL_ATTRIBUTE)) return true;
+    add(readProposalAttribute(at.getAttribute(PROPOSAL_ATTRIBUTE)));
   }
   for (const { node, start, size } of layout(element)) {
     if (start + size <= from || start >= to) continue;
     if (node instanceof Y.XmlElement) {
-      if (node.getAttribute(PROPOSAL_ATTRIBUTE)) return true;
+      add(readProposalAttribute(node.getAttribute(PROPOSAL_ATTRIBUTE)));
       continue;
     }
     let offset = start;
     for (const run of node.toDelta() as Run[]) {
       const length = typeof run.insert === "string" ? run.insert.length : 1;
-      const overlaps = offset < to && offset + length > from;
-      if (
-        overlaps &&
-        run.attributes &&
-        (PROPOSAL_INSERT_MARK in run.attributes || PROPOSAL_DELETE_MARK in run.attributes)
-      ) {
-        return true;
+      if (offset < to && offset + length > from) {
+        add(readProposalRef(run.attributes?.[PROPOSAL_INSERT_MARK]));
+        add(readProposalRef(run.attributes?.[PROPOSAL_DELETE_MARK]));
       }
       offset += length;
     }
   }
-  return false;
+  return [...found];
 }
 
 /** What the Citations in `from`..`to` of a Block quote. */
-function citedIn(element: Y.XmlElement, from: number, to: number) {
+function citedIn(element: Y.XmlElement, from: number, to: number): CitedQuote[] {
   return layout(element).flatMap(({ node, start }) => {
     if (start < from || start >= to || !(node instanceof Y.XmlElement)) return [];
     if (node.nodeName !== CITATION_NODE) return [];
-    const { documentName, quote } = node.getAttributes() as Attributes;
+    const { documentId, documentName, contentHash, quote } = node.getAttributes() as Attributes;
     return typeof quote === "string" && quote !== ""
-      ? [{ documentName: typeof documentName === "string" ? documentName : "", quote }]
+      ? [
+          {
+            documentName: typeof documentName === "string" ? documentName : "",
+            quote,
+            ...(typeof documentId === "string" && { documentId }),
+            ...(typeof contentHash === "string" && { contentHash }),
+          },
+        ]
       : [];
   });
 }
 
 /**
- * The sentences from `from` to `to`, each whole: a sentence the selection
- * only touches is checked all the same. Headings aren't checked.
+ * The sentences each stretch touches, each whole and once: a sentence a
+ * stretch only touches is checked all the same. Headings aren't checked.
  */
 export function selectedSentences(
   blocks: Y.XmlFragment,
-  from: TextPlace,
-  to: TextPlace,
+  stretches: readonly TextStretch[],
 ): SelectedSentences {
   const all = textBlocks(blocks);
   const idOf = (element: Y.XmlElement) => element.getAttribute(BLOCK_ID_ATTRIBUTE);
-  const first = all.findIndex(({ element }) => idOf(element) === from.blockId);
-  const last = all.findIndex(({ element }) => idOf(element) === to.blockId);
-  if (first < 0 || last < first) return { ok: false, reason: "nothing" };
   const sentences: SelectedSentence[] = [];
-  for (const [index, { element, busy }] of all.slice(first, last + 1).entries()) {
-    if (busy || element.nodeName !== "paragraph") continue;
-    const blockId = idOf(element);
-    if (typeof blockId !== "string") continue;
-    const text = textOf(element);
-    const start = index === 0 ? from.offset : 0;
-    const end = index === last - first ? to.offset : text.length;
-    for (const span of sentenceSpans(text)) {
-      const touched =
-        start === end ? span.from <= start && start <= span.to : span.from < end && span.to > start;
-      if (!touched) continue;
-      if (holdsProposal(element, span.from, span.to)) return { ok: false, reason: "has-proposals" };
-      sentences.push({
-        element,
-        blockId,
-        from: span.from,
-        to: span.to,
-        text: text.slice(span.from, span.to),
-        context: text,
-        cited: citedIn(element, span.from, span.to),
-      });
+  const waiting: WaitingSentences = { sentences: [], changeIds: [] };
+  const seen = new Set<string>();
+  for (const { from, to } of stretches) {
+    const first = all.findIndex(({ element }) => idOf(element) === from.blockId);
+    const last = all.findIndex(({ element }) => idOf(element) === to.blockId);
+    if (first < 0 || last < first) continue;
+    for (const [index, { element, busy }] of all.slice(first, last + 1).entries()) {
+      if (busy || element.nodeName !== "paragraph") continue;
+      const blockId = idOf(element);
+      if (typeof blockId !== "string") continue;
+      const text = textOf(element);
+      const start = index === 0 ? from.offset : 0;
+      const end = index === last - first ? to.offset : text.length;
+      for (const span of sentenceSpans(text)) {
+        const touched =
+          start === end
+            ? span.from <= start && start <= span.to
+            : span.from < end && span.to > start;
+        const key = `${blockId}:${span.from}`;
+        if (!touched || seen.has(key)) continue;
+        seen.add(key);
+        const changes = changesIn(element, span.from, span.to);
+        if (changes.length > 0) {
+          waiting.sentences.push({
+            from: { blockId, offset: span.from },
+            to: { blockId, offset: span.to },
+          });
+          waiting.changeIds.push(...changes.filter((id) => !waiting.changeIds.includes(id)));
+          continue;
+        }
+        sentences.push({
+          element,
+          blockId,
+          from: span.from,
+          to: span.to,
+          text: text.slice(span.from, span.to),
+          context: text,
+          cited: citedIn(element, span.from, span.to),
+        });
+      }
     }
   }
-  return sentences.length > 0 ? { ok: true, sentences } : { ok: false, reason: "nothing" };
+  return sentences.length + waiting.sentences.length > 0
+    ? { ok: true, sentences, waiting }
+    : { ok: false, reason: "nothing" };
 }
 
 /** Every sentence of the Mind's paragraphs, in order, but those holding a change still waiting. */
@@ -149,7 +175,7 @@ export function everySentence(blocks: Y.XmlFragment): SelectedSentence[] {
     if (busy || element.nodeName !== "paragraph" || typeof blockId !== "string") return [];
     const text = textOf(element);
     return sentenceSpans(text).flatMap((span) =>
-      holdsProposal(element, span.from, span.to)
+      changesIn(element, span.from, span.to).length > 0
         ? []
         : [
             {
@@ -182,6 +208,33 @@ export function markSentence(
   }
 }
 
+/** Takes the marks of checks made by `action` off `from`..`to` of a Block's text; true if there were any. */
+export function unmarkSentence(
+  element: Y.XmlElement,
+  from: number,
+  to: number,
+  action: ClaimCheckAttributes["action"],
+): boolean {
+  let removed = false;
+  for (const { node, start } of layout(element)) {
+    if (!(node instanceof Y.XmlText)) continue;
+    let offset = start;
+    for (const run of node.toDelta() as Run[]) {
+      const length = typeof run.insert === "string" ? run.insert.length : 1;
+      const check = readClaimCheck(run.attributes?.[CLAIM_CHECK_MARK]);
+      if (check?.action === action && offset < to && offset + length > from) {
+        const begin = Math.max(from, offset);
+        node.format(begin - start, Math.min(to, offset + length) - begin, {
+          [CLAIM_CHECK_MARK]: null,
+        });
+        removed = true;
+      }
+      offset += length;
+    }
+  }
+  return removed;
+}
+
 /** Where a check's mark is: its Block and the stretch of text from its first marked character to its last. */
 export interface MarkedSentence {
   element: Y.XmlElement;
@@ -211,6 +264,19 @@ export function markedSentences(blocks: Y.XmlFragment): MarkedSentence[] {
     }
   }
   return [...found.values()];
+}
+
+/** Every check in the Mind with the whole sentences its marked text is in, as they read now. */
+export function checkedSentences(
+  blocks: Y.XmlFragment,
+): { check: ClaimCheckAttributes; sentence: string }[] {
+  return markedSentences(blocks).map(({ element, from, to, check }) => {
+    const text = textOf(element);
+    const touched = sentenceSpans(text).filter((span) => span.from < to && span.to > from);
+    const start = Math.min(from, touched[0]?.from ?? from);
+    const end = Math.max(to, touched.at(-1)?.to ?? to);
+    return { check, sentence: text.slice(start, end) };
+  });
 }
 
 /** Changes a check's result where its mark is now; false when its mark has gone (its sentence was deleted). */

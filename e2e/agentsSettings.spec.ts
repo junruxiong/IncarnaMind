@@ -4,8 +4,11 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { expect, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
+import { SHOW_AGENT_CONNECTION } from "../src/shared/agentConnection";
 import {
   acceptPlainTextKeys,
+  catchCopies,
+  copied,
   createDataFolder,
   dismissChatSetup,
   expectReadyDocuments,
@@ -16,6 +19,11 @@ import {
   setWindowSize,
   showSettingsPage,
 } from "./app";
+
+test.skip(
+  !SHOW_AGENT_CONNECTION,
+  "Settings › Agents is hidden while SHOW_AGENT_CONNECTION is false.",
+);
 
 /*
  * Settings → Agents (#351): turned on, an agent is connected after one plain
@@ -66,19 +74,6 @@ async function withCoast(window: Page) {
   await expectReadyDocuments(window, 1);
 }
 
-/** What the page copies goes here instead of the machine's clipboard. */
-async function catchCopies(window: Page) {
-  await window.evaluate(() => {
-    const caught = globalThis as unknown as { copied?: string };
-    navigator.clipboard.writeText = async (text: string) => {
-      caught.copied = text;
-    };
-  });
-}
-
-const copied = (window: Page) =>
-  window.evaluate(() => (globalThis as unknown as { copied?: string }).copied ?? "");
-
 test("off by default; Connect asks once, writes Codex's settings as shown, and Undo takes them back", async () => {
   await mkdir(join(home, ".codex"));
   const codexSettings = join(home, ".codex", "config.toml");
@@ -119,7 +114,7 @@ test("off by default; Connect asks once, writes Codex's settings as shown, and U
     await expect(allow).toBeDisabled();
     // Linux with no keyring running (CI): the dialog asks to keep the key as plain text first.
     await acceptPlainTextKeys(window, dialog);
-    await dialog.getByTestId("connect-agent-folder").check();
+    await dialog.getByTestId("agent-folder").check();
     await dialog.getByTestId("connect-agent-change").locator("summary").click();
     await shot(window, "agents-connect-dialog");
     await allow.click();
@@ -229,7 +224,7 @@ test("an agent set up by pasting its settings searches, its activity shows each 
       "My agent",
     );
     await shot(window, "agents-connect-other-en");
-    await dialog.getByTestId("connect-agent-folder").check();
+    await dialog.getByTestId("agent-folder").check();
     await dialog.getByTestId("connect-agent-allow").click();
 
     const row = page.locator('[data-testid="agent-pairing"][data-name="Other agent"]');
@@ -299,7 +294,7 @@ test("an Other agent's Details show the command, arguments and environment, each
       .getByTestId("agent-connect")
       .click();
     const dialog = window.getByTestId("connect-agent-dialog");
-    await dialog.getByTestId("connect-agent-folder").check();
+    await dialog.getByTestId("agent-folder").check();
     await dialog.getByTestId("connect-agent-allow").click();
 
     const row = page.getByTestId("agent-pairing").filter({ hasText: "Other agent" });
@@ -397,7 +392,7 @@ test("in Chinese the Codex agent is named in Chinese in the list, the dialog and
     await shot(window, "agents-codex-name-zh-dialog");
     await expect(dialog).toContainText("允许 ChatGPT 应用或 Codex 读取你的文档？");
     await acceptPlainTextKeys(window, dialog);
-    await dialog.getByTestId("connect-agent-folder").check();
+    await dialog.getByTestId("agent-folder").check();
     await dialog.getByTestId("connect-agent-allow").click();
     await expect(dialog).toBeHidden();
 
@@ -432,7 +427,7 @@ test("Disconnect takes away the settings file Connect made, and the agent stays 
     await list.locator('[data-client="workbuddy"]').getByTestId("agent-connect").click();
     const dialog = window.getByTestId("connect-agent-dialog");
     await acceptPlainTextKeys(window, dialog);
-    await dialog.getByTestId("connect-agent-folder").check();
+    await dialog.getByTestId("agent-folder").check();
     await dialog.getByTestId("connect-agent-allow").click();
     await expect(dialog).toBeHidden();
     expect(await readFile(join(home, ".workbuddy", "mcp.json"), "utf8")).toContain("incarnamind");

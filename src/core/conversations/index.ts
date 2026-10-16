@@ -168,6 +168,7 @@ const ERROR_KINDS: Record<ProviderErrorKind, true> = {
   provider: true,
   "consent-declined": true,
   "local-mode": true,
+  "ollama-not-running": true,
   "not-signed-in": true,
   "plan-limit": true,
   blocked: true,
@@ -205,7 +206,7 @@ function storedSteps(value: string | null): AnswerSteps | null {
   }
   if (!isRecord(parsed)) return null;
   const phases = Array.isArray(parsed.phases) ? parsed.phases.filter(isRecord) : [];
-  const { reasoning, readShare } = parsed;
+  const { reasoning, readShare, citedAfterChecking } = parsed;
   return {
     sentAt: timeOrNull(parsed.sentAt),
     finishedAt: timeOrNull(parsed.finishedAt),
@@ -223,6 +224,9 @@ function storedSteps(value: string | null): AnswerSteps | null {
         ? { summary: reasoning.summary, ms: reasoning.ms }
         : null,
     ...(typeof readShare === "number" && readShare >= 0 && readShare <= 1 && { readShare }),
+    ...(typeof citedAfterChecking === "number" &&
+      Number.isInteger(citedAfterChecking) &&
+      citedAfterChecking > 0 && { citedAfterChecking }),
   };
 }
 
@@ -702,7 +706,12 @@ export function createConversations(db: Database, now: () => string) {
     },
 
     /** The Question of an Answer, both live, to write the Answer again. */
-    questionOf(input: unknown): { answerId: string; question: ConversationQuestion } {
+    questionOf(input: unknown): {
+      answerId: string;
+      question: ConversationQuestion;
+      /** The Tool calls the Answer made, as it stands before it is written again. */
+      toolCalls: AnswerToolCall[];
+    } {
       if (!isRecord(input)) {
         throw new InvalidInputError("Expected { conversationId, answerId }.");
       }
@@ -715,7 +724,21 @@ export function createConversations(db: Database, now: () => string) {
       if (question?.kind !== "question") {
         throw new NotFoundError({ key: "error.answer.questionGone" });
       }
-      return { answerId: answer.id, question: toQuestion(question) };
+      return {
+        answerId: answer.id,
+        question: toQuestion(question),
+        toolCalls: storedList<AnswerToolCall>(answer.tool_calls),
+      };
+    },
+
+    /** Takes the Search scope off a Question, so its Answers search every Document (#748). */
+    clearScope(questionId: string): ConversationQuestion | null {
+      db.run(
+        "UPDATE conversation_messages SET scope = NULL, updated_at = ? WHERE id = ? AND kind = 'question'",
+        [now(), questionId],
+      );
+      const row = liveMessage(questionId);
+      return row?.kind === "question" ? toQuestion(row) : null;
     },
 
     /** Empties an Answer, where it is, to write it again with `answerModel` from the Mind it reads. */

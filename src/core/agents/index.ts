@@ -2,11 +2,13 @@
  * Outside agents (#351, experimental): AI agents the User runs themselves,
  * such as Claude Code or Codex, that use IncarnaMind as an MCP server (ADR-0013,
  * addendum of 2026-10-11). Each is a pairing the User makes: a name, the
- * Folders it may read (none until the User picks some), its own consent (the
- * "agents" data flow, one service per pairing) and a token only it holds,
- * kept by ../secrets. Off by default: nothing listens until the User turns it
- * on, and Local mode pauses every pairing, because an agent sends what it
- * reads to a model IncarnaMind can't see.
+ * Folders it may read (none until the User picks some; Not in a Folder is one
+ * of the list's entries, as `NOT_IN_A_FOLDER_ID`, so storing it needs no
+ * migration, and an older version drops it as a Folder that doesn't exist),
+ * its own consent (the "agents" data flow, one service per pairing) and a
+ * token only it holds, kept by ../secrets. Off by default: nothing listens
+ * until the User turns it on, and Local mode pauses every pairing, because
+ * an agent sends what it reads to a model IncarnaMind can't see.
  *
  * Calls arrive through the shim on the socket (./socket, ./mcp) and go
  * through one interface (./access), which checks the pairing at every call
@@ -17,6 +19,7 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import type { Socket } from "node:net";
 import { AGENT_SOCKET_ENV, AGENT_TOKEN_ENV } from "../../shared/agentSocket";
+import type { Logger } from "../adapters";
 import {
   AGENT_TOOLS,
   type AgentActivity,
@@ -29,6 +32,7 @@ import {
   type DataKind,
   type Effect,
   type ExternalService,
+  NOT_IN_A_FOLDER_ID,
 } from "../api";
 import type { Consent } from "../consent";
 import { InvalidInputError, isRecord, NotFoundError } from "../errors";
@@ -75,6 +79,8 @@ export interface AgentLauncher {
 }
 
 export interface AgentsOptions {
+  offered: boolean;
+  log: Logger;
   db: Database;
   now(): string;
   clock(): number;
@@ -173,7 +179,8 @@ export function createAgents(options: AgentsOptions) {
   let closed = false;
   let mcp: Promise<typeof import("./mcp")> | null = null;
 
-  const enabled = () => options.readValue(ENABLED_KEY) === true;
+  const turnedOn = () => options.readValue(ENABLED_KEY) === true;
+  const enabled = () => options.offered && turnedOn();
   const say = options.access.say;
 
   const livePairings = () =>
@@ -206,7 +213,7 @@ export function createAgents(options: AgentsOptions) {
       throw new InvalidInputError("A pairing id must be text.");
     }
     const pairing = findPairing(pairingId);
-    if (!pairing) throw new NotFoundError("That agent isn't connected.");
+    if (!pairing) throw new NotFoundError({ key: "error.agent.notConnected" });
     return pairing;
   };
 
@@ -222,25 +229,30 @@ export function createAgents(options: AgentsOptions) {
 
   const changed = () => options.changed(settings());
 
-  options.consent.registry.register({
-    id: "agents",
-    sends: AGENT_FLOW_SENDS,
-    services: async () => livePairings().map(serviceOf),
-  });
+  if (options.offered) {
+    options.consent.registry.register({
+      id: "agents",
+      sends: AGENT_FLOW_SENDS,
+      services: async () => livePairings().map(serviceOf),
+    });
+  }
 
   const parseName = (value: unknown, exceptId: string | null): string => {
     if (typeof value !== "string" || value.trim() === "") {
-      throw new InvalidInputError("Give the agent a name.");
+      throw new InvalidInputError({ key: "error.agent.nameEmpty" });
     }
     const name = value.trim();
     if (name.length > MAX_NAME_CHARS) {
-      throw new InvalidInputError(`An agent's name can be at most ${MAX_NAME_CHARS} characters.`);
+      throw new InvalidInputError({
+        key: "error.agent.nameTooLong",
+        values: { max: MAX_NAME_CHARS },
+      });
     }
     const taken = livePairings().some(
       (pairing) =>
         pairing.id !== exceptId && pairing.name.toLocaleLowerCase() === name.toLocaleLowerCase(),
     );
-    if (taken) throw new InvalidInputError(`An agent named "${name}" is already connected.`);
+    if (taken) throw new InvalidInputError({ key: "error.agent.nameTaken", values: { name } });
     return name;
   };
 
@@ -258,8 +270,8 @@ export function createAgents(options: AgentsOptions) {
       throw new InvalidInputError("folderIds must be a list of Folder ids.");
     }
     const live = new Set(options.access.folders().map((folder) => folder.id));
-    const unknown = value.find((id) => !live.has(id));
-    if (unknown !== undefined) throw new NotFoundError("That Folder no longer exists.");
+    const unknown = value.find((id) => id !== NOT_IN_A_FOLDER_ID && !live.has(id));
+    if (unknown !== undefined) throw new NotFoundError({ key: "error.folder.notFound" });
     return [...new Set(value as string[])];
   };
 
@@ -323,7 +335,7 @@ export function createAgents(options: AgentsOptions) {
     return {
       id: pairing.id,
       name: pairing.name,
-      folderIds: pairing.folderIds.filter((id) => live.has(id)),
+      folderIds: pairing.folderIds.filter((id) => id === NOT_IN_A_FOLDER_ID || live.has(id)),
     };
   };
 
@@ -529,9 +541,7 @@ export function createAgents(options: AgentsOptions) {
       const pairing = requirePairing(pairingIdInput);
       const token = await tokenOf(pairing.id);
       if (!token) {
-        throw new NotFoundError(
-          "This agent's key can't be read on this computer. Disconnect it and connect it again.",
-        );
+        throw new NotFoundError({ key: "error.agent.keyUnreadable" });
       }
       return launchFor(token);
     },
@@ -553,7 +563,15 @@ export function createAgents(options: AgentsOptions) {
     localModeChanged: changed,
 
     /** Starts listening, if connecting agents was left on. */
-    start: () => syncListening(),
+    start: () => {
+      if (!options.offered && (turnedOn() || livePairings().length > 0)) {
+        options.log.info("agents.notOffered", {
+          turnedOn: turnedOn(),
+          pairings: livePairings().length,
+        });
+      }
+      return syncListening();
+    },
 
     /** Stops listening and closes every connection. Safe to call twice. */
     async close(): Promise<void> {

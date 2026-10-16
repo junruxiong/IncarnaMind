@@ -6,16 +6,16 @@ import type { HTMLAttributes, ReactNode } from "react";
  * a dot: each dot is drawn in the gap before its part and clipped where that
  * part starts a line (`.meta-line` in styles.css). Use it, or `.meta-line`
  * and `.meta-part` on a flex row, wherever parts are joined by dots.
+ * `children` follow the parts as flex items of the row, for a part that
+ * draws its own dot because a list opens under it (`.mind-unread`).
  */
 export function MetaLine({
   parts,
   as: Tag = "p",
   className = "",
+  children,
   ...rest
-}: { parts: readonly ReactNode[]; as?: "p" | "div" } & Omit<
-  HTMLAttributes<HTMLElement>,
-  "children"
->) {
+}: { parts: readonly ReactNode[]; as?: "p" | "div" } & HTMLAttributes<HTMLElement>) {
   return (
     <Tag {...rest} className={`meta-line ${className}`}>
       {parts
@@ -31,6 +31,7 @@ export function MetaLine({
             {part}
           </span>
         ))}
+      {children}
     </Tag>
   );
 }

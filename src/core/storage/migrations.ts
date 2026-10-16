@@ -1625,7 +1625,20 @@ export const migrations: readonly Migration[] = [
     `,
   },
   {
-    // 85 and 86 are held by work in progress.
+    // 85 is reserved by work in progress.
+    version: 86,
+    description: "A Word file imported as a Mind is also a Document (#720)",
+    sql: `
+      -- The Document the original file was also added as, so the Mind can say where it came
+      -- from and leave it out of its own checks, and the Document can open its Mind. NULL: the
+      -- User left it out of the Library, or the import was made before. No foreign key: a
+      -- later sync may deliver a row before its Document.
+      ALTER TABLE word_packages ADD COLUMN document_id TEXT;
+      CREATE INDEX word_packages_by_document ON word_packages (document_id)
+        WHERE document_id IS NOT NULL AND deleted_at IS NULL;
+    `,
+  },
+  {
     version: 87,
     description: "A data flow allowed when the User chose its service says so (ADR-0022, #718)",
     sql: `
@@ -1633,6 +1646,68 @@ export const migrations: readonly Migration[] = [
       -- (first-run setup, Settings, a plan sign-in); 0: allowed in a dialog or in Settings ›
       -- Privacy, as every decision made before this. A declined flow is always 0.
       ALTER TABLE data_flow_consents ADD COLUMN chosen INTEGER NOT NULL DEFAULT 0;
+    `,
+  },
+  {
+    version: 88,
+    description: "Organize: a waiting or failed Document's problem as a wording (#654)",
+    sql: `
+      -- The problem in error_message as a key of the dictionary and its values (JSON), so the
+      -- window says it in the interface language; NULL when the core gave only its sentence.
+      ALTER TABLE document_groups ADD COLUMN error_wording TEXT;
+    `,
+  },
+  {
+    version: 89,
+    description: "Web pages keep their pictures: each version's, and how many were left out (#756)",
+    // A saved page's pictures are files named by their content (src/core/documents/web),
+    // shared by its versions; a row per picture per version, numbered as the page shows
+    // them, says which files a version shows, so a picture an older version still has stays.
+    sql: `
+      CREATE TABLE web_page_pictures (
+        id TEXT PRIMARY KEY NOT NULL,
+        document_id TEXT NOT NULL REFERENCES documents (id),
+        content_hash TEXT NOT NULL,
+        number INTEGER NOT NULL,
+        picture_hash TEXT NOT NULL,
+        media_type TEXT NOT NULL,
+        width INTEGER NOT NULL,
+        height INTEGER NOT NULL,
+        bytes INTEGER NOT NULL,
+        address TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE UNIQUE INDEX web_page_pictures_by_number
+        ON web_page_pictures (document_id, content_hash, number) WHERE deleted_at IS NULL;
+      CREATE INDEX web_page_pictures_by_picture
+        ON web_page_pictures (picture_hash) WHERE deleted_at IS NULL;
+      -- Pictures over the caps (too many, too large, past the page's total), per version.
+      ALTER TABLE web_pages ADD COLUMN pictures_left_out INTEGER NOT NULL DEFAULT 0;
+    `,
+  },
+  {
+    version: 90,
+    description: "A Mind imported from Word keeps the file's look (#746)",
+    sql: `
+      -- WORD_LOOK_VERSION the look was read with; NULL for imports from before it was kept.
+      -- Lets start-up find Minds needing it without loading each one.
+      ALTER TABLE word_packages ADD COLUMN look_version INTEGER;
+    `,
+  },
+  {
+    version: 91,
+    description: "Web pages kept as they look: a PDF of each version, when the User asks (#756)",
+    // The PDF is a file named by its content, beside the snapshots (src/core/documents/web).
+    // A version asked for it is 'saving' until it is made, and made again at the next start
+    // if the app quit meanwhile; 'failed' says why in look_failure.
+    sql: `
+      ALTER TABLE web_pages ADD COLUMN look_status TEXT
+        CHECK (look_status IS NULL OR look_status IN ('saving', 'saved', 'failed'));
+      ALTER TABLE web_pages ADD COLUMN look_hash TEXT;
+      ALTER TABLE web_pages ADD COLUMN look_saved_at TEXT;
+      ALTER TABLE web_pages ADD COLUMN look_failure TEXT;
     `,
   },
 ];

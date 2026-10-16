@@ -1,9 +1,11 @@
-import type { ReactNode } from "react";
-import type { GettingStarted } from "../../../core/api";
+import { Fragment, type ReactNode } from "react";
+import type { ExampleGroup, GettingStarted } from "../../../core/api";
 import { shortcutLabel } from "../commands/keymap";
 import { CheckMarkIcon } from "../editor/icons";
 import { useGap, useT } from "../i18n";
-import { useAppStore } from "../store";
+import { gettingStartedShown } from "../nudges";
+import { allExamples, useAppStore } from "../store";
+import { useAddYourDocuments } from "./AddYourDocuments";
 import { AskIcon, PlugIcon } from "./icons";
 import { ChevronRightLineIcon, CloseLineIcon } from "./lineIcons";
 import { SLOT, Slotted } from "./Slotted";
@@ -32,18 +34,19 @@ export function useGettingStarted(): Step[] | null {
 }
 
 function stepsOf(progress: GettingStarted): Step[] | null {
-  if (!progress.started || progress.hidden) return null;
-  const steps: Step[] = [
+  if (!gettingStartedShown(progress)) return null;
+  return [
     { key: "citation", done: progress.citationChecked },
     { key: "documents", done: progress.indexed },
     { key: "question", done: progress.askedOwn },
   ];
-  return steps.every((step) => step.done) ? null : steps;
 }
 
 /** Whether a Mind is the example one. */
 export const useIsExample = (mindId: string | undefined) =>
-  useAppStore((state) => mindId !== undefined && state.examples?.mindId === mindId);
+  useAppStore(
+    (state) => mindId !== undefined && allExamples(state).some((each) => each.mindId === mindId),
+  );
 
 /** "Example", after the example Mind's name and its Linked folder's. */
 export function ExampleChip() {
@@ -85,7 +88,8 @@ function StepMark({ number, done, next }: { number: number; done: boolean; next:
 /**
  * "Get started · N of 3", at the bottom of the sidebar: each step ticks
  * itself as the User does it, and the next one to do takes them there. It can
- * be hidden, and goes once all three are done.
+ * be hidden, and goes once all three are done. "Add your Documents" is a menu
+ * of the two ways, Add files… and Link a folder… (#766).
  */
 export function GetStartedCard() {
   const t = useT();
@@ -93,19 +97,16 @@ export function GetStartedCard() {
   const steps = useGettingStarted();
   const updateGettingStarted = useAppStore((state) => state.updateGettingStarted);
   const openExamples = useAppStore((state) => state.openExamples);
-  const createMind = useAppStore((state) => state.createMind);
   const startQuestion = useAppStore((state) => state.startQuestion);
+  const addMenu = useAddYourDocuments("get-started-add");
   if (!steps) return null;
 
   const done = steps.filter((step) => step.done).length;
   const next = steps.find((step) => !step.done)?.key;
-  const go: Record<StepKey, () => void> = {
+  const go: Record<Exclude<StepKey, "documents">, () => void> = {
     citation: () => void openExamples(),
-    // A Mind of their own, which shows the ways to add Documents or connect apps.
-    documents: () => void createMind(),
     question: startQuestion,
   };
-
   return (
     <section
       aria-labelledby="get-started-title"
@@ -150,8 +151,8 @@ export function GetStartedCard() {
                 </span>
               ) : step.key === next ? (
                 <button
+                  {...(step.key === "documents" ? addMenu.buttonProps : { onClick: go[step.key] })}
                   type="button"
-                  onClick={go[step.key]}
                   className={`${rowClass} font-semibold text-ink hover:bg-hover focus-visible:outline-offset-0`}
                 >
                   {mark}
@@ -171,6 +172,7 @@ export function GetStartedCard() {
           );
         })}
       </ol>
+      {addMenu.menu}
       <button
         type="button"
         data-testid="onboarding-groups"
@@ -184,14 +186,20 @@ export function GetStartedCard() {
 }
 
 /**
- * Above the example Mind's title: what a Mind is, and the ways on: a Mind of
- * one's own, to add Documents or apps to, or removing the examples.
+ * Above the example Mind's title: what a Mind is, and the ways on: adding
+ * one's own Documents, in place (#766), or removing the examples.
  */
-export function ExampleBanner() {
+export function ExampleBanner({ mindId }: { mindId: string }) {
   const t = useT();
   const gap = useGap();
-  const createMind = useAppStore((state) => state.createMind);
+  const addMenu = useAddYourDocuments("example-add");
   const removeExamples = useAppStore((state) => state.removeExamples);
+  const openExample = useAppStore((state) => state.openExample);
+  const more = useAppStore(
+    (state) => allExamples(state).find((each) => each.mindId === mindId)?.more,
+  );
+  const tea = useAppStore((state) => state.examples?.group === "tea");
+  const body = t(tea ? "examples.banner.body.tea" : "examples.banner.body");
   return (
     <aside
       aria-label={t("examples.banner.label")}
@@ -216,18 +224,19 @@ export function ExampleBanner() {
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
         <p>
           <strong className="font-semibold text-ink">{t("examples.banner.title")}</strong>
-          {gap(t("examples.banner.title"), t("examples.banner.body"))}
-          {t("examples.banner.body")}
+          {gap(t("examples.banner.title"), body)}
+          {body}
         </p>
         <div className="flex flex-wrap gap-2">
           <button
+            {...addMenu.buttonProps}
             type="button"
             data-testid="example-add-own"
-            onClick={() => void createMind()}
             className={buttonStyle("primary", "sm")}
           >
             {t("examples.banner.addOwn")}
           </button>
+          {addMenu.menu}
           <button
             type="button"
             data-testid="example-remove"
@@ -237,6 +246,26 @@ export function ExampleBanner() {
             {t("examples.banner.remove")}
           </button>
         </div>
+        {more && more.length > 0 && (
+          <p data-testid="example-more" className="pt-1.5 text-[13px] leading-5 text-ink-secondary">
+            {t("examples.banner.more")}
+            {gap(t("examples.banner.more"), t(`examples.group.${more[0] as ExampleGroup}`))}
+            {more.map((group, index) => (
+              <Fragment key={group}>
+                {index > 0 && " · "}
+                <button
+                  type="button"
+                  data-testid="example-more-link"
+                  data-group={group}
+                  onClick={() => void openExample(group)}
+                  className="rounded-sm text-accent-strong underline-offset-2 hover:underline focus-visible:outline-offset-0"
+                >
+                  {t(`examples.group.${group}`)}
+                </button>
+              </Fragment>
+            ))}
+          </p>
+        )}
       </div>
     </aside>
   );
@@ -397,5 +426,7 @@ export function StartGuide() {
 
 /** Whether an Answer is the example one, written in advance: its meta line says so. */
 export function useIsExampleAnswer(answerId: string | null) {
-  return useAppStore((state) => answerId !== null && state.examples?.answerId === answerId);
+  return useAppStore(
+    (state) => answerId !== null && allExamples(state).some((each) => each.answerId === answerId),
+  );
 }

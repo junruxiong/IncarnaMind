@@ -8,6 +8,8 @@ import {
   citationState,
   citedLocation,
   citedTextKept,
+  closestWordsMessage,
+  parseQuotedWords,
   shownDocumentName,
   withShownName,
 } from "../../src/shared/citations";
@@ -285,6 +287,74 @@ describe("A Citation's badge", () => {
     expect(citedLocation(found, in_("en"))).toBe("p. 12–13");
     expect(citationReference(found)).toBe("[Tides, p. 12–13]");
     expect(citationReference({ ...found, pageFrom: null, pageTo: null })).toBe("[Tides]");
+  });
+});
+
+describe("The words an Answer put in quotation marks that a Citation's page lacks (#483)", () => {
+  const notFound: CitationAttributes = {
+    ...found,
+    pageFrom: 3,
+    pageTo: 3,
+    check: "not-found",
+    checkReason: "quoted-words-not-on-pages",
+  };
+  const closest = (attributes: Partial<CitationAttributes>) => {
+    const en = closestWordsMessage(attributes, in_("en"));
+    const zh = closestWordsMessage(attributes, in_("zh-CN"));
+    return {
+      en: translate("en", en.key, en.params),
+      zh: translate("zh-CN", zh.key, zh.params),
+    };
+  };
+
+  test("the label over the page's nearest words names the place the badge does", () => {
+    expect(closest(notFound)).toEqual({
+      en: "Closest words on p. 3",
+      zh: "第 3 页最接近的文字",
+    });
+    expect(closest({ ...notFound, pageFrom: null, pageTo: null })).toEqual({
+      en: "Closest words in Tides",
+      zh: "“Tides”中最接近的文字",
+    });
+    expect(
+      closest({
+        ...notFound,
+        pageFrom: null,
+        pageTo: null,
+        location: { kind: "time", from: 866_000, to: 870_000 },
+      }),
+    ).toEqual({
+      en: "Closest words in the transcript at 14:26",
+      zh: "转写稿 14:26 处最接近的文字",
+    });
+  });
+
+  test("the badge is the existing not-found one, and the reason is worded for both languages", () => {
+    expect(words(notFound)).toEqual({
+      en: "Quote not found on p. 3",
+      zh: "未在第 3 页找到引文",
+    });
+    expect(translate("en", "citation.reason.quoted-words-not-on-pages")).toContain(
+      "words in quotation marks",
+    );
+    expect(translate("zh-CN", "citation.reason.quoted-words-not-on-pages")).toContain("引号");
+  });
+
+  test("stored words are read back whole, or not at all", () => {
+    const stored = {
+      answer: [
+        { text: "training ", found: false },
+        { text: "coverage reached 98%", found: true },
+      ],
+      closest: [{ text: "Safety training: coverage reached 98%", found: false }],
+    };
+    expect(parseQuotedWords(stored)).toEqual(stored);
+    expect(parseQuotedWords(JSON.stringify(stored))).toEqual(stored);
+    expect(parseQuotedWords({ ...stored, closest: [] })).toEqual({ ...stored, closest: null });
+    expect(parseQuotedWords({ answer: [] })).toBeNull();
+    expect(parseQuotedWords({ answer: [{ text: 1, found: true }] })).toBeNull();
+    expect(parseQuotedWords("not json")).toBeNull();
+    expect(parseQuotedWords(undefined)).toBeNull();
   });
 });
 

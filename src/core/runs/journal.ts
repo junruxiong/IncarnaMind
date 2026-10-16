@@ -46,6 +46,14 @@ export interface TaskRecord {
 
 export type StepStatus = "started" | "completed" | "failed" | "skipped";
 
+/**
+ * A key that starts with this is a record a kind keeps in its journal (what
+ * it made, to find again after a quit), not a step: progress doesn't show it.
+ */
+export const RECORD_PREFIX = "~";
+
+export const isStep = (key: string) => !key.startsWith(RECORD_PREFIX);
+
 export interface StepRecord {
   key: string;
   effect: TaskEffect | null;
@@ -286,20 +294,22 @@ export function createJournal(db: Database, now: () => string) {
         .map(toStep);
     },
 
-    /** A Task's latest steps, oldest first, and how many it has. */
+    /** A Task's latest steps, oldest first, and how many it has: its kind's records left out. */
     latestSteps(taskId: string, limit: number): { steps: StepRecord[]; count: number } {
       const steps = db
         .all<StepRow>(
           `SELECT key, effect, status, result, attempts FROM run_steps
-           WHERE run_id = ? AND deleted_at IS NULL ORDER BY started_at DESC, rowid DESC LIMIT ?`,
-          [taskId, limit],
+           WHERE run_id = ? AND deleted_at IS NULL AND substr(key, 1, 1) <> ?
+           ORDER BY started_at DESC, rowid DESC LIMIT ?`,
+          [taskId, RECORD_PREFIX, limit],
         )
         .map(toStep)
         .reverse();
       const count =
         db.get<{ count: number }>(
-          "SELECT count(*) AS count FROM run_steps WHERE run_id = ? AND deleted_at IS NULL",
-          [taskId],
+          `SELECT count(*) AS count FROM run_steps
+           WHERE run_id = ? AND deleted_at IS NULL AND substr(key, 1, 1) <> ?`,
+          [taskId, RECORD_PREFIX],
         )?.count ?? 0;
       return { steps, count };
     },
@@ -314,6 +324,16 @@ export function createJournal(db: Database, now: () => string) {
           [taskId],
         )
         .map(toStep);
+    },
+
+    /** Keeps a record (`RECORD_PREFIX`) with what it holds, as started: a message queued, say. */
+    keep(taskId: string, key: string, result: unknown): void {
+      const at = now();
+      db.run(
+        `INSERT INTO run_steps (id, run_id, key, status, result, started_at, created_at, updated_at)
+         VALUES (?, ?, ?, 'started', ?, ?, ?, ?)`,
+        [randomUUID(), taskId, key, JSON.stringify(result), at, at, at],
+      );
     },
 
     /** Records a step as started, before it runs: a new attempt of one that ran before. */

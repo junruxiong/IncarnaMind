@@ -17,6 +17,7 @@ import {
   PROPOSAL_ATTRIBUTE,
   PROPOSAL_DELETE_MARK,
   PROPOSAL_INSERT_MARK,
+  type TextPlace,
   WORD_CHANGE_ID,
 } from "../../../core/api";
 import { citationState } from "../../../shared/citations";
@@ -299,6 +300,73 @@ export function acceptedSlice(slice: Slice): Slice {
     : new Slice(content, slice.openStart, slice.openEnd);
 }
 
+/** A place in a paragraph or heading: its id, and how far into its text, an inline node counting as one. */
+export interface BlockPlace {
+  blockId: string;
+  offset: number;
+}
+
+const goesOnAccept = (node: ProseMirrorNode) =>
+  readProposalAttribute(node.attrs[PROPOSAL_ATTRIBUTE])?.kind === "delete" ||
+  node.marks.some((mark) => mark.type.name === PROPOSAL_DELETE_MARK);
+
+/**
+ * Where a place in a paragraph or heading will be once the changes there are
+ * accepted, counted in the text that stays; null when a change removes its
+ * Block. Unlike a position in the editor, it holds through the accept, which
+ * comes back from Yjs as a new document.
+ */
+export function placeOnAccept(doc: ProseMirrorNode, place: TextPlace): BlockPlace | null {
+  let found: BlockPlace | null = null;
+  doc.descendants((node, pos) => {
+    if (found) return false;
+    if (!node.isTextblock) return true;
+    if (node.attrs.id !== place.blockId) return false;
+    const $pos = doc.resolve(pos + 1);
+    for (let depth = $pos.depth; depth > 0; depth--) {
+      if (readProposalAttribute($pos.node(depth).attrs[PROPOSAL_ATTRIBUTE])?.kind === "delete") {
+        return false;
+      }
+    }
+    let left = place.offset;
+    let offset = 0;
+    node.forEach((child) => {
+      const part = Math.min(child.isText ? child.nodeSize : 1, Math.max(left, 0));
+      if (!goesOnAccept(child)) offset += part;
+      left -= part;
+    });
+    found = { blockId: place.blockId, offset };
+    return false;
+  });
+  return found;
+}
+
+/** Where a Block's place is in the editor now; null when the Block is gone. */
+export function positionOf(doc: ProseMirrorNode, place: BlockPlace): number | null {
+  let found: number | null = null;
+  doc.descendants((node, pos) => {
+    if (found !== null) return false;
+    if (!node.isTextblock) return true;
+    if (node.attrs.id !== place.blockId) return false;
+    let left = place.offset;
+    let at = pos + 1;
+    for (let index = 0; index < node.childCount && left > 0; index++) {
+      const child = node.child(index);
+      const size = child.isText ? child.nodeSize : 1;
+      if (child.isText && left <= size) {
+        at += left;
+        left = 0;
+        break;
+      }
+      left -= size;
+      at += child.nodeSize;
+    }
+    found = at;
+    return false;
+  });
+  return found;
+}
+
 /** The Proposals waiting in the editor's Mind. */
 export const pendingIn = (state: EditorState): readonly PendingProposal[] =>
   proposalReviewKey.getState(state)?.proposals ?? [];
@@ -348,6 +416,22 @@ function bringsProposals(tr: Transaction): boolean {
 
 /** A change that came from the Mind's document (the core, another window, Undo), not the User typing here. */
 const fromDocument = (tr: Transaction) => !!tr.getMeta(ySyncPluginKey)?.isChangeOrigin;
+
+/**
+ * Watches for the User moving the cursor or editing the Mind from now on;
+ * changes that come from the Mind's document, as an AI change streaming in
+ * does (#202), don't count. `stop` ends the watch.
+ */
+export function watchMovedOn(editor: Editor): { movedOn(): boolean; stop(): void } {
+  let moved = false;
+  const look = ({ transaction }: { transaction: Transaction }) => {
+    if (!fromDocument(transaction) && (transaction.selectionSet || transaction.docChanged)) {
+      moved = true;
+    }
+  };
+  editor.on("transaction", look);
+  return { movedOn: () => moved, stop: () => editor.off("transaction", look) };
+}
 
 /**
  * The line under a change out of date (DESIGN.md, AI edits): "Out of date ·
@@ -619,6 +703,16 @@ export function theirChange(
   const doc = editorDoc(editor);
   const made = doc ? proposalRequestOf(doc, proposal.request) : null;
   return made?.source === "word-change" ? { author: made.author, date: made.date } : null;
+}
+
+/** Why the assistant made a change, in the model's few words (#202); null when it didn't say. */
+export function changeReason(
+  editor: Editor,
+  proposal: Pick<PendingProposal, "request">,
+): string | null {
+  const doc = editorDoc(editor);
+  const made = doc ? proposalRequestOf(doc, proposal.request) : null;
+  return made?.source === "edit-with-ai" ? (made.reason ?? null) : null;
 }
 
 /**

@@ -1,6 +1,6 @@
 import { mergeAttributes, Node, type NodeViewRenderer } from "@tiptap/core";
 import { CITATION_NODE, type CitationAttributes } from "../../../core/api";
-import { citationReference } from "../../../shared/citations";
+import { citationReference, parseQuotedWords } from "../../../shared/citations";
 import { parseLocation } from "../../../shared/locations";
 
 export interface CitationOptions {
@@ -74,6 +74,16 @@ export const Citation = Node.create<CitationOptions>({
       checkReason: dataAttribute("checkReason"),
       // Only a claim check sets it, so a Citation without one stores nothing.
       verdict: { ...dataAttribute("verdict"), default: undefined },
+      // Only an Answer whose quoted words weren't found sets it (#483), as JSON in the HTML.
+      quotedWords: {
+        default: undefined,
+        parseHTML: (element: HTMLElement) =>
+          parseQuotedWords(element.getAttribute("data-quoted-words")) ?? undefined,
+        renderHTML: (attributes: Record<string, unknown>) => {
+          const words = parseQuotedWords(attributes.quotedWords);
+          return words ? { "data-quoted-words": JSON.stringify(words) } : {};
+        },
+      },
     };
     return attributes;
   },

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { APICallError, generateText, streamText } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, test } from "vitest";
-import type { ChatProvider, Core, MonthlyCap } from "../../src/core";
+import type { ChatProvider, Core, MonthlyCap, TaskKind } from "../../src/core";
 import { createAiSdkChatModel, InvalidInputError } from "../../src/core";
 import { DATABASE_FILE } from "../../src/core/core";
 import { costOf, inCurrency, rateAt } from "../../src/core/cost/price";
@@ -38,10 +38,10 @@ const usageOf = ({ input, output, cached = 0, written }: Counted): Usage => ({
 
 /**
  * A model that answers "OK" to each request and reports the next of `counts`
- * (the last one again after that). With `held`, a streamed reply waits for it
- * before it finishes, so that several requests are open at once.
+ * (the last one again after that). With `held`, a streamed reply waits for the
+ * promise it returns before it finishes, so that several requests are open at once.
  */
-function reportingModel(counts: readonly Counted[], held?: Promise<void>) {
+function reportingModel(counts: readonly Counted[], held?: () => Promise<void> | undefined) {
   let calls = 0;
   const next = () =>
     usageOf(counts[Math.min(calls++, counts.length - 1)] ?? { input: 0, output: 0 });
@@ -65,7 +65,7 @@ function reportingModel(counts: readonly Counted[], held?: Promise<void>) {
           async pull(controller) {
             const part = parts.shift();
             if (part) return controller.enqueue(part);
-            await held;
+            await held?.();
             controller.enqueue({
               type: "finish",
               finishReason: { unified: "stop", raw: undefined },
@@ -94,10 +94,15 @@ async function cloudCore(
     modelId: HAIKU,
   },
   dataDir?: string,
+  taskKinds?: TaskKind[],
 ) {
   const folder = dataDir ?? (await createTempDataFolder());
   const clock = manualClock("2026-10-12T09:00:00.000Z");
-  const core = startCore(folder, { createChatModel: () => model, now: clock.now });
+  const core = startCore(folder, {
+    createChatModel: () => model,
+    now: clock.now,
+    ...(taskKinds && { taskKinds }),
+  });
   // An Ollama cloud model's service is known only once it is asked with: allow it then.
   core.on("consent.requested", (asked) => void core.respondToConsent(asked.requestId, true));
   const saved = await core.saveChatProvider(
@@ -178,6 +183,7 @@ describe("Recording", () => {
         billing: "per-token",
         requests: 3,
         spent: [{ currency: "USD", amount: expect.closeTo(expected, 10) }],
+        setAside: [],
         unpricedTokens: 0,
         interrupted: 0,
       },
@@ -347,7 +353,7 @@ describe("The monthly cap", () => {
       release = resolve;
     });
     // Each reports all it reserved for its output: settled, they still fit.
-    const model = reportingModel([{ input: 40, output: 100_000 }], held);
+    const model = reportingModel([{ input: 40, output: 100_000 }], () => held);
     const { core, dataDir } = await cloudCore(model);
     // 100,000 output tokens of Haiku reserve $0.05: three fit under $0.175, a fourth doesn't.
     await setCap(core, { amount: 0.175, currency: "USD" });
@@ -360,7 +366,9 @@ describe("The monthly cap", () => {
     );
     await expect.poll(() => rows(dataDir).length).toBe(3);
     const during = await core.getCostSummary();
-    expect(during.spentTowardCap?.amount).toBeLessThanOrEqual(0.175);
+    expect(
+      (during.spentTowardCap?.amount ?? 0) + (during.setAsideTowardCap?.amount ?? 0),
+    ).toBeLessThanOrEqual(0.175);
     release();
 
     expect((await Promise.all(requests)).sort()).toEqual([
@@ -508,6 +516,123 @@ describe("The monthly cap", () => {
   });
 });
 
+describe("Spending shows what was spent, and what is set aside apart (#891)", () => {
+  const counts = [
+    { input: 1_000, output: 100 },
+    { input: 2_000, output: 150 },
+  ];
+  const stoppedByCap = (error: unknown) => classifyProviderError(error).kind === "cost-cap";
+
+  test("an open request's reservation is set aside, not spent, and the cap counts it until it settles", async () => {
+    let gate: Promise<void> | undefined;
+    let release = () => {};
+    const { core, dataDir } = await cloudCore(reportingModel(counts, () => gate));
+    try {
+      await request(core);
+      const settled = await spentUsd(core);
+      expect(settled).toBeGreaterThan(0);
+
+      gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const open = request(core, 100_000);
+      await expect
+        .poll(() => rows(dataDir).map((row) => row.status))
+        .toEqual(["settled", "reserved"]);
+      const reserved = rows(dataDir)[1]?.reserved ?? 0;
+      expect(reserved).toBeGreaterThan(settled * 10);
+
+      await setCap(core, { amount: settled + reserved * 1.5, currency: "USD" });
+      const during = await core.getCostSummary();
+      expect(during.spent).toEqual([{ currency: "USD", amount: expect.closeTo(settled, 12) }]);
+      expect(during.setAside).toEqual([{ currency: "USD", amount: expect.closeTo(reserved, 12) }]);
+      expect(during.providers[0]).toMatchObject({
+        spent: [{ currency: "USD", amount: expect.closeTo(settled, 12) }],
+        setAside: [{ currency: "USD", amount: expect.closeTo(reserved, 12) }],
+      });
+      expect(during.spentTowardCap?.amount).toBeCloseTo(settled, 12);
+      expect(during.setAsideTowardCap?.amount).toBeCloseTo(reserved, 12);
+      const estimate = await core.estimateRun({ items: 10 });
+      expect(estimate).toMatchObject({
+        spentTowardCap: { amount: expect.closeTo(settled, 12) },
+        setAsideTowardCap: { amount: expect.closeTo(reserved, 12) },
+      });
+
+      // The settled part alone is far under the cap; with the set aside, another request would pass it.
+      await expect(request(core, 100_000)).rejects.toSatisfy(stoppedByCap);
+
+      release();
+      await open;
+      await expect
+        .poll(() => rows(dataDir).map((row) => row.status))
+        .toEqual(["settled", "settled"]);
+      const after = await core.getCostSummary();
+      expect(after.setAside).toEqual([]);
+      expect(after.providers[0]?.setAside).toEqual([]);
+      expect(after.setAsideTowardCap?.amount).toBe(0);
+      const cost = rows(dataDir).reduce((sum, row) => sum + (row.cost ?? 0), 0);
+      expect(after.spent).toEqual([{ currency: "USD", amount: expect.closeTo(cost, 12) }]);
+      expect(cost).toBeLessThan(reserved / 10);
+      await expect(request(core, 100_000)).resolves.toBe("OK");
+    } finally {
+      release();
+    }
+  });
+
+  test("with only an open request, spent is nothing and all of its reservation is set aside", async () => {
+    const gate = new Promise<void>(() => {});
+    const { core, dataDir } = await cloudCore(reportingModel(counts, () => gate));
+    void request(core, 100_000).catch(() => undefined);
+    await expect.poll(() => rows(dataDir).map((row) => row.status)).toEqual(["reserved"]);
+
+    const summary = await core.getCostSummary();
+
+    expect(summary.spent).toEqual([{ currency: "USD", amount: 0 }]);
+    expect(summary.setAside).toEqual([
+      { currency: "USD", amount: expect.closeTo(rows(dataDir)[0]?.reserved ?? 0, 12) },
+    ]);
+  });
+
+  test("a Task's cost so far leaves out what an open request reserves", async () => {
+    let gate: Promise<void> | undefined;
+    let release = () => {};
+    let core: Core | undefined;
+    const kind: TaskKind = {
+      kind: "test-model",
+      async run() {
+        if (!core) throw new Error("The core isn't started.");
+        await request(core);
+        gate = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        await request(core, 100_000);
+        return { status: "done" };
+      },
+    };
+    const started = await cloudCore(
+      reportingModel(counts, () => gate),
+      undefined,
+      undefined,
+      [kind],
+    );
+    core = started.core;
+    try {
+      const task = core.startTask("test-model", null, {});
+      await expect
+        .poll(() => rows(started.dataDir).map((row) => row.status))
+        .toEqual(["settled", "reserved"]);
+      const [first] = rows(started.dataDir);
+
+      const running = (await core.listTasks()).find((each) => each.id === task.id);
+
+      expect(running?.cost?.amount).toBeCloseTo(first?.cost ?? 0, 12);
+      expect(running?.cost?.amount).toBeLessThan((rows(started.dataDir)[1]?.reserved ?? 0) / 10);
+    } finally {
+      release();
+    }
+  });
+});
+
 describe("A Question beside a long Mind (#564)", () => {
   // protects=the reservation made before a request, which the monthly cap is checked against, counts the Mind read with the Question, so a long Mind can't slip past the cap; fails_when=a 40k-token Mind reserves no more than one line does; no_claim=what the provider bills, the hand test's.
   test("reserves for the Mind's tokens before anything is sent", async () => {
@@ -573,6 +698,7 @@ describe("Plans", () => {
         billing: "plan",
         requests: 1,
         spent: [],
+        setAside: [],
         unpricedTokens: 0,
         interrupted: 0,
       },
@@ -827,6 +953,29 @@ describe("The estimate before a large run", () => {
     });
     if (estimate.billing !== "per-token") throw new Error("Not billed per token.");
     expect(estimate.tokens).toBeGreaterThan(tokens);
+  });
+
+  test("a run's web searches add their provider's fee and the pages it reads, and only where the provider searches", async () => {
+    const { core } = await cloudCore(reportingModel([{ input: 0, output: 0 }]));
+    const without = await core.estimateRun({ items: 9 });
+    const searching = await core.estimateRun({ items: 9, searches: 4 });
+    if (without.billing !== "per-token" || searching.billing !== "per-token") {
+      throw new Error("Not billed per token.");
+    }
+    const price = catalogFacts("anthropic", HAIKU)?.price;
+    if (!price) throw new Error("No Haiku price.");
+    const pages = costOf({ inputTokens: 30_000 }, price, new Date("2026-10-12T09:00:00.000Z"));
+    expect((searching.cost?.amount ?? 0) - (without.cost?.amount ?? 0)).toBeCloseTo(
+      4 * (0.01 + pages),
+      6,
+    );
+    expect(searching.tokens - without.tokens).toBe(4 * 30_000);
+
+    const local = await cloudCore(reportingModel([{ input: 0, output: 0 }]), {
+      kind: "ollama",
+      modelId: "local-model",
+    });
+    expect(await local.core.estimateRun({ items: 9, searches: 4 })).toEqual({ billing: "free" });
   });
 
   test("under a cap, it says how much of the month is used", async () => {

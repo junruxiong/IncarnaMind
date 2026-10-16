@@ -86,7 +86,7 @@ describe("Choosing a service is the consent (ADR-0022)", () => {
       allowed("chat", ["blocks", "passages"]),
       allowed("suggestions", ["writing", "writing-passages"]),
       allowed("edits", ["selection"]),
-      allowed("checks", ["selection", "passages", "verified-document"]),
+      allowed("checks", ["selection", "passages", "verified-document", "blocks"]),
       allowed("tagging", ["tags", "document-excerpts"]),
       allowed("classification", ["groups", "tags", "document-excerpts", "page-images"]),
     ]);
@@ -108,30 +108,24 @@ describe("Choosing a service is the consent (ADR-0022)", () => {
     expect(await core.listDataFlows()).toEqual([]);
   });
 
-  test("choosing the provider again keeps a flow the User declined declined", async () => {
-    const { core } = await startWithModel();
+  test("choosing the provider again is a new choice: it replaces an earlier decline, and nothing asks", async () => {
+    const { core, models } = await startWithModel();
     await saveProviderUnasked(core, OPENAI);
     const { result, request } = await askAndWaitForConsent(core);
     await core.respondToConsent(request.requestId, false);
     await expect(result).rejects.toThrow(ConsentDeclinedError);
+    expect(await core.getChatReadiness()).toMatchObject({ reason: "consent-declined" });
+    const requests = countRequests(core);
 
     await core.saveChatProvider(OPENAI);
 
-    expect(await core.getChatReadiness()).toMatchObject({
-      ready: false,
-      reason: "consent-declined",
-    });
-    const flows = await core.listDataFlows();
-    expect(flows).toContainEqual(
+    expect(await core.getChatReadiness()).toMatchObject({ ready: true, consent: "accepted" });
+    await core.prepareChatModel();
+    expect(models.specs).toHaveLength(1);
+    expect(requests).toEqual([]);
+    expect(await core.listDataFlows()).toContainEqual(
       expect.objectContaining({
         flow: expect.objectContaining({ id: "chat" }),
-        consent: "declined",
-        chosen: false,
-      }),
-    );
-    expect(flows).toContainEqual(
-      expect.objectContaining({
-        flow: expect.objectContaining({ id: "edits" }),
         consent: "accepted",
         chosen: true,
       }),
@@ -168,7 +162,7 @@ describe("Decisions made before choosing was the consent", () => {
             AT,
           ],
         );
-      decided("checks", "accepted", ["selection", "passages", "verified-document"]);
+      decided("checks", "accepted", ["selection", "passages", "verified-document", "blocks"]);
       decided("edits", "declined", []);
     } finally {
       db.close();
@@ -181,7 +175,7 @@ describe("Decisions made before choosing was the consent", () => {
       flow: {
         id: "checks",
         service: OPENAI_SERVICE,
-        sends: ["selection", "passages", "verified-document"],
+        sends: ["selection", "passages", "verified-document", "blocks"],
       },
       consent: "accepted",
       decidedAt: AT,
@@ -274,7 +268,7 @@ describe("Data-flow consent", () => {
       // Suggestions, Edit with AI, the checks (#96, #97) and tagging go there too.
       notAsked("suggestions", ["writing", "writing-passages"]),
       notAsked("edits", ["selection"]),
-      notAsked("checks", ["selection", "passages", "verified-document"]),
+      notAsked("checks", ["selection", "passages", "verified-document", "blocks"]),
       notAsked("tagging", ["tags", "document-excerpts"]),
     ]);
   });

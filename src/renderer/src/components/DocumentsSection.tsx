@@ -15,20 +15,16 @@ import { documentStatusText } from "../documentStatus";
 import { useLanguage, useT } from "../i18n";
 import { currentTabOf } from "../layoutSlice";
 import { fileStatusLabel, formatCount } from "../linkedFolders";
+import { usePeekKey } from "../peek";
 import { useRequests } from "../requests";
 import { scanningStatus } from "../scanStatus";
-import {
-  extendThroughRows,
-  rowsIn,
-  selectedOn,
-  useSelectable,
-  useSelectionOrder,
-} from "../selection";
+import { rowsIn, selectedOn, useSelectable, useSelectionOrder } from "../selection";
 import { useSortMenu } from "../sortMenu";
 import { selectVisibleDocuments, useAppStore } from "../store";
 import { chipsOf, tagIndex } from "../tagEditing";
-import { moveThroughRows, TREE_ROW } from "../treeKeys";
+import { moveThroughRows, TREE_ROW, useTreeItem } from "../treeKeys";
 import { useRename } from "../useRename";
+import { useTreeKeyboard } from "../useTreeKeyboard";
 import { ActiveTagFilter, DocumentTagMenu, TagFilterMenu } from "./DocumentTags";
 import { FolderTree } from "./FolderTree";
 import { InlineName } from "./InlineName";
@@ -36,6 +32,7 @@ import { LibraryFolders } from "./LibraryFolders";
 import { LinkFolderDialog } from "./LinkFolderDialog";
 import { DocumentLineIcon, MoreLineIcon } from "./lineIcons";
 import { ObjectMenu, useObjectMenu } from "./ObjectMenu";
+import { ProblemLine } from "./ProblemLine";
 import { SidebarSearch } from "./SidebarSearch";
 import { SidebarTags } from "./SidebarTags";
 import {
@@ -81,10 +78,10 @@ const isProcessing = (status: DocumentStatus) =>
 
 /**
  * The sidebar's tree: "All Documents", then a switcher, "Folders | Tags |
- * Source locations" (with the Tag filter and "+" for a new Folder), over one
+ * Folders on disk" (with the Tag filter and "+" for a new Folder), over one
  * of three views. Folders, the first, is the User's projects: each Folder
  * with its Minds and Documents, then Not in a Folder (see `LibraryFolders`).
- * Tags lists the Tags (see `SidebarTags`); Source locations, each Linked
+ * Tags lists the Tags (see `SidebarTags`); Folders on disk, each Linked
  * folder with its folders as on disk, then "Other Documents", the files
  * added on their own (see `FolderTree`). With nothing to browse but Minds,
  * there is no switcher. Each Document is one row: its name, its Tags' colours (see
@@ -113,6 +110,7 @@ export function DocumentsSection() {
   const addDocuments = useAppStore((state) => state.addDocuments);
   const picker = useRef<HTMLInputElement>(null);
   const tree = useRef<HTMLDivElement>(null);
+  const treeKeys = useTreeKeyboard(tree);
   // ⌘A and Shift-click reach the rows in view: every Mind and Document the tree draws.
   useSelectionOrder("sidebar", () => rowsIn(tree.current));
   const tags = useAppStore((state) => state.tags);
@@ -130,6 +128,11 @@ export function DocumentsSection() {
   const view = views.includes(chosenView) ? chosenView : "folders";
   // A Folder just made is named in its row, which only the Folders view has.
   const naming = useRequests((state) => state.nameFolder !== null);
+  // A folder just linked: the view that shows it, with its row in sight and washed for a moment (#763).
+  const justLinked = useRequests((state) => state.showLinked);
+  useEffect(() => {
+    if (justLinked !== null) setView("sources");
+  }, [justLinked]);
   useEffect(() => {
     if (naming) setView("folders");
   }, [naming]);
@@ -166,12 +169,12 @@ export function DocumentsSection() {
   const empty = documents.length === 0 && (filtering || !hasFolders);
 
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: ↑ and ↓ move between the rows' buttons inside it.
+    // biome-ignore lint/a11y/noStaticElementInteractions: ↑ and ↓ go on from the tree's first and last rows to Search and All Documents.
     <div
       data-testid="documents-section"
       {...tagNamesTipListProps}
       onKeyDown={(event) => {
-        if (!moveThroughRows(event)) extendThroughRows(event, "sidebar");
+        if (!event.defaultPrevented) moveThroughRows(event);
       }}
     >
       {/* Files given straight to the page arrive here, as from the dialog: the smoke tests add them so. */}
@@ -246,7 +249,13 @@ export function DocumentsSection() {
       )}
       {/* Under the switcher, so it never moves; in the Tags view, the chosen Tags say it. */}
       {view !== "tags" && <ActiveTagFilter />}
-      <div ref={tree} role="tree" aria-multiselectable="true" aria-label={t("sidebar.tree")}>
+      <div
+        ref={tree}
+        role="tree"
+        aria-multiselectable="true"
+        aria-label={t("sidebar.tree")}
+        {...treeKeys}
+      >
         {view === "folders" ? (
           <LibraryFolders documents={documents} renderDocument={renderDocument} />
         ) : view === "tags" ? (
@@ -261,13 +270,23 @@ export function DocumentsSection() {
         (filtering ? (
           <p className="px-2 py-1 text-[13px] leading-5 text-ink-meta">{t("tags.filter.empty")}</p>
         ) : (
-          // Adding is the header's "+" menu's: this only says where.
-          <p
-            data-testid="documents-empty"
-            className="px-2 pt-2 pb-1 text-[13px] leading-5 text-ink-meta"
+          <ProblemLine
+            role="status"
+            testId="documents-empty"
+            className="px-2 pt-2 pb-1"
+            action={{
+              label: t("documents.none.addFiles"),
+              testId: "documents-empty-add-files",
+              onClick: () => void useAppStore.getState().pickDocuments(),
+            }}
+            also={{
+              label: t("sidebar.plus.linkFolder"),
+              testId: "documents-empty-link-folder",
+              onClick: () => void useAppStore.getState().addLinkedFolder(),
+            }}
           >
             {t("documents.none")}
-          </p>
+          </ProblemLine>
         ))}
       <LinkFolderDialog />
       <TagNamesTip />
@@ -321,11 +340,12 @@ const DocumentRow = memo(function DocumentRow({
   const select = useSelectable({ kind: "document", id: item.id }, "sidebar", () =>
     openDocument({ documentId: item.id }),
   );
+  const peek = usePeekKey(item.id, "sidebar");
   const lit = isOpen || select.selected;
   const muted = !lit && (isProcessing(item.status) || item.fileStatus !== "available");
+  const treeItem = useTreeItem({ depth, selected: select.selected });
 
   return (
-    // biome-ignore lint/a11y/useFocusableInteractive: the row's own button takes the focus, and the arrow keys move between them.
     <li
       data-testid="document-list-item"
       data-document-id={item.id}
@@ -334,8 +354,9 @@ const DocumentRow = memo(function DocumentRow({
       data-status={item.status}
       data-file-status={item.fileStatus}
       data-tagging={item.tagging}
-      role="treeitem"
-      {...select.rowProps}
+      role="none"
+      {...select.refProps}
+      {...peek.rowProps}
       {...(rename.renaming ? {} : objectMenu.rowProps)}
       className={rowClass(lit, muted ? "muted" : "item")}
     >
@@ -356,7 +377,7 @@ const DocumentRow = memo(function DocumentRow({
         <button
           {...rename.nameProps}
           type="button"
-          {...TREE_ROW}
+          {...treeItem}
           data-testid="open-document"
           aria-current={isOpen ? "true" : undefined}
           aria-description={tagNames}
@@ -384,11 +405,12 @@ const DocumentRow = memo(function DocumentRow({
       )}
       {!rename.renaming && (
         <div className={rowActionsClass}>
-          <DocumentTagMenu item={item} buttonClassName={rowActionButtonClass} />
+          <DocumentTagMenu item={item} buttonClassName={rowActionButtonClass} tabIndex={-1} />
           <ObjectMenu
             target={{ kind: "document", id: item.id }}
             label={t("documents.more", { name: item.name })}
             here={{ "document.rename": rename.start }}
+            tabIndex={-1}
           />
         </div>
       )}
@@ -439,10 +461,11 @@ export function DocumentStatusLabel({ item }: { item: Document }) {
     <span
       data-testid="document-status"
       title={title}
-      className={`shrink-0 text-label font-semibold ${
-        item.status === "failed" && !unread ? "text-danger" : "text-ink-meta"
-      }`}
+      className="flex shrink-0 items-center gap-1.5 text-label font-semibold text-ink-meta"
     >
+      {item.status === "failed" && !unread && (
+        <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-attention" />
+      )}
       <span aria-hidden="true">{short}</span>
       <span className="sr-only">{full}</span>
     </span>

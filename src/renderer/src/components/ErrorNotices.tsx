@@ -1,24 +1,32 @@
+import { createPortal } from "react-dom";
 import { useDismissOnEscape } from "../escapeDismiss";
 import { useT } from "../i18n";
 import { type ErrorNotice as ErrorNoticeState, useNotices } from "../notices";
+import { ProblemMark } from "./ProblemLine";
 import { buttonStyle } from "./ui";
+import { useTopModal } from "./useModal";
 
 /**
  * What failed where the action had no line of its own, in plain words, bottom right (DESIGN.md,
  * Problems). Each stays until the User dismisses it, with its button or Esc: it never goes by
  * itself, as an error the User didn't read would be lost. The technical text is one click away
  * under Details; nothing here shows Electron's wrapping or a stack.
+ *
+ * With a modal dialog open (Settings, say), they are drawn inside it: it makes all else inert, so
+ * a notice outside would be hidden or unclickable (#754).
  */
 export function ErrorNotices() {
   const errors = useNotices((state) => state.errors);
+  const modal = useTopModal();
   if (errors.length === 0) return null;
-  return (
+  const list = (
     <div className="fixed right-4 bottom-4 z-20 flex max-w-sm flex-col gap-2">
       {errors.map((notice) => (
         <Notice key={notice.id} notice={notice} />
       ))}
     </div>
   );
+  return modal ? createPortal(list, modal) : list;
 }
 
 function Notice({ notice }: { notice: ErrorNoticeState }) {
@@ -35,8 +43,9 @@ function Notice({ notice }: { notice: ErrorNoticeState }) {
     <div
       role="alert"
       data-testid="error-notice"
-      className="flex items-start gap-3 rounded-lg bg-sheet py-2.5 pr-2.5 pl-4 text-[13px] leading-5 text-danger shadow-popover"
+      className="flex items-start gap-3 rounded-lg bg-sheet py-2.5 pr-2.5 pl-4 text-[13px] leading-5 text-ink shadow-popover"
     >
+      <ProblemMark className="mt-2 -mr-1.5" />
       <div className="min-w-0 flex-1 py-1">
         {/* A long one is cut here and kept whole under Details. */}
         <p data-testid="error-notice-message" title={line} className="line-clamp-4 break-words">
@@ -49,6 +58,22 @@ function Notice({ notice }: { notice: ErrorNoticeState }) {
           </p>
         </details>
       </div>
+      {notice.action && (
+        <button
+          type="button"
+          data-testid="error-notice-action"
+          onClick={() => {
+            const { action } = notice;
+            dismiss();
+            Promise.resolve(action?.run()).catch((error: unknown) =>
+              useNotices.getState().showError(error),
+            );
+          }}
+          className={buttonStyle("secondary", "sm")}
+        >
+          {notice.action.label}
+        </button>
+      )}
       <button
         type="button"
         data-testid="error-notice-dismiss"

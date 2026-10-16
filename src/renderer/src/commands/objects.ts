@@ -1,6 +1,7 @@
 import type { LinkedFolder } from "../../../core/api";
 import { displayName } from "../../../shared/documentNames";
 import { core, files } from "../core";
+import { useDocumentPasswords } from "../documentPasswords";
 import { showFileLabelKey } from "../fileInfo";
 import { languageNow, translateNow } from "../i18n";
 import { bridgeFrom, type LibraryBridge } from "../libraryBridges";
@@ -65,6 +66,16 @@ const fileReason = (ctx: CommandContext) => {
 };
 
 const onFiles = (ctx: CommandContext) => everyDocument(ctx, (document) => !document.web);
+
+/** A PDF that couldn't be read for want of its password (#763). */
+const isLockedPdf = (document: { kind: string; failure: { reason: string } | null }) =>
+  document.kind === "pdf" && document.failure?.reason === "password-protected";
+
+/** The Mind a Word file was imported as (#720), while it is there. */
+const importedMindOf = (ctx: CommandContext) => {
+  const id = documentsOf(ctx)[0]?.importedAs;
+  return id ? store().minds.find((each) => each.id === id) : undefined;
+};
 
 export const mindCommands: readonly Command[] = [
   {
@@ -142,6 +153,18 @@ export const documentCommands: readonly Command[] = [
       store().openDocument({ documentId: idsOf(ctx, "document")[0] ?? "" }, { as: "here" }),
   },
   {
+    id: "document.openMind",
+    label: "document.openMind",
+    group: "open",
+    appliesTo: ["document"],
+    when: (ctx) => onlyOne(ctx) && importedMindOf(ctx) !== undefined,
+    reversible: true,
+    run(ctx) {
+      const mind = importedMindOf(ctx);
+      if (mind) store().openMind(mind.id);
+    },
+  },
+  {
     id: "document.ask",
     label: (ctx, t) =>
       many(ctx) ? t("library.ask.documents", { count: many(ctx) }) : t("documents.ask"),
@@ -184,15 +207,48 @@ export const documentCommands: readonly Command[] = [
         : t("documents.retryAction"),
     group: "main",
     appliesTo: ["document"],
-    // Only a failed one whose file is there to be read again.
+    // Only a failed one, or a scan with no text, whose file is there to be read again; a locked PDF
+    // is unlocked instead.
     when: (ctx) =>
       everyDocument(
         ctx,
-        (document) => document.status === "failed" && document.fileStatus === "available",
+        (document) =>
+          (document.status === "failed" || document.status === "no-text") &&
+          document.fileStatus === "available" &&
+          !isLockedPdf(document),
       ),
     reversible: true,
     run: async (ctx) => {
       await Promise.all(idsOf(ctx, "document").map((id) => store().retryDocument(id)));
+    },
+  },
+  {
+    // Opens it where its password is asked for (#763).
+    id: "document.unlock",
+    label: "documents.unlockAction",
+    group: "main",
+    appliesTo: ["document"],
+    when: (ctx) =>
+      onlyOne(ctx) &&
+      everyDocument(
+        ctx,
+        (document) => isLockedPdf(document) && document.fileStatus === "available",
+      ),
+    reversible: true,
+    run: (ctx) => store().openDocument({ documentId: idsOf(ctx, "document")[0] ?? "" }),
+  },
+  {
+    id: "document.forgetPassword",
+    label: "documents.forgetPasswordAction",
+    group: "edit",
+    appliesTo: ["document"],
+    when: (ctx) =>
+      onlyOne(ctx) &&
+      useDocumentPasswords.getState().kept.includes(idsOf(ctx, "document")[0] ?? ""),
+    // Nothing is lost: the text read stays, and the password opens it again.
+    reversible: true,
+    run: async (ctx) => {
+      await core.forgetDocumentPassword(idsOf(ctx, "document")[0] ?? "").catch(reportError);
     },
   },
   {

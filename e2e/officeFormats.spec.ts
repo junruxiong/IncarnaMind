@@ -20,6 +20,7 @@ import {
   createDataFolder,
   dismissChatSetup,
   documentIdOf,
+  exportFromMenu,
   launchApp,
   linkFolderFromSidebar,
   newMind,
@@ -257,7 +258,7 @@ test("Word, PowerPoint, Excel and CSV files in a linked folder are cited by sect
   const target = join(sources, "Formats.docx");
   await useOutputLocation(window, sources);
   await window.keyboard.press("Escape");
-  await window.getByTestId("export-mind").click();
+  await exportFromMenu(window);
   const result = window.getByTestId("export-result");
   await expect(result.getByTestId("export-done")).toHaveText("Saved Formats.docx");
   // Every quote was found: no line about one that wasn't.
@@ -665,7 +666,10 @@ test("a Word file over 500 MB fails as too large to open, in English and Chinese
     await expect(review).toHaveAttribute("data-status", "ready", { timeout: 30_000 });
     // "Failed" at the row's end; the reason for screen readers, and the limit in its tooltip.
     const status = refused.getByTestId("document-status");
-    await expect(status.locator("[aria-hidden]")).toHaveText("Failed");
+    await expect(status.locator("[aria-hidden]").filter({ hasText: "Failed" })).toHaveText(
+      "Failed",
+    );
+    await expect(status.locator(".bg-attention")).toBeVisible();
     await expect(status.locator(".sr-only")).toHaveText("Failed: the file is too large to open");
     await expect(status).toHaveAttribute(
       "title",

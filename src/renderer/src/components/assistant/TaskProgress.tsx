@@ -1,13 +1,15 @@
 import { Fragment, type ReactNode, useEffect, useId, useState } from "react";
 import type { Task, TaskStep } from "../../../../core/api";
 import type { Language } from "../../../../core/language";
+import { formatDateTime } from "../../../../shared/dates";
+import { RESEARCH_TASK } from "../../../../shared/research";
 import { core } from "../../core";
 import { formatMoney } from "../../cost";
 import { useLanguage, useT } from "../../i18n";
 import type { Translate } from "../../objects";
 import { useAppStore } from "../../store";
 import { needsYou } from "../../taskGroups";
-import { pauseTask, resumeTask, showTask, stopTask, useTasks } from "../../tasks";
+import { pauseTask, resumeTask, reviewTask, stopTask, useTasks } from "../../tasks";
 import { stepLine, taskName } from "../../taskText";
 import { CheckLineIcon } from "../lineIcons";
 
@@ -41,10 +43,14 @@ function headLine(task: Task, minutes: number, t: Translate): string {
   if (task.status === "stopped") return t("task.status.stopped");
   const progress = task.progress;
   if (!progress || progress.total === 0) return time;
-  const counted = t(task.kind === "comparison" ? "task.progress.cells" : "task.progress.items", {
-    done: progress.done,
-    total: progress.total,
-  });
+  const counted = t(
+    task.kind === "comparison"
+      ? "task.progress.cells"
+      : task.kind === RESEARCH_TASK
+        ? "task.progress.steps"
+        : "task.progress.items",
+    { done: progress.done, total: progress.total },
+  );
   return `${counted} · ${time}`;
 }
 
@@ -65,10 +71,7 @@ function details(task: Task, t: Translate, language: Language): string {
   if (task.kind === "comparison" && task.progress) {
     parts.push(t("task.details.cells", { done: task.progress.done, total: task.progress.total }));
   }
-  const time = new Intl.DateTimeFormat(language, { hour: "numeric", minute: "2-digit" }).format(
-    new Date(task.startedAt),
-  );
-  parts.push(t("task.details.started", { time }));
+  parts.push(t("task.details.started", { time: formatDateTime(task.startedAt, language) }));
   if (task.cost) parts.push(t("task.details.cost", { cost: formatMoney(task.cost, language) }));
   return parts.join(" · ");
 }
@@ -123,7 +126,7 @@ function useAllSteps(task: Task, wanted: boolean): readonly TaskStep[] | null {
 }
 
 /**
- * A Task's progress in the thread (D189; DESIGN.md, Task progress in the
+ * A Task's progress in the thread (#657; DESIGN.md, Task progress in the
  * thread; the boards Tasks-*), where it started, as an Answer shows its
  * steps: the live dot and its name, how far it is; a 3px bar; "Show all N
  * steps"; its latest steps, ✓ when done and a dot on the one it is on; then
@@ -175,7 +178,7 @@ export function TaskProgress({
         key: "review",
         testId: "review",
         label: t("task.action.review"),
-        onClick: () => showTask(task),
+        onClick: () => reviewTask(task),
         strong: true,
       });
     }
@@ -270,15 +273,36 @@ export function TaskProgress({
           </li>
         )}
       </ol>
+      {task.remaining.length > 0 && (
+        <div data-testid="task-progress-remaining" className="task-progress-remaining">
+          <p className="task-progress-remaining-label">{t("task.progress.remaining")}</p>
+          <ul className="task-progress-steps">
+            {task.remaining.map((step, index) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: what is left, in its order.
+              <li key={index} className="task-progress-step">
+                <span aria-hidden="true" className="task-progress-mark">
+                  –
+                </span>
+                <span>{step}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {detailsOpen && (
         <p id={detailsId} data-testid="task-progress-record" className="task-progress-details">
           {details(task, t, language)}
         </p>
       )}
       <div data-testid="task-progress-actions" className="task-progress-actions">
+        {task.summary && (
+          <span data-testid="task-progress-summary" className="task-progress-summary">
+            {task.summary}
+          </span>
+        )}
         {offered.map((action, index) => (
           <Fragment key={action.key}>
-            {index > 0 && <Dot />}
+            {(index > 0 || task.summary) && <Dot />}
             <button
               type="button"
               data-testid={`task-progress-${action.testId}`}
