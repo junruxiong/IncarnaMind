@@ -10,6 +10,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import type { AddressInfo } from "node:net";
 import { onTestFinished } from "vitest";
 import type { Browser } from "../../src/core";
+import { isRecord } from "../../src/core/errors";
 import type { AnthropicOAuthConfig } from "../../src/core/providers/claudeAccount/config";
 
 export const ANSWER = "Hello from your Claude plan.";
@@ -253,7 +254,8 @@ export async function startFakeAnthropic(): Promise<FakeAnthropic> {
     readBody(request)
       .then((raw) => {
         const isJson = (request.headers["content-type"] ?? "").includes("application/json");
-        const body = raw && isJson ? (JSON.parse(raw) as Record<string, unknown>) : {};
+        const parsed: unknown = raw && isJson ? JSON.parse(raw) : {};
+        const body = isRecord(parsed) ? parsed : {};
         if (request.method === "POST" && path === "/v1/oauth/token") {
           if (!isJson) return sendJson(response, 415, { error: "invalid_request" });
           return token(fake, body, response);

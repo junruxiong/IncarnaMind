@@ -182,7 +182,7 @@ export function createAccountFetch(
     if (refused) throw refused;
     return response;
   };
-  return accountFetch as typeof globalThis.fetch;
+  return accountFetch;
 }
 
 export function createClaudeAccountChatModel(options: {

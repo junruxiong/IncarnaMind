@@ -261,11 +261,11 @@ export async function refreshOAuthTokens(options: {
     options.fetch ?? globalThis.fetch,
     options.tokenUrl,
     {
+      ...options.params,
       grant_type: "refresh_token",
       client_id: options.clientId,
       refresh_token: options.refreshToken,
       ...(options.scope ? { scope: options.scope } : {}),
-      ...options.params,
     },
     options.format ?? "form",
     options.signal,
