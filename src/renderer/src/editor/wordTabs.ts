@@ -1,6 +1,6 @@
 import { Mark } from "@tiptap/core";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
-import { type EditorState, Plugin, type Transaction } from "@tiptap/pm/state";
+import { type EditorState, Plugin, TextSelection, type Transaction } from "@tiptap/pm/state";
 import { AddMarkStep, RemoveMarkStep } from "@tiptap/pm/transform";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
 import type * as Y from "yjs";
@@ -278,6 +278,30 @@ const tabBoxes = new Plugin<DecorationSet>({
   props: {
     decorations(state) {
       return this.getState(state);
+    },
+    // The arrow keys step over a tab here: at an inline-block's edge Chrome can stop on the edge itself, which ProseMirror reads as no move.
+    handleKeyDown(view, event) {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return false;
+      if (event.altKey || event.ctrlKey || event.metaKey) return false;
+      const { doc, selection } = view.state;
+      if (!(selection instanceof TextSelection) || (!event.shiftKey && !selection.empty)) {
+        return false;
+      }
+      const forward = event.key === "ArrowRight";
+      const tab = forward ? selection.head : selection.head - 1;
+      if (tab < 0 || tab >= doc.content.size || doc.textBetween(tab, tab + 1) !== "\t") {
+        return false;
+      }
+      const mark = doc.type.schema.marks[WORD_TAB_MARK];
+      if (!mark || !doc.rangeHasMark(tab, tab + 1, mark)) return false;
+      const paragraph = view.nodeDOM(selection.$head.before());
+      if (!(paragraph instanceof HTMLElement) || getComputedStyle(paragraph).direction === "rtl") {
+        return false;
+      }
+      const head = forward ? tab + 1 : tab;
+      const anchor = event.shiftKey ? selection.anchor : head;
+      view.dispatch(view.state.tr.setSelection(TextSelection.create(doc, anchor, head)));
+      return true;
     },
   },
 });
