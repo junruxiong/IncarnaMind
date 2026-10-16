@@ -61,7 +61,6 @@ export interface TaggerOptions {
   db: Database;
   /** The folder organizer owns tagging while it is configured. */
   enabled?(): boolean;
-  /** Whether the User stopped Tagging with AI where this Document is (#895). */
   stopped(id: string): boolean;
   now: () => string;
   tags: TagsStore;

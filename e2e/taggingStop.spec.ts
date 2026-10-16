@@ -41,7 +41,6 @@ test.afterEach(async () => {
   await removeDataFolder(sources);
 });
 
-/** A text file the scripted model takes a moment to tag. */
 async function slowFile(name: string): Promise<string> {
   const path = join(sources, `${name}.md`);
   await writeFile(path, `${name}. Read slowly: the facts of the case.\n`);
@@ -55,7 +54,6 @@ async function createFolder(window: Page, name: string): Promise<string> {
   }, name);
 }
 
-/** Adds files to a Folder, as dropping them on it does. */
 async function addToFolder(window: Page, paths: string[], groupId: string): Promise<void> {
   await window.evaluate(
     async ([paths, groupId]) => {
@@ -66,7 +64,6 @@ async function addToFolder(window: Page, paths: string[], groupId: string): Prom
   );
 }
 
-/** Shows a Folder's Documents in the sidebar, whether or not it was open. */
 async function openFolder(window: Page, name: string): Promise<void> {
   const row = sidebarFolder(window, name).getByTestId("folder-row");
   if ((await row.getAttribute("aria-expanded")) !== "true") await row.click();
@@ -76,7 +73,6 @@ async function openFolder(window: Page, name: string): Promise<void> {
 const documentItem = (window: Page, name: string) =>
   window.getByTestId("document-list-item").filter({ hasText: name });
 
-/** Saves an Anthropic key in Settings › Models, as the User pastes one. */
 async function pasteKey(window: Page): Promise<void> {
   const settings = await openSettings(window, "models");
   await settings.getByTestId("chat-choice-api-key").check();
@@ -114,7 +110,6 @@ test("the status names where Tagging goes; Stop keeps the Folder's new Documents
   const footer = window.getByTestId("sidebar-status");
   await expect(footer.getByTestId("tagging-waiting")).toContainText("No AI model for Tags");
 
-  // Once the key is in, the status says how many go where, and never that there is no model.
   await pasteKey(window);
   const status = footer.getByTestId("tagging-status");
   await expect(status.getByTestId("status-label")).toHaveText(
@@ -129,22 +124,17 @@ test("the status names where Tagging goes; Stop keeps the Folder's new Documents
   );
   await screenshot(window, "tagging-status-stop-en");
 
-  // Stop: Undo is offered, and the Documents not yet sent wait.
   await stop.click();
-  await expect(window.getByTestId("undo-message")).toHaveText(
-    `Stopped Tagging in “${FOLDER}”`,
-  );
+  await expect(window.getByTestId("undo-message")).toHaveText(`Stopped Tagging in “${FOLDER}”`);
   await expect(status).toHaveCount(0);
   await expect(documentItem(window, "Delivery log")).toHaveAttribute("data-tagging", "stopped");
 
-  // A Document added to the Folder now isn't sent.
   await addToFolder(window, [await slowFile("Expert report")], folderId);
   await expect(documentItem(window, "Expert report")).toHaveAttribute("data-tagging", "stopped");
   await expect(footer.getByTestId("tagging-status")).toHaveCount(0);
   await screenshot(window, "tagging-stopped-undo-en");
   await app.close();
 
-  // After a restart it is still stopped, and the Folder's menu offers to turn it back on.
   const again = await launchApp(dataDir, { fakeChat: true });
   await setWindowSize(again.app, again.window, 1440, 900);
   const folder = sidebarFolder(again.window, FOLDER);
@@ -153,7 +143,6 @@ test("the status names where Tagging goes; Stop keeps the Folder's new Documents
     "data-tagging",
     "stopped",
   );
-  // Settings › Models › Tagging says where it is stopped, and can turn it back on too.
   const settings = await openSettings(again.window, "models");
   await expect(settings.getByTestId("tagging-stopped")).toContainText(
     `Tagging with AI is stopped for Documents in “${FOLDER}”.`,

@@ -203,7 +203,6 @@ export function createLibrary(options: {
         : [];
     return { classifier, automatic, organizeWith, taggingStopped };
   };
-  /** The live Folder a Document is in, a Suggested Folder included; null for Not in a Folder. */
   const placeOf = (id: string): string | null =>
     db.get<{ group_id: string }>(
       "SELECT a.group_id FROM document_groups a JOIN library_groups g ON g.id = a.group_id WHERE a.document_id = ? AND a.deleted_at IS NULL AND g.deleted_at IS NULL",
@@ -617,7 +616,6 @@ export function createLibrary(options: {
   return {
     settings: getSettings,
     taggingStoppedFor,
-    /** Where the Documents waiting to be tagged, or being tagged, are: their live Folders, and null for Not in a Folder. */
     taggingPlaces(): (string | null)[] {
       const ids = db
         .all<{ id: string }>(
