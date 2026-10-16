@@ -1,0 +1,324 @@
+{
+  "format": 1,
+  "about": "References to check against Crossref: real works, invented ones that look plausible, and real ones with a wrong year or author. Run with npm run eval:references.",
+  "references": [
+    {
+      "id": "real-01",
+      "reference": "Hochreiter, S., & Schmidhuber, J. (1997). Long short-term memory. Neural Computation, 9(8), 1735–1780. https://doi.org/10.1162/neco.1997.9.8.1735",
+      "expected": "found",
+      "note": "DOI"
+    },
+    {
+      "id": "real-02",
+      "reference": "LeCun, Y., Bengio, Y., & Hinton, G. (2015). Deep learning. Nature, 521(7553), 436–444.",
+      "expected": "found",
+      "note": "no DOI"
+    },
+    {
+      "id": "real-03",
+      "reference": "Krizhevsky, A., Sutskever, I., & Hinton, G. E. (2017). ImageNet classification with deep convolutional neural networks. Communications of the ACM, 60(6), 84–90.",
+      "expected": "found",
+      "note": "no DOI"
+    },
+    {
+      "id": "real-04",
+      "reference": "Mnih, V., Kavukcuoglu, K., Silver, D., et al. (2015). Human-level control through deep reinforcement learning. Nature, 518(7540), 529–533.",
+      "expected": "found",
+      "note": "no DOI"
+    },
+    {
+      "id": "real-05",
+      "reference": "Silver, D., Huang, A., Maddison, C. J., et al. (2016). Mastering the game of Go with deep neural networks and tree search. Nature, 529(7587), 484–489.",
+      "expected": "found",
+      "note": "no DOI"
+    },
+    {
+      "id": "real-06",
+      "reference": "Watson, J. D., & Crick, F. H. C. (1953). Molecular structure of nucleic acids: A structure for deoxyribose nucleic acid. Nature, 171(4356), 737–738.",
+      "expected": "found",
+      "note": "no DOI"
+    },
+    {
+      "id": "real-07",
+      "reference": "Shannon, C. E. (1948). A mathematical theory of communication. Bell System Technical Journal, 27(3), 379–423.",
+      "expected": "found",
+      "note": "no DOI"
+    },
+    {
+      "id": "real-08",
+      "reference": "Lander, E. S., Linton, L. M., Birren, B., et al. (2001). Initial sequencing and analysis of the human genome. Nature, 409(6822), 860–921.",
+      "expected": "found",
+      "note": "no DOI"
+    },
+    {
+      "id": "real-09",
+      "reference": "Jumper, J., Evans, R., Pritzel, A., et al. (2021). Highly accurate protein structure prediction with AlphaFold. Nature, 596(7873), 583–589. doi:10.1038/s41586-021-03819-2",
+      "expected": "found",
+      "note": "DOI"
+    },
+    {
+      "id": "real-10",
+      "reference": "He, K., Zhang, X., Ren, S., & Sun, J. (2016). Deep residual learning for image recognition. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (pp. 770–778).",
+      "expected": "found",
+      "note": "conference, no DOI"
+    },
+    {
+      "id": "real-11",
+      "reference": "Doudna, J. A., & Charpentier, E. (2014). The new frontier of genome engineering with CRISPR-Cas9. Science, 346(6213), 1258096. doi:10.1126/science.1258096",
+      "expected": "found",
+      "note": "DOI"
+    },
+    {
+      "id": "real-12",
+      "reference": "Jinek, M., Chylinski, K., Fonfara, I., Hauer, M., Doudna, J. A., & Charpentier, E. (2012). A programmable dual-RNA-guided DNA endonuclease in adaptive bacterial immunity. Science, 337(6096), 816–821.",
+      "expected": "found",
+      "note": "no DOI"
+    },
+    {
+      "id": "real-13",
+      "reference": "Kahneman, D., & Tversky, A. (1979). Prospect theory: An analysis of decision under risk. Econometrica, 47(2), 263–291.",
+      "expected": "found",
+      "note": "no DOI"
+    },
+    {
+      "id": "real-14",
+      "reference": "周志华. (2016). 机器学习. 北京: 清华大学出版社.",
+      "expected": "found",
+      "note": "Chinese book, no DOI"
+    },
+    {
+      "id": "real-15",
+      "reference": "Ioannidis, J. P. A. (2005). Why most published research findings are false. PLoS Medicine, 2(8), e124. https://doi.org/10.1371/journal.pmed.0020124",
+      "expected": "found",
+      "note": "DOI"
+    },
+    {
+      "id": "real-16",
+      "reference": "Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A. N., Kaiser, Ł., & Polosukhin, I. (2017). Attention is all you need. Advances in Neural Information Processing Systems, 30.",
+      "expected": "found",
+      "note": "conference, no DOI"
+    },
+    {
+      "id": "real-17",
+      "reference": "Kingma, D. P., & Ba, J. (2014). Adam: A method for stochastic optimization. arXiv preprint arXiv:1412.6980.",
+      "expected": "found",
+      "note": "arXiv preprint"
+    },
+    {
+      "id": "real-18",
+      "reference": "Brown, T., Mann, B., Ryder, N., et al. (2020). Language models are few-shot learners. Advances in Neural Information Processing Systems, 33, 1877–1901.",
+      "expected": "found",
+      "note": "conference, no DOI"
+    },
+    {
+      "id": "real-19",
+      "reference": "Harris, C. R., Millman, K. J., van der Walt, S. J., et al. (2020). Array programming with NumPy. Nature, 585(7825), 357–362. https://doi.org/10.1038/s41586-020-2649-2",
+      "expected": "found",
+      "note": "DOI"
+    },
+    {
+      "id": "real-20",
+      "reference": "Devlin, J., Chang, M.-W., Lee, K., & Toutanova, K. (2019). BERT: Pre-training of deep bidirectional transformers for language understanding. In Proceedings of NAACL-HLT 2019 (pp. 4171–4186).",
+      "expected": "found",
+      "note": "conference, no DOI"
+    },
+    {
+      "id": "invented-01",
+      "reference": "Marlowe, T. (2019). Quantum gradient folding in recurrent attention lattices. Journal of Imagined Results, 4, 1–9.",
+      "expected": "not-found",
+      "note": "invented, plausible"
+    },
+    {
+      "id": "invented-02",
+      "reference": "Chen, L., & Hartmann, R. (2018). Adaptive entropy pruning for sparse transformer memories. Neural Computation, 30(11), 2901–2925.",
+      "expected": "not-found",
+      "note": "invented, plausible"
+    },
+    {
+      "id": "invented-03",
+      "reference": "Okafor, N., Liu, J., & Brandt, S. (2021). Cross-lingual citation hallucination in large language models: A benchmark. Transactions of the Association for Computational Linguistics, 9, 1102–1118.",
+      "expected": "not-found",
+      "note": "invented, plausible"
+    },
+    {
+      "id": "invented-04",
+      "reference": "Fischer, M. (2016). The ecology of urban heat islands in coastal Mediterranean cities. Urban Climate, 17, 45–62.",
+      "expected": "not-found",
+      "note": "invented, plausible"
+    },
+    {
+      "id": "invented-05",
+      "reference": "Patel, R., & Gómez, A. (2020). Mitochondrial signalling in drought-tolerant sorghum cultivars. Plant Physiology, 182(3), 1411–1426.",
+      "expected": "not-found",
+      "note": "invented, plausible"
+    },
+    {
+      "id": "invented-06",
+      "reference": "Nguyen, T. H. (2017). A unified theory of monetary shocks in small open economies. Journal of Monetary Economics, 89, 77–95.",
+      "expected": "not-found",
+      "note": "invented, plausible"
+    },
+    {
+      "id": "invented-07",
+      "reference": "Larsen, K., & Abara, J. (2022). Microplastic transport in Arctic sea ice: A ten-year survey. Nature Geoscience, 15(4), 300–308.",
+      "expected": "not-found",
+      "note": "invented, plausible"
+    },
+    {
+      "id": "invented-08",
+      "reference": "Svensson, E. (2015). Judicial review and algorithmic sentencing in the Nordic courts. Yale Law Journal, 124(6), 1890–1943.",
+      "expected": "not-found",
+      "note": "invented, plausible"
+    },
+    {
+      "id": "invented-09",
+      "reference": "Haddad, S., Kim, Y., & Rossi, P. (2019). Graph neural operators for turbulent flow closure in stratified oceans. arXiv preprint arXiv:1907.99871.",
+      "expected": "not-found",
+      "note": "invented, with an invented arXiv number"
+    },
+    {
+      "id": "invented-10",
+      "reference": "Moreau, C. (2013). Bilingual memory consolidation during sleep spindles in older adults. Neuropsychologia, 51(9), 1650–1662.",
+      "expected": "not-found",
+      "note": "invented, plausible"
+    },
+    {
+      "id": "invented-11",
+      "reference": "王立新, 赵敏. (2018). 基于深度学习的古籍文字自动校勘研究. 中文信息学报, 32(5), 45–53.",
+      "expected": "not-found",
+      "note": "invented, plausible"
+    },
+    {
+      "id": "invented-12",
+      "reference": "Alvarez, J. (2020). Self-healing concrete with engineered fungal spores at subzero temperatures. Cement and Concrete Research, 137, 106201.",
+      "expected": "not-found",
+      "note": "invented, plausible"
+    },
+    {
+      "id": "invented-13",
+      "reference": "Brennan, D., & Iyer, S. (2014). Placebo effects in remote cognitive behavioural therapy: A meta-analysis. The Lancet Psychiatry, 1(5), 360–369.",
+      "expected": "not-found",
+      "note": "invented, plausible"
+    },
+    {
+      "id": "invented-14",
+      "reference": "Kowalski, P. (2021). Atmospheric lensing as a probe of exoplanet magnetospheres. The Astrophysical Journal, 912(2), 88. https://doi.org/10.3847/1538-4357/abq7z31",
+      "expected": "not-found",
+      "note": "invented, with an invented DOI"
+    },
+    {
+      "id": "invented-15",
+      "reference": "Tanaka, H., & Moore, B. (2012). Sovereign debt contagion and the euro-area interbank lending network. Review of Financial Studies, 25(9), 2650–2687.",
+      "expected": "not-found",
+      "note": "invented, plausible"
+    },
+    {
+      "id": "mismatch-01",
+      "reference": "Hochreiter, S., & Schmidhuber, J. (2003). Long short-term memory. Neural Computation, 9(8), 1735–1780.",
+      "expected": "mismatch",
+      "note": "year 1997"
+    },
+    {
+      "id": "mismatch-02",
+      "reference": "LeCun, Y., Bengio, Y., & Hinton, G. (2012). Deep learning. Nature, 521(7553), 436–444.",
+      "expected": "mismatch",
+      "note": "year 2015"
+    },
+    {
+      "id": "mismatch-03",
+      "reference": "Smith, J. (2015). Deep learning. Nature, 521(7553), 436–444. doi:10.1038/nature14539",
+      "expected": "mismatch",
+      "note": "authors LeCun et al."
+    },
+    {
+      "id": "mismatch-04",
+      "reference": "Watson, J. D., & Crick, F. H. C. (1963). Molecular structure of nucleic acids: A structure for deoxyribose nucleic acid. Nature, 171, 737–738.",
+      "expected": "mismatch",
+      "note": "year 1953"
+    },
+    {
+      "id": "mismatch-05",
+      "reference": "Shannon, C. E. (1958). A mathematical theory of communication. Bell System Technical Journal, 27(3), 379–423.",
+      "expected": "mismatch",
+      "note": "year 1948"
+    },
+    {
+      "id": "mismatch-06",
+      "reference": "Granovetter, M. S. (1983). The strength of weak ties. American Journal of Sociology, 78(6), 1360–1380.",
+      "expected": "mismatch",
+      "note": "year 1973"
+    },
+    {
+      "id": "mismatch-07",
+      "reference": "Kahneman, D., & Tversky, A. (1985). Prospect theory: An analysis of decision under risk. Econometrica, 47(2), 263–291.",
+      "expected": "mismatch",
+      "note": "year 1979"
+    },
+    {
+      "id": "mismatch-08",
+      "reference": "Ioannidis, J. P. A. (2009). Why most published research findings are false. PLoS Medicine, 2(8), e124.",
+      "expected": "mismatch",
+      "note": "year 2005"
+    },
+    {
+      "id": "mismatch-09",
+      "reference": "Hardin, G. (1978). The tragedy of the commons. Science, 162(3859), 1243–1248.",
+      "expected": "mismatch",
+      "note": "year 1968"
+    },
+    {
+      "id": "mismatch-10",
+      "reference": "Brown, T. (2016). Mastering the game of Go with deep neural networks and tree search. Nature, 529(7587), 484–489.",
+      "expected": "mismatch",
+      "note": "authors Silver et al."
+    },
+    {
+      "id": "mismatch-11",
+      "reference": "Johnson, M. (2005). Why most published research findings are false. PLoS Medicine, 2(8), e124.",
+      "expected": "mismatch",
+      "note": "authors Ioannidis"
+    },
+    {
+      "id": "mismatch-12",
+      "reference": "Doudna, J. A., & Charpentier, E. (2020). The new frontier of genome engineering with CRISPR-Cas9. Science, 346(6213), 1258096.",
+      "expected": "mismatch",
+      "note": "year 2014"
+    },
+    {
+      "id": "mismatch-13",
+      "reference": "Jumper, J., Evans, R., Pritzel, A., et al. (2019). Highly accurate protein structure prediction with AlphaFold. Nature, 596(7873), 583–589.",
+      "expected": "mismatch",
+      "note": "year 2021"
+    },
+    {
+      "id": "mismatch-14",
+      "reference": "Zhang, W. (2016). Deep residual learning for image recognition. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (pp. 770–778).",
+      "expected": "mismatch",
+      "note": "authors He et al."
+    },
+    {
+      "id": "mismatch-15",
+      "reference": "Harris, C. R., Millman, K. J., van der Walt, S. J., et al. (2018). Array programming with NumPy. Nature, 585(7825), 357–362. https://doi.org/10.1038/s41586-020-2649-2",
+      "expected": "mismatch",
+      "note": "year 2020, by DOI"
+    },
+    {
+      "id": "mismatch-16",
+      "reference": "Watson, J. D., & Crick, F. H. C. (1954). Molecular structure of nucleic acids: A structure for deoxyribose nucleic acid. Nature, 171, 737–738.",
+      "expected": "mismatch",
+      "note": "year 1953, one off"
+    },
+    {
+      "id": "mismatch-17",
+      "reference": "Granovetter, M. S. (1974). The strength of weak ties. American Journal of Sociology, 78(6), 1360–1380.",
+      "expected": "mismatch",
+      "note": "year 1973, one off"
+    },
+    {
+      "id": "mismatch-18",
+      "reference": "Hardin, G. (1969). The tragedy of the commons. Science, 162(3859), 1243–1248.",
+      "expected": "mismatch",
+      "note": "year 1968, one off"
+    }
+  ]
+}

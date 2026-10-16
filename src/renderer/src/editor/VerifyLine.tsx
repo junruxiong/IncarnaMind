@@ -31,6 +31,7 @@ import {
 import { AnswerError } from "./AnswerView";
 import { coverageOf, type ShownClaim, sameCoverage, shownClaims } from "./claimChecks";
 import { useMindModel, useRunModel } from "./ModelChip";
+import { ReferencesLine } from "./ReferencesLine";
 import { UncoveredLine } from "./UncoveredLine";
 
 const partsOf = (...parts: ReactNode[]): ReactNode[] => parts;
@@ -392,6 +393,7 @@ export function VerifyLine({
           {t("verify.problem.error", { message: outcome.message })}
         </ProblemLine>
       )}
+      {running === null && <ReferencesLine editor={editor} mindId={mindId} />}
     </>
   );
 }
