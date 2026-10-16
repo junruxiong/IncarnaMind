@@ -181,6 +181,16 @@ export function claimCheckShown(check: ClaimCheckAttributes, now: ClaimCheckNow)
 }
 
 /**
+ * Whether Documents added to its scope since could change a check (#993): one
+ * found unsupported or not checked. A supported or contradicted one already
+ * has its evidence, and contradiction watch makes its own checks again.
+ */
+export const addedCouldChange = (check: ClaimCheckAttributes, shown: ClaimCheckShown): boolean =>
+  check.action !== "contradiction-watch" &&
+  check.checkedAt !== "" &&
+  (shown.state === "unsupported" || shown.state === "not-checked");
+
+/**
  * A sentence's check as a record lists it: the counts' keys (`needsRecheck` is a Document or the
  * scope that changed), and "changed" once its words were edited. Null while it is still checking.
  */

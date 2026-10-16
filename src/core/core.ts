@@ -1620,6 +1620,8 @@ export function createCore(adapters: CoreAdapters): Core {
     evidence,
     documents: {
       searchableCount: (documentIds) => documents.searchableCount(documentIds ?? undefined),
+      addedAfter: (documentIds, since) =>
+        documents.searchableAddedAfter(documentIds ?? undefined, since),
       names: () => documents.names(),
       searchableLanguages: (documentIds) => documents.searchableLanguages(documentIds ?? undefined),
       savedBySearch: (documentId) => documents.getMany([documentId])[0]?.web?.origin === "search",
@@ -3111,6 +3113,7 @@ export function createCore(adapters: CoreAdapters): Core {
     planMindCheck: (mindId, mode, allDocuments) => checks.planMindCheck(mindId, mode, allDocuments),
     findMindClaims: (input) => checks.findMindClaims(input),
     checkMind: (input) => checks.checkMind(input),
+    documentsAddedSinceChecks: async (mindId) => checks.documentsAddedSinceChecks(mindId),
 
     getSecretStorage: async () => secrets.status(),
     acceptPlainTextSecretStorage: async () => secrets.acceptPlainText(),

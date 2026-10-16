@@ -1843,6 +1843,20 @@ export function createDocuments(options: DocumentsOptions) {
     /** How many live Documents have Passages to search: of all of them, or only of these. */
     searchableCount,
 
+    /** The live Documents with Passages to search (of all of them, or only of these) added after `since` (ISO 8601, UTC). */
+    searchableAddedAfter(
+      documentIds: readonly string[] | undefined,
+      since: string,
+    ): { id: string; createdAt: string }[] {
+      const { where, params } = searchable(documentIds);
+      return db
+        .all<{ id: string; created_at: string }>(
+          `SELECT d.id, d.created_at FROM documents d WHERE ${where} AND d.created_at > ?`,
+          [...params, since],
+        )
+        .map((row) => ({ id: row.id, createdAt: row.created_at }));
+    },
+
     /**
      * How many live Documents have Passages to search (of all of them, or only
      * of these), and the names of the `limit` most recently added, newest

@@ -604,6 +604,8 @@ export const en = {
   "claim.webQuestion": "Search the web for sources that support or contradict this: “{sentence}”",
   "claim.searchAll": "Search all Documents",
   "claim.checkAgain": "Check again",
+  "claim.added.one": "1 Document added since this check",
+  "claim.added": "{count} Documents added since this check",
   "claim.reason.refused": "The model declined to check it.",
   "claim.reason.malformed": "The model's reply couldn't be read.",
   "claim.reason.empty": "The model gave an empty reply.",
@@ -640,6 +642,8 @@ export const en = {
   "checks.running.contradiction-watch": "Checking cited claims for contradictions…",
   "checks.stop": "Stop",
   "checks.close": "Close",
+  "checks.added.one": "1 Document added since these checks",
+  "checks.added": "{count} Documents added since these checks",
   "checks.problem.no-documents.folder":
     "Nothing to check against: “{folder}” has no Documents yet.",
   "checks.addFiles": "Add files…",

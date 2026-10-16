@@ -4624,9 +4624,21 @@ export interface ContradictionWatchRun extends ContradictionCheckOutcome {
  * What "Check this Mind" checks (#737): "all", every sentence that makes a
  * claim, found afresh; "changed", the checks that need a re-check and the
  * sentences never checked since, found among those the last run didn't
- * leave out.
+ * leave out; "added", only the checks Documents added since could change
+ * (`documentsAddedSinceChecks`), each in the scope it used.
  */
-export type CheckMindMode = "all" | "changed";
+export type CheckMindMode = "all" | "changed" | "added";
+
+/**
+ * A sentence's check that Documents added since could change (#993): one
+ * found unsupported or not checked, and the Documents added to the scope it
+ * used after it was made. Supported and contradicted checks already have
+ * their evidence, and contradiction watch checks its own marks.
+ */
+export interface DocumentsAddedSince {
+  checkId: string;
+  documentIds: string[];
+}
 
 export interface CheckMindInput {
   requestId: string;
@@ -8477,6 +8489,8 @@ export interface CoreApi {
    * the run in the Mind (`MindCheckRun`). `cancelCheck` stops it.
    */
   checkMind(input: CheckMindInput): Promise<CheckMindResult>;
+  /** The Mind's checks that Documents added since could change, with those Documents (#993). Sends nothing. */
+  documentsAddedSinceChecks(mindId: string): Promise<DocumentsAddedSince[]>;
 
   getSecretStorage(): Promise<SecretStorageStatus>;
   /** The User accepts storing keys without keyring protection on this device. */
@@ -9373,6 +9387,7 @@ const methods: Record<CoreApiMethod, true> = {
   planMindCheck: true,
   findMindClaims: true,
   checkMind: true,
+  documentsAddedSinceChecks: true,
   getSecretStorage: true,
   acceptPlainTextSecretStorage: true,
   detectOllama: true,
