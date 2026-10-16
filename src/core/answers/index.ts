@@ -47,7 +47,13 @@ import { runsByDefault } from "../../shared/approvalRules";
 import { citationNode, withCitations } from "../../shared/blockJson";
 import type { LiveDocument } from "../../shared/citations";
 import { withFigures, withFigureText } from "../../shared/figureMarkers";
-import { recordProposalRequest, resolveProposals } from "../../shared/proposals";
+import { linkTableSources } from "../../shared/markdownTables";
+import {
+  decisionsOn,
+  pendingProposals,
+  recordProposalRequest,
+  resolveProposals,
+} from "../../shared/proposals";
 import { searchScopeOf } from "../../shared/searchScope";
 import { setTextOrigin } from "../../shared/textOrigins";
 import {
@@ -143,7 +149,12 @@ import {
   createCitationSession,
   withoutFootnoteDefinitions,
 } from "./citations";
-import { askAgainNote, unbackedClaims as claimsNoCallMade, holdBack } from "./claimedChanges";
+import {
+  askAgainNote,
+  askToWriteNote,
+  unbackedClaims as claimsNoCallMade,
+  holdBack,
+} from "./claimedChanges";
 import {
   conversationContext,
   conversationContextOf,
@@ -185,6 +196,8 @@ import {
   webInstructions,
 } from "./prompt";
 import { quotedWordsIn, withoutQuotationMarks } from "./quotedWords";
+import { type RequestContext, routeRequest } from "./routeRequest";
+import type { ChangeStates } from "./toolRecord";
 
 export type { AnswerDocuments } from "./citations";
 export { createAiSdkAnswerEngine } from "./engine";
@@ -323,6 +336,9 @@ const EMPTY_SCOPE_NOTE =
 
 const NO_SCOPE: SearchScope = { folderIds: [], tagIds: [], documentIds: [] };
 
+const changesAMind = (change: MindChange) =>
+  change.created || change.revised === true || change.proposals > 0;
+
 /** The Folder a Search scope is, when it is one Folder alone; null otherwise. */
 const oneFolderOf = (scope: SearchScope | null): string | null =>
   scope && scope.folderIds.length === 1 && scope.tagIds.length + scope.documentIds.length === 0
@@ -354,6 +370,14 @@ export interface AnswersOptions {
     choice: ChatModelChoice,
     thinking: "summary" | "answer" | "careful",
   ): Promise<PreparedChatModel>;
+  /**
+   * The quick-tasks model for an Answer asked with `answers`, prepared as
+   * `answers` was: for the calls that don't write the Answer.
+   */
+  prepareQuickModel?(
+    answers: ChatModelChoice,
+    prepared: PreparedChatModel,
+  ): Promise<PreparedChatModel["model"]>;
   /** Searching the User's Documents, and what Citations point to. */
   documents: DocumentsForAnswers;
   /** What an Answer is written in when its Question has no language of its own. */
@@ -700,7 +724,7 @@ export function createAnswers(options: AnswersOptions) {
      * Blocks the User selected there, where a Mind it makes goes, and what
      * Blocks it adds link back to. It is offered the Minds' Tools. Absent: none.
      */
-    assistant?: Pick<MindToolsOptions, "focused" | "folderId" | "origin">;
+    assistant?: Pick<MindToolsOptions, "focused" | "folderId" | "origin"> & RequestContext;
   }): void {
     const { home, answerId, model, context, documentIds, forcedSkill } = input;
     const outside = input.outside === true;
@@ -1412,11 +1436,18 @@ export function createAnswers(options: AnswersOptions) {
           : [];
       // The Minds' Tools, for an Answer in the assistant (#202).
       const minds = outside ? undefined : options.minds;
+      const route =
+        minds && input.assistant ? routeRequest(context.question, input.assistant) : null;
+      const requested =
+        route && (route.kind === "write" || route.kind === "edit")
+          ? { change: route.kind, newMind: route.newMind }
+          : null;
       const mindsTools =
         minds && input.assistant
           ? mindTools({
               minds,
               prepared,
+              requested,
               ...input.assistant,
               language: answerLanguage(context.question),
               blocksOf: (text) => {
@@ -1424,17 +1455,20 @@ export function createAnswers(options: AnswersOptions) {
                 let notFound = 0;
                 let unrecorded = 0;
                 let firstUnrecorded = -1;
-                const cited = markdownToBlocks(withoutFootnoteDefinitions(text)).flatMap(
-                  (block, index) =>
-                    withCitations([block], (marker) => {
-                      const node = session.checkedNode(marker);
-                      if (!node) {
-                        unrecorded++;
-                        if (firstUnrecorded < 0) firstUnrecorded = index;
-                      } else if (node.attrs?.check === "not-found") notFound++;
-                      else found++;
-                      return node;
-                    }),
+                const tables = linkTableSources(withoutFootnoteDefinitions(text), (source) => {
+                  const marker = session.markerFor(source);
+                  return marker === null ? null : `[^${marker}]`;
+                });
+                const cited = markdownToBlocks(tables.markdown).flatMap((block, index) =>
+                  withCitations([block], (marker) => {
+                    const node = session.checkedNode(marker);
+                    if (!node) {
+                      unrecorded++;
+                      if (firstUnrecorded < 0) firstUnrecorded = index;
+                    } else if (node.attrs?.check === "not-found") notFound++;
+                    else found++;
+                    return node;
+                  }),
                 );
                 const blocks = asGenerated(
                   calculating
@@ -1451,6 +1485,8 @@ export function createAnswers(options: AnswersOptions) {
                   notFound,
                   unrecorded,
                   firstUnrecorded,
+                  unlinkedSources: tables.unlinked,
+                  extraCells: tables.extraCells,
                 };
               },
               changed: (toolCallId, change) => {
@@ -1463,7 +1499,16 @@ export function createAnswers(options: AnswersOptions) {
                   writeSoon();
                 }
               },
-              failed: (toolCallId, problem) => mindProblems.set(toolCallId, problem),
+              failed: (toolCallId, problem) => {
+                mindProblems.set(toolCallId, problem);
+                // Whatever it wrote as its input came in was taken back: nothing of it counts.
+                mindChanges.delete(toolCallId);
+                const call = toolCalls.find((each) => each.id === toolCallId);
+                if (call?.mindChange) {
+                  delete call.mindChange;
+                  writeSoon();
+                }
+              },
               signal: controller.signal,
               now: () => new Date(),
             })
@@ -1531,17 +1576,24 @@ export function createAnswers(options: AnswersOptions) {
       else showPhase();
 
       const learntKey = modelKey(model, prepared);
+      const prepareQuick = options.prepareQuickModel;
       let outcome: Outcome = { status: "stopped" };
       let mindsNow: { id: string; name: string }[] | null = null;
       const mindsListed = () => {
         mindsNow ??= minds?.list() ?? [];
         return mindsNow;
       };
+      const changedAMind = () => [...mindChanges.values()].some(changesAMind);
+      const owesAWrite = () => requested !== null && !changedAMind() && mindProblems.size === 0;
+      const heldBack = holdBack(() => mindsListed().map((mind) => mind.name));
       const checkReply = (text: string) => {
         mindsNow = null;
         const claims = claimsNoCallMade(text, toolCalls, mindsListed());
-        return claims.length > 0
-          ? { claims, note: askAgainNote(claims, toolCalls, options.readableMindName) }
+        if (claims.length > 0) {
+          return { claims, note: askAgainNote(claims, toolCalls, options.readableMindName) };
+        }
+        return owesAWrite()
+          ? { claims, note: askToWriteNote(toolCalls, options.readableMindName) }
           : null;
       };
       for await (const event of engine.generate({
@@ -1573,7 +1625,7 @@ export function createAnswers(options: AnswersOptions) {
             connectorTools ? connectorInstructions(fromConnectors, mode === "no-documents") : "",
             sourcesInstructions(sourceTools),
             webInstructions(withWebTools),
-            mindInstructions(withMindTools),
+            mindInstructions(withMindTools, route),
             meetingInstructions(listening),
             signInNeededInstructions(signInNeeded.map((connector) => connector.name)),
             language,
@@ -1584,6 +1636,7 @@ export function createAnswers(options: AnswersOptions) {
         ...(mindRequest && { mind: mindRequest }),
         question: context.question,
         model: prepared.model,
+        ...(prepareQuick && { quickModel: () => prepareQuick(model, prepared) }),
         documents,
         tools: [...provided, ...fromSkills, ...fromWeb, ...(mindsTools?.tools ?? [])],
         gate,
@@ -1598,11 +1651,8 @@ export function createAnswers(options: AnswersOptions) {
         cacheKey: place.conversationId ?? place.mindId ?? undefined,
         ...(input.assistant && {
           checkReply,
-          shownUpTo: holdBack(() => mindsListed().map((mind) => mind.name)),
-          mayEndBlank: () =>
-            [...mindChanges.values()].some(
-              (change) => change.created || change.revised || change.proposals > 0,
-            ),
+          shownUpTo: (text: string) => (owesAWrite() ? 0 : heldBack(text)),
+          mayEndBlank: changedAMind,
         }),
         signal: controller.signal,
       })) {
@@ -1900,6 +1950,16 @@ export function createAnswers(options: AnswersOptions) {
       ? { mindId: mind.mindId, version: mind.reading.version, partial: mind.section.partial }
       : null;
 
+  const changeStatesOf: ChangeStates = (change) => {
+    if (options.readableMindName(change.mindId) === null) {
+      return { waiting: 0, accepted: 0, rejected: 0, gone: true };
+    }
+    return options.content.read(change.mindId, (blocks) => ({
+      waiting: pendingProposals(blocks).filter((each) => each.request === change.request).length,
+      ...(blocks.doc ? decisionsOn(blocks.doc, change.request) : { accepted: 0, rejected: 0 }),
+    }));
+  };
+
   /**
    * Writes the Answer of a Question in a conversation, added or emptied in `turn`, from
    * the messages before it, the Mind it reads and its Search scope as it is now.
@@ -1927,6 +1987,7 @@ export function createAnswers(options: AnswersOptions) {
       mind: section,
       documents,
       mindNames: options.readableMindName,
+      changeStates: changeStatesOf,
     });
     const requestOf = (reading: MindReading, kept: MindCut): RequestMind => ({
       text: kept.text,
@@ -1958,6 +2019,7 @@ export function createAnswers(options: AnswersOptions) {
                   mind: smaller,
                   documents,
                   mindNames: options.readableMindName,
+                  changeStates: changeStatesOf,
                 }).context,
                 request: requestOf(mind.reading, smaller),
                 share: smaller.share,
@@ -1978,6 +2040,11 @@ export function createAnswers(options: AnswersOptions) {
         },
         folderId: oneFolderOf(question.scope),
         origin: { from: messageReference(conversation.id, answer.id), question: question.text },
+        followsAChange:
+          turn.earlier
+            .findLast((message) => message.kind === "answer")
+            ?.toolCalls.some((call) => call.mindChange && changesAMind(call.mindChange)) ?? false,
+        followsAnAnswer: turn.earlier.some((message) => message.kind === "answer"),
       },
     });
     return { asked: true, conversation, questionId: question.id, answerId: answer.id };

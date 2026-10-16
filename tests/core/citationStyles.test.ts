@@ -215,6 +215,10 @@ describe("formatting a Mind's Citations", () => {
       label: "line",
     });
     expect(locatorOf(null, "en")).toEqual({});
+    // A Meeting's Citation says who spoke in the app, but a style's locator is the time alone.
+    const said: CitationLocation = { kind: "time", from: 723_000, to: 725_000, speaker: "Me" };
+    expect(locatorOf(said, "en")).toEqual({ locator: "12:03", label: "custom" });
+    expect(locatorOf(said, "zh-CN")).toEqual({ locator: "12:03", label: "custom" });
   });
 
   test("a PDF page is cited by the page it prints, not by its number in the PDF", async () => {
