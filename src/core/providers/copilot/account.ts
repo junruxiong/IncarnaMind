@@ -5,6 +5,7 @@
 import type { Browser } from "../../adapters";
 import {
   type CopilotModel,
+  type CopilotPlan,
   type CopilotProfileId,
   type CopilotSignInErrorKind,
   type CopilotSignInResult,
@@ -14,6 +15,7 @@ import {
 import { isRecord, SecretStorageError } from "../../errors";
 import {
   type DeviceCode,
+  nonEmptyText,
   OAuthFlowError,
   type OAuthFlowFailure,
   OAuthTokenError,
@@ -28,24 +30,68 @@ import {
 } from "../../oauthAccount";
 import type { Secrets } from "../../secrets";
 import { SignInRouteError } from "../providerErrors";
+import { USER_AGENT } from "../signedFetch";
 import type { CopilotProfile } from "./config";
 import { listCopilotModels } from "./requests";
-import { NO_COPILOT_ACCESS } from "./service";
+import { NO_COPILOT_ACCESS, ORGANIZATION_POLICY } from "./service";
 
 const ACCOUNT_SECRET = "copilot:account";
 
 const MODEL_LIST_TTL_MS = 10 * 60_000;
 const MODEL_LIST_TIMEOUT_MS = 5_000;
+const ACCOUNT_TIMEOUT_MS = 5_000;
+
+const PLANS: readonly CopilotPlan[] = ["free", "pro", "pro-plus", "business", "enterprise"];
+
+/** Most specific first: "plus_monthly_subscriber" names Pro+, not Pro. */
+const PLAN_SKUS: readonly [RegExp, CopilotPlan][] = [
+  [/enterprise/i, "enterprise"],
+  [/business/i, "business"],
+  [/plus/i, "pro-plus"],
+  [/educational|subscriber|individual/i, "pro"],
+  [/free/i, "free"],
+];
 
 interface StoredAccount extends OAuthAccountRecord {
   /** The profile the account signed in with, which every refresh and request uses. */
   profile: CopilotProfileId;
+  login: string | null;
+  plan: CopilotPlan | null;
 }
 
 const parseStored = (record: Record<string, unknown>): StoredAccount => ({
   ...parseAccountRecord(record),
   profile: record.profile === "editor" ? "editor" : "own",
+  login: nonEmptyText(record.login),
+  plan: PLANS.find((plan) => plan === record.plan) ?? null,
 });
+
+const planOf = (sku: unknown): CopilotPlan | null =>
+  typeof sku === "string" ? (PLAN_SKUS.find(([pattern]) => pattern.test(sku))?.[1] ?? null) : null;
+
+async function readLogin(options: {
+  url: string;
+  githubToken: string;
+  headers: Readonly<Record<string, string>>;
+  fetch?: typeof globalThis.fetch;
+}): Promise<string | null> {
+  const headers = new Headers({ "user-agent": USER_AGENT });
+  for (const [name, value] of Object.entries(options.headers)) headers.set(name, value);
+  headers.set("authorization", `Bearer ${options.githubToken}`);
+  headers.set("accept", "application/vnd.github+json");
+  try {
+    const response = await (options.fetch ?? globalThis.fetch)(options.url, {
+      headers,
+      redirect: "error",
+      signal: AbortSignal.timeout(ACCOUNT_TIMEOUT_MS),
+    });
+    const body: unknown = await response.json().catch(() => undefined);
+    return response.ok && isRecord(body) ? nonEmptyText(body.login) : null;
+  } catch (error) {
+    console.error("The GitHub account's name couldn't be read.", error);
+    return null;
+  }
+}
 
 /** The token exchange's refusal, with what GitHub said, as a refresh refusal too. */
 class ExchangeRefusal extends OAuthTokenError {
@@ -63,7 +109,7 @@ async function exchangeToken(options: {
   now: number;
   signal: AbortSignal;
   fetch?: typeof globalThis.fetch;
-}): Promise<OAuthTokens> {
+}): Promise<{ tokens: OAuthTokens; plan: CopilotPlan | null }> {
   const response = await (options.fetch ?? globalThis.fetch)(options.exchange.url, {
     headers: {
       ...options.exchange.headers,
@@ -84,12 +130,15 @@ async function exchangeToken(options: {
   }
   const expiresAt = typeof body.expires_at === "number" ? body.expires_at : null;
   return {
-    accessToken: token,
-    refreshToken: options.githubToken,
-    idToken: null,
-    expiresIn: expiresAt === null ? null : Math.max(0, expiresAt - options.now / 1000),
-    scope: null,
-    account: { email: null, organization: null },
+    tokens: {
+      accessToken: token,
+      refreshToken: options.githubToken,
+      idToken: null,
+      expiresIn: expiresAt === null ? null : Math.max(0, expiresAt - options.now / 1000),
+      scope: null,
+      account: { email: null, organization: null },
+    },
+    plan: planOf(body.sku),
   };
 }
 
@@ -111,6 +160,9 @@ function exchangeFailure(error: unknown): ExchangeFailure {
   if (status === null) return new ExchangeFailure("unexpected-response", message);
   if (NO_COPILOT_ACCESS.test(error.said)) {
     return new ExchangeFailure("no-plan", message);
+  }
+  if (status === 403 && ORGANIZATION_POLICY.test(error.said)) {
+    return new ExchangeFailure("policy-blocked", message);
   }
   if (status >= 500) return new ExchangeFailure("service-error", message);
   return new ExchangeFailure("refused", message);
@@ -167,17 +219,18 @@ export function createCopilotAccount(options: {
     parse: parseStored,
     browser: options.browser,
     now,
-    renew(stored, refreshToken, signal) {
+    async renew(stored, refreshToken, signal) {
       const profile = profiles[stored.profile];
       if (!profile) throw required("signed-out");
       if (profile.tokenExchange) {
-        return exchangeToken({
+        const exchanged = await exchangeToken({
           exchange: profile.tokenExchange,
           githubToken: refreshToken,
           now: now(),
           signal,
           ...fetcher,
         });
+        return exchanged.tokens;
       }
       return refreshOAuthTokens({
         tokenUrl: profile.tokenUrl,
@@ -188,6 +241,7 @@ export function createCopilotAccount(options: {
         ...fetcher,
       });
     },
+    forgetOnSignOut: (stored) => ({ ...stored, login: null, plan: null }),
     signInRequired: required,
     onChange: options.onChange,
     ...fetcher,
@@ -246,7 +300,7 @@ export function createCopilotAccount(options: {
     const usable = stored?.tokens && profiles[stored.profile] ? stored : null;
     return {
       account: usable
-        ? { state: "signed-in", profile: usable.profile }
+        ? { state: "signed-in", profile: usable.profile, login: usable.login, plan: usable.plan }
         : { state: stored?.ended === "expired" ? "expired" : "signed-out" },
       signingIn,
       deviceCode: signingIn && waiting ? waiting : null,
@@ -289,23 +343,31 @@ export function createCopilotAccount(options: {
             },
           });
           let tokens = github;
+          let plan: CopilotPlan | null = null;
           if (profile.tokenExchange) {
             try {
-              tokens = await exchangeToken({
+              ({ tokens, plan } = await exchangeToken({
                 exchange: profile.tokenExchange,
                 githubToken: github.accessToken,
                 now: now(),
                 signal,
                 ...fetcher,
-              });
+              }));
             } catch (error) {
               if (signal.aborted)
                 throw new OAuthFlowError("cancelled", "The sign-in was cancelled.");
               throw exchangeFailure(error);
             }
           }
+          const login = await readLogin({
+            url: profile.accountUrl,
+            githubToken: github.accessToken,
+            headers: profile.signInHeaders ?? {},
+            ...fetcher,
+          });
+          if (signal.aborted) throw new OAuthFlowError("cancelled", "The sign-in was cancelled.");
           listed = null;
-          await account.commit({ tokens: kept(tokens), ended: null, profile: id });
+          await account.commit({ tokens: kept(tokens), ended: null, profile: id, login, plan });
         });
         return { ok: true, status: await status() };
       } catch (error) {

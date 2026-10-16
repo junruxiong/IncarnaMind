@@ -1,0 +1,399 @@
+import { useEffect, useRef } from "react";
+import type { CopilotPlan, CopilotStatus } from "../../../../core/api";
+import { copilotWay } from "../../../../core/providers/copilot/service";
+import {
+  COPILOT_SIGN_IN_PROBLEMS,
+  type RouteProblemWords,
+  type RouteWayBack,
+  wayBackLabel,
+} from "../../../../core/providers/signInRoutes";
+import type { MessageKey } from "../../../../shared/i18n";
+import { copyText } from "../../copied";
+import {
+  type CopilotFailure,
+  cancelCopilotSignIn,
+  openCopilotNotice,
+  signInWithCopilot,
+  useCopilot,
+  useCopilotStatus,
+} from "../../copilotSignIn";
+import { core } from "../../core";
+import { useT } from "../../i18n";
+import { useSettingsTarget } from "../../settingsTarget";
+import { useAppStore } from "../../store";
+import { ChevronDownLineIcon, ChevronRightLineIcon, CopyLineIcon } from "../lineIcons";
+import { ProblemMark } from "../ProblemLine";
+import { buttonStyle, rowButtonsClass, rowTextClass, rowTitleClass, ruledRowClass } from "../ui";
+
+const TARGET = ["copilot"] as const;
+
+const PLAN_NAMES: Record<CopilotPlan, MessageKey> = {
+  free: "copilot.plan.free",
+  pro: "copilot.plan.pro",
+  "pro-plus": "copilot.plan.pro-plus",
+  business: "copilot.plan.business",
+  enterprise: "copilot.plan.enterprise",
+};
+
+const NO_MODELS: RouteProblemWords = {
+  line: "copilot.signIn.noModels",
+  waysBack: ["try-again", "paste-api-key"],
+};
+
+const failureWords = (failure: CopilotFailure): RouteProblemWords =>
+  failure.kind === "no-models" ? NO_MODELS : COPILOT_SIGN_IN_PROBLEMS[failure.kind];
+
+const linkClass =
+  "self-start text-[13px] leading-5 font-semibold text-accent underline-offset-2 hover:underline";
+
+type Place = "setup" | "settings";
+
+function useOfferedWay(): { status: CopilotStatus; experimental: boolean } | null {
+  const status = useCopilotStatus();
+  const way = status && copilotWay(status.profiles);
+  return status && way ? { status, experimental: way.experimental } : null;
+}
+
+const close = () => {
+  if (useCopilot.getState().status?.signingIn) void cancelCopilotSignIn();
+  openCopilotNotice(false);
+  useCopilot.setState({ failure: null });
+};
+
+function ExperimentalTag() {
+  const t = useT();
+  return (
+    <span className="rounded-sm bg-chip px-1.5 text-label leading-5 font-semibold text-ink-secondary">
+      {t("copilot.experimental")}
+    </span>
+  );
+}
+
+/** `onKey` opens the key form, the way back to an API key. */
+export function CopilotSetupWay({ onKey }: { onKey(): void }) {
+  const t = useT();
+  const offered = useOfferedWay();
+  const open = useCopilot((state) => state.open);
+  const failure = useCopilot((state) => state.failure);
+  if (!offered) return null;
+  const expanded = open || offered.status.signingIn || failure !== null;
+  const Chevron = expanded ? ChevronDownLineIcon : ChevronRightLineIcon;
+  return (
+    <div
+      data-testid="setup-copilot"
+      className={`flex flex-col rounded-md ${expanded ? "bg-frame" : ""}`}
+    >
+      <button
+        type="button"
+        data-testid="way-copilot"
+        aria-expanded={expanded}
+        onClick={() => (expanded ? close() : openCopilotNotice(true))}
+        className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-hover"
+      >
+        <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
+          <span className="flex flex-wrap items-center gap-x-2 text-ui font-semibold text-ink">
+            {t("copilot.way.title")}
+            {offered.experimental && <ExperimentalTag />}
+          </span>
+          <span className="text-[13px] leading-5 text-ink-secondary">{t("copilot.way.line")}</span>
+        </span>
+        <Chevron aria-hidden="true" className="size-3.5 shrink-0 text-ink-meta" />
+      </button>
+      {expanded && (
+        <div className="px-2 pt-1 pb-2">
+          <SignInPanel
+            place="setup"
+            status={offered.status}
+            experimental={offered.experimental}
+            onKey={onKey}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function CopilotPlanRow() {
+  const t = useT();
+  const offered = useOfferedWay();
+  const open = useCopilot((state) => state.open);
+  const failure = useCopilot((state) => state.failure);
+  const row = useSettingsTarget<HTMLLIElement>(TARGET, offered !== null);
+  if (!offered) return null;
+  const { status } = offered;
+  const { account } = status;
+  const signedIn = account.state === "signed-in" && !status.signingIn;
+  const expanded = !signedIn && (open || status.signingIn || failure !== null);
+  return (
+    <li ref={row} data-testid="plans-copilot" className={ruledRowClass}>
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <span className={`flex flex-wrap items-center gap-x-2 ${rowTitleClass}`}>
+          {t("plans.copilot.title")}
+          {offered.experimental && <ExperimentalTag />}
+        </span>
+        {signedIn && account.state === "signed-in" ? (
+          <>
+            <span data-testid="plans-copilot-account" className={rowTextClass}>
+              {[t(account.plan ? PLAN_NAMES[account.plan] : "copilot.plan.unknown"), account.login]
+                .filter(Boolean)
+                .join(" · ")}
+            </span>
+            <span className={rowTextClass}>{t("copilot.signedIn.usage")}</span>
+          </>
+        ) : (
+          <span className={rowTextClass}>
+            {t(
+              account.state === "expired" ? "copilot.problem.signInExpired" : "plans.copilot.line",
+            )}
+          </span>
+        )}
+      </div>
+      <div className={rowButtonsClass}>
+        {signedIn ? (
+          <button
+            type="button"
+            data-testid="plans-copilot-sign-out"
+            onClick={() =>
+              void core
+                .signOutOfCopilot()
+                .then((next) => useCopilot.setState({ status: next }))
+                .catch((error: unknown) => useAppStore.getState().reportError(error))
+            }
+            className={buttonStyle("secondary", "sm")}
+          >
+            {t("copilot.signOut")}
+          </button>
+        ) : (
+          !expanded && (
+            <button
+              type="button"
+              data-testid="plans-copilot-sign-in"
+              onClick={() => openCopilotNotice(true)}
+              className={buttonStyle("secondary", "sm")}
+            >
+              {t(
+                account.state === "expired"
+                  ? "signInRoute.wayBack.signInAgain"
+                  : "copilot.wayBack.signIn",
+              )}
+            </button>
+          )
+        )}
+      </div>
+      {expanded && (
+        <div className="col-span-2 pt-1">
+          <SignInPanel place="settings" status={status} experimental={offered.experimental} />
+        </div>
+      )}
+    </li>
+  );
+}
+
+function SignInPanel({
+  place,
+  status,
+  experimental,
+  onKey,
+}: {
+  place: Place;
+  status: CopilotStatus;
+  experimental: boolean;
+  onKey?: () => void;
+}) {
+  const failure = useCopilot((state) => state.failure);
+  if (status.signingIn) return <Waiting status={status} />;
+  if (failure) return <Failure failure={failure} place={place} onKey={onKey} />;
+  return <Notice place={place} experimental={experimental} onKey={onKey} />;
+}
+
+function Notice({
+  place,
+  experimental,
+  onKey,
+}: {
+  place: Place;
+  experimental: boolean;
+  onKey: (() => void) | undefined;
+}) {
+  const t = useT();
+  const signIn = useRef<HTMLButtonElement>(null);
+  const cancel = useRef<HTMLButtonElement>(null);
+  // An experimental way starts on the safe choice (ADR-0019's amendment).
+  useEffect(() => {
+    (experimental ? cancel : signIn).current?.focus();
+  }, [experimental]);
+  return (
+    <div data-testid="copilot-notice" className="flex flex-col gap-2">
+      <p className="text-[13px] leading-5 font-semibold text-ink">{t("copilot.notice.title")}</p>
+      <ul className="flex list-disc flex-col gap-1 pl-5 text-[13px] leading-5 text-ink-secondary">
+        <li data-testid="copilot-notice-usage" className="font-semibold text-ink">
+          {t("copilot.notice.usage")}
+        </li>
+        {experimental && <li>{t("copilot.notice.experimental")}</li>}
+        <li>{t("copilot.notice.sends")}</li>
+        <li>{t("copilot.notice.off")}</li>
+      </ul>
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          ref={signIn}
+          type="button"
+          data-testid="copilot-sign-in"
+          onClick={() => void signInWithCopilot({ keepDefault: place === "settings" })}
+          className={buttonStyle("primary", "sm")}
+        >
+          {t("copilot.wayBack.signIn")}
+        </button>
+        <button
+          ref={cancel}
+          type="button"
+          data-testid="copilot-cancel"
+          onClick={close}
+          className={buttonStyle("ghost", "sm")}
+        >
+          {t("copilot.cancel")}
+        </button>
+      </div>
+      {onKey && (
+        <button type="button" data-testid="copilot-use-key" onClick={onKey} className={linkClass}>
+          {t("signInRoute.wayBack.pasteApiKey")}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function Waiting({ status }: { status: CopilotStatus }) {
+  const t = useT();
+  const code = status.deviceCode;
+  return (
+    <div data-testid="copilot-waiting" className="flex flex-col gap-2">
+      {code ? (
+        <>
+          <p className="text-[13px] leading-5 font-semibold text-ink">{t("copilot.code.title")}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              data-testid="copilot-code"
+              className="rounded-sm border border-rule-strong bg-sheet px-2 font-mono text-[20px] leading-8 tracking-[0.04em] text-ink select-all"
+            >
+              {code.userCode}
+            </span>
+            <button
+              type="button"
+              data-testid="copilot-copy-code"
+              onClick={() =>
+                void copyText(code.userCode).catch((error: unknown) =>
+                  useAppStore.getState().reportError(error),
+                )
+              }
+              className={buttonStyle("secondary", "sm")}
+            >
+              <CopyLineIcon aria-hidden="true" className="size-3.5" />
+              {t("copilot.code.copy")}
+            </button>
+          </div>
+        </>
+      ) : null}
+      <p role="status" className="flex items-start gap-2 text-[13px] leading-5 text-ink-secondary">
+        <span aria-hidden="true" className="flex h-5 shrink-0 items-center">
+          <span className="size-1.5 rounded-full bg-accent motion-safe:animate-pulse" />
+        </span>
+        {t(code ? "copilot.code.waiting" : "copilot.code.asking")}
+      </p>
+      <p className="text-[13px] leading-5 text-ink-meta">{t("copilot.notice.usage")}</p>
+      <div className="flex flex-wrap items-center gap-2">
+        {code && (
+          <button
+            type="button"
+            data-testid="copilot-reopen"
+            // The main process opens it in the User's browser.
+            onClick={() => window.open(code.verificationUri, "_blank", "noreferrer")}
+            className={buttonStyle("secondary", "sm")}
+          >
+            {t("copilot.code.reopen")}
+          </button>
+        )}
+        <button
+          type="button"
+          data-testid="copilot-cancel"
+          onClick={() => void cancelCopilotSignIn()}
+          className={buttonStyle("ghost", "sm")}
+        >
+          {t("copilot.cancel")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Failure({
+  failure,
+  place,
+  onKey,
+}: {
+  failure: CopilotFailure;
+  place: Place;
+  onKey: (() => void) | undefined;
+}) {
+  const t = useT();
+  const openSettings = useAppStore((state) => state.openSettings);
+  const words = failureWords(failure);
+  const anotherModel = () => {
+    close();
+    if (place === "settings") openSettings("models", "chat-model");
+  };
+  const run: Record<RouteWayBack, (() => void) | undefined> = {
+    "sign-in": () => void signInWithCopilot({ keepDefault: place === "settings" }),
+    "sign-in-again": () => void signInWithCopilot({ keepDefault: place === "settings" }),
+    "try-again": () => void signInWithCopilot({ keepDefault: place === "settings" }),
+    "use-another-model": anotherModel,
+    "paste-api-key":
+      place === "setup"
+        ? onKey
+        : () => {
+            close();
+            openSettings("models", "chat-model");
+          },
+  };
+  // First run has no other model yet: there, leaving the route is choosing another way.
+  const label = (wayBack: RouteWayBack) =>
+    place === "setup" && wayBack === "use-another-model"
+      ? t("copilot.chooseAnotherWay")
+      : t(wayBackLabel("copilot", wayBack));
+  return (
+    <div
+      role="alert"
+      data-testid="copilot-failure"
+      data-failure={failure.kind}
+      title={failure.message}
+      className="flex flex-col gap-2"
+    >
+      <p className="text-[13px] leading-5 font-semibold text-ink">
+        <ProblemMark />
+        {t(words.line)}
+      </p>
+      {failure.kind === "policy-blocked" && (
+        <p className="text-[13px] leading-5 text-ink-secondary">
+          {t("copilot.policyBlocked.body")}
+        </p>
+      )}
+      <div className="flex flex-wrap items-center gap-2">
+        {words.waysBack.map((wayBack, index) => {
+          const onClick = run[wayBack];
+          return (
+            onClick && (
+              <button
+                key={wayBack}
+                type="button"
+                data-testid={`copilot-way-back-${wayBack}`}
+                onClick={onClick}
+                className={buttonStyle(index === 0 ? "secondary" : "ghost", "sm")}
+              >
+                {label(wayBack)}
+              </button>
+            )
+          );
+        })}
+      </div>
+    </div>
+  );
+}
