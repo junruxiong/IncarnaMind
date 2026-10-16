@@ -34,12 +34,14 @@ import {
   KEY_PROVIDERS,
   keyProviderGroups,
   kindOfCatalogId,
+  LOCAL_PRESETS,
   untestedForCitations,
 } from "../../src/core/providers/catalog/providers";
 import { KNOWN_PLAN_MODELS } from "../../src/core/providers/chatgpt/planEndpoint";
 import {
   baseUrlFor,
   endpointUrl,
+  isLoopbackHost,
   requiresApiKey,
   serviceFor,
 } from "../../src/core/providers/kinds";
@@ -49,7 +51,9 @@ import { zhCN } from "../../src/shared/i18n/zh-CN";
 const GIB = 1024 ** 3;
 
 const sampleFieldValue = (field: EndpointField): string =>
-  field.choices?.[0]?.value ?? (field.name === "account" ? "0123456789abcdef0123456789abcdef" : "");
+  field.choices?.[0]?.value ??
+  field.default ??
+  (field.name === "account" ? "0123456789abcdef0123456789abcdef" : "");
 const REPO_ROOT = resolve(__dirname, "../..");
 
 /** What the catalog alone says of a model on a provider kind. */
@@ -79,6 +83,8 @@ describe("The provider catalog", () => {
       "venice",
       "bedrock",
       "cloudflare",
+      "lmstudio",
+      "unsloth",
       "openai-compatible",
     ]);
     for (const provider of CATALOG_PROVIDERS) {
@@ -96,7 +102,9 @@ describe("The provider catalog", () => {
       if (provider.endpoints.length > 0) {
         for (const endpoint of provider.endpoints) {
           const value = endpoint.field ? sampleFieldValue(endpoint.field) : "";
-          expect(new URL(fieldUrl(endpoint, value)).protocol, where).toBe("https:");
+          expect(new URL(fieldUrl(endpoint, value)).protocol, where).toBe(
+            provider.group === "local" ? "http:" : "https:",
+          );
           expect(endpoint.label.en && endpoint.label.zh, where).toBeTruthy();
           if (endpoint.field) {
             expect(endpoint.baseUrl, where).toContain(`{${endpoint.field.name}}`);
@@ -509,7 +517,7 @@ describe("Support tiers (ADR-0019)", () => {
     );
   });
 
-  test("a preset is a hosted OpenAI-compatible row with a key page and an Answers model, saved as that kind, and not yet tested is never first-class", () => {
+  test("a hosted preset is an OpenAI-compatible row with a key page and an Answers model, a local one a server on this computer; each is saved as that kind, and not yet tested is never first-class", () => {
     expect(PRESETS.length).toBeGreaterThan(0);
     for (const preset of PRESETS) {
       const where = preset.id;
@@ -518,6 +526,20 @@ describe("Support tiers (ADR-0019)", () => {
       expect(preset.adapter, where).toBe("openai-compatible");
       expect(kindOfCatalogId(preset.id), where).toBe("openai-compatible");
       expect(preset.endpoints.length, where).toBeGreaterThan(0);
+      expect(untestedForCitations(preset), where).toBe(preset.citingTested === undefined);
+      if (untestedForCitations(preset)) expect(preset.support, where).toBe("best-effort");
+      if (preset.group === "local") {
+        // The models are whatever the User has loaded: none is named here.
+        expect(preset.roles, where).toEqual({});
+        // Set up at its default address, it is on this computer; and it is in no list of keys.
+        for (const endpoint of preset.endpoints) {
+          const address = endpoint.field?.default ?? "";
+          expect(isLoopbackHost(new URL(fieldUrl(endpoint, address)).hostname), where).toBe(true);
+        }
+        expect(KEY_PROVIDERS, where).not.toContain(preset.id);
+        expect(LOCAL_PRESETS, where).toContain(preset.id);
+        continue;
+      }
       expect(preset.keyUrl ?? preset.endpoints[0]?.keyUrl, where).toMatch(/^https:\/\//);
       expect(preset.roles.answers, where).toBeDefined();
       // An Answers model that calls Tools, and quick tasks that cost no more.
@@ -527,8 +549,6 @@ describe("Support tiers (ADR-0019)", () => {
       expect(output(preset.roles.quickTasks) ?? Number.NaN, where).toBeLessThanOrEqual(
         output(preset.roles.answers) ?? Number.NaN,
       );
-      expect(untestedForCitations(preset), where).toBe(preset.citingTested === undefined);
-      if (untestedForCitations(preset)) expect(preset.support, where).toBe("best-effort");
     }
     // Rows that aren't presets are never marked untested.
     expect(
