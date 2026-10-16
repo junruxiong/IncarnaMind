@@ -1528,23 +1528,20 @@ export const en = {
   "setup.waiting": "Waiting for you to choose a model",
   "setup.chatgpt.use": "Use my ChatGPT plan",
   "setup.chatgpt.line":
-    "Plus or Pro · No key needed · Your Questions, the Mind you're in, Passages from your Documents, and Document text for Tags go to OpenAI under your ChatGPT account.",
-  "setup.deepseek.use": "Paste a DeepSeek key",
-  "setup.deepseek.line":
-    "Your Questions, the Mind you're in, Passages from your Documents, and Document text for Tags go to DeepSeek under your own key.",
-  "setup.how": "How do I get one?",
+    "If you pay for ChatGPT Plus or Pro · No key needed · Your Questions, the Mind you're in, Passages from your Documents, and Document text for Tags go to OpenAI under your ChatGPT account.",
+  "setup.chatgpt.line.china":
+    "If you pay for ChatGPT Plus or Pro (not in mainland China) · No key needed · Your Questions, the Mind you're in, Passages from your Documents, and Document text for Tags go to OpenAI under your ChatGPT account.",
+  "setup.key.use": "Paste an API key",
+  "setup.key.for": "From OpenAI, Anthropic, Google, DeepSeek and more, yours or your company's.",
+  "setup.back": "Back",
   "setup.getOllama": "Get Ollama",
   "setup.other": "Other ways",
-  "setup.way.key": "Paste a key",
-  "setup.way.key.line": "From Anthropic, OpenAI, Google, DeepSeek and more.",
   "setup.way.local": "Use a model on this computer",
   "setup.way.local.line":
     "Free and private. Needs the free Ollama app. Slower, and cites less reliably.",
   "setup.way.local.running":
     "Ollama is running here. Free and private; slower, and cites less reliably.",
   "setup.way.local.notRunning": "Ollama isn't running on this computer. It's free to get.",
-  "setup.way.chatgpt": "Sign in with ChatGPT",
-  "setup.way.chatgpt.line": "Plus or Pro. Not available in mainland China.",
   "setup.claude.title": "Already pay for Claude?",
   "setup.claude.line":
     "Anthropic doesn’t let other apps use a Claude plan. You can ask your Documents in the Claude app instead.",
@@ -1622,7 +1619,16 @@ export const en = {
   "providers.form.moreShort": "More…",
   "providers.form.whereKey": "Where do I find it?",
   "providers.form.anotherModel": "Another model…",
-  "providers.form.recommended": "Recommended: {model}",
+  "providers.form.modelHint": "{model} · {hint}",
+  "providers.form.hint.answers": "Recommended",
+  "providers.form.hint.strongest": "Most capable",
+  "providers.form.hint.quickTasks": "Fast and cheap",
+  "providers.form.hint.images": "Good with images and scans",
+  "providers.form.modelExample": "e.g. {model}",
+  "providers.form.modelId": "Model id",
+  "providers.form.modelIdHint": "The model's id, as the company's documentation writes it.",
+  "providers.form.title": "Paste your {provider} key",
+  "providers.form.title.server": "Connect an OpenAI-compatible server",
   "providers.form.useKey": "Use this key",
   "providers.untested": "Not yet tested for checked Citations",
   "providers.form.checking": "Checking the key…",
@@ -2759,6 +2765,10 @@ export const en = {
   "aiStatement.sentences.contradicted": "Contradicted",
   "aiStatement.sentences.recheck": "Needs re-check",
   "aiStatement.sentences.notChecked": "Not checked",
+  "aiStatement.unread.one":
+    "When these sentences were checked, 1 file they were checked against couldn't be read, so the checks didn't search it:",
+  "aiStatement.unread":
+    "When these sentences were checked, {count} files they were checked against couldn't be read, so the checks didn't search them:",
   "aiStatement.note":
     "Schools have their own forms for declaring AI use. Use these counts to fill in yours.",
   "export.questionsLeftOut.one": "1 Question is left out.",
@@ -3050,11 +3060,13 @@ export const en = {
   "error.privacy.usageDataLocalMode":
     "Usage data stays off while “Keep everything on this computer” is on.",
   "error.check.claimTooLong": "The claim is too long to check: at most {max} characters.",
-  "error.check.localMode": "Local mode is on, and the model isn't on this computer.",
+  "error.check.localMode":
+    "“Keep everything on this computer” is on, and the model isn't on this computer.",
   "error.check.declined":
     "You declined sending the claim to the model's service, so nothing was sent.",
   "error.tagging.noModel": "Choose a classification model.",
-  "error.tagging.cloudPaused": "Cloud classification is paused in local mode.",
+  "error.tagging.cloudPaused":
+    "Cloud classification is paused while “Keep everything on this computer” is on.",
   "error.tagging.jevNotSetUp": "Jev isn't set up.",
   "error.tagging.jevKeyUnreadable": "The Jev key can't be read on this device.",
   "error.tagging.startOllama": "Start Ollama to use automatic local classification.",

@@ -13,9 +13,18 @@
  */
 import type { ChatProviderKind } from "../../api";
 import { PRESETS } from "./presets";
-import type { CatalogProvider, Endpoint, EndpointField } from "./types";
+import type { CatalogProvider, Endpoint, EndpointField, ProviderOptions } from "./types";
 
 const GLOBAL = { en: "Global", zh: "全球" };
+
+export const CLAUDE_BETWEEN_TOOLS: ProviderOptions = {
+  anthropic: { thinking: { type: "between_tools" } },
+};
+
+// A model that always thinks adaptively can only be asked for less (#907).
+export const CLAUDE_LOW_EFFORT: ProviderOptions = {
+  anthropic: { thinking: { type: "adaptive" }, effort: "low" },
+};
 
 const PROVIDERS = [
   {
@@ -44,8 +53,15 @@ const PROVIDERS = [
     docsUrl: "https://docs.anthropic.com/en/docs/about-claude/models",
     request: {
       // Claude 5.5 thinks by default (adaptively): a small call with a short reply runs out of room
-      // before it writes anything (#282).
-      thinkingOff: { options: { anthropic: { thinking: { type: "disabled" } } } },
+      // before it writes anything (#282). The newest refuse `disabled`, and their refusal names
+      // the setting they take instead (#907).
+      thinkingOff: {
+        options: { anthropic: { thinking: { type: "disabled" } } },
+        refused: [
+          { names: "between_tools", options: CLAUDE_BETWEEN_TOOLS },
+          { names: "output_config.effort", options: CLAUDE_LOW_EFFORT },
+        ],
+      },
       // Claude 5 models think by default, and return only an empty block unless asked for the summary.
       reasoningSummary: {
         options: { anthropic: { thinking: { type: "adaptive", display: "summarized" } } },

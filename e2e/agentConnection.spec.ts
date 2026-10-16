@@ -10,6 +10,7 @@ import {
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  newMind,
   openSettings,
   removeDataFolder,
   setLanguage,
@@ -17,8 +18,9 @@ import {
 
 /*
  * Connecting outside agents (#351) while it isn't offered: no Settings page,
- * no ⌘K command and no Privacy row lead to it, and the socket stays closed even
- * where an earlier build turned it on and paired an agent.
+ * no ⌘K command, no Privacy row and no way to set up a model (#890) lead to it,
+ * and the socket stays closed even where an earlier build turned it on and
+ * paired an agent.
  */
 
 test.skip(SHOW_AGENT_CONNECTION, "Checks the app while SHOW_AGENT_CONNECTION is false.");
@@ -105,6 +107,53 @@ test("turning agents on leaves the socket closed, and a pairing an earlier build
     };
     await expect.poll(mentions).toBe(1);
     expect(existsSync(socket)).toBe(false);
+  } finally {
+    await app.close();
+  }
+});
+
+test("neither the setup card nor Settings › Models offers the Claude app, Antigravity or Agents settings, in English and Chinese", async () => {
+  const { app, window } = await launchApp(dataDir);
+  try {
+    const leadsToAgents = {
+      en: ["Open Agents settings", "Connect the Claude app", "Connect Antigravity"],
+      "zh-CN": ["打开智能体设置", "连接 Claude 应用", "连接 Antigravity"],
+    } as const;
+    await newMind(window);
+    await window.getByTestId("mind-editor").click();
+    await window.keyboard.press("ControlOrMeta+j");
+    await window.keyboard.type("What is in my Documents?");
+    await window.keyboard.press("Enter");
+    const card = window.getByTestId("model-setup");
+    await card.getByTestId("setup-other").click();
+    await expect(card.getByTestId("way-local")).toBeVisible();
+    for (const language of ["en", "zh-CN"] as const) {
+      await setLanguage(window, language);
+      await expect(card.getByTestId("setup-other")).toHaveText(
+        language === "en" ? "Other ways" : "其他方式",
+      );
+      await expect(card.getByTestId("setup-claude")).toHaveCount(0);
+      for (const name of leadsToAgents[language]) {
+        await expect(window.getByRole("button", { name })).toHaveCount(0);
+      }
+    }
+    await setLanguage(window, "en");
+    await card.getByTestId("setup-later").click();
+    await expect(card).toBeHidden();
+
+    const settings = await openSettings(window, "models");
+    const plans = settings.getByTestId("plans-settings");
+    for (const language of ["en", "zh-CN"] as const) {
+      await setLanguage(window, language);
+      await expect(plans.getByTestId("plans-chatgpt")).toHaveText(
+        language === "en" ? "Continue with ChatGPT" : "使用 ChatGPT 继续",
+      );
+      await expect(plans.getByTestId("plans-claude")).toHaveCount(0);
+      await expect(plans.getByTestId("plans-google")).toHaveCount(0);
+      for (const name of leadsToAgents[language]) {
+        await expect(settings.getByRole("button", { name })).toHaveCount(0);
+      }
+    }
   } finally {
     await app.close();
   }
