@@ -5315,6 +5315,18 @@ export type OllamaStatus =
       recommendedModel: string;
     };
 
+/** What runs at a local preset's address: `address` is its host and port, `models` the language models it lists. */
+export type LocalServerStatus =
+  | { running: false; address: string }
+  | { running: true; address: string; models: string[] };
+
+export interface DetectLocalServerInput {
+  catalogId: string;
+  apiKey?: string;
+  /** A host and port; the preset's default when left out. */
+  address?: string;
+}
+
 export interface SelectOllamaInput {
   /** Defaults to Ollama's local port. */
   baseUrl?: string;
@@ -7936,6 +7948,8 @@ export interface CoreApi {
 
   /** Looks for Ollama, on its default local port unless another URL is given. */
   detectOllama(input?: { baseUrl?: string }): Promise<OllamaStatus>;
+  /** Looks for a preset's server on this computer at its address, and lists its models. */
+  detectLocalServer(input: DetectLocalServerInput): Promise<LocalServerStatus>;
   /**
    * Opens Ollama's app and waits, for up to twenty seconds, until Ollama answers; resolves with
    * what `detectOllama` then finds. Rejects when the app can't be opened from here.
@@ -8769,6 +8783,7 @@ const methods: Record<CoreApiMethod, true> = {
   getSecretStorage: true,
   acceptPlainTextSecretStorage: true,
   detectOllama: true,
+  detectLocalServer: true,
   openOllama: true,
   selectOllama: true,
   getChatGptPlan: true,
