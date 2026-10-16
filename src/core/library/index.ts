@@ -468,10 +468,6 @@ export function createLibrary(options: {
             state(id, "waiting");
             return;
           }
-          if (taggingStoppedFor(id) && !asked.has(id)) {
-            stopped(id);
-            return;
-          }
           // Until Organize has a model, automatic tagging tags this Document: its state is the tagger's.
           if (!organizeModelOf(getSettings())) {
             db.run(
@@ -479,6 +475,10 @@ export function createLibrary(options: {
               [now(), id],
             );
             announce([id]);
+            return;
+          }
+          if (taggingStoppedFor(id) && !asked.has(id)) {
+            stopped(id);
             return;
           }
           state(id, "classifying");
