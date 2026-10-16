@@ -46,7 +46,7 @@ async function shot(window: Page, name: string) {
   await window.screenshot({ path: join(SCREENSHOTS, `${name}.png`) });
 }
 
-/** The line drawn on each side of a table or cell, in px: a cell's own, or on the table's edge the table's. */
+/** The line drawn on each side of a table or cell, in px: its own, the neighbouring cell's, or on the table's edge the table's. */
 const sidesOf = (target: Locator) =>
   target.evaluate((element) => {
     const width = (of: Element, side: string) => {
@@ -58,14 +58,21 @@ const sidesOf = (target: Locator) =>
     const table = element.closest("table") ?? element;
     const box = element.getBoundingClientRect();
     const outer = table.getBoundingClientRect();
-    const edge = {
-      top: Math.abs(box.top - outer.top) < 2,
-      right: Math.abs(box.right - outer.right) < 2,
-      bottom: Math.abs(box.bottom - outer.bottom) < 2,
-      left: Math.abs(box.left - outer.left) < 2,
+    const middle = { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+    const sides = {
+      top: { x: middle.x, y: box.top - 2, opposite: "bottom" },
+      right: { x: box.right + 2, y: middle.y, opposite: "left" },
+      bottom: { x: middle.x, y: box.bottom + 2, opposite: "top" },
+      left: { x: box.left - 2, y: middle.y, opposite: "right" },
+    } as const;
+    const side = (name: keyof typeof sides) => {
+      const { x, y, opposite } = sides[name];
+      const next = document.elementFromPoint(x, y)?.closest("td, th");
+      const neighbour =
+        next && next !== element && table.contains(next) ? width(next, opposite) : 0;
+      const edge = Math.abs(box[name] - outer[name]) < 2 ? width(table, name) : 0;
+      return Math.max(width(element, name), neighbour, edge);
     };
-    const side = (name: keyof typeof edge) =>
-      Math.max(width(element, name), edge[name] ? width(table, name) : 0);
     return { top: side("top"), right: side("right"), bottom: side("bottom"), left: side("left") };
   });
 
