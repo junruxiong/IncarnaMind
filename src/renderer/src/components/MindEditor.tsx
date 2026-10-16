@@ -97,11 +97,12 @@ import { isWritingIn } from "../mindStatus";
 import { followMindStyle } from "../mindStyles";
 import { useMindTools } from "../mindTools";
 import { onMindWriting, writingPlaceOf } from "../mindWriting";
+import { firstOpenOf } from "../nudges";
 import { skillDescription } from "../skills";
 import { useAppStore } from "../store";
 import { askForSuggestion, describeSuggestion } from "../suggestions";
 import { CompareSheet } from "./CompareSheet";
-import { StartGuide, useGettingStarted, useIsExample } from "./GettingStarted";
+import { StartGuide, useIsExample } from "./GettingStarted";
 import { CheckLineIcon, MineLineIcon, SearchLineIcon, SparkLineIcon } from "./lineIcons";
 import { MindNotice } from "./MindNotice";
 
@@ -631,7 +632,8 @@ function MindEditorView({
   const findShown = useMindTools((state) => state.findMindId === mindId);
   const outlineShown = useMindTools((state) => state.outlineMindId === mindId);
   const firstOpen = useFirstOpen();
-  const guide = useGettingStarted() !== null && empty && !isExample && !readOnly;
+  const stepsUnderWay = useAppStore((state) => firstOpenOf(state.settings?.device.gettingStarted));
+  const guide = stepsUnderWay && empty && !isExample && !readOnly;
   const verification = useVerification(doc);
   const frame = useRef<HTMLDivElement>(null);
   useClickBelowNote(editor, frame);

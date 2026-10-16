@@ -35,7 +35,7 @@ A provider or agent moves between tiers with a one-line change: a field in the c
 
 A plan can also be reached through an experimental sign-in route, where the User signs in with their own account. Such a route:
 
-- is opt-in: off by default in the interface, never preselected or recommended, and listed under other ways;
+- is opt-in: listed under other ways, off until the User signs in, never preselected or recommended;
 - says before sign-in, in three sentences with focus on the safe choice, that the provider may refuse or block it, that the account is the User's own, and that it can be turned off at any time in Settings › Models;
 - names the provider in a plain line when it stops working, with a way back to an API key;
 - keeps its client profile in its provider's one configuration module, behind one build flag (`EXPERIMENTAL_SIGN_IN_ROUTES`, `src/core/buildFlags.ts`), so every such route leaves the bundle with a one-line change.

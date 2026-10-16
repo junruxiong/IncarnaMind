@@ -276,9 +276,6 @@ export function NoCitationsLine({
   );
 }
 
-/** Asked for once per run: while offline, asking again on every error would only fail again. */
-let modelsAsked = false;
-
 /** Failures that can come of a model that can't answer, rather than of the connection. */
 const WRONG_MODEL: ReadonlySet<ProviderErrorKind> = new Set([
   "model",
@@ -326,12 +323,12 @@ export function AnswerError({
     : t("answer.error.thisService");
   const [shownAt] = useState(() => new Date().toISOString());
   const keySaved = useKeySavedSince(providerId, failedAt ?? shownAt);
-  // Whose plan it was decides where its usage is managed.
+  // Whose plan or sign-in it was decides the line. A sign-in that ends changes readiness, which
+  // clears the list, so it is read again then, and not on every error (offline, that only fails).
+  const readiness = useAppStore((state) => state.chatReadiness);
   useEffect(() => {
-    if (modelsAsked) return;
-    modelsAsked = true;
-    useAnswers.getState().loadModels();
-  }, []);
+    if (readiness) useAnswers.getState().loadModels();
+  }, [readiness]);
   // A model the User added to the menu that then failed: one click takes it back out.
   const added = useAnswers((state) =>
     state.models?.some(
