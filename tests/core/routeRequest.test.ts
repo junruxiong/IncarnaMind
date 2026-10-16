@@ -1,18 +1,23 @@
 import { describe, expect, test } from "vitest";
-import { type RequestKind, routeRequest } from "../../src/core/answers/routeRequest";
+import {
+  type RequestContext,
+  type RequestKind,
+  routeRequest,
+} from "../../src/core/answers/routeRequest";
 
 /**
  * Everyday requests in the assistant, in English and Chinese, and how each
  * is read. Only a whole request of a plain shape is an edit or a write, so
  * no question, doubted request, or request about a Document or the reply may
  * read as one. A request labelled "answer" changes nothing and reads as
- * "unclear", which behaves the same: nothing is forced or tagged. A follow-up
- * with no object is read after an Answer that changed a Mind, or one that
- * changed none; without either, in both.
+ * "unclear", which behaves the same: nothing is forced or tagged. A request
+ * is read where its row says: after an Answer that changed a Mind, after one
+ * that changed none, or as the conversation's first; without either, in all
+ * three.
  */
 
 type Label = RequestKind | "answer";
-type After = "after a change" | "after no change";
+type After = "after a change" | "after no change" | "first";
 type Row = readonly [request: string, label: Label, after?: After];
 
 /** A review's requests and the route each should take, the earlier blockers among them. */
@@ -423,12 +428,12 @@ const OURS: readonly Row[] = [
   ["笔记里的第二段讲了什么？", "answer"],
   ["谢谢，第二篇论文呢？", "answer"],
   ["写一个总结页面有用吗？", "answer"],
-  ["Put this in my notes", "write"],
-  ["Save this to my notes", "write"],
-  ["Save your answer to my notes", "write"],
-  ["把刚才的回答加到我的笔记里", "write"],
+  ["Put this in my notes", "write", "after no change"],
+  ["Save this to my notes", "write", "after no change"],
+  ["Save your answer to my notes", "write", "after no change"],
+  ["把刚才的回答加到我的笔记里", "write", "after no change"],
   ["Write the summary in Chinese", "edit"],
-  ["Write the conclusion", "unclear"],
+  ["Write the conclusion", "write"],
   ["Make my notes into a table", "edit"],
   ["Turn my notes into a table", "edit"],
   ["Help me shorten my intro", "edit"],
@@ -438,36 +443,79 @@ const OURS: readonly Row[] = [
   ["Start a new page on tides", "write"],
   ["Turn this into a table", "edit", "after a change"],
   ["Add more detail on the methods", "unclear", "after a change"],
+  ["write a page about tides what do you think", "unclear"],
+  ["add a section about risks can you", "unclear"],
+  ["add which part to my notes", "unclear"],
+  ["shorten the part about tides do you think", "unclear"],
+  ["把这个能不能加到我的笔记里", "unclear"],
+  ["把这个是否加到我的笔记里", "unclear"],
+  ["把哪些内容加到我的笔记里", "unclear"],
+  ["加一个怎样的部分", "unclear"],
+  ["把关于哪个的部分删掉", "unclear"],
+  ["Make my summary shorter...", "unclear"],
+  ["Make my summary shorter…", "unclear"],
+  ["把第二段删掉……", "unclear"],
+  ["帮我润色第二段", "edit"],
+  ["帮我把这段改短一点，谢谢", "edit"],
+  ["Go ahead and delete the second paragraph", "edit"],
+  ["I'd like you to shorten my intro", "edit"],
+  ["Shorten my intro, thanks", "edit"],
+  ["麻烦把第二段改得更正式", "edit"],
+  ["写一份总结放到我的笔记里", "write"],
+  ["新建一篇笔记，总结这两篇论文", "write"],
+  ["Write a one-page summary of the paper in a new note", "write"],
+  ["加到我的笔记里", "write", "after no change"],
+  ["加到我的笔记里", "write", "after a change"],
+  ["加到我的笔记里", "unclear", "first"],
+  ["add it to my notes", "write", "after no change"],
+  ["add it to my notes", "unclear", "first"],
+  ["把这个加到我的笔记里", "write", "after no change"],
+  ["把这个加到我的笔记里", "unclear", "first"],
+  ["add this to my notes, can you", "unclear"],
+  ["what do you think, write a page about tides", "unclear"],
 ];
 
-const contexts = ([, , after]: Row): boolean[] =>
-  after === "after a change" ? [true] : after === "after no change" ? [false] : [false, true];
+const FIRST: RequestContext = { followsAChange: false, followsAnAnswer: false };
+const NO_CHANGE: RequestContext = { followsAChange: false, followsAnAnswer: true };
+const CHANGE: RequestContext = { followsAChange: true, followsAnAnswer: true };
+
+const contexts = (after: After | undefined): RequestContext[] =>
+  after === "after a change"
+    ? [CHANGE]
+    : after === "after no change"
+      ? [NO_CHANGE]
+      : after === "first"
+        ? [FIRST]
+        : [FIRST, NO_CHANGE, CHANGE];
 
 const cases = (rows: readonly Row[], labels: readonly Label[]) =>
   rows
     .filter(([, label]) => labels.includes(label))
     .flatMap(([request, label, after]) =>
-      contexts([request, label, after]).map((followsAChange) => ({
+      contexts(after).map((context) => ({
         request,
         kind: label === "answer" ? "unclear" : label,
-        followsAChange,
+        context,
+        after:
+          after ??
+          (context === FIRST ? "first" : context === CHANGE ? "after a change" : "after no change"),
       })),
     );
 
 describe("Routing everyday requests", () => {
   // protects=no question, doubted request, or request about a Document or the reply reads as an edit or a write, after a change or not; fails_when=one does, and a Mind would change unasked; no_claim=that every request asking for a change is read as one.
   test.each(cases([...REVIEWED, ...OURS], ["answer", "unclear"]))(
-    "$request is unclear (follows a change: $followsAChange)",
-    ({ request, followsAChange }) => {
-      expect(routeRequest(request, { followsAChange }).kind).toBe("unclear");
+    "$request is unclear ($after)",
+    ({ request, context }) => {
+      expect(routeRequest(request, context).kind).toBe("unclear");
     },
   );
 
   // protects=a plain instruction that names the User's own text is an edit, one that says where new text goes a write, and a follow-up an edit only after a change; fails_when=one reads otherwise; no_claim=every wording a User may use.
   test.each(cases([...REVIEWED, ...OURS], ["edit", "write"]))(
-    "$request reads as $kind (follows a change: $followsAChange)",
-    ({ request, kind, followsAChange }) => {
-      expect(routeRequest(request, { followsAChange }).kind).toBe(kind);
+    "$request reads as $kind ($after)",
+    ({ request, kind, context }) => {
+      expect(routeRequest(request, context).kind).toBe(kind);
     },
   );
 
@@ -486,7 +534,10 @@ describe("Routing everyday requests", () => {
     ["Add a note about the meeting to Project plan", false],
     ["帮我在笔记里添加一个风险部分", false],
     ["写一份这两篇论文的总结", false],
+    ["新建一篇笔记，总结这两篇论文", true],
+    ["Write a one-page summary of the paper in a new note", true],
+    ["Write the conclusion", false],
   ] as const)("%s asks for a new Mind: %s", (request, newMind) => {
-    expect(routeRequest(request, { followsAChange: false })).toEqual({ kind: "write", newMind });
+    expect(routeRequest(request, FIRST)).toEqual({ kind: "write", newMind });
   });
 });

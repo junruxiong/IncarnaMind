@@ -23,11 +23,13 @@ export interface RequestRoute {
 
 // Never a doubt: "I mean write a summary…", "no, keep it shorter", "帮我润色一下这段".
 const FILLER =
-  /^(?:(?:please|pls|i mean|ok|okay|now|then|no|yes|so|just|actually|great|thanks|let's|help me)[,!]?\s+)*/;
+  /^(?:(?:please|pls|i mean|ok|okay|now|then|no|yes|so|just|actually|great|thanks|let's|help me|go ahead and|i'd like you to|i would like you to)[,!]?\s+)*/;
 const ZH_FILLER = /^(?:请|麻烦你?|帮我|好的，?|那就|就)*/;
+// A question hides in free text too: "add which part to my notes", "把哪些内容加到我的笔记里".
+const ZH_ASKS = /哪|是否|可否|能不能|要不要|怎|啥|什么|(\p{Script=Han})[不没]\1/u;
 
 const WORD =
-  "(?!(?:or|and|if|but|unless|then|is|does|would|should|could|will|maybe|perhaps|ok|okay|right|yes|no|not|whether|thoughts|idea|worth|fine)\\b)[\\p{L}\\p{N}'’-]+";
+  "(?!(?:or|and|if|but|unless|then|is|does|do|did|would|should|could|can|will|you|i|think|reckon|guess|suppose|what|which|how|why|whether|maybe|perhaps|ok|okay|right|yes|yeah|no|not|thoughts|idea|worth|fine)\\b)[\\p{L}\\p{N}'’-]+";
 const WORDS = `(?:${WORD} ?){1,8}`;
 const LANGUAGE = "(?:chinese|english|french|german|spanish|japanese|korean|plain english)";
 const SOME = "(?:these|the|both|this|all|my)(?: \\d+| two)?";
@@ -74,11 +76,12 @@ const WRITES = [
   ),
   new RegExp(`^(?:make|take) notes (?:on|about|from) ${DOCUMENTS}$`, "u"),
   new RegExp(
-    `^(?:write|draft|prepare)(?: me)? (?:a|an)(?: short| brief)? (?:summary|overview|outline|brief|memo)(?: (?:of|about|on) ${DOCUMENTS})?(?: in ${LANGUAGE})?$`,
+    `^(?:write|draft|prepare)(?: me)? (?:a|an)(?: short| brief| one-page)? (?:summary|overview|outline|brief|memo)(?: (?:of|about|on) ${DOCUMENTS})?(?: in ${LANGUAGE})?(?: (?:in|on|into) (?:a )?new (?:note|page))?$`,
     "u",
   ),
+  /^(?:write|draft) (?:the|my) (?:conclusion|introduction|intro|summary|abstract|next section|next paragraph)$/,
   new RegExp(
-    `^(?:add|put|save|copy|insert|append) (?:this|that|it|these|them|${WORDS}) (?:to|into|in) (?:my|the) notes?$`,
+    `^(?:add|put|save|copy|insert|append) ${WORDS} (?:to|into|in) (?:my|the) notes?$`,
     "u",
   ),
   new RegExp(
@@ -108,7 +111,7 @@ const FOLLOW_UPS = [
 const CONTINUE = /^(?:continue|go on|keep going)$/;
 
 const ZH_OWN_TEXT =
-  "(?:这段|这一段|这一节|这节|这页|这部分|这一部分|这句话?|这一句|第[一二三四五六七八九十\\d]+段|最后一段|我的(?:总结|笔记|段落|草稿)|关于[^，。？！吗呢吧么]{1,10}的部分)";
+  "(?:这段|这一段|这一节|这节|这页|这部分|这一部分|这句话?|这一句|第[一二三四五六七八九十\\d]+段|最后一段|我的(?:总结|笔记|段落|草稿)|关于[^，。？！?吗呢吧么]{1,10}的部分)";
 const ZH_EDIT_VERB =
   "(?:改得|写得|改成|改为|改短|改长|写长|写短|缩短|扩写|翻译成|翻译为|翻译|润色|精简|删掉|删除|删去|去掉|简化|改)";
 const ZH_CHANGE =
@@ -120,7 +123,9 @@ const ZH_EDITS = [
   new RegExp(
     `^(?:在(?:我的)?笔记(?:里|中))?把${ZH_OWN_TEXT}${ZH_EDIT_VERB}${ZH_CHANGE}${ZH_LEAVE_THE_REST}$`,
   ),
-  new RegExp(`^(?:缩短|删掉|删除|润色一下|精简一下|翻译一下|改一下|扩写|简化)${ZH_OWN_TEXT}$`),
+  new RegExp(
+    `^(?:缩短|删掉|删除|润色(?:一下)?|精简(?:一下)?|翻译(?:一下)?|改一下|扩写|简化)${ZH_OWN_TEXT}$`,
+  ),
 ];
 const ZH_WRITES = [
   /^写一[个份篇](?:总结|概述)?(?:页面|页)$/,
@@ -133,7 +138,14 @@ const ZH_WRITES = [
     `^(?:在(?:我的)?笔记(?:里|中))?(?:添加|加上|加|插入|补充)一[个段节]${ZH_FREE}?(?:部分|章节|段落|小节)$`,
   ),
   /^总结一下(?:这篇论文|这两篇论文|这些文档|这些论文)，?(?:并|然后)?(?:放到|加到|记到)(?:我的)?笔记(?:里|中)$/,
+  /^写一[份篇个](?:简短的)?(?:总结|概述|摘要)，?(?:并|然后)?(?:放到|加到|记到|写到)(?:我的)?笔记(?:里|中)$/,
+  /^(?:新建|创建)一[篇个份](?:新的?)?笔记，?(?:总结|概括)(?:一下)?(?:这两篇论文|这篇论文|这些文档|这些论文)$/,
 ];
+// What the last Answer said, put into a Mind: "add it to my notes", "加到我的笔记里".
+const ADD_IT =
+  /^(?:add|put|save|copy) (?:this|that|it|these|them|your answer|the answer) (?:to|into|in) (?:my|the) notes?$/;
+const ZH_ADD_IT =
+  /^(?:把(?:这个|这些|它|它们|刚才的回答|这个回答))?(?:加到|添加到|放到|记到|存到)(?:我的)?(?:笔记|页面)(?:里|中)?$/;
 const ZH_FOLLOW_UPS = [
   /^(?:再|更)?(?:长|短|详细|简单|正式|简洁|具体)一?(?:点|些)?$/,
   /^更(?:正式|简洁|详细|简单)(?:一点|一些)?$/,
@@ -153,37 +165,47 @@ const NAMES_A_MIND =
 const matches = (patterns: readonly RegExp[], text: string) =>
   patterns.some((pattern) => pattern.test(text));
 
-function plainKind(question: string, followsAChange: boolean): "edit" | "write" | null {
-  const english = question
-    .trim()
-    .replace(/\s+/g, " ")
-    .toLocaleLowerCase()
-    .replace(/[.!]+$/, "")
-    .replace(/,? (?:please|pls)$/, "")
-    .replace(FILLER, "");
-  const chinese = question
-    .trim()
-    .replace(/[。！]+$/, "")
-    .replace(ZH_FILLER, "");
-  if (/\p{Script=Han}/u.test(question)) {
+export interface RequestContext {
+  /** The conversation's last Answer changed a Mind: "longer" means what it wrote. */
+  followsAChange: boolean;
+  /** The conversation has an Answer before: "add it to my notes" means it. */
+  followsAnAnswer: boolean;
+}
+
+function plainKind(question: string, { followsAChange, followsAnAnswer }: RequestContext) {
+  const trimmed = question.trim();
+  // "Make my summary shorter..." trails off.
+  if (/(?:\.{2,}|…|。{2,})$/.test(trimmed)) return null;
+  if (/\p{Script=Han}/u.test(trimmed)) {
+    const chinese = trimmed
+      .replace(/[。！]+$/, "")
+      .replace(/，?谢谢$/, "")
+      .replace(ZH_FILLER, "");
+    if (ZH_ASKS.test(chinese)) return null;
     if (matches(ZH_EDITS, chinese)) return "edit";
+    if (ZH_ADD_IT.test(chinese)) return followsAnAnswer ? "write" : null;
     if (matches(ZH_WRITES, chinese)) return "write";
     if (!followsAChange) return null;
     if (matches(ZH_FOLLOW_UPS, chinese)) return "edit";
     return ZH_CONTINUE.test(chinese) ? "write" : null;
   }
+  const english = trimmed
+    .replace(/\s+/g, " ")
+    .toLocaleLowerCase()
+    .replace(/[.!]$/, "")
+    .replace(/,? (?:thanks|thank you)$/, "")
+    .replace(/,? (?:please|pls)$/, "")
+    .replace(FILLER, "");
   if (matches(EDITS, english)) return WHOLE_MIND.test(english) ? null : "edit";
+  if (ADD_IT.test(english)) return followsAnAnswer ? "write" : null;
   if (matches(WRITES, english)) return "write";
   if (!followsAChange) return null;
   if (matches(FOLLOW_UPS, english)) return "edit";
   return CONTINUE.test(english) ? "write" : null;
 }
 
-export function routeRequest(
-  question: string,
-  { followsAChange }: { followsAChange: boolean },
-): RequestRoute {
-  const kind = plainKind(question, followsAChange) ?? "unclear";
+export function routeRequest(question: string, context: RequestContext): RequestRoute {
+  const kind = plainKind(question, context) ?? "unclear";
   const newMind =
     kind === "write" && !NAMES_A_MIND.test(question) && NEW_MIND.test(question.toLocaleLowerCase());
   return { kind, newMind };
