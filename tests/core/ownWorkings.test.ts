@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { type Core, type Document, InvalidInputError, NotFoundError } from "../../src/core";
+import { documentInstructions } from "../../src/core/answers/prompt";
 import { readClaimCheck } from "../../src/shared/claimChecks";
 import { checkingModel } from "../helpers/checks";
 import {
@@ -235,4 +236,16 @@ test("a check's mark keeps the working file it names, as the Mind stores it", ()
   expect(
     readClaimCheck({ id: "check-1", state: "unsupported", excluded: [left] })?.excluded,
   ).toEqual([left]);
+});
+
+test("a model that can't call Tools is told which Passages are the User's own workings, only when there are some", () => {
+  const listed = { total: 2, names: ["Annual report", "Workings"] };
+  const own = '<passage id="P1" document="Workings" cite="never">\nRevenue 1482.6\n</passage>';
+  const other = '<passage id="P2" document="Annual report">\nRevenue was 1,482.6\n</passage>';
+  expect(documentInstructions("structured-output", listed, `${own}\n\n${other}`)).toContain(
+    "own working file",
+  );
+  expect(documentInstructions("structured-output", listed, other)).not.toContain(
+    "own working file",
+  );
 });

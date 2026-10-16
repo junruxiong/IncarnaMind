@@ -123,7 +123,9 @@ export interface ComparisonsOptions {
   };
   documents: {
     /** The live Documents among `ids`, in that order, with the version each is at. */
-    live(ids: readonly string[]): { id: string; name: string; contentHash: string }[];
+    live(
+      ids: readonly string[],
+    ): { id: string; name: string; contentHash: string; notCited: boolean }[];
     /** How many of `ids` have Passages to search. */
     searchableCount(ids: readonly string[]): number;
   };
