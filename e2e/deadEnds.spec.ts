@@ -157,7 +157,7 @@ test("most sentences unsupported says so once; an unsupported card offers its th
   await slideSelect(window, line, "Penguins", { line, words: "waters." });
   await pointAndClick(
     window,
-    window.getByTestId("selection-menu").getByTestId("selection-action-find-support"),
+    window.getByTestId("selection-menu").getByTestId("selection-action-check-against-documents"),
   );
   const marks = window.getByTestId("claim-mark");
   await expect(marks).toHaveCount(2);

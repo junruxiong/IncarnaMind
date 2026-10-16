@@ -1,5 +1,5 @@
 /**
- * Find support and Check against Documents (#96), the window's side: which
+ * Check against Documents (#96), the window's side: which
  * sentences a selection is (as the core reads them, `TextPlace`), asking
  * the core to check them, Stop, what went wrong where the Mind's health is,
  * and a check's card actions: Check again, Search all Documents and Add as

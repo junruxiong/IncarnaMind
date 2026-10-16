@@ -30,8 +30,8 @@ import {
 } from "./selectionCommands";
 
 /**
- * One action of the menu's AI section: Edit with AI, Find support and the
- * like. The section is hidden while there are none.
+ * One action of the menu's AI section: Edit with AI, Check against Documents
+ * and the like. The section is hidden while there are none.
  */
 export interface SelectionAction {
   /** A stable name; tests find the action by it (`selection-action-<id>`). */
