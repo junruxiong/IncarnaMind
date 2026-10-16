@@ -13,6 +13,7 @@ import {
   documentIdOf,
   exportFromMenu,
   launchApp,
+  motionSettled,
   newMind,
   pointAndClick,
   removeDataFolder,
@@ -431,6 +432,77 @@ test("in Chinese, a thesis Mind: 引用信息 read from the PDFs waits to be che
   await pointAndClick(window, needs.getByTestId("export-needs-details-show"));
   await expect(thin.getByTestId("reference-needs-details")).toBeFocused();
   await app.close();
+});
+
+test("in Chinese, a Mind that takes GB/T 7714 by default says so once on the undo line: Change opens the picker, Undo puts Numbered back, and it never shows again in that Mind", async () => {
+  await writeFile(join(sources, "绿地与热岛.pdf"), ARTICLE);
+  let session = await launchApp(dataDir, { fakeChat: true });
+  let { window } = session;
+  await dismissChatSetup(window);
+  await window.evaluate(() =>
+    (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
+      user: { language: "zh-CN" },
+    }),
+  );
+  await useLocalChatModel(window);
+  await addDocuments(window, [join(sources, "绿地与热岛.pdf")]);
+  try {
+    /** A new Mind citing the article, in Chinese, titled `title`. */
+    const chineseMind = async (title: string) => {
+      const editor = await ask(window, "城市绿地 each");
+      await window.getByTestId("mind-title").fill(title);
+      await pointAndClick(window, editor.locator("p").last());
+      await window.keyboard.press("ControlOrMeta+End");
+      await window.keyboard.press("Enter");
+      await window.keyboard.type("本文梳理城市绿地对夏季降温的作用，并比较不同城市的热岛效应。");
+      return editor;
+    };
+    const message = window.getByTestId("undo-line").getByTestId("undo-message");
+    const notice = "此 Mind 引用了论文，引用格式已设为 GB/T 7714—2015（顺序编码制）";
+
+    // The first Mind: the line says so, with Change and Undo; Change opens the picker.
+    await chineseMind("第一章");
+    const references = window.getByTestId("references");
+    await expect(references).toHaveAttribute("data-style", "gb-t-7714-2015-numeric");
+    await expect(message).toHaveText(notice);
+    await motionSettled(window);
+    await screenshot(window, "default-style-notice-zh");
+    await pointAndClick(window, window.getByTestId("undo-change-style"));
+    const picker = window.getByTestId("citation-style-picker");
+    await expect(picker).toBeVisible();
+    await expect(message).toHaveCount(0);
+    await window.keyboard.press("Escape");
+    await expect(picker).toBeHidden();
+    // Writing on, it doesn't say it again.
+    await window.keyboard.type("城市绿地使夜间降温。");
+    await expect(references).toHaveAttribute("data-style", "gb-t-7714-2015-numeric");
+    await expect(message).toHaveCount(0);
+
+    // The second Mind says it once too; Undo puts Numbered back, as the Mind's own choice.
+    const second = await chineseMind("第二章");
+    await expect(message).toHaveText(notice);
+    await pointAndClick(window, window.getByTestId("undo-action"));
+    await expect(window.getByTestId("references")).toHaveCount(0);
+    await expect(second.getByTestId("citation-chip").first()).toHaveText("1");
+    await window.keyboard.type("再写一句。");
+    await expect(message).toHaveCount(0);
+
+    // After a restart, the first Mind is still in GB/T 7714 by default, and says nothing.
+    await session.app.close();
+    session = await launchApp(dataDir, { fakeChat: true });
+    window = session.window;
+    await pointAndClick(window, window.getByTestId("mind-list-item").filter({ hasText: "第一章" }));
+    await expect(window.getByTestId("references")).toHaveAttribute(
+      "data-style",
+      "gb-t-7714-2015-numeric",
+    );
+    await expect(window.getByTestId("references-style-default")).toBeVisible();
+    await pointAndClick(window, window.getByTestId("export-mind"));
+    await window.keyboard.press("Escape");
+    await expect(window.getByTestId("undo-line").getByTestId("undo-message")).toHaveCount(0);
+  } finally {
+    await session.app.close();
+  }
 });
 
 test("a Mind citing files with no details isn't offered a style until one is a paper; closed, the offer stays closed there, with Undo; More… opens the picker", async () => {

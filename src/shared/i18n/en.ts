@@ -3906,6 +3906,8 @@ export const en = {
   "citationStyle.prompt.apa": "APA",
   "citationStyle.prompt.gbt": "GB/T 7714",
   "citationStyle.prompt.more": "More…",
+  "citationStyle.defaulted": "This Mind cites a paper, so its citation style is now {style}",
+  "citationStyle.change": "Change",
   "citationStyle.prompt.dismiss": "Don't ask in this Mind",
   "citationStyle.prompt.dismissed": "Won't ask about a citation style in this Mind",
   "references.title": "References",

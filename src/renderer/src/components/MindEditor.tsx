@@ -39,6 +39,7 @@ import { useClickBelowNote } from "../editor/clickBelowNote";
 import { comparisonCellView, comparisonRowView } from "../editor/comparisonViews";
 import { CopyCitations } from "../editor/copyCitations";
 import { DocumentChipView } from "../editor/DocumentChipView";
+import { useDefaultStyleNotice } from "../editor/defaultStyleNotice";
 import { DocumentChipKeys } from "../editor/documentChipKeys";
 import { EndHint, type HintPlace, type HintText, isEmptyMind } from "../editor/EndHint";
 import { selectionForEdit } from "../editor/editSelection";
@@ -414,6 +415,7 @@ function MindEditorView({
   // window's thread, and the footnotes numbered again when the style counts Citations otherwise.
   const style = useMindCitationStyle(editor, styleChoice);
   styleRef.current = style;
+  useDefaultStyleNotice({ mindId, doc, style, chosen: styleChoice.chosen, readOnly });
   useCitationFormattingFor(editor, style, mindId);
   useEffect(() => {
     if (!editor.isDestroyed) setCitationForm(editor.view, citationStyle(style).form);
