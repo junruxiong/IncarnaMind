@@ -1091,6 +1091,19 @@
     container: mind / inline-size;
     padding-block: 64px 160px;
   }
+  /*
+   * Above the Ask pill (20px up, 40px tall) the page fades out over 56px, so no line runs under it.
+   * Sticky in the scroller, it leaves the scrollbar alone, and the column's 160px foot lets the
+   * last line scroll clear of it.
+   */
+  .ask-pill-fade {
+    position: sticky;
+    bottom: 0;
+    height: 116px;
+    margin-top: -116px;
+    background: linear-gradient(to bottom, transparent, var(--color-sheet) 56px);
+    pointer-events: none;
+  }
   .mind-measure {
     width: 680px;
     margin-left: calc((100% - 784px) / 2 + 56px);

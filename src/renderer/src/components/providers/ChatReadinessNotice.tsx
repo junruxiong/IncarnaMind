@@ -2,7 +2,7 @@ import type { ChatReadiness } from "../../../../core/api";
 import { signInAgain } from "../../chatGptSignIn";
 import { useLanguage, useT } from "../../i18n";
 import { turnOffLocalMode } from "../../localMode";
-import { useModelSetup } from "../../modelSetup";
+import { useSettingUp } from "../../modelSetup";
 import { useRequests } from "../../requests";
 import type { SettingsPage } from "../../settingsPages";
 import { useAppStore } from "../../store";
@@ -131,8 +131,8 @@ export function ReadinessLine({
 export function ChatReadinessNotice() {
   const t = useT();
   const readiness = useAppStore((state) => state.chatReadiness);
-  // The setup card, waiting with the Question, already says it.
-  const settingUp = useModelSetup((state) => state.waiting !== null);
+  // The setup card already says it.
+  const settingUp = useSettingUp();
   if (!readiness || readiness.ready || settingUp) return null;
   return (
     <ReadinessLine

@@ -53,6 +53,7 @@ export function ModelSetupCard() {
       );
   }, []);
   const running = ollama.status?.running;
+  const questionWaits = useModelSetup((state) => state.waiting !== null);
 
   return (
     <section
@@ -68,7 +69,9 @@ export function ModelSetupCard() {
           {t("setup.title")}
         </h2>
         {view === null && (
-          <p className="text-[13px] leading-5 text-ink-secondary">{t("setup.body")}</p>
+          <p className="text-[13px] leading-5 text-ink-secondary">
+            {t(questionWaits ? "setup.body" : "setup.body.ask")}
+          </p>
         )}
       </div>
 
