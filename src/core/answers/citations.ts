@@ -66,8 +66,8 @@ import type {
 } from "./engine";
 import { NOT_CITED_ATTRIBUTE } from "./prompt";
 
-/** How many times one Answer may search; later searches are refused, so the model answers. */
-const MAX_SEARCHES_PER_ANSWER = 5;
+/** How many times one Answer may search, unless it is given more; later searches are refused, so the model answers. */
+export const MAX_SEARCHES = 5;
 
 const FIX_THESE = "Fix these with another cite call:";
 
@@ -315,6 +315,8 @@ export interface AnswerDocuments {
   ): PageText[];
   /** A live Document's date, shown with its Passages (see `documentDate` in ../documents); null if none is known. */
   documentDate(documentId: string): string | null;
+  /** The id of the Document to search named `name`, as the instructions list it; null for none. */
+  documentNamed?(name: string): string | null;
 }
 
 /** What re-checking a Citation against the current version needs from Documents. */
@@ -626,7 +628,11 @@ export interface CitationSessionEvents {
  * as "P3", which is what the model cites), the records it gave, and the Tools
  * the Answer engine offers the model.
  */
-export function createCitationSession(documents: AnswerDocuments, events: CitationSessionEvents) {
+export function createCitationSession(
+  documents: AnswerDocuments,
+  events: CitationSessionEvents,
+  maxSearches = MAX_SEARCHES,
+) {
   const handles = new Map<string, string>();
   const handleOf = new Map<string, string>();
   /** Each Passage's text as the model was given it, by its short id. */
@@ -989,11 +995,21 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
       options?: AnswerSearchOptions,
     ): Promise<SearchResultForModel> {
       searches++;
-      if (searches > MAX_SEARCHES_PER_ANSWER) {
+      if (searches > maxSearches) {
         return {
           text: "You have searched enough for this Question: answer with the Passages you have.",
           passageCount: 0,
         };
+      }
+      if (options?.document) {
+        const id = documents.documentNamed?.(options.document) ?? null;
+        if (!id) {
+          return {
+            text: `No Document to search is called “${options.document}”: name one as the instructions list it, or leave document out.`,
+            passageCount: 0,
+          };
+        }
+        return search(query, signal, [id], options);
       }
       return search(query, signal, undefined, options);
     },

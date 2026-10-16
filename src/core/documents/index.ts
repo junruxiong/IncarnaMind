@@ -444,6 +444,15 @@ export interface DocumentFilter {
   searchable?: boolean;
 }
 
+// A file named "2306.10683v1" says nothing of what is in it: the model gets its title too. A
+// title taken from a first line that is a sentence, as a text file's is, says no more than a search.
+const withTitle = (name: string, title: string | null) => {
+  const shown = title?.replace(/\s+/g, " ").trim() ?? "";
+  const same = (a: string) => a.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+  const heading = shown.length <= 160 && !/[.!?。！？]$/.test(shown);
+  return heading && shown && !same(name).includes(same(shown)) ? `${name} (“${shown}”)` : name;
+};
+
 export function createDocuments(options: DocumentsOptions) {
   const { db, dataDir, now, model, emitStatus } = options;
   const reportError = options.reportError ?? ((error: unknown) => console.error(error));
@@ -1836,7 +1845,8 @@ export function createDocuments(options: DocumentsOptions) {
 
     /**
      * How many live Documents have Passages to search (of all of them, or only
-     * of these), and the names of the `limit` most recently added, newest first.
+     * of these), and the names of the `limit` most recently added, newest
+     * first, each with its title when its name doesn't hold it.
      */
     searchableNames(
       documentIds: readonly string[] | undefined,
@@ -1844,13 +1854,30 @@ export function createDocuments(options: DocumentsOptions) {
     ): { total: number; names: string[] } {
       const { where, params } = searchable(documentIds);
       const names = db
-        .all<{ name: string }>(
-          `SELECT d.name FROM documents d WHERE ${where}
+        .all<{ name: string; title: string | null }>(
+          `SELECT d.name, d.title FROM documents d WHERE ${where}
            ORDER BY d.created_at DESC, d.rowid DESC LIMIT ?`,
           [...params, BigInt(limit)],
         )
-        .map((row) => row.name);
+        .map((row) => withTitle(row.name, row.title));
       return { total: searchableCount(documentIds), names };
+    },
+
+    /** The live Documents with Passages to search (of all of them, or only of these), the most text first: `size` characters. */
+    searchableBySize(
+      documentIds: readonly string[] | undefined,
+    ): { id: string; name: string; size: number }[] {
+      const { where, params } = searchable(documentIds);
+      return db
+        .all<{ id: string; name: string; size: bigint | number }>(
+          `SELECT d.id, d.name,
+             (SELECT coalesce(sum(length(p.text)), 0) FROM passages p
+               WHERE p.document_id = d.id AND p.deleted_at IS NULL) AS size
+           FROM documents d WHERE ${where}
+           ORDER BY size DESC, d.created_at DESC, d.rowid DESC`,
+          params,
+        )
+        .map((row) => ({ id: row.id, name: row.name, size: Number(row.size) }));
     },
 
     /**

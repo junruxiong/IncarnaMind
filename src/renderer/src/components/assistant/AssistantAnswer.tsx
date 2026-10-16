@@ -26,6 +26,7 @@ import { AnswerActions } from "./AnswerActions";
 import { AnswerSteps, useStepsScopeOf } from "./AnswerSteps";
 import { AnswerText } from "./AnswerText";
 import { UnbackedClaimLine, WaitingChangesLine } from "./ChangeProblemLines";
+import { AskedAgainLine, CoverageLine } from "./CoverageLines";
 import { MindChangesCard, NoMindLine, wantedAMind } from "./MindChangesCard";
 
 /** What adding an Answer needs from the thread around it. */
@@ -50,12 +51,15 @@ export function AssistantAnswer({
   question,
   sought,
   keeping,
+  askedAgain,
 }: {
   answer: ConversationAnswer;
   question: ConversationQuestion | undefined;
   /** A link back from a Note led here: it is flashed. */
   sought: boolean;
   keeping: AnswerKeeping;
+  /** It was asked again with this many Documents an earlier Answer didn't use. */
+  askedAgain?: number;
 }) {
   const t = useT();
   const { text, citations, figures, status } = answer;
@@ -93,6 +97,7 @@ export function AssistantAnswer({
       aria-label={t("answer.label")}
       className="assistant-answer"
     >
+      {askedAgain !== undefined && <AskedAgainLine count={askedAgain} />}
       <AnswerSteps
         answer={answer}
         question={question}
@@ -107,6 +112,7 @@ export function AssistantAnswer({
           providerId={answer.model?.providerId ?? null}
         />
       )}
+      <CoverageLine answer={answer} question={question} />
       {(written || streaming) && (
         <AnswerText
           answerId={answer.id}
