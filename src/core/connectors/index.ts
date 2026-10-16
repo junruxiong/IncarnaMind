@@ -22,6 +22,10 @@
  *   may change something (see ../approvals). Every call checks consent for
  *   the "connectors" flow first: even a server on this computer can reach
  *   the internet.
+ * - Local mode: a remote Connector whose server isn't on this computer
+ *   (`serviceForUrl`) isn't connected to, nor offered to Answers, while
+ *   "Keep everything on this computer" is on; it is "paused". Local programs
+ *   and servers at a loopback address keep working.
  */
 import { randomUUID } from "node:crypto";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -51,6 +55,7 @@ import {
   SecretStorageError,
 } from "../errors";
 import { DEFAULT_SIGN_IN_TIMEOUT_MS, type OAuthPage } from "../oauth";
+import { serviceForUrl } from "../providers/service";
 import type { Secrets } from "../secrets";
 import type { Database } from "../storage";
 import type { Tool } from "../tools";
@@ -169,6 +174,8 @@ export interface ConnectorsOptions {
   processes: ProcessLauncher;
   browser: Browser;
   consent: Consent;
+  /** Whether "Keep everything on this computer" is on. */
+  localOnly(): boolean;
   /** The browser tab's pages after a remote Connector's sign-in, in the User's language. */
   signInPages(name: string): { success: OAuthPage; failure: OAuthPage };
   /** Something changed: the list, as `list()` returns it. */
@@ -309,12 +316,26 @@ function untilAborted<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
   });
 }
 
+/** Whether a Connector is a remote one whose server isn't on this computer. */
+function awayFromHere(row: ConnectorRow): boolean {
+  const config = storedConfig(row);
+  if (config.transport !== "http") return false;
+  try {
+    return serviceForUrl(config.url) !== null;
+  } catch {
+    // An unreadable URL can't connect, so nothing is sent.
+    return false;
+  }
+}
+
 export function createConnectors(options: ConnectorsOptions) {
   const { db, now, secrets, processes, consent } = options;
   const timing: ConnectorTiming = { ...CONNECTOR_TIMING, ...options.timing };
   const runtimes = new Map<string, Runtime>();
   const auths = new Map<string, ConnectorAuth>();
   let closed = false;
+
+  const paused = (row: ConnectorRow) => options.localOnly() && awayFromHere(row);
 
   const liveRows = () =>
     db.all<ConnectorRow>(
@@ -376,10 +397,12 @@ export function createConnectors(options: ConnectorsOptions) {
       enabled,
       state: !enabled
         ? ("off" as const)
-        : runtime?.signingIn
-          ? ("signing-in" as const)
-          : (runtime?.state ?? "connecting"),
-      error: enabled && !runtime?.signingIn ? (runtime?.error ?? null) : null,
+        : paused(row)
+          ? ("paused" as const)
+          : runtime?.signingIn
+            ? ("signing-in" as const)
+            : (runtime?.state ?? "connecting"),
+      error: enabled && !runtime?.signingIn && !paused(row) ? (runtime?.error ?? null) : null,
       tools:
         enabled && runtime?.tools
           ? runtime.tools.map(({ name, title, description, readOnly }) => ({
@@ -723,6 +746,8 @@ export function createConnectors(options: ConnectorsOptions) {
     runtime.error = null;
     runtime.tools = null;
     changed();
+    const row = rowById(id);
+    if (row && paused(row)) return;
     runtime.starting = connect(id, runtime, generation)
       .catch(options.reportError)
       .finally(() => {
@@ -855,6 +880,11 @@ export function createConnectors(options: ConnectorsOptions) {
       // Its reply comes from the Connector's service, not from the User.
       untrustedResult: true,
       async call(input, { signal }) {
+        if (paused(row)) {
+          throw new Error(
+            `The Connector "${row.name}" isn't used while everything stays on this computer, so ${tool.name} wasn't called. Go on without it.`,
+          );
+        }
         try {
           await untilAborted(consent.ensure("connectors", service), signal);
         } catch (error) {
@@ -1018,6 +1048,7 @@ export function createConnectors(options: ConnectorsOptions) {
     async signIn(id: unknown): Promise<ConnectorSignInResult> {
       const { row, config } = requireRemote(id);
       if (row.enabled !== 1) throw new InvalidInputError({ key: "error.connector.off" });
+      if (paused(row)) throw new InvalidInputError({ key: "error.connector.localMode" });
       const storage = secrets.status();
       const runtime = runtimeOf(row.id);
       // Check before the User signs in, not after: the tokens would have nowhere to go. The
@@ -1139,7 +1170,18 @@ export function createConnectors(options: ConnectorsOptions) {
     },
 
     /** Whether any Connector is on: Answers may then send Tool results to the chat model. */
-    anyEnabled: () => liveRows().some((row) => row.enabled === 1),
+    anyEnabled: () => liveRows().some((row) => row.enabled === 1 && !paused(row)),
+
+    /** "Keep everything on this computer" was turned on or off: remote Connectors disconnect, or connect again. */
+    localModeChanged(): void {
+      for (const row of liveRows()) {
+        if (row.enabled !== 1 || !awayFromHere(row)) continue;
+        if (options.localOnly()) stop(row.id);
+        else start(row.id);
+      }
+      changed();
+      options.onEnabledChange();
+    },
 
     /** Starts every enabled Connector, e.g. when the app starts, and reads every remote one's sign-in. */
     startAll(): void {
@@ -1159,7 +1201,7 @@ export function createConnectors(options: ConnectorsOptions) {
      * started start now; those still connecting are waited for, a little.
      */
     async tools(signal: AbortSignal): Promise<Tool[]> {
-      const rows = liveRows().filter((row) => row.enabled === 1);
+      const rows = liveRows().filter((row) => row.enabled === 1 && !paused(row));
       if (rows.length === 0) return [];
       startIdle(rows);
       const starting = rows.flatMap((row) => runtimes.get(row.id)?.starting ?? []);
@@ -1220,7 +1262,7 @@ export function createConnectors(options: ConnectorsOptions) {
       };
       for (const row of liveRows()) {
         const config = storedConfig(row);
-        if (row.enabled !== 1 || config.transport !== "http") continue;
+        if (row.enabled !== 1 || config.transport !== "http" || paused(row)) continue;
         add(config.url);
         const authorizationServer = auths.get(row.id)?.authorizationServer();
         if (authorizationServer) add(authorizationServer);
@@ -1238,6 +1280,7 @@ export function createConnectors(options: ConnectorsOptions) {
           const runtime = runtimes.get(row.id);
           return (
             row.enabled === 1 &&
+            !paused(row) &&
             runtime !== undefined &&
             (runtime.signingIn !== null || runtime.state === "needs-sign-in")
           );

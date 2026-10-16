@@ -2947,6 +2947,8 @@ export const zhCN = {
   "error.connector.nameTooLong": "连接器名称不能超过 {max} 个字符。",
   "error.connector.nameTaken": "已有名为“{name}”的连接器。",
   "error.connector.off": "先开启这个连接器。",
+  "error.connector.localMode":
+    "“所有内容都留在这台电脑上”已开启，而这个连接器不在这台电脑上，所以不会使用。",
   "error.connector.urlMissing": "输入服务器 URL。",
   "error.connector.urlTooLong": "URL 太长。",
   "error.connector.urlInvalid": "“{url}”不是有效的 URL。",
@@ -3200,6 +3202,7 @@ export const zhCN = {
   "connectors.custom.import": "从 Claude 或 Cursor 导入",
   "connectors.custom.note": "你自己添加的连接器不经过审核。",
   "connectors.state.off": "已关闭",
+  "connectors.state.paused": "所有内容都留在这台电脑上时不会使用",
   "connectors.state.connecting": "正在连接…",
   "connectors.state.ready": "已连接",
   "connectors.state.error": "未连接",
