@@ -219,6 +219,7 @@ async function runCase(
       ? { selection: [...before.values()].join("\n\n"), blockIds: ids }
       : null;
   let conversationId: string | null = null;
+  const earlierCalls: ConversationAnswer["toolCalls"] = [];
   for (const earlier of each.before ?? []) {
     const answer = await ask(core, {
       text: earlier,
@@ -227,6 +228,7 @@ async function runCase(
       focus,
     });
     conversationId = answer.conversationId;
+    earlierCalls.push(...answer.toolCalls);
   }
   const answer = await ask(core, {
     text: each.request,
@@ -238,7 +240,12 @@ async function runCase(
   const minds = await core.listMinds();
   const names = (id: string) => minds.find((each) => each.id === id)?.title ?? null;
   const record = toolRecordLines(answer.toolCalls, names);
-  const verdict = await judgeClaims(judge, answer.text, record);
+  const verdict = await judgeClaims(
+    judge,
+    answer.text,
+    record,
+    toolRecordLines(earlierCalls, names),
+  );
   const changed = new Set(
     answer.toolCalls.flatMap((call) => (call.mindChange ? [call.mindChange.mindId] : [])),
   );

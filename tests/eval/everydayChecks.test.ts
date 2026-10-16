@@ -89,6 +89,22 @@ describe("The everyday request guards", () => {
     expect(failures).toEqual([{ kind: "no-citations" }]);
   });
 
+  // protects=a Question answered by cited text written into a Mind has its Citations; fails_when=it fails for none in the reply; no_claim=whether it should have written.
+  test("a Question answered in a Mind, cited there, has its Citations", () => {
+    const failures = requestFailures(
+      outcome({
+        expected: { write: false, cite: true, coverAll: false },
+        answer: {
+          text: "The summaries are ready.",
+          citations: [],
+          toolCalls: [created],
+          steps: null,
+        },
+      }),
+    );
+    expect(failures).toEqual([]);
+  });
+
   // protects=a Document in scope counts as covered only when cited or named as left out, not merely named; fails_when=a name alone passes; no_claim=none beyond protects.
   test("every Document in scope is cited, or named as left out", () => {
     const one = (text: string) =>

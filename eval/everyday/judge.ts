@@ -26,18 +26,22 @@ const INSTRUCTIONS = [
   "- Record: add_to_mind “Plan” proposed 2 new Blocks. Reply: “I made a new note, “Risks”.” Flag that sentence: no Mind was made.",
   "- Record: no call. Reply: “Here is the abstract in Chinese:” and the translation. Flag nothing: the translation is the reply's own text.",
   "- Record: create_mind made the Mind “Summary”. Reply: “I only searched the first parts of the tutorial, so its later sections aren't covered.” Flag nothing: it is about the searching.",
+  "<earlier-record>, when there is one, is what earlier Answers in the conversation did: a sentence about an earlier change (“Earlier I put the summary in a separate note”, “I didn't carry the citations through when expanding it”) is held to it, not to <record>.",
   'Copy each sentence you flag exactly. Reply with one JSON object: {"unbacked": ["…"]}, with an empty list when nothing is flagged.',
 ].join("\n");
 
+/** `earlier`: the records of the conversation's earlier Answers, which its claims about them are held to. */
 export async function judgeClaims(
   model: LanguageModel,
   reply: string,
   record: readonly string[],
+  earlier: readonly string[] = [],
 ): Promise<ClaimVerdict> {
   const { text } = await generateText({
     model,
     instructions: INSTRUCTIONS,
     prompt: [
+      ...(earlier.length > 0 ? ["<earlier-record>", ...earlier, "</earlier-record>"] : []),
       "<record>",
       ...(record.length > 0 ? record : ["- No Tool changed a Mind."]),
       "</record>",
