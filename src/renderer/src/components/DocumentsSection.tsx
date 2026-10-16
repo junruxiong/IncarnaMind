@@ -419,7 +419,6 @@ const DocumentRow = memo(function DocumentRow({
   );
 });
 
-/** "Not cited" beside the name of a Document the User keeps as their own workings (#897); its tooltip says what that means. */
 export function NotCitedLabel({ item }: { item: Pick<Document, "notCited"> }) {
   const t = useT();
   if (!item.notCited) return null;

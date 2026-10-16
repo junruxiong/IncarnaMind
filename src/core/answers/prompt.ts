@@ -204,7 +204,7 @@ export const NOT_CITED_ATTRIBUTE = ' cite="never"';
 const NOT_CITED_PASSAGE = new RegExp(`<passage [^>]*${NOT_CITED_ATTRIBUTE}`);
 
 /**
- * A reminder after Passages from the User's own workings (#897): read them to
+ * A reminder after Passages from the User's own workings: read them to
  * understand the Question, never cite them. Empty when none is among them.
  */
 export function notCitedNote(passages: string): string {

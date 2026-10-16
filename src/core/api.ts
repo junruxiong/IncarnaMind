@@ -591,7 +591,7 @@ export type ComparisonCellStatus = "waiting" | "writing" | "done" | "failed";
  * Why a cell has no Answer: its Document doesn't answer the Question
  * ("not-found"), has no text to search, was deleted, is a file
  * IncarnaMind wrote, which checks leave out (#80), or is one the User keeps as
- * their own workings, which Answers never cite (#897); or why its model didn't
+ * their own workings, which Answers never cite; or why its model didn't
  * write one (a `ProviderErrorKind`). "cost-cap" and "plan-limit" stopped the
  * fill (`RunStop`): the cell wasn't checked.
  */
@@ -2224,7 +2224,7 @@ export interface Document {
    */
   ownFile: OwnFile | null;
   /**
-   * The User keeps it as their own workings (#897): a spreadsheet of figures copied from a
+   * The User keeps it as their own workings: a spreadsheet of figures copied from a
    * report, with their own ratios. Answers search and read it to understand a Question but
    * never cite it, and checks never use it as evidence (`setNotCited`).
    */
