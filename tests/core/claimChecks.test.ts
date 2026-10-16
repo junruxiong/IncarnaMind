@@ -907,6 +907,32 @@ describe("Needs re-check", () => {
     ).toEqual([{ content_hash: tides.contentHash }]);
   });
 
+  // protects=a result stays when a Document it only read goes, as an example's do when the interface language changes (#962), and needs a re-check when the one it rests on goes; fails_when=any Document read, deleted, makes a result need a re-check, or the evidence's own deletion doesn't; no_claim=new versions, tested above.
+  test("a Document the check only read, deleted, leaves its result as it was; its evidence Document, deleted, makes it need a re-check", async () => {
+    const moons = {
+      name: "Moons.md",
+      contents: "# Moons\n\nSpring tides and neap tides follow the moon around the harbour.",
+    };
+    const { core, client, check, tides, documents } = await mindWith([SUPPORTED], checkingModel(), [
+      moons,
+    ]);
+    const read = documents[1] as Document;
+    await check();
+    const [checked] = await shownChecks(core, client);
+    expect(checked?.shown).toEqual({ state: "supported" });
+    expect(checked?.check.evidence?.documentId).toBe(tides.id);
+    expect(checked?.check.versions.map((each) => each.documentId)).toContain(read.id);
+
+    await core.deleteDocument(read.id);
+    expect((await shownChecks(core, client))[0]?.shown).toEqual({ state: "supported" });
+
+    await core.deleteDocument(tides.id);
+    expect((await shownChecks(core, client))[0]?.shown).toEqual({
+      state: "needs-recheck",
+      why: "document-removed",
+    });
+  });
+
   test("a Mind deleted permanently lets go of its checks' evidence", async () => {
     const { core, check, mind, dataDir } = await mindWith([SUPPORTED]);
     await check();
