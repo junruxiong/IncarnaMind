@@ -4,6 +4,7 @@ import {
   dismissChatSetup,
   enterContent,
   launchApp,
+  leaveFirstOpen,
   newMind,
   removeDataFolder,
   setLanguage,
@@ -38,6 +39,7 @@ for (const language of ["en", "zh-CN"] as const) {
     const { app, window } = await launchApp(dataDir, { examples: true });
     await setWindowSize(app, window, 1440, 900);
     await setLanguage(window, language);
+    await leaveFirstOpen(window);
     await expect(window.getByTestId("example-banner")).toContainText(SENTENCE[language]);
     await expect(window.getByTestId("new-tab").first()).toHaveAttribute(
       "title",

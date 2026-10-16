@@ -3386,6 +3386,8 @@ export const zhCN = {
   "menu.reload": "重新加载",
   "menu.forceReload": "强制重新加载",
   "menu.devTools": "切换开发者工具",
+  "menu.export": "导出…",
+  "menu.export.named": "导出“{name}”…",
   "menu.help": "帮助",
   "menu.sendFeedback": "发送反馈…",
   "feedback.title": "发送反馈",
@@ -3670,6 +3672,8 @@ export const zhCN = {
   "editor.hint.example": "试一试：在这里写一行，或{ask}",
   "editor.hint.example.ask": "按 {shortcut} 提出你自己的问题",
   "examples.chip": "示例",
+  "assistant.pill": "提问",
+  "sidebar.examples": "示例",
   "examples.banner.label": "关于这个示例",
   "examples.banner.title": "这是一个示例 Mind。",
   "examples.banner.body":

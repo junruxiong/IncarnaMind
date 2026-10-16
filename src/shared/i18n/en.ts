@@ -3552,6 +3552,8 @@ export const en = {
   "menu.reload": "Reload",
   "menu.forceReload": "Force Reload",
   "menu.devTools": "Toggle Developer Tools",
+  "menu.export": "Export…",
+  "menu.export.named": "Export “{name}”…",
   "menu.help": "Help",
   "menu.sendFeedback": "Send feedback…",
   "feedback.title": "Send feedback",
@@ -3862,6 +3864,8 @@ export const en = {
   "editor.hint.example": "Try it: write a line here, or {ask}",
   "editor.hint.example.ask": "press {shortcut} to ask your own Question",
   "examples.chip": "Example",
+  "assistant.pill": "Ask anything",
+  "sidebar.examples": "Examples",
   "examples.banner.label": "About this example",
   "examples.banner.title": "This is an example Mind.",
   "examples.banner.body":
