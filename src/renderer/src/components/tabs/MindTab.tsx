@@ -2,6 +2,7 @@ import { type KeyboardEvent, useContext, useEffect, useRef, useState } from "rea
 import type { Mind } from "../../../../core/api";
 import { files } from "../../core";
 import {
+  BadgeSlotContext,
   CompareSheetSlotContext,
   ComposerDockContext,
   CountSlotContext,
@@ -32,6 +33,7 @@ export function MindTab({ mindId }: { mindId: string }) {
   const isExample = useIsExample(mindId);
   const [countSlot, setCountSlot] = useState<HTMLElement | null>(null);
   const [sheetSlot, setSheetSlot] = useState<HTMLElement | null>(null);
+  const [badgeSlot, setBadgeSlot] = useState<HTMLElement | null>(null);
   const assistantSlot = useContext(ComposerDockContext);
   const tabId = useTabPlace()?.tabId;
   const merged = useGroupsMerged();
@@ -41,26 +43,31 @@ export function MindTab({ mindId }: { mindId: string }) {
 
   return (
     <div className="relative flex min-h-0 flex-grow flex-col">
-      <div ref={dropTarget} className="mind-scroller min-h-0 flex-grow overflow-auto">
-        {/* Every text in it starts at one edge (styles.css, `.mind-column`). */}
-        <article data-testid="mind-pane" data-mind-id={mind.id} className="mind-column">
-          <div className="mind-measure">
-            {isExample && <ExampleBanner mindId={mindId} />}
-            <MindTitle mind={mind} />
-            <div ref={setCountSlot} data-testid="mind-count-slot" />
-            <MeetingInMind mindId={mind.id} />
-            {/* The example works without a chat model: it says so in its Answer instead. */}
-            {!isExample && <ChatReadinessNotice />}
-            <ComposerDockContext.Provider value={read ? assistantSlot : null}>
-              <CountSlotContext.Provider value={countSlot}>
-                <CompareSheetSlotContext.Provider value={sheetSlot}>
-                  <MindEditor mindId={mind.id} />
-                </CompareSheetSlotContext.Provider>
-              </CountSlotContext.Provider>
-            </ComposerDockContext.Provider>
-            <MakeSkillCard mindId={mind.id} />
-          </div>
-        </article>
+      <div className="relative flex min-h-0 flex-grow flex-col">
+        <div ref={dropTarget} className="mind-scroller min-h-0 flex-grow overflow-auto">
+          {/* Every text in it starts at one edge (styles.css, `.mind-column`). */}
+          <article data-testid="mind-pane" data-mind-id={mind.id} className="mind-column">
+            <div className="mind-measure">
+              {isExample && <ExampleBanner mindId={mindId} />}
+              <MindTitle mind={mind} />
+              <div ref={setCountSlot} data-testid="mind-count-slot" />
+              <MeetingInMind mindId={mind.id} />
+              {/* The example works without a chat model: it says so in its Answer instead. */}
+              {!isExample && <ChatReadinessNotice />}
+              <ComposerDockContext.Provider value={read ? assistantSlot : null}>
+                <CountSlotContext.Provider value={countSlot}>
+                  <CompareSheetSlotContext.Provider value={sheetSlot}>
+                    <BadgeSlotContext.Provider value={badgeSlot}>
+                      <MindEditor mindId={mind.id} />
+                    </BadgeSlotContext.Provider>
+                  </CompareSheetSlotContext.Provider>
+                </CountSlotContext.Provider>
+              </ComposerDockContext.Provider>
+              <MakeSkillCard mindId={mind.id} />
+            </div>
+          </article>
+        </div>
+        <div ref={setBadgeSlot} className="mind-badge-slot" />
       </div>
       {/* The Compare Documents sheet docks here, in the column's measure, below the note. */}
       <div ref={setSheetSlot} className="compare-sheet-dock" />
