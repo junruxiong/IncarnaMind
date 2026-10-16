@@ -8,18 +8,23 @@ import { ProblemMark } from "../ProblemLine";
 import { buttonStyle, errorTextClass, fieldClass } from "../ui";
 
 /** What a sign-in's paste field says, and how its test ids start. */
-export interface PasteWords {
+export type PasteWords = {
   testId: string;
-  question: MessageKey;
-  open: MessageKey;
+  continue: MessageKey;
   problems: Record<PastedAddressProblem, MessageKey>;
   placeholder?: string;
-}
+} & /** A fallback: the question, then the link that opens the field. */
+(
+  | { question: MessageKey; open: MessageKey }
+  /** The way on: the field is open at once, under its label. */
+  | { label: MessageKey }
+);
 
 const CHATGPT: PasteWords = {
   testId: "chatgpt-paste",
   question: "chatgpt.paste.question",
   open: "chatgpt.paste.open",
+  continue: "chatgpt.paste.continue",
   problems: {
     "not-sign-in-address": "chatgpt.paste.problem.not-sign-in-address",
     "other-sign-in": "chatgpt.paste.problem.other-sign-in",
@@ -29,25 +34,24 @@ const CHATGPT: PasteWords = {
 };
 
 /**
- * "Didn't come back? Paste the address the browser shows", under a sign-in
- * that waits for the browser: when the browser can't hand the sign-in back (a
- * blocked port, another browser profile, a proxy), or the provider's page shows
- * a code to copy, what the User pastes finishes the sign-in. It opens in place
- * (`startOpen`: at once); Esc closes it.
+ * What the User pastes under a sign-in that waits for the browser: as a
+ * fallback, "Didn't come back? Paste the address the browser shows", for when
+ * the browser can't hand the sign-in back (a blocked port, another browser
+ * profile, a proxy), opened in place and closed with Esc; or, where the
+ * provider's page shows a code to copy, the field itself, open at once.
  */
 export function PasteSignInAddress({
   paste = (address) => core.pasteChatGptSignInAddress(address),
   words = CHATGPT,
-  startOpen = false,
 }: {
   paste?(address: string): Promise<PastedAddressResult>;
   words?: PasteWords;
-  startOpen?: boolean;
 }) {
   const t = useT();
   const gap = useGap();
   const id = useId();
-  const [open, setOpen] = useState(startOpen);
+  const always = "label" in words;
+  const [open, setOpen] = useState(always);
   const [address, setAddress] = useState("");
   const [problem, setProblem] = useState<PastedAddressProblem | null>(null);
   const [sending, setSending] = useState(false);
@@ -63,15 +67,15 @@ export function PasteSignInAddress({
     }
   }, [open]);
 
-  const question = t(words.question);
-  const action = t(words.open);
-  const between = gap(question, action);
+  const question = "question" in words ? t(words.question) : "";
+  const action = "open" in words ? t(words.open) : "";
+  const label = "label" in words ? t(words.label) : `${question}${gap(question, action)}${action}`;
 
   if (!open) {
     return (
       <p className="text-[13px] leading-5 text-ink-secondary">
         {question}
-        {between}
+        {gap(question, action)}
         <button
           ref={opener}
           type="button"
@@ -108,7 +112,7 @@ export function PasteSignInAddress({
     if (event.key === "Enter") {
       event.preventDefault();
       void submit();
-    } else if (event.key === "Escape") {
+    } else if (event.key === "Escape" && !always) {
       // Closes the field only, not the Settings dialog or menu it sits in.
       event.preventDefault();
       event.stopPropagation();
@@ -122,9 +126,7 @@ export function PasteSignInAddress({
   return (
     <div data-testid={words.testId} className="flex w-full flex-col gap-1">
       <label htmlFor={id} className="text-[13px] leading-5 text-ink-secondary">
-        {question}
-        {between}
-        {action}
+        {label}
       </label>
       <div className="flex w-full items-center gap-2">
         <input
@@ -153,7 +155,7 @@ export function PasteSignInAddress({
           onClick={() => void submit()}
           className={buttonStyle("secondary", "sm")}
         >
-          {t("chatgpt.paste.continue")}
+          {t(words.continue)}
         </button>
       </div>
       {problem && (

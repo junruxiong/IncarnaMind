@@ -20,8 +20,8 @@ import { PasteSignInAddress, type PasteWords } from "./PasteSignInAddress";
 
 const PASTE: PasteWords = {
   testId: "claude-paste",
-  question: "claudePlan.paste.question",
-  open: "claudePlan.paste.open",
+  label: "claudePlan.paste.label",
+  continue: "claudePlan.paste.continue",
   problems: {
     "not-sign-in-address": "claudePlan.paste.problem.not-sign-in-address",
     "other-sign-in": "claudePlan.paste.problem.other-sign-in",
@@ -256,7 +256,6 @@ function ClaudePlanSignIn({
         <PasteSignInAddress
           paste={(address) => core.pasteClaudeSignInAddress(address)}
           words={PASTE}
-          startOpen
         />
       </div>
     );
