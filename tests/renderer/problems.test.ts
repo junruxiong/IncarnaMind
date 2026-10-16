@@ -1,7 +1,13 @@
 import { describe, expect, test } from "vitest";
 import type { ChatProviderKind, ProviderErrorKind } from "../../src/core/api";
+import { SIGN_IN_ROUTES } from "../../src/core/providers/signInRoutes";
 import { readinessKey } from "../../src/renderer/src/components/providers/shared";
-import { ANSWER_PROBLEMS, answerProblem, saveFailureReason } from "../../src/renderer/src/problems";
+import {
+  ANSWER_PROBLEMS,
+  answerProblem,
+  failedAnswerLine,
+  saveFailureReason,
+} from "../../src/renderer/src/problems";
 import { settingsPages } from "../../src/renderer/src/settingsPages";
 import { type MessageKey, translate } from "../../src/shared/i18n";
 
@@ -106,6 +112,29 @@ describe("a failed Answer's problem line", () => {
         }
       }
     }
+  });
+
+  test("a sign-in route's Answer gets the route's own line only where this build signs in with it", () => {
+    expect(failedAnswerLine("blocked", "copilot", "policy-blocked", true)).toEqual({
+      kind: "route",
+      route: "copilot",
+      words: SIGN_IN_ROUTES.copilot.problems["policy-blocked"],
+    });
+    const notOffered = failedAnswerLine("blocked", "copilot", "policy-blocked", false);
+    expect(notOffered.kind).toBe("plain");
+  });
+
+  test("a route's Answer whose provider is gone or not loaded yet never gets ChatGPT's line or sign-in", () => {
+    for (const kind of ["not-signed-in", "plan-limit", "blocked"] as const) {
+      const shown = failedAnswerLine(kind, undefined, "signed-out", true);
+      if (shown.kind !== "plain") throw new Error("A route's line with no route known.");
+      expect(translate("en", shown.problem.line)).not.toMatch(/ChatGPT|OpenAI/);
+      expect(["sign-in", "link"]).not.toContain(shown.problem.fix.kind);
+    }
+    expect(failedAnswerLine("not-signed-in", "chatgpt", null, false)).toEqual({
+      kind: "plain",
+      problem: ANSWER_PROBLEMS["not-signed-in"],
+    });
   });
 
   test("an Ollama Cloud allowance used up is managed on Ollama's own page", () => {

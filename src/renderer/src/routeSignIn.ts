@@ -5,11 +5,35 @@
  */
 import { useEffect } from "react";
 import { create } from "zustand";
-import type { SignInRoute } from "../../core/providers/signInRoutes";
+import type { RouteWayBack, SignInRoute } from "../../core/providers/signInRoutes";
 import { core } from "./core";
+import { requestModelMenu } from "./modelMenu";
+import type { SettingsPage } from "./settingsPages";
 import { useAppStore } from "./store";
 
 const SIGN_INS: Partial<Record<SignInRoute, () => Promise<boolean>>> = {};
+
+/** What a way back does on a problem line; undefined where the line can't do it. */
+export function wayBackRun(
+  route: SignInRoute,
+  wayBack: RouteWayBack,
+  line: { onRetry?: (() => void) | undefined; onOpenSettings(page: SettingsPage): void },
+): (() => void) | undefined {
+  switch (wayBack) {
+    case "sign-in":
+    case "sign-in-again":
+      return () =>
+        void signInToRoute(route).then((signedIn) => {
+          if (signedIn) line.onRetry?.();
+        });
+    case "try-again":
+      return line.onRetry;
+    case "use-another-model":
+      return requestModelMenu;
+    case "paste-api-key":
+      return () => line.onOpenSettings("models");
+  }
+}
 
 export function signInToRoute(route: SignInRoute): Promise<boolean> {
   const signIn = SIGN_INS[route];

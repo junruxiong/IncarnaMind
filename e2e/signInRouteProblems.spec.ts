@@ -37,7 +37,6 @@ test.afterEach(async () => {
   await removeDataFolder(dataDir);
 });
 
-/** Signs in to the stand-in through the core's bridge, approving its code as the User would on GitHub. */
 async function signInToCopilot(window: Page): Promise<void> {
   await acceptPlainTextKeys(window);
   await window.evaluate(() => {
@@ -100,7 +99,7 @@ test("an organization's policy stops a Copilot Answer: GitHub's line, an API key
   await app.close();
 });
 
-test("signed out of Copilot, the composer names GitHub Copilot, and Sign in again opens its place in Settings › Models", async () => {
+test("signed out of Copilot, the lines name GitHub Copilot with its ways back, and Sign in with GitHub opens its place in Settings › Models", async () => {
   const { app, window } = await launchApp(dataDir, { copilot: github.origin });
   await interceptOpenExternal(app);
   await setWindowSize(app, window, 1100, 800);
@@ -111,17 +110,23 @@ test("signed out of Copilot, the composer names GitHub Copilot, and Sign in agai
   await newMind(window);
 
   const readiness = window.getByTestId("chat-readiness");
-  await expect(readiness).toHaveText("You're not signed in to GitHub Copilot · Sign in again");
+  await expect(readiness).toHaveText(
+    "You're not signed in to GitHub Copilot · Sign in with GitHub · Use an API key instead",
+  );
   await window.getByTestId("mind-editor").click();
   await window.keyboard.press("ControlOrMeta+j");
   await window.keyboard.type("What does my plan cover?");
   await window.keyboard.press("Enter");
   const refused = window.getByTestId(/^(composer|answer)-not-ready$/);
-  await expect(refused).toHaveText("You're not signed in to GitHub Copilot · Sign in again");
+  await expect(refused).toHaveText(
+    "You're not signed in to GitHub Copilot · Sign in with GitHub · Use an API key instead",
+  );
   await screenshot(window, "copilot-readiness-lines");
 
-  await pointAndClick(window, refused.getByRole("button", { name: "Sign in again" }));
-  await expect(window.getByTestId("settings")).toHaveAttribute("data-page", "models");
+  await pointAndClick(window, refused.getByRole("button", { name: "Sign in with GitHub" }));
+  const settings = window.getByTestId("settings");
+  await expect(settings).toHaveAttribute("data-page", "models");
   await expect(window.getByTestId("plans-settings")).toBeInViewport();
+  await expect(settings.getByRole("note")).toHaveText("You're not signed in to GitHub Copilot.");
   await app.close();
 });

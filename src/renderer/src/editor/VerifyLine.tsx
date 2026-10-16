@@ -11,7 +11,11 @@ import {
 import { DocumentLineIcon, VerifyLineIcon } from "../components/lineIcons";
 import { MetaLine } from "../components/MetaLine";
 import { ProblemLine } from "../components/ProblemLine";
-import { ReadinessExplanation, readinessAction } from "../components/providers/ChatReadinessNotice";
+import {
+  ReadinessExplanation,
+  readinessAction,
+  readinessAlso,
+} from "../components/providers/ChatReadinessNotice";
 import { UnreadFilesLine } from "../components/UnreadFilesLine";
 import { buttonStyle } from "../components/ui";
 import { core } from "../core";
@@ -350,6 +354,9 @@ export function VerifyLine({
           testId="verify-problem"
           className="mind-verify-problem"
           action={readinessAction(outcome.readiness, t, openSettings, t("question.setUp"), () =>
+            dismissVerifyOutcome(mindId),
+          )}
+          also={readinessAlso(outcome.readiness, t, openSettings, () =>
             dismissVerifyOutcome(mindId),
           )}
         >
