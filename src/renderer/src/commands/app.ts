@@ -9,6 +9,7 @@ import { blockAt, noteHolding } from "../editor/noteKeymap";
 import { openOrigin } from "../editor/originActions";
 import { useFindSources } from "../findSources";
 import { useHistory } from "../history";
+import { frontTabOfMind, groupsMerged } from "../layoutSlice";
 import { startSkillFromMind } from "../makeSkill";
 import { startMindCheck } from "../mindCheck";
 import { useMindTools } from "../mindTools";
@@ -234,7 +235,8 @@ const appCommands: readonly Command[] = [
       const mindId = mindShown(ctx);
       if (!mindId) return;
       await useAppStore.getState().openMind(mindId);
-      setCheckCardOpen(mindId, true);
+      const tab = frontTabOfMind(useAppStore.getState().layout, mindId, groupsMerged());
+      setCheckCardOpen(tab?.id ?? mindId, true);
     },
   },
   {

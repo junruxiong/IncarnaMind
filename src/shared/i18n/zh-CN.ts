@@ -609,6 +609,7 @@ export const zhCN = {
   "health.notChecked": "{count} 句未核对",
   "health.unchecked.one": "1 句待核对",
   "health.unchecked": "{count} 句待核对",
+  "badge.label": "{label}：{parts}",
   "badge.next": "下一处",
   "badge.toCheck": "句待核对",
   "badge.checked": "已核对 {count} 句",
