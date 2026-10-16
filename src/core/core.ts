@@ -16,6 +16,7 @@ import { mindModelOf } from "../shared/mindModel";
 import { mindName } from "../shared/naming";
 import { paperFor } from "../shared/printDocument";
 import { resolveProposals } from "../shared/proposals";
+import { isCitableWork } from "../shared/references";
 import { RESEARCH_TASK } from "../shared/research";
 import { wordFileOf } from "../shared/wordFiles";
 import { logActivity, silentLogger } from "./activityLog";
@@ -1412,24 +1413,32 @@ export function createCore(adapters: CoreAdapters): Core {
     reportError: (error) => console.error(error),
   });
 
+  /** The live Document, or undefined for one deleted. */
+  const liveDocument = (id: string): Document | undefined => {
+    try {
+      return documents.get(id);
+    } catch (error) {
+      if (error instanceof NotFoundError) return undefined;
+      throw error;
+    }
+  };
   // Citation styles (#289): formatted on their own thread, from the Documents' reference records.
   const citationStyles = createCitationStyles({
     folder: adapters.paths.citationStyles,
-    document: (id): Document | undefined => {
-      try {
-        return documents.get(id);
-      } catch (error) {
-        if (error instanceof NotFoundError) return undefined;
-        throw error;
-      }
-    },
+    document: liveDocument,
   });
   const mindCitationStyle = (mindId: string): MindCitationStyle => {
     const { folderId } = minds.get(mindId);
-    const chineseText = content.read(mindId, (blocks) =>
-      writtenInChinese(textStart(blocks, LANGUAGE_SAMPLE)),
-    );
-    const fallback = defaultCitationStyle(settings.get().language, chineseText);
+    const { chineseText, cited } = content.read(mindId, (blocks) => {
+      const versions: CitedVersions = new Map();
+      addCitedVersions(blocks, versions);
+      return {
+        chineseText: writtenInChinese(textStart(blocks, LANGUAGE_SAMPLE)),
+        cited: [...versions.keys()],
+      };
+    });
+    const citesWorks = cited.some((id) => isCitableWork(liveDocument(id)?.reference ?? null));
+    const fallback = defaultCitationStyle(settings.get().language, { chineseText, citesWorks });
     return content.readSettings(mindId, (mindSettings) => ({
       style: citationStyleIn(mindSettings, fallback),
       chosen: chosenCitationStyle(mindSettings) !== null,

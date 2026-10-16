@@ -189,11 +189,16 @@ export const CITATION_STYLES: readonly CitationStyle[] = [
 /**
  * The style of a Mind that hasn't chosen one. Numbered, as many Minds cite contracts and reports
  * that no citation style could cite better, so none turns into "(n.d.)" by itself; but GB/T
- * 7714—2015 when the interface and the Mind's text are both Chinese, as a Chinese thesis or paper
- * is cited.
+ * 7714—2015 when the interface and the Mind's text are both Chinese and it cites a paper or a
+ * book (`isCitableWork`), as a Chinese thesis is cited.
  */
-export function defaultCitationStyle(language: Language, chineseText: boolean): CitationStyleId {
-  return language === "zh-CN" && chineseText ? "gb-t-7714-2015-numeric" : "numbered";
+export function defaultCitationStyle(
+  language: Language,
+  mind: { chineseText: boolean; citesWorks: boolean },
+): CitationStyleId {
+  return language === "zh-CN" && mind.chineseText && mind.citesWorks
+    ? "gb-t-7714-2015-numeric"
+    : "numbered";
 }
 
 /**

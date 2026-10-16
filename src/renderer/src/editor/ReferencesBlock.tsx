@@ -47,7 +47,7 @@ export function ReferencesBlock({
   mindId: string;
   editor: Editor;
   readOnly: boolean;
-  /** The Mind follows the default style rather than one it chose: GB/T 7714, as it is Chinese. */
+  /** The Mind follows the default style rather than one it chose: GB/T 7714 for a Chinese Mind. */
   byDefault: boolean;
 }) {
   const t = useT();

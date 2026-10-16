@@ -182,8 +182,8 @@ function TheirChangesRow({
 /**
  * The Mind's citation style (#289), which its export is written in, with the button that
  * changes it: the same picker as the References block's. It changes at once, not on Save.
- * A Mind that hasn't chosen and isn't Numbered is in GB/T 7714 because it and the interface are
- * Chinese, which the row says.
+ * A Mind that hasn't chosen and isn't Numbered follows the Chinese default (GB/T 7714), which the
+ * row says.
  */
 function CitationStyleRow({ mindId }: { mindId: string }) {
   const t = useT();
