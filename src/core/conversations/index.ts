@@ -585,9 +585,7 @@ export function createConversations(db: Database, now: () => string) {
 
     /** See `CoreApi.usualAnswerWait`. */
     usualWait(answerId: unknown): number | null {
-      if (typeof answerId !== "string" || answerId === "") {
-        throw new InvalidInputError("An Answer id must be a non-empty string.");
-      }
+      if (typeof answerId !== "string") return null;
       const asked = db.get<{ provider_id: string | null; model_id: string | null; text: string }>(
         `SELECT answer.provider_id, answer.model_id, question.text
          FROM conversation_messages answer
