@@ -156,11 +156,19 @@ describe("Library groups", () => {
     });
   });
 
-  test("manual organization never invokes the old chat tagger", async () => {
-    const { core, fake, specs } = await setup();
-    await core.saveLibrarySettings({ classifier: null, automatic: false });
+  test("Automatic with no model it can use leaves Documents waiting, and sends nothing", async () => {
+    const fake = classifierModel();
+    const specs: string[] = [];
+    const core = startCore(await createTempDataFolder(), {
+      createChatModel: (spec) => {
+        specs.push(spec.modelId);
+        return fake.model;
+      },
+    });
+    await core.createLibraryGroup({ name: "Research", description: "Scientific research papers." });
     const doc = await add(core);
-    await expect(core.retagDocuments([doc.id])).rejects.toThrow(/model first/);
+    await core.retagDocuments([doc.id]);
+    expect(await settled(core, doc.id, "waiting")).toMatchObject({ groupId: null });
     expect(fake.calls).toHaveLength(0);
     expect(specs).toHaveLength(0);
   });
@@ -236,16 +244,21 @@ describe("Library groups", () => {
     expect(await core.listDocuments()).toHaveLength(1);
   });
 
-  test("switching to manual-only while a request is running discards the result", async () => {
-    const { core, fake } = await setup();
+  test("choosing another model while a request is running discards the result, and the new one decides", async () => {
+    const { core, fake, specs } = await setup();
     const doc = await add(core);
     fake.hold();
     await core.classifyDocuments([doc.id]);
     await vi.waitFor(() => expect(fake.calls).toHaveLength(1));
-    await core.saveLibrarySettings({ classifier: null, automatic: false });
+    const [provider] = await core.listChatProviders();
+    await core.saveLibrarySettings({
+      classifier: { kind: "chat", choice: { providerId: provider?.id ?? "", modelId: "other" } },
+      automatic: false,
+    });
     fake.release();
-    expect(await settled(core, doc.id, "waiting")).toMatchObject({ groupId: null });
-    expect(fake.calls).toHaveLength(1);
+    await settled(core, doc.id);
+    expect(fake.calls).toHaveLength(2);
+    expect(specs.at(-1)).toBe("other");
   });
 
   test("local-only mode prevents a configured cloud classifier from sending excerpts", async () => {

@@ -31,6 +31,7 @@
 import { randomUUID } from "node:crypto";
 import * as Y from "yjs";
 import { setOrigins } from "../../../shared/blockOrigins";
+import { translate } from "../../../shared/i18n";
 import {
   pendingProposals,
   readProposalAttribute,
@@ -51,6 +52,7 @@ import {
   type ThirdPartySource,
   type WritingPlace,
 } from "../../api";
+import type { Language } from "../../language";
 import { plainText } from "../../mindText";
 import { insertBlocks } from "../../noteAdding";
 import { type OwnWaiting, replaceOwn, waitingIn } from "../../proposals/ownWaiting";
@@ -129,6 +131,8 @@ export interface MindToolsOptions {
   folderId: string | null;
   /** The Answer, and its Question, that Blocks it adds link back to. */
   origin: BlockOrigin;
+  /** The language the Answer is written in, which the model is told to ask the User in. */
+  language: Language;
   /**
    * Markdown as a Mind holds it: each Citation marker the Answer recorded a
    * Citation for, checked, and its figures as their shown text. Says how many
@@ -153,17 +157,18 @@ export interface MindToolsOptions {
 /**
  * A name as the User or the model may write it: no quotes or "@" around it,
  * nor the Markdown mark a heading or list item has in <mind> ("## Risks"),
- * spaces made alike, any case.
+ * spaces made alike.
  */
-function nameKey(name: string): string {
+function bareName(name: string): string {
   return name
     .trim()
     .replace(/^(?:@|#{1,6}\s+|[-*+]\s+|\d{1,3}[.)]\s+|>\s+)/, "")
     .replace(/^["'“‘「『《](.*)["'”’」』》]$/u, "$1")
     .replace(/\s+/g, " ")
-    .trim()
-    .toLocaleLowerCase();
+    .trim();
 }
+
+const nameKey = (name: string): string => bareName(name).toLocaleLowerCase();
 
 const listed = (minds: readonly ChangeableMind[]) =>
   minds
@@ -229,12 +234,116 @@ const levelOf = (element: Y.XmlElement): number => {
   return Number.isInteger(level) && level > 0 ? level : 1;
 };
 
-/** Where in `elements` the one `wanted` names is: by its whole text, else by its start; -1 for none. */
-function indexNamed(elements: readonly Y.XmlElement[], wanted: string): number {
+const pathOf = (wanted: string): string[] =>
+  wanted
+    .split(/\s*[>›]\s*/)
+    .map((part) => bareName(part.replace(/^["'“‘「『《]|["'”’」』》]$/gu, "")))
+    .filter((part) => part !== "");
+
+/** The headings a block is under, the nearest first, each higher than the last. */
+function headingsAbove(order: readonly Y.XmlElement[], element: Y.XmlElement): Y.XmlElement[] {
+  const above: Y.XmlElement[] = [];
+  let level = isHeading(element) ? levelOf(element) : Number.POSITIVE_INFINITY;
+  for (const each of order.slice(0, order.indexOf(element)).reverse()) {
+    if (isHeading(each) && levelOf(each) < level) {
+      above.push(each);
+      level = levelOf(each);
+    }
+  }
+  return above;
+}
+
+function isUnder(
+  order: readonly Y.XmlElement[],
+  element: Y.XmlElement,
+  parents: readonly Set<Y.XmlElement>[],
+) {
+  const above = headingsAbove(order, element).reverse();
+  let from = 0;
+  for (const wanted of parents) {
+    const at = above.findIndex((heading, index) => index >= from && wanted.has(heading));
+    if (at < 0) return false;
+    from = at + 1;
+  }
+  return true;
+}
+
+/**
+ * The blocks `wanted` names among `elements`, which are among `order`, the
+ * Mind's blocks as they follow each other. A name that fits none whole may
+ * say the headings its block is under, as in "Part 2 > Summary", to pick one
+ * of several.
+ */
+function namedBlocks(
+  elements: readonly Y.XmlElement[],
+  order: readonly Y.XmlElement[],
+  wanted: string,
+): Y.XmlElement[] {
+  const direct = named(elements, wanted);
+  const path = pathOf(wanted);
+  const name = path.pop() ?? "";
+  if (direct.length > 0 || path.length === 0) return direct;
+  const headings = order.filter((element) => isHeading(element));
+  const parents = path.map((part) => new Set(named(headings, part)));
+  return named(
+    elements.filter((element) => isUnder(order, element, parents)),
+    name,
+  );
+}
+
+/**
+ * What the model is told when a name fits several blocks: nothing was done,
+ * and the User is asked which, in the words the dictionary gives for the
+ * language the Answer is written in. Places are named by the heading each
+ * is under, else by their number.
+ */
+function severalNamed(
+  order: readonly Y.XmlElement[],
+  matches: readonly Y.XmlElement[],
+  wanted: string,
+  field: "part" | "after",
+  language: Language,
+): string {
+  const parents = matches.map((element) => {
+    const parent = headingsAbove(order, element)[0];
+    return parent ? plainText(parent).trim() : "";
+  });
+  const apart = !parents.includes("") && new Set(parents.map(nameKey)).size === parents.length;
+  const places = matches
+    .slice(0, 10)
+    .map((_, index) =>
+      apart
+        ? translate(language, "assistant.place.under", { heading: parents[index] ?? "" })
+        : translate(language, "assistant.place.number", { n: index + 1 }),
+    );
+  const headings = matches.every((element) => isHeading(element));
+  const [first] = matches;
+  const own = first ? plainText(first).trim() : "";
+  const wholly = matches.every((element) => nameKey(plainText(element)) === nameKey(own));
+  const name = headings && wholly ? own : (pathOf(wanted).pop() ?? "");
+  const ask = translate(
+    language,
+    headings ? "assistant.several.headings" : "assistant.several.paragraphs",
+    {
+      count: matches.length,
+      name,
+      places: new Intl.ListFormat(language, { type: "conjunction" }).format(places),
+    },
+  );
+  const then = apart
+    ? `Once they say, name the block with the heading it is under, as in ${field}: "${parents[0]} > ${name}"`
+    : `Only their places tell them apart, so ${field === "part" ? "have the User select the one they mean in the Mind" : "have the User name a paragraph in the one they mean"}`;
+  return `“${name}” is the name of ${matches.length} ${headings ? "headings" : "paragraphs"}, and the User didn't say which. Ask them, in their language: "${ask}" ${then}`;
+}
+
+function named(elements: readonly Y.XmlElement[], wanted: string): Y.XmlElement[] {
   const key = nameKey(wanted);
-  const texts = elements.map((element) => nameKey(plainText(element)));
-  const whole = texts.indexOf(key);
-  return whole >= 0 || key === "" ? whole : texts.findIndex((text) => text.startsWith(key));
+  const keyed = elements.map((element) => ({ element, text: nameKey(plainText(element)) }));
+  const whole = keyed.filter((each) => each.text === key);
+  if (key === "") return whole.slice(0, 1).map((each) => each.element);
+  return (whole.length > 0 ? whole : keyed.filter((each) => each.text.startsWith(key))).map(
+    (each) => each.element,
+  );
 }
 
 const isHeading = (element: Y.XmlElement | undefined) => element?.nodeName === "heading";
@@ -253,13 +362,18 @@ interface Stretch {
 function stretchOf(
   blocks: Y.XmlFragment,
   part: string | null,
+  language: Language,
   selected: readonly string[],
-): Stretch | { why: string; kind: "no-heading" | "no-text" } {
+): Stretch | { why: string; kind: "no-heading" | "no-text" | "several-places" } {
   const all = textBlocks(blocks).map((each) => each.element);
   let chosen = all;
   if (part !== null) {
     const headings = all.filter((element) => isHeading(element));
-    const heading = headings[indexNamed(headings, part)];
+    const matches = namedBlocks(headings, all, part);
+    if (matches.length > 1) {
+      return { why: severalNamed(all, matches, part, "part", language), kind: "several-places" };
+    }
+    const heading = matches[0];
     if (!heading) return { why: `there is no heading “${part}” in it`, kind: "no-heading" };
     const start = all.indexOf(heading);
     const level = levelOf(heading);
@@ -291,22 +405,30 @@ function stretchOf(
 /**
  * Where `add_to_mind` puts its Blocks: after the last top-level Block of the
  * section under the heading `after` names, or after the paragraph it names;
- * by that Block's id, or null for the end of the Mind. A message when it
- * names none.
+ * by that Block's id, or null for the end of the Mind. Why not, when it
+ * names none or several.
  */
 function placeAfter(
   blocks: Y.XmlFragment,
   after: string | null,
-): { after: string | null } | string {
+  language: Language,
+): { after: string | null } | { why: string; kind: "no-place" | "several-places" } {
   if (after === null) return { after: null };
   const top = blocks.toArray().filter((each): each is Y.XmlElement => each instanceof Y.XmlElement);
   const headings = top.filter((element) => isHeading(element));
-  const heading = headings[indexNamed(headings, after)];
   const texts = top.filter((element) => isHeading(element) || element.nodeName === "paragraph");
-  const found = heading ?? texts[indexNamed(texts, after)];
+  const byHeading = namedBlocks(headings, top, after);
+  const matches = byHeading.length > 0 ? byHeading : namedBlocks(texts, top, after);
+  if (matches.length > 1) {
+    return { why: severalNamed(top, matches, after, "after", language), kind: "several-places" };
+  }
+  const found = matches[0];
   if (!found) {
     const names = headings.slice(0, 10).map((element) => `“${plainText(element)}”`);
-    return `there is no heading or paragraph “${after}” in it${names.length > 0 ? `; its headings are ${names.join(", ")}` : ""}`;
+    return {
+      why: `there is no heading or paragraph “${after}” in it${names.length > 0 ? `; its headings are ${names.join(", ")}` : ""}`,
+      kind: "no-place",
+    };
   }
   if (!isHeading(found)) return { after: idOf(found) };
   const level = levelOf(found);
@@ -501,11 +623,13 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
   }
 
   const writerFor = (mind: ChangeableMind, after: string | null, made: boolean): Writer => {
-    const place = minds.read(mind.id, (note) => placeAfter(note, after));
-    if (typeof place === "string") {
+    const place = minds.read(mind.id, (note) => placeAfter(note, after, options.language));
+    if ("why" in place) {
       throw new Refusal(
-        { kind: "no-place", mindId: mind.id, place: after ?? "" },
-        `Nothing was added: ${place}. Don't add it to another Mind instead.`,
+        place.kind === "several-places"
+          ? { kind: "several-places", mindId: mind.id, name: after ?? "", adding: true }
+          : { kind: "no-place", mindId: mind.id, place: after ?? "" },
+        `Nothing was added: ${place.why}. Don't add it to another Mind instead.`,
       );
     }
     return {
@@ -797,7 +921,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         part: {
           type: "string",
           description:
-            "The heading of the section to change, as written in the Mind. Leave it out to change what the User selected, or else the whole Mind.",
+            'The heading of the section to change, as written in the Mind. Whenever the User names a section, give its name here alone, also when the Mind has that heading more than once: you are then told how to ask the User which. Only when the User names the heading it is under ("the Summary under Part 2"), put that first: "Part 2 > Summary". Leave it out to change what the User selected, or else the whole Mind.',
         },
         instruction: {
           type: "string",
@@ -823,12 +947,16 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       const part = optional(input.part);
       // The selection counts only in the Mind it is in, and only when no section is named.
       const selected = focused?.mindId === mind.id && part === null ? focused.blockIds : [];
-      const stretch = minds.read(mind.id, (blocks) => stretchOf(blocks, part, selected));
+      const stretch = minds.read(mind.id, (blocks) =>
+        stretchOf(blocks, part, options.language, selected),
+      );
       if ("why" in stretch) {
         throw new Refusal(
           stretch.kind === "no-heading"
             ? { kind: "no-heading", mindId: mind.id, heading: part ?? "" }
-            : { kind: "no-text", mindId: mind.id },
+            : stretch.kind === "several-places"
+              ? { kind: "several-places", mindId: mind.id, name: part ?? "", adding: false }
+              : { kind: "no-text", mindId: mind.id },
           `Nothing was changed in “${mind.name}”: ${stretch.why}.`,
         );
       }
@@ -912,7 +1040,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         after: {
           type: "string",
           description:
-            "The heading of the section to add it at the end of, or the first words of the paragraph to add it after, as written in the Mind. Leave it out to add it at the Mind's end.",
+            'The heading of the section to add it at the end of, or the first words of the paragraph to add it after, as written in the Mind. Whenever the User names a place, give its name here alone, also when the Mind has it more than once: you are then told how to ask the User which. Only when the User names the heading it is under ("the Summary under Part 2"), put that first: "Part 2 > Summary". Leave it out to add it at the Mind\'s end.',
         },
         content: contentProperty,
       },
@@ -931,7 +1059,11 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         if ((named && !named.done) || (place && !place.done)) return null;
         const mind = targetOf({ mind: named?.value });
         if (mind instanceof Refusal) return null;
-        return { writer: writerFor(mind, optional(place?.value), false), created: false };
+        const after = optional(place?.value);
+        // A place that can't be written to is the call's to report, once it has all of its input.
+        const there = minds.read(mind.id, (note) => placeAfter(note, after, options.language));
+        if ("why" in there) return null;
+        return { writer: writerFor(mind, after, false), created: false };
       });
     },
     async call(input, { toolCallId }) {
