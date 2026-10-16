@@ -61,8 +61,12 @@ function whyNot(problem: MindProblem | undefined): string {
       return "its text changed while it was being read";
     case "content-not-own":
       return "new text can only replace your own waiting changes";
+    case "copy":
+      return `“${problem.text}” is there already, as your own waiting text: revise it with edit_mind`;
     case "stopped":
       return "it was stopped";
+    case "no-table":
+      return "its table couldn't be made";
     case "local-mode":
       return "“Keep everything on this computer” is on";
     case "not-ready":
@@ -74,12 +78,13 @@ function whyNot(problem: MindProblem | undefined): string {
   }
 }
 
-function citationsOf(change: MindChange): string {
+function detailsOf(change: MindChange): string {
+  const tables = change.tables ? `, ${counted(change.tables, "table")} among them` : "";
   const cited = change.cited ? `, with ${counted(change.cited, "Citation")}` : "";
   const left = change.unrecorded
     ? `; ${counted(change.unrecorded, "marker")} had no Citation recorded with cite, so ${change.unrecorded === 1 ? "it was" : "they were"} left out`
     : "";
-  return `${cited}${left}`;
+  return `${tables}${cited}${left}`;
 }
 
 function mindOf(call: AnswerToolCall, names: MindNames): string {
@@ -132,7 +137,7 @@ function mindLine(call: AnswerToolCall, names: MindNames, states?: ChangeStates)
   }
   const fate = change ? fateOf(change.proposals, states?.(change) ?? null) : "";
   const proposed = change
-    ? `proposed ${counted(change.proposals, "change")}, ${fate}${citationsOf(change)}`
+    ? `proposed ${counted(change.proposals, "change")}, ${fate}${detailsOf(change)}`
     : "";
   switch (call.tool) {
     case "read_mind":
@@ -142,7 +147,7 @@ function mindLine(call: AnswerToolCall, names: MindNames, states?: ChangeStates)
         ? `create_mind: made the Mind ${mind} and ${proposed}`
         : `create_mind: made the Mind ${mind}, empty`;
     case "add_to_mind":
-      return `add_to_mind ${mind}: proposed ${counted(change?.proposals ?? 0, "new Block")}, ${fate}${change ? citationsOf(change) : ""}`;
+      return `add_to_mind ${mind}: proposed ${counted(change?.proposals ?? 0, "new Block")}, ${fate}${change ? detailsOf(change) : ""}`;
     default:
       if (!change) return `${call.tool} ${mind}${section}: no change was needed`;
       return change.revised

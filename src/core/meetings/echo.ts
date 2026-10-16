@@ -31,7 +31,7 @@ const BINS = ECHO_BLOCK + 1;
 const PARTITIONS = 20;
 /** Where the filter starts, in blocks of reference ahead of the microphone: an echo may be stamped before its source. */
 const LEAD = 5;
-/** The most reference the filter reads ahead of the microphone: the mixer holds audio 300 ms. */
+/** The most reference the filter reads ahead of the microphone: the tracks hold audio 300 ms. */
 const MAX_LEAD = 12;
 /** The partition the echo's strongest part is moved to when it nears an end. */
 const TARGET = LEAD;

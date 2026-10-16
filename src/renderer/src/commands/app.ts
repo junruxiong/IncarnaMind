@@ -52,6 +52,7 @@ import { selectionCommands } from "./selection";
 import { settingsPageCommands } from "./settings";
 import { tableCommands } from "./tables";
 import { tabCommands } from "./tabs";
+import { taggingCommands } from "./tagging";
 import { mindInFront, mindShown, onlyOne } from "./targets";
 import { taskCommands } from "./tasks";
 import { webPageCommands } from "./webPages";
@@ -110,6 +111,7 @@ const appCommands: readonly Command[] = [
   ...documentCommands,
   ...peekCommands,
   ...folderCommands,
+  ...taggingCommands,
   ...newFolderCommands,
   ...tagCommands,
   ...linkedFolderCommands,

@@ -16,7 +16,10 @@ export interface Cue {
   startMs: number;
   endMs: number;
   text: string;
-  /** Who said it, once speakers are told apart (#140); null until then. */
+  /**
+   * Who said it: "Me", "Them" or "Speaker ?" on a live line (#941), a person's name once speakers
+   * are told apart (#140); null for a line from a file that names no one.
+   */
   speaker: string | null;
 }
 

@@ -215,6 +215,9 @@ async function fetchModels({ kind, baseUrl, apiKey, endpoint, catalogId }: Model
     case "claude-account":
       // Nothing is asked: the API key route's catalog says which models there are.
       return catalogModels(modelsProviderOfKind(kind)).map((model) => ({ id: model.id }));
+    case "copilot":
+      // Read with the sign-in by the route itself (see ./copilot/account).
+      return [];
     case "ollama": {
       const body = await getJson(`${baseUrl}/api/tags`, {});
       const models = isRecord(body) && Array.isArray(body.models) ? body.models : [];

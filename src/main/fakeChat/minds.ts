@@ -7,18 +7,21 @@
  *
  * In the assistant, with the Minds' Tools (#202, `mindsReply`): a request to
  * shorten (缩短, 改短), or to "replace X with Y", calls edit_mind with the request as its instruction,
- * which Edit with AI's scripted model carries out as Shorten; one for a new
- * note (新笔记, 新建) calls create_mind, titled from what follows "called"
+ * which Edit with AI's scripted model carries out as Shorten, and so does one
+ * "with a table" (加上表格), which it carries out by adding one (#961); one
+ * for a new note (新笔记, 新建) calls create_mind, titled from what follows "called"
  * (叫), its content citing the Documents when there are any; and "add X to
  * <Mind>" (把 X 添加到 <Mind>) calls add_to_mind with X, and "add X" (添加 X)
  * adds X to the Mind in focus; "add X to <Mind> and make a new note called Y"
  * calls both. Each then replies with the first sentence of what its calls
  * came to; add_to_mind's and create_mind's input streams in word by word,
- * slowly for a Question asked "slowly", as does edit_mind's edit.
+ * slowly for a Question asked "slowly", as does edit_mind's edit. "Write three
+ * paragraphs" is `paragraphsReply`'s.
  */
 
 import { answerReply, CITED_ANSWER } from "./answers";
 import { ASSISTANT_REPLACES } from "./appliedEdits";
+import { paragraphsReply } from "./paragraphs";
 import {
   lastQuestion,
   lastResult,
@@ -66,6 +69,9 @@ export function mindRead(prompt: Prompt): string | null {
   ].join("\n\n");
 }
 
+/** A request to change the Mind so it has a table: "…, with a table" (加上表格). */
+const WITH_A_TABLE = /\bwith a table\b|加上?表格/i;
+
 /** A request for a new note, and its title after "called" (叫). */
 const NEW_NOTE = /\bnew (?:note|mind)\b|新笔记|新建/i;
 const CALLED = /\b(?:called|named|titled)\s+[“"]?(.+?)[”"]?[.。]?$|叫[“"]?(.+?)[”"]?的/iu;
@@ -89,6 +95,8 @@ export function mindsReply(prompt: Prompt, asked: string, names: readonly string
   if (!names.includes("edit_mind")) return null;
   // Asked "slowly", only its pace changes.
   const question = asked.replace(/\s+slowly$/i, "");
+  const paragraphs = paragraphsReply(prompt, question);
+  if (paragraphs) return paragraphs;
   const both = ADD_AND_NEW.exec(question);
   if (both) {
     if (lastResult(prompt, "add_to_mind") === undefined) {
@@ -103,7 +111,7 @@ export function mindsReply(prompt: Prompt, asked: string, names: readonly string
       text: `${firstSentence(lastResult(prompt, "add_to_mind") ?? "")} ${firstSentence(made)}`,
     };
   }
-  if (SHORTEN.test(question) || ASSISTANT_REPLACES.test(question)) {
+  if (SHORTEN.test(question) || ASSISTANT_REPLACES.test(question) || WITH_A_TABLE.test(question)) {
     const result = lastResult(prompt, "edit_mind");
     // Asked "slowly", the edit is written slowly too.
     if (result === undefined) return { tool: "edit_mind", input: { instruction: asked } };

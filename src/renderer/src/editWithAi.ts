@@ -57,7 +57,8 @@ export type EditProblem =
         | "has-proposals"
         | "too-long"
         | "local-mode"
-        | "cant-regenerate";
+        | "cant-regenerate"
+        | "no-table";
     }
   | { kind: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
   | { kind: "failed"; message: string; retry: () => void };

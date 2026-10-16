@@ -98,7 +98,14 @@ export const en = {
   "library.inside.failed": "The words inside Documents couldn't be searched: {reason}",
   "library.inside.retry": "Try again",
   "library.classify": "Organize",
-  "library.progress": "Organizing {count} Documents…",
+  "library.progress.one": "Organizing 1 Document…",
+  "library.progress.other": "Organizing {count} Documents…",
+  "library.progressWith.one": "Organizing 1 Document with {service}…",
+  "library.progressWith.other": "Organizing {count} Documents with {service}…",
+  "library.progressSends.one":
+    "Organizing 1 Document with {service}: its name, outline and short excerpts are sent",
+  "library.progressSends.other":
+    "Organizing {count} Documents with {service}: each one's name, outline and short excerpts are sent",
   "library.waiting":
     "{count} Documents need text, a model or permission. Open their details to check.",
   "library.count": "{count} Documents",
@@ -251,6 +258,7 @@ export const en = {
   "document.tags": "Tags…",
   "folder.organize": "Organize this Folder",
   "folder.organize.empty": "The Folder has no Documents to organize.",
+  "folder.tagWithAi": "Tag with AI",
   "folder.editDescription": "Edit description…",
   "tag.rename": "Rename",
   "tag.renameLabel": "New name for {name}",
@@ -578,6 +586,13 @@ export const en = {
   "claim.unsupported.inFolder": "Nothing in “{folder}” says this.",
   "claim.unsupported.anywhere": "Nothing in your Documents says this.",
   "claim.unsupported.differs": "Your Documents say something different:",
+  "claim.courtDecision.title": "This cites a court decision.",
+  "claim.courtDecision.body":
+    "IncarnaMind can't check that the case exists or that it says this. Look it up in your legal research service before you rely on it.",
+  "claim.citedCaseUnchecked":
+    "The case this sentence cites isn't in your Documents, so it hasn't been checked. Look it up in your legal research service before you rely on it.",
+  "claim.courtDecision.held":
+    "This cites a court decision. The quoted words were found in your saved copy of the opinion ({document}, {location}). Whether it has been overruled or changed isn't checked: look it up in your legal research service before you rely on it.",
   "claim.unsupported.ownWorkings": "Only your own working file says this.",
   "claim.fixSentence": "Fix the sentence",
   "claim.findSources": "Find sources",
@@ -649,9 +664,8 @@ export const en = {
   "contradictions.command": "Check for contradictions",
   "contradictions.command.keywords":
     "contradictions conflict contradicted cited claims Folder watch",
-  "contradictions.ask.one": "Check 1 cited claim against this Folder’s other Documents? {estimate}",
-  "contradictions.ask":
-    "Check {count} cited claims against this Folder’s other Documents? {estimate}",
+  "contradictions.ask.one": "Check 1 cited claim against this Folder’s other Documents?",
+  "contradictions.ask": "Check {count} cited claims against this Folder’s other Documents?",
   "contradictions.check": "Check",
   "contradictions.cancel": "Not now",
   "contradictions.none": "No contradictions in {count} cited claims",
@@ -661,15 +675,12 @@ export const en = {
   "contradictions.noneChecked": "None of the {count} cited claims could be checked",
   "contradictions.found": "{contradicted} of {count} cited claims contradicted",
   "contradictions.after": "After “{document}” changed: {result}",
-  "contradictions.cost": "{result} · {cost}",
   "mindCheck.command": "Check this Mind",
   "mindCheck.command.keywords": "check all whole draft before sending claims sentences verify",
-  "mindCheck.ask.folder.one":
-    "Check this Mind’s sentence against this Folder’s Documents? {estimate}",
-  "mindCheck.ask.folder":
-    "Check this Mind’s {count} sentences against this Folder’s Documents? {estimate}",
-  "mindCheck.ask.all.one": "Check this Mind’s sentence against your Documents? {estimate}",
-  "mindCheck.ask.all": "Check this Mind’s {count} sentences against your Documents? {estimate}",
+  "mindCheck.ask.folder.one": "Check this Mind’s sentence against this Folder’s Documents?",
+  "mindCheck.ask.folder": "Check this Mind’s {count} sentences against this Folder’s Documents?",
+  "mindCheck.ask.all.one": "Check this Mind’s sentence against your Documents?",
+  "mindCheck.ask.all": "Check this Mind’s {count} sentences against your Documents?",
   "mindCheck.check": "Check",
   "mindCheck.cancel": "Not now",
   "verify.command": "Verify a document…",
@@ -723,6 +734,8 @@ export const en = {
   "edit.problem.retry": "Try again",
   "edit.problem.cant-regenerate":
     "This change can't be made again. Reject it, then select the text and edit it with AI.",
+  "edit.problem.no-table":
+    "The AI's table wasn't complete, so nothing was changed. Try again, or ask for a list instead.",
   "composer.edit.placeholder": "Say what to change…",
   "composer.edit.label": "Say what to change in the selected text",
   "composer.edit.quote": "Editing “{text}”",
@@ -1197,6 +1210,13 @@ export const en = {
   "status.scanning.other": "Reading {count} scanned pages…",
   "status.tagging.one": "Tagging 1 Document…",
   "status.tagging.other": "Tagging {count} Documents…",
+  "status.taggingWith.one": "Tagging 1 Document with {service}…",
+  "status.taggingWith.other": "Tagging {count} Documents with {service}…",
+  "status.taggingSends.one":
+    "Tagging 1 Document with {service}: its name, outline and short excerpts are sent",
+  "status.taggingSends.other":
+    "Tagging {count} Documents with {service}: each one's name, outline and short excerpts are sent",
+  "status.sendsScans": " (page images for scans)",
   "status.taggingWaiting": "No AI model for Tags",
   "status.taggingPermission": "Tags need your OK",
   "status.taggingFailed.one": "1 Document couldn't be tagged",
@@ -1265,6 +1285,7 @@ export const en = {
   "webPages.copyAddress": "Copy address",
   "webPages.menuTitle": "Web page",
   "webPages.fetched": "Fetched {date}",
+  "webPages.source": "Saved web page · {address} · saved {date}",
   "webPages.drop": "Drop to save the web page, or drop it on a Folder in the sidebar",
   "status.alreadyAdded.one": "1 already added",
   "status.alreadyAdded.other": "{count} already added",
@@ -1555,6 +1576,17 @@ export const en = {
     "This model says how likely each Tag is, and marks the ones it isn't sure of for you to review.",
   "tagging.review.kept":
     "This model doesn't say how sure it is, so every Tag it adds is kept. Remove any you don't want.",
+  "tagging.stop": "Stop",
+  "tagging.stop.command": "Stop Tagging",
+  "tagging.tagNotInFolder": "Tag Documents not in a Folder with AI",
+  "tagging.stop.title":
+    "Stop, and don't tag new Documents {places} with AI until you turn it back on",
+  "tagging.place.folders": "in {names}",
+  "tagging.place.notInFolder": "not in a Folder",
+  "tagging.stopped": "Stopped Tagging {places}",
+  "tagging.stopped.notInFolder": "Stopped Tagging Documents {places}",
+  "tagging.restarted": "Tagging Documents {places} with AI again",
+  "tagging.stoppedIn": "Tagging with AI is stopped for Documents {places}.",
   "status.taggingPaused": "Tagging waits for your ChatGPT plan",
   "status.taggingPaused.full":
     "Your ChatGPT plan's limit is reached, so tagging waits for it to reset, then goes on by itself.",
@@ -1684,6 +1716,7 @@ export const en = {
   "providers.kind.chatgpt": "ChatGPT plan",
 
   "providers.kind.claude-account": "Claude account",
+  "providers.kind.copilot": "GitHub Copilot plan",
   "providers.form.label": "Service",
   "providers.form.apiKey": "API key",
   "providers.form.apiKeyOptional": "API key (optional)",
@@ -1711,6 +1744,8 @@ export const en = {
   "providers.form.save": "Use this service",
   "providers.sends":
     "Your Questions, the Mind you're in, passages from your Documents, and Document text for Tags go to {provider} when you use it.",
+  "providers.sends.tagsOnSave":
+    "Your Questions, the Mind you're in and Passages from your Documents go to {provider} when you use it, and the first lines of each Document, to tag it. Tagging starts when you save the key.",
   "providers.form.saving": "Saving…",
   "providers.form.moreShort": "More…",
   "providers.form.whereKey": "Where do I find it?",
@@ -1869,6 +1904,25 @@ export const en = {
   "claudeAccount.page.success.body": "You can close this tab and go back to IncarnaMind.",
   "claudeAccount.page.failure.title": "The Claude sign-in didn't work",
   "claudeAccount.page.failure.body": "Close this tab and try again in IncarnaMind.",
+  "copilot.wayBack.signIn": "Sign in with GitHub",
+  "copilot.problem.signInCancelled": "GitHub sign-in cancelled: nothing was kept",
+  "copilot.problem.signedOut": "You're not signed in to GitHub Copilot",
+  "copilot.problem.signInExpired": "Your GitHub sign-in has expired",
+  "copilot.problem.refused": "GitHub didn't let IncarnaMind use your Copilot plan",
+  "copilot.problem.noPlan": "Your GitHub account has no Copilot plan",
+  "copilot.problem.policyBlocked": "Your organization doesn't allow this app",
+  "copilot.problem.modelUnavailable": "GitHub Copilot doesn't offer this model to IncarnaMind",
+  "copilot.problem.planLimit": "Your Copilot plan's usage limit is reached",
+  "copilot.problem.rateLimited": "GitHub Copilot asked to slow down for a while",
+  "copilot.signIn.codeExpired": "The code expired",
+  "copilot.signIn.declined": "You declined on GitHub's page",
+  "copilot.signIn.unreachable": "GitHub couldn't be reached",
+  "copilot.signIn.serviceError": "GitHub had a problem signing you in",
+  "copilot.signIn.unavailable": "This version doesn't offer that way to sign in",
+  "copilot.signIn.secretStorage": "This computer can't keep the sign-in safely",
+  "copilot.signIn.failed": "The GitHub sign-in didn't work",
+  "copilot.problem.unexpectedResponse":
+    "GitHub Copilot answered in a way IncarnaMind didn't expect",
   "claudeAccount.problem.signInCancelled": "Claude sign-in cancelled: nothing was kept",
   "claudeAccount.problem.signedOut": "You're not signed in to Claude",
   "claudeAccount.problem.signInExpired": "Your Claude sign-in has expired",
@@ -1877,10 +1931,11 @@ export const en = {
   "claudeAccount.problem.planLimitUntil": "Your Claude plan's usage limit is reached until {time}",
   "claudeAccount.problem.unexpectedResponse": "Claude answered in a way IncarnaMind didn't expect",
   "claudeAccount.wayBack.signIn": "Sign in with Claude",
-  "claudeAccount.wayBack.signInAgain": "Sign in again",
-  "claudeAccount.wayBack.useAnotherModel": "Use another model",
-  "claudeAccount.wayBack.pasteApiKey": "Paste an API key instead",
-  "claudeAccount.wayBack.useClaudeCode": "Use Claude Code",
+  "signInRoute.wayBack.tryAgain": "Try again",
+  "signInRoute.wayBack.signInAgain": "Sign in again",
+  "signInRoute.wayBack.useAnotherModel": "Use another model",
+  "signInRoute.wayBack.pasteApiKey": "Use an API key instead",
+  "signInRoute.wayBack.useClaudeCode": "Use Claude Code",
   "chatgpt.welcome.title": "You're using your ChatGPT plan",
   "chatgpt.welcome.body":
     "Questions you ask in IncarnaMind with a ChatGPT model now use your ChatGPT plan. You can see and limit this in ChatGPT's settings.",
@@ -2109,6 +2164,9 @@ export const en = {
   "privacy.traffic.claude-sign-in": "Sign in with Claude",
   "privacy.traffic.claude-sign-in.description":
     "When you sign in with your Claude account, IncarnaMind signs you in with Anthropic and renews the sign-in. Questions asked with your plan are the chat flow above.",
+  "privacy.traffic.copilot-sign-in": "Sign in with GitHub for Copilot",
+  "privacy.traffic.copilot-sign-in.description":
+    "When you sign in with GitHub for Copilot, IncarnaMind signs you in with GitHub, renews the sign-in and reads the models your plan offers. Questions asked with your plan are the chat flow above.",
   "privacy.traffic.remote-connectors": "Remote Connectors and their sign-in",
   "privacy.traffic.remote-connectors.description":
     "IncarnaMind connects to your remote Connectors' servers to list their Tools, and to the sign-in services they name to sign you in and renew the sign-in. What their Tools are sent is the Connectors flow above.",
@@ -2511,8 +2569,12 @@ export const en = {
   "command.researchPlan.keywords": "plan steps research running",
 
   "cost.and": "{first} and {second}",
-  "cost.estimate": "About {calls} calls, {tokens} tokens, {cost}",
-  "cost.estimate.unpriced": "About {calls} calls, {tokens} tokens",
+  "cost.estimate.price": "About {cost}",
+  "cost.estimate.calls.one": "1 model call",
+  "cost.estimate.calls": "{calls} model calls",
+  "cost.estimate.callsAbout.one": "About 1 model call",
+  "cost.estimate.callsAbout": "About {calls} model calls",
+  "cost.estimate.tokens": "{tokens} tokens",
   "cost.estimate.month": "{spent} of {cap} used this month",
   "cost.cap.title": "Monthly spending cap",
   "cost.cap.switch": "Cap what your keys spend each month",
@@ -2953,7 +3015,6 @@ export const en = {
   "export.failed.notAllowed": "you haven't allowed new files in “{folder}”, a Linked folder",
   "export.changeLocation": "Change output location…",
   "export.allow": "Allow",
-  "export.done": "Saved {name}",
   "export.doneIn": "Saved “{name}” in {folder}",
   "export.changeFolder": "Change folder…",
   "export.parts.separator": ", ",
@@ -3000,6 +3061,7 @@ export const en = {
     "Contradicted: your Documents give {shown}, and the sentence says {stated}.",
   "export.comment.sentence.contradicted.plain": "Contradicted by your Documents.",
   "export.comment.sentence.unsupported": "Unsupported: nothing in your Documents says this.",
+  "export.comment.sentence.citedCaseUnchecked": "Cited case not checked: not in the Documents.",
   "export.comment.sentence.unsupported.folder": "Unsupported: nothing in “{folder}” says this.",
   "export.comment.sentence.unsupported.differs":
     "Unsupported: your Documents say something different (“{quote}”, {source})",
@@ -3290,6 +3352,7 @@ export const en = {
   "error.check.declined":
     "You declined sending the claim to the model's service, so nothing was sent.",
   "error.tagging.noModel": "Choose a classification model.",
+  "error.tagging.place": "Choose where to tag with AI: a Folder, or Not in a Folder.",
   "error.tagging.cloudPaused":
     "Cloud classification is paused while “Keep everything on this computer” is on.",
   "error.tagging.jevNotSetUp": "Jev isn't set up.",
@@ -3770,6 +3833,10 @@ export const en = {
   "meetings.transcript.retry": "Try again",
   "meetings.transcript.save": "Save it",
   "transcript.live": "Live",
+  "location.time.speaker": "{speaker} · {time}",
+  "transcript.speaker.me": "Me",
+  "transcript.speaker.them": "Them",
+  "transcript.speaker.unknown": "Speaker ?",
   "transcript.recording": "Recording…",
   "transcript.lines.one": "{count} line",
   "transcript.lines.other": "{count} lines",
@@ -4139,6 +4206,17 @@ export const en = {
   "mindChanges.wrote.one": "Wrote 1 paragraph in “{mind}”",
   "mindChanges.created": "Created “{mind}” and wrote {count} paragraphs",
   "mindChanges.created.one": "Created “{mind}” and wrote 1 paragraph",
+  "mindChanges.tables": "Added {tables} to “{mind}”",
+  "mindChanges.wrote.tables": "Wrote {paragraphs} and {tables} in “{mind}”",
+  "mindChanges.changed.tables": "Changed {places} and added {tables} in “{mind}”",
+  "mindChanges.created.tables": "Created “{mind}” and added {tables}",
+  "mindChanges.created.wrote.tables": "Created “{mind}” and wrote {paragraphs} and {tables}",
+  "mindChanges.count.tables": "{count} tables",
+  "mindChanges.count.tables.one": "a table",
+  "mindChanges.count.paragraphs": "{count} paragraphs",
+  "mindChanges.count.paragraphs.one": "1 paragraph",
+  "mindChanges.count.places": "{count} places",
+  "mindChanges.count.places.one": "1 place",
   "mindChanges.left": "· {count} waiting",
   "mindChanges.left.one": "· 1 waiting",
   "mindChanges.left.none": "· none waiting",
@@ -4188,9 +4266,16 @@ export const en = {
   "mindCall.failed.noText": "Couldn't change “{mind}”: there's no text there to change",
   "mindCall.failed.tooLong": "Couldn't change “{mind}”: that's too much text to change at once",
   "mindCall.failed.changed": "Couldn't change “{mind}”: its text changed while it was being read",
+  "mindCall.failed.copy": "Didn't add to “{mind}”: “{text}” is there already, waiting",
   "mindCall.failed.contentNotOwn":
     "Couldn't change “{mind}”: only the assistant's own waiting text can be written anew",
   "mindCall.failed.stopped": "Stopped before “{mind}” changed",
+  "mindCall.failed.noTable": "Couldn't make the table, so nothing was added to “{mind}”",
+  "mindChanges.unlinked":
+    "· {count} sources in the table couldn't be linked, so they're shown as text",
+  "mindChanges.unlinked.one": "· 1 source in the table couldn't be linked, so it's shown as text",
+  "mindChanges.extraCells": "· {count} extra cells were kept as text",
+  "mindChanges.extraCells.one": "· 1 extra cell was kept as text",
   "mindCall.failed.localMode":
     "Couldn't change “{mind}”: “Keep everything on this computer” is on, and the model isn't on this computer",
   "mindCall.failed.notReady": "Couldn't change “{mind}”: the model can't be used now",
@@ -4240,6 +4325,8 @@ export const en = {
     "There are {count} paragraphs starting “{name}”: {places}. Which one?",
   "assistant.place.under": "under “{heading}”",
   "assistant.place.number": "number {n}",
+  "assistant.table.unmade":
+    "I couldn't make this into a table, so it's below as text. Nothing was added to “{mind}”.",
   // Outside agents (#351): the consent for each agent the User connects, and what IncarnaMind
   // tells an agent when a call can't be done, which the agent passes on to the User.
   "consent.flow.agents": "Your AI agents",

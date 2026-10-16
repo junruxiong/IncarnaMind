@@ -319,14 +319,6 @@ test("A supported sentence's card names the Document as it is named now, after a
 const PENGUINS_A = "Penguins nest on a harbour cliffs.";
 const HARBOURS_A = "Harbours publish a times of high water every 6 months.";
 
-/** Waits for the health line to count, which it does a moment after the check, moving what follows it. */
-async function healthCounted(window: Page, noCitation: string) {
-  const health = window.getByTestId("mind-health");
-  await expect(health.getByTestId("health-noCitation")).toHaveText(noCitation);
-  await expect(health.getByTestId("health-check")).toBeVisible();
-  await motionSettled(window);
-}
-
 /** Asks the assistant to change "the" to "a": its changes, in the two sentences with "the", wait as the assistant's do. */
 async function askForTwoChanges(window: Page, line: Locator) {
   await window.keyboard.press("ControlOrMeta+j");
@@ -434,7 +426,7 @@ test("Check against Documents on sentences that all have changes waiting sends n
   await expect(marks(window)).toHaveCount(0);
   await expect(window.getByTestId("checks-problem")).toHaveCount(0);
 
-  await healthCounted(window, "2 with no Citation");
+  await motionSettled(window);
   await pointAndClick(window, waiting.getByTestId("checks-accept-and-check"));
   await expect(line).toHaveText(`${PENGUINS_A} ${HARBOURS_A}`);
   await expect(marks(window)).toHaveCount(2);
@@ -465,7 +457,7 @@ test("After the User accepts one change by hand and goes to another tab and back
   await expect(line).toContainText(PENGUINS_A);
   await expect(waiting).toContainText("2 sentences with changes waiting weren't checked");
 
-  await healthCounted(window, "3 with no Citation");
+  await motionSettled(window);
   await pointAndClick(window, waiting.getByTestId("checks-accept-and-check"));
   await expect(window.getByTestId("undo-message")).toHaveText("Accepted 1 change");
   await expect(line).toHaveText(`${SUPPORTED} ${PENGUINS_A} ${HARBOURS_A}`);

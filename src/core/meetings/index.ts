@@ -116,6 +116,8 @@ interface Live {
   ends: Map<AudioSource, number>;
   /** All-silent samples in a row from the computer's sound. */
   silent: number;
+  /** Some sound has come from the computer's sound: without it, a macOS that isn't allowing it can't be told from a quiet call. */
+  systemSignal: boolean;
   saveError: string | null;
 }
 
@@ -351,9 +353,9 @@ export function createMeetings(options: MeetingsOptions) {
       savePart(current, source, run, take(run, PART_SAMPLES));
     }
     if (source === "system") {
-      current.silent = samples.every((sample) => sample === 0)
-        ? current.silent + samples.length
-        : 0;
+      const quiet = samples.every((sample) => sample === 0);
+      current.silent = quiet ? current.silent + samples.length : 0;
+      if (!quiet) current.systemSignal = true;
     }
     setSource(
       current,
@@ -394,6 +396,7 @@ export function createMeetings(options: MeetingsOptions) {
       runs: new Map(),
       ends: new Map(),
       silent: 0,
+      systemSignal: false,
       saveError: null,
     };
     for (const part of listParts(current.folder)) {
@@ -402,7 +405,7 @@ export function createMeetings(options: MeetingsOptions) {
     }
     live = current;
     options.onCapturingChange(true);
-    transcripts?.begin(row.id, period.offsetMs);
+    transcripts?.begin(row.id, period.offsetMs, () => current.systemSignal);
     current.session = capture.start(
       { systemAudio: systemAudio && capture.systemAudio },
       {

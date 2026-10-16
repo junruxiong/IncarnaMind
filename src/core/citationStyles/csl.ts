@@ -104,7 +104,7 @@ export function locatorOf(location: CitationLocation | null, language: Language)
       label: "custom",
     };
   }
-  return { locator: formatLocation(location, t), label: "custom" };
+  return { locator: formatLocation(location, t, false), label: "custom" };
 }
 
 /**

@@ -23,13 +23,14 @@ import { catalogFacts, modelsProviderOfKind, withoutDateSuffix } from "./catalog
 import { catalogProviderOf, catalogProviderOfKind } from "./catalog/providers";
 import type { ProviderOptions, RequestQuirks } from "./catalog/types";
 import { createPlanChatModel } from "./chatgpt/planEndpoint";
-import type { RequestTransform } from "./claudeAccount/config";
 import { createClaudeAccountChatModel } from "./claudeAccount/messages";
+import { createCopilotChatModel } from "./copilot/requests";
 import { endpointUrl } from "./kinds";
 import { createOllamaChatModel } from "./ollamaChat";
 import { DEFAULT_OLLAMA_SETTINGS, type OllamaModelSettings } from "./ollamaModels";
 import { withCacheBreakpoints } from "./promptCache";
 import { withOptionsOver, withoutStorage } from "./responsesStore";
+import type { RequestTransform } from "./signedFetch";
 
 /** A model object, never a model id string (which the AI SDK would send to its gateway). */
 export type ChatLanguageModel = Exclude<LanguageModel, string>;
@@ -60,9 +61,9 @@ export interface ChatModelSpec {
   thinking?: "off" | "summary" | "answer" | "careful";
   apiKey: string | null;
   modelId: string;
-  /** "chatgpt" and "claude-account": the User's sign-in, which signs (and refreshes) every request. */
+  /** "chatgpt", "claude-account" and "copilot": the User's sign-in, which signs (and refreshes) every request. */
   credentials?: OAuthCredentials;
-  /** "claude-account" only: what its client profile adds to every request. */
+  /** "claude-account" and "copilot": what the client profile adds to every request. */
   request?: RequestTransform;
   /** "ollama" only: the settings every request to the model carries (see ./ollamaModels). */
   ollama?: OllamaModelSettings;
@@ -332,6 +333,14 @@ function providerModel(spec: ChatModelSpec): ChatLanguageModel {
         modelId: spec.modelId,
         credentials: spec.credentials,
         request: spec.request ?? {},
+      });
+    case "copilot":
+      if (!spec.credentials) throw new Error("A GitHub sign-in is required.");
+      return createCopilotChatModel({
+        baseUrl: requireBaseUrl(spec),
+        modelId: spec.modelId,
+        credentials: spec.credentials,
+        headers: spec.request?.headers ?? {},
       });
   }
 }

@@ -234,7 +234,7 @@ function placeOf(
   if (location === null) {
     return { where: "document", params: { document: attributes.documentName ?? "" } };
   }
-  const params = { location: formatLocation(location, t) };
+  const params = { location: formatLocation(location, t, false) };
   // A Transcript's is labelled so, so its check isn't taken for a page's.
   if (isTranscriptLocation(location)) return { where: "transcript", params };
   return { where: readsIn(location) ? "in" : "on", params };

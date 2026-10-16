@@ -90,6 +90,22 @@ export function countFor(count: TextCount, basis: CountBasis): number {
 export const mostlyCjk = (count: TextCount): boolean => count.cjk > count.words;
 
 /**
+ * What the count is called: words, unless the writing is mostly Chinese or
+ * Japanese, the User asked for characters, or a Chinese interface has nothing
+ * written yet to tell by, where an empty Mind counts 字 too.
+ */
+export function countedUnit(
+  count: TextCount,
+  basis: CountBasis,
+  chineseInterface: boolean,
+): "words" | "characters" {
+  const empty = count.words + count.cjk === 0;
+  return basis === "words" && !mostlyCjk(count) && !(empty && chineseInterface)
+    ? "words"
+    : "characters";
+}
+
+/**
  * A target the User typed: "8000", "8,000 words", "3万字", "1.5万", "5k". A
  * 万 is 10,000, a 千 or k 1,000. Null when it is not a whole number above zero.
  */

@@ -23,6 +23,7 @@
  */
 
 import { generateText } from "ai";
+import { type CaseCitation, caseCitations, isOpinionOf } from "../../../shared/caseCitations";
 import type { FigureContext } from "../../../shared/figures";
 import type {
   CheckedVersion,
@@ -81,6 +82,7 @@ export interface ClaimCheckDependencies {
   documents: Pick<AnswerDocuments, "citationSource" | "pageTexts" | "documentDate"> & {
     searchableCount(documentIds: readonly string[] | null): number;
     searchableLanguages(documentIds: readonly string[] | null): DocumentLanguage[];
+    savedBySearch(documentId: string): boolean;
   };
 }
 
@@ -147,12 +149,18 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
     const { scope, signal } = request;
     const read = new Map<string, string>();
     const excluded = new Map<string, LeftOutDocument>();
+    const decisions = caseCitations(request.claim);
     const workings = new Map<string, PassageSearchResult[]>();
     const scoped: AnswerDocuments = {
       searchableCount: () => deps.documents.searchableCount(scope.documentIds),
       async search(query, searchSignal) {
         const found = await deps.evidence.search(query, scope, searchSignal);
-        for (const passage of found.passages) read.set(passage.documentId, passage.contentHash);
+        // A web search's result never settles a citation of a court decision.
+        const passages =
+          decisions.length === 0
+            ? found.passages
+            : found.passages.filter((passage) => !deps.documents.savedBySearch(passage.documentId));
+        for (const passage of passages) read.set(passage.documentId, passage.contentHash);
         for (const each of found.excluded) {
           if (each.reason === "own-workings") {
             workings.set(each.documentId, [
@@ -167,7 +175,7 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
             reason: each.reason,
           });
         }
-        return found.passages;
+        return passages;
       },
       citationSource: (passageId) => deps.documents.citationSource(passageId),
       pageTexts: (documentId, contentHash, from, to) =>
@@ -235,6 +243,21 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       ...facts(),
     });
 
+    let opinions: Opinions;
+    try {
+      opinions = await opinionsOf(decisions, scoped, signal);
+    } catch (error) {
+      if (signal.aborted) return notChecked("stopped");
+      throw error;
+    }
+    const citedCase = (evidence: Citation | null) => ({
+      citedCaseUnchecked: opinions.missing,
+      citedCaseFound:
+        !opinions.missing &&
+        evidence !== null &&
+        opinions.documentIds.has(evidence.documentId ?? ""),
+    });
+
     let reply = "";
     let failed: ProviderError | null = null;
     let finished = false;
@@ -279,6 +302,7 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
         evidence: worked.evidence,
         says: null,
         calculation: worked.calculation,
+        ...citedCase(worked.evidence),
         ...facts(),
       };
     }
@@ -287,6 +311,7 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       evidence: worked.evidence,
       says: null,
       calculation: worked.calculation,
+      ...citedCase(worked.evidence),
       ...facts(),
     };
     if (!finished || reply.trim() === "") return byCalculation ?? notChecked("empty");
@@ -305,6 +330,7 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
         evidence: nearest,
         says: null,
         calculation: null,
+        ...citedCase(nearest),
         ...left,
         excluded: nearest ? left.excluded : [...left.excluded, ...workingsSayingIt()],
       };
@@ -328,6 +354,7 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
             evidence,
             says: null,
             calculation: null,
+            ...citedCase(evidence),
             ...facts(),
           }
         );
@@ -338,6 +365,7 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       evidence,
       says: verdict.says,
       calculation: worked?.calculation ?? null,
+      ...citedCase(evidence),
       ...facts(),
     };
   };
@@ -446,6 +474,42 @@ async function confirmContradiction(
       console.error(`A contradiction couldn't be confirmed: ${messageOf(error)}`);
     return null;
   }
+}
+
+interface Opinions {
+  documentIds: ReadonlySet<string>;
+  missing: boolean;
+}
+
+function startOf(documents: AnswerDocuments, documentId: string, contentHash: string): string {
+  const [first] = documents.pageTexts(documentId, contentHash, 1, 1);
+  return first?.text ?? documents.pageTexts(documentId, contentHash, null, null)[0]?.text ?? "";
+}
+
+async function opinionsOf(
+  decisions: readonly CaseCitation[],
+  documents: AnswerDocuments,
+  signal: AbortSignal,
+): Promise<Opinions> {
+  const documentIds = new Set<string>();
+  let missing = false;
+  for (const decision of decisions) {
+    const query = [decision.name, decision.cite].filter(Boolean).join(" ");
+    const found = await documents.search(query, signal);
+    const candidates = new Map(found.map((each) => [each.documentId, each]));
+    const opinions = [...candidates.values()].filter((each) =>
+      isOpinionOf(
+        {
+          name: each.documentName,
+          start: startOf(documents, each.documentId, each.contentHash),
+        },
+        decision,
+      ),
+    );
+    if (opinions.length === 0) missing = true;
+    for (const each of opinions) documentIds.add(each.documentId);
+  }
+  return { documentIds, missing };
 }
 
 /**

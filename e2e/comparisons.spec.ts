@@ -148,7 +148,9 @@ test("Compare Documents from “/”: 3 Documents × 2 Questions fill as a chang
   await expect(sheet.getByTestId("compare-sheet-document")).toHaveCount(3);
   await typeQuestions(window, ["Termination notice", "Liability cap (busy)"]);
   // A cloud model billed per token: the estimate shows before the run.
-  await expect(sheet.getByTestId("compare-sheet-note")).toContainText("About 18 calls");
+  await expect(sheet.getByTestId("compare-sheet-note")).toContainText(
+    "About $0.0095 · 18 model calls",
+  );
   await screenshot(window, "compare-sheet-en-1440");
   await pointAndClick(window, sheet.getByTestId("compare-sheet-make"));
 

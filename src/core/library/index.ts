@@ -202,8 +202,23 @@ export function createLibrary(options: {
       classifier: taggingClassifierOf(saved.classifier) ?? AUTOMATIC,
       automatic: typeof saved.automatic === "boolean" ? saved.automatic : true,
       organizeWith: taggingClassifierOf(saved.organizeWith),
+      taggingStopped: Array.isArray(saved.taggingStopped)
+        ? saved.taggingStopped.filter(
+            (each): each is string | null => each === null || typeof each === "string",
+          )
+        : [],
     };
   };
+  const placeOf = (id: string): string | null =>
+    db.get<{ group_id: string }>(
+      "SELECT a.group_id FROM document_groups a JOIN library_groups g ON g.id = a.group_id WHERE a.document_id = ? AND a.deleted_at IS NULL AND g.deleted_at IS NULL",
+      [id],
+    )?.group_id ?? null;
+  const taggingStoppedFor = (id: string) => {
+    const { taggingStopped } = getSettings();
+    return taggingStopped.length > 0 && taggingStopped.includes(placeOf(id));
+  };
+  const asked = new Set<string>();
   const checkClassifier = (selected: Record<string, unknown>) => {
     if (selected.kind === "chat") {
       if (
@@ -346,6 +361,18 @@ export function createLibrary(options: {
     options.tagged([id]);
     announce([id]);
   };
+  const stopped = (id: string) => {
+    db.run(
+      "UPDATE document_groups SET status = 'classified', updated_at = ? WHERE document_id = ? AND deleted_at IS NULL",
+      [now(), id],
+    );
+    db.run(
+      "UPDATE documents SET tagging_status = 'stopped', tagging_error_kind = NULL, tagging_error_message = NULL, updated_at = ? WHERE id = ? AND deleted_at IS NULL",
+      [now(), id],
+    );
+    options.tagged([id]);
+    announce([id]);
+  };
   const write = (
     doc: DocumentRow,
     groupId: string | null,
@@ -456,6 +483,10 @@ export function createLibrary(options: {
             state(id, "waiting");
             return;
           }
+          if (taggingStoppedFor(id) && !asked.has(id)) {
+            stopped(id);
+            return;
+          }
           state(id, "classifying");
           const classifier = await options.prepare(getSettings());
           if (classifier.local) call.runsLocally();
@@ -524,6 +555,7 @@ export function createLibrary(options: {
             if (!call.gaveWay) {
               queued.delete(id);
               if (assignment(id)?.status === "pending") enqueue(id);
+              else asked.delete(id);
             }
           }
         }
@@ -589,6 +621,58 @@ export function createLibrary(options: {
 
   return {
     settings: getSettings,
+    taggingStoppedFor,
+    taggingPlaces(): (string | null)[] {
+      const ids = db
+        .all<{ id: string }>(
+          `SELECT d.id FROM documents d WHERE d.deleted_at IS NULL AND (
+             (d.status = 'ready' AND d.tagging_status IN ('pending', 'tagging'))
+             OR EXISTS (SELECT 1 FROM document_groups g WHERE g.document_id = d.id
+               AND g.deleted_at IS NULL AND g.status IN ('pending', 'classifying')))`,
+        )
+        .map((row) => row.id);
+      return [...new Set(ids.map(placeOf))];
+    },
+    /**
+     * Stops automatic Tagging with AI in these places, or turns it back on.
+     * Turned back on while Organize tags, their stopped Documents are
+     * organized as the User asked, even with automatic Organize off;
+     * otherwise automatic tagging picks them up.
+     */
+    setTaggingStopped(places: readonly (string | null)[], stop: boolean): void {
+      if (stop) for (const place of places) if (place !== null) group(place);
+      const before = getSettings();
+      const taggingStopped = stop
+        ? [...new Set([...before.taggingStopped, ...places])]
+        : before.taggingStopped.filter((each) => !places.includes(each));
+      settings.writeDeviceValue("library", { ...before, taggingStopped });
+      changed();
+      if (stop || !organizeModelOf(before) || groups().length === 0) return;
+      const ids = db
+        .all<{ id: string }>(
+          "SELECT id FROM documents WHERE deleted_at IS NULL AND tagging_status = 'stopped'",
+        )
+        .map((row) => row.id)
+        .filter((id) => places.includes(placeOf(id)));
+      for (const id of ids) asked.add(id);
+      db.transaction(() => {
+        for (const id of ids) {
+          const existing = assignment(id);
+          write(
+            document(id),
+            existing?.group_id ?? null,
+            existing?.source ?? "automatic",
+            "pending",
+            null,
+            existing?.suggested === 1,
+          );
+          tagState(id, "pending");
+        }
+      });
+      options.tagged(ids);
+      announce(ids);
+      resume();
+    },
     documentIds(folderId: string): string[] {
       return db
         .all<{ document_id: string }>(
@@ -813,6 +897,7 @@ export function createLibrary(options: {
         classifier: automaticChosen ? AUTOMATIC : chosen,
         automatic: input.automatic,
         organizeWith,
+        taggingStopped: getSettings().taggingStopped,
       });
       revision++;
       changed();
@@ -834,6 +919,7 @@ export function createLibrary(options: {
               .map((row) => row.id)
           : [...new Set(input as string[])];
       const docs = ids.map(document);
+      for (const doc of docs) asked.add(doc.id);
       db.transaction(() => {
         for (const doc of docs) {
           const existing = assignment(doc.id);
@@ -945,8 +1031,10 @@ export function createLibrary(options: {
     },
     file(id: string, groupId: string) {
       if (!groups().some((item) => item.id === groupId)) return;
-      write(document(id), groupId, "user", getSettings().automatic ? "pending" : "classified");
-      announce([id]);
+      const { automatic, taggingStopped } = getSettings();
+      write(document(id), groupId, "user", automatic ? "pending" : "classified");
+      if (taggingStopped.includes(groupId)) stopped(id);
+      else announce([id]);
     },
     documentChanged(id: string) {
       if (lifetime.signal.aborted) return;
@@ -967,6 +1055,10 @@ export function createLibrary(options: {
         groups().length > 0 &&
         (!existing || existing.content_hash !== doc.content_hash)
       ) {
+        if (taggingStoppedFor(id)) {
+          stopped(id);
+          return;
+        }
         write(
           doc,
           existing?.group_id ?? null,

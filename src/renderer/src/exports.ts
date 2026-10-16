@@ -75,6 +75,11 @@ export type ExportResult =
       format: ExportFormat;
       path: string;
       name: string;
+      /** The folder it is in, which the line names. */
+      folder: string;
+      inDefaultFolder: boolean;
+      /** When it was saved, in ms, so a line the User left behind doesn't come back long after. */
+      at: number;
       unverified: number;
       /** The sentences whose check isn't good: how many, and whether they went in as comments. */
       checks: SentenceChecksExported;
@@ -159,6 +164,9 @@ export async function exportMind(
         format: chosen,
         path: saved.file.path,
         name: saved.file.name,
+        folder: saved.file.folder,
+        inDefaultFolder: saved.file.inDefaultFolder,
+        at: Date.now(),
         unverified: saved.unverifiedCitations,
         checks: saved.sentenceChecks,
         tracked: saved.trackedChanges,

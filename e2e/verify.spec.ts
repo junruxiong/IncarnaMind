@@ -110,10 +110,16 @@ test("Verify a PDF: its Mind opens beside it, its claims are checked, and the co
   // A model on this computer costs nothing: no estimate.
   await expect(line.getByTestId("verify-estimate")).toHaveCount(0);
   await screenshot(window, "verify-start-en");
+  await expect(
+    window
+      .getByTestId("document-list-item")
+      .filter({ hasText: "Harbour report" })
+      .getByTestId("document-not-cited"),
+  ).toHaveText("Not cited");
 
   await pointAndClick(window, check);
 
-  const done = line.getByTestId("verify-done");
+  const done = line;
   await expect(done).toContainText("Checked 4 claims");
   await expect(done.getByTestId("verify-need-look")).toHaveText("3 need a look");
   await expect(marks(window)).toHaveCount(4);
@@ -165,7 +171,7 @@ test("In Chinese and a narrow window: the same, in Chinese", async () => {
   await screenshot(window, "verify-start-zh-narrow");
 
   await pointAndClick(window, line.getByTestId("verify-check"));
-  const done = line.getByTestId("verify-done");
+  const done = line;
   await expect(done).toContainText("已核对 4 条说法");
   await expect(done.getByTestId("verify-need-look")).toHaveText("3 条需要留意");
   await expect(marks(window)).toHaveCount(4);

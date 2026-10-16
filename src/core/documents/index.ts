@@ -25,7 +25,8 @@ import { existsSync, renameSync } from "node:fs";
 import { rm, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
 import type { LiveDocument } from "../../shared/citations";
-import { quoteInUnits } from "../../shared/locations";
+import { joinUnits, quoteInUnits } from "../../shared/locations";
+import { readableQuote } from "../../shared/readableQuote";
 import {
   type Anchor,
   anchorsOf,
@@ -2032,6 +2033,20 @@ export function createDocuments(options: DocumentsOptions) {
           anchors: unit.anchors ?? [],
         })),
       };
+    },
+
+    /** A Citation's quote as the Document's text reads it (see `CoreApi.readableQuote`). */
+    readableQuote(input: ScannedQuoteInput): string | null {
+      const row = find(parseId(input.documentId));
+      if (!row) return null;
+      const units = pageTexts(
+        row.id,
+        input.contentHash ?? row.content_hash,
+        input.pageFrom,
+        input.pageTo ?? input.pageFrom,
+      );
+      const ranges = quoteInUnits(units, cleanQuote(input.quote));
+      return ranges && ranges.length > 0 ? readableQuote(joinUnits(units).text, ranges) : null;
     },
 
     /** A Citation's quote read from a scan (see `CoreApi.readScannedQuote`). */

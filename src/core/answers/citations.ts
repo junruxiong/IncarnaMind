@@ -37,6 +37,7 @@ import {
   resolveRequested,
   unitLocation,
 } from "../../shared/locations";
+import { citesSource, type NamedSource } from "../../shared/markdownTables";
 import { findQuote, lostLigatures, type MatchOptions } from "../../shared/quoteMatch";
 import { foldRadicals, nameKey } from "../../shared/text";
 import { sameRun } from "../../shared/units";
@@ -1202,6 +1203,14 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
       placedElsewhere.add(marker);
       record.result ??= check(record);
       return citationNode(toCitation(record, record.result));
+    },
+
+    /** The marker of a Citation recorded for a source written as its name in brackets; null for none. */
+    markerFor(source: NamedSource): number | null {
+      for (const record of records.values()) {
+        if (citesSource(toCitation(record, record.result), source)) return record.marker;
+      }
+      return null;
     },
 
     /** A marker's node once the Answer has finished: `finalCitation`'s, or null to remove the marker. */

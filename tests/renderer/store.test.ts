@@ -77,7 +77,12 @@ const snapshot = (assignments: DocumentGroupAssignment[]): LibrarySnapshot => ({
   ],
   deletedGroups: [],
   assignments,
-  settings: { classifier: { kind: "automatic" }, automatic: false, organizeWith: null },
+  settings: {
+    classifier: { kind: "automatic" },
+    automatic: false,
+    organizeWith: null,
+    taggingStopped: [],
+  },
 });
 
 let useAppStore: typeof import("../../src/renderer/src/store").useAppStore;

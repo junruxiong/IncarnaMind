@@ -468,6 +468,7 @@ describe("Organize suggests a Folder and waits for the User", () => {
       classifier: { kind: "automatic" },
       automatic: true,
       organizeWith: null,
+      taggingStopped: [],
     });
     await core.createLibraryGroup({ name: "Thesis", description: "Research for my thesis" });
     const add = async (on: Core, name: string) => {
@@ -520,6 +521,7 @@ describe("Organize suggests a Folder and waits for the User", () => {
       classifier,
       automatic: false,
       organizeWith: offered.classifier,
+      taggingStopped: [],
     });
     const third = await add(reopened, "Chapter 3");
     expect(await assignmentOf(reopened, third.id)).toBeUndefined();
