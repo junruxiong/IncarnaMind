@@ -1490,14 +1490,15 @@ export const MAX_CITED_PAGES = 2;
  *   web page, the paragraphs of the section the quote covers, from 1 (#261).
  * - "lines": the lines the quote covers, or the cited block's.
  * - "time": in a Transcript, from the start of the cue the quote starts in to
- *   the end of the one it ends in, in ms from the Transcript's start (#136).
+ *   the end of the one it ends in, in ms from the Transcript's start (#136);
+ *   `speaker`: who said the cue it starts in, where the Transcript says (#941).
  */
 export type CitationLocation =
   | { kind: "page"; from: number; to: number; printed?: { from: string; to: string } }
   | { kind: "slide"; from: number; to: number }
   | { kind: "rows"; sheet: string | null; from: number; to: number }
   | { kind: "lines"; from: number; to: number }
-  | { kind: "time"; from: number; to: number }
+  | { kind: "time"; from: number; to: number; speaker?: string }
   | {
       kind: "section";
       heading: string | null;
@@ -7141,8 +7142,11 @@ export interface MeetingTranscript {
   state: TranscriptState;
   /** How many lines it has. */
   lines: number;
-  /** The speech being transcribed now, while live: where it starts, in the Meeting's time, and its words so far. */
-  partial: { startMs: number; text: string } | null;
+  /**
+   * The speech being transcribed now, while live: where it starts, in the Meeting's time, its
+   * words so far, and whose they are ("Me", "Them" or "Speaker ?", see src/shared/speakers.ts).
+   */
+  partial: { startMs: number; text: string; speaker: string } | null;
   /** The speech-to-text model, while it is downloading or failed to. */
   model: TranscriptionModelStatus | null;
   /** The WebVTT file in the Output location, once saved. */
