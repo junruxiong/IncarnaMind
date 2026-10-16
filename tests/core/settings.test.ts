@@ -65,6 +65,9 @@ describe("Settings", () => {
         meetingsEnabled: false,
         meetingSystemAudio: true,
         meetingNoticeAccepted: false,
+        meetingPanel: true,
+        meetingPanelHidden: true,
+        meetingHelpKeys: {},
         motion: "system",
       },
       language: "en",
@@ -162,6 +165,9 @@ describe("Settings", () => {
       meetingsEnabled: false,
       meetingSystemAudio: true,
       meetingNoticeAccepted: false,
+      meetingPanel: true,
+      meetingPanelHidden: true,
+      meetingHelpKeys: {},
       motion: "system",
     });
   });
@@ -208,6 +214,9 @@ describe("Settings", () => {
       meetingsEnabled: true,
       meetingSystemAudio: false,
       meetingNoticeAccepted: true,
+      meetingPanel: false,
+      meetingPanelHidden: false,
+      meetingHelpKeys: { say: "Ctrl+Alt+Q" },
       motion: "reduced" as const,
     };
     await before.updateSettings({

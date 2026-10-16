@@ -1,10 +1,16 @@
 import { useEffect, useState } from "react";
-import type { ConversationAnswer, MarkedCitation, MeetingHelpKind } from "../../../../core/api";
+import type {
+  ConversationAnswer,
+  MarkedCitation,
+  MeetingHelp,
+  MeetingHelpKind,
+} from "../../../../core/api";
 import { citedLocation } from "../../../../shared/citations";
 import { isTranscriptLocation } from "../../../../shared/locations";
-import { helpLabel } from "../../../../shared/meetingHelp";
+import { HELP_SHAPE, helpLabel } from "../../../../shared/meetingHelp";
+import { SPEAKER_ME, SPEAKER_THEM } from "../../../../shared/speakers";
 import { core } from "../../core";
-import { type ReplyItem, type ReplyPiece, readHelpReply } from "../../helpReply";
+import { quoted, type ReplyItem, type ReplyPiece, readHelpReply } from "../../helpReply";
 import { useT } from "../../i18n";
 import { CheckLineIcon, DocumentLineIcon } from "../lineIcons";
 
@@ -75,7 +81,16 @@ function Pieces({ pieces, answer }: { pieces: readonly ReplyPiece[]; answer: Con
   );
 }
 
-function Item({ item, answer }: { item: ReplyItem; answer: ConversationAnswer }) {
+function Item({
+  item,
+  answer,
+  said,
+}: {
+  item: ReplyItem;
+  answer: ConversationAnswer;
+  /** It is an option to say: its sentence shows in quotation marks. */
+  said: boolean;
+}) {
   const t = useT();
   return (
     <div
@@ -91,7 +106,7 @@ function Item({ item, answer }: { item: ReplyItem; answer: ConversationAnswer })
         )}
       </span>
       <span data-testid="help-option-say" className="help-option-say">
-        <Pieces pieces={item.lead} answer={answer} />
+        <Pieces pieces={said ? quoted(item.lead) : item.lead} answer={answer} />
       </span>
       {item.notes.map((note, index) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: a reading's notes are in the order written.
@@ -126,13 +141,38 @@ export function HelpOutline({ count }: { count: number }) {
   );
 }
 
-/** The heading over a suggestion: the button, and for "What do they want?" what it reads from. */
-export function HelpHeading({ kind }: { kind: MeetingHelpKind }) {
+/**
+ * The heading over a suggestion: the button, then the line it answers ("They said: …"), or for
+ * "What do they want?" that it is read from what they said.
+ */
+export function HelpHeading({
+  kind,
+  heard = null,
+}: {
+  kind: MeetingHelpKind;
+  heard?: MeetingHelp["heard"];
+}) {
   const t = useT();
+  const said = heard
+    ? t(
+        heard.speaker === SPEAKER_THEM
+          ? "meetings.help.theySaid"
+          : heard.speaker === SPEAKER_ME
+            ? "meetings.help.youSaid"
+            : "meetings.help.said",
+        { text: heard.text },
+      )
+    : null;
+  const after = kind === "want" ? t("meetings.help.readFrom") : said;
   return (
     <p data-testid="help-heading" className="help-heading">
       <b>{t(helpLabel(kind))}</b>
-      {kind === "want" && <span> · {t("meetings.help.readFrom")}</span>}
+      {after && (
+        <span title={after} className="help-heading-after">
+          {" · "}
+          {after}
+        </span>
+      )}
     </p>
   );
 }
@@ -171,10 +211,10 @@ function Sources({ answer, markers }: { answer: ConversationAnswer; markers: rea
  * While it streams, the options still to come keep their outline.
  */
 export function HelpSuggestion({
-  kind,
+  help,
   answer,
 }: {
-  kind: MeetingHelpKind;
+  help: Pick<MeetingHelp, "kind" | "heard">;
   answer: ConversationAnswer;
 }) {
   const t = useT();
@@ -196,10 +236,15 @@ export function HelpSuggestion({
       aria-busy={streaming}
       className="help-suggestion"
     >
-      <HelpHeading kind={kind} />
+      <HelpHeading kind={help.kind} heard={help.heard} />
       {items.map((item, index) => (
-        // biome-ignore lint/suspicious/noArrayIndexKey: the options are in the order written.
-        <Item key={index} item={item} answer={answer} />
+        <Item
+          // biome-ignore lint/suspicious/noArrayIndexKey: the options are in the order written.
+          key={index}
+          item={item}
+          answer={answer}
+          said={HELP_SHAPE[help.kind] === "options" && item.effect !== null}
+        />
       ))}
       {streaming && items.length < 2 && <HelpOutline count={items.length === 0 ? 2 : 1} />}
       {answer.status === "failed" && (

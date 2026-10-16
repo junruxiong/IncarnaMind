@@ -2,89 +2,47 @@
  * One-click help during a call (#839): the instructions for a button's
  * Question, whose Answer the User reads in a second or two while the call
  * goes on. The floating panel lays each line out by its first character
- * (src/shared/helpReply.ts), so the shape is fixed here.
+ * (src/renderer/src/helpReply.ts), so the shape is fixed here.
  */
 
-import type { MeetingHelpKind } from "../../shared/meetingHelp";
+import { HELP_SHAPE, type HelpShape, type MeetingHelpKind } from "../../shared/meetingHelp";
 import type { WindowedPassage } from "../documents/search";
 import { estimateTokens } from "./context";
 import type { AnswerMessage } from "./engine";
 
-/** How a button's Answer is laid out: options to say, readings of what they want, or short lines. */
-type Shape = "options" | "readings" | "lines";
-
-const TASKS: Readonly<Record<MeetingHelpKind, { shape: Shape; task: string }>> = {
-  say: {
-    shape: "options",
-    task: "What could the User say next, given the last thing said?",
-  },
-  answer: {
-    shape: "options",
-    task: "Answer the newest question the other side asked, from the User's Documents.",
-  },
-  want: {
-    shape: "readings",
-    task: "What does the other side want? Read it from what they said in the last few minutes.",
-  },
-  sum: {
-    shape: "lines",
-    task: "Sum up the call so far: what was said and decided, the most important first.",
-  },
-  no: {
-    shape: "options",
-    task: "Decline what was just asked of the User, politely, keeping the relationship; the option you recommend keeps things moving.",
-  },
-  ask: {
-    shape: "options",
-    task: "What should the User ask next, to move the call forward? Each option is a question.",
-  },
-  check: {
-    shape: "lines",
-    task: "Check the newest claims in the transcript against the User's Documents: each line is a claim, then whether the Documents support it, contradict it or don't say.",
-  },
-  objection: {
-    shape: "options",
-    task: "Answer the other side's newest objection.",
-  },
-  nextStep: {
-    shape: "options",
-    task: "Propose a concrete next step that fits where the call is: a meeting, a trial, something to send.",
-  },
-  facts: {
-    shape: "lines",
-    task: "The facts from the User's Documents that matter for what is being discussed now: prices, the product, terms. Each line is one fact.",
-  },
-  followUp: {
-    shape: "options",
-    task: "A follow-up question that digs into what the interviewee just said, without suggesting an answer.",
-  },
-  leading: {
-    shape: "options",
-    task: "Is the User's own newest question (their lines in the transcript) leading the interviewee? Start with one short line that says whether it does and why, then give one or two better questions as the options.",
-  },
-  notCovered: {
-    shape: "lines",
-    task: "Compare the interview guide in the User's Documents with the transcript: each line is a topic or question from the guide not covered yet, cited to the guide.",
-  },
-  decisions: {
-    shape: "lines",
-    task: "The decisions made so far, each with its owner.",
-  },
-  disagree: {
-    shape: "lines",
-    task: "Where people in the call disagree: each line is one point, and who holds which view.",
-  },
+const TASKS: Readonly<Record<MeetingHelpKind, string>> = {
+  say: "What could the User say next, given the last thing said?",
+  answer: "Answer the newest question the other side asked, from the User's Documents.",
+  want: "What does the other side want? Read it from what they said in the last few minutes.",
+  sum: "Sum up the call so far: what was said and decided, the most important first.",
+  no: "Decline what was just asked of the User, politely, keeping the relationship; the option you recommend keeps things moving.",
+  ask: "What should the User ask next, to move the call forward? Each option is a question.",
+  check:
+    "Check the newest claims in the transcript against the User's Documents: each line is a claim, then whether the Documents support it, contradict it or don't say.",
+  objection: "Answer the other side's newest objection.",
+  nextStep:
+    "Propose a concrete next step that fits where the call is: a meeting, a trial, something to send.",
+  facts:
+    "The facts from the User's Documents that matter for what is being discussed now: prices, the product, terms. Each line is one fact.",
+  followUp:
+    "A follow-up question that digs into what the interviewee just said, without suggesting an answer.",
+  leading:
+    "Is the User's own newest question (their lines in the transcript) leading the interviewee? Start with one short line that says whether it does and why, then give one or two better questions as the options.",
+  notCovered:
+    "Compare the interview guide in the User's Documents with the transcript: each line is a topic or question from the guide not covered yet, cited to the guide.",
+  decisions: "The decisions made so far, each with its owner.",
+  disagree: "Where people in the call disagree: each line is one point, and who holds which view.",
 };
 
-const SHAPES: Readonly<Record<Shape, readonly string[]>> = {
+const SHAPES: Readonly<Record<HelpShape, readonly string[]>> = {
   options: [
     '- One or two options, never more. The one you recommend comes first, its line starting with "★ ".',
-    '- Each option is two lines: one sentence the User could say, in quotation marks; then a line starting with "→ " and what saying it leads to, in a few words.',
+    '- Each option is two lines: one sentence the User could say, as they would say it, with no quotation marks around it (the panel shows it as a quote); then a line starting with "→ " and what saying it leads to, in a few words.',
     '- Write the sentences to say in the language the people in the call speak; write the "→" lines in the language of the Question.',
   ],
   readings: [
     '- One or two readings, never more. The likeliest comes first, its line starting with "★ ".',
-    '- Each reading is three lines: one sentence that says what they want ("They want the total for 40 seats under £10k"), as a reading of what they said, never as a fact; then the moment of the transcript it rests on, as its time and a short quote, with its Citation marker; then a line starting with "→ " and the move it suggests.',
+    '- Each reading is three lines: one sentence that says what they want ("They want the total for 40 seats under £10k"), as a reading of what they said, never as a fact; then the moment of the transcript it rests on, as its time and a short quote whose last word has no punctuation after it (no full stop or question mark inside the quotation marks), then its Citation marker; then a line starting with "→ " and the move it suggests.',
     "- Every reading cites the transcript.",
   ],
   lines: [
@@ -138,7 +96,8 @@ export function meetingHelpInstructions(
   kind: MeetingHelpKind,
   { searches, found }: { searches: boolean; found: boolean },
 ): string {
-  const { shape, task } = TASKS[kind];
+  const shape = HELP_SHAPE[kind];
+  const task = TASKS[kind];
   return [
     "The User is in a call and pressed a button for help: the Question is the button's name. They will read your reply in a second or two while the call goes on.",
     `What they need: ${task}`,

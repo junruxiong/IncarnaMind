@@ -5427,15 +5427,27 @@
     gap: 10px;
   }
   .help-heading {
+    display: flex;
+    gap: 4px;
     margin: 0;
     font-size: 12px;
     line-height: 16px;
     color: var(--color-ink-meta);
 
     & b {
+      flex: none;
       font-weight: 600;
+      white-space: nowrap;
       color: var(--color-ink-secondary);
     }
+  }
+  .help-heading-after {
+    display: -webkit-box;
+    min-width: 0;
+    overflow: hidden;
+    overflow-wrap: break-word;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
   }
   .help-option {
     display: grid;

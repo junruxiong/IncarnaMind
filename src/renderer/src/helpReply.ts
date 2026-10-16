@@ -44,6 +44,27 @@ export function pieces(text: string): ReplyPiece[] {
   return found;
 }
 
+const OPENING_QUOTES = /^\s*["“「]+/;
+const CLOSING_QUOTES = /["”」]+\s*$/;
+
+/**
+ * An option's sentence as the User would say it, in quotation marks: the model writes it bare,
+ * and any marks it added anyway are taken off first. Its Citations stay after the closing mark.
+ */
+export function quoted(lead: readonly ReplyPiece[]): ReplyPiece[] {
+  const texts = lead.flatMap((piece, index) => (piece.kind === "text" ? [index] : []));
+  const first = texts[0];
+  const last = texts.at(-1);
+  if (first === undefined || last === undefined) return [...lead];
+  return lead.map((piece, index) => {
+    if (piece.kind !== "text") return piece;
+    let text = piece.text;
+    if (index === first) text = `“${text.replace(OPENING_QUOTES, "")}`;
+    if (index === last) text = `${text.trimEnd().replace(CLOSING_QUOTES, "")}”`;
+    return { kind: "text", text };
+  });
+}
+
 /** Bold and italics marks a model may add, which the panel doesn't show. */
 const plain = (line: string) => line.replace(/\*\*|__/g, "").trim();
 

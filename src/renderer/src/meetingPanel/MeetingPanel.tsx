@@ -379,7 +379,7 @@ function Suggestion({
   if (!answer) {
     return (
       <div className="panel-suggestion">
-        <HelpHeading kind={help.kind} />
+        <HelpHeading kind={help.kind} heard={help.heard} />
         <HelpOutline count={2} />
       </div>
     );
@@ -409,7 +409,7 @@ function Suggestion({
   };
   return (
     <div className="panel-suggestion" data-pinned={pinned}>
-      <HelpSuggestion kind={help.kind} answer={answer} />
+      <HelpSuggestion help={help} answer={answer} />
       {answer.status === "done" && (
         <div className="panel-actions">
           <button
