@@ -67,17 +67,25 @@ describe("the Word look's stylesheet", () => {
     map.set("runs", {
       r1: { font: 'Evil"; } body { display: none; } x { font-family: "', color: "red; }" },
       "r2] , body [x": { bold: true },
+      ...JSON.parse('{"__proto__": { "font": "Polluted" }}'),
     });
-    map.set("paragraphs", { p1: { align: "center; } body { display: none", left: "1px" } });
+    map.set("paragraphs", {
+      p1: { align: "center; } body { display: none", left: "1px" },
+      p2: { run: "constructor" },
+    });
     map.set("body", 12);
     map.set("width", null);
     map.set("version", 1);
     const look = wordLookOf(doc);
     if (!look) throw new Error("No look.");
     expect(look.runs).toEqual({ r1: {} });
-    expect(look.paragraphs).toEqual({ p1: {} });
+    expect(Object.getPrototypeOf(look.runs)).toBe(Object.prototype);
+    expect(look.paragraphs).toEqual({ p1: {}, p2: { run: "constructor" } });
     const css = wordLookCss("mind", look);
     expect(css).not.toContain("display");
+    expect(css).not.toContain("Polluted");
+    // A run key that names no run of this look, only an object's own property, draws no run.
+    expect(rulesOf(css).find((rule) => rule.includes('"p2"'))).not.toContain("text-transform");
     expect(css.split("{").length).toBe(css.split("}").length);
     expect(css.split("{").length - 1).toBe(rulesOf(css).length);
   });

@@ -1114,15 +1114,13 @@ export interface WordImportReport {
 /**
  * What a Word file's look holds that a Mind doesn't draw (#735), counted from
  * the document's own formatting: paragraphs, runs and cells shaded;
- * paragraphs with a border; tab stops set; tables with no borders, which
- * place text; and how many text colours (other than black), fonts and sizes
- * it sets.
+ * paragraphs with a border; tab stops set; and how many text colours (other
+ * than black), fonts and sizes it sets.
  */
 export interface WordLayout {
   shading: number;
   borders: number;
   tabStops: number;
-  layoutTables: number;
   colours: number;
   fonts: number;
   sizes: number;

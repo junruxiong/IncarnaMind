@@ -539,17 +539,26 @@ const BOX = ["top", "bottom", "left", "right"] as const;
 type Side = (typeof BOX)[number];
 const INSIDE = { top: "insideH", bottom: "insideH", left: "insideV", right: "insideV" } as const;
 
-/** A cell's "none" hides the table's line on that side, as in Word. */
-const NO_LINE: WordBorder = { style: "nil", width: 0, color: null, space: 0 };
+/** A cell's "none" hides the table's line on that side, as in Word: "nil" on the table's edge, "none" between cells. */
+const noLine = (style: "nil" | "none"): WordBorder => ({ style, width: 0, color: null, space: 0 });
+
+const edgesOf = (place: CellPlace): Record<Side, boolean> => ({
+  top: place.row === 0,
+  bottom: place.row + place.rowSpan === place.rows,
+  left: place.column === 0,
+  right: place.column + place.span === place.columns,
+});
 
 function cellBorders(
   borders: Record<string, WordBorder | null> | undefined,
+  place: CellPlace | undefined,
 ): WordBorders<Side> | undefined {
   if (!borders) return undefined;
+  const edge = place ? edgesOf(place) : null;
   const kept: WordBorders<Side> = {};
   for (const side of BOX) {
     const border = borders[side];
-    if (border !== undefined) kept[side] = border ?? NO_LINE;
+    if (border !== undefined) kept[side] = border ?? noLine(!edge || edge[side] ? "nil" : "none");
   }
   return Object.keys(kept).length > 0 ? kept : undefined;
 }
@@ -630,11 +639,11 @@ function conditionsAt(
   const firstCol = options.firstColumn && place.column === 0;
   const lastCol = options.lastColumn && place.column + place.span === place.columns;
   const on = new Set(["wholeTable"]);
-  if (options.rowBands && !firstRow && !lastRow) {
+  if (options.rowBands && bands.rows > 0 && !firstRow && !lastRow) {
     const band = Math.floor((place.row - (options.firstRow ? 1 : 0)) / bands.rows);
     on.add(band % 2 === 0 ? "band1Horz" : "band2Horz");
   }
-  if (options.columnBands && !firstCol && !lastCol) {
+  if (options.columnBands && bands.columns > 0 && !firstCol && !lastCol) {
     const band = Math.floor((place.column - (options.firstColumn ? 1 : 0)) / bands.columns);
     on.add(band % 2 === 0 ? "band1Vert" : "band2Vert");
   }
@@ -656,12 +665,7 @@ function conditionsAt(
 function regionBorders(props: CellProps, region: Region, place: CellPlace): CellProps {
   const sides = props.borders;
   if (!sides || region === "cell") return props;
-  const edge = {
-    top: place.row === 0,
-    bottom: place.row + place.rowSpan === place.rows,
-    left: place.column === 0,
-    right: place.column + place.span === place.columns,
-  };
+  const edge = edgesOf(place);
   const across = (side: Side) =>
     region === "table" ||
     (region === "row" ? side === "left" || side === "right" : side === "top" || side === "bottom");
@@ -758,6 +762,8 @@ export interface TableLookContext {
   chain: StyleDefinition[];
   options: TableOptions;
   bands: { rows: number; columns: number };
+  /** A cell's place, in its context. */
+  place?: CellPlace;
 }
 
 /** Each look under a key made from the look itself, so a key names the same look in every Mind. */
@@ -955,12 +961,12 @@ export class LookReader {
       cellBase,
       chain: style,
       options: readOptions(tblPr && child(tblPr, "w:tblLook")),
-      bands: { rows: Math.max(1, props.rowBand ?? 1), columns: Math.max(1, props.columnBand ?? 1) },
+      bands: { rows: props.rowBand ?? 1, columns: props.columnBand ?? 1 },
     };
   }
 
   cellAt(table: TableLookContext, place: CellPlace): TableLookContext {
-    if (!table.chain.some((style) => style.conditional.size > 0)) return table;
+    if (!table.chain.some((style) => style.conditional.size > 0)) return { ...table, place };
     const on = conditionsAt(table.options, table.bands, place);
     const levels = [...table.levels];
     const taken: string[] = [];
@@ -975,8 +981,8 @@ export class LookReader {
         if (taken.at(-1) !== condition) taken.push(condition);
       }
     }
-    if (taken.length === 0) return table;
-    return { ...table, id: `${table.id}|${taken.join(",")}`, levels, cellBase };
+    if (taken.length === 0) return { ...table, place };
+    return { ...table, id: `${table.id}|${taken.join(",")}`, levels, cellBase, place };
   }
 
   cell(tc: XmlElement, table: TableLookContext): string | null {
@@ -984,7 +990,7 @@ export class LookReader {
     const look: WordCellLook = defined({
       width: props.width ?? undefined,
       shade: props.shade ?? undefined,
-      borders: cellBorders(props.borders),
+      borders: cellBorders(props.borders, table.place),
       vertical: props.vertical && props.vertical !== "top" ? props.vertical : undefined,
       margins: props.margins && Object.keys(props.margins).length > 0 ? props.margins : undefined,
       noWrap: props.noWrap ? (true as const) : undefined,
@@ -1147,7 +1153,6 @@ export class LookReader {
 
 const EMPTY: XmlElement = { name: "", attrs: {}, children: [] };
 
-/** Word's size when nothing gives one. */
 const WORD_DEFAULT_SIZE = 10;
 
 function paragraphLook(props: ParagraphProps, size: number): WordParagraphLook {

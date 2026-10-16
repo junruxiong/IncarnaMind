@@ -528,21 +528,12 @@ const drawsLine = (borders: XmlElement | undefined): boolean =>
   borders !== undefined &&
   elements(borders).some((side) => !["nil", "none"].includes(side.attrs["w:val"] ?? "none"));
 
-/** A table with no lines of its own or from a style: its cells only place text. */
-function placesText(tbl: XmlElement): boolean {
-  const tblPr = child(tbl, "w:tblPr");
-  if (tblPr && child(tblPr, "w:tblStyle")) return false;
-  if (drawsLine(tblPr && child(tblPr, "w:tblBorders"))) return false;
-  return !descendants(tbl, "w:tcBorders").some((borders) => drawsLine(borders));
-}
-
-/** Counts a document's layout (`WordLayout`) from its own formatting; the Word look draws all but tables' lines and aligned columns. */
+/** Counts a document's layout (`WordLayout`) from its own formatting; the Word look draws all but aligned columns. */
 export function layoutOf(document: XmlElement): WordLayout {
   const layout: WordLayout = {
     shading: 0,
     borders: 0,
     tabStops: 0,
-    layoutTables: 0,
     colours: 0,
     fonts: 0,
     sizes: 0,
@@ -565,9 +556,6 @@ export function layoutOf(document: XmlElement): WordLayout {
         break;
       case "w:tabs":
         layout.tabStops += elements(element).filter((tab) => tab.attrs["w:val"] !== "clear").length;
-        break;
-      case "w:tbl":
-        if (placesText(element)) layout.layoutTables++;
         break;
       case "w:color":
         if (value && !NO_COLOUR.has(value.toUpperCase())) colours.add(value.toUpperCase());
@@ -1252,15 +1240,18 @@ class Reader {
     const outer = this.tableLook;
     const tableLook = this.look.table(tbl);
     const cellLooks = new Map<Placed, TableLookContext>();
+    const rowSpanOf = (at: Placed, r: number) =>
+      Math.max(1, Math.min(rowspans.get(at) ?? 1, placed.length - r));
+    const spanOf = (at: Placed) => Math.min(at.span, width - at.column);
     placed.forEach((row, r) => {
       for (const at of row) {
         if (at.merge === "continue" && mergedInto.has(at)) continue;
         this.tableLook = this.look.cellAt(tableLook, {
           row: r,
           rows: placed.length,
-          rowSpan: rowspans.get(at) ?? 1,
+          rowSpan: rowSpanOf(at, r),
           column: at.column,
-          span: at.span,
+          span: spanOf(at),
           columns: width,
         });
         cellLooks.set(at, this.tableLook);
@@ -1293,8 +1284,8 @@ class Reader {
       for (let column = 0; column < width; ) {
         const at = starts.get(column);
         if (at) {
-          const rowspan = Math.max(1, Math.min(rowspans.get(at) ?? 1, placed.length - r));
-          const colspan = Math.min(at.span, width - column);
+          const rowspan = rowSpanOf(at, r);
+          const colspan = spanOf(at);
           for (let down = r; down < r + rowspan; down++) {
             for (let across = column; across < column + colspan; across++) {
               const line = occupied[down];

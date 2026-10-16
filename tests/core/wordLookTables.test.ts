@@ -58,16 +58,17 @@ function cellsOf(client: MindClient, look: WordLook): Cell[] {
   const found: Cell[] = [];
   readMind(client).descendants((node) => {
     if (node.type.name !== "tableCell" && node.type.name !== "tableHeader") return true;
-    const key = node.attrs[WORD_LOOK_ATTRIBUTE] as string | null;
+    const key: unknown = node.attrs[WORD_LOOK_ATTRIBUTE];
     const first = node.firstChild;
-    const paragraphKey = first?.attrs[WORD_LOOK_ATTRIBUTE] as string | null;
-    const paragraph = paragraphKey ? (look.paragraphs[paragraphKey] ?? null) : null;
+    const paragraphKey: unknown = first?.attrs[WORD_LOOK_ATTRIBUTE];
+    const paragraph =
+      typeof paragraphKey === "string" ? (look.paragraphs[paragraphKey] ?? null) : null;
     const text = first?.firstChild;
     const runKey =
       text?.marks.find((mark) => mark.type.name === WORD_RUN_MARK)?.attrs.k ?? paragraph?.run;
     found.push({
       text: node.textContent,
-      look: key ? (look.cells[key] ?? null) : null,
+      look: typeof key === "string" ? (look.cells[key] ?? null) : null,
       paragraph,
       run: typeof runKey === "string" ? (look.runs[runKey] ?? null) : null,
       bold: text?.marks.some((mark) => mark.type.name === "bold") ?? false,
@@ -111,16 +112,10 @@ describe("a Word table's conditional formatting, as its tblLook picks it", () =>
     expect(region.bold).toBe(true);
     expect(region.run).toMatchObject({ color: "FFFFFF" });
     // insideV "nil" in the heading row hides the lines between its cells, not its outer edges.
-    expect(region.look?.borders).toEqual({
-      right: { style: "nil", width: 0, color: null, space: 0 },
-    });
-    expect(byText(cells, "Q1").look?.borders).toEqual({
-      left: { style: "nil", width: 0, color: null, space: 0 },
-      right: { style: "nil", width: 0, color: null, space: 0 },
-    });
-    expect(byText(cells, "Q2").look?.borders).toEqual({
-      left: { style: "nil", width: 0, color: null, space: 0 },
-    });
+    const between = { style: "none", width: 0, color: null, space: 0 };
+    expect(region.look?.borders).toEqual({ right: between });
+    expect(byText(cells, "Q1").look?.borders).toEqual({ left: between, right: between });
+    expect(byText(cells, "Q2").look?.borders).toEqual({ left: between });
     expect(byText(cells, "Q1").bold).toBe(true);
 
     expect(byText(cells, "North")).toMatchObject({ look: { shade: "D9E2F3" }, bold: true });
@@ -161,6 +156,19 @@ describe("a Word table's conditional formatting, as its tblLook picks it", () =>
     expect(byText(cells, "2").look?.shade).toBeUndefined();
   });
 
+  test("a band size of 0 bands nothing", async () => {
+    const { cells } = await imported(
+      report({
+        tblLook:
+          '<w:tblLook w:firstRow="1" w:lastRow="0" w:firstColumn="0" w:lastColumn="0" w:noHBand="0" w:noVBand="0"/><w:tblStyleRowBandSize w:val="0"/><w:tblStyleColBandSize w:val="0"/>',
+        rows: FIGURES,
+      }),
+    );
+    for (const text of ["North", "1", "2", "South", "3"]) {
+      expect(byText(cells, text).look?.shade, text).toBeUndefined();
+    }
+  });
+
   test("cell looks grow with the table's styles and places, never with its rows", async () => {
     const rows = [
       FIGURES[0] ?? [],
@@ -172,14 +180,16 @@ describe("a Word table's conditional formatting, as its tblLook picks it", () =>
 });
 
 describe("a Word table's own lines and widths", () => {
-  test("a cell's 'no border' is kept, to hide the table's line on that side", async () => {
+  test("a cell's 'no border' is kept: on the table's edge to hide the table's line, between cells to leave a neighbour's own", async () => {
     const { cells } = await imported(
-      `<w:tbl><w:tblPr><w:tblStyle w:val="TableGrid"/></w:tblPr><w:tblGrid><w:gridCol w:w="2000"/><w:gridCol w:w="2000"/></w:tblGrid><w:tr>${cell("Open", '<w:tcBorders><w:top w:val="nil"/><w:left w:val="none"/></w:tcBorders>')}${cell("Lined")}</w:tr></w:tbl>`,
+      `<w:tbl><w:tblPr><w:tblStyle w:val="TableGrid"/></w:tblPr><w:tblGrid><w:gridCol w:w="2000"/><w:gridCol w:w="2000"/></w:tblGrid><w:tr>${cell("Open", '<w:tcBorders><w:top w:val="nil"/><w:left w:val="none"/></w:tcBorders>')}${cell("Lined")}</w:tr><w:tr>${cell("Below", '<w:tcBorders><w:top w:val="nil"/></w:tcBorders>')}${cell("Beside")}</w:tr></w:tbl>`,
     );
+    const noLine = (style: string) => ({ style, width: 0, color: null, space: 0 });
     expect(byText(cells, "Open").look?.borders).toEqual({
-      top: { style: "nil", width: 0, color: null, space: 0 },
-      left: { style: "nil", width: 0, color: null, space: 0 },
+      top: noLine("nil"),
+      left: noLine("nil"),
     });
+    expect(byText(cells, "Below").look?.borders).toEqual({ top: noLine("none") });
     expect(byText(cells, "Lined").look).toBeNull();
   });
 
@@ -188,13 +198,14 @@ describe("a Word table's own lines and widths", () => {
       `<w:tbl><w:tr>${cell("Bare")}</w:tr></w:tbl>${paragraph("After")}`,
       '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>',
     );
-    let key: unknown = null;
+    const keys: unknown[] = [];
     readMind(client).descendants((node) => {
-      if (node.type.name === "table") key = node.attrs[WORD_LOOK_ATTRIBUTE];
+      if (node.type.name === "table") keys.push(node.attrs[WORD_LOOK_ATTRIBUTE]);
       return true;
     });
-    expect(typeof key).toBe("string");
-    expect(look.tables[key as string]).toEqual({});
+    const [key] = keys;
+    if (typeof key !== "string") throw new Error("The table has no look.");
+    expect(look.tables[key]).toEqual({});
   });
 });
 
