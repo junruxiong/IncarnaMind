@@ -244,7 +244,8 @@ test("Twenty-four claims, two contradicted and four the model fails on: the card
   await interceptOpenDialog(app, join(sources, "Station report.pdf"));
   await verifyFromPlusMenu(window, "Verify a document…");
   const card = window.locator('[data-testid="check-card"]:visible');
-  await pointAndClick(window, (await checkCard(window)).getByTestId("verify-check"));
+  await expect(card.getByTestId("verify-ask")).toBeVisible();
+  await pointAndClick(window, card.getByTestId("verify-check"));
   const done = card.getByTestId("verify-done");
   await expect(done).toContainText("Checked 20 of 24 claims · 2 need a look", {
     timeout: 60_000,
@@ -262,7 +263,9 @@ test("Twenty-four claims, two contradicted and four the model fails on: the card
   await expect(window.locator('[data-testid="mind-title"]:visible')).toHaveValue(
     "Checking: Refusals",
   );
-  await pointAndClick(window, (await checkCard(window)).getByTestId("verify-check"));
+  // The question opens the card by itself once the claims are found.
+  await expect(card.getByTestId("verify-ask")).toBeVisible();
+  await pointAndClick(window, card.getByTestId("verify-check"));
   await expect(done).toContainText("Checked 0 of 3 claims");
   await expect(done.getByTestId("verify-notChecked")).toContainText("3 not checked");
   await expect(done.getByTestId("verify-contradicted")).toHaveCount(0);
