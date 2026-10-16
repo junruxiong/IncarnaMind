@@ -915,7 +915,7 @@ test("asking during the call: the assistant listens to the live transcript, its 
   const chip = answer.getByTestId("citation-chip").first();
   await expect(chip).toHaveAttribute(
     "aria-label",
-    /^Citation 1: Transcript · Meeting, .+, \d+:\d{2}/,
+    /^Citation 1: Transcript · Meeting, .+, (?:Me|Them) · \d+:\d{2}/,
   );
   await expect(window.getByTestId("mind-editor")).toHaveText("");
   await motionSettled(window);
