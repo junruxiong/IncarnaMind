@@ -2,6 +2,13 @@
 
 <p align="center"><b>English</b> · <a href="README.zh-CN.md">简体中文</a></p>
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="build/icon/svg/mac-dark.svg">
+    <img src="build/icon/svg/mac-light.svg" width="96" height="96" alt="">
+  </picture>
+</p>
+
 <h1 align="center">IncarnaMind</h1>
 
 <p align="center">

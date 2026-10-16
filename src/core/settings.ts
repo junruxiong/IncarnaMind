@@ -114,6 +114,7 @@ const userScope: Scope<UserSettings> = {
     authorName: null,
     monthlyCap: null,
     webSearch: false,
+    keepWebPageLook: false,
   },
   validators: {
     language: isLanguagePreference,
@@ -125,6 +126,7 @@ const userScope: Scope<UserSettings> = {
     authorName: (value): value is string | null => value === null || isNonBlankText(value),
     monthlyCap: (value): value is MonthlyCap | null => value === null || isMonthlyCap(value),
     webSearch: isBoolean,
+    keepWebPageLook: isBoolean,
   },
 };
 

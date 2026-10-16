@@ -63,6 +63,7 @@ import {
   type ChatModelChoice,
   type ChatReadiness,
   type CitationSupport,
+  type ClaimedChange,
   type ConversationAskResult,
   type ConversationQuestion,
   type CoreEventName,
@@ -75,6 +76,7 @@ import {
   MIND_CONTENT_FIELD,
   type MindChange,
   type MindFocus,
+  type MindProblem,
   type ProviderError,
   QUESTION_BLOCK,
   type QuoteRetry,
@@ -93,6 +95,7 @@ import type { WindowedPassage } from "../documents/search";
 import { ChatNotReadyError, InvalidInputError, isRecord, NotFoundError } from "../errors";
 import type { createEventHub } from "../events";
 import type { ExecAccess } from "../execution";
+import type { Language } from "../language";
 import type { MindContent } from "../mindContent";
 import { plainText } from "../mindText";
 import { docOf } from "../proposals/merge";
@@ -139,6 +142,7 @@ import {
   createCitationSession,
   withoutFootnoteDefinitions,
 } from "./citations";
+import { askAgainNote, unbackedClaims as claimsNoCallMade, holdBack } from "./claimedChanges";
 import {
   conversationContext,
   conversationContextOf,
@@ -179,7 +183,7 @@ import {
   sourcesInstructions,
   webInstructions,
 } from "./prompt";
-import { quotedWordsIn } from "./quotedWords";
+import { quotedWordsIn, withoutQuotationMarks } from "./quotedWords";
 
 export type { AnswerDocuments } from "./citations";
 export { createAiSdkAnswerEngine } from "./engine";
@@ -348,6 +352,8 @@ export interface AnswersOptions {
   prepareModel(choice: ChatModelChoice): Promise<PreparedChatModel>;
   /** Searching the User's Documents, and what Citations point to. */
   documents: DocumentsForAnswers;
+  /** What an Answer is written in when its Question has no language of its own. */
+  interfaceLanguage(): Language;
   /** The ids of the live Documents a Search scope covers; null with no Search scope (every Document). */
   resolveScope(scope: SearchScope): string[] | null;
   /** What an Answer says when its Question's Search scope has no Documents to search. */
@@ -733,6 +739,7 @@ export function createAnswers(options: AnswersOptions) {
     let quoteRetry: QuoteRetry | null = null;
     /** The one request to fix figures, if the engine made it (see ./figureRetry). */
     let figureRetry: FigureRetry | null = null;
+    let unbackedClaims: ClaimedChange[] = [];
     /** What the model calls counted, the cached input tokens too. */
     const usage: AnswerUsage = {
       inputTokens: 0,
@@ -768,6 +775,7 @@ export function createAnswers(options: AnswersOptions) {
             : null,
         ...(read?.partial && { readShare }),
         ...(citedAfterChecking.count > 0 && { citedAfterChecking: citedAfterChecking.count }),
+        ...(unbackedClaims.length > 0 && { unbackedClaims: [...unbackedClaims] }),
       };
     };
     let skills: SkillSession | null = null;
@@ -900,7 +908,10 @@ export function createAnswers(options: AnswersOptions) {
       try {
         session.check();
         figures.check();
-        session.checkQuotedWords(quotedWordsIn(withoutFootnoteDefinitions(markdown)));
+        const translated = session.checkQuotedWords(
+          quotedWordsIn(withoutFootnoteDefinitions(markdown)),
+        );
+        if (translated.length > 0) markdown = withoutQuotationMarks(markdown, new Set(translated));
       } catch (error) {
         options.reportError(error);
       }
@@ -949,7 +960,15 @@ export function createAnswers(options: AnswersOptions) {
     announce("answer.started", { ...place, answerId, questionId: input.questionId, model });
 
     const base = answerInstructions();
-    const language = languageInstruction(context.question);
+    const language = languageInstruction(
+      context.question,
+      options.interfaceLanguage(),
+      options.documents
+        .names()
+        .flatMap((document) =>
+          [document.name, document.title].filter((each) => typeof each === "string"),
+        ),
+    );
     const callStarted = (call: AnswerToolCall) => {
       // A call that asks the User first may already be there (see `ask`), and one whose input
       // streams in is there from its start (#202): it now has all of its input.
@@ -969,7 +988,10 @@ export function createAnswers(options: AnswersOptions) {
       id: string,
       ok: boolean,
       resultCount: number | null,
-      found: Pick<AnswerToolCall, "passages" | "error" | "webPage" | "mindChange"> = {},
+      found: Pick<
+        AnswerToolCall,
+        "passages" | "error" | "webPage" | "mindChange" | "mindProblem"
+      > = {},
     ) => {
       const call = toolCalls.find((each) => each.id === id);
       if (!call) return;
@@ -981,6 +1003,7 @@ export function createAnswers(options: AnswersOptions) {
       if (found.error) call.error = found.error;
       if (found.webPage) call.webPage = found.webPage;
       if (found.mindChange) call.mindChange = found.mindChange;
+      if (found.mindProblem) call.mindProblem = found.mindProblem;
       announce("answer.toolCallFinished", { ...place, answerId, call: { ...call } });
       input.onCall?.({ ...call });
       writeSoon();
@@ -995,6 +1018,7 @@ export function createAnswers(options: AnswersOptions) {
     const webPages = new Map<string, WebPageCall>();
     /** What each call of a Minds' Tool changed, by call, for its card when it finishes (#202). */
     const mindChanges = new Map<string, MindChange>();
+    const mindProblems = new Map<string, MindProblem>();
     /** Keeps how a script's run went on its card. */
     const setScriptRun = (id: string, run: SkillScriptRun) => {
       const call = toolCalls.find((each) => each.id === id);
@@ -1221,6 +1245,7 @@ export function createAnswers(options: AnswersOptions) {
       return true;
     };
 
+    let settleMinds = (): void => undefined;
     const run = async () => {
       // An outside agent's Question, or a table's cell, whose scope has no Documents has nothing to
       // answer from: it says so without asking the model.
@@ -1360,23 +1385,28 @@ export function createAnswers(options: AnswersOptions) {
           : [];
       // The Minds' Tools, for an Answer in the assistant (#202).
       const minds = outside ? undefined : options.minds;
-      const fromMinds: Tool[] =
+      const mindsTools =
         minds && input.assistant
           ? mindTools({
               minds,
               prepared,
               ...input.assistant,
               blocksOf: (text) => {
+                let found = 0;
                 let notFound = 0;
                 let unrecorded = 0;
-                const cited = withCitations(
-                  markdownToBlocks(withoutFootnoteDefinitions(text)),
-                  (marker) => {
-                    const node = session.checkedNode(marker);
-                    if (!node) unrecorded++;
-                    else if (node.attrs?.check === "not-found") notFound++;
-                    return node;
-                  },
+                let firstUnrecorded = -1;
+                const cited = markdownToBlocks(withoutFootnoteDefinitions(text)).flatMap(
+                  (block, index) =>
+                    withCitations([block], (marker) => {
+                      const node = session.checkedNode(marker);
+                      if (!node) {
+                        unrecorded++;
+                        if (firstUnrecorded < 0) firstUnrecorded = index;
+                      } else if (node.attrs?.check === "not-found") notFound++;
+                      else found++;
+                      return node;
+                    }),
                 );
                 const blocks = asGenerated(
                   calculating
@@ -1387,7 +1417,13 @@ export function createAnswers(options: AnswersOptions) {
                       )
                     : cited,
                 );
-                return { blocks, notFound, unrecorded };
+                return {
+                  blocks,
+                  cited: found + notFound,
+                  notFound,
+                  unrecorded,
+                  firstUnrecorded,
+                };
               },
               changed: (toolCallId, change) => {
                 mindChanges.set(toolCallId, change);
@@ -1398,10 +1434,12 @@ export function createAnswers(options: AnswersOptions) {
                   writeSoon();
                 }
               },
+              failed: (toolCallId, problem) => mindProblems.set(toolCallId, problem),
               signal: controller.signal,
               now: () => new Date(),
             })
-          : [];
+          : null;
+      if (mindsTools) settleMinds = () => mindsTools.settle();
       const documents: AnswerTools = {
         get documentCount() {
           return session.tools.documentCount;
@@ -1417,6 +1455,8 @@ export function createAnswers(options: AnswersOptions) {
         correctQuote: (marker, quote) => session.tools.correctQuote?.(marker, quote) ?? false,
         shownPassages: () => session.tools.shownPassages?.() ?? [],
         quoteFound: (passage, quote) => session.tools.quoteFound?.(passage, quote) ?? false,
+        wroteIntoMind: () =>
+          [...mindChanges.values()].some((change) => change.proposals > 0 || change.revised),
         ...(calculating && {
           calculate: (given: readonly unknown[], calculateOptions?: CiteOptions) =>
             figures.calculate(given, calculateOptions),
@@ -1462,6 +1502,18 @@ export function createAnswers(options: AnswersOptions) {
 
       const learntKey = modelKey(model, prepared);
       let outcome: Outcome = { status: "stopped" };
+      let mindsNow: { id: string; name: string }[] | null = null;
+      const mindsListed = () => {
+        mindsNow ??= minds?.list() ?? [];
+        return mindsNow;
+      };
+      const checkReply = (text: string) => {
+        mindsNow = null;
+        const claims = claimsNoCallMade(text, toolCalls, mindsListed());
+        return claims.length > 0
+          ? { claims, note: askAgainNote(claims, toolCalls, options.readableMindName) }
+          : null;
+      };
       for await (const event of engine.generate({
         instructions: (
           mode,
@@ -1503,7 +1555,7 @@ export function createAnswers(options: AnswersOptions) {
         question: context.question,
         model: prepared.model,
         documents,
-        tools: [...provided, ...fromSkills, ...fromWeb, ...fromMinds],
+        tools: [...provided, ...fromSkills, ...fromWeb, ...(mindsTools?.tools ?? [])],
         gate,
         streamsInput,
         toolSet: input.toolSet,
@@ -1514,6 +1566,14 @@ export function createAnswers(options: AnswersOptions) {
         window: prepared.window,
         retryQuotes: prepared.retryQuotes,
         cacheKey: place.conversationId ?? place.mindId ?? undefined,
+        ...(input.assistant && {
+          checkReply,
+          shownUpTo: holdBack(() => mindsListed().map((mind) => mind.name)),
+          mayEndBlank: () =>
+            [...mindChanges.values()].some(
+              (change) => change.created || change.revised || change.proposals > 0,
+            ),
+        }),
         signal: controller.signal,
       })) {
         if (finished) break;
@@ -1547,6 +1607,10 @@ export function createAnswers(options: AnswersOptions) {
             break;
           case "figures-retried":
             figureRetry = event.retry;
+            break;
+          case "claims-unbacked":
+            unbackedClaims = event.claims;
+            writeSoon();
             break;
           case "usage":
             usage.inputTokens += event.usage.inputTokens ?? 0;
@@ -1596,11 +1660,13 @@ export function createAnswers(options: AnswersOptions) {
           case "tool-call-finished": {
             const webPage = webPages.get(event.id);
             const mindChange = mindChanges.get(event.id);
+            const mindProblem = mindProblems.get(event.id);
             callFinished(event.id, event.ok, event.resultCount, {
               ...(event.passages && { passages: [...event.passages] }),
               ...(event.error && { error: event.error }),
               ...(webPage && { webPage }),
               ...(mindChange && { mindChange }),
+              ...(mindProblem && { mindProblem }),
             });
             break;
           }
@@ -1618,10 +1684,12 @@ export function createAnswers(options: AnswersOptions) {
             break;
         }
       }
+      settleMinds();
       finish(outcome);
     };
     run().catch((error: unknown) => {
       options.reportError(error);
+      settleMinds();
       finish({ status: "failed", error: classifyProviderError(error) });
     });
   }
@@ -1828,6 +1896,7 @@ export function createAnswers(options: AnswersOptions) {
     const { context, origins } = conversationContextOf(turn.earlier, question.text, {
       mind: section,
       documents,
+      mindNames: options.readableMindName,
     });
     const requestOf = (reading: MindReading, kept: MindCut): RequestMind => ({
       text: kept.text,
@@ -1858,6 +1927,7 @@ export function createAnswers(options: AnswersOptions) {
                 context: conversationContextOf(turn.earlier, question.text, {
                   mind: smaller,
                   documents,
+                  mindNames: options.readableMindName,
                 }).context,
                 request: requestOf(mind.reading, smaller),
                 share: smaller.share,
@@ -2269,7 +2339,10 @@ export function createAnswers(options: AnswersOptions) {
         if (readiness.ready || readiness.reason !== "local-mode") continue;
         generation.finish({
           status: "failed",
-          error: { kind: "local-mode", message: "Stopped: local mode is on." },
+          error: {
+            kind: "local-mode",
+            message: "Stopped: “Keep everything on this computer” is on.",
+          },
         });
       }
     },

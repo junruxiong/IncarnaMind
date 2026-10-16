@@ -628,7 +628,7 @@ export function createActiveEmbedding(options: {
      */
     async setLocalOnly(enabled: unknown): Promise<boolean> {
       if (typeof enabled !== "boolean") {
-        throw new InvalidInputError("Local mode is on or off: true or false.");
+        throw new InvalidInputError("“Keep everything on this computer” takes true or false.");
       }
       settings.writeDeviceValue(LOCAL_ONLY_VALUE, enabled);
       const provider = stored();

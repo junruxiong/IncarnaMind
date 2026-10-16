@@ -26,15 +26,17 @@ const dataUrl = (folder: string) => new URL(`pdfjs/${folder}/`, document.baseURI
 
 /**
  * Starts loading a Document's PDF, streamed from the main process (never over
- * IPC). `password` opens a locked one (#763): handed to pdf.js and kept nowhere else.
+ * IPC): its file, or another PDF it serves (`url`), as a web page's look.
+ * `password` opens a locked one (#763): handed to pdf.js and kept nowhere else.
  */
 export function openPdf(
   pdfjs: PdfJs,
   documentId: string,
+  url = documentFileUrl(documentId),
   password?: string,
 ): PDFDocumentLoadingTask {
   return pdfjs.getDocument({
-    url: documentFileUrl(documentId),
+    url,
     ...(password !== undefined && { password }),
     cMapUrl: dataUrl("cmaps"),
     cMapPacked: true,

@@ -12,6 +12,7 @@ const WEB = {
     { contentHash: "new", fetchedAt: "2026-10-08T09:00:00.000Z" },
   ],
   picturesLeftOut: 0,
+  look: null,
 };
 
 const documents = [
