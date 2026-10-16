@@ -4252,6 +4252,8 @@ export const zhCN = {
   "answer.unbacked.made": "这条回答说新建了 Mind，但实际没有新建。",
   "answer.unbacked.removed": "这条回答说删除或替换了文字，但实际没有删除任何内容。",
   "answer.unbacked.changed": "这条回答说修改了 Mind，但实际没有任何改动。",
+  "answer.noMindTools": "这个模型不能自己写进你的 Mind。",
+  "answer.noMindTools.add": "添加到 Mind",
   "answer.added": "已添加到“{mind}”",
   "answer.addedToNew": "已用这个回答新建 Mind“{mind}”",
   "answer.tableOpened": "已用这个表格新建 Mind“{mind}”",
