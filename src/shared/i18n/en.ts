@@ -4090,6 +4090,8 @@ export const en = {
   "mindCall.failed.noPlace": "Couldn't add to “{mind}”: it has no heading or paragraph “{place}”",
   "mindCall.failed.severalPlaces":
     "Couldn't change “{mind}”: more than one place is called “{name}”",
+  "mindCall.failed.severalPlaces.add":
+    "Couldn't add to “{mind}”: more than one place is called “{name}”",
   "mindCall.failed.noText": "Couldn't change “{mind}”: there's no text there to change",
   "mindCall.failed.tooLong": "Couldn't change “{mind}”: that's too much text to change at once",
   "mindCall.failed.changed": "Couldn't change “{mind}”: its text changed while it was being read",

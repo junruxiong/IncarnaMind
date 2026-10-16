@@ -868,7 +868,7 @@ export type MindProblem =
   | { kind: "several"; name: string }
   | { kind: "no-heading"; mindId: string; heading: string }
   | { kind: "no-place"; mindId: string; place: string }
-  | { kind: "several-places"; mindId: string; name: string }
+  | { kind: "several-places"; mindId: string; name: string; adding: boolean }
   | {
       kind: "no-text" | "too-long" | "changed" | "content-not-own" | "stopped";
       mindId: string;
