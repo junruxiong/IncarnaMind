@@ -33,6 +33,7 @@ import type {
   LeftOutDocument,
   PassageSearchResult,
   ProviderError,
+  RecordAiUseInput,
   ThirdPartyReason,
 } from "../../api";
 import type { Evidence, EvidenceScope } from "../../documents/evidence";
@@ -118,6 +119,27 @@ export function runFailureOf(result: ClaimCheckResult): ProviderError | null {
   const { reason } = result;
   if (reason !== "rate-limit" && reason !== "cost-cap" && reason !== "plan-limit") return null;
   return { kind: reason, message: result.detail ?? reason };
+}
+
+/** Records a sentence a model judged as a use of AI (#906); one it couldn't judge isn't one. */
+export function recordJudged(
+  record: (inputs: RecordAiUseInput[]) => void,
+  mindId: string,
+  model: PreparedChatModel,
+  result: ClaimCheckResult,
+  at: string,
+): void {
+  if (result.verdict === "not-checked") return;
+  record([
+    {
+      mindId,
+      kind: "sentence-checked",
+      providerId: model.provider.id,
+      modelId: model.modelId,
+      characters: 0,
+      occurredAt: at,
+    },
+  ]);
 }
 
 export function createClaimCheck(deps: ClaimCheckDependencies) {

@@ -10,6 +10,7 @@ import {
   type MotionPreference,
   type SandboxLevel,
   type Settings,
+  type SharePagePreferences,
   SKILL_SCRIPT_LIMITS,
   type UserSettings,
   type WordExportPreferences,
@@ -61,19 +62,31 @@ const isWordOption = (value: unknown) =>
     isBoolean(value.includeQuestions) &&
     WORD_CHOICES.every((choice) => isBoolean(value[choice])));
 
+const SHARE_PAGE_CHOICES = ["includeQuestions", "citationCards", "checkedLine"] as const;
+
+const isSharePageOption = (value: unknown) =>
+  hasOnly(value, SHARE_PAGE_CHOICES) && SHARE_PAGE_CHOICES.every((key) => isBoolean(value[key]));
+
+const SHARE_PAGE_DEFAULTS: SharePagePreferences = {
+  includeQuestions: false,
+  citationCards: true,
+  checkedLine: false,
+};
+
 /**
- * HTML came after the others, and how someone's changes are shown (#734) after HTML: choices
- * saved before them have neither, and read as the defaults.
+ * HTML came after the others, how someone's changes are shown (#734) after HTML, and the web
+ * page to share after that: choices saved before them have none, and read as the defaults.
  */
 const isExportPreferences = (value: unknown): value is ExportPreferences => {
   if (!isRecord(value)) return false;
-  const later = ["html", "theirChanges"].filter((key) => Object.hasOwn(value, key));
+  const later = ["html", "share-page", "theirChanges"].filter((key) => Object.hasOwn(value, key));
   return (
     hasOnly(value, ["format", "docx", "pdf", ...later]) &&
     EXPORT_FORMATS.some((format) => format === value.format) &&
     isWordOption(value.docx) &&
     isQuestionsOption(value.pdf) &&
     (!Object.hasOwn(value, "html") || isQuestionsOption(value.html)) &&
+    (!Object.hasOwn(value, "share-page") || isSharePageOption(value["share-page"])) &&
     (!Object.hasOwn(value, "theirChanges") ||
       value.theirChanges === "shown" ||
       value.theirChanges === "accepted")
@@ -110,6 +123,7 @@ const userScope: Scope<UserSettings> = {
       docx: { includeQuestions: false, ...WORD_DEFAULTS },
       pdf: { includeQuestions: false },
       html: { includeQuestions: false },
+      "share-page": SHARE_PAGE_DEFAULTS,
     },
     authorName: null,
     monthlyCap: null,
@@ -266,6 +280,7 @@ export function createSettings(
       ...user.exportOptions,
       docx: { ...WORD_DEFAULTS, ...user.exportOptions.docx },
       html: stored.html ?? { includeQuestions: false },
+      "share-page": stored["share-page"] ?? SHARE_PAGE_DEFAULTS,
     };
     const device = read(db, deviceScope);
     const language = resolveLanguage(user.language, systemLanguages());
