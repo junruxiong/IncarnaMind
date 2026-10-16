@@ -2,36 +2,55 @@ import { describe, expect, test } from "vitest";
 import { asksToRemove, mapsOnto, waitsForUser } from "../../src/core/edits/applies";
 
 describe("An edit the User asked for (#880)", () => {
-  test("asks for text to go only when it names a part of the text, and doesn't say not to, in English or Chinese", () => {
-    for (const asked of [
-      "Delete the last paragraph",
-      "remove the second point",
-      "Cut this sentence",
-      "take out everything after the first section",
-      "Remove them",
-      "删除最后一段",
-      "把第二段删掉",
-      "删掉这句",
-      "删掉第二段的最后一句",
-    ]) {
-      expect(asksToRemove("instruction", asked), asked).toBe(true);
-    }
-    for (const asked of [
-      "remove the jargon from this paragraph",
-      "remove the jargon in the second paragraph",
-      "Get rid of the repetition",
-      "Make the second paragraph more formal",
-      "Removal costs are in clause 4: make it clearer",
-      "don't remove anything, just fix the typos",
-      "Rewrite it without deleting a paragraph",
-      "Keep every paragraph and remove the filler words",
-      "去掉第二段里的口语化表达",
-      "把重复的去掉",
-      "不要删除任何段落",
-      "保留所有段落，删掉多余的词",
-    ]) {
-      expect(asksToRemove("instruction", asked), asked).toBe(false);
-    }
+  // protects=only a part of the text named by its kind deletes what the model left out; fails_when=a word, a phrase or a determiner ("these", 所有) deletes paragraphs at once, or "but keep the rest" undoes an asked-for delete; no_claim=what the model writes.
+  test.each([
+    ["Delete the last paragraph", true],
+    ["delete this paragraph", true],
+    ["remove the second bullet", true],
+    ["Cut this sentence", true],
+    ["Remove the Methods section", true],
+    ["delete the heading", true],
+    ["remove the table", true],
+    ["remove the first and second paragraphs", true],
+    ["delete paragraphs 2 and 3", true],
+    ["take out everything after the first section", true],
+    ["delete the second paragraph but keep the rest", true],
+    ["delete the second paragraph and leave the rest", true],
+    ["Keep the first paragraph, delete the second paragraph", true],
+    ["Join them and delete the second paragraph", true],
+    ["删除最后一段", true],
+    ["把第二段删掉", true],
+    ["删掉这句", true],
+    ["删掉第二段的最后一句", true],
+    ["删除第二段，其余保留", true],
+    ["remove these filler words", false],
+    ["cut this jargon", false],
+    ["remove all the adverbs", false],
+    ["Remove them", false],
+    ["delete everything", false],
+    ["remove the jargon from this paragraph", false],
+    ["remove the jargon in the second paragraph", false],
+    ["remove the jargon and tighten the paragraph", false],
+    ["Get rid of the repetition", false],
+    ["Make the second paragraph more formal", false],
+    ["Removal costs are in clause 4: make it clearer", false],
+    ["don't remove anything, just fix the typos", false],
+    ["Don't delete the second paragraph", false],
+    ["Rewrite it without deleting a paragraph", false],
+    ["Keep every paragraph and remove the filler words", false],
+    ["去掉这些口语化表达", false],
+    ["删掉所有形容词", false],
+    ["去掉第二段里的口语化表达", false],
+    ["删掉这个阶段的描述", false],
+    ["把重复的去掉", false],
+    ["不要删除任何段落", false],
+    ["别删第二段", false],
+    ["保留所有段落，删掉多余的词", false],
+  ] as const)("“%s” asks to remove a part of the text: %s", (asked, removes) => {
+    expect(asksToRemove("instruction", asked)).toBe(removes);
+  });
+
+  test("only an instruction asks to remove: Shorten and Improve never do", () => {
     expect(asksToRemove("shorten", "delete the last paragraph")).toBe(false);
     expect(asksToRemove("improve", "")).toBe(false);
   });

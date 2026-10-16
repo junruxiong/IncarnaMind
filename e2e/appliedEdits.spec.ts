@@ -15,9 +15,8 @@ import {
 } from "./app";
 
 /*
- * An edit the User asks for on the text applies at once (#880): ⌘J, the
- * selection menu's AI actions, and a change asked for in the composer with
- * text selected. A line over it says how many places changed, with Undo and
+ * An edit the User asks for on the text applies at once (#880): ⌘J and the
+ * selection menu's AI actions. A line over it says how many places changed, with Undo and
  * Review changes. The scripted model (src/main/fakeChat/edit.ts and
  * src/main/fakeChat/appliedEdits.ts) does what "replace X with Y" says, shortens
  * by dropping "very" and "really", gives back only the second paragraph
@@ -109,7 +108,7 @@ test("⌘J applies the change at once as AI text, with Changed 1 place · Undo �
   await screenshot(window, "applied-en");
 
   await setLanguage(window, "zh-CN");
-  await expect(line.getByTestId("applied-count")).toHaveText("改了 1 处");
+  await expect(line.getByTestId("applied-count")).toHaveText("已修改 1 处");
   await expect(line.getByTestId("applied-undo")).toHaveText("撤销");
   await expect(line.getByTestId("applied-review")).toHaveText("查看改动");
   await screenshot(window, "applied-zh");
@@ -293,7 +292,7 @@ test("an edit that would remove most of what was selected, and can't be mapped o
   await expect(paragraphs).toHaveText([FIRST, SECOND, THIRD]);
 });
 
-test("“delete the second paragraph” applies at once; a change asked for in the composer with text selected applies at once too", async () => {
+test("“delete the second paragraph” applies at once", async () => {
   const { window } = await launch();
   await useLocalChatModel(window);
   const { editor, paragraphs } = await mindWith(window, [FIRST, SECOND, THIRD]);
@@ -304,15 +303,6 @@ test("“delete the second paragraph” applies at once; a change asked for in t
   await expect(paragraphs).toHaveText([FIRST, THIRD]);
   await expect(line.getByTestId("applied-count")).toHaveText("Changed 1 place");
   await expect(editor.getByTestId("applied-kept")).toHaveCount(0);
-
-  await slideSelect(window, paragraphs.first(), FIRST);
-  const input = window.getByTestId("composer-input");
-  await pointAndClick(window, input);
-  await window.keyboard.type("replace coast with shore");
-  await window.keyboard.press("Enter");
-  await expect(paragraphs.first()).toHaveText("Tides rise twice a day along this shore.");
-  await expect(line.getByTestId("applied-count")).toHaveText("Changed 1 place");
-  await expect(input).toHaveValue("");
 });
 
 test("text typed elsewhere while a slow edit streams in stays, and one ⌘Z takes back the whole edit", async () => {

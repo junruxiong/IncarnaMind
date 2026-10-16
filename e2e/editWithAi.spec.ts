@@ -294,9 +294,9 @@ test("⌘J with text selected says what to change in the composer, in Chinese; t
   await expect(note.locator(".generated-text")).toHaveText("准时");
   await expect(window.getByTestId("proposals-bar")).toHaveCount(0);
   const line = editor.getByTestId("applied-line");
-  await expect(line.getByTestId("applied-count")).toHaveText("改了 1 处");
+  await expect(line.getByTestId("applied-count")).toHaveText("已修改 1 处");
   await expect(line).toHaveAttribute("title", "原因：已按你的要求修改。");
-  await expect(window.getByTestId("proposal-spoken")).toHaveText("改了 1 处");
+  await expect(window.getByTestId("proposal-spoken")).toHaveText("已修改 1 处");
   await screenshot(window, "edit-applied-zh");
   // The line fits in the narrow window.
   const box = await line.getByTestId("applied-review").boundingBox();
@@ -311,7 +311,7 @@ test("⌘J with text selected says what to change in the composer, in Chinese; t
   await selectWords(window, note, "潮水每天非常规律地涨落两次。");
   await pointAndClick(window, window.getByTestId("selection-action-shorten"));
   await expect(note).toHaveText("潮水每天规律地涨落两次。");
-  await expect(line.getByTestId("applied-count")).toHaveText("改了 1 处");
+  await expect(line.getByTestId("applied-count")).toHaveText("已修改 1 处");
 
   // Translate… asks for the language beside it. A text the model gives back as it was (the
   // scripted model only capitalises) says so in the composer, and changes nothing.
