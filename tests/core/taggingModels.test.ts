@@ -559,7 +559,11 @@ describe("Moving to one Tagging setting", () => {
     await before.saveLibrarySettings(kept);
     before.close();
     const after = startCore(dataDir);
-    expect((await after.getLibrary()).settings).toEqual({ ...kept, organizeWith: null });
+    expect((await after.getLibrary()).settings).toEqual({
+      ...kept,
+      organizeWith: null,
+      taggingStopped: [],
+    });
     after.close();
 
     // As the version before stored "Organize manually".
@@ -573,6 +577,7 @@ describe("Moving to one Tagging setting", () => {
       classifier: { kind: "automatic" },
       automatic: true,
       organizeWith: null,
+      taggingStopped: [],
     });
   });
 
@@ -583,6 +588,7 @@ describe("Moving to one Tagging setting", () => {
       classifier: { kind: "automatic" },
       automatic: false,
       organizeWith: null,
+      taggingStopped: [],
     });
   });
 });

@@ -1746,6 +1746,7 @@ export function createCore(adapters: CoreAdapters): Core {
     now,
     tags,
     enabled: () => !organizing(),
+    stopped: (id) => library.taggingStoppedFor(id),
     canRun: async () => {
       const classifier = await tagging.resolve();
       if (!classifier) return false;
@@ -3141,6 +3142,20 @@ export function createCore(adapters: CoreAdapters): Core {
     retagDocuments: async (documentIds) => {
       if (organizing()) return library.classify(documentIds);
       tagger.retag(documentIds);
+    },
+    stopTagging: async () => {
+      const places = library.taggingPlaces();
+      library.setTaggingStopped(places, true);
+      tagger.resume();
+      return places;
+    },
+    setTaggingWithAi: async (folderId, on) => {
+      if (folderId !== null && typeof folderId !== "string") {
+        throw new InvalidInputError("Choose a Folder, or Not in a Folder.");
+      }
+      if (typeof on !== "boolean") throw new InvalidInputError("on must be true or false.");
+      library.setTaggingStopped([folderId], !on);
+      tagger.resume();
     },
 
     getJevSettings: () => jev.status(),
