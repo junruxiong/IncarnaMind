@@ -316,6 +316,7 @@ for (const [language, query, label] of [
       .getByTestId("palette")
       .locator('[data-key="command:export.changeLocation"]');
     await expect(item).toContainText(label);
+    await screenshot(window, `change-location-cmdk-${language}`);
     await pointAndClick(window, item);
     await expect
       .poll(() =>
