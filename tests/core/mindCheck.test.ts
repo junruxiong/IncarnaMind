@@ -9,9 +9,10 @@ import type { CheckMindInput, Core } from "../../src/core";
 import { claimSpans } from "../../src/renderer/src/editor/claimChecks";
 import { claimCheckShown } from "../../src/shared/claimChecks";
 import { mindCheckOf } from "../../src/shared/mindCheck";
-import { checkGenerate, checkReply, isCheckRun, type Plan } from "../helpers/checks";
+import { checkGenerate, checkReply, isCheckRun, type Plan, sentenceOf } from "../helpers/checks";
+import { shownPassages } from "../helpers/citations";
 import { createTempDataFolder, manualClock, startCore } from "../helpers/core";
-import { addAndProcess, writeSourceFile } from "../helpers/documents";
+import { addAndProcess, waitForDocuments, writeSourceFile } from "../helpers/documents";
 import { connectToMind, type MindClient, typeInto } from "../helpers/mindClient";
 import { editMind, readMind, writeMind } from "../helpers/minds";
 import {
@@ -20,6 +21,8 @@ import {
   scriptedModel,
   scriptedModels,
 } from "../helpers/models";
+import { wordFile, paragraph as wordParagraph } from "../helpers/word";
+import { importWordBytes } from "../helpers/wordMinds";
 
 const TIDES = {
   name: "Tides.md",
@@ -265,5 +268,130 @@ describe("Check this Mind", () => {
       kind: "ready",
       sentences: 1,
     });
+  });
+});
+
+describe("A sentence gets the same verdict in Check this Mind as checked alone", () => {
+  const LOAN = "The Northgate Bank term loan stood at £214,480.00 at 31 March 2026.";
+  const BANK = "Balance outstanding at 31 March 2026: GBP 212,480.00.";
+  const MEMO = `Revenue for the year was £1,284,300. ${LOAN}`;
+
+  /**
+   * A model that trusts what it reads: the sentence itself supports it, the
+   * bank's figure contradicts it. The first `unread` of its check Runs answer
+   * before searching, as a model sometimes does.
+   */
+  function readingModel(runs: ModelCall[], unread = 0) {
+    const plans: Record<string, Plan> = { [LOAN]: { judgement: "conflict" } };
+    let skipped = 0;
+    return scriptedModel(
+      (call) => {
+        runs.push(call);
+        const searches = call.results.filter((result) => result.tool === "search_documents");
+        if (searches.length === 0) {
+          if (sentenceOf(call) === LOAN && skipped < unread) {
+            skipped++;
+            return { text: "Verdict: unsupported" };
+          }
+          return { calls: [{ tool: "search_documents", input: { query: sentenceOf(call) } }] };
+        }
+        const shown = shownPassages(searches.at(-1)?.text ?? "");
+        const itself = shown.find((each) => each.text.includes(sentenceOf(call)));
+        const bank = shown.find((each) => each.text.includes(BANK));
+        const decided = itself ?? bank;
+        if (!decided) return { text: "Verdict: unsupported" };
+        const quote = itself ? sentenceOf(call) : BANK;
+        if (!call.results.some((result) => result.tool === "cite")) {
+          return {
+            calls: [
+              { tool: "cite", input: { citations: [{ marker: 1, passage: decided.id, quote }] } },
+            ],
+          };
+        }
+        return {
+          text: itself
+            ? "Verdict: supported"
+            : "Verdict: contradicted\nThe bank says £212,480.00. [^1]",
+        };
+      },
+      { generate: checkGenerate(plans) },
+    );
+  }
+
+  /** A bank confirmation, and a memo imported from Word with its original added, in one Folder. */
+  async function yearEnd(unread = 0) {
+    const runs: ModelCall[] = [];
+    const core = startCore(await createTempDataFolder(), {
+      createChatModel: scriptedModels(readingModel(runs, unread)).createChatModel,
+    });
+    await core.saveChatProvider({ kind: "ollama", modelId: "local-model" });
+    const sources = await createTempDataFolder();
+    const [bank] = await addAndProcess(core, [
+      await writeSourceFile(
+        sources,
+        "Northgate Bank confirmation.md",
+        `# Audit confirmation\n\n${BANK}\n`,
+      ),
+    ]);
+    const folder = await core.createLibraryGroup({ name: "Year end", description: "" });
+    await core.moveToFolder({ documentIds: [bank?.id ?? ""], folderId: folder.id });
+    const { mindId, client } = await importWordBytes(
+      core,
+      sources,
+      wordFile({ body: wordParagraph(MEMO) }),
+      {
+        name: "Draft memo.docx",
+        origin: "own",
+        folderId: folder.id,
+        addOriginal: true,
+      },
+    );
+    await waitForDocuments(core, (listed) =>
+      expect(listed.filter((each) => each.status === "ready")).toHaveLength(2),
+    );
+    const loanCheck = () =>
+      claimSpans(readMind(client)).find((span) => span.sentence.text.trim() === LOAN)?.check;
+    return { core, client, mindId, runs, loanCheck };
+  }
+
+  test("an imported draft never counts as its own evidence: the bank's figure contradicts it either way", async () => {
+    const { core, client, mindId, runs, loanCheck } = await yearEnd();
+    await core.checkMind(request(mindId, "all"));
+    expect(loanCheck()).toMatchObject({ state: "contradicted", evidence: { quote: BANK } });
+
+    let blockId = "";
+    readMind(client).forEach((node) => {
+      if (node.textContent.includes(LOAN)) blockId = String(node.attrs.id);
+    });
+    const from = MEMO.indexOf(LOAN);
+    await core.checkSentences({
+      requestId: "alone",
+      mindId,
+      action: "check-against-documents",
+      from: { blockId, offset: from },
+      to: { blockId, offset: from + LOAN.length },
+    });
+    await client.settled();
+    expect(loanCheck()).toMatchObject({ state: "contradicted", evidence: { quote: BANK } });
+
+    // No check, whole or alone, was shown a Passage of the draft itself.
+    const shownToChecks = runs.flatMap((call) =>
+      call.results
+        .filter((result) => result.tool === "search_documents")
+        .flatMap((result) => shownPassages(result.text)),
+    );
+    expect(shownToChecks.some((each) => each.document.startsWith("Draft memo"))).toBe(false);
+  });
+
+  test("a verdict given before searching isn't kept: the sentence is checked again, and contradicted", async () => {
+    const { core, mindId, loanCheck } = await yearEnd(1);
+    await core.checkMind(request(mindId, "all"));
+    expect(loanCheck()).toMatchObject({ state: "contradicted", evidence: { quote: BANK } });
+  });
+
+  test("a model that never searches gets no verdict: the sentence isn't checked, and says why", async () => {
+    const { core, mindId, loanCheck } = await yearEnd(2);
+    await core.checkMind(request(mindId, "all"));
+    expect(loanCheck()).toMatchObject({ state: "not-checked", reason: "unread" });
   });
 });

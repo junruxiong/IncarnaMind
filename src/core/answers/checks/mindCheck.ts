@@ -25,6 +25,7 @@ import type {
   CheckMindInput,
   CheckMindMode,
   CheckMindResult,
+  CitedQuote,
   ClaimCheckAttributes,
   MindCheckPlan,
 } from "../../api";
@@ -50,6 +51,8 @@ export interface MindCheckOptions extends RunChecksOptions {
   ): { searchable: number; folderId: string | null; check: CheckScope };
   /** The Folder the Mind is in; null for none. */
   mindFolder(mindId: string): string | null;
+  /** The quotes a sentence cites, by their Documents' names now, as a check of it alone sends them. */
+  citedNow(cited: readonly CitedQuote[]): { documentName: string; quote: string }[];
   /** Each live Document's version now, for which checks need a re-check. */
   documentVersions(): ReadonlyMap<string, string>;
   settleStopped(mindId: string, request: string): void;
@@ -200,7 +203,12 @@ export function createMindCheck(options: MindCheckOptions) {
         };
         markSentence(sentence.element, sentence.from, sentence.to, mark);
         return [
-          { id: mark.id, claim: sentence.text, context: sentence.context, cited: sentence.cited },
+          {
+            id: mark.id,
+            claim: sentence.text,
+            context: sentence.context,
+            cited: options.citedNow(sentence.cited),
+          },
         ];
       });
       if (marked.length > 0) options.recordUnread(blocks, requestId, unread);
