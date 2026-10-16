@@ -38,16 +38,13 @@ export interface CheckRecordDependencies {
   readableQuote(attributes: Partial<CitationAttributes>): string | null;
   /** A Folder's name; null for one that isn't there. */
   folderName(folderId: string): string | null;
-  /** Whether Local mode is on. */
   localMode(): boolean;
   language(): Language;
-  /** Prints a PDF; null where this copy can't. */
   printer: Printer | null;
   paper(): PrintPaper;
   now(): string;
 }
 
-/** What a record says: the summary and each checked sentence and Citation. */
 export interface CheckRecord {
   mind: string;
   /** When it was made, ISO 8601 UTC. */
@@ -55,7 +52,6 @@ export interface CheckRecord {
   /** What the sentence checks searched; empty when none ran. */
   searched: string[];
   localMode: boolean;
-  /** The models that checked sentences, each with how many checks. */
   models: string[];
   sentences: SentenceItem[];
   citations: CitationItem[];
