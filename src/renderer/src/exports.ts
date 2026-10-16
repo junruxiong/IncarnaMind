@@ -91,6 +91,11 @@ export type ExportResult =
       format: ExportKind;
       path: string;
       name: string;
+      /** The folder it is in, which the line names. */
+      folder: string;
+      inDefaultFolder: boolean;
+      /** When it was saved, in ms, so a line the User left behind doesn't come back long after. */
+      at: number;
       unverified: number;
       /** The sentences whose check isn't good: how many, and whether they went in as comments. */
       checks: SentenceChecksExported;
@@ -155,6 +160,9 @@ function savedResult(
       format,
       path: saved.file.path,
       name: saved.file.name,
+      folder: saved.file.folder,
+      inDefaultFolder: saved.file.inDefaultFolder,
+      at: Date.now(),
       unverified: "unverifiedCitations" in saved ? saved.unverifiedCitations : 0,
       checks: "sentenceChecks" in saved ? saved.sentenceChecks : NO_CHECKS,
       tracked: "trackedChanges" in saved ? saved.trackedChanges : 0,

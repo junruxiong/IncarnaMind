@@ -16,6 +16,7 @@ import {
 } from "../exports";
 import { showFileLabelKey } from "../fileInfo";
 import { useT } from "../i18n";
+import { folderName } from "../linkedFolders";
 import { enter } from "../motion";
 import {
   chooseOutputLocation,
@@ -30,21 +31,34 @@ import { WordExportReview } from "./WordExportReview";
 /** How long a plain "Saved …" stays, unless the pointer or the focus is on it. */
 const SAVED_SHOWN_MS = 10_000;
 
+type SavedResult = Extract<ExportResult, { state: "saved" }>;
+
+const isPlainSaved = (result: SavedResult, t: ReturnType<typeof useT>): boolean =>
+  result.unverified === 0 && result.kept.length === 0 && unmarkedChecks(result.checks, t) === null;
+
 /**
  * How the last export of this Mind went, floating at the foot of its tab (#100), as problems
- * do (DESIGN.md, Problems): "Exporting…", then "Saved Tides.pdf · Open · Show in Finder", with
- * a second line when quotes weren't found ("1 quote not found, marked unverified · Show"), or
- * the problem and its one fix. A plain "Saved" goes by itself after a while; a problem stays
- * until it is dismissed, or the next export replaces it.
+ * do (DESIGN.md, Problems): "Exporting…", then "Saved “Tides.pdf” in Documents › IncarnaMind ·
+ * Open · Show in Finder", with a second line when quotes weren't found ("1 quote not found,
+ * marked unverified · Show"), or the problem and its one fix. A plain "Saved" goes by itself
+ * after a while, and not back when the Mind is opened again after that; a problem stays until
+ * it is dismissed, or the next export replaces it.
  */
 export function ExportResultLine({ mindId }: { mindId: string }) {
+  const t = useT();
   const result = useExports((state) => (state.result?.mindId === mindId ? state.result : null));
+  const dismiss = useExports((state) => state.dismiss);
   const line = useRef<HTMLDivElement>(null);
-  const shown = result !== null;
+  const expired =
+    result?.state === "saved" &&
+    isPlainSaved(result, t) &&
+    Date.now() - result.at >= SAVED_SHOWN_MS;
+  const shown = result !== null && !expired;
   useEffect(() => {
-    if (shown && line.current) enter(line.current, { y: 8 });
-  }, [shown]);
-  if (!result) return null;
+    if (expired) dismiss();
+    else if (shown && line.current) enter(line.current, { y: 8 });
+  }, [expired, shown, dismiss]);
+  if (!result || expired) return null;
   return (
     <div className="pointer-events-none absolute inset-x-6 bottom-6 z-10 flex justify-center">
       <div
@@ -107,14 +121,7 @@ function ResultBody({
           { testId: "export-tracked", text: trackedChanges(result.tracked, t) },
         ].flatMap(({ testId, text }) => (text ? [{ testId, text }] : []))
       : [];
-  // The first save says where it went (D209): it stays until it is closed, as a problem does.
-  const plain =
-    result.state === "saved" &&
-    !result.defaulted &&
-    result.unverified === 0 &&
-    result.kept.length === 0 &&
-    unmarked === null &&
-    error === null;
+  const plain = result.state === "saved" && isPlainSaved(result, t) && error === null;
   useDismissOnEscape(result.state !== "saving", dismiss);
 
   useEffect(() => {
@@ -187,7 +194,9 @@ function ResultBody({
                 <CheckIcon />
                 <SavedName
                   name={result.name}
-                  folder={result.defaulted ? defaultFolderLabel(t) : null}
+                  folder={
+                    result.inDefaultFolder ? defaultFolderLabel(t) : folderName(result.folder)
+                  }
                   withFile={withFile}
                 />
               </p>
@@ -200,7 +209,15 @@ function ResultBody({
                 >
                   {t("export.open")}
                 </button>
-                {result.defaulted ? (
+                <button
+                  type="button"
+                  data-testid="export-show"
+                  onClick={() => run(() => files.showSavedFile(result.path), "export.failed.show")}
+                  className="h-7 rounded-md px-2.5 text-[13px] leading-5 font-semibold text-ink-secondary hover:bg-hover hover:text-ink"
+                >
+                  {t(showFileLabelKey(navigator.platform))}
+                </button>
+                {result.defaulted && (
                   <button
                     type="button"
                     data-testid="export-change-folder"
@@ -208,17 +225,6 @@ function ResultBody({
                     className="h-7 rounded-md px-2.5 text-[13px] leading-5 font-semibold text-ink-secondary hover:bg-hover hover:text-ink"
                   >
                     {t("export.changeFolder")}
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    data-testid="export-show"
-                    onClick={() =>
-                      run(() => files.showSavedFile(result.path), "export.failed.show")
-                    }
-                    className="h-7 rounded-md px-2.5 text-[13px] leading-5 font-semibold text-ink-secondary hover:bg-hover hover:text-ink"
-                  >
-                    {t(showFileLabelKey(navigator.platform))}
                   </button>
                 )}
               </span>
@@ -315,10 +321,10 @@ function ResultBody({
 }
 
 /**
- * "Saved Tides.pdf", or "Saved “Tides.pdf” in Documents › IncarnaMind", the
- * file's name in the ink, wrapped rather than cut short so all of it shows;
- * then what went into the file, each part after a "·" that a wrapped line
- * leaves off its start: "Saved “Tides.docx” · 2 Contradicted, as comments".
+ * "Saved “Tides.pdf” in Documents › IncarnaMind", the file's name in the ink,
+ * wrapped rather than cut short so all of it shows; then what went into the
+ * file, each part after a "·" that a wrapped line leaves off its start:
+ * "Saved “Tides.docx” in Exports · 2 Contradicted, as comments".
  */
 function SavedName({
   name,
@@ -326,14 +332,11 @@ function SavedName({
   withFile,
 }: {
   name: string;
-  folder: string | null;
+  folder: string;
   withFile: readonly { testId: string; text: string }[];
 }) {
   const t = useT();
-  const said =
-    folder === null
-      ? t("export.done", { name: "\u0000" })
-      : t("export.doneIn", { name: "\u0000", folder });
+  const said = t("export.doneIn", { name: "\u0000", folder });
   const [before = "", after = ""] = said.split("\u0000");
   const saved = (
     <span className="min-w-0 break-words">

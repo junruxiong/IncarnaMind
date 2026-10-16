@@ -26,11 +26,12 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { APICallError } from "ai";
 import type { ChatGptPlanModel } from "../../api";
 import { isRecord } from "../../errors";
+import type { OAuthCredentials } from "../../oauthAccount";
 import type { ChatLanguageModel } from "../models";
 import { withoutStorage } from "../responsesStore";
 import { retryAfterMs } from "../retryAfter";
 import { ChatGptPlanError } from "./errors";
-import { CHATGPT_PLAN_RESOURCE, type ChatGptCredentials } from "./signIn";
+import { CHATGPT_PLAN_RESOURCE } from "./signIn";
 
 /** The API's base; the AI SDK appends `/responses`. */
 export const CHATGPT_PLAN_BASE_URL = CHATGPT_PLAN_RESOURCE;
@@ -438,7 +439,7 @@ async function collectStream(response: Response, url: string): Promise<Response>
  * 401, and turns refusals into `ChatGptPlanError`.
  */
 function createPlanFetch(
-  credentials: ChatGptCredentials,
+  credentials: OAuthCredentials,
   fetcher: typeof globalThis.fetch = globalThis.fetch,
 ): typeof globalThis.fetch {
   const planFetch = async (input: Parameters<typeof globalThis.fetch>[0], init?: RequestInit) => {
@@ -478,7 +479,7 @@ function createPlanFetch(
 export function createPlanChatModel(options: {
   baseUrl: string;
   modelId: string;
-  credentials: ChatGptCredentials;
+  credentials: OAuthCredentials;
   fetch?: typeof globalThis.fetch;
 }): ChatLanguageModel {
   const provider = createOpenAI({
@@ -500,7 +501,7 @@ export function createPlanChatModel(options: {
  */
 export async function listPlanModels(options: {
   baseUrl: string;
-  credentials: ChatGptCredentials;
+  credentials: OAuthCredentials;
   fetch?: typeof globalThis.fetch;
   signal?: AbortSignal;
 }): Promise<ChatGptPlanModel[]> {
