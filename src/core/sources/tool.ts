@@ -75,7 +75,7 @@ function describe(work: FoundSource, index: number): string {
 /** What the model reads of a search. */
 export function resultText(result: FindSourcesResult): string {
   if (result.outcome === "local-mode") {
-    return "Find sources is off: the User keeps everything on this computer (local mode), so nothing was searched. Say so.";
+    return "Find sources is off: “Keep everything on this computer” is on, so nothing was searched. Say so.";
   }
   const searched = result.providers.filter((each) => each.failure === null);
   const lines = [
