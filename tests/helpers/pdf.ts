@@ -13,6 +13,12 @@ export interface PdfPage {
    * supply themselves, so extracting it needs pdf.js's CMap files.
    */
   chineseLines?: readonly string[];
+  /**
+   * Lines drawn first, each at its own size in points (11 if not given), as a
+   * cover or a paper's first page sets its title large: in Helvetica, or in
+   * STSong-Light when a line has characters beyond Latin-1.
+   */
+  printed?: readonly { text: string; size?: number }[];
   /** Draws a small greyscale image, like a scanned page. */
   image?: boolean;
   /** A valid compressed raster for exercising oversized-image limits. */
@@ -110,6 +116,12 @@ function contentStream(page: PdfPage): string {
   // A scan's picture first: any lines are written over it, as a stamp is.
   const parts: string[] = page.scan ? ["q 595 0 0 842 0 0 cm /Scan Do Q"] : [];
   let y = TOP;
+  for (const { text, size = 11 } of page.printed ?? []) {
+    const chinese = /[^\x20-\xff]/.test(text);
+    const shown = chinese ? `<${toUcs2Hex(text)}>` : `(${escapeLatin(text)})`;
+    parts.push(`BT /${chinese ? "F2" : "F1"} ${size} Tf 72 ${y} Td ${shown} Tj ET`);
+    y -= Math.round(size * 1.6);
+  }
   for (const line of page.lines ?? []) {
     if (/[^\x20-\xff]/.test(line)) throw new Error(`Not Latin-1: ${line}`);
     parts.push(`BT /F1 11 Tf 72 ${y} Td (${escapeLatin(line)}) Tj ET`);

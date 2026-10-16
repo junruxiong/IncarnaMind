@@ -15,7 +15,6 @@ const MODULE = "src/shared/dates.ts";
 const OWN_RULES: Record<string, string> = {
   "src/core/exports/index.ts":
     "an export keeps its own date rules, which come from the citation style",
-  "src/core/citationStyles/index.ts": "a citation style writes its dates as the style says",
   "src/shared/sources.ts":
     "the References and every export write the same line, 'accessed 6 October 2026'",
   "src/core/documents/formats/numberDisplay.ts":

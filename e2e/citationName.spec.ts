@@ -217,11 +217,11 @@ test("in a citation style, the References and the Citations ask again and read t
     await expect(references).toHaveAttribute("data-style", "harvard");
     const entry = references.getByTestId("reference-entry");
     const chip = editor.getByTestId("citation-chip");
-    await expect(entry).toContainText("Ferry. PDF");
+    await expect(entry).toContainText("Ferry.");
     await expect(chip).toHaveText("(“Ferry,” no date, p. 2)");
 
     await rename(join(library, "Ferry.pdf"), join(library, "Ferry-timetable.pdf"));
-    await expect(entry).toContainText("Ferry-timetable. PDF");
+    await expect(entry).toContainText("Ferry-timetable.");
     await expect(chip).toHaveText("(“Ferry-timetable,” no date, p. 2)");
   } finally {
     await app.close();

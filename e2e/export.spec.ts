@@ -93,7 +93,13 @@ test("Export opens a short menu: Word and PDF, the last one used first with ⇧�
   const shortcut = /(⇧⌘E|Ctrl\+Shift\+E)$/;
 
   await pointAndClick(window, window.getByTestId("export-mind"));
-  await expect(items).toHaveText([/^Word \(\.docx\)/, "PDF", "More formats", "Export options…"]);
+  await expect(items).toHaveText([
+    /^Word \(\.docx\)/,
+    "PDF",
+    "More formats",
+    "Citation styleNumbered (Document and Location)",
+    "Export options…",
+  ]);
   await expect(items.first()).toHaveText(shortcut);
   await motionSettled(window);
   // Under the button, its right edge by the button's, so it stays over the Mind.
@@ -114,6 +120,7 @@ test("Export opens a short menu: Word and PDF, the last one used first with ⇧�
     new RegExp(`^PDF${shortcut.source}`),
     "Word (.docx)",
     "More formats",
+    /^Citation style/,
     "Export options…",
   ]);
 
@@ -164,6 +171,7 @@ test("Export opens a short menu: Word and PDF, the last one used first with ⇧�
     "Word（.docx）",
     "PDF",
     "更多格式",
+    /^引用格式/,
     "导出选项…",
   ]);
   await motionSettled(window);

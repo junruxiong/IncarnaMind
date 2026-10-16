@@ -28,6 +28,7 @@ import { ARXIV_INTERVAL_MS, ARXIV_LANE } from "../sources/providers/arxiv";
 import type { Database } from "../storage";
 import { ARXIV, CROSSREF, LookupError, lookUpArxiv, lookUpDoi } from "./lookup";
 import {
+  confirmReference,
   editReference,
   fillReference,
   isFieldValue,
@@ -167,6 +168,12 @@ export function createReferences(options: ReferencesOptions) {
       const fields = parsePatch(patch);
       const id = options.document(documentId).id;
       const changed = db.transaction(() => editReference(db, id, fields, now()));
+      return settle(id, changed.length > 0);
+    },
+
+    confirm(documentId: unknown): Document {
+      const id = options.document(documentId).id;
+      const changed = db.transaction(() => confirmReference(db, id, now()));
       return settle(id, changed.length > 0);
     },
 

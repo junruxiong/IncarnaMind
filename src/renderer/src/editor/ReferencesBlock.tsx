@@ -42,10 +42,13 @@ export function ReferencesBlock({
   mindId,
   editor,
   readOnly,
+  byDefault,
 }: {
   mindId: string;
   editor: Editor;
   readOnly: boolean;
+  /** The Mind follows the default style rather than one it chose: GB/T 7714 for a Chinese Mind. */
+  byDefault: boolean;
 }) {
   const t = useT();
   const language = useLanguage();
@@ -88,7 +91,7 @@ export function ReferencesBlock({
 
   const copy = async () => {
     setCopyProblem(null);
-    const { text, html } = bibliographyClipboard(entries);
+    const { text, html } = bibliographyClipboard(entries, t("export.needsDetails"));
     try {
       await navigator.clipboard.write([
         new ClipboardItem({
@@ -127,6 +130,15 @@ export function ReferencesBlock({
           <span className="min-w-0 truncate">{styleLabel(style, t)}</span>
           <ChevronDownLineIcon className="size-3.5 shrink-0" />
         </button>
+        {byDefault && (
+          <span
+            data-testid="references-style-default"
+            title={t("export.citationStyle.default")}
+            className="references-default"
+          >
+            {t("references.style.default")}
+          </span>
+        )}
         <span className="flex-1" />
         <button
           type="button"

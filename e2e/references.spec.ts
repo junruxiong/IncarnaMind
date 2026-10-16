@@ -112,7 +112,8 @@ test("Needs details opens Cite as at the first missing field, and each field is 
     await window.keyboard.type("Harris, Charles R.; 张三");
     await window.keyboard.press("Enter");
     await expect(panel.getByTestId("reference-authors")).toHaveText("Harris, Charles R.; 张三");
-    await expect(toggle).toHaveText("Cite as");
+    // The type, which the DOI suggested, is still a guess to check.
+    await expect(toggle).toHaveText("Needs checking");
 
     // Undo takes the last change back.
     await expect(window.getByTestId("undo-message")).toHaveText(
