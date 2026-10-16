@@ -906,6 +906,10 @@ export interface MindChange {
   paragraphs?: number;
   /** How many tables it added. Absent: none. */
   tables?: number;
+  /** Sources in its tables' cells written as a name in brackets that matched no Citation, kept as text. Absent: none. */
+  unlinkedSources?: number;
+  /** Cells beyond its tables' columns, their text kept in their row's last cell. Absent: none. */
+  extraCells?: number;
   /**
    * It revised the assistant's own changes still waiting there: they
    * are gone, and its request holds the new text and the rest of them.
@@ -4138,6 +4142,12 @@ export type EditWithAiResult =
       proposals: number;
       droppedCitations: number;
       outOfDate: number;
+      /** Markers the text had for none of the passage's Citations, left out. Absent: none. */
+      unmatchedMarkers?: number;
+      /** Sources in a table's cells written as a name in brackets that matched none of its Citations, kept as text (#961). Absent: none. */
+      unlinkedSources?: number;
+      /** Cells beyond a table's columns, their text kept in their row's last cell. Absent: none. */
+      extraCells?: number;
     }
   /** The model gave the text back as it was: there is nothing to propose. */
   | { kind: "unchanged" }

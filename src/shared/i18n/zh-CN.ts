@@ -3881,6 +3881,10 @@ export const zhCN = {
   "mindCall.failed.contentNotOwn": "无法修改“{mind}”：只有助手自己待确认的文字可以整段重写",
   "mindCall.failed.stopped": "已停止，“{mind}”没有改动",
   "mindCall.failed.noTable": "未能生成表格，因此没有向“{mind}”添加内容",
+  "mindChanges.unlinked": "· 表格中有 {count} 处来源无法关联，已作为文字显示",
+  "mindChanges.unlinked.one": "· 表格中有 1 处来源无法关联，已作为文字显示",
+  "mindChanges.extraCells": "· 多出的 {count} 个单元格已作为文字保留",
+  "mindChanges.extraCells.one": "· 多出的 1 个单元格已作为文字保留",
   "mindCall.failed.localMode":
     "无法修改“{mind}”：已开启“所有内容都留在这台电脑上”，而这个模型不在这台电脑上",
   "mindCall.failed.notReady": "无法修改“{mind}”：现在无法使用这个模型",
@@ -3923,6 +3927,7 @@ export const zhCN = {
   "assistant.several.paragraphs": "有 {count} 个段落以“{name}”开头：{places}。是哪一个？",
   "assistant.place.under": "在“{heading}”下",
   "assistant.place.number": "第 {n} 个",
+  "assistant.table.unmade": "这些内容没法做成表格，所以写在下面，没有添加到“{mind}”。",
   "consent.flow.agents": "你的 AI 智能体",
   "consent.flow.agents.purpose": "让你使用的 AI 智能体（例如 Claude 或 Codex）读取并引用你的文档",
   "consent.data.scoped-passages": "你选择的文件夹中文档的段落，在智能体搜索和读取时发送",

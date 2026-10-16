@@ -32,7 +32,7 @@ import { randomUUID } from "node:crypto";
 import * as Y from "yjs";
 import { setOrigins } from "../../../shared/blockOrigins";
 import { translate } from "../../../shared/i18n";
-import { looksLikeTableRow } from "../../../shared/markdownTables";
+import { looksLikeTable } from "../../../shared/markdownTables";
 import {
   pendingProposals,
   readProposalAttribute,
@@ -146,9 +146,14 @@ export interface MindToolsOptions {
     unrecorded: number;
     /** The first of `blocks` with a marker no Citation is recorded for yet; -1 for none. */
     firstUnrecorded: number;
+    /** Sources in its tables' cells written as a name in brackets that matched no recorded Citation. */
+    unlinkedSources: number;
+    /** Cells beyond its tables' columns, their text kept in the row's last cell. */
+    extraCells: number;
   };
   /** A call changed a Mind: its card says so, as soon as it does, also while it writes. */
   changed(toolCallId: string, change: MindChange): void;
+  /** A call changed nothing, and whatever it wrote as its input came was taken back. */
   failed(toolCallId: string, problem: MindProblem): void;
   /** The Answer's: once it aborts, calls still writing stop. */
   signal: AbortSignal;
@@ -445,10 +450,44 @@ function lengths(before: string, after: string): string {
 
 const changes = (count: number) => (count === 1 ? "1 change" : `${count} changes`);
 
-const tablesNote = (tables: number | undefined): string[] =>
-  !tables ? [] : [tables === 1 ? "One of them adds a table." : `${tables} of them add tables.`];
+function tableNotes(change: MindChange, unmatchedMarkers = 0): string[] {
+  const { tables = 0, unlinkedSources = 0, extraCells = 0 } = change;
+  return [
+    ...(tables > 0
+      ? [tables === 1 ? "One of them adds a table." : `${tables} of them add tables.`]
+      : []),
+    ...(unlinkedSources > 0
+      ? [
+          `${unlinkedSources === 1 ? "1 source in its table cells was" : `${unlinkedSources} sources in its table cells were`} written as a name in brackets that matched no Citation, so it stays as text, as the User sees under your reply. In a cell, cite with markers.`,
+        ]
+      : []),
+    ...(extraCells > 0
+      ? [
+          extraCells === 1
+            ? "1 row had a cell beyond the table's columns: its text was kept in the row's last cell."
+            : `Rows had ${extraCells} cells beyond the table's columns: their text was kept in each row's last cell.`,
+        ]
+      : []),
+    ...(unmatchedMarkers > 0
+      ? [
+          `${unmatchedMarkers === 1 ? "1 marker" : `${unmatchedMarkers} markers`} matched none of the text's Citations and ${unmatchedMarkers === 1 ? "was" : "were"} left out: say so.`,
+        ]
+      : []),
+  ];
+}
 
-function noTableMessage(name: string, text: string | null): string {
+const someTableNotes = ({
+  unlinkedSources,
+  extraCells,
+}: {
+  unlinkedSources: number;
+  extraCells: number;
+}) => ({
+  ...(unlinkedSources > 0 && { unlinkedSources }),
+  ...(extraCells > 0 && { extraCells }),
+});
+
+function noTableMessage(name: string, said: string, text: string | null): string {
   // A rewrite's markers are the passage's Citations, which the reply can't give.
   const given =
     text === null
@@ -456,7 +495,7 @@ function noTableMessage(name: string, text: string | null): string {
       : `this text, written again as you would an Answer: <text>${text.replace(/\s*\[\^?\d+\]/g, "")}</text>`;
   return [
     `Nothing was added to “${name}”: its table couldn't be made, as a table needs a heading row, a row of ---, and then each row on a line of its own.`,
-    `Say so first, in one sentence in the User's language, in these words: “I couldn't make this into a table, so it's below as text. Nothing was added to “${name}”.” In Chinese: “这些内容没法做成表格，所以写在下面，没有添加到“${name}”。”`,
+    `Say so first, in these words: “${said}”`,
     `Then, below it, give ${given}, so the User still has it. Don't add it to a Mind another way.`,
   ].join(" ");
 }
@@ -468,7 +507,7 @@ function unmadeTable(node: NodeJSON): boolean {
       .map((child) => (child.type === "hardBreak" ? "\n" : (child.text ?? "")))
       .join("")
       .split("\n");
-    return lines.some(looksLikeTableRow);
+    return lines.some(looksLikeTable);
   }
   return (node.content ?? []).some(unmadeTable);
 }
@@ -485,7 +524,11 @@ function waitingMessage(name: string, count: number, mixed: boolean): string {
 }
 
 /** What `edit_mind`'s model reads of a result that proposed nothing, and what its card says. */
-function notProposed(result: EditWithAiResult, mind: ChangeableMind): Refusal | string {
+function notProposed(
+  result: EditWithAiResult,
+  mind: ChangeableMind,
+  noTableSaid: string,
+): Refusal | string {
   const { id: mindId, name } = mind;
   switch (result.kind) {
     case "unchanged":
@@ -526,7 +569,10 @@ function notProposed(result: EditWithAiResult, mind: ChangeableMind): Refusal | 
         "The change was stopped. Nothing was proposed.",
       );
     case "no-table":
-      return new Refusal({ kind: "no-table", mindId }, noTableMessage(name, result.text));
+      return new Refusal(
+        { kind: "no-table", mindId },
+        noTableMessage(name, noTableSaid, result.text),
+      );
     case "proposed":
       return "";
   }
@@ -562,10 +608,6 @@ function stretchText(blocks: Y.XmlFragment, { from, to }: Stretch): string {
     .join("\n\n");
 }
 
-/**
- * What the whole Blocks a request wrote hold: paragraphs, in lists and quotes
- * too, and tables. A heading is no paragraph, nor a table's cell.
- */
 function writtenBy(note: Y.XmlFragment, request: string): { paragraphs: number; tables: number } {
   const counts = { paragraphs: 0, tables: 0 };
   const visit = (element: Y.XmlElement, written: boolean) => {
@@ -800,7 +842,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     const stream = streams.get(toolCallId);
     streams.delete(toolCallId);
     ended.add(toolCallId);
-    const { blocks, cited, notFound, unrecorded } = options.blocksOf(markdown);
+    const { blocks, cited, notFound, unrecorded, ...notes } = options.blocksOf(markdown);
     const unmade = blocks.some(unmadeTable);
     let writer = stream?.writer ?? null;
     if (writer && (unmade || writer.mind.id !== mind.id || writer.named !== after)) {
@@ -813,7 +855,11 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     writeMore(writer, blocks);
     minds.writing(writer.mind.id, null);
     // Markers `cite` may still record in this step count as left out only once the Run is done.
-    const change = { ...changeOf(writer, made), ...citedIn({ cited, unrecorded: 0 }) };
+    const change = {
+      ...changeOf(writer, made),
+      ...citedIn({ cited, unrecorded: 0 }),
+      ...someTableNotes(notes),
+    };
     options.changed(toolCallId, change);
     if (unrecorded > 0) {
       unsettled.set(toolCallId, {
@@ -834,7 +880,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
 
   const settle = (): void => {
     for (const [toolCallId, each] of unsettled) {
-      const { blocks, cited, unrecorded } = options.blocksOf(each.markdown);
+      const { blocks, cited, unrecorded, ...notes } = options.blocksOf(each.markdown);
       if (blocks.length !== each.ids.length) {
         console.warn(
           `Citations recorded after a Mind was written couldn't go in: the text reads as ${blocks.length} Blocks, ${each.ids.length} were written (Mind ${each.mindId}, call ${toolCallId}).`,
@@ -848,7 +894,11 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
           if (at >= 0 && block) syncContent(element, block.content ?? []);
         }
       });
-      options.changed(toolCallId, { ...each.change(), ...citedIn({ cited, unrecorded }) });
+      options.changed(toolCallId, {
+        ...each.change(),
+        ...citedIn({ cited, unrecorded }),
+        ...someTableNotes(notes),
+      });
     }
     unsettled.clear();
   };
@@ -857,7 +907,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
   const added = (written: NonNullable<ReturnType<typeof finishContent>>, where: string): string =>
     [
       `Proposed ${written.change.proposals === 1 ? "1 new Block" : `${written.change.proposals} new Blocks`} ${where}.`,
-      ...tablesNote(written.change.tables),
+      ...tableNotes(written.change),
       WAITING,
       ...citationNotes(written),
     ].join(" ");
@@ -909,10 +959,8 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     own: OwnWaiting,
     markdown: string,
   ): { change: MindChange; notFound: number; unrecorded: number } => {
-    const { blocks, cited, notFound, unrecorded } = options.blocksOf(markdown);
-    if (blocks.some(unmadeTable)) {
-      throw new Refusal({ kind: "no-table", mindId: mind.id }, noTableMessage(mind.name, null));
-    }
+    const { blocks, cited, notFound, unrecorded, ...notes } = options.blocksOf(markdown);
+    if (blocks.some(unmadeTable)) throw noTable(mind);
     const request = randomUUID();
     minds.checkpoint(mind.id);
     const ids = minds.edit(mind.id, (note) => {
@@ -935,13 +983,26 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       );
     }
     const revision = (): MindChange => ({ ...changeIn(mind.id, request, false), revised: true });
-    const change: MindChange = { ...revision(), ...citedIn({ cited, unrecorded: 0 }) };
+    const change: MindChange = {
+      ...revision(),
+      ...citedIn({ cited, unrecorded: 0 }),
+      ...someTableNotes(notes),
+    };
     options.changed(toolCallId, change);
     if (unrecorded > 0) {
       unsettled.set(toolCallId, { mindId: mind.id, ids, markdown, change: revision });
     }
     return { change, notFound, unrecorded };
   };
+
+  const unmadeSaid = (name: string) =>
+    translate(options.language, "assistant.table.unmade", { mind: name });
+
+  const noTable = (mind: ChangeableMind) =>
+    new Refusal(
+      { kind: "no-table", mindId: mind.id },
+      noTableMessage(mind.name, unmadeSaid(mind.name), null),
+    );
 
   const refuseWaiting = (mind: ChangeableMind, waiting: { count: number; mixed: boolean }) =>
     new Refusal(
@@ -1014,7 +1075,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         const revised = reviseWith(toolCallId, mind, waiting, markdown);
         return [
           revisedText(mind.name, revised.change, ` (${lengths(before, markdown)})`),
-          ...tablesNote(revised.change.tables),
+          ...tableNotes(revised.change),
           ...citationNotes(revised),
         ].join(" ");
       }
@@ -1029,7 +1090,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
           options.changed(toolCallId, { mindId: mind.id, created: false, request, proposals }),
       });
       if (result.kind !== "proposed") {
-        const why = notProposed(result, mind);
+        const why = notProposed(result, mind, unmadeSaid(mind.name));
         if (typeof why === "string") return why;
         if (why.problem.kind === "waiting") {
           const now = minds.read(mind.id, (blocks) => waitingIn(blocks, stretch.from, stretch.to));
@@ -1041,14 +1102,19 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         throw why;
       }
       const tables = minds.read(mind.id, (note) => writtenBy(note, result.request).tables);
+      const notes = someTableNotes({
+        unlinkedSources: result.unlinkedSources ?? 0,
+        extraCells: result.extraCells ?? 0,
+      });
       const change: MindChange = revised
-        ? { ...changeIn(mind.id, result.request, false), revised: true }
+        ? { ...changeIn(mind.id, result.request, false), revised: true, ...notes }
         : {
             mindId: mind.id,
             created: false,
             request: result.request,
             proposals: result.proposals,
             ...(tables > 0 && { tables }),
+            ...notes,
           };
       if (revised) {
         minds.edit(mind.id, (note) => {
@@ -1061,7 +1127,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         revised
           ? revisedText(mind.name, change, went)
           : `Proposed ${changes(result.proposals)} in “${mind.name}”${went}. ${WAITING}`,
-        ...tablesNote(change.tables),
+        ...tableNotes(change, result.unmatchedMarkers),
         ...(reason ? [`Why, as the rewrite says: ${reason}`] : []),
         ...(result.droppedCitations > 0
           ? [
@@ -1119,9 +1185,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       const mind = found(targetOf(input));
       const after = optional(input.after);
       const written = finishContent(toolCallId, mind, after, markdown, false);
-      if (!written) {
-        throw new Refusal({ kind: "no-table", mindId: mind.id }, noTableMessage(mind.name, null));
-      }
+      if (!written) throw noTable(mind);
       return added(written, `in “${mind.name}”, ${after ? `after “${after}”` : "at its end"}`);
     },
   };
@@ -1175,7 +1239,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       const written = finishContent(toolCallId, mind, null, markdown, true);
       if (!written) {
         options.changed(toolCallId, { mindId: mind.id, created: true, request: "", proposals: 0 });
-        return `${made}. It is empty. ${noTableMessage(mind.name, null)}`;
+        return `${made}. It is empty. ${noTable(mind).message}`;
       }
       return `${made}. ${added(written, "in it")}`;
     },

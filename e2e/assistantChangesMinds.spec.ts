@@ -427,20 +427,25 @@ test("a table the assistant writes into a Mind is a table, and the card counts i
 
   const answer = await askInAssistant(window, "Make the summary longer, with a table");
   const rows = editor.locator("table tr");
-  await expect(rows).toHaveCount(3);
+  await expect(rows).toHaveCount(4);
   await expect(rows.nth(0).locator("th")).toHaveText(["Term", "What it says"]);
   await expect(rows.nth(1).locator("td")).toHaveText(["The quarter", "was good."]);
   await expect(editor.locator("p", { hasText: "|" })).toHaveCount(0);
   await expect(window.getByTestId("proposals-count")).toHaveText("1 change from the assistant");
   const title = answer.getByTestId("mind-changes").getByTestId("mind-changes-title");
   await expect(title).toHaveText("Added a table to “Q3 review”");
+  const kept = answer.getByTestId("mind-changes").getByTestId("mind-changes-kept");
+  await expect(kept).toHaveText(
+    "· 1 source in the table couldn't be linked, so it's shown as text",
+  );
   await screenshot(window, "assistant-table");
 
   await pointAndClick(window, window.getByTestId("proposals-accept-all"));
   await expect(window.getByTestId("proposals-bar")).toHaveCount(0);
-  await expect(rows).toHaveCount(3);
+  await expect(rows).toHaveCount(4);
   await setLanguage(window, "zh-CN");
   await setWindowSize(app, window, 900, 760);
   await expect(title).toHaveText("在“Q3 review”中添加了 1 个表格");
+  await expect(kept).toHaveText("· 表格中有 1 处来源无法关联，已作为文字显示");
   await screenshot(window, "assistant-table-zh");
 });

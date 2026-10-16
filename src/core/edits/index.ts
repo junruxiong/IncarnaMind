@@ -72,8 +72,8 @@ import {
   type RewritePlace,
   readSelection,
   type Selection,
+  someNotes,
   takeBackForRegenerate,
-  type Written,
 } from "../proposals/write";
 import type { PreparedChatModel } from "../providers/chat";
 import { classifyProviderError } from "../providers/providerErrors";
@@ -489,6 +489,7 @@ export function createEdits(options: EditsOptions) {
         proposals: now.count,
         droppedCitations: stream?.written().droppedCitations ?? 0,
         outOfDate: now.outOfDate.length,
+        ...(stream && someNotes(stream.written().notes)),
       };
     };
     let wrote = false;
@@ -716,14 +717,14 @@ export function createEdits(options: EditsOptions) {
       const reply = readEditReply(streamed.raw, selection.text);
       if (sameText(reply, selection.text)) return nothing({ kind: "unchanged" });
       const request = randomUUID();
-      let written: Written = { proposals: [], droppedCitations: 0 };
-      fork.transact(() => {
+      const written = fork.transact(() => {
         const fresh = freshCitations(selection, options.recheck)(reply);
-        written = proposeRewrite(selection, reply, request, randomUUID, fresh);
+        const rewritten = proposeRewrite(selection, reply, request, randomUUID, fresh);
         resolveProposals(blocks, (each) => each.request === request, "accept");
+        return rewritten;
       });
       if (written.unmadeTable) return nothing({ kind: "no-table", text: reply });
-      const { droppedCitations } = written;
+      const { droppedCitations, notes } = written;
       const top = topLevelBlocks(blocks);
       const revised = top
         .slice(bounds.before, top.length - bounds.after)
@@ -747,7 +748,14 @@ export function createEdits(options: EditsOptions) {
       );
       input.written(request, proposals);
       return {
-        result: { kind: "proposed", request, proposals, droppedCitations, outOfDate: 0 },
+        result: {
+          kind: "proposed",
+          request,
+          proposals,
+          droppedCitations,
+          outOfDate: 0,
+          ...someNotes(notes),
+        },
         length: { before: selection.text, after: reply },
         reason: reasonOf(streamed.raw),
         revised: { blockIds },

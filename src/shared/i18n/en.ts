@@ -4090,6 +4090,11 @@ export const en = {
     "Couldn't change “{mind}”: only the assistant's own waiting text can be written anew",
   "mindCall.failed.stopped": "Stopped before “{mind}” changed",
   "mindCall.failed.noTable": "Couldn't make the table, so nothing was added to “{mind}”",
+  "mindChanges.unlinked":
+    "· {count} sources in the table couldn't be linked, so they're shown as text",
+  "mindChanges.unlinked.one": "· 1 source in the table couldn't be linked, so it's shown as text",
+  "mindChanges.extraCells": "· {count} extra cells were kept as text",
+  "mindChanges.extraCells.one": "· 1 extra cell was kept as text",
   "mindCall.failed.localMode":
     "Couldn't change “{mind}”: “Keep everything on this computer” is on, and the model isn't on this computer",
   "mindCall.failed.notReady": "Couldn't change “{mind}”: the model can't be used now",
@@ -4135,6 +4140,8 @@ export const en = {
     "There are {count} paragraphs starting “{name}”: {places}. Which one?",
   "assistant.place.under": "under “{heading}”",
   "assistant.place.number": "number {n}",
+  "assistant.table.unmade":
+    "I couldn't make this into a table, so it's below as text. Nothing was added to “{mind}”.",
   // Outside agents (#351): the consent for each agent the User connects, and what IncarnaMind
   // tells an agent when a call can't be done, which the agent passes on to the User.
   "consent.flow.agents": "Your AI agents",
