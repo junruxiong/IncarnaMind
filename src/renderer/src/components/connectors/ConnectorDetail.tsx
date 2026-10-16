@@ -25,6 +25,7 @@ import { ClientForm, RemoteSignIn } from "./RemoteSignIn";
 /** A state's dot: working (blue), or waiting for the User (amber). Green and red are for checks only. */
 const stateDot: Record<ConnectorState, string | null> = {
   off: null,
+  paused: null,
   connecting: "bg-accent",
   "signing-in": "bg-accent",
   "needs-sign-in": "bg-attention",
@@ -345,7 +346,7 @@ function ConnectorControls({ connector }: { connector: Connector }) {
           onRetry={() => void act(() => core.restartConnector(id))}
         />
       )}
-      {connector.transport === "http" && connector.enabled && (
+      {connector.transport === "http" && connector.enabled && connector.state !== "paused" && (
         <RemoteSignIn connector={connector} />
       )}
     </div>

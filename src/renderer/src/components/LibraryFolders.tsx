@@ -8,7 +8,7 @@ import { useRequests } from "../requests";
 import { sorted } from "../sort";
 import { type SortScope, sortOf, useSort } from "../sortChoices";
 import { documentFields, folderFields, mindFields } from "../sortFields";
-import { useAppStore } from "../store";
+import { allExamples, useAppStore } from "../store";
 import { foldKeys, TreeLevelOffset, useTreeItem } from "../treeKeys";
 import { useRename } from "../useRename";
 import { InlineName } from "./InlineName";
@@ -429,6 +429,10 @@ function NotInAFolder({
   const Chevron = folded ? ChevronRightLineIcon : ChevronDownLineIcon;
   const treeItem = useTreeItem({ depth: 0, expanded: !folded });
   const fold = foldKeys(!folded, () => useFolds.getState().toggle(NOT_IN_A_FOLDER));
+  const examplesOnly = useAppStore((state) => {
+    const examples = allExamples(state);
+    return quiet && minds.every((mind) => examples.some((each) => each.mindId === mind.id));
+  });
   return (
     <div
       data-testid="not-in-a-folder"
@@ -448,11 +452,13 @@ function NotInAFolder({
             onKeyDown={fold}
             className="flex max-w-full items-center gap-1 rounded-sm hover:text-ink-secondary"
           >
-            <span className="truncate">{t(quiet ? "sidebar.examples" : "library.unsorted")}</span>
+            <span className="truncate">
+              {t(examplesOnly ? "sidebar.examples" : "library.unsorted")}
+            </span>
             <Chevron className="size-3 shrink-0" />
           </button>
         </div>
-        {!quiet && (
+        {!examplesOnly && (
           <span
             data-testid="not-in-a-folder-hint"
             title={t("sidebar.notInFolder.title")}

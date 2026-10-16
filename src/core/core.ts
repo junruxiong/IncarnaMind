@@ -17,6 +17,7 @@ import { mindModelOf } from "../shared/mindModel";
 import { mindName } from "../shared/naming";
 import { paperFor } from "../shared/printDocument";
 import { resolveProposals, restoreRevised } from "../shared/proposals";
+import { isCitableWork } from "../shared/references";
 import { RESEARCH_TASK } from "../shared/research";
 import { wordFileOf } from "../shared/wordFiles";
 import { logActivity, silentLogger } from "./activityLog";
@@ -95,6 +96,7 @@ import { createVersionRetention, type VersionRetention } from "./documents/reten
 import { BUILT_IN_TEXT_RECOGNITION_MODEL, createTextRecognitionModel } from "./documents/scan";
 import type { WindowedPassage } from "./documents/search";
 import { tunedSearch } from "./documents/searchTuning";
+import { LANGUAGE_SAMPLE, writtenInChinese } from "./documents/textLanguage";
 import { findUnreadDocuments } from "./documents/unread";
 import { createViewing } from "./documents/viewing";
 import { fsWatchFolder } from "./documents/watcher";
@@ -151,7 +153,7 @@ import {
   parseIds,
   parseMindId,
 } from "./minds";
-import { firstLineOf, readBlocks, theirChangesReading } from "./mindText";
+import { firstLineOf, readBlocks, textStart, theirChangesReading } from "./mindText";
 import { createNoteAdding, insertBlocks } from "./noteAdding";
 import { createOutputFiles } from "./outputFiles";
 import { createPrivacy, type NetworkTrafficRegistry } from "./privacy";
@@ -180,6 +182,7 @@ import { isCloudModelName } from "./providers/ollamaCloud";
 import { createOllamaModels } from "./providers/ollamaModels";
 import { createAiSdkRerankingModel, createRerank } from "./providers/rerank";
 import { createRecentlyDeleted } from "./recentlyDeleted";
+import { createReferenceChecks } from "./referenceChecks";
 import {
   createReferenceImport,
   createReferences,
@@ -804,6 +807,8 @@ export function createCore(adapters: CoreAdapters): Core {
   if (documents.searchableCount() > 0) rerank.prepare();
   /** Set once outside agents exist: Local mode pauses them. */
   let agentsLocalModeChanged = () => {};
+  /** Set once Connectors exist: Local mode pauses those on other computers. */
+  let connectorsLocalModeChanged = () => {};
   /**
    * Local mode on or off: embeddings may switch back to the built-in model,
    * rerank pauses, usage data stops, and outside agents pause.
@@ -816,6 +821,7 @@ export function createCore(adapters: CoreAdapters): Core {
       usageData.localModeChanged();
       privacyChanged();
       agentsLocalModeChanged();
+      connectorsLocalModeChanged();
       await rerankChanged();
       // Questions to a cloud model are refused now (or allowed again): the chat model's readiness changed.
       await readinessChanged();
@@ -899,6 +905,7 @@ export function createCore(adapters: CoreAdapters): Core {
     processes: adapters.processes,
     browser: adapters.browser,
     consent,
+    localOnly: () => embedding.localOnly(),
     signInPages: (name) => {
       const { language } = settings.get();
       return {
@@ -919,6 +926,7 @@ export function createCore(adapters: CoreAdapters): Core {
       timing: { signInTimeoutMs: adapters.connectorSignInTimeoutMs },
     }),
   });
+  connectorsLocalModeChanged = () => connectors.localModeChanged();
   /** Skill scripts can run: the User hasn't turned them off, and a Skill that is on has some. */
   const scriptsOffered = () =>
     settings.get().device.skillScriptsEnabled && skills.anyEnabledWithScripts();
@@ -1476,22 +1484,33 @@ export function createCore(adapters: CoreAdapters): Core {
     reportError: (error) => console.error(error),
   });
 
+  const liveDocument = (id: string): Document | undefined => {
+    try {
+      return documents.get(id);
+    } catch (error) {
+      if (error instanceof NotFoundError) return undefined;
+      throw error;
+    }
+  };
   // Citation styles (#289): formatted on their own thread, from the Documents' reference records.
   const citationStyles = createCitationStyles({
     folder: adapters.paths.citationStyles,
-    document: (id): Document | undefined => {
-      try {
-        return documents.get(id);
-      } catch (error) {
-        if (error instanceof NotFoundError) return undefined;
-        throw error;
-      }
-    },
+    document: liveDocument,
   });
   const mindCitationStyle = (mindId: string): MindCitationStyle => {
     const { folderId } = minds.get(mindId);
+    const { chineseText, cited } = content.read(mindId, (blocks) => {
+      const versions: CitedVersions = new Map();
+      addCitedVersions(blocks, versions);
+      return {
+        chineseText: writtenInChinese(textStart(blocks, LANGUAGE_SAMPLE)),
+        cited: [...versions.keys()],
+      };
+    });
+    const citesWorks = cited.some((id) => isCitableWork(liveDocument(id)?.reference ?? null));
+    const context = { language: settings.get().language, chineseText, citesWorks };
     return content.readSettings(mindId, (mindSettings) => ({
-      style: citationStyleIn(mindSettings),
+      style: citationStyleIn(mindSettings, context),
       chosen: chosenCitationStyle(mindSettings) !== null,
       folderDefault: folderId === null ? null : library.citationStyle(folderId),
     }));
@@ -2022,6 +2041,19 @@ export function createCore(adapters: CoreAdapters): Core {
     changed: (list) => events.emit("references.changed", list),
     signal: lifetime.signal,
     pace,
+  });
+  // Checking a Mind's reference list sends each reference only, to Crossref, OpenAlex
+  // and arXiv, once the User starts it where a line says so; never in local mode.
+  const referenceChecks = createReferenceChecks({
+    consent,
+    localOnly: () => embedding.localOnly(),
+    http: createSourceHttp(pace, paceTimers),
+    urls: adapters.referenceLookup,
+    content,
+    db,
+    now,
+    progress: (event) => events.emit("referenceCheck.progress", event),
+    signal: lifetime.signal,
   });
   // Importing references (#287) reads a file the User chose and sends nothing.
   const referenceImport = createReferenceImport({
@@ -2913,7 +2945,11 @@ export function createCore(adapters: CoreAdapters): Core {
     updateReference: async (documentId, patch) => references.update(documentId, patch),
     restoreReference: async (documentId, before, fields) =>
       references.restore(documentId, before, fields),
+    confirmReference: async (documentId) => references.confirm(documentId),
     lookUpReference: (documentId) => references.lookUp(documentId),
+    checkReferences: (mindId, options) =>
+      referenceChecks.check(mindId, isRecord(options) && options.again === true),
+    stopReferenceCheck: async (mindId) => referenceChecks.stop(mindId),
     listSourceProviders: () => sources.list(),
     setSourceProviderKey: (providerId, key) => sources.setKey(providerId, key),
     findSources: (input) => sources.search(input),

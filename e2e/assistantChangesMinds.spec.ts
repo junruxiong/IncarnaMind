@@ -11,6 +11,7 @@ import {
   newMind,
   openSteps,
   pointAndClick,
+  pointAt,
   removeDataFolder,
   setLanguage,
   setWindowSize,
@@ -449,3 +450,49 @@ test("a table the assistant writes into a Mind is a table, and the card counts i
   await expect(kept).toHaveText("· 表格中有 1 处出处无法关联，已作为文字显示");
   await screenshot(window, "assistant-table-zh");
 });
+
+for (const [width, language] of [
+  [1100, "en"],
+  [1440, "en"],
+  [1100, "zh-CN"],
+  [1440, "zh-CN"],
+] as const) {
+  test(`a change bar near the right edge stays beside the assistant, never under it, at ${width} px in ${language}`, async () => {
+    const { app, window } = await launchApp(dataDir, { fakeChat: true });
+    await dismissChatSetup(window);
+    await useLocalChatModel(window);
+    await setLanguage(window, language);
+    await setWindowSize(app, window, width, 900);
+    const zh = language === "zh-CN";
+    const note = (
+      zh ? "销售非常好，利润真的很高。" : "Sales were very good and the margin was really strong. "
+    ).repeat(zh ? 14 : 7);
+    await writeMind(window, zh ? "第三季度" : "Q3 review", [note.trim()]);
+    await askInAssistant(window, zh ? "缩短摘要" : "Shorten the summary");
+
+    // The change farthest to the right, on one line (a change that wraps has no one place to point at):
+    // where a bar the width of its words reaches under the assistant.
+    const changes = window.getByTestId("mind-editor").locator(".proposal-delete");
+    const rights = await changes.evaluateAll((each) =>
+      each.map((element) =>
+        element.getClientRects().length === 1 ? element.getBoundingClientRect().right : -1,
+      ),
+    );
+    expect(rights.length).toBeGreaterThan(4);
+    const far = changes.nth(rights.indexOf(Math.max(...rights)));
+    await pointAt(window, far);
+
+    const bar = window.getByTestId("change-bar");
+    await expect(bar).toBeVisible();
+    await screenshot(window, `change-bar-${width}-${language}`);
+    const [shown, panel, change] = await Promise.all([
+      bar.boundingBox(),
+      window.getByTestId("assistant").boundingBox(),
+      far.boundingBox(),
+    ]);
+    if (!shown || !panel || !change) throw new Error("Something isn't visible.");
+    // Where the Mind fills the card, the change is near enough the edge for the bar to need to move; at 1,440 its column ends well short of it.
+    if (width < 1200) expect(change.x + shown.width).toBeGreaterThan(panel.x);
+    expect(shown.x + shown.width).toBeLessThanOrEqual(panel.x);
+  });
+}

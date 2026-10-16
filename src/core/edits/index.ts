@@ -49,6 +49,7 @@ import {
   editActions,
   MIND_CONTENT_FIELD,
   type ProposalRequest,
+  type RequestedChange,
   type TextPlace,
   type WritingPlace,
 } from "../api";
@@ -131,6 +132,7 @@ interface Ask {
   action: EditAction;
   instruction: string;
   model: ChatModelChoice | null;
+  requested?: RequestedChange;
 }
 
 interface ParsedInput extends Ask {
@@ -296,6 +298,8 @@ export interface ProposeInput {
   signal: AbortSignal;
   beforeWriting(): void;
   written(request: string, count: number): void;
+  /** What the User's words asked for, which its request records; null: neither. Not for a revision. */
+  requested: RequestedChange | null;
 }
 
 export interface Proposed {
@@ -310,6 +314,7 @@ const askOf = (input: ProposeInput): Ask => ({
   action: "instruction",
   instruction: input.instruction,
   model: { providerId: input.prepared.provider.id, modelId: input.prepared.modelId },
+  ...(input.requested && { requested: input.requested }),
 });
 
 interface EditCall {
@@ -487,6 +492,7 @@ export function createEdits(options: EditsOptions) {
       createdAt: options.now().toISOString(),
       action: ask.action,
       instruction: ask.instruction,
+      ...(ask.requested && { requested: ask.requested }),
     };
     const mine = (mind: Y.XmlFragment) =>
       pendingProposals(mind).filter((each) => each.request === request);

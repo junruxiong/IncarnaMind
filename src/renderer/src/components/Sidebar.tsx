@@ -78,7 +78,7 @@ export function Sidebar({ width, onOpenSettings }: { width: number; onOpenSettin
         className="relative flex shrink-0 flex-col p-2 before:absolute before:inset-x-2 before:top-0 before:h-px before:bg-rule before:content-['']"
       >
         <SidebarSelection />
-        {!firstOpen && <SidebarStatus />}
+        <SidebarStatus problemsOnly={firstOpen} />
         <div className={rowClass(false)}>
           <button type="button" onClick={onOpenSettings} className={rowButtonClass}>
             <SettingsLineIcon className={rowIconClass(false)} />

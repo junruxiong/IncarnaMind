@@ -1,12 +1,14 @@
 /**
  *   npx electron-vite build --mode test
  *   AUDIT_OUT=/tmp/word-look npx playwright test -c e2e/audit/playwright.audit.config.ts wordLook.audit.ts
+ *
+ * TAB_CLAUSES sets how many clauses the tabbed contract has, a tab in each of its paragraphs: 550 make about 6,000 tabs.
  */
 import { readdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../../src/core/api";
-import { longContract } from "../../tests/helpers/longContract";
+import { LONG_CONTRACT_CLAUSES, longContract } from "../../tests/helpers/longContract";
 import { resumeFile } from "../../tests/helpers/wordLookFiles";
 import {
   busy,
@@ -182,6 +184,82 @@ test("typing in the 304-page contract, and opening it and the corpus's largest f
       corpusPlainOpenMs: corpusPlainOpen,
     };
     record("wordLook", result);
+    console.log(JSON.stringify(result, null, 2));
+  } finally {
+    await close(launched);
+    removeDir(dataDir);
+    removeDir(files);
+  }
+});
+
+test("typing in the 304-page contract with a tab after every clause number, and how long its tabs take to draw", async () => {
+  const dataDir = tempDir("data");
+  const files = tempDir("files");
+  const contract = join(files, "Framework Services Agreement (tabbed).docx");
+  const clauseCount = Number(process.env.TAB_CLAUSES) || LONG_CONTRACT_CLAUSES;
+  writeFileSync(contract, longContract(clauseCount, { tabbed: true }));
+  const launched = await launch(dataDir);
+  const { window } = launched;
+  try {
+    const contractId = await importWord(window, contract);
+    await msToOpen(window, contractId, ".ProseMirror h1", 1);
+    await expect(window.locator(".ProseMirror h1")).toHaveCount(clauseCount + 1, {
+      timeout: 120_000,
+    });
+    const tabs = await window.locator("[data-word-tab]").count();
+    const drawn: number[] = [];
+    for (let run = 0; run < 3; run++) {
+      await window.evaluate(async () => {
+        const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+        const mind = await core.createMind({ title: "Elsewhere" });
+        await core.changeLayout("main", {
+          type: "open",
+          item: { kind: "mind", mindId: mind.id },
+          where: { in: "place" },
+        });
+      });
+      drawn.push(
+        await window.evaluate(
+          async ({ id, wanted }) => {
+            const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+            const start = performance.now();
+            await core.changeLayout("main", {
+              type: "open",
+              item: { kind: "mind", mindId: id },
+              where: { in: "place" },
+            });
+            for (;;) {
+              const measured = document.querySelectorAll('[data-word-tab][style*="width"]').length;
+              if (measured >= wanted) break;
+              await new Promise((resolve) => requestAnimationFrame(resolve));
+            }
+            return Math.round(performance.now() - start);
+          },
+          { id: contractId, wanted: tabs },
+        ),
+      );
+    }
+
+    await installKeyLatency(window);
+    const clauses = window.locator(".ProseMirror > p:has([data-word-tab])");
+    const typeIn = async (index: number) => {
+      const target = clauses.nth(index);
+      await target.scrollIntoViewIfNeeded();
+      await target.click({ position: { x: 120, y: 6 } });
+      await window.keyboard.press("End");
+      for (let key = 0; key < 30; key++) {
+        await window.keyboard.type("x");
+        await window.waitForTimeout(40);
+      }
+      return takeKeyLatency(window);
+    };
+    const result = {
+      tabs,
+      tabsDrawnMs: { runs: drawn, median: median(drawn) },
+      typingFirstPage: await typeIn(1),
+      typingLastPage: await typeIn((await clauses.count()) - 2),
+    };
+    record("wordTabs", result);
     console.log(JSON.stringify(result, null, 2));
   } finally {
     await close(launched);
