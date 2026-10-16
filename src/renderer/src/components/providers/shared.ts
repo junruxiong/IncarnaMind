@@ -4,6 +4,7 @@ import type { Language } from "../../../../core/language";
 import {
   catalogProvider,
   catalogProviderOf,
+  fieldValueOf,
   isPreset,
   kindOfCatalogId,
 } from "../../../../core/providers/catalog/providers";
@@ -47,7 +48,11 @@ export function providerLabel(provider: ChatProvider, t: Translate, language: La
     ? keyProviderName(catalog.id, t, language)
     : t(`providers.kind.${provider.kind}`);
   if (catalog && catalog.endpoints.length > 0) {
-    // A hosted provider: its name, and its region when it has more than one.
+    // A hosted provider: its name, and its region when it has more than one, or the value its
+    // address was built from (an AWS region, a Cloudflare account).
+    const [first] = catalog.endpoints;
+    const value = first && fieldValueOf(first, provider.baseUrl);
+    if (value) return `${kind} · ${value}`;
     if (catalog.endpoints.length === 1) return kind;
     return provider.endpoint === "cn" || provider.endpoint === "intl"
       ? `${kind} · ${t(`providers.region.${provider.endpoint}`)}`
