@@ -223,8 +223,7 @@ export function createOAuthAccount<A extends OAuthAccountRecord>(options: {
     if (!json) return null;
     try {
       const value: unknown = JSON.parse(json);
-      if (typeof value !== "object" || value === null) return null;
-      return options.parse(value as Record<string, unknown>);
+      return isRecord(value) ? options.parse(value) : null;
     } catch {
       return null;
     }

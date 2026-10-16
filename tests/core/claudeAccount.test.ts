@@ -149,6 +149,38 @@ describe("Sign in with Claude", () => {
     expect(stored(keychain)).toContain(fake.issued[0]?.accessToken);
   });
 
+  test("a profile's extra parameters can't replace the protocol's own", async () => {
+    const fake = await startFakeAnthropic();
+    const taken = {
+      response_type: "token",
+      client_id: "other-client",
+      redirect_uri: "https://elsewhere.example.test/callback",
+      code_challenge: "chosen-challenge",
+      code_challenge_method: "plain",
+      state: "chosen-state",
+    };
+    const browser = createFakeClaudeBrowser(fake);
+    const keychain = createMemoryKeychain();
+    const core = startCore(await createTempDataFolder(), {
+      keychain,
+      browser,
+      claudeAccount: { ...fake.profile("page"), authorizeParams: { code: "true", ...taken } },
+    });
+
+    await signIn({ core, fake, browser, keychain, clock: manualClock() });
+
+    const params = Object.fromEntries(new URL(browser.opened[0] ?? "").searchParams);
+    expect(params).toMatchObject({
+      response_type: "code",
+      client_id: "test-client",
+      redirect_uri: `${fake.origin}/oauth/code/callback`,
+      code_challenge_method: "S256",
+      code: "true",
+    });
+    expect(params.code_challenge).not.toBe(taken.code_challenge);
+    expect(params.state).not.toBe(taken.state);
+  });
+
   test("a code with another state is refused and changes nothing; the page's address still works", async () => {
     const { core, fake, browser } = await setUp();
     const result = core.signInToClaude();
@@ -409,8 +441,10 @@ describe("Requests", () => {
     });
     expect(request?.headers["x-api-key"]).toBeUndefined();
     expect(request?.headers["anthropic-beta"]?.split(",")).toContain(BETA_FLAG);
-    const system = request?.body.system as { text: string }[];
-    expect(system.map((block) => block.text)).toEqual([SYSTEM_BLOCK, "IncarnaMind's own."]);
+    expect(request?.body.system).toEqual([
+      expect.objectContaining({ text: SYSTEM_BLOCK }),
+      expect.objectContaining({ text: "IncarnaMind's own." }),
+    ]);
   });
 
   test("an API key's requests carry nothing of the account route's profile", async () => {
@@ -474,6 +508,7 @@ describe("Requests", () => {
     const profile = {
       ...fake.profile("page"),
       authorizeUrl: "https://login.example.test/authorize",
+      revokeUrl: "https://revoke.example.test/oauth/revoke",
     };
     const browser = createFakeClaudeBrowser(fake);
     const keychain = createMemoryKeychain();
@@ -487,7 +522,9 @@ describe("Requests", () => {
     const services = (await core.listNetworkTraffic())
       .filter((traffic) => traffic.id === "claude-sign-in")
       .map((traffic) => traffic.service.id);
-    expect(services.sort()).toEqual(["https://login.example.test", fake.origin].sort());
+    expect(services.sort()).toEqual(
+      ["https://login.example.test", "https://revoke.example.test", fake.origin].sort(),
+    );
   });
 
   test("the account's token is never sent to another origin than the API's", async () => {
@@ -654,8 +691,10 @@ describe("Failures", () => {
         translate(language, "claudeAccount.problem.planLimitUntil", { time: "15:20" }),
       ).toContain("15:20");
     }
-    for (const [problem, words] of Object.entries(CLAUDE_ACCOUNT_PROBLEMS)) {
-      expect(words.waysBack, problem).toEqual(expected[problem as ClaudeAccountProblem]);
-    }
+    const waysBack = Object.entries(CLAUDE_ACCOUNT_PROBLEMS).map(([problem, words]) => [
+      problem,
+      words.waysBack,
+    ]);
+    expect(Object.fromEntries(waysBack)).toEqual(expected);
   });
 });

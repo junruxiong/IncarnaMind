@@ -1,7 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { build, type Rollup } from "vite";
+import { build } from "vite";
 import { describe, expect, test } from "vitest";
 import { ANTHROPIC_OAUTH } from "../../src/core/providers/claudeAccount/config";
 
@@ -30,7 +30,7 @@ async function bundle(on: boolean): Promise<string> {
     define: { __EXPERIMENTAL_SIGN_IN_ROUTES__: JSON.stringify(on) },
     build: { ssr: CONFIG, write: false, minify: false },
   });
-  const results = (Array.isArray(output) ? output : [output]) as Rollup.RollupOutput[];
+  const results = Array.isArray(output) ? output : "output" in output ? [output] : [];
   return results
     .flatMap((result) => result.output)
     .map((chunk) => (chunk.type === "chunk" ? chunk.code : ""))

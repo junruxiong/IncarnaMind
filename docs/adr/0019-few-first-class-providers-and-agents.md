@@ -33,7 +33,7 @@ A provider or agent moves between tiers with a one-line change: a field in the c
 
 ## Amendment: experimental sign-in routes
 
-A plan can also be reached through an experimental sign-in route: the User signs in with their own account, and the route's requests follow the shape the provider's subscription endpoint accepts. Such a route:
+A plan can also be reached through an experimental sign-in route, where the User signs in with their own account. Such a route:
 
 - is opt-in: off by default in the interface, never preselected or recommended, and listed under other ways;
 - says before sign-in, in three sentences with focus on the safe choice, that the provider may refuse or block it, that the account is the User's own, and that it can be turned off at any time in Settings › Models;
