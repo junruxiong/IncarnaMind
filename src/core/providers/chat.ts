@@ -994,14 +994,16 @@ export function createChat(options: {
      * For Answers (#29): the default model, or `choice` from a Question's model
      * picker, after checking readiness and getting consent for its service on
      * `flow` (automatic tagging passes "tagging"). `thinking: "off"` skips
-     * thinking where the model can, for a short request on the chat flow; the
-     * chat flow's other requests ask for a summary of the model's reasoning.
+     * thinking where the model can, for a short request on the chat flow;
+     * the chat flow's other requests ask for a summary of the model's
+     * reasoning, with a modest budget for `thinking: "answer"` and a larger
+     * one for `"careful"`.
      * Throws `ChatNotReadyError` or `ConsentDeclinedError`; nothing is sent then.
      */
     async prepareModel(
       choice?: ChatModelChoice,
       flow: DataFlowId = "chat",
-      thinking?: "off",
+      thinking?: Exclude<ChatModelSpec["thinking"], undefined>,
     ): Promise<PreparedChatModel> {
       const readiness = await readinessFor(choice ?? settings.get().user.chatModel, flow);
       if (!readiness.ready) throw new ChatNotReadyError(readiness);
