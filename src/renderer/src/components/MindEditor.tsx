@@ -8,10 +8,14 @@ import { createPortal } from "react-dom";
 import type * as Y from "yjs";
 import { ANSWER_BLOCK, MIND_CONTENT_FIELD } from "../../../core/api";
 import { writingTime } from "../../../shared/blockTimes";
-import { citationStyle } from "../../../shared/citationStyles";
+import { type CitationStyleId, citationStyle } from "../../../shared/citationStyles";
 import { translate } from "../../../shared/i18n";
 import { checkSentences } from "../checks";
-import { useCitationFormattingFor, useMindStyleChoice } from "../citationFormatting";
+import {
+  useCitationFormattingFor,
+  useMindCitationStyle,
+  useMindStyleChoice,
+} from "../citationFormatting";
 import { noteHandle, readMindHandle } from "../commands/handles";
 import { shortcutLabel } from "../commands/keymap";
 import { startCompareDocuments, useComparisons } from "../comparisons";
@@ -288,9 +292,7 @@ function MindEditorView({
   const importing = useWordFile(doc).progress !== null;
   /** The Mind's citation style, followed as it changes (#289). */
   const styleChoice = useMindStyleChoice(doc);
-  const { style } = styleChoice;
-  const styleRef = useRef(style);
-  styleRef.current = style;
+  const styleRef = useRef<CitationStyleId>(styleChoice.chosen ?? "numbered");
 
   const editor = useEditor(
     {
@@ -410,6 +412,8 @@ function MindEditorView({
 
   // The Citations and References in the Mind's citation style (#289), formatted off the
   // window's thread, and the footnotes numbered again when the style counts Citations otherwise.
+  const style = useMindCitationStyle(editor, styleChoice);
+  styleRef.current = style;
   useCitationFormattingFor(editor, style, mindId);
   useEffect(() => {
     if (!editor.isDestroyed) setCitationForm(editor.view, citationStyle(style).form);
@@ -656,9 +660,12 @@ function MindEditorView({
         {(style !== "numbered" || styleChoice.bibliography) && (
           <ReferencesBlock mindId={mindId} editor={editor} readOnly={readOnly} />
         )}
-        {!readOnly && !styleChoice.chosen && !styleChoice.promptDismissed && (
-          <CitationStylePrompt mindId={mindId} editor={editor} doc={doc} />
-        )}
+        {!readOnly &&
+          styleChoice.chosen === null &&
+          style === "numbered" &&
+          !styleChoice.promptDismissed && (
+            <CitationStylePrompt mindId={mindId} editor={editor} doc={doc} />
+          )}
       </div>
       {sheetSlot &&
         comparing &&

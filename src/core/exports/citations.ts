@@ -106,14 +106,26 @@ function runsOf(runs: FormattedCitations["clusters"][number]["runs"]): StyledRun
   return joined;
 }
 
+/** Full-width punctuation, which carries its own space. */
+const FULL_WIDTH = /[\u3000-\u303f\uff00-\uffef]/u;
+
+/** An entry with `mark` after it, as an export flags one whose record is too thin to cite. */
+function marked(runs: readonly StyledRun[], mark: string): StyledRun[] {
+  const last = runs.at(-1)?.text ?? "";
+  const space = FULL_WIDTH.test(last.slice(-1)) || FULL_WIDTH.test(mark[0] ?? "") ? "" : " ";
+  return [...runs, { text: `${space}${mark}` }];
+}
+
 /**
  * The Blocks with their Citations in `style`, and its Bibliography at the end: `format` is the
- * core's `formatCitations`. Blocks with no Citation come back as they were.
+ * core's `formatCitations`, and `needsDetails` the mark after an entry too thin to cite
+ * ("[needs details]"). Blocks with no Citation come back as they were.
  */
 export async function styleCitations(
   blocks: readonly Block[],
   style: CitationStyle,
   format: (request: CitationFormatRequest) => Promise<FormattedCitations>,
+  needsDetails: string,
 ): Promise<Block[]> {
   const works: CitedWork[][] = [];
   mapInlines(blocks, (content) => {
@@ -165,7 +177,10 @@ export async function styleCitations(
     {
       kind: "bibliography",
       heading: style.heading,
-      items: formatted.bibliography.map((entry) => ({ label: entry.label, runs: entry.runs })),
+      items: formatted.bibliography.map((entry) => ({
+        label: entry.label,
+        runs: entry.needsDetails ? marked(entry.runs, needsDetails) : entry.runs,
+      })),
       hangingIndent: formatted.hangingIndent,
     },
   ];
