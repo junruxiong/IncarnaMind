@@ -1160,6 +1160,21 @@ export async function pointAndClick(
 }
 
 /**
+ * A Mind's check badge card (#909): open already, as a question opens it,
+ * or opened from the badge, as a person opens it.
+ */
+export async function checkCard(window: Page, scope: Page | Locator = window): Promise<Locator> {
+  const card = window.getByTestId("check-card");
+  if (!(await card.isVisible())) {
+    await pointAndClick(window, scope.getByTestId("check-badge-open").first());
+  }
+  await expect(card).toBeVisible();
+  // It grows from the badge: a click while it moves could land on the page behind.
+  await motionSettled(window);
+  return card;
+}
+
+/**
  * Drags an element horizontally by `dx` CSS pixels, as a person grabs it: a
  * few pixels off its centre (a divider is a 1px rule with a wider strip to
  * grab), after sliding the mouse there.

@@ -2,17 +2,56 @@ import type { Editor } from "@tiptap/core";
 import { useEditorState } from "@tiptap/react";
 import type { MindCheckRun } from "../../../core/api";
 import { formatDateTime } from "../../../shared/dates";
-import { ProblemLine } from "../components/ProblemLine";
+import { buttonStyle } from "../components/ui";
 import { runStopText } from "../cost";
 import { useLanguage, useT } from "../i18n";
 import { checkMind, dismissMindCheck, useMindCheck } from "../mindCheck";
 import { shownClaims } from "./claimChecks";
 
 /**
- * Check this Mind's question (#737), on the line under the title before a
- * run billed per token: "Check this Mind's 48 sentences against this
- * Folder's Documents? About 52 calls, … · Check · Not now".
+ * A question before a run billed per token, in the check badge's card: what
+ * it would check, the estimate under it, then Check and Not now.
  */
+export function AskBlock({
+  testId,
+  question,
+  estimate,
+  check,
+  notNow,
+}: {
+  testId: string;
+  question: string;
+  estimate: string;
+  check: { label: string; testId: string; onClick(): void };
+  notNow: { label: string; testId: string; onClick(): void };
+}) {
+  return (
+    <div role="status" data-testid={testId} className="check-card-ask">
+      <p className="check-card-ask-title">{question}</p>
+      {estimate && <p>{estimate}</p>}
+      <div className="check-card-ask-actions">
+        <button
+          type="button"
+          data-testid={check.testId}
+          className={buttonStyle("primary", "sm")}
+          onClick={check.onClick}
+        >
+          {check.label}
+        </button>
+        <button
+          type="button"
+          data-testid={notNow.testId}
+          className={buttonStyle("ghost", "sm")}
+          onClick={notNow.onClick}
+        >
+          {notNow.label}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Check this Mind's question (#737): "Check this Mind's 48 sentences against this Folder's Documents?" */
 export function MindCheckAsk({ mindId }: { mindId: string }) {
   const t = useT();
   const language = useLanguage();
@@ -21,26 +60,24 @@ export function MindCheckAsk({ mindId }: { mindId: string }) {
   const where = asking.inFolder ? "folder" : "all";
   const count = new Intl.NumberFormat(language).format(asking.sentences);
   return (
-    <ProblemLine
-      role="status"
+    <AskBlock
       testId="mind-check-ask"
-      className="mind-health-line"
-      action={{
+      question={t(
+        asking.sentences === 1 ? `mindCheck.ask.${where}.one` : `mindCheck.ask.${where}`,
+        { count },
+      )}
+      estimate={asking.estimate}
+      check={{
         label: t("mindCheck.check"),
         testId: "mind-check-check",
         onClick: () => void checkMind(mindId, asking.mode, { allDocuments: asking.allDocuments }),
       }}
-      also={{
+      notNow={{
         label: t("mindCheck.cancel"),
         testId: "mind-check-cancel",
         onClick: () => dismissMindCheck(mindId),
       }}
-    >
-      {t(asking.sentences === 1 ? `mindCheck.ask.${where}.one` : `mindCheck.ask.${where}`, {
-        count,
-        estimate: asking.estimate,
-      })}
-    </ProblemLine>
+    />
   );
 }
 
