@@ -6,6 +6,8 @@ const SIDES = ["top", "right", "bottom", "left"] as const;
 const WORD_TABLE = `table[${WORD_LOOK_DOM_ATTRIBUTE}]`;
 /** An inch, for a column the file gives no width, such as one the User adds. */
 const UNSIZED_COLUMN = 72;
+/** Word's cell margins where neither the table nor its style sets them. */
+const CELL_MARGIN = 5.4;
 
 const attribute = (key: string) => `[${WORD_LOOK_DOM_ATTRIBUTE}="${key}"]`;
 
@@ -88,7 +90,7 @@ export function wordTableCss(scope: string, look: WordLook): string[] {
     `${scope} :where(.tableWrapper:has(> ${WORD_TABLE})) { margin-top: 0; }`,
     `${scope} :where(${WORD_TABLE}) { width: auto; border: 0; border-radius: 0; border-collapse: collapse; table-layout: fixed; }`,
     `${scope} :where(${WORD_TABLE} > colgroup > col) { width: ${pt(UNSIZED_COLUMN)}; }`,
-    `${scope} :where(${WORD_TABLE} > tbody > tr > :is(td, th)) { min-width: 0; padding: 0; border: 0; border-radius: 0; vertical-align: top; background: none; font: inherit; color: inherit; text-align: inherit; }`,
+    `${scope} :where(${WORD_TABLE} > tbody > tr > :is(td, th)) { min-width: 0; padding: 0 ${pt(CELL_MARGIN)}; border: 0; border-radius: 0; vertical-align: top; background: none; font: inherit; color: inherit; text-align: inherit; }`,
     `${scope} :where(${WORD_TABLE} > tbody > tr > * > * + *) { margin-top: 0; }`,
     ...Object.entries(look.tables).flatMap(([key, table]) =>
       tableRules(scope, key, table, look.width),
