@@ -83,8 +83,8 @@ const PROVIDERS = [
     dataUse: {
       training: "no",
       summary: {
-        en: "Doesn't train on API data without your permission. Doesn't keep content by default; Fable 5.1 needs 30 days of retention.",
-        zh: "未经你许可不用 API 数据训练模型。默认不保留内容；Fable 5.1 要求保留 30 天。",
+        en: "Doesn't train on API data without your permission. Doesn't keep content by default; Claude Fable 5.1, Fable 5, Mythos 5.1 and Mythos 5 need 30 days of retention.",
+        zh: "未经你许可不用 API 数据训练模型。默认不保留内容；Claude Fable 5.1、Fable 5、Mythos 5.1 和 Mythos 5 要求保留 30 天。",
       },
       url: "https://platform.claude.com/docs/en/manage-claude/api-and-data-retention",
     },
@@ -357,8 +357,8 @@ const PROVIDERS = [
     dataUse: {
       training: "unknown",
       summary: {
-        en: "DeepSeek's privacy policy lets it use personal data to train its models, with a right to opt out, and stores it in China. It doesn't cover what apps built on its API collect from their own users.",
-        zh: "DeepSeek 的隐私政策允许其使用个人数据训练模型，用户有权选择退出，数据存储在中国。基于其 API 开发的应用向自己的用户收集的数据不在该政策范围内。",
+        en: "DeepSeek's terms don't say whether it trains on what you send through its API. Its privacy policy lets it use personal data to train its models, with a right to opt out, and stores it in China.",
+        zh: "DeepSeek 的条款没有说明是否会用你通过 API 发送的内容训练模型。其隐私政策允许使用个人数据训练模型，用户有权选择退出，数据存储在中国。",
       },
       url: "https://cdn.deepseek.com/policies/en-US/deepseek-privacy-policy.html",
     },
@@ -462,10 +462,10 @@ const PROVIDERS = [
       images: "kimi-k2.6",
     },
     dataUse: {
-      training: "opt-out",
+      training: "unknown",
       summary: {
-        en: "Moonshot's terms let it use your content to improve its services; the international terms say so unless you agree otherwise in writing.",
-        zh: "月之暗面的条款允许其使用你的内容改进服务；国际版条款注明，除非你与其另有书面约定。",
+        en: "Moonshot's terms let it use your content to improve its services, unless you agree otherwise with it in writing; its China terms grant that use too. They don't say whether that includes training.",
+        zh: "月之暗面的条款允许其使用你的内容改进服务，除非你与其另有书面约定；中国站的条款同样授予这项使用权。条款没有说明其中是否包括训练模型。",
       },
       url: "https://platform.kimi.ai/docs/agreement/modeluse",
     },
