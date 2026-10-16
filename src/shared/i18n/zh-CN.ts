@@ -577,8 +577,10 @@ export const zhCN = {
   "claim.courtDecision.title": "本句引用了法院判决。",
   "claim.courtDecision.body":
     "IncarnaMind 无法核对这个判决是否存在、是否这样说。依赖它之前，请在你使用的法律数据库中查一下。",
+  "claim.citedCaseUnchecked":
+    "本句引用的判决不在你的文档中，因此尚未核对。依赖它之前，请在你使用的法律数据库中查一下。",
   "claim.courtDecision.held":
-    "这里引用了一项法院判决。引用的文字在你保存的判决书副本中找到（{document}，{location}）。它是否已被推翻或修改没有核对，引用前请在你的法律检索服务中查证。",
+    "本句引用了法院判决。引用的文字已在你保存的判决书副本中找到（{document}，{location}）。之后有没有法院推翻或修改这个判决，尚未核对；依赖它之前，请在你使用的法律数据库中查一下。",
   "claim.fixSentence": "修改这句话",
   "claim.findSources": "查找来源",
   "claim.searchWeb": "网页搜索",
@@ -2745,6 +2747,7 @@ export const zhCN = {
     "与文档矛盾：根据文档算出 {shown}，句子里写的是 {stated}。",
   "export.comment.sentence.contradicted.plain": "与文档矛盾。",
   "export.comment.sentence.unsupported": "无依据：你的文档里没有这样写。",
+  "export.comment.sentence.citedCaseUnchecked": "所引判决尚未核对：不在文档中。",
   "export.comment.sentence.unsupported.folder": "无依据：“{folder}”里没有这样写。",
   "export.comment.sentence.unsupported.differs":
     "无依据：你的文档里是另一种说法（“{quote}”，{source}）",

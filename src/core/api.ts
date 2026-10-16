@@ -4236,14 +4236,6 @@ export type UnlockDocumentResult =
   | { kind: "unlocked"; document: Document }
   | { kind: "wrong-password" };
 
-/**
- * What a sentence's check found of the court decision it cites. "held": the Passage that decides
- * it is in the opinion, among the Documents. "missing": a decision it cites isn't among them, so
- * no check can find it or say what it holds. Null: it cites none, or the opinion is there but
- * isn't what decided it.
- */
-export type CitedDecision = "held" | "missing";
-
 /** What one claim check found: the claim-check function's result (`checkClaim`). */
 export type ClaimCheckResult =
   | {
@@ -4260,7 +4252,13 @@ export type ClaimCheckResult =
       says: string | null;
       /** A figure worked out that decided it; null when a Passage did. */
       calculation: ClaimCalculation | null;
-      citedDecision: CitedDecision | null;
+      /**
+       * The sentence cites a court decision that none of the Documents holds: the citation itself
+       * isn't checked, whatever else backs the sentence.
+       */
+      citedCaseUnchecked: boolean;
+      /** The Passage that decides it is in the opinion of the court decision it cites, among the Documents. */
+      citedCaseFound: boolean;
       /** The versions of the Documents it read, each once. */
       versions: CheckedVersion[];
       excluded: LeftOutDocument[];
@@ -4336,7 +4334,9 @@ export interface ClaimCheckAttributes {
   says: string | null;
   /** A figure worked out that decided it; null when a Passage did. */
   calculation: ClaimCalculation | null;
-  citedDecision: CitedDecision | null;
+  /** See `ClaimCheckResult`. */
+  citedCaseUnchecked: boolean;
+  citedCaseFound: boolean;
   scope: ClaimCheckScope;
   versions: CheckedVersion[];
   excluded: LeftOutDocument[];

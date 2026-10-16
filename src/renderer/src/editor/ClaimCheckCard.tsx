@@ -322,9 +322,10 @@ function ClaimCard({
   const evidence = (decided && fromPassage) || differs ? check.evidence : null;
   const location = evidence ? citationLocation(evidence) : null;
   const where = location ? formatLocation(location, t) : null;
-  const decisionMissing = state === "unsupported" && check.citedDecision === "missing";
+  const decisionMissing = state === "unsupported" && check.citedCaseUnchecked;
+  const decisionUnchecked = decided && check.citedCaseUnchecked;
   const decisionHeld =
-    check.citedDecision === "held" &&
+    check.citedCaseFound &&
     (state === "supported" || state === "contradicted" || state === "unsupported") &&
     evidence !== null &&
     where !== null;
@@ -337,7 +338,12 @@ function ClaimCard({
   const savedPage = evidence
     ? documents.find((each) => each.id === evidence.documentId)?.web
     : undefined;
-  const savedFrom = savedPage && { address: savedPage.address, savedAt: savedPage.fetchedAt };
+  const savedFrom = savedPage && {
+    address: savedPage.address,
+    savedAt:
+      savedPage.versions.find((each) => each.contentHash === evidence?.contentHash)?.fetchedAt ??
+      savedPage.fetchedAt,
+  };
   const searchedFolder = !check.scope.widened && folderName !== null;
   const reason =
     shown.state === "not-checked"
@@ -394,6 +400,11 @@ function ClaimCard({
       {decisionMissing && (
         <p data-testid="claim-court-decision" className="citation-card-note">
           {t("claim.courtDecision.body")}
+        </p>
+      )}
+      {decisionUnchecked && (
+        <p data-testid="claim-cited-case-unchecked" className="citation-card-note">
+          {t("claim.citedCaseUnchecked")}
         </p>
       )}
       {decisionHeld && evidence && (

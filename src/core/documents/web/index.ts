@@ -403,12 +403,19 @@ export function createWebPages(options: WebPagesOptions) {
           failed(typed, new WebPageError("invalid-address", "Not an http or https address.")),
         );
       }
-      const saved = (id: string): WebPageResult => {
-        if (origin === "user") claimForUser(db, id, now());
-        return { outcome: "saved", document: documents.get(id), existing: true };
+      const saved = (id: string): WebPageResult => ({
+        outcome: "saved",
+        document: documents.get(id),
+        existing: true,
+      });
+      // A save that joins one a web search has under way is the User's too.
+      const claimed = (result: WebPageResult): WebPageResult => {
+        if (origin !== "user" || result.outcome !== "saved") return result;
+        claimForUser(db, result.document.id, now());
+        return { ...result, document: documents.get(result.document.id) };
       };
       const known = documentAtAddress(db, address);
-      if (known) return Promise.resolve(saved(known));
+      if (known) return Promise.resolve(claimed(saved(known)));
       return once(address, async () => {
         try {
           return await withPage(await pageFor(address, html, fetch), async (page) => {
@@ -428,7 +435,7 @@ export function createWebPages(options: WebPagesOptions) {
         } catch (error) {
           return failed(address, error);
         }
-      });
+      }).then(claimed);
     },
 
     /** See `CoreApi.fetchWebPageAgain`. */

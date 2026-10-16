@@ -22,12 +22,11 @@
  */
 
 import { generateText } from "ai";
-import { type CaseCitation, caseCitations, namesDecision } from "../../../shared/caseCitations";
+import { type CaseCitation, caseCitations, isOpinionOf } from "../../../shared/caseCitations";
 import type { FigureContext } from "../../../shared/figures";
 import type {
   CheckedVersion,
   Citation,
-  CitedDecision,
   ClaimCalculation,
   ClaimCheckFailure,
   ClaimCheckResult,
@@ -210,11 +209,13 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       if (signal.aborted) return notChecked("stopped");
       throw error;
     }
-    const citedDecision = (evidence: Citation | null): CitedDecision | null => {
-      if (decisions.length === 0) return null;
-      if (opinions.missing) return "missing";
-      return evidence && opinions.documentIds.has(evidence.documentId ?? "") ? "held" : null;
-    };
+    const citedCase = (evidence: Citation | null) => ({
+      citedCaseUnchecked: opinions.missing,
+      citedCaseFound:
+        !opinions.missing &&
+        evidence !== null &&
+        opinions.documentIds.has(evidence.documentId ?? ""),
+    });
 
     let reply = "";
     let failed: ProviderError | null = null;
@@ -260,7 +261,7 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
         evidence: worked.evidence,
         says: null,
         calculation: worked.calculation,
-        citedDecision: citedDecision(worked.evidence),
+        ...citedCase(worked.evidence),
         ...facts(),
       };
     }
@@ -269,7 +270,7 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       evidence: worked.evidence,
       says: null,
       calculation: worked.calculation,
-      citedDecision: citedDecision(worked.evidence),
+      ...citedCase(worked.evidence),
       ...facts(),
     };
     if (!finished || reply.trim() === "") return byCalculation ?? notChecked("empty");
@@ -287,7 +288,7 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
         evidence: nearest,
         says: null,
         calculation: null,
-        citedDecision: citedDecision(nearest),
+        ...citedCase(nearest),
         ...facts(),
       };
     };
@@ -310,7 +311,7 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
             evidence,
             says: null,
             calculation: null,
-            citedDecision: citedDecision(evidence),
+            ...citedCase(evidence),
             ...facts(),
           }
         );
@@ -321,7 +322,7 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       evidence,
       says: verdict.says,
       calculation: worked?.calculation ?? null,
-      citedDecision: citedDecision(evidence),
+      ...citedCase(evidence),
       ...facts(),
     };
   };
@@ -433,10 +434,16 @@ async function confirmContradiction(
 }
 
 interface Opinions {
-  /** The Documents that name a decision the sentence cites. */
+  /** The Documents that are the opinion of a decision the sentence cites. */
   documentIds: ReadonlySet<string>;
-  /** A decision the sentence cites is named by none of the Documents. */
+  /** A decision the sentence cites has no opinion among the Documents. */
   missing: boolean;
+}
+
+/** The start of a Document's first Unit: where an opinion's caption or citation is. */
+function startOf(documents: AnswerDocuments, documentId: string, contentHash: string): string {
+  const [first] = documents.pageTexts(documentId, contentHash, 1, 1);
+  return first?.text ?? documents.pageTexts(documentId, contentHash, null, null)[0]?.text ?? "";
 }
 
 async function opinionsOf(
@@ -448,11 +455,19 @@ async function opinionsOf(
   let missing = false;
   for (const decision of decisions) {
     const query = [decision.name, decision.cite].filter(Boolean).join(" ");
-    const named = (await documents.search(query, signal)).filter((each) =>
-      namesDecision(`${each.documentName} ${each.text}`, decision),
+    const found = await documents.search(query, signal);
+    const candidates = new Map(found.map((each) => [each.documentId, each]));
+    const opinions = [...candidates.values()].filter((each) =>
+      isOpinionOf(
+        {
+          name: each.documentName,
+          start: startOf(documents, each.documentId, each.contentHash),
+        },
+        decision,
+      ),
     );
-    if (named.length === 0) missing = true;
-    for (const each of named) documentIds.add(each.documentId);
+    if (opinions.length === 0) missing = true;
+    for (const each of opinions) documentIds.add(each.documentId);
   }
   return { documentIds, missing };
 }

@@ -250,11 +250,13 @@ const ABBREVIATIONS = [
   "Hosp",
 ].map(escaped);
 
-// A period ends a party's word only in an abbreviation or initials: "Act.", "Texas." and "IBM." end a sentence.
-const WORD = String.raw`(?:(?:[A-Z]\.){1,4}|(?:${ABBREVIATIONS.join("|")})\.|(?!(?:${INTRODUCERS})\b)[A-Z][\p{L}\p{N}'’&-]*)`;
+// A period ends a party's word only in initials or an abbreviation, and an abbreviation only before a lowercase word, a comma or another abbreviation: "…in the U.S. Brown v. Board" and "Acme Co. Smith v. Jones" end a sentence at the abbreviation.
+const ABBREVIATED = ABBREVIATIONS.join("|");
+const ABBREVIATION_ENDS = String.raw`(?=\s+[a-z]|\s+(?:${ABBREVIATED})\.|\s*[,;:)]|\s*$)`;
+const WORD = String.raw`(?:[A-Z]\.|(?:(?:[A-Z]\.){2,4}|(?:${ABBREVIATED})\.)${ABBREVIATION_ENDS}|(?!(?:${INTRODUCERS})\b)[A-Z][\p{L}\p{N}'’&-]*)`;
 const COMPANY_SUFFIX = String.raw`(?:,\s+(?:Inc|Ltd|LLC|L\.L\.C|LLP|L\.L\.P|Co|Corp|PC|P\.C|Jr|Sr)\.?)?`;
 const PARTY = `${WORD}(?:\\s+(?:${WORD}|of|the|and|for|ex|rel\\.|de|la|&)){0,6}${COMPANY_SUFFIX}`;
-const INTRODUCED = `(?:(?:${INTRODUCERS})\\.?,?\\s+)*`;
+const INTRODUCED = `(?<![\\p{L}\\p{N}.])(?:(?:${INTRODUCERS})\\.?,?\\s+)*`;
 const NAME = `${PARTY}\\s+v\\.?\\s+${PARTY}`;
 const ARTICLES = /^(?:(?:the|a|an)\s+)+/i;
 
@@ -307,10 +309,36 @@ const plain = (text: string) =>
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim();
 
-/** Whether a text, such as a Document's name or a Passage of it, names the decision: its citation, or both of its parties. */
-export function namesDecision(text: string, decision: CaseCitation): boolean {
-  const words = ` ${plain(text)} `;
-  if (words.includes(` ${plain(decision.cite)} `)) return true;
-  const parties = decision.name?.split(/\s+v\.?\s+/) ?? [];
-  return parties.length === 2 && parties.every((party) => words.includes(` ${plain(party)} `));
+/** How much of a Document's first Passage counts as its start: where a caption or a citation heads an opinion. */
+const START_LENGTH = 200;
+
+function hasCaption(text: string, decision: CaseCitation): boolean {
+  const parties = decision.name?.split(/\s+v\.?\s+/).map(plain) ?? [];
+  const [first, second] = parties;
+  if (parties.length !== 2 || !first || !second) return false;
+  const caption = new RegExp(
+    `(?:^| )${first}(?: \\S+){0,4} vs? (?:\\S+ ){0,3}${second}(?: |$)`,
+    "u",
+  );
+  const notCited = citedCases(text).reduceRight(
+    (rest, each) => `${rest.slice(0, each.from)} ${rest.slice(each.to)}`,
+    text,
+  );
+  return caption.test(plain(notCited));
+}
+
+/**
+ * Whether a Document is the opinion of a court decision: its caption (the parties joined by "v.")
+ * or its citation heads it, in its name or at the start of its first Passage. Another Document
+ * that cites the case, or names both parties, isn't.
+ */
+export function isOpinionOf(
+  document: { name: string; start: string },
+  decision: CaseCitation,
+): boolean {
+  const heads = [document.name, document.start.slice(0, START_LENGTH)];
+  const cite = plain(decision.cite);
+  return heads.some(
+    (text) => hasCaption(text, decision) || ` ${plain(text)} `.includes(` ${cite} `),
+  );
 }
