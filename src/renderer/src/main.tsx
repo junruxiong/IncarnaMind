@@ -9,10 +9,12 @@ import "./styles.css";
 import "./viewer/viewer.css";
 import { installErrorLog } from "./errorLog";
 import { installMotion } from "./motion";
+import { retryTaggingWhenOnline } from "./taggingRetry";
 import { installTestHooks } from "./viewerControls";
 
 installErrorLog();
 installTestHooks();
+retryTaggingWhenOnline();
 // Before the first paint: the system's Reduce motion holds until the settings say the User's choice.
 installMotion();
 

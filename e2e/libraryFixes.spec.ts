@@ -194,9 +194,32 @@ for (const language of ["en", "zh-CN"] as const) {
     );
     await expect(needs.getByTestId("library-organize-sends")).toHaveText(
       language === "en"
-        ? "Sends your Documents' text, Folder names and Tag definitions to llm.example.com"
-        : "会把文档文本、文件夹名称和标签说明发送给 llm.example.com",
+        ? "Each Document's name and the start of its text (for a scan, images of its first pages), and your Folders' and Tags' names and descriptions, go to llm.example.com"
+        : "每个文档的名称和开头的文字（扫描件则是前几页的图片），以及文件夹和标签的名称与描述，会发送给 llm.example.com",
     );
+
+    // The answer is kept: Organize runs with that model, and asks no more.
+    await pointAndClick(window, needs.getByTestId("library-organize-use"));
+    await expect(needs).toHaveCount(0);
+    const organized = () =>
+      bridge(window, async (core) => {
+        const { assignments } = await core.getLibrary();
+        return assignments.map((each) => `${each.status} ${each.model?.id ?? ""}`);
+      });
+    await expect.poll(organized).toEqual(["classified example-model"]);
+    await writeFile(join(library, "Tides.txt"), "Notes on the tides.\n");
+    await bridge(window, async (core) => {
+      const { settings } = await core.getLibrary();
+      await core.saveLibrarySettings({ ...settings, automatic: false });
+    });
+    await window.evaluate(
+      (path) =>
+        (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.addDocuments([path]),
+      join(library, "Tides.txt"),
+    );
+    await pointAndClick(window, lib.getByTestId("library-organize"));
+    await expect.poll(organized).toEqual(["classified example-model", "classified example-model"]);
+    await expect(needs).toHaveCount(0);
     await app.close();
   });
 }

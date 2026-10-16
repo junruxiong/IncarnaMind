@@ -48,9 +48,10 @@ import { documentTitle } from "./title";
  * text isn't that number written plainly). 9: #397 (a PDF's scanned pages
  * are read from their pictures; see `SCAN_CURRENT_SINCE`). 10: #756 (a saved
  * web page's pictures are read, their text in its section; see
- * `PICTURES_CURRENT_SINCE`).
+ * `PICTURES_CURRENT_SINCE`). 11: #901 (a PDF's pages keep the name they
+ * print, from its page labels or its headers and footers).
  */
-export const PROCESSING_VERSION = 10;
+export const PROCESSING_VERSION = 11;
 
 /**
  * Per kind, the oldest version whose Passages and Units are still what this
@@ -60,10 +61,12 @@ export const PROCESSING_VERSION = 10;
  * version 7 changed only Word files', which gain their comments; version 8
  * only Excel workbooks', whose rows Units gain their cells' numbers; version 9
  * only PDFs' scanned pages, which `SCAN_CURRENT_SINCE` reads again; version
- * 10 only web pages with saved pictures, which `PICTURES_CURRENT_SINCE` reads.
+ * 10 only web pages with saved pictures, which `PICTURES_CURRENT_SINCE` reads;
+ * version 11 only PDFs', whose pages gain their printed names and whose
+ * Passages come out as they were.
  */
 export const CURRENT_SINCE: Readonly<Record<DocumentKind, number>> = {
-  pdf: 4,
+  pdf: 11,
   text: 5,
   markdown: 5,
   docx: 7,

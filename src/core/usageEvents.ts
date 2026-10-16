@@ -73,6 +73,8 @@ const PROVIDER_KINDS = [
   "openai-compatible",
   "ollama",
   "chatgpt",
+  "claude-account",
+  "copilot",
 ] as const;
 const CITATION_CHECKS = [
   "checking",
