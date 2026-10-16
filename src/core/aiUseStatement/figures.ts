@@ -106,10 +106,10 @@ export interface CheckedSentence {
   /** Its first words, with "…" when it goes on, as it reads in the Mind now. */
   sentence: string;
   result: SentenceResult;
-  /** The model that checked it; null when the mark doesn't say. */
+  /** The model that checked it; null when the mark doesn't say, or when no check ran. */
   model: string | null;
-  /** When it was checked. ISO 8601, UTC. */
-  checkedAt: string;
+  /** When it was checked, ISO 8601 UTC; null when no check ran. */
+  checkedAt: string | null;
 }
 
 export interface AiUseFigures {
@@ -325,11 +325,12 @@ export function readFigures(sources: FigureSources): AiUseFigures {
     if (!result) continue;
     sentences[result === "changed" ? "needsRecheck" : result]++;
     const quoted = firstWords(comparableSentence(sentence), SENTENCE_WORDS);
+    const ran = result !== "notChecked";
     checked.push({
       sentence: quoted.cut ? `${quoted.text}…` : quoted.text,
       result,
-      model: sources.modelName(check.providerId, check.modelId),
-      checkedAt: check.checkedAt,
+      model: ran ? sources.modelName(check.providerId, check.modelId) : null,
+      checkedAt: ran ? check.checkedAt : null,
     });
   }
   // A Mind whose record holds no check (made before checks were recorded, or cleared) still used the model.

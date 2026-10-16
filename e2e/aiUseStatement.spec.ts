@@ -283,6 +283,7 @@ for (const language of ["en", "zh-CN"] as const) {
     const line = editor.locator(":scope > p").first();
     await expect(line).toHaveText(sentences.join(" "));
 
+    const started = new Date();
     await slideSelect(window, line, "Spring tides", { line, words: "harbour cliffs." });
     await pointAndClick(
       window,
@@ -298,12 +299,14 @@ for (const language of ["en", "zh-CN"] as const) {
     await expect(statement.getByRole("heading")).toHaveText(text.sections);
     const [uses, , listed] = await tablesOf(statement);
     expect(uses).toEqual([text.usesColumns, [text.checkedUse, "fake-model", "2"]]);
-    const on = formatDate(new Date(), language);
-    expect(listed).toEqual([
-      text.sentenceColumns,
-      [sentences[0], text.supported, "fake-model", on],
-      [sentences[1], text.unsupported, "fake-model", on],
+    const days = [formatDate(started, language), formatDate(new Date(), language)];
+    const [head, ...rows] = listed ?? [];
+    expect(head).toEqual(text.sentenceColumns);
+    expect(rows.map((row) => row.slice(0, 3))).toEqual([
+      [sentences[0], text.supported, "fake-model"],
+      [sentences[1], text.unsupported, "fake-model"],
     ]);
+    for (const row of rows) expect(days).toContain(row[3]);
     await expect(statement.getByText(text.noRecord)).toHaveCount(0);
     await screenshot(window, `ai-statement-checks-${language}`);
     await statement.locator(":scope > p").last().scrollIntoViewIfNeeded();

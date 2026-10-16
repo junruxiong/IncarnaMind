@@ -173,8 +173,8 @@ export function statementBlocks(
   const checkedRow = ({ sentence, result, model, checkedAt }: CheckedSentence) => [
     sentence,
     t(SENTENCE_LABELS[result]),
-    model ?? t("aiStatement.uses.modelUnknown"),
-    formatDate(checkedAt, language),
+    checkedAt === null ? "" : (model ?? t("aiStatement.uses.modelUnknown")),
+    checkedAt === null ? "" : formatDate(checkedAt, language),
   ];
 
   const resultRows = <K extends string>(
