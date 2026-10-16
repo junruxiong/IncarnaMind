@@ -134,11 +134,6 @@ function RunningText({ editor, mindId }: { editor: Editor; mindId: string }) {
   );
 }
 
-/**
- * The card's ways to check the whole Mind (the boards' "Check this Mind" and
- * "Check for contradictions"); each becomes its question, with the
- * estimate, Check and Not now, while it waits before a paid run.
- */
 function CheckActions({
   doc,
   mindId,
@@ -168,7 +163,7 @@ function CheckActions({
       {askingMind ? (
         <MindCheckAsk mindId={mindId} />
       ) : (
-        action("badge-check-mind", t("mindCheck.command"), t("badge.checkMind.about"), () =>
+        action("badge-check-mind", t("mindCheck.command"), t("mindCheck.command.purpose"), () =>
           startMindCheck(mindId, "all"),
         )
       )}
@@ -178,7 +173,7 @@ function CheckActions({
         action(
           "badge-check-contradictions",
           t("contradictions.command"),
-          t("badge.checkContradictions.about"),
+          t("contradictions.command.purpose"),
           () => void startContradictionCheck(mindId),
         )
       )}
@@ -349,7 +344,6 @@ function BadgeFrame({
   );
 }
 
-/** ↓ and ↑ go from one of the card's rows and buttons to the next, round to the first. */
 function stepThroughCard(event: KeyboardEvent<HTMLDivElement>) {
   if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
   const buttons = [...event.currentTarget.querySelectorAll<HTMLElement>("button:not(:disabled)")];

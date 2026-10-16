@@ -2,8 +2,9 @@ import type { Editor } from "@tiptap/core";
 import { useEditorState } from "@tiptap/react";
 import type { MindCheckRun } from "../../../core/api";
 import { formatDateTime } from "../../../shared/dates";
+import { MetaLine } from "../components/MetaLine";
 import { buttonStyle } from "../components/ui";
-import { runStopText } from "../cost";
+import { type EstimateLine, joinMeta, runStopParts } from "../cost";
 import { useLanguage, useT } from "../i18n";
 import { checkMind, dismissMindCheck, useMindCheck } from "../mindCheck";
 import { shownClaims } from "./claimChecks";
@@ -21,14 +22,14 @@ export function AskBlock({
 }: {
   testId: string;
   question: string;
-  estimate: string;
+  estimate: EstimateLine | null;
   check: { label: string; testId: string; onClick(): void };
   notNow: { label: string; testId: string; onClick(): void };
 }) {
   return (
     <div role="status" data-testid={testId} className="check-card-ask">
       <p className="check-card-ask-title">{question}</p>
-      {estimate && <p>{estimate}</p>}
+      {estimate && <p title={estimate.title}>{joinMeta(estimate.parts)}</p>}
       <div className="check-card-ask-actions">
         <button
           type="button"
@@ -110,9 +111,10 @@ export function CheckedWhen({ run }: { run: MindCheckRun }) {
     when,
   });
   return (
-    <span data-testid="health-checked-all">
-      {run.stop ? `${said} · ${runStopText(run.stop, t, language)}` : said}
-    </span>
+    <MetaLine
+      data-testid="health-checked-all"
+      parts={[said, ...(run.stop ? runStopParts(run.stop, t, language) : [])]}
+    />
   );
 }
 

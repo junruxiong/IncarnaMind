@@ -9,12 +9,13 @@ import {
   verificationOf,
 } from "../../../shared/verification";
 import { DocumentLineIcon } from "../components/lineIcons";
+import { MetaLine } from "../components/MetaLine";
 import { ProblemLine } from "../components/ProblemLine";
 import { ReadinessExplanation, readinessAction } from "../components/providers/ChatReadinessNotice";
 import { UnreadFilesLine } from "../components/UnreadFilesLine";
 import { buttonStyle } from "../components/ui";
 import { core } from "../core";
-import { estimateText, runStopText } from "../cost";
+import { type EstimateLine, estimateLine, joinMeta, runStopParts } from "../cost";
 import { useLanguage, useT } from "../i18n";
 import { enter } from "../motion";
 import { useAppStore } from "../store";
@@ -27,7 +28,7 @@ import {
   useVerify,
 } from "../verify";
 import { AnswerError } from "./AnswerView";
-import { coverageOf, sameCoverage, shownClaims } from "./claimChecks";
+import { coverageOf, type ShownClaim, sameCoverage, shownClaims } from "./claimChecks";
 import { ClaimMarkIcon, type ClaimMarkState } from "./icons";
 import { useMindModel, useRunModel } from "./ModelChip";
 import { Counted } from "./NoteHealth";
@@ -43,7 +44,19 @@ export function useVerification(doc: Y.Doc): Verification | null {
   return verification;
 }
 
-type VerifyRow = "contradicted" | "unsupported" | "notChecked" | "recheck" | "supported";
+const VERIFY_ROWS = ["contradicted", "unsupported", "notChecked", "recheck", "supported"] as const;
+type VerifyRow = (typeof VERIFY_ROWS)[number];
+
+const ROW_OF: Partial<Record<ShownClaim["shown"]["state"], VerifyRow>> = {
+  contradicted: "contradicted",
+  unsupported: "unsupported",
+  "needs-recheck": "recheck",
+  supported: "supported",
+};
+
+/** A claim no model checked stays not checked when it is edited, or "Checked 20 of 24" would count it. */
+const rowOf = (claim: ShownClaim): VerifyRow | undefined =>
+  claim.check.state === "not-checked" ? "notChecked" : ROW_OF[claim.shown.state];
 
 /** The checks of the document's sentences: how many there are and are going, and where each state's are. */
 function claimMarks(editor: Editor, pages: Verification["pages"]) {
@@ -61,13 +74,9 @@ function claimMarks(editor: Editor, pages: Verification["pages"]) {
     const id: unknown = doc.resolve(claim.from).parent.attrs.id;
     if (typeof id !== "string" || !(id in pages)) continue;
     marked++;
-    const state = claim.shown.state;
-    if (state === "checking") checking++;
-    else if (state === "supported") rows.supported.push(claim.from);
-    else if (state === "contradicted") rows.contradicted.push(claim.from);
-    else if (state === "unsupported") rows.unsupported.push(claim.from);
-    else if (state === "needs-recheck") rows.recheck.push(claim.from);
-    else rows.notChecked.push(claim.from);
+    if (claim.shown.state === "checking") checking++;
+    const row = rowOf(claim);
+    if (row) rows[row].push(claim.from);
   }
   return { marked, checking, rows, coverage: coverageOf(shownClaims(editor.state)) };
 }
@@ -77,7 +86,7 @@ const sameMarks = (a: ReturnType<typeof claimMarks>, b: ReturnType<typeof claimM
   a.marked === b.marked &&
   a.checking === b.checking &&
   sameCoverage(a.coverage, b.coverage) &&
-  (Object.keys(a.rows) as VerifyRow[]).every(
+  VERIFY_ROWS.every(
     (row) =>
       a.rows[row].length === b.rows[row].length &&
       a.rows[row].every((at, index) => at === b.rows[row][index]),
@@ -106,14 +115,14 @@ export function useVerifyState(
   const total = claims?.length ?? 0;
   const asking = claims !== null && total > 0 && marks.marked === 0 && running === null;
 
-  const [estimate, setEstimate] = useState<string | null>(null);
+  const [estimate, setEstimate] = useState<EstimateLine | null>(null);
   useEffect(() => {
     if (!asking) return;
     let current = true;
     core
       .estimateRun({ items: total, ...(model && { model }) })
       .then((result) => {
-        if (current) setEstimate(estimateText(result, t, language));
+        if (current) setEstimate(estimateLine(result, t, language));
       })
       .catch(() => {
         // No model to estimate for: checking says why.
@@ -167,13 +176,6 @@ export function VerifyFrom({ verification }: { verification: Verification }) {
   );
 }
 
-const VERIFY_ROWS: readonly VerifyRow[] = [
-  "contradicted",
-  "unsupported",
-  "notChecked",
-  "recheck",
-  "supported",
-];
 const VERIFY_MARKS: Record<VerifyRow, ClaimMarkState> = {
   contradicted: "contradicted",
   unsupported: "unsupported",
@@ -297,7 +299,11 @@ export function VerifyCard({
         <p className="check-card-ask-title">
           {t(inFolder ? "verify.ask.folder" : "verify.ask.all")}
         </p>
-        {estimate && <p data-testid="verify-estimate">{estimate}</p>}
+        {estimate && (
+          <p data-testid="verify-estimate" title={estimate.title}>
+            {joinMeta(estimate.parts)}
+          </p>
+        )}
         <div className="check-card-ask-actions">
           <button
             type="button"
@@ -319,26 +325,35 @@ export function VerifyCard({
       </div>
     );
   } else {
-    const look = marks.marked - marks.checking - marks.rows.supported.length;
+    const look = marks.rows.contradicted.length + marks.rows.unsupported.length;
+    const notChecked = marks.rows.notChecked.length;
     const stopped = outcome?.kind === "checked" ? outcome.stop : null;
     const summary = [
-      t(marks.marked === 1 ? "verify.checked.one" : "verify.checked", {
-        count: format(marks.marked),
-      }),
+      notChecked > 0
+        ? t(marks.marked === 1 ? "verify.checkedOf.one" : "verify.checkedOf", {
+            checked: format(marks.marked - notChecked),
+            count: format(marks.marked),
+          })
+        : t(marks.marked === 1 ? "verify.checked.one" : "verify.checked", {
+            count: format(marks.marked),
+          }),
       ...(look > 0
         ? [t(look === 1 ? "verify.needLook.one" : "verify.needLook", { count: format(look) })]
         : []),
-      ...(stopped ? [runStopText(stopped, t, language)] : []),
-    ].join(" · ");
+      ...(stopped ? runStopParts(stopped, t, language) : []),
+    ];
     body = (
       <div ref={doneRef} data-testid="verify-done" className="check-rows">
-        <p className="check-card-summary">{summary}</p>
+        <MetaLine parts={summary} className="check-card-summary" />
         {VERIFY_ROWS.filter((row) => marks.rows[row].length > 0).map((row) => {
           const count = marks.rows[row].length;
-          const text = t(
-            row === "recheck" && count === 1 ? "verify.row.recheck.one" : `verify.row.${row}`,
-            { count: format(count) },
-          );
+          const shown = { count: format(count) };
+          const text =
+            row === "notChecked"
+              ? t("verify.notChecked", shown)
+              : row === "recheck"
+                ? t(count === 1 ? "verify.recheck.one" : "verify.recheck", shown)
+                : t(`verify.row.${row}`, shown);
           return (
             <button
               key={row}
@@ -347,7 +362,7 @@ export function VerifyCard({
               data-count={count}
               data-part={row === "supported" ? "found" : row}
               className="check-row"
-              aria-label={t("verify.needLook.next", { part: text })}
+              aria-label={t("verify.next", { part: text })}
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => goToNext(row)}
             >

@@ -103,7 +103,6 @@ export function useHealth(editor: Editor, skipped: ReadonlySet<string>): Health 
   return health;
 }
 
-/** The rows, after the problems' first, in the badge's card. */
 const ROWS: readonly HealthPart[] = [
   "contradicted",
   "unsupported",
@@ -256,9 +255,9 @@ export function HealthCard({
         {health.noCitation.length > 0 && row("noCitation")}
       </div>
       {checkedAll && !running && (
-        <p className="check-card-note">
+        <div className="check-card-note">
           <CheckedWhen run={checkedAll} />
-        </p>
+        </div>
       )}
       {((smallModel && rows.length > 0) ||
         (contradictions?.kind !== "asking" && contradictions?.run.smallModel)) && (

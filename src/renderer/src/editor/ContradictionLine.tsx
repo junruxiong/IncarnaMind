@@ -9,7 +9,7 @@ import {
 } from "../contradictions";
 import { formatMoney } from "../cost";
 import { useLanguage, useT } from "../i18n";
-import { contradictionOutcomeText } from "./contradictionOutcome";
+import { contradictionOutcomeParts } from "./contradictionOutcome";
 import { AskBlock } from "./MindCheckLine";
 
 /**
@@ -21,9 +21,10 @@ export function ContradictionLine({ doc, mindId }: { doc: Y.Doc; mindId: string 
   const t = useT();
   const language = useLanguage();
   const shown = useContradictionLine(doc, mindId);
-  const outcome = (run: ContradictionCheckOutcome) => contradictionOutcomeText(run, t, language);
+  const outcome = (run: ContradictionCheckOutcome) => contradictionOutcomeParts(run, t, language);
 
   if (shown?.kind === "found") {
+    const [first = "", ...rest] = outcome(shown.run);
     return (
       <>
         <div className="check-card-sep" />
@@ -31,23 +32,22 @@ export function ContradictionLine({ doc, mindId }: { doc: Y.Doc; mindId: string 
           role="status"
           testId="contradictions-found"
           className="mind-health-line"
+          details={rest}
           action={{
             label: t("checks.close"),
             testId: "contradictions-close",
             onClick: () => dismissContradictions(mindId),
           }}
         >
-          {outcome(shown.run)}
+          {first}
         </ProblemLine>
       </>
     );
   }
   if (shown?.kind === "watched") {
     const watched = shown.run;
-    const result = t("contradictions.after", {
-      document: watched.documentName,
-      result: outcome(watched),
-    });
+    const [first = "", ...rest] = outcome(watched);
+    const cost = watched.cost ? [formatMoney(watched.cost, language)] : [];
     return (
       <>
         <div className="check-card-sep" />
@@ -55,6 +55,7 @@ export function ContradictionLine({ doc, mindId }: { doc: Y.Doc; mindId: string 
           role="status"
           testId="contradictions-watched"
           className="mind-health-line"
+          details={[...rest, ...cost]}
           action={{
             label: t("checks.close"),
             testId: "contradictions-watched-close",
@@ -62,9 +63,7 @@ export function ContradictionLine({ doc, mindId }: { doc: Y.Doc; mindId: string 
             onClick: () => clearContradictionWatch(doc.getMap(MIND_SETTINGS_FIELD)),
           }}
         >
-          {watched.cost
-            ? t("contradictions.cost", { result, cost: formatMoney(watched.cost, language) })
-            : result}
+          {t("contradictions.after", { document: watched.documentName, result: first })}
         </ProblemLine>
       </>
     );

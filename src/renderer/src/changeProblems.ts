@@ -69,6 +69,8 @@ export function problemText(t: Translate, problem: MindProblem, mind: string): s
       return t("mindCall.failed.changed", { mind });
     case "content-not-own":
       return t("mindCall.failed.contentNotOwn", { mind });
+    case "copy":
+      return t("mindCall.failed.copy", { mind, text: problem.text });
     case "stopped":
       return t("mindCall.failed.stopped", { mind });
     case "no-table":

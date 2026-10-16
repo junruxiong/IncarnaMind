@@ -9,7 +9,6 @@ export interface BadgeInput {
   marks: Readonly<Partial<Record<HealthPart, number>>>;
   /** Sentences that make a claim no check has looked at. */
   toCheck: number;
-  /** "Checking 12 of 24", or a check's own words, while one runs. */
   running: boolean;
   /** A question before a run billed per token waits. */
   asking: boolean;
