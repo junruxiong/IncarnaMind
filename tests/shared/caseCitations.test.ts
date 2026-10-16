@@ -142,6 +142,34 @@ describe("Court decisions a sentence cites", () => {
     expect(caseCitations(sentence)).toEqual([expect.objectContaining({ name })]);
   });
 
+  test.each([
+    [
+      "eBay Inc. v. MercExchange, L.L.C., 547 U.S. 388 (2006).",
+      "eBay Inc. v. MercExchange, L.L.C.",
+    ],
+    [
+      "St. Paul Fire & Marine Ins. Co. v. Barry, 438 U.S. 531 (1978).",
+      "St. Paul Fire & Marine Ins. Co. v. Barry",
+    ],
+    [
+      "Mt. Hood Stages, Inc. v. Greyhound Corp., 616 F.2d 394 (9th Cir. 1980).",
+      "Mt. Hood Stages, Inc. v. Greyhound Corp.",
+    ],
+    [
+      "See also iRobot Corp. v. SharkNinja, 100 F.4th 5 (Fed. Cir. 2024).",
+      "iRobot Corp. v. SharkNinja",
+    ],
+    [
+      "Under St. Paul Fire & Marine Ins. Co. v. Barry, 438 U.S. 531 (1978), it holds.",
+      "St. Paul Fire & Marine Ins. Co. v. Barry",
+    ],
+  ])(
+    "a name with a lower-case brand or an abbreviation that leads it is whole: %j",
+    (sentence, name) => {
+      expect(caseCitations(sentence)).toEqual([expect.objectContaining({ name })]);
+    },
+  );
+
   test("finds each of the decisions a sentence cites, in order", () => {
     expect(
       caseCitations(
@@ -188,25 +216,84 @@ describe("Whether a Document is the opinion of a decision", () => {
   const document = (name: string, start = "") => ({ name, start });
   const PREAMBLE =
     "To: the client team. From: the construction group. Date: 4 March 2025. Subject: payment rights on the Brazos job. This note sets out where we stand on lien rights and what we recommend before the next payment is due. ";
+  const WESTLAW_HEADER = [
+    "Westlaw. © 2025 Thomson Reuters. No claim to original U.S. Government Works.",
+    "KeyCite Yellow Flag - Negative Treatment. Distinguished by Other Court v. Another Party, Tex.App.-Dallas, February 3, 2023",
+    "512 S.W.3d 101",
+    "Supreme Court of Texas.",
+    "Argued December 6, 2016. Opinion Delivered March 3, 2017. Rehearing Denied June 2, 2017.",
+    "Synopsis: Background: Supplier of construction materials brought action against general contractor to enforce a statutory lien on the improved property after delivery of the materials to the job site.",
+  ];
 
   test.each([
     document("Hallmark Builders v Rio Grande Supply.pdf"),
     document("hallmark_builders_v_rio_grande_supply_2017.pdf"),
+    document("Hallmark Builders v Rio Grande Supply, 512 S.W.3d 101 (Tex. 2017).pdf"),
+    document("Hallmark Builders, Inc. v. Rio Grande Supply Co. No. 15-0123.pdf"),
+    document("512 S.W.3d 101.pdf"),
     document(
       "Opinion 15-0123.pdf",
-      "Supreme Court of Texas. Hallmark Builders, Inc., Petitioner, v. Rio Grande Supply Co., Respondent. No. 15-0123.",
+      "Supreme Court of Texas.\nHallmark Builders, Inc., Petitioner, v. Rio Grande Supply Co., Respondent.\nNo. 15-0123.",
     ),
     document(
       "Opinion.pdf",
-      "IN THE SUPREME COURT OF TEXAS\n\nHallmark Builders, Inc.,\nPetitioner,\nv.\nRio Grande Supply Co.,\nRespondent.",
+      "IN THE SUPREME COURT OF TEXAS\n\nHallmark Builders, Inc.,\nPetitioner,\nv.\nRio Grande Supply Co.,\nRespondent.\n\nNo. 15-0123",
     ),
-    document("Slip.pdf", "Cite as 512 S.W.3d 101 (Tex. 2017). Opinion of the Court."),
-    document("512 S.W.3d 101.pdf"),
-  ])("%j is, by its caption or its citation at its head", (found) => {
+    document("Slip.pdf", "Cite as 512 S.W.3d 101 (Tex. 2017)\nOpinion of the Court."),
+    document(
+      "Reporter.pdf",
+      [
+        ...WESTLAW_HEADER,
+        "Hallmark Builders, Inc., Petitioner,",
+        "v.",
+        "RIO GRANDE SUPPLY CO., Respondent.",
+        "No. 15-0123",
+      ].join("\n"),
+    ),
+  ])("%j is: its caption or its citation stands on its own line, near the start", (found) => {
     expect(isOpinionOf(found, hallmark)).toBe(true);
   });
 
+  test("an opinion with a long header before its caption counts", () => {
+    const header = WESTLAW_HEADER.join("\n");
+    expect(header.length).toBeGreaterThan(300);
+    expect(
+      isOpinionOf(
+        document("Opinion.pdf", `${header}\nHallmark Builders v. Rio Grande Supply\nNo. 15-0123`),
+        hallmark,
+      ),
+    ).toBe(true);
+  });
+
   test.each([
+    [
+      "a short memo whose first Passage cites the case",
+      document(
+        "Memo.pdf",
+        "A supplier lien attaches when the materials are delivered. See Hallmark Builders v. Rio Grande Supply, 512 S.W.3d 101 (Tex. 2017).",
+      ),
+    ],
+    [
+      "a memo that cites the case on a line of its own after a lead-in",
+      document(
+        "Memo.pdf",
+        "See Hallmark Builders v. Rio Grande Supply, 512 S.W.3d 101 (Tex. 2017).\nA supplier lien attaches on delivery.",
+      ),
+    ],
+    [
+      "a case cited with the words In before it",
+      document(
+        "Brief.pdf",
+        "In Hallmark Builders v. Rio Grande Supply, 512 S.W.3d 101 (Tex. 2017), the court held it.",
+      ),
+    ],
+    [
+      "a sentence that begins with the case and goes on",
+      document(
+        "Brief.pdf",
+        "Hallmark Builders v. Rio Grande Supply, 512 S.W.3d 101 (Tex. 2017), held that a supplier lien attaches.",
+      ),
+    ],
     [
       "a memo that cites the case further in",
       document(
@@ -227,6 +314,14 @@ describe("Whether a Document is the opinion of a decision", () => {
         "Notes.pdf",
         "Hallmark Builders was paid late on three jobs this year, and the owners have asked about Rio Grande Supply, the supplier on the Tulsa job.",
       ),
+    ],
+    [
+      "a Document named for the case and an alert",
+      document("Hallmark Builders v Rio Grande Supply - client alert.pdf"),
+    ],
+    [
+      "a Document named for the case and a memo",
+      document("Hallmark Builders v Rio Grande Supply memo.docx"),
     ],
     [
       "an unrelated Document",
@@ -273,10 +368,13 @@ describe("Whether a Document is the opinion of a decision", () => {
     const neutral = { name: null, cite: "[2024] UKSC 5" };
     expect(
       isOpinionOf(
-        document("Judgment.pdf", "[2024] UKSC 5. Judgment given on 5 March 2024."),
+        document("Judgment.pdf", "[2024] UKSC 5\nJudgment given on 5 March 2024."),
         neutral,
       ),
     ).toBe(true);
     expect(isOpinionOf(document("Notes.pdf", "The UKSC sat in 2024"), neutral)).toBe(false);
+    expect(
+      isOpinionOf(document("Notes.pdf", "See the ruling at [2024] UKSC 5 for the rule."), neutral),
+    ).toBe(false);
   });
 });

@@ -77,6 +77,16 @@ const MEMO: SourceFile = {
   ].join("\n"),
 };
 
+const SHORT_MEMO: SourceFile = {
+  name: "Lien note.md",
+  contents: `# Lien note\n\n${LIEN}. See ${CITATION}.`,
+};
+
+const NAMED_ALERT: SourceFile = {
+  name: "Hallmark Builders v Rio Grande Supply - client alert.md",
+  contents: `# Client alert\n\nThe Supreme Court of Texas decided a lien case this year. ${LIEN}.`,
+};
+
 const CLIENT_ALERT: SourceFile = {
   name: "Client alert 2017.md",
   contents: [
@@ -179,6 +189,8 @@ describe("A sentence that cites a court decision", () => {
 
   test.each([
     ["a memo that cites it", MEMO],
+    ["a short memo whose first Passage cites it", SHORT_MEMO],
+    ["a Document named for the case and a client alert", NAMED_ALERT],
     ["a client alert that names both parties", CLIENT_ALERT],
   ])(
     "is not found in %s: the sentence it backs stays Supported, and its cited case is unchecked",

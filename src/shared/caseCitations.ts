@@ -253,7 +253,9 @@ const ABBREVIATIONS = [
 // A period ends a party's word only in initials or an abbreviation, and an abbreviation only before a lowercase word, a comma or another abbreviation: "…in the U.S. Brown v. Board" and "Acme Co. Smith v. Jones" end a sentence at the abbreviation.
 const ABBREVIATED = ABBREVIATIONS.join("|");
 const ABBREVIATION_ENDS = String.raw`(?=\s+[a-z]|\s+(?:${ABBREVIATED})\.|\s*[,;:)]|\s*$)`;
-const WORD = String.raw`(?:[A-Z]\.|(?:(?:[A-Z]\.){2,4}|(?:${ABBREVIATED})\.)${ABBREVIATION_ENDS}|(?!(?:${INTRODUCERS})\b)[A-Z][\p{L}\p{N}'’&-]*)`;
+const NAME_LEADING = String.raw`(?:St|Mt|Ft|Dr|Mr|Mrs|Ms)\.(?=\s+[A-Z])`;
+const CAMEL_CASE = String.raw`[a-z]+[A-Z][\p{L}\p{N}'’&-]*`;
+const WORD = String.raw`(?:${NAME_LEADING}|[A-Z]\.|(?:(?:[A-Z]\.){2,4}|(?:${ABBREVIATED})\.)${ABBREVIATION_ENDS}|${CAMEL_CASE}|(?!(?:${INTRODUCERS})\b)[A-Z][\p{L}\p{N}'’&-]*)`;
 const COMPANY_SUFFIX = String.raw`(?:,\s+(?:Inc|Ltd|LLC|L\.L\.C|LLP|L\.L\.P|Co|Corp|PC|P\.C|Jr|Sr)\.?)?`;
 const PARTY = `${WORD}(?:\\s+(?:${WORD}|of|the|and|for|ex|rel\\.|de|la|&)){0,6}${COMPANY_SUFFIX}`;
 const INTRODUCED = `(?<![\\p{L}\\p{N}.])(?:(?:${INTRODUCERS})\\.?,?\\s+)*`;
@@ -309,36 +311,49 @@ const plain = (text: string) =>
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim();
 
-/** How much of a Document's first Passage counts as its start: where a caption or a citation heads an opinion. */
-const START_LENGTH = 200;
+const START_LENGTH = 1500;
+const MAX_CAPTION_LINES = 8;
 
-function hasCaption(text: string, decision: CaseCitation): boolean {
-  const parties = decision.name?.split(/\s+v\.?\s+/).map(plain) ?? [];
-  const [first, second] = parties;
-  if (parties.length !== 2 || !first || !second) return false;
-  const caption = new RegExp(
-    `(?:^| )${first}(?: \\S+){0,4} vs? (?:\\S+ ){0,3}${second}(?: |$)`,
-    "u",
+const BESIDE = String.raw`(?:\S*\d\S*|no|nos|cite|as|inc|co|corp|ltd|llc|llp|lp|plc|et|al|company|incorporated|corporation|limited|petitioners?|respondents?|appell(?:ant|ee)s?|plaintiffs?|defendants?)`;
+
+const EXTENSION = /\.(?:pdf|docx?|txt|md|html?|rtf|pptx?|xlsx?|csv)$/iu;
+
+const lineWords = (line: string) => plain(line.replace(/\([^)]*\)/gu, " "));
+
+function standsAlone(lines: readonly string[], decision: CaseCitation): boolean {
+  const [first, second] = decision.name?.split(/\s+v\.?\s+/).map(plain) ?? [];
+  const cite = plain(decision.cite);
+  const beside = `(?:${BESIDE}|${cite.split(" ").join("|")})`;
+  const alone = [
+    new RegExp(`^(?:cite as )?${cite}(?: ${beside})*$`, "u"),
+    ...(first && second
+      ? [new RegExp(`^${first}(?: \\S+){0,4} vs? (?:\\S+ ){0,3}${second}(?: ${beside})*$`, "u")]
+      : []),
+  ];
+  return lines.some((_, from) =>
+    Array.from({ length: Math.min(MAX_CAPTION_LINES, lines.length - from) }, (_, count) =>
+      lines.slice(from, from + count + 1).join(" "),
+    ).some((window) => alone.some((each) => each.test(window))),
   );
-  const notCited = citedCases(text).reduceRight(
-    (rest, each) => `${rest.slice(0, each.from)} ${rest.slice(each.to)}`,
-    text,
-  );
-  return caption.test(plain(notCited));
 }
 
 /**
- * Whether a Document is the opinion of a court decision: its caption (the parties joined by "v.")
- * or its citation heads it, in its name or at the start of its first Passage. Another Document
- * that cites the case, or names both parties, isn't.
+ * Whether a Document is the opinion of a court decision: its caption (the parties joined by
+ * "v.") or its citation stands on a line of its own, with at most the citation, a docket or a
+ * year beside it, at the start of its first Passage, or is its whole name. A Document that cites
+ * the case in a sentence, names both parties, or is a memo or an alert about it isn't.
  */
 export function isOpinionOf(
   document: { name: string; start: string },
   decision: CaseCitation,
 ): boolean {
-  const heads = [document.name, document.start.slice(0, START_LENGTH)];
-  const cite = plain(decision.cite);
-  return heads.some(
-    (text) => hasCaption(text, decision) || ` ${plain(text)} `.includes(` ${cite} `),
+  const lines = document.start
+    .slice(0, START_LENGTH)
+    .split(/\r?\n/u)
+    .map(lineWords)
+    .filter((line) => line !== "");
+  return (
+    standsAlone([lineWords(document.name.replace(EXTENSION, ""))], decision) ||
+    standsAlone(lines, decision)
   );
 }
