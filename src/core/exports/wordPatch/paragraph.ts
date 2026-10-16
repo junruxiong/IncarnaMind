@@ -66,7 +66,6 @@ export interface Token {
   pending: Pendings;
   /** It is AI text. */
   ai: boolean;
-  /** The check of its sentence, when it isn't good. */
   sentence?: FailedSentence;
 }
 

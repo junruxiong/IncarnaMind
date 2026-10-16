@@ -302,7 +302,6 @@ export type Authorship = "ai" | "own" | "neither";
 export interface Piece {
   key: object;
   authorship: Authorship;
-  /** The check of its sentence, when it isn't good. */
   sentence?: FailedSentence | undefined;
 }
 
@@ -369,6 +368,7 @@ export class Review {
   private open: number | null = null;
   private sentences: SentencePassages = { starts: new Map(), ends: new Map() };
   private readonly openSentences = new Map<string, number>();
+  private readonly commented = new Map<string, FailedSentence>();
   private readonly trackings = new Map<string, Tracking>();
 
   constructor(
@@ -414,14 +414,16 @@ export class Review {
   }
 
   /**
-   * The part's text with no passage of AI text left open: one whose end
-   * wasn't written (it fell where the text couldn't be written again) loses
-   * its comment rather than leave Word a range without an end.
+   * The part's text with no comment's range left open, of AI text or of a
+   * sentence: one whose end wasn't written (it fell where the text couldn't
+   * be written again) loses its comment rather than leave Word a range
+   * without an end.
    */
   finish(text: string): string {
     const unfinished = [...this.openSentences.values()];
     if (this.open !== null) unfinished.push(this.open);
     this.open = null;
+    for (const id of this.openSentences.keys()) this.commented.delete(id);
     this.openSentences.clear();
     let out = text;
     for (const id of unfinished) {
@@ -432,6 +434,10 @@ export class Review {
       out = out.replace(commentStart(id), "");
     }
     return out;
+  }
+
+  commentedSentences(): FailedSentence[] {
+    return [...this.commented.values()];
   }
 
   private add(text: string): number {
@@ -447,6 +453,7 @@ export class Review {
     if (sentence) {
       const id = this.add(this.labels.failedSentence(sentence));
       this.openSentences.set(sentence.id, id);
+      this.commented.set(sentence.id, sentence);
       xml += commentStart(id);
     }
     if (this.passages.starts.has(key) && this.open === null) {

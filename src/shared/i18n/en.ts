@@ -2858,7 +2858,7 @@ export const en = {
   "export.comment.sentence.unsupported": "Unsupported: nothing in your Documents says this.",
   "export.comment.sentence.unsupported.folder": "Unsupported: nothing in “{folder}” says this.",
   "export.comment.sentence.unsupported.differs":
-    "Unsupported: your Documents say something different: “{quote}” ({source})",
+    "Unsupported: your Documents say something different (“{quote}”, {source})",
   "export.comment.sentence.needs-recheck.edited": "Needs re-check: changed since it was checked.",
   "export.comment.sentence.needs-recheck.new-version":
     "Needs re-check: a Document it was checked against has a new version.",
