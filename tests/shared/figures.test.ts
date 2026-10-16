@@ -309,7 +309,7 @@ const GOLDEN: { name: string; context: FigureContext; cases: Case[] }[] = [
       ["(38.9%)", [f("(38.9%)", 0.389, { unit: "%", ambiguous: ["sign"] })]],
       ["(1)", []],
       ["(2025)", []],
-      ["(US$170 million)", [f("(US$170 million)", -170000000, { unit: "USD", scale: "million" })]],
+      ["(US$170 million)", [f("US$170 million", 170000000, { unit: "USD", scale: "million" })]],
       [
         "revenue of RMB 1.2 billion (US$170 million)",
         [

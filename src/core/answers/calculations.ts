@@ -23,8 +23,9 @@
  *   亿): inputs are in base units with their page's scale applied, so the
  *   figure would be 10,000 times too small (#577); `scale` shows it in 亿.
  * In a workbook, the formula uses the number a cell stores (#435), not the one
- * it shows rounded. An amount in brackets is negative; a formula that subtracts
- * one is recorded all the same, with a line telling the model it adds (#978).
+ * it shows rounded. A deduction a statement writes in brackets is negative, so
+ * a sum that subtracts it is recorded all the same, with a line telling the
+ * model it adds (#978).
  */
 import {
   type Figure,
@@ -47,7 +48,7 @@ import {
   scaleWordOf,
   scaleWords,
   showResult,
-  subtractedNames,
+  sumOf,
 } from "../../shared/formula";
 import {
   anchorsCovered,
@@ -240,7 +241,9 @@ const either = (items: readonly (string | number)[]) =>
 /** A number as a message to the model writes it: no float noise. */
 const plainNumber = (value: number) => String(Number(value.toPrecision(12)));
 
-/** What the model is told when its formula subtracts inputs the reader gave as negative: "(12,500)" is -12500, so "price - fee" adds it. */
+const DEDUCTION_LINE =
+  /(?:^|[\s|:：(（])(?:less|deduct(?:ion|ions|ed)?|minus|减|扣除|减去)(?![A-Za-z])/i;
+
 function signNote(negatives: readonly { name: string; chars: string; value: number }[]): string {
   const them = negatives.length > 1 ? "them" : "it";
   const read = negatives
@@ -314,6 +317,8 @@ interface Recorded {
   figure: CalculatedFigure;
   /** What the model is told beside its result, if anything: how it is shown when not as asked. */
   note: string;
+  /** The model was told to check a sign (#978): its next figure for the marker is the fix, not a marker given twice. */
+  signAsked: boolean;
   /** Each input's quote, and its unit statement's, in order. */
   quotes: { input: Quoted; unit: Quoted | null }[];
 }
@@ -448,6 +453,15 @@ export function createCalculationSession(options: CalculationSessionOptions) {
     const own = scaleReadings({ ...context, header: null });
     const all = scaleReadings({ ...context, header });
     return all.slice(Math.max(1, own.length));
+  }
+
+  function lineBefore(quoted: Quoted, figure: Figure): string {
+    const { quote } = quoted.citation;
+    const page = quoted.units.map((unit) => unit.text).join("\n");
+    const at = page.indexOf(quote);
+    const text = at < 0 ? quote : page;
+    const figureAt = (at < 0 ? 0 : at) + figure.start;
+    return text.slice(text.lastIndexOf("\n", figureAt - 1) + 1, figureAt);
   }
 
   /** Reads one input; or says why it can't be read. */
@@ -676,10 +690,14 @@ export function createCalculationSession(options: CalculationSessionOptions) {
       return {
         problems: changes.map((change) => `${lead}: ${scaleChangeProblem(change, language)}`),
       };
-    const subtracted = new Set(subtractedNames(given.formula).map((name) => name.toLowerCase()));
+    const sum = sumOf(given.formula);
+    const nameIs = (name: string, other?: string) => name.toLowerCase() === other?.toLowerCase();
+    const totalValue = inputs.find((input) => nameIs(input.name, sum?.total))?.value ?? -1;
     const negatives = reads.flatMap((read, index) => {
-      const number = inputs[index] as FormulaInput;
-      return number.value < 0 && subtracted.has(number.name.toLowerCase())
+      const number = inputs[index];
+      const deducted = sum?.taken.some((name) => nameIs(name, read.given.name));
+      const line = lineBefore(read.quoted, read.figure);
+      return totalValue >= 0 && deducted && number && number.value < 0 && DEDUCTION_LINE.test(line)
         ? [{ name: number.name, chars: read.figure.chars, value: number.value }]
         : [];
     });
@@ -748,6 +766,7 @@ export function createCalculationSession(options: CalculationSessionOptions) {
       recorded: {
         figure,
         note,
+        signAsked: negatives.length > 0,
         quotes: reads.map((read) => ({ input: read.quoted, unit: read.unit?.quoted ?? null })),
       },
     };
@@ -807,12 +826,11 @@ export function createCalculationSession(options: CalculationSessionOptions) {
       recorded.set(marker, outcome.recorded);
       failed.delete(marker);
       options.onRecord?.(marker, outcome.recorded.figure);
-      // A figure that came with a note is being fixed, as the note asked: not a marker given twice.
       lines.push(
         told(marker, outcome.recorded.figure) +
           outcome.recorded.note +
           (earlier &&
-          earlier.note === "" &&
+          !earlier.signAsked &&
           earlier.figure.formula !== outcome.recorded.figure.formula
             ? ` It replaces the earlier [=${marker}] = ${earlier.figure.shown}: give each figure a marker of its own.`
             : ""),

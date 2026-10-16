@@ -1,4 +1,5 @@
 /** The instructions every Answer is written with. Kept short: every word is sent with every Question. */
+import { figureContextOf, readFigures } from "../../shared/figures";
 import { CJK, nameKey } from "../../shared/text";
 import type { CitationSupport, SkillFile, UnreadFile, UnreadReason } from "../api";
 import { detectLanguage } from "../documents/textLanguage";
@@ -201,17 +202,17 @@ export function datedDocumentsNote(passages: string): string {
   return `These Passages come from Documents of different dates: ${listed}. Take each Document's figure only from a sentence that states it for that Document, never from a passing mention. Where they give different figures for the same thing, lead with the newer Document, then write one sentence naming the older one, its date and its figure, with a Citation.`;
 }
 
-/** An amount in brackets, "(12,500)", "(£4,620.00)", "（412）": how accounts write a negative (#978). */
-const BRACKETED_AMOUNT =
-  /[(（]\s*(?:\p{Sc}\s*)?(?:\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+\.\d+|\d{3,})\s*[)）]/u;
-
 /**
- * A reminder after Passages that hold an amount in brackets: it is negative, so
- * a deduction written that way is added to a total, never subtracted. Kept out
- * of the instructions, which go with every Question. Empty when none does.
+ * A reminder after Passages in which the reader (../../shared/figures) finds an
+ * amount in brackets read as negative: a deduction written that way is added
+ * to a total, never subtracted (#978). Kept out of the instructions, which go
+ * with every Question. Empty when none does.
  */
 export function bracketedAmountsNote(passages: string): string {
-  if (!BRACKETED_AMOUNT.test(passages)) return "";
+  const negative = readFigures(passages, figureContextOf(passages)).some(
+    (figure) => figure.value < 0 && /[(（]/.test(figure.chars),
+  );
+  if (!negative) return "";
   return 'An amount in brackets in these Passages is negative, as accountants write it: "(12,500)" is minus 12,500, a deduction or a loss, never a plain amount. / 括号里的金额是负数：“（12,500）”是负的 12,500，是扣减或亏损，不是正数。';
 }
 
