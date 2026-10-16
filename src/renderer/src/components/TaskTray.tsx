@@ -1,12 +1,17 @@
 import { isMacOS } from "@tiptap/core";
 import { type KeyboardEvent, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import type { ApprovalRequest, Task, TaskEffect } from "../../../core/api";
 import { useApprovals } from "../approvals";
 import { keysLabel } from "../commands/keys";
 import { ApprovalCard, withShortcut } from "../editor/AnswerView";
 import { useT } from "../i18n";
 import type { Translate } from "../objects";
+import { useResearch } from "../research";
 import { answerTaskAsk, loadTasks, useTasks } from "../tasks";
+import { QueuedMessages } from "./QueuedMessages";
+import { ResearchPlanCard } from "./ResearchPlanCard";
+import { ResearchPlanView } from "./ResearchPlanView";
 
 /** The share of the assistant's column the tray may take (DESIGN.md, Task tray). */
 const TRAY_SHARE = 0.4;
@@ -76,6 +81,26 @@ function UnknownOutcomeCard({ task, effect }: { task: Task; effect: TaskEffect }
   );
 }
 
+/**
+ * ⌘↵ or ⌘⌫ in the composer: the Mind's waiting ask is answered as its first
+ * or last button would. False when none waits.
+ */
+export function answerAskFrom(mindId: string, allow: boolean): boolean {
+  const task = Object.values(useTasks.getState().tasks).find(
+    (each) => each.mindId === mindId && each.finishedAt === null && each.ask !== null,
+  );
+  if (!task?.ask) return false;
+  if (task.ask.kind === "unknown-outcome") {
+    void answerTaskAsk(task.id, allow ? "redo" : "skip");
+    return true;
+  }
+  const approvals = useApprovals.getState();
+  const request = Object.values(approvals.waiting).find((each) => each.taskId === task.id);
+  if (!request) return false;
+  approvals.respond(request.requestId, allow ? "allow-once" : "deny");
+  return true;
+}
+
 /** The one ask waiting, nearest the keyboard: an approval or an Effect it can't check. */
 function TaskAskView({ task }: { task: Task }) {
   const t = useT();
@@ -117,14 +142,13 @@ function TaskAskView({ task }: { task: Task }) {
 }
 
 /**
- * The Task tray (#126, narrowed by D189; DESIGN.md, Task tray): joined to the
+ * The Task tray (#126, narrowed by #657; DESIGN.md, Task tray): joined to the
  * top of the assistant's composer, only what waits for the User, nearest the
  * keyboard. Top to bottom: the plan card before a Task starts, the one
  * waiting ask, then queued messages, which wrap. Progress is in the thread
- * (`TaskProgress`); the plan card and the queue come with the first kind that
- * has them (#130), in those places around the ask. It takes at most 40% of
- * the column, and at least room for the ask's buttons; the ask scrolls inside
- * with its buttons pinned. Nothing in it goes into the Mind.
+ * (`TaskProgress`). The plan card is Research's (#130). It takes at most 40%
+ * of the column, and at least room for the ask's buttons; the ask scrolls
+ * inside with its buttons pinned. Nothing in it goes into the Mind.
  */
 export function TaskTray({ mindId }: { mindId: string }) {
   const t = useT();
@@ -134,9 +158,22 @@ export function TaskTray({ mindId }: { mindId: string }) {
       (task) => task.mindId === mindId && task.finishedAt === null && task.ask !== null,
     ),
   );
+  const planning = useResearch((state) => state.plans[mindId] !== undefined);
+  const viewingId = useResearch((state) => state.viewing[mindId]);
+  const viewing = useTasks((state) => {
+    const task = viewingId ? state.tasks[viewingId] : undefined;
+    return task && task.finishedAt === null ? task : undefined;
+  });
+  const queued = useTasks(
+    useShallow((state) =>
+      Object.values(state.tasks).filter(
+        (task) => task.mindId === mindId && task.finishedAt === null && task.queued.length > 0,
+      ),
+    ),
+  );
   const tray = useRef<HTMLElement>(null);
   const [maxHeight, setMaxHeight] = useState<number | undefined>(undefined);
-  const present = asking !== undefined;
+  const present = asking !== undefined || planning || viewing !== undefined || queued.length > 0;
 
   useLayoutEffect(() => {
     const element = tray.current;
@@ -156,7 +193,7 @@ export function TaskTray({ mindId }: { mindId: string }) {
     return () => observer.disconnect();
   }, [present]);
 
-  if (!asking) return null;
+  if (!present) return null;
   return (
     <section
       ref={tray}
@@ -165,7 +202,12 @@ export function TaskTray({ mindId }: { mindId: string }) {
       className="task-tray"
       style={{ maxHeight }}
     >
-      <TaskAskView task={asking} />
+      {planning && <ResearchPlanCard mindId={mindId} />}
+      {!planning && viewing && <ResearchPlanView task={viewing} />}
+      {asking && <TaskAskView task={asking} />}
+      {queued.map((task) => (
+        <QueuedMessages key={task.id} task={task} />
+      ))}
     </section>
   );
 }

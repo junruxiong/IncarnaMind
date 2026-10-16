@@ -1,9 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { ConversationAnswer, ConversationQuestion } from "../../../../core/api";
+import type { ConversationAnswer, ConversationQuestion, Task } from "../../../../core/api";
 import { mindName } from "../../../../shared/naming";
 import { type AddTarget, addAnswer } from "../../addToNote";
-import { answerBlocks } from "../../answerBlocks";
-import { selectedNotes } from "../../answerEditors";
+import { notesToAdd } from "../../answerEditors";
 import { readsLine, stepsScope } from "../../assistantContext";
 import { readMindHandle } from "../../commands/handles";
 import { composerScope, NO_MIND, useComposer } from "../../composer";
@@ -15,26 +14,29 @@ import {
   useOpenConversation,
 } from "../../conversations";
 import { useT } from "../../i18n";
+import { isLive, useMeetings } from "../../meetings";
+import { useModelSetup } from "../../modelSetup";
+import { togglePlanView, useResearch } from "../../research";
 import { type ScopeChip, scopeChips } from "../../scope";
 import { useAppStore } from "../../store";
 import { interleave, type ThreadStart, threadTasks } from "../../taskGroups";
 import { loadTasks, useTasks } from "../../tasks";
+import { aimAt } from "../../taskTell";
 import { SearchIcon } from "../icons";
-import { SparkLineIcon } from "../lineIcons";
+import { PlanLineIcon, SearchLineIcon, SparkLineIcon } from "../lineIcons";
 import { AddToMindPicker } from "./AddToMindPicker";
 import { WritingLine } from "./AnswerActions";
 import { LiveLine } from "./AnswerSteps";
 import { type AnswerKeeping, AssistantAnswer } from "./AssistantAnswer";
-import { TaskProgress } from "./TaskProgress";
+import { MeetingStarters } from "./MeetingStarters";
+import { TaskProgress, type TaskProgressActions } from "./TaskProgress";
+
+const TASK_ACTIONS: TaskProgressActions = { plan: togglePlanView, tell: aimAt };
 
 /** How long an Answer a link back led to stays flashed. */
 const SOUGHT_MS = 1600;
 /** How near the foot counts as being at it, so the thread keeps up with an Answer being written. */
 const AT_FOOT_PX = 24;
-
-/** What to add of an Answer: what is selected in it, or all of it as it ended. */
-const notesOf = (answer: ConversationAnswer) =>
-  selectedNotes(answer.id) ?? answerBlocks({ ...answer, status: "done" });
 
 /**
  * The conversation the assistant shows (#201): the Questions as bubbles at the
@@ -44,7 +46,7 @@ const notesOf = (answer: ConversationAnswer) =>
  * the moment it is sent, with its Answer's first step and Stop under it
  * before the core has checked the model, so asking never looks like nothing
  * happened. The Tasks of the Mind it reads show their progress where each
- * started, by time among the messages (D189). It keeps up with an Answer
+ * started, by time among the messages (#657). It keeps up with an Answer
  * being written while the User is at its foot, and brings an Answer a link
  * back led to into view, flashed.
  */
@@ -52,6 +54,7 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
   const t = useT();
   const messages = useConversations((state) => state.messages);
   const asking = useConversations((state) => state.asking);
+  const waitingQuestion = useModelSetup((state) => state.waiting);
   const askingQuote = useConversations((state) => state.askingQuote);
   const onItsWay = useAnswerOnItsWay();
   const stopWanted = useConversations((state) => state.stopWanted);
@@ -62,16 +65,24 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
   const shownTask = useTasks((state) => state.shown);
   const thread = useThreadStart(conversation ?? null);
   const tasks = threadTasks(Object.values(allTasks), focusedMindId, thread, shownTask);
+  const plan = useResearch((state) => (focusedMindId ? state.plans[focusedMindId] : undefined));
   const focusedMind = useAppStore((state) => state.minds.find((mind) => mind.id === focusedMindId));
   const focusedMindName = focusedMindId
     ? (focusedMind && mindName(focusedMind)) || t("mind.untitled")
     : null;
   const nextScope = useNextScope(focusedMindId);
-  const reads = readsLine(t, focusedMind ? focusedMindName : null, nextScope);
+  // While the Mind's meeting records, the assistant listens to its live transcript (#144).
+  const listening = useMeetings((state) =>
+    state.meetings.some((meeting) => meeting.mindId === focusedMindId && isLive(meeting)),
+  );
+  const reads =
+    listening && focusedMindName
+      ? t("assistant.reads.listening", { mind: focusedMindName })
+      : readsLine(t, focusedMind ? focusedMindName : null, nextScope);
   const [picking, setPicking] = useState<{
     answer: ConversationAnswer;
     anchor: HTMLElement;
-    blocks: ReturnType<typeof notesOf>;
+    blocks: ReturnType<typeof notesToAdd>;
   } | null>(null);
   const log = useRef<HTMLDivElement>(null);
   const atFoot = useRef(true);
@@ -87,13 +98,16 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
     scroller.addEventListener("scroll", onScroll);
     return () => scroller.removeEventListener("scroll", onScroll);
   }, []);
+  // A Research topic asked, or a Task started, grows it too; a Task's every step doesn't move it.
+  const started = tasks.length;
+  const askedAt = plan?.askedAt;
   // biome-ignore lint/correctness/useExhaustiveDependencies: each change to the messages may grow the thread.
   useLayoutEffect(() => {
     const scroller = log.current?.parentElement;
     if (scroller && (atFoot.current || asking) && !sought) {
       scroller.scrollTop = scroller.scrollHeight;
     }
-  }, [messages, asking, sought]);
+  }, [messages, asking, sought, started, askedAt]);
 
   // A link back led here: that Answer comes into view, flashed, once it shows (its conversation's
   // messages may come a moment after it is opened).
@@ -113,7 +127,7 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
     }, SOUGHT_MS);
   }, [sought, messages]);
 
-  const add = (answer: ConversationAnswer, target: AddTarget, blocks = notesOf(answer)) =>
+  const add = (answer: ConversationAnswer, target: AddTarget, blocks = notesToAdd(answer)) =>
     void addAnswer({ answer, conversation, blocks }, target, focusedMindId === null);
   const keeping: AnswerKeeping = {
     focusedMindName,
@@ -121,7 +135,7 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
       if (focusedMindId) add(answer, { kind: "mind", mindId: focusedMindId });
     },
     pick(answer, anchor) {
-      setPicking({ answer, anchor, blocks: notesOf(answer) });
+      setPicking({ answer, anchor, blocks: notesToAdd(answer) });
     },
   };
 
@@ -138,19 +152,34 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
       data-testid="assistant-log"
       className="assistant-log"
     >
-      {messages.length === 0 && asking === null && (
-        <>
-          <p data-testid="assistant-reads" title={reads} className="assistant-reads">
-            <SearchIcon aria-hidden="true" className="assistant-reads-icon" />
-            <span className="assistant-reads-text">{reads}</span>
-          </p>
-          <p data-testid="assistant-empty" className="assistant-empty">
-            {t("assistant.empty")}
-          </p>
-        </>
-      )}
+      {messages.length === 0 &&
+        asking === null &&
+        !waitingQuestion &&
+        !plan &&
+        !tasks.some(asked) && (
+          <>
+            <p data-testid="assistant-reads" title={reads} className="assistant-reads">
+              <SearchIcon aria-hidden="true" className="assistant-reads-icon" />
+              <span className="assistant-reads-text">{reads}</span>
+            </p>
+            <p data-testid="assistant-empty" className="assistant-empty">
+              {t("assistant.empty")}
+            </p>
+            {listening && <MeetingStarters />}
+          </>
+        )}
       {interleave(messages, tasks).map((entry) => {
-        if (entry.kind === "task") return <TaskProgress key={entry.task.id} task={entry.task} />;
+        if (entry.kind === "task") {
+          const { task } = entry;
+          return task.question ? (
+            <div key={task.id} className="assistant-task">
+              <QuestionBubble text={task.question} research />
+              <TaskProgress task={task} actions={TASK_ACTIONS} />
+            </div>
+          ) : (
+            <TaskProgress key={task.id} task={task} actions={TASK_ACTIONS} />
+          );
+        }
         const message = entry.message;
         return message.kind === "question" ? (
           <QuestionBubble key={message.id} question={message} />
@@ -165,6 +194,29 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
         );
       })}
       {asking !== null && <QuestionBubble text={asking} quote={askingQuote} />}
+      {waitingQuestion && (
+        <>
+          <QuestionBubble text={waitingQuestion.text} quote="" />
+          <p data-testid="assistant-waiting-model" className="assistant-empty">
+            {t("setup.waiting")}
+          </p>
+        </>
+      )}
+      {plan && (
+        <>
+          <QuestionBubble text={plan.topic} research />
+          <p data-testid="research-plan-line" className="assistant-reads">
+            {plan.planning ? (
+              <span aria-hidden="true" className="assistant-reads-icon task-dot" />
+            ) : (
+              <PlanLineIcon aria-hidden="true" className="assistant-reads-icon" />
+            )}
+            <span className="assistant-reads-text">
+              {plan.planning ? t("research.thread.planning") : t("research.thread.planBelow")}
+            </span>
+          </p>
+        </>
+      )}
       {onItsWay && (
         // Its line shows at rest, as an Answer's being written does.
         <div
@@ -221,15 +273,23 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
   );
 }
 
-/** A Question the User asked: their words in a bubble at the right, with the Skill forced on it. */
+/** A Task the User asked in their words: a Research Task, whose topic is its Question. */
+const asked = (task: Task) => task.question !== null;
+
+/**
+ * A Question the User asked: their words in a bubble at the right, with the
+ * Skill forced on it, or the Research it started.
+ */
 function QuestionBubble({
   question,
   text,
   quote,
+  research = false,
 }: {
   question?: ConversationQuestion;
   text?: string;
   quote?: string;
+  research?: boolean;
 }) {
   const t = useT();
   const skill = question?.forcedSkill ?? null;
@@ -237,7 +297,7 @@ function QuestionBubble({
   return (
     <div
       data-testid="assistant-question"
-      data-pending={question ? undefined : true}
+      data-pending={question || research ? undefined : true}
       className="assistant-question"
     >
       <p className="assistant-question-bubble">
@@ -255,6 +315,12 @@ function QuestionBubble({
           <span data-testid="assistant-question-skill" className="assistant-question-skill">
             <SparkLineIcon aria-hidden="true" className="size-3" />
             {skill}
+          </span>
+        )}
+        {research && (
+          <span data-testid="assistant-question-research" className="assistant-question-skill">
+            <SearchLineIcon aria-hidden="true" className="size-3" />
+            {t("research.chip")}
           </span>
         )}
         {question?.text ?? text}

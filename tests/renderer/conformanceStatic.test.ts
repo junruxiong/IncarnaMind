@@ -184,10 +184,7 @@ describe("a question about deleting", () => {
   // with Undo. Only what can't be taken back asks, and says what is lost: a command marked
   // `reversible: { confirm }`, whose text and question share a key prefix
   // (`deleted.confirm.*`, `linkedFolders.unlink.*`).
-  const KNOWN: Record<string, string> = {
-    "wordImport.sectionBreak.title":
-      "deleting a Word section break asks, though the note's ⌘Z takes it back (#637)",
-  };
+  const KNOWN: Record<string, string> = {};
   const ASKS = /^(Delete|Remove|Unlink|Empty|Erase)\b[^?]*\?/;
 
   function questions(

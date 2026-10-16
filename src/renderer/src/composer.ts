@@ -15,6 +15,10 @@ export interface Draft {
   scope: SearchScope | null;
   /** The Skill chosen with "/" for the next Question only. */
   skill: string | null;
+  /** "Research…" was chosen: what is typed next is a topic to plan research for (#130). */
+  research?: boolean;
+  /** Tell it…: the Task what is typed goes to, by id, which reads it at its next step (#130). */
+  tell?: string;
   /** Long pastes, each a chip above the text until it is put back, saved as a Document, or asked with. */
   pastes: Paste[];
 }
@@ -81,10 +85,14 @@ interface ComposerState {
    * needs of it (see `Assistant`). Null before then and with no Mind in focus.
    */
   seat: { editor: Editor; doc: Y.Doc; mindId: string } | null;
+  /** Text to ask at once, as typed and sent in the composer: ⌘K's "Ask about…". */
+  askWanted: string | null;
   draft(mindId: string): Draft;
   update(mindId: string, change: Partial<Draft>): void;
   requestFocus(): void;
   focusTaken(): void;
+  requestAsk(text: string): void;
+  askTaken(): void;
 }
 
 /** The composer's drafts, in this window (DESIGN.md, Composer). */
@@ -104,6 +112,9 @@ export const useComposer = create<ComposerState>()((set, get) => ({
   },
   requestFocus: () => set({ focusWanted: true }),
   focusTaken: () => set({ focusWanted: false }),
+  askWanted: null,
+  requestAsk: (text) => set({ askWanted: text }),
+  askTaken: () => set({ askWanted: null }),
 }));
 
 /** The draft's key when no Mind is in focus (the Library, Home or a Document): not a Mind's id. */

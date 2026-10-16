@@ -38,16 +38,16 @@ describe("The reranking model's download in the sidebar's status row", () => {
     ).toEqual({
       testId: "reranking-model-download",
       tone: "progress",
-      short: "Reranking",
+      short: "Search setup",
       figure: "45/136 MB",
-      full: "Downloading the reranking model: 45 of 136 MB. Until it's ready, search keeps its own order.",
+      full: "Getting search ready: 45 of 136 MB. Until then, search keeps its own order.",
       retry: false,
     });
     const started = rerankingModelStatus(
       settings({}, { state: "downloading", downloadedBytes: 0 }),
       zh,
     );
-    expect([started?.short, started?.figure]).toEqual(["重排序", "0/136 MB"]);
+    expect([started?.short, started?.figure]).toEqual(["准备搜索", "0/136 MB"]);
   });
 
   test("says why it failed, with a retry", () => {
@@ -66,8 +66,8 @@ describe("The reranking model's download in the sidebar's status row", () => {
     ).toEqual({
       testId: "reranking-model-failed",
       tone: "error",
-      short: "Reranking model download failed",
-      full: "The reranking model couldn't be downloaded: check your internet connection.\nfetch failed",
+      short: "Couldn't get search ready",
+      full: "The model that orders search results couldn't be downloaded: check your internet connection.\nfetch failed",
       retry: true,
     });
     expect(
@@ -75,7 +75,7 @@ describe("The reranking model's download in the sidebar's status row", () => {
         settings({}, { state: "failed", error: { kind: "load", message: "bad model" } }),
         en,
       )?.short,
-    ).toBe("Reranking model couldn't start");
+    ).toBe("Couldn't get search ready");
   });
 
   test("says nothing once it is ready, before it is needed, or when it isn't what reranks", () => {

@@ -23,7 +23,7 @@ Read this before adding or changing a string in `src/shared/i18n/zh-CN.ts`, whet
     - No long 的 chain before a noun: split the sentence ("添加一个问题，只搜索此文件夹", not "添加一个只搜索此文件夹的问题").
     - Drop 它/它的 and 你的 when they add nothing.
     - Put the condition first ("开启后，…").
-13. **One word for one thing.** Use the glossary everywhere and never a second word for the same concept: 不在文件夹中, not 未分类 or 未分组; 对话模型, not 聊天模型; 提供商, not 服务商.
+13. **One word for one thing.** Use the glossary everywhere and never a second word for the same concept: 不在文件夹中, not 未分类 or 未分组; AI 模型 in sentences (not 对话模型 or 聊天模型); a company's own name, or 服务 when generic (not 提供商 or 服务商).
 14. **Platform words go in their own keys.** Where macOS and Windows name a thing differently, add a key per platform and choose it in code, as `linkedFolders.reveal.mac` / `.windows` / `.other` and `menu.copy` / `menu.copy.other` do. Don't put one platform's word on the other.
 15. **Names stay as they are:** IncarnaMind, Mind, ChatGPT, Ollama, OpenAI, PDF, Word, Markdown. Write file types in capitals (ZIP, CSV), and keys as they are printed (Enter, Esc, Backspace, ⌘J).
 
@@ -65,7 +65,7 @@ The words from `CONTEXT.md`, then the ones the interaction rules bring in. Where
 | Look up (a reference record) | 查询 | "按 DOI 从 Crossref 补全空白字段". |
 | Web search | 联网搜索 | Searching the web from an Answer: "允许回答联网搜索", "已联网搜索“…”". As Kimi, Doubao, Yuanbao and DeepSeek show it. |
 | Find sources | 查找资料 | "查找资料…". 资料 matches 资料库 (Library): what is found is added to it. |
-| Source provider | 资料来源 | "资料来源：OpenAlex arXiv PubMed". Not 提供商, which is an AI model's provider. |
+| Source provider | 资料来源 | "资料来源：OpenAlex arXiv PubMed". Not 服务, which is an AI model's company. |
 | Open access | 开放获取 | As CNKI and publishers say it. "仅开放获取", "无开放全文". |
 | Preprint / Accepted manuscript | 预印本 / 录用稿 | The version an open copy is. |
 | Cited by {count} | 被引 {count} 次 | As CNKI and Google Scholar show it. |
@@ -109,6 +109,7 @@ The words from `CONTEXT.md`, then the ones the interaction rules bring in. Where
 | Comparison table | 对比表 | |
 | Chart | 图表 | Its kinds: 柱状图、折线图、饼图、散点图. "以表格显示" / "以图表显示"; "用表格生成图表". |
 | Columns (a chart's series) | 数据列 | The columns of a table a chart draws. A scatter chart's two: 横轴 and 纵轴. |
+| Rows (a switched chart's series) | 数据行 | The rows of a table a chart draws once its rows and columns are switched: "行列互换". |
 | Source (of a chart's values) | 数据来源 | Under a chart in an export, as Chinese reports caption theirs: "数据来源：". |
 | Memory | 记忆 | |
 | Meeting | 会议 | |
@@ -140,14 +141,26 @@ A figure in an Answer is written as reports write it, with no space between the 
 | times (a multiple) | 倍 | "4.00倍". |
 | yes / no (what a comparison gives) | 是 / 否 | |
 
+### Dates and times
+
+A date in a string is a `{date}` or `{time}` parameter, written by `src/shared/dates.ts`, never by a string or by code of its own: "会议，{date}", "{time} 后可重试". The module gives each language one style, and a test fails on a date built by hand elsewhere.
+
+| Kind | English | Chinese |
+|---|---|---|
+| Day | 12 October | 10月12日 |
+| Date | 12 Oct 2026 | 2026年10月12日 |
+| Date and time | 12 Oct 2026, 15:20 | 2026年10月12日 15:20 |
+| Time | 15:20 | 15:20 |
+
+The year is left out when it is this year, except in a Date, and a time today is the time alone. The clock has 24 hours ("15:20"), and 12 when the system asks for it ("下午3:20"). A weekday goes before the date in English ("Friday 9 Oct") and after it in Chinese ("10月9日星期五").
+
 ### Models and settings
 
 | English | Chinese | Notes |
 |---|---|---|
-| chat model | 对话模型 | |
 | embedding model | 嵌入模型 | |
 | reranking | 重新排序; the model: 重排序模型 | |
-| provider | 提供商 | As Open WebUI, Chatbox, AnythingLLM, Dify and Microsoft. |
+| provider | the company's name, or 服务 | "无法连接 OpenAI"; 服务 for the Settings row. Not 提供商. |
 | API key | API 密钥 | |
 | Server URL (base URL) | API 地址 | As Cherry Studio and Open WebUI. |
 | local / cloud | 本地 / 云端 | "本地模型", "云端模型", "在本机运行". |
@@ -160,6 +173,11 @@ A figure in an Answer is written as reports write it, with no space between the 
 | English | Chinese | Notes |
 |---|---|---|
 | Recently deleted | 回收站 | As Feishu, Yuque, Tencent Docs, WPS, DingTalk, Obsidian and Zotero. Restore: 恢复. Delete permanently: 彻底删除. |
+| Revoke (an allowed service) | 停止允许 | Not 撤销, which is Undo. For a service the User allowed to receive data (Privacy); approvals have their own words. |
+| Local mode | 所有内容都留在这台电脑上 | The one name, quoted: “所有内容都留在这台电脑上”; its button is 允许使用云端模型. Never 本地模式. |
+| Chat model | AI 模型 | In sentences and on Settings' labels. |
+| Embedding model | 搜索模型 · 按含义搜索 | "正在为搜索读取文档". Not 嵌入. |
+| Reranking | 把最相关的排在前面 | "最相关的排在前面" on Settings; never 重排序. |
 | Undo | 撤销 | The undo line: "已将 3 个文档移动到“财务” · 撤销". |
 | Rename | 重命名 | |
 | Move to… | 移动到… | |

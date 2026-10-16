@@ -11,11 +11,14 @@ import {
   MIND_WORD_FIELD,
   MIND_WORD_SOURCES_FIELD,
   PROPOSAL_ATTRIBUTE,
+  WORD_LOOK_ATTRIBUTE,
+  WORD_RUN_MARK,
   type WordAtomAttributes,
   type WordAtomKind,
   type WordFileInfo,
   type WordImportProgress,
   type WordImportReport,
+  type WordLayout,
   type WordOrigin,
   type WordSource,
 } from "../core/api";
@@ -87,6 +90,16 @@ export function wordAtomText(atom: Pick<WordAtomAttributes, "kind" | "label" | "
   return atom.text || atom.label;
 }
 
+/**
+ * Whether a Word file lays text out in tables without lines or in columns of
+ * tab stops, which the Mind doesn't draw yet, so the import screen says they
+ * are kept (#735). The bars sit above what the Word corpus's memos, contracts
+ * and reports reach; its résumés and forms pass them.
+ */
+export function layoutNotShown(layout: WordLayout | undefined): boolean {
+  return layout !== undefined && (layout.layoutTables >= 1 || layout.tabStops >= 4);
+}
+
 const wordMap = (doc: Y.Doc) => doc.getMap<unknown>(MIND_WORD_FIELD);
 const sourcesMap = (doc: Y.Doc) => doc.getMap<unknown>(MIND_WORD_SOURCES_FIELD);
 
@@ -94,11 +107,17 @@ const sourcesMap = (doc: Y.Doc) => doc.getMap<unknown>(MIND_WORD_SOURCES_FIELD);
 export function wordFileOf(doc: Y.Doc): WordFileInfo | null {
   const file = wordMap(doc).get("file");
   if (!isRecord(file)) return null;
-  const { name, sha256, size, part } = file;
+  const { name, sha256, size, part, documentId } = file;
   if (typeof name !== "string" || typeof sha256 !== "string" || typeof part !== "string") {
     return null;
   }
-  return { name, sha256, size: typeof size === "number" ? size : 0, part };
+  return {
+    name,
+    sha256,
+    size: typeof size === "number" ? size : 0,
+    part,
+    documentId: typeof documentId === "string" && documentId !== "" ? documentId : null,
+  };
 }
 
 /** How far the import has got; null once it is done, or for a Mind that wasn't imported. */
@@ -135,6 +154,13 @@ export function startWordImport(
   map.set("import", { done: 0, total } satisfies WordImportProgress);
 }
 
+/** Names the Document the original became after the import, when adding it then failed (#720). */
+export function linkWordFileDocument(doc: Y.Doc, documentId: string): void {
+  const map = wordMap(doc);
+  const file = map.get("file");
+  if (isRecord(file)) map.set("file", { ...file, documentId });
+}
+
 /** Records how many top-level Blocks have been written. Inside the transaction that wrote them. */
 export function recordWordImportProgress(doc: Y.Doc, done: number, total: number): void {
   wordMap(doc).set("import", { done, total } satisfies WordImportProgress);
@@ -167,12 +193,17 @@ export function observeWordFile(doc: Y.Doc, listener: () => void): () => void {
   return () => map.unobserve(listener);
 }
 
-/** Attributes that don't change what a node is: its id, whether Questions read it, a Proposal on it. */
-const NOT_CONTENT = new Set(["id", "includeInContext", PROPOSAL_ATTRIBUTE]);
+/**
+ * Attributes that don't change what a node is: its id, whether Questions read it, a Proposal on
+ * it, its Word look (given later to earlier imports, which mustn't count as an edit).
+ */
+const NOT_CONTENT = new Set(["id", "includeInContext", PROPOSAL_ATTRIBUTE, WORD_LOOK_ATTRIBUTE]);
+const NOT_TEXT_CONTENT = new Set([WORD_RUN_MARK]);
 /** Mark attributes that are how a link opens, not where it leads. */
 const NOT_MARK_CONTENT = new Set(["target", "rel", "class"]);
 
-function sorted(value: unknown, skip: ReadonlySet<string> = new Set()): unknown {
+/** A value with its keys sorted and its empty ones left out, for hashing. */
+export function sorted(value: unknown, skip: ReadonlySet<string> = new Set()): unknown {
   if (Array.isArray(value)) return value.map((each) => sorted(each));
   if (!isRecord(value)) return value;
   return Object.fromEntries(
@@ -183,18 +214,34 @@ function sorted(value: unknown, skip: ReadonlySet<string> = new Set()): unknown 
   );
 }
 
-function canonical(node: Y.XmlElement | Y.XmlText): unknown {
+function canonical(node: Y.XmlElement | Y.XmlText, rejoin = true): unknown {
   if (node instanceof Y.XmlText) {
-    return (node.toDelta() as { insert: unknown; attributes?: Record<string, unknown> }[]).map(
-      (run) => [
-        typeof run.insert === "string" ? run.insert : "￼",
-        Object.fromEntries(
-          Object.keys(run.attributes ?? {})
-            .sort()
-            .map((mark) => [mark, sorted(run.attributes?.[mark], NOT_MARK_CONTENT)]),
-        ),
-      ],
-    );
+    const runs: [string, Record<string, unknown>][] = [];
+    for (const run of node.toDelta() as {
+      insert: unknown;
+      attributes?: Record<string, unknown>;
+    }[]) {
+      const marks = Object.fromEntries(
+        Object.keys(run.attributes ?? {})
+          .filter((mark) => !NOT_TEXT_CONTENT.has(mark))
+          .sort()
+          .map((mark) => [mark, sorted(run.attributes?.[mark], NOT_MARK_CONTENT)]),
+      );
+      const last = runs.at(-1);
+      // Rejoin text that only a left-out mark split, so adding the mark keeps the fingerprint.
+      if (
+        rejoin &&
+        typeof run.insert === "string" &&
+        last &&
+        last[0] !== "￼" &&
+        JSON.stringify(last[1]) === JSON.stringify(marks)
+      ) {
+        last[0] += run.insert;
+      } else {
+        runs.push([typeof run.insert === "string" ? run.insert : "￼", marks]);
+      }
+    }
+    return runs;
   }
   return [
     node.nodeName,
@@ -202,7 +249,7 @@ function canonical(node: Y.XmlElement | Y.XmlText): unknown {
     node
       .toArray()
       .filter((child) => child instanceof Y.XmlElement || child instanceof Y.XmlText)
-      .map((child) => canonical(child as Y.XmlElement | Y.XmlText)),
+      .map((child) => canonical(child as Y.XmlElement | Y.XmlText, rejoin)),
   ];
 }
 
@@ -213,4 +260,9 @@ function canonical(node: Y.XmlElement | Y.XmlText): unknown {
  */
 export function wordFingerprint(element: Y.XmlElement): string {
   return targetHash(JSON.stringify(canonical(element)));
+}
+
+/** As recorded by versions before Minds kept the Word look, which didn't rejoin text. */
+export function wordFingerprintBeforeLook(element: Y.XmlElement): string {
+  return targetHash(JSON.stringify(canonical(element, false)));
 }

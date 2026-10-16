@@ -1,10 +1,11 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { OutputSettings } from "../../../core/api";
 import { core } from "../core";
 import { errorMessage } from "../errors";
 import { translateNow, useT } from "../i18n";
 import { folderName } from "../linkedFolders";
 import { chooseOutputLocation } from "../outputFiles";
+import { useAppStore } from "../store";
 import { PathText } from "./PathText";
 import { ProblemLine } from "./ProblemLine";
 import {
@@ -17,8 +18,9 @@ import {
 } from "./ui";
 
 /**
- * Settings → General → Output location: where new files go, changed with the
- * system's folder dialog; and, once IncarnaMind has asked about any, the
+ * Settings → General → Output location: where new files go, the default
+ * Documents › IncarnaMind until the User picks another (D209), changed with
+ * the system's folder dialog; and, once IncarnaMind has asked about any, the
  * Linked folders it may or may not add files to, each with its switch.
  */
 export function OutputLocationSettings() {
@@ -44,6 +46,16 @@ export function OutputLocationSettings() {
     };
   }, []);
 
+  const section = useRef<HTMLElement>(null);
+  const changeButton = useRef<HTMLButtonElement>(null);
+  const drawn = settings !== null;
+  useEffect(() => {
+    if (!drawn || useAppStore.getState().settingsAt !== "output-location") return;
+    useAppStore.setState({ settingsAt: null });
+    section.current?.scrollIntoView({ block: "start" });
+    changeButton.current?.focus({ preventScroll: true });
+  }, [drawn]);
+
   const change = async (action: () => Promise<OutputSettings | null>) => {
     setProblem(null);
     try {
@@ -58,37 +70,37 @@ export function OutputLocationSettings() {
   const { location, linkedFolders } = settings;
 
   return (
-    <section data-testid="output-location-settings" className="flex flex-col gap-7">
+    <section ref={section} data-testid="output-location-settings" className="flex flex-col gap-7">
       <div>
         <h4 id={titleId} className={sectionTitleClass}>
           {t("outputLocation.title")}
         </h4>
         <p className={sectionNoteClass}>{t("outputLocation.body")}</p>
         <div className="flex min-w-0 items-center gap-2">
-          {location ? (
-            <PathText
-              path={location}
-              testId="output-location-path"
-              className="flex-1 rounded-md border border-rule bg-frame px-3 py-1.5 font-mono text-[13px] leading-5 text-ink-secondary"
-            />
-          ) : (
-            <span
-              data-testid="output-location-path"
-              className="min-w-0 flex-1 text-[13px] leading-5 text-ink-meta"
-            >
-              {t("outputLocation.notChosen")}
-            </span>
-          )}
+          <PathText
+            path={location ?? settings.suggested}
+            testId="output-location-path"
+            className="flex-1 rounded-md border border-rule bg-frame px-3 py-1.5 font-mono text-[13px] leading-5 text-ink-secondary"
+          />
           <button
+            ref={changeButton}
             type="button"
             data-testid="output-location-change"
             aria-describedby={titleId}
             onClick={() => void change(chooseOutputLocation)}
             className={buttonClass}
           >
-            {t(location ? "outputLocation.change" : "outputLocation.choose")}
+            {t("outputLocation.change")}
           </button>
         </div>
+        {!location && (
+          <p
+            data-testid="output-location-default"
+            className="mt-1.5 text-[13px] leading-5 text-ink-meta"
+          >
+            {t("outputLocation.default")}
+          </p>
+        )}
         {problem && (
           <ProblemLine testId="output-location-problem" className="mt-2">
             {t("outputLocation.failed", { reason: problem })}

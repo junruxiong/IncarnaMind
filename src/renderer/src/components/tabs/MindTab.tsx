@@ -9,6 +9,7 @@ import {
 import { useT } from "../../i18n";
 import { assistantTabOf } from "../../layoutSlice";
 import { useAppStore } from "../../store";
+import { useFittedName } from "../../useFittedName";
 import { useGroupsMerged } from "../../useWindowWidth";
 import { isWordFile, useWordImport } from "../../wordImport";
 import { ExportResultLine } from "../ExportResultLine";
@@ -44,7 +45,7 @@ export function MindTab({ mindId }: { mindId: string }) {
         {/* Every text in it starts at one edge (styles.css, `.mind-column`). */}
         <article data-testid="mind-pane" data-mind-id={mind.id} className="mind-column">
           <div className="mind-measure">
-            {isExample && <ExampleBanner />}
+            {isExample && <ExampleBanner mindId={mindId} />}
             <MindTitle mind={mind} />
             <div ref={setCountSlot} data-testid="mind-count-slot" />
             <MeetingInMind mindId={mind.id} />
@@ -127,6 +128,10 @@ function MindTitle({ mind }: { mind: Mind }) {
   /** The title as it was when the User started typing it, for Undo. */
   const titleBefore = useRef(mind.title);
   const focusNow = useAppStore((state) => state.titleToFocus === mind.id);
+  // The name it takes while it has no title, one line of it; the whole name is in the tooltip.
+  const name = mind.autoTitle || t("mind.untitled");
+  const placeholder = useFittedName(field, name);
+  const value = draft ?? mind.title;
 
   // A Mind just created: its title takes the focus from the button that made it.
   useEffect(() => {
@@ -166,8 +171,9 @@ function MindTitle({ mind }: { mind: Mind }) {
         rows={1}
         data-testid="mind-title"
         aria-label={t("mind.title.label")}
-        placeholder={mind.autoTitle || t("mind.untitled")}
-        value={draft ?? mind.title}
+        placeholder={placeholder}
+        title={value === "" && placeholder !== name ? name : undefined}
+        value={value}
         onFocus={() => {
           setDraft(mind.title);
           titleBefore.current = mind.title;

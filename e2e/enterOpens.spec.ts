@@ -11,6 +11,7 @@ import {
   removeDataFolder,
   setWindowSize,
   sidebarFolder,
+  typeWithInputMethod,
 } from "./app";
 
 /*
@@ -49,28 +50,6 @@ const createFolder = (window: Page, name: string) =>
       }),
     name,
   );
-
-/**
- * Types a name through an input method: the composition is open, its Enter
- * (the one that picks a candidate) changes nothing, and the next Enter saves.
- */
-async function typeWithInputMethod(window: Page, field: Locator, name: string): Promise<void> {
-  const session = await window.context().newCDPSession(window);
-  try {
-    await session.send("Input.imeSetComposition", {
-      text: "xinming",
-      selectionStart: 7,
-      selectionEnd: 7,
-    });
-    await field.dispatchEvent("keydown", { key: "Enter", isComposing: true, bubbles: true });
-    await expect(field).toBeVisible();
-    await session.send("Input.insertText", { text: name });
-    await expect(field).toHaveValue(name);
-  } finally {
-    await session.detach();
-  }
-  await window.keyboard.press("Enter");
-}
 
 interface Row {
   /** The row's button, which takes the keys. */

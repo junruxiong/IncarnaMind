@@ -20,6 +20,7 @@
 import { freemem, totalmem } from "node:os";
 import type { CitationSupport } from "../api";
 import { isRecord } from "../errors";
+import { ollamaAnswers } from "./ollama";
 import { isCloudModelName, isRemoteEntry } from "./ollamaCloud";
 
 /** The settings every chat request to one model carries. */
@@ -64,6 +65,8 @@ export interface OllamaModels {
    * a request otherwise waits for it to load. Null when Ollama can't say.
    */
   loaded(baseUrl: string, model: string, numCtx: number): Promise<boolean | null>;
+  /** Whether anything answers at `baseUrl`, asked quickly and with no retry. */
+  running(baseUrl: string): Promise<boolean>;
 }
 
 /** How long Ollama keeps a model loaded after a request: long enough not to reload between Questions. */
@@ -398,5 +401,7 @@ export function createOllamaModels(
         return error instanceof Error && error.name === "TimeoutError" ? false : null;
       }
     },
+
+    running: ollamaAnswers,
   };
 }

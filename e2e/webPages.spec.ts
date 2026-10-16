@@ -33,6 +33,8 @@ let dataDir: string;
 let home: string;
 let server: Server;
 let site: string;
+/** The server's port: it stands in for the web too, so a page's pictures are asked of it (#756). */
+let port: number;
 test.beforeEach(async () => {
   dataDir = await createDataFolder();
   home = await createDataFolder();
@@ -46,7 +48,8 @@ test.beforeEach(async () => {
     }
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  site = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  port = (server.address() as AddressInfo).port;
+  site = `http://127.0.0.1:${port}`;
 });
 test.afterEach(async () => {
   server.closeAllConnections();
@@ -101,7 +104,7 @@ const dragLink = (target: Locator, address: string, drop = true) =>
   );
 
 test("a web page added from the + menu is a Document named by its title, opened as its snapshot; one that can't be fetched says why", async () => {
-  const { app, window } = await launchApp(dataDir, { home });
+  const { app, window } = await launchApp(dataDir, { home, web: port });
   await dismissChatSetup(window);
   await interceptOpenExternal(app);
 
@@ -127,7 +130,7 @@ test("a web page added from the + menu is a Document named by its title, opened 
   const viewer = window.getByTestId("viewer");
   await expect(viewer.getByTestId("viewer-web-title")).toHaveText(TITLE);
   await expect(viewer.getByTestId("viewer-web-fetched")).toHaveText(
-    /^Fetched \d{1,2} \w{3} \d{4}$/,
+    /^Fetched \d{1,2} \w{3,4} \d{4}$/,
   );
   const article = viewer.getByTestId("viewer-web-article");
   await expect(article).toContainText("Tea was first introduced to Portuguese priests");
@@ -149,7 +152,7 @@ test("a web page added from the + menu is a Document named by its title, opened 
 });
 
 test("a link pasted or dropped on a Folder in the sidebar is saved there; one that can't be fetched says why below", async () => {
-  const { app, window } = await launchApp(dataDir, { home });
+  const { app, window } = await launchApp(dataDir, { home, web: port });
   await dismissChatSetup(window);
   await window.evaluate(() =>
     (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.createLibraryGroup({
@@ -185,7 +188,7 @@ test("a link pasted or dropped on a Folder in the sidebar is saved there; one th
 });
 
 test("an Answer cites a web page by section and paragraph; its card says the site and when it was fetched, and opens the snapshot at the quote", async () => {
-  const { app, window } = await launchApp(dataDir, { fakeChat: true, home });
+  const { app, window } = await launchApp(dataDir, { fakeChat: true, home, web: port });
   await dismissChatSetup(window);
   await useLocalChatModel(window);
   await interceptOpenExternal(app);
@@ -210,7 +213,7 @@ test("an Answer cites a web page by section and paragraph; its card says the sit
   const card = window.getByTestId("citation-card");
   await expect(card.getByTestId("citation-badge")).toHaveText(/^Quote found in § History, ¶\s\d$/);
   await expect(card.getByTestId("citation-web-source")).toHaveText(
-    /^The Open Encyclopedia · Fetched \d{1,2} \w{3} \d{4}$/,
+    /^The Open Encyclopedia · Fetched \d{1,2} \w{3,4} \d{4}$/,
   );
   const highlight = window.getByTestId("viewer").locator("[data-quote-highlight]").first();
   await expect(highlight).toBeVisible();

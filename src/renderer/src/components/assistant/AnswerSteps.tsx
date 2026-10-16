@@ -7,6 +7,7 @@ import type {
 } from "../../../../core/api";
 import { shownDocumentName } from "../../../../shared/citations";
 import { citationLocation, formatLocation } from "../../../../shared/locations";
+import { mindName } from "../../../../shared/naming";
 import {
   type FoldedLine,
   foldedLine,
@@ -40,6 +41,7 @@ import {
   SparkLineIcon,
 } from "../lineIcons";
 import { ProblemLine } from "../ProblemLine";
+import { mindCallText, namedMind } from "./MindCall";
 
 /** The least time a live step stays up while another replaces it, so the line never flickers. */
 const MIN_STEP_MS = 1000;
@@ -75,7 +77,13 @@ export function AnswerSteps({
   // Written again, it starts folded.
   if (streaming && open) setOpen(false);
   if (streaming) {
-    return <LiveLine step={liveStep({ answer, phase, waitingForApproval })} scope={scopeOf(0)} />;
+    return (
+      <LiveLine
+        step={liveStep({ answer, phase, waitingForApproval })}
+        scope={scopeOf(0)}
+        askedFrom={askedFrom}
+      />
+    );
   }
   const line = foldedLine({ answer, askedFrom, meeting, selection });
   if (!line) return null;
@@ -114,10 +122,30 @@ export function AnswerSteps({
  * pulsing accent dot, or what it waits for, with the attention dot. `scope`
  * is what its Question searches (`stepsScope`).
  */
-export function LiveLine({ step, scope }: { step: LiveStep; scope: string }) {
+export function LiveLine({
+  step,
+  scope,
+  askedFrom = null,
+}: {
+  step: LiveStep;
+  scope: string;
+  /** The Mind the Question was asked from: the one a Minds' Tool changes when it names none. */
+  askedFrom?: AskedFrom | null;
+}) {
   const t = useT();
   const shown = useHeldStep(step);
-  const label = liveText(t, shown, scope);
+  const minds = useAppStore((state) => state.minds);
+  // A Minds' Tool's call names its Mind once it has changed it; before, by its input, else the one asked from.
+  const mindOf = (call: AnswerToolCall) => {
+    const changed = minds.find((mind) => mind.id === call.mindChange?.mindId);
+    if (changed) return mindName(changed);
+    if (call.tool === "create_mind")
+      return typeof call.input.title === "string" ? call.input.title : "";
+    return typeof call.input.mind === "string"
+      ? call.input.mind
+      : askedFrom?.name || namedMind(t, call);
+  };
+  const label = liveText(t, shown, scope, mindOf);
   const waiting = shown.kind === "waiting" || shown.kind === "consent";
   return (
     <p
@@ -167,7 +195,12 @@ function useHeldStep(step: LiveStep): LiveStep {
   return key === shownKey ? step : shown;
 }
 
-function liveText(t: Translate, step: LiveStep, scope: string): string {
+function liveText(
+  t: Translate,
+  step: LiveStep,
+  scope: string,
+  mindOf: (call: AnswerToolCall) => string,
+): string {
   switch (step.kind) {
     case "waiting":
       return t("approvals.answer.waiting");
@@ -180,7 +213,7 @@ function liveText(t: Translate, step: LiveStep, scope: string): string {
     case "searching":
       return t("steps.live.searching", { scope });
     case "call":
-      return runningText(t, step.call);
+      return runningText(t, step.call, mindOf);
     case "writing":
       return t("answer.phase.writing");
     case "checking":
@@ -197,11 +230,16 @@ const field = (call: AnswerToolCall, name: string): string => {
 };
 
 /** What a call that runs is doing, in the words its row uses. */
-function runningText(t: Translate, call: AnswerToolCall): string {
+function runningText(
+  t: Translate,
+  call: AnswerToolCall,
+  mindOf: (call: AnswerToolCall) => string,
+): string {
   if (call.source === "connector") {
     return t("connectors.call.running", { connector: call.connector?.name ?? "", tool: call.tool });
   }
   if (call.source === "sources") return t("sources.call.running", { query: field(call, "query") });
+  if (call.source === "minds") return mindCallText(t, call, mindOf(call));
   if (call.source === "web") {
     return call.tool === "search_web"
       ? t("web.call.searching", { query: field(call, "query") })
@@ -238,6 +276,10 @@ function mindStepText(t: Translate, step: MindStep, name = mindLabel(t, step.min
 /** A share read as a whole percent, at least 1 and at most 99: "about 40%" is part, never none or all. */
 const percentOf = (share: number) => Math.min(99, Math.max(1, Math.round(share * 100)));
 
+function passagesText(t: Translate, count: number): string {
+  return count === 1 ? t("steps.passages.one") : t("steps.passages", { count });
+}
+
 function sourcesText(t: Translate, count: number): string {
   if (count === 0) return t("steps.sources.none");
   return count === 1 ? t("steps.sources.one") : t("steps.sources", { count });
@@ -255,6 +297,13 @@ function foldedText(
         scope: scope(line.extraScopes),
         sources: sourcesText(t, line.sources),
       });
+    case "read-passages": {
+      const passages = passagesText(t, line.passages);
+      if (line.citedAfterChecking === 0) return t("steps.readNoneMatched", { passages });
+      return line.citedAfterChecking === 1
+        ? t("steps.readCited.one", { passages })
+        : t("steps.readCited", { passages, count: line.citedAfterChecking });
+    }
     case "searched-web":
       return t("steps.searchedWeb", { sources: sourcesText(t, line.sources) });
     case "listened":
@@ -702,7 +751,9 @@ function useAskedInMeeting(question: ConversationQuestion | undefined): boolean 
 }
 
 /** What a Question searched, with `extra` scopes besides (see `stepsScope`). */
-function useStepsScopeOf(question: ConversationQuestion | undefined): (extra: number) => string {
+export function useStepsScopeOf(
+  question: ConversationQuestion | undefined,
+): (extra: number) => string {
   const t = useT();
   const folders = useAppStore((state) => state.folders);
   const groups = useAppStore((state) => state.library?.groups);

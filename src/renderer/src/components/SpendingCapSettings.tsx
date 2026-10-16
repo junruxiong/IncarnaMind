@@ -1,7 +1,7 @@
 import { type KeyboardEvent, useEffect, useId, useState } from "react";
 import type { CostSummary, Currency, MonthlyCap } from "../../../core/api";
 import { core } from "../core";
-import { formatMoney, formatSpent } from "../cost";
+import { formatMoney, formatSpent, setAsideText } from "../cost";
 import { useLanguage, useT } from "../i18n";
 import type { SettingsPage } from "../settingsPages";
 import { useAppStore } from "../store";
@@ -72,6 +72,7 @@ export function SpendingCapSettings() {
   };
 
   const spent = summary && formatSpent(summary.spent, t, language);
+  const setAside = summary && setAsideText(summary.setAside, t, language);
   const unpriced = summary?.providers.reduce((sum, each) => sum + each.unpricedTokens, 0) ?? 0;
   const interrupted = summary?.providers.reduce((sum, each) => sum + each.interrupted, 0) ?? 0;
   const spentLine = !summary
@@ -100,6 +101,15 @@ export function SpendingCapSettings() {
             {spentLine && (
               <p data-testid="spending-cap-spent" className={hintClass}>
                 {spentLine}
+              </p>
+            )}
+            {setAside && (
+              <p
+                data-testid="spending-cap-set-aside"
+                title={t("cost.setAside.hint")}
+                className={hintClass}
+              >
+                {setAside}
               </p>
             )}
             {interrupted > 0 && (

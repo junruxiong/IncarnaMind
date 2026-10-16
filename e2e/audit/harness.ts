@@ -17,6 +17,7 @@ import {
 } from "@playwright/test";
 // Vite's own source-map reader (the audit adds no dependency of its own).
 import { SourceMapConsumer } from "source-map-js";
+import { homeEnv } from "../../tests/helpers/home";
 
 const appDir = resolve(__dirname, "..", "..");
 
@@ -99,7 +100,7 @@ export async function launch(
   env.INCARNAMIND_DATA_DIR = dataDir;
   env.INCARNAMIND_TEST_HOOKS = "1";
   env.INCARNAMIND_TEST_EMBEDDER = "fake";
-  env.HOME = home;
+  Object.assign(env, homeEnv(home));
   Object.assign(env, extraEnv);
 
   const launchMs = Date.now();
@@ -368,13 +369,16 @@ export async function focusWalk(
       const accent = getComputedStyle(probe).color;
       probe.remove();
       // The ring may be drawn on the element, on its ::before or ::after, or on a child
-      // (a tab draws it on its inner shape); a divider turns accent instead.
+      // (a tab draws it on its inner shape), or on the row a sidebar row's main button is
+      // in; a divider turns accent instead.
       const style = getComputedStyle(el);
+      const row = el.matches(".row-main") ? el.closest(".group") : null;
       const styles = [
         style,
         getComputedStyle(el, "::before"),
         getComputedStyle(el, "::after"),
         ...[...el.children].slice(0, 4).map((child) => getComputedStyle(child)),
+        ...(row ? [getComputedStyle(row)] : []),
       ];
       const ringed = styles.find(
         (s) => s.outlineStyle !== "none" && Number.parseFloat(s.outlineWidth) > 0,

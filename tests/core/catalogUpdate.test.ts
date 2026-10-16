@@ -1,3 +1,6 @@
+import { execFileSync } from "node:child_process";
+import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { describe, expect, test } from "vitest";
 import { diffModels, formatDiff, generateModels, isEmpty } from "../../scripts/catalogModels";
 
@@ -150,5 +153,25 @@ describe("the catalog's reading of ids that answer by another API", () => {
       "gpt-audio": "audio",
       "gpt-davinci": "completion",
     });
+  });
+});
+
+describe("Running the update with Node", () => {
+  test("Node loads the catalog's providers, presets among them, with the resolve hook the script runs with", () => {
+    const root = resolve(__dirname, "../..");
+    const catalog = pathToFileURL(join(root, "src/core/providers/catalog/providers.ts")).href;
+    const ids = execFileSync(
+      process.execPath,
+      [
+        "--no-warnings",
+        "--import",
+        "./scripts/tsResolve.mjs",
+        "--input-type=module",
+        "-e",
+        `const { CATALOG_PROVIDERS } = await import(${JSON.stringify(catalog)}); console.log(CATALOG_PROVIDERS.map((each) => each.id).join(","));`,
+      ],
+      { cwd: root, encoding: "utf8" },
+    );
+    expect(ids.trim().split(",")).toContain("groq");
   });
 });

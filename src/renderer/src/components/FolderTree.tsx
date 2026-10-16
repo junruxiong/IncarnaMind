@@ -1,4 +1,11 @@
-import { type ComponentType, type ReactNode, type SVGProps, useCallback, useMemo } from "react";
+import {
+  type ComponentType,
+  type ReactNode,
+  type SVGProps,
+  useCallback,
+  useEffect,
+  useMemo,
+} from "react";
 import { create } from "zustand";
 import type { Document, LinkedFolder } from "../../../core/api";
 import { buildFolderTree, type FolderNode } from "../folders";
@@ -10,11 +17,12 @@ import {
   rowStateLabel,
 } from "../linkedFolders";
 import type { ObjectRef } from "../objects";
+import { useRequests } from "../requests";
 import { sorted } from "../sort";
 import { useSort } from "../sortChoices";
 import { documentFields, folderFields } from "../sortFields";
-import { selectTagFilterKey, useAppStore } from "../store";
-import { TREE_ROW } from "../treeKeys";
+import { allExamples, selectTagFilterKey, useAppStore } from "../store";
+import { foldKeys, useTreeItem } from "../treeKeys";
 import { ExampleChip } from "./GettingStarted";
 import {
   ChevronDownLineIcon,
@@ -35,6 +43,9 @@ import {
 
 /** The "Other Documents" group's key among the folded. */
 const OTHER_DOCUMENTS = "other-documents";
+
+/** As long as the wash's animation lasts (`[data-just-linked]` in styles.css). */
+const LINKED_WASH_MS = 1600;
 
 interface FolderTreeState {
   /**
@@ -224,11 +235,13 @@ export function FolderTree({ documents, filtering, renderDocument }: FolderTreeP
   // Without Linked folders there is nothing to set the Other Documents apart from.
   if (tree.length === 0) {
     return others.length === 0 ? null : (
-      <ul data-testid="document-tree">{others.map((item) => renderDocument(item, 0))}</ul>
+      <ul role="none" data-testid="document-tree">
+        {others.map((item) => renderDocument(item, 0))}
+      </ul>
     );
   }
   return (
-    <ul aria-label={t("folders.label")} data-testid="document-tree">
+    <ul role="none" data-testid="document-tree">
       {renderLevel(
         sorted(tree, choices.sidebar ?? forAll, (node) => folderFields(node.folder), language),
       )}
@@ -275,7 +288,19 @@ function LinkedFolderItem({
   const language = useLanguage();
   const state = linkedFolderRowState(linked, hasContents);
   const label = rowStateLabel(state, t, language);
-  const isExample = useAppStore((current) => current.examples?.linkedFolderId === linked.id);
+  const isExample = useAppStore((current) =>
+    allExamples(current).some((each) => each.linkedFolderId === linked.id),
+  );
+  const justLinked = useRequests((current) => current.showLinked === linked.id);
+  // Its row, once it shows: in sight, washed for a moment, then as any other (#763).
+  useEffect(() => {
+    if (!justLinked) return;
+    document
+      .querySelector(`[data-linked-folder-id="${linked.id}"][data-root]`)
+      ?.scrollIntoView({ block: "nearest" });
+    const timer = setTimeout(() => useRequests.getState().clear("showLinked"), LINKED_WASH_MS);
+    return () => clearTimeout(timer);
+  }, [justLinked, linked.id]);
   return (
     <GroupItem
       testId="folder-item"
@@ -296,6 +321,7 @@ function LinkedFolderItem({
         <ObjectMenu
           target={{ kind: "linkedFolder", id: linked.id }}
           label={t("linkedFolders.more", { name })}
+          tabIndex={-1}
         />
       }
       data={{
@@ -305,6 +331,7 @@ function LinkedFolderItem({
         "data-state": state.kind,
         "data-status": linked.status,
         "data-layout": linked.layout,
+        ...(justLinked && { "data-just-linked": "true" }),
       }}
     >
       {children}
@@ -362,6 +389,7 @@ function GroupItem(props: GroupItemProps) {
   const tagFilter = useAppStore(selectTagFilterKey);
   const objectMenu = useObjectMenu(object ?? { kind: "folder", id: groupKey });
   const open = expandable && expanded;
+  const treeItem = useTreeItem({ depth, expanded: expandable ? open : undefined });
   const Chevron = open ? ChevronDownLineIcon : ChevronRightLineIcon;
   const buttonClass = actions ? `${rowButtonClass} ${clearsActions.menu}` : rowButtonClass;
   const inner = (
@@ -392,8 +420,7 @@ function GroupItem(props: GroupItemProps) {
   );
 
   return (
-    <li>
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: a right-click shortcut to the row's menu, whose ⋯ button is the way in by keyboard. */}
+    <li role="none">
       <div
         data-testid={testId}
         data-depth={depth}
@@ -404,18 +431,24 @@ function GroupItem(props: GroupItemProps) {
         {expandable ? (
           <button
             type="button"
-            {...TREE_ROW}
+            {...treeItem}
             data-testid="folder-toggle"
-            aria-expanded={open}
             title={title ?? name}
             onClick={() => toggle(groupKey, tagFilter)}
+            onKeyDown={foldKeys(open, () => toggle(groupKey, tagFilter))}
             className={buttonClass}
             style={rowPadding(depth)}
           >
             {inner}
           </button>
         ) : (
-          <div title={title ?? name} className={buttonClass} style={rowPadding(depth)}>
+          <div
+            {...treeItem}
+            tabIndex={-1}
+            title={title ?? name}
+            className={buttonClass}
+            style={rowPadding(depth)}
+          >
             {inner}
           </div>
         )}
@@ -437,7 +470,7 @@ function GroupItem(props: GroupItemProps) {
         )}
         {actions && <div className={rowActionsClass}>{actions}</div>}
       </div>
-      {open && <ul>{children}</ul>}
+      {open && <ul role="none">{children}</ul>}
     </li>
   );
 }

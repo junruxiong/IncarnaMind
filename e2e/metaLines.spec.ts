@@ -1,8 +1,9 @@
-import { expect, type Locator, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import {
   createDataFolder,
   dismissChatSetup,
+  dotsOf,
   launchApp,
   newMind,
   removeDataFolder,
@@ -16,30 +17,6 @@ test.beforeEach(async () => {
 test.afterEach(async () => {
   await removeDataFolder(dataDir);
 });
-
-/**
- * By geometry, for each part after the first of a line of parts joined by
- * dots: its dot shows only where the part before it is on the same line, and
- * then sits between the two. So no line starts or ends with a dot.
- */
-async function dotsOf(line: Locator) {
-  return line.evaluate((element) => {
-    const row = element.getBoundingClientRect();
-    const parts = [...element.querySelectorAll(":scope > .meta-part")];
-    return parts.slice(1).map((part, index) => {
-      const before = parts[index]?.getBoundingClientRect();
-      const here = part.getBoundingClientRect();
-      const dot = part.querySelector(".meta-dot")?.getBoundingClientRect();
-      const glyphCentre = dot ? dot.left + dot.width / 2 : Number.NaN;
-      return {
-        sameLine: before !== undefined && Math.abs(before.top - here.top) < 2,
-        shown: glyphCentre > row.left + 4,
-        between:
-          before !== undefined && glyphCentre >= before.right - 1 && glyphCentre <= here.left + 1,
-      };
-    });
-  });
-}
 
 const language = (window: Page, value: "en" | "zh-CN") =>
   window.evaluate(

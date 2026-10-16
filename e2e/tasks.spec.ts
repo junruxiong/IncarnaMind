@@ -1,11 +1,12 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { type ElectronApplication, expect, type Locator, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge, Task } from "../src/core/api";
 import {
   addDocuments,
   createDataFolder,
   dismissChatSetup,
+  forceQuit,
   launchApp,
   motionSettled,
   newMind,
@@ -19,7 +20,7 @@ import {
 } from "./app";
 
 /*
- * Tasks (#126, D189): a comparison table keeps filling as a Task when its
+ * Tasks (#126, #657): a comparison table keeps filling as a Task when its
  * Mind is closed and when IncarnaMind is force-quit, and goes on at the next
  * start; its progress shows in the assistant's thread, where it started, with
  * its bar, latest steps and what it can be asked (Pause, Stop). A Task that
@@ -114,13 +115,6 @@ const cellTexts = (table: Locator) =>
         ),
       ),
     );
-
-/** Force-quits the app as a crash would: its process killed, nothing saved on the way out. */
-async function forceQuit(app: ElectronApplication): Promise<void> {
-  const exited = new Promise<void>((resolve) => app.process().once("exit", () => resolve()));
-  app.process().kill("SIGKILL");
-  await exited;
-}
 
 test("a comparison table keeps filling as a Task: closing its Mind and force-quitting don't stop it, and it goes on at the next start", async () => {
   test.setTimeout(150_000);

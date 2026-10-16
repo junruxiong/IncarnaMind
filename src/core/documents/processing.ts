@@ -10,8 +10,9 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import type { TextUnit } from "../../shared/units";
-import type { PagePicture, RecognizedLine } from "../adapters";
+import type { LogFields, PagePicture, PictureRead, RecognizedLine } from "../adapters";
 import type { DocumentFailureReason, DocumentKind } from "../api";
 import {
   type FileMetadata,
@@ -23,7 +24,7 @@ import { stripBoilerplate } from "./boilerplate";
 import { creationDate, pdfDate, w3cDate } from "./creationDate";
 import { ExtractionError, extractText, type PageReading, pdfMetadata } from "./extract";
 import { officeProperties } from "./formats/coreProperties";
-import { readWebPage } from "./formats/web";
+import { readWebPage, SAVED_PICTURE } from "./formats/web";
 import { isPackageKind, packageSizeError } from "./formats/zip";
 import { keywordText } from "./keywords";
 import { type BuiltPassage, buildPassages } from "./passages";
@@ -45,9 +46,11 @@ import { documentTitle } from "./title";
  * (a Word file's comments are read into the section their mark is in). 8:
  * #435 (a workbook's rows Units keep the number of each cell whose shown
  * text isn't that number written plainly). 9: #397 (a PDF's scanned pages
- * are read from their pictures; see `SCAN_CURRENT_SINCE`).
+ * are read from their pictures; see `SCAN_CURRENT_SINCE`). 10: #756 (a saved
+ * web page's pictures are read, their text in its section; see
+ * `PICTURES_CURRENT_SINCE`).
  */
-export const PROCESSING_VERSION = 9;
+export const PROCESSING_VERSION = 10;
 
 /**
  * Per kind, the oldest version whose Passages and Units are still what this
@@ -56,7 +59,8 @@ export const PROCESSING_VERSION = 9;
  * (and embeddings) stay as they are; version 6 changed no Passage or Unit;
  * version 7 changed only Word files', which gain their comments; version 8
  * only Excel workbooks', whose rows Units gain their cells' numbers; version 9
- * only PDFs' scanned pages, which `SCAN_CURRENT_SINCE` reads again.
+ * only PDFs' scanned pages, which `SCAN_CURRENT_SINCE` reads again; version
+ * 10 only web pages with saved pictures, which `PICTURES_CURRENT_SINCE` reads.
  */
 export const CURRENT_SINCE: Readonly<Record<DocumentKind, number>> = {
   pdf: 4,
@@ -93,6 +97,13 @@ export const HAN_CURRENT_SINCE = 6;
  * quotes, which are kept as they were read (see `ScanJob.keep`).
  */
 export const SCAN_CURRENT_SINCE = 9;
+
+/**
+ * For a web page saved with its pictures, the oldest version that reads
+ * them: one processed by an older version is processed again at startup,
+ * when there is a model to read them.
+ */
+export const PICTURES_CURRENT_SINCE = 10;
 
 /**
  * The version of the metadata read: what a Document's creation date is
@@ -231,6 +242,9 @@ export type WorkerResult = ProcessingResult | MetadataResult;
 export interface ReadingChannel {
   /** The lines on a page's picture. Rejects with `ReadingUnavailable` when no page can be read now. */
   read(page: number, picture: PagePicture): Promise<RecognizedLine[]>;
+  /** The lines on a picture file, read where the model runs (`TextRecognizer.readFile`). */
+  readFile(page: number, file: Uint8Array): Promise<PictureRead>;
+  log(event: string, fields: LogFields): void;
   /** `read` of `of` scanned pages of version `contentHash` are read; `unit` is the one just read. */
   progress(contentHash: string, read: number, of: number, unit: TextUnit | null): void;
   signal: AbortSignal;
@@ -242,12 +256,13 @@ export interface ReadingChannel {
  * (`request` pairs them with the asking), or why they couldn't be.
  */
 export type WorkerRequest =
-  | { id: number; job: WorkerJob }
+  | { id: number; job: WorkerJob; password?: string }
   | { id: number; stop: true }
   | {
       id: number;
       request: number;
       lines?: RecognizedLine[];
+      read?: PictureRead;
       error?: { message: string; unavailable: boolean };
     };
 
@@ -261,14 +276,18 @@ export type WorkerResponse =
       id: number;
       progress: { contentHash: string; read: number; of: number; unit: TextUnit | null };
     }
-  | { id: number; request: number; page: number; picture: PagePicture };
+  | { id: number; request: number; page: number; picture: PagePicture }
+  | { id: number; request: number; page: number; file: Uint8Array }
+  | { id: number; log: { event: string; fields: LogFields } };
 
 /** Runs a job of either kind. Never throws. */
+/** `password`: what opens the job's PDF when it is locked (#763), never kept with the job. */
 export function runJob(
   job: WorkerJob,
   channel: ReadingChannel | null = null,
+  password?: string,
 ): Promise<WorkerResult> {
-  return job.task === "process" ? processFile(job, channel) : readMetadata(job);
+  return job.task === "process" ? processFile(job, channel, password) : readMetadata(job, password);
 }
 
 /** Why the file couldn't be read: it is gone, or can't be read now. */
@@ -323,6 +342,7 @@ async function refuseTooLarge(file: string, kind: DocumentKind): Promise<Process
 export async function processFile(
   job: ProcessingJob,
   channel: ReadingChannel | null = null,
+  password?: string,
 ): Promise<ProcessingResult> {
   const refused = isPackageKind(job.kind) ? await refuseTooLarge(job.file, job.kind) : null;
   if (refused) return refused;
@@ -333,6 +353,8 @@ export async function processFile(
     job.scan && channel
       ? {
           read: channel.read,
+          readFile: channel.readFile,
+          log: channel.log,
           signal: channel.signal,
           progress: (read, of, unit) => channel.progress(version.contentHash, read, of, unit),
           reader: job.scan.reader,
@@ -343,18 +365,31 @@ export async function processFile(
           ),
         }
       : null;
-  const { processed, firstPages } = await processBytes(job.kind, bytes, reading);
+  const readPicture =
+    job.kind === "web"
+      ? async (src: string) => {
+          if (!SAVED_PICTURE.test(src)) throw new Error("Not a picture saved with the page.");
+          return readFile(join(dirname(job.file), src));
+        }
+      : null;
+  const { processed, firstPages } = await processBytes(
+    job.kind,
+    bytes,
+    reading,
+    password,
+    readPicture,
+  );
   if (reading?.signal.aborted) return { outcome: "stopped" };
   const firstUnit = processed.outcome === "ready" ? (processed.pages[0]?.text ?? null) : null;
   return {
     ...processed,
     ...version,
-    ...(await readMetadataOf(job.kind, bytes, firstUnit, firstPages)),
+    ...(await readMetadataOf(job.kind, bytes, firstUnit, firstPages, password)),
   };
 }
 
 /** A metadata job: the creation date of the version indexed, read from the file. Never throws. */
-export async function readMetadata(job: MetadataJob): Promise<MetadataResult> {
+export async function readMetadata(job: MetadataJob, password?: string): Promise<MetadataResult> {
   // Text, Markdown and CSV files have no metadata: only the stored first Unit is read.
   if (!hasMetadata(job.kind)) {
     const firstPages = job.firstUnit === null ? [] : [job.firstUnit];
@@ -371,7 +406,10 @@ export async function readMetadata(job: MetadataJob): Promise<MetadataResult> {
   // A PDF's first pages are read again as extracted: the stored first Unit has lost its running
   // headers and footers, where a DOI often is.
   const firstPages = job.kind === "pdf" ? null : job.firstUnit === null ? [] : [job.firstUnit];
-  return { outcome: "read", ...(await readMetadataOf(job.kind, bytes, job.firstUnit, firstPages)) };
+  return {
+    outcome: "read",
+    ...(await readMetadataOf(job.kind, bytes, job.firstUnit, firstPages, password)),
+  };
 }
 
 const hasMetadata = (kind: DocumentKind) =>
@@ -394,6 +432,7 @@ async function readMetadataOf(
   bytes: Uint8Array,
   firstUnit: string | null,
   firstPages: string[] | null,
+  password: string | undefined,
 ): Promise<VersionMetadata> {
   let fromMetadata: (string | null)[] = [];
   let property: string | null = null;
@@ -422,7 +461,7 @@ async function readMetadataOf(
       };
     }
     if (kind === "pdf") {
-      const pdf = await pdfMetadata(bytes, firstPages === null ? REFERENCE_PAGES : 0);
+      const pdf = await pdfMetadata(bytes, firstPages === null ? REFERENCE_PAGES : 0, password);
       fromMetadata = [
         pdf.info === null ? null : pdfDate(pdf.info),
         pdf.xmp === null ? null : w3cDate(pdf.xmp),
@@ -452,9 +491,11 @@ async function processBytes(
   kind: DocumentKind,
   bytes: Uint8Array,
   reading: PageReading | null,
+  password: string | undefined,
+  readPicture: ((src: string) => Promise<Uint8Array>) | null,
 ): Promise<{ processed: Processed; firstPages: string[] }> {
   try {
-    const extracted = await extractText(kind, bytes, reading);
+    const extracted = await extractText(kind, bytes, reading, password, readPicture);
     const firstPages = extracted.units.slice(0, REFERENCE_PAGES).map((unit) => unit.text);
     const pages = kind === "pdf" ? stripBoilerplate(extracted.units) : extracted.units;
     const { pageCount, unread } = extracted;

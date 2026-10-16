@@ -19,18 +19,24 @@
  * Minds point to, and those retained, stay, the only text a deleted Document
  * keeps (`keptCitationTexts`), so those Citations can still be checked.
  */
+
 import { randomUUID } from "node:crypto";
 import { existsSync, renameSync } from "node:fs";
 import { rm, stat } from "node:fs/promises";
-import { isAbsolute, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
+import type { LiveDocument } from "../../shared/citations";
 import { quoteInUnits } from "../../shared/locations";
 import {
   type Anchor,
+  anchorsOf,
   cellNumber,
   type TextUnit,
   type UnitKind,
   type UnitLabel,
+  type UnitText,
 } from "../../shared/units";
+import { silentLogger } from "../activityLog";
+import type { Logger } from "../adapters";
 import { cleanQuote } from "../answers/citations";
 import type { CitedUnits } from "../answers/citedVersions";
 import type {
@@ -63,6 +69,7 @@ import { foundSourceOf } from "../sources/store";
 import type { Database, SqlValue } from "../storage";
 import { tagsOfDocument } from "../tags";
 import type { StoredTaggingState } from "../tags/tagger";
+import { isPlaceholderDate } from "./creationDate";
 import { createEmbeddingQueue } from "./embedding";
 import {
   DOCUMENT_EXTENSIONS,
@@ -74,17 +81,13 @@ import {
 } from "./files";
 import { isPackageKind, packageSizeError } from "./formats/zip";
 import { keywordText } from "./keywords";
-import {
-  createLibrary,
-  FORGET_FILE_IDENTITY,
-  type LibraryHooks,
-  type LibraryOptions,
-} from "./library";
+import { createLibrary, FORGET_FILE_IDENTITY, type LibraryHooks } from "./library";
 import type { PageText } from "./passages";
 import {
   CURRENT_SINCE,
   HAN_CURRENT_SINCE,
   METADATA_VERSION,
+  PICTURES_CURRENT_SINCE,
   PROCESSING_VERSION,
   type ProcessedPassage,
   type ProcessingJob,
@@ -121,7 +124,7 @@ import { detectLanguage, languageList, type TextLanguage } from "./textLanguage"
 import { createVectorIndex } from "./vectors";
 import type { WatchFolder } from "./watcher";
 import type { SnapshotFile } from "./web";
-import { webPageInfo } from "./web/store";
+import { currentLookHash, lookName, showsPicture, webPageInfo } from "./web/store";
 
 const DEFAULT_SEARCH_LIMIT = 20;
 const MAX_SEARCH_LIMIT = 200;
@@ -410,15 +413,16 @@ export interface DocumentsOptions {
    * scanned pages are left with the little text they have, as before.
    */
   textRecognition?: TextRecognitionModel;
+  /** The password kept for a locked PDF (./pdfPasswords, #763); undefined when none is. */
+  pdfPassword?(documentId: string): Promise<string | undefined>;
   linkedFolders: {
     watch: WatchFolder;
     stat: StatIdentity;
     retryMs: number;
     detectDataless: boolean;
   };
-  /** Says something to the User, in their language: why locating a Linked folder was refused. */
-  say: LibraryOptions["say"];
   reportError?: (error: unknown) => void;
+  log?: Logger;
 }
 
 /** Which Documents `list` returns. Every condition given must match. */
@@ -438,6 +442,7 @@ export interface DocumentFilter {
 export function createDocuments(options: DocumentsOptions) {
   const { db, dataDir, now, model, emitStatus } = options;
   const reportError = options.reportError ?? ((error: unknown) => console.error(error));
+  const log = options.log ?? silentLogger;
   const vectors = createVectorIndex(db, model);
   const legacyFolder = join(dataDir, "documents");
   const { textRecognition } = options;
@@ -487,6 +492,15 @@ export function createDocuments(options: DocumentsOptions) {
     return row.status as DocumentStatus;
   };
 
+  /** The Mind a file was last imported as, still there (#720). */
+  const importedMindOf = (documentId: string): string | null =>
+    db.get<{ mind_id: string }>(
+      `SELECT p.mind_id FROM word_packages p JOIN minds m ON m.id = p.mind_id
+       WHERE p.document_id = ? AND p.deleted_at IS NULL AND m.deleted_at IS NULL
+       ORDER BY p.created_at DESC, p.rowid DESC LIMIT 1`,
+      [documentId],
+    )?.mind_id ?? null;
+
   const toDocument = (row: DocumentRow): Document => {
     const tagging = taggingOf(row.status, row.tagging_status);
     const status = statusOf(row);
@@ -521,13 +535,15 @@ export function createDocuments(options: DocumentsOptions) {
               message: row.tagging_error_message ?? "",
             }
           : null,
-      creationDate: row.creation_date,
+      creationDate:
+        row.creation_date && !isPlaceholderDate(row.creation_date) ? row.creation_date : null,
       modifiedAt: row.file_mtime_ms === null ? null : new Date(row.file_mtime_ms).toISOString(),
       title: row.title,
       web: row.kind === "web" ? webPageInfo(db, row.id) : null,
       reference: referenceOf(db, row.id),
       ownFile: ownFileOf(row),
       found: foundSourceOf(db, row.id),
+      importedAs: importedMindOf(row.id),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
@@ -615,7 +631,9 @@ export function createDocuments(options: DocumentsOptions) {
     scan:
       textRecognition && row.kind === "pdf"
         ? { reader: textRecognition.reader, keep: keptScans(row) }
-        : null,
+        : textRecognition && row.kind === "web"
+          ? { reader: textRecognition.reader, keep: null }
+          : null,
   });
 
   const setStatus = (id: string, status: DocumentStatus) =>
@@ -910,7 +928,11 @@ export function createDocuments(options: DocumentsOptions) {
       announce(job.documentId);
     },
     onProgress(job, { contentHash, read, of, unit }) {
-      scanProgress.set(job.documentId, { pages: of, read });
+      scanProgress.set(job.documentId, {
+        pages: of,
+        read,
+        of: job.kind === "web" ? "pictures" : "scanned-pages",
+      });
       if (unit) {
         let partial = partialScans.get(job.documentId);
         if (partial?.contentHash !== contentHash) {
@@ -928,7 +950,17 @@ export function createDocuments(options: DocumentsOptions) {
       }
       return textRecognition.read(picture, page);
     },
+    onLog(job, { event, fields }) {
+      log.warn(event, { documentId: job.documentId, ...fields });
+    },
+    readFile(_job, page, file) {
+      if (!textRecognition) {
+        return Promise.reject(new TextRecognitionUnavailableError("Pictures can't be read."));
+      }
+      return textRecognition.readFile(file, page);
+    },
     isUnavailable: (error) => error instanceof TextRecognitionUnavailableError,
+    password: async (job) => options.pdfPassword?.(job.documentId),
     onResult(job, result) {
       scanProgress.delete(job.documentId);
       // Pages read by a job that stopped or crashed wait for the next; any other result has them.
@@ -1189,6 +1221,11 @@ export function createDocuments(options: DocumentsOptions) {
         [at, at, list],
       );
       db.run(
+        `UPDATE web_page_pictures SET deleted_at = ?, updated_at = ?
+         WHERE document_id IN (SELECT value FROM json_each(?)) AND deleted_at IS NULL`,
+        [at, at, list],
+      );
+      db.run(
         `UPDATE document_pages SET deleted_at = ?, updated_at = ?
          WHERE document_id IN (SELECT value FROM json_each(?)) AND deleted_at IS NULL
            AND id NOT IN (SELECT value FROM json_each(?))`,
@@ -1228,7 +1265,6 @@ export function createDocuments(options: DocumentsOptions) {
     db,
     now,
     dataDir,
-    say: options.say,
     folders: options.folders,
     watch: options.linkedFolders.watch,
     stat: options.linkedFolders.stat,
@@ -1324,6 +1360,16 @@ export function createDocuments(options: DocumentsOptions) {
                AND (length(trim(dp.text)) < ? OR json_extract(dp.label, '$.scan') IS NOT NULL)))`,
         [now(), BigInt(SCAN_CURRENT_SINCE), BigInt(MIN_PAGE_TEXT * 2)],
       );
+      db.run(
+        `UPDATE documents SET status = 'queued', updated_at = ?
+         WHERE deleted_at IS NULL AND kind = 'web' AND processing_version < ?
+           AND status IN ('ready', 'embedding', 'waiting-for-model')
+           AND EXISTS (
+             SELECT 1 FROM web_page_pictures wp
+             WHERE wp.document_id = documents.id AND wp.content_hash = documents.content_hash
+               AND wp.deleted_at IS NULL)`,
+        [now(), BigInt(PICTURES_CURRENT_SINCE)],
+      );
     }
     db.run(
       `UPDATE documents SET processing_version = ?
@@ -1338,8 +1384,12 @@ export function createDocuments(options: DocumentsOptions) {
     if (closed) return;
     for (const { id } of db.all<{ id: string }>(
       `SELECT id FROM documents
-       WHERE deleted_at IS NULL AND failure_reason = 'pages-unread' AND file_status = 'available'
+       WHERE deleted_at IS NULL AND file_status = 'available'
          AND status NOT IN ('queued', 'extracting')
+         AND (failure_reason = 'pages-unread' OR (kind = 'web' AND EXISTS (
+           SELECT 1 FROM document_pages dp, json_each(dp.label, '$.figures') figure
+           WHERE dp.document_id = documents.id AND dp.content_hash = documents.content_hash
+             AND dp.deleted_at IS NULL AND json_extract(figure.value, '$.unread') = 1)))
        ORDER BY created_at DESC, rowid DESC`,
     )) {
       process(id);
@@ -1369,7 +1419,15 @@ export function createDocuments(options: DocumentsOptions) {
     citedAtStart = byDocument;
   }
   for (const row of unfinished) {
-    if (row.status === "extracting") setStatus(row.id, "queued");
+    if (row.status === "extracting") {
+      // Read again by itself, what stopped the app could stop it again, at every start.
+      db.run(
+        `UPDATE documents SET status = ?, failure_reason = 'app-stopped',
+           failure_message = ?, updated_at = ? WHERE id = ?`,
+        [indexedStatus(row) ?? "failed", "The app stopped while it was being read.", now(), row.id],
+      );
+      continue;
+    }
     if (!isPaused(row.id)) processor.enqueue(jobFor(row));
   }
   citedAtStart = null;
@@ -1497,6 +1555,20 @@ export function createDocuments(options: DocumentsOptions) {
       )
       .map(toDocument);
   };
+
+  /** Every live Document's id, version and names, in `list`'s order: what a Citation needs to show its Document's current name. */
+  const names = (): LiveDocument[] =>
+    db
+      .all<{ id: string; content_hash: string; name: string; title: string | null }>(
+        `SELECT id, content_hash, name, title FROM documents
+         WHERE deleted_at IS NULL ORDER BY created_at DESC, rowid DESC`,
+      )
+      .map((row) => ({
+        id: row.id,
+        contentHash: row.content_hash,
+        name: row.name,
+        title: row.title,
+      }));
 
   /** The ids of the live Documents the filter keeps, in `list`'s order. */
   const ids = (filter: DocumentFilter = {}): string[] => {
@@ -1838,10 +1910,13 @@ export function createDocuments(options: DocumentsOptions) {
       if (!row) return null;
       const issued = referenceOf(db, documentId)?.fields.issued;
       if (issued) return issued;
-      if (row.creation_date) return row.creation_date.slice(0, 10);
-      return row.file_mtime_ms === null
-        ? null
-        : new Date(row.file_mtime_ms).toISOString().slice(0, 10);
+      // A date stored before it was known to be a placeholder (2000-01-01) isn't shown either.
+      if (row.creation_date && !isPlaceholderDate(row.creation_date)) {
+        return row.creation_date.slice(0, 10);
+      }
+      if (row.file_mtime_ms === null) return null;
+      const modified = new Date(row.file_mtime_ms).toISOString().slice(0, 10);
+      return isPlaceholderDate(modified) ? null : modified;
     },
 
     /**
@@ -1945,31 +2020,39 @@ export function createDocuments(options: DocumentsOptions) {
         input.pageFrom,
         input.pageTo ?? input.pageFrom,
       );
-      if (!units.some((unit) => unit.label?.scan && !unit.label.scan.unread)) return null;
+      const read = (unit: UnitText) =>
+        (unit.label?.scan && !unit.label.scan.unread) ||
+        unit.label?.figures?.some((figure) => !figure.unread);
+      if (!units.some(read)) return null;
       const ranges = quoteInUnits(units, cleanQuote(input.quote));
       if (!ranges || ranges.length === 0) return null;
       const unsure: string[] = [];
+      const covers = (from: number, to: number) =>
+        ranges.some((range) => range.start < to && range.end > from);
       // A quote of a page of text beside a scanned one wasn't read from a scan.
       let scanned = false;
+      let pictured = false;
       let start = 0;
       for (const unit of units) {
         const end = start + unit.text.length;
-        if (
-          unit.label?.scan &&
-          !unit.label.scan.unread &&
-          ranges.some((range) => range.start < end && range.end > start)
-        ) {
-          scanned = true;
-        }
+        if (unit.label?.scan && !unit.label.scan.unread && covers(start, end)) scanned = true;
         for (const [from, to] of unit.label?.scan?.unsure ?? []) {
-          if (ranges.some((range) => range.start < start + to && range.end > start + from)) {
-            unsure.push(unit.text.slice(from, to));
+          if (covers(start + from, start + to)) unsure.push(unit.text.slice(from, to));
+        }
+        for (const figure of unit.label?.figures ?? []) {
+          const anchor = anchorsOf(unit).find((each) => each.target === `figure${figure.number}`);
+          if (figure.unread || !anchor || !covers(start + anchor.start, start + anchor.end)) {
+            continue;
+          }
+          pictured = true;
+          for (const [from, to] of figure.unsure ?? []) {
+            if (covers(start + from, start + to)) unsure.push(unit.text.slice(from, to));
           }
         }
         // `joinUnits` puts one line break between Units.
         start = end + 1;
       }
-      return scanned ? { unsure } : null;
+      return scanned ? { unsure, from: "scan" } : pictured ? { unsure, from: "picture" } : null;
     },
 
     /** `added` hears of each new Document as it is stored, before it is processed. */
@@ -1994,6 +2077,9 @@ export function createDocuments(options: DocumentsOptions) {
       });
       return { documents, skipped };
     },
+
+    /** See the library's `newVersionFrom`: a newer draft of a Word file imported before (#720). */
+    newVersionFrom: (documentId: string, path: string) => library.newVersionFrom(documentId, path),
 
     /**
      * Adds a file IncarnaMind saved in the data folder, a web page's snapshot
@@ -2039,6 +2125,9 @@ export function createDocuments(options: DocumentsOptions) {
     /** Looks at a file again now, as when it is opened: a new version is processed. */
     check: (path: string) => library.check([path]),
 
+    /** Tells the windows a Document changed besides its processing, such as a web page's look. */
+    announce,
+
     /**
      * Points a Document added on its own at a copy IncarnaMind just saved of
      * its file, elsewhere: a Transcript saved at Stop to the Output location
@@ -2062,7 +2151,21 @@ export function createDocuments(options: DocumentsOptions) {
     },
 
     list,
+    names,
     ids,
+
+    /** The live Documents (of these, or all of them) that failed or have no text: the few `findUnreadDocuments` looks at. */
+    unread(documentIds?: readonly string[]): Document[] {
+      const { where, params } = filterWhere(documentIds ? { ids: documentIds } : {});
+      return db
+        .all<DocumentRow>(
+          `SELECT ${COLUMNS} FROM documents
+           WHERE ${where} AND (status IN ('failed', 'no-text') OR failure_reason IS NOT NULL)
+           ORDER BY created_at DESC, rowid DESC`,
+          params,
+        )
+        .map(toDocument);
+    },
 
     /** A live Document. Throws NotFoundError for an unknown or deleted one. */
     get(idInput: unknown): Document {
@@ -2167,6 +2270,10 @@ export function createDocuments(options: DocumentsOptions) {
           deleted,
         );
         db.run(
+          "UPDATE web_page_pictures SET deleted_at = NULL, updated_at = ? WHERE document_id = ? AND deleted_at = ?",
+          deleted,
+        );
+        db.run(
           `UPDATE document_tags SET deleted_at = NULL, updated_at = ?
            WHERE document_id = ? AND deleted_at = ?
              AND NOT EXISTS (SELECT 1 FROM document_tags live
@@ -2215,7 +2322,8 @@ export function createDocuments(options: DocumentsOptions) {
       const id = parseId(idInput);
       const row = find(id);
       if (!row) throw new NotFoundError({ key: "error.document.notFound" });
-      if (!failedNow(row)) {
+      // A scan with no text is read again too (#763): its text recognition may now be ready.
+      if (!failedNow(row) && row.status !== "no-text") {
         throw new InvalidInputError({ key: "error.document.notFailed" });
       }
       if (row.file_status !== "available") {
@@ -2256,15 +2364,31 @@ export function createDocuments(options: DocumentsOptions) {
 
     /**
      * Opens a picture a live Markdown Document shows from beside it, by the
-     * path written in the file (see `openImageBeside`). Anything else is
-     * refused (NotFoundError).
+     * path written in the file (see `openImageBeside`), or one a saved web
+     * page's versions show, by its path in the snapshot, or the PDF of how
+     * its last version looked (`WebPageLook.path`). Anything else is refused
+     * (NotFoundError).
      */
     async openImage(idInput: unknown, path: unknown): Promise<DocumentImage> {
       if (typeof path !== "string" || path.length > 2048) {
         throw new InvalidInputError("An image's path must be text.");
       }
       const row = await openablePath(idInput);
-      if (row.kind !== "markdown") {
+      const look = row.kind === "web" ? currentLookHash(db, row.id) : null;
+      if (look && path === `looks/${lookName(look)}`) {
+        try {
+          return { ...(await openFile(join(dirname(row.path), path))), type: "application/pdf" };
+        } catch (error) {
+          throw new NotFoundError({ key: "error.webPage.lookGone" }, { cause: error });
+        }
+      }
+      if (row.kind === "web") {
+        // A saved web page's picture: one of the files its versions show, and nothing else (#756).
+        const hash = /^pictures\/([0-9a-f]{64})\.(?:png|jpg|gif|webp|avif)$/.exec(path)?.[1];
+        if (!hash || !showsPicture(db, row.id, hash)) {
+          throw new NotFoundError({ key: "error.document.noSuchPicture" });
+        }
+      } else if (row.kind !== "markdown") {
         throw new NotFoundError("Only a Markdown Document shows pictures from beside it.");
       }
       try {
@@ -2432,6 +2556,13 @@ export function createDocuments(options: DocumentsOptions) {
       library.close();
       embedding.close();
       processor.close();
+      // Closed in good order, a Document being read is read again at the next start; one
+      // still "extracting" then is one whose reading stopped the app (see `unfinished`).
+      db.run(
+        `UPDATE documents SET status = 'queued', updated_at = ?
+         WHERE deleted_at IS NULL AND status = 'extracting'`,
+        [now()],
+      );
     },
   };
 }

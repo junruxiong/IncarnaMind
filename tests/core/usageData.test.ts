@@ -95,18 +95,7 @@ async function useTheApp(sender: UsageDataSender, agree: boolean | null) {
   await core.exportMind(mind.id, { format: "markdown" });
   await core.recordUsage({ event: "citation_opened", fields: { check: "found" } });
   await core.recordUsage({ event: "settings_page_viewed", fields: { page: "privacy" } });
-  await core.recordUsage({
-    event: "onboarding_picked",
-    fields: {
-      papers_research: true,
-      reports_analysis: false,
-      contracts_legal: false,
-      meetings_notes: true,
-      everything: false,
-      something_else: false,
-      skipped: false,
-    },
-  });
+  await core.recordUsage({ event: "example_opened", fields: { group: "contracts" } });
   return { ...setUp, answerId };
 }
 
@@ -227,7 +216,9 @@ describe("Usage data: consent", { timeout: 30_000 }, () => {
     expect(fieldsOf(sent, "settings_page_viewed")).toEqual([
       expect.objectContaining({ page: "privacy" }),
     ]);
-    expect(fieldsOf(sent, "onboarding_picked")).toHaveLength(1);
+    expect(fieldsOf(sent, "example_opened")).toEqual([
+      expect.objectContaining({ group: "contracts" }),
+    ]);
 
     // Nothing the User wrote or named appears anywhere in what was sent.
     const everything = JSON.stringify(sent);
@@ -327,9 +318,10 @@ describe("Usage data: consent", { timeout: 30_000 }, () => {
     await core.createMind();
     expect(sent).toHaveLength(before);
     // It can't be turned on while local mode is on.
-    await expect(core.updatePrivacySettings({ usageData: true })).rejects.toThrow(
-      InvalidInputError,
-    );
+    await expect(core.updatePrivacySettings({ usageData: true })).rejects.toMatchObject({
+      name: "InvalidInputError",
+      wording: { key: "error.privacy.usageDataLocalMode" },
+    });
     expect(
       (await core.listNetworkTraffic()).find((each) => each.id === "usage-data"),
     ).toMatchObject({ enabled: false });
@@ -556,6 +548,7 @@ describe("Usage data: what the core derives from its events", () => {
       droppedRecords: 0,
       rejectedRecords: [],
       placedMarkers: 0,
+      citedAfterChecking: { count: 0, asked: false },
       citationSupport: null,
       quoteRetry: null,
       figures: [],

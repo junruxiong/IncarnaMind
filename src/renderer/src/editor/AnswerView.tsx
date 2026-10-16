@@ -11,49 +11,43 @@ import {
   type ToolApprovalRequest,
 } from "../../../core/api";
 import { asksAfterThirdParty } from "../../../shared/approvalRules";
+import { toolCallsOf } from "../../../shared/toolCalls";
 import { AnswerWriting } from "../answerPhase";
 import { isCalculated, RUN_SCRIPT, SEARCH } from "../answerSteps";
 import { useAnswers } from "../answers";
 import { useApprovals, waitingFor } from "../approvals";
 import { signInAgain } from "../chatGptSignIn";
+import { MindCall } from "../components/assistant/MindCall";
 import { useIsExampleAnswer } from "../components/GettingStarted";
 import { PlugIcon, ScriptIcon, SkillIcon, StopIcon } from "../components/icons";
 import { DocumentLineIcon, FindSourcesLineIcon } from "../components/lineIcons";
 import { ObjectMenu, useObjectMenu } from "../components/ObjectMenu";
-import { ProblemLine } from "../components/ProblemLine";
+import { ProblemLine, ProblemMark } from "../components/ProblemLine";
+import {
+  LocalModelRefusedLine,
+  OllamaNotRunningLine,
+} from "../components/providers/OllamaProblems";
 import { core } from "../core";
 import { formatResetTime } from "../cost";
 import { useFindSources } from "../findSources";
 import { useLanguage, useT } from "../i18n";
+import { useKeyRefusals, useKeySavedSince } from "../keyRefusals";
+import { requestModelMenu } from "../modelMenu";
 import { useModelNames } from "../modelNames";
+import { useStoppedByPlanLimit } from "../planLimits";
 import { ANSWER_PROBLEMS, answerProblem } from "../problems";
 import type { SettingsPage } from "../settingsPages";
 import { useAppStore } from "../store";
 import { reasonKey } from "../webPages";
 import { ChevronRightSmallIcon, RegenerateSmallIcon } from "./icons";
 import { useMindId } from "./mindContext";
+import { PlanLimitLine } from "./PlanLimitLine";
 import { ThirdPartyLine } from "./ThirdPartyLine";
 
 const text = (value: unknown) => (typeof value === "string" ? value : null);
 
 const isErrorKind = (value: unknown): value is ProviderErrorKind =>
   typeof value === "string" && Object.hasOwn(ANSWER_PROBLEMS, value);
-
-/** The Tool calls the core stored on the Answer (a JSON array), or none if unreadable. */
-function toolCallsOf(value: unknown): AnswerToolCall[] {
-  if (typeof value !== "string") return [];
-  try {
-    const parsed: unknown = JSON.parse(value);
-    return Array.isArray(parsed)
-      ? parsed.filter(
-          (call): call is AnswerToolCall =>
-            typeof call === "object" && call !== null && typeof call.id === "string",
-        )
-      : [];
-  } catch {
-    return [];
-  }
-}
 
 /** Items of the meta line, with a dot between each two. */
 function Dotted({ items }: { items: ReactNode[] }) {
@@ -97,10 +91,16 @@ export function AnswerView({ node, editor, getPos }: ReactNodeViewProps) {
   const waiting = useApprovals((state) => state.waiting);
   const approvals = useMemo(() => waitingFor(waiting, answerId), [waiting, answerId]);
   const isExample = useIsExampleAnswer(answerId);
+  const planModel = useStoppedByPlanLimit(
+    status === "failed" && isErrorKind(node.attrs.errorKind) ? node.attrs.errorKind : null,
+    text(node.attrs.providerId),
+  )
+    ? modelId
+    : null;
 
   // One the User edited comes back as changes over their version: nothing to confirm.
-  const writeAgain = () => {
-    if (answerId && questionId) void regenerate(mindId, answerId, questionId);
+  const writeAgain = async () => {
+    if (answerId && questionId) await regenerate(mindId, answerId, questionId);
   };
   const objectMenu = useObjectMenu({ kind: "answer", id: answerId ?? "" });
   const here = {
@@ -156,9 +156,9 @@ export function AnswerView({ node, editor, getPos }: ReactNodeViewProps) {
       <CallRows calls={toolCalls} approvals={approvals} />
 
       {text(node.attrs.citationSupport) === "none" && (
-        <p contentEditable={false} data-testid="answer-no-citations" className="answer-info">
-          {t("citation.unsupported")}
-        </p>
+        <div contentEditable={false}>
+          <NoCitationsLine modelId={modelId} providerId={text(node.attrs.providerId)} />
+        </div>
       )}
 
       <NodeViewContent
@@ -174,7 +174,7 @@ export function AnswerView({ node, editor, getPos }: ReactNodeViewProps) {
         </div>
       )}
 
-      {!streaming && status === "failed" && (
+      {!streaming && status === "failed" && !planModel && (
         <AnswerError
           kind={isErrorKind(node.attrs.errorKind) ? node.attrs.errorKind : "unknown"}
           modelId={modelId}
@@ -183,6 +183,14 @@ export function AnswerView({ node, editor, getPos }: ReactNodeViewProps) {
           details={text(node.attrs.errorMessage)}
           onRetry={questionId ? () => writeAgain() : undefined}
           onOpenSettings={openSettings}
+        />
+      )}
+      {!streaming && status === "failed" && planModel && (
+        <PlanLimitLine
+          modelId={planModel}
+          providerId={text(node.attrs.providerId)}
+          details={text(node.attrs.errorMessage)}
+          onAnswerAgain={writeAgain}
         />
       )}
 
@@ -233,6 +241,37 @@ export function AnswerView({ node, editor, getPos }: ReactNodeViewProps) {
   );
 }
 
+/** An Answer by a model that can't add Citations (#765): it says so, with the way to another model. */
+export function NoCitationsLine({
+  modelId,
+  providerId,
+}: {
+  modelId: string | null;
+  providerId: string | null;
+}) {
+  const t = useT();
+  const shownModel = useModelNames()(modelId ?? "", providerId);
+  return (
+    <ProblemLine
+      testId="answer-no-citations"
+      role="status"
+      action={{
+        label: t("citation.unsupported.choose"),
+        testId: "answer-choose-model",
+        onClick: requestModelMenu,
+      }}
+      className="answer-info"
+    >
+      {t("citation.unsupported", {
+        model: modelId ? shownModel.name : t("answer.error.thisModel"),
+      })}
+    </ProblemLine>
+  );
+}
+
+/** Asked for once per run: while offline, asking again on every error would only fail again. */
+let modelsAsked = false;
+
 /** Failures that can come of a model that can't answer, rather than of the connection. */
 const WRONG_MODEL: ReadonlySet<ProviderErrorKind> = new Set([
   "model",
@@ -248,6 +287,7 @@ export function AnswerError({
   providerId,
   resetsAt,
   details,
+  failedAt = null,
   onRetry,
   onOpenSettings,
 }: {
@@ -257,19 +297,32 @@ export function AnswerError({
   /** When the plan's limit resets, when its provider said. */
   resetsAt: string | null;
   details: string | null;
+  /**
+   * When it failed, ISO 8601, said beside a refused key; an Answer in a Mind keeps no time, so
+   * its failure counts from when it was first shown. A key saved since lets it be asked again.
+   */
+  failedAt?: string | null;
   onRetry?: (() => void) | undefined;
   onOpenSettings(page: SettingsPage): void;
 }) {
   const t = useT();
   const language = useLanguage();
   const shownModel = useModelNames()(modelId ?? "", providerId);
-  const provider = useAnswers(
-    (state) => state.models?.find((group) => group.provider.id === providerId)?.provider.kind,
+  const providerInUse = useAnswers(
+    (state) => state.models?.find((group) => group.provider.id === providerId)?.provider,
   );
+  const provider = providerInUse?.kind;
+  const service = providerInUse
+    ? (providerInUse.service?.name ?? t(`providers.kind.${providerInUse.kind}`))
+    : t("answer.error.thisService");
+  const [shownAt] = useState(() => new Date().toISOString());
+  const keySaved = useKeySavedSince(providerId, failedAt ?? shownAt);
   // Whose plan it was decides where its usage is managed.
   useEffect(() => {
-    if (kind === "plan-limit" || WRONG_MODEL.has(kind)) useAnswers.getState().loadModels();
-  }, [kind]);
+    if (modelsAsked) return;
+    modelsAsked = true;
+    useAnswers.getState().loadModels();
+  }, []);
   // A model the User added to the menu that then failed: one click takes it back out.
   const added = useAnswers((state) =>
     state.models?.some(
@@ -287,27 +340,44 @@ export function AnswerError({
         }
       : undefined;
   const { line, fix } = answerProblem(kind, provider);
+  if (fix.kind === "ollama") return <OllamaNotRunningLine details={details} onRetry={onRetry} />;
+  if (fix.kind === "local-model") {
+    return (
+      <LocalModelRefusedLine
+        model={modelId ? shownModel.name : t("answer.error.thisModel")}
+        details={details}
+      />
+    );
+  }
   const action = removeFromMenu
     ? { label: t("answer.error.removeFromMenu"), onClick: removeFromMenu }
-    : fix.kind === "settings"
-      ? { label: t(fix.label), onClick: () => onOpenSettings(fix.page) }
-      : fix.kind === "sign-in"
+    : kind === "auth" && keySaved && onRetry
+      ? { label: t("answer.error.askAgain"), onClick: onRetry }
+      : kind === "auth"
         ? {
-            label: t(fix.label),
+            label: t("answer.error.checkKey"),
             onClick: () =>
-              void signInAgain(onOpenSettings).then((signedIn) => {
-                if (signedIn) onRetry?.();
-              }),
+              void useKeyRefusals.getState().check(providerId, modelId ?? "", failedAt),
           }
-        : fix.kind === "link"
-          ? // The main process opens it in the User's browser.
-            {
-              label: `${t(fix.label)} ↗`,
-              onClick: () => window.open(fix.url, "_blank", "noreferrer"),
-            }
-          : fix.kind === "retry" && onRetry
-            ? { label: t(fix.label), onClick: onRetry }
-            : undefined;
+        : fix.kind === "settings"
+          ? { label: t(fix.label), onClick: () => onOpenSettings(fix.page) }
+          : fix.kind === "sign-in"
+            ? {
+                label: t(fix.label),
+                onClick: () =>
+                  void signInAgain(onOpenSettings).then((signedIn) => {
+                    if (signedIn) onRetry?.();
+                  }),
+              }
+            : fix.kind === "link"
+              ? // The main process opens it in the User's browser.
+                {
+                  label: `${t(fix.label)} ↗`,
+                  onClick: () => window.open(fix.url, "_blank", "noreferrer"),
+                }
+              : fix.kind === "retry" && onRetry
+                ? { label: t(fix.label), onClick: onRetry }
+                : undefined;
   return (
     <div contentEditable={false} data-testid="answer-error" data-error-kind={kind}>
       <ProblemLine
@@ -316,7 +386,7 @@ export function AnswerError({
         title={details ?? undefined}
         className="mt-1 select-none"
       >
-        {t(line, { model: modelId ? shownModel.name : t("answer.error.thisModel") })}
+        {t(line, { model: modelId ? shownModel.name : t("answer.error.thisModel"), service })}
         {removeFromMenu && kind !== "model" && ` · ${shownModel.name}`}
         {kind === "plan-limit" && resetsAt && (
           <>
@@ -364,8 +434,9 @@ export function CallRows({
   );
 }
 
-/** The row of a call through a Connector, of Find sources, of web search, or of a Skill script. */
+/** The row of a call through a Connector, of Find sources, of web search, of a Minds' Tool, or of a Skill script. */
 export function CallRow({ call }: { call: AnswerToolCall }) {
+  if (call.source === "minds") return <MindCall call={call} />;
   if (call.source === "connector") return <ConnectorCall call={call} />;
   if (call.source === "sources") return <SourcesCall call={call} />;
   if (call.source === "web") return <WebCall call={call} />;
@@ -570,6 +641,7 @@ function ScriptApprovalCard({
           className="approval-actions approval-warning"
         >
           <p id={warningId} className="approval-warning-title">
+            <ProblemMark />
             {t("scripts.alwaysRun.title", params)}
           </p>
           <p className="approval-warning-body">
@@ -580,7 +652,7 @@ function ScriptApprovalCard({
               type="button"
               data-testid="always-run-confirm"
               onClick={() => respond(request.requestId, "always-allow", { riskAccepted: true })}
-              className="approval-button approval-button--danger"
+              className="approval-button"
             >
               {t("scripts.alwaysRun.confirm", params)}
             </button>
@@ -717,6 +789,7 @@ function ScriptCall({ call }: { call: AnswerToolCall }) {
           </pre>
           {run?.error && (
             <p data-testid="answer-script-error" className="answer-call-error">
+              <ProblemMark />
               {run.error}
             </p>
           )}
@@ -989,7 +1062,15 @@ export function SkillRow({ name, use, reads }: SkillUse) {
       className={`answer-call ${status === "failed" ? "answer-call--failed" : ""}`}
     >
       <p className="answer-call-summary answer-call-summary--static">
-        <SkillIcon className={`answer-call-icon ${status === "running" ? "animate-pulse" : ""}`} />
+        {status === "failed" ? (
+          <span className="answer-call-icon flex items-center justify-center">
+            <ProblemMark className="" />
+          </span>
+        ) : (
+          <SkillIcon
+            className={`answer-call-icon ${status === "running" ? "animate-pulse" : ""}`}
+          />
+        )}
         <span className="answer-call-text">{summary}</span>
         {use?.forced && <span className="answer-call-note"> · {t("skills.answer.forced")}</span>}
       </p>

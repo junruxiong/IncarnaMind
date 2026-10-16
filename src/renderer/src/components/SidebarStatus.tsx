@@ -8,7 +8,7 @@ import { useCapturing } from "../meetings";
 import { downloadProgress } from "../modelDownload";
 import { enterFrom, exitToward } from "../motion";
 import { rerankingModelStatus } from "../rerankStatus";
-import { isOwnDocument, useAppStore } from "../store";
+import { allExamples, isOwnDocument, useAppStore } from "../store";
 import { textRecognitionStatus, useTextRecognition } from "../textRecognition";
 import { canTryAgain, outsideDialog, reasonKey, useWebPages } from "../webPages";
 import { CloseLineIcon } from "./lineIcons";
@@ -37,13 +37,13 @@ const PROCESSING: ReadonlySet<DocumentStatus> = new Set([
   "embedding",
 ]);
 
-/** In progress (a blue dot), waiting for the User (amber), failed (red), or for information (grey). */
+/** In progress (a blue dot), waiting for the User or failed (amber), or for information (grey). */
 type Tone = "progress" | "waiting" | "error" | "info";
 
 const dotTones: Record<Tone, string> = {
   progress: "bg-accent",
   waiting: "bg-attention",
-  error: "bg-danger",
+  error: "bg-attention",
   info: "bg-ink-placeholder",
 };
 
@@ -223,11 +223,14 @@ function useStatuses(): Status[] {
         if (PROCESSING.has(item.status)) {
           if (item.linkedFolderId === null || !paused.has(item.linkedFolderId)) {
             processing++;
-            if (item.scan) scannedPages += item.scan.pages - item.scan.read;
+            if (item.scan?.of === "scanned-pages") scannedPages += item.scan.pages - item.scan.read;
           }
         } else if (item.status === "ready") {
           if (item.tagging === "pending" || item.tagging === "tagging") tagging++;
-          else if (item.tagging === "waiting-for-provider" && isOwnDocument(item, state.examples))
+          else if (
+            item.tagging === "waiting-for-provider" &&
+            isOwnDocument(item, allExamples(state))
+          )
             waitingForTagger++;
         }
       }
@@ -392,7 +395,7 @@ function useStatuses(): Status[] {
       short: t("status.taggingWaiting"),
       full: t("jev.waiting.notice"),
       action: {
-        label: t("status.setUp"),
+        label: t("status.choose"),
         testId: "tagging-waiting-setup",
         run: () => openSettings("models"),
       },

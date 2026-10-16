@@ -1,3 +1,4 @@
+import { SHOW_AGENT_CONNECTION } from "../../shared/agentConnection";
 import type { MessageKey } from "../../shared/i18n";
 
 /** The pages of the Settings dialog, in the order its list shows them. */
@@ -13,6 +14,10 @@ export const settingsPages = [
 ] as const;
 
 export type SettingsPage = (typeof settingsPages)[number];
+
+export const offeredSettingsPages: readonly SettingsPage[] = settingsPages.filter(
+  (page) => page !== "agents" || SHOW_AGENT_CONNECTION,
+);
 
 /** Each page's name: in the dialog's list, as its title, and in ⌘K. */
 export const settingsPageLabels: Record<SettingsPage, MessageKey> = {
@@ -30,7 +35,7 @@ export const settingsPageLabels: Record<SettingsPage, MessageKey> = {
 const movedPages: Record<string, SettingsPage> = { tools: "privacy", notifications: "general" };
 
 export const resolveSettingsPage = (page: unknown): SettingsPage =>
-  isSettingsPage(page)
+  isSettingsPage(page) && offeredSettingsPages.includes(page)
     ? page
     : typeof page === "string"
       ? (movedPages[page] ?? "general")

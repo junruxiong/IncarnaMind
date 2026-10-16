@@ -70,6 +70,12 @@ export type StepRow =
 
 export type FoldedLine =
   | { kind: "searched"; sources: number; extraScopes: number }
+  /**
+   * A search whose Answer cited nothing of its own (#760): the Passages it
+   * read, and how many sentences were cited after checking them against
+   * those (0: none could be matched).
+   */
+  | { kind: "read-passages"; passages: number; citedAfterChecking: number }
   | { kind: "searched-web"; sources: number }
   | { kind: "listened"; sources: number }
   | { kind: "read"; mind: MindRead; share: number | null; selection?: true }
@@ -242,6 +248,15 @@ export function stepRows(input: StepsInput): StepRow[] {
 const sourceCount = (citations: readonly MarkedCitation[]) =>
   new Set(citations.map((citation) => citation.documentId)).size;
 
+/** How many Passages the Answer's searches read: each once, when the searches kept which. */
+function passagesRead(calls: readonly AnswerToolCall[]): number {
+  const done = calls.filter((call) => isSearch(call) && call.status === "done");
+  if (done.some((call) => call.passages)) {
+    return new Set(done.flatMap((call) => call.passages ?? [])).size;
+  }
+  return done.reduce((sum, call) => sum + (call.resultCount ?? 0), 0);
+}
+
 /**
  * Further scopes the Answer searched beside its Question's: each Connector
  * whose Tools it called, Find sources, and the web.
@@ -269,6 +284,13 @@ export function foldedLine(input: StepsInput): FoldedLine | null {
   const sources = sourceCount(answer.citations);
   if (meeting) return { kind: "listened", sources };
   if (answer.toolCalls.some((call) => isSearch(call) && call.status === "done")) {
+    // Never "no sources" once Passages were read: when the model cited nothing itself, what
+    // was read, and what came of checking the Answer against it.
+    const passages = passagesRead(answer.toolCalls);
+    const citedAfterChecking = answer.steps?.citedAfterChecking ?? 0;
+    if (passages > 0 && answer.citations.length <= citedAfterChecking) {
+      return { kind: "read-passages", passages, citedAfterChecking };
+    }
     return { kind: "searched", sources, extraScopes: extraScopes(answer.toolCalls) };
   }
   if (answer.toolCalls.some((call) => call.source === "web" && call.status === "done")) {

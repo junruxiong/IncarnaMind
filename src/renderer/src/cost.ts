@@ -1,18 +1,21 @@
 import type { Money, RunEstimate, RunStop } from "../../core/api";
 import type { Language } from "../../core/language";
+import { formatDateTime } from "../../shared/dates";
 import type { MessageKey, MessageParams } from "../../shared/i18n";
 
 type Translate = (key: MessageKey, params?: MessageParams) => string;
 
 /**
  * An amount in its currency: cents, and a small amount to its first figures
- * rather than "$0.00", so one short Answer still shows ("$0.0013").
+ * rather than "$0.00", so one short Answer still shows ("$0.0013"). Dollars
+ * are "$" in every language, where Chinese would write "US$".
  */
 export function formatMoney({ amount, currency }: Money, language: Language): string {
   const small = amount > 0 && amount < 0.01;
   return new Intl.NumberFormat(language, {
     style: "currency",
     currency,
+    currencyDisplay: currency === "USD" ? "narrowSymbol" : "symbol",
     minimumFractionDigits: amount === 0 ? 0 : 2,
     maximumFractionDigits: small ? 4 : 2,
   }).format(amount);
@@ -29,15 +32,22 @@ export function formatSpent(
   return second ? t("cost.and", { first, second }) : first;
 }
 
+export function setAsideText(
+  setAside: readonly Money[],
+  t: Translate,
+  language: Language,
+): string | null {
+  const amount = formatSpent(
+    setAside.filter((each) => each.amount > 0),
+    t,
+    language,
+  );
+  return amount && t("cost.setAside", { amount });
+}
+
 /** When a plan's limit resets: the time today, else the day and time. */
 export function formatResetTime(iso: string, language: Language, now = new Date()): string {
-  const at = new Date(iso);
-  const sameDay = at.toDateString() === now.toDateString();
-  return new Intl.DateTimeFormat(language, {
-    ...(sameDay ? {} : { month: "short", day: "numeric" }),
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(at);
+  return formatDateTime(iso, language, { now });
 }
 
 /** The line a run stopped at the cap or a plan's limit shows: "Plan limit reached · Try again after 14:30". */
@@ -87,6 +97,9 @@ export function estimateLine(
     tokens: new Intl.NumberFormat(language, { notation: "compact" }).format(estimate.tokens),
   });
   const { calls } = estimate;
+  const aside = estimate.setAsideTowardCap
+    ? setAsideText([estimate.setAsideTowardCap], t, language)
+    : null;
   const month =
     estimate.cap && estimate.spentTowardCap
       ? [
@@ -94,6 +107,7 @@ export function estimateLine(
             spent: formatMoney(estimate.spentTowardCap, language),
             cap: formatMoney(estimate.cap, language),
           }),
+          ...(aside ? [aside] : []),
         ]
       : [];
   const run = estimate.cost

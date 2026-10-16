@@ -17,6 +17,7 @@ import { DOMParser } from "@xmldom/xmldom";
 import * as Y from "yjs";
 import type { NodeJSON } from "../../../shared/blockJson";
 import type { CitationStyle } from "../../../shared/citationStyles";
+import { proposalRequestOf } from "../../../shared/proposals";
 import type { SourceContext } from "../../../shared/sources";
 import { wordFileOf, wordFingerprint, wordSourceOf } from "../../../shared/wordFiles";
 import {
@@ -28,7 +29,7 @@ import {
   type WordExportLoss,
   type WordExportReport,
 } from "../../api";
-import { readWordDocument } from "../../documents/formats/docxImport";
+import { nodesByPlace, readWordDocument } from "../../documents/formats/docxImport";
 import { openWordPackage, relationshipsOf, reviewOf } from "../../documents/formats/docxPackage";
 import { child, elements, type XmlElement } from "../../documents/formats/xml";
 import {
@@ -44,7 +45,14 @@ import { Review, type ReviewChoices } from "../wordReview";
 import { AtomPlan } from "./atoms";
 import { styleWritten, type Written } from "./citations";
 import { DocumentPatch } from "./document";
-import { type Counterpart, counterpartsOf, isFurniture, mindJson } from "./mind";
+import {
+  type Counterpart,
+  changesWithin,
+  counterpartsOf,
+  importedChangesWithin,
+  isFurniture,
+  mindJson,
+} from "./mind";
 import { WordPackageWriter, WordPartError } from "./package";
 import { currentTokens, type Token } from "./paragraph";
 import {
@@ -122,13 +130,32 @@ export async function exportWordPatch(input: WordPatchInput): Promise<WordPatchR
       ((node.type === "paragraph" || node.type === "heading") && element.name === "w:p");
     return fits ? source.n : null;
   };
+  const importedByPlace = nodesByPlace(base.structure);
+  /**
+   * Resolving a change on a node within a Block, such as a line break someone removed, leaves
+   * the Block's fingerprint as it was (#858). An import from before changes were read made
+   * none of the file's, so only those it recorded count.
+   */
+  const changesResolvedOrMade = (element: Y.XmlElement, place: string): boolean => {
+    const imported = importedByPlace.get(place);
+    if (!imported) return false;
+    const now = changesWithin(element);
+    const before = [...importedChangesWithin(imported)].filter(
+      ([, request]) => proposalRequestOf(doc, request) !== null,
+    );
+    return before.length !== now.size || before.some(([key]) => !now.has(key));
+  };
   const editedNodes = new Map<NodeJSON, boolean>();
   const edited = (node: NodeJSON) => {
     const known = editedNodes.get(node);
     if (known !== undefined) return known;
     const source = sourceOf(node);
     const element = yOf.get(node);
-    const result = !source || !element || wordFingerprint(element) !== source.f;
+    const result =
+      !source ||
+      !element ||
+      wordFingerprint(element) !== source.f ||
+      changesResolvedOrMade(element, source.n);
     editedNodes.set(node, result);
     return result;
   };

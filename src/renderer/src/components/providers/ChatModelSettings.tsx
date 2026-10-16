@@ -3,8 +3,9 @@ import type { ChatGptPlanModel, ChatProvider } from "../../../../core/api";
 import { modelName } from "../../../../shared/modelName";
 import { useAnswers } from "../../answers";
 import { core } from "../../core";
-import { formatSpent } from "../../cost";
+import { formatSpent, setAsideText } from "../../cost";
 import { useLanguage, useT } from "../../i18n";
+import { useKeyRefusals } from "../../keyRefusals";
 import { useModelNames } from "../../modelNames";
 import { useAppStore } from "../../store";
 import { useCostSummary } from "../SpendingCapSettings";
@@ -38,6 +39,7 @@ const MODELS_UNDO_PLACE = "settings:models";
  */
 export function ChatModelSettings() {
   const t = useT();
+  const language = useLanguage();
   const readiness = useAppStore((state) => state.chatReadiness);
   const chatModel = useAppStore((state) => state.settings?.user.chatModel ?? null);
   const updateSettings = useAppStore((state) => state.updateSettings);
@@ -58,7 +60,17 @@ export function ChatModelSettings() {
     core.listChatProviders().then(setProviders, () => undefined);
   }, []);
 
-  const done = () => {
+  // "Check the key" on a refused Answer: that provider's key field, open.
+  const refused = useKeyRefusals((state) => state.showing);
+  useEffect(() => {
+    if (!refused) return;
+    setChanging(true);
+    setChoice("api-key");
+  }, [refused]);
+  useEffect(() => () => useKeyRefusals.getState().done(), []);
+
+  const done = (provider?: ChatProvider) => {
+    if (provider) useKeyRefusals.getState().saved(provider);
     setChanging(false);
     setChoice(null);
     refresh();
@@ -119,7 +131,7 @@ export function ChatModelSettings() {
             <div className="flex min-w-0 flex-col gap-0.5">
               <span className={rowTitleClass}>{t("providers.settings.provider")}</span>
               <span data-testid="chat-provider-current" className="text-ui text-ink-secondary">
-                {providerLabel(current, t)}
+                {providerLabel(current, t, language)}
               </span>
               <ProviderCostLine providerId={current.id} />
             </div>
@@ -207,6 +219,7 @@ export function ChatModelSettings() {
               onSaved={done}
               ollamaActionInRow
               withMoreProviders
+              refused={refused}
             />
           </div>
           {current && (
@@ -215,6 +228,7 @@ export function ChatModelSettings() {
               onClick={() => {
                 setChanging(false);
                 setChoice(null);
+                useKeyRefusals.getState().done();
               }}
               className={buttonClass}
             >
@@ -229,8 +243,8 @@ export function ChatModelSettings() {
 
 /**
  * What a provider billed per token cost this month, in its own currency
- * ("This month: $3.20"), once it has been used. A plan's line is in its own
- * section, and a model on this computer costs nothing.
+ * ("This month: $3.20 spent"), once it has been used. A plan's line is in its
+ * own section, and a model on this computer costs nothing.
  */
 function ProviderCostLine({ providerId }: { providerId: string }) {
   const t = useT();
@@ -241,10 +255,19 @@ function ProviderCostLine({ providerId }: { providerId: string }) {
   );
   if (!used) return null;
   const spent = formatSpent(used.spent, t, language);
+  const setAside = setAsideText(used.setAside, t, language);
   const tokens = new Intl.NumberFormat(language).format(used.unpricedTokens);
   return (
     <span data-testid="chat-provider-cost" className="text-[13px] leading-5 text-ink-meta">
       {spent ? t("cost.provider.thisMonth", { spent }) : t("cost.provider.unpriced", { tokens })}
+      {setAside && (
+        <>
+          {" · "}
+          <span data-testid="chat-provider-set-aside" title={t("cost.setAside.hint")}>
+            {setAside}
+          </span>
+        </>
+      )}
     </span>
   );
 }

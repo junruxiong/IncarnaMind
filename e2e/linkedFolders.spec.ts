@@ -24,6 +24,8 @@ import {
   pathsShown,
   previewLink,
   removeDataFolder,
+  setLanguage,
+  setWindowSize,
   showSourceLocations,
   useLocalChatModel,
 } from "./app";
@@ -186,7 +188,7 @@ test("Add folder… shows what linking would take, then the folder's row shows i
   await expect(dialog.getByTestId("link-folder-path")).toHaveText(library);
   await expect(dialog.getByTestId("link-folder-files")).toHaveText(/^4 supported files, 1\.\d MB$/);
   await expect(dialog.getByTestId("link-folder-time")).toContainText(
-    /Indexing takes (under a minute|about .+) on this computer, newest files first/,
+    /Reading its files takes (under a minute|about .+) on this computer, newest first/,
   );
   await expect(dialog.getByTestId("link-folder-online-only")).toContainText(
     "2 files are online only",
@@ -202,7 +204,7 @@ test("Add folder… shows what linking would take, then the folder's row shows i
   // Indexing: its count and a thin bar on the folder's one 28px row.
   const row = linkedFolderRow(window, "Library");
   await expect(row).toHaveAttribute("data-state", "indexing");
-  await expect(row.getByTestId("folder-status")).toContainText(/Indexing \d of 4/);
+  await expect(row.getByTestId("folder-status")).toContainText(/Reading \d of 4/);
   await expect(row.getByTestId("folder-progress")).toBeVisible();
   expect((await row.boundingBox())?.height).toBeCloseTo(28, 0);
   await screenshot(window.getByTestId("sidebar"), "row-indexing");
@@ -216,9 +218,9 @@ test("Add folder… shows what linking would take, then the folder's row shows i
   // Its menu offers to download and index them (not done here: it would ask iCloud Drive).
   const menu = await openLinkedFolderMenu(row);
   await expect(menu.getByTestId("linkedFolder.download")).toHaveText(
-    "Download and index 2 online-only files",
+    "Download and read 2 online-only files",
   );
-  await expect(menu.getByTestId("linkedFolder.pause")).toHaveText("Pause indexing");
+  await expect(menu.getByTestId("linkedFolder.pause")).toHaveText("Pause reading");
   await expect(menu.getByTestId("linkedFolder.layout")).toHaveText("Show as a flat list");
   await screenshot(window, "row-menu");
   // Show in Finder (Explorer, the file manager) shows the folder itself, never anything else.
@@ -257,7 +259,7 @@ test("pausing a Linked folder holds its indexing until it is resumed", async () 
   await screenshot(window.getByTestId("sidebar"), "row-paused");
 
   menu = await openLinkedFolderMenu(row);
-  await expect(menu.getByTestId("linkedFolder.pause")).toHaveText("Resume indexing");
+  await expect(menu.getByTestId("linkedFolder.pause")).toHaveText("Resume reading");
   await menu.getByTestId("linkedFolder.pause").click();
   await expect(row).not.toHaveAttribute("data-state", "paused");
   await expect(row).toHaveAttribute("data-state", "idle", { timeout: 120_000 });
@@ -587,23 +589,70 @@ test("a Linked folder that moved is located from its menu, and its Document and 
   await app.close();
 });
 
+test("in Chinese a folder that doesn't hold the Linked folder's files is refused in Chinese, and its Details stay English", async () => {
+  const library = join(sources, "Library");
+  const empty = join(sources, "Empty");
+  await mkdir(empty);
+  await writeTree(library, ["Tides.md"], "Spring tides happen at new moon and at full moon.\n");
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await dismissChatSetup(window);
+    await setWindowSize(app, window, 900, 660);
+    await linkFolderFromSidebar(app, window, library);
+    await showSourceLocations(window);
+    const row = linkedFolderRow(window, "Library");
+    await expect(row).toHaveAttribute("data-state", "idle");
+    await window.evaluate(async () => {
+      const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      await bridge.updateSettings({ user: { language: "zh-CN" } });
+    });
+
+    await interceptOpenDialog(app, empty);
+    await (await openLinkedFolderMenu(row)).getByTestId("linkedFolder.locate").click();
+    const notice = window.getByTestId("error-notice");
+    await expect(notice.getByTestId("error-notice-message")).toHaveText(
+      "无法完成操作：这个文件夹中没有“Library”里的文件。选择现在存放这些文件的文件夹。",
+    );
+    const details = notice.getByTestId("error-notice-details");
+    await details.getByText("详情").click();
+    await expect(details).toContainText("core:locateLinkedFolder");
+    await expect(details).toContainText(
+      "InvalidInputError: None of the files in “Library” are in that folder. Choose the folder that holds them now.",
+    );
+    await screenshot(window, "locate-refused-zh-900");
+    await setWindowSize(app, window, 1600, 900);
+    await expect(notice).toBeVisible();
+    await screenshot(window, "locate-refused-zh-1600");
+    await expect(row).toHaveAttribute("data-state", "idle");
+    expect((await linkedAt(window, library))?.path).toBe(library);
+  } finally {
+    await app.close();
+  }
+});
+
 test("an empty Linked folder says so; with nothing linked or added, the sidebar says where to start", async () => {
   const empty = join(sources, "Projects");
   await mkdir(empty);
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
 
-  // Adding is the header's "+" menu's, the one place to add: the empty sidebar says so.
+  // The empty sidebar offers both ways in, as the "+" menu does.
   const start = window.getByTestId("documents-empty");
-  await expect(start).toHaveText(
-    "No Documents yet. Add files, or link a folder to keep in sync, with the + above.",
-  );
+  await expect(start).toHaveText("No Documents yet · Add files… · Link a folder…");
   await screenshot(window.getByTestId("sidebar"), "documents-empty");
+  await setLanguage(window, "zh-CN");
+  await expect(start).toHaveText("还没有文档 · 添加文件… · 添加同步文件夹…");
+  await setLanguage(window, "en");
 
   // Its "Link a folder…".
-  const dialog = await previewLink(app, window, empty);
+  const dialog = await previewLink(
+    app,
+    window,
+    empty,
+    start.getByTestId("documents-empty-link-folder"),
+  );
   await expect(dialog.getByTestId("link-folder-files")).toHaveText(
-    "No supported files in it yet. Files added to it later are indexed then.",
+    "No supported files in it yet. Files added to it later are read then.",
   );
   await expect(dialog.getByTestId("link-folder-time")).toHaveCount(0);
   await confirmLink(dialog);

@@ -9,7 +9,7 @@ CI (`.github/workflows/ci.yml`) runs three checks on every pull request (`pull_r
 | Check | Where | What it runs |
 |---|---|---|
 | Typecheck, lint and unit tests | Ubuntu | `npm ci`, `npm run typecheck`, `npm run lint`, `npm test` |
-| Electron smoke test (Linux) | Ubuntu | `npm ci`, the Noto CJK fonts (the runner has no Chinese face), then `npm run test:smoke` on a virtual display (`xvfb-run`): builds the app and runs every spec in `e2e/`, split into eight shards that run at once (`Smoke shard N/8`); this check passes when all eight do |
+| Electron smoke test (Linux) | Ubuntu | `npm ci`, the Noto CJK fonts (the runner has no Chinese face), then `npm run test:smoke` on a virtual display (`xvfb-run`): builds the app and runs every spec in `e2e/`, split into eight shards that run at once, balanced by how long each spec takes (`scripts/smoke-shard.mjs`, `e2e/durations.json`; refresh it from a green run's log when specs are added or slow down) (`Smoke shard N/8`); this check passes when all eight do |
 | Every commit is signed off (DCO) | Ubuntu | a `Signed-off-by:` line on each commit (`git commit -s`) |
 
 `main` must stay green. A pull request merges through GitHub's merge queue once all three pass: the queue builds it together with `main` and the pull requests ahead of it, runs the checks again, and merges only if they pass. Nobody brings a branch up to date by hand. If `main` goes red, fixing it comes before new work.
@@ -40,6 +40,7 @@ Every night, and by hand from the Actions tab, the Electron smoke test (macOS) i
 - **Keep wall-clock limits out of unit tests.** CI machines run two to five times slower than a laptop. A speed budget belongs in a dedicated speed test with headroom, not in a unit test with a tight millisecond limit.
 - **Make each test stand alone.** It must pass on its own and in any order, and it cleans up what it made.
 - **Unit tests run in plain Node.** They must not need the Electron binary (CI doesn't download it) or a model download.
+- **Tests and the evaluation never touch the real home folder.** `tests/setup/home.ts` gives each test file a temporary HOME (and `USERPROFILE` and the XDG folders), and fails a test that writes under the real one outside the cache and report folders the run was given; the core takes its home and Documents folders from its host, so `startCore` and the evaluation pass temporary ones.
 - **Write paths and text that work on every platform.** Use `path.join`, never assume `/` or a case-insensitive file system, and give the Chinese strings the same tests as the English ones.
 - **Write each spec for Linux and macOS.** Pull requests run the smoke test on Linux; macOS runs it each night. Press shortcuts with `ControlOrMeta+…`, never `Meta+…`, and expect a shortcut's label in either form (`⌘J` or `Ctrl+J`). A spec for something only macOS has, such as the traffic lights or full screen, skips elsewhere with `test.skip(process.platform !== "darwin", "<why>")`, and the nightly run covers it.
 
@@ -55,16 +56,9 @@ A new kind of object needs a menu (`registerMenu`) and a stage in the e2e (how t
 
 ## Trying AI features by hand
 
-The scripted chat model (`fakeChat`) is for automated tests only: CI has no keys, and its runs must give the same result every time. Before you call an AI feature done (Answers, Citations, Organize, tagging, Tasks, anything a model does), use it by hand in the built app with real models from **several providers**, because they differ in how they follow instructions, cite and format:
+The scripted chat model (`fakeChat`) is for automated tests only: CI has no keys, and its runs must give the same result every time. Before you call an AI feature done (Answers, Citations, Organize, tagging, Tasks, anything a model does), use it by hand in the built app with **Claude Haiku 5.5** on an Anthropic API key. For a hard feature (labelled `complexity:hard`), or when Haiku fails at the task, use Claude Sonnet 5.5 instead. When the feature runs in Local mode, also try a small local model through Ollama, for example `qwen3.5:4b`, with the context at 8,192 tokens or less, one model loaded at a time, and unloaded afterwards.
 
-- **Anthropic:** Haiku first. Sonnet only when Haiku fails at the task or the feature needs the stronger model; say why in the pull request.
-- **OpenAI:** GPT-6 Luna, the newest small model, priced like Haiku. Not GPT-6 Sol or Astra unless the feature needs them. Use the ChatGPT plan's allowance, through the ChatGPT test profile below, instead of an API key.
-- **An Ollama cloud model** (its name ends in `-cloud`, for example a `gpt-oss` or `qwen3` cloud model). The app treats it as leaving the computer, which is fine for test Documents.
-- **A small local model through Ollama,** for example `qwen3.5:4b`, with the context at 8,192 tokens or less, one model loaded at a time, and unloaded afterwards. Required when the feature runs in Local mode.
-
-Use at least three of these, including one from Anthropic and one from OpenAI, and say where a model did worse than the others.
-
-**Before a release,** the first-class providers (ADR-0019) are each tried by hand once, with the cheapest model that answers: the ChatGPT plan, Anthropic, OpenAI, Google, OpenRouter, Ollama (a local model and a cloud model), and, for mainland China, DeepSeek, Qwen (Alibaba Cloud Model Studio) and SiliconFlow. Their `support` field in `src/core/providers/catalog/providers.ts` says which they are. Best-effort providers (Mistral, xAI, Kimi, GLM and an OpenAI-compatible server) have no release check. The rule above for an AI feature is unchanged: at least three providers, including Anthropic and OpenAI.
+**Before a release,** the first-class providers (ADR-0019) are each tried by hand once, with the cheapest model that answers: the ChatGPT plan (through the ChatGPT test profile below), Anthropic, OpenAI, Google, OpenRouter, Ollama (a local model and a cloud model), and, for mainland China, DeepSeek, Qwen (Alibaba Cloud Model Studio) and SiliconFlow. Their `support` field in `src/core/providers/catalog/providers.ts` says which they are. Best-effort providers (Mistral, xAI, Kimi, GLM and an OpenAI-compatible server) have no release check. Models differ in how they follow instructions, cite and format, so this pass is where a problem with one provider shows up; file each one as an issue.
 
 **Keep the bill small.** These keys are paid by the person, not a company. Use the cheapest model that answers the question, run each check once per model rather than many times, use short test Documents, and stop as soon as the result is clear. Large or "pro" models need a reason in the pull request.
 
