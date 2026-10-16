@@ -12,7 +12,7 @@
  * still waiting are read as changes, with who made them and when:
  * "[deleted by Priya Nair, 2026-10-02: …]" (#734). Read for the assistant
  * (`readMind`), the AI's own changes still waiting are read as changes too:
- * "[waiting change, adds: …]" (#893).
+ * "[waiting change, adds: …]".
  */
 
 import type * as Y from "yjs";

@@ -8,7 +8,7 @@ import {
 import { type MessageKey, type MessageParams, translate } from "../../src/shared/i18n";
 
 /*
- * What an Answer says under its reply about changes it couldn't make (#893):
+ * What an Answer says under its reply about changes it couldn't make:
  * the changes waiting that stopped it, a reply that claims a change none of
  * its calls made, and why a call changed nothing, in English and Chinese.
  */
@@ -95,7 +95,7 @@ describe("Why a call changed nothing, on its row", () => {
       "Couldn't change “Q3 review”: 12 changes are waiting there",
     );
     expect(problemText(zh, waiting, "Q3 review")).toBe(
-      "无法修改“Q3 review”：那里有 12 处修订待确认",
+      "无法修改“Q3 review”：其中有 12 处修订待确认",
     );
     expect(en("mindChanges.waiting", { mind: "Q3 review", count: 12 })).toBe(
       "12 changes are waiting in “Q3 review”. Accept or reject them first?",

@@ -85,12 +85,18 @@ function release(mindId: string): void {
 const belongsTo = (requests: readonly string[]) => (proposal: ProposalRef) =>
   requests.includes(proposal.request);
 
+/** Changes in a Mind: those of `requests`, or, for null, every change waiting there. */
+interface WaitingIn {
+  mindId: string;
+  requests: readonly string[] | null;
+}
+
 /** How many of a row's changes wait in its Mind; null until its copy has arrived. */
-function waiting(row: ChangedMind): number | null {
+function waiting(row: WaitingIn): number | null {
   const doc = held.get(row.mindId)?.doc;
   if (!doc) return null;
-  return pendingProposals(doc.getXmlFragment(MIND_CONTENT_FIELD)).filter(belongsTo(row.requests))
-    .length;
+  const pending = pendingProposals(doc.getXmlFragment(MIND_CONTENT_FIELD));
+  return row.requests ? pending.filter(belongsTo(row.requests)).length : pending.length;
 }
 
 /** How many of a row's changes wait in its Mind: a count, "gone" for a Mind deleted, null until its copy arrives. */
@@ -100,7 +106,7 @@ export type Waiting = number | "gone" | null;
  * How many of each row's changes wait in its Mind, as they change. Holds a
  * copy of each Mind still there while the card is shown.
  */
-export function useWaitingChanges(rows: readonly ChangedMind[]): Waiting[] {
+export function useWaitingChanges(rows: readonly WaitingIn[]): Waiting[] {
   const minds = useAppStore((state) => state.minds);
   const live = useMemo(
     () => rows.filter((row) => minds.some((mind) => mind.id === row.mindId)),
@@ -131,6 +137,12 @@ export function useWaitingChanges(rows: readonly ChangedMind[]): Waiting[] {
   return snapshot
     .split(",")
     .map((count) => (count === "gone" ? "gone" : count === "" ? null : Number(count)));
+}
+
+/** How many changes wait in a Mind, from anyone, as they change. */
+export function useWaitingIn(mindId: string | null): Waiting {
+  const rows = useMemo(() => (mindId ? [{ mindId, requests: null }] : []), [mindId]);
+  return useWaitingChanges(rows)[0] ?? null;
 }
 
 /** Brings a Mind up beside the focused one, where it is open, else in a new tab. */
@@ -173,7 +185,7 @@ export function showChanges(row: ChangedMind): void {
   revealChange(row.mindId, belongsTo(row.requests));
 }
 
-/** Review, where changes waiting kept the assistant from changing a Mind (#893): the Mind, at its first change. */
+/** Review, where changes waiting kept the assistant from changing a Mind: the Mind, at its first change. */
 export function showWaitingChanges(mindId: string): void {
   useAppStore.getState().openMind(mindId);
   revealChange(mindId, () => true);

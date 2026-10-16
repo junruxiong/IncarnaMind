@@ -1,5 +1,5 @@
 /**
- * The assistant's own changes still waiting in a Mind (#893): Blocks an
+ * The assistant's own changes still waiting in a Mind: Blocks an
  * Answer in the assistant added whole (`add_to_mind`, `create_mind`, a Mind
  * made from an Answer), which the User hasn't accepted or rejected, nor typed
  * in. Asked to change that text again ("make it longer", "remove the part
@@ -11,6 +11,7 @@ import { randomUUID } from "node:crypto";
 import * as Y from "yjs";
 import { INLINE_CODE_MARK } from "../../shared/aiText";
 import {
+  keepRevised,
   pendingProposals,
   proposalRequestOf,
   readProposalAttribute,
@@ -74,7 +75,6 @@ function holdsProposal(nodes: readonly (Y.XmlElement | Y.XmlText | Y.XmlHook)[])
   });
 }
 
-/** Whether every word in an element is AI text: the User hasn't typed in it. */
 function allAiText(element: Y.XmlElement): boolean {
   // A code block's text can't carry the mark.
   if (element.nodeName === "codeBlock") return true;
@@ -172,10 +172,9 @@ export function boundsOf(
 }
 
 /**
- * Puts `revised` in place of `own`'s Blocks, each waiting whole as a
- * Proposal of `request`, and moves the rest of their requests' Blocks still
- * waiting elsewhere in the Mind to `request` too, so the new request holds
- * the whole revised text the User reviews. Returns the new Blocks' ids; null,
+ * Puts `revised` in place of `own`'s Blocks, each waiting whole as a Proposal
+ * of `request`, and keeps what they replaced (`MIND_REVISIONS_FIELD`), so
+ * rejecting the revision brings it back. Returns the new Blocks' ids; null,
  * changing nothing, when `own`'s Blocks have changed since they were read.
  * Call it in a Yjs transaction.
  */
@@ -188,21 +187,11 @@ export function replaceOwn(
   const old = blocksOf(blocks, own);
   const first = old?.[0];
   if (!old || !first) return null;
-  const requests = new Set(
-    old.flatMap((element) => {
-      const ref = readProposalRef(element.getAttribute(PROPOSAL_ATTRIBUTE));
-      return ref ? [ref.request] : [];
-    }),
-  );
+  keepRevised(blocks, request, old);
   const at = blocks.toArray().indexOf(first);
   blocks.delete(at, old.length);
   blocks.insert(at, [...revised]);
   for (const element of revised)
     setProposal(element, { id: randomUUID(), request, kind: "insert" });
-  for (const element of topLevelBlocks(blocks)) {
-    const attribute = readProposalAttribute(element.getAttribute(PROPOSAL_ATTRIBUTE));
-    if (attribute && requests.has(attribute.request))
-      setProposal(element, { ...attribute, request });
-  }
   return revised.map(idOf);
 }

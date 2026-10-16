@@ -1,21 +1,18 @@
 /**
- * The guards an everyday request in the assistant must pass (#893, #894),
- * read from what the core stored, as a User would see it:
+ * The guards every everyday request in the assistant is held to, read from
+ * what the core stored, as a User would see it:
  *
- * - **Asked to write, the Mind changed.** A request for text in a Mind
- *   ("write a summary page", "make it longer") changed or made one.
- * - **Every claimed change is real.** What the reply says it did to a Mind,
- *   one of its Tool calls did (../../src/core/answers/claimedChanges).
- * - **Citations are there.** With Documents in scope, the reply cites them,
- *   or, for text written into a Mind, the Mind does.
- * - **Every Document is covered.** Asked about all the Documents in scope,
- *   each is cited, or the reply names it as one it didn't cover.
- *
- * The everyday-requests evaluation asserts these for every request, and the
- * unit tests hold them to the failures that were found (tests/eval).
+ * - **Asked to write, the Mind changed.**
+ * - **Every claimed change is real**, as a model judges the reply against the
+ *   record of what the calls did (./judge), never the app's own net.
+ * - **Citations are there**: in the reply, or, for text written into a Mind,
+ *   in the Mind.
+ * - **Every Document is covered**: asked about all the Documents in scope,
+ *   each is cited, or named in a sentence saying it wasn't covered.
  */
-import { changeLogOf, unbackedClaims } from "../../src/core/answers/claimedChanges";
-import type { ClaimedChange, ConversationAnswer, MarkedCitation } from "../../src/core/api";
+import { changeLogOf } from "../../src/core/answers/claimedChanges";
+import type { ConversationAnswer, MarkedCitation } from "../../src/core/api";
+import type { ClaimVerdict } from "./judge";
 
 /** What a request expects of its Answer. */
 export interface Expected {
@@ -27,70 +24,68 @@ export interface Expected {
   coverAll: boolean;
 }
 
-/** What one request came to. */
 export interface RequestOutcome {
   expected: Expected;
   answer: Pick<ConversationAnswer, "text" | "toolCalls" | "steps"> & {
     citations: readonly Pick<MarkedCitation, "documentId">[];
   };
+  verdict: ClaimVerdict;
   /** The Documents the Citations it wrote into Minds quote, by id. */
   citedInMinds: readonly string[];
-  /** The Documents in the Question's Search scope. */
   scoped: readonly { id: string; name: string }[];
-  /** The names of the User's Minds, so a quoted name counts as a Mind's only when it is one. */
-  minds: readonly string[];
 }
 
 export type RequestFailure =
-  /** Asked to write, it changed no Mind. */
   | { kind: "no-change" }
-  /** Its reply claims changes no call made; `flagged`: the app said so under it. */
-  | { kind: "unbacked"; claims: ClaimedChange[]; flagged: boolean }
-  /** Documents were in scope and nothing it wrote cites them. */
+  /** `flagged`: the app's own net said so under the reply. */
+  | { kind: "unbacked"; sentences: string[]; flagged: boolean }
   | { kind: "no-citations" }
-  /** Asked about every Document in scope, these it neither cited nor named. */
   | { kind: "uncovered"; documents: string[] };
 
-/** A Document's name as a reply may write it: any case, spaces made alike. */
 const key = (text: string) => text.replace(/\s+/g, " ").trim().toLocaleLowerCase();
+
+const NOT_COVERED =
+  /\b(?:couldn't|could not|can't|cannot|didn't|did not|wasn't|weren't|isn't|aren't|not|no|unable|left out|missing|skipped)\b|没有|未能|未|无法|不能|缺少|略去/i;
+
+function namedAsUncovered(reply: string, name: string): boolean {
+  return reply
+    .split(/(?<=[.!?])\s+|(?<=[。！？])|\n+/)
+    .some((sentence) => key(sentence).includes(key(name)) && NOT_COVERED.test(sentence));
+}
 
 /** The ways one request failed its guards; none when it passed. */
 export function requestFailures(outcome: RequestOutcome): RequestFailure[] {
   const { expected, answer } = outcome;
   const failures: RequestFailure[] = [];
   const log = changeLogOf(answer.toolCalls);
-  if (expected.write && !log.changed && !log.made) failures.push({ kind: "no-change" });
-
-  const claimed = unbackedClaims(answer.text, answer.toolCalls, { minds: outcome.minds });
-  const flagged = answer.steps?.unbackedClaims ?? [];
-  const claims = [...new Set([...claimed, ...flagged])];
-  if (claims.length > 0) failures.push({ kind: "unbacked", claims, flagged: flagged.length > 0 });
-
-  const cited = new Set([
-    ...answer.citations.map((citation) => citation.documentId),
-    ...outcome.citedInMinds,
-  ]);
+  if (expected.write && log.changed.size === 0 && log.made.size === 0) {
+    failures.push({ kind: "no-change" });
+  }
+  if (outcome.verdict.unbacked.length > 0) {
+    failures.push({
+      kind: "unbacked",
+      sentences: outcome.verdict.unbacked,
+      flagged: (answer.steps?.unbackedClaims ?? []).length > 0,
+    });
+  }
   const citedHere = expected.write ? outcome.citedInMinds.length : answer.citations.length;
   if (expected.cite && outcome.scoped.length > 0 && citedHere === 0) {
     failures.push({ kind: "no-citations" });
   }
-
   if (expected.coverAll) {
-    const reply = key(answer.text);
+    const cited = new Set([
+      ...answer.citations.map((citation) => citation.documentId),
+      ...outcome.citedInMinds,
+    ]);
     const uncovered = outcome.scoped
-      .filter((document) => !cited.has(document.id) && !reply.includes(key(document.name)))
+      .filter(
+        (document) => !cited.has(document.id) && !namedAsUncovered(answer.text, document.name),
+      )
       .map((document) => document.name);
     if (uncovered.length > 0) failures.push({ kind: "uncovered", documents: uncovered });
   }
   return failures;
 }
-
-const CLAIMED: Record<ClaimedChange, string> = {
-  made: "made a Mind",
-  added: "added text to one",
-  changed: "changed one",
-  removed: "removed or replaced text",
-};
 
 /** A failure as the evaluation's report lists it. */
 export function failureLine(failure: RequestFailure): string {
@@ -98,10 +93,10 @@ export function failureLine(failure: RequestFailure): string {
     case "no-change":
       return "asked to write, it changed no Mind";
     case "unbacked":
-      return `claims it ${failure.claims.map((claim) => CLAIMED[claim]).join(" and ")}, which no call did${failure.flagged ? " (flagged under the reply)" : ""}`;
+      return `claims a change no call made${failure.flagged ? " (flagged under the reply)" : ""}: ${failure.sentences.map((sentence) => `“${sentence}”`).join(" ")}`;
     case "no-citations":
       return "Documents in scope, and nothing it wrote cites them";
     case "uncovered":
-      return `neither cites nor names ${failure.documents.map((name) => `“${name}”`).join(", ")}`;
+      return `neither cites nor names as left out ${failure.documents.map((name) => `“${name}”`).join(", ")}`;
   }
 }

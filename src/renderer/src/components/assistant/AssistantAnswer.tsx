@@ -39,7 +39,7 @@ export interface AnswerKeeping {
  * (DESIGN.md, Answer), in the assistant's reading sizes. Its steps first
  * (#391), folded to one line; its text with its Citations and their checks
  * in the margin; the card of the Minds it changed (#202), and what kept it from
- * changing one (#893); what went wrong, and the approvals it waits for, under
+ * changing one; what went wrong, and the approvals it waits for, under
  * it; then its actions (`AnswerActions`).
  */
 export function AssistantAnswer({

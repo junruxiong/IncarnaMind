@@ -1,6 +1,6 @@
 /**
  * What an Answer in the assistant says under its reply about the changes it
- * couldn't make (#893): changes waiting in a Mind that kept it from changing
+ * couldn't make: changes waiting in a Mind that kept it from changing
  * the text, a reply that claims a change none of its calls made, and why a
  * call changed nothing. Only data and words.
  */
@@ -34,7 +34,7 @@ export function unbackedClaimKey(claims: readonly ClaimedChange[] | undefined): 
   return "answer.unbacked.changed";
 }
 
-/** Why a call of a Minds' Tool changed nothing, in its row's words (#893); null for one of no kind it knows. */
+/** Why a call of a Minds' Tool changed nothing, in its row's words; null for one of no kind it knows. */
 export function problemText(t: Translate, problem: MindProblem, mind: string): string | null {
   switch (problem.kind) {
     case "waiting":

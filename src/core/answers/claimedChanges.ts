@@ -1,27 +1,20 @@
 /**
- * What an Answer's reply says it changed in a Mind, against what its Tool
- * calls really changed (#893). The assistant must never claim a change that
- * didn't happen: a reply that does is asked for once more, with the record of
- * what the calls did (./toolRecord), and one that still does is shown with a
- * line saying so.
- *
- * A claim is read from the words a reply reports a change with, in English
- * and Chinese: "I've added a section…", "Shortened the summary in “Q3
- * review”…", "The changes are waiting for your review", "我已新建…",
- * "已在“周报”中添加了…". Words about the reply itself ("I've written a
- * summary below"), about Citations, or about someone else ("the authors
- * added…") aren't claims, and neither is a change said not to have been made.
- * A claim about an earlier Answer ("as I added before") holds when an
- * earlier Answer's calls made that kind of change.
+ * A narrow safety net under the change log, which is what the Answer reports:
+ * a reply that says it changed a Mind when none of its Tool calls did (or not
+ * that Mind) is asked for once more, with the record of what the calls did
+ * (./toolRecord), and one that still says so is flagged. It reads only the
+ * plainest reports, in English and Chinese ("I've added…", "Shortened the
+ * summary in “Q3 review”…", "The summary is now twice as long", "页面已创建"),
+ * and misses a vague sentence rather than flag an honest one.
  */
 import type { AnswerToolCall, ClaimedChange } from "../api";
 import { type MindNames, toolRecordLines } from "./toolRecord";
 
-/** A change a sentence of the reply says was made, and whether it says an earlier Answer made it. */
+/** A change a sentence of the reply says was made, and the Mind it names, by its name; null for none. */
 export interface Claim {
   kind: ClaimedChange;
   sentence: string;
-  earlier: boolean;
+  mind: string | null;
 }
 
 const MADE = "made|created|started|set up";
@@ -30,74 +23,75 @@ const CHANGED =
   "updated|changed|edited|revised|rewrote|rewritten|expanded|lengthened|extended|shortened|trimmed|condensed|tightened|fixed|corrected|translated|reworded|restructured|reorganized|reorganised|polished|improved|proposed|merged|moved";
 const REMOVED = "removed|deleted|replaced|dropped|took out|taken out";
 const VERBS = `${MADE}|${ADDED}|${CHANGED}|${REMOVED}`;
-/** The verbs a report starts with, as the instructions' example does; not those that start other sentences too. */
+// "Proposed in 2017, the Transformer…": these start other sentences too.
 const REPORT_VERBS = VERBS.replace(/\|(?:proposed|merged|moved|put|set up|started)\b/g, "");
 
 const KIND_OF_VERB: [RegExp, ClaimedChange][] = [
   [new RegExp(`^(?:${MADE})$`, "i"), "made"],
   [new RegExp(`^(?:${ADDED})$`, "i"), "added"],
   [new RegExp(`^(?:${CHANGED})$`, "i"), "changed"],
-  [new RegExp(`^(?:${REMOVED})$`, "i"), "removed"],
+  [new RegExp(`^(?:${REMOVED}|replaces)$`, "i"), "removed"],
 ];
 
 const MIND_WORDS =
   /\b(?:minds?|notes?|pages?|notebook|handout|draft|summary|section|paragraph|heading|outline)\b/i;
+const MIND_NOUN =
+  "(?:minds?|notes?|pages?|notebook|handout|draft|summary|summaries|sections?|paragraphs?|headings?|outline|text|version)";
 
-/** A made thing that is a Mind's, not a mistake or a point. */
 const MADE_THING =
-  /^\s+(?:(?:a|an|the|your|this|that|it|one)\s+)?(?:(?:new|separate|fresh|short|shorter|longer|cited|brief|full)\s+)*(?:minds?\b|notes?\b|pages?\b|document\b|summary\b|draft\b|handout\b|outline\b|section\b|report\b|copy\b|version\b)/i;
-
-/** "Made it longer", "made the summary clearer": a change, not something made. */
+  /^\s+(?:(?:a|an|the|your|this|that|it|one)\s+)?(?:(?:new|separate|fresh|short|shorter|longer|cited|brief|full)\s+)*(?:minds?\b|notes?\b|pages?\b|document\b|summary\b|draft\b|handout\b|outline\b|section\b|report\b|copy\b|version\b|[“"«])/i;
 const MADE_INTO =
   /^\s+(?:it|this|that|them|the\s+\w+(?:\s+\w+)?)\s+(?:longer|shorter|clearer|simpler|tighter|more\s+\w+|less\s+\w+)/i;
-
-/** The words after a verb that say nothing was changed, or that it is about something not in a Mind. */
 const NOT_A_CHANGE =
-  /^\s+(?:(?:no|nothing|none|any)\b|(?:(?:a|the|my|your|some|each|every|all)\s+)?(?:citations?|sources?|references?|markers?|quotes?|footnotes?)\b|(?:my|the|this)\s+(?:answer|reply|response)\b|(?:sure|a mistake|an error|that clear)\b)/i;
-
-/** Words saying the text is in the reply, not in a Mind. */
+  /^\s+(?:(?:no|nothing|none|any)\b|(?:(?:a|the|my|your|some|each|every|all|several|many|more|\d+)\s+)?(?:new\s+)?(?:citations?|sources?|references?|markers?|quotes?|footnotes?)\b|(?:my|the|this)\s+(?:answer|reply|response)\b|(?:sure|a mistake|an error|that clear)\b)/i;
 const IN_THE_REPLY =
-  /\b(?:below|above|here|in this (?:reply|answer|message)|in my (?:reply|answer))\b|下面|如下|以下|上面|本回答/;
-
-const EARLIER =
-  /\b(?:earlier|before|previous(?:ly)?|last (?:time|reply|answer|turn|message)|in my (?:first|last|earlier|previous) (?:reply|answer|message))\b|之前|上次|刚才|先前|前面|上一/i;
+  /\b(?:below|above|here)[\s.:!]*$|\bin (?:this|my) (?:reply|answer|message)\b|下面|如下|以下|本回答/;
+const NEGATION = /\b(?:not|nothing|never|no)\b|n['’]t\b|\bcannot\b/i;
+// "As I wrote", "was wrong to say I added…": an earlier claim reported, not made.
+const REPORTED =
+  /\b(?:as|say|said|says|saying|claim|claimed|claims|claiming|stated|states|reported|wrote that|told you)\s+(?:that\s+)?$/i;
+const CHINESE_REPORTED = /(?:说|称|声称|讲)$/;
 
 const FIRST_PERSON = new RegExp(
   `\\bI(?:'ve|’ve| have|'d|’d| had)?(?:\\s+(?:just|also|now|then|already|quickly))*\\s+(${VERBS})\\b`,
   "gi",
 );
-
-/** A sentence that starts with the verb, as a report does: "Shortened the summary in “Q3 review”." */
+const HEADING_LIKE = /^(?![-*•]\s)[^.!?。！？]*$/;
 const REPORT = new RegExp(`^(?:[-*•]\\s+)?(${REPORT_VERBS})\\b`, "i");
-
-/** "It has been added to your Mind", "the summary is now in “Q3 review”". */
 const PASSIVE = new RegExp(`\\b(?:has|have) been (${VERBS})\\b|\\b(?:is|are) now in\\b`, "i");
-
+// "Summary page created in “X”", "The new page replaces the earlier version", "is now twice as long".
+const STATED = new RegExp(
+  `^(?:the |a |an |your |my |this |that )?(?:[\\p{L}-]+ ){0,3}${MIND_NOUN} (?:was |were |is |are |has been |have been |now )?(${VERBS}|replaces)\\b`,
+  "iu",
+);
+const NOW_LONGER =
+  /\b(?:is|are) now (?:about |roughly |almost )?(?:twice|three times|\d+(?:\.\d+)? times|longer|shorter|much longer|much shorter|more \w+|less \w+)\b/i;
 const WAITING =
   /\b(?:changes?|edits?|text|it|they|these|those)\s+(?:are|is)\s+(?:now\s+)?(?:waiting|ready)\s+(?:for\s+(?:you|your)|in\b)|\bwaits?\s+for\s+your\s+(?:review|approval)\b/i;
 
-/** A first-person or subjectless Chinese report of a change: "我已添加", "已在“周报”中新建了", "我把总结改长了". */
-const CHINESE: [RegExp, ClaimedChange][] = (
+const CHINESE_KINDS = [
+  ["新建|创建|建立", "made"],
+  ["添加|加入|写入|插入|补充|追加|写好|写了", "added"],
   [
-    ["新建|创建|建立", "made"],
-    ["添加|加入|写入|插入|补充|追加|写好|写了", "added"],
-    [
-      "修改|改写|更新|扩写|扩展|扩充|缩短|精简|压缩|翻译|调整|重写|润色|修正|改正|改短|改长|改成",
-      "changed",
-    ],
-    ["删除|删去|删掉|替换|去掉|移除", "removed"],
-  ] as const
-).map(([verbs, kind]) => [
+    "修改|改写|更新|扩写|扩展|扩充|缩短|精简|压缩|翻译|调整|重写|润色|修正|改正|改短|改长|改成",
+    "changed",
+  ],
+  ["删除|删去|删掉|替换|去掉|移除", "removed"],
+] as const;
+const CHINESE: [RegExp, ClaimedChange][] = CHINESE_KINDS.map(([verbs, kind]) => [
   new RegExp(
     `(?:我(?:已经?|刚刚?|也|还|先)?|(?:^|[，,；;：:、\\s])已经?)(?:为你|帮你|替你)?(?:(?:在[“"][^”"]{1,40}[”"](?:中|里)?)|(?:把|将)[^。！？]{1,40}?)?(?:${verbs})`,
   ),
   kind,
 ]);
-
-const NEGATION = /\b(?:not|nothing|never|no)\b|n['’]t\b|\bcannot\b/i;
-
+// "总结已扩写", "页面已创建": a Mind's text said to be done, not the authors'.
+const CHINESE_STATED: [RegExp, ClaimedChange][] = CHINESE_KINDS.map(([verbs, kind]) => [
+  new RegExp(
+    `(?:总结|摘要|页面|笔记|段落|部分|章节|内容|文字|标题|列表|表格|报告|草稿|Mind|[”"])(?:已经?|都已经?|均已)(?:被)?(?:${verbs}|完成)`,
+  ),
+  kind,
+]);
 const CHINESE_NOT = /没有|没|未能|未|无法|不能|尚未|并未/;
-
 const CHINESE_WAITING = /等待?你(?:的)?(?:确认|审阅|接受|查看|审核)|待你确认/;
 
 const kindOf = (verb: string): ClaimedChange =>
@@ -105,14 +99,14 @@ const kindOf = (verb: string): ClaimedChange =>
 
 const nameKey = (name: string) => name.replace(/\s+/g, " ").trim().toLocaleLowerCase();
 
-/** The claims of one sentence of a reply; `minds`: the names of the User's Minds, as `nameKey` gives them. */
-function sentenceClaims(sentence: string, minds: ReadonlySet<string>): ClaimedChange[] {
+function sentenceClaims(sentence: string, minds: ReadonlyMap<string, string>): Claim[] {
   if (IN_THE_REPLY.test(sentence)) return [];
-  const namesAMind =
-    MIND_WORDS.test(sentence) ||
-    [...sentence.matchAll(/[“"«]([^”"»]{1,120})[”"»]/g)].some((quote) =>
-      minds.has(nameKey(quote[1] ?? "")),
-    );
+  const named =
+    [...sentence.matchAll(/[“"«]([^”"»]{1,120})[”"»]/g)]
+      .map((quote) => minds.get(nameKey(quote[1] ?? "")))
+      .find((name) => name !== undefined) ?? null;
+  const namesAMind = named !== null || MIND_WORDS.test(sentence);
+  const denied = NEGATION.test(sentence);
   const kinds: ClaimedChange[] = [];
   const consider = (verb: string, after: string, needsMind: boolean) => {
     if (NOT_A_CHANGE.test(after)) return;
@@ -126,32 +120,32 @@ function sentenceClaims(sentence: string, minds: ReadonlySet<string>): ClaimedCh
     kinds.push(kind);
   };
   for (const match of sentence.matchAll(FIRST_PERSON)) {
-    // "As I wrote before…" is about the reply's own words.
-    if (/\bas\s*$/i.test(sentence.slice(0, match.index))) continue;
+    if (REPORTED.test(sentence.slice(0, match.index))) continue;
     consider(match[1] ?? "", sentence.slice(match.index + match[0].length), false);
   }
   const trimmed = sentence.trim();
-  const report = REPORT.exec(trimmed);
+  // "Expanded two-paper summary" on a line of its own is a heading, not a report.
+  const report = HEADING_LIKE.test(trimmed) ? null : REPORT.exec(trimmed);
   if (report?.[1]) consider(report[1], trimmed.slice(report[0].length), true);
-  const passive = PASSIVE.exec(sentence);
-  if (passive && namesAMind && !NEGATION.test(sentence)) {
-    kinds.push(passive[1] ? kindOf(passive[1]) : "added");
+  if (!denied) {
+    const passive = PASSIVE.exec(sentence);
+    if (passive && namesAMind) kinds.push(passive[1] ? kindOf(passive[1]) : "added");
+    const stated = STATED.exec(trimmed);
+    if (stated?.[1]) kinds.push(kindOf(stated[1]));
+    if (NOW_LONGER.test(sentence) && namesAMind) kinds.push("changed");
+    if (WAITING.test(sentence) || CHINESE_WAITING.test(sentence)) kinds.push("changed");
   }
-  const denied = NEGATION.test(sentence);
-  if (!denied && (WAITING.test(sentence) || CHINESE_WAITING.test(sentence))) kinds.push("changed");
-  for (const [pattern, kind] of CHINESE) {
+  for (const [pattern, kind] of [...CHINESE, ...CHINESE_STATED]) {
     const match = pattern.exec(sentence);
-    if (
-      match &&
-      !CHINESE_NOT.test(sentence.slice(Math.max(0, match.index - 4), match.index + match[0].length))
-    ) {
-      kinds.push(kind);
-    }
+    const before = match
+      ? sentence.slice(Math.max(0, match.index - 4), match.index + match[0].length)
+      : "";
+    if (!match || CHINESE_NOT.test(before)) continue;
+    if (!CHINESE_REPORTED.test(sentence.slice(0, match.index))) kinds.push(kind);
   }
-  return [...new Set(kinds)];
+  return [...new Set(kinds)].map((kind) => ({ kind, sentence, mind: named }));
 }
 
-/** A reply's sentences, its list items and lines each one, Citations' markers left out. */
 const sentencesOf = (reply: string): string[] =>
   reply
     .replace(/\[\^\d+\]|\[=\d+\]/g, "")
@@ -159,73 +153,92 @@ const sentencesOf = (reply: string): string[] =>
     .map((sentence) => sentence.trim())
     .filter((sentence) => sentence !== "");
 
+const MAY_CLAIM = new RegExp(
+  `\\bI\\b|\\b(?:now|been|${VERBS}|replaces)\\b|[“"«]|我|已|待你|等待?你`,
+  "iu",
+);
+const REPORT_VERB_LIST = REPORT_VERBS.split("|");
+
 /**
- * The changes a reply says were made in a Mind, each with its sentence (see
- * the module's comment). `minds`: the names of the User's Minds, so a quoted
- * name counts as a Mind's only when it is one.
+ * How much of a reply being written may show: up to the first sentence that
+ * may claim a change, which waits until the reply is checked. Of the sentence
+ * still being written, all but its last word, unless it has begun the way a
+ * claim does.
  */
-export function claimsIn(reply: string, minds: readonly string[] = []): Claim[] {
-  const names = new Set(minds.map(nameKey));
-  return sentencesOf(reply).flatMap((sentence) =>
-    sentenceClaims(sentence, names).map((kind) => ({
-      kind,
-      sentence,
-      earlier: EARLIER.test(sentence),
-    })),
-  );
+export function shownUpTo(text: string, minds: readonly string[]): number {
+  const names = new Map(minds.map((name) => [nameKey(name), name]));
+  let start = 0;
+  for (const match of text.matchAll(/(?<=[.!?])\s+|(?<=[。！？])|\n+/g)) {
+    const sentence = text
+      .slice(start, match.index)
+      .replace(/\[\^\d+\]|\[=\d+\]/g, "")
+      .trim();
+    if (sentence && sentenceClaims(sentence, names).length > 0) return start;
+    start = match.index + match[0].length;
+  }
+  const rest = text.slice(start);
+  if (MAY_CLAIM.test(rest)) return start;
+  const word = /^\s*(\p{L}+)$/u.exec(rest)?.[1]?.toLocaleLowerCase();
+  if (word && REPORT_VERB_LIST.some((verb) => verb.startsWith(word))) return start;
+  const lastWord = /[\p{Script=Latin}\p{N}'’]+$/u.exec(rest);
+  return lastWord ? start + lastWord.index : text.length;
 }
 
+/** `minds`: the names of the User's Minds, so a quoted name counts as a Mind's only when it is one. */
+export function claimsIn(reply: string, minds: readonly string[] = []): Claim[] {
+  const names = new Map(minds.map((name) => [nameKey(name), name]));
+  return sentencesOf(reply).flatMap((sentence) => sentenceClaims(sentence, names));
+}
+
+/** The Minds each kind of change was made in, by id. */
 export interface ChangeLog {
-  made: boolean;
-  /** Changed anything in a Mind: added, rewrote, revised or made one with text. */
-  changed: boolean;
-  /** Changed text already there, so some may be gone: `edit_mind`'s Proposals or a revision. */
-  edited: boolean;
+  made: Set<string>;
+  /** Anything written: added, rewritten, revised, or made with text. */
+  changed: Set<string>;
+  /** Text already there rewritten, so some may be gone. */
+  edited: Set<string>;
 }
 
 export function changeLogOf(calls: readonly AnswerToolCall[]): ChangeLog {
-  const log: ChangeLog = { made: false, changed: false, edited: false };
+  const log: ChangeLog = { made: new Set(), changed: new Set(), edited: new Set() };
   for (const call of calls) {
     const change = call.mindChange;
     if (call.source !== "minds" || !change) continue;
-    if (change.created) log.made = true;
-    if (change.proposals > 0 || change.revised) log.changed = true;
-    if (call.tool === "edit_mind" && (change.proposals > 0 || change.revised)) log.edited = true;
+    if (change.created) log.made.add(change.mindId);
+    if (change.proposals > 0 || change.revised) log.changed.add(change.mindId);
+    if (call.tool === "edit_mind" && (change.proposals > 0 || change.revised)) {
+      log.edited.add(change.mindId);
+    }
   }
   return log;
 }
 
-function backs(log: ChangeLog, kind: ClaimedChange): boolean {
-  switch (kind) {
-    case "made":
-      return log.made;
-    case "added":
-    case "changed":
-      return log.changed || log.made;
-    case "removed":
-      return log.edited;
-  }
+function backs(log: ChangeLog, kind: ClaimedChange, mindIds: readonly string[] | null): boolean {
+  const done =
+    kind === "made"
+      ? log.made
+      : kind === "removed"
+        ? log.edited
+        : new Set([...log.changed, ...log.made]);
+  return mindIds === null ? done.size > 0 : mindIds.some((id) => done.has(id));
 }
 
 /**
- * The kinds of change a reply claims that no call made: those of this
- * Answer, or, for a claim about an earlier one, those of the conversation's
- * earlier Answers. Each kind once. `minds`: the names of the User's Minds
- * (see `claimsIn`).
+ * The kinds of change a reply claims that none of `calls` made, in the Mind
+ * a claim names (by its name, among `minds`), else in any. Each kind once.
  */
 export function unbackedClaims(
   reply: string,
   calls: readonly AnswerToolCall[],
-  {
-    earlierCalls = [],
-    minds = [],
-  }: { earlierCalls?: readonly AnswerToolCall[]; minds?: readonly string[] } = {},
+  minds: readonly { id: string; name: string }[] = [],
 ): ClaimedChange[] {
-  const now = changeLogOf(calls);
-  const before = changeLogOf(earlierCalls);
-  const unbacked = claimsIn(reply, minds).filter(
-    (claim) => !backs(now, claim.kind) && !(claim.earlier && backs(before, claim.kind)),
-  );
+  const log = changeLogOf(calls);
+  const idsOf = (name: string) =>
+    minds.filter((mind) => nameKey(mind.name) === nameKey(name)).map((mind) => mind.id);
+  const unbacked = claimsIn(
+    reply,
+    minds.map((mind) => mind.name),
+  ).filter((claim) => !backs(log, claim.kind, claim.mind === null ? null : idsOf(claim.mind)));
   return [...new Set(unbacked.map((claim) => claim.kind))];
 }
 
@@ -236,10 +249,7 @@ const CLAIMED_WORDS: Record<ClaimedChange, string> = {
   removed: "removed or replaced text in a Mind",
 };
 
-/**
- * What the model is told when its reply claims a change no call made: the
- * record of what its calls did, then to write the reply again from it.
- */
+/** The record of what the calls did, then to write the reply again from it. */
 export function askAgainNote(
   claims: readonly ClaimedChange[],
   calls: readonly AnswerToolCall[],
@@ -252,6 +262,6 @@ export function askAgainNote(
     "What the Tools of this Answer really did, as IncarnaMind recorded it:",
     ...(lines.length > 0 ? lines : ["- No Tool was called."]),
     "</tool-record>",
-    `Your reply says you ${said}, but no Tool did that. Write your reply again from its start: say only what the Tools really did, and plainly what wasn't done and why. If the User's request still needs a change you can make now, make it with the Tools first.`,
+    `Your reply says you ${said}, but no Tool did that. Write your reply again from its start, without saying what you changed: IncarnaMind lists each change under your reply. Say plainly what wasn't done and why. If the User's request still needs a change you can make now, make it with the Tools first.`,
   ].join("\n");
 }

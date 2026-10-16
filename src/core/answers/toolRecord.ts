@@ -1,10 +1,10 @@
 /**
- * IncarnaMind's own record of what an Answer's Tool calls did (#893): what
+ * IncarnaMind's own record of what an Answer's Tool calls did: what
  * each one changed, and in which Mind, or why it changed nothing. It is
  * written from the calls' cards, never from the model's words, so a later
  * Question in the conversation knows what really happened before (./context),
  * and a reply that claims a change no call made is asked again with it
- * (./claims). In English, as the rest of the instructions are.
+ * (./claimedChanges). In English, as the rest of the instructions are.
  */
 import type { AnswerToolCall, MindChange, MindProblem } from "../api";
 
@@ -59,7 +59,7 @@ function whyNot(problem: MindProblem | undefined): string {
 }
 
 function citationsOf(change: MindChange): string {
-  const cited = change.cited ? `, with ${counted(change.cited, "checked Citation")}` : "";
+  const cited = change.cited ? `, with ${counted(change.cited, "Citation")}` : "";
   const left = change.unrecorded
     ? `; ${counted(change.unrecorded, "marker")} had no Citation recorded with cite, so ${change.unrecorded === 1 ? "it was" : "they were"} left out`
     : "";
@@ -81,23 +81,23 @@ function mindLine(call: AnswerToolCall, names: MindNames): string {
     const verb = call.tool === "read_mind" ? "couldn't read it" : "nothing changed";
     return `${call.tool} ${mind}${section}: ${verb}: ${whyNot(call.mindProblem)}`;
   }
-  const waiting = change
-    ? `${counted(change.proposals, "change")} waiting for the User${citationsOf(change)}`
+  const proposed = change
+    ? `proposed ${counted(change.proposals, "change")}, waiting for the User${citationsOf(change)}`
     : "";
   switch (call.tool) {
     case "read_mind":
       return `read_mind ${mind}: read it`;
     case "create_mind":
       return change && change.proposals > 0
-        ? `create_mind: made the Mind ${mind}, its text as ${waiting}`
+        ? `create_mind: made the Mind ${mind} and ${proposed}`
         : `create_mind: made the Mind ${mind}, empty`;
     case "add_to_mind":
       return `add_to_mind ${mind}: proposed ${counted(change?.proposals ?? 0, "new Block")}, waiting for the User${change ? citationsOf(change) : ""}`;
     default:
       if (!change) return `${call.tool} ${mind}${section}: no change was needed`;
       return change.revised
-        ? `${call.tool} ${mind}${section}: revised your own waiting text; it is gone, and ${waiting} in its place`
-        : `${call.tool} ${mind}${section}: proposed ${waiting}`;
+        ? `${call.tool} ${mind}${section}: revised your own waiting text in place, and ${proposed}`
+        : `${call.tool} ${mind}${section}: ${proposed}`;
   }
 }
 
@@ -157,7 +157,7 @@ export function toolRecord(calls: readonly AnswerToolCall[], names: MindNames, c
     ...toolRecordLines(calls, names),
     ...(cited > 0
       ? [
-          `- cite: ${counted(cited, "Citation")} in your reply, checked against their Documents; each reads as its source in brackets, like [Tides, p. 3]`,
+          `- cite: ${counted(cited, "Citation")} in your reply; each reads as its source in brackets, like [Tides, p. 3]`,
         ]
       : []),
   ];
