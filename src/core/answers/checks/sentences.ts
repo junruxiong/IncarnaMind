@@ -266,16 +266,18 @@ export function markedSentences(blocks: Y.XmlFragment): MarkedSentence[] {
   return [...found.values()];
 }
 
-/** Every check in the Mind with the whole sentences its marked text is in, as they read now. */
-export function checkedSentences(
-  blocks: Y.XmlFragment,
-): { check: ClaimCheckAttributes; sentence: string }[] {
-  return markedSentences(blocks).map(({ element, from, to, check }) => {
+/**
+ * Every check in the Mind with the whole sentences its marked text is in, as they read now, and
+ * where its mark is (`MarkedSentence`).
+ */
+export function checkedSentences(blocks: Y.XmlFragment): (MarkedSentence & { sentence: string })[] {
+  return markedSentences(blocks).map((marked) => {
+    const { element, from, to } = marked;
     const text = textOf(element);
     const touched = sentenceSpans(text).filter((span) => span.from < to && span.to > from);
     const start = Math.min(from, touched[0]?.from ?? from);
     const end = Math.max(to, touched.at(-1)?.to ?? to);
-    return { check, sentence: text.slice(start, end) };
+    return { ...marked, sentence: text.slice(start, end) };
   });
 }
 

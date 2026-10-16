@@ -107,7 +107,7 @@ function indexOf(documents: readonly LiveDocument[]): DocumentIndex {
 }
 
 /** The live Document a Citation opens: its own, or one with the same content added again after it was deleted. */
-function liveDocumentOf(
+export function liveDocumentOf(
   attributes: Partial<Pick<CitationAttributes, "documentId" | "contentHash">>,
   documents: readonly LiveDocument[],
 ): LiveDocument | undefined {

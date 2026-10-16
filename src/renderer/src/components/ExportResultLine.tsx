@@ -5,8 +5,9 @@ import { errorMessage } from "../errors";
 import { useDismissOnEscape } from "../escapeDismiss";
 import {
   type ExportResult,
-  exportMind,
+  exportAgain,
   FORMAT_LABELS,
+  isCheckRecord,
   revealUnverified,
   useExports,
 } from "../exports";
@@ -110,14 +111,16 @@ function ResultBody({
     return () => clearTimeout(timer);
   }, [plain, held, dismiss]);
 
-  const format = t(FORMAT_LABELS[result.format]);
+  const saving = isCheckRecord(result.format)
+    ? t("checkRecord.saving")
+    : t("export.saving.line", { format: t(FORMAT_LABELS[result.format]) });
   const fix = (): ProblemAction | undefined => {
     if (result.state === "failed") {
       return {
         label: t("export.changeLocation"),
         testId: "export-change-location",
         onClick: () =>
-          void exportMind(
+          void exportAgain(
             result.mindId,
             result.format,
             async () => (await chooseOutputLocation()) !== null,
@@ -130,7 +133,7 @@ function ResultBody({
         label: t("export.allow"),
         testId: "export-allow",
         onClick: () =>
-          void exportMind(result.mindId, result.format, async () => {
+          void exportAgain(result.mindId, result.format, async () => {
             await core.setLinkedFolderWriting(linkedFolderId, true);
             return true;
           }),
@@ -156,7 +159,7 @@ function ResultBody({
             className="flex items-center gap-2 py-1 text-[13px] leading-5 text-ink-meta"
           >
             <ExportLineIcon className="size-4 shrink-0" />
-            {t("export.saving.line", { format })}
+            {saving}
           </p>
         ) : result.state === "saved" ? (
           <>
