@@ -10,8 +10,9 @@ import { shownClaims } from "./claimChecks";
 
 /**
  * Check this Mind's question (#737), on the line under the title before a
- * run billed per token: "Check this Mind's 48 sentences against this
- * Folder's Documents? · About $0.40 · 52 model calls · Check · Not now".
+ * run, once the model has named the claims: "Check this Mind's 48 claims
+ * against this Folder's Documents? · About $0.40 · 113 model calls · Check ·
+ * Not now", with no price for a plan or a model on this computer.
  */
 export function MindCheckAsk({ mindId }: { mindId: string }) {
   const t = useT();
@@ -19,14 +20,17 @@ export function MindCheckAsk({ mindId }: { mindId: string }) {
   const asking = useMindCheck((state) => state.asking[mindId]);
   if (!asking) return null;
   const where = asking.inFolder ? "folder" : "all";
-  const count = new Intl.NumberFormat(language).format(asking.sentences);
+  const count = new Intl.NumberFormat(language).format(asking.count);
+  const one = asking.count === 1;
+  const question = asking.claims
+    ? t(one ? `mindCheck.ask.claims.${where}.one` : `mindCheck.ask.claims.${where}`, { count })
+    : t(one ? `mindCheck.ask.${where}.one` : `mindCheck.ask.${where}`, { count });
   return (
     <ProblemLine
       role="status"
       testId="mind-check-ask"
       className="mind-health-line"
-      details={asking.estimate.parts}
-      title={asking.estimate.title}
+      {...(asking.estimate && { details: asking.estimate.parts, title: asking.estimate.title })}
       action={{
         label: t("mindCheck.check"),
         testId: "mind-check-check",
@@ -38,9 +42,7 @@ export function MindCheckAsk({ mindId }: { mindId: string }) {
         onClick: () => dismissMindCheck(mindId),
       }}
     >
-      {t(asking.sentences === 1 ? `mindCheck.ask.${where}.one` : `mindCheck.ask.${where}`, {
-        count,
-      })}
+      {question}
     </ProblemLine>
   );
 }

@@ -564,6 +564,7 @@ export function createChecks(options: ChecksOptions) {
     planMindCheck: async (mindId: unknown, mode: unknown, allDocuments?: unknown) =>
       mindCheck.planMindCheck(mindId, mode, allDocuments === true),
 
+    findMindClaims: (input: unknown) => mindCheck.findMindClaims(input),
     checkMind: (input: unknown) => mindCheck.checkMind(input),
 
     /** A Document's status changed: a new version has its Folder's Minds checked for contradictions. */

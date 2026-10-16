@@ -10,6 +10,7 @@ import {
   dismissChatSetup,
   launchApp,
   mindWrittenBefore,
+  motionSettled,
   pointAndClick,
   removeDataFolder,
   setLanguage,
@@ -128,11 +129,13 @@ test("Check this Mind from ⌘K: the estimate first on a cloud model, then every
   const item = window.getByTestId("palette-item").filter({ hasText: "Check this Mind" }).first();
   await pointAndClick(window, item);
 
-  // Billed per token: the line asks first, with the estimate.
+  // The model names the claims first; the line then asks with their number and the estimate,
+  // its price first. Of the 20 sentences, the 15 claims are what it checks.
   const ask = window.getByTestId("mind-check-ask");
-  await expect(ask).toContainText("Check this Mind’s 20 sentences against your Documents?");
-  await expect(ask).toContainText("About");
+  await expect(ask).toContainText("Check this Mind’s 15 claims against your Documents?");
+  await expect(ask).toContainText("About $");
   await expect(window.getByTestId("palette-search")).toBeHidden();
+  await motionSettled(window);
   await screenshot(window, "mind-check-ask-en");
   await pointAndClick(window, ask.getByTestId("mind-check-check"));
 
@@ -160,7 +163,7 @@ test("Check this Mind from ⌘K: the estimate first on a cloud model, then every
   await expect(marks(window)).toHaveCount(15);
 });
 
-test("In Chinese and a narrow window, from the Mind's tab menu: a model on this computer checks at once; a Folder that holds too little offers all Documents; Check all checks a sentence written since", async () => {
+test("In Chinese and a narrow window, from the Mind's tab menu: a model on this computer asks with the claims and no price; a Folder that holds too little offers all Documents; Check all checks a sentence written since", async () => {
   await writeFile(join(sources, "Tides.pdf"), TIDES);
   await writeFile(
     join(sources, "Garden.pdf"),
@@ -188,7 +191,11 @@ test("In Chinese and a narrow window, from the Mind's tab menu: a model on this 
 
   await window.getByTestId("mind-tab").first().click({ button: "right" });
   await pointAndClick(window, window.getByRole("menuitem", { name: "核对整个 Mind" }));
-  await expect(window.getByTestId("mind-check-ask")).toHaveCount(0);
+  // On this computer it asks too, with the claims the model named and no price.
+  const ask = window.getByTestId("mind-check-ask");
+  await expect(ask).toContainText("要对照这个文件夹中的文档，核对这个 Mind 中的 15 条说法吗？");
+  await expect(ask).not.toContainText("约");
+  await pointAndClick(window, ask.getByTestId("mind-check-check"));
   const health = window.getByTestId("mind-health");
   await expect(health.getByTestId("health-checked-all")).toContainText("已核对 15 句，");
   await expect(marks(window).and(window.locator('[data-check="unsupported"]'))).toHaveCount(15);
@@ -197,6 +204,9 @@ test("In Chinese and a narrow window, from the Mind's tab menu: a model on this 
   const widen = window.getByTestId("checks-uncovered").getByTestId("checks-check-all");
   await expect(widen).toHaveText("对照全部文档核对");
   await pointAndClick(window, widen);
+  // The claims aren't sorted again: the ask comes at once.
+  await expect(ask).toContainText("要对照你的文档，核对这个 Mind 中的 15 条说法吗？");
+  await pointAndClick(window, ask.getByTestId("mind-check-check"));
   await expect(window.getByTestId("checks-running")).toHaveCount(0);
   await expect(health.getByTestId("health-checked-all")).toBeVisible();
   await expect(marks(window).and(window.locator('[data-check="supported"]'))).toHaveCount(3);
@@ -218,6 +228,31 @@ test("In Chinese and a narrow window, from the Mind's tab menu: a model on this 
   const all = health.getByTestId("health-check");
   await expect(all).toHaveText("全部核对");
   await pointAndClick(window, all);
+  await expect(ask).toContainText("要对照这个文件夹中的文档，核对这个 Mind 中的这条说法吗？");
+  await pointAndClick(window, ask.getByTestId("mind-check-check"));
   await expect(marks(window)).toHaveCount(16);
   await expect(health.getByTestId("health-check")).toHaveCount(0);
+});
+
+test("when the provider can't be reached while the claims are named, Try again names them again and asks before it checks", async () => {
+  await writeFile(join(sources, "Tides.pdf"), TIDES);
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  // The scripted model can't reach its provider the first time it names the claims.
+  await useLocalChatModel(window, "fake-model-claims-offline");
+  await setWindowSize(app, window, 1440, 900);
+  await addDocuments(window, [join(sources, "Tides.pdf")]);
+  await harbourNotes(window);
+
+  await window.getByTestId("mind-tab").first().click({ button: "right" });
+  await pointAndClick(window, window.getByRole("menuitem", { name: "Check this Mind" }));
+  const failure = window.getByTestId("answer-error");
+  await expect(failure).toHaveAttribute("data-error-kind", "network");
+  await pointAndClick(window, failure.getByTestId("answer-error-action"));
+
+  const ask = window.getByTestId("mind-check-ask");
+  await expect(ask).toContainText("Check this Mind’s 15 claims against your Documents?");
+  await expect(marks(window)).toHaveCount(0);
+  await pointAndClick(window, ask.getByTestId("mind-check-check"));
+  await expect(marks(window)).toHaveCount(15);
 });

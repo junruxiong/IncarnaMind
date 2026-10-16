@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { AgentClient, ChatProvider } from "../../../../core/api";
 import { SHOW_AGENT_CONNECTION } from "../../../../shared/agentConnection";
+import { chosenFlowSummary } from "../../chosenFlows";
 import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useLanguage, useT } from "../../i18n";
@@ -175,7 +176,9 @@ function LeadingWays({
       </button>
       {/* It signs in at once, so its line also says what goes to OpenAI (ADR-0022). */}
       <p data-testid="setup-chatgpt-sends" className={lineClass}>
-        {t(chinese ? "setup.chatgpt.line.china" : "setup.chatgpt.line")}
+        {t(chinese ? "setup.chatgpt.line.china" : "setup.chatgpt.line", {
+          sends: chosenFlowSummary(t),
+        })}
       </p>
     </div>
   );

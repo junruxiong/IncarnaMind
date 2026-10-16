@@ -39,6 +39,7 @@ import type {
   MonthlyCap,
   ProviderCost,
   RunEstimate,
+  RunEstimateInput,
 } from "../api";
 import type { Price } from "../providers/catalog/types";
 import { ChatGptPlanError } from "../providers/chatgpt/errors";
@@ -79,16 +80,40 @@ export interface MeteredModel {
 /** The output reserved for a request that sets no limit, on a model whose limit isn't known. */
 const DEFAULT_OUTPUT_TOKENS = 16_384;
 
-/**
- * An Answer searches, then writes: about three model calls. Before this
- * computer has recorded two Answers' worth on a model, a call is a third of
- * an average Answer's 12,000 input and 750 output tokens, none cached.
- */
-const CALLS_PER_ITEM = 3;
-const DEFAULT_CALL = { inputTokens: 4_000, cachedInputTokens: 0, outputTokens: 250 };
-/** The recorded requests an estimate averages, once there are at least `MIN_RECORDED`. */
+interface ItemCost {
+  calls: number;
+  /** A call before this computer has recorded two items' worth on the model. */
+  call: Required<TokenUsage>;
+  flow: DataFlowId;
+}
+
+const ITEM_COSTS: Record<NonNullable<RunEstimateInput["each"]>, ItemCost> = {
+  /** An Answer searches, then writes: a third of an average Answer's 12,000 input and 750 output tokens, none cached. */
+  answer: {
+    calls: 3,
+    call: { inputTokens: 4_000, cachedInputTokens: 0, cacheWriteTokens: 0, outputTokens: 250 },
+    flow: "chat",
+  },
+  /**
+   * A sentence checked: it searches, cites and gives its verdict, with its
+   * run's one call naming the claims shared out. Measured on a memo checked
+   * with Claude Haiku 5.5 (tests/fixtures/cost/recorded-checks.json). Its own
+   * recorded calls, not Answers', which carry more of the Documents: those made
+   * one estimate seven times its run's cost (#973).
+   */
+  check: {
+    calls: 2.35,
+    call: {
+      inputTokens: 8_260,
+      cachedInputTokens: 2_903,
+      cacheWriteTokens: 4_362,
+      outputTokens: 129,
+    },
+    flow: "checks",
+  },
+};
+/** The recorded requests an estimate averages, once there are two items' worth. */
 const RECORDED_CALLS = 100;
-const MIN_RECORDED = 2 * CALLS_PER_ITEM;
 
 interface RequestRow {
   provider_id: string;
@@ -528,36 +553,43 @@ export function createMeter(options: {
     },
 
     /**
-     * The estimate before a large run of `items` on `model`: three calls an
-     * item, each the average of this computer's recent requests to the model
-     * once it has made enough, else a third of an average Answer. On recorded
-     * Answers its tokens come within 15% of the run's, and its price from 10%
-     * below to 2.5 times above: higher when recent requests found the prompt
-     * cache cold, as the first of a session does, and a run's later ones don't.
+     * The estimate before a large run of `items` on `model`: each item's calls
+     * (`ITEM_COSTS`), each the average of this computer's recent requests to
+     * the model for the same kind of item once it has made enough, else that
+     * kind's measured call. On recorded Answers its tokens come within 15% of
+     * the run's, and its price from 10% below to 2.5 times above: higher when
+     * recent requests found the prompt cache cold, as the first of a session
+     * does, and a run's later ones don't.
      */
-    estimate(model: MeteredModel, items: number, searches = 0): RunEstimate {
+    estimate(
+      model: MeteredModel,
+      items: number,
+      searches = 0,
+      kind: NonNullable<RunEstimateInput["each"]> = "answer",
+    ): RunEstimate {
       if (model.billing !== "per-token") return { billing: model.billing };
+      const item = ITEM_COSTS[kind];
       const recent = db.all<Required<TokenUsage>>(
         `SELECT input_tokens AS inputTokens, coalesce(cached_input_tokens, 0) AS cachedInputTokens,
            coalesce(cache_write_tokens, 0) AS cacheWriteTokens, output_tokens AS outputTokens
          FROM model_requests
          WHERE deleted_at IS NULL AND status = 'settled' AND provider_id = ? AND model_id = ?
-           AND flow = 'chat' AND input_tokens IS NOT NULL AND output_tokens IS NOT NULL
+           AND flow = ? AND input_tokens IS NOT NULL AND output_tokens IS NOT NULL
          ORDER BY created_at DESC LIMIT ?`,
-        [model.providerId, model.modelId, RECORDED_CALLS],
+        [model.providerId, model.modelId, item.flow, RECORDED_CALLS],
       );
       const mean = (pick: (each: Required<TokenUsage>) => number) =>
         recent.reduce((sum, each) => sum + pick(each), 0) / recent.length;
       const call: Required<TokenUsage> =
-        recent.length >= MIN_RECORDED
+        recent.length >= 2 * item.calls
           ? {
               inputTokens: mean((each) => each.inputTokens),
               cachedInputTokens: mean((each) => each.cachedInputTokens),
               cacheWriteTokens: mean((each) => each.cacheWriteTokens),
               outputTokens: mean((each) => each.outputTokens),
             }
-          : { ...DEFAULT_CALL, cacheWriteTokens: 0 };
-      const calls = Math.max(0, Math.round(items)) * CALLS_PER_ITEM;
+          : item.call;
+      const calls = Math.round(Math.max(0, Math.round(items)) * item.calls);
       const at = now();
       const cap = options.cap();
       const fee = searchFeeOf(model.kind);
