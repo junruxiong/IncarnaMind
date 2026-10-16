@@ -97,8 +97,15 @@ describe("the rest of a quote", () => {
     expect(readableQuoteText("The tides\nrise   twice\n\na day")).toBe(
       "The tides rise twice a day",
     );
-    expect(readableQuoteText("含\n1750 亿参数")).toBe("含1750亿参数");
+    expect(readableQuoteText("含\n1750 亿参数")).toBe("含1750 亿参数");
     expect(readableQuoteText("潮水\n每天涨落两次")).toBe("潮水每天涨落两次");
+  });
+
+  test("a space the writer typed next to Chinese stays, a line break there doesn't", () => {
+    const written = "使用 Mind 创建文档，第 3 页";
+    expect(readableQuoteText(written)).toBe(written);
+    expect(readableQuote(written, whole(written))).toBe(written);
+    expect(readableQuoteText("使用 Mind\n创建文档，第\n3 页")).toBe("使用 Mind创建文档，第3 页");
   });
 
   test("the parts of a quote with an ellipsis come back with one between them", () => {
