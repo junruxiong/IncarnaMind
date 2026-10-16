@@ -468,7 +468,7 @@ for (const [width, language] of [
       zh ? "销售非常好，利润真的很高。" : "Sales were very good and the margin was really strong. "
     ).repeat(zh ? 14 : 7);
     await writeMind(window, zh ? "第三季度" : "Q3 review", [note.trim()]);
-    await askInAssistant(window, zh ? "缩短摘要" : "Shorten the summary");
+    await askInAssistant(window, zh ? "缩短摘要" : "Could you shorten the summary?");
 
     // The change farthest to the right, on one line (a change that wraps has no one place to point at):
     // where a bar the width of its words reaches under the assistant.
