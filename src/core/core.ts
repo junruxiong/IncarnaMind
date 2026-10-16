@@ -182,6 +182,7 @@ import { isCloudModelName } from "./providers/ollamaCloud";
 import { createOllamaModels } from "./providers/ollamaModels";
 import { createAiSdkRerankingModel, createRerank } from "./providers/rerank";
 import { createRecentlyDeleted } from "./recentlyDeleted";
+import { createReferenceChecks } from "./referenceChecks";
 import {
   createReferenceImport,
   createReferences,
@@ -806,6 +807,8 @@ export function createCore(adapters: CoreAdapters): Core {
   if (documents.searchableCount() > 0) rerank.prepare();
   /** Set once outside agents exist: Local mode pauses them. */
   let agentsLocalModeChanged = () => {};
+  /** Set once Connectors exist: Local mode pauses those on other computers. */
+  let connectorsLocalModeChanged = () => {};
   /**
    * Local mode on or off: embeddings may switch back to the built-in model,
    * rerank pauses, usage data stops, and outside agents pause.
@@ -818,6 +821,7 @@ export function createCore(adapters: CoreAdapters): Core {
       usageData.localModeChanged();
       privacyChanged();
       agentsLocalModeChanged();
+      connectorsLocalModeChanged();
       await rerankChanged();
       // Questions to a cloud model are refused now (or allowed again): the chat model's readiness changed.
       await readinessChanged();
@@ -901,6 +905,7 @@ export function createCore(adapters: CoreAdapters): Core {
     processes: adapters.processes,
     browser: adapters.browser,
     consent,
+    localOnly: () => embedding.localOnly(),
     signInPages: (name) => {
       const { language } = settings.get();
       return {
@@ -921,6 +926,7 @@ export function createCore(adapters: CoreAdapters): Core {
       timing: { signInTimeoutMs: adapters.connectorSignInTimeoutMs },
     }),
   });
+  connectorsLocalModeChanged = () => connectors.localModeChanged();
   /** Skill scripts can run: the User hasn't turned them off, and a Skill that is on has some. */
   const scriptsOffered = () =>
     settings.get().device.skillScriptsEnabled && skills.anyEnabledWithScripts();
@@ -2036,6 +2042,19 @@ export function createCore(adapters: CoreAdapters): Core {
     signal: lifetime.signal,
     pace,
   });
+  // Checking a Mind's reference list sends each reference only, to Crossref, OpenAlex
+  // and arXiv, once the User starts it where a line says so; never in local mode.
+  const referenceChecks = createReferenceChecks({
+    consent,
+    localOnly: () => embedding.localOnly(),
+    http: createSourceHttp(pace, paceTimers),
+    urls: adapters.referenceLookup,
+    content,
+    db,
+    now,
+    progress: (event) => events.emit("referenceCheck.progress", event),
+    signal: lifetime.signal,
+  });
   // Importing references (#287) reads a file the User chose and sends nothing.
   const referenceImport = createReferenceImport({
     db,
@@ -2894,6 +2913,9 @@ export function createCore(adapters: CoreAdapters): Core {
       references.restore(documentId, before, fields),
     confirmReference: async (documentId) => references.confirm(documentId),
     lookUpReference: (documentId) => references.lookUp(documentId),
+    checkReferences: (mindId, options) =>
+      referenceChecks.check(mindId, isRecord(options) && options.again === true),
+    stopReferenceCheck: async (mindId) => referenceChecks.stop(mindId),
     listSourceProviders: () => sources.list(),
     setSourceProviderKey: (providerId, key) => sources.setKey(providerId, key),
     findSources: (input) => sources.search(input),

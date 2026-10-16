@@ -9,7 +9,11 @@
 import { utimes } from "node:fs/promises";
 import { describe, expect, test } from "vitest";
 import { createCitationSession } from "../../src/core/answers/citations";
-import { datedDocumentsNote, documentInstructions } from "../../src/core/answers/prompt";
+import {
+  bracketedAmountsNote,
+  datedDocumentsNote,
+  documentInstructions,
+} from "../../src/core/answers/prompt";
 import { askAndFinish, setUpWithDocuments, shownPassages } from "../helpers/citations";
 import { createTempDataFolder } from "../helpers/core";
 import { addAndProcess, writeSourceFile } from "../helpers/documents";
@@ -206,6 +210,49 @@ const handed = (...documents: readonly [string, string | null][]) =>
         `<passage id="P${index + 1}" document="${document}"${date ? ` date="${date}"` : ""} pages="1">\nOutages must be reported.\n</passage>`,
     )
     .join("\n\n");
+
+describe("The note on amounts in brackets (#978)", () => {
+  const handed = (line: string) => `<passage id="P1" document="Statement">\n${line}\n</passage>`;
+
+  test.each([
+    ["Less: agent's fee (4,620.00)"],
+    ["Less: legal fees (£1,500.00)"],
+    ["Net cash flow | （1,250.5）"],
+    ["Interest paid ( 340.50 )"],
+    ["Net loss\t($1.2bn)"],
+  ])("follows Passages in which the reader finds a negative in brackets: %s", (line) => {
+    expect(bracketedAmountsNote(handed(line))).toMatch(
+      /^An amount in brackets in these Passages is negative.*括号里的金额是负数/,
+    );
+  });
+
+  test.each([
+    ["Report outages over 4 hours (see the memo)."],
+    ["Founded in 1998 (the second year of the programme) in Leeds."],
+    ["The memo (2023) and the handbook (note 4) apply, see (p. 12)."],
+    ["Items (1) and (2) apply, and section 1159(10)."],
+    ["Fees of 4,620.00 are due."],
+    ["Legal fees (250) were paid."],
+    ["The fund (£2.1bn) invested in 12 properties (£4.5m)."],
+    ["No Passages in the User's Documents match this search."],
+  ])("is left out of Passages in which it finds none: %s", (line) => {
+    expect(bracketedAmountsNote(handed(line))).toBe("");
+  });
+
+  test("is in the instructions of a model without Tools, after its Passages, and not in a Question's instructions otherwise", () => {
+    const listed = { total: 1, names: ["Statement"] };
+    const passages = handed("Less: fees (4,620.00)");
+    for (const mode of ["structured-output", "none"] as const) {
+      expect(documentInstructions(mode, listed, passages)).toContain(
+        "is negative, as accountants write it",
+      );
+    }
+    expect(documentInstructions("tools", listed)).not.toContain("accountants");
+    expect(documentInstructions("none", listed, handed("Plain text."))).not.toContain(
+      "accountants",
+    );
+  });
+});
 
 describe("The note on Documents of different dates (#660)", { timeout: 30_000 }, () => {
   const NOTE = "These Passages come from Documents of different dates:";

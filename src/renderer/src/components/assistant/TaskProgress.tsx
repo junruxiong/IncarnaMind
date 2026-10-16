@@ -37,13 +37,13 @@ function useMinutes(since: string, until: string | null): number {
 }
 
 /** Its head's right side: how far it is and for how long, or how it ended. */
-function headLine(task: Task, minutes: number, t: Translate): string {
+function headLine(task: Task, minutes: number, t: Translate): string[] {
   const time = t("task.minutes", { count: minutes });
-  if (task.status === "done") return t("task.progress.doneIn", { time });
-  if (task.status === "failed") return t("task.status.failed");
-  if (task.status === "stopped") return t("task.status.stopped");
+  if (task.status === "done") return [t("task.progress.doneIn", { time })];
+  if (task.status === "failed") return [t("task.status.failed")];
+  if (task.status === "stopped") return [t("task.status.stopped")];
   const progress = task.progress;
-  if (!progress || progress.total === 0) return time;
+  if (!progress || progress.total === 0) return [time];
   const counted = t(
     task.kind === "comparison"
       ? "task.progress.cells"
@@ -52,7 +52,7 @@ function headLine(task: Task, minutes: number, t: Translate): string {
         : "task.progress.items",
     { done: progress.done, total: progress.total },
   );
-  return `${counted} · ${time}`;
+  return [counted, time];
 }
 
 /** What it waits for, where the step it is on would be: the User below, or a limit. */
@@ -225,9 +225,12 @@ export function TaskProgress({
           </span>
         )}
         <span className="task-progress-name">{name}</span>
-        <span data-testid="task-progress-meta" className="task-progress-meta">
-          {headLine(task, minutes, t)}
-        </span>
+        <MetaLine
+          as="div"
+          data-testid="task-progress-meta"
+          className="task-progress-meta"
+          parts={headLine(task, minutes, t)}
+        />
       </div>
       {!finished && (
         <div

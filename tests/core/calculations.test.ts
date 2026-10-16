@@ -63,6 +63,43 @@ const CHENGHU = {
   ]),
 };
 
+/** A completion statement (#978): a sale price and three deductions, each in brackets. */
+const SALE_LINES = [
+  "Sale price £385,000.00",
+  "Less: estate agent's fee (£4,620.00)",
+  "Less: legal fees (£1,500.00)",
+  "Less: search and other costs (£804.00)",
+];
+const COMPLETION = {
+  name: "Completion statement 14 Mill Lane.pdf",
+  contents: buildPdf([{ lines: ["Completion statement: 14 Mill Lane", ...SALE_LINES] }]),
+};
+
+const SALE_LINES_ZH = [
+  "成交价 3,850,000.00",
+  "减：中介费 （46,200.00）",
+  "减：律师费 （15,000.00）",
+  "减：其他费用 （8,040.00）",
+];
+const COMPLETION_ZH = {
+  name: "房产交易结算表.pdf",
+  contents: buildPdf([{ chineseLines: ["房产交易结算表", ...SALE_LINES_ZH] }]),
+};
+
+/** Cites each line of a statement as a marker from 1, then makes `calls` over those markers. */
+const citeStatement =
+  (name: string, lines: readonly string[], calls: (cited: number[]) => Call[]) =>
+  (passages: ShownPassage[]): Call[] => {
+    const passage = passageOf(passages, name);
+    const citations = lines.map((quote, index) => ({
+      marker: index + 1,
+      passage,
+      location: "p. 1",
+      quote,
+    }));
+    return [{ tool: "cite", input: { citations } }, ...calls(lines.map((_, index) => index + 1))];
+  };
+
 /** A Tool call as a scripted model makes it. */
 type Call = { tool: string; input: unknown };
 
@@ -1048,6 +1085,182 @@ describe("The calculate Tool", { timeout: 60_000 }, () => {
     expect(match?.conversation.id).toBe(conversationId);
     expect(match?.messages.map((message) => message.excerpt)).toEqual([
       expect.stringContaining("gross margin rose 2.3 percentage points"),
+    ]);
+  });
+});
+
+describe("Amounts in brackets are negative (#978)", { timeout: 60_000 }, () => {
+  const inputs = (cited: number[], numbers: string[]) =>
+    ["price", "agent", "legal", "other"].map((name, index) => ({
+      name,
+      label: ["Sale price", "Agent's fee", "Legal fees", "Other costs"][index],
+      citation: cited[index],
+      number: numbers[index],
+    }));
+  const NUMBERS = ["£385,000.00", "(£4,620.00)", "(£1,500.00)", "(£804.00)"];
+  const figure = (cited: number[], formula: string) => ({
+    marker: 1,
+    label: "Net sale proceeds",
+    formula,
+    inputs: inputs(cited, NUMBERS),
+  });
+
+  // protects=#978; fails_when=a deduction in brackets is read as positive, the net proceeds come out 391,924 or the working doesn't show each input's sign; no_claim=the wording of the Answer, which the scripted model writes.
+  test("deductions in brackets are taken off: the net proceeds are 378,076, and each input is read as written", async () => {
+    const model = calculatingModel({
+      queries: ["sale price deductions"],
+      steps: [
+        citeStatement("Completion statement", SALE_LINES, (cited) => [
+          {
+            tool: "calculate",
+            input: { figures: [figure(cited, "price + agent + legal + other")] },
+          },
+        ]),
+      ],
+      answer: "The net sale proceeds were [=1][^1].",
+    });
+    const { core } = await setUpCalculating(model, [COMPLETION]);
+
+    const { answer } = await askAndRead(core, "What were the net sale proceeds of 14 Mill Lane?");
+
+    expect(shown(answerBlocks(answer))).toBe("The net sale proceeds were £378,076.00.");
+    expect(
+      answer.figures[0]?.inputs.map((input) => [input.number.chars, input.number.value]),
+    ).toEqual([
+      ["£385,000.00", 385_000],
+      ["(£4,620.00)", -4_620],
+      ["(£1,500.00)", -1_500],
+      ["(£804.00)", -804],
+    ]);
+    expect(told(model, "calculate")[0]).not.toContain("Check the sign");
+    expect(told(model, "search_documents")[0]).toContain(
+      "An amount in brackets in these Passages is negative",
+    );
+  });
+
+  // protects=#978; fails_when=a formula that subtracts an amount in brackets is recorded without telling the model it adds it, or the model's fix is called a marker given twice; no_claim=that a model heeds the line, which a hand check with Claude Haiku 5.5 shows.
+  test("a formula that subtracts them adds them: the model is told the sign it was read with, and its fix replaces the figure quietly", async () => {
+    const model = calculatingModel({
+      queries: ["sale price deductions"],
+      steps: [
+        citeStatement("Completion statement", SALE_LINES, (cited) => [
+          {
+            tool: "calculate",
+            input: { figures: [figure(cited, "price - agent - legal - other")] },
+          },
+        ]),
+        () => [
+          {
+            tool: "calculate",
+            input: { figures: [figure([1, 2, 3, 4], "price + agent + legal + other")] },
+          },
+        ],
+      ],
+      answer: "The net sale proceeds were [=1][^1].",
+    });
+    const { core } = await setUpCalculating(model, [COMPLETION]);
+
+    const { answer } = await askAndRead(core, "What were the net sale proceeds of 14 Mill Lane?");
+
+    const [first, second] = told(model, "calculate");
+    expect(first).toContain("Recorded [=1] = £391,924.00");
+    expect(first).toContain(
+      "Check the sign: agent is (£4,620.00), read as -4620; legal is (£1,500.00), read as -1500; other is (£804.00), read as -804, so subtracting them adds them.",
+    );
+    expect(second).toMatch(/^Recorded \[=1\] = £378,076\.00 /);
+    expect(second).not.toContain("replaces");
+    expect(shown(answerBlocks(answer))).toBe("The net sale proceeds were £378,076.00.");
+  });
+
+  // protects=#978; fails_when=a correct change between two losses, or from a loss to a profit, is told its sign is wrong; no_claim=the wording of the line a deduction gets.
+  test.each([
+    [
+      "two losses",
+      ["Loss for 2025 (£2,500.00)", "Loss for 2024 (£3,100.00)"],
+      ["(£2,500.00)", "(£3,100.00)"],
+      "£600.00",
+    ],
+    [
+      "a profit and a loss",
+      ["Profit for 2025 £800.00", "Loss for 2024 (£500.00)"],
+      ["£800.00", "(£500.00)"],
+      "£1,300.00",
+    ],
+  ])(
+    "a difference between %s is recorded with no word about its sign",
+    async (_name, lines, numbers, result) => {
+      const input = (name: string, label: string, cited: number[], at: number) => ({
+        name,
+        label,
+        citation: cited[at],
+        number: numbers[at],
+      });
+      const model = calculatingModel({
+        queries: ["profit loss"],
+        steps: [
+          citeStatement("Results", lines, (cited) => [
+            {
+              tool: "calculate",
+              input: {
+                figures: [
+                  {
+                    marker: 1,
+                    label: "Change",
+                    formula: "later - earlier",
+                    inputs: [input("later", "2025", cited, 0), input("earlier", "2024", cited, 1)],
+                  },
+                ],
+              },
+            },
+          ]),
+        ],
+        answer: "The change was [=1][^1].",
+      });
+      const results = {
+        name: "Results.pdf",
+        contents: buildPdf([{ lines: ["Results", ...lines] }]),
+      };
+      const { core } = await setUpCalculating(model, [results]);
+
+      const { answer } = await askAndRead(core, "What was the change in the result?");
+
+      expect(told(model, "calculate")[0]).toMatch(`Recorded [=1] = ${result} `);
+      expect(told(model, "calculate")[0]).not.toContain("Check the sign");
+      expect(shown(answerBlocks(answer))).toBe(`The change was ${result}.`);
+    },
+  );
+
+  // protects=#978; fails_when=full-width brackets in a Chinese statement are read as positive; no_claim=English.
+  test("in Chinese: （46,200.00） is minus 46,200, and the net proceeds are 3,780,760", async () => {
+    const numbers = ["3,850,000.00", "（46,200.00）", "（15,000.00）", "（8,040.00）"];
+    const model = calculatingModel({
+      queries: ["成交价 中介费"],
+      steps: [
+        citeStatement("房产交易结算表", SALE_LINES_ZH, (cited) => [
+          {
+            tool: "calculate",
+            input: {
+              figures: [
+                {
+                  marker: 1,
+                  label: "净收入",
+                  formula: "price + agent + legal + other",
+                  inputs: inputs(cited, numbers),
+                },
+              ],
+            },
+          },
+        ]),
+      ],
+      answer: "出售房产的净收入为[=1][^1]。",
+    });
+    const { core } = await setUpCalculating(model, [COMPLETION_ZH]);
+
+    const { answer } = await askAndRead(core, "出售房产的净收入是多少？");
+
+    expect(shown(answerBlocks(answer))).toBe("出售房产的净收入为3,780,760.00。");
+    expect(answer.figures[0]?.inputs.map((input) => input.number.value)).toEqual([
+      3_850_000, -46_200, -15_000, -8_040,
     ]);
   });
 });
