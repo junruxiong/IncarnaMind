@@ -912,6 +912,19 @@ export const en = {
   "viewer.markdown.imageMissing": "Image not found",
   "viewer.web.picturesLeftOut.one": "1 picture wasn't saved: over the limit for a page",
   "viewer.web.picturesLeftOut": "{count} pictures weren't saved: over the limit for a page",
+  "viewer.web.look.saving": "Saving the page as it looks…",
+  "viewer.web.look.saved": "Saved as it looked on {date}",
+  "viewer.web.look.show": "Show as it looked",
+  "viewer.web.look.showing": "As it looked on {date}",
+  "viewer.web.look.showText": "Show the text",
+  "viewer.web.look.failed.timed-out":
+    "The page as it looks wasn't kept: it didn't finish loading in 30 seconds.",
+  "viewer.web.look.failed.unreachable": "The page as it looks wasn't kept: it couldn't be loaded.",
+  "viewer.web.look.failed.too-large":
+    "The page as it looks wasn't kept: its PDF would be over 50 MB.",
+  "viewer.web.look.failed.stopped":
+    "The page as it looks wasn't kept: IncarnaMind stopped while making it.",
+  "viewer.web.look.failed.failed": "The page as it looks wasn't kept.",
   "viewer.web.pictureNotSaved": "Not saved with the page",
   "viewer.docx.comment": "Comment by {author}",
 
@@ -1192,6 +1205,8 @@ export const en = {
   "webPages.add.title": "Add web pages",
   "webPages.add.note":
     "Paste an address, or several, one per line. Each page is fetched once, from this computer, with the article's pictures, which may come from the site's image servers, and kept as a Document whose quotes can be checked. Nothing else on the page is loaded.",
+  "webPages.add.note.keepLook":
+    "Paste an address, or several, one per line. Each page is fetched once, from this computer, with the article's pictures, which may come from the site's image servers, and kept as a Document whose quotes can be checked.",
   "webPages.add.label": "Addresses",
   "webPages.add.invalid": "Not a web address: {line}",
   "webPages.add.cancel": "Cancel",
@@ -1205,6 +1220,9 @@ export const en = {
   "webPages.notAdded": "Not added: {reason}",
   "webPages.fetchAgainFailed": "Couldn't fetch “{name}” again: {reason}",
   "webPages.tryAgain": "Try again",
+  "webPages.add.keepLook": "Keep the page as it looks",
+  "webPages.keepLook.body":
+    "Also keeps a PDF of the page as you saw it. Making it loads the page again, so the sites it draws from see a visit.",
   "webPages.reason.invalid-address": "it isn't a web address",
   "webPages.reason.unreachable": "the site can't be reached",
   "webPages.reason.timed-out": "the site took too long to answer",
@@ -2883,6 +2901,10 @@ export const en = {
   "error.document.fileGone": "The Document's file isn't there to read.",
   "error.document.fileCantOpen": "The Document's file can't be opened.",
   "error.document.noSuchPicture": "The Document shows no such picture.",
+  "error.document.idRequired": "A Document id is required.",
+  "error.webPage.keepLookNotBoolean": "Whether to keep a page as it looks must be true or false.",
+  "error.webPage.lookNotWebPage": "Only a web page can be kept as it looks.",
+  "error.webPage.lookGone": "The PDF of how this page looked is gone.",
   "error.document.notFailed": "Only a Document that failed to process can be retried.",
   "error.document.notPdf": "Only a PDF is opened with a password.",
   "error.document.passwordMissing": "Type the PDF's password to open it.",
@@ -3717,6 +3739,8 @@ export const en = {
   "web.call.notSaved": "Couldn't save {address}: {reason}",
   "web.call.open": "Open",
   "web.settings.title": "Search the web",
+  "web.settings.pages.title": "Saved web pages",
+  "web.settings.keepLook": "Keep pages as they look",
   "web.settings.switch": "Let Answers search the web",
   "web.settings.body":
     "Only when a Question asks for it. Each web page an Answer uses is saved as a Document, so its Citation can be checked.",
