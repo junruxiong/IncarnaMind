@@ -1785,7 +1785,7 @@ export const en = {
   "providers.form.getKey": "Get a key",
   "providers.form.planCredits": "Learn more",
   "providers.form.dataUse": "{summary}",
-  "providers.form.terms": "Terms",
+  "providers.form.dataUseLink": "Data use",
   "providers.form.details": "Details",
   "providers.form.keyPage": "Open {provider}'s key page",
   "providers.form.modelsAndPrices": "Models and prices",
@@ -1854,6 +1854,8 @@ export const en = {
   "providers.test.no-answer": "The model sent no reply.",
   "providers.test.ollama-not-running":
     "Ollama isn't running on this computer. Open it, then test again.",
+  "providers.test.data-retention":
+    "The key works, but {model} needs your Anthropic organization to allow 30-day data retention. Choose another model, or use a key from an organization that allows it.",
   "providers.test.unknown": "The test didn't work.",
 
   "providers.secrets.plainText.title": "No keyring is running",
@@ -2433,6 +2435,8 @@ export const en = {
   "answer.error.not-signed-in": "You're not signed in to ChatGPT",
   "answer.error.plan-limit": "Your ChatGPT plan's usage limit is reached",
   "answer.error.blocked": "OpenAI didn't let IncarnaMind use your ChatGPT plan",
+  "answer.error.data-retention":
+    "Anthropic didn't run {model}: it needs your Anthropic organization to allow 30-day data retention. Choose another model, or use a key from an organization that allows it.",
   "answer.error.checkKey": "Check the key",
   "answer.error.askAgain": "Ask again",
   "answer.error.removeFromMenu": "Remove from menu",

@@ -3680,6 +3680,8 @@ export type ProviderErrorKind =
   | "local-mode"
   /** The model is in Ollama on this computer, and Ollama isn't running: found before anything was sent. */
   | "ollama-not-running"
+  /** Anthropic: a model that requires 30-day data retention (Fable 5.1), asked by an organization or workspace that has it off. */
+  | "data-retention"
   /** ChatGPT plan: there is no sign-in on this device, or it expired: sign in again. */
   | "not-signed-in"
   /** ChatGPT plan: the plan's usage limit, or the one the User set for IncarnaMind, is reached. */
