@@ -74,7 +74,6 @@ describe("Open as a table", () => {
   test("its tab is opened before the table is put in, so the tab shows while a big table is still going in", async () => {
     const { openTable } = await import("../../src/renderer/src/addToNote");
     const opening = openTable({ answer, conversation: undefined, blocks: [table] });
-    // The table is still going in: the tab is already open, and nothing says it is done.
     await vi.waitFor(() => expect(calls).toEqual(["createMind", "changeLayout", "addToNote"]));
     expect(pushed).toHaveLength(0);
     fill.release();

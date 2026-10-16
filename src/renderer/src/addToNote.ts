@@ -162,7 +162,6 @@ const openBeside = (mindId: string) =>
     where: { in: "place" },
   });
 
-/** A new Mind named as the conversation, in its Folder. */
 async function newMindFor(added: AddedAnswer) {
   const title = conversationLabel(added.conversation);
   const mind = await core.createMind({ title, folderId: added.conversation?.folderId ?? null });

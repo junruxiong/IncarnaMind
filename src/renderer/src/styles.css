@@ -5464,7 +5464,6 @@
       background: linear-gradient(to right, var(--color-sheet), transparent);
       pointer-events: none;
     }
-    /* "Open as a table", in the slot the editor keeps under each table (`AnswerTableSlots`). */
     .answer-table-slot {
       margin-top: 4px;
 
@@ -5510,7 +5509,6 @@
       &:hover {
         filter: brightness(0.97);
       }
-      /* Found stays quiet: a tick with its number, no fill. */
       &[data-check="found"] {
         background: none;
         color: var(--color-ink-meta);

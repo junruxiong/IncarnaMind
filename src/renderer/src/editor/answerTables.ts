@@ -18,7 +18,9 @@ const slotFor = (index: number) => {
 export function tablesOf(doc: ProseMirrorNode): NodeJSON[] {
   const tables: NodeJSON[] = [];
   doc.forEach((node) => {
-    if (node.type.name === "table") tables.push(node.toJSON() as NodeJSON);
+    if (node.type.name !== "table") return;
+    const json: NodeJSON = node.toJSON();
+    tables.push(json);
   });
   return withoutCitationGlue(tables);
 }
