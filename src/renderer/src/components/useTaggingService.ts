@@ -3,17 +3,24 @@ import type { ExternalService } from "../../../core/api";
 import { core } from "../core";
 import { useAppStore } from "../store";
 
+export interface TaggingService {
+  service: ExternalService;
+  /** Whether the User has allowed Document text to go to it. */
+  allowed: boolean;
+}
+
 /**
- * The service tagging waits for the User to allow, or null. Tagging is
- * background work and never asks (ADR-0022): where its Documents wait says
- * so, and offers Allow in place. Read only while `waiting`.
+ * The service the Tagging setting tags with now, and whether the User has
+ * allowed it; null for a model on this computer. Tagging is background work
+ * and never asks (ADR-0022): where its Documents wait says so, and offers
+ * Allow in place. Read only while `watching`.
  */
-export function useTaggingPermission(waiting: boolean): ExternalService | null {
-  const [service, setService] = useState<ExternalService | null>(null);
+export function useTaggingService(watching: boolean): TaggingService | null {
+  const [tagging, setTagging] = useState<TaggingService | null>(null);
 
   useEffect(() => {
-    if (!waiting) {
-      setService(null);
+    if (!watching) {
+      setTagging(null);
       return;
     }
     let stopped = false;
@@ -22,10 +29,8 @@ export function useTaggingPermission(waiting: boolean): ExternalService | null {
         (flows) => {
           if (stopped) return;
           // The flow goes only to the service the Tagging setting tags with now (#180).
-          const unallowed = flows
-            .find((flow) => flow.id === "tagging")
-            ?.services.find((each) => each.consent !== "accepted");
-          setService(unallowed ? unallowed.flow.service : null);
+          const to = flows.find((flow) => flow.id === "tagging")?.services[0];
+          setTagging(to ? { service: to.flow.service, allowed: to.consent === "accepted" } : null);
         },
         (error: unknown) => useAppStore.getState().reportError(error),
       );
@@ -41,7 +46,7 @@ export function useTaggingPermission(waiting: boolean): ExternalService | null {
       stopped = true;
       for (const stop of stops) stop();
     };
-  }, [waiting]);
+  }, [watching]);
 
-  return service;
+  return tagging;
 }
