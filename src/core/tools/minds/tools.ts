@@ -418,7 +418,6 @@ function stretchText(blocks: Y.XmlFragment, { from, to }: Stretch): string {
     .join("\n\n");
 }
 
-/** The Minds' Tools for one Answer in the assistant (see the module's comment). */
 /** The paragraphs in the whole Blocks a request wrote, in lists and quotes too; a heading or a table's cells are none. */
 function paragraphsWritten(note: Y.XmlFragment, request: string): number {
   let count = 0;
@@ -436,6 +435,7 @@ function paragraphsWritten(note: Y.XmlFragment, request: string): number {
   return count;
 }
 
+/** The Minds' Tools for one Answer in the assistant (see the module's comment). */
 export function mindTools(options: MindToolsOptions): Tool[] {
   const { minds, focused } = options;
 
