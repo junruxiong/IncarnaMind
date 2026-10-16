@@ -51,7 +51,9 @@ test("each preset is a chip under More…; Groq's has its key page and its model
       "href",
       "https://console.groq.com/keys",
     );
-    await expect(form.getByTestId("provider-sends")).toContainText("Groq receives");
+    await expect(form.getByTestId("provider-sends")).toContainText(
+      "Sends your questions and document text to Groq.",
+    );
     if (process.env.INCARNAMIND_SCREENSHOTS) {
       await settings.screenshot({
         path: `${process.env.INCARNAMIND_SCREENSHOTS}/preset-groq-en.png`,
@@ -107,7 +109,9 @@ test("Amazon Bedrock asks for its region from a list, and Cloudflare for its acc
     await expect(region.locator("option:checked")).toHaveText("Europe (Ireland) · eu-west-1");
     await form.getByLabel(/^API key/).fill("bedrock-key");
     await expect(form.getByTestId("provider-use-key")).toBeEnabled();
-    await expect(form.getByTestId("provider-sends")).toContainText("Amazon Bedrock receives");
+    await expect(form.getByTestId("provider-sends")).toContainText(
+      "Sends your questions and document text to Amazon Bedrock.",
+    );
 
     await pickProvider(form, "Cloudflare Workers AI");
     const account = form.getByTestId("provider-field");
@@ -191,7 +195,9 @@ test("LM Studio and Unsloth Studio are set up beside Ollama, not under More…, 
     await form.getByTestId("provider-field").fill("192.168.1.20:8888");
     await form.getByLabel(/^API key/).focus();
     await expect(form.getByTestId("local-server")).toContainText("answers at 192.168.1.20:8888");
-    await expect(form.getByTestId("provider-sends")).toContainText("Unsloth Studio receives");
+    await expect(form.getByTestId("provider-sends")).toContainText(
+      "Sends your questions and document text to Unsloth Studio.",
+    );
     await form.getByTestId("provider-field").fill("127.0.0.1:8888");
     await form.getByLabel(/^API key/).focus();
     await expect(form.getByTestId("provider-sends")).toHaveCount(0);

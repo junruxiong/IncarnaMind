@@ -31,7 +31,7 @@ async function screenshot(window: Page, name: string): Promise<void> {
 }
 
 const SENDS_EN = {
-  lead: "When you use it, OpenAI receives:",
+  lead: "Sends your questions and document text to OpenAI. · Details",
   after: "Tagging starts when you save the key.",
   items: [
     "your Questions, the Mind you're in, matching passages with their Document names and pages, and the names of other Documents in scope",
@@ -42,7 +42,7 @@ const SENDS_EN = {
   ],
 };
 const SENDS_ZH = {
-  lead: "使用时，以下内容会发送给 OpenAI：",
+  lead: "会把你的问题和文档内容发送给 OpenAI。· 详情",
   after: "保存密钥后就开始打标签。",
   items: [
     "你的问题、你所在的 Mind、相关段落及其文档名称和页码，以及范围内其他文档的名称",
@@ -53,9 +53,19 @@ const SENDS_ZH = {
   ],
 };
 
+/** The one line, then Details opening and closing the full list by keyboard; and the tagging note under it. */
 async function expectSends(sends: Locator, words: typeof SENDS_EN): Promise<void> {
-  await expect(sends.locator("p")).toHaveText([words.lead, words.after]);
+  await expect(sends.locator("p")).toHaveText(words.lead);
+  await expect(sends.getByRole("listitem")).toHaveCount(0);
+  const details = sends.getByTestId("provider-sends-details");
+  await details.focus();
+  await details.press("Enter");
+  await expect(details).toHaveAttribute("aria-expanded", "true");
   await expect(sends.getByRole("listitem")).toHaveText(words.items);
+  await details.press("Enter");
+  await expect(sends.getByRole("listitem")).toHaveCount(0);
+  await details.press("Enter");
+  await expect(sends.locator("xpath=..").getByText(words.after)).toBeVisible();
 }
 
 let dataDir: string;
@@ -185,21 +195,21 @@ test("before a model is chosen, a new Document's tagging waits with its line, an
   await app.close();
 });
 
-test("Settings › Models says in one phrase what the ChatGPT plan and an API key send", async () => {
+test("Settings › Models says in one line what the ChatGPT plan sends, with the full list behind Details", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   const settings = await openSettings(window, "models");
 
-  const phrase =
-    "your Questions with the Mind you're in, matching passages and the names of Documents in scope; sentences you check; the paragraph you pause on; text you ask the assistant to change; and Document names, outlines and excerpts with your Folder and Tag names, to tag and file them (page images for scans)";
   const plan = settings.getByTestId("chatgpt-settings");
   await expect(plan).toContainText(
-    `OpenAI receives, under your ChatGPT account: ${phrase}. It counts against your plan's limits.`,
+    "Use your ChatGPT Plus or Pro plan instead of an API key. It counts against your plan's limits.",
   );
-  await expect(plan.getByTestId("provider-sends")).toHaveCount(0);
-  await expect(settings.getByTestId("chat-provider-choices")).toContainText(
-    `The service you choose receives: ${phrase}.`,
+  const sends = plan.getByTestId("provider-sends");
+  await expect(sends.locator("p")).toHaveText(
+    "Sends your questions and document text to ChatGPT. · Details",
   );
+  await sends.getByTestId("provider-sends-details").click();
+  await expect(sends.getByRole("listitem")).toHaveText(SENDS_EN.items);
   await plan.scrollIntoViewIfNeeded();
   await screenshot(window, "choosing-line-chatgpt-en");
   await app.close();
