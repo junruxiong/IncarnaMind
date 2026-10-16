@@ -4871,6 +4871,11 @@ export interface AnswerSteps {
   unbackedClaims?: ClaimedChange[];
   /** Written in advance for the example (`askReadyQuestion`): no model wrote it, and nothing was searched. */
   example?: true;
+  /**
+   * Its model can't call Tools, and the User's words asked to write into a
+   * Mind or change one (`routeRequest`): nothing was written. Absent: neither.
+   */
+  withoutMindTools?: true;
   /** It covered only some of the Documents in scope, and offers the rest. Absent: all of them. */
   coverage?: AnswerCoverage;
 }
