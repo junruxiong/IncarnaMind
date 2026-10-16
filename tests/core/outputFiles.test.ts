@@ -13,6 +13,7 @@ import {
 import { dirname, join } from "node:path";
 import { describe, expect, test, vi } from "vitest";
 import { type Core, type FileWriteRequest, InvalidInputError, NotFoundError } from "../../src/core";
+import { silentLogger } from "../../src/core/activityLog";
 import { createOwnFiles } from "../../src/core/documents/ownFiles";
 import { createEventHub } from "../../src/core/events";
 import { createOutputFiles } from "../../src/core/outputFiles";
@@ -510,6 +511,7 @@ describe("Saving next to an original (the call other features use)", () => {
       suggested: join(await createSourceFolder(), "IncarnaMind"),
       linkedFolders: () => [{ id: "linked-1", path: linked }],
       recordOwnFile: createOwnFiles(db, now).record,
+      log: silentLogger,
     });
     outputs.setLinkedFolderWriting("linked-1", true);
     const fingerprints = () =>

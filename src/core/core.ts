@@ -1640,6 +1640,7 @@ export function createCore(adapters: CoreAdapters): Core {
     suggested: join(adapters.paths.documents, "IncarnaMind"),
     linkedFolders: () => documents.linkedFolders.list(),
     recordOwnFile,
+    log: adapters.log ?? silentLogger,
   });
   /** Saves an export in the Output location, as the window's save: what went wrong is a result, not an error. */
   const saveExport = async (

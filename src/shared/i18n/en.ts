@@ -2575,7 +2575,7 @@ export const en = {
   "skills.settings.actions": "Actions for {name}",
   "skills.settings.edit": "Edit",
   "skills.settings.export": "Export as zip",
-  "skills.settings.exported": "Saved {name}",
+  "skills.settings.exported": "Saved “{name}” in {folder}",
   "skills.settings.exportFailed": "Couldn't save the zip: {reason}",
   "skills.settings.exportNotAllowed":
     "You haven't allowed new files in “{folder}”, a Linked folder.",
@@ -2869,6 +2869,7 @@ export const en = {
   "export.failed.gone": "the folder isn't there any more",
   "export.failed.notAllowed": "you haven't allowed new files in “{folder}”, a Linked folder",
   "export.changeLocation": "Change output location…",
+  "export.changeLocation.keywords": "output location folder where files go save exports Documents",
   "export.allow": "Allow",
   "export.doneIn": "Saved “{name}” in {folder}",
   "export.changeFolder": "Change folder…",

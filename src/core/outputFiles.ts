@@ -18,6 +18,7 @@ import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import { access, mkdir, realpath, stat } from "node:fs/promises";
 import { extname, isAbsolute, join } from "node:path";
+import type { Logger } from "./adapters";
 import type {
   FileWriteRequest,
   LinkedFolder,
@@ -71,6 +72,7 @@ export interface OutputFilesOptions {
   linkedFolders(): readonly Pick<LinkedFolder, "id" | "path">[];
   /** Records the fingerprint of a file IncarnaMind wrote, before it is written (see ./documents/ownFiles). */
   recordOwnFile(data: Uint8Array, kind: OwnFileKind): void;
+  log: Logger;
 }
 
 /** A question as a save raises it, before it has an id. */
@@ -139,7 +141,7 @@ async function usableDefault(
 }
 
 export function createOutputFiles(options: OutputFilesOptions) {
-  const { db, events, now, settings, suggested } = options;
+  const { db, events, now, settings, suggested, log } = options;
   const pending = new Map<string, Pending>();
   /** Files saved since the core started: the only ones the window may ask to show. */
   const saved = new Set<string>();
@@ -285,6 +287,16 @@ export function createOutputFiles(options: OutputFilesOptions) {
     return { folder: real, defaulted: false };
   };
 
+  const isDefaultFolder = async (folder: string): Promise<boolean> => {
+    try {
+      return (await realFolder(suggested)) === folder;
+    } catch (error) {
+      // The default was never made when the User chose another folder first: that is not a fault.
+      if (!isGone(error)) log.warn("output.defaultFolder", { error: String(error) });
+      return false;
+    }
+  };
+
   /** A folder the caller named: inside the Output location or a Linked folder, links followed. */
   const givenFolder = async (folder: unknown): Promise<string> => {
     if (typeof folder !== "string" || !isAbsolute(folder)) {
@@ -387,12 +399,7 @@ export function createOutputFiles(options: OutputFilesOptions) {
         }
         const path = join(folder, used);
         saved.add(path);
-        const inDefaultFolder =
-          defaulted ||
-          (await realFolder(suggested).then(
-            (real) => real === folder,
-            () => false,
-          ));
+        const inDefaultFolder = defaulted || (await isDefaultFolder(folder));
         return { path, name: used, folder, defaulted, inDefaultFolder };
       }
     },
