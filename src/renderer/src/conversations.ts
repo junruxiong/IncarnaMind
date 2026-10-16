@@ -217,7 +217,9 @@ function askWaitingQuestion(): void {
 }
 
 core.on("chatReadiness.changed", (readiness) => {
-  if (readiness.ready) askWaitingQuestion();
+  if (!readiness.ready) return;
+  useModelSetup.setState({ wanted: false });
+  askWaitingQuestion();
 });
 
 /**

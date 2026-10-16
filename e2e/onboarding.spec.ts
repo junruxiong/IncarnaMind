@@ -402,9 +402,17 @@ test("the steps card's last step offers Add files… and Link a folder… at onc
   await setLanguage(window, "zh-CN");
   await interceptOpenDialog(app, notes);
   await pointAndClick(window, files.getByRole("button").first());
-  await expect(pane.getByTestId("first-open-steps")).toContainText("准备好了。", {
+  // Done with no model: one more step, in place of "You're set up." (#1027).
+  const steps = pane.getByTestId("first-open-steps");
+  await expect(steps).toContainText("还差一步：选择 AI 模型，就能就你自己的文件提问。", {
     timeout: 15_000,
   });
+  await expect(steps).not.toContainText("准备好了。");
+  await pointAndClick(window, steps.getByTestId("first-open-choose-model"));
+  await expect(window.getByTestId("model-setup")).toContainText("选择回答所用的模型");
+  await useLocalChatModel(window);
+  await expect(steps).toContainText("准备好了。");
+  await expect(window.getByTestId("model-setup")).toHaveCount(0);
 });
 
 test('"Ask a question" is ticked by an Answer that arrives, not by one that fails (#766)', async () => {
@@ -469,6 +477,7 @@ test("in Chinese, the ready Question is the Chinese example's, answered with no 
 
 test("the steps can be hidden once all are done, and stay hidden", async () => {
   const first = await launchApp(dataDir, { examples: true });
+  await useLocalChatModel(first.window);
   await markSteps(first.window, { citationChecked: true, askedOwn: true, indexed: true });
   const steps = first.window.getByTestId("first-open-steps");
   await expect(steps).toContainText("You're set up.");
@@ -480,6 +489,73 @@ test("the steps can be hidden once all are done, and stay hidden", async () => {
   await expect(again.window.getByTestId("example-banner")).toBeVisible();
   await expect(again.window.getByTestId("first-open-steps")).toHaveCount(0);
   await again.app.close();
+});
+
+test("finishing the steps with no model asks for one in the card, never says You're set up, and brings nothing back by itself; a saved model sets it up (#1027)", async () => {
+  const notes = join(sources, "Harbour notes.md");
+  await writeFile(notes, "# Harbour notes\n\nThe harbour master publishes the tide tables.\n");
+  const { app, window } = await launchApp(dataDir, { examples: true });
+  await setWindowSize(app, window, 1440, 900);
+  const pane = window.getByTestId("mind-pane");
+  await expect(pane.getByTestId("claim-mark")).toHaveAttribute("data-check", "contradicted", {
+    timeout: 20_000,
+  });
+  await markSteps(window, { citationChecked: true, askedReady: true });
+  await window.getByTestId("add-documents-input").setInputFiles([notes]);
+
+  const steps = pane.getByTestId("first-open-steps");
+  await expect(step(window, "files")).toHaveAttribute("data-state", "done");
+  await expect(steps).toContainText(
+    "One more step: choose an AI model to ask about your own files.",
+  );
+  await expect(steps).not.toContainText("You're set up.");
+  await expect(steps.getByTestId("first-open-next")).toHaveCount(0);
+  // Each part of the shell still waits for its own moment, and one prompt asks for the model.
+  const sidebar = window.getByTestId("sidebar");
+  await expect(window.getByTestId("tab-list")).toHaveCount(0);
+  await expect(window.getByTestId("assistant")).toBeHidden();
+  await expect(window.getByTestId("ask-pill")).toBeVisible();
+  await expect(sidebar.getByTestId("sidebar-status")).toHaveCount(0);
+  await expect(sidebar.getByTestId("tagging-waiting")).toHaveCount(0);
+
+  await pointAndClick(window, steps.getByTestId("first-open-choose-model"));
+  const setup = window.getByTestId("model-setup");
+  await expect(window.getByTestId("assistant")).toBeVisible();
+  await expect(setup).toContainText("Your Questions are answered with the one you pick.");
+  await useLocalChatModel(window);
+  await expect(steps).toContainText("You're set up.");
+  await expect(steps.getByTestId("first-open-next").first()).toBeVisible();
+  await expect(setup).toHaveCount(0);
+  await expect(window.getByTestId("composer-input")).toBeVisible();
+  await app.close();
+});
+
+test("scrolled to the end, the example's last line sits above the Ask pill, and the page fades out above it (#1027)", async () => {
+  const { app, window } = await launchApp(dataDir, { examples: true });
+  const pill = window.getByTestId("ask-pill");
+  const fade = window.getByTestId("ask-pill-fade");
+  for (const [width, height] of [
+    [1440, 900],
+    [1100, 760],
+  ] as const) {
+    await setWindowSize(app, window, width, height);
+    await expect(pill).toBeVisible();
+    await window
+      .getByTestId("mind-pane")
+      .evaluate((pane) => pane.parentElement?.scrollTo({ top: pane.parentElement.scrollHeight }));
+    const lastLine = window.getByTestId("mind-editor").locator(":scope > *").last();
+    await expect
+      .poll(async () => {
+        const line = await lastLine.boundingBox();
+        const ask = await pill.boundingBox();
+        return line && ask ? ask.y - (line.y + line.height) : null;
+      })
+      .toBeGreaterThanOrEqual(0);
+    const ask = await pill.boundingBox();
+    const faded = await fade.boundingBox();
+    expect(ask && faded && faded.y <= ask.y - 56 + 1).toBe(true);
+  }
+  await app.close();
 });
 
 test("the hint at the end of a Mind focuses the composer when its link is clicked once the cursor is on its line, and is otherwise the line to write on", async () => {

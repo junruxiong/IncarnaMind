@@ -1,10 +1,12 @@
 import type { GettingStarted } from "../../core/api";
 import type { AppState } from "./store";
 
+export const stepsShownOf = (progress: GettingStarted | undefined): boolean =>
+  progress?.started === true && !progress.hidden;
+
 export const firstOpenOf = (progress: GettingStarted | undefined): boolean =>
-  progress?.started === true &&
-  !progress.hidden &&
-  !(progress.citationChecked && progress.indexed && (progress.askedOwn || progress.askedReady));
+  stepsShownOf(progress) &&
+  !(progress?.citationChecked && progress.indexed && (progress.askedOwn || progress.askedReady));
 
 export type NudgeId = "usage-data";
 
