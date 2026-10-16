@@ -17,7 +17,8 @@ import type {
 
 export type TextRecognizerCommand =
   | { type: "load"; files: TextRecognitionFiles }
-  | { type: "read"; picture: PagePicture; page: number };
+  | { type: "read"; picture: PagePicture; page: number }
+  | { type: "readFile"; file: Uint8Array; page: number };
 
 /** `id` pairs a response with its request. */
 export type TextRecognizerRequest = TextRecognizerCommand & { id: number };
@@ -26,6 +27,8 @@ export type TextRecognizerRequest = TextRecognizerCommand & { id: number };
 export interface TextRecognizerResponse {
   id: number;
   lines?: RecognizedLine[];
+  /** For "readFile": the size the picture was read at. */
+  size?: { width: number; height: number };
   error?: string;
 }
 
@@ -40,10 +43,13 @@ export interface TextRecognizerChannel {
 
 type Pending = { resolve(response: TextRecognizerResponse): void; reject(error: Error): void };
 
+/** Far longer than a picture takes to read: one that hangs the process mustn't hold up the rest. */
+const READ_FILE_MS = 60_000;
+
 /**
  * The core's `TextRecognizer`, backed by a channel that `start` opens on the
  * first `load`. If it stops, pending requests fail, and the next `load` opens
- * a new one.
+ * a new one. A picture file not read in `READ_FILE_MS` stops it.
  */
 export function createChannelTextRecognizer(start: () => TextRecognizerChannel): TextRecognizer {
   let channel: TextRecognizerChannel | undefined;
@@ -52,6 +58,15 @@ export function createChannelTextRecognizer(start: () => TextRecognizerChannel):
   const pending = new Map<number, Pending>();
   let nextId = 1;
 
+  /** The process is done with: what it was asked fails, and the next `load` starts another. */
+  function drop(target: TextRecognizerChannel, error: Error): void {
+    if (channel !== target) return;
+    channel = undefined;
+    loadedKey = undefined;
+    for (const waiting of pending.values()) waiting.reject(error);
+    pending.clear();
+  }
+
   function open(): TextRecognizerChannel {
     const started = start();
     started.onResponse((response) => {
@@ -59,14 +74,9 @@ export function createChannelTextRecognizer(start: () => TextRecognizerChannel):
       pending.delete(response.id);
       waiting?.resolve(response);
     });
-    started.onExit((code) => {
-      if (channel !== started) return;
-      channel = undefined;
-      loadedKey = undefined;
-      const error = new Error(`The text recognition process stopped (exit code ${code}).`);
-      for (const waiting of pending.values()) waiting.reject(error);
-      pending.clear();
-    });
+    started.onExit((code) =>
+      drop(started, new Error(`The text recognition process stopped (exit code ${code}).`)),
+    );
     return started;
   }
 
@@ -109,6 +119,24 @@ export function createChannelTextRecognizer(start: () => TextRecognizerChannel):
       return lines;
     },
 
+    async readFile(file, page) {
+      const target = channel;
+      if (!target || loadedKey === undefined) {
+        throw new Error("The text recognition model isn't loaded.");
+      }
+      const timer = setTimeout(() => {
+        drop(target, new Error(`The picture wasn't read in ${READ_FILE_MS} ms.`));
+        target.stop();
+      }, READ_FILE_MS);
+      try {
+        const { lines, size } = await request({ type: "readFile", file, page });
+        if (!lines || !size) throw new Error("The text recognition process returned no lines.");
+        return { lines, ...size };
+      } finally {
+        clearTimeout(timer);
+      }
+    },
+
     close() {
       const stopping = channel;
       channel = undefined;
@@ -131,6 +159,10 @@ export function serveTextRecognizer(recognizer: TextRecognizer, port: TextRecogn
       if (request.type === "load") {
         await recognizer.load(request.files);
         return { id: request.id };
+      }
+      if (request.type === "readFile") {
+        const { lines, width, height } = await recognizer.readFile(request.file, request.page);
+        return { id: request.id, lines, size: { width, height } };
       }
       return { id: request.id, lines: await recognizer.read(request.picture, request.page) };
     } catch (error) {

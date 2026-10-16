@@ -305,7 +305,7 @@ function notProposed(result: EditWithAiResult, name: string): string {
     case "changed":
       return `That text of “${name}” changed while it was being read. Nothing was proposed.`;
     case "local-mode":
-      return "Local mode is on, and the model isn't on this computer. Nothing was proposed.";
+      return "“Keep everything on this computer” is on, and the model isn't on this computer. Nothing was proposed.";
     case "not-ready":
       return "The model can't be used now. Nothing was proposed.";
     case "failed":

@@ -17,6 +17,7 @@ import {
   type AssistantPlace,
   CHOSEN_PROVIDER_FLOWS,
   type CoreBridge,
+  type ExportFormat,
   type SaveChatProviderInput,
 } from "../src/core/api";
 import type { FakeTranscriberOptions } from "../src/core/transcription/fake";
@@ -41,7 +42,7 @@ export interface RunningApp {
 
 export interface LaunchOptions {
   /**
-   * Every chat model is the scripted one in `src/main/fakeChatModel.ts`, so
+   * Every chat model is the scripted one in `src/main/fakeChat/`, so
    * Questions are answered with no network or keys. Needs a test build
    * (`npm run test:smoke` makes one).
    */
@@ -118,6 +119,8 @@ export interface LaunchOptions {
    * build honours it.
    */
   web?: number;
+  /** How long keeping a page as it looks may take, in milliseconds. A test build honours it. */
+  lookLimit?: number;
   /**
    * What the fake text recognition model reads on each scanned page (#397):
    * a JSON file of a `FakeScanScript`. Without, it reads nothing on them.
@@ -128,6 +131,11 @@ export interface LaunchOptions {
    * started with `startScriptedTask`. Needs a test build.
    */
   scriptedTasks?: boolean;
+  /**
+   * How long after a new version of a Document contradiction watch checks its
+   * Folder's Minds (#112), instead of 30 seconds. Needs a test build.
+   */
+  contradictionWatchDelayMs?: number;
 }
 
 /**
@@ -180,7 +188,9 @@ export async function launchApp(
     transcriber,
     scans,
     web,
+    lookLimit,
     scriptedTasks = false,
+    contradictionWatchDelayMs,
   }: LaunchOptions = {},
 ): Promise<RunningApp> {
   const env: Record<string, string> = {};
@@ -206,7 +216,9 @@ export async function launchApp(
   delete env.INCARNAMIND_TEST_TRANSCRIBER_OPTIONS;
   delete env.INCARNAMIND_TEST_SCANS;
   delete env.INCARNAMIND_TEST_WEB;
+  delete env.INCARNAMIND_TEST_LOOK_LIMIT;
   delete env.INCARNAMIND_TEST_TASKS;
+  delete env.INCARNAMIND_TEST_CONTRADICTION_DELAY_MS;
   // A test never uses the ChatGPT sign-in an agent's shell may point at for checks by hand.
   delete env.INCARNAMIND_CHATGPT_PROFILE;
   env.INCARNAMIND_TEST_AUDIO = "fake";
@@ -228,7 +240,11 @@ export async function launchApp(
   if (chatGpt) env.INCARNAMIND_TEST_CHATGPT = chatGpt;
   if (scans) env.INCARNAMIND_TEST_SCANS = scans;
   if (web) env.INCARNAMIND_TEST_WEB = String(web);
+  if (lookLimit) env.INCARNAMIND_TEST_LOOK_LIMIT = String(lookLimit);
   if (scriptedTasks) env.INCARNAMIND_TEST_TASKS = "1";
+  if (contradictionWatchDelayMs !== undefined) {
+    env.INCARNAMIND_TEST_CONTRADICTION_DELAY_MS = String(contradictionWatchDelayMs);
+  }
   env.INCARNAMIND_DATA_DIR = dataDir;
   env.INCARNAMIND_TEST_HOOKS = "1";
   if (fakeChat) env.INCARNAMIND_FAKE_CHAT = "1";
@@ -843,6 +859,23 @@ export async function setWindowSize(
   await resizeContent(app, window, width, height);
 }
 
+const SIZE_WAIT_MS = 30_000;
+const REPORT_WAIT_MS = 2_000;
+
+async function within<T>(answer: Promise<T>, otherwise: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<T>((settle) => {
+    timer = setTimeout(() => settle(otherwise), REPORT_WAIT_MS);
+  });
+  try {
+    return await Promise.race([answer, late]);
+  } catch {
+    return otherwise;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
  * Asks for the content size once, waits until the page has it, then until the
  * page has drawn a frame at it. Chromium sends a page its next size only after
@@ -872,14 +905,31 @@ async function resizeContent(
           const page = await look();
           return [page.width, waitForHeight ? page.height : height];
         },
-        { message },
+        // A loaded runner can take far longer than expect's 5 s to draw the frame the size waits
+        // for (#432); this still ends early enough in the test's 60 s to report what it saw.
+        { message, timeout: SIZE_WAIT_MS },
       )
       .toEqual([width, height]);
   } catch (error) {
-    const content = await browserWindow.evaluate((win) => win.getContentSize());
-    const page = await look();
+    // A window that has stopped answering must not take the report down with it.
+    const [content, page, drawing] = await Promise.all([
+      within(
+        browserWindow.evaluate((win) => win.getContentSize().join(" × ")),
+        "unknown (the app's main process isn't answering)",
+      ),
+      within(
+        look().then((size) => `${size.width} × ${size.height}`),
+        "unknown (the page isn't answering)",
+      ),
+      within(
+        window.evaluate(
+          () => new Promise<string>((drawn) => requestAnimationFrame(() => drawn("drawing"))),
+        ),
+        "not drawing frames",
+      ),
+    ]);
     throw new Error(
-      `${message ?? "The window did not reach its size"}: asked ${width} × ${height}; the window's content is ${content.join(" × ")}, the page ${page.width} × ${page.height}.`,
+      `${message ?? "The window did not reach its size"}: asked ${width} × ${height}; the window's content is ${content}; the page is ${page}, ${drawing}.`,
       { cause: error },
     );
   }
@@ -1653,4 +1703,24 @@ export async function leaveText(window: Page): Promise<void> {
   await window.mouse.move(box.x + box.width / 2, box.y + box.height - 8, { steps: 8 });
   await window.mouse.down();
   await window.mouse.up();
+}
+
+/**
+ * Exports the Mind in the shown tab from Export's menu: in `format`, or in the
+ * one it lists first, the last one used.
+ */
+export async function exportFromMenu(window: Page, format?: ExportFormat): Promise<void> {
+  await pointAndClick(window, window.getByTestId("export-mind"));
+  const menu = window.getByTestId("export-menu");
+  await expect(menu).toBeVisible();
+  if (!format) {
+    await pointAndClick(window, menu.getByRole("menuitem").first());
+    return;
+  }
+  const item = window.getByTestId(`export-as-${format}`);
+  if ((await menu.getByTestId(`export-as-${format}`).count()) === 0) {
+    await pointAndClick(window, menu.getByTestId("export-more"));
+    await expect(window.getByTestId("export-more-menu")).toBeVisible();
+  }
+  await pointAndClick(window, item);
 }

@@ -93,6 +93,7 @@ import type { WindowedPassage } from "../documents/search";
 import { ChatNotReadyError, InvalidInputError, isRecord, NotFoundError } from "../errors";
 import type { createEventHub } from "../events";
 import type { ExecAccess } from "../execution";
+import type { Language } from "../language";
 import type { MindContent } from "../mindContent";
 import { plainText } from "../mindText";
 import { docOf } from "../proposals/merge";
@@ -179,7 +180,7 @@ import {
   sourcesInstructions,
   webInstructions,
 } from "./prompt";
-import { quotedWordsIn } from "./quotedWords";
+import { quotedWordsIn, withoutQuotationMarks } from "./quotedWords";
 
 export type { AnswerDocuments } from "./citations";
 export { createAiSdkAnswerEngine } from "./engine";
@@ -348,6 +349,8 @@ export interface AnswersOptions {
   prepareModel(choice: ChatModelChoice): Promise<PreparedChatModel>;
   /** Searching the User's Documents, and what Citations point to. */
   documents: DocumentsForAnswers;
+  /** What an Answer is written in when its Question has no language of its own. */
+  interfaceLanguage(): Language;
   /** The ids of the live Documents a Search scope covers; null with no Search scope (every Document). */
   resolveScope(scope: SearchScope): string[] | null;
   /** What an Answer says when its Question's Search scope has no Documents to search. */
@@ -900,7 +903,10 @@ export function createAnswers(options: AnswersOptions) {
       try {
         session.check();
         figures.check();
-        session.checkQuotedWords(quotedWordsIn(withoutFootnoteDefinitions(markdown)));
+        const translated = session.checkQuotedWords(
+          quotedWordsIn(withoutFootnoteDefinitions(markdown)),
+        );
+        if (translated.length > 0) markdown = withoutQuotationMarks(markdown, new Set(translated));
       } catch (error) {
         options.reportError(error);
       }
@@ -949,7 +955,15 @@ export function createAnswers(options: AnswersOptions) {
     announce("answer.started", { ...place, answerId, questionId: input.questionId, model });
 
     const base = answerInstructions();
-    const language = languageInstruction(context.question);
+    const language = languageInstruction(
+      context.question,
+      options.interfaceLanguage(),
+      options.documents
+        .names()
+        .flatMap((document) =>
+          [document.name, document.title].filter((each) => typeof each === "string"),
+        ),
+    );
     const callStarted = (call: AnswerToolCall) => {
       // A call that asks the User first may already be there (see `ask`), and one whose input
       // streams in is there from its start (#202): it now has all of its input.
@@ -2269,7 +2283,10 @@ export function createAnswers(options: AnswersOptions) {
         if (readiness.ready || readiness.reason !== "local-mode") continue;
         generation.finish({
           status: "failed",
-          error: { kind: "local-mode", message: "Stopped: local mode is on." },
+          error: {
+            kind: "local-mode",
+            message: "Stopped: “Keep everything on this computer” is on.",
+          },
         });
       }
     },

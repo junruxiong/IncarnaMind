@@ -134,6 +134,10 @@ export interface CreateMindInput {
  * - 18: checks of the User's own sentences (#96): the `claimCheck` mark on a
  *   sentence's text, which holds its result (see `CLAIM_CHECK_MARK`). Older
  *   content is version 18 content as it is: nothing is rewritten.
+ * - 19: contradiction watch (#112): "contradiction-watch", a third `action`
+ *   of the `claimCheck` mark. An older version reads it as Find support, so
+ *   its Check again would check the sentence against the very Documents it
+ *   cites. Older content is version 19 content as it is: nothing is rewritten.
  * - 20: someone's tracked changes in an imported Word file, as Proposals
  *   (#108): their requests are `WordChangeRequest`s, which name the change's
  *   author and date. A version before 20 would take them for the
@@ -661,6 +665,14 @@ export const MIND_TEXT_ORIGINS_FIELD = "textOrigins";
  * (see `src/shared/blockTimes.ts`), so the content schema version stays as it is.
  */
 export const MIND_BLOCK_TIMES_FIELD = "blockTimes";
+
+/**
+ * The name of the Y.Map, beside a Mind's Blocks, that lists the files a
+ * check's scope couldn't read when it started, by the request that made the
+ * checks (`ClaimCheckAttributes.request`). A request that read everything has
+ * no entry (ADR-0003).
+ */
+export const MIND_CHECK_UNREAD_FIELD = "checkUnread";
 
 /**
  * A Question's Search scope (CONTEXT.md): the Folders, Tags and individual
@@ -1431,6 +1443,8 @@ export type CitationLocation =
       notes?: boolean;
       comment?: { author: string | null };
       paragraphs?: { from: number; to: number };
+      /** A web page's picture the quote was read from, numbered in the page from 1. */
+      figure?: number;
     };
 
 /** A stretch of words, and whether the Document has it where the Answer's quoted words were looked for. */
@@ -1655,6 +1669,11 @@ export interface UserSettings {
    * pages they use as Documents (#128): off until the User turns it on.
    */
   webSearch: boolean;
+  /**
+   * Web pages are kept as they look when saved (`WebPageLook`), unless the
+   * save says otherwise: off until the User turns it on.
+   */
+  keepWebPageLook: boolean;
 }
 
 /**
@@ -1810,6 +1829,8 @@ export interface DocumentPlace {
    * TXT or Markdown file.
    */
   quote?: string;
+  /** A saved web page's picture the quote was read from, numbered in the page from 1: it is outlined. */
+  figure?: number;
   /** The Citation this was opened from, if a Citation opened it. */
   citation?: TabCitation;
   /**
@@ -2027,7 +2048,12 @@ export type DocumentFailureReason =
    * couldn't be downloaded or failed on them. The pages that were read are
    * searched; Retry reads the others.
    */
-  | "pages-unread";
+  | "pages-unread"
+  /**
+   * The app stopped while it was being read, not closed in good order: it
+   * isn't read again by itself, as it could stop the app again. Retry reads it.
+   */
+  | "app-stopped";
 
 export interface DocumentFailure {
   reason: DocumentFailureReason;
@@ -2037,12 +2063,13 @@ export interface DocumentFailure {
   pages?: number[];
 }
 
-/** Where reading a PDF's scanned pages is (#397), while it is processed. */
+/** Where reading a PDF's scanned pages, or a saved web page's pictures, is while it is processed. */
 export interface DocumentScanProgress {
-  /** How many of its pages are scans to read. */
+  /** How many of its pages are scans to read, or of a saved web page's pictures. */
   pages: number;
   /** How many of them are read so far. */
   read: number;
+  of: "scanned-pages" | "pictures";
 }
 
 /**
@@ -2287,6 +2314,8 @@ export interface WebPageInfo {
    * (#756): over 60, over 5 MB, or past 25 MB for the page.
    */
   picturesLeftOut: number;
+  /** The last fetch kept as it looks; null when it wasn't asked to be. */
+  look: WebPageLook | null;
 }
 
 /** What `saveWebPage` takes. */
@@ -2297,7 +2326,35 @@ export interface SaveWebPageInput {
   html?: string;
   /** The Library Folder to file a new Document in; none or null: Unsorted. */
   folderId?: string | null;
+  /**
+   * Keep the page as it looks too (see `WebPageLook`), whose full load may
+   * reach the other sites the page draws from. Absent: as
+   * `UserSettings.keepWebPageLook` says. Ignored with `html`.
+   */
+  keepLook?: boolean;
 }
+
+/**
+ * A web page's version kept as it looks: a PDF of the page as a browser
+ * showed it, made once, in the background, in a hidden page that reaches
+ * only the public internet (src/main/pageLook.ts).
+ * - "saving": being made.
+ * - "saved": made at `savedAt` (ISO 8601, UTC), served at
+ *   `documentImageUrl(documentId, path)`.
+ * - "failed": it couldn't be made.
+ */
+export type WebPageLook =
+  | { status: "saving" }
+  | { status: "saved"; savedAt: string; path: string }
+  | { status: "failed"; failure: WebPageLookFailure };
+
+/**
+ * Why a page's look couldn't be kept: "timed-out", it didn't load in 30
+ * seconds; "unreachable", it couldn't be loaded; "too-large", its PDF is over
+ * 50 MB; "stopped", IncarnaMind stopped while making it, twice; "failed",
+ * anything else.
+ */
+export type WebPageLookFailure = "timed-out" | "unreachable" | "too-large" | "stopped" | "failed";
 
 /**
  * Why a web page wasn't saved, or wasn't fetched again:
@@ -2798,6 +2855,7 @@ export interface ScannedText {
  */
 export interface ScannedQuote {
   unsure: string[];
+  from: "scan" | "picture";
 }
 
 /** A Citation's quote, as `readScannedQuote` looks it up: its Document, version, Units and quote. */
@@ -2890,20 +2948,25 @@ export type LinkedFolderStatus = "scanning" | "watching" | "paused" | "unavailab
 
 /**
  * The groups that have an example Mind (onboarding, see src/core/examples.ts):
- * "tea" is the first-run default; the others are closer to a kind of work
- * (papers, reports, contracts, meetings), and open from the default's banner.
+ * "credit", a credit committee paper, is the first-run default (#802); the
+ * others are closer to a kind of work (papers, reports, contracts, meetings),
+ * and open from the default's banner.
  */
-export const EXAMPLE_GROUPS = ["tea", "papers", "reports", "contracts", "meetings"] as const;
+export const EXAMPLE_GROUPS = ["credit", "papers", "reports", "contracts", "meetings"] as const;
 export type ExampleGroup = (typeof EXAMPLE_GROUPS)[number];
 
 /**
- * An example Mind (onboarding, see src/core/examples.ts): "Where tea comes
- * from", or one of a group, with its example Documents in their own Linked
- * folder, written in advance so it works before any chat model is set up.
+ * An example Mind (onboarding, see src/core/examples.ts): "Draft: credit
+ * committee paper", or one of a group, with its example Documents in their own
+ * Linked folder, written in advance so it works before any chat model is set up.
  */
 export interface Examples {
-  /** Which example this is. */
-  group: ExampleGroup;
+  /**
+   * Which example this is. "tea": "Where tea comes from", which a first run of
+   * an earlier version made; it is shown as the example, and removed, while
+   * there is no credit paper, but no longer made (#802).
+   */
+  group: ExampleGroup | "tea";
   /** Whether this copy of IncarnaMind ships the examples. */
   available: boolean;
   /** The example Mind, while it exists. */
@@ -3367,6 +3430,11 @@ export interface ChatProvider {
 export interface SaveChatProviderInput {
   kind: ChatProviderKind;
   /**
+   * A preset of the "openai-compatible" kind, by its catalog id, e.g. "groq":
+   * its endpoint and name come from the catalog. Left out: the kind's own.
+   */
+  catalogId?: string;
+  /**
    * A hosted provider's endpoint (its region), by its id in the catalog, e.g.
    * "intl" for Qwen. Left out: its first. Each endpoint is its own provider
    * with its own key, as keys and model lists differ by region.
@@ -3374,6 +3442,11 @@ export interface SaveChatProviderInput {
   endpoint?: string;
   /** Required for "openai-compatible"; optional for "ollama" (Ollama's local port); not allowed otherwise. */
   baseUrl?: string;
+  /**
+   * The value an endpoint's address is built from, for an endpoint that needs
+   * one (an AWS region, a Cloudflare account). Each value is its own provider.
+   */
+  endpointValue?: string;
   /** A new API key. Leave it out to keep the stored one; null removes it. */
   apiKey?: string | null;
   /** The model to make the default, e.g. "gpt-5.4-mini". */
@@ -3382,9 +3455,11 @@ export interface SaveChatProviderInput {
 
 export interface TestChatConnectionInput {
   kind: ChatProviderKind;
+  catalogId?: string;
   /** The endpoint to test (see `SaveChatProviderInput`). */
   endpoint?: string;
   baseUrl?: string;
+  endpointValue?: string;
   /** The key to test. Leave it out to test the key stored for the same provider. */
   apiKey?: string;
   modelId: string;
@@ -3452,7 +3527,8 @@ export interface Money {
  * The most IncarnaMind may spend in a calendar month on models billed per
  * token. Before each such request its most (its prompt and its output limit)
  * is reserved, and a request whose reservation would pass the cap isn't sent.
- * Spending in the other currency counts at a fixed rate.
+ * What is spent and what is still reserved both count against it. Spending
+ * in the other currency counts at a fixed rate.
  */
 export interface MonthlyCap {
   amount: number;
@@ -3464,8 +3540,10 @@ export interface ProviderCost {
   providerId: string;
   billing: Billing;
   requests: number;
-  /** What its requests cost, in each currency they were priced in. */
+  /** What its settled requests cost, in each currency they were priced in. */
   spent: Money[];
+  /** Reserved for its open requests, per currency. */
+  setAside: Money[];
   /** Tokens of requests to models with no known price: counted here, not toward the cap. */
   unpricedTokens: number;
   /** Requests a quit cut short with no usage known: counted as costing nothing (#636). */
@@ -3476,10 +3554,14 @@ export interface ProviderCost {
 export interface CostSummary {
   /** When the counted month began (ISO 8601), in the computer's time zone. */
   monthStart: string;
-  /** What per-token requests cost this month, settled and still reserved, per currency. */
+  /** What per-token requests cost this month once settled, per currency. */
   spent: Money[];
-  /** All of it in the cap's currency (the other at a fixed rate), when a cap is set. */
+  /** Reserved for open requests, per currency. */
+  setAside: Money[];
+  /** `spent` in the cap's currency (the other at a fixed rate), when a cap is set. */
   spentTowardCap: Money | null;
+  /** `setAside` in the cap's currency; it counts against the cap too. */
+  setAsideTowardCap: Money | null;
   cap: MonthlyCap | null;
   /** The providers used this month. */
   providers: ProviderCost[];
@@ -3623,7 +3705,7 @@ export interface Task {
   progress: TaskProgress | null;
   /** "failed": why, as a `ProviderErrorKind` or another short kind. */
   problem: string | null;
-  /** What its model requests have cost, settled and reserved; null with none billed. */
+  /** What its model requests have cost once settled; null with none billed. */
   cost: Money | null;
   /** What its kind lets the User ask of it, whatever it is doing now. */
   actions: TaskAction[];
@@ -3745,6 +3827,7 @@ export type RunEstimate =
       /** Null for a model with no known price. */
       cost: Money | null;
       spentTowardCap: Money | null;
+      setAsideTowardCap: Money | null;
       cap: MonthlyCap | null;
     }
   | { billing: "plan" | "free" };
@@ -4022,13 +4105,19 @@ export type EditWithAiResult =
   | { kind: "failed"; error: ProviderError };
 
 /**
- * The checks of the User's own sentences (#96). Both check each sentence's
+ * The checks of the User's own sentences (#96). Each checks a sentence's
  * claim against the Documents: Find support looks for a Passage that backs
  * it; Check against Documents does the same for a sentence that already has
  * Citations, telling the model what they quote, so the claim is checked and
- * not only the quote.
+ * not only the quote. Contradiction watch (#112) checks a cited sentence
+ * against the other Documents in its Mind's Folder, the ones it cites left
+ * out, and keeps a mark only where one contradicts it.
  */
-export const claimCheckActions = ["find-support", "check-against-documents"] as const;
+export const claimCheckActions = [
+  "find-support",
+  "check-against-documents",
+  "contradiction-watch",
+] as const;
 export type ClaimCheckAction = (typeof claimCheckActions)[number];
 
 /** What a claim check found (CONTEXT.md: supported, unsupported, contradicted). */
@@ -4203,6 +4292,8 @@ export interface CheckSentencesInput {
   /** Where the selection starts, and where it ends: each sentence it touches is checked, whole. */
   from: TextPlace;
   to: TextPlace;
+  /** More stretches checked with `from`..`to`, each sentence once. */
+  more?: TextStretch[];
   action: ClaimCheckAction;
   /** Search every Document, not the Mind's Folder ("Search all Documents"). */
   allDocuments?: boolean;
@@ -4217,7 +4308,14 @@ export type CheckSentencesResult =
    * checked. `smallModel`: a model on this computer too small to judge
    * reliably made the verdicts (#680), so they carry a notice.
    */
-  | { kind: "checked"; sentences: number; checked: number; smallModel: boolean }
+  | {
+      kind: "checked";
+      sentences: number;
+      checked: number;
+      smallModel: boolean;
+      /** Sentences left out because they hold changes still waiting; absent when none. */
+      waiting?: WaitingSentences;
+    }
   /** Nothing was sent: the model can't be used now, and `readiness` says why. */
   | { kind: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
   /** Nothing was sent: local mode is on, and the model isn't on this computer. */
@@ -4226,10 +4324,130 @@ export type CheckSentencesResult =
   | { kind: "no-documents"; folderId: string | null }
   /** The selection holds no sentence to check, or isn't in the Mind any more. */
   | { kind: "nothing" }
-  /** Nothing was sent: the selection holds changes still waiting. */
-  | { kind: "has-proposals" }
+  /** Nothing was sent: every sentence of the selection holds changes still waiting. */
+  | { kind: "waiting"; waiting: WaitingSentences }
   /** The User stopped it (`cancelCheck`): the sentences not checked yet say "stopped". */
-  | { kind: "cancelled" };
+  | { kind: "cancelled" }
+  /** Contradiction watch, nothing sent: the Mind is in no Folder, so there is none to check against. */
+  | { kind: "no-folder" }
+  /** Contradiction watch, nothing sent: the Folder holds no Documents but those its claims cite. */
+  | { kind: "only-cited"; folderId: string };
+
+/** Contradiction watch (#112) on a whole Mind, on demand. */
+export interface CheckContradictionsInput {
+  /** Chosen by the caller, so it can stop the request (`cancelCheck`). */
+  requestId: string;
+  mindId: string;
+  /** The model to use; none, or null: the Mind's own, else the default chat model. */
+  model?: ChatModelChoice | null;
+}
+
+/** What a check for contradictions would check, before anything is sent. */
+export type ContradictionCheckPlan =
+  /**
+   * `claims` cited sentences, each checked against the other Documents in the
+   * Folder, with `model`: the Mind's own, or null for the default.
+   */
+  | { kind: "ready"; claims: number; model: ChatModelChoice | null }
+  | Extract<
+      CheckSentencesResult,
+      { kind: "no-folder" | "only-cited" | "no-documents" | "nothing" }
+    >;
+
+/** What a check for contradictions found, on demand or after a new version (`ContradictionWatchRun`). */
+export interface ContradictionCheckOutcome {
+  /** The cited sentences checked: a contradicted one has its mark, the others none. */
+  claims: number;
+  /** Of them, those the model gave a verdict for. */
+  checked: number;
+  contradicted: number;
+  /** What its requests billed per token cost; null when none was priced. */
+  cost: Money | null;
+  /** The monthly cap or a plan's limit stopped it; the claims after it weren't checked. */
+  stop: RunStop | null;
+  /** The verdicts came from a model too small to judge reliably (#680). */
+  smallModel: boolean;
+}
+
+/** What `checkContradictions` did. */
+export type CheckContradictionsResult =
+  | ({ kind: "checked" } & ContradictionCheckOutcome)
+  | Exclude<CheckSentencesResult, { kind: "checked" | "waiting" }>;
+
+/**
+ * The last check for contradictions a new version of a Document in the Mind's
+ * Folder started (#112), kept in the Mind's settings so its line can show
+ * what it found and cost (`src/shared/contradictionWatch.ts`).
+ */
+export interface ContradictionWatchRun extends ContradictionCheckOutcome {
+  /** When it finished. ISO 8601, UTC. */
+  at: string;
+  /** The Document whose new version started it, by name. */
+  documentName: string;
+}
+
+/**
+ * What "Check this Mind" checks (#737): "all", every sentence that makes a
+ * claim, found afresh; "changed", the checks that need a re-check and the
+ * sentences never checked since, found among those the last run didn't
+ * leave out.
+ */
+export type CheckMindMode = "all" | "changed";
+
+export interface CheckMindInput {
+  requestId: string;
+  mindId: string;
+  mode: CheckMindMode;
+  /** Every Document, not only the Mind's Folder, as for `checkSentences`. */
+  allDocuments?: boolean;
+  /** The model; the Mind's own, else the default, when absent. */
+  model?: ChatModelChoice | null;
+}
+
+/** What `checkMind` would send, before it sends anything, so a cloud model's estimate can show first. */
+export type MindCheckPlan =
+  | {
+      kind: "ready";
+      /** The sentences it sends: to find the claims among, and the checks to make again. */
+      sentences: number;
+      /** Whether the model first names the claims among them; only checks made again don't need it. */
+      findsClaims: boolean;
+      /** The Mind's own model; null for the default. */
+      model: ChatModelChoice | null;
+    }
+  | Extract<CheckSentencesResult, { kind: "no-documents" | "nothing" }>;
+
+export type CheckMindResult =
+  /**
+   * Each claim has its mark: `checked` of the `sentences` with a verdict, the
+   * rest not checked. The monthly cap or a plan's limit stopped it (`stop`):
+   * the claims after it say "not checked: cost cap".
+   */
+  | {
+      kind: "checked";
+      sentences: number;
+      checked: number;
+      smallModel: boolean;
+      stop: RunStop | null;
+    }
+  /** The model couldn't name the claims: nothing was checked. */
+  | { kind: "failed"; error: ProviderError }
+  | Exclude<CheckSentencesResult, { kind: "checked" | "no-folder" | "only-cited" | "waiting" }>;
+
+/**
+ * The last whole-Mind check (#737), in the Mind's settings
+ * (`src/shared/mindCheck.ts`), for the line under its title: "Checked 48
+ * sentences, 2 Oct, 15:20".
+ */
+export interface MindCheckRun {
+  /** When it finished. ISO 8601, UTC. */
+  at: string;
+  /** The Mind's sentences with a check then. */
+  sentences: number;
+  stop: RunStop | null;
+  /** The sentences it found make no claim, by `sentenceKey`, so a later run doesn't send them again. */
+  skipped: string[];
+}
 
 /** A document someone else wrote, to verify claim by claim (#97): the window offers PDFs. */
 export interface VerifyDocumentInput {
@@ -4257,9 +4475,19 @@ export interface VerifyClaimsInput {
   model?: ChatModelChoice | null;
 }
 
+export interface WaitingSentences {
+  sentences: TextStretch[];
+  changeIds: string[];
+}
+
+export interface TextStretch {
+  from: TextPlace;
+  to: TextPlace;
+}
+
 /** Why finding or checking a document's claims sent nothing. */
 type VerifyRefusal =
-  | Exclude<CheckSentencesResult, { kind: "checked" } | { kind: "has-proposals" }>
+  | Exclude<CheckSentencesResult, { kind: "checked" } | { kind: "waiting" }>
   /** Another document's claims are being found or checked, in that Mind: one run at a time. */
   | { kind: "busy"; mindId: string };
 
@@ -7152,12 +7380,20 @@ export interface CoreApi {
    * navigation, ads or scripts, kept as a snapshot that Citations point at
    * and the check reads, named by the page's title. The page is fetched from
    * this computer, with a time and size limit, unless `html` is given (a
-   * page the app has open). Its images aren't fetched. An address saved
-   * already gives its Document, as it is. "document.status" events report
-   * its processing. A page that can't be fetched, or that is mostly not text,
-   * isn't saved: the result says why.
+   * page the app has open), with its article's pictures. Kept as it
+   * looks too, if asked, in the background (`WebPageInfo.look`). An address
+   * saved already gives its Document, as it is. "document.status" events
+   * report its processing. A page that can't be fetched, or that is mostly
+   * not text, isn't saved: the result says why.
    */
   saveWebPage(input: SaveWebPageInput): Promise<WebPageResult>;
+  /**
+   * Keeps a web page Document's last version as it looks (`WebPageLook`),
+   * again after it failed, in the background: the User's click is the
+   * consent to its full load. Throws NotFoundError for an unknown Document,
+   * and InvalidInputError for one that isn't a web page.
+   */
+  keepWebPageLook(documentId: string): Promise<Document>;
   /**
    * "Fetch again" on a web page Document: its address is fetched anew, and a
    * page that changed becomes a new version. Citations keep pointing at the
@@ -7374,7 +7610,7 @@ export interface CoreApi {
    */
   addFoundSource(input: AddFoundSourceInput): Promise<AddFoundSourceResult>;
 
-  /** An example Mind and its Documents, if made (see `Examples`); the tea example by default. */
+  /** An example Mind and its Documents, if made (see `Examples`); the credit paper by default. */
   getExamples(group?: ExampleGroup): Promise<Examples>;
   /**
    * On a first run (no Mind yet, examples never offered before), makes the
@@ -7384,8 +7620,8 @@ export interface CoreApi {
   /**
    * Makes the example Mind and its Documents (copies of the shipped files in
    * the data folder, linked), or returns them if they exist. Its Citations
-   * are checked once the Documents have been read. "examples.changed" follows.
-   * The tea example by default.
+   * are checked once the Documents have been read, and so are its draft's
+   * checks, already made. "examples.changed" follows. The credit paper by default.
    */
   createExamples(group?: ExampleGroup): Promise<Examples>;
   /** Deletes the example Mind, and unlinks the example Documents and deletes their copies. */
@@ -7707,6 +7943,42 @@ export interface CoreApi {
    * limit stops the run. `cancelCheck` stops it. One verify run at a time.
    */
   verifyClaims(input: VerifyClaimsInput): Promise<VerifyClaimsResult>;
+  /**
+   * What "Check for contradictions" would check in a Mind (#112): its cited
+   * sentences, or why there is nothing to check. Sends nothing.
+   */
+  planContradictionCheck(mindId: string): Promise<ContradictionCheckPlan>;
+  /**
+   * Contradiction watch (#112): checks each cited sentence of a Mind against
+   * the other Documents in its Folder, the Documents it cites and IncarnaMind's
+   * own files left out, with `checkClaim`. A contradicted sentence gets a
+   * "contradiction-watch" `CLAIM_CHECK_MARK`; any such mark on the others goes.
+   * A new version of a Document in a Folder starts the same check, in the
+   * background, for the Folder's Minds, when the User allowed the "checks"
+   * flow for the model's service (`ContradictionWatchRun`). `cancelCheck` stops it.
+   */
+  checkContradictions(input: CheckContradictionsInput): Promise<CheckContradictionsResult>;
+  /**
+   * What "Check this Mind" (#737) would send in `mode`, against the Mind's
+   * Folder or, with `allDocuments`, every Document; or why there is nothing
+   * to check. Sends nothing.
+   */
+  planMindCheck(
+    mindId: string,
+    mode: CheckMindMode,
+    allDocuments?: boolean,
+  ): Promise<MindCheckPlan>;
+  /**
+   * "Check this Mind" (#737): the model names the claims among the Mind's
+   * sentences, leaving out headings, questions and the User's own opinions,
+   * then each claim is checked as Check against Documents checks it, against
+   * the Mind's Folder (or every Document). In "changed" mode only the checks
+   * that need a re-check, and the sentences never checked since, are sent.
+   * Each claim gets its mark at once, then its result; a cloud model checks a
+   * few at once, and the monthly cap or a plan's limit stops the run. Records
+   * the run in the Mind (`MindCheckRun`). `cancelCheck` stops it.
+   */
+  checkMind(input: CheckMindInput): Promise<CheckMindResult>;
 
   getSecretStorage(): Promise<SecretStorageStatus>;
   /** The User accepts storing keys without keyring protection on this device. */
@@ -8471,6 +8743,7 @@ const methods: Record<CoreApiMethod, true> = {
   changeLayout: true,
   addDocuments: true,
   saveWebPage: true,
+  keepWebPageLook: true,
   fetchWebPageAgain: true,
   saveTextAsDocument: true,
   listDocuments: true,
@@ -8564,6 +8837,10 @@ const methods: Record<CoreApiMethod, true> = {
   verifyDocument: true,
   findClaims: true,
   verifyClaims: true,
+  planContradictionCheck: true,
+  checkContradictions: true,
+  planMindCheck: true,
+  checkMind: true,
   getSecretStorage: true,
   acceptPlainTextSecretStorage: true,
   detectOllama: true,

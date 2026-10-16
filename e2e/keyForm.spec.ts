@@ -6,10 +6,12 @@ import { createFakeOpenAI } from "../tests/helpers/fakeOpenAI";
 import {
   acceptPlainTextKeys,
   assistantAnswers,
+  closeSettings,
   createDataFolder,
   interceptOpenExternal,
   launchApp,
   newMind,
+  openSettings,
   removeDataFolder,
   setWindowSize,
   urlsOpened,
@@ -58,14 +60,13 @@ test("at 900px high the key form shows provider, key, Model and its button witho
     for (const value of ["en", "zh-CN"] as const) {
       await language(window, value);
       const card = await openKeyForm(window);
-      if (value === "en") {
-        await card.getByTestId("setup-other").click();
-        await card.getByTestId("way-key").click();
-      } else await card.getByTestId("setup-primary").click();
+      await card.getByTestId("setup-key").click();
       const form = card.getByTestId("provider-form");
       await expect(form.getByRole("radio", { checked: true })).toHaveCount(1);
       await expect(form.getByTestId("provider-model")).toBeVisible();
-      await expect(form.getByTestId("provider-model-reason")).toBeVisible();
+      await expect(form.getByTestId("provider-model").locator("option").first()).toContainText(
+        value === "en" ? "Recommended" : "推荐",
+      );
       await expect(form.getByTestId("provider-key-link")).toBeVisible();
       await expect(form.getByTestId("provider-use-key")).toBeInViewport({ ratio: 1 });
       await expect(form.getByTestId("provider-model")).toBeInViewport({ ratio: 1 });
@@ -74,6 +75,7 @@ test("at 900px high the key form shows provider, key, Model and its button witho
           path: `${process.env.INCARNAMIND_SCREENSHOTS}/key-form-900-${value}.png`,
         });
       }
+      await card.getByTestId("setup-back").click();
     }
   } finally {
     await app.close();
@@ -94,7 +96,7 @@ test("a way that can't be used yet says why, with the next step: Ollama not runn
     await language(window, "zh-CN");
     await expect(local).toContainText("这台电脑上没有运行 Ollama。可以免费获取。");
     await language(window, "en");
-    await card.getByTestId("way-key").click();
+    await card.getByTestId("setup-key").click();
     const form = card.getByTestId("provider-form");
     await expect(form.getByTestId("provider-use-key")).toBeDisabled();
     await expect(form.getByTestId("provider-use-key-why")).toHaveText("Paste the key first.");
@@ -155,9 +157,11 @@ test("Use this key shows a refused key in place, and with a good one saves and t
     await setWindowSize(app, window, 1100, 900);
     await acceptPlainTextKeys(window);
     const card = await openKeyForm(window);
-    await card.getByTestId("setup-other").click();
-    await card.getByTestId("way-key").click();
-    const form = card.getByTestId("provider-form");
+    // A server the User gives is offered in Settings, not at first run (ADR-0019); saved there,
+    // it answers the Question waiting in the setup card all the same.
+    const settings = await openSettings(window, "models");
+    await settings.getByTestId("chat-choice-api-key").check();
+    const form = settings.getByTestId("provider-form");
     await form.getByTestId("provider-more-toggle").click();
     await form.locator("label").filter({ hasText: "OpenAI-compatible server" }).click();
     // A compatible server keeps a free-text Model.
@@ -173,6 +177,8 @@ test("Use this key shows a refused key in place, and with a good one saves and t
 
     await form.getByLabel(/^API key/).fill("good-key");
     await form.getByTestId("provider-use-key").click();
+    await expect(form).toBeHidden();
+    await closeSettings(window);
     await expect(card).toBeHidden();
     // The waiting Question was asked: the conversation holds its Answer (the server only answers
     // the connection test, so how it ends is not the point).
@@ -195,7 +201,7 @@ test("the ChatGPT wait offers the sign-in page again, and after five minutes say
     await acceptPlainTextKeys(window);
     await window.clock.install();
     const card = await openKeyForm(window);
-    await card.getByTestId("setup-primary").click();
+    await card.getByTestId("setup-chatgpt").click();
     await expect.poll(() => urlsOpened(app)).toHaveLength(1);
     await expect(card).toContainText("Finish signing in in your browser");
     await expect(card).toContainText("nothing extra to pay");
@@ -210,7 +216,7 @@ test("the ChatGPT wait offers the sign-in page again, and after five minutes say
     await expect(window.getByTestId("chatgpt-error")).toHaveCount(0);
 
     await card.getByTestId("chatgpt-cancel").click();
-    await expect(card.getByTestId("setup-primary")).toBeVisible();
+    await expect(card.getByTestId("setup-chatgpt")).toBeVisible();
   } finally {
     await app.close();
   }

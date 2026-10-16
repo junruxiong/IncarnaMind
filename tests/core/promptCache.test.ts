@@ -218,7 +218,11 @@ function request(
   const question = messages.at(-1)?.content ?? "";
   return {
     instructions: () =>
-      [answerInstructions(), documentInstructions("tools", names), languageInstruction(question)]
+      [
+        answerInstructions(),
+        documentInstructions("tools", names),
+        languageInstruction(question, "en", names.names),
+      ]
         .filter(Boolean)
         .join("\n\n"),
     messages,
@@ -497,11 +501,15 @@ describe("The start of the prompt stays the same from one Question to the next",
   }
 
   test("a change of language changes only the last line of the instructions", () => {
-    const english = [answerInstructions(), documentInstructions("tools", names)].join("\n\n");
-    const chinese = [english, languageInstruction("潮汐是什么？")].join("\n\n");
-    expect(languageInstruction("What causes the tides?")).toBe("");
-    expect(chinese.startsWith(english)).toBe(true);
-    expect(chinese.slice(english.length)).toContain("Chinese");
+    const shared = [answerInstructions(), documentInstructions("tools", names)].join("\n\n");
+    const english = [shared, languageInstruction("What causes the tides?", "zh-CN", [])].join(
+      "\n\n",
+    );
+    const chinese = [shared, languageInstruction("潮汐是什么？", "en", [])].join("\n\n");
+    expect(english.startsWith(shared)).toBe(true);
+    expect(chinese.startsWith(shared)).toBe(true);
+    expect(english.slice(shared.length)).toContain("English");
+    expect(chinese.slice(shared.length)).toContain("Chinese");
   });
 
   test("the instructions hold nothing that changes with the request", () => {
