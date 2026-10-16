@@ -1204,6 +1204,7 @@ export function createCore(adapters: CoreAdapters): Core {
       },
     },
     resolveScope,
+    interfaceLanguage: () => settings.get().language,
     emptyScopeAnswer: () => translate(settings.get().language, "scope.answer.empty"),
     onWritingChange: (writing) => {
       background.setAnswering(writing);
