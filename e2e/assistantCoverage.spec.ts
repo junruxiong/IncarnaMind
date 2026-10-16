@@ -20,7 +20,9 @@ import {
 /**
  * An Answer about the main few of the Documents says which it took, above
  * its reply, with Use others: that asks again with the rest, in a new Answer
- * under the first, whose steps line says so. The first stays as it was.
+ * under the first, whose steps line says so. The first stays as it was. And
+ * an Answer from the User's own Mind never cites or names the examples'
+ * Documents (#894).
  */
 
 const SCREENSHOTS = process.env.INCARNAMIND_SCREENSHOTS;
@@ -97,4 +99,31 @@ test("“the two main documents” names the two it took, and Use others asks ag
   await expect(coverage).toHaveText("我选了“Report 1”和“Report 2”作为主要文档。· 换别的");
   await expect(againSteps).toHaveText("用其余 1 个文档重新回答");
   if (SCREENSHOTS) await window.screenshot({ path: join(SCREENSHOTS, "main-pick-zh.png") });
+});
+
+test("on first run, with the examples there, an Answer from the User's own Mind never cites or names the example's Documents", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true, examples: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await setLanguage(window, "en");
+  await setWindowSize(app, window, 1440, 900);
+  const path = join(files, "Store notes.md");
+  await writeFile(path, "# Store notes\n\nOur gross margin rose to 41% in the third quarter.\n");
+  // The examples' Documents are listed too, so the helper's count doesn't hold.
+  await window.getByTestId("add-documents-input").setInputFiles([path]);
+  await expect(
+    window.getByTestId("document-list-item").filter({ hasText: "Store notes" }),
+  ).toHaveAttribute("data-status", "ready", { timeout: 30_000 });
+  await newMind(window);
+  await window.keyboard.type("Margins");
+
+  // "each" cites every Document the search finds; the examples' results speak of gross margin too.
+  await askInAssistant(window, "What does each say about the gross margin?");
+
+  const answer = assistantAnswers(window).last();
+  await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+  const chips = answer.getByTestId("citation-chip");
+  await expect(chips).toHaveCount(1);
+  await expect(chips.first()).toHaveAttribute("aria-label", /Store notes/);
+  await expect(answer).not.toContainText("Northwind");
 });
