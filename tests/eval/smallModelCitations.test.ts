@@ -56,6 +56,7 @@ function sessionOver({ name, pages, passages }: Excerpt) {
       .join("\n\n"),
   }));
   const source = { documentId: name, documentName: name, contentHash: "v1" };
+  let shownOnce: Promise<string> | null = null;
   const session = createCitationSession(
     {
       searchableCount: () => 1,
@@ -82,7 +83,10 @@ function sessionOver({ name, pages, passages }: Excerpt) {
   );
   return {
     /** The Passages as the model reads them, each with its id: P1, P2… */
-    shown: async () => (await session.tools.searchDocuments("a query")).text,
+    shown: () => {
+      shownOnce ??= session.tools.searchDocuments("a query").then((found) => found.text);
+      return shownOnce;
+    },
     /** What `cite` tells the model, and what became of each record: null when it was dropped. */
     cite(
       records: CitationRecordInput[],

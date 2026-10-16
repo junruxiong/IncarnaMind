@@ -8,6 +8,7 @@
 import type { TranscriptionModelFiles } from "../adapters";
 import { MEETING_SAMPLE_RATE } from "../adapters";
 import type { SpeechEngine, VoiceDetector } from "./speech";
+import { textOfResult, wordsOnly } from "./speechText";
 
 /** Silero's window at 16 kHz: it reads audio 512 samples at a time. */
 const WINDOW = 512;
@@ -97,7 +98,15 @@ export async function createSherpaEngine(model: TranscriptionModelFiles): Promis
       async decode(samples) {
         const stream = recognizer.createStream();
         stream.acceptWaveform({ samples, sampleRate: MEETING_SAMPLE_RATE });
-        return (await recognizer.decodeAsync(stream)).text;
+        try {
+          return wordsOnly((await recognizer.decodeAsync(stream)).text);
+        } catch (error) {
+          if (!(error instanceof SyntaxError)) throw error;
+          // The stretch was decoded; sherpa's reader refused its JSON (#981): read it here.
+          const loaded = await import("sherpa-onnx-node/addon.js");
+          const addon = "default" in loaded ? loaded.default : loaded;
+          return wordsOnly(textOfResult(addon.getOfflineStreamResultAsJson(stream.handle)));
+        }
       },
     },
     // The recognizer and detectors are freed with the process; nothing holds them here.
