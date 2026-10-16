@@ -3730,6 +3730,8 @@ export const zhCN = {
   "firstOpen.step.files.done": "已添加你的文件",
   "firstOpen.step.files.body": "你的文件留在原处，IncarnaMind 在这台电脑上读取它们。",
   "firstOpen.done.title": "准备好了。",
+  "firstOpen.model.body": "还差一步：选择 AI 模型，就能就你自己的文件提问。",
+  "firstOpen.model.choose": "选择模型",
   "firstOpen.next.lead": "接下来可以试试：",
   "firstOpen.next.compare": "用表格对比文档",
   "firstOpen.next.meeting": "录制会议",
