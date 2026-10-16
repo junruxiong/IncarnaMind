@@ -1,0 +1,546 @@
+import { createHash, randomUUID } from "node:crypto";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { basename } from "node:path";
+import type { JSONContent } from "@tiptap/core";
+import { describe, expect, test } from "vitest";
+import {
+  type CheckRecordFormat,
+  type CitationCheck,
+  type ClaimCheckAttributes,
+  type Core,
+  type Document,
+  GENERATED_MARK,
+} from "../../src/core";
+import { formatDate, formatFullDateTime } from "../../src/shared/dates";
+import { setTextOrigin } from "../../src/shared/textOrigins";
+import { createTempDataFolder, manualClock, startCore } from "../helpers/core";
+import { parseCsv } from "../helpers/csv";
+import { addAndProcess, writeSourceFile } from "../helpers/documents";
+import { connectToMind } from "../helpers/mindClient";
+import { writeMind } from "../helpers/minds";
+import { fakePrinter } from "../helpers/printer";
+
+/*
+ * The check record (#738), as the User gets it: a PDF to file with the work and a CSV for their
+ * own records, listing each checked sentence and each Citation with its result, the Document
+ * version, the model and the time, and whose text it is. The fixture Mind holds one of each
+ * result and each kind of text, so a row that goes missing or wrong fails.
+ */
+
+const NOW = "2026-10-16T09:00:00.000Z";
+const CHECKED = "2026-10-15T14:20:00.000Z";
+const QUOTE = "Spring tides happen at new moon.";
+
+const text = (value: string, ...marks: { type: string; attrs?: object }[]): JSONContent => ({
+  type: "text",
+  text: value,
+  ...(marks.length > 0 && { marks }),
+});
+const paragraph = (id: string, ...content: JSONContent[]): JSONContent => ({
+  type: "paragraph",
+  attrs: { id },
+  content,
+});
+
+function citation(document: Document, check: CitationCheck): JSONContent {
+  return {
+    type: "citation",
+    attrs: {
+      passageId: "passage-1",
+      documentId: document.id,
+      documentName: "Tides",
+      contentHash: document.contentHash,
+      pageFrom: 1,
+      pageTo: 1,
+      quote: QUOTE,
+      check,
+      checkReason: check === "not-found" ? "quote-not-on-pages" : null,
+    },
+  };
+}
+
+type Model = { providerId: string; modelId: string };
+
+function checked(
+  document: Document,
+  sentence: string,
+  state: ClaimCheckAttributes["state"],
+  model: Model,
+  overrides: Partial<ClaimCheckAttributes> = {},
+): ClaimCheckAttributes {
+  const found = state === "supported" || state === "contradicted";
+  return {
+    id: randomUUID(),
+    request: "request-1",
+    action: "find-support",
+    state,
+    reason: state === "not-checked" ? "refused" : null,
+    detail: null,
+    ...model,
+    text: sentence,
+    evidence: found
+      ? {
+          passageId: "passage-1",
+          documentId: document.id,
+          documentName: "Tides",
+          contentHash: document.contentHash,
+          pageFrom: 1,
+          pageTo: 1,
+          location: null,
+          quote: QUOTE,
+          check: "found",
+          checkReason: null,
+        }
+      : null,
+    says: found ? "Tides says spring tides happen at new moon." : null,
+    calculation: null,
+    scope: { folderId: null, widened: true },
+    versions: [{ documentId: document.id, contentHash: document.contentHash }],
+    excluded: [],
+    checkedAt: CHECKED,
+    ...overrides,
+  };
+}
+
+/** One parsed CSV row, by the header's names. */
+type Row = Record<string, string>;
+
+async function setUp(options: { printer?: ReturnType<typeof fakePrinter>["printer"] } = {}) {
+  const dataDir = await createTempDataFolder();
+  const sources = await createTempDataFolder();
+  const out = await createTempDataFolder();
+  const core = startCore(dataDir, { now: manualClock(NOW).now, ...options });
+  const file = await writeSourceFile(sources, "Tides.txt", QUOTE);
+  const [tides] = (await addAndProcess(core, [file])) as [Document];
+  const local = await core.saveChatProvider({ kind: "ollama", modelId: "local-model" });
+  const haiku = await core.saveChatProvider({
+    kind: "anthropic",
+    apiKey: "sk-ant-test",
+    modelId: "claude-haiku-5-5",
+  });
+  const folder = await core.createLibraryGroup({ name: "Harbours", description: "" });
+  await core.setOutputLocation(out);
+  const mind = await core.createMind({ title: "Harbour notes", folderId: folder.id });
+  const client = await connectToMind(core, mind.id);
+  return {
+    core,
+    mind,
+    client,
+    tides: tides as Document,
+    file,
+    out,
+    localModel: { providerId: local.id, modelId: "local-model" },
+    haikuModel: { providerId: haiku.id, modelId: "claude-haiku-5-5" },
+  };
+}
+
+type Setup = Awaited<ReturnType<typeof setUp>>;
+
+/** A Mind with every result and every kind of text. */
+async function writeNotes({ core, mind, client, tides, localModel, haikuModel }: Setup) {
+  const [own, ai, theirs, mixed] = [randomUUID(), randomUUID(), randomUUID(), randomUUID()];
+  const sentences = [
+    ["Spring tides come at new moon.", "supported"],
+    ["Penguins nest on the harbour cliffs.", "unsupported"],
+    ["Nobody would say.", "not-checked"],
+  ] as const;
+  writeMind(client, [
+    paragraph(
+      own,
+      ...sentences.flatMap(([sentence, state]) => [
+        text(sentence, {
+          type: "claimCheck",
+          attrs: checked(tides, sentence, state, localModel),
+        }),
+        text(" "),
+      ]),
+    ),
+    paragraph(
+      ai,
+      text("The Moon pulls the sea", { type: GENERATED_MARK }),
+      citation(tides, "found"),
+      text("."),
+    ),
+    {
+      type: "answer",
+      attrs: { id: randomUUID(), status: "done", generatedMarks: true, ...haikuModel },
+      content: [
+        paragraph(randomUUID(), text("The tides follow the Moon."), citation(tides, "not-found")),
+      ],
+    },
+    paragraph(
+      theirs,
+      text("Their report says tides follow the Moon.", {
+        type: "claimCheck",
+        attrs: checked(
+          tides,
+          "Their report says tides follow the Moon.",
+          "contradicted",
+          haikuModel,
+        ),
+      }),
+    ),
+    paragraph(mixed, text("I read it in the harbour office"), citation(tides, "found"), text(".")),
+  ]);
+  await client.settled();
+  setTextOrigin(client.doc, [theirs], "imported");
+  await client.settled();
+  await core.recordAiUse([
+    { mindId: mind.id, kind: "answer-added", characters: 24, blockIds: [ai], ...localModel },
+  ]);
+}
+
+async function saveRecord(
+  { core, mind, out }: Pick<Setup, "core" | "mind" | "out">,
+  format: CheckRecordFormat,
+) {
+  const saved = await core.saveCheckRecord(mind.id, format);
+  if (saved.status !== "saved") throw new Error(`Not saved: ${saved.status}`);
+  return { name: saved.file.name, path: saved.file.path, files: readdirSync(out) };
+}
+
+const rowsOf = (csv: string): Row[] => {
+  const table = parseCsv(csv);
+  const at = table.findIndex((each) => each.length === 0 || (each.length === 1 && each[0] === ""));
+  const [header = [], ...rows] = table.slice(at + 1);
+  return rows.map((each) => Object.fromEntries(header.map((name, i) => [name, each[i] ?? ""])));
+};
+
+const summaryOf = (csv: string): Map<string, string> =>
+  new Map(
+    parseCsv(csv)
+      .slice(1, 8)
+      .map(([name = "", value = ""]) => [name, value]),
+  );
+
+describe("The check record as CSV", () => {
+  test("lists each checked sentence and each Citation with its result, the Document version, model, time and text", async () => {
+    const setup = await setUp();
+    await writeNotes(setup);
+
+    const saved = await saveRecord(setup, "csv");
+
+    expect(saved.name).toBe("Harbour notes - check record.csv");
+    const csv = readFileSync(saved.path, "utf8");
+    expect(csv.startsWith("﻿")).toBe(true);
+    const rows = rowsOf(csv);
+    const sha256 = createHash("sha256").update(readFileSync(setup.file)).digest("hex");
+    const size = statSync(setup.file).size;
+    const tidesVersion = {
+      Document: "Tides",
+      File: basename(setup.file),
+      "Size (bytes)": String(size),
+      "SHA-256": sha256,
+      Location: "p. 1",
+      Quote: QUOTE,
+    };
+    const local = { Model: "local-model", Service: "this computer" };
+    const haiku = { Model: "Claude Haiku 5.5", Service: "Anthropic" };
+    const none = {
+      Document: "",
+      File: "",
+      "Size (bytes)": "",
+      "SHA-256": "",
+      Location: "",
+      Quote: "",
+    };
+
+    expect(
+      rows.map((row) => ({
+        Kind: row.Kind,
+        Sentence: row.Sentence,
+        Result: row.Result,
+        Text: row.Text,
+        Document: row.Document,
+        File: row.File,
+        "Size (bytes)": row["Size (bytes)"],
+        "SHA-256": row["SHA-256"],
+        Location: row.Location,
+        Quote: row.Quote,
+        Model: row.Model,
+        Service: row.Service,
+        Checked: row.Checked,
+      })),
+    ).toEqual([
+      {
+        Kind: "Sentence",
+        Sentence: "Spring tides come at new moon.",
+        Result: "Supported",
+        Text: "Your text",
+        ...tidesVersion,
+        ...local,
+        Checked: CHECKED,
+      },
+      {
+        Kind: "Sentence",
+        Sentence: "Penguins nest on the harbour cliffs.",
+        Result: "Unsupported",
+        Text: "Your text",
+        ...none,
+        ...local,
+        Checked: CHECKED,
+      },
+      {
+        Kind: "Sentence",
+        Sentence: "Nobody would say.",
+        Result: "Not checked",
+        Text: "Your text",
+        ...none,
+        ...local,
+        Checked: CHECKED,
+      },
+      {
+        Kind: "Sentence",
+        Sentence: "Their report says tides follow the Moon.",
+        Result: "Contradicted",
+        Text: "Someone else's text",
+        ...tidesVersion,
+        ...haiku,
+        Checked: CHECKED,
+      },
+      {
+        Kind: "Citation",
+        Sentence: "The Moon pulls the sea.",
+        Result: "Quote found",
+        Text: "AI text",
+        ...tidesVersion,
+        ...local,
+        Checked: "",
+      },
+      {
+        Kind: "Citation",
+        Sentence: "The tides follow the Moon.",
+        Result: "Quote not found",
+        Text: "AI text",
+        ...tidesVersion,
+        ...haiku,
+        Checked: "",
+      },
+      {
+        Kind: "Citation",
+        Sentence: "I read it in the harbour office.",
+        Result: "Quote found",
+        Text: "Your text",
+        ...tidesVersion,
+        Model: "",
+        Service: "",
+        Checked: "",
+      },
+    ]);
+    expect(rows[0]?.["What it says"]).toBe("Tides says spring tides happen at new moon.");
+  });
+
+  test("starts with the summary: the Mind, the date, the Folder, Local mode, the models and the counts", async () => {
+    const setup = await setUp();
+    await writeNotes(setup);
+
+    const csv = readFileSync((await saveRecord(setup, "csv")).path, "utf8");
+
+    const summary = summaryOf(csv);
+    expect(parseCsv(csv)[0]).toEqual(["Check record: Harbour notes"]);
+    expect(summary.get("Exported")).toBe(NOW);
+    expect(summary.get("Documents searched")).toBe("Harbours");
+    expect(summary.get("Local mode when exported")).toBe("Off");
+    expect(summary.get("Models")).toBe("Claude Haiku 5.5 (Anthropic); local-model");
+    expect(summary.get("Sentences")).toBe(
+      "Supported 1; Unsupported 1; Not checked 1; Contradicted 1",
+    );
+    expect(summary.get("Citations")).toBe("Quote found 2; Quote not found 1");
+
+    await setup.core.setLocalOnly(true);
+    const on = readFileSync((await saveRecord(setup, "csv")).path, "utf8");
+    expect(summaryOf(on).get("Local mode when exported")).toBe("On");
+  });
+
+  test("a Mind in no Folder says it searched every Document; one never checked says so, and still has its header", async () => {
+    const { core, out } = await setUp();
+    const mind = await core.createMind({ title: "Empty" });
+
+    const saved = await core.saveCheckRecord(mind.id, "csv");
+
+    expect(saved.status).toBe("saved");
+    const csv = readFileSync(`${out}/Empty - check record.csv`, "utf8");
+    expect(summaryOf(csv).get("Documents searched")).toBe("All Documents");
+    expect(summaryOf(csv).get("Models")).toBe("None");
+    expect(rowsOf(csv)).toEqual([]);
+    expect(parseCsv(csv).some((row) => row[0] === "Kind" && row[1] === "Sentence")).toBe(true);
+  });
+
+  test("a quote that starts like a formula can't run in a spreadsheet, and commas, quotes and line breaks stay in their cell", async () => {
+    const setup = await setUp();
+    const { client, tides, localModel } = setup;
+    const sentence = '=HYPERLINK("http://example.invalid"), said "them",\nand more.';
+    writeMind(client, [
+      paragraph(
+        randomUUID(),
+        text(sentence, {
+          type: "claimCheck",
+          attrs: checked(tides, sentence, "unsupported", localModel),
+        }),
+      ),
+    ]);
+    await client.settled();
+
+    const csv = readFileSync((await saveRecord(setup, "csv")).path, "utf8");
+
+    const [row] = rowsOf(csv);
+    expect(row?.Sentence).toBe(
+      `'${'=HYPERLINK("http://example.invalid"), said "them", and more.'}`,
+    );
+  });
+
+  test("in Chinese, the summary, headings, results and file name are Chinese", async () => {
+    const setup = await setUp();
+    await writeNotes(setup);
+    await setup.core.updateSettings({ user: { language: "zh-CN" } });
+
+    const saved = await saveRecord(setup, "csv");
+
+    expect(saved.name).toBe("Harbour notes - 核对记录.csv");
+    const csv = readFileSync(saved.path, "utf8");
+    expect(parseCsv(csv)[0]).toEqual(["核对记录：Harbour notes"]);
+    const summary = summaryOf(csv);
+    expect(summary.get("搜索范围")).toBe("Harbours");
+    expect(summary.get("导出时“所有内容都留在这台电脑上”")).toBe("未开启");
+    const [first, , , , citationRow] = rowsOf(csv);
+    expect(first).toMatchObject({
+      类型: "句子",
+      核对结果: "有依据",
+      文字来源: "你写的文字",
+      文档: "Tides",
+      位置: "第 1 页",
+      服务: "本机",
+    });
+    expect(citationRow).toMatchObject({
+      类型: "引用",
+      核对结果: "找到引文",
+      文字来源: "AI 生成的文字",
+    });
+  });
+});
+
+describe("The check record as PDF", () => {
+  test("is printed with the summary, each item and a footer saying what it is", async () => {
+    const { printed, printer } = fakePrinter();
+    const setup = await setUp({ printer });
+    await writeNotes(setup);
+    await setup.core.setLocalOnly(true);
+
+    const saved = await saveRecord(setup, "pdf");
+
+    expect(saved.name).toBe("Harbour notes - check record.pdf");
+    expect(readFileSync(saved.path, "utf8")).toBe("%PDF-stand-in");
+    const [document] = printed;
+    expect(document).toMatchObject({
+      language: "en",
+      title: "Harbour notes - check record",
+      notes: [],
+      footer:
+        "This record lists what IncarnaMind checked and how. “Quote found” means the quoted words are on that page; it doesn't mean they support the sentence.",
+    });
+    const body = document?.body ?? "";
+    const sha256 = createHash("sha256").update(readFileSync(setup.file)).digest("hex");
+    expect(body).toContain("Check record: Harbour notes");
+    expect(body).toContain(formatDate(NOW, "en"));
+    expect(body).toContain("Harbours");
+    expect(body).toContain('<th scope="row">Local mode when exported</th><td>On</td>');
+    expect(body).toContain("Claude Haiku 5.5 (Anthropic); local-model");
+    expect(body).toContain("Sentences checked against the Documents (4)");
+    expect(body).toContain("Citations (3)");
+    for (const sentence of [
+      "Spring tides come at new moon.",
+      "Penguins nest on the harbour cliffs.",
+      "Their report says tides follow the Moon.",
+    ]) {
+      expect(body).toContain(sentence);
+    }
+    expect(body).toContain(formatFullDateTime(CHECKED, "en"));
+    expect(body).toContain(`<code class="record-hash">${sha256}</code>`);
+    expect(body).toContain("Someone else&#39;s text");
+    expect(body).toContain("Quote not found");
+  });
+
+  test("shows the Mind's words as text: markup in a sentence or a quote is escaped", async () => {
+    const { printed, printer } = fakePrinter();
+    const setup = await setUp({ printer });
+    const sentence = "<img src=x onerror=alert(1)> is not a picture.";
+    writeMind(setup.client, [
+      paragraph(
+        randomUUID(),
+        text(sentence, {
+          type: "claimCheck",
+          attrs: checked(setup.tides, sentence, "supported", setup.localModel),
+        }),
+      ),
+    ]);
+    await setup.client.settled();
+
+    await saveRecord(setup, "pdf");
+
+    const body = printed[0]?.body ?? "";
+    expect(body).not.toContain("<img");
+    expect(body).toContain("&lt;img src=x onerror=alert(1)&gt; is not a picture.");
+  });
+
+  test("in Chinese, the PDF's words and footer are Chinese", async () => {
+    const { printed, printer } = fakePrinter();
+    const setup = await setUp({ printer });
+    await writeNotes(setup);
+    await setup.core.updateSettings({ user: { language: "zh-CN" } });
+
+    await saveRecord(setup, "pdf");
+
+    expect(printed[0]).toMatchObject({
+      language: "zh-CN",
+      title: "Harbour notes - 核对记录",
+      footer:
+        "本记录列出 IncarnaMind 核对了什么、怎样核对。“找到引文”只说明引文的文字在那一页上，不说明它支持这句话。",
+    });
+    expect(printed[0]?.body).toContain("核对记录：Harbour notes");
+    expect(printed[0]?.body).toContain("对照文档核对的句子（4）");
+  });
+
+  test("a printer that fails says so and saves nothing; a copy with no printer can't make one", async () => {
+    const failing = await setUp({
+      printer: {
+        print: async () => {
+          throw new Error("The PDF took too long to lay out.");
+        },
+      },
+    });
+    await expect(failing.core.saveCheckRecord(failing.mind.id, "pdf")).rejects.toThrow(
+      "The PDF took too long to lay out.",
+    );
+    expect(readdirSync(failing.out)).toEqual([]);
+
+    const bare = await setUp();
+    await expect(bare.core.saveCheckRecord(bare.mind.id, "pdf")).rejects.toThrow(
+      "This copy of IncarnaMind can't make PDFs.",
+    );
+  });
+});
+
+describe("Saving a check record", () => {
+  test("refuses a format that isn't one, and a Mind that isn't there", async () => {
+    const { core, mind } = await setUp();
+    await expect(
+      (core as Core).saveCheckRecord(mind.id, "docx" as CheckRecordFormat),
+    ).rejects.toThrow('The check record format must be "pdf" or "csv".');
+    await expect(core.saveCheckRecord(randomUUID(), "csv")).rejects.toThrow();
+  });
+
+  test("saves under the next free name, and the Mind it is of is left as it was", async () => {
+    const setup = await setUp();
+    await writeNotes(setup);
+    const before = (await setup.core.openMind(setup.mind.id)).state;
+
+    await saveRecord(setup, "csv");
+    const second = await saveRecord(setup, "csv");
+
+    expect(second.files).toEqual([
+      "Harbour notes - check record 2.csv",
+      "Harbour notes - check record.csv",
+    ]);
+    expect((await setup.core.openMind(setup.mind.id)).state).toEqual(before);
+  });
+});

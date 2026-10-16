@@ -69,6 +69,7 @@ import {
 import { createApprovals } from "./approvals";
 import { createBackgroundQueue } from "./backgroundQueue";
 import { createCheckpoints } from "./checkpoints";
+import { createCheckRecord } from "./checkRecord";
 import { createCitationStyles } from "./citationStyles";
 import { type CitedPages, type CitedPlace, createCitedPages } from "./citedPages";
 import { COMPARISON_TASK, createComparisons } from "./comparisons";
@@ -1573,6 +1574,22 @@ export function createCore(adapters: CoreAdapters): Core {
     wordPackage: (mindId) => wordImports.packageOf(mindId),
     author: () => settings.get().author,
     log: adapters.log ?? silentLogger,
+    now,
+  });
+  // The check record (#738): what a Mind's checks left, as a file for the User to keep.
+  const checkRecord = createCheckRecord({
+    mind: (mindId) => minds.get(mindId),
+    read: (mindId, look) => content.peek(mindId, look),
+    entries: (mindId) => aiUse.list(mindId),
+    providers: () => chat.list(),
+    documents: () => documents.list(),
+    keptCitationTexts: () => documents.keptCitationTexts(),
+    folderName: (folderId) =>
+      library.folders().find((folder) => folder.id === folderId)?.name ?? null,
+    localMode: () => embedding.localOnly(),
+    language: () => settings.get().language,
+    printer: adapters.printer ?? null,
+    paper: () => paperFor(systemRegion(adapters.systemRegion?.(), adapters.systemLanguages())),
     now,
   });
   const ownFileOf = (options: ExportMindOptions): OwnFileKind =>
@@ -3126,6 +3143,10 @@ export function createCore(adapters: CoreAdapters): Core {
         ownFileOf(options),
       );
       return saved.status === "saved" ? { ...saved, ...counts, word } : saved;
+    },
+    saveCheckRecord: async (mindId, format) => {
+      const { fileName, data } = await checkRecord.file(mindId, format);
+      return saveExport(fileName, data);
     },
     saveSkillExport: async (skillId) => {
       const { fileName, data } = await skills.exportZip(skillId);
