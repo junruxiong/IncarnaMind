@@ -4,8 +4,9 @@
  * "Check all" and "Check again" check only what changed. When the model is
  * to name the claims, it does that first, with Stop, and the line under the
  * Mind's title then asks with their number and, billed per token, the
- * estimate (#973); a run that only checks again asks so when it is large.
- * While it runs, the health line counts the claims checked, with Stop.
+ * estimate (#973); a run that only checks again asks so when it is large,
+ * and always for the Documents added since (#993). While it runs, the
+ * health line counts the claims checked, with Stop.
  */
 import { useEffect, useState } from "react";
 import type * as Y from "yjs";
@@ -129,7 +130,7 @@ export async function startMindCheck(
     setCheckProblem(mindId, plan.kind === "nothing" ? { kind: "no-claims" } : plan);
     return;
   }
-  if (!plan.findsClaims && plan.sentences < ASK_FROM)
+  if (mode !== "added" && !plan.findsClaims && plan.sentences < ASK_FROM)
     return checkMind(mindId, mode, { allDocuments });
   dismissMindCheck(mindId);
   dismissCheckProblem(mindId);

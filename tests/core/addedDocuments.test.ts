@@ -86,8 +86,10 @@ const checksIn = async (client: Awaited<ReturnType<typeof setUp>>["client"]) => 
 };
 
 describe("Documents added since a Mind's checks", () => {
-  test("only an unsupported check is offered, for a Document added to its Folder, and Check again checks it alone", async () => {
+  test("only an unsupported check is offered, for a Document filed into its Folder since, and Check again checks it alone", async () => {
     const { core, client, clock, plans, add, mindId, folderId, checkRuns } = await setUp();
+    const colony = await add("Colony.md", `# Colony\n\n${PENGUINS}\n`);
+    clock.advance(60_000);
     await core.checkMind(request(mindId, "all"));
     const checked = await checksIn(client);
     expect(checked.map((each) => [each.sentence, each.state])).toEqual([
@@ -104,9 +106,8 @@ describe("Documents added since a Mind's checks", () => {
     expect(await core.documentsAddedSinceChecks(mindId)).toEqual([]);
     expect(await core.planMindCheck(mindId, "added")).toEqual({ kind: "nothing" });
 
-    // Filed into the Folder, it is: the supported and contradicted checks are never offered.
+    // One there before, filed into the Folder since, is: the supported and contradicted checks are never offered.
     clock.advance(60_000);
-    const colony = await add("Colony.md", `# Colony\n\n${PENGUINS}\n`);
     await core.moveToFolder({ documentIds: [colony.id], folderId });
     const unsupported = checked.filter((each) => each.state === "unsupported");
     expect(await core.documentsAddedSinceChecks(mindId)).toEqual(

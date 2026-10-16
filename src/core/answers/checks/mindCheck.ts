@@ -65,11 +65,15 @@ export interface MindCheckOptions extends RunChecksOptions {
   /** Each live Document's version now, for which checks need a re-check. */
   documentVersions(): ReadonlyMap<string, string>;
   documents: {
-    /** The live Documents with Passages to search, of these (null: of all), added after `since`. */
-    addedAfter(
+    /**
+     * The live Documents with Passages to search, of these (null: of all), that joined after
+     * `since`: added then, or, with `folderId`, filed into that Folder then.
+     */
+    joinedAfter(
       documentIds: readonly string[] | null,
       since: string,
-    ): { id: string; createdAt: string }[];
+      folderId: string | null,
+    ): { id: string; joinedAt: string }[];
   };
   settleStopped(mindId: string, request: string): void;
   track(requestId: string, mindId: string): { signal: AbortSignal; done(): void };
@@ -175,20 +179,22 @@ export function createMindCheck(options: MindCheckOptions) {
     const found = new Map<string, string[]>();
     const since = changeable.map((check) => check.checkedAt).sort()[0];
     if (since === undefined) return found;
-    const added = new Map<boolean, { id: string; createdAt: string }[]>();
-    const addedTo = (widened: boolean) => {
+    const joined = new Map<boolean, { id: string; joinedAt: string }[]>();
+    const joinedIn = (widened: boolean) => {
+      const { check } = options.scopeOf(mindId, widened);
       const known =
-        added.get(widened) ??
-        options.documents.addedAfter(
-          options.scopeOf(mindId, widened).check.scope.documentIds,
+        joined.get(widened) ??
+        options.documents.joinedAfter(
+          check.scope.documentIds,
           since,
+          widened ? null : check.marked.folderId,
         );
-      added.set(widened, known);
+      joined.set(widened, known);
       return known;
     };
     for (const check of changeable) {
-      const ids = addedTo(check.scope.widened)
-        .filter((document) => document.createdAt > check.checkedAt)
+      const ids = joinedIn(check.scope.widened)
+        .filter((document) => document.joinedAt > check.checkedAt)
         .map((document) => document.id);
       if (ids.length > 0) found.set(check.id, ids);
     }
