@@ -37,6 +37,8 @@ export function ExampleBanner({ mindId }: { mindId: string }) {
   const gap = useGap();
   const addMenu = useAddYourDocuments("example-add");
   const removeExamples = useAppStore((state) => state.removeExamples);
+  const tea = useAppStore((state) => state.examples?.group === "tea");
+  const body = t(tea ? "examples.banner.body.tea" : "examples.banner.body");
   return (
     <aside
       aria-label={t("examples.banner.label")}
@@ -61,8 +63,8 @@ export function ExampleBanner({ mindId }: { mindId: string }) {
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
         <p>
           <strong className="font-semibold text-ink">{t("examples.banner.title")}</strong>
-          {gap(t("examples.banner.title"), t("examples.banner.body"))}
-          {t("examples.banner.body")}
+          {gap(t("examples.banner.title"), body)}
+          {body}
         </p>
         <div className="flex flex-wrap gap-2">
           <button

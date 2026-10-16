@@ -7,12 +7,12 @@ const HAN_START = /^\p{Script=Han}/u;
 
 /**
  * What goes between two pieces of text a screen puts side by side: a space in
- * English; in Chinese none after or before full-width punctuation or between
- * Chinese characters, else a space (docs/agents/zh-CN.md).
+ * English; in Chinese none after or before full-width punctuation or a space
+ * already there, or between Chinese characters, else a space (docs/agents/zh-CN.md).
  */
 export function gap(language: Language, before: string, after: string): string {
   if (language !== "zh-CN") return " ";
-  if (before === "" || after === "") return "";
+  if (before === "" || after === "" || /\s$/u.test(before) || /^\s/u.test(after)) return "";
   if (FULL_WIDTH_PUNCTUATION.test(before) || FULL_WIDTH_PUNCTUATION_START.test(after)) return "";
   return HAN_END.test(before) && HAN_START.test(after) ? "" : " ";
 }

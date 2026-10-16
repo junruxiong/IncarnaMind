@@ -7,12 +7,14 @@ import {
   createDataFolder,
   dismissChatSetup,
   expectReadyDocuments,
+  exportFromMenu,
   importWordFromMenu,
   interceptOpenDialog,
   launchApp,
   motionSettled,
   openOptions,
   removeDataFolder,
+  savedLine,
   savedPath,
   setLanguage,
   setWindowSize,
@@ -114,8 +116,8 @@ test("the assistant reads someone's changes as changes and cites the contract, a
 
   // The PDF has the deleted clause, with a note of who deleted it and when.
   const result = window.getByTestId("export-result");
-  await window.getByTestId("export-mind").click();
-  await expect(result.getByTestId("export-done")).toHaveText("Saved MSA redline.pdf");
+  await exportFromMenu(window);
+  await expect(result.getByTestId("export-done")).toHaveText(savedLine("MSA redline.pdf", output));
   const marked = (await pdfText(await readFile(await savedPath(window, "MSA redline.pdf")))).join(
     "\n",
   );
@@ -128,8 +130,10 @@ test("the assistant reads someone's changes as changes and cites the contract, a
   await shown.selectOption("accepted");
   await sheet.getByTestId("export-save").click();
   await expect(sheet).toBeHidden();
-  await window.getByTestId("export-mind").click();
-  await expect(result.getByTestId("export-done")).toHaveText("Saved MSA redline 2.pdf");
+  await exportFromMenu(window);
+  await expect(result.getByTestId("export-done")).toHaveText(
+    savedLine("MSA redline 2.pdf", output),
+  );
   const accepted = (
     await pdfText(await readFile(await savedPath(window, "MSA redline 2.pdf")))
   ).join("\n");

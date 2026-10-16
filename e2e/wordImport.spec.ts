@@ -22,6 +22,7 @@ import {
   createDataFolder,
   dismissChatSetup,
   expectReadyDocuments,
+  exportFromMenu,
   importWordFromMenu,
   interceptOpenDialog,
   launchApp,
@@ -30,6 +31,7 @@ import {
   openSettings,
   pointAndClick,
   removeDataFolder,
+  savedLine,
   setLanguage,
   setWindowSize,
   tabMenu,
@@ -191,7 +193,7 @@ test("a résumé laid out with tables, shading and tab stops says, before Import
   const dialog = await importWordFromMenu(window);
   const note = dialog.getByTestId("word-import-layout");
   await expect(note).toHaveText(
-    "This file’s layout (fonts, colours, shading and aligned columns) isn’t shown in the Mind. It’s kept, and comes back when you export to Word.",
+    "Some of this file’s layout (aligned columns) isn’t shown in the Mind yet. It’s kept, and comes back when you export to Word.",
   );
   // Before Import, in one place: above the buttons.
   const noteBox = await note.boundingBox();
@@ -201,7 +203,10 @@ test("a résumé laid out with tables, shading and tab stops says, before Import
   await dialog.getByTestId("word-import-confirm").click();
   await expect(dialog).toBeHidden();
   const origin = window.getByTestId("mind-word-origin");
-  await expect(origin).toHaveAttribute("title", /This file’s layout .* isn’t shown in the Mind/);
+  await expect(origin).toHaveAttribute(
+    "title",
+    /Some of this file’s layout .* isn’t shown in the Mind/,
+  );
   await screenshot(window.getByTestId("mind-pane"), "word-import-layout-mind");
 
   await setLanguage(window, "zh-CN");
@@ -211,14 +216,14 @@ test("a résumé laid out with tables, shading and tab stops says, before Import
   await window.getByTestId("plus-menu").click();
   await window.getByTestId("plus-import-word").click();
   await expect(dialog.getByTestId("word-import-layout")).toHaveText(
-    "这份文件的版式（字体、颜色、底色和对齐）在 Mind 里不显示，会保留，导出 Word 时原样还原。",
+    "这份文件的部分版式（对齐的列）在 Mind 里暂不显示，会保留，导出 Word 时原样还原。",
   );
   await screenshot(dialog, "word-import-layout-zh");
   await dialog.getByTestId("word-import-confirm").click();
   await expect(dialog).toBeHidden();
   await expect(window.locator('[data-testid="mind-word-origin"]:visible')).toHaveAttribute(
     "title",
-    /这份文件的版式/,
+    /这份文件的部分版式/,
   );
   await app.close();
 });
@@ -331,9 +336,14 @@ test("someone else's tracked changes wait in place with who made them and when: 
   await expect(counts).toHaveText(["1 change from Priya Nair"]);
 
   // Export: what was resolved leaves no trace; what waits is in the file as it was.
-  await window.getByTestId("export-mind").click();
+  await exportFromMenu(window);
   const result = window.getByTestId("export-result");
-  await expect(result.getByTestId("export-done")).toHaveText("Saved Lease redline.docx");
+  await expect(result.getByTestId("export-done")).toContainText(
+    savedLine("Lease redline.docx", output),
+  );
+  await expect(result.getByTestId("export-tracked")).toContainText(
+    "1 change waiting, as tracked changes",
+  );
   const document =
     unzip(await readFile(join(output, "Lease redline.docx")))
       .get("word/document.xml")
@@ -513,8 +523,8 @@ test("Export writes back into the Word file: the User's edits tracked under thei
 
   // Export: the deleted paragraph stays as Priya's deletion, the comment with it; nothing to say first.
   const result = window.getByTestId("export-result");
-  await window.getByTestId("export-mind").click();
-  await expect(result.getByTestId("export-done")).toHaveText("Saved Memo.docx");
+  await exportFromMenu(window);
+  await expect(result.getByTestId("export-done")).toHaveText(savedLine("Memo.docx", output));
   const tracked =
     unzip(await readFile(join(output, "Memo.docx")))
       .get("word/document.xml")
@@ -532,7 +542,7 @@ test("Export writes back into the Word file: the User's edits tracked under thei
   await expect(track).not.toBeChecked();
   await sheet.getByTestId("export-save").click();
   await expect(sheet).toBeHidden();
-  await window.getByTestId("export-mind").click();
+  await exportFromMenu(window);
   await expect(result.getByTestId("export-review")).toHaveText(
     "1 thing in the Word file can't be kept: Marcus Hale's comment “Is spring realistic?” is on text you deleted · Export anyway",
   );
@@ -559,7 +569,7 @@ test("Export writes back into the Word file: the User's edits tracked under thei
 
   // Export anyway: saved, the paragraph kept byte for byte, the comment's marks gone with its text.
   await result.getByTestId("export-anyway").click();
-  await expect(result.getByTestId("export-done")).toHaveText("Saved Memo 2.docx");
+  await expect(result.getByTestId("export-done")).toHaveText(savedLine("Memo 2.docx", output));
   await motionSettled(window);
   await screenshot(window, "word-export-saved");
   const document =

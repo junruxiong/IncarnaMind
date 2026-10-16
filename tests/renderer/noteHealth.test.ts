@@ -8,9 +8,14 @@ import {
   type ClaimCheckAttributes,
 } from "../../src/core/api";
 import { claimSpans, type ShownClaim } from "../../src/renderer/src/editor/claimChecks";
-import { type NoteHealth, noteHealth } from "../../src/renderer/src/editor/healthCounts";
+import {
+  HEALTH_PARTS,
+  type HealthPart,
+  noteHealth,
+} from "../../src/renderer/src/editor/healthCounts";
 import { noteExtensions } from "../../src/renderer/src/editor/noteSchema";
 import { claimCheckShown } from "../../src/shared/claimChecks";
+import { sentenceKey } from "../../src/shared/mindCheck";
 
 const schema = getSchema(noteExtensions());
 
@@ -43,10 +48,14 @@ function checked(
     state,
     reason,
     detail: null,
+    providerId: null,
+    modelId: null,
     text: sentence,
     evidence: null,
     says: null,
     calculation: null,
+    citedCaseUnchecked: false,
+    citedCaseFound: false,
     scope: { folderId: null, widened: false },
     versions: [],
     excluded: [],
@@ -57,8 +66,8 @@ function checked(
 
 const docOf = (...blocks: JSONContent[]) => schema.nodeFromJSON({ type: "doc", content: blocks });
 
-/** The Mind's health as its header counts it. */
-function healthOf(doc: ProseMirrorNode): Record<keyof NoteHealth, number> {
+/** The Mind's health as its header counts it, part by part. */
+function healthOf(doc: ProseMirrorNode): Record<HealthPart, number> {
   const claims: ShownClaim[] = claimSpans(doc).map((span) => ({
     ...span,
     shown: claimCheckShown(span.check, {
@@ -68,9 +77,24 @@ function healthOf(doc: ProseMirrorNode): Record<keyof NoteHealth, number> {
     }),
   }));
   const health = noteHealth(doc, claims, (attributes) => attributes.check);
-  return Object.fromEntries(
-    Object.entries(health).map(([part, places]) => [part, places.length]),
-  ) as Record<keyof NoteHealth, number>;
+  return Object.fromEntries(HEALTH_PARTS.map((part) => [part, health[part].length])) as Record<
+    HealthPart,
+    number
+  >;
+}
+
+/** The sentences "Check all" would check: claims with no check, but those the last whole-Mind check found make none. */
+function uncheckedIn(doc: ProseMirrorNode, skipped: readonly string[] = []): number {
+  const claims: ShownClaim[] = claimSpans(doc).map((span) => ({
+    ...span,
+    shown: claimCheckShown(span.check, {
+      text: span.sentence.text,
+      versions: null,
+      folderId: null,
+    }),
+  }));
+  return noteHealth(doc, claims, (attributes) => attributes.check, new Set(skipped)).unchecked
+    .length;
 }
 
 const NOTHING = {
@@ -161,5 +185,18 @@ describe("A Mind's health", () => {
 
     expect(healthOf(before)).toEqual({ ...NOTHING, noCitation: 1 });
     expect(healthOf(after)).toEqual({ ...NOTHING, found: 1 });
+  });
+
+  test("knows which claims were never checked, for Check all: not those checked, short ones, or those the last whole-Mind check found make no claim (#737)", () => {
+    const opinion = "We think the tides are lovely in spring.";
+    const doc = docOf(
+      paragraph(checked("Spring tides come at full moon.", "supported")),
+      paragraph(text("Neap tides come at the quarter moons. "), text(opinion)),
+      paragraph(text("Thanks!")),
+      heading("A heading that claims a lot about tides"),
+    );
+
+    expect(uncheckedIn(doc)).toBe(2);
+    expect(uncheckedIn(doc, [sentenceKey(opinion)])).toBe(1);
   });
 });

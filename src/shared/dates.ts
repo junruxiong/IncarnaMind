@@ -131,6 +131,17 @@ export function formatTime(moment: Moment, language: Language, options: DateOpti
   });
 }
 
+/** "12 Oct 2026, 15:20", "2026年10月12日 15:20", whenever it was: for a record of when something was. */
+export function formatFullDateTime(
+  moment: Moment,
+  language: Language,
+  options: DateOptions = {},
+): string {
+  const date = toDate(moment);
+  if (Number.isNaN(date.getTime())) return "";
+  return `${formatDate(date, language, options)}${BETWEEN_DAY_AND_TIME[language]}${formatTime(date, language, options)}`;
+}
+
 /** "12 Oct 2026, 15:20"; "12 Oct, 15:20" this year; the time alone today. */
 export function formatDateTime(
   moment: Moment,

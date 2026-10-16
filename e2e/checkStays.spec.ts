@@ -105,10 +105,10 @@ test("an example's Documents a check relies on stay when the language changes, a
   const editor = window.getByTestId("mind-editor");
   await editor.click();
   await window.keyboard.type(
-    "Tea drinking may have begun in the region of Yunnan, where it was used for medicinal purposes.",
+    "Net debt to EBITDA was 3.1 times at the end of the quarter, up from 2.7 times at the half year.",
   );
   const line = editor.locator(":scope > p").first();
-  await slideSelect(window, line, "Tea drinking", { line, words: "purposes." });
+  await slideSelect(window, line, "Net debt", { line, words: "year." });
   await pointAndClick(
     window,
     window.getByTestId("selection-menu").getByTestId("selection-action-find-support"),
@@ -120,5 +120,45 @@ test("an example's Documents a check relies on stay when the language changes, a
   await expect(mark).toHaveAttribute("data-check", "supported");
   await setLanguage(window, "en");
   await expect(mark).toHaveAttribute("data-check", "supported");
+  await app.close();
+});
+
+test("with the examples kept and All Documents searched, a Contradicted result on the User's own Document stays after a change of language, and so does its card", async () => {
+  test.setTimeout(150_000);
+  await writeFile(join(sources, "Tides.pdf"), TIDES);
+  const { app, window } = await launchApp(dataDir, {
+    fakeChat: true,
+    examples: true,
+    home: sources,
+  });
+  await setWindowSize(app, window, 1440, 900);
+  await leaveFirstOpen(window);
+  await expect(window.getByTestId("document-list-item")).toHaveCount(2);
+  await useLocalChatModel(window);
+  await window.getByTestId("add-documents-input").setInputFiles([join(sources, "Tides.pdf")]);
+  const tides = window.getByTestId("document-list-item").filter({ hasText: "Tides" });
+  await expect(tides).toHaveAttribute("data-status", "ready");
+  await newMind(window);
+  const editor = window.getByTestId("mind-editor");
+  await editor.click();
+  await window.keyboard.type(WRONG);
+  const line = editor.locator(":scope > p").first();
+  await slideSelect(window, line, "Harbours", { line, words: "months." });
+  await pointAndClick(
+    window,
+    window.getByTestId("selection-menu").getByTestId("selection-action-find-support"),
+  );
+  const mark = window.getByTestId("claim-mark");
+  await expect(mark).toHaveAttribute("data-check", "contradicted");
+
+  await setLanguage(window, "zh-CN");
+  await expect(window.getByTestId("document-list-item").first()).toBeVisible();
+  await expect(mark).toHaveAttribute("data-check", "contradicted");
+  await pointAndClick(window, mark);
+  const card = window.getByTestId("claim-card");
+  await expect(card.getByTestId("claim-quote")).toHaveText(QUOTE);
+  await window.keyboard.press("Escape");
+  await setLanguage(window, "en");
+  await expect(mark).toHaveAttribute("data-check", "contradicted");
   await app.close();
 });

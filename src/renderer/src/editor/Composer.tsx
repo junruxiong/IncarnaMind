@@ -17,8 +17,9 @@ import { hasSearchScope, type ScopeKind, scopeIds } from "../../../shared/search
 import { useAnswers } from "../answers";
 import { shortcutLabel } from "../commands/keymap";
 import { SearchIcon, StopIcon } from "../components/icons";
-import { SparkLineIcon } from "../components/lineIcons";
+import { SearchLineIcon, SparkLineIcon } from "../components/lineIcons";
 import { ProblemLine } from "../components/ProblemLine";
+import { answerAskFrom } from "../components/TaskTray";
 import { TypingTextarea } from "../components/TypingTextarea";
 import {
   chosenScope,
@@ -40,16 +41,28 @@ import {
 import { core } from "../core";
 import { carriesDocuments, droppedDocumentIds } from "../documentDrag";
 import { editFromComposer, stopEditing, useEdits } from "../editWithAi";
+import { errorMessage } from "../errors";
 import { useT } from "../i18n";
 import { newNoteTitle } from "../newNoteRequest";
+import {
+  cancelResearch,
+  changePlan,
+  openResearch,
+  startResearch,
+  useResearch,
+  useWebReach,
+} from "../research";
 import type { ScopeChoice } from "../scope";
 import { skillDescription } from "../skills";
 import { useAppStore } from "../store";
+import { tellTask, useTasks } from "../tasks";
+import { takeBackLast, tellable } from "../taskTell";
+import { taskName } from "../taskText";
 import { AnswerAnnouncer } from "./AnswerAnnouncer";
 import { AskProblem } from "./AskProblem";
 import { EditStatus } from "./EditStatus";
 import { AskArrowIcon, CollapseIcon, ExpandIcon, RemoveIcon } from "./icons";
-import { ModelChip } from "./ModelChip";
+import { ModelChip, useMindModel } from "./ModelChip";
 import { useMindSelection } from "./mindSelection";
 import { PasteChip, usePasteLabel } from "./PasteChip";
 import { SkillChip } from "./QuestionView";
@@ -58,6 +71,7 @@ import { ScopeChips } from "./ScopeChips";
 import { type ChoiceListHandle, ScopeChoiceList } from "./ScopePicker";
 import { SkillChoiceList } from "./SkillChoiceList";
 import { SuggestionOffer } from "./SuggestionOffer";
+import { TaskTargetChip } from "./TaskTargetChip";
 
 /** In the composer, a long Search scope shows this many chips, then "+N more". */
 const CHIPS_SHOWN = 3;
@@ -135,6 +149,7 @@ export function Composer({
     setPicking(null);
     setExpanded(false);
     setViewing(null);
+    setTellProblem(null);
     if (before !== NO_MIND) return;
     const state = useComposer.getState();
     const loose = state.draft(NO_MIND);
@@ -171,6 +186,16 @@ export function Composer({
   const skill = draft.skill ? skills.find((each) => each.name === draft.skill) : undefined;
   /** The selection the composer is saying what to change in (Edit with AI…, ⌘J with a selection). */
   const editing = useEdits((state) => state.editing[key]);
+  /** The Research plan open in the tray (#130): what is typed changes it. */
+  const plan = useResearch((state) => (mindId ? state.plans[mindId] : undefined));
+  const researching = mind !== null && draft.research === true;
+  /** Tell it… (#130): the running Task what is typed goes to. */
+  const told = useTasks((state) => (draft.tell ? state.tasks[draft.tell] : undefined));
+  const target = mind && tellable(told) ? told : undefined;
+  /** Why the last message couldn't reach its Task. */
+  const [tellProblem, setTellProblem] = useState<string | null>(null);
+  const chosenModel = useMindModel(mind?.doc ?? null);
+  const webReach = useWebReach(chosenModel);
   const selection = useMindSelection(mind, editing !== undefined);
   const mindTitle = useAppStore((state) => {
     const own = state.minds.find((each) => each.id === mindId);
@@ -242,8 +267,8 @@ export function Composer({
     const from = at - query.length - 1;
     if (dismissed.current === from) return null;
     const kind = match[1] === "@" ? "scope" : "skill";
-    // A slash is just a slash while there is no Skill to choose.
-    if (kind === "skill" && enabledSkills.length === 0) return null;
+    // A slash is just a slash while there is nothing to choose: no Skill, and no Mind to research for.
+    if (kind === "skill" && enabledSkills.length === 0 && !mind) return null;
     return { kind, query, from, to: at };
   };
 
@@ -318,8 +343,16 @@ export function Composer({
     field.current?.focus();
   };
 
+  /** Research…: what is typed next is a topic (#130). */
+  const chooseResearch = () => {
+    update({ research: true, skill: null, ...(picking && { text: withoutTyped(picking) }) });
+    useAnswers.getState().dismiss(composerKey(mindId));
+    setPicking(null);
+    field.current?.focus();
+  };
+
   const chooseSkill = (name: string) => {
-    update({ skill: name, ...(picking && { text: withoutTyped(picking) }) });
+    update({ skill: name, research: false, ...(picking && { text: withoutTyped(picking) }) });
     useAnswers.getState().dismiss(composerKey(mindId));
     setPicking(null);
     field.current?.focus();
@@ -402,6 +435,29 @@ export function Composer({
       ) {
         update({ text: "" });
       }
+      return;
+    }
+    const aimed = current.tell ? useTasks.getState().tasks[current.tell] : undefined;
+    if (mind && tellable(aimed)) {
+      const said = current.text.trim();
+      if (!said) return;
+      setTellProblem(null);
+      update({ text: "", tell: undefined });
+      try {
+        await tellTask(aimed.id, said);
+      } catch (error) {
+        setTellProblem(errorMessage(error, t));
+        // Its words come back, unless the User has typed anew meanwhile.
+        if (useComposer.getState().draft(key).text === "") update({ text: said, tell: aimed.id });
+      }
+      return;
+    }
+    if (mind && (plan || current.research)) {
+      const topic = current.text.trim();
+      if (!topic) return;
+      update({ text: "", research: false });
+      if (plan) void changePlan(mind.mindId, topic, mindModelOf(mind.doc));
+      else openResearch(mind.mindId, topic, mindModelOf(mind.doc), webReach === "ready");
       return;
     }
     // An Answer is being written, or its Question is on its way: Enter waits for it, as in
@@ -496,6 +552,60 @@ export function Composer({
       void ask();
       return;
     }
+    if (event.key === "Enter" && isCommand(event) && plan && mind) {
+      event.preventDefault();
+      void startResearch(mind.mindId, mindModelOf(mind.doc));
+      return;
+    }
+    // The waiting ask in the tray, nearest the keyboard: ⌘↵ allows, ⌘⌫ (with nothing typed) denies.
+    if (
+      mind &&
+      isCommand(event) &&
+      !event.shiftKey &&
+      !event.altKey &&
+      (event.key === "Enter" || (event.key === "Backspace" && draft.text === "")) &&
+      answerAskFrom(mind.mindId, event.key === "Enter")
+    ) {
+      event.preventDefault();
+      return;
+    }
+    if (
+      event.key === "ArrowUp" &&
+      mind &&
+      !event.shiftKey &&
+      !event.altKey &&
+      !event.metaKey &&
+      !event.ctrlKey &&
+      draft.text === "" &&
+      draft.pastes.length === 0
+    ) {
+      // ↑ takes back the last message the Task hasn't read yet, or aims at it.
+      const taking = takeBackLast(mind.mindId);
+      if (taking) {
+        event.preventDefault();
+        setTellProblem(null);
+        taking.catch((error: unknown) => setTellProblem(errorMessage(error, t)));
+        return;
+      }
+    }
+    if (event.key === "Escape" && target) {
+      // Back to asking; the next Esc is the plan card's or the assistant's.
+      event.preventDefault();
+      update({ tell: undefined });
+      setTellProblem(null);
+      return;
+    }
+    if (event.key === "Escape" && plan && mind) {
+      event.preventDefault();
+      cancelResearch(mind.mindId);
+      return;
+    }
+    if (event.key === "Escape" && researching) {
+      // Back to asking; the next Esc is the assistant's.
+      event.preventDefault();
+      update({ research: false });
+      return;
+    }
     if (event.key === "Escape" && expanded) {
       // The tall editor goes back to its size; the next Esc is the assistant's.
       event.preventDefault();
@@ -514,6 +624,11 @@ export function Composer({
   /** An Answer is being written in the assistant, or on its way: the button is Stop meanwhile. */
   const answering = writing !== null;
   const activeOption = picking && option >= 0 ? `${listId}-${option}` : undefined;
+  const askLabel = editing
+    ? t("composer.edit.send")
+    : target
+      ? t("task.tell.send", { task: taskName(target, t) })
+      : t("composer.ask");
 
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: a drop target; "@" adds a Document without dragging.
@@ -559,6 +674,15 @@ export function Composer({
             void ask();
           }}
         />
+      )}
+      {tellProblem && (
+        <ProblemLine
+          testId="composer-tell-problem"
+          className="composer-problem"
+          action={{ label: t("composer.paste.close"), onClick: () => setTellProblem(null) }}
+        >
+          {tellProblem}
+        </ProblemLine>
       )}
       {saveFailed && (
         <ProblemLine
@@ -654,6 +778,37 @@ export function Composer({
             </button>
           </span>
         )}
+        {target && (
+          <TaskTargetChip
+            task={target}
+            onRemove={() => {
+              update({ tell: undefined });
+              field.current?.focus();
+            }}
+          />
+        )}
+        {researching && !target && (
+          <span
+            data-testid="composer-research"
+            title={t("research.command.hint")}
+            className="question-skill"
+          >
+            <SearchLineIcon className="question-skill-icon" />
+            <span className="truncate">{t("research.chip")}</span>
+            <button
+              type="button"
+              data-testid="composer-research-remove"
+              aria-label={t("research.chip.remove")}
+              title={t("research.chip.remove")}
+              // The text keeps the focus.
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => update({ research: false })}
+              className="scope-chip-remove"
+            >
+              <RemoveIcon className="size-2.5" />
+            </button>
+          </span>
+        )}
         {draft.skill && (
           <SkillChip
             name={draft.skill}
@@ -674,7 +829,17 @@ export function Composer({
               ? t("composer.edit.label")
               : t("composer.label", { shortcut: shortcutLabel("composer.focus") })
           }
-          placeholder={editing ? t("composer.edit.placeholder") : t("composer.placeholder")}
+          placeholder={
+            editing
+              ? t("composer.edit.placeholder")
+              : target
+                ? t("task.tell.placeholder")
+                : plan
+                  ? t("research.placeholder.change")
+                  : researching
+                    ? t("research.placeholder")
+                    : t("composer.placeholder")
+          }
           aria-autocomplete="list"
           aria-controls={picking ? listId : undefined}
           aria-activedescendant={activeOption}
@@ -714,7 +879,7 @@ export function Composer({
               className="composer-chip composer-scope-all"
             >
               <SearchIcon className="composer-chip-icon" />
-              {t("composer.scope.all")}
+              <span className="truncate">{t("composer.scope.all")}</span>
             </button>
           )}
           {answering && !editing ? (
@@ -737,8 +902,8 @@ export function Composer({
             <button
               type="button"
               data-testid="composer-ask"
-              aria-label={editing ? t("composer.edit.send") : t("composer.ask")}
-              title={editing ? t("composer.edit.send") : t("composer.ask")}
+              aria-label={askLabel}
+              title={askLabel}
               disabled={!canAsk}
               // The text keeps the focus.
               onMouseDown={(event) => event.preventDefault()}
@@ -783,6 +948,7 @@ export function Composer({
             <SkillChoiceList
               ref={list}
               id={listId}
+              onResearch={mind ? chooseResearch : undefined}
               skills={enabledSkills}
               describe={(each) => skillDescription(each, t)}
               query={picking.query}

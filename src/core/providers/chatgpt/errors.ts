@@ -24,10 +24,16 @@ export class ChatGptPlanError extends Error {
     readonly kind: "plan-limit" | "blocked",
     message: string,
     readonly status: number,
+    /** When a plan limit resets (epoch milliseconds), when OpenAI says. */
+    readonly resetsAt: number | null = null,
   ) {
     super(message);
   }
 }
+
+/** The plan's or this app's usage limit is reached: a request refused, or tagging waiting for it to reset. */
+export const isPlanLimit = (error: unknown): error is ChatGptPlanError =>
+  error instanceof ChatGptPlanError && error.kind === "plan-limit";
 
 /** The User signed in but didn't allow IncarnaMind to use their ChatGPT plan. */
 export class ChatGptPlanNotAllowedError extends Error {

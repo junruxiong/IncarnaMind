@@ -1,8 +1,9 @@
 import { type ReactNode, useId } from "react";
 import type { ChatProvider, ChatProviderKind } from "../../../../core/api";
-import { keyProviderGroups } from "../../../../core/providers/catalog/providers";
+import type { Language } from "../../../../core/language";
+import { keyProviderGroups, kindOfCatalogId } from "../../../../core/providers/catalog/providers";
 import { CHATGPT_SERVICE } from "../../../../core/providers/chatgpt/service";
-import { useT } from "../../i18n";
+import { useLanguage, useT } from "../../i18n";
 import type { KeyRefusal } from "../../keyRefusals";
 import { OnThisComputer } from "../OnThisComputer";
 import {
@@ -21,8 +22,10 @@ import {
   useContinueWithChatGpt,
 } from "./ChatGptSignIn";
 import { KeepLocalChoice } from "./KeepLocalChoice";
+import { LocalServersAlso, localChoice, useLocalServers } from "./LocalServerChoices";
 import { type Ollama, OllamaProgress, ollamaDescription } from "./OllamaCard";
 import { ProviderForm, ProviderSendsLine } from "./ProviderForm";
+import { keyProviderName } from "./shared";
 
 const SHORT_NAMES: Partial<
   Record<ChatProviderKind, "providers.kind.short.qwen" | "providers.kind.short.deepseek">
@@ -32,7 +35,7 @@ const SHORT_NAMES: Partial<
 };
 
 /** Where Answers come from: local models, an API key, or the User's ChatGPT plan. */
-export type ChatProviderChoice = "ollama" | "api-key" | "chatgpt";
+export type ChatProviderChoice = "ollama" | "api-key" | "chatgpt" | ReturnType<typeof localChoice>;
 
 interface ChatProviderChoicesProps {
   /** Nothing is chosen at first: no provider is preselected. */
@@ -63,12 +66,14 @@ export function ChatProviderChoices(props: ChatProviderChoicesProps) {
   const { ollamaActionInRow = false, includeChatGpt = false, withMoreProviders = false } = props;
   const { refused = null } = props;
   const t = useT();
+  const language = useLanguage();
   const name = useId();
+  const local = useLocalServers(withMoreProviders);
 
   const apiKeyBody = withMoreProviders
     ? t("providers.choice.apiKey.body")
     : t("providers.choice.apiKey.firstRun.body", {
-        providers: providerList(keyProviderGroups().main, t),
+        providers: providerList(keyProviderGroups().main, t, language),
       });
 
   const radio = (value: ChatProviderChoice) => (
@@ -117,8 +122,41 @@ export function ChatProviderChoices(props: ChatProviderChoicesProps) {
           <span data-testid="ollama-status" className={choiceTextClass}>
             {ollamaDescription(ollama, t)}
           </span>
+          <LocalServersAlso
+            closed={local.closed}
+            onOpen={(catalogId) => {
+              local.open(catalogId);
+              onChoose(localChoice(catalogId));
+            }}
+          />
         </span>
       </Choice>
+
+      {local.shown.map((catalogId) => (
+        <Choice
+          key={catalogId}
+          inputId={`${name}-${localChoice(catalogId)}`}
+          chosen={choice === localChoice(catalogId)}
+          details={
+            <ProviderForm
+              only={catalogId}
+              providers={providers}
+              onSaved={onSaved}
+              withMoreProviders
+            />
+          }
+        >
+          {radio(localChoice(catalogId))}
+          <span className="flex min-w-0 flex-col gap-1">
+            <span className={choiceTitleClass}>{keyProviderName(catalogId, t, language)}</span>
+            <span data-testid={`${localChoice(catalogId)}-status`} className={choiceTextClass}>
+              {local.found[catalogId]?.running
+                ? t("providers.local.rowRunning")
+                : t("providers.local.rowNotRunning")}
+            </span>
+          </span>
+        </Choice>
+      ))}
 
       <Choice
         inputId={`${name}-api-key`}
@@ -244,10 +282,14 @@ export function OllamaAction({ ollama, large = false }: { ollama: Ollama; large?
 }
 
 /** The providers by their short names, in the language's list: "Anthropic, OpenAI or Google". */
-function providerList(kinds: readonly ChatProviderKind[], t: ReturnType<typeof useT>): string {
-  const names = kinds.map((kind) => {
-    const short = SHORT_NAMES[kind];
-    return t(short ?? `providers.kind.${kind}`);
+function providerList(
+  ids: readonly string[],
+  t: ReturnType<typeof useT>,
+  language: Language,
+): string {
+  const names = ids.map((id) => {
+    const short = SHORT_NAMES[kindOfCatalogId(id)];
+    return short ? t(short) : keyProviderName(id, t, language);
   });
   const last = names.pop();
   if (last === undefined) return "";

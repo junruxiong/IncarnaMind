@@ -1,6 +1,13 @@
 import { useRef, useState } from "react";
 import type { ChatProvider, ChatReadiness, ProviderErrorKind } from "../../../../core/api";
-import { catalogProviderOfKind } from "../../../../core/providers/catalog/providers";
+import type { Language } from "../../../../core/language";
+import {
+  catalogProvider,
+  catalogProviderOf,
+  fieldValueOf,
+  isPreset,
+  kindOfCatalogId,
+} from "../../../../core/providers/catalog/providers";
 import { OLLAMA_CLOUD } from "../../../../core/providers/ollamaCloud";
 import type { MessageKey, MessageParams } from "../../../../shared/i18n";
 
@@ -27,13 +34,25 @@ export function readinessKey(
     : `providers.readiness.${reason}`;
 }
 
+export function keyProviderName(id: string, t: Translate, language: Language): string {
+  const preset = catalogProvider(id);
+  if (isPreset(preset)) return preset.name[language === "zh-CN" ? "zh" : "en"];
+  return t(`providers.kind.${kindOfCatalogId(id)}`);
+}
+
 /** "OpenAI","OpenAI-compatible server · api.deepseek.com", "Ollama · on this computer". */
-export function providerLabel(provider: ChatProvider, t: Translate): string {
+export function providerLabel(provider: ChatProvider, t: Translate, language: Language): string {
   if (provider.kind === "chatgpt") return t("chatgpt.title");
-  const kind = t(`providers.kind.${provider.kind}`);
-  const catalog = catalogProviderOfKind(provider.kind);
+  const catalog = catalogProviderOf(provider.kind, provider.catalogId);
+  const kind = isPreset(catalog)
+    ? keyProviderName(catalog.id, t, language)
+    : t(`providers.kind.${provider.kind}`);
   if (catalog && catalog.endpoints.length > 0) {
-    // A hosted provider: its name, and its region when it has more than one.
+    // A hosted provider: its name, and its region when it has more than one, or the value its
+    // address was built from (an AWS region, a Cloudflare account).
+    const [first] = catalog.endpoints;
+    const value = first && fieldValueOf(first, provider.baseUrl);
+    if (value) return `${kind} · ${value}`;
     if (catalog.endpoints.length === 1) return kind;
     return provider.endpoint === "cn" || provider.endpoint === "intl"
       ? `${kind} · ${t(`providers.region.${provider.endpoint}`)}`
@@ -47,8 +66,8 @@ export function providerLabel(provider: ChatProvider, t: Translate): string {
 }
 
 /** Who receives the data, for messages like "You chose not to send data to {service}". */
-export const serviceName = (provider: ChatProvider, t: Translate) =>
-  provider.service?.name ?? providerLabel(provider, t);
+export const serviceName = (provider: ChatProvider, t: Translate, language: Language) =>
+  provider.service?.name ?? providerLabel(provider, t, language);
 
 /** The host of a server address, or null while it isn't one yet. */
 function hostOf(baseUrl: string): string | null {

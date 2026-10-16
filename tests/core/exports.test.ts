@@ -850,6 +850,37 @@ describe("exporting a Mind", () => {
     );
   });
 
+  test("a PDF page's footnote names the page it prints, in Word and in Markdown, in both languages", async () => {
+    const { core, mind, client, tides } = await setUp();
+    const at = (location: object): JSONContent => {
+      const node = citation(tides, [69, 69], "found");
+      return { ...node, attrs: { ...node.attrs, location } };
+    };
+    writeMind(client, [
+      paragraph(
+        text("Turnover"),
+        at({ kind: "page", from: 69, to: 69, printed: { from: "68", to: "68" } }),
+        text(", the preface"),
+        at({ kind: "page", from: 3, to: 4, printed: { from: "iii", to: "iv" } }),
+        text(", and a page that prints no number"),
+        at({ kind: "page", from: 70, to: 70 }),
+        text("."),
+      ),
+    ]);
+    await client.settled();
+
+    const docx = unzip((await core.exportMind(mind.id, { format: "docx" })).data);
+    expect(footnotesOf(part(docx, "word/footnotes.xml"))).toEqual({
+      "1": "Tides, p. 68",
+      "2": "Tides, p. iii–iv",
+      "3": "Tides, p. 70",
+    });
+    await core.updateSettings({ user: { language: "zh-CN" } });
+    expect(decode(await core.exportMind(mind.id, { format: "markdown" }))).toContain(
+      ["[^1]: Tides，第 68 页", "[^2]: Tides，第 iii–iv 页", "[^3]: Tides，第 70 页"].join("\n"),
+    );
+  });
+
   test("maths Word's equations can't hold stays LaTeX text in a .docx that still opens; Markdown keeps $…$", async () => {
     const { core, mind, client } = await setUp();
     writeMind(client, [

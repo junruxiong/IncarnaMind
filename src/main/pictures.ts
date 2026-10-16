@@ -3,8 +3,9 @@
  * window whose session refuses every request but the picture itself, so
  * nothing reaches the network.
  */
-import { BrowserWindow, type Session, session } from "electron";
+import { type Session, session } from "electron";
 import type { Logger, Pictures } from "../core";
+import { onHiddenPage } from "./hiddenPage";
 
 const PICTURES_PARTITION = "pictures";
 
@@ -43,53 +44,33 @@ export function createElectronPictures(log: Logger): Pictures {
   return {
     async png(svg) {
       picturesSession ??= prepareSession();
-      const window = new BrowserWindow({
-        show: false,
-        width: 320,
-        height: 240,
-        title: "IncarnaMind picture",
-        webPreferences: {
-          contextIsolation: true,
-          nodeIntegration: false,
-          sandbox: true,
-          session: picturesSession,
-          backgroundThrottling: false,
-          spellcheck: false,
-        },
-      });
-      const contents = window.webContents;
-      contents.setWindowOpenHandler(() => ({ action: "deny" }));
-      contents.on("will-navigate", (event) => event.preventDefault());
-      let timer: ReturnType<typeof setTimeout> | undefined;
       try {
-        const drawn = (async () => {
-          await window.loadURL(
-            "data:text/html;charset=utf-8,<!doctype html><title>picture</title>",
-          );
-          const url: unknown = await contents.executeJavaScript(
-            `(${DRAW})(${JSON.stringify(svg)})`,
-          );
-          if (typeof url !== "string" || !url.startsWith("data:image/png;base64,")) {
-            throw new Error("The page gave back no PNG.");
-          }
-          return new Uint8Array(Buffer.from(url.slice(url.indexOf(",") + 1), "base64"));
-        })();
-        drawn.catch(() => undefined);
-        const timedOut = new Promise<never>((_resolve, reject) => {
-          timer = setTimeout(
-            () => reject(new Error("The picture took too long to draw.")),
-            PICTURE_TIMEOUT_MS,
-          );
-        });
-        return await Promise.race([drawn, timedOut]);
+        return await onHiddenPage(
+          {
+            session: picturesSession,
+            width: 320,
+            height: 240,
+            limitMs: PICTURE_TIMEOUT_MS,
+            onLimit: () => new Error("The picture took too long to draw."),
+          },
+          async (contents) => {
+            await contents.loadURL(
+              "data:text/html;charset=utf-8,<!doctype html><title>picture</title>",
+            );
+            const url: unknown = await contents.executeJavaScript(
+              `(${DRAW})(${JSON.stringify(svg)})`,
+            );
+            if (typeof url !== "string" || !url.startsWith("data:image/png;base64,")) {
+              throw new Error("The page gave back no PNG.");
+            }
+            return new Uint8Array(Buffer.from(url.slice(url.indexOf(",") + 1), "base64"));
+          },
+        );
       } catch (error) {
         log.error("export.pictureFailed", {
           message: error instanceof Error ? error.message : String(error),
         });
         throw error;
-      } finally {
-        clearTimeout(timer);
-        if (!window.isDestroyed()) window.destroy();
       }
     },
   };

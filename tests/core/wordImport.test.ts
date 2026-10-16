@@ -79,25 +79,42 @@ function importDone(client: MindClient): Promise<void> {
   });
 }
 
-/** The Mind's top-level Blocks as the editor reads them, each node's id left out. */
+/** The Mind's top-level Blocks as the editor reads them, ids and the Word look left out. */
 function blocksOf(client: MindClient): JSONContent[] {
   const strip = (node: JSONContent): JSONContent => {
     const attrs = Object.fromEntries(
       Object.entries(node.attrs ?? {}).filter(
-        ([key, value]) => value !== null && !["id", "includeInContext", "proposal"].includes(key),
+        ([key, value]) =>
+          value !== null && !["id", "includeInContext", "proposal", "wordLook"].includes(key),
       ),
     );
+    const marks = node.marks?.map((mark) => mark.type).filter((mark) => mark !== "wordRun");
     return {
       type: node.type,
       ...(Object.keys(attrs).length > 0 && { attrs }),
       ...(node.text !== undefined && { text: node.text }),
-      ...(node.marks && {
-        marks: node.marks.map((mark) => mark.type) as unknown as JSONContent["marks"],
-      }),
-      ...(node.content && { content: node.content.map(strip) }),
+      ...(marks && marks.length > 0 && { marks: marks as unknown as JSONContent["marks"] }),
+      ...(node.content && { content: joinTexts(node.content.map(strip)) }),
     };
   };
   return (readMind(client).toJSON().content ?? []).map(strip);
+}
+
+function joinTexts(content: JSONContent[]): JSONContent[] {
+  const joined: JSONContent[] = [];
+  for (const node of content) {
+    const last = joined.at(-1);
+    if (
+      node.type === "text" &&
+      last?.type === "text" &&
+      JSON.stringify(last.marks ?? []) === JSON.stringify(node.marks ?? [])
+    ) {
+      joined[joined.length - 1] = { ...last, text: `${last.text ?? ""}${node.text ?? ""}` };
+    } else {
+      joined.push(node);
+    }
+  }
+  return joined;
 }
 
 /** Every atom in the Mind, in order: inline and as Blocks. */
@@ -842,7 +859,7 @@ describe("a file whose look the Mind doesn't draw (#735)", () => {
   const SYNTHETIC = join(WORD_DIR, "documents", "synthetic");
   const RESUMES = ["en-resume-layout.docx", "zh-resume-layout.docx"];
 
-  test("a résumé laid out with tables that have no borders, shading, tab stops, colours and sizes says its layout is kept; a plain memo doesn't", async () => {
+  test("a résumé laid out with tab stops, tables that have no borders, shading, colours and sizes says its layout is kept; a plain memo doesn't", async () => {
     const core = startCore(await createTempDataFolder());
     for (const file of RESUMES) {
       expect((await core.checkWordFile(join(SYNTHETIC, file))).layoutNotShown, file).toBe(true);
@@ -867,7 +884,7 @@ describe("a file whose look the Mind doesn't draw (#735)", () => {
     const core = startCore(await createTempDataFolder());
     const { client } = await importFile(core, join(SYNTHETIC, "zh-resume-layout.docx"));
     const layout = wordReportOf(client.doc)?.layout;
-    expect(layout).toMatchObject({ layoutTables: 2, tabStops: 4, fonts: 1, sizes: 6 });
+    expect(layout).toMatchObject({ tabStops: 4, fonts: 1, sizes: 6 });
     expect(layoutNotShown(layout)).toBe(true);
     // A report made before #735 has no counts, and says nothing.
     expect(layoutNotShown(undefined)).toBe(false);

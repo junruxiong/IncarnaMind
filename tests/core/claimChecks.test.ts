@@ -78,10 +78,14 @@ const LEFT_CHECKING: ClaimCheckAttributes = {
   state: "checking",
   reason: null,
   detail: null,
+  providerId: null,
+  modelId: null,
   text: SUPPORTED,
   evidence: null,
   says: null,
   calculation: null,
+  citedCaseUnchecked: false,
+  citedCaseFound: false,
   scope: { folderId: null, widened: false },
   versions: [],
   excluded: [],
@@ -216,6 +220,50 @@ describe("Find support", () => {
     const { core, client, check } = await mindWith([UNSUPPORTED], checkingModel(plans));
     await check();
     expect((await shownChecks(core, client))[0]?.shown).toEqual({ state: "unsupported" });
+  });
+
+  test("a sentence holding a change still waiting is left out and counted; with only such sentences, nothing is sent", async () => {
+    const calls: ModelCall[] = [];
+    const { core, client, mind } = await setUpWithDocuments(checkingModel(PLANS, calls), [TIDES]);
+    const change = { id: "change-1", request: "request-1", target: "x" };
+    const block = paragraph(text(`${SUPPORTED} Penguins nest `), {
+      type: "text",
+      text: "on the cliffs above the harbour.",
+      marks: [{ type: "proposalInsert", attrs: change }],
+    });
+    writeMind(client, [block]);
+    await client.settled();
+    const length = SUPPORTED.length + 1 + UNSUPPORTED.length;
+    const check = (from: number) =>
+      core.checkSentences({
+        requestId: crypto.randomUUID(),
+        mindId: mind.id,
+        action: "find-support",
+        from: { blockId: block.attrs.id, offset: from },
+        to: { blockId: block.attrs.id, offset: length },
+      });
+
+    const leftOut = {
+      sentences: [
+        {
+          from: { blockId: block.attrs.id, offset: SUPPORTED.length + 1 },
+          to: { blockId: block.attrs.id, offset: length },
+        },
+      ],
+      changeIds: ["change-1"],
+    };
+    expect(await check(0)).toEqual({
+      kind: "checked",
+      sentences: 1,
+      checked: 1,
+      smallModel: false,
+      waiting: leftOut,
+    });
+    expect((await shownChecks(core, client)).map((each) => each.sentence)).toEqual([SUPPORTED]);
+
+    calls.length = 0;
+    expect(await check(SUPPORTED.length + 1)).toEqual({ kind: "waiting", waiting: leftOut });
+    expect(calls).toEqual([]);
   });
 
   test("with nothing to check against, nothing is sent", async () => {
@@ -859,6 +907,32 @@ describe("Needs re-check", () => {
         "SELECT content_hash FROM retained_versions WHERE kind = 'check-result' AND deleted_at IS NULL",
       ),
     ).toEqual([{ content_hash: tides.contentHash }]);
+  });
+
+  // protects=a result stays when a Document it only read goes, as an example's do when the interface language changes (#962), and needs a re-check when the one it rests on goes; fails_when=any Document read, deleted, makes a result need a re-check, or the evidence's own deletion doesn't; no_claim=new versions, tested above.
+  test("a Document the check only read, deleted, leaves its result as it was; its evidence Document, deleted, makes it need a re-check", async () => {
+    const moons = {
+      name: "Moons.md",
+      contents: "# Moons\n\nSpring tides and neap tides follow the moon around the harbour.",
+    };
+    const { core, client, check, tides, documents } = await mindWith([SUPPORTED], checkingModel(), [
+      moons,
+    ]);
+    const read = documents[1] as Document;
+    await check();
+    const [checked] = await shownChecks(core, client);
+    expect(checked?.shown).toEqual({ state: "supported" });
+    expect(checked?.check.evidence?.documentId).toBe(tides.id);
+    expect(checked?.check.versions.map((each) => each.documentId)).toContain(read.id);
+
+    await core.deleteDocument(read.id);
+    expect((await shownChecks(core, client))[0]?.shown).toEqual({ state: "supported" });
+
+    await core.deleteDocument(tides.id);
+    expect((await shownChecks(core, client))[0]?.shown).toEqual({
+      state: "needs-recheck",
+      why: "document-removed",
+    });
   });
 
   test("a Mind deleted permanently lets go of its checks' evidence", async () => {

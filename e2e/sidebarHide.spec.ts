@@ -369,9 +369,13 @@ test("hiding and showing slide the sidebar and the card's edge together, 8px apa
     await setMotionSpeed(window, 0.5);
     for (const hidden of [true, false]) {
       await (hidden ? hide : show)(window);
-      await expect.poll(() => isHidden(window)).toBe(hidden);
+      await expect
+        .poll(async () => midway(await edges(window)), {
+          message: `${language} at ${width}: seen part way`,
+        })
+        .toBe(true);
       const { frames, settled } = await slide(window);
-      expect(frames.some(midway), `${language} at ${width}: seen part way`).toBe(true);
+      expect(await isHidden(window)).toBe(hidden);
       expectTogether(frames, settled);
       if (hidden) expectHiddenAtRest(settled);
       else expectShownAtRest(settled);

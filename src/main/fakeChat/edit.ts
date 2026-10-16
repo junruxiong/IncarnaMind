@@ -1,0 +1,111 @@
+/**
+ * Edit with AI (`fakeEdit`): Shorten drops filler words ("very", "really",
+ * 非常, 真的…), Improve writing capitalises each sentence and writes "a lot
+ * of" as "many", Translate… puts the text in capitals, Explain says what the
+ * passage starts with, and an instruction to "replace X with Y" (把 X 换成 Y)
+ * does so, or "drop the citations" (去掉引用) leaves their markers out.
+ * "Restructure" (重新组织) cuts a plain last paragraph and puts the last
+ * section, from its heading (a "#" paragraph) on, first, keeping each
+ * paragraph's mark, as a model restructuring a whole Mind does (#703). The
+ * new text streams in word by word, slowly when the instruction says
+ * "slowly", then a line saying why (#202).
+ */
+
+import { appliedEditReply } from "./appliedEdits";
+import { type Prompt, SHORTEN, SLOWLY, type StreamPart, USAGE } from "./prompt";
+
+const FILLER = /(?:\b(?:very|really|truly|quite|actually|basically)\s+|非常|真的|其实|十分)/giu;
+
+/** A passage restructured (see the top of this file): its last section first, a plain last paragraph cut. */
+function restructured(passage: string): string {
+  const paragraphs = passage.split(/\n\n+/);
+  if (paragraphs.length > 1 && !/^(?:#|- |\d+\. |> )/.test(paragraphs.at(-1) ?? "")) {
+    paragraphs.pop();
+  }
+  const last = paragraphs.findLastIndex((paragraph) => paragraph.startsWith("#"));
+  if (last <= 0) return paragraphs.join("\n\n");
+  return [...paragraphs.slice(last), ...paragraphs.slice(0, last)].join("\n\n");
+}
+
+/** Why the scripted Edit with AI changed a passage, by its action, in English and in Chinese. */
+const EDIT_REASONS: Readonly<Record<string, readonly [string, string]>> = {
+  shorten: ["Shorter: the filler words are gone.", "更简洁：去掉了多余的词。"],
+  improve: ["Each sentence starts with a capital.", "每句话的开头都大写了。"],
+  translate: ["Translated.", "已翻译。"],
+  instruction: ["Changed as you asked.", "已按你的要求修改。"],
+};
+
+/**
+ * The scripted Edit with AI (see the top of this file): the passage's new
+ * text and why, or an explanation; `slow` when the instruction says "slowly".
+ */
+export function fakeEdit(prompt: Prompt): { text: string; slow: boolean } | null {
+  const request = prompt
+    .filter((message) => message.role === "user")
+    .map((message) =>
+      typeof message.content === "string"
+        ? message.content
+        : message.content.map((part) => (part.type === "text" ? part.text : "")).join(""),
+    )
+    .join("\n");
+  const task = /<task action="([^"]+)">([\s\S]*?)<\/task>/.exec(request);
+  if (!task) return null;
+  const passage = /<passage>\n([\s\S]*?)\n<\/passage>/.exec(request)?.[1] ?? "";
+  const asked = (task[2] ?? "").replace(/^Do what the User asks: /, "");
+  const action = task[1] ?? "";
+  const text = editedText(action, passage, asked.replace(/\s+slowly\.?$/i, ""));
+  // In the passage's language, as the instructions ask.
+  const why = EDIT_REASONS[action]?.[/\p{Script=Han}/u.test(passage) ? 1 : 0];
+  return { text: why ? `${text}\n\n<why>${why}</why>` : text, slow: SLOWLY.test(asked) };
+}
+
+/** The scripted Edit with AI's new text for `passage`, or its explanation. */
+function editedText(action: string, passage: string, asked: string): string {
+  switch (action) {
+    case "shorten":
+      return passage.replace(FILLER, "");
+    case "improve":
+      return passage
+        .replace(/\ba lot of\b/g, "many")
+        .replace(
+          /(^|[.!?]\s+)([a-z])/g,
+          (_match, before: string, letter: string) => `${before}${letter.toUpperCase()}`,
+        );
+    case "translate":
+      return passage.toUpperCase();
+    case "explain": {
+      const words = passage
+        .replace(/\s*\[\d+\]/g, "")
+        .split(/\s+/)
+        .slice(0, 6)
+        .join(" ");
+      return `This passage says: ${words}…`;
+    }
+    default: {
+      const applied = appliedEditReply(passage, asked);
+      if (applied !== null) return applied;
+      const replace =
+        /replace\s+[“"]?(.+?)[”"]?\s+with\s+[“"]?(.+?)[”"]?\.?$/i.exec(asked) ??
+        /把\s*[“"]?(.+?)[”"]?\s*换成\s*[“"]?(.+?)[”"]?。?$/u.exec(asked);
+      if (replace?.[1] && replace[2] !== undefined)
+        return passage.split(replace[1]).join(replace[2]);
+      if (/drop the citations|去掉引用/i.test(asked)) return passage.replace(/\s*\[\d+\]/g, "");
+      if (/restructure|重新组织/i.test(asked)) return restructured(passage);
+      if (SHORTEN.test(asked)) return passage.replace(FILLER, "");
+      return `${passage} (edited)`;
+    }
+  }
+}
+
+/** Edit with AI's new text, streamed in word by word. */
+export function editParts(text: string): StreamPart[] {
+  return [
+    { type: "stream-start", warnings: [] },
+    { type: "text-start", id: "edit" },
+    ...text
+      .split(/(?<=\s)/)
+      .map((word): StreamPart => ({ type: "text-delta", id: "edit", delta: word })),
+    { type: "text-end", id: "edit" },
+    { type: "finish", finishReason: { unified: "stop", raw: undefined }, usage: USAGE },
+  ];
+}

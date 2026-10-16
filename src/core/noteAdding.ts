@@ -20,7 +20,7 @@ import {
   textLength,
   withoutIds,
 } from "../shared/noteBlocks";
-import { proposalRequestOf, recordProposalRequest } from "../shared/proposals";
+import { pendingProposals, proposalRequestOf, recordProposalRequest } from "../shared/proposals";
 import { createElement, type NodeJSON, textAttribute, topLevelBlocks } from "./answers/blocks";
 import {
   type AddedToNote,
@@ -29,6 +29,7 @@ import {
   type CitationRecheck,
   PROPOSAL_ATTRIBUTE,
   type ProposalAttribute,
+  type ProposalRequest,
   type RecheckCitationInput,
   type RecordAiUseInput,
 } from "./api";
@@ -100,6 +101,14 @@ function parseBlockIds(value: unknown): string[] {
   return value;
 }
 
+/** A request's changes still waiting in a note: null when it hasn't proposed there. */
+function proposalsOf(note: Y.XmlFragment, request: string) {
+  const doc = note.doc;
+  if (!doc || proposalRequestOf(doc, request) === null) return null;
+  const mine = pendingProposals(note).filter((each) => each.request === request);
+  return { proposalId: mine[0]?.id ?? "", changes: mine.length };
+}
+
 export function createNoteAdding(options: NoteAddingOptions) {
   const { content } = options;
 
@@ -151,6 +160,35 @@ export function createNoteAdding(options: NoteAddingOptions) {
         ]);
       }
       return { mindId, blockIds };
+    },
+
+    /**
+     * Puts a Task's cited Blocks at the Mind's end as changes to accept, one
+     * a Block, under `request`, their Citations checked again. Once only: a
+     * Task that goes on after a quit finds them there and adds nothing.
+     * Returns the first change's id and how many there are.
+     */
+    async propose(
+      mindId: string,
+      given: readonly NodeJSON[],
+      request: string,
+      made: ProposalRequest,
+    ): Promise<{ proposalId: string; changes: number }> {
+      const blocks = asGenerated(
+        await recheckCitations(citedTables(withoutIds(given)), options.recheck),
+      );
+      return content.edit(mindId, (note) => {
+        const earlier = proposalsOf(note, request);
+        if (earlier) return earlier;
+        insertBlocks(note, blocks, { request });
+        if (note.doc) recordProposalRequest(note.doc, request, made);
+        return proposalsOf(note, request) ?? { proposalId: "", changes: 0 };
+      });
+    },
+
+    /** A request's changes in a Mind, once it has proposed there; null before. */
+    proposed(mindId: string, request: string): { proposalId: string; changes: number } | null {
+      return content.read(mindId, (note) => proposalsOf(note, request));
     },
 
     undo(input: unknown): void {

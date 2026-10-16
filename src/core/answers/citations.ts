@@ -38,7 +38,7 @@ import {
   unitLocation,
 } from "../../shared/locations";
 import { findQuote, lostLigatures, type MatchOptions } from "../../shared/quoteMatch";
-import { foldRadicals } from "../../shared/text";
+import { foldRadicals, nameKey } from "../../shared/text";
 import { sameRun } from "../../shared/units";
 import {
   type Citation,
@@ -52,6 +52,7 @@ import {
 import type { CitationSource } from "../documents";
 import type { PageText } from "../documents/passages";
 import type { WindowedPassage } from "../documents/search";
+import { writtenInCjk } from "../documents/textLanguage";
 import { closestWords } from "./closestWords";
 import { withCueMarks } from "./cueMarks";
 import type {
@@ -62,6 +63,7 @@ import type {
   SearchResultForModel,
   UnfoundQuote,
 } from "./engine";
+import { NOT_CITED_ATTRIBUTE } from "./prompt";
 
 /** How many times one Answer may search; later searches are refused, so the model answers. */
 const MAX_SEARCHES_PER_ANSWER = 5;
@@ -117,13 +119,6 @@ export function cleanQuote(raw: string): string {
     if (quote === before) return quote;
   }
 }
-
-/** A name read for comparing: its letters and digits, in lower case ("Gradient Descent: The Ultimate Optimizer" is a file named without its colon). */
-const nameKey = (name: string) =>
-  name
-    .normalize("NFKC")
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, "");
 
 /** How a Document's text is matched: whether it lost its f-ligatures (see `lostLigatures`). */
 type Matching = Pick<MatchOptions, "lostLigatures">;
@@ -548,12 +543,13 @@ interface ShownPassage {
   /** For every kind but PDF: the label of the Units it covers, e.g. "slides 3–4". */
   location: string | null;
   text: string;
+  notCited: boolean;
 }
 
 /** Passages as the model sees them, each with its short id, Document, its date, and pages or Location. */
 function formatPassages(passages: readonly ShownPassage[]): string {
   return passages
-    .map(({ id, documentName, date, range, location, text }) => {
+    .map(({ id, documentName, date, range, location, text, notCited }) => {
       const pages = pagesLabel(range);
       const where = location
         ? ` location="${attribute(location)}"`
@@ -561,7 +557,8 @@ function formatPassages(passages: readonly ShownPassage[]): string {
           ? ` pages="${pages}"`
           : "";
       const dated = date ? ` date="${attribute(date)}"` : "";
-      return `<passage id="${id}" document="${attribute(documentName)}"${dated}${where}>\n${text}\n</passage>`;
+      const never = notCited ? NOT_CITED_ATTRIBUTE : "";
+      return `<passage id="${id}" document="${attribute(documentName)}"${dated}${where}${never}>\n${text}\n</passage>`;
     })
     .join("\n\n");
 }
@@ -739,7 +736,7 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
     if (!quote) return null;
     for (const [passageId, handle] of handleOf) {
       const source = documents.citationSource(passageId);
-      if (!source || source.documentDeleted) continue;
+      if (!source || source.documentDeleted || source.notCited) continue;
       const units = documents.pageTexts(
         source.documentId,
         source.contentHash,
@@ -796,6 +793,12 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
       return {
         ok: false,
         problem: `there is no Passage "${String(input.passage)}" in your search results; use a Passage's id, such as P1.`,
+      };
+    }
+    if (source.notCited) {
+      return {
+        ok: false,
+        problem: `${found.handle} is from the User's own working file, which is read but never cited; cite a Passage from another Document, or leave the claim without a marker.`,
       };
     }
     const passageUnits = documents.pageTexts(
@@ -878,6 +881,11 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
     }
     if (!record.quote) return `the quote is empty; copy a short quote from ${handle}.`;
     if (check(record).check !== "not-found") return null;
+    if (
+      writtenInCjk(record.quote) !== writtenInCjk(passageUnits.map((unit) => unit.text).join("\n"))
+    ) {
+      return `the quote is a translation: copy it from ${handle} in the Passage's own language, word for word, never translated.`;
+    }
     return where
       ? `the quote isn't word for word at ${cutLocation(record) ?? where} in ${handle}; copy it exactly, and check where it is.`
       : `the quote isn't word for word${record.range.pageFrom === null ? "" : ` on p. ${pagesLabel(record.range)}`} in ${handle}; copy it exactly, and check its page.`;
@@ -953,7 +961,9 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
       const id = handleFor(passage.passageId);
       // A browser-made PDF's "⼤" for "大": every other reader of the text folds it (ADR-0009).
       const text = foldRadicals(withCueMarks(marked, units));
-      shownTexts.set(id, text);
+      const notCited = documents.citationSource(passage.passageId)?.notCited ?? false;
+      // What later requests offer for citing is what was shown here: never a Passage no record may name.
+      if (!notCited) shownTexts.set(id, text);
       return {
         id,
         documentName: passage.documentName,
@@ -961,6 +971,7 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
         range,
         location: passageLocation(units),
         text,
+        notCited,
       };
     });
     return formatPassages(formatted);
@@ -1135,9 +1146,12 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
      * matching in the Units cited in its sentence. One found changes nothing.
      * One not found makes the Citation whose Units are nearest it "not found",
      * with the Answer's words and the Document's nearest for its card. Where a
-     * Citation of the sentence couldn't be checked, no span of it is.
+     * Citation of the sentence couldn't be checked, no span of it is. Words in
+     * another language than every page cited are a translation: they aren't
+     * checked, and are returned to lose their quotation marks.
      */
-    checkQuotedWords(quoted: readonly { words: string; markers: readonly number[] }[]): void {
+    checkQuotedWords(quoted: readonly { words: string; markers: readonly number[] }[]): string[] {
+      const translated: string[] = [];
       // A Document's name in quotation marks, as an Answer gives a title, is a name, not a quote.
       const names = new Set(
         [...records.values()].map(({ source }) => nameKey(source.documentName)),
@@ -1152,6 +1166,16 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
         });
         if (cited.some(({ record }) => record.result?.check === "cant-check")) continue;
         if (cited.some(({ units, matching }) => quoteInUnits(units, words, matching))) continue;
+        const inCjk = writtenInCjk(words);
+        if (
+          cited.length > 0 &&
+          cited.every(
+            ({ units }) => writtenInCjk(units.map((unit) => unit.text).join("\n")) !== inCjk,
+          )
+        ) {
+          translated.push(words);
+          continue;
+        }
         let nearest: { record: Accepted; closest: ReturnType<typeof closestWords> } | undefined;
         for (const { record, units, matching } of cited) {
           const closest = closestWords(units, words, matching);
@@ -1163,6 +1187,7 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
         nearest.record.result = { check: "not-found", checkReason: "quoted-words-not-on-pages" };
         nearest.record.quotedWords = nearest.closest.shown;
       }
+      return translated;
     },
 
     finalCitation,
