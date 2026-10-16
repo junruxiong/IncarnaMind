@@ -31,7 +31,7 @@ import {
   NotFoundError,
   TaggingNotReadyError,
 } from "../errors";
-import { isPlanLimit } from "../providers/chatgpt/errors";
+import { reachedPlanLimit } from "../library/planPace";
 import { classifyProviderError } from "../providers/providerErrors";
 import type { Database } from "../storage";
 import {
@@ -222,8 +222,8 @@ export function createTagger(options: TaggerOptions) {
         });
       } catch (error) {
         if (stale()) return;
-        if (isPlanLimit(error)) {
-          // The ChatGPT plan's limit: this and the rest wait for it to reset (see ../library/planPace).
+        if (reachedPlanLimit(error)) {
+          // The plan's limit: this and the rest wait for it to reset (see ../library/planPace).
           const why = classifyProviderError(error);
           if (setState(id, "waiting-for-provider", why)) announce([id]);
           park(why);
@@ -431,6 +431,27 @@ export function createTagger(options: TaggerOptions) {
       if (changed.length > 0) announce(changed);
       if (!ready) return;
       for (const { id, row } of rows) if (row.status === "ready") enqueue(id, true);
+    },
+
+    /**
+     * The computer is back online: the Documents that couldn't reach the AI
+     * model are tagged again. Said again before they are tagged, it changes nothing.
+     */
+    backOnline(): void {
+      if (lifetime.signal.aborted || options.enabled?.() === false || !options.mightBeReady()) {
+        return;
+      }
+      const ids = db
+        .all<{ id: string }>(
+          `SELECT id FROM documents
+           WHERE deleted_at IS NULL AND status = 'ready'
+             AND tagging_status = 'failed' AND tagging_error_kind = 'network'
+           ORDER BY created_at, rowid`,
+        )
+        .map((row) => row.id)
+        .filter((id) => !options.stopped(id));
+      setStates(ids, "pending");
+      for (const id of ids) enqueue(id);
     },
 
     /** Stops: Documents keep their state, and the next start picks them up. */

@@ -12,6 +12,7 @@ import { enterFrom, exitToward } from "../motion";
 import { rerankingModelStatus } from "../rerankStatus";
 import { allExamples, isOwnDocument, useAppStore } from "../store";
 import { useTaggingExplained } from "../taggingExplained";
+import { failedTagging, retryTagging } from "../taggingRetry";
 import { placesText, taggingPlaces } from "../taggingStop";
 import { textRecognitionStatus, useTextRecognition } from "../textRecognition";
 import { canTryAgain, outsideDialog, reasonKey, useWebPages } from "../webPages";
@@ -419,9 +420,11 @@ function useStatuses(): Status[] {
   }
 
   if (!organizing && counts.failedTagging > 0) {
-    const failed = useAppStore
-      .getState()
-      .documents.filter((each) => each.status === "ready" && each.tagging === "failed");
+    const reasons = failedTagging(useAppStore.getState()).flatMap((each) =>
+      each.taggingError && each.taggingError.kind !== "network"
+        ? [t(testErrorKey(each.taggingError.kind))]
+        : [],
+    );
     statuses.push({
       testId: "tagging-failed",
       tone: "error",
@@ -435,14 +438,12 @@ function useStatuses(): Status[] {
             ? "status.taggingFailed.offline"
             : "status.taggingFailed.full",
         ),
-        failed[0]?.taggingError?.message ?? "",
-      ]
-        .filter(Boolean)
-        .join("\n"),
+        ...new Set(reasons),
+      ].join("\n"),
       action: {
         label: t("status.retry"),
         testId: "tagging-failed-retry",
-        run: () => void useAppStore.getState().retagDocuments(failed.map((each) => each.id)),
+        run: () => void retryTagging(),
       },
     });
   }
