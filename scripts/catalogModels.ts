@@ -79,6 +79,8 @@ const SOURCES: Record<
   cerebras: { modelsDev: "cerebras", litellm: "cerebras" },
   cohere: { modelsDev: "cohere", litellm: "cohere_chat" },
   venice: { modelsDev: "venice", litellm: "venice" },
+  bedrock: { modelsDev: "amazon-bedrock", litellm: "bedrock_mantle" },
+  cloudflare: { modelsDev: "cloudflare-workers-ai", litellm: "cloudflare" },
 };
 
 const MIT = (copyright: string) =>
