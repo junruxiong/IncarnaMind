@@ -20,6 +20,7 @@ import {
   writingType,
 } from "../../shared/mindStyle";
 import { core } from "./core";
+import { logCaught } from "./errorLog";
 import { translateNow } from "./i18n";
 import { useAppStore } from "./store";
 import { useUndo } from "./undo";
@@ -200,11 +201,20 @@ export function useFontInstalled(font: MindFont): boolean {
   return installed;
 }
 
-/** Every family installed on this computer, once each, in the interface's order. */
+/**
+ * Every family installed on this computer, once each, in the interface's order. Electron grants
+ * the page this without asking; when it can't be read all the same, the list is empty, which
+ * Style takes as "no other fonts" rather than as something for the User to fix.
+ */
 export async function installedFamilies(): Promise<string[]> {
-  const fonts = await window.queryLocalFonts();
-  const families = new Set(fonts.map((font) => font.family));
-  return [...families]
-    .filter((family) => isFontFamily(family) && !family.startsWith("."))
-    .sort((a, b) => a.localeCompare(b));
+  try {
+    const fonts = await window.queryLocalFonts();
+    const families = new Set(fonts.map((font) => font.family));
+    return [...families]
+      .filter((family) => isFontFamily(family) && !family.startsWith("."))
+      .sort((a, b) => a.localeCompare(b));
+  } catch (error) {
+    logCaught(error);
+    return [];
+  }
 }

@@ -17,6 +17,9 @@ const written: [string, MindStyle][] = [];
 const held = new Map<string, MindStyle>();
 let refuse = false;
 const reported: unknown[] = [];
+const logged: unknown[] = [];
+/** What `window.queryLocalFonts()` answers: the fonts Chromium lists, or a refusal. */
+let localFonts: () => Promise<{ family: string; style: string }[]> = async () => [];
 
 beforeAll(async () => {
   const handlers: Record<string, unknown> = {
@@ -31,9 +34,14 @@ beforeAll(async () => {
   const bridge = new Proxy(handlers, {
     get: (target, name: string) => target[name] ?? (() => () => undefined),
   });
+  const files = new Proxy(
+    { logError: (report: unknown) => void logged.push(report) } as Record<string, unknown>,
+    { get: (target, name: string) => target[name] ?? (() => () => undefined) },
+  );
   (globalThis as unknown as { window: unknown }).window = {
     incarnamind: bridge,
-    incarnamindFiles: bridge,
+    incarnamindFiles: files,
+    queryLocalFonts: () => localFonts(),
   };
   styles = await import("../../src/renderer/src/mindStyles");
   undo = await import("../../src/renderer/src/undo");
@@ -45,6 +53,8 @@ afterEach(() => {
   written.length = 0;
   held.clear();
   reported.length = 0;
+  logged.length = 0;
+  localFonts = async () => [];
   refuse = false;
   undo.useUndo.setState({ done: [], undone: [], line: null });
 });
@@ -143,5 +153,36 @@ describe("whether a font is installed", () => {
 
   test("takes a name with a quote in it as one name", () => {
     expect(styles.isFontInstalled('Bad"Name', page("BadName"))).toBe(true);
+  });
+});
+
+describe("the fonts installed on this computer", () => {
+  const face = (family: string, style = "Regular") => ({ family, style });
+
+  test("are each family once, in order, without the system's hidden ones", async () => {
+    localFonts = async () => [
+      face("Songti SC"),
+      face("Georgia"),
+      face("Georgia", "Bold"),
+      face(".SF NS"),
+      face("Bad\u0000Name"),
+      face("Arial"),
+    ];
+    expect(await styles.installedFamilies()).toEqual(["Arial", "Georgia", "Songti SC"]);
+  });
+
+  test("come back empty, quietly and logged, when the computer refuses to say", async () => {
+    localFonts = async () => {
+      throw new DOMException("Permission denied", "NotAllowedError");
+    };
+    expect(await styles.installedFamilies()).toEqual([]);
+    expect(reported).toEqual([]);
+    expect(logged).toHaveLength(1);
+  });
+
+  test("come back empty when there are none", async () => {
+    localFonts = async () => [];
+    expect(await styles.installedFamilies()).toEqual([]);
+    expect(logged).toEqual([]);
   });
 });

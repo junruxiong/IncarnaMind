@@ -106,6 +106,26 @@ describe("the type a Mind is written in", () => {
     expect(type.heading).toEqual({ size: 22, leading: 30 });
   });
 
+  test("the writing is 14/23, 16/26 and 18/29, and a step up in Serif: 15/24, 17/28 and 19/31", () => {
+    const body = (font: "default" | "serif" | "mono", size: "small" | "default" | "large") =>
+      writingType({ font, size }, true).body;
+    expect(["small", "default", "large"].map((size) => body("default", size as never))).toEqual([
+      { size: 14, leading: 23 },
+      { size: 16, leading: 26 },
+      { size: 18, leading: 29 },
+    ]);
+    expect(["small", "default", "large"].map((size) => body("mono", size as never))).toEqual([
+      { size: 14, leading: 23 },
+      { size: 16, leading: 26 },
+      { size: 18, leading: 29 },
+    ]);
+    expect(["small", "default", "large"].map((size) => body("serif", size as never))).toEqual([
+      { size: 15, leading: 24 },
+      { size: 17, leading: 28 },
+      { size: 19, leading: 31 },
+    ]);
+  });
+
   test("Small and Large scale the body, the headings and the title together", () => {
     const small = writingType({ font: "default", size: "small" }, true);
     const large = writingType({ font: "default", size: "large" }, true);
