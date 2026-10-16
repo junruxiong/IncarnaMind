@@ -96,7 +96,11 @@ export function rowHeightFor(points: number, lines: number): number {
   return Math.round((lines * points * 4 * 15) / (3 * 11));
 }
 
-const FALLBACKS = { serif: "var(--font-serif)", mono: "var(--font-mono)", sans: "var(--font-sans)" };
+const FALLBACKS = {
+  serif: "var(--font-serif)",
+  mono: "var(--font-mono)",
+  sans: "var(--font-sans)",
+};
 
 /** A font's name as a CSS family, falling back to the app's own font of the same kind. */
 export function fontFamily(name: string | undefined): string {

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { DEFAULT_MIND_STYLE, isMindStyle } from "../shared/mindStyle";
 import {
   type ChatModelChoice,
   type DeviceSettings,
@@ -15,7 +16,6 @@ import {
   type UserSettings,
   type WordExportPreferences,
 } from "./api";
-import { DEFAULT_MIND_STYLE, isMindStyle } from "../shared/mindStyle";
 import { InvalidInputError, isRecord } from "./errors";
 import { isLanguagePreference, resolveLanguage } from "./language";
 import type { Database } from "./storage";

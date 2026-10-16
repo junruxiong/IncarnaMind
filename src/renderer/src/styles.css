@@ -124,6 +124,24 @@
 }
 
 /*
+ * The fonts a Mind's Style chooses between (src/shared/mindStyle.ts): the system's, the Mono
+ * style's, and the system's Chinese faces of each kind, which a font installed on the computer
+ * takes after it. Outside @theme, so they are written whether or not a class uses them: the
+ * Mind's page names them from script.
+ */
+:root {
+  --font-cjk-sans:
+    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Source Han Sans SC";
+  --font-cjk-serif: "Songti SC", "STSong", "SimSun", "Noto Serif CJK SC", "Source Han Serif SC";
+  --font-system:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", var(--font-cjk-sans), system-ui,
+    sans-serif;
+  --font-mono-writing:
+    "JetBrains Mono", var(--font-cjk-sans), ui-monospace, "SFMono-Regular", Menlo, Consolas,
+    monospace;
+}
+
+/*
  * The app's chrome (sidebar, pane headers, dialogs, Settings), from the
  * approved mockups: values they use that DESIGN.md's palette doesn't name.
  */
@@ -1108,7 +1126,7 @@
       field-sizing: content;
       resize: none;
       overflow: hidden;
-      font-family: var(--font-serif);
+      font-family: var(--writing-font, var(--font-system));
       font-size: var(--text-display);
       line-height: var(--text-display--line-height);
       font-weight: 600;
@@ -1493,7 +1511,7 @@
     position: absolute;
     margin: 0;
     pointer-events: none;
-    font-family: var(--font-serif);
+    font-family: var(--writing-font, var(--font-system));
     font-size: var(--text-body);
     line-height: var(--text-body--line-height);
     color: var(--color-ink-meta);
@@ -2150,7 +2168,7 @@
     padding-left: var(--editor-gutter);
     min-height: 10rem;
     outline: none;
-    font-family: var(--font-serif);
+    font-family: var(--writing-font, var(--font-system));
     font-size: var(--text-body);
     line-height: var(--text-body--line-height);
     color: var(--color-ink);
@@ -7235,7 +7253,7 @@
   }
   .history-rows {
     padding: 40px 0 48px;
-    font-family: var(--font-serif);
+    font-family: var(--writing-font, var(--font-system));
     font-size: var(--text-body);
     line-height: var(--text-body--line-height);
     color: var(--color-ink);

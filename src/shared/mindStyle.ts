@@ -50,7 +50,9 @@ export function isMindFont(value: unknown): value is MindFont {
   if (isFontPreset(value)) return true;
   if (typeof value !== "object" || value === null) return false;
   const keys = Object.keys(value);
-  return keys.length === 1 && keys[0] === "family" && isFontFamily((value as { family: unknown }).family);
+  return (
+    keys.length === 1 && keys[0] === "family" && isFontFamily((value as { family: unknown }).family)
+  );
 }
 
 export function isMindStyle(value: unknown): value is MindStyle {
@@ -95,7 +97,10 @@ export function writeMindStyle(settings: Y.Map<unknown>, style: MindStyle): void
 
 /** A name as a CSS string, safe inside a style sheet or a `<style>` element. */
 export function cssString(text: string): string {
-  const escaped = text.replace(/[\\"<>&]/g, (character) => `\\${character.charCodeAt(0).toString(16)} `);
+  const escaped = text.replace(
+    /[\\"<>&]/g,
+    (character) => `\\${character.charCodeAt(0).toString(16)} `,
+  );
   return `"${escaped}"`;
 }
 
@@ -146,7 +151,8 @@ export function fontFamilyList(font: MindFont, installed: boolean): string {
   if (font === "serif") return "var(--font-serif)";
   if (font === "mono") return "var(--font-mono-writing)";
   if (!installed) return "var(--font-system)";
-  const chinese = fontKind(font.family) === "serif" ? "var(--font-cjk-serif)" : "var(--font-cjk-sans)";
+  const chinese =
+    fontKind(font.family) === "serif" ? "var(--font-cjk-serif)" : "var(--font-cjk-sans)";
   return `${cssString(font.family)}, ${chinese}, var(--font-system)`;
 }
 
