@@ -2335,7 +2335,7 @@ export const en = {
   "research.plan.webOff": "Web search is off",
   "research.plan.webOff.action": "Turn on",
   "research.plan.webUnavailable": "{model} can't search the web",
-  "research.plan.localMode": "Local mode is on: nothing goes to the web",
+  "research.plan.localMode": "“Keep everything on this computer” is on: nothing goes to the web",
   "task.notify.needsYou": "{task} needs you",
   "task.notify.finished": "{task} finished",
   "task.notify.failed": "{task} couldn't finish",
