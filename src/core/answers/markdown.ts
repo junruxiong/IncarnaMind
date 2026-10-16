@@ -17,7 +17,12 @@
  */
 
 import type { MarkJSON, NodeJSON } from "../../shared/blockJson";
-import { type TableAlign, tableCellRanges, tableStart } from "../../shared/markdownTables";
+import {
+  rowCells,
+  type TableAlign,
+  tableCellRanges,
+  tableStart,
+} from "../../shared/markdownTables";
 
 export interface MarkdownOptions {
   /** The text may continue: hold back, or close, what is unfinished at its end. */
@@ -241,7 +246,8 @@ function parseBlocks(lines: readonly string[], open: boolean): NodeJSON[] {
 /**
  * A table from its heading row at `start` to the first blank line, line
  * without a pipe, or other kind of Block. Every row has the heading row's
- * columns: missing cells are empty, extra ones are left out. While the text
+ * columns: missing cells are empty, and extra ones' text is kept in the last
+ * (`rowCells`). While the text
  * streams, the last row shows as far as it is written, once it has any text.
  */
 function parseTable(
@@ -274,19 +280,16 @@ function tableRow(
   header: boolean,
   open: boolean,
 ): NodeJSON {
-  const ranges = tableCellRanges(line);
+  const written = Math.min(tableCellRanges(line).length, align.length);
+  const { cells } = rowCells(line, align.length);
   return {
     type: "tableRow",
-    content: align.map((columnAlign, column) => {
-      const range = ranges[column];
-      const source = range ? withLineBreaks(line.slice(range.start, range.end)) : "";
-      return {
-        type: header ? "tableHeader" : "tableCell",
-        attrs: { colspan: 1, rowspan: 1, ...(columnAlign ? { align: columnAlign } : {}) },
-        // The cell being written is the last one there is.
-        content: [paragraph(source, open && column === ranges.length - 1)],
-      };
-    }),
+    content: align.map((columnAlign, column) => ({
+      type: header ? "tableHeader" : "tableCell",
+      attrs: { colspan: 1, rowspan: 1, ...(columnAlign ? { align: columnAlign } : {}) },
+      // The cell being written is the last one there is.
+      content: [paragraph(withLineBreaks(cells[column] ?? ""), open && column === written - 1)],
+    })),
   };
 }
 

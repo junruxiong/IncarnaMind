@@ -8,7 +8,8 @@
  * section, from its heading (a "#" paragraph) on, first, keeping each
  * paragraph's mark, as a model restructuring a whole Mind does (#703). One
  * that asks for a table (表格) adds a Markdown table after the passage, a
- * row for each paragraph, its markers in the cells (#961). The
+ * row for each paragraph, its markers in the cells, and a last row whose
+ * source is a name in brackets no Citation has (#961). The
  * new text streams in word by word, slowly when the instruction says
  * "slowly", then a line saying why (#202).
  */
@@ -37,7 +38,8 @@ function withTable(passage: string): string {
       const words = paragraph.replace(/^(?:- |\d+\. |> )/, "").split(/\s+/);
       return `| ${words.slice(0, 2).join(" ")} | ${words.slice(2).join(" ")} |`;
     });
-  return [passage, "", "| Term | What it says |", "|---|---|", ...rows].join("\n");
+  const named = "| Source | Board minutes [Board minutes, p. 2] |";
+  return [passage, "", "| Term | What it says |", "|---|---|", ...rows, named].join("\n");
 }
 
 /** Why the scripted Edit with AI changed a passage, by its action, in English and in Chinese. */

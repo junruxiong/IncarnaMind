@@ -189,7 +189,7 @@ describe("A table the assistant writes into a Mind is a table", { timeout: 30_00
       (call): ScriptedReply =>
         citingFirst(call, () =>
           called(call, "add_to_mind")
-            ? { text: "" }
+            ? { text: "Done." }
             : {
                 calls: [
                   {
@@ -252,7 +252,7 @@ describe("A table the assistant writes into a Mind is a table", { timeout: 30_00
     const byContent = (call: ModelCall): ScriptedReply =>
       citingFirst(call, () =>
         called(call, "edit_mind")
-          ? { text: "" }
+          ? { text: "Done." }
           : {
               calls: [
                 { tool: "edit_mind", input: { part: "Terms", content: `## Terms\n\n${TABLE}` } },
@@ -289,39 +289,141 @@ describe("A table the assistant writes into a Mind is a table", { timeout: 30_00
   });
 });
 
-describe("A table that can't be made goes in nowhere", { timeout: 30_000 }, () => {
-  // protects=add_to_mind whose table has no row of --- adds nothing, its card says why, and the model is told to say so in the User's line and give the text in its reply; fails_when=the pipe lines land in the page, or the model isn't told; no_claim=that a real model words it so.
-  test("added: nothing goes in, and the model is told to say so and give the text", async () => {
+describe("A table's cells keep their sources", { timeout: 30_000 }, () => {
+  // protects=in a rewrite's table, a source written as a name in brackets becomes the passage's Citation when it names its Document, else stays as text and is counted; an extra cell's text and Citation stay in the row's last cell; a marker for no Citation is reported (#961); fails_when=a bracketed name stays text though it names a cited Document, an unlinked one or an extra cell is dropped or not counted, or the model isn't told; no_claim=none beyond protects.
+  test("a rewrite's bracketed names link to the passage's Citations, and what can't is kept and counted", async () => {
+    const model = scriptedModel((call): ScriptedReply => {
+      const passage = editPassage(call);
+      if (passage !== null) {
+        return {
+          text: [
+            `${passage} Neap tides are smaller [2].`,
+            "",
+            "| Term | What it means |",
+            "|---|---|",
+            "| Spring tide | The biggest tide [Tides, p. 1] |",
+            "| Neap tide | The smallest tide [Atlas of the Sea, p. 9] |",
+            "| Bore | Rare | at new moon [1] |",
+            "<why>A table.</why>",
+          ].join("\n"),
+        };
+      }
+      return called(call, "edit_mind")
+        ? { text: "Done." }
+        : { calls: [{ tool: "edit_mind", input: { instruction: "Add a table of terms" } }] };
+    });
+    const { core, mind, client } = await setUp(model);
+
+    const answer = await askAssistant(core, { text: "Add a table of terms", mindId: mind.id });
+    await client.settled();
+
+    expect(tablesIn(readMind(client))).toEqual([
+      [
+        ["Term", "What it means"],
+        ["Spring tide", "The biggest tide ⟨found⟩"],
+        ["Neap tide", "The smallest tide [Atlas of the Sea, p. 9]"],
+        ["Bore", "Rare | at new moon ⟨found⟩"],
+      ],
+    ]);
+    expect(changesIn(answer)).toEqual([
+      expect.objectContaining({ tables: 1, unlinkedSources: 1, extraCells: 1 }),
+    ]);
+    const told = lastResult(model);
+    expect(told).toContain("1 source in its table cells was written as a name in brackets");
+    expect(told).toContain("1 row had a cell beyond the table's columns");
+    expect(told).toContain("1 marker matched none of the text's Citations and was left out");
+  });
+
+  // protects=in added text, a table cell's source written as a name in brackets becomes the Citation recorded for that Document with cite (#961); fails_when=it stays as text though a Citation of it was recorded; no_claim=none beyond protects.
+  test("an added table's bracketed name links to the Citation recorded for it", async () => {
+    const content =
+      "| Term | What it means |\n|---|---|\n| Spring tide | The biggest tide [Tides, p. 1] |";
     const model = scriptedModel(
       (call): ScriptedReply =>
-        called(call, "add_to_mind")
-          ? { text: "I couldn't make this into a table." }
-          : {
-              calls: [
-                {
-                  tool: "add_to_mind",
-                  input: { content: `## Key terms\n\n${BROKEN_TABLE}\n\nThat is all.` },
-                },
-              ],
-            },
+        citingFirst(call, () =>
+          called(call, "add_to_mind")
+            ? { text: "Done." }
+            : { calls: [{ tool: "add_to_mind", input: { content } }] },
+        ),
     );
+    const { core, mind, client } = await setUp(model);
+
+    const answer = await askAssistant(core, { text: "Add a table of terms", mindId: mind.id });
+    await client.settled();
+
+    expect(tablesIn(readMind(client))).toEqual([
+      [
+        ["Term", "What it means"],
+        ["Spring tide", "The biggest tide ⟨found⟩"],
+      ],
+    ]);
+    expect(changesIn(answer)).toEqual([expect.not.objectContaining({ unlinkedSources: 1 })]);
+  });
+});
+
+describe("A table that can't be made goes in nowhere", { timeout: 30_000 }, () => {
+  // protects=add_to_mind whose table can't be made, after some of its Blocks were already written as its input came, leaves the Mind as it was, counts nothing on the call or the card, and the reply carries the refusal in the User's language (#961); fails_when=the streamed Blocks stay, the call keeps a change ("Wrote 1 paragraph"), or the model isn't told what to say; no_claim=that a real model words it so.
+  test("added after Blocks streamed in: the Mind is as it was, nothing is counted, and the reply says why", async () => {
+    const content = `## 关键条款\n\n下面是表格。\n\n${BROKEN_TABLE}\n\n就这些。`;
+    const model = scriptedModel((call): ScriptedReply => {
+      const told = call.results.find((result) => result.tool === "add_to_mind")?.text;
+      if (told !== undefined) {
+        return { text: /in these words: “(.*?)” Then/.exec(told)?.[1] ?? "" };
+      }
+      return { calls: [{ tool: "add_to_mind", input: { content }, streamInput: true }] };
+    });
     const { core, mind, client } = await setUp(model);
     const before = JSON.stringify(client.blocks.toJSON());
 
-    const answer = await askAssistant(core, { text: "Add a table of key terms", mindId: mind.id });
+    const answer = await askAssistant(core, { text: "加一个关键条款表格", mindId: mind.id });
     await client.settled();
 
     expect(JSON.stringify(client.blocks.toJSON())).toBe(before);
     expect(pendingProposals(client.blocks)).toEqual([]);
-    expect(mindCalls(answer)[0]).toMatchObject({
+    const [call] = mindCalls(answer);
+    expect(call).toMatchObject({
       status: "failed",
       mindProblem: { kind: "no-table", mindId: mind.id },
     });
-    expect(lastResult(model)).toContain(
-      "“I couldn't make this into a table, so it's below as text. Nothing was added to “Tides”.”",
-    );
-    expect(lastResult(model)).toContain("这些内容没法做成表格，所以写在下面，没有添加到“Tides”。");
-    expect(lastResult(model)).toContain("so the User still has it");
+    expect(call?.mindChange).toBeUndefined();
+    expect(changesIn(answer)).toEqual([]);
+    expect(answer.text).toBe("这些内容没法做成表格，所以写在下面，没有添加到“Tides”。");
+  });
+
+  // protects=added pipe lines with no row of ---, or an HTML table, add nothing, and the model is told the User's words for it, in English only for an English Question; fails_when=either lands in the page, or the model gets both languages' words; no_claim=none beyond protects.
+  test("added pipe lines or an HTML table: nothing goes in, and the model is told what to say", async () => {
+    for (const table of [BROKEN_TABLE, '<table><tr><td rowspan="2">Spring</td></tr></table>']) {
+      const model = scriptedModel(
+        (call): ScriptedReply =>
+          called(call, "add_to_mind")
+            ? { text: "Done." }
+            : {
+                calls: [
+                  {
+                    tool: "add_to_mind",
+                    input: { content: `## Key terms\n\n${table}\n\nThat is all.` },
+                  },
+                ],
+              },
+      );
+      const { core, mind, client } = await setUp(model);
+      const before = JSON.stringify(client.blocks.toJSON());
+
+      const answer = await askAssistant(core, {
+        text: "Add a table of key terms",
+        mindId: mind.id,
+      });
+      await client.settled();
+
+      expect(JSON.stringify(client.blocks.toJSON())).toBe(before);
+      expect(mindCalls(answer)[0]).toMatchObject({ mindProblem: { kind: "no-table" } });
+      const told = lastResult(model);
+      expect(told).toContain(
+        "in these words: “I couldn't make this into a table, so it's below as text. Nothing was added to “Tides”.”",
+      );
+      expect(told).not.toContain("没法做成表格");
+      expect(told).toContain("so the User still has it");
+    }
   });
 
   // protects=edit_mind whose rewrite writes pipe lines that make no table proposes nothing, takes back what it had written, and gives the model the text without its markers; fails_when=the pipe lines or part of the rewrite stay in the page; no_claim=none beyond protects.
@@ -332,7 +434,7 @@ describe("A table that can't be made goes in nowhere", { timeout: 30_000 }, () =
         return { text: `${passage} More here.\n\n${BROKEN_TABLE}\n\nThe end.\n<why>Longer.</why>` };
       }
       return called(call, "edit_mind")
-        ? { text: "" }
+        ? { text: "Done." }
         : {
             calls: [{ tool: "edit_mind", input: { instruction: "Make it longer, with a table" } }],
           };
@@ -355,5 +457,68 @@ describe("A table that can't be made goes in nowhere", { timeout: 30_000 }, () =
     );
     expect(told).toContain("| Spring tide | The biggest tide [Tides, p. 1] |");
     expect(told).not.toContain("[1]");
+  });
+});
+
+describe("A table the assistant didn't touch", { timeout: 30_000 }, () => {
+  // protects=a rewrite of the whole Mind that leaves its table's cells as they were changes nothing in the table: once accepted, Word and Markdown write it byte for byte as before; fails_when=the table, a cell or its Citation is rewritten, moved or exported differently; no_claim=none beyond protects.
+  test("exports byte for byte as before after the rest of the Mind is rewritten", async () => {
+    const model = scriptedModel((call): ScriptedReply => {
+      const passage = editPassage(call);
+      if (passage !== null) return { text: passage.replace("come at", "happen at") };
+      return called(call, "edit_mind")
+        ? { text: "Done." }
+        : { calls: [{ tool: "edit_mind", input: { instruction: "Reword it" } }] };
+    });
+    const { core, mind, client, tides } = await setUp(model);
+    let cells = 0;
+    const cell = (type: string, ...content: JSONContent[]): JSONContent => ({
+      type,
+      attrs: { colspan: 1, rowspan: 1 },
+      content: [{ type: "paragraph", attrs: { id: `cell-${++cells}` }, content }],
+    });
+    const text = (value: string): JSONContent => ({ type: "text", text: value });
+    writeMind(client, [
+      ...(readMind(client).toJSON().content ?? []),
+      {
+        type: "table",
+        content: [
+          {
+            type: "tableRow",
+            content: [cell("tableHeader", text("Term")), cell("tableHeader", text("Meaning"))],
+          },
+          {
+            type: "tableRow",
+            content: [
+              cell("tableCell", text("Spring tide")),
+              cell("tableCell", text("Big "), citation(tides)),
+            ],
+          },
+        ],
+      },
+    ]);
+    await client.settled();
+    const tableOf = async (format: "docx" | "markdown") => {
+      const exported = await core.exportMind(mind.id, { format });
+      return format === "docx"
+        ? (/<w:tbl>[\s\S]*<\/w:tbl>/.exec(part(unzip(exported.data), "word/document.xml"))?.[0] ??
+            "")
+        : new TextDecoder()
+            .decode(exported.data)
+            .split("\n")
+            .filter((line) => line.startsWith("|"))
+            .join("\n");
+    };
+    const word = await tableOf("docx");
+    const markdown = await tableOf("markdown");
+    expect(word).toContain("Spring tide");
+
+    await askAssistant(core, { text: "Reword the summary", mindId: mind.id });
+    await client.settled();
+    expect(pendingProposals(client.blocks).length).toBeGreaterThan(0);
+    await resolveChanges(client, "accept");
+
+    expect(await tableOf("docx")).toBe(word);
+    expect(await tableOf("markdown")).toBe(markdown);
   });
 });

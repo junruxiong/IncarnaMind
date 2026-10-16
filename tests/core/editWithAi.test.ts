@@ -1397,6 +1397,37 @@ describe("Edit with AI over Blocks of several kinds", () => {
     ]);
   });
 
+  // protects=a table written without leading pipes, streamed in a few characters at a time, keeps every row: it isn't written while its next row may still be coming (#961); fails_when=it goes in with only the rows that had arrived when a row's first word did; no_claim=none beyond protects.
+  test("a streamed table without leading pipes keeps all its rows", async () => {
+    const { core, mind, client } = await setUp(
+      editingModel(() =>
+        [
+          "Spring tides are strong.",
+          "",
+          "Tide | When",
+          "--- | ---",
+          "Spring | New moon",
+          "Neap | Quarter moon",
+          "Bore | Rarely",
+          "",
+          "That is all.",
+        ].join("\n"),
+      ),
+    );
+    const note = paragraph(text("Spring tides are strong."));
+    writeMind(client, [note]);
+    await client.settled();
+
+    await core.editWithAi(
+      wholeParagraph(client, mind.id, note.attrs.id, "instruction", "Add a table"),
+    );
+    await resolveChanges(client, "accept");
+
+    expect(await exported(core, mind.id)).toContain(
+      "| Tide | When |\n| --- | --- |\n| Spring | New moon |\n| Neap | Quarter moon |\n| Bore | Rarely |",
+    );
+  });
+
   // protects=pipe lines that make no table (no row of --- under the first) are written nowhere, and the request says why (#961); fails_when=they land in the Mind as a paragraph of pipes; no_claim=none beyond protects.
   test("pipe lines that make no table change nothing, and say so", async () => {
     const { core, mind, client } = await setUp(

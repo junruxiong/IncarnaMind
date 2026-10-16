@@ -51,8 +51,26 @@ describe("The Minds an Answer changed", () => {
       ],
     });
     expect(rows).toEqual([
-      { mindId: "a", created: false, requests: ["r1", "r3"], wrote: 1, changed: 2, tables: 0 },
-      { mindId: "b", created: true, requests: ["r2", "r4"], wrote: 3, changed: 0, tables: 0 },
+      {
+        mindId: "a",
+        created: false,
+        requests: ["r1", "r3"],
+        wrote: 1,
+        changed: 2,
+        tables: 0,
+        unlinkedSources: 0,
+        extraCells: 0,
+      },
+      {
+        mindId: "b",
+        created: true,
+        requests: ["r2", "r4"],
+        wrote: 3,
+        changed: 0,
+        tables: 0,
+        unlinkedSources: 0,
+        extraCells: 0,
+      },
     ]);
   });
 
@@ -62,7 +80,18 @@ describe("The Minds an Answer changed", () => {
       changedMinds({
         toolCalls: [call("create_mind", { mindId: "c", created: true, request: "", proposals: 0 })],
       }),
-    ).toEqual([{ mindId: "c", created: true, requests: [], wrote: 0, changed: 0, tables: 0 }]);
+    ).toEqual([
+      {
+        mindId: "c",
+        created: true,
+        requests: [],
+        wrote: 0,
+        changed: 0,
+        tables: 0,
+        unlinkedSources: 0,
+        extraCells: 0,
+      },
+    ]);
     expect(changedMinds({ toolCalls: [call("read_mind")] })).toEqual([]);
   });
 
@@ -81,7 +110,18 @@ describe("The Minds an Answer changed", () => {
           }),
         ],
       }),
-    ).toEqual([{ mindId: "a", created: false, requests: ["r1"], wrote: 3, changed: 0, tables: 0 }]);
+    ).toEqual([
+      {
+        mindId: "a",
+        created: false,
+        requests: ["r1"],
+        wrote: 3,
+        changed: 0,
+        tables: 0,
+        unlinkedSources: 0,
+        extraCells: 0,
+      },
+    ]);
     expect(
       changedMinds({
         toolCalls: [
@@ -94,7 +134,18 @@ describe("The Minds an Answer changed", () => {
           }),
         ],
       }),
-    ).toEqual([{ mindId: "a", created: false, requests: ["r1"], wrote: 0, changed: 0, tables: 0 }]);
+    ).toEqual([
+      {
+        mindId: "a",
+        created: false,
+        requests: ["r1"],
+        wrote: 0,
+        changed: 0,
+        tables: 0,
+        unlinkedSources: 0,
+        extraCells: 0,
+      },
+    ]);
   });
 
   // protects=a table counts as a table, never as a place or as nothing: a rewrite's table isn't one of its places changed, and an added table alone still makes the row say what was added (#961); fails_when=a table alone reads as 0 changes, or a rewrite's table is also counted as a place; no_claim=how the card words it.
@@ -126,9 +177,62 @@ describe("The Minds an Answer changed", () => {
         ],
       }),
     ).toEqual([
-      { mindId: "a", created: false, requests: ["r1"], wrote: 0, changed: 4, tables: 1 },
-      { mindId: "b", created: false, requests: ["r2"], wrote: 0, changed: 0, tables: 1 },
-      { mindId: "c", created: false, requests: ["r3"], wrote: 0, changed: 0, tables: 1 },
+      {
+        mindId: "a",
+        created: false,
+        requests: ["r1"],
+        wrote: 0,
+        changed: 4,
+        tables: 1,
+        unlinkedSources: 0,
+        extraCells: 0,
+      },
+      {
+        mindId: "b",
+        created: false,
+        requests: ["r2"],
+        wrote: 0,
+        changed: 0,
+        tables: 1,
+        unlinkedSources: 0,
+        extraCells: 0,
+      },
+      {
+        mindId: "c",
+        created: false,
+        requests: ["r3"],
+        wrote: 0,
+        changed: 0,
+        tables: 1,
+        unlinkedSources: 0,
+        extraCells: 0,
+      },
     ]);
+  });
+
+  // protects=what a Mind's tables kept as text is summed over its calls, for the card's note (#961); fails_when=a call's unlinked sources or extra cells are lost; no_claim=how the card words it.
+  test("sources that couldn't be linked and extra cells add up per Mind", () => {
+    const [row] = changedMinds({
+      toolCalls: [
+        call("add_to_mind", {
+          mindId: "a",
+          created: false,
+          request: "r1",
+          proposals: 1,
+          tables: 1,
+          unlinkedSources: 2,
+        }),
+        call("edit_mind", {
+          mindId: "a",
+          created: false,
+          request: "r2",
+          proposals: 1,
+          tables: 1,
+          unlinkedSources: 1,
+          extraCells: 3,
+        }),
+      ],
+    });
+    expect(row).toMatchObject({ tables: 2, unlinkedSources: 3, extraCells: 3 });
   });
 });
