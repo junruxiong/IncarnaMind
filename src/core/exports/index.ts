@@ -46,6 +46,7 @@ import {
   type Block,
   countQuestions,
   type FailedCheck,
+  type FailedSentence,
   type Footnote,
   footnotesIn,
   type ReadOptions,
@@ -55,12 +56,13 @@ import {
 } from "../mindText";
 import { withChangesAccepted } from "../shownChanges";
 import { addSources, styleCitations } from "./citations";
-import { renderDocx } from "./docx";
+import { piecesOf, renderDocx } from "./docx";
 import { renderHtml } from "./html";
 import { exportLabels } from "./labels";
 import { renderMarkdown } from "./markdown";
 import { unifyIdeographs } from "./pdfUnicode";
 import { renderPrintHtml } from "./printHtml";
+import { failedSentences } from "./sentenceChecks";
 import { isUnverified, numberCitations, packPages, renderSourcePack } from "./sourcePack";
 import { exportWordPatch } from "./wordPatch";
 import type { ReviewChoices } from "./wordReview";
@@ -79,6 +81,7 @@ export interface ExportsDependencies {
   keptCitationTexts(): KeptCitationText[];
   /** The interface language, which the export's own words are in. */
   language(): Language;
+  folderName(folderId: string): string | null;
   /** The Mind's citation style (#289). */
   citationStyle(mindId: string): CitationStyleId;
   /** Whether the Mind shows its Bibliography without a citation style (#102). */
@@ -125,6 +128,8 @@ interface Prepared {
   word: { importing: boolean } | null;
   blocks: Block[];
   preview: MindExportPreview;
+  failedSentences: FailedSentence[];
+  trackedChanges: number;
   language: Language;
   style: CitationStyle;
   documents: readonly SourceDocument[];
@@ -161,23 +166,38 @@ export function createExports(deps: ExportsDependencies) {
       comparisonText: (key, params) => translate(language, key, params),
       documentRemoved: (documentId) => !live.has(documentId),
     };
-    const { read, questions, word, theirChanges } = deps.read(mind.id, (fragment) => {
-      const { doc } = fragment;
-      const fromWord = doc !== null && wordFileOf(doc) !== null;
-      // A Word file shows what is waiting as tracked changes, and can mark AI text (#107); the
-      // others show someone's changes from the Word file as changes, or accepted (#734).
-      if (format === "docx") readOptions.review = reviewReading(fragment);
-      else if (doc && fromWord && format !== "source-pack")
-        readOptions.review = theirChangesReading(doc);
-      return {
-        read: readBlocks(fragment, readOptions),
-        questions: countQuestions(fragment),
-        word: doc && fromWord ? { importing: wordImportProgressOf(doc) !== null } : null,
-        theirChanges: fromWord
-          ? pendingProposals(fragment).filter((each) => each.id.startsWith(WORD_CHANGE_ID)).length
-          : 0,
-      };
-    });
+    const { read, questions, word, theirChanges, trackedChanges } = deps.read(
+      mind.id,
+      (fragment) => {
+        const { doc } = fragment;
+        const fromWord = doc !== null && wordFileOf(doc) !== null;
+        // A Word file shows what is waiting as tracked changes, and can mark AI text (#107); the
+        // others show someone's changes from the Word file as changes, or accepted (#734).
+        if (format === "docx") readOptions.review = reviewReading(fragment);
+        else if (doc && fromWord && format !== "source-pack")
+          readOptions.review = theirChangesReading(doc);
+        readOptions.sentenceChecks = failedSentences(fragment, {
+          versions: new Map(documents.map((document) => [document.id, document.contentHash])),
+          folderId: mind.folderId,
+          folderName: deps.folderName,
+          sourceOf: (passage) => footnoteOf(passage, documents, kept, language).source,
+        });
+        const { review } = readOptions;
+        const waiting = pendingProposals(fragment);
+        return {
+          read: readBlocks(fragment, readOptions),
+          questions: countQuestions(fragment),
+          word: doc && fromWord ? { importing: wordImportProgressOf(doc) !== null } : null,
+          theirChanges: fromWord
+            ? waiting.filter((each) => each.id.startsWith(WORD_CHANGE_ID)).length
+            : 0,
+          trackedChanges:
+            format === "docx" && review
+              ? waiting.filter((each) => !review.skips(each.id)).length
+              : 0,
+        };
+      },
+    );
     const blocks =
       format !== "docx" && options.theirChanges === "accepted" ? withChangesAccepted(read) : read;
     // A source pack holds the Citations the Mind numbers; the others, every footnote.
@@ -194,6 +214,8 @@ export function createExports(deps: ExportsDependencies) {
       fromWord: word !== null,
       theirChanges,
     };
+    const failed = new Map<string, FailedSentence>();
+    for (const { sentence } of piecesOf(blocks)) if (sentence) failed.set(sentence.id, sentence);
     return {
       format,
       options,
@@ -203,6 +225,8 @@ export function createExports(deps: ExportsDependencies) {
       word,
       blocks,
       preview,
+      failedSentences: [...failed.values()],
+      trackedChanges,
       language,
       style,
       documents,
@@ -229,6 +253,8 @@ export function createExports(deps: ExportsDependencies) {
       unverifiedCitations: pages.flatMap((page) => page.entries).filter(isUnverified).length,
       data: unifyIdeographs(printed),
       word: null,
+      sentenceChecks: { contradicted: 0, unsupported: 0, needsRecheck: 0, commented: false },
+      trackedChanges: 0,
     };
   };
 
@@ -257,17 +283,18 @@ export function createExports(deps: ExportsDependencies) {
             : prepared.blocks;
       const labels = exportLabels(language);
       let data: Uint8Array;
+      let commented: readonly FailedSentence[] = [];
       if (format === "markdown") {
         data = new TextEncoder().encode(renderMarkdown(title, blocks, labels));
       } else if (format === "docx") {
-        data = renderDocx(await withPictures(blocks, language, deps), {
+        ({ data, commented } = renderDocx(await withPictures(blocks, language, deps), {
           title,
           labels,
           language: language === "zh-CN" ? "zh-CN" : "en-US",
           paper: language === "en" ? "letter" : "a4",
           created: deps.now(),
           review: reviewChoices(prepared, false),
-        });
+        }));
       } else if (format === "html") {
         const drawn = await withPictures(blocks, language, deps);
         data = new TextEncoder().encode(
@@ -289,7 +316,7 @@ export function createExports(deps: ExportsDependencies) {
         });
         data = unifyIdeographs(printed);
       }
-      return { ...preview, data, word: null };
+      return { ...preview, data, word: null, ...reviewOf(prepared, commented) };
     },
   };
 
@@ -318,7 +345,7 @@ export function createExports(deps: ExportsDependencies) {
     const doc = new Y.Doc();
     try {
       if (state) Y.applyUpdate(doc, state);
-      const { data, report } = await exportWordPatch({
+      const { data, report, commented } = await exportWordPatch({
         bytes: await deps.wordPackage(prepared.mindId),
         blocks: doc.getXmlFragment(MIND_CONTENT_FIELD),
         readOptions: prepared.readOptions,
@@ -335,11 +362,30 @@ export function createExports(deps: ExportsDependencies) {
         notKept: report.notKept.length,
         unknownParts: report.unknownParts.length,
       });
-      return { ...prepared.preview, data, word: report };
+      return { ...prepared.preview, data, word: report, ...reviewOf(prepared, commented) };
     } finally {
       doc.destroy();
     }
   }
+}
+
+function reviewOf(
+  prepared: Prepared,
+  commented: readonly FailedSentence[],
+): Pick<MindExport, "sentenceChecks" | "trackedChanges"> {
+  const asComments = prepared.format === "docx" && prepared.options.commentFailedChecks;
+  const counted = asComments ? commented : prepared.failedSentences;
+  const count = (check: FailedSentence["check"]) =>
+    counted.filter((each) => each.check === check).length;
+  return {
+    sentenceChecks: {
+      contradicted: count("contradicted"),
+      unsupported: count("unsupported"),
+      needsRecheck: count("needs-recheck"),
+      commented: asComments,
+    },
+    trackedChanges: prepared.trackedChanges,
+  };
 }
 
 /** A picture that can't be drawn leaves the chart's table, and the log says why. */
