@@ -10,6 +10,7 @@ import {
   launchApp,
   newMind,
   removeDataFolder,
+  setCheck,
   setLanguage,
   setWindowSize,
   useLocalChatModel,
@@ -126,5 +127,31 @@ test("a PDF whose printed numbers don't keep step shows its PDF pages, and the c
   const card = window.getByTestId("citation-card");
   await expect(card.getByTestId("citation-badge")).toHaveText("Quote found on p. 3");
   await expect(card.getByTestId("citation-pdf-page")).toHaveCount(0);
+  await app.close();
+});
+
+test("where the card doesn't say the page in its badge, the page shows once, in the line under the name", async () => {
+  await writeFile(join(sources, "Annual Report.pdf"), ANNUAL_REPORT);
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await addDocuments(window, [join(sources, "Annual Report.pdf")]);
+  await setWindowSize(app, window, 1200, 800);
+  await newMind(window);
+  await window.getByTestId("mind-editor").click();
+  const answer = await askInAssistant(window, "When do spring tides happen?");
+  const chip = answer.getByTestId("citation").getByTestId("citation-chip");
+  const card = window.getByTestId("citation-card");
+
+  for (const check of ["unsupported", "contradicted", "cant-check"]) {
+    await setCheck(answer, { check });
+    await window.mouse.move(0, 0);
+    await chip.hover();
+    await expect(card.getByTestId("citation-pdf-page")).toHaveText("p. 2 · page 3 of the PDF");
+    await expect(card).not.toContainText("Annual Report, p.");
+    expect((await card.innerText()).split("p. 2").length - 1).toBe(1);
+    await window.keyboard.press("Escape");
+    await expect(card).toHaveCount(0);
+  }
   await app.close();
 });

@@ -73,25 +73,31 @@ export interface Locator {
   label?: string;
 }
 
-const span = (from: number | string, to: number | string) =>
-  to !== from ? `${from}-${to}` : String(from);
+const span = (from: number, to: number) => (to > from ? `${from}-${to}` : String(from));
+
+const RANGE_MARK = /[-–—]/;
 
 /**
  * A Citation's Location as a locator: pages and lines as CSL's own ("p. 4", "pp. 4–5"); a slide,
  * rows of a sheet or a section as the Location's own words in the style's language ("slide 4",
- * "§ History"), which the style prints with no label rather than as an invented page.
+ * "§ History"), which the style prints with no label rather than as an invented page. So is a page
+ * a PDF names with letters or a hyphen ("A-3", "iii–iv"): CSL reads a hyphen in a locator as a
+ * range, and only of numbers.
  */
 export function locatorOf(location: CitationLocation | null, language: Language): Locator {
   if (!location) return {};
-  if (location.kind === "page") {
-    const { from, to } = location.printed ?? location;
-    return { locator: span(from, to), label: "page" };
-  }
   if (location.kind === "lines") {
     return { locator: span(location.from, location.to), label: "line" };
   }
-  return {
-    locator: formatLocation(location, (key, params) => translate(language, key, params)),
-    label: "custom",
-  };
+  const words = formatLocation(location, (key, params) => translate(language, key, params));
+  if (location.kind === "page") {
+    const from = location.printed?.from ?? String(location.from);
+    const to = location.printed?.to ?? String(location.to);
+    const single = from === to;
+    const plain = single ? !RANGE_MARK.test(from) : /^\d+$/.test(from) && /^\d+$/.test(to);
+    if (plain) return { locator: single ? from : `${from}-${to}`, label: "page" };
+    // CSL turns even a custom locator's hyphen between digits into an en dash, a range.
+    if (single) return { locator: words.replaceAll("-", "\u2011"), label: "custom" };
+  }
+  return { locator: words, label: "custom" };
 }

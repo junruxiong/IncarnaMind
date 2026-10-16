@@ -190,6 +190,30 @@ describe("A PDF indexed before pages kept their names", () => {
       printed: { from: "3", to: "3" },
     });
   });
+
+  test("being read again when the app stopped, not closed in good order, it is read again at the very next start, not left to wait for Retry", async () => {
+    const dataDir = await createTempDataFolder();
+    const before = startCore(dataDir);
+    const document = await addReport(before, "Annual Report.pdf", report(["", "1", "2", "3", "4"]));
+    before.close();
+    const db = openDatabase(join(dataDir, DATABASE_FILE));
+    try {
+      db.run("UPDATE document_pages SET label = NULL");
+      db.run("UPDATE documents SET status = 'extracting', processing_version = ?", [
+        BigInt(PROCESSING_VERSION - 1),
+      ]);
+    } finally {
+      db.close();
+    }
+
+    const after = startCore(dataDir);
+    const [read] = await waitForProcessing(after, [document.id]);
+
+    expect(read).toMatchObject({ status: "ready", failure: null });
+    expect((await locationOf(after, document, 4)).location).toMatchObject({
+      printed: { from: "3", to: "3" },
+    });
+  });
 });
 
 describe("A page's Location in words", () => {

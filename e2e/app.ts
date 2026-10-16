@@ -1469,6 +1469,17 @@ export async function askInAssistant(window: Page, question: string): Promise<Lo
   return answer;
 }
 
+/** Gives the Citations of an Answer in the assistant a check (#96 will produce them for real). */
+export const setCheck = (answer: Locator, patch: { check: string; verdict?: string | null }) =>
+  answer.getByTestId("assistant-answer-text").evaluate((dom, attributes) => {
+    const { view } = (dom as unknown as { editor: Editor }).editor;
+    view.state.doc.descendants((node, pos) => {
+      if (node.type.name !== "citation") return true;
+      view.dispatch(view.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, ...attributes }));
+      return false;
+    });
+  }, patch);
+
 /** The tiny MCP server the core tests use: `lookup_tide` is read-only, `book_boat` isn't. */
 const TIDE_SERVER = resolve(__dirname, "../tests/fixtures/mcp-server.mjs");
 
