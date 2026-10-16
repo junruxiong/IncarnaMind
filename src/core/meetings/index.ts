@@ -378,6 +378,11 @@ export function createMeetings(options: MeetingsOptions) {
     setSource(current, source, state);
   }
 
+  /** Whether the computer's sound is being recorded: the others in the call are heard apart from the User. */
+  function hasCallSound(current: Live): boolean {
+    return ["starting", "recording", "silent"].includes(current.sources.system);
+  }
+
   /** Starts capturing a Meeting's audio, in a stretch that begins now. */
   function begin(row: MeetingRow, period: Period): void {
     if (!capture) throw new InvalidInputError("This copy of IncarnaMind can't record audio.");
@@ -402,7 +407,7 @@ export function createMeetings(options: MeetingsOptions) {
     }
     live = current;
     options.onCapturingChange(true);
-    transcripts?.begin(row.id, period.offsetMs);
+    transcripts?.begin(row.id, period.offsetMs, () => hasCallSound(current));
     current.session = capture.start(
       { systemAudio: systemAudio && capture.systemAudio },
       {
