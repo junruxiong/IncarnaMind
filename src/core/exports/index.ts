@@ -23,6 +23,7 @@ import { mindName } from "../../shared/naming";
 import type { PrintPaper } from "../../shared/printDocument";
 import { pendingProposals } from "../../shared/proposals";
 import type { SourceDocument } from "../../shared/sources";
+import type { UnitText } from "../../shared/units";
 import { wordFileOf, wordImportProgressOf } from "../../shared/wordFiles";
 import type { Logger, Pictures, Printer } from "../adapters";
 import {
@@ -55,6 +56,7 @@ import {
   theirChangesReading,
 } from "../mindText";
 import { withChangesAccepted } from "../shownChanges";
+import { type CitationCard, citationCard } from "./citationCards";
 import { addSources, styleCitations } from "./citations";
 import { piecesOf, renderDocx } from "./docx";
 import { renderHtml } from "./html";
@@ -63,6 +65,7 @@ import { renderMarkdown } from "./markdown";
 import { unifyIdeographs } from "./pdfUnicode";
 import { renderPrintHtml } from "./printHtml";
 import { failedSentences } from "./sentenceChecks";
+import { renderSharePage } from "./sharePage";
 import { isUnverified, numberCitations, packPages, renderSourcePack } from "./sourcePack";
 import { exportWordPatch } from "./wordPatch";
 import type { ReviewChoices } from "./wordReview";
@@ -90,6 +93,11 @@ export interface ExportsDependencies {
   formatCitations(request: CitationFormatRequest): Promise<FormattedCitations>;
   /** A Citation's saved page (#133); null if none is saved. */
   citedPage(citation: Readonly<Record<string, unknown>>): Promise<DrawnPage | null>;
+  /**
+   * The stored text of the Units a Citation cites, of the version it quotes (`pageTexts` in
+   * ../documents): what a web page to share's card shows a part of. Empty once it is gone.
+   */
+  citedUnits(citation: Partial<CitationAttributes>): UnitText[];
   /** Prints a PDF; null where this copy can't. */
   printer: Printer | null;
   /** The paper a PDF is printed on, which goes by the computer's region (`paperFor`). */
@@ -115,6 +123,7 @@ const EXTENSIONS: Readonly<Record<ExportFormat, string>> = {
   pdf: "pdf",
   "source-pack": "pdf",
   html: "html",
+  "share-page": "html",
 };
 
 /** What an export holds, read once for both its preview and its file. */
@@ -153,9 +162,10 @@ export function createExports(deps: ExportsDependencies) {
       attributesOf.set(note, attributes as Partial<CitationAttributes>);
       return note;
     };
-    // Footnotes go right after the word, and so do Numbered's Citations; a style decides for
-    // its own (./citations).
-    const trimBeforeCitation = style.form === "numbered";
+    // Footnotes go right after the word, and so do Numbered's Citations and a shared page's
+    // markers; a style decides for its own (./citations).
+    const trimBeforeCitation =
+      style.form === "numbered" || (format === "share-page" && options.citationCards);
 
     const live = new Set(documents.map((document) => document.id));
     const readOptions: ReadOptions = {
@@ -258,6 +268,38 @@ export function createExports(deps: ExportsDependencies) {
     };
   };
 
+  /**
+   * A shared page numbers its Citations whatever the Mind's style, since its readers click a
+   * number for each; the Bibliography comes only where a Numbered Mind shows one.
+   */
+  const sharePage = async (prepared: Prepared): Promise<string> => {
+    const { title, language, documents, preview } = prepared;
+    const blocks = prepared.bibliography
+      ? addSources(
+          prepared.blocks,
+          { language, documents },
+          translate(language, "bibliography.title"),
+        )
+      : prepared.blocks;
+    const t: Translate = (key, params) => translate(language, key, params);
+    const kept = deps.keptCitationTexts();
+    const cards = new Map<Footnote, CitationCard>();
+    for (const footnote of footnotesIn(blocks, { inFootnotes: false })) {
+      const attributes = prepared.attributesOf.get(footnote) ?? {};
+      cards.set(footnote, citationCard(attributes, { documents, kept, units: deps.citedUnits, t }));
+    }
+    return renderSharePage({
+      title,
+      blocks: await withPictures(blocks, language, deps),
+      labels: exportLabels(language),
+      language,
+      name: preview.fileName.slice(0, -".html".length),
+      at: deps.now(),
+      cards,
+      checkedLine: prepared.options.checkedLine,
+    });
+  };
+
   return {
     preview(mindId: unknown, options: unknown): MindExportPreview {
       return prepare(mindId, options).preview;
@@ -271,6 +313,10 @@ export function createExports(deps: ExportsDependencies) {
       }
       if (format === "source-pack") return sourcePack(prepared);
       if (format === "docx" && prepared.word) return exportIntoWord(prepared, prepared.word);
+      if (format === "share-page" && prepared.options.citationCards) {
+        const data = new TextEncoder().encode(await sharePage(prepared));
+        return { ...preview, data, word: null, ...reviewOf(prepared, []) };
+      }
       const blocks =
         style.form !== "numbered"
           ? await styleCitations(prepared.blocks, style, deps.formatCitations)
@@ -295,7 +341,7 @@ export function createExports(deps: ExportsDependencies) {
           created: deps.now(),
           review: reviewChoices(prepared, false),
         }));
-      } else if (format === "html") {
+      } else if (format === "html" || format === "share-page") {
         const drawn = await withPictures(blocks, language, deps);
         data = new TextEncoder().encode(
           renderHtml(title, drawn, labels, {
@@ -451,16 +497,19 @@ async function withPictures(
 function parseExportOptions(input: unknown): Required<ExportMindOptions> {
   if (!isRecord(input)) throw new InvalidInputError("Export options must be an object.");
   const { format, includeQuestions, accept, theirChanges } = input;
-  const choice = (name: "trackChanges" | "markAiText" | "commentFailedChecks") => {
+  const choice = (
+    name: "trackChanges" | "markAiText" | "commentFailedChecks" | "citationCards" | "checkedLine",
+    absent = false,
+  ) => {
     const value = input[name];
     if (value !== undefined && typeof value !== "boolean") {
       throw new InvalidInputError({ key: "error.export.choice", values: { name } });
     }
-    return value === true;
+    return value ?? absent;
   };
   if (!EXPORT_FORMATS.some((each) => each === format)) {
     throw new InvalidInputError(
-      'The export format must be "markdown", "docx", "pdf", "source-pack" or "html".',
+      'The export format must be "markdown", "docx", "pdf", "source-pack", "html" or "share-page".',
     );
   }
   if (includeQuestions !== undefined && typeof includeQuestions !== "boolean") {
@@ -483,6 +532,8 @@ function parseExportOptions(input: unknown): Required<ExportMindOptions> {
     trackChanges: choice("trackChanges"),
     markAiText: choice("markAiText"),
     commentFailedChecks: choice("commentFailedChecks"),
+    citationCards: choice("citationCards", true),
+    checkedLine: choice("checkedLine"),
     theirChanges: theirChanges ?? "shown",
   };
 }
