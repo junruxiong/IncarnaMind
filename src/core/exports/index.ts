@@ -283,6 +283,7 @@ export function createExports(deps: ExportsDependencies) {
       unverifiedCitations: pages.flatMap((page) => page.entries).filter(isUnverified).length,
       data: unifyIdeographs(printed),
       word: null,
+      needsDetails: [],
       sentenceChecks: { contradicted: 0, unsupported: 0, needsRecheck: 0, commented: false },
       trackedChanges: 0,
     };
@@ -485,18 +486,23 @@ export function createExports(deps: ExportsDependencies) {
         throw new Error("This copy of IncarnaMind can't make PDFs.");
       }
       if (format === "source-pack") return sourcePack(prepared);
-      if (format === "docx" && prepared.word) return exportIntoWord(prepared, prepared.word);
+      const thin = thinEntries(deps.formatCitations);
+      if (format === "docx" && prepared.word) {
+        return exportIntoWord(prepared, prepared.word, thin);
+      }
       if (format === "share-page" && prepared.options.citationCards) {
         return {
           ...preview,
           data: await sharePage(prepared),
           word: null,
+          needsDetails: [],
           ...reviewOf(prepared, []),
         };
       }
+      const labels = exportLabels(language);
       const blocks =
         style.form !== "numbered"
-          ? await styleCitations(prepared.blocks, style, deps.formatCitations)
+          ? await styleCitations(prepared.blocks, style, thin.format, labels.needsDetails)
           : prepared.bibliography
             ? addSources(
                 prepared.blocks,
@@ -504,7 +510,6 @@ export function createExports(deps: ExportsDependencies) {
                 translate(language, "bibliography.title"),
               )
             : prepared.blocks;
-      const labels = exportLabels(language);
       let data: Uint8Array;
       let commented: readonly FailedSentence[] = [];
       if (format === "markdown") {
@@ -539,7 +544,13 @@ export function createExports(deps: ExportsDependencies) {
         });
         data = unifyIdeographs(printed);
       }
-      return { ...preview, data, word: null, ...reviewOf(prepared, commented) };
+      return {
+        ...preview,
+        data,
+        word: null,
+        needsDetails: [...thin.documents],
+        ...reviewOf(prepared, commented),
+      };
     },
   };
 
@@ -558,6 +569,7 @@ export function createExports(deps: ExportsDependencies) {
   async function exportIntoWord(
     prepared: Prepared,
     word: NonNullable<Prepared["word"]>,
+    thin: ThinEntries,
   ): Promise<MindExport> {
     if (word.importing) throw new Error("This Mind is still being imported from its Word file.");
     const { language, style, documents } = prepared;
@@ -577,7 +589,7 @@ export function createExports(deps: ExportsDependencies) {
         bibliography: prepared.bibliography,
         bibliographyHeading: translate(language, "bibliography.title"),
         sources: { language, documents },
-        formatCitations: deps.formatCitations,
+        formatCitations: thin.format,
         withPictures: (blocks) => withPictures(blocks, language, deps),
         review: reviewChoices(prepared, true),
       });
@@ -585,11 +597,38 @@ export function createExports(deps: ExportsDependencies) {
         notKept: report.notKept.length,
         unknownParts: report.unknownParts.length,
       });
-      return { ...prepared.preview, data, word: report, ...reviewOf(prepared, commented) };
+      return {
+        ...prepared.preview,
+        data,
+        word: report,
+        needsDetails: [...thin.documents],
+        ...reviewOf(prepared, commented),
+      };
     } finally {
       doc.destroy();
     }
   }
+}
+
+interface ThinEntries {
+  format(request: CitationFormatRequest): Promise<FormattedCitations>;
+  documents: ReadonlySet<string>;
+}
+
+function thinEntries(
+  format: (request: CitationFormatRequest) => Promise<FormattedCitations>,
+): ThinEntries {
+  const documents = new Set<string>();
+  return {
+    documents,
+    async format(request) {
+      const formatted = await format(request);
+      for (const entry of formatted.bibliography) {
+        if (entry.needsDetails && entry.documentId !== null) documents.add(entry.documentId);
+      }
+      return formatted;
+    },
+  };
 }
 
 function reviewOf(

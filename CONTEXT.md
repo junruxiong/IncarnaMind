@@ -103,15 +103,15 @@ A note the User writes at a point in the text, shown there by its number; its te
 _Avoid_: endnote, annotation, comment
 
 **Reference record**:
-What a citation style needs to cite a Document: its type, title, authors, date, where it was published, volume, issue, pages, publisher, DOI, URL and language. It is read from the Document's file, the User can edit every field (an edit is never replaced by a later read), and Look up can fill its empty fields from the Document's DOI or arXiv ID. A record of a known type that lacks its title, authors or date "needs details". A file exported from Zotero, EndNote or Mendeley (CSL JSON, BibTeX or RIS) can be imported: each reference is matched to a Document, or kept as a record with no Document until its PDF is added; the User's edits win over an import.
+What a citation style needs to cite a Document: its type, title, authors, date, where it was published, volume, issue, pages, publisher, DOI, URL and language. It is read from the Document's file (its properties, and what a PDF's first page prints: title, authors, institution and year), the User can edit every field (an edit is never replaced by a later read), and Look up can fill its empty fields from the Document's DOI or arXiv ID. What was read from the file "needs checking" until the User marks it checked or edits it. A record of a known type that lacks its title, authors or date "needs details". A file exported from Zotero, EndNote or Mendeley (CSL JSON, BibTeX or RIS) can be imported: each reference is matched to a Document, or kept as a record with no Document until its PDF is added; the User's edits win over an import.
 _Avoid_: metadata, bibliographic entry, citation (a Citation is the reference in an Answer)
 
 **Citation style**:
-How a Mind's Citations read, in its text and its exports, and how its Bibliography lists their Documents: a style of the Citation Style Language, such as APA 7, IEEE or GB/T 7714—2015, written from the Documents' reference records, or Numbered, IncarnaMind's own (numbered markers, each a footnote naming its Document and Location). Each Mind has one; one that hasn't chosen is Numbered, and a new Mind starts in the style last chosen for a Mind in its Folder. A style changes how a Citation reads, never its check.
+How a Mind's Citations read, in its text and its exports, and how its Bibliography lists their Documents: a style of the Citation Style Language, such as APA 7, IEEE or GB/T 7714—2015, written from the Documents' reference records, or Numbered, IncarnaMind's own (numbered markers, each a footnote naming its Document and Location). Each Mind has one; one that hasn't chosen is Numbered, or GB/T 7714—2015 when the interface and the Mind are in Chinese and it cites a paper or a book, and a new Mind starts in the style last chosen for a Mind in its Folder. A style changes how a Citation reads, never its check.
 _Avoid_: citation format, reference style
 
 **Bibliography**:
-Every Document a Mind cites, once each, in its citation style: the References at the Mind's end, kept up to date, and the end of its exports. A Mind in Numbered shows none. A Document whose reference record is too thin to cite is listed by its name, marked "needs details".
+Every Document a Mind cites, once each, in its citation style: the References at the Mind's end, kept up to date, and the end of its exports. A Mind in Numbered shows none. A Document whose reference record is too thin to cite is listed by its name, marked "needs details", in the Mind and in its exports.
 _Avoid_: works cited (except as a style's own heading), sources list
 
 **Source provider**:
@@ -244,7 +244,7 @@ The result of a Citation check when the Citation's quote, or words its sentence 
 _Avoid_: broken, invalid, failed
 
 **Unsupported**:
-The result for a sentence when Find support, Verify or note health finds nothing in the Documents that backs it up. It is not a finding that the sentence is wrong.
+The result for a sentence when Find support, Verify or note health finds nothing in the Documents that backs it up. It is not a finding that the sentence is wrong. A sentence that cites a court decision none of the Documents holds is unsupported too, and its card says the case can't be checked here.
 _Avoid_: not found, unverified, false
 
 **Contradicted**:
@@ -298,7 +298,7 @@ The words of a Meeting, in order and with times, kept as a Document so that a Ci
 _Avoid_: captions, subtitles, minutes
 
 **Speaker**:
-A person in a Transcript who is told apart from the others. A Speaker is named by the User, and a Citation to a Transcript names who said the quote.
+A person in a Transcript who is told apart from the others. A Speaker is named by the User, and a Citation to a Transcript names who said the quote. Before that, a live Meeting's lines are "Me" (the microphone) or "Them" (the computer's sound), or "Speaker ?" with no computer sound.
 _Avoid_: voice, participant, user
 
 ### Files

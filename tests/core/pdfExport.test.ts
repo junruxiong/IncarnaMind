@@ -412,7 +412,7 @@ describe("a web page Citation's footnote", () => {
     expect(document?.body).toContain("Accessed October 6, 2026");
   });
 
-  test("a Document with no reference details is in the Bibliography by its name, kind and the day it was added, in each style", async () => {
+  test("a Document with no reference details is in the Bibliography by its name, marked as needing details, in each style", async () => {
     const { printed, printer } = fakePrinter();
     const { core, mind, client, tides } = await setUp({ printer });
     writeMind(client, [paragraph(text("Spring tides"), citation(tides, 1, "found"))]);
@@ -421,7 +421,8 @@ describe("a web page Citation's footnote", () => {
       await core.setMindCitationStyle(mind.id, style);
       await core.exportMind(mind.id, { format: "pdf" });
       const body = printed.at(-1)?.body ?? "";
-      expect(body, style).toMatch(/Tides\. Plain text, added \d+ \w+ \d{4}\./);
+      expect(body, style).toContain("Tides. [needs details]");
+      expect(body, style).not.toMatch(/added \d/);
     }
   });
 });

@@ -111,6 +111,8 @@ export function readClaimCheck(value: unknown): ClaimCheckAttributes | null {
     evidence: isRecord(value.evidence) ? (value.evidence as unknown as CitationAttributes) : null,
     says: text(value.says),
     calculation: calculationOf(value.calculation),
+    citedCaseUnchecked: value.citedCaseUnchecked === true,
+    citedCaseFound: value.citedCaseFound === true,
     scope: scopeOf(value.scope),
     versions: versionsOf(value.versions),
     excluded: excludedOf(value.excluded),

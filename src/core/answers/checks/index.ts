@@ -25,6 +25,7 @@
 
 import { randomUUID } from "node:crypto";
 import type * as Y from "yjs";
+import { caseCitations } from "../../../shared/caseCitations";
 import { type LiveDocument, withShownName } from "../../../shared/citations";
 import { restsOn } from "../../../shared/claimChecks";
 import { judgesUnreliably } from "../../../shared/smallModel";
@@ -235,6 +236,8 @@ function withResult(
         evidence: evidenceOf(result.evidence),
         says: result.says,
         calculation: result.calculation,
+        citedCaseUnchecked: result.citedCaseUnchecked,
+        citedCaseFound: result.citedCaseFound,
       };
 }
 
@@ -403,6 +406,8 @@ export function createChecks(options: ChecksOptions) {
           evidence: null,
           says: null,
           calculation: null,
+          citedCaseUnchecked: false,
+          citedCaseFound: false,
           scope,
           versions: [],
           excluded: [],
@@ -597,6 +602,8 @@ export function createChecks(options: ChecksOptions) {
           evidence: null,
           says: null,
           calculation: null,
+          citedCaseUnchecked: caseCitations(parsed.claim).length > 0,
+          citedCaseFound: false,
           versions: [],
           excluded: [],
         };
