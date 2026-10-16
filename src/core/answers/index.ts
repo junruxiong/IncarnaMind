@@ -328,6 +328,9 @@ const EMPTY_SCOPE_NOTE =
 
 const NO_SCOPE: SearchScope = { folderIds: [], tagIds: [], documentIds: [] };
 
+const changesAMind = (change: MindChange) =>
+  change.created || change.revised === true || change.proposals > 0;
+
 /** The Folder a Search scope is, when it is one Folder alone; null otherwise. */
 const oneFolderOf = (scope: SearchScope | null): string | null =>
   scope && scope.folderIds.length === 1 && scope.tagIds.length + scope.documentIds.length === 0
@@ -702,7 +705,10 @@ export function createAnswers(options: AnswersOptions) {
      * Blocks the User selected there, where a Mind it makes goes, and what
      * Blocks it adds link back to. It is offered the Minds' Tools. Absent: none.
      */
-    assistant?: Pick<MindToolsOptions, "focused" | "folderId" | "origin">;
+    assistant?: Pick<MindToolsOptions, "focused" | "folderId" | "origin"> & {
+      /** The conversation's last Answer changed a Mind (see `routeRequest`). */
+      followsAChange: boolean;
+    };
   }): void {
     const { home, answerId, model, context, documentIds, forcedSkill } = input;
     const outside = input.outside === true;
@@ -1391,7 +1397,8 @@ export function createAnswers(options: AnswersOptions) {
           : [];
       // The Minds' Tools, for an Answer in the assistant (#202).
       const minds = outside ? undefined : options.minds;
-      const route = minds && input.assistant ? routeRequest(context.question) : null;
+      const route =
+        minds && input.assistant ? routeRequest(context.question, input.assistant) : null;
       const requested =
         route && (route.kind === "write" || route.kind === "edit")
           ? { change: route.kind, newMind: route.newMind }
@@ -1519,10 +1526,7 @@ export function createAnswers(options: AnswersOptions) {
         mindsNow ??= minds?.list() ?? [];
         return mindsNow;
       };
-      const changedAMind = () =>
-        [...mindChanges.values()].some(
-          (change) => change.created || change.revised || change.proposals > 0,
-        );
+      const changedAMind = () => [...mindChanges.values()].some(changesAMind);
       const owesAWrite = () => requested !== null && !changedAMind() && mindProblems.size === 0;
       const heldBack = holdBack(() => mindsListed().map((mind) => mind.name));
       const checkReply = (text: string) => {
@@ -1966,6 +1970,10 @@ export function createAnswers(options: AnswersOptions) {
         },
         folderId: oneFolderOf(question.scope),
         origin: { from: messageReference(conversation.id, answer.id), question: question.text },
+        followsAChange:
+          turn.earlier
+            .findLast((message) => message.kind === "answer")
+            ?.toolCalls.some((call) => call.mindChange && changesAMind(call.mindChange)) ?? false,
       },
     });
     return { asked: true, conversation, questionId: question.id, answerId: answer.id };

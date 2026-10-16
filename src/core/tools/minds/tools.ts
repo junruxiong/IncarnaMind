@@ -593,10 +593,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
   const changeOf = (writer: Writer, created: boolean): MindChange =>
     changeIn(writer.mind.id, writer.request, created);
 
-  /**
-   * Text a writer would add that is already there: the assistant's own
-   * waiting text, or what another call of this Answer wrote; null for none.
-   */
+  // Sections may share their headings ("Key findings"), so only a paragraph is a second copy.
   const copyIn = (writer: Writer, blocks: readonly NodeJSON[]): string | null => {
     const there = new Set(
       minds
@@ -604,12 +601,13 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         .map(textKey)
         .filter((key) => key.length >= MIN_COPY),
     );
-    return (
-      blocks.map(nodeText).find((text) => {
-        const key = textKey(text);
-        return key.length >= MIN_COPY && there.has(key);
-      }) ?? null
-    );
+    let section: string | null = null;
+    for (const block of blocks) {
+      const text = nodeText(block);
+      if (block.type === "heading") section = text;
+      else if (textKey(text).length >= MIN_COPY && there.has(textKey(text))) return section ?? text;
+    }
+    return null;
   };
 
   /** Takes back what a writer wrote: the call ended up meaning another Mind, or another place. */
