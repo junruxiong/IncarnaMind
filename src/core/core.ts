@@ -660,7 +660,9 @@ export function createCore(adapters: CoreAdapters): Core {
     languages: () =>
       settings.get().language === "zh-CN" ? ["zh-CN", "zh;q=0.9", "en;q=0.8"] : ["en", "*;q=0.5"],
     pictureFetch: pictureFetcher.fetch,
-    reportError: (error) => console.error("A web page's picture couldn't be fetched:", error),
+    ...(adapters.pageLook ? { look: adapters.pageLook } : {}),
+    keepLookByDefault: () => settings.get().user.keepWebPageLook,
+    reportError: (error) => console.error("A web page's picture or look couldn't be kept:", error),
     ...adapters.webPages,
   });
   webPages.dropPurged().catch((error: unknown) => console.error(error));
@@ -946,7 +948,8 @@ export function createCore(adapters: CoreAdapters): Core {
       }
     },
     async savePage(address, folderId, added) {
-      const result = await webPages.save({ address }, added);
+      // A found source's copy is the text the User asked for, not how its page looks.
+      const result = await webPages.save({ address, keepLook: false }, added);
       if (result.outcome === "failed") return null;
       if (!result.existing && folderId !== null) library.assign(result.document.id, folderId);
       return { document: documents.get(result.document.id), existing: result.existing };
@@ -988,6 +991,50 @@ export function createCore(adapters: CoreAdapters): Core {
       organizedFolderDocuments: (folderId) => library.documentIds(folderId),
       documentIds: (filter) => documents.ids(filter),
     });
+  // A Folder of the Library holds no file that isn't a Document, so it names the folders on disk
+  // its Documents are in: a Linked folder filed into it whole names the Linked folder.
+  const foldersOnDisk = (folderIds: readonly string[]) => {
+    const all = folders.list();
+    const named = all.filter((folder) => folderIds.includes(folder.id));
+    const filed = new Set(
+      folderIds
+        .filter((id) => !named.some((folder) => folder.id === id))
+        .flatMap((id) => documents.getMany(library.documentIds(id)))
+        .map((document) => document.folderId),
+    );
+    return [...named, ...all.filter((folder) => filed.has(folder.id))];
+  };
+  const unreadIn = (wanted: SearchScope | null): UnreadFile[] => {
+    const inScope = wanted ? resolveScope(wanted) : null;
+    const unread = findUnreadDocuments(documents.unread(inScope ?? undefined));
+    // Files in a format not read belong to folders on disk only: a Tag or a Document can't name
+    // them. A folder holds those in it and under it, even where no Document is.
+    const named = wanted ? foldersOnDisk(wanted.folderIds) : null;
+    const files = documents.linkedFolders
+      .unsupportedFiles()
+      .filter(
+        (file) =>
+          named === null ||
+          named.some(
+            (folder) =>
+              folder.linkedFolderId === file.linkedFolderId &&
+              (folder.relativePath === "" ||
+                file.relativeFolder === folder.relativePath ||
+                file.relativeFolder.startsWith(`${folder.relativePath}/`)),
+          ),
+      )
+      .map(
+        (file): UnreadFile => ({
+          id: file.path,
+          name: file.name,
+          reason: "format",
+          extension: file.extension,
+          documentId: null,
+          pages: [],
+        }),
+      );
+    return [...unread, ...files];
+  };
   // What checks and comparison tables search (#80): as Answers do, without IncarnaMind's own
   // files and the document being checked. Answers themselves search everything, as before.
   const evidence = createEvidence({
@@ -1008,7 +1055,8 @@ export function createCore(adapters: CoreAdapters): Core {
     enabled: () => settings.get().user.webSearch && !embedding.localOnly(),
     readiness: (model) => chat.readiness(model),
     prepare: (model) => chat.prepareModel(model, "web-search", "off"),
-    savePage: (address, fetch) => webPages.save({ address }, undefined, fetch),
+    // A page an Answer saves is never loaded whole: that is for the User to ask for, page by page.
+    savePage: (address, fetch) => webPages.save({ address, keepLook: false }, undefined, fetch),
     folderOf: (place) => {
       try {
         if (place.mindId !== null) return minds.get(place.mindId).folderId;
@@ -1160,6 +1208,7 @@ export function createCore(adapters: CoreAdapters): Core {
       },
     },
     resolveScope,
+    interfaceLanguage: () => settings.get().language,
     emptyScopeAnswer: () => translate(settings.get().language, "scope.answer.empty"),
     onWritingChange: (writing) => {
       background.setAnswering(writing);
@@ -1461,6 +1510,7 @@ export function createCore(adapters: CoreAdapters): Core {
     consent,
     localOnly: () => embedding.localOnly(),
     resolveScope,
+    unread: unreadIn,
     evidence,
     documents: {
       searchableCount: (documentIds) => documents.searchableCount(documentIds ?? undefined),
@@ -2457,6 +2507,7 @@ export function createCore(adapters: CoreAdapters): Core {
         ? { ...result, document: documents.get(result.document.id) }
         : result;
     },
+    keepWebPageLook: async (documentId) => webPages.keepLook(documentId),
     fetchWebPageAgain: async (documentId) => webPages.fetchAgain(documentId),
     saveTextAsDocument: async (input) => {
       if (!isRecord(input) || typeof input.text !== "string" || input.text.trim() === "") {
@@ -2548,40 +2599,7 @@ export function createCore(adapters: CoreAdapters): Core {
       return { ...linked, batchId };
     },
     listLinkedFolders: async () => documents.linkedFolders.list(),
-    listUnreadFiles: async (scope) => {
-      const wanted = parseSearchScope(scope);
-      const inScope = wanted ? resolveScope(wanted) : null;
-      const unread = findUnreadDocuments(documents.unread(inScope ?? undefined));
-      // Files in a format not read belong to Folders only: a Tag or a Document can't name them.
-      // A Folder holds those in it and under it, even where no Document is.
-      const named = wanted
-        ? folders.list().filter((folder) => wanted.folderIds.includes(folder.id))
-        : null;
-      const files = documents.linkedFolders
-        .unsupportedFiles()
-        .filter(
-          (file) =>
-            named === null ||
-            named.some(
-              (folder) =>
-                folder.linkedFolderId === file.linkedFolderId &&
-                (folder.relativePath === "" ||
-                  file.relativeFolder === folder.relativePath ||
-                  file.relativeFolder.startsWith(`${folder.relativePath}/`)),
-            ),
-        )
-        .map(
-          (file): UnreadFile => ({
-            id: file.path,
-            name: file.name,
-            reason: "format",
-            extension: file.extension,
-            documentId: null,
-            pages: [],
-          }),
-        );
-      return [...unread, ...files];
-    },
+    listUnreadFiles: async (scope) => unreadIn(parseSearchScope(scope)),
     locateLinkedFolder: (linkedFolderId, path) =>
       documents.linkedFolders.locate(linkedFolderId, path),
     removeLinkedFolder: async (linkedFolderId) => unlinkFolder(linkedFolderId),

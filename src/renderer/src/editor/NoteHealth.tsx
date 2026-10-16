@@ -14,11 +14,13 @@ import {
 } from "../checks";
 import { ProblemLine } from "../components/ProblemLine";
 import { ReadinessExplanation, readinessAction } from "../components/providers/ChatReadinessNotice";
+import { UnreadFilesLine } from "../components/UnreadFilesLine";
 import { useContradictionLine } from "../contradictions";
 import { errorMessage } from "../errors";
 import { useLanguage, useT } from "../i18n";
 import { checkMind, startMindCheck, useMindCheck, useMindCheckRun } from "../mindCheck";
 import { useAppStore } from "../store";
+import { useCheckUnread } from "../unreadFiles";
 import { AnswerError } from "./AnswerView";
 import { coverageOf, sameCoverage, shownClaims } from "./claimChecks";
 import {
@@ -105,7 +107,8 @@ function useHealth(editor: Editor, skipped: ReadonlySet<string>): Health {
  * a re-check or weren't checked. Each part is a button that moves to the
  * next such sentence or Citation, round to the first. Under it, while
  * sentences are checked, what is happening with Stop; or why a check gave
- * nothing, with the one thing that helps.
+ * nothing, with the one thing that helps. Last on the line, the files the
+ * checks couldn't read, if any, whose list opens below it.
  */
 export function NoteHealth({
   editor,
@@ -122,6 +125,7 @@ export function NoteHealth({
   const skippedKeys = checkedAll?.skipped.join(" ") ?? "";
   const skipped = useMemo(() => new Set(skippedKeys.split(" ").filter(Boolean)), [skippedKeys]);
   const health = useHealth(editor, skipped);
+  const unread = useCheckUnread(editor, doc);
   const asking = useMindCheck((state) => state.asking[mindId] !== undefined);
   const coverage = useEditorState({
     editor,
@@ -377,6 +381,7 @@ export function NoteHealth({
                 : t(`checks.problem.${problem.kind}`)}
           </ProblemLine>
         )}
+      <UnreadFilesLine files={unread} testId="checks-unread" className="mind-unread" />
     </>
   );
 }

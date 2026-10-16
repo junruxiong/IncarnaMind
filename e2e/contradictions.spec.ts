@@ -22,7 +22,7 @@ import {
  * Contradiction watch (#112): "Check for contradictions" (⌘K, the Mind's
  * menu) checks each cited sentence of a Mind against the other Documents in
  * its Folder. The User cites a sentence with Find support's Add as Citation;
- * the scripted model (src/main/fakeChatModel.ts) finds a sentence
+ * the scripted model (src/main/fakeChat/checks.ts) finds a sentence
  * contradicted when it shares three words with a line that has other numbers.
  * Set INCARNAMIND_SCREENSHOTS to a folder to also save screenshots.
  */
