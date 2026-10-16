@@ -1,5 +1,5 @@
 import { type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
-import type { ChatGptPastedAddressProblem } from "../../../../core/api";
+import type { PastedAddressProblem } from "../../../../core/api";
 import { core } from "../../core";
 import { useGap, useT } from "../../i18n";
 import { useAppStore } from "../../store";
@@ -18,7 +18,7 @@ export function PasteSignInAddress() {
   const id = useId();
   const [open, setOpen] = useState(false);
   const [address, setAddress] = useState("");
-  const [problem, setProblem] = useState<ChatGptPastedAddressProblem | null>(null);
+  const [problem, setProblem] = useState<PastedAddressProblem | null>(null);
   const [sending, setSending] = useState(false);
   const field = useRef<HTMLInputElement>(null);
   const opener = useRef<HTMLButtonElement>(null);
