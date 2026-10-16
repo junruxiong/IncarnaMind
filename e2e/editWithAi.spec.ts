@@ -401,6 +401,16 @@ test("âŒ˜J's change streams in and applies paragraph by paragraph, with Writingâ
     "Harbours are very busy in the spring and really quiet in winter.",
   );
   await expect(line.getByTestId("applied-count")).toHaveText(/^Changed \d+ places$/);
+
+  // The next edit, asked right after Stop, has its own Undo: the stopped one's stays its own.
+  await ask("replace tides with waves");
+  await expect(paragraphs.first()).toHaveText("The waves here are strong and regular.");
+  await expect(line.getByTestId("applied-count")).toHaveText("Changed 1 place");
+  await editor.focus();
+  await window.keyboard.press("ControlOrMeta+z");
+  await expect(paragraphs.first()).toHaveText("The tides here are strong and regular.");
+  await window.keyboard.press("ControlOrMeta+z");
+  await expect(paragraphs.first()).toHaveText("The tides here are very strong and really regular.");
 });
 
 /** Asks the assistant, with no text selected: its changes to the Mind wait for the User. */

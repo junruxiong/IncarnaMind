@@ -40,8 +40,8 @@ export interface AppliedChange {
   from: unknown;
   to: unknown;
   removed: Fragment;
-  /** Whole Blocks, added or taken out. */
-  block: boolean;
+  /** Whole Blocks, added or taken out; `to` of added ones is just inside the last one's end. */
+  block: "added" | "removed" | null;
 }
 
 export type AppliedLine = (
@@ -60,6 +60,15 @@ export type AppliedLine = (
   /** The language it was last drawn in, once that changed. */
   language?: Language;
 };
+
+const LINE_KINDS: ReadonlySet<unknown> = new Set<AppliedLine["kind"]>([
+  "applied",
+  "review",
+  "held",
+]);
+
+const isAppliedLine = (value: unknown): value is AppliedLine =>
+  typeof value === "object" && value !== null && "kind" in value && LINE_KINDS.has(value.kind);
 
 interface LineState {
   line: AppliedLine | null;
@@ -151,7 +160,8 @@ export function placeOfChange(
   const at = (relative: unknown): number | null =>
     relativePositionToAbsolutePosition(binding.doc, binding.type, relative, binding.mapping);
   const from = at(change.from);
-  const to = at(change.to);
+  const inside = at(change.to);
+  const to = inside === null || change.block !== "added" ? inside : inside + 1;
   return from === null || to === null || to < from ? null : { from, to };
 }
 
@@ -301,9 +311,11 @@ export const AppliedEditLine = Extension.create<Options>({
         state: {
           init: () => ({ line: null, marks: DecorationSet.empty }),
           apply: (tr, value, _before, state) => {
-            const meta = tr.getMeta(appliedLineKey) as AppliedLine | null | undefined;
+            const meta: unknown = tr.getMeta(appliedLineKey);
+            // Typing ends the line, but a held edit waits for its Apply or Discard.
+            const typedOver = tr.docChanged && !fromDocument(tr) && value.line?.kind !== "held";
             const shown =
-              meta !== undefined ? meta : tr.docChanged && !fromDocument(tr) ? null : value.line;
+              meta === null || isAppliedLine(meta) ? meta : typedOver ? null : value.line;
             // Applied or discarded one by one, a held edit's changes are all gone; restored, a reviewed one's.
             const gone =
               shown !== null &&
