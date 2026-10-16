@@ -667,6 +667,14 @@ export const MIND_TEXT_ORIGINS_FIELD = "textOrigins";
 export const MIND_BLOCK_TIMES_FIELD = "blockTimes";
 
 /**
+ * The name of the Y.Map, beside a Mind's Blocks, that lists the files a
+ * check's scope couldn't read when it started, by the request that made the
+ * checks (`ClaimCheckAttributes.request`). A request that read everything has
+ * no entry (ADR-0003).
+ */
+export const MIND_CHECK_UNREAD_FIELD = "checkUnread";
+
+/**
  * A Question's Search scope (CONTEXT.md): the Folders, Tags and individual
  * Documents its Document search is limited to. It covers every Document in
  * one of the Folders or their sub-Folders (at any depth), every Document with
