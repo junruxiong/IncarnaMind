@@ -166,9 +166,7 @@ export function createExports(deps: ExportsDependencies) {
         documents,
         kept,
         language,
-        {
-          readQuote: deps.readableQuote,
-        },
+        deps,
       );
       attributesOf.set(note, attributes as Partial<CitationAttributes>);
       return note;
@@ -201,7 +199,7 @@ export function createExports(deps: ExportsDependencies) {
           versions: new Map(documents.map((document) => [document.id, document.contentHash])),
           folderId: mind.folderId,
           folderName: deps.folderName,
-          sourceOf: (passage) => footnoteOf(passage, documents, kept, language).source,
+          sourceOf: (passage) => footnoteOf(passage, documents, kept, language, deps).source,
         });
         const { review } = readOptions;
         const waiting = pendingProposals(fragment);
@@ -571,7 +569,7 @@ function footnoteOf(
   documents: readonly LiveDocument[],
   kept: readonly KeptCitationText[],
   language: Language,
-  { readQuote }: { readQuote(attributes: Partial<CitationAttributes>): string | null },
+  { readableQuote }: Pick<ExportsDependencies, "readableQuote">,
 ): Footnote {
   const t: Translate = (key, params) => translate(language, key, params);
   const document = shownDocumentName(attributes, documents) || t("export.unnamedDocument");
@@ -583,7 +581,7 @@ function footnoteOf(
       ? {
           check: state.check,
           quote: attributes.quote
-            ? (readQuote(attributes) ?? readableQuoteText(attributes.quote))
+            ? (readableQuote(attributes) ?? readableQuoteText(attributes.quote))
             : null,
           verdict: attributes.verdict ?? null,
         }
