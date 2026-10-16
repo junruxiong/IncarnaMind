@@ -45,8 +45,8 @@ describe("a version from before tab stops", () => {
     const tab = line instanceof Y.XmlElement ? line.get(0) : null;
     if (!(tab instanceof Y.XmlText)) throw new Error("No line.");
     tab.format(6, 1, { [WORD_TAB_MARK]: null });
-    await expect(core.applyMindUpdate(mind.id, sent[0] as Uint8Array)).rejects.toThrow(
-      MindReadOnlyError,
-    );
+    const [update] = sent;
+    if (!update) throw new Error("Nothing sent.");
+    await expect(core.applyMindUpdate(mind.id, update)).rejects.toThrow(MindReadOnlyError);
   });
 });

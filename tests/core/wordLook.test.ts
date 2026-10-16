@@ -614,7 +614,9 @@ describe("a Mind imported before gets its look once", () => {
     const edited = styled(after, wordLookOf(after.doc) as WordLook).find((node) =>
       node.text.includes("Edited."),
     );
-    expect(edited).toMatchObject({ look: null, runs: [null] });
+    // Plain, but for its tab, which the look marks wherever it is.
+    expect(edited?.look).toBeNull();
+    expect(edited?.runs).toEqual([null, null, null]);
     expect(
       styled(after, wordLookOf(after.doc) as WordLook).find((node) => node.text.startsWith("3.1"))
         ?.look,
