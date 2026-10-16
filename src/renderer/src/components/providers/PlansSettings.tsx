@@ -1,5 +1,6 @@
 import { SHOW_AGENT_CONNECTION } from "../../../../shared/agentConnection";
 import { useT } from "../../i18n";
+import { useSettingsTarget } from "../../settingsTarget";
 import { useAppStore } from "../../store";
 import {
   buttonStyle,
@@ -14,6 +15,8 @@ import { useContinueWithChatGpt } from "./ChatGptSignIn";
 
 const GOOGLE_CREDITS = "https://developers.google.com/program";
 
+const ROUTES = ["claude-account", "copilot"] as const;
+
 /**
  * Settings → Models → "Already pay for a plan?": the routes for a plan the User already has.
  * ChatGPT signs in; Claude and Google AI plans can't be used by other apps, so the plan pays
@@ -24,6 +27,7 @@ export function PlansSettings() {
   const t = useT();
   const showPage = useAppStore((state) => state.showSettingsPage);
   const sign = useContinueWithChatGpt({ keepDefault: true });
+  const section = useSettingsTarget<HTMLElement>(ROUTES, true);
   const row = (title: string, line: string, action: React.ReactNode, extra?: React.ReactNode) => (
     <li className={ruledRowClass}>
       <div className="flex min-w-0 flex-col gap-0.5">
@@ -35,7 +39,7 @@ export function PlansSettings() {
     </li>
   );
   return (
-    <section data-testid="plans-settings">
+    <section ref={section} data-testid="plans-settings">
       <h4 className={`mb-2 ${sectionTitleClass}`}>{t("plans.title")}</h4>
       <ul className={ruledListClass}>
         {row(
