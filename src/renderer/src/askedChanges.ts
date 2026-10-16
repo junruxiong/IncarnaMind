@@ -13,6 +13,7 @@ import type { ConversationAnswer } from "../../core/api";
 import { proposalRequestOf } from "../../shared/proposals";
 import { actOnAppliedEdit, applyArrived } from "./appliedEdits";
 import { type ChangedMind, changedMinds } from "./changedMinds";
+import { readMindHandle } from "./commands/handles";
 import { core } from "./core";
 import { mindEditor, whenMindEditor } from "./editor/openEditors";
 import { applyingIn, editorDoc, setApplying } from "./editor/proposalReview";
@@ -73,6 +74,7 @@ const openBeside = (mindId: string) =>
 
 /** Draws a row's asked-for changes as applied where its Mind is open; opens it beside the focused one if it isn't. */
 function follow(answerId: string, row: ChangedMind): void {
+  const key = `${answerId} ${row.mindId}`;
   const editor = mindEditor(row.mindId);
   const doc = editor && editorDoc(editor);
   if (editor && doc) {
@@ -81,9 +83,13 @@ function follow(answerId: string, row: ChangedMind): void {
     if ([...asked].some((request) => !now.has(request))) {
       setApplying(editor, new Set([...now, ...asked]));
     }
+    // Open in a tab behind the one in view: shown, beside it.
+    if (asked.size > 0 && !seen.has(key) && readMindHandle.current?.mindId !== row.mindId) {
+      seen.add(key);
+      void openBeside(row.mindId);
+    }
     return;
   }
-  const key = `${answerId} ${row.mindId}`;
   if (seen.has(key)) return;
   seen.add(key);
   // A Mind the Answer made opens anyway (./assistantMinds).
