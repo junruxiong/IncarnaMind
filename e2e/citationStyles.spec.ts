@@ -287,7 +287,8 @@ test("in Chinese: the offer puts GB/T 7714 first; chosen, raised numbers and 参
   await screenshot(window, "citation-style-prompt-zh");
   await pointAndClick(window, prompt.getByTestId("citation-style-prompt-choice").first());
   const styled = answer.locator('[data-testid="citation"][data-styled="runs"]').first();
-  await expect(styled.getByTestId("citation-chip")).toHaveText(/^\[\d(,\d)?\]$/);
+  // Each work's Location raised after its number, as GB/T 7714 prints a page: "[1]第 1 行".
+  await expect(styled.getByTestId("citation-chip")).toHaveText(/^(\[\d\](\d+|第 \d+ 行)?)+$/);
   await expect(styled.getByTestId("citation-chip")).toHaveClass(/citation-marker--raised/);
 
   const references = window.getByTestId("references");
@@ -419,7 +420,7 @@ test("in Chinese, a thesis Mind: 引用信息 read from the PDFs waits to be che
     (each) => each.text,
   );
   expect(paragraphs).toContain("参考文献");
-  expect(paragraphs.some((line) => /\[1\]\d/.test(line))).toBe(true);
+  expect(paragraphs.some((line) => /(\[\d\](\d+|第 \d+ 行)){3}/.test(line))).toBe(true);
   expect(
     paragraphs.some((line) => line.includes("林小雨. 城市绿地与夏季降温调查[D]. 华东师范大学")),
   ).toBe(true);
