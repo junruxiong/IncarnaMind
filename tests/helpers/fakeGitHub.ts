@@ -7,7 +7,6 @@
  */
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
-import { onTestFinished } from "vitest";
 import type { Browser, CopilotProfileId } from "../../src/core";
 import type { CopilotProfile } from "../../src/core/providers/copilot/config";
 
@@ -91,6 +90,7 @@ export interface FakeGitHub {
   expire(): void;
   /** Tokens GitHub no longer takes, as when the User revokes the app. */
   revoke(): void;
+  close(): Promise<void>;
 }
 
 const readBody = (request: IncomingMessage) =>
@@ -108,7 +108,8 @@ const sendJson = (response: ServerResponse, status: number, body: unknown) => {
   response.end(JSON.stringify(body));
 };
 
-export async function startFakeGitHub(): Promise<FakeGitHub> {
+/** Starts the fake on a free port. Call `close` when done. */
+export async function createFakeGitHub(): Promise<FakeGitHub> {
   let origin = "";
   let deviceState: "pending" | "approved" | "denied" | "expired" = "pending";
   const live = new Set<string>();
@@ -179,6 +180,11 @@ export async function startFakeGitHub(): Promise<FakeGitHub> {
       deviceState = "expired";
     },
     revoke: () => live.clear(),
+    close: () =>
+      new Promise<void>((resolve) => {
+        server.close(() => resolve());
+        server.closeAllConnections();
+      }),
   };
 
   const token = (body: Record<string, unknown>, response: ServerResponse) => {
@@ -353,13 +359,6 @@ export async function startFakeGitHub(): Promise<FakeGitHub> {
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
   origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  onTestFinished(
-    () =>
-      new Promise<void>((resolve) => {
-        server.close(() => resolve());
-        server.closeAllConnections();
-      }),
-  );
   return fake;
 }
 

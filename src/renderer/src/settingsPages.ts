@@ -1,3 +1,4 @@
+import type { SignInRoute } from "../../core/providers/signInRoutes";
 import { SHOW_AGENT_CONNECTION } from "../../shared/agentConnection";
 import type { MessageKey } from "../../shared/i18n";
 
@@ -14,6 +15,8 @@ export const settingsPages = [
 ] as const;
 
 export type SettingsPage = (typeof settingsPages)[number];
+
+export type SettingsTarget = "output-location" | SignInRoute;
 
 export const offeredSettingsPages: readonly SettingsPage[] = settingsPages.filter(
   (page) => page !== "agents" || SHOW_AGENT_CONNECTION,
