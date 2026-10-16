@@ -1,6 +1,7 @@
 /** Names shared by the main process and the preload script for the typed core bridge. */
 import type { CoreApiMethod } from "../core/api";
 import type { MenuCommandId } from "./commands";
+import type { GeneralHelpKind } from "./meetingHelp";
 import type { TitleBar } from "./titleBar";
 
 /** The renderer reaches the core as `window.incarnamind`. */
@@ -101,6 +102,19 @@ export interface FilesBridge {
    * macOS hides its traffic lights, and false when it leaves. Returns how to stop.
    */
   onFullScreenChange(listener: (fullScreen: boolean) => void): () => void;
+  /**
+   * Calls `listener` when a help button's global shortcut is pressed during a call (#839) while
+   * the floating panel isn't shown: the window asks for that help itself. Returns how to stop.
+   */
+  onMeetingHelp(listener: (kind: GeneralHelpKind) => void): () => void;
+  /** Whether no other app holds these keys as its global shortcut, as far as the system says. */
+  globalKeysFree(keys: string): Promise<boolean>;
+  /** Shows the floating panel during a call again after the User closed it, or hides it. */
+  showMeetingPanel(shown: boolean): void;
+  /** Calls `listener` with whether the floating panel shows, now and when that changes. Returns how to stop. */
+  onMeetingPanel(listener: (shown: boolean) => void): () => void;
+  /** Calls `listener` when the floating panel's Set up was clicked: the window shows where a model is chosen. */
+  onSetUpModel(listener: () => void): () => void;
 }
 
 /** The command the application menu asks the window to run (see src/main/menu.ts). */
@@ -154,4 +168,15 @@ export const FILES_CHANNELS = {
   menuCommand: "app:menuCommand",
   /** From the main process: the window entered (true) or left (false) full screen. */
   fullScreen: "app:fullScreen",
+  /** From the main process: a help button's shortcut was pressed with no floating panel shown. */
+  meetingHelp: "app:meetingHelp",
+  globalKeysFree: "app:globalKeysFree",
+  /** From the page: show (true) or hide (false) the floating panel. */
+  showMeetingPanel: "app:showMeetingPanel",
+  /** From the page: what the floating panel's state is now; the main process answers on `meetingPanel`. */
+  meetingPanelWanted: "app:meetingPanelWanted",
+  /** From the main process: whether the floating panel shows. */
+  meetingPanel: "app:meetingPanel",
+  /** From the main process: the floating panel's Set up was clicked. */
+  setUpModel: "app:setUpModel",
 } as const;

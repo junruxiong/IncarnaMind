@@ -1,0 +1,216 @@
+/*
+ * The floating panel during a call (#839; the canvas boards Meet-Help-*): 408px wide, its
+ * window sized to what it holds, or a pill when collapsed. The window has no frame: the header
+ * and the pill move it.
+ */
+html,
+body {
+  margin: 0;
+  overflow: hidden;
+  background: var(--color-sheet);
+  font-family: var(--font-sans);
+  color: var(--color-ink);
+  user-select: none;
+}
+
+.panel-root {
+  width: max-content;
+}
+
+.panel-drag {
+  -webkit-app-region: drag;
+
+  & button {
+    -webkit-app-region: no-drag;
+  }
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  width: 408px;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 10px 8px 14px;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--color-ink-secondary);
+}
+
+.panel-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+
+  & b {
+    font-weight: 600;
+    color: var(--color-ink);
+  }
+
+  & .recording-dot {
+    width: 8px;
+    height: 8px;
+  }
+}
+
+.panel-time {
+  font-variant-numeric: tabular-nums;
+}
+
+.panel-template {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--color-chip);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--color-ink-secondary);
+
+  &:hover {
+    background: var(--color-hover);
+    color: var(--color-ink);
+  }
+}
+
+.panel-templates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 14px 10px;
+}
+
+.panel-template-option {
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid var(--color-rule-strong);
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--color-ink-secondary);
+
+  &:hover {
+    background: var(--color-hover);
+    color: var(--color-ink);
+  }
+
+  &[aria-pressed="true"] {
+    border-color: var(--color-accent);
+    background: var(--color-accent-wash);
+    color: var(--color-accent);
+  }
+}
+
+.panel-icon-button {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  color: var(--color-ink-meta);
+
+  &:hover {
+    background: var(--color-hover);
+    color: var(--color-ink);
+  }
+}
+
+.panel-hidden {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 0 14px 8px;
+  font-size: 11.5px;
+  line-height: 16px;
+  color: var(--color-ink-meta);
+}
+
+.panel-suggestion {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--color-rule);
+  user-select: text;
+}
+
+.panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: -8px;
+}
+
+.panel-ghost {
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-ink-secondary);
+
+  &:hover {
+    background: var(--color-hover);
+    color: var(--color-ink);
+  }
+}
+
+.panel-line {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--color-ink-secondary);
+  overflow-wrap: break-word;
+}
+
+.panel-actions .panel-line {
+  padding: 0 8px;
+}
+
+.panel-link {
+  font-weight: 600;
+  color: var(--color-accent);
+
+  &:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+}
+
+.panel-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 8px 0 12px;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--color-ink-secondary);
+}
+
+.panel-pill-grip {
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+}
+
+.panel-keys {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--color-frame);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--color-ink-meta);
+}

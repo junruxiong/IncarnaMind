@@ -33,6 +33,7 @@ import {
   HistoryLineIcon,
   PlusLineIcon,
 } from "../lineIcons";
+import { HelpStrip } from "../meetings/HelpStrip";
 import { ModelSetupCard } from "../providers/ModelSetupCard";
 import { TaskTray } from "../TaskTray";
 import { AssistantMenu } from "./AssistantMenu";
@@ -286,6 +287,7 @@ function AssistantMain({
   }, [folded]);
   return (
     <div className="assistant-main" hidden={folded}>
+      <HelpStrip mindId={mind?.mindId ?? null} />
       <div
         ref={thread}
         data-testid="assistant-thread"

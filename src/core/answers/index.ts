@@ -47,6 +47,7 @@ import { runsByDefault } from "../../shared/approvalRules";
 import { citationNode, withCitations } from "../../shared/blockJson";
 import type { LiveDocument } from "../../shared/citations";
 import { withFigures, withFigureText } from "../../shared/figureMarkers";
+import { type MeetingHelpKind, SEARCHING_HELP } from "../../shared/meetingHelp";
 import {
   decisionsOn,
   pendingProposals,
@@ -174,6 +175,13 @@ import type {
 } from "./engine";
 import { listenedTokens, newestWithin, withTranscript } from "./liveTranscript";
 import { markdownToBlocks } from "./markdown";
+import {
+  FOUND_TOKEN_LIMIT,
+  foundWithin,
+  meetingHelpInstructions,
+  newestSaid,
+  withFound,
+} from "./meetingHelp";
 import {
   answerInstructions,
   connectorInstructions,
@@ -352,6 +360,11 @@ export interface AnswersOptions {
    * Passages in reading order; null when the Mind's Meeting isn't recording or has no lines yet.
    */
   liveTranscript(mindId: string): Promise<WindowedPassage[] | null>;
+  /**
+   * The help button (#839) a Question in a conversation is, asked from a Mind whose Meeting
+   * records or is paused: its text is the button's name. Null for any other Question.
+   */
+  meetingHelp?(mindId: string, question: string): MeetingHelpKind | null;
   providerExists(providerId: string): boolean;
   /** Whether Questions can be asked with this model (the default one when undefined). */
   readiness(choice: ChatModelChoice | undefined): Promise<ChatReadiness>;
@@ -703,6 +716,12 @@ export function createAnswers(options: AnswersOptions) {
      * to now, to go with the Question. Absent: none.
      */
     listening?: () => Promise<WindowedPassage[] | null>;
+    /**
+     * One-click help during the call (#839): the button pressed. Its Answer is laid out as
+     * the panel reads it, and is offered the Documents' Tools only, their search only for
+     * the buttons that need the User's Documents.
+     */
+    help?: MeetingHelpKind;
     /** Written for a Task (#126), which gives way to Answers itself (see ../runs/tasks). */
     task?: boolean;
     /** Offers web search's Tools whatever the Question says: a Research Task's Web source (#130). */
@@ -747,6 +766,10 @@ export function createAnswers(options: AnswersOptions) {
     let mindRequest = input.mind?.request;
     /** It listened to a meeting's live transcript: the Question went with it. */
     let listening = false;
+    const { help } = input;
+    const helpSearches = help !== undefined && SEARCHING_HELP.has(help);
+    /** Passages of the User's Documents found ahead for a help button's Question. */
+    let foundAhead = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
     let finished = false;
     let support: CitationSupport | null = null;
@@ -1355,6 +1378,27 @@ export function createAnswers(options: AnswersOptions) {
           messages = withTranscript(messages, session.show(kept));
           listening = true;
         }
+        // A help button that needs the Documents gets what they say about the newest lines at
+        // once, with no search the model has to call first (#839).
+        if (helpSearches && kept.length > 0) {
+          const transcript = new Set(kept.map((passage) => passage.documentId));
+          try {
+            const found = await session.find(newestSaid(kept), controller.signal, {
+              rerank: false,
+            });
+            const fitting = foundWithin(
+              found.filter((passage) => !transcript.has(passage.documentId)),
+              FOUND_TOKEN_LIMIT,
+            );
+            if (fitting.length > 0) {
+              messages = withFound(messages, session.show(fitting));
+              foundAhead = true;
+            }
+          } catch (error) {
+            if (!controller.signal.aborted) options.reportError(error);
+          }
+          if (finished) return;
+        }
       }
       // Stopped while waiting, e.g. for consent: send nothing.
       if (finished) return;
@@ -1590,6 +1634,9 @@ export function createAnswers(options: AnswersOptions) {
             webInstructions(withWebTools),
             mindInstructions(withMindTools),
             meetingInstructions(listening),
+            help
+              ? meetingHelpInstructions(help, { searches: helpSearches, found: foundAhead })
+              : "",
             signInNeededInstructions(signInNeeded.map((connector) => connector.name)),
             language,
           ]
@@ -1604,7 +1651,7 @@ export function createAnswers(options: AnswersOptions) {
         tools: [...provided, ...fromSkills, ...fromWeb, ...(mindsTools?.tools ?? [])],
         gate,
         streamsInput,
-        toolSet: input.toolSet,
+        toolSet: input.toolSet ?? (help ? (helpSearches ? "documents" : "cite") : undefined),
         thirdParty: contextReasons,
         support: startingSupport(prepared.support, supportByModel.get(learntKey)),
         structuredOutput: givesStructuredOutput(prepared.capabilities),
@@ -1938,6 +1985,7 @@ export function createAnswers(options: AnswersOptions) {
     mind: MindToRead | null,
   ): ConversationAskResult {
     const { conversation, question, answer } = turn;
+    const help = mind ? (options.meetingHelp?.(mind.mindId, question.text) ?? null) : null;
     // A long Mind is cut to what the conversation's Questions are about, the earlier ones too: a
     // follow-up keeps the part the first one found, and so the same start for the prompt cache.
     const asking = [
@@ -1998,6 +2046,7 @@ export function createAnswers(options: AnswersOptions) {
       forcedSkill: question.forcedSkill,
       consentNeeded: ready.consentNeeded,
       ...(mind && { listening: () => options.liveTranscript(mind.mindId) }),
+      ...(help && { help }),
       assistant: {
         focused: mind && {
           mindId: mind.mindId,
