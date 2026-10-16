@@ -21,7 +21,7 @@ import {
 } from "./app";
 
 /*
- * Checking a verified document's reference list (#711): the line under its
+ * Checking a verified document's reference list: the line under its
  * claims says what looking the references up sends, by its button, so
  * clicking it is the consent; then it flags the reference Crossref has no
  * work for. A local stand-in answers for Crossref. Set INCARNAMIND_SCREENSHOTS
@@ -188,7 +188,7 @@ test("in Chinese and a narrow window, and in local mode, where it says why and o
 
   const line = window.getByTestId("references-line");
   await expect(line.getByTestId("references-sends")).toHaveText(
-    "在 Crossref 中查找列表里的 4 条参考文献，必要时再查 OpenAlex 或 arXiv，只发送每条参考文献的原文。",
+    "在 Crossref 中查找列表里的 4 条参考文献，必要时再在 OpenAlex 或 arXiv 中查找，只发送每条参考文献的原文。",
   );
   await pointAndClick(window, line.getByTestId("references-check"));
   await expect(line.getByTestId("references-done")).toHaveText(

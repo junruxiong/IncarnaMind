@@ -862,7 +862,7 @@ export interface CoreAdapters {
    */
   jevHostedUrl?: string;
   /**
-   * Where Look up (#286) and checking references (#711) ask Crossref's,
+   * Where Look up (#286) and checking references ask Crossref's,
    * arXiv's and OpenAlex's APIs. Defaults to theirs; tests point them at a
    * local fake server. Consent still treats the requests as going to each.
    */

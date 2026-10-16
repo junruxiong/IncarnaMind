@@ -34,7 +34,7 @@ const AFTER_DOT = "inline-flex items-center gap-2";
 const STOPPED: ReadonlySet<ReferenceCheckReason | null> = new Set(["unreachable", "rate-limited"]);
 
 /**
- * The line under a verified document's claims (#711) when its Mind has a
+ * The line under a verified document's claims when its Mind has a
  * reference list: what looking its references up sends, by the button that
  * does it, so clicking it is the consent (ADR-0022); how far a check is,
  * with Stop; then what it found, its references listed below

@@ -1,5 +1,5 @@
 /**
- * Checking a Mind's reference list (#711), the window's side: the line
+ * Checking a Mind's reference list, the window's side: the line
  * under a verified document's claims (editor/ReferencesLine) starts it, says
  * how far it is, and lists what it found. Results live while the window
  * does: checking again asks Crossref only about what changed, as the core

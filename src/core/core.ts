@@ -1816,7 +1816,7 @@ export function createCore(adapters: CoreAdapters): Core {
     signal: lifetime.signal,
     pace,
   });
-  // Checking a Mind's reference list (#711) sends each reference only, to Crossref, OpenAlex
+  // Checking a Mind's reference list sends each reference only, to Crossref, OpenAlex
   // and arXiv, once the User starts it where a line says so; never in local mode.
   const referenceChecks = createReferenceChecks({
     consent,

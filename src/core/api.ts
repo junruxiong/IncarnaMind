@@ -2509,11 +2509,11 @@ export type ReferenceLookupFailureReason =
   | "unreachable"
   | "service-error";
 
-/** A service a reference is looked up in (#711). */
+/** A service a reference is looked up in. */
 export type ReferenceService = "crossref" | "openalex" | "arxiv";
 
 /**
- * How a reference in a Mind's reference list checks (#711), looked up in
+ * How a reference in a Mind's reference list checks, looked up in
  * Crossref, then OpenAlex, and an arXiv number on arXiv:
  * - "found": the work exists, as written;
  * - "mismatch": a record exists, but its title, year or first author differ;
@@ -2548,15 +2548,11 @@ export interface ReferenceDifference {
   cited: string | null;
 }
 
-/** One reference of a reference list, checked. */
 export interface ReferenceCheck {
   /** As written, its white space collapsed. */
   reference: string;
   mark: ReferenceCheckMark;
-  /**
-   * The service that answered: whose record it is, which said its DOI or
-   * arXiv number leads nowhere, or which couldn't be asked ("not-checked").
-   */
+  /** Whose record it is, which said its identifier leads nowhere, or which couldn't be asked. */
   service: ReferenceService | null;
   /** The record of the work it names; null when none was found, or it wasn't checked. */
   record: {
@@ -2571,7 +2567,6 @@ export interface ReferenceCheck {
   reason: ReferenceCheckReason | null;
 }
 
-/** What `checkReferences` did. */
 export type CheckReferencesResult =
   | {
       kind: "checked";
@@ -5464,8 +5459,8 @@ export type DataKind = (typeof dataKinds)[number];
  *   Nothing else: no file, text or name. None in local mode.
  * - "reference-check": each entry of a Mind's reference list, as written,
  *   to Crossref, then to OpenAlex when Crossref has no record of it or one
- *   that differs, and an arXiv number to arXiv, when the User checks the list's references
- *   (#711). Nothing else of the Mind. None in local mode.
+ *   that differs, and an arXiv number to arXiv, when the User checks the
+ *   list's references. Nothing else of the Mind. None in local mode.
  * - "find-sources": what the User (or an Answer, for them) searches for, with
  *   its filters, to each Source provider searched, and the identifier of a
  *   work they add, to the provider that gives its full text or record (#296).
@@ -7565,13 +7560,11 @@ export interface CoreApi {
    */
   lookUpReference(documentId: string): Promise<ReferenceLookupResult>;
   /**
-   * Looks up each entry of a Mind's reference list (#711) in Crossref, by its
-   * DOI, else by the reference as written; then in OpenAlex when Crossref has
-   * no record; an arXiv number on arXiv. Only the reference is sent. The User
-   * starts it where a line by its action names the services, so calling it
-   * is the consent to the "reference-check" flow (ADR-0022); never in local
-   * mode, where every entry is "not-checked". One check of a Mind at a time;
-   * "referenceCheck.progress" says how far it is.
+   * Looks up each entry of a Mind's reference list in Crossref, by its DOI,
+   * else as written; then in OpenAlex when Crossref has no record of it or
+   * only one that differs; an arXiv number on arXiv. Calling it is the
+   * consent to the "reference-check" flow (ADR-0022); in local mode every
+   * entry is "not-checked". One check of a Mind at a time.
    */
   checkReferences(mindId: string): Promise<CheckReferencesResult>;
   /** Stops a Mind's `checkReferences`: it gives "cancelled". Stopping none does nothing. */

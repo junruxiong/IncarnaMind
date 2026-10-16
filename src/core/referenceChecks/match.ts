@@ -1,23 +1,19 @@
 /**
- * Whether a reference as written (an entry of a reference list) is the work a
- * record describes, and how they differ (#711). Pure: the records come from
- * Crossref (./crossref).
- *
- * A reference is the work when most of the record's title is in it, word for
- * word once case, accents and punctuation are set aside. Then its year must
- * be within a year of one of the record's (issued, in print or online; a
- * preprint's year and its proceedings' often differ by one), and its first
- * author's family name must be in it. A title that is only partly there is
- * a work by another title: by DOI, that is a mismatch (the DOI leads to a
- * record, but not to this work); found by searching, it is no match at all.
+ * A reference is the work a record describes when most of the record's title
+ * is in it, word for word once case, accents and punctuation are set aside.
+ * Then its year must be one of the record's (issued, in print or online), or
+ * a year off when one of them is a preprint, whose year its proceedings'
+ * often follows; and its first author's family name must be in it. A title
+ * only partly there is another work: by DOI, a mismatch; by search, no match.
  */
 import {
   ARXIV_IN_TEXT,
   arxivOf,
   DOI_IN_TEXT,
   doiOf,
+  joinBrokenDoi,
   titleWords,
-  YEAR_IN_TEXT,
+  yearOf,
 } from "../../shared/referenceList";
 import type { ReferenceDifference, ReferenceFields, ReferenceName } from "../api";
 
@@ -26,35 +22,39 @@ export const SAME_TITLE = 0.75;
 /** A title of fewer words than this ("Deep learning", "Introduction") must stand alone in the reference. */
 const SHORT_TITLE = 3;
 
-/** A reference as written, with what can be read from it without a service. */
 export interface CitedReference {
   text: string;
   doi: string | null;
-  /** Its arXiv number, without the version. */
   arxiv: string | null;
-  /** The year it names: the first four-digit year from 1500 to 2099. */
   year: number | null;
+  /** It cites a preprint: an arXiv number, or "preprint" in so many words. */
+  preprint: boolean;
 }
 
-/** A record's fields as a check reads them, with every year it gives. */
 export interface WorkRecord {
   fields: Partial<ReferenceFields>;
   /** The years it was issued, printed and put online. */
   years: number[];
+  preprint?: boolean;
 }
 
-/** What can be read from a reference as written: its DOI and year. */
 export function citedReference(text: string): CitedReference {
-  // A DOI's or arXiv number's digits aren't its year: "arXiv:1706.03762".
-  const year = YEAR_IN_TEXT.exec(text.replace(DOI_IN_TEXT, " ").replace(ARXIV_IN_TEXT, " "))?.[1];
+  const joined = joinBrokenDoi(text);
+  const arxiv = arxivOf(joined);
   return {
     text: text.replace(/\s+/g, " ").trim(),
-    doi: doiOf(text),
-    arxiv: arxivOf(text),
-    year: year ? Number(year) : null,
+    doi: doiOf(joined),
+    arxiv,
+    // A DOI's or arXiv number's digits aren't its year: "arXiv:1706.03762".
+    year: yearOf(joined.replace(DOI_IN_TEXT, " ").replace(ARXIV_IN_TEXT, " ")),
+    preprint: arxiv !== null || /\bpreprint\b/i.test(text),
   };
 }
 
+const LIST_NUMBER = /^\s*(?:\[\d{1,3}\]|\d{1,3}\.)\s+/;
+/** What an author list goes on with after an initial's dot: "Vaswani, N", "Shazeer", not a title. */
+const AUTHORS_GO_ON =
+  /^(?:\p{Lu}[\p{L}'’-]*(?:,\s*\p{Lu}\b\.?|$)|\p{Lu}[\p{L}'’-]*,\s*(?:and\s+)?\p{Lu}\b)/u;
 /** A title in quotation marks, as numbered styles write it: “Attention is all you need,”. */
 const QUOTED_TITLE = /[“"]([^”"]{3,}?)[,.]?[”"]/;
 /** A title before its type, as GB/T 7714 writes it: 机器学习[M]. */
@@ -63,18 +63,20 @@ const TYPED_TITLE = /([^.。]+?)\s*\[(?:J|M|C|D|R|S|P|N|EB\/OL|Z)\]/;
 const TITLE_AFTER_YEAR =
   /(?:\((?:1[5-9]|20)\d\d[a-z]?\)\.?|(?<!\d)(?:1[5-9]|20)\d\d[a-z]?\.)\s*([^.?!。]+[?!]?)/;
 
-/**
- * The title a reference gives, as citation styles set it apart: quoted,
- * before its type, or after the year; else the part after the authors.
- * Null when it can't be told.
- */
+/** Quoted, before its type, after the year, or else the first part after the authors. */
 export function titleOf(reference: string): string | null {
   for (const pattern of [QUOTED_TITLE, TYPED_TITLE, TITLE_AFTER_YEAR]) {
     const title = pattern.exec(reference)?.[1]?.trim();
     if (title && titleWords(title).length > 0) return title;
   }
-  const parts = reference.split(/[.。]\s+/).slice(1);
-  return parts.find((part) => titleWords(part).length >= 2)?.trim() ?? null;
+  const [, ...parts] = reference.replace(LIST_NUMBER, "").split(/[.。]\s+/);
+  const afterAuthors = parts.findIndex((part) => !AUTHORS_GO_ON.test(part));
+  return (
+    parts
+      .slice(Math.max(afterAuthors, 0))
+      .find((part) => titleWords(part).length >= 2)
+      ?.trim() ?? null
+  );
 }
 
 /**
@@ -97,11 +99,7 @@ export function titleCoverage(reference: string, title: string): number {
 /** Where a reference's parts end: its authors, year, title and venue are set apart by these. */
 const PARTS = /[.?!;:"“”。；：]+/;
 
-/**
- * Whether a reference holds a record's title: most of its words; a short
- * title, as a part of its own, so a record titled "Introduction" isn't a
- * reference to "Introduction to quantum widgets".
- */
+/** A short title must be a part of its own: "Introduction" isn't "Introduction to quantum widgets". */
 export function holdsTitle(reference: string, title: string): boolean {
   const wanted = titleWords(title);
   if (wanted.length === 0) return false;
@@ -112,17 +110,12 @@ export function holdsTitle(reference: string, title: string): boolean {
   });
 }
 
-/** A name's family name, or a literal name whole. */
 const familyOf = (name: ReferenceName) => ("family" in name ? name.family : name.literal);
 
 /** The authors as a reader would list them, in any language: "Hochreiter, Schmidhuber", "A, B, C, …". */
 const authorList = (authors: readonly ReferenceName[]) =>
   [...authors.slice(0, 3).map(familyOf), ...(authors.length > 3 ? ["…"] : [])].join(", ");
 
-/**
- * How `cited` differs from the work `record` describes: its title (when
- * little of it is in the reference), its year, its first author.
- */
 export function differences(cited: CitedReference, record: WorkRecord): ReferenceDifference[] {
   const found: ReferenceDifference[] = [];
   const title = record.fields.title ?? "";
@@ -130,10 +123,11 @@ export function differences(cited: CitedReference, record: WorkRecord): Referenc
     found.push({ field: "title", found: title, cited: null });
   }
   const { year } = cited;
+  const slack = cited.preprint || record.preprint ? 1 : 0;
   if (
     year !== null &&
     record.years.length > 0 &&
-    !record.years.some((each) => Math.abs(each - year) <= 1)
+    !record.years.some((each) => Math.abs(each - year) <= slack)
   ) {
     found.push({
       field: "year",

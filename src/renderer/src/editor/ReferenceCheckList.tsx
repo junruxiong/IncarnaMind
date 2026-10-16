@@ -109,7 +109,7 @@ function markText(reference: ListedCheck, t: Translate): string {
 }
 
 /**
- * A checked reference list's entries (#711), under its line, by mark, those
+ * A checked reference list's entries, under its line, by mark, those
  * that need a look first: each with its mark, why, and the record it
  * matched, with the service it came from. Clicking one, or Enter on it,
  * moves to its Block.

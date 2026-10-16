@@ -1,6 +1,6 @@
 /**
- * The reference check (#711) against the services themselves (Crossref,
- * OpenAlex, arXiv): each of the 50 references in references.json checked as
+ * The reference check against the services themselves (Crossref,
+ * OpenAlex, arXiv): each of the 53 references in references.json checked as
  * the app checks one, and its mark compared with what it should be. An
  * invented reference ("expected": "not-found") is caught when it is marked
  * "not-found" (its DOI or arXiv number leads nowhere) or "not-listed"
@@ -15,7 +15,11 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "vitest";
 import type { ReferenceCheck, ReferenceCheckMark } from "../../src/core/api";
-import { type CheckRun, checkReference } from "../../src/core/referenceChecks/check";
+import {
+  type CheckRun,
+  checkReference,
+  ServiceFailure,
+} from "../../src/core/referenceChecks/check";
 import { createLookups } from "../../src/core/referenceChecks/lookups";
 import { citedReference } from "../../src/core/referenceChecks/match";
 import { createSourceHttp } from "../../src/core/sources/http";
@@ -54,13 +58,14 @@ test("references against Crossref, OpenAlex and arXiv", async () => {
     try {
       check = await checkReference(citedReference(item.reference), run, signal);
     } catch (error) {
+      const failure = error instanceof ServiceFailure ? error : null;
       check = {
         reference: item.reference,
         mark: "not-checked",
-        service: null,
+        service: failure?.service ?? null,
         record: null,
         differences: [],
-        reason: "service-error",
+        reason: failure?.reason ?? "service-error",
       };
       console.error(`${item.id}: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -98,7 +103,7 @@ test("references against Crossref, OpenAlex and arXiv", async () => {
       .filter(({ item, check }) => !caught(item.expected, check.mark))
       .map(
         ({ item, check }) =>
-          `- ${item.id} (${item.note}): expected ${item.expected}, marked ${check.mark}${check.record ? `; ${check.service}: “${check.record.title}”, ${check.record.year ?? "no year"}, ${formatNames(check.record.authors.slice(0, 2), "en")}` : ""}${check.differences.length > 0 ? `; differs in ${check.differences.map((each) => each.field).join(", ")}` : ""}`,
+          `- ${item.id} (${item.note}): expected ${item.expected}, marked ${check.mark}${check.record ? `; ${check.service}: “${check.record.title}”, ${check.record.year ?? "no year"}, ${formatNames(check.record.authors.slice(0, 2), "en")}` : ""}${check.differences.length > 0 ? `; differs in ${check.differences.map((each) => each.field).join(", ")}` : ""}${check.reason ? `; ${check.service ?? "a service"}: ${check.reason}` : ""}`,
       ),
     "",
   );

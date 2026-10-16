@@ -1204,7 +1204,7 @@
   .mind-verify-problem {
     margin: -8px 0 16px;
   }
-  /* A checked reference list's entries (#711), under its line: those that need a look first. */
+  /* A checked reference list's entries, under its line: those that need a look first. */
   .mind-references {
     display: flex;
     flex-direction: column;

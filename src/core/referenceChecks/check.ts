@@ -1,17 +1,9 @@
 /**
- * One reference checked (#711). By its DOI (or arXiv number) in Crossref,
- * then OpenAlex and, for a preprint, arXiv, until a record is the work as
- * cited, else keeping the record that differs least. Without either, by
- * Crossref's matching of the reference as written, and, when Crossref has no
- * record of it or only one that differs from it, by its title in OpenAlex,
- * keeping the record that differs least (Crossref's on a tie).
- *
- * It is found (the work exists, as written), doesn't match (a record exists,
- * but its title, year or first author differ), isn't found (its DOI or arXiv
- * number leads nowhere), or isn't listed (neither Crossref nor OpenAlex has
- * a record like it; the work may still exist). A DOI another agency
- * registered that OpenAlex has no record of either names a work that exists
- * whose details can't be compared: it isn't checked.
+ * By DOI or arXiv number: Crossref, OpenAlex, then arXiv for a preprint,
+ * until a record is the work as cited, else the closest. Otherwise Crossref's
+ * matching of the reference as written, then OpenAlex by its title when
+ * Crossref's record is missing or differs. A service that can't be asked
+ * leaves the reference unchecked rather than reading as a mismatch.
  */
 import type { ReferenceCheck, ReferenceCheckReason, ReferenceService } from "../api";
 import { SourceError } from "../sources/http";
@@ -25,7 +17,6 @@ import {
   type WorkRecord,
 } from "./match";
 
-/** A service couldn't be asked about a reference, and why. */
 export class ServiceFailure extends Error {
   override name = "ServiceFailure";
   constructor(
@@ -49,11 +40,7 @@ const reasonOf = (error: unknown): ReferenceCheckReason =>
     ? error.reason
     : "service-error";
 
-/**
- * Asks `service`, unless the check stopped asking it. Offline, or asked to
- * slow down, it stops asking it for the rest of the list rather than failing
- * once a reference.
- */
+/** Offline, or asked to slow down, a service isn't asked again for the rest of the list. */
 async function ask<T>(
   run: CheckRun,
   service: ReferenceService,
@@ -72,7 +59,6 @@ async function ask<T>(
   }
 }
 
-/** The record as the check shows it. */
 function shown(record: WorkRecord): NonNullable<ReferenceCheck["record"]> {
   const { fields } = record;
   return {
@@ -83,7 +69,6 @@ function shown(record: WorkRecord): NonNullable<ReferenceCheck["record"]> {
   };
 }
 
-/** The check of a reference with a record: found as written, or how it differs. */
 function compared(
   cited: CitedReference,
   record: WorkRecord,
@@ -100,12 +85,7 @@ function compared(
   };
 }
 
-/**
- * Of a search's records, the one that is the work: it holds the reference's
- * title and, among several (a reprint, a later edition), differs least.
- * `sameAuthor`: only a record whose first author is the reference's, as a
- * search by title alone needs.
- */
+/** Among a reprint and a later edition, the record that differs least; `sameAuthor` for a search by title alone. */
 function bestOf(
   cited: CitedReference,
   records: readonly WorkRecord[],
@@ -159,13 +139,7 @@ export async function checkReference(
       service: ReferenceService,
       call: () => Promise<WorkRecord | null>,
     ): Promise<ReferenceCheck | null> => {
-      let record: WorkRecord | null;
-      try {
-        record = await ask(run, service, signal, call);
-      } catch (error) {
-        if (checks.length > 0 && error instanceof ServiceFailure) return null;
-        throw error;
-      }
+      const record = await ask(run, service, signal, call);
       if (!record) return null;
       const check = compared(cited, record, service);
       checks.push(check);
@@ -201,13 +175,7 @@ export async function checkReference(
   if (inCrossref?.mark === "found") return inCrossref;
   // Crossref's record may be another edition's (a reprint, a later year): OpenAlex may hold the one cited.
   const title = titleOf(cited.text) ?? cited.text;
-  let searched: WorkRecord[];
-  try {
-    searched = await ask(run, "openalex", signal, () => openalex.search(title, signal));
-  } catch (error) {
-    if (inCrossref && error instanceof ServiceFailure) return inCrossref;
-    throw error;
-  }
+  const searched = await ask(run, "openalex", signal, () => openalex.search(title, signal));
   const inOpenAlex = bestOf(cited, searched, "openalex", true);
   if (
     inCrossref &&

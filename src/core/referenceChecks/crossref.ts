@@ -1,12 +1,4 @@
-/**
- * Crossref's REST API for checking references (#711): a work's record by its
- * DOI, or the works whose records best match a reference as written
- * (`query.bibliographic`, Crossref's own reference matching). Only the
- * reference is sent, in the request's address. Its public pool takes one
- * request a second here, as Find sources asks it (../sources/providers/crossref):
- * the faster polite pool needs a contact address, which IncarnaMind never
- * invents for a User.
- */
+/** The public pool, one request a second: the polite pool needs a contact address, which IncarnaMind never invents. */
 import { isRecord } from "../errors";
 import { fromCsl } from "../referenceRecords/csl";
 import { SourceError, type SourceHttp } from "../sources/http";
@@ -15,7 +7,6 @@ import type { WorkRecord } from "./match";
 export const CROSSREF_URL = "https://api.crossref.org";
 /** Crossref's public pool: one request a second, on the lane Find sources uses too. */
 const LANE = { lane: "crossref", intervalMs: 1000 } as const;
-/** How many of the best matches a search reads. */
 const ROWS = 5;
 /** The fields a search asks for: enough to compare, nothing more. */
 const SELECT = "DOI,title,author,issued,published-print,published-online,container-title,type";
@@ -36,7 +27,7 @@ export function workRecord(item: unknown): WorkRecord | null {
   const years = [item.issued, item["published-print"], item["published-online"]]
     .map(yearOf)
     .filter((year): year is number => year !== null);
-  return { fields, years: [...new Set(years)] };
+  return { fields, years: [...new Set(years)], preprint: item.type === "posted-content" };
 }
 
 /** The "message" of a Crossref answer. */

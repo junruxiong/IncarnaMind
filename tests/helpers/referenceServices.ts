@@ -2,7 +2,7 @@
  * A local stand-in for Look up's two services (#286): Crossref's
  * `GET /works/{doi}` and arXiv's `GET /api/query?id_list=…`, answering from
  * recorded answers (tests/fixtures/references/), and, for checking reference
- * lists (#711), Crossref's `GET /works?query.bibliographic=…` over a few
+ * lists, Crossref's `GET /works?query.bibliographic=…` over a few
  * works, best match first by the words they share, and its
  * `GET /works/{doi}/agency`; and OpenAlex's `GET /works?search=…` and
  * `GET /works/doi:{doi}` over a few works of its own. It records every request, so
