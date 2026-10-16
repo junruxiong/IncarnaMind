@@ -247,7 +247,9 @@ test("a web page to share: the sheet offers it, and the file loads nothing and o
   const sheetBox = await second.boundingBox();
   if (!sheetBox) throw new Error("The card isn't shown.");
   expect(Math.abs(sheetBox.x)).toBeLessThanOrEqual(1);
-  expect(Math.abs(sheetBox.width - 375)).toBeLessThanOrEqual(1);
+  // Beside a classic scrollbar (Linux, Windows) the sheet spans what is left of the width.
+  const room = await page.evaluate(() => document.documentElement.clientWidth);
+  expect(Math.abs(sheetBox.width - room)).toBeLessThanOrEqual(1);
   expect(Math.abs(sheetBox.y + sheetBox.height - 720)).toBeLessThanOrEqual(1);
   expect(
     await second.locator(".card-source .date").evaluate((date) => date.getClientRects().length),
