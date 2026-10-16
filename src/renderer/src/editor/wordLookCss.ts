@@ -1,5 +1,5 @@
 import type { WordBorder, WordLook, WordParagraphLook, WordRunLook } from "../../../core/api";
-import { wordLookZoomCss } from "./useWordLookZoom";
+import { wordLookZoomCss } from "./wordLookZoom";
 import { WORD_LOOK_DOM_ATTRIBUTE, WORD_RUN_DOM_ATTRIBUTE } from "./wordSchema";
 import { wordTableCss } from "./wordTableCss";
 
@@ -170,6 +170,6 @@ export function wordLookCss(mindId: string, look: WordLook): string {
     `${scope} :is(code, a) [${WORD_RUN_DOM_ATTRIBUTE}] { font-family: inherit; color: inherit; }`,
     `${scope} [${WORD_LOOK_DOM_ATTRIBUTE}] :is([contenteditable="false"], .citation-marker) { text-indent: 0; letter-spacing: normal; text-transform: none; font-variant-caps: normal; }`,
   );
-  rules.push(...wordTableCss(scope, look), ...wordLookZoomCss(scope));
+  rules.push(...wordTableCss(scope, look), ...wordLookZoomCss(scope, look));
   return rules.filter(Boolean).join("\n");
 }

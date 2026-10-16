@@ -959,7 +959,6 @@ export class LookReader {
     };
   }
 
-  /** The table's context in one cell, with the conditional formatting its place picks. */
   cellAt(table: TableLookContext, place: CellPlace): TableLookContext {
     if (!table.chain.some((style) => style.conditional.size > 0)) return table;
     const on = conditionsAt(table.options, table.bands, place);

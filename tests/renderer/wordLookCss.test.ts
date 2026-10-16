@@ -50,6 +50,17 @@ describe("the Word look's stylesheet", () => {
     expect(decorationsIn(editor.state)).toBe(0);
   });
 
+  test("zooms the content to fit a frame narrower than the file's text width, down to 80%; the frame keeps the whole width", async () => {
+    const { mindId, look } = await importedLook(longContract(2));
+    const scope = `.${wordLookScope(mindId)}`;
+    const rules = rulesOf(wordLookCss(mindId, look));
+    expect(rules).toContain(`${scope} { max-width: calc(var(--word-pt) * ${look.width}); }`);
+    expect(rules).toContain(
+      `${scope} .mind-editor { --word-pt: clamp(calc(var(--word-unit) * 0.8), calc(100cqw / ${look.width}), var(--word-unit)); }`,
+    );
+    expect(rulesOf(wordLookCss(mindId, { ...look, width: null })).join("\n")).not.toContain("cqw");
+  });
+
   test("a look another device wrote can't reach outside its rule", () => {
     const doc = new Y.Doc();
     const map = doc.getMap(MIND_WORD_LOOK_FIELD);

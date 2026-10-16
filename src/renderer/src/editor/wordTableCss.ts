@@ -8,6 +8,8 @@ const WORD_TABLE = `table[${WORD_LOOK_DOM_ATTRIBUTE}]`;
 const UNSIZED_COLUMN = 72;
 /** Word's cell margins where neither the table nor its style sets them. */
 const CELL_MARGIN = 5.4;
+/** Half Word's widest border. */
+const BORDER_ROOM = 3;
 
 const attribute = (key: string) => `[${WORD_LOOK_DOM_ATTRIBUTE}="${key}"]`;
 
@@ -87,7 +89,8 @@ function cellRule(scope: string, key: string, cell: WordCellLook): string {
 export function wordTableCss(scope: string, look: WordLook): string[] {
   if (Object.keys(look.tables).length === 0) return [];
   return [
-    `${scope} :where(.tableWrapper:has(> ${WORD_TABLE})) { margin-top: 0; }`,
+    // Room for the outer lines' halves outside the table, which the scrolling frame would cut.
+    `${scope} :where(.tableWrapper:has(> ${WORD_TABLE})) { margin: 0 calc(-1 * ${pt(BORDER_ROOM)}); padding: 0 ${pt(BORDER_ROOM)} 1px; }`,
     `${scope} :where(${WORD_TABLE}) { width: auto; border: 0; border-radius: 0; border-collapse: collapse; table-layout: fixed; }`,
     `${scope} :where(${WORD_TABLE} > colgroup > col) { width: ${pt(UNSIZED_COLUMN)}; }`,
     `${scope} :where(${WORD_TABLE} > tbody > tr > :is(td, th)) { min-width: 0; padding: 0 ${pt(CELL_MARGIN)}; border: 0; border-radius: 0; vertical-align: top; background: none; font: inherit; color: inherit; text-align: inherit; }`,
