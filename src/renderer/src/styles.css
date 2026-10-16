@@ -646,7 +646,8 @@
     align-items: center;
     /* As well as the basis: the strip sizes to its tabs' widths, which would otherwise be their text's. */
     width: 220px;
-    min-width: 64px;
+    /* Its chrome and the start of its name (#905): the strip scrolls rather than shrink a tab past it. */
+    min-width: calc(70px + var(--tab-label-min, 0px));
     height: 34px;
     color: var(--color-ink-secondary);
     font-size: 13px;
@@ -659,7 +660,7 @@
     &[aria-selected="true"] {
       z-index: 1;
       /* Its title stays readable while the others shrink. */
-      min-width: min(132px, 100%);
+      min-width: max(min(132px, 100%), calc(70px + var(--tab-label-min, 0px)));
       height: 32px;
       border-radius: 10px 10px 0 0;
       background: var(--color-sheet);
@@ -3400,6 +3401,67 @@
     & .proposal-action {
       color: var(--color-ink-secondary);
     }
+  }
+  /* An edit applying as it streams in reads as the text it makes (#880; DESIGN.md, AI edits). */
+  .mind-editor del.proposal-delete:has(.proposal-applying),
+  .mind-editor .proposal-node--delete.proposal-applying {
+    display: none;
+  }
+  .mind-editor ins.proposal-insert:has(.proposal-applying),
+  .mind-editor .proposal-node--insert.proposal-applying:not(.citation-marker) {
+    text-decoration: none;
+  }
+  .mind-editor .proposal-node--insert.proposal-applying .citation-marker,
+  .mind-editor .citation-marker.proposal-node--insert.proposal-applying {
+    box-shadow: none;
+  }
+  /* Review changes draws an applied edit's changes as proposals are drawn, over text that stays applied. */
+  .mind-editor .applied-new {
+    text-decoration: underline 1px var(--color-accent);
+    text-decoration-skip-ink: none;
+    text-underline-offset: 5px;
+  }
+  .mind-editor .applied-old {
+    color: var(--color-ink-meta);
+    text-decoration: line-through 1px var(--color-ink-meta);
+    user-select: none;
+  }
+  .mind-editor .applied-old--block {
+    display: block;
+    margin-block: 4px;
+  }
+  .mind-editor .applied-line,
+  .mind-editor .applied-kept-line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 6px;
+    min-width: 0;
+    margin-block: 4px;
+    font-family: var(--font-sans);
+    font-size: 12px;
+    line-height: 20px;
+    user-select: none;
+    white-space: normal;
+  }
+  .mind-editor .applied-line {
+    color: var(--color-accent-strong);
+  }
+  .mind-editor .applied-kept-line {
+    color: var(--color-ink-meta);
+
+    & .proposal-action {
+      color: var(--color-ink-secondary);
+    }
+  }
+  .mind-editor .applied-keys {
+    padding: 0 4px;
+    border-radius: 3px;
+    background: var(--color-chip);
+    font-family: var(--font-sans);
+    font-size: 11px;
+    line-height: 16px;
+    color: var(--color-ink-meta);
   }
   /* One change's own bar, over its first line: "Change 1 of 3 · Accept · Reject". */
   .change-bar {

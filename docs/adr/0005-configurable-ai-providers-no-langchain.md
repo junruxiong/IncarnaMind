@@ -17,7 +17,7 @@ The default embedding provider is a small multilingual model built into the app.
 
 This replaces the old backend, which needed Azure OpenAI, Google Vertex, Cohere, Voyage and a private Hugging Face endpoint all at once.
 
-Tagging a Document automatically uses the chat model by default. If a TypeSafe Jev key is configured, Jev is used instead: it is faster and cheaper, and it returns calibrated probabilities. Its endpoint can be changed, so Jev-compatible models can be used too.
+Tagging a Document automatically, and Organize, use one model choice (amended 2026-10-11, #180), "Automatic" unless the User picks a model. Automatic takes Jev when a TypeSafe Jev key is configured (it returns calibrated probabilities, and its endpoint can be changed, so Jev-compatible models can be used too); otherwise the tagging model of the chat provider, from the catalog's optional `tagging` role, else its quick-tasks model (never an Ollama cloud model, whose cloud doesn't hold a reply to a schema); otherwise a local decision model installed in Ollama; otherwise the chat model on this computer. On the Organize evaluation a cloud provider's cheap model tagged better than any local route, at under 2 US cents per 100 Documents, and Tev1 4B better than a small local chat model. Calls that don't write an Answer go to the quick-tasks model, OpenAI's with reasoning off.
 
 We don't use LangChain. The only parts the old code used were document loaders and a text splitter, which are small enough to own, and the user wants as few dependencies as possible.
 
