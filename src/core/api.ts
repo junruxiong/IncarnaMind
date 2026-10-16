@@ -2188,6 +2188,8 @@ export interface DocumentScanProgress {
  * - "failed": the tagger's provider failed (see `taggingError`); a re-tag, a
  *   change of model or a restart tries again.
  * - "skipped": the Document has no text to tag (processing failed, or found none).
+ * - "stopped": Tagging with AI is stopped where it is, in its Folder or Not in
+ *   a Folder (see `stopTagging`): nothing is sent until it is turned back on.
  */
 export type TaggingState =
   | "pending"
@@ -2195,7 +2197,8 @@ export type TaggingState =
   | "tagging"
   | "tagged"
   | "failed"
-  | "skipped";
+  | "skipped"
+  | "stopped";
 
 /** Who put a Tag on a Document: automatic tagging, or the User. */
 export type TagSource = "automatic" | "user";
@@ -2413,6 +2416,12 @@ export interface EvidenceSearchResult {
 export interface WebPageInfo {
   /** The address it was saved from: http or https, without a fragment. */
   address: string;
+  /**
+   * Who saved it: "user" (Add a web page, Save page, a source the User chose to add) or "search"
+   * (read by an Answer's web search). A page from before this was kept reads as "search" until
+   * the User saves its address again.
+   */
+  origin: WebPageOrigin;
   /** The site's name, as the page gives it, else its host. */
   siteName: string;
   author: string | null;
@@ -2430,6 +2439,8 @@ export interface WebPageInfo {
   /** The last fetch kept as it looks; null when it wasn't asked to be. */
   look: WebPageLook | null;
 }
+
+export type WebPageOrigin = "user" | "search";
 
 /** What `saveWebPage` takes. */
 export interface SaveWebPageInput {
@@ -4322,6 +4333,13 @@ export type ClaimCheckResult =
       says: string | null;
       /** A figure worked out that decided it; null when a Passage did. */
       calculation: ClaimCalculation | null;
+      /**
+       * The sentence cites a court decision that none of the Documents holds: the citation itself
+       * isn't checked, whatever else backs the sentence.
+       */
+      citedCaseUnchecked: boolean;
+      /** The Passage that decides it is in the opinion of the court decision it cites, among the Documents. */
+      citedCaseFound: boolean;
       /** The versions of the Documents it read, each once. */
       versions: CheckedVersion[];
       excluded: LeftOutDocument[];
@@ -4400,6 +4418,8 @@ export interface ClaimCheckAttributes {
   says: string | null;
   /** A figure worked out that decided it; null when a Passage did. */
   calculation: ClaimCalculation | null;
+  citedCaseUnchecked: boolean;
+  citedCaseFound: boolean;
   scope: ClaimCheckScope;
   versions: CheckedVersion[];
   excluded: LeftOutDocument[];
@@ -6926,11 +6946,15 @@ export interface SavedFile {
   path: string;
   /** Its name: the one asked for, or, when that was taken, the next free one ("Tides 2.docx"). */
   name: string;
+  /** The folder it is in, absolute, symbolic links resolved. */
+  folder: string;
   /**
    * This save took the default Output location, Documents › IncarnaMind,
    * none being chosen yet (D209): what shows it says where, with a way to change it.
    */
   defaulted: boolean;
+  /** The folder is the default Output location, which a line names as this computer names Documents. */
+  inDefaultFolder: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -7396,7 +7420,7 @@ export interface CoreApi {
    * classifier of null is Automatic; `organizeWith` left out stays as it was.
    */
   saveLibrarySettings(
-    settings: Omit<LibrarySettings, "classifier" | "organizeWith"> & {
+    settings: Omit<LibrarySettings, "classifier" | "organizeWith" | "taggingStopped"> & {
       classifier: LibraryClassifier | null;
       organizeWith?: TaggingClassifier | null;
     },
@@ -7414,6 +7438,17 @@ export interface CoreApi {
    * only their Tags suggested.
    */
   classifyDocuments(documentIds?: string[]): Promise<void>;
+  /**
+   * Stops automatic Tagging with AI where the Documents waiting to be
+   * tagged, or being tagged, are: each of their Folders, and Not in a Folder
+   * (null). Nothing more from there is sent to tag, by automatic tagging or by
+   * Organize on its own, until `setTaggingWithAi` turns it back on; a re-tag
+   * or Organize the User asks for still goes. Kept across restarts. Returns
+   * the places it stopped.
+   */
+  stopTagging(): Promise<(string | null)[]>;
+  /** Turns automatic Tagging with AI on, or stops it, in a Folder or Not in a Folder (null). */
+  setTaggingWithAi(folderId: string | null, on: boolean): Promise<void>;
   /**
    * A manual choice, including Not in a Folder (null), wins over in-flight classification.
    * Returns the assignment before, for `restoreAssignment` (null: it had none).
@@ -7758,6 +7793,12 @@ export interface CoreApi {
    * scanned, or its quote isn't in them.
    */
   readScannedQuote(input: ScannedQuoteInput): Promise<ScannedQuote | null>;
+  /**
+   * A Citation's quote as its Document's text reads it (#905): a word a PDF split at a line end
+   * whole again, and a quote that stops at one run to the end of its word. Null when the quote
+   * isn't in the Units it cites, which leaves the quote as it is.
+   */
+  readableQuote(input: ScannedQuoteInput): Promise<string | null>;
   /** The built-in text recognition model's download state (#397). */
   getTextRecognitionModel(): Promise<EmbeddingModelStatus>;
   /**
@@ -9084,6 +9125,7 @@ const methods: Record<CoreApiMethod, true> = {
   readDocumentText: true,
   readScannedText: true,
   readScannedQuote: true,
+  readableQuote: true,
   getTextRecognitionModel: true,
   downloadTextRecognitionModel: true,
   previewLinkedFolder: true,
@@ -9220,6 +9262,8 @@ const methods: Record<CoreApiMethod, true> = {
   saveLibrarySettings: true,
   getTaggingModels: true,
   classifyDocuments: true,
+  stopTagging: true,
+  setTaggingWithAi: true,
   assignDocumentGroup: true,
   acceptAssignments: true,
   rejectAssignments: true,

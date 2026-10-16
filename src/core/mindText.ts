@@ -112,6 +112,7 @@ export type FailedSentence = { id: string } & (
       nearest: { quote: string; source: string } | null;
     }
   | { check: "needs-recheck"; why: RecheckReason }
+  | { check: "cited-case-unchecked" }
 );
 
 /** Part of a change still waiting to be accepted (a Proposal), read for review (#107). */

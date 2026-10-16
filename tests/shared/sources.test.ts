@@ -3,6 +3,7 @@ import { sourceEntry, sourcesOf, sourceText } from "../../src/shared/sources";
 
 const WEB = {
   address: "https://encyclopedia.example/tea",
+  origin: "user" as const,
   siteName: "The Open Encyclopedia",
   author: null,
   published: null,
