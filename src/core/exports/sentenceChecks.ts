@@ -1,7 +1,7 @@
 import type * as Y from "yjs";
 import { claimCheckShown } from "../../shared/claimChecks";
-import type { CitationAttributes } from "../api";
 import { checkedSentences } from "../answers/checks/sentences";
+import type { CitationAttributes } from "../api";
 import type { FailedSentence } from "../mindText";
 
 /** What the checks of a Mind's sentences are compared with, and how an export names things. */

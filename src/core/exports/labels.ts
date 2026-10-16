@@ -54,12 +54,14 @@ export function exportLabels(language: Language): ExportLabels {
         return t(`export.comment.sentence.needs-recheck.${sentence.why}`);
       }
       if (sentence.check === "contradicted") {
-        if (sentence.says) return t("export.comment.sentence.contradicted", { says: sentence.says });
+        if (sentence.says)
+          return t("export.comment.sentence.contradicted", { says: sentence.says });
         return sentence.worked
           ? t("export.comment.sentence.contradicted.worked", sentence.worked)
           : t("export.comment.sentence.contradicted.plain");
       }
-      if (sentence.nearest) return t("export.comment.sentence.unsupported.differs", sentence.nearest);
+      if (sentence.nearest)
+        return t("export.comment.sentence.unsupported.differs", sentence.nearest);
       return sentence.folder
         ? t("export.comment.sentence.unsupported.folder", { folder: sentence.folder })
         : t("export.comment.sentence.unsupported");

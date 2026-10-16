@@ -33,7 +33,13 @@ import {
 } from "../../mindText";
 import { type DocxWriter, piecesOf, WRITER_NAMESPACES } from "../docx";
 import { dateAttribute, escapeXml, type WordIds } from "../wordml";
-import { type Authorship, type Piece, type Review, type Tracking, trackBlocks } from "../wordReview";
+import {
+  type Authorship,
+  type Piece,
+  type Review,
+  type Tracking,
+  trackBlocks,
+} from "../wordReview";
 import type { AtomPlan } from "./atoms";
 import { type Counterpart, counterpartsOf, type ListPlace, NO_MARKS } from "./mind";
 import {
@@ -303,9 +309,7 @@ export class DocumentPatch {
    * passages: a paragraph written as it was is the User's; one written again,
    * its new words by who wrote them; new Blocks as the native writer writes them.
    */
-  private *pieces(
-    counterparts: readonly Counterpart[],
-  ): Generator<Piece> {
+  private *pieces(counterparts: readonly Counterpart[]): Generator<Piece> {
     for (const counterpart of counterparts) {
       if (counterpart.pending.inserted) continue;
       const based = counterpart.key ? this.based.get(counterpart.key) : undefined;
