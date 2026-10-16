@@ -5,6 +5,7 @@ describe("The paragraph a request names by its place", () => {
   // protects=a request naming one paragraph by its place gives that paragraph, in English and Chinese; fails_when=another paragraph or none is given; no_claim=paragraphs named by their words.
   test.each([
     ["Make the second paragraph more formal and leave the other paragraphs as they are", 1],
+    ["Shorten the second paragraph and keep the rest unchanged", 1],
     ["Shorten the first paragraph", 0],
     ["make my third paragraph clearer", 2],
     ["Rewrite paragraph 2", 1],
@@ -34,6 +35,11 @@ describe("The paragraph a request names by its place", () => {
     "第二段保持不变，其他的改正式一点",
     "把第二段移到最后",
     "把第十一段删掉",
+    "Don't change the second paragraph, shorten the rest",
+    "第二段不要改，其他的缩短",
+    "The second paragraph is fine, tighten the others",
+    "Make the whole thing more formal, especially the second paragraph",
+    "整体改得更正式，尤其是第二段",
   ])("%s names none", (request) => {
     expect(paragraphAsked(request)).toBeNull();
   });

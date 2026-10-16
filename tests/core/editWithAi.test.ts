@@ -651,30 +651,48 @@ describe("Edit with AI", () => {
     expect(pendingProposals(client.blocks)).toEqual([]);
   });
 
-  test("asked to remove a paragraph, a reply of no text but why removes it; no text and no why is a failure", async () => {
+  test("asked to remove a paragraph, a reply of no text but why removes it; any other empty reply fails with its reason", async () => {
     const { core, mind, client } = await setUp(
-      editingModel(({ passage }) => (passage.startsWith("Pensions") ? "<why>Removed.</why>" : "")),
+      editingModel(({ passage }) =>
+        passage.startsWith("Pensions")
+          ? "<why>Removed.</why>"
+          : passage.startsWith("Health")
+            ? "<why>I can't do this.</why>"
+            : "",
+      ),
     );
     const pensions = paragraph(text("Pensions match up to 5% of salary."));
     const leave = paragraph(text("Leave is 25 days."));
-    writeMind(client, [pensions, leave]);
+    const health = paragraph(text("Health cover starts after three months."));
+    writeMind(client, [pensions, leave, health]);
     await client.settled();
 
     const removed = await core.editWithAi(
       wholeParagraph(client, mind.id, pensions.attrs.id, "instruction", "Remove it"),
     );
-    const failed = await core.editWithAi(
+    const silent = await core.editWithAi(
       wholeParagraph(client, mind.id, leave.attrs.id, "instruction", "Remove it"),
+    );
+    const refused = await core.editWithAi(
+      wholeParagraph(client, mind.id, health.attrs.id, "instruction", "Make it more formal"),
     );
 
     expect(removed).toMatchObject({ kind: "proposed" });
-    expect(failed).toMatchObject({ kind: "failed" });
+    expect(silent).toMatchObject({ kind: "failed" });
+    expect(refused).toMatchObject({
+      kind: "failed",
+      error: { message: "I can't do this." },
+    });
     expect(shownWithChanges(client)).toEqual([
       "- Pensions match up to 5% of salary.",
       "Leave is 25 days.",
+      "Health cover starts after three months.",
     ]);
     await resolveChanges(client, "accept");
-    expect(shownWithChanges(client)).toEqual(["Leave is 25 days."]);
+    expect(shownWithChanges(client)).toEqual([
+      "Leave is 25 days.",
+      "Health cover starts after three months.",
+    ]);
   });
 
   test("a model that fails says why, and nothing is written", async () => {

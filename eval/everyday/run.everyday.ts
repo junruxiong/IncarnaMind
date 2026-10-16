@@ -20,6 +20,7 @@ import {
   type MindFocus,
 } from "../../src/core";
 import { toolRecordLines } from "../../src/core/answers/toolRecord";
+import { plainText } from "../../src/core/mindText";
 import { createAiSdkChatModel } from "../../src/core/providers/models";
 import { resolveProposals } from "../../src/shared/proposals";
 import { connectToMind } from "../../tests/helpers/mindClient";
@@ -142,20 +143,6 @@ async function ask(
   return answer;
 }
 
-const elementText = (element: Y.XmlElement): string =>
-  element
-    .toArray()
-    .map((node) =>
-      node instanceof Y.XmlText
-        ? (node.toDelta() as { insert: unknown }[])
-            .map((run) => (typeof run.insert === "string" ? run.insert : ""))
-            .join("")
-        : node instanceof Y.XmlElement
-          ? elementText(node)
-          : "",
-    )
-    .join(" ");
-
 /** The top-level Blocks, by id, as they read once these requests' changes are accepted. */
 function acceptedTexts(doc: Y.Doc, requests: ReadonlySet<string>): Map<string, string> {
   const copy = new Y.Doc();
@@ -167,7 +154,7 @@ function acceptedTexts(doc: Y.Doc, requests: ReadonlySet<string>): Map<string, s
       .toArray()
       .flatMap((block) =>
         block instanceof Y.XmlElement
-          ? [[String(block.getAttribute(BLOCK_ID_ATTRIBUTE)), elementText(block)]]
+          ? [[String(block.getAttribute(BLOCK_ID_ATTRIBUTE)), plainText(block)]]
           : [],
       ),
   );
@@ -298,8 +285,23 @@ async function runCase(
   };
 }
 
+// Not the model under test: it would judge its own claims.
+const JUDGE_MODEL = "claude-sonnet-5-5";
+
+/** The model that judges claims: INCARNAMIND_EVAL_JUDGE_*, else Claude Sonnet 5.5 on an Anthropic key. */
+function judgeOf(config: ReturnType<typeof readConfig>, chat: ChatSettings): ChatSettings {
+  if (config.judge) return config.judge;
+  if (chat.kind !== "anthropic") {
+    throw new Error(
+      "Set INCARNAMIND_EVAL_JUDGE_KIND, _MODEL and _KEY: the claims are judged by another model than the one asked.",
+    );
+  }
+  return { ...chat, modelId: JUDGE_MODEL };
+}
+
 async function runModel(
   chat: ChatSettings,
+  judging: ChatSettings,
   cases: readonly EverydayCase[],
   runs: number,
   log: Log,
@@ -309,7 +311,6 @@ async function runModel(
     papers: await fetchPapers(config.cacheDir, log),
     reports: await reports(),
   };
-  const judging = config.judge ?? chat;
   const judge = createAiSdkChatModel({
     kind: judging.kind,
     modelId: judging.modelId,
@@ -472,7 +473,8 @@ test("everyday requests", async () => {
     !only ? true : only === "hard" ? each.hard === true : only.split(",").includes(each.id),
   );
   const runs = Number(process.env.INCARNAMIND_EVAL_EVERYDAY_RUNS ?? "3") || 3;
-  const results = await runModel(config.chat, cases, runs, log);
+  const judging = judgeOf(config, config.chat);
+  const results = await runModel(config.chat, judging, cases, runs, log);
   const rows = rowRates(
     results.map((each) => ({
       id: each.id,
@@ -487,7 +489,6 @@ test("everyday requests", async () => {
     `${new Date().toISOString().replace(/[:.]/g, "-")}-everyday`,
   );
   await mkdir(folder, { recursive: true });
-  const judging = config.judge ?? config.chat;
   await writeFile(
     join(folder, "report.md"),
     report(results, rows, `${judging.kind}/${judging.modelId}`),

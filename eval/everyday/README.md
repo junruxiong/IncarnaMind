@@ -36,7 +36,7 @@ npm run eval:everyday
 
 - `INCARNAMIND_EVAL_EVERYDAY=hard` asks only the hard requests, for a stronger model such as Claude Sonnet 5.5. A list of ids asks only those: `INCARNAMIND_EVAL_EVERYDAY=owner-1,only-second-en`.
 - `INCARNAMIND_EVAL_EVERYDAY_RUNS` sets how many times each request is asked (3 by default).
-- The same model judges the claims, unless `INCARNAMIND_EVAL_JUDGE_KIND`, `_MODEL` and `_KEY` name another, such as Claude Sonnet 5.5. The report says which.
+- Another model judges the claims, never the one asked: Claude Sonnet 5.5 on the Anthropic key, or the one `INCARNAMIND_EVAL_JUDGE_KIND`, `_MODEL` and `_KEY` name, which a run on another provider must set. The report says which.
 - The report goes into `eval/results/<start time>-everyday/`. `report.md` has the pass rates by language and by request, against each request's floor, the Answers' tokens, then every run's result with its reply and the Blocks it changed. `report.json` has the same data.
 
 **Cost and time, roughly:** on Claude Haiku 5.5, half a minute to a minute and $0.02 to $0.05 a request, so about an hour and a half and $3 to $6 for three runs of all of them. A request that takes over five minutes is stopped and fails.

@@ -185,12 +185,17 @@ export interface MindToolsOptions {
  * spaces made alike.
  */
 function bareName(name: string): string {
-  return name
-    .trim()
-    .replace(/^(?:@|#{1,6}\s+|[-*+]\s+|\d{1,3}[.)]\s+|>\s+)/, "")
-    .replace(/^["'“‘「『《](.*)["'”’」』》]$/u, "$1")
-    .replace(/\s+/g, " ")
-    .trim();
+  return (
+    name
+      .trim()
+      .replace(/^(?:@|#{1,6}\s+|[-*+]\s+|\d{1,3}[.)]\s+|>\s+)/, "")
+      // Copied from <mind>: "[waiting change, adds: Results]".
+      .replace(/^\[waiting change, (?:adds|removes): (.*?)\]?$/u, "$1")
+      .replace(/\*\*|__/g, "")
+      .replace(/^["'“‘「『《](.*)["'”’」』》]$/u, "$1")
+      .replace(/\s+/g, " ")
+      .trim()
+  );
 }
 
 const nameKey = (name: string): string => bareName(name).toLocaleLowerCase();
@@ -373,20 +378,32 @@ function named(elements: readonly Y.XmlElement[], wanted: string): Y.XmlElement[
 
 const isHeading = (element: Y.XmlElement | undefined) => element?.nodeName === "heading";
 
-// Fewer words than this could start several paragraphs.
-const MIN_FIRST_WORDS = 12;
+// Fewer than this could start several paragraphs.
+const MIN_FIRST_WORDS = 3;
+const MIN_FIRST_CJK = 6;
 
-/** The one paragraph (not a heading) that starts with `wanted`; none for a start too short or shared. */
 function paragraphNamed(
   elements: readonly Y.XmlElement[],
   wanted: string,
 ): Y.XmlElement | undefined {
   const key = nameKey(wanted);
-  if (key.length < MIN_FIRST_WORDS) return undefined;
+  const count = countText(key);
+  if (count.words < MIN_FIRST_WORDS && count.cjk < MIN_FIRST_CJK) return undefined;
   const found = elements.filter(
     (element) => !isHeading(element) && nameKey(plainText(element)).startsWith(key),
   );
   return found.length === 1 ? found[0] : undefined;
+}
+
+function paragraphAt(
+  elements: readonly Y.XmlElement[],
+  asked: ParagraphAsked,
+): Y.XmlElement | undefined {
+  if (asked === null) return undefined;
+  const paragraphs = elements.filter(
+    (element) => element.nodeName === "paragraph" && plainText(element).trim() !== "",
+  );
+  return asked === "last" ? paragraphs.at(-1) : paragraphs[asked];
 }
 
 /** The stretch of a Mind `edit_mind` changes, from one paragraph or heading to another. */
@@ -427,8 +444,8 @@ function stretchOf(
       );
       chosen = all.slice(start, end < 0 ? all.length : end);
     } else {
-      // Named by its first words, one paragraph changes and the rest stay as they are.
-      const paragraph = paragraphNamed(all, part);
+      // A start the model got wrong falls back to the paragraph the User named by its place.
+      const paragraph = paragraphNamed(all, part) ?? paragraphAt(all, asked);
       if (!paragraph) {
         return { why: `there is no heading or paragraph “${part}” in it`, kind: "no-heading" };
       }
@@ -445,12 +462,9 @@ function stretchOf(
     const picked = all.filter(inSelection);
     if (picked.length > 0) chosen = picked;
   }
-  if (asked !== null && chosen.length > 1) {
+  if (chosen.length > 1) {
     // Rewritten with the paragraphs around it, the others would come back reworded.
-    const paragraphs = (part === null ? chosen : all).filter(
-      (element) => element.nodeName === "paragraph" && plainText(element).trim() !== "",
-    );
-    const paragraph = asked === "last" ? paragraphs.at(-1) : paragraphs[asked];
+    const paragraph = paragraphAt(part === null ? chosen : all, asked);
     if (paragraph && chosen.includes(paragraph)) chosen = [paragraph];
   }
   const first = chosen[0];

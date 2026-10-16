@@ -90,6 +90,9 @@ import {
   sameText,
 } from "./prompt";
 
+const REMOVAL =
+  /\b(?:remove|delete|cut|drop|take out|get rid of|strike)\b|删掉|删除|删去|去掉|移除|拿掉/i;
+
 /** What the "edits" flow sends: the selected text, with the paragraphs it is in. */
 export const EDITS_FLOW_SENDS = ["selection"] as const;
 
@@ -614,11 +617,16 @@ export function createEdits(options: EditsOptions) {
       return ended({ kind: "failed", error: classifyProviderError(failure) });
     }
     const reply = readEditReply(raw, selection.text);
-    // Asked to remove the passage, a model gives back no text, only why.
-    if (reply === "" && !wrote && !refused && (explain || reasonOf(raw) === null)) {
+    // No text back removes the passage only when that is what was asked; otherwise its reason
+    // ("I can't do this") is why it failed.
+    const removes = ask.action === "instruction" && REMOVAL.test(ask.instruction);
+    if (reply === "" && !wrote && !refused && (explain || !removes || reasonOf(raw) === null)) {
       return ended({
         kind: "failed",
-        error: { kind: "provider", message: "The model gave nothing back." },
+        error: {
+          kind: "provider",
+          message: (!explain && reasonOf(raw)) || "The model gave nothing back.",
+        },
       });
     }
     if (!explain && !wrote && !refused && sameText(reply, selection.text)) {
