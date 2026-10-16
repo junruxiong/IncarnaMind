@@ -15,6 +15,8 @@ import type {
   FormattedCitations,
   ReferencePatch,
 } from "../../src/core";
+import { MIND_SETTINGS_FIELD } from "../../src/core/api";
+import { dismissCitationStylePrompt } from "../../src/shared/mindCitationStyle";
 import { createTempDataFolder, manualClock, startCore } from "../helpers/core";
 import { addAndProcess, writeSourceFile } from "../helpers/documents";
 import { paragraphsOf, part, unzip } from "../helpers/docx";
@@ -151,6 +153,26 @@ describe("GB/T 7714's pages", () => {
     });
   });
 
+  test("author-date: works each with their page are set apart by the style's own delimiter", async () => {
+    const { core, dictionary, qian } = await setUp();
+    const formatted = await format(core, "gb-t-7714-2015-author-date", [
+      work(dictionary, page(1194)),
+      work(qian),
+    ]);
+    expect(plain(formatted.clusters[0]?.runs)).toBe(
+      "(中国社会科学院语言研究所词典编辑室, 1996)1194; (钱学森等, 1990)",
+    );
+  });
+
+  test("a Location the standard has no raised form for (a slide, lines) is in brackets on the line", async () => {
+    const { core, qian } = await setUp();
+    const slide: CitationLocation = { kind: "slide", from: 4, to: 4 };
+    const formatted = await format(core, "gb-t-7714-2015-numeric", [work(qian, slide)]);
+    const runs = formatted.clusters[0]?.runs ?? [];
+    expect(plain(runs)).toMatch(/^\[1\]（.*4.*）$/);
+    expect(runs.at(-1)?.script).toBeUndefined();
+  });
+
   test("a range of pages is raised as the standard writes one, and every GB/T style keeps it", async () => {
     const { core, qian } = await setUp();
     for (const style of [
@@ -229,7 +251,8 @@ describe("an entry too thin to cite", () => {
 
     const exported = await core.exportMind(mind.id, { format: "markdown" });
     const markdown = new TextDecoder().decode(exported.data);
-    expect(markdown).toContain("\\[1\\] 城市绿地与夏季降温调查。\\[信息待补充\\]");
+    // Ended as the style ends the rest of its entries, ". ".
+    expect(markdown).toContain("\\[1\\] 城市绿地与夏季降温调查. \\[信息待补充\\]");
     expect(markdown).toContain("\\[2\\] 城市热岛效应研究\\[J\\]. \\[信息待补充\\]");
     expect(markdown).toContain(
       "\\[3\\] 中国社会科学院语言研究所词典编辑室. 现代汉语词典\\[M\\]. 商务印书馆, 1996.\n",
@@ -239,7 +262,7 @@ describe("an entry too thin to cite", () => {
 
     const files = unzip((await core.exportMind(mind.id, { format: "docx" })).data);
     const entries = paragraphsOf(part(files, "word/document.xml")).map((each) => each.text);
-    expect(entries.some((entry) => entry.endsWith("城市绿地与夏季降温调查。[信息待补充]"))).toBe(
+    expect(entries.some((entry) => entry.endsWith("城市绿地与夏季降温调查. [信息待补充]"))).toBe(
       true,
     );
   });
@@ -284,6 +307,19 @@ describe("the style of a Mind that hasn't chosen one", () => {
     ]);
     await client.settled();
     expect(await core.getMindCitationStyle(mind.id)).toEqual(numbered);
+
+    // The User said "not for this Mind" to the offer of a style: no default changes that.
+    writeMind(client, chinese);
+    client.doc.transact(() =>
+      dismissCitationStylePrompt(client.doc.getMap<unknown>(MIND_SETTINGS_FIELD)),
+    );
+    await client.settled();
+    expect(await core.getMindCitationStyle(mind.id)).toEqual(numbered);
+    client.doc.transact(() =>
+      dismissCitationStylePrompt(client.doc.getMap<unknown>(MIND_SETTINGS_FIELD), false),
+    );
+    await client.settled();
+    expect(await core.getMindCitationStyle(mind.id)).toEqual(gbt);
 
     // Citing only files with nothing to cite them by (a contract, a site report), it stays Numbered.
     writeMind(client, [paragraph(text("合同约定每月付租"), citation(blank, page(2)))]);

@@ -4271,7 +4271,6 @@
     max-width: 100%;
     font-weight: 600;
   }
-  /* "Default", after a style the Mind follows rather than chose: GB/T 7714 for Chinese. */
   .references-default {
     font-size: 12px;
     line-height: 16px;

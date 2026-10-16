@@ -91,7 +91,7 @@ export function ReferencesBlock({
 
   const copy = async () => {
     setCopyProblem(null);
-    const { text, html } = bibliographyClipboard(entries);
+    const { text, html } = bibliographyClipboard(entries, t("export.needsDetails"));
     try {
       await navigator.clipboard.write([
         new ClipboardItem({

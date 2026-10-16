@@ -288,9 +288,12 @@ test("in Chinese: the offer puts GB/T 7714 first; chosen, raised numbers and 参
   await screenshot(window, "citation-style-prompt-zh");
   await pointAndClick(window, prompt.getByTestId("citation-style-prompt-choice").first());
   const styled = answer.locator('[data-testid="citation"][data-styled="runs"]').first();
-  // Each work's Location raised after its number, as GB/T 7714 prints a page: "[1]第 1 行".
-  await expect(styled.getByTestId("citation-chip")).toHaveText(/^(\[\d\](\d+|第 \d+ 行)?)+$/);
-  await expect(styled.getByTestId("citation-chip")).toHaveClass(/citation-marker--raised/);
+  // A page raised after its number, as GB/T 7714 prints one; lines in brackets: "[1]（第 1 行）".
+  await expect(styled.getByTestId("citation-chip")).toHaveText(/^(\[\d\](\d+|（第 \d+ 行）)?)+$/);
+  // The numbers raised; a chip with a Location on the line stays on the line itself.
+  await expect(
+    styled.getByTestId("citation-chip").locator("sup").filter({ hasText: /\d/ }).first(),
+  ).toBeVisible();
 
   const references = window.getByTestId("references");
   await expect(references).toHaveAttribute("data-style", "gb-t-7714-2015-numeric");
@@ -360,8 +363,8 @@ test("in Chinese, a thesis Mind: 引用信息 read from the PDFs waits to be che
   await expect(panel.getByTestId("reference-title")).toHaveText("城市绿地与夏季降温调查");
   await expect(panel.getByTestId("reference-authors")).toHaveText("林小雨");
   await expect(panel.getByTestId("reference-issued")).toHaveText("2026");
-  await expect(panel.getByTestId("reference-publisher")).toHaveText("华东师范大学地理科学学院");
-  await expect(panel.locator("dt[data-unchecked]")).toHaveCount(4);
+  await expect(panel.getByTestId("reference-publisher")).toHaveText("华东师范大学");
+  await expect(panel.locator("dt[data-unchecked]")).toHaveCount(5);
   await screenshot(window, "cite-as-check-zh");
   await pointAndClick(window, panel.getByTestId("reference-confirm"));
   await expect(panel.locator("dt[data-unchecked]")).toHaveCount(0);
@@ -383,16 +386,16 @@ test("in Chinese, a thesis Mind: 引用信息 read from the PDFs waits to be che
   await expect(window.getByTestId("citation-style-prompt")).toHaveCount(0);
   const entries = references.getByTestId("reference-entry");
   await expect(entries.filter({ hasText: "林小雨" })).toContainText(
-    "林小雨. 城市绿地与夏季降温调查[D]. 华东师范大学地理科学学院, 2026.",
+    "林小雨. 城市绿地与夏季降温调查[D]. 华东师范大学, 2026.",
   );
   await expect(entries.filter({ hasText: "张三" })).toContainText(
     "张三, 李四. 城市绿地对热岛效应的缓解作用[J/OL]. 2024. DOI:10.5555/greenspace-2024.",
   );
   const thin = entries.filter({ hasText: "城市绿地调查笔记" });
   await expect(thin).toHaveAttribute("data-needs-details", "true");
-  // Each cited work on its own, its page (or line) raised after its number: "[1]第 1 行[2]1[3]1".
+  // Each cited work on its own, its page raised after its number, lines in brackets: "[1]（第 1 行）[2]1[3]1".
   await expect(answer.getByTestId("citation-chip").first()).toHaveText(
-    /^(\[\d\](\d+|第 \d+ 行)){3}$/,
+    /^(\[\d\](\d+|（第 \d+ 行）)){3}$/,
   );
   await screenshot(window, "references-gbt-default-zh");
 
@@ -421,11 +424,11 @@ test("in Chinese, a thesis Mind: 引用信息 read from the PDFs waits to be che
     (each) => each.text,
   );
   expect(paragraphs).toContain("参考文献");
-  expect(paragraphs.some((line) => /(\[\d\](\d+|第 \d+ 行)){3}/.test(line))).toBe(true);
+  expect(paragraphs.some((line) => /(\[\d\](\d+|（第 \d+ 行）)){3}/.test(line))).toBe(true);
   expect(
     paragraphs.some((line) => line.includes("林小雨. 城市绿地与夏季降温调查[D]. 华东师范大学")),
   ).toBe(true);
-  expect(paragraphs.some((line) => line.endsWith("城市绿地调查笔记。[信息待补充]"))).toBe(true);
+  expect(paragraphs.some((line) => line.endsWith("城市绿地调查笔记. [信息待补充]"))).toBe(true);
   expect(paragraphs.join("\n")).not.toContain("添加于");
 
   // Show goes to the thin entry, whose 信息待补充 fills it in right there.

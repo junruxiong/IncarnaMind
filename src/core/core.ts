@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 import * as Y from "yjs";
-import { defaultCitationStyle, isCitationStyleId } from "../shared/citationStyles";
+import { isCitationStyleId } from "../shared/citationStyles";
 import type { DrawnPage } from "../shared/citedPage";
 import { translate } from "../shared/i18n";
 import { bibliographyShown } from "../shared/mindBibliography";
@@ -1438,9 +1438,9 @@ export function createCore(adapters: CoreAdapters): Core {
       };
     });
     const citesWorks = cited.some((id) => isCitableWork(liveDocument(id)?.reference ?? null));
-    const fallback = defaultCitationStyle(settings.get().language, { chineseText, citesWorks });
+    const context = { language: settings.get().language, chineseText, citesWorks };
     return content.readSettings(mindId, (mindSettings) => ({
-      style: citationStyleIn(mindSettings, fallback),
+      style: citationStyleIn(mindSettings, context),
       chosen: chosenCitationStyle(mindSettings) !== null,
       folderDefault: folderId === null ? null : library.citationStyle(folderId),
     }));

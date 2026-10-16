@@ -234,14 +234,8 @@ export function readReference(meta: FileMetadata): FileReference {
     doiPrinted(meta.firstPages);
   if (doi) read.doi = doi;
 
-  const type =
-    page.type === "thesis"
-      ? "thesis"
-      : doi || journal
-        ? "article-journal"
-        : arxiv
-          ? "article"
-          : (page.type ?? "document");
+  // What a first page suggests never outweighs a DOI or a journal the metadata names.
+  const type = doi || journal ? "article-journal" : arxiv ? "article" : (page.type ?? "document");
   // A thesis is published by the university that grants it, a report by its organisation,
   // which is also a report's author when no person is named.
   const publisher =

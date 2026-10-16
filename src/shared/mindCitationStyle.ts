@@ -2,10 +2,11 @@
  * The citation style a Mind is written in (#289). Like its model (`mindModel.ts`), it lives in
  * the Mind's Yjs settings (`MIND_SETTINGS_FIELD`), not in its Blocks, so it goes wherever the
  * Mind goes and its content schema stays as it is. A Mind with no choice is in the default
- * style (`defaultCitationStyle`).
+ * style (`defaultCitationStyle`), unless the User said "not for this Mind" to the offer of one.
  */
 import type * as Y from "yjs";
-import { type CitationStyleId, isCitationStyleId } from "./citationStyles";
+import type { Language } from "../core/language";
+import { type CitationStyleId, defaultCitationStyle, isCitationStyleId } from "./citationStyles";
 
 const STYLE_KEY = "citationStyle";
 /** The User's "not for this Mind" to the prompt that offers a style (`CitationStylePrompt`). */
@@ -19,12 +20,36 @@ export function chosenCitationStyle(settings: Y.Map<unknown>): CitationStyleId |
   return isCitationStyleId(value) ? value : null;
 }
 
-/** The style the Mind's Citations and Bibliography are in: its choice, else `fallback`. */
-export function citationStyleIn(
-  settings: Y.Map<unknown>,
-  fallback: CitationStyleId,
+/** What decides the style of a Mind that hasn't chosen one, beyond its settings. */
+export interface StyleContext {
+  /** The interface language. */
+  language: Language;
+  chineseText: boolean;
+  citesWorks: boolean;
+}
+
+/**
+ * The style a Mind is in: its choice; else Numbered when the User closed the offer of a style
+ * there ("not for this Mind"), which no default overrides; else the default. The core and the
+ * editor both work it out here, so an export and the page never disagree.
+ */
+export function resolvedCitationStyle(
+  mind: { chosen: CitationStyleId | null; promptDismissed: boolean },
+  context: StyleContext,
 ): CitationStyleId {
-  return chosenCitationStyle(settings) ?? fallback;
+  if (mind.chosen !== null) return mind.chosen;
+  return mind.promptDismissed ? "numbered" : defaultCitationStyle(context.language, context);
+}
+
+/** The style the Mind's Citations and Bibliography are in (`resolvedCitationStyle`). */
+export function citationStyleIn(settings: Y.Map<unknown>, context: StyleContext): CitationStyleId {
+  return resolvedCitationStyle(
+    {
+      chosen: chosenCitationStyle(settings),
+      promptDismissed: citationStylePromptDismissed(settings),
+    },
+    context,
+  );
 }
 
 /** Chooses a style for the Mind; null forgets the choice, so it follows the default again. */

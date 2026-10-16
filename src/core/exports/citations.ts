@@ -5,6 +5,7 @@
  * and is never passed through here.
  */
 import type { CitationStyle } from "../../shared/citationStyles";
+import { withNeedsDetailsMark } from "../../shared/references";
 import { type SourceContext, sourceEntry, sourcesOf } from "../../shared/sources";
 import type { CitationFormatRequest, CitedWork, FormattedCitations, StyledRun } from "../api";
 import { type Block, type Inline, type Pendings, trimTrailingSpace } from "../mindText";
@@ -106,15 +107,6 @@ function runsOf(runs: FormattedCitations["clusters"][number]["runs"]): StyledRun
   return joined;
 }
 
-/** Full-width punctuation, which carries its own space. */
-const FULL_WIDTH = /[\u3000-\u303f\uff00-\uffef]/u;
-
-function marked(runs: readonly StyledRun[], mark: string): StyledRun[] {
-  const last = runs.at(-1)?.text ?? "";
-  const space = FULL_WIDTH.test(last.slice(-1)) || FULL_WIDTH.test(mark[0] ?? "") ? "" : " ";
-  return [...runs, { text: `${space}${mark}` }];
-}
-
 /**
  * The Blocks with their Citations in `style`, and its Bibliography at the end: `format` is the
  * core's `formatCitations`, and `needsDetails` the mark after an entry too thin to cite
@@ -178,7 +170,7 @@ export async function styleCitations(
       heading: style.heading,
       items: formatted.bibliography.map((entry) => ({
         label: entry.label,
-        runs: entry.needsDetails ? marked(entry.runs, needsDetails) : entry.runs,
+        runs: entry.needsDetails ? withNeedsDetailsMark(entry.runs, needsDetails) : entry.runs,
       })),
       hangingIndent: formatted.hangingIndent,
     },

@@ -252,6 +252,11 @@ export function fillReference(
       for (const [field, value] of Object.entries(found) as [ReferenceField, FieldValue][]) {
         if (isEmptyValue(field, value)) continue;
         const current = stored[field];
+        // The registry agrees with the type the file suggested: it is no longer a guess to check.
+        if (field === "type" && current?.source === "file" && same(current.value, value)) {
+          stored.type = { value, source: "lookup" };
+          continue;
+        }
         const open =
           field === "type"
             ? current?.source !== "user" && !same(current?.value, value)

@@ -432,7 +432,6 @@ export function createExports(deps: ExportsDependencies) {
   }
 }
 
-/** `format`, keeping the Documents whose Bibliography entries were too thin to cite. */
 interface ThinEntries {
   format(request: CitationFormatRequest): Promise<FormattedCitations>;
   documents: ReadonlySet<string>;

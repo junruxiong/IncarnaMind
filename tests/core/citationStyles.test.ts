@@ -263,9 +263,7 @@ describe("formatting a Mind's Citations", () => {
       const { bibliography } = await style(id);
       const entry = bibliography.find((each) => each.documentId === lease.id);
       expect(entry?.needsDetails, id).toBe(true);
-      expect(plain(entry?.runs), id).toBe(
-        id.startsWith("gb-t") ? "Lease agreement。" : "Lease agreement.",
-      );
+      expect(plain(entry?.runs), id).toBe("Lease agreement.");
     }
     // The style's own number stays.
     expect(plain((await style("ieee")).bibliography[0]?.label)).toBe("[1]");
