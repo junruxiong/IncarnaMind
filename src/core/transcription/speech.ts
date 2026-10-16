@@ -24,8 +24,8 @@ export interface VoiceDetector {
 }
 
 export interface Recognizer {
-  /** The words in one stretch of speech. */
-  decode(samples: Float32Array): Promise<string>;
+  /** The words in one stretch of speech, said on the stream named. */
+  decode(samples: Float32Array, stream: string): Promise<string>;
 }
 
 /** An engine, loaded: a detector for each stream, and one recognizer they share. */
@@ -178,7 +178,7 @@ export function createSpeechHost(engine: SpeechEngine, report: SpeechReport) {
     let text = "";
     let failed = false;
     try {
-      text = (await engine.recognizer.decode(job.samples)).trim();
+      text = (await engine.recognizer.decode(job.samples, job.stream)).trim();
     } catch (error) {
       // A stretch the engine can't read loses its text, not the rest of the stream.
       failed = true;

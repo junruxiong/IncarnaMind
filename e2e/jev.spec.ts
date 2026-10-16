@@ -76,7 +76,7 @@ test("with a Jev key, Jev tags Documents instead of the chat model, and an unsur
   await dismissChatSetup(window);
   await useLocalChatModel(window);
 
-  // Settings → Automatic tagging: a key and a Jev-compatible server, tested, then used.
+  // Settings → Models → Tagging: a key and a Jev-compatible server, tested, then used.
   await openSettings(window, "models");
   const section = window.getByTestId("jev-settings");
   await section.getByTestId("jev-set-up").click();
@@ -90,7 +90,11 @@ test("with a Jev key, Jev tags Documents instead of the chat model, and an unsur
   await expect(form.getByTestId("connection-test")).toHaveText("Connected: the provider answered.");
   await acceptPlainTextKeys(window, form);
   await form.getByRole("button", { name: "Use Jev for tagging" }).click();
-  await expect(section).toContainText("TypeSafe Jev tags your Documents.");
+  await expect(section).toContainText("Your Jev key is saved.");
+  // Automatic tags with Jev now, before the chat model.
+  await expect(window.getByTestId("tagging-automatic-line")).toHaveText(
+    "Using TypeSafe Jev, with your Jev key",
+  );
   await expect(section).toContainText(`Server: ${jev.url}`);
   await closeSettings(window);
 

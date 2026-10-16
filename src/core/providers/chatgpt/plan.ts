@@ -8,27 +8,22 @@
 import { translate } from "../../../shared/i18n";
 import type { Browser } from "../../adapters";
 import type {
-  ChatGptPastedAddressProblem,
-  ChatGptPastedAddressResult,
   ChatGptPlanModel,
   ChatGptPlanStatus,
   ChatGptSignInErrorKind,
   ChatGptSignInResult,
   ChatGptSignOutResult,
+  PastedAddressResult,
 } from "../../api";
 import { SecretStorageError } from "../../errors";
-import { DEFAULT_SIGN_IN_TIMEOUT_MS, OAuthFlowError, type PastedRedirect } from "../../oauth";
+import { DEFAULT_SIGN_IN_TIMEOUT_MS, OAuthFlowError } from "../../oauth";
+import { pastedAddressResult, type RefreshLock } from "../../oauthAccount";
 import type { Secrets } from "../../secrets";
 import type { SettingsStore } from "../../settings";
 import { ChatGptOtherAccountError, ChatGptPlanNotAllowedError } from "./errors";
 import { CHATGPT_PLAN_BASE_URL, KNOWN_PLAN_MODELS, listPlanModels } from "./planEndpoint";
 import { createPlanLimits } from "./planLimits";
-import {
-  type ChatGptSignInEndpoints,
-  createChatGptSignIn,
-  OPENAI_AUTH,
-  type RefreshLock,
-} from "./signIn";
+import { type ChatGptSignInEndpoints, createChatGptSignIn, OPENAI_AUTH } from "./signIn";
 
 /** Where the provider signs in and sends Questions. */
 export interface ChatGptPlanEndpoints extends ChatGptSignInEndpoints {
@@ -60,12 +55,6 @@ function signInError(error: unknown): { kind: ChatGptSignInErrorKind; message: s
   if (error instanceof ChatGptOtherAccountError) return { kind: "other-account", message };
   return { kind: "failed", message };
 }
-
-const PASTE_PROBLEMS: Record<Exclude<PastedRedirect, "accepted">, ChatGptPastedAddressProblem> = {
-  "not-redirect": "not-sign-in-address",
-  "wrong-state": "other-sign-in",
-  finished: "finished",
-};
 
 export type ChatGptPlan = ReturnType<typeof createChatGptPlan>;
 
@@ -183,10 +172,8 @@ export function createChatGptPlan(options: {
       return { revoked, status: await status() };
     },
 
-    pasteSignInAddress(address: string): ChatGptPastedAddressResult {
-      const pasted = signIn.pasteAddress(address);
-      return pasted === "accepted" ? { ok: true } : { ok: false, problem: PASTE_PROBLEMS[pasted] };
-    },
+    pasteSignInAddress: (address: string): PastedAddressResult =>
+      pastedAddressResult(signIn.pasteAddress(address)),
 
     /**
      * Forgets what the experimental provider kept on this device: its tokens,
