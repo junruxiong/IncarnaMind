@@ -3,6 +3,7 @@ import {
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  nameMind,
   newMind,
   removeDataFolder,
   setLanguage,
@@ -54,7 +55,7 @@ for (const language of ["en", "zh-CN"] as const) {
     await setWindowSize(app, window, 1100, 760);
     for (const name of NAMES[language]) {
       await newMind(window);
-      await window.getByTestId("mind-title").fill(name);
+      await nameMind(window, name);
       await window.keyboard.press("Enter");
     }
     const tabs = window.getByRole("tab");

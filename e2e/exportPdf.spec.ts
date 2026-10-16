@@ -24,6 +24,7 @@ import {
   type MindChild,
   mindNode,
   motionSettled,
+  nameMind,
   newMind,
   openOptions,
   pathsOpened,
@@ -119,7 +120,7 @@ const unspaced = (text: string) => text.replace(/\s+/g, "");
 /** Opens a new Mind titled `title`, and adds the two Documents it cites. Returns its id. */
 async function setUpMind(window: Page, folder: string, title: string) {
   await newMind(window);
-  await window.getByTestId("mind-title").fill(title);
+  await nameMind(window, title);
   const mindId = await window.getByTestId("mind-pane").getAttribute("data-mind-id");
   if (!mindId) throw new Error("No Mind is open.");
   await writeFile(join(folder, "Tides.txt"), "Spring tides happen at new moon.");
@@ -430,7 +431,7 @@ test("Export options remembers the format and its options; Export and ⇧⌘E us
   const { app, window } = await launchApp(dataDir, { home });
   await dismissChatSetup(window);
   await newMind(window);
-  await window.getByTestId("mind-title").fill("Tides");
+  await nameMind(window, "Tides");
   await pointAndClick(window, window.getByTestId("mind-editor"));
   await window.keyboard.type("Spring tides come twice a month.");
   const out = await createDataFolder();

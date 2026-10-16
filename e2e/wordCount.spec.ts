@@ -8,19 +8,22 @@ import {
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  nameMind,
   newMind,
   pointAndClick,
   removeDataFolder,
   setWindowSize,
+  showCountWhileWriting,
   useLocalChatModel,
   WORD_KEY,
 } from "./app";
 
 /*
- * The word count under the Mind's title: words for English, characters for
- * Chinese, the selection's own count, a target per Mind, and a count that
- * waits for a pause in typing. Set INCARNAMIND_SCREENSHOTS to a folder to also
- * save screenshots of it at a wide and a narrow window, in English and Chinese.
+ * The count while writing, at the page's bottom left once the page's ⋯ menu
+ * shows it (#908): words for English, characters for Chinese, the selection's
+ * own count, a target per Mind, and a count that waits for a pause in typing.
+ * Set INCARNAMIND_SCREENSHOTS to a folder to also save screenshots of it at a
+ * wide and a narrow window, in English and Chinese.
  */
 
 const SCREENSHOTS = process.env.INCARNAMIND_SCREENSHOTS;
@@ -46,6 +49,7 @@ test("the count follows the writing, in words and in characters, and the selecti
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   await newMind(window);
+  await showCountWhileWriting(window);
   const button = window.getByTestId("mind-count-button");
   await expect(button).toHaveText("0 words");
 
@@ -75,6 +79,7 @@ test("typing is not slowed: the count is worked out after a pause, not for each 
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   await newMind(window);
+  await showCountWhileWriting(window);
   const button = window.getByTestId("mind-count-button");
   await window.getByTestId("mind-editor").click();
 
@@ -103,6 +108,7 @@ test("a target shows progress, is kept for the Mind, and can be removed", async 
   const { window } = first;
   await dismissChatSetup(window);
   await newMind(window);
+  await showCountWhileWriting(window);
   const button = window.getByTestId("mind-count-button");
   await window.getByTestId("mind-editor").click();
   await window.keyboard.type("one two three four five");
@@ -133,7 +139,7 @@ test("a target shows progress, is kept for the Mind, and can be removed", async 
   await expect(button).toHaveText("19 / 20 characters");
   await first.app.close();
 
-  // After a restart the Mind still has both.
+  // After a restart the Mind still has both, and still shows its count.
   const second = await launchApp(dataDir);
   await second.window.getByTestId("mind-list-item").click();
   await expect(second.window.getByTestId("mind-count-button")).toHaveText("19 / 20 characters");
@@ -149,6 +155,7 @@ test("the target's field keeps the focus when the menu's toggle event comes late
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   await newMind(window);
+  await showCountWhileWriting(window);
   await window.getByTestId("mind-editor").click();
   await window.keyboard.type("The tide turns at noon.");
   await window.getByTestId("mind-count-button").click();
@@ -212,6 +219,7 @@ for (const language of ["en", "zh-CN"] as const) {
     await setLanguage(window, language);
     await setWindowSize(app, window, 1440, 900);
     await newMind(window);
+    await showCountWhileWriting(window);
     const button = window.getByTestId("mind-count-button");
     await expect(button).toHaveText(empty);
     const words = (paragraphs: readonly string[]) =>
@@ -248,13 +256,14 @@ for (const language of ["en", "zh-CN"] as const) {
 
 for (const language of ["en", "zh-CN"] as const) {
   for (const width of [1440, 900]) {
-    test(`the count fits under the title at ${width}px in ${language}`, async () => {
+    test(`the count fits at the page's bottom left at ${width}px in ${language}`, async () => {
       const { app, window } = await launchApp(dataDir);
       await dismissChatSetup(window);
       await setWindowSize(app, window, width, 700);
       await setLanguage(window, language);
       await newMind(window);
-      await window.getByTestId("mind-title").fill("Tides of the Aldermoor coast");
+      await nameMind(window, "Tides of the Aldermoor coast");
+      await showCountWhileWriting(window);
       await window.getByTestId("mind-editor").click();
       await window.keyboard.type(
         language === "en"
@@ -274,13 +283,15 @@ for (const language of ["en", "zh-CN"] as const) {
       // The count waits for a pause in typing.
       await expect(button).not.toHaveAttribute("data-total", "0");
 
-      // Under the title, inside the card, and nothing scrolls sideways.
-      const title = await window.getByTestId("mind-title").boundingBox();
+      // At the page's bottom left, inside it, and nothing scrolls sideways.
       const count = await window.getByTestId("mind-count").boundingBox();
-      const card = await window.getByTestId("mind-pane").boundingBox();
-      if (!title || !count || !card) throw new Error("Not laid out.");
-      expect(count.y).toBeGreaterThanOrEqual(title.y + title.height - 20);
-      expect(count.x + count.width).toBeLessThanOrEqual(card.x + card.width);
+      const page = await window.getByTestId("mind-pane").boundingBox();
+      const scroller = await window.locator(".mind-scroller").boundingBox();
+      if (!count || !page || !scroller) throw new Error("Not laid out.");
+      expect(count.x).toBeGreaterThanOrEqual(page.x);
+      expect(count.x + count.width).toBeLessThanOrEqual(page.x + page.width / 2);
+      expect(count.y + count.height).toBeLessThanOrEqual(scroller.y + scroller.height);
+      expect(count.y).toBeGreaterThan(scroller.y + scroller.height / 2);
       expect(await window.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
         width,
       );

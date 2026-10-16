@@ -1358,6 +1358,20 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     },
   };
 
+  // A page has no title field (#908), so a new Mind's text starts with its title, unless the model began with a
+  // heading of its own. It is written with the Mind, not as a change to accept: the changes the model hears of are its own.
+  const make = (title: string, content: string): ChangeableMind => {
+    const mind = minds.create(title, options.folderId);
+    if (!/^\s*#\s/.test(content)) {
+      minds.edit(mind.id, (note) =>
+        insertBlocks(note, [
+          { type: "heading", attrs: { level: 1 }, content: [{ type: "text", text: mind.name }] },
+        ]),
+      );
+    }
+    return mind;
+  };
+
   const create: Tool = {
     name: MIND_TOOLS.create,
     description:
@@ -1383,7 +1397,8 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       streamContent(toolCallId, input, (fields) => {
         const title = fields.get("title");
         if (!title?.done || title.value.trim() === "") return null;
-        const mind = minds.create(title.value.trim(), options.folderId);
+        // Its first paragraph is whole by now, so whether the model began with a heading is known.
+        const mind = make(title.value.trim(), fields.get("content")?.value ?? "");
         return { writer: writerFor(mind, null, true), created: true };
       });
     },
@@ -1392,7 +1407,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       const markdown = optional(input.content);
       // Made already, as its content came in.
       const streamed = streams.get(toolCallId)?.writer?.mind;
-      const mind = streamed ?? minds.create(title, options.folderId);
+      const mind = streamed ?? make(title, markdown ?? "");
       const folder = options.folderId === null ? null : minds.folderName(options.folderId);
       const made = `Made the Mind “${mind.name}”${folder ? ` in the Folder “${folder}”` : ""}, open beside the User's Mind`;
       if (markdown === null) {

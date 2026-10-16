@@ -11,6 +11,8 @@ import {
   createDataFolder,
   DEFAULT_FOLDER_ZH,
   dismissChatSetup,
+  enterContent,
+  frontMindName,
   launchApp,
   motionSettled,
   openDocumentAt,
@@ -133,7 +135,7 @@ test("a meeting records from the + menu, after the one-time notice: the bar, ⌘
   }
 
   const start = await recordMeeting(window);
-  await expect(window.getByTestId("mind-title")).toHaveValue(/^Meeting, \d{1,2} [A-Z][a-z]+$/);
+  await expect(frontMindName(window)).toHaveText(/^Meeting, \d{1,2} [A-Z][a-z]+$/);
   await expect(window.getByTestId("end-hint")).toHaveText(
     "Write the agenda, or anything you want to cover…",
   );
@@ -168,13 +170,12 @@ test("a meeting records from the + menu, after the one-time notice: the bar, ⌘
   // Live, its dot is red, as on the tab.
   await expect(bar.getByTestId("meeting-dot")).toHaveCSS("background-color", "rgb(180, 35, 24)");
   await expect(window.getByTestId("meeting-time")).toHaveText(/^0:0[2-9]$/);
-  // The bar sits at the top of the Mind, under its title and above the notes; the composer
-  // stays for asking.
-  const title = await window.getByTestId("mind-title").boundingBox();
+  // The bar sits at the top of the Mind's page, above the notes; the composer stays for asking.
+  const page = await window.getByTestId("mind-pane").boundingBox();
   const controls = await bar.boundingBox();
   const editor = await window.getByTestId("mind-editor").boundingBox();
-  if (!title || !controls || !editor) throw new Error("The meeting bar isn't drawn.");
-  expect(controls.y).toBeGreaterThanOrEqual(title.y + title.height - 1);
+  if (!page || !controls || !editor) throw new Error("The meeting bar isn't drawn.");
+  expect(controls.y).toBeGreaterThanOrEqual(page.y);
   expect(controls.y + controls.height).toBeLessThanOrEqual(editor.y + 1);
   await expect(window.getByTestId("composer")).not.toContainText("Recording");
   // The tab shows the recording: a red dot and the meeting's time.
@@ -191,7 +192,9 @@ test("a meeting records from the + menu, after the one-time notice: the bar, ⌘
   await window.getByTestId("mind-editor").click();
   for (let line = 0; line < 30; line++) await window.keyboard.press("Enter");
   await window.keyboard.type("Rebates stay as they are until January.");
-  await expect(window.getByTestId("mind-title")).not.toBeInViewport();
+  await expect(
+    window.getByTestId("mind-editor").locator(":scope > *").first(),
+  ).not.toBeInViewport();
   await expect(bar).toBeInViewport();
   await shot(window, "meeting-bar-scrolled-en");
 
@@ -236,7 +239,7 @@ test("a meeting records from the + menu, after the one-time notice: the bar, ⌘
   const meetingTab = window.getByTestId("mind-tab").filter({ hasText: "Meeting" });
   await window.keyboard.press("ControlOrMeta+KeyN");
   await expect(window.getByTestId("mind-tab")).toHaveCount(2);
-  await expect(window.getByTestId("mind-title")).toBeFocused();
+  await enterContent(window);
   await window.keyboard.press("ControlOrMeta+Shift+KeyP");
   const tabDot = meetingTab.getByTestId("mind-tab-recording");
   await expect(tabDot).toHaveAttribute("data-status", "paused");

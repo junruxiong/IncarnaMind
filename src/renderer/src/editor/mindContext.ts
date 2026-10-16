@@ -18,13 +18,18 @@ export const RegenerateAnswerContext = createContext<(() => void) | null>(null);
 export const ComposerDockContext = createContext<HTMLElement | null>(null);
 
 /**
- * Where the open Mind's word count is drawn: right under its title, above any
- * notice (see `MindPane`). Null until it is there.
+ * The places on a Mind's page outside its text (#908, see `MindTab`): `top`,
+ * above the text, for what is happening now and needs the User, as a Word
+ * import's progress; `menu`, the page's top right, for its ⋯ button; `foot`,
+ * the page's bottom, for the count while writing at the left and the check
+ * badge at the right, over the text. Each is null until it is there.
  */
-export const CountSlotContext = createContext<HTMLElement | null>(null);
-
-/** Where a Mind's check badge is drawn: at the bottom right of its page, over the text (see `MindTab`). */
-export const BadgeSlotContext = createContext<HTMLElement | null>(null);
+export const PageSlotsContext = createContext<{
+  top: HTMLElement | null;
+  menu: HTMLElement | null;
+  count: HTMLElement | null;
+  badge: HTMLElement | null;
+}>({ top: null, menu: null, count: null, badge: null });
 
 /**
  * Where a Mind's Compare Documents sheet is drawn: at the foot of its tab,

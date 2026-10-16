@@ -7,6 +7,7 @@ import {
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  nameMind,
   newMind,
   pointAndClick,
   pointAt,
@@ -255,7 +256,7 @@ test("a Mind and a Document select together in the sidebar", async () => {
     await dismissChatSetup(window);
     await addFiveDocuments(window);
     await newMind(window);
-    await window.getByTestId("mind-title").fill("Shortlist");
+    await nameMind(window, "Shortlist");
     const sidebar = window.getByTestId("sidebar");
     const mind = sidebar.getByTestId("mind-row");
     const documents = sidebar.getByTestId("document-list-item");
@@ -282,7 +283,7 @@ test("with the focus in the note or the composer, ⌘A selects text and not rows
     await dismissChatSetup(window);
     await addFiveDocuments(window);
     await newMind(window);
-    await window.getByTestId("mind-title").fill("Shortlist");
+    await nameMind(window, "Shortlist");
     const rows = PLACES[0]?.rows(window);
     if (!rows) throw new Error("The sidebar is missing.");
     const target = (index: number) => rows.nth(index).getByTestId("open-document");

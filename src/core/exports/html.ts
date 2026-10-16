@@ -111,12 +111,11 @@ export function htmlFile({
 
 /** A Mind's HTML file: its text in `<main>`, its notes as a numbered list after it. */
 export function renderHtml(
-  title: string,
   blocks: readonly Block[],
   labels: ExportLabels,
   { language, name }: { language: Language; name: string },
 ): string {
-  const printed = renderPrintHtml(title, blocks, labels, { linkNotes: true });
+  const printed = renderPrintHtml(blocks, labels, { linkNotes: true });
   return htmlFile({
     language,
     name,

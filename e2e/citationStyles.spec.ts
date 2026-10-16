@@ -14,6 +14,7 @@ import {
   exportFromMenu,
   launchApp,
   motionSettled,
+  nameMind,
   newMind,
   pointAndClick,
   removeDataFolder,
@@ -453,7 +454,7 @@ test("in Chinese, a Mind that takes GB/T 7714 by default says so once on the und
     /** A new Mind citing the article, in Chinese, titled `title`. */
     const chineseMind = async (title: string) => {
       const editor = await ask(window, "城市绿地 each");
-      await window.getByTestId("mind-title").fill(title);
+      await nameMind(window, title);
       await pointAndClick(window, editor.locator("p").last());
       await window.keyboard.press("ControlOrMeta+End");
       await window.keyboard.press("Enter");

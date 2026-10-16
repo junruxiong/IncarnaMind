@@ -58,14 +58,14 @@ import { MathEditing, MathEditor } from "../editor/MathEditor";
 import { MindOutline } from "../editor/MindOutline";
 import { MeetingNotes } from "../editor/meetingNotes";
 import {
-  BadgeSlotContext,
   CompareSheetSlotContext,
   ComposerDockContext,
-  CountSlotContext,
   MindIdContext,
+  PageSlotsContext,
 } from "../editor/mindContext";
 import { NoteKeymap } from "../editor/noteKeymap";
 import { noteExtensions } from "../editor/noteSchema";
+import { PageMenu } from "../editor/PageMenu";
 import { ProposalBars } from "../editor/ProposalBars";
 import { ProposalReview } from "../editor/proposalReview";
 import { QuestionView } from "../editor/QuestionView";
@@ -80,10 +80,10 @@ import { Suggestions } from "../editor/suggestions";
 import { TableMenu } from "../editor/TableMenu";
 import { TableKeys } from "../editor/tableCommands";
 import { SmartTypography } from "../editor/typography";
-import { useVerification, VerifyFrom } from "../editor/VerifyLine";
+import { useVerification } from "../editor/VerifyLine";
 import { wordAtomView, wordBlockView } from "../editor/WordAtomView";
-import { WordCount } from "../editor/WordCount";
-import { OriginalNotAdded, useWordFile, WordOrigin } from "../editor/WordOrigin";
+import { useCountSettings, WordCount } from "../editor/WordCount";
+import { OriginalNotAdded, useWordFile, WordImportProgress } from "../editor/WordOrigin";
 import { useWordLookStyle } from "../editor/wordLookStyle";
 import { setWritingPlace, WritingPlace } from "../editor/writingPlace";
 import { requestEdit, startEditing, TRANSLATE_LANGUAGES } from "../editWithAi";
@@ -95,6 +95,7 @@ import { type OpenedCopy, openMindCopy } from "../mindCopies";
 import { isWritingIn } from "../mindStatus";
 import { useMindTools } from "../mindTools";
 import { onMindWriting, writingPlaceOf } from "../mindWriting";
+import { holdShownPage } from "../shownPages";
 import { skillDescription } from "../skills";
 import { useAppStore } from "../store";
 import { askForSuggestion, describeSuggestion } from "../suggestions";
@@ -251,8 +252,7 @@ function MindEditorView({
   const t = useT();
   const isExample = useIsExample(mindId);
   const dock = useContext(ComposerDockContext);
-  const countSlot = useContext(CountSlotContext);
-  const badgeSlot = useContext(BadgeSlotContext);
+  const slots = useContext(PageSlotsContext);
   const sheetSlot = useContext(CompareSheetSlotContext);
   const comparing = useComparisons((state) => state.sheets[mindId] !== undefined);
   /**
@@ -632,31 +632,47 @@ function MindEditorView({
   const firstOpen = useFirstOpen();
   const guide = useGettingStarted() !== null && empty && !isExample && !readOnly;
   const verification = useVerification(doc);
+  const countShown = useCountSettings(doc).shown;
   const frame = useRef<HTMLDivElement>(null);
   useClickBelowNote(editor, frame);
   const wordLook = useWordLookStyle(doc, mindId, editor);
+  // A read-only copy sends nothing to the core, so a switch there wouldn't be remembered.
+  useEffect(() => (readOnly ? undefined : holdShownPage(mindId, doc)), [mindId, doc, readOnly]);
 
   return (
     <MindIdContext.Provider value={mindId}>
-      {countSlot &&
+      {slots.top &&
         createPortal(
           <>
-            <WordOrigin doc={doc} editor={editor} />
+            <WordImportProgress doc={doc} />
             <OriginalNotAdded mindId={mindId} />
-            {verification ? (
-              <VerifyFrom verification={verification} />
-            ) : (
-              <WordCount editor={editor} doc={doc} quiet={firstOpen && isExample} />
-            )}
           </>,
-          countSlot,
+          slots.top,
         )}
-      {badgeSlot &&
-        !(firstOpen && isExample) &&
+      {slots.menu &&
         createPortal(
-          <CheckBadge editor={editor} doc={doc} mindId={mindId} verification={verification} />,
-          badgeSlot,
+          <PageMenu
+            editor={editor}
+            doc={doc}
+            mindId={mindId}
+            verification={verification}
+            readOnly={readOnly}
+          />,
+          slots.menu,
         )}
+      {/* The quiet first open shows the example's text alone (#856). */}
+      {!(firstOpen && isExample) && (
+        <>
+          {slots.count &&
+            countShown &&
+            createPortal(<WordCount editor={editor} doc={doc} />, slots.count)}
+          {slots.badge &&
+            createPortal(
+              <CheckBadge editor={editor} doc={doc} mindId={mindId} verification={verification} />,
+              slots.badge,
+            )}
+        </>
+      )}
       {readOnly && <MindNotice kind="read-only" />}
       <div
         ref={frame}

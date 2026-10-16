@@ -16,6 +16,7 @@ import {
   menuCommands,
   mindWrittenBefore,
   motionSettled,
+  nameMind,
   newMind,
   removeDataFolder,
   setWindowSize,
@@ -139,7 +140,7 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
     { question: "When do spring tides happen?", answer: "At new moon and at full moon." },
   ]);
   await newMind(window);
-  await window.getByTestId("mind-title").fill("Cited notes");
+  await nameMind(window, "Cited notes");
   const editor = window.getByTestId("mind-editor");
   await editor.click();
   await addToNote(window, await askInAssistant(window, "When do spring tides happen?"));

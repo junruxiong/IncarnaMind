@@ -8,6 +8,7 @@ import {
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  nameMind,
   newMind,
   openSteps,
   removeDataFolder,
@@ -128,7 +129,7 @@ test("each Folder lists its Minds above its Documents and opens in place; a Mind
     // above its Documents, and open.
     await folder.getByTestId("folder-row").click({ button: "right" });
     await folder.getByTestId("folder.newMind").click();
-    await window.getByTestId("mind-title").fill("Tide questions");
+    await nameMind(window, "Tide questions");
     const listed = folder.locator(":scope > ul > li");
     await expect(listed.first()).toHaveAttribute("data-testid", "mind-row");
     await expect(listed.first()).toContainText("Tide questions");
@@ -205,7 +206,7 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
     await bridge(window).createFolder("Finance");
     await bridge(window).createFolder("Research");
     await newMind(window);
-    await window.getByTestId("mind-title").fill("Shortlist");
+    await nameMind(window, "Shortlist");
     const shortlist = mindRow(window, "Shortlist");
     await expect(notInAFolder(window).getByTestId("mind-list-item")).toHaveText("Shortlist");
     const finance = sidebarFolder(window, "Finance");

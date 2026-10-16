@@ -8,7 +8,6 @@ import {
   type Verification,
   verificationOf,
 } from "../../../shared/verification";
-import { DocumentLineIcon } from "../components/lineIcons";
 import { MetaLine } from "../components/MetaLine";
 import { ProblemLine } from "../components/ProblemLine";
 import {
@@ -157,29 +156,6 @@ export const verifyDone = ({ running, outcome, claims, total, marks }: VerifySta
   claims !== null &&
   total > 0 &&
   marks.marked > 0;
-
-/**
- * Where a Mind made by "Verify a document…" took its text from, under its
- * title in place of the word count: "From {name}", which opens it beside.
- */
-export function VerifyFrom({ verification }: { verification: Verification }) {
-  const t = useT();
-  const name = verification.documentName;
-  return (
-    <div className="mind-verify" data-testid="verify-line">
-      <button
-        type="button"
-        data-testid="verify-from"
-        className="mind-verify-from"
-        title={t("verify.from.title", { name })}
-        onClick={() => openDocumentBeside(verification.documentId)}
-      >
-        <DocumentLineIcon kind="pdf" className="size-3.5 shrink-0" />
-        <span className="min-w-0 truncate">{t("verify.from", { name })}</span>
-      </button>
-    </div>
-  );
-}
 
 const VERIFY_MARKS: Record<VerifyRow, ClaimMarkState> = {
   contradicted: "contradicted",

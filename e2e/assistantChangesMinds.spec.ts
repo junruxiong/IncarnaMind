@@ -7,7 +7,9 @@ import {
   createDataFolder,
   dismissChatSetup,
   enterContent,
+  frontMindName,
   launchApp,
+  nameMind,
   newMind,
   openSteps,
   pointAndClick,
@@ -40,12 +42,11 @@ test.afterEach(async () => {
   await removeDataFolder(dataDir);
 });
 
-/** A new Mind, its title and its Notes typed as a person types them. */
+/** A new Mind, named, and its Notes typed as a person types them. */
 async function writeMind(window: Page, title: string, notes: string[]): Promise<void> {
   await newMind(window);
-  await expect(window.getByTestId("mind-title")).toBeFocused();
-  await window.keyboard.type(title);
   await enterContent(window);
+  await nameMind(window, title);
   for (const [index, line] of notes.entries()) {
     if (index > 0) await window.keyboard.press("Enter");
     await window.keyboard.type(line);
@@ -97,7 +98,7 @@ test("a request for a new note makes a Mind beside the one in focus, its text as
   const tab = window.getByTestId("mind-tab").filter({ hasText: "田野计划" });
   await expect(tab).toBeVisible();
   await expect(window.getByTestId("mind-tab").filter({ hasText: "第三季度" })).toBeVisible();
-  await expect(window.getByTestId("mind-title")).toHaveValue("田野计划");
+  await expect(frontMindName(window)).toHaveText("田野计划");
   await expect(window.getByTestId("proposals-count")).toHaveText("来自助手的 2 处修订");
   const timeline = await openSteps(window, answer);
   await expect(timeline.getByTestId("answer-mind-call")).toHaveText(/新建了“田野计划” · 2 处修订/);
@@ -129,7 +130,7 @@ test("the card lists each Mind changed: Open shows the change, Reject all remove
   await screenshot(window, "card-two-minds");
 
   await pointAndClick(window, rows.nth(0).getByTestId("mind-changes-open"));
-  await expect(window.getByTestId("mind-title")).toHaveValue("Project plan");
+  await expect(frontMindName(window)).toHaveText("Project plan");
   await expect(window.getByTestId("proposals-count")).toHaveText("1 change from the assistant");
 
   await pointAndClick(window, card.getByTestId("mind-changes-reject-all"));
@@ -202,7 +203,7 @@ test("“Create a new note called Fieldwork plan” makes an empty Mind at once,
   await window.keyboard.press("Enter");
 
   await expect(window.getByTestId("mind-tab").filter({ hasText: "Fieldwork plan" })).toBeVisible();
-  await expect(window.getByTestId("mind-title")).toHaveValue("Fieldwork plan");
+  await expect(frontMindName(window)).toHaveText("Fieldwork plan");
   const editor = window.getByTestId("mind-editor");
   await expect(editor).toBeFocused();
   await window.keyboard.type("First visit: the roastery.");
@@ -287,15 +288,14 @@ test("Reject all keeps a Mind the assistant made once the User has written in it
   const made = window.getByTestId("mind-tab").filter({ hasText: "Fieldwork plan with a summary" });
   await expect(made).toHaveCount(1);
 
-  // The User writes a line of their own in it, under the changes: from its title, Enter, then the end.
+  // Its text starts with its title, not a change to accept (#908). The User writes a line of
+  // their own in it, under the changes: from the first change, then the end.
   await pointAndClick(window, made);
-  const title = window.getByTestId("mind-title");
-  await expect(title).toHaveValue("Fieldwork plan with a summary");
+  await expect(frontMindName(window)).toHaveText("Fieldwork plan with a summary");
   await expect(window.getByTestId("proposals-count")).toHaveText("2 changes from the assistant");
   const editor = window.getByTestId("mind-editor");
-  await pointAndClick(window, title);
-  await window.keyboard.press("End");
-  await window.keyboard.press("Enter");
+  await expect(editor.locator(":scope > h1")).toHaveText("Fieldwork plan with a summary");
+  await pointAndClick(window, editor.locator(":scope > *").nth(1));
   await expect(editor).toBeFocused();
   // The cursor is in the first change once its bar shows.
   await expect(window.getByTestId("change-bar")).toContainText("Change 1 of 2");
@@ -337,7 +337,7 @@ test("Reject all keeps a Mind the assistant made once something of it was accept
 
   // Fieldwork plan is open beside, with the cursor in its first change: ⌘↵ accepts that one.
   await pointAndClick(window, rows.nth(1).getByTestId("mind-changes-open"));
-  await expect(window.getByTestId("mind-title")).toHaveValue("Fieldwork plan");
+  await expect(frontMindName(window)).toHaveText("Fieldwork plan");
   await expect(window.getByTestId("change-bar")).toContainText("Change 1 of 2");
   await window.keyboard.press("ControlOrMeta+Enter");
   await expect(rows.nth(1)).toContainText("· 1 waiting");

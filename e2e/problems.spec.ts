@@ -15,6 +15,7 @@ import {
   interceptShowItemInFolder,
   launchApp,
   motionSettled,
+  nameMind,
   newMind,
   openDocumentAt,
   openSteps,
@@ -179,7 +180,7 @@ test("asking without a chat model says what to set up at the top of the Mind, an
   await screenshot(window, "needs-chat-model-en");
 
   // The notice's action opens Settings on Models, by keyboard too.
-  await window.getByTestId("mind-title").fill("Tides");
+  await nameMind(window, "Tides");
   await window.keyboard.press("End");
   await top.getByRole("button").focus();
   await expect(top.getByRole("button")).toHaveCSS("outline-style", "solid");
@@ -302,7 +303,7 @@ test("an export that can't be saved says why in the Mind, and Change output loca
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   await newMind(window);
-  await window.getByTestId("mind-title").fill("Tides");
+  await nameMind(window, "Tides");
   await window.getByTestId("mind-editor").click();
   await window.keyboard.type("Spring tides come twice a month.");
 
