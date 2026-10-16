@@ -1245,6 +1245,7 @@ export function createAnswers(options: AnswersOptions) {
       return true;
     };
 
+    let settleMinds = (): void => undefined;
     const run = async () => {
       // An outside agent's Question, or a table's cell, whose scope has no Documents has nothing to
       // answer from: it says so without asking the model.
@@ -1438,6 +1439,7 @@ export function createAnswers(options: AnswersOptions) {
               now: () => new Date(),
             })
           : null;
+      if (mindsTools) settleMinds = () => mindsTools.settle();
       const documents: AnswerTools = {
         get documentCount() {
           return session.tools.documentCount;
@@ -1682,11 +1684,12 @@ export function createAnswers(options: AnswersOptions) {
             break;
         }
       }
-      mindsTools?.settle();
+      settleMinds();
       finish(outcome);
     };
     run().catch((error: unknown) => {
       options.reportError(error);
+      settleMinds();
       finish({ status: "failed", error: classifyProviderError(error) });
     });
   }

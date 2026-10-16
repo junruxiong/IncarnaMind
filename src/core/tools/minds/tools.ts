@@ -404,7 +404,7 @@ function citationNotes({ notFound, unrecorded }: { notFound: number; unrecorded:
       : []),
     ...(unrecorded > 0
       ? [
-          `${unrecorded === 1 ? "1 marker" : `${unrecorded} markers`} had no Citation recorded with cite and ${unrecorded === 1 ? "was" : "were"} left out.`,
+          `${unrecorded === 1 ? "1 marker has" : `${unrecorded} markers have`} no Citation recorded yet: record ${unrecorded === 1 ? "it" : "them"} with cite.`,
         ]
       : []),
   ];
@@ -654,34 +654,43 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     const { blocks, cited, notFound, unrecorded } = options.blocksOf(markdown);
     writeMore(writer, blocks);
     minds.writing(writer.mind.id, null);
-    const change = { ...changeOf(writer, made), ...citedIn({ cited, unrecorded }) };
+    // Markers `cite` may still record in this step count as left out only once the Run is done.
+    const change = { ...changeOf(writer, made), ...citedIn({ cited, unrecorded: 0 }) };
     options.changed(toolCallId, change);
-    if (unrecorded > 0) unsettled.set(toolCallId, { writer, markdown, made });
+    if (unrecorded > 0) {
+      unsettled.set(toolCallId, {
+        mindId: writer.mind.id,
+        ids: writer.ids,
+        markdown,
+        change: () => changeOf(writer, made),
+      });
+    }
     return { change, notFound, unrecorded };
   };
 
-  /**
-   * Calls whose text had markers no Citation was recorded for when it was
-   * written, by id: `cite` in the same step may run after them.
-   */
-  const unsettled = new Map<string, { writer: Writer; markdown: string; made: boolean }>();
+  /** By call: text written with markers `cite` hadn't recorded yet. */
+  const unsettled = new Map<
+    string,
+    { mindId: string; ids: readonly string[]; markdown: string; change(): MindChange }
+  >();
 
-  /**
-   * Writes again the Blocks of each call whose markers have records now,
-   * once the Run is done: still waiting, their Citations in place.
-   */
   const settle = (): void => {
-    for (const [toolCallId, { writer, markdown, made }] of unsettled) {
-      const { blocks, cited, unrecorded } = options.blocksOf(markdown);
-      if (blocks.length !== writer.ids.length) continue;
-      minds.edit(writer.mind.id, (note) => {
+    for (const [toolCallId, each] of unsettled) {
+      const { blocks, cited, unrecorded } = options.blocksOf(each.markdown);
+      if (blocks.length !== each.ids.length) {
+        console.warn(
+          `Citations recorded after a Mind was written couldn't go in: the text reads as ${blocks.length} Blocks, ${each.ids.length} were written (Mind ${each.mindId}, call ${toolCallId}).`,
+        );
+        continue;
+      }
+      minds.edit(each.mindId, (note) => {
         for (const element of topLevelBlocks(note)) {
-          const at = writer.ids.indexOf(idOf(element));
+          const at = each.ids.indexOf(idOf(element));
           const block = blocks[at];
           if (at >= 0 && block) syncContent(element, block.content ?? []);
         }
       });
-      options.changed(toolCallId, { ...changeOf(writer, made), ...citedIn({ cited, unrecorded }) });
+      options.changed(toolCallId, { ...each.change(), ...citedIn({ cited, unrecorded }) });
     }
     unsettled.clear();
   };
@@ -762,12 +771,12 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         `That text of “${mind.name}” changed while it was being read. Nothing was changed.`,
       );
     }
-    const change: MindChange = {
-      ...changeIn(mind.id, request, false),
-      revised: true,
-      ...citedIn({ cited, unrecorded }),
-    };
+    const revision = (): MindChange => ({ ...changeIn(mind.id, request, false), revised: true });
+    const change: MindChange = { ...revision(), ...citedIn({ cited, unrecorded: 0 }) };
     options.changed(toolCallId, change);
+    if (unrecorded > 0) {
+      unsettled.set(toolCallId, { mindId: mind.id, ids, markdown, change: revision });
+    }
     return { change, notFound, unrecorded };
   };
 
