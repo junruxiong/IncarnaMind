@@ -145,6 +145,7 @@ export function AssistantAnswer({
           providerId={answer.model?.providerId ?? null}
           // A conversation doesn't keep when a plan's limit resets: the line says so without it.
           resetsAt={null}
+          signInRoute={answer.errorSignInRoute}
           details={answer.errorMessage}
           failedAt={answer.updatedAt}
           onRetry={regenerate}

@@ -1940,7 +1940,6 @@ export const en = {
   "signInRoute.wayBack.signInAgain": "Sign in again",
   "signInRoute.wayBack.useAnotherModel": "Use another model",
   "signInRoute.wayBack.pasteApiKey": "Use an API key instead",
-  "signInRoute.wayBack.useClaudeCode": "Use Claude Code",
   "chatgpt.welcome.title": "You're using your ChatGPT plan",
   "chatgpt.welcome.body":
     "Questions you ask in IncarnaMind with a ChatGPT model now use your ChatGPT plan. You can see and limit this in ChatGPT's settings.",

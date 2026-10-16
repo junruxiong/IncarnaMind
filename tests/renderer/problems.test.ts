@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
-import type { ProviderErrorKind } from "../../src/core/api";
+import type { ChatProviderKind, ProviderErrorKind } from "../../src/core/api";
+import { readinessKey } from "../../src/renderer/src/components/providers/shared";
 import { ANSWER_PROBLEMS, answerProblem, saveFailureReason } from "../../src/renderer/src/problems";
 import { settingsPages } from "../../src/renderer/src/settingsPages";
 import { type MessageKey, translate } from "../../src/shared/i18n";
@@ -95,6 +96,18 @@ describe("a failed Answer's problem line", () => {
     expect(translate("zh-CN", "answer.error.no-answer")).toBe("模型没有给出回答");
   });
 
+  test("a sign-in route's plain line never names ChatGPT, nor offers its sign-in or usage page", () => {
+    for (const route of ["claude-account", "copilot"] as const) {
+      for (const kind of KINDS) {
+        const { line, fix } = answerProblem(kind, route);
+        expect(["sign-in", "link"]).not.toContain(fix.kind);
+        for (const language of ["en", "zh-CN"] as const) {
+          expect(translate(language, line)).not.toMatch(/ChatGPT|OpenAI/);
+        }
+      }
+    }
+  });
+
   test("an Ollama Cloud allowance used up is managed on Ollama's own page", () => {
     expect(answerProblem("plan-limit", "ollama")).toEqual({
       line: "answer.error.plan-limit.ollama",
@@ -183,5 +196,37 @@ describe("why a file couldn't be saved", () => {
         reason: translate("zh-CN", "export.failed.readOnly"),
       }),
     ).toBe("无法保存：这个文件夹是只读的");
+  });
+});
+
+describe("Questions waiting for a sign-in", () => {
+  const signedOut = (kind: ChatProviderKind) =>
+    readinessKey({
+      ready: false,
+      reason: "sign-in-required",
+      provider: {
+        id: "provider-1",
+        kind,
+        catalogId: null,
+        endpoint: null,
+        baseUrl: null,
+        hasApiKey: false,
+        service: null,
+      },
+      modelId: "model-1",
+    });
+
+  test("name the route's own provider, never ChatGPT, in both languages", () => {
+    expect(translate("en", signedOut("chatgpt"))).toMatch(/ChatGPT/);
+    for (const [kind, name] of [
+      ["claude-account", /Claude/],
+      ["copilot", /GitHub Copilot/],
+    ] as const) {
+      for (const language of ["en", "zh-CN"] as const) {
+        const line = translate(language, signedOut(kind));
+        expect(line).toMatch(name);
+        expect(line).not.toMatch(/ChatGPT/);
+      }
+    }
   });
 });

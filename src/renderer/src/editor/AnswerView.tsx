@@ -5,11 +5,17 @@ import {
   type ApprovalRequest,
   BLOCK_ID_ATTRIBUTE,
   type ProviderErrorKind,
+  type SignInRouteProblem,
   SKILL_SCRIPT_LIMITS,
   type SkillScriptApprovalRequest,
   SOURCE_KIND_PROVIDERS,
   type ToolApprovalRequest,
 } from "../../../core/api";
+import {
+  isSignInRoute,
+  isSignInRouteProblem,
+  SIGN_IN_ROUTES,
+} from "../../../core/providers/signInRoutes";
 import { asksAfterThirdParty } from "../../../shared/approvalRules";
 import { toolCallsOf } from "../../../shared/toolCalls";
 import { AnswerWriting } from "../answerPhase";
@@ -27,6 +33,7 @@ import {
   LocalModelRefusedLine,
   OllamaNotRunningLine,
 } from "../components/providers/OllamaProblems";
+import { RouteProblemLine } from "../components/providers/RouteProblemLine";
 import { core } from "../core";
 import { formatResetTime } from "../cost";
 import { useFindSources } from "../findSources";
@@ -36,6 +43,7 @@ import { requestModelMenu } from "../modelMenu";
 import { useModelNames } from "../modelNames";
 import { useStoppedByPlanLimit } from "../planLimits";
 import { ANSWER_PROBLEMS, answerProblem } from "../problems";
+import { useRouteOffered } from "../routeSignIn";
 import type { SettingsPage } from "../settingsPages";
 import { useAppStore } from "../store";
 import { reasonKey } from "../webPages";
@@ -180,6 +188,9 @@ export function AnswerView({ node, editor, getPos }: ReactNodeViewProps) {
           modelId={modelId}
           providerId={text(node.attrs.providerId)}
           resetsAt={text(node.attrs.errorResetsAt)}
+          signInRoute={
+            isSignInRouteProblem(node.attrs.errorSignInRoute) ? node.attrs.errorSignInRoute : null
+          }
           details={text(node.attrs.errorMessage)}
           onRetry={questionId ? () => writeAgain() : undefined}
           onOpenSettings={openSettings}
@@ -286,6 +297,7 @@ export function AnswerError({
   modelId,
   providerId,
   resetsAt,
+  signInRoute = null,
   details,
   failedAt = null,
   onRetry,
@@ -296,6 +308,8 @@ export function AnswerError({
   providerId: string | null;
   /** When the plan's limit resets, when its provider said. */
   resetsAt: string | null;
+  /** A sign-in route's own problem, said in the route's words. */
+  signInRoute?: SignInRouteProblem | null;
   details: string | null;
   /**
    * When it failed, ISO 8601, said beside a refused key; an Answer in a Mind keeps no time, so
@@ -339,6 +353,22 @@ export function AnswerError({
           });
         }
       : undefined;
+  const route = isSignInRoute(provider) ? provider : null;
+  const offered = useRouteOffered(route);
+  const routeWords = route && signInRoute && SIGN_IN_ROUTES[route].problems[signInRoute];
+  if (route && routeWords && offered) {
+    return (
+      <RouteProblemLine
+        route={route}
+        words={routeWords}
+        kind={kind}
+        resetsAt={resetsAt}
+        details={details}
+        onRetry={onRetry}
+        onOpenSettings={onOpenSettings}
+      />
+    );
+  }
   const { line, fix } = answerProblem(kind, provider);
   if (fix.kind === "ollama") return <OllamaNotRunningLine details={details} onRetry={onRetry} />;
   if (fix.kind === "local-model") {

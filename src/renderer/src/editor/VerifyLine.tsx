@@ -371,6 +371,7 @@ export function VerifyLine({
           modelId={runModel.modelId}
           providerId={runModel.providerId}
           resetsAt={outcome.error.resetsAt ?? null}
+          signInRoute={outcome.error.signInRoute ?? null}
           details={outcome.error.message}
           onRetry={() =>
             void (claims === null ? findClaims(mindId, doc) : checkClaims(mindId, doc))
