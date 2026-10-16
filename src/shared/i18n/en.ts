@@ -2032,7 +2032,7 @@ export const en = {
     "Skill scripts run on this computer and can make their own network requests, sending anything they can read. This page doesn't control them: the approval you give before each run does, and you can turn them off in Settings, under Skills.",
   "privacy.aiUse.title": "AI use record",
   "privacy.aiUse.body":
-    "IncarnaMind keeps a record of what the AI wrote into your Minds and whether you kept, edited or deleted it, so you can say how you used AI. It holds no text of yours or the AI's, stays on this computer, and is never sent anywhere, whatever you choose about usage data.",
+    "IncarnaMind keeps a record of what the AI wrote into your Minds, how many sentences it checked, and whether you kept, edited or deleted what it wrote, so you can say how you used AI. It holds no text of yours or the AI's, stays on this computer, and is never sent anywhere, whatever you choose about usage data.",
   "privacy.aiUse.entries": "Entries: {count}",
   "privacy.aiUse.clear": "Clear record",
   "privacy.aiUse.cleared": "Cleared the AI use record.",
@@ -2761,7 +2761,7 @@ export const en = {
     "There is nothing to report: IncarnaMind has no record of AI use in this document, and the document has no Citations or checks.",
   "aiStatement.uses.heading": "AI models and what they were used for",
   "aiStatement.uses.none":
-    "IncarnaMind has no record of AI writing, suggesting changes or searching for this document.",
+    "IncarnaMind has no record of AI writing, suggesting changes, searching or checking sentences for this document.",
   "aiStatement.uses.column.use": "Use",
   "aiStatement.uses.column.model": "Model",
   "aiStatement.uses.column.times": "Times",
@@ -2775,6 +2775,7 @@ export const en = {
   "aiStatement.use.search-documents": "Searches of the author's own Documents",
   "aiStatement.use.search-sources": "Searches of public scholarly sources (Find sources)",
   "aiStatement.use.search-web": "Web searches",
+  "aiStatement.use.sentence-checked": "Sentences checked against the Documents",
   "aiStatement.text.heading": "AI text, by section",
   "aiStatement.text.none": "This document has no AI text.",
   "aiStatement.text.intro":
@@ -2808,6 +2809,11 @@ export const en = {
   "aiStatement.sentences.contradicted": "Contradicted",
   "aiStatement.sentences.recheck": "Needs re-check",
   "aiStatement.sentences.notChecked": "Not checked",
+  "aiStatement.sentences.changed": "Changed since checked",
+  "aiStatement.sentences.list.intro":
+    "Each sentence checked, cut after its first {count} words, with the latest result of its check:",
+  "aiStatement.sentences.column.sentence": "Sentence",
+  "aiStatement.sentences.column.checked": "Checked",
   "aiStatement.unread.one":
     "When these sentences were checked, 1 file they were checked against couldn't be read, so the checks didn't search it:",
   "aiStatement.unread":
