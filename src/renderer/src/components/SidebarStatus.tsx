@@ -2,6 +2,7 @@ import { type ReactNode, type ToggleEvent, useId, useRef, useState } from "react
 import { useShallow } from "zustand/react/shallow";
 import type { DocumentStatus, EmbeddingModelError } from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
+import { organizes } from "../../../shared/libraryModels";
 import { core } from "../core";
 import { useT } from "../i18n";
 import { useCapturing } from "../meetings";
@@ -205,7 +206,7 @@ function useStatuses(): Status[] {
   const model = useAppStore((state) => state.embeddingModel);
   const embedding = useAppStore((state) => state.embedding);
   const library = useAppStore((state) => state.library);
-  const organizing = !!library?.groups.length;
+  const organizing = organizes(library);
   const capturing = useCapturing();
   const counts = useAppStore(
     useShallow((state) => {

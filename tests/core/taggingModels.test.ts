@@ -544,6 +544,43 @@ describe("The image model reads scans the model that tags can't", () => {
   });
 });
 
+describe("Until Organize has a model", () => {
+  test("with Folders, automatic tagging tags their Documents and Organize leaves them tagged", async () => {
+    const { core, calls } = await start();
+    const contracts = await core.createLibraryGroup({
+      name: "Contracts",
+      description: "Signed contracts",
+    });
+    await core.saveChatProvider({
+      kind: "anthropic",
+      apiKey: "sk-ant-test",
+      modelId: "claude-sonnet-5-5",
+    });
+    const { documents } = await core.addDocuments(
+      [
+        await writeSourceFile(
+          await createTempDataFolder(),
+          "Supply.md",
+          "The supply contract with Brazos Steel.",
+        ),
+      ],
+      { groupId: contracts.id },
+    );
+    const loose = await addText(core, "Notes.md", "Notes from the first meeting.");
+    const ids = [documents[0]?.id ?? "", loose.id];
+    await waitForTagging(core, ids);
+    await vi.waitFor(async () => {
+      const { assignments } = await core.getLibrary();
+      for (const id of ids) {
+        expect(assignments.find((each) => each.documentId === id)?.status).toBe("waiting");
+      }
+    });
+    const tagged = (await core.listDocuments()).filter((each) => ids.includes(each.id));
+    expect(tagged.map((each) => each.tagging)).toEqual(["tagged", "tagged"]);
+    expect(calls.filter((call) => call.purpose === "organize")).toEqual([]);
+  });
+});
+
 describe("Moving to one Tagging setting", () => {
   test("a classifier chosen before is kept; a Library that chose none, or Organize manually, gets Automatic", async () => {
     const dataDir = await createTempDataFolder();
