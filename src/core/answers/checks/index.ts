@@ -25,6 +25,7 @@
 
 import { randomUUID } from "node:crypto";
 import type * as Y from "yjs";
+import { caseCitations } from "../../../shared/caseCitations";
 import { type LiveDocument, withShownName } from "../../../shared/citations";
 import { judgesUnreliably } from "../../../shared/smallModel";
 import { recordCheckUnread } from "../../../shared/unreadFiles";
@@ -62,7 +63,6 @@ import { parseMindId } from "../../minds";
 import type { PreparedChatModel } from "../../providers/chat";
 import { parseSearchScope } from "../../scope";
 import type { AnswerEngine } from "../engine";
-import { caseCitations } from "./caseCitations";
 import { type ClaimCheckDependencies, createClaimCheck } from "./claimCheck";
 import { createMindCheck } from "./mindCheck";
 import { markedSentences, markSentence, selectedSentences, updateCheck } from "./sentences";

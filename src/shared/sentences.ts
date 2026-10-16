@@ -6,6 +6,8 @@
  * are the core's `TextPlace` offsets.
  */
 
+import { citedCases } from "./caseCitations";
+
 /** An inline node in a paragraph's text. */
 export const INLINE_NODE = "￼";
 
@@ -24,6 +26,22 @@ const hasWords = (text: string) => /[\p{L}\p{N}]/u.test(text);
 
 /** A title or an abbreviation the segmenter takes for a sentence's end: "Mr. Smith", "Fig. 2". */
 const ABBREVIATION = /(?:^|\s)(?:mr|mrs|ms|dr|prof|st|sr|jr|vs|etc|fig|no|inc|ltd|co|corp)\.$/iu;
+
+/** A court decision's citation is one sentence's: "v." and "(Tex. 2017)" end none. */
+function withDecisionsWhole(spans: SentenceSpan[], text: string): SentenceSpan[] {
+  const decisions = citedCases(text);
+  if (decisions.length === 0) return spans;
+  const whole: SentenceSpan[] = [];
+  for (const span of spans) {
+    const previous = whole.at(-1);
+    if (previous && decisions.some((each) => each.from < previous.to && each.to > span.from)) {
+      previous.to = span.to;
+    } else {
+      whole.push({ ...span });
+    }
+  }
+  return whole;
+}
 
 /**
  * The sentences of a paragraph's text, in order. A Citation's marker right
@@ -46,7 +64,7 @@ export function sentenceSpans(text: string): SentenceSpan[] {
     else if (from < to && hasWords(text.slice(from, to))) spans.push({ from, to });
     else if (previous && from < to) previous.to = to;
   }
-  return spans;
+  return withDecisionsWhole(spans, text);
 }
 
 /** The text of a sentence as checks compare it: without inline nodes, spaces collapsed. */

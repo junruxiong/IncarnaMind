@@ -22,6 +22,7 @@
  */
 
 import { generateText } from "ai";
+import { type CaseCitation, caseCitations, namesDecision } from "../../../shared/caseCitations";
 import type { FigureContext } from "../../../shared/figures";
 import type {
   CheckedVersion,
@@ -54,7 +55,6 @@ import {
   type DocumentLanguage,
 } from "../engine";
 import { agreesWith, statedFigure } from "./calculated";
-import { type CaseCitation, caseCitations, namesDecision } from "./caseCitations";
 import { nearestLine } from "./nearest";
 import {
   CONFIRM_INSTRUCTIONS,
