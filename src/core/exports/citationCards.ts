@@ -7,6 +7,7 @@ import {
   type CitationState,
   citationState,
   citedLocation,
+  citedTextKept,
   shownDocumentName,
 } from "../../shared/citations";
 import { clockTime } from "../../shared/clock";
@@ -53,6 +54,7 @@ export interface CitationCard {
   spoken: string;
   /** The quote the Mind holds, whether or not it was found. */
   quote: string;
+  changedAfterCited: boolean;
   content: CardContent;
 }
 
@@ -93,11 +95,13 @@ export function citationCard(
       ? t("export.citation.location", { document: name, location: spokenLocation })
       : name,
     quote,
-    // A Document deleted and added again is the same content under a new id.
+    changedAfterCited: state.changedAfterCited,
     content: contentOf(
       quote,
+      // A Document deleted and added again is the same content under a new id.
       units({ ...attributes, documentId: state.documentId ?? attributes.documentId ?? null }),
       address,
+      citedTextKept(attributes, kept),
       t,
     ),
   };
@@ -115,7 +119,6 @@ function headingOf(
   return t(key, params);
 }
 
-/** Words a Location for a screen reader: "page 9" where the page reads "p. 9". */
 const spoken =
   (t: Translate): Translate =>
   (key, params) =>
@@ -127,10 +130,12 @@ function contentOf(
   quote: string,
   units: readonly UnitText[],
   address: string | null,
+  kept: boolean,
   t: Translate,
 ): CardContent {
   const first = units[0];
-  if (!first) return { kind: "missing", quote };
+  if (!first)
+    return kept ? { kind: "quote", text: quote, scan: false } : { kind: "missing", quote };
   const kind = first.kind ?? "page";
   const asText: CardContent = {
     kind: "quote",
@@ -165,10 +170,6 @@ function runsOf(text: string, ranges: readonly TextRange[]): CardRun[] {
   return runs;
 }
 
-/**
- * The paragraph a quote is in: a section's paragraphs are its lines; plain text's are split by
- * blank lines. A long one is cut around the quote, at word breaks, with "…".
- */
 function passageOf(
   units: readonly UnitText[],
   ranges: readonly TextRange[],
@@ -224,11 +225,6 @@ const wordBreakBefore = (text: string, at: number) => {
   return found < 0 ? at : found;
 };
 
-/**
- * The cells a quote covers, with the cells between them, as a table: each column headed by the
- * sheet's header row (its letter where it has none), each row by its first cell (its number
- * where that cell is in the table or empty).
- */
 function cellsOf(
   units: readonly UnitText[],
   ranges: readonly TextRange[],

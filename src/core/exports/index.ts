@@ -159,7 +159,8 @@ export function createExports(deps: ExportsDependencies) {
     };
     // Footnotes go right after the word, and so do Numbered's Citations and a shared page's
     // markers; a style decides for its own (./citations).
-    const trimBeforeCitation = style.form === "numbered" || format === "share-page";
+    const trimBeforeCitation =
+      style.form === "numbered" || (format === "share-page" && options.citationCards);
 
     const live = new Set(documents.map((document) => document.id));
     const readOptions: ReadOptions = {

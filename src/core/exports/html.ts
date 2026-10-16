@@ -67,7 +67,6 @@ img{max-width:100%;height:auto}
 export const withTableBodies = (body: string) =>
   body.replaceAll("<table>", "<table><tbody>").replaceAll("</table>", "</tbody></table>");
 
-/** A Mind's notes as a numbered list, each linked back to its marker; nothing when it has none. */
 export function notesSection(notes: readonly string[], labels: ExportLabels): string {
   if (notes.length === 0) return "";
   const list = notes

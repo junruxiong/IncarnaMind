@@ -2822,13 +2822,20 @@ export const en = {
   "export.citation.accessed": "accessed {date}",
   "share.page.shared": "Shared from IncarnaMind · {date}",
   "share.page.about":
-    "Each Citation was checked against its page when this was shared. Click a number to see the quote.",
-  "share.page.foot": "Made with IncarnaMind · Every quote checked against its page on {date}",
+    "Each Citation's card shows its quote, where it is, and what the check found.",
+  "share.page.made": "Made with IncarnaMind",
+  "share.page.found.all": "Every quote was found on its page, checked on {date}.",
+  "share.page.found.some":
+    "Checked on {date}: {found} of {total} quotes found on their pages. Each other Citation's card says why.",
+  "share.page.found.none.one":
+    "Checked on {date}: the quote wasn't found on its page. Its card says why.",
+  "share.page.found.none.other":
+    "Checked on {date}: none of the {total} quotes was found on its page. Each Citation's card says why.",
   "share.page.checkedLine": "Citations checked with IncarnaMind",
   "share.card.label": "Citation {number}: {source}",
   "share.card.page": "page {range}",
   "share.card.pages": "pages {range}",
-  "share.card.checked": "checked {date}",
+  "share.card.checked": "as of {date}",
   "share.card.close": "Close",
   "share.card.unsupported": "Unsupported by the Documents checked",
   "share.card.unchecked": "Not checked when this was shared",

@@ -5,8 +5,20 @@ import type { JSONContent } from "@tiptap/core";
 import { HtmlValidate } from "html-validate/node";
 import { parseHTML } from "linkedom";
 import { describe, expect, test } from "vitest";
-import type { CitationCheck, Document, ExportMindOptions, SavedMindExport } from "../../src/core";
+import type {
+  CitationAttributes,
+  CitationCheck,
+  Document,
+  ExportMindOptions,
+  SavedMindExport,
+} from "../../src/core";
 import { createFakeTextRecognizer } from "../../src/core/documents/scan/fake";
+import { type CitationCard, citationCard } from "../../src/core/exports/citationCards";
+import { exportLabels } from "../../src/core/exports/labels";
+import { renderSharePage } from "../../src/core/exports/sharePage";
+import type { Language } from "../../src/core/language";
+import type { Footnote } from "../../src/core/mindText";
+import { translate } from "../../src/shared/i18n";
 import { locationOf, quoteInUnits } from "../../src/shared/locations";
 import type { UnitKind, UnitText } from "../../src/shared/units";
 import {
@@ -268,7 +280,7 @@ describe("a web page to share (#72)", { timeout: 60_000 }, () => {
 
     // A PDF's page and a slide: the quote as text, until their pictures come.
     expect(cardText(card(1), ".card-heading")).toBe("Quote found on p. 2");
-    expect(cardText(card(1), ".card-source")).toBe("Northwind results · checked 13 Oct 2026");
+    expect(cardText(card(1), ".card-source")).toBe("Northwind results · as of 13 Oct 2026");
     expect(cardText(card(1), ".card-passage")).toBe(`“${QUOTES.pdf}”`);
     expect(cardText(card(5), ".card-passage")).toBe(`“${QUOTES.slide}”`);
     expect(cardText(card(5), ".card-heading")).toBe("Quote found on slide 1");
@@ -348,10 +360,10 @@ describe("a web page to share (#72)", { timeout: 60_000 }, () => {
     );
     expect(document.querySelector("h1")?.textContent).toBe("Credit memo: Northwind <Retail>");
     expect(document.querySelector(".shared-about")?.textContent).toBe(
-      "Each Citation was checked against its page when this was shared. Click a number to see the quote.",
+      "Each Citation's card shows its quote, where it is, and what the check found.",
     );
     expect(document.querySelector(".shared-foot")?.textContent).toBe(
-      "Made with IncarnaMind · Every quote checked against its page on 13 Oct 2026",
+      "Made with IncarnaMind · Checked on 13 Oct 2026: 9 of 11 quotes found on their pages. Each other Citation's card says why.",
     );
   });
 
@@ -373,7 +385,7 @@ describe("a web page to share (#72)", { timeout: 60_000 }, () => {
     const contradicted = document.getElementById("card-11");
     expect(cardText(contradicted, ".card-heading")).toBe("Contradicted");
     expect(cardText(contradicted, ".card-source")).toBe(
-      "Northwind results, p. 2 · checked 13 Oct 2026",
+      "Northwind results, p. 2 · as of 13 Oct 2026",
     );
     expect(cardText(contradicted, ".card-verdict")).toBe("The results say 3.1 times, p. 2");
 
@@ -436,10 +448,10 @@ describe("a web page to share (#72)", { timeout: 60_000 }, () => {
       "分享自 IncarnaMind · 2026年10月13日",
     );
     expect(document.querySelector(".shared-about")?.textContent).toBe(
-      "分享时，每条引用都已对照原页面核对。点击编号即可查看引文。",
+      "每处引用的卡片都会显示引文、所在位置和核对结果。",
     );
     expect(document.querySelector(".shared-foot p")?.textContent).toBe(
-      "由 IncarnaMind 制作 · 所有引文已于 2026年10月13日 对照原页面核对",
+      "由 IncarnaMind 制作 · 2026年10月13日对照原页面核对：11 处引文中找到 9 处，其余引用的卡片里写明了原因。",
     );
     expect(document.querySelector(".shared-foot a")?.textContent).toBe("引用已由 IncarnaMind 核对");
     expect(document.querySelector("a.cite")?.getAttribute("aria-label")).toBe(
@@ -449,7 +461,7 @@ describe("a web page to share (#72)", { timeout: 60_000 }, () => {
       "已在第 2 页找到引文",
     );
     expect(cardText(document.getElementById("card-1"), ".card-source")).toBe(
-      "Northwind results · 核对于 2026年10月13日",
+      "Northwind results · 截至 2026年10月13日",
     );
     expect(cardText(document.getElementById("card-1"), ".card-source .date")).toBe(
       "2026年10月13日",
@@ -480,6 +492,22 @@ describe("a web page to share (#72)", { timeout: 60_000 }, () => {
     expect(withoutCards.html).toBe(html);
   });
 
+  test("with cards off, a Mind in an author-date style keeps the space before each Citation", async () => {
+    const { core, dataDir, tides } = await setUp();
+    const moon = await core.createMind({ title: "Moon" });
+    const client = await connectToMind(core, moon.id);
+    writeMind(client, [
+      paragraph(text("Tides follow the new moon "), cite(dataDir, tides, QUOTES.text), text(".")),
+    ]);
+    await client.settled();
+    await core.setMindCitationStyle(moon.id, "apa");
+
+    const styled = await sharedPage(core, moon.id, { citationCards: false });
+
+    expect(styled.html).toBe(decode((await core.exportMind(moon.id, { format: "html" })).data));
+    expect(styled.document.querySelector("main p")?.textContent).toMatch(/new moon \(/);
+  });
+
   test("a Mind in a citation style is still numbered, one marker for each Citation", async () => {
     const { core, mind } = await setUp();
     await core.setMindCitationStyle(mind.id, "apa");
@@ -502,5 +530,162 @@ describe("a web page to share (#72)", { timeout: 60_000 }, () => {
       content_hash: createHash("sha256").update(readFileSync(saved.file.path)).digest("hex"),
       kind: "export",
     });
+  });
+});
+
+const card = (check: CitationCheck, more: Partial<CitationCard> = {}): CitationCard => ({
+  check,
+  heading: "Quote found on p. 2",
+  source: "Tides",
+  dated: true,
+  verdict: null,
+  spoken: "Tides, page 2",
+  quote: "Spring tides come twice a month",
+  changedAfterCited: false,
+  content: { kind: "quote", text: "Spring tides come twice a month", scan: false },
+  ...more,
+});
+
+/** The page for these cards, each behind a marker of its own. */
+function pageOf(
+  cards: readonly CitationCard[],
+  { language = "en", footnote }: { language?: Language; footnote?: Partial<Footnote> } = {},
+) {
+  const footnotes: Footnote[] = cards.map((each) => ({
+    source: each.source,
+    unverified: each.check !== "found",
+    ...footnote,
+  }));
+  const html = renderSharePage({
+    title: "Tides",
+    blocks: [
+      {
+        kind: "paragraph",
+        content: footnotes.map((each) => ({
+          kind: "citation" as const,
+          footnote: each,
+          work: { documentId: null, documentName: null, location: null },
+        })),
+      },
+    ],
+    labels: exportLabels(language),
+    language,
+    name: "Tides",
+    at: "2026-10-13T12:00:00.000Z",
+    cards: new Map(footnotes.map((each, index) => [each, cards[index] ?? card("found")])),
+    checkedLine: false,
+  });
+  return { html, document: parseHTML(html).document };
+}
+
+const foot = (cards: readonly CitationCard[], language: Language = "en") =>
+  pageOf(cards, { language }).document.querySelector(".shared-foot p")?.textContent;
+
+describe("what a web page to share says of its checks", () => {
+  test("it says every quote was found only when every card says so; otherwise it counts them", () => {
+    expect(foot([card("found"), card("found")])).toBe(
+      "Made with IncarnaMind · Every quote was found on its page, checked on 13 Oct 2026.",
+    );
+    expect(foot([card("found"), card("cant-check"), card("checking")])).toBe(
+      "Made with IncarnaMind · Checked on 13 Oct 2026: 1 of 3 quotes found on their pages. Each other Citation's card says why.",
+    );
+    expect(foot([card("not-found")])).toBe(
+      "Made with IncarnaMind · Checked on 13 Oct 2026: the quote wasn't found on its page. Its card says why.",
+    );
+    expect(foot([card("cant-check"), card("contradicted")])).toBe(
+      "Made with IncarnaMind · Checked on 13 Oct 2026: none of the 2 quotes was found on its page. Each Citation's card says why.",
+    );
+  });
+
+  test("in Chinese too", () => {
+    expect(foot([card("found")], "zh-CN")).toBe(
+      "由 IncarnaMind 制作 · 2026年10月13日对照原页面核对，所有引文都已找到。",
+    );
+    expect(foot([card("found"), card("unsupported")], "zh-CN")).toBe(
+      "由 IncarnaMind 制作 · 2026年10月13日对照原页面核对：2 处引文中找到 1 处，其余引用的卡片里写明了原因。",
+    );
+    expect(foot([card("not-found")], "zh-CN")).toBe(
+      "由 IncarnaMind 制作 · 2026年10月13日对照原页面核对：未找到这处引文，原因见它的卡片。",
+    );
+    expect(foot([card("checking"), card("not-found")], "zh-CN")).toBe(
+      "由 IncarnaMind 制作 · 2026年10月13日对照原页面核对：2 处引文都未找到，原因见各处引用的卡片。",
+    );
+  });
+
+  test("a Document's name, a quote and an address written to break the page stay words", () => {
+    const hostile = `<script>alert("x")</script><img src=x onerror=alert(1)> "q" 'a'`;
+    // As untrusted as a Mind synced from elsewhere: a check this version doesn't know.
+    const unknownCheck: CitationCheck = JSON.parse('"found\\" onclick=\\"alert(1)"');
+    const { html, document } = pageOf(
+      [
+        card(unknownCheck, {
+          heading: hostile,
+          source: hostile,
+          spoken: hostile,
+          quote: hostile,
+          verdict: hostile,
+          content: {
+            kind: "passage",
+            runs: [{ text: hostile, quote: true }],
+            address: "javascript:alert(1)",
+          },
+        }),
+      ],
+      { footnote: { source: hostile, link: "javascript:alert(2)" } },
+    );
+
+    expect(document.querySelectorAll("script")).toHaveLength(1);
+    expect(document.querySelectorAll("img")).toHaveLength(0);
+    const handlers = [...document.querySelectorAll("*")].flatMap((element) =>
+      [...element.attributes].filter((attribute) => attribute.name.startsWith("on")),
+    );
+    expect(handlers).toEqual([]);
+    expect(html).not.toMatch(/href="javascript:/i);
+    const shown = document.getElementById("card-1");
+    expect(shown?.querySelector(".card-heading")?.textContent).toBe(hostile);
+    expect(shown?.querySelector("mark.quote")?.textContent).toBe(hostile);
+    expect(shown?.querySelector(".card-address")?.textContent).toBe("javascript:alert(1)");
+    expect(shown?.querySelector(".card-address a")).toBeNull();
+    expect(shown?.classList.contains("check-cant-check")).toBe(true);
+    expect(document.querySelector("a.cite")?.getAttribute("data-check")).toBe("cant-check");
+  });
+
+  test("a Document unlinked with its folder shows the quote its kept text has; one changed since says so", () => {
+    const t = (key: Parameters<typeof translate>[1], params?: Parameters<typeof translate>[2]) =>
+      translate("en", key, params);
+    const attributes: Partial<CitationAttributes> = {
+      documentId: "tides",
+      documentName: "Tides",
+      contentHash: "first",
+      pageFrom: 1,
+      pageTo: 1,
+      location: { kind: "lines", from: 1, to: 1 },
+      quote: "Spring tides come twice a month",
+      check: "found",
+    };
+
+    const kept = citationCard(attributes, {
+      documents: [],
+      kept: [{ documentId: "tides", contentHash: "first", units: [1] }],
+      units: () => [],
+      t,
+    });
+    const changed = citationCard(attributes, {
+      documents: [{ id: "tides", contentHash: "second", name: "Tides" }],
+      kept: [],
+      units: () => [],
+      t,
+    });
+
+    expect(kept.check).toBe("found");
+    expect(kept.content).toEqual({
+      kind: "quote",
+      text: "Spring tides come twice a month",
+      scan: false,
+    });
+    expect(changed.changedAfterCited).toBe(true);
+    expect(pageOf([changed]).document.querySelector(".card-verdict")?.textContent).toBe(
+      "The Document changed after this was cited.",
+    );
   });
 });

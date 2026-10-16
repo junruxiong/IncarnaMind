@@ -23,7 +23,6 @@ export interface PrintHtml {
   notes: string[];
 }
 
-/** How a web page to share (./sharePage) writes a Citation outside a note: its note, and its marker. */
 export interface CitationWriter {
   note(footnote: Footnote): string;
   marker(footnote: Footnote, number: number): string;
@@ -41,7 +40,7 @@ export const escapeHtml = (text: string) =>
   text.replace(/[&<>"']/g, (char) => ESCAPES[char] ?? char);
 
 /** Only links a PDF reader can follow without running anything. */
-const safeLink = (href: string | null | undefined): href is string =>
+export const safeLink = (href: string | null | undefined): href is string =>
   typeof href === "string" && /^(https?:|mailto:)/i.test(href);
 
 export function renderPrintHtml(

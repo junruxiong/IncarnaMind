@@ -167,6 +167,7 @@ test("a web page to share: the sheet offers it, and the file loads nothing and o
   await pointAndClick(window, cards);
   await expect(cards).not.toBeChecked();
   await expect(line).toHaveCount(0);
+  await expect(sheet.getByTestId("export-citation-style")).toBeVisible();
   await pointAndClick(window, cards);
   await pointAndClick(window, line);
   await expect(line).toBeChecked();
