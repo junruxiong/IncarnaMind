@@ -1,5 +1,5 @@
 import { countedByChoice, leftOutOfEvidence } from "../../../shared/evidence";
-import { countAsEvidence } from "../evidence";
+import { countAsEvidence, markNotCited } from "../evidence";
 import { useAppStore } from "../store";
 import type { Command } from "./registry";
 import { documentsOf, everyDocument } from "./targets";
@@ -36,5 +36,30 @@ export const evidenceCommands: readonly Command[] = [
     },
     reversible: true,
     run: (ctx) => countAsEvidence(documentsOf(ctx), false),
+  },
+  {
+    id: "document.dontCite",
+    label: (ctx, t) => {
+      const count = documentsOf(ctx).length;
+      return count > 1 ? t("evidence.notCitedMany", { count }) : t("evidence.notCited");
+    },
+    hint: "evidence.notCited.hint",
+    group: "main",
+    appliesTo: ["document"],
+    when: (ctx) => everyDocument(ctx, (document) => !document.notCited),
+    reversible: true,
+    run: (ctx) => markNotCited(documentsOf(ctx), true),
+  },
+  {
+    id: "document.citeAgain",
+    label: (ctx, t) => {
+      const count = documentsOf(ctx).length;
+      return count > 1 ? t("evidence.citeAgainMany", { count }) : t("evidence.citeAgain");
+    },
+    group: "main",
+    appliesTo: ["document"],
+    when: (ctx) => everyDocument(ctx, (document) => document.notCited),
+    reversible: true,
+    run: (ctx) => markNotCited(documentsOf(ctx), false),
   },
 ];

@@ -602,8 +602,9 @@ export type ComparisonCellStatus = "waiting" | "writing" | "done" | "failed";
 
 /**
  * Why a cell has no Answer: its Document doesn't answer the Question
- * ("not-found"), has no text to search, was deleted, or is a file
- * IncarnaMind wrote, which checks leave out (#80); or why its model didn't
+ * ("not-found"), has no text to search, was deleted, is a file
+ * IncarnaMind wrote, which checks leave out (#80), or is one the User keeps as
+ * their own workings, which Answers never cite; or why its model didn't
  * write one (a `ProviderErrorKind`). "cost-cap" and "plan-limit" stopped the
  * fill (`RunStop`): the cell wasn't checked.
  */
@@ -612,6 +613,7 @@ export type ComparisonProblem =
   | "nothing-to-search"
   | "source-removed"
   | "left-out"
+  | "not-cited"
   | ProviderErrorKind;
 
 /** Attributes of a comparison table's cell. */
@@ -2267,6 +2269,12 @@ export interface Document {
    * (web pages, Transcripts), which count as evidence as usual.
    */
   ownFile: OwnFile | null;
+  /**
+   * The User keeps it as their own workings: a spreadsheet of figures copied from a
+   * report, with their own ratios. Answers search and read it to understand a Question but
+   * never cite it, and checks never use it as evidence (`setNotCited`).
+   */
+  notCited: boolean;
   /** Where its text came from, when Find sources added it (#296); null for any other Document. */
   found: DocumentFoundSource | null;
   /**
@@ -2302,11 +2310,13 @@ export interface OwnFile {
 /**
  * Why a check leaves a Document out of its evidence (#80):
  * - "own-file": IncarnaMind wrote it (see `OwnFile`). Counting it lets it count.
+ * - "own-workings": the User keeps it as their own workings (`Document.notCited`).
+ *   Never evidence, counted or not, until the User cites it again.
  * - "checked-document": it is the document being checked, an earlier version
  *   of it, or a copy of either (the same content fingerprint, at any path).
  *   Never evidence for that check.
  */
-export type EvidenceExclusion = "own-file" | "checked-document";
+export type EvidenceExclusion = "own-file" | "own-workings" | "checked-document";
 
 /** The document a check verifies (#97, #110): it, its earlier versions and their copies are never its evidence. */
 export interface CheckedDocument {
@@ -7690,6 +7700,12 @@ export interface CoreApi {
    * IncarnaMind didn't write.
    */
   setCountedAsEvidence(documentId: string, counted: boolean): Promise<Document>;
+  /**
+   * Keeps a Document as the User's own workings, or with false cites it as any
+   * Document again (see `Document.notCited`): its Undo, and its menu. Returns
+   * it, and "document.status" says so.
+   */
+  setNotCited(documentId: string, notCited: boolean): Promise<Document>;
   /** The built-in embedding model and its download. */
   getEmbeddingModel(): Promise<EmbeddingModelStatus>;
   /**
@@ -8785,6 +8801,7 @@ const methods: Record<CoreApiMethod, true> = {
   searchPassages: true,
   searchEvidence: true,
   setCountedAsEvidence: true,
+  setNotCited: true,
   getEmbeddingModel: true,
   downloadEmbeddingModel: true,
   getEmbeddingSettings: true,
