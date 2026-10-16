@@ -1,0 +1,283 @@
+{
+  "about": "What Anthropic reported for each model call of a real Check this Mind run (#973), recorded on 2026-10-16 in a test build with Claude Haiku 5.5: a one-page memo of 26 sentences in four paragraphs (memo) checked against the three report examples (tests/live/mindCheckCost.live.test.ts). The model named 17 of the sentences as claims; the first call names them, the rest check them, three at once. In order; input counts all input tokens; cached and written are the parts read from and written to the prompt cache.",
+  "model": "anthropic/claude-haiku-5-5",
+  "memo": [
+    [
+      "This memo summarises the April 2026 regional updates for the investment committee.",
+      "Thanks to Maria for pulling the three reports together.",
+      "Sub-Saharan Africa's growth is projected to remain at 4.1 percent in 2026.",
+      "That projection was revised down by 0.3 percentage points from October 2025.",
+      "A weaker U.S. dollar has eased inflationary pressures across the region.",
+      "High prices for coffee and cocoa boosted revenues in 2025."
+    ],
+    [
+      "Latin America and the Caribbean is projected to grow 2.1 percent in 2026.",
+      "Growth in the region was 2.4 percent in 2025.",
+      "Private consumption remains the main driver of growth there.",
+      "Tariffs on the region have risen more than expected.",
+      "Progress against inflation continues, but more slowly than expected.",
+      "I think the region's clean power mix is its best long-term asset."
+    ],
+    [
+      "South Asia's growth is expected to slow to 6.3 percent in 2026.",
+      "South Asia remains the fastest-growing EMDE region thanks to India.",
+      "South Asian countries use industrial policies at about three times the rate of other EMDEs.",
+      "Since 2022, about half of South Asia's industrial policies have targeted manufacturing.",
+      "Import restrictions in South Asia lowered imports significantly.",
+      "Export support in South Asia has not materially raised exports."
+    ],
+    [
+      "Should we revisit our allocation to oil-importing countries?",
+      "The conflict in the Middle East has raised Brent crude and liquefied natural gas prices.",
+      "Fertilizer prices have also increased.",
+      "We recommend holding the current allocation until the June updates.",
+      "In my view, the downside risks in Africa are understated.",
+      "Please send comments by Friday.",
+      "Can someone check the debt-service figures?",
+      "Let's discuss this at Tuesday's meeting."
+    ]
+  ],
+  "checked": 17,
+  "calls": [
+    {
+      "input": 826,
+      "cached": 0,
+      "written": 0,
+      "output": 59
+    },
+    {
+      "input": 3792,
+      "cached": 0,
+      "written": 3475,
+      "output": 165
+    },
+    {
+      "input": 3782,
+      "cached": 0,
+      "written": 3475,
+      "output": 176
+    },
+    {
+      "input": 3784,
+      "cached": 0,
+      "written": 3475,
+      "output": 107
+    },
+    {
+      "input": 9699,
+      "cached": 3475,
+      "written": 6222,
+      "output": 61
+    },
+    {
+      "input": 16044,
+      "cached": 3475,
+      "written": 12567,
+      "output": 195
+    },
+    {
+      "input": 15493,
+      "cached": 3475,
+      "written": 12016,
+      "output": 76
+    },
+    {
+      "input": 3782,
+      "cached": 3475,
+      "written": 0,
+      "output": 160
+    },
+    {
+      "input": 5614,
+      "cached": 0,
+      "written": 0,
+      "output": 76
+    },
+    {
+      "input": 3761,
+      "cached": 3475,
+      "written": 0,
+      "output": 150
+    },
+    {
+      "input": 8230,
+      "cached": 0,
+      "written": 0,
+      "output": 89
+    },
+    {
+      "input": 16159,
+      "cached": 3475,
+      "written": 12682,
+      "output": 204
+    },
+    {
+      "input": 14001,
+      "cached": 3475,
+      "written": 10524,
+      "output": 176
+    },
+    {
+      "input": 3751,
+      "cached": 3475,
+      "written": 0,
+      "output": 161
+    },
+    {
+      "input": 3748,
+      "cached": 3475,
+      "written": 0,
+      "output": 11
+    },
+    {
+      "input": 3748,
+      "cached": 3475,
+      "written": 0,
+      "output": 11
+    },
+    {
+      "input": 16203,
+      "cached": 3475,
+      "written": 12726,
+      "output": 194
+    },
+    {
+      "input": 3751,
+      "cached": 3475,
+      "written": 0,
+      "output": 156
+    },
+    {
+      "input": 3783,
+      "cached": 3475,
+      "written": 0,
+      "output": 160
+    },
+    {
+      "input": 15656,
+      "cached": 3475,
+      "written": 12179,
+      "output": 153
+    },
+    {
+      "input": 3781,
+      "cached": 3475,
+      "written": 0,
+      "output": 78
+    },
+    {
+      "input": 15533,
+      "cached": 3475,
+      "written": 12056,
+      "output": 186
+    },
+    {
+      "input": 9683,
+      "cached": 3475,
+      "written": 6206,
+      "output": 176
+    },
+    {
+      "input": 3784,
+      "cached": 3475,
+      "written": 0,
+      "output": 152
+    },
+    {
+      "input": 7541,
+      "cached": 0,
+      "written": 0,
+      "output": 86
+    },
+    {
+      "input": 3786,
+      "cached": 3475,
+      "written": 0,
+      "output": 84
+    },
+    {
+      "input": 15343,
+      "cached": 3475,
+      "written": 11866,
+      "output": 204
+    },
+    {
+      "input": 3777,
+      "cached": 3475,
+      "written": 0,
+      "output": 149
+    },
+    {
+      "input": 10189,
+      "cached": 3475,
+      "written": 6712,
+      "output": 59
+    },
+    {
+      "input": 15583,
+      "cached": 15341,
+      "written": 240,
+      "output": 63
+    },
+    {
+      "input": 15619,
+      "cached": 3475,
+      "written": 12142,
+      "output": 159
+    },
+    {
+      "input": 867,
+      "cached": 0,
+      "written": 0,
+      "output": 5
+    },
+    {
+      "input": 6115,
+      "cached": 0,
+      "written": 0,
+      "output": 62
+    },
+    {
+      "input": 3774,
+      "cached": 3475,
+      "written": 0,
+      "output": 142
+    },
+    {
+      "input": 3781,
+      "cached": 3475,
+      "written": 0,
+      "output": 159
+    },
+    {
+      "input": 3764,
+      "cached": 3475,
+      "written": 0,
+      "output": 132
+    },
+    {
+      "input": 15474,
+      "cached": 3475,
+      "written": 11997,
+      "output": 175
+    },
+    {
+      "input": 15346,
+      "cached": 3475,
+      "written": 11869,
+      "output": 174
+    },
+    {
+      "input": 15508,
+      "cached": 3475,
+      "written": 12031,
+      "output": 260
+    },
+    {
+      "input": 5556,
+      "cached": 0,
+      "written": 0,
+      "output": 103
+    }
+  ]
+}

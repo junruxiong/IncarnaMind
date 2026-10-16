@@ -8,7 +8,6 @@
 import type * as Y from "yjs";
 import type { LiveDocument } from "../../shared/citations";
 import { translate } from "../../shared/i18n";
-import { modelName } from "../../shared/modelName";
 import { mindName } from "../../shared/naming";
 import type { NodeJSON } from "../answers/blocks";
 import {
@@ -19,6 +18,7 @@ import {
   type KeptCitationText,
   type Mind,
 } from "../api";
+import { describeModel } from "../chatModelNames";
 import type { Language } from "../language";
 import { readFigures } from "./figures";
 import { statementBlocks } from "./template";
@@ -43,13 +43,10 @@ export interface AiUseStatementOptions {
 /** A model as the statement names it: "Claude Haiku 5.5 (Anthropic)", or without the service for one on this computer. */
 function modelNamer(providers: readonly ChatProvider[]) {
   return (providerId: string | null, modelId: string | null): string | null => {
-    if (!modelId) return null;
-    const provider = providers.find((each) => each.id === providerId);
-    const shown = modelName(
-      modelId,
-      provider ? { kind: provider.kind, endpoint: provider.endpoint } : {},
+    const model = describeModel(providers, providerId, modelId);
+    return (
+      model && (model.place.kind === "service" ? `${model.name} (${model.place.name})` : model.name)
     );
-    return provider?.service ? `${shown} (${provider.service.name})` : shown;
   };
 }
 

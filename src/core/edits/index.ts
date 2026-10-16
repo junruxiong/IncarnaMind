@@ -90,6 +90,11 @@ import {
   sameText,
 } from "./prompt";
 
+// The whole passage deleted, as `asksToRemove` reads a part named: "Remove it", "Delete the part
+// about pensions". Never a shortening ("Cut it down to two sentences").
+const REMOVAL =
+  /^(?:please\s+)?(?:remove|delete|drop|cut|take out|get rid of)\s+(?:it|this|that|(?:the|this|that)\s+(?:whole\s+|entire\s+)?(?:paragraph|section|sentence|passage|part|line|text|bullet)(?:\s+about\s+[^,.;]+)?)(?:\s+(?:entirely|completely|altogether))?\s*[.!]?$|^(?:请)?(?:把(?:它|这段|这一段|这部分|这句|整段)?)?(?:删掉|删除|删去|去掉|移除)(?:它|这段|这一段|这部分|这句|整段)?[。！]?$/i;
+
 /** What the "edits" flow sends: the selected text, with the paragraphs it is in. */
 export const EDITS_FLOW_SENDS = ["selection"] as const;
 
@@ -465,7 +470,9 @@ export function createEdits(options: EditsOptions) {
     const request = randomUUID();
     const blocks = fork.getXmlFragment(MIND_CONTENT_FIELD);
     const { requestId } = hooks;
-    const removing = asksToRemove(ask.action, ask.instruction);
+    const removing =
+      asksToRemove(ask.action, ask.instruction) ||
+      (ask.action === "instruction" && REMOVAL.test(ask.instruction.trim()));
     // Explain's few sentences go in once they are all there.
     const stream = explain
       ? null
@@ -617,10 +624,15 @@ export function createEdits(options: EditsOptions) {
       return ended({ kind: "failed", error: classifyProviderError(failure) });
     }
     const reply = readEditReply(raw, selection.text);
-    if (reply === "" && !wrote && !refused) {
+    // No text back removes the passage only when that is what was asked; otherwise its reason
+    // ("I can't do this") is why it failed.
+    if (reply === "" && !wrote && !refused && (explain || !removing || reasonOf(raw) === null)) {
       return ended({
         kind: "failed",
-        error: { kind: "provider", message: "The model gave nothing back." },
+        error: {
+          kind: "provider",
+          message: (!explain && reasonOf(raw)) || "The model gave nothing back.",
+        },
       });
     }
     if (!explain && !wrote && !refused && sameText(reply, selection.text)) {

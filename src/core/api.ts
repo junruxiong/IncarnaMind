@@ -3680,6 +3680,8 @@ export type ProviderErrorKind =
   | "local-mode"
   /** The model is in Ollama on this computer, and Ollama isn't running: found before anything was sent. */
   | "ollama-not-running"
+  /** Anthropic: a model that requires 30-day data retention (Fable 5.1), asked by an organization or workspace that has it off. */
+  | "data-retention"
   /** ChatGPT plan: there is no sign-in on this device, or it expired: sign in again. */
   | "not-signed-in"
   /** ChatGPT plan: the plan's usage limit, or the one the User set for IncarnaMind, is reached. */
@@ -4007,9 +4009,11 @@ export interface TaskShown {
   blockId: string | null;
 }
 
-/** A large run to estimate: so many items (a comparison table's cells, verify's sentences…), each about an Answer. */
+/** A large run to estimate: so many items (a comparison table's cells, verify's sentences…). */
 export interface RunEstimateInput {
   items: number;
+  /** What each item is: about an Answer (the default), or a sentence checked against Documents (#973). */
+  each?: "answer" | "check";
   /** The web searches it makes (#128), each billed by the model's provider, on top of its items. */
   searches?: number;
   /** The model it would use; the default model when left out. */
@@ -4647,6 +4651,11 @@ export type MindCheckPlan =
     }
   | Extract<CheckSentencesResult, { kind: "no-documents" | "nothing" }>;
 
+/** The claims a Check this Mind run would check, once the model has named them (`findMindClaims`). */
+export type FindMindClaimsResult =
+  /** The fresh sentences it named as claims, and the checks to make again. */
+  { kind: "found"; claims: number } | Exclude<CheckMindResult, { kind: "checked" }>;
+
 export type CheckMindResult =
   /**
    * Each claim has its mark: `checked` of the `sentences` with a verdict, the
@@ -4852,6 +4861,20 @@ export interface AnswerSteps {
    * Absent: none.
    */
   unbackedClaims?: ClaimedChange[];
+  /** It covered only some of the Documents in scope, and offers the rest. Absent: all of them. */
+  coverage?: AnswerCoverage;
+}
+
+/**
+ * What an Answer covered of the Documents in scope, when not all of them: the
+ * main few the Question asked for ("main"), or the largest of more than one
+ * summary covers well ("largest"); by name as they were then. `rest`: the
+ * others' ids, which a second Question can be asked from.
+ */
+export interface AnswerCoverage {
+  kind: "main" | "largest";
+  used: { id: string; name: string }[];
+  rest: string[];
 }
 
 /**
@@ -5813,16 +5836,19 @@ export type DataFlowId = (typeof dataFlowIds)[number];
 
 /**
  * The flows choosing the chat model's provider allows (ADR-0022): everything
- * that sends to it, as the line above "Use this provider" says.
+ * that sends to it, as the line above "Use this provider" says. That line is
+ * made from this list, so a flow added here needs its words (`chosenFlowLines`).
  */
-export const CHOSEN_PROVIDER_FLOWS: readonly DataFlowId[] = [
+export const CHOSEN_PROVIDER_FLOWS = [
   "chat",
-  "edits",
   "checks",
   "suggestions",
+  "edits",
   "tagging",
   "classification",
-];
+] as const satisfies readonly DataFlowId[];
+
+export type ChosenProviderFlow = (typeof CHOSEN_PROVIDER_FLOWS)[number];
 
 /** Data leaving this computer: what one flow sends to one service. */
 export interface DataFlow {
@@ -6705,6 +6731,10 @@ export const EXPORT_FORMATS = [
   "markdown",
 ] as const;
 export type ExportFormat = (typeof EXPORT_FORMATS)[number];
+
+/** What a Mind's check record (#738) is saved as: a PDF to file with the work, and a CSV for the User's own records. */
+export const CHECK_RECORD_FORMATS = ["pdf", "csv"] as const;
+export type CheckRecordFormat = (typeof CHECK_RECORD_FORMATS)[number];
 
 /**
  * The User's export choices (`UserSettings.exportOptions`): the format Export uses, and each
@@ -8430,6 +8460,13 @@ export interface CoreApi {
     allDocuments?: boolean,
   ): Promise<MindCheckPlan>;
   /**
+   * The first step of "Check this Mind" (#973): the model names the claims
+   * among the sentences `checkMind` would send, so the ask before the run
+   * counts and prices them exactly. What it named is kept, and `checkMind`
+   * doesn't send those sentences to be sorted again. `cancelCheck` stops it.
+   */
+  findMindClaims(input: CheckMindInput): Promise<FindMindClaimsResult>;
+  /**
    * "Check this Mind" (#737): the model names the claims among the Mind's
    * sentences, leaving out headings, questions and the User's own opinions,
    * then each claim is checked as Check against Documents checks it, against
@@ -8871,6 +8908,12 @@ export interface CoreApi {
    * next free name, asking where new files go the first time.
    */
   saveMindExport(mindId: string, options: ExportMindOptions): Promise<SavedMindExport>;
+  /**
+   * Saves a record of what was checked in a Mind (#738) into the Output location, as
+   * `saveMindExport` does: each checked sentence and each Citation with its result, the Document
+   * version, the model and the time. Nothing is sent anywhere.
+   */
+  saveCheckRecord(mindId: string, format: CheckRecordFormat): Promise<SavedExport>;
 
   /**
    * Formats Citations and their Bibliography in a citation style (#289), from the cited
@@ -9328,6 +9371,7 @@ const methods: Record<CoreApiMethod, true> = {
   planContradictionCheck: true,
   checkContradictions: true,
   planMindCheck: true,
+  findMindClaims: true,
   checkMind: true,
   getSecretStorage: true,
   acceptPlainTextSecretStorage: true,
@@ -9448,6 +9492,7 @@ const methods: Record<CoreApiMethod, true> = {
   previewSharePage: true,
   setSharePageTextOnly: true,
   saveMindExport: true,
+  saveCheckRecord: true,
   formatCitations: true,
   getMindCitationStyle: true,
   setMindCitationStyle: true,

@@ -72,6 +72,7 @@ import {
 import { createApprovals } from "./approvals";
 import { createBackgroundQueue } from "./backgroundQueue";
 import { createCheckpoints } from "./checkpoints";
+import { createCheckRecord } from "./checkRecord";
 import { createCitationStyles } from "./citationStyles";
 import { type CitedPages, type CitedPlace, createCitedPages } from "./citedPages";
 import { COMPARISON_TASK, createComparisons } from "./comparisons";
@@ -1168,6 +1169,7 @@ export function createCore(adapters: CoreAdapters): Core {
       names: () => documents.names(),
       searchableNames: (documentIds, limit) =>
         documents.searchableNames(documentIds ?? undefined, limit),
+      searchableBySize: (documentIds) => documents.searchableBySize(documentIds ?? undefined),
       searchableLanguages: (documentIds) => documents.searchableLanguages(documentIds ?? undefined),
       unread: (documentIds) => findUnreadDocuments(documents.unread(documentIds ?? undefined)),
       search: searchDocuments,
@@ -1282,6 +1284,12 @@ export function createCore(adapters: CoreAdapters): Core {
       },
     },
     resolveScope,
+    unscopedDocuments: (mindId) => {
+      const made = examples.made();
+      if (made.documentIds.length === 0 || (mindId && made.mindIds.includes(mindId))) return null;
+      const left = new Set(made.documentIds);
+      return documents.ids({}).filter((id) => !left.has(id));
+    },
     interfaceLanguage: () => settings.get().language,
     emptyScopeAnswer: () => translate(settings.get().language, "scope.answer.empty"),
     onWritingChange: (writing) => {
@@ -1690,6 +1698,30 @@ export function createCore(adapters: CoreAdapters): Core {
     wordPackage: (mindId) => wordImports.packageOf(mindId),
     author: () => settings.get().author,
     log: adapters.log ?? silentLogger,
+    now,
+  });
+  const checkRecord = createCheckRecord({
+    mind: (mindId) => minds.get(mindId),
+    read: (mindId, look) => content.peek(mindId, look),
+    providers: () => chat.list(),
+    documents: () => documents.list(),
+    keptCitationTexts: () => documents.keptCitationTexts(),
+    readableQuote: ({ documentId, contentHash, pageFrom, pageTo, quote }) =>
+      documentId && quote
+        ? documents.readableQuote({
+            documentId,
+            contentHash: contentHash ?? null,
+            pageFrom: pageFrom ?? null,
+            pageTo: pageTo ?? null,
+            quote,
+          })
+        : null,
+    folderName: (folderId) =>
+      library.folders().find((folder) => folder.id === folderId)?.name ?? null,
+    localMode: () => embedding.localOnly(),
+    language: () => settings.get().language,
+    printer: adapters.printer ?? null,
+    paper: () => paperFor(systemRegion(adapters.systemRegion?.(), adapters.systemLanguages())),
     now,
   });
   const ownFileOf = (options: ExportMindOptions): OwnFileKind =>
@@ -3019,7 +3051,10 @@ export function createCore(adapters: CoreAdapters): Core {
     getCostSummary: async () => meter.summary(),
     estimateRun: async (input) => {
       if (!isRecord(input)) throw new InvalidInputError("estimateRun expects an object.");
-      const { items, model, searches = 0 } = input;
+      const { items, model, searches = 0, each = "answer" } = input;
+      if (each !== "answer" && each !== "check") {
+        throw new InvalidInputError({ key: "error.estimate.each" });
+      }
       if (typeof items !== "number" || !Number.isInteger(items) || items < 0 || items > 100_000) {
         throw new InvalidInputError("items must be a whole number from 0 to 100,000.");
       }
@@ -3036,7 +3071,7 @@ export function createCore(adapters: CoreAdapters): Core {
       }
       const metered = chat.metered(model);
       if (!metered) throw new InvalidInputError("There is no model to estimate for.");
-      return meter.estimate(metered, items, searches);
+      return meter.estimate(metered, items, searches, each);
     },
     compareDocuments: (input) => comparisons.compareDocuments(input),
     fillComparisonTable: (input) => comparisons.fillComparisonTable(input),
@@ -3074,6 +3109,7 @@ export function createCore(adapters: CoreAdapters): Core {
     planContradictionCheck: (mindId) => checks.planContradictionCheck(mindId),
     checkContradictions: (input) => checks.checkContradictions(input),
     planMindCheck: (mindId, mode, allDocuments) => checks.planMindCheck(mindId, mode, allDocuments),
+    findMindClaims: (input) => checks.findMindClaims(input),
     checkMind: (input) => checks.checkMind(input),
 
     getSecretStorage: async () => secrets.status(),
@@ -3501,6 +3537,10 @@ export function createCore(adapters: CoreAdapters): Core {
         ownFileOf(options),
       );
       return saved.status === "saved" ? { ...saved, ...counts, word } : saved;
+    },
+    saveCheckRecord: async (mindId, format) => {
+      const { fileName, data } = await checkRecord.file(mindId, format);
+      return saveExport(fileName, data);
     },
     saveSkillExport: async (skillId) => {
       const { fileName, data } = await skills.exportZip(skillId);

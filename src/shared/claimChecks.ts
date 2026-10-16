@@ -179,3 +179,28 @@ export function claimCheckShown(check: ClaimCheckAttributes, now: ClaimCheckNow)
     return { state: "not-checked", reason: check.reason ?? "failed" };
   return { state: check.state };
 }
+
+/**
+ * A sentence's check as a record lists it: the counts' keys (`needsRecheck` is a Document or the
+ * scope that changed), and "changed" once its words were edited. Null while it is still checking.
+ */
+export type SentenceResult =
+  | "supported"
+  | "unsupported"
+  | "contradicted"
+  | "needsRecheck"
+  | "notChecked"
+  | "changed";
+
+export function sentenceResultOf(shown: ClaimCheckShown): SentenceResult | null {
+  switch (shown.state) {
+    case "checking":
+      return null;
+    case "needs-recheck":
+      return shown.why === "edited" ? "changed" : "needsRecheck";
+    case "not-checked":
+      return "notChecked";
+    default:
+      return shown.state;
+  }
+}
