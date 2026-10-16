@@ -34,7 +34,6 @@ import { RowTags } from "./RowTags";
  */
 export const COLUMN_CLASSES = {
   // Narrow, only the chips go: the "+" stays, so Tags… from the menu still has its place.
-  status: "flex w-16 shrink-0 items-center",
   tags: "w-[200px] shrink-0 @max-[512px]/page:w-auto @max-[512px]/page:[&_[data-testid^=tag-chip]]:hidden",
   format: "w-[76px] shrink-0 @max-[704px]/page:hidden",
   added: "w-24 shrink-0 @max-[768px]/page:hidden",
@@ -239,6 +238,7 @@ export const LibraryRow = memo(function LibraryRow({
                 </span>
               )}
               <span className="contents">
+                <NotCitedLabel item={doc} />
                 <DocumentStatusLabel item={doc} />
                 {notSorted !== null && (
                   <span
@@ -294,9 +294,6 @@ export const LibraryRow = memo(function LibraryRow({
         <div data-row-cell="tags" className={`${COLUMN_CLASSES.tags} flex min-w-0 items-center`}>
           <RowTags document={doc} />
         </div>
-        <span data-row-cell="status" className={COLUMN_CLASSES.status}>
-          <NotCitedLabel item={doc} />
-        </span>
         <span
           data-testid="library-document-format"
           className={`${COLUMN_CLASSES.format} truncate text-[13px] text-ink-secondary`}
