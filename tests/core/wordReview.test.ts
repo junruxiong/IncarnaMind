@@ -13,7 +13,7 @@ import { trackBlocks, trackInline } from "../../src/core/exports/wordReview";
 import { recordProposalRequest } from "../../src/shared/proposals";
 import { createTempDataFolder, startCore } from "../helpers/core";
 import { addAndProcess, writeSourceFile } from "../helpers/documents";
-import { acceptedParagraphs, checkWellFormed, unzip } from "../helpers/docx";
+import { acceptedParagraphs, checkWellFormed, textOf, unzip } from "../helpers/docx";
 import { connectToMind, type MindClient } from "../helpers/mindClient";
 import { resolveChanges, writeMind } from "../helpers/minds";
 
@@ -265,6 +265,209 @@ describe("IncarnaMind's comments", () => {
         "word/styles.xml",
       ].sort(),
     );
+  });
+});
+
+describe("sentences whose check isn't good", () => {
+  const checkOf = (
+    document: Document,
+    id: string,
+    state: "supported" | "unsupported" | "contradicted",
+    asked: string,
+    more: Record<string, unknown> = {},
+  ) => ({
+    type: "claimCheck",
+    attrs: {
+      id,
+      request: "r1",
+      action: "check-against-documents",
+      state,
+      reason: null,
+      detail: null,
+      text: asked,
+      evidence: null,
+      says: null,
+      calculation: null,
+      scope: { folderId: null, widened: false },
+      versions: [{ documentId: document.id, contentHash: document.contentHash }],
+      excluded: [],
+      checkedAt: ASKED,
+      ...more,
+    },
+  });
+
+  async function sentences(language: "en" | "zh-CN" = "en") {
+    const core = startCore(await createTempDataFolder());
+    await core.updateSettings({ user: { language } });
+    const document = await tides(core);
+    const says = "The annual report (p. 69) says £182.9m, not £192.9m.";
+    const { id } = await mindWith(core, [
+      paragraph(
+        text("Halden held cash of £192.9m.", [
+          checkOf(document, "c1", "contradicted", "Halden held cash of £192.9m.", { says }),
+        ]),
+        text(" "),
+        text("Net debt fell to £410.5m.", [
+          checkOf(document, "c2", "supported", "Net debt fell to £410.5m."),
+        ]),
+      ),
+      paragraph(
+        text("Margins widened in 2026.", [
+          checkOf(document, "c3", "unsupported", "Margins widened in 2026."),
+        ]),
+      ),
+      paragraph(
+        text("Headroom will widen in 2027.", [
+          checkOf(document, "c4", "supported", "Headroom widens in 2027."),
+        ]),
+      ),
+    ]);
+    return { core, id, says };
+  }
+
+  /** Each comment's words, with the words of the text its range holds. */
+  function commentsOn(exported: Awaited<ReturnType<typeof word>>) {
+    const comments = exported.part("word/comments.xml");
+    return [...comments.matchAll(/<w:comment w:id="(\d+)"[^>]*>([\s\S]*?)<\/w:comment>/g)].map(
+      ([, id, body]) => {
+        const range = new RegExp(
+          `<w:commentRangeStart w:id="${id}"/>([\\s\\S]*?)<w:commentRangeEnd w:id="${id}"/>`,
+        ).exec(exported.document);
+        return { comment: textOf(body ?? ""), on: textOf(range?.[1] ?? "") };
+      },
+    );
+  }
+
+  test("a Contradicted, an Unsupported and a Needs re-check sentence each get a comment by the sentence; a supported one gets none", async () => {
+    const { core, id, says } = await sentences();
+
+    const exported = await word(core, id, { commentFailedChecks: true });
+
+    expect(commentsOn(exported)).toEqual([
+      { comment: `Contradicted: ${says}`, on: "Halden held cash of £192.9m." },
+      {
+        comment: "Unsupported: nothing in your Documents says this.",
+        on: "Margins widened in 2026.",
+      },
+      {
+        comment: "Needs re-check: changed since it was checked.",
+        on: "Headroom will widen in 2027.",
+      },
+    ]);
+    expect(exported.part("word/comments.xml")).toContain('w:author="IncarnaMind"');
+  });
+
+  test("the comments are in Chinese in a Chinese interface", async () => {
+    const { core, id, says } = await sentences("zh-CN");
+
+    const exported = await word(core, id, { commentFailedChecks: true });
+
+    expect(commentsOn(exported).map((each) => each.comment)).toEqual([
+      `与文档矛盾：${says}`,
+      "无依据：你的文档里没有这样写。",
+      "需重新核对：核对后已修改。",
+    ]);
+  });
+
+  test("the export counts them by result, as comments when asked for, else as sentences that went out unmarked", async () => {
+    const { core, id } = await sentences();
+
+    const commented = await core.exportMind(id, { format: "docx", commentFailedChecks: true });
+    const plain = await core.exportMind(id, { format: "docx", commentFailedChecks: false });
+    const markdown = await core.exportMind(id, { format: "markdown" });
+
+    const counts = { contradicted: 1, unsupported: 1, needsRecheck: 1 };
+    expect(commented.sentenceChecks).toEqual({ ...counts, commented: true });
+    expect(plain.sentenceChecks).toEqual({ ...counts, commented: false });
+    expect(markdown.sentenceChecks).toEqual({ ...counts, commented: false });
+  });
+
+  test("with the option off no comment is written", async () => {
+    const { core, id } = await sentences();
+
+    const { files, document } = await word(core, id, { commentFailedChecks: false });
+
+    expect(files.has("word/comments.xml")).toBe(false);
+    expect(document).not.toContain("commentRange");
+  });
+
+  test("a check that is supported, or was made of the sentence as it reads now, has no comment", async () => {
+    const core = startCore(await createTempDataFolder());
+    const document = await tides(core);
+    const { id } = await mindWith(core, [
+      paragraph(
+        text("Spring tides happen at new moon.", [
+          checkOf(document, "c1", "supported", "Spring tides happen at new moon."),
+        ]),
+      ),
+    ]);
+
+    const exported = await core.exportMind(id, { format: "docx", commentFailedChecks: true });
+
+    expect(exported.sentenceChecks).toEqual({
+      contradicted: 0,
+      unsupported: 0,
+      needsRecheck: 0,
+      commented: true,
+    });
+    expect(unzip(exported.data).has("word/comments.xml")).toBe(false);
+  });
+
+  test("an Unsupported sentence with a nearest line says what the Documents say instead, and where", async () => {
+    const core = startCore(await createTempDataFolder());
+    const document = await tides(core);
+    const nearest = {
+      passageId: "p1",
+      documentId: document.id,
+      documentName: "Tides",
+      contentHash: document.contentHash,
+      pageFrom: 1,
+      pageTo: 1,
+      quote: "Spring tides happen at new moon.",
+      check: "found",
+    };
+    const { id } = await mindWith(core, [
+      paragraph(
+        text("Spring tides happen at half moon.", [
+          checkOf(document, "c1", "unsupported", "Spring tides happen at half moon.", {
+            evidence: nearest,
+          }),
+        ]),
+      ),
+    ]);
+
+    const exported = await word(core, id, { commentFailedChecks: true });
+
+    expect(commentsOn(exported)).toEqual([
+      {
+        comment:
+          "Unsupported: your Documents say something different (“Spring tides happen at new moon.”, Tides, p. 1)",
+        on: "Spring tides happen at half moon.",
+      },
+    ]);
+  });
+
+  test("a Document with a new version since the check makes it need a re-check", async () => {
+    const core = startCore(await createTempDataFolder());
+    const document = await tides(core);
+    const { id } = await mindWith(core, [
+      paragraph(
+        text("Spring tides happen at new moon.", [
+          checkOf(document, "c1", "supported", "Spring tides happen at new moon.", {
+            versions: [{ documentId: document.id, contentHash: "an older version" }],
+          }),
+        ]),
+      ),
+    ]);
+
+    const exported = await word(core, id, { commentFailedChecks: true });
+
+    expect(commentsOn(exported)).toEqual([
+      {
+        comment: "Needs re-check: a Document it was checked against has a new version.",
+        on: "Spring tides happen at new moon.",
+      },
+    ]);
   });
 });
 
