@@ -66,8 +66,6 @@ const STATED = new RegExp(
 );
 const NOW_LONGER =
   /\b(?:is|are) now (?:about |roughly |almost )?(?:twice|three times|\d+(?:\.\d+)? times|longer|shorter|much longer|much shorter|more \w+|less \w+)\b/i;
-const WAITING =
-  /\b(?:changes?|edits?|text|it|they|these|those)\s+(?:are|is)\s+(?:now\s+)?(?:waiting|ready)\s+(?:for\s+(?:you|your)|in\b)|\bwaits?\s+for\s+your\s+(?:review|approval)\b/i;
 
 const CHINESE_KINDS = [
   ["新建|创建|建立", "made"],
@@ -92,7 +90,6 @@ const CHINESE_STATED: [RegExp, ClaimedChange][] = CHINESE_KINDS.map(([verbs, kin
   kind,
 ]);
 const CHINESE_NOT = /没有|没|未能|未|无法|不能|尚未|并未/;
-const CHINESE_WAITING = /等待?你(?:的)?(?:确认|审阅|接受|查看|审核)|待你确认/;
 
 const kindOf = (verb: string): ClaimedChange =>
   KIND_OF_VERB.find(([pattern]) => pattern.test(verb.replace(/\s+/g, " ")))?.[1] ?? "changed";
@@ -133,7 +130,6 @@ function sentenceClaims(sentence: string, minds: ReadonlyMap<string, string>): C
     const stated = STATED.exec(trimmed);
     if (stated?.[1]) kinds.push(kindOf(stated[1]));
     if (NOW_LONGER.test(sentence) && namesAMind) kinds.push("changed");
-    if (WAITING.test(sentence) || CHINESE_WAITING.test(sentence)) kinds.push("changed");
   }
   for (const [pattern, kind] of [...CHINESE, ...CHINESE_STATED]) {
     const match = pattern.exec(sentence);
@@ -153,10 +149,7 @@ const sentencesOf = (reply: string): string[] =>
     .map((sentence) => sentence.trim())
     .filter((sentence) => sentence !== "");
 
-const MAY_CLAIM = new RegExp(
-  `\\bI\\b|\\b(?:now|been|${VERBS}|replaces)\\b|[“"«]|我|已|待你|等待?你`,
-  "iu",
-);
+const MAY_CLAIM = new RegExp(`\\bI\\b|\\b(?:now|been|${VERBS}|replaces)\\b|[“"«]|我|已`, "iu");
 const REPORT_VERB_LIST = REPORT_VERBS.split("|");
 
 /**
