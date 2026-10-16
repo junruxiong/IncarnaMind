@@ -1382,8 +1382,8 @@ describe("Edit with AI over Blocks of several kinds", () => {
     ]);
   });
 
-  // protects=a list turned into a table gets a table Block beside it, out of the list, its cell keeping the item's Citation (#961); the list, which the instruction doesn't name, is kept as left out (#880); fails_when=the table is pipe text, lands in the list, or the Citation is lost; no_claim=how a real model lays out a table.
-  test("a list made into a table gets a table beside it, its Citation in its cell, the list kept as left out", async () => {
+  // protects=a list made into a table becomes a table Block where the list was, out of it, its cell keeping the item's Citation: asking for a table replaces the text it is made from (#961); fails_when=the table is pipe text or lands in the list, the Citation is lost, or the list is kept as left out; no_claim=how a real model lays out a table.
+  test("a list made into a table becomes a table, out of the list, its Citation in its cell", async () => {
     const { core, mind, client, tides } = await setUp(
       editingModel(() =>
         [
@@ -1408,13 +1408,14 @@ describe("Edit with AI over Blocks of several kinds", () => {
       instruction: "Make it a table",
     });
 
-    expect(result).toMatchObject({ kind: "proposed", leftOut: [{}, {}] });
+    expect(result).toMatchObject({ kind: "proposed" });
+    expect(result).not.toHaveProperty("leftOut");
     await resolveChanges(client, "accept");
     expect(
       readMind(client)
         .toJSON()
         .content?.map((block: JSONContent) => block.type),
-    ).toEqual(["table", "bulletList"]);
+    ).toEqual(["table"]);
     expect(await exported(core, mind.id)).toContain(
       "| Tide | When |\n| :--- | ---: |\n| Spring | At new moon[^1] |\n| Neap | Weakest \\| smallest |",
     );
@@ -1425,8 +1426,6 @@ describe("Edit with AI over Blocks of several kinds", () => {
       "p At new moon ⟨found⟩",
       "p Neap",
       "p Weakest | smallest",
-      "• Spring tides are strongest at new moon. ⟨found⟩",
-      "• Neap tides are weakest.",
     ]);
   });
 
