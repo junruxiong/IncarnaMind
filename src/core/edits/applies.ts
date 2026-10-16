@@ -26,9 +26,15 @@ export function asksToRemove(action: EditAction, instruction: string): boolean {
     const opening = asked.slice(0, at).split(CLAUSE).at(-1) ?? "";
     if (NOT.test(opening)) continue;
     const rest = (asked.slice(at + verb[0].length).split(CLAUSE)[0] ?? "").split(/\band\b/iu)[0];
-    // The object, not where it is: "the jargon in this paragraph", "第二段里的口语化表达".
+    // The object, not where it is: "the adjectives across all paragraphs", "第二段里的口语化表达".
     const object = (words: string) =>
-      (words.split(/\b(?:in|of|from|within)\b|从/u)[0] ?? "").split("的").at(-1) ?? "";
+      (
+        words.split(
+          /\b(?:in|of|from|within|across|throughout|over|on|at|for|each|every|per)\b|从|每|各/iu,
+        )[0] ?? ""
+      )
+        .split("的")
+        .at(-1) ?? "";
     // Chinese puts the object before the verb: 把第二段删掉.
     const before = /[把将]([^把将]*)$/u.exec(opening)?.[1] ?? "";
     if (PART.test(object(rest ?? "")) || PART.test(object(before))) return true;
