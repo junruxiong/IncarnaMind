@@ -216,8 +216,9 @@ function useStatuses(): Status[] {
       let tagging = 0;
       // Only the User's own Documents: the examples need no model, so they alone don't ask for one.
       let waitingForTagger = 0;
-      // Waiting for the ChatGPT plan's limit to reset, with Folders or without (#180).
       let waitingForPlan = 0;
+      let failedTagging = 0;
+      let unreached = 0;
       // A paused Linked folder's Documents wait for the User: its row says so, not the footer.
       const paused = new Set(
         state.linkedFolders.filter((each) => each.status === "paused").map((each) => each.id),
@@ -236,10 +237,21 @@ function useStatuses(): Status[] {
           ) {
             waitingForTagger++;
             if (item.taggingError?.kind === "plan-limit") waitingForPlan++;
+          } else if (item.tagging === "failed" && isOwnDocument(item, allExamples(state))) {
+            failedTagging++;
+            if (item.taggingError?.kind === "network") unreached++;
           }
         }
       }
-      return { processing, scannedPages, tagging, waitingForTagger, waitingForPlan };
+      return {
+        processing,
+        scannedPages,
+        tagging,
+        waitingForTagger,
+        waitingForPlan,
+        failedTagging,
+        unreached,
+      };
     }),
   );
   const retryDownload = useAppStore((state) => state.downloadEmbeddingModel);
@@ -324,6 +336,35 @@ function useStatuses(): Status[] {
         reason: t(testErrorKey(embedding.error.kind)),
       })}\n${embedding.error.message}`,
       action: { label: t("status.retry"), run: () => void retryEmbedding() },
+    });
+  }
+
+  if (!organizing && counts.failedTagging > 0) {
+    const failed = useAppStore
+      .getState()
+      .documents.filter((each) => each.status === "ready" && each.tagging === "failed");
+    statuses.push({
+      testId: "tagging-failed",
+      tone: "error",
+      short:
+        counts.failedTagging === 1
+          ? t("status.taggingFailed.one")
+          : t("status.taggingFailed.other", { count: counts.failedTagging }),
+      full: [
+        t(
+          counts.unreached === counts.failedTagging
+            ? "status.taggingFailed.offline"
+            : "status.taggingFailed.full",
+        ),
+        failed[0]?.taggingError?.message ?? "",
+      ]
+        .filter(Boolean)
+        .join("\n"),
+      action: {
+        label: t("status.retry"),
+        testId: "tagging-failed-retry",
+        run: () => void useAppStore.getState().retagDocuments(failed.map((each) => each.id)),
+      },
     });
   }
 
