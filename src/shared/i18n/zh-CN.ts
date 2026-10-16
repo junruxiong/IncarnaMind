@@ -1575,6 +1575,7 @@ export const zhCN = {
   "providers.form.needsKey": "请先粘贴密钥。",
   "providers.form.needsAddress": "请先填写服务器地址。",
   "providers.form.needsField": "请先填写{field}。",
+  "providers.form.needsServer": "请先启动 {provider}。",
   "providers.form.needsModel": "请先选择模型。",
   "providers.form.badKey": "这个密钥对 {provider} 无效。请到 {site} 检查。",
 
@@ -1609,6 +1610,14 @@ export const zhCN = {
   "providers.ollama.use": "使用本地模型（{model}，3.3 GB）",
   "providers.ollama.pulling": "正在下载 {model}（3.3 GB）…可能需要一些时间。",
   "providers.ollama.checkAgain": "重新检查",
+  "providers.local.checking": "正在查找这台电脑上的 {provider}…",
+  "providers.local.running": "{provider} 正在这台电脑上运行，你的问题和文档不会离开这台电脑。",
+  "providers.local.notRunning":
+    "{address} 没有响应。请先启动 {provider} 及其本地服务器，或修改地址。",
+  "providers.local.runningAway": "{address} 上的 {provider} 有响应。",
+  "providers.local.also": "也支持",
+  "providers.local.rowRunning": "正在这台电脑上运行。",
+  "providers.local.rowNotRunning": "尚未运行。",
   "providers.ollama.get": "下载 Ollama",
 
   "providers.readiness.no-provider": "提问需要先设置 AI 模型。笔记和文档不需要模型也能使用。",
