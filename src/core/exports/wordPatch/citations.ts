@@ -28,6 +28,8 @@ export interface CitationOptions {
   heading: string;
   sources: SourceContext;
   format(request: CitationFormatRequest): Promise<FormattedCitations>;
+  /** The mark after an entry too thin to cite (`ExportLabels.needsDetails`). */
+  needsDetails: string;
 }
 
 const isCitation = (token: Token | undefined) =>
@@ -124,7 +126,7 @@ export async function styleWritten(
     styled = addSources(blocks, options.sources, options.heading);
     return styled.length > blocks.length ? styled.slice(blocks.length) : [];
   }
-  styled = await styleCitations(blocks, options.style, options.format);
+  styled = await styleCitations(blocks, options.style, options.format, options.needsDetails);
 
   let at = 0;
   for (const each of written) {

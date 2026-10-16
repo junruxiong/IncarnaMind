@@ -75,6 +75,10 @@ export interface FakeGitHub {
   exchangeStatus: number | null;
   /** The token exchange drops the connection, as offline. */
   exchangeOffline: boolean;
+  /** The token exchange answers with GitHub's own error for an account without Copilot. */
+  exchangeNoCopilot: boolean;
+  /** The token exchange answers only once this resolves. */
+  holdExchange: Promise<void> | null;
   /** The next replies of the chat API, then answers. */
   replies: ChatReply[];
   /** What the chat API says to each request after `replies`; `ANSWER` without one. */
@@ -161,6 +165,8 @@ export async function startFakeGitHub(): Promise<FakeGitHub> {
     refuseRefresh: null,
     exchangeStatus: null,
     exchangeOffline: false,
+    exchangeNoCopilot: false,
+    holdExchange: null,
     replies: [],
     script: null,
     approve: () => {
@@ -270,7 +276,7 @@ export async function startFakeGitHub(): Promise<FakeGitHub> {
   const server = createServer((request, response) => {
     const path = new URL(request.url ?? "/", "http://fake").pathname;
     readBody(request)
-      .then((raw) => {
+      .then(async (raw) => {
         const isJson = (request.headers["content-type"] ?? "").includes("application/json");
         const body: Record<string, unknown> = raw
           ? isJson
@@ -301,7 +307,18 @@ export async function startFakeGitHub(): Promise<FakeGitHub> {
         if (request.method === "GET" && path === "/copilot_internal/v2/token") {
           if (!live.has(bearer(request)))
             return sendJson(response, 401, { message: "Bad credentials" });
+          await fake.holdExchange;
           if (fake.exchangeOffline) return response.socket?.destroy();
+          if (fake.exchangeNoCopilot) {
+            return sendJson(response, 403, {
+              message: "Resource not accessible by integration",
+              error_details: {
+                notification_id: "no_copilot_access",
+                message:
+                  "No access to GitHub Copilot found. You are currently logged in as tester.",
+              },
+            });
+          }
           if (fake.exchangeStatus) {
             const status = fake.exchangeStatus;
             const message =

@@ -8,7 +8,12 @@ import {
   referenceTypes,
 } from "../../../core/api";
 import { displayName } from "../../../shared/documentNames";
-import { lookupIdentifier, missingDetails, referenceFieldOrder } from "../../../shared/references";
+import {
+  fieldsToCheck,
+  lookupIdentifier,
+  missingDetails,
+  referenceFieldOrder,
+} from "../../../shared/references";
 import { core } from "../core";
 import { errorMessage } from "../errors";
 import { useLanguage, useT } from "../i18n";
@@ -23,6 +28,7 @@ import {
 import { useAppStore } from "../store";
 import { useUndo } from "../undo";
 import { type ProblemAction, ProblemLine, ProblemMark } from "./ProblemLine";
+import { ReviewRing } from "./TagColour";
 import { TypingTextarea } from "./TypingTextarea";
 import { buttonStyle } from "./ui";
 
@@ -35,8 +41,9 @@ type LookUpLine = { text: string; action?: ProblemAction; role: "status" | "aler
  * "Cite as" (#286): a Document's reference record, every field edited in
  * place (click it, or Enter on it; Enter or leaving the field saves, Esc
  * cancels, and a Chinese input method's Enter only picks its candidate),
- * with Look up to fill the empty fields by its DOI or arXiv id. Each change
- * offers Undo. Esc, outside a field, closes it.
+ * with Look up to fill the empty fields by its DOI or arXiv id. What was read
+ * from the file has the review ring until the User marks it checked, or edits
+ * it. Each change offers Undo. Esc, outside a field, closes it.
  */
 export function CiteAsPanel({
   document,
@@ -64,6 +71,7 @@ export function CiteAsPanel({
   const name = displayName(document);
   const { fields } = record;
   const missing = missingDetails(record);
+  const toCheck = fieldsToCheck(record);
   const identifier = lookupIdentifier(fields);
   const service = identifier?.kind === "arxiv" ? "arXiv" : "Crossref";
 
@@ -89,6 +97,26 @@ export function CiteAsPanel({
         },
         redo: async () => {
           await core.updateReference(document.id, { [field]: value });
+        },
+      });
+    } catch (failure) {
+      setProblem(errorMessage(failure, t));
+    }
+  };
+
+  const confirm = async () => {
+    setProblem(null);
+    const before = record;
+    const checked = toCheck;
+    try {
+      await core.confirmReference(document.id);
+      useUndo.getState().push({
+        message: t("reference.undo.confirm", { name }),
+        undo: async () => {
+          await core.restoreReference(document.id, before, checked);
+        },
+        redo: async () => {
+          await core.confirmReference(document.id);
         },
       });
     } catch (failure) {
@@ -212,15 +240,25 @@ export function CiteAsPanel({
         {referenceFieldOrder.map((field) => {
           const label = fieldLabel(language, field, fields.type);
           const needed = missing.includes(field);
+          const unchecked = toCheck.includes(field);
           return (
             <div key={field} className="contents">
               {/* The label sits on the first line of a value that wraps. */}
-              <dt className="flex gap-1.5 py-1 text-ink-meta">
+              <dt
+                data-unchecked={unchecked || undefined}
+                title={unchecked ? t("reference.toCheck") : undefined}
+                className="flex gap-1.5 py-1 text-ink-meta"
+              >
                 {needed && (
                   <span
                     aria-hidden="true"
                     className="mt-[7px] size-1.5 shrink-0 rounded-full bg-attention"
                   />
+                )}
+                {unchecked && (
+                  <span className="mt-[5px]">
+                    <ReviewRing />
+                  </span>
                 )}
                 <span className="break-words">{label}</span>
               </dt>
@@ -268,13 +306,30 @@ export function CiteAsPanel({
           {lookUpLine.text}
         </ProblemLine>
       )}
-      <p className="mt-2 text-[12px] leading-[18px] text-ink-meta">
-        {!identifier && missing.length > 0
-          ? t("reference.addIdentifier")
-          : Object.values(record.sources).includes("file")
-            ? t("reference.checkNote")
-            : null}
-      </p>
+      {toCheck.length > 0 && (
+        <p
+          data-testid="reference-check"
+          className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] leading-[18px] text-ink-meta"
+        >
+          <span className="inline-flex items-center gap-1.5">
+            <ReviewRing />
+            {t("reference.checkNote")}
+          </span>
+          <button
+            type="button"
+            data-testid="reference-confirm"
+            onClick={() => void confirm()}
+            className={buttonStyle("secondary", "sm")}
+          >
+            {t("reference.confirm")}
+          </button>
+        </p>
+      )}
+      {!identifier && missing.length > 0 && (
+        <p className="mt-2 text-[12px] leading-[18px] text-ink-meta">
+          {t("reference.addIdentifier")}
+        </p>
+      )}
     </section>
   );
 }

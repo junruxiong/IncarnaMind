@@ -289,6 +289,55 @@ test("A figure the Documents don't state is worked out from theirs: a wrong mult
   await screenshot(window, "check-calculated-contradicted-zh");
 });
 
+test("A figure worked out from an amount in brackets says the amount was counted as negative, in English and Chinese (#978)", async () => {
+  await writeFile(
+    join(sources, "Cash update.pdf"),
+    buildPdf([
+      { lines: ["Cash update", "Net cash was $(500.0)m and EBITDA was $400m at the end of 2025."] },
+    ]),
+  );
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await setWindowSize(app, window, 1440, 900);
+  await dismissChatSetup(window);
+  await acceptPlainTextKeys(window);
+  await window.evaluate(async () => {
+    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    await bridge.saveChatProvider({
+      kind: "anthropic",
+      apiKey: "sk-ant-test",
+      modelId: "claude-haiku-5-5",
+    });
+  });
+  await addDocuments(window, [join(sources, "Cash update.pdf")]);
+  await newMind(window);
+  const sentence = "Net cash to EBITDA was 1.3x at the end of 2025.";
+  const editor = window.getByTestId("mind-editor");
+  await editor.click();
+  await window.keyboard.type(sentence);
+  const line = editor.locator(":scope > p").first();
+  await checkAll(window, line, "Net cash", "end of 2025.", "find-support");
+
+  const contradicted = marks(window).and(window.locator('[data-check="contradicted"]'));
+  await expect(contradicted).toBeVisible({ timeout: 15_000 });
+  await pointAndClick(window, contradicted);
+  const inputs = window.getByTestId("claim-card").getByTestId("claim-input");
+  await expect(inputs).toHaveCount(2);
+  await expect(inputs.first()).toContainText("$(500.0)m");
+  await expect(inputs.first()).toContainText("counted as negative");
+  await expect(inputs.last()).toContainText("$400m");
+  await expect(inputs.last()).not.toContainText("counted as negative");
+  await motionSettled(window);
+  await screenshot(window, "check-calculated-negative-en");
+  await window.keyboard.press("Escape");
+
+  await setLanguage(window, "zh-CN");
+  await pointAndClick(window, contradicted);
+  await expect(inputs.first()).toContainText("按负数计算");
+  await expect(inputs.last()).not.toContainText("按负数计算");
+  await motionSettled(window);
+  await screenshot(window, "check-calculated-negative-zh");
+});
+
 test("A supported sentence's card names the Document as it is named now, after a rename in IncarnaMind", async () => {
   const { app, window } = await launchWithTides();
   await useLocalChatModel(window);

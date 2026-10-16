@@ -223,6 +223,8 @@ function TheirChangesRow({
 /**
  * The Mind's citation style (#289), which its export is written in, with the button that
  * changes it: the same picker as the References block's. It changes at once, not on Save.
+ * A Mind that hasn't chosen and isn't Numbered follows the Chinese default (GB/T 7714), which the
+ * row says.
  */
 function CitationStyleRow({ mindId }: { mindId: string }) {
   const t = useT();
@@ -242,11 +244,22 @@ function CitationStyleRow({ mindId }: { mindId: string }) {
       current = false;
     };
   }, [mindId, picking]);
+  const byDefault = style !== null && !style.chosen && style.style !== "numbered";
   return (
     <div className={rowClass}>
-      <span id="export-citation-style" className="text-ui text-ink">
-        {t("export.citationStyle")}
-      </span>
+      <div className="flex min-w-0 flex-col">
+        <span id="export-citation-style" className="text-ui text-ink">
+          {t("export.citationStyle")}
+        </span>
+        {byDefault && (
+          <span
+            data-testid="export-citation-style-default"
+            className="text-[13px] leading-5 text-ink-meta"
+          >
+            {t("export.citationStyle.default")}
+          </span>
+        )}
+      </div>
       <button
         type="button"
         data-testid="export-citation-style"

@@ -50,7 +50,7 @@ export type SelectedSentences =
   | { ok: false; reason: "nothing" };
 
 /** A Block's text as checks read it. */
-function textOf(element: Y.XmlElement): string {
+export function textOf(element: Y.XmlElement): string {
   return layout(element)
     .map(({ node }) =>
       node instanceof Y.XmlText
