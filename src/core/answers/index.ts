@@ -63,6 +63,7 @@ import {
   type ChatModelChoice,
   type ChatReadiness,
   type CitationSupport,
+  type ClaimedChange,
   type ConversationAskResult,
   type ConversationQuestion,
   type CoreEventName,
@@ -75,6 +76,7 @@ import {
   MIND_CONTENT_FIELD,
   type MindChange,
   type MindFocus,
+  type MindProblem,
   type ProviderError,
   QUESTION_BLOCK,
   type QuoteRetry,
@@ -141,6 +143,7 @@ import {
   createCitationSession,
   withoutFootnoteDefinitions,
 } from "./citations";
+import { askAgainNote, unbackedClaims as claimsNoCallMade, holdBack } from "./claimedChanges";
 import {
   conversationContext,
   conversationContextOf,
@@ -740,6 +743,7 @@ export function createAnswers(options: AnswersOptions) {
     let quoteRetry: QuoteRetry | null = null;
     /** The one request to fix figures, if the engine made it (see ./figureRetry). */
     let figureRetry: FigureRetry | null = null;
+    let unbackedClaims: ClaimedChange[] = [];
     /** What the model calls counted, the cached input tokens too. */
     const usage: AnswerUsage = {
       inputTokens: 0,
@@ -793,6 +797,7 @@ export function createAnswers(options: AnswersOptions) {
         ...(sentAt !== null &&
           firstWordAt !== Infinity && { firstWordMs: wordAfter(sentAt, firstWordAt) }),
         ...(careful && { careful: true as const }),
+        ...(unbackedClaims.length > 0 && { unbackedClaims: [...unbackedClaims] }),
       };
     };
     let skills: SkillSession | null = null;
@@ -1005,7 +1010,10 @@ export function createAnswers(options: AnswersOptions) {
       id: string,
       ok: boolean,
       resultCount: number | null,
-      found: Pick<AnswerToolCall, "passages" | "error" | "webPage" | "mindChange"> = {},
+      found: Pick<
+        AnswerToolCall,
+        "passages" | "error" | "webPage" | "mindChange" | "mindProblem"
+      > = {},
     ) => {
       const call = toolCalls.find((each) => each.id === id);
       if (!call) return;
@@ -1017,6 +1025,7 @@ export function createAnswers(options: AnswersOptions) {
       if (found.error) call.error = found.error;
       if (found.webPage) call.webPage = found.webPage;
       if (found.mindChange) call.mindChange = found.mindChange;
+      if (found.mindProblem) call.mindProblem = found.mindProblem;
       announce("answer.toolCallFinished", { ...place, answerId, call: { ...call } });
       input.onCall?.({ ...call });
       writeSoon();
@@ -1031,6 +1040,7 @@ export function createAnswers(options: AnswersOptions) {
     const webPages = new Map<string, WebPageCall>();
     /** What each call of a Minds' Tool changed, by call, for its card when it finishes (#202). */
     const mindChanges = new Map<string, MindChange>();
+    const mindProblems = new Map<string, MindProblem>();
     /** Keeps how a script's run went on its card. */
     const setScriptRun = (id: string, run: SkillScriptRun) => {
       const call = toolCalls.find((each) => each.id === id);
@@ -1408,6 +1418,7 @@ export function createAnswers(options: AnswersOptions) {
               prepared,
               ...input.assistant,
               blocksOf: (text) => {
+                let found = 0;
                 let notFound = 0;
                 let unrecorded = 0;
                 const cited = withCitations(
@@ -1416,6 +1427,7 @@ export function createAnswers(options: AnswersOptions) {
                     const node = session.checkedNode(marker);
                     if (!node) unrecorded++;
                     else if (node.attrs?.check === "not-found") notFound++;
+                    else found++;
                     return node;
                   },
                 );
@@ -1428,7 +1440,7 @@ export function createAnswers(options: AnswersOptions) {
                       )
                     : cited,
                 );
-                return { blocks, notFound, unrecorded };
+                return { blocks, cited: found + notFound, notFound, unrecorded };
               },
               changed: (toolCallId, change) => {
                 firstMindWordAt ??= Date.now();
@@ -1440,6 +1452,7 @@ export function createAnswers(options: AnswersOptions) {
                   writeSoon();
                 }
               },
+              failed: (toolCallId, problem) => mindProblems.set(toolCallId, problem),
               signal: controller.signal,
               now: () => new Date(),
             })
@@ -1505,6 +1518,18 @@ export function createAnswers(options: AnswersOptions) {
 
       const learntKey = modelKey(model, prepared);
       let outcome: Outcome = { status: "stopped" };
+      let mindsNow: { id: string; name: string }[] | null = null;
+      const mindsListed = () => {
+        mindsNow ??= minds?.list() ?? [];
+        return mindsNow;
+      };
+      const checkReply = (text: string) => {
+        mindsNow = null;
+        const claims = claimsNoCallMade(text, toolCalls, mindsListed());
+        return claims.length > 0
+          ? { claims, note: askAgainNote(claims, toolCalls, options.readableMindName) }
+          : null;
+      };
       for await (const event of engine.generate({
         instructions: (
           mode,
@@ -1557,6 +1582,14 @@ export function createAnswers(options: AnswersOptions) {
         window: prepared.window,
         retryQuotes: prepared.retryQuotes,
         cacheKey: place.conversationId ?? place.mindId ?? undefined,
+        ...(input.assistant && {
+          checkReply,
+          shownUpTo: holdBack(() => mindsListed().map((mind) => mind.name)),
+          mayEndBlank: () =>
+            [...mindChanges.values()].some(
+              (change) => change.created || change.revised || change.proposals > 0,
+            ),
+        }),
         signal: controller.signal,
       })) {
         if (finished) break;
@@ -1590,6 +1623,10 @@ export function createAnswers(options: AnswersOptions) {
             break;
           case "figures-retried":
             figureRetry = event.retry;
+            break;
+          case "claims-unbacked":
+            unbackedClaims = event.claims;
+            writeSoon();
             break;
           case "usage":
             usage.inputTokens += event.usage.inputTokens ?? 0;
@@ -1639,11 +1676,13 @@ export function createAnswers(options: AnswersOptions) {
           case "tool-call-finished": {
             const webPage = webPages.get(event.id);
             const mindChange = mindChanges.get(event.id);
+            const mindProblem = mindProblems.get(event.id);
             callFinished(event.id, event.ok, event.resultCount, {
               ...(event.passages && { passages: [...event.passages] }),
               ...(event.error && { error: event.error }),
               ...(webPage && { webPage }),
               ...(mindChange && { mindChange }),
+              ...(mindProblem && { mindProblem }),
             });
             break;
           }
@@ -1871,6 +1910,7 @@ export function createAnswers(options: AnswersOptions) {
     const { context, origins } = conversationContextOf(turn.earlier, question.text, {
       mind: section,
       documents,
+      mindNames: options.readableMindName,
     });
     const requestOf = (reading: MindReading, kept: MindCut): RequestMind => ({
       text: kept.text,
@@ -1901,6 +1941,7 @@ export function createAnswers(options: AnswersOptions) {
                 context: conversationContextOf(turn.earlier, question.text, {
                   mind: smaller,
                   documents,
+                  mindNames: options.readableMindName,
                 }).context,
                 request: requestOf(mind.reading, smaller),
                 share: smaller.share,

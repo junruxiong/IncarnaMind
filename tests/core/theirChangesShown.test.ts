@@ -3,7 +3,8 @@
  * (#734), through the core's public interface: the model reads them marked,
  * with who made each and when, and so does an outside agent; a PDF, an HTML
  * file and Markdown show them as Word prints them, or as if accepted. The
- * AI's own changes still waiting stay out, as before.
+ * model reads the AI's own changes still waiting too, marked as waiting
+ *, unless they are out of date.
  */
 import type { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, test } from "vitest";
@@ -46,16 +47,29 @@ async function setUp(model: MockLanguageModelV4 = streamingModel("Noted.")) {
   return { core, model, mindId, client, printed };
 }
 
-/** Adds a change the AI suggests, still waiting, to the clause's last paragraph. */
-function suggestChange(client: MindClient) {
-  const change = { id: "ai-change", request: "ai-request", target: "x" };
+/**
+ * Adds two paragraphs the AI suggests, still waiting, after the clause: one
+ * whose change is out of date, as one is once the text it was made for has
+ * changed, and one still fresh.
+ */
+function suggestChanges(client: MindClient) {
+  const suggested = (id: string, text: string, target?: string) => ({
+    type: "paragraph",
+    attrs: {
+      id,
+      proposal: {
+        id: `${id}-change`,
+        request: "ai-request",
+        kind: "insert",
+        ...(target && { target }),
+      },
+    },
+    content: [{ type: "text", text }],
+  });
   editMind(client, (blocks) => [
     ...blocks,
-    {
-      type: "paragraph",
-      attrs: { id: "ai-note", proposal: { ...change, kind: "insert" } },
-      content: [{ type: "text", text: "A paragraph the AI would add." }],
-    },
+    suggested("stale-note", "A paragraph out of date.", "x"),
+    suggested("ai-note", "A paragraph the AI would add."),
   ]);
 }
 
@@ -65,9 +79,9 @@ async function text(core: Core, mindId: string, options: Omit<ExportMindOptions,
 }
 
 describe("someone else's changes, shown as changes", { timeout: 30_000 }, () => {
-  test("a Question beside the Mind reads them marked, with who made each and when; the AI's own stay out", async () => {
+  test("a Question beside the Mind reads them marked, with who made each and when, and the AI's own as waiting", async () => {
     const { core, model, mindId, client } = await setUp();
-    suggestChange(client);
+    suggestChanges(client);
     await client.settled();
 
     const result = await core.askInConversation({ text: "What did they change in 9.2?", mindId });
@@ -84,7 +98,8 @@ describe("someone else's changes, shown as changes", { timeout: 30_000 }, () => 
     expect(sent).toContain(
       "9.3 Fees paid are not refunded[inserted by Priya Nair, 2026-10-02:  under any circumstances].",
     );
-    expect(sent).not.toContain("A paragraph the AI would add.");
+    expect(sent).toContain("[waiting change, adds: A paragraph the AI would add.]");
+    expect(sent).not.toContain("A paragraph out of date.");
   });
 
   test("Markdown shows them as CriticMarkup with who made each, or as if accepted", async () => {
