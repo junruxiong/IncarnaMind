@@ -6706,6 +6706,10 @@ export const EXPORT_FORMATS = [
 ] as const;
 export type ExportFormat = (typeof EXPORT_FORMATS)[number];
 
+/** What a Mind's check record (#738) is saved as: a PDF to file with the work, and a CSV for the User's own records. */
+export const CHECK_RECORD_FORMATS = ["pdf", "csv"] as const;
+export type CheckRecordFormat = (typeof CHECK_RECORD_FORMATS)[number];
+
 /**
  * The User's export choices (`UserSettings.exportOptions`): the format Export uses, and each
  * format's own options. Markdown, the archive, always keeps the Questions; a source pack has
@@ -8871,6 +8875,12 @@ export interface CoreApi {
    * next free name, asking where new files go the first time.
    */
   saveMindExport(mindId: string, options: ExportMindOptions): Promise<SavedMindExport>;
+  /**
+   * Saves a record of what was checked in a Mind (#738) into the Output location, as
+   * `saveMindExport` does: each checked sentence and each Citation with its result, the Document
+   * version, the model and the time. Nothing is sent anywhere.
+   */
+  saveCheckRecord(mindId: string, format: CheckRecordFormat): Promise<SavedExport>;
 
   /**
    * Formats Citations and their Bibliography in a citation style (#289), from the cited
@@ -9448,6 +9458,7 @@ const methods: Record<CoreApiMethod, true> = {
   previewSharePage: true,
   setSharePageTextOnly: true,
   saveMindExport: true,
+  saveCheckRecord: true,
   formatCitations: true,
   getMindCitationStyle: true,
   setMindCitationStyle: true,
