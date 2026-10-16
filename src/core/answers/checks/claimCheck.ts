@@ -6,7 +6,8 @@
  * The Run is the Answer engine's Tool-calling loop (ADR-0007) with the check
  * Tool set: the Documents' search and `cite`, nothing else (ADR-0013, #78).
  * Its searches leave out what a check may not use as evidence (#80): the
- * files IncarnaMind wrote, unless counted, and the document being checked.
+ * files IncarnaMind wrote, unless counted, the User's own workings and the
+ * document being checked.
  * The model records the Passage that decides the claim with `cite`, and its
  * quote must pass the Citation check before the verdict is taken: a
  * "supported" or "contradicted" without a quote that is found is not
@@ -22,6 +23,7 @@
  */
 
 import { generateText } from "ai";
+import { type CaseCitation, caseCitations, isOpinionOf } from "../../../shared/caseCitations";
 import type { FigureContext } from "../../../shared/figures";
 import type {
   CheckedVersion,
@@ -30,7 +32,9 @@ import type {
   ClaimCheckFailure,
   ClaimCheckResult,
   LeftOutDocument,
+  PassageSearchResult,
   ProviderError,
+  RecordAiUseInput,
   ThirdPartyReason,
 } from "../../api";
 import type { Evidence, EvidenceScope } from "../../documents/evidence";
@@ -54,7 +58,7 @@ import {
   type DocumentLanguage,
 } from "../engine";
 import { agreesWith, statedFigure } from "./calculated";
-import { nearestLine } from "./nearest";
+import { figuresMatch, nearestLine } from "./nearest";
 import {
   CONFIRM_INSTRUCTIONS,
   checkInstructions,
@@ -78,6 +82,7 @@ export interface ClaimCheckDependencies {
   documents: Pick<AnswerDocuments, "citationSource" | "pageTexts" | "documentDate"> & {
     searchableCount(documentIds: readonly string[] | null): number;
     searchableLanguages(documentIds: readonly string[] | null): DocumentLanguage[];
+    savedBySearch(documentId: string): boolean;
   };
 }
 
@@ -118,17 +123,51 @@ export function runFailureOf(result: ClaimCheckResult): ProviderError | null {
   return { kind: reason, message: result.detail ?? reason };
 }
 
+/** Records a sentence a model judged as a use of AI (#906); one it couldn't judge isn't one. */
+export function recordJudged(
+  record: (inputs: RecordAiUseInput[]) => void,
+  mindId: string,
+  model: PreparedChatModel,
+  result: ClaimCheckResult,
+  at: string,
+): void {
+  if (result.verdict === "not-checked") return;
+  record([
+    {
+      mindId,
+      kind: "sentence-checked",
+      providerId: model.provider.id,
+      modelId: model.modelId,
+      characters: 0,
+      occurredAt: at,
+    },
+  ]);
+}
+
 export function createClaimCheck(deps: ClaimCheckDependencies) {
   return async function checkClaim(request: ClaimCheckRequest): Promise<ClaimCheckResult> {
     const { scope, signal } = request;
     const read = new Map<string, string>();
     const excluded = new Map<string, LeftOutDocument>();
+    const decisions = caseCitations(request.claim);
+    const workings = new Map<string, PassageSearchResult[]>();
     const scoped: AnswerDocuments = {
       searchableCount: () => deps.documents.searchableCount(scope.documentIds),
       async search(query, searchSignal) {
         const found = await deps.evidence.search(query, scope, searchSignal);
-        for (const passage of found.passages) read.set(passage.documentId, passage.contentHash);
+        // A web search's result never settles a citation of a court decision.
+        const passages =
+          decisions.length === 0
+            ? found.passages
+            : found.passages.filter((passage) => !deps.documents.savedBySearch(passage.documentId));
+        for (const passage of passages) read.set(passage.documentId, passage.contentHash);
         for (const each of found.excluded) {
+          if (each.reason === "own-workings") {
+            workings.set(each.documentId, [
+              ...(workings.get(each.documentId) ?? []),
+              ...each.passages,
+            ]);
+          }
           if (excluded.has(each.documentId)) continue;
           excluded.set(each.documentId, {
             documentId: each.documentId,
@@ -136,7 +175,7 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
             reason: each.reason,
           });
         }
-        return found.passages;
+        return passages;
       },
       citationSource: (passageId) => deps.documents.citationSource(passageId),
       pageTexts: (documentId, contentHash, from, to) =>
@@ -184,6 +223,16 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       ),
       excluded: [...excluded.values()].filter((each) => each.reason === "own-file"),
     });
+    const workingsSayingIt = (): LeftOutDocument[] =>
+      [...workings].flatMap(([documentId, passages]) => {
+        const left = excluded.get(documentId);
+        const speaks = passages.some(
+          (passage) =>
+            figuresMatch(request.claim, passage.text) &&
+            nearestLine(request.claim, [{ id: passage.passageId, text: passage.text }]),
+        );
+        return left && speaks ? [left] : [];
+      });
     const notChecked = (
       reason: ClaimCheckFailure,
       detail: string | null = null,
@@ -192,6 +241,21 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       reason,
       detail,
       ...facts(),
+    });
+
+    let opinions: Opinions;
+    try {
+      opinions = await opinionsOf(decisions, scoped, signal);
+    } catch (error) {
+      if (signal.aborted) return notChecked("stopped");
+      throw error;
+    }
+    const citedCase = (evidence: Citation | null) => ({
+      citedCaseUnchecked: opinions.missing,
+      citedCaseFound:
+        !opinions.missing &&
+        evidence !== null &&
+        opinions.documentIds.has(evidence.documentId ?? ""),
     });
 
     let reply = "";
@@ -238,6 +302,7 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
         evidence: worked.evidence,
         says: null,
         calculation: worked.calculation,
+        ...citedCase(worked.evidence),
         ...facts(),
       };
     }
@@ -246,6 +311,7 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       evidence: worked.evidence,
       says: null,
       calculation: worked.calculation,
+      ...citedCase(worked.evidence),
       ...facts(),
     };
     if (!finished || reply.trim() === "") return byCalculation ?? notChecked("empty");
@@ -258,12 +324,15 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
     const unsupported = async (): Promise<ClaimCheckResult> => {
       const nearest = await nearestDifferent(request, session, signal);
       if (signal.aborted) return notChecked("stopped");
+      const left = facts();
       return {
         verdict: "unsupported",
         evidence: nearest,
         says: null,
         calculation: null,
-        ...facts(),
+        ...citedCase(nearest),
+        ...left,
+        excluded: nearest ? left.excluded : [...left.excluded, ...workingsSayingIt()],
       };
     };
     session.check();
@@ -285,6 +354,7 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
             evidence,
             says: null,
             calculation: null,
+            ...citedCase(evidence),
             ...facts(),
           }
         );
@@ -295,6 +365,7 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       evidence,
       says: verdict.says,
       calculation: worked?.calculation ?? null,
+      ...citedCase(evidence),
       ...facts(),
     };
   };
@@ -403,6 +474,42 @@ async function confirmContradiction(
       console.error(`A contradiction couldn't be confirmed: ${messageOf(error)}`);
     return null;
   }
+}
+
+interface Opinions {
+  documentIds: ReadonlySet<string>;
+  missing: boolean;
+}
+
+function startOf(documents: AnswerDocuments, documentId: string, contentHash: string): string {
+  const [first] = documents.pageTexts(documentId, contentHash, 1, 1);
+  return first?.text ?? documents.pageTexts(documentId, contentHash, null, null)[0]?.text ?? "";
+}
+
+async function opinionsOf(
+  decisions: readonly CaseCitation[],
+  documents: AnswerDocuments,
+  signal: AbortSignal,
+): Promise<Opinions> {
+  const documentIds = new Set<string>();
+  let missing = false;
+  for (const decision of decisions) {
+    const query = [decision.name, decision.cite].filter(Boolean).join(" ");
+    const found = await documents.search(query, signal);
+    const candidates = new Map(found.map((each) => [each.documentId, each]));
+    const opinions = [...candidates.values()].filter((each) =>
+      isOpinionOf(
+        {
+          name: each.documentName,
+          start: startOf(documents, each.documentId, each.contentHash),
+        },
+        decision,
+      ),
+    );
+    if (opinions.length === 0) missing = true;
+    for (const each of opinions) documentIds.add(each.documentId);
+  }
+  return { documentIds, missing };
 }
 
 /**

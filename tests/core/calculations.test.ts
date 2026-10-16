@@ -320,6 +320,39 @@ describe("The calculate Tool", { timeout: 60_000 }, () => {
     expect(translate("zh-CN", "answer.figures.calculated", { count: 2 })).toBe("计算了 2 个数字");
   });
 
+  test.each([
+    ["a record and a figure each given alone", (value: object) => value],
+    [
+      "lists written in JSON and encoded twice",
+      (value: object) => JSON.stringify(JSON.stringify([value])),
+    ],
+  ])("cite and calculate take %s, with no step spent on sending them again", async (_how, wrap) => {
+    const model = calculatingModel({
+      queries: ["revenue"],
+      steps: [
+        (passages): Call[] => {
+          const passage = passageOf(passages, "Acme");
+          const [figure] = GROWTH({ revenue: 1, margin: 1 });
+          const record = { marker: 1, passage, location: "p. 1", quote: REVENUE };
+          return [
+            { tool: "cite", input: { citations: wrap(record) } },
+            { tool: "calculate", input: { figures: wrap(figure ?? {}) } },
+          ];
+        },
+      ],
+      answer: "Revenue grew [=1] in 2025, to $1,482.6 million[^1].",
+    });
+    const { core } = await setUpCalculating(model, [ACME]);
+
+    const { answer } = await askAndRead(core, "How much did Acme's revenue grow in 2025?");
+
+    expect(model.doStreamCalls).toHaveLength(3);
+    expect(shown(answerBlocks(answer))).toBe("Revenue grew 20.4% in 2025, to $1,482.6 million.");
+    expect(answer.figures).toMatchObject([
+      { marker: 1, inputs: [{ citation: { check: "found" } }, { citation: { check: "found" } }] },
+    ]);
+  });
+
   test("a Chinese 同比增长 cancels its 单位; an amount needs the heading's 单位：万元 as unitQuote, never guessed", async () => {
     const figure = (marker: number, formula: string, unitQuote?: string) => ({
       marker,

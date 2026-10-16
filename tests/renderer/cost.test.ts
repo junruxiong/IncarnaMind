@@ -22,10 +22,15 @@ describe("Cost in words", () => {
     expect(formatMoney({ amount: 1.4, currency: "CNY" }, "zh-CN")).toBe("¥1.40");
   });
 
-  test('dollars are "$" in Chinese too, never "US$"', () => {
-    expect(formatMoney({ amount: 1.28, currency: "USD" }, "zh-CN")).toBe("$1.28");
-    expect(formatMoney({ amount: 1.28, currency: "USD" }, "en")).toBe("$1.28");
-  });
+  test.each(["en", "zh-CN"] as const)(
+    'dollars are "$" and yuan "¥" in %s, never "US$" or "CN¥"',
+    (language) => {
+      expect(formatMoney({ amount: 1.4, currency: "USD" }, language)).toBe("$1.40");
+      expect(formatMoney({ amount: 1.4, currency: "CNY" }, language)).toBe("¥1.40");
+      expect(formatMoney({ amount: 0.0013, currency: "USD" }, language)).toBe("$0.0013");
+      expect(formatMoney({ amount: 0.0013, currency: "CNY" }, language)).toBe("¥0.0013");
+    },
+  );
 
   test("what is set aside for running work is named apart from what was spent, and absent when nothing is", () => {
     const aside = [{ amount: 1.28, currency: "USD" as const }];
@@ -50,12 +55,12 @@ describe("Cost in words", () => {
     );
   });
 
-  test("spending in two currencies names both", () => {
+  test("spending in two currencies names both, told apart by their symbols", () => {
     const spent = [
       { amount: 3.2, currency: "USD" as const },
       { amount: 1.4, currency: "CNY" as const },
     ];
-    expect(formatSpent(spent, t("en"), "en")).toBe("$3.20 and CN¥1.40");
+    expect(formatSpent(spent, t("en"), "en")).toBe("$3.20 and ¥1.40");
     expect(formatSpent(spent, t("zh-CN"), "zh-CN")).toBe("$3.20 和 ¥1.40");
     expect(formatSpent([], t("en"), "en")).toBeNull();
   });

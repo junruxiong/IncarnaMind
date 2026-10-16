@@ -38,6 +38,20 @@ const everything: AiUseFigures = {
   removed: 2,
   citations: { found: 9, notFound: 1, cantCheck: 1, unsupported: 1, contradicted: 1, checking: 1 },
   sentences: { supported: 3, unsupported: 2, contradicted: 1, needsRecheck: 1, notChecked: 1 },
+  checked: [
+    {
+      sentence: "Spring tides come at new and full moon.",
+      result: "supported",
+      model: "Claude Haiku 5.5 (Anthropic)",
+      checkedAt: "2026-10-14T09:00:00.000Z",
+    },
+    {
+      sentence: "潮汐是海水的周期性涨落，由月球引力…",
+      result: "changed",
+      model: null,
+      checkedAt: "2026-10-13T09:00:00.000Z",
+    },
+  ],
   unread: [
     {
       id: "contract",
@@ -64,6 +78,7 @@ const nothing: AiUseFigures = {
   removed: 0,
   citations: { found: 0, notFound: 0, cantCheck: 0, unsupported: 0, contradicted: 0, checking: 0 },
   sentences: { supported: 0, unsupported: 0, contradicted: 0, needsRecheck: 0, notChecked: 0 },
+  checked: [],
   unread: [],
 };
 const FIGURES = { everything, nothing };

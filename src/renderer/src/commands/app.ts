@@ -15,6 +15,7 @@ import { useReferenceImport } from "../referenceImport";
 import { useAppStore } from "../store";
 import { verifyDocument } from "../verify";
 import { useWordImport } from "../wordImport";
+import { answerTableCommands } from "./answerTables";
 import { assistantCommands } from "./assistant";
 import { bibliographyCommands } from "./bibliography";
 import { chartCommands } from "./charts";
@@ -51,6 +52,7 @@ import { selectionCommands } from "./selection";
 import { settingsPageCommands } from "./settings";
 import { tableCommands } from "./tables";
 import { tabCommands } from "./tabs";
+import { taggingCommands } from "./tagging";
 import { mindInFront, mindShown, onlyOne } from "./targets";
 import { taskCommands } from "./tasks";
 import { webPageCommands } from "./webPages";
@@ -97,7 +99,7 @@ const appCommands: readonly Command[] = [
   {
     id: "verify.document",
     label: "verify.command",
-    hint: "verify.command.hint",
+    purpose: "verify.command.purpose",
     keywords: ["verify.command.keywords"],
     group: "main",
     // It adds the PDF and makes a Mind of it, each deleted as any other is.
@@ -110,6 +112,7 @@ const appCommands: readonly Command[] = [
   ...documentCommands,
   ...peekCommands,
   ...folderCommands,
+  ...taggingCommands,
   ...newFolderCommands,
   ...tagCommands,
   ...linkedFolderCommands,
@@ -164,6 +167,7 @@ const appCommands: readonly Command[] = [
     run: () => useFindSources.getState().show(),
   },
   ...assistantCommands,
+  ...answerTableCommands,
   {
     id: "citation.open",
     label: "command.citation.open",
@@ -212,7 +216,7 @@ const appCommands: readonly Command[] = [
   {
     id: "mind.checkAll",
     label: "mindCheck.command",
-    hint: "mindCheck.command.hint",
+    purpose: "mindCheck.command.purpose",
     keywords: ["mindCheck.command.keywords"],
     group: "main",
     // It changes no words: its marks go with Check again, or when the sentence is edited.
@@ -226,7 +230,7 @@ const appCommands: readonly Command[] = [
   {
     id: "mind.checkContradictions",
     label: "contradictions.command",
-    hint: "contradictions.command.hint",
+    purpose: "contradictions.command.purpose",
     keywords: ["contradictions.command.keywords"],
     group: "main",
     // It changes no words: its marks go with Check again, or when the sentence is edited.

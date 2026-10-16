@@ -21,6 +21,39 @@ describe("The sentences of a paragraph", () => {
     ).toEqual([`Spring tides come at full moon.${INLINE_NODE}`, "Neap tides come between."]);
   });
 
+  test("a court decision's citation stays in one sentence, with its court and year", () => {
+    expect(
+      sentences(
+        "See Hallmark Builders v. Rio Grande Supply, 512 S.W.3d 101 (Tex. 2017). Penguins nest here. Cf. Acme Corp. v. Widget Co., 25 F. Supp. 2d 345, 350 (S.D.N.Y. 1998). Donoghue v Stevenson [1932] AC 562 is older.",
+      ),
+    ).toEqual([
+      "See Hallmark Builders v. Rio Grande Supply, 512 S.W.3d 101 (Tex. 2017).",
+      "Penguins nest here.",
+      "Cf. Acme Corp. v. Widget Co., 25 F. Supp. 2d 345, 350 (S.D.N.Y. 1998).",
+      "Donoghue v Stevenson [1932] AC 562 is older.",
+    ]);
+  });
+
+  test.each([
+    ["The duty arises under the Act.", "See Hallmark v. Rio Grande, 512 S.W.3d 101 (Tex. 2017)."],
+    ["The lien attached in Texas.", "See Hallmark v. Rio Grande, 512 S.W.3d 101 (Tex. 2017)."],
+    ["Revenue fell in Q3.", "See Hallmark v. Rio Grande, 512 S.W.3d 101 (Tex. 2017)."],
+    ["The supplier was owned by IBM.", "See Hallmark v. Rio Grande, 512 S.W.3d 101 (Tex. 2017)."],
+    ["Yes.", "See Hallmark v. Rio Grande, 512 S.W.3d 101 (Tex. 2017)."],
+    [
+      "It was formed in Delaware.",
+      "Under Hallmark v. Rio Grande, 512 S.W.3d 101 (Tex. 2017), it attaches.",
+    ],
+    [
+      "The plan is Plan A.",
+      "In Hallmark v. Rio Grande, 512 S.W.3d 101 (Tex. 2017), it was upheld.",
+    ],
+    ["The case arose in the U.S.", "Brown v. Board of Education, 347 U.S. 483 (1954), decided it."],
+    ["The buyer was Acme Co.", "Smith v. Jones, 12 F.3d 5 (1st Cir. 1994), is cited."],
+  ])("the sentence before a citation stays apart from it: %j", (before, cited) => {
+    expect(sentences(`${before} ${cited}`)).toEqual([before, cited]);
+  });
+
   test("Chinese sentences end at 。！？", () => {
     expect(sentences("今天的潮水很高。明天会更高！真的吗？")).toEqual([
       "今天的潮水很高。",

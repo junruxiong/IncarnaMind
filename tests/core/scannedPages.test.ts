@@ -193,6 +193,32 @@ describe("Scanned pages are read on this computer (#397)", { timeout: 60_000 }, 
     ]);
   });
 
+  test("the page numbers a scan prints, as the model read them, name its pages as a text PDF's are named", async () => {
+    const dataDir = await createTempDataFolder();
+    const { recognizer } = countingRecognizer({
+      pages: {
+        1: { lines: ["Harbour survey", "Annual report"] },
+        2: { lines: ["Spring tides rose in March.", "1"] },
+        3: { lines: ["Neap tides fell in April.", "2"] },
+        4: { lines: ["Storm surges came in May.", "3"] },
+      },
+    });
+    const core = startCore(dataDir, scanning(recognizer));
+
+    const document = await addPdf(
+      core,
+      "Survey scan.pdf",
+      buildPdf(Array.from({ length: 4 }, () => ({ scan: picture("en-clean") }))),
+    );
+
+    expect(unitsOf(dataDir, document).map((unit) => JSON.parse(unit.label ?? "null"))).toEqual([
+      { scan: { reader: READER } },
+      { scan: { reader: READER }, printed: "1" },
+      { scan: { reader: READER }, printed: "2" },
+      { scan: { reader: READER }, printed: "3" },
+    ]);
+  });
+
   test("a scan an older version found no text in is read at the next start", async () => {
     const dataDir = await createTempDataFolder();
     const before = startCore(dataDir);

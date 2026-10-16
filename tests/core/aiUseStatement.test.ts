@@ -13,6 +13,8 @@ import {
 } from "../../src/core";
 import { contentHash } from "../../src/core/answers/blocks";
 import { formatDate } from "../../src/shared/dates";
+import { checkingModel, type Plan } from "../helpers/checks";
+import { setUpWithDocuments } from "../helpers/citations";
 import { createTempDataFolder, manualClock, startCore } from "../helpers/core";
 import { addAndProcess, writeSourceFile } from "../helpers/documents";
 import { connectToMind, type MindClient, typeInto } from "../helpers/mindClient";
@@ -66,6 +68,7 @@ function checked(
   document: Document,
   sentence: string,
   state: ClaimCheckAttributes["state"],
+  model: { providerId: string; modelId: string },
   asked = sentence,
 ): ClaimCheckAttributes {
   return {
@@ -75,10 +78,13 @@ function checked(
     state,
     reason: state === "not-checked" ? "refused" : null,
     detail: null,
+    ...model,
     text: asked,
     evidence: null,
     says: null,
     calculation: null,
+    citedCaseUnchecked: false,
+    citedCaseFound: false,
     scope: { folderId: null, widened: false },
     versions: [{ documentId: document.id, contentHash: document.contentHash }],
     excluded: [],
@@ -164,8 +170,22 @@ function typeAfter(client: MindClient, id: string, words: string): void {
   run.insert(run.length, words, { [GENERATED_MARK]: null });
 }
 
+const FIRST = "Spring tides come at new and full moon.";
+const SECOND = "Penguins nest above the harbour.";
+const LONG =
+  "Harbours publish the times of high water on their notice boards every year without fail.";
+const FOURTH = "Nobody would say.";
+const EDITED = "Edited since it was checked.";
+
 const NOTE_EN =
   "Schools have their own forms for declaring AI use. Use these counts to fill in yours.";
+
+const checkRecord = (mindId: string, model: { providerId: string; modelId: string }) => ({
+  mindId,
+  kind: "sentence-checked" as const,
+  characters: 0,
+  ...model,
+});
 
 /** The fixture: AI text kept and rewritten, accepted changes, and Citations and sentence checks of every result. */
 async function writeThesis(setup: Awaited<ReturnType<typeof setUp>>) {
@@ -222,10 +242,10 @@ async function writeThesis(setup: Awaited<ReturnType<typeof setUp>>) {
     { generatedHash: "written-before-the-user-edited-it" },
   );
   const sentences = [
-    ["Spring tides come at new and full moon.", "supported"],
-    ["Penguins nest above the harbour.", "unsupported"],
-    ["Harbours publish high water times every week.", "contradicted"],
-    ["Nobody would say.", "not-checked"],
+    [FIRST, "supported", haikuModel],
+    [SECOND, "unsupported", haikuModel],
+    [LONG, "contradicted", localModel],
+    [FOURTH, "not-checked", haikuModel],
   ] as const;
   writeMind(client, [
     heading(1, "Introduction"),
@@ -238,13 +258,13 @@ async function writeThesis(setup: Awaited<ReturnType<typeof setUp>>) {
     aiParagraph(p3, "Tidal ranges differ between harbours."),
     aiParagraph(p4, "This paragraph was deleted again."),
     paragraph(
-      ...sentences.flatMap(([sentence, state]) => [
-        text(sentence, { type: "claimCheck", attrs: checked(tides, sentence, state) }),
+      ...sentences.flatMap(([sentence, state, model]) => [
+        text(sentence, { type: "claimCheck", attrs: checked(tides, sentence, state, model) }),
         text(" "),
       ]),
-      text("Edited since it was checked.", {
+      text(EDITED, {
         type: "claimCheck",
-        attrs: checked(tides, "Edited since it was checked.", "supported", "As it was checked."),
+        attrs: checked(tides, EDITED, "supported", haikuModel, "As it was checked."),
       }),
     ),
     // A change still waiting isn't the Mind's: its AI text and Citation count for nothing.
@@ -294,6 +314,8 @@ async function writeThesis(setup: Awaited<ReturnType<typeof setUp>>) {
     { mindId: mind.id, kind: "answer-added", characters: 33, blockIds: [p4], ...haikuModel },
     { mindId: mind.id, kind: "suggestion-accepted", characters: 12, ...localModel },
     { mindId: mind.id, kind: "assistant-change-rejected", characters: 40, ...localModel },
+    ...[...Array(6)].map(() => checkRecord(mind.id, haikuModel)),
+    ...[...Array(2)].map(() => checkRecord(mind.id, localModel)),
   ]);
   typeAfter(client, p2, " I measured them on the pier myself.");
   client.blocks.delete(blockIndex(client, p4), 1);
@@ -318,7 +340,7 @@ describe("The AI use statement", () => {
     expect(paragraphsOf(parts)[0]).toBe(
       `Drawn from the record IncarnaMind keeps of this document, as of ${formatDate(NOW, "en")}. It covers only what IncarnaMind recorded, so add any use of AI elsewhere, and edit this before you attach it.`,
     );
-    const [uses, sections, citations, sentences] = tablesOf(parts);
+    const [uses, sections, citations, sentences, checkedList] = tablesOf(parts);
     const haiku = "Claude Haiku 5.5 (Anthropic)";
     expect(uses).toEqual([
       ["Use", "Model", "Times"],
@@ -330,6 +352,8 @@ describe("The AI use statement", () => {
       ["Searches of the author's own Documents", haiku, "2"],
       ["Searches of public scholarly sources (Find sources)", haiku, "1"],
       ["Web searches", haiku, "1"],
+      ["Sentences checked against the Documents", haiku, "6"],
+      ["Sentences checked against the Documents", "local-model", "2"],
     ]);
     // One Answer kept as written and one rewritten; of the accepted changes, two kept, one
     // rewritten by typing, one removed again.
@@ -357,6 +381,20 @@ describe("The AI use statement", () => {
       ["Contradicted", "1"],
       ["Needs re-check", "1"],
       ["Not checked", "1"],
+    ]);
+    const on = formatDate(NOW, "en");
+    expect(checkedList).toEqual([
+      ["Sentence", "Result", "Model", "Checked"],
+      [FIRST, "Supported", haiku, on],
+      [SECOND, "Unsupported", haiku, on],
+      [
+        "Harbours publish the times of high water on their notice boards every…",
+        "Contradicted",
+        "local-model",
+        on,
+      ],
+      [FOURTH, "Not checked", "", ""],
+      [EDITED, "Changed since checked", haiku, on],
     ]);
     expect(paragraphsOf(parts).at(-1)).toBe(NOTE_EN);
 
@@ -425,7 +463,7 @@ describe("The AI use statement", () => {
     const { parts } = await statementOf(core, mind.id);
 
     expect(paragraphsOf(parts)).toContain(
-      "IncarnaMind has no record of AI writing, suggesting changes or searching for this document.",
+      "IncarnaMind has no record of AI writing, suggesting changes, searching or checking sentences for this document.",
     );
     expect(paragraphsOf(parts)).toContain("This document has no AI text.");
     expect(tablesOf(parts)).toEqual([
@@ -553,6 +591,227 @@ describe("The AI use statement", () => {
       ["Quote found", "0"],
       ["Quote not found", "0"],
       ["Could not be checked", "1"],
+    ]);
+  });
+});
+
+describe("Checks in the statement", () => {
+  const TIDES = {
+    name: "Tides.md",
+    contents:
+      "# Tides\n\nSpring tides happen at new moon and at full moon.\n\nHarbours publish the times of high water every year.\n",
+  };
+  const OFFICE = {
+    name: "Harbour office.md",
+    contents:
+      "# Harbour office\n\nThe harbour office publishes the times of high water every week.\n",
+  };
+  const MOON = "Spring tides come at new and full moon.";
+  const YEARLY = "Harbours publish the times of high water every year.";
+  const PENGUINS = "Penguins nest on the cliffs above the harbour.";
+  const PLANS: Record<string, Plan> = {
+    [MOON]: { verdict: "supported", quote: "Spring tides happen at new moon and at full moon" },
+    [YEARLY]: {
+      verdict: "contradicted",
+      quote: "The harbour office publishes the times of high water every week.",
+      says: "The harbour office says every week, not every year.",
+    },
+    [PENGUINS]: { verdict: "unsupported" },
+  };
+  const NO_RECORD = /has no record of AI writing/;
+
+  /** A Mind in a Folder with both Documents, and a scripted model on this computer. */
+  async function checking(...body: JSONContent[]) {
+    const setup = await setUpWithDocuments(checkingModel(PLANS), [TIDES, OFFICE], {
+      now: manualClock(NOW).now,
+    });
+    const { core } = setup;
+    const folder = await core.createLibraryGroup({ name: "Harbours", description: "" });
+    await core.moveToFolder({
+      documentIds: setup.documents.map((each) => each.id),
+      folderId: folder.id,
+    });
+    const mind = await core.createMind({ title: "Harbour notes", folderId: folder.id });
+    const client = await connectToMind(core, mind.id);
+    writeMind(client, body);
+    await client.settled();
+    const check = (
+      block: JSONContent,
+      length: number,
+      action: "find-support" | "check-against-documents" = "find-support",
+      model?: { providerId: string; modelId: string },
+    ) =>
+      core.checkSentences({
+        requestId: randomUUID(),
+        mindId: mind.id,
+        action,
+        from: { blockId: block.attrs?.id, offset: 0 },
+        to: { blockId: block.attrs?.id, offset: length },
+        ...(model && { model }),
+      });
+    return { ...setup, mind, client, folder, check };
+  }
+
+  const sentencesBlock = (...sentences: string[]) => paragraph(text(sentences.join(" ")));
+  const on = formatDate(NOW, "en");
+
+  test("checks alone are a row of the uses table, with the model and how many, and the statement never says there is no record", async () => {
+    const block = sentencesBlock(MOON, PENGUINS);
+    const { core, mind, check } = await checking(block);
+    await check(block, MOON.length + 1 + PENGUINS.length);
+    await check(block, MOON.length + 1 + PENGUINS.length);
+
+    const { parts } = await statementOf(core, mind.id);
+
+    const [uses, sentences, listed] = tablesOf(parts);
+    expect(uses).toEqual([
+      ["Use", "Model", "Times"],
+      ["Sentences checked against the Documents", "local-model", "4"],
+    ]);
+    expect(sentences).toEqual([
+      ["Result", "Sentences"],
+      ["Supported", "1"],
+      ["Unsupported", "1"],
+    ]);
+    expect(listed).toEqual([
+      ["Sentence", "Result", "Model", "Checked"],
+      [MOON, "Supported", "local-model", on],
+      [PENGUINS, "Unsupported", "local-model", on],
+    ]);
+    expect(paragraphsOf(parts).filter((each) => NO_RECORD.test(each))).toEqual([]);
+    expect(paragraphsOf(parts)).toContain("This document has no AI text.");
+  });
+
+  test("checks beside written text are listed with it", async () => {
+    const answer = randomUUID();
+    const block = sentencesBlock(MOON);
+    const { core, mind, client, check } = await checking(aiParagraph(answer, "Neap tides."), block);
+    await core.recordAiUse([
+      { mindId: mind.id, kind: "answer-added", characters: 11, blockIds: [answer] },
+    ]);
+    await check(block, MOON.length);
+    await client.settled();
+
+    const { parts } = await statementOf(core, mind.id);
+
+    expect(tablesOf(parts)[0]).toEqual([
+      ["Use", "Model", "Times"],
+      ["Answers added to the document", "Not recorded", "1"],
+      ["Sentences checked against the Documents", "local-model", "1"],
+    ]);
+  });
+
+  test("a Mind nothing was used on says there is nothing to report, with no row of checks", async () => {
+    const { core, mind } = await checking(sentencesBlock(MOON));
+
+    const { parts } = await statementOf(core, mind.id);
+
+    expect(paragraphsOf(parts).filter((each) => NO_RECORD.test(each))).toHaveLength(0);
+    expect(tablesOf(parts)).toEqual([]);
+    expect(paragraphsOf(parts)).toContain(
+      "There is nothing to report: IncarnaMind has no record of AI use in this document, and the document has no Citations or checks.",
+    );
+  });
+
+  test("checking the whole Mind counts each sentence the model judged", async () => {
+    const { core, mind } = await checking(sentencesBlock(MOON, YEARLY, PENGUINS));
+
+    await core.checkMind({ requestId: "all", mindId: mind.id, mode: "all" });
+    const { parts } = await statementOf(core, mind.id);
+
+    expect(tablesOf(parts)[0]).toEqual([
+      ["Use", "Model", "Times"],
+      ["Sentences checked against the Documents", "local-model", "3"],
+    ]);
+  });
+
+  test("a check for contradictions counts every claim the model judged, though only a contradiction keeps a mark", async () => {
+    const cited = (document: Document): JSONContent => ({
+      type: "citation",
+      attrs: {
+        passageId: "passage-1",
+        documentId: document.id,
+        documentName: document.name,
+        contentHash: document.contentHash,
+        pageFrom: null,
+        pageTo: null,
+        quote: "Harbours publish the times of high water every year.",
+        check: "found",
+        checkReason: null,
+      },
+    });
+    const { core, mind, documents } = await checking();
+    const [tides] = documents;
+    if (!tides) throw new Error("Tides was not added");
+    const client = await connectToMind(core, mind.id);
+    writeMind(client, [
+      paragraph(text(`${YEARLY} `), cited(tides), text(` ${PENGUINS} `), cited(tides)),
+    ]);
+    await client.settled();
+
+    await core.checkContradictions({ requestId: "contradictions", mindId: mind.id });
+    const { parts } = await statementOf(core, mind.id);
+
+    expect(tablesOf(parts)[0]).toEqual([
+      ["Use", "Model", "Times"],
+      ["Sentences checked against the Documents", "local-model", "2"],
+    ]);
+    expect(tablesOf(parts).at(-1)?.slice(1)).toEqual([[YEARLY, "Contradicted", "local-model", on]]);
+  });
+
+  test("a sentence checked again with another model lists both models, and shows the latest", async () => {
+    const block = sentencesBlock(MOON);
+    const { core, mind, check } = await checking(block);
+    await check(block, MOON.length);
+    const other = await core.saveChatProvider({ kind: "ollama", modelId: "other-model" });
+    await check(block, MOON.length, "find-support", {
+      providerId: other.id,
+      modelId: "other-model",
+    });
+
+    const { parts } = await statementOf(core, mind.id);
+
+    expect(tablesOf(parts)[0]).toEqual([
+      ["Use", "Model", "Times"],
+      ["Sentences checked against the Documents", "local-model", "1"],
+      ["Sentences checked against the Documents", "other-model", "1"],
+    ]);
+    expect(tablesOf(parts).at(-1)).toEqual([
+      ["Sentence", "Result", "Model", "Checked"],
+      [MOON, "Supported", "other-model", on],
+    ]);
+  });
+
+  test("when the record has been cleared, the checks still on the page are counted by the model that made them", async () => {
+    const block = sentencesBlock(MOON, PENGUINS);
+    const { core, mind, check } = await checking(block);
+    await check(block, MOON.length + 1 + PENGUINS.length);
+    await core.clearAiUse();
+
+    const { parts } = await statementOf(core, mind.id);
+
+    expect(tablesOf(parts)[0]).toEqual([
+      ["Use", "Model", "Times"],
+      ["Sentences checked against the Documents", "local-model", "2"],
+    ]);
+    expect(paragraphsOf(parts).filter((each) => NO_RECORD.test(each))).toEqual([]);
+  });
+
+  test("in Chinese, the row, the list and its dates are in Chinese", async () => {
+    const block = sentencesBlock(MOON);
+    const { core, mind, check } = await checking(block);
+    await core.updateSettings({ user: { language: "zh-CN" } });
+    await check(block, MOON.length);
+
+    const { parts } = await statementOf(core, mind.id);
+
+    expect(tablesOf(parts)[0]).toEqual([
+      ["用途", "模型", "次数"],
+      ["对照文档核对句子", "local-model", "1"],
+    ]);
+    expect(tablesOf(parts).at(-1)).toEqual([
+      ["句子", "核对结果", "模型", "核对日期"],
+      [MOON, "有依据", "local-model", formatDate(NOW, "zh-CN")],
     ]);
   });
 });

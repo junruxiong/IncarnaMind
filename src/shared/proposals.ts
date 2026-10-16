@@ -381,6 +381,45 @@ export function pendingProposals(blocks: Y.XmlFragment): ProposalRef[] {
 
 const requestsOf = (doc: Y.Doc) => doc.getMap<unknown>(MIND_PROPOSAL_REQUESTS_FIELD);
 
+const DECISION_KEYS = { accept: "accepted", reject: "rejected" } as const;
+
+/**
+ * `resolveProposals` for what the User decides, which the Mind also remembers
+ * per request (how many were accepted and how many rejected), so a later
+ * Question knows what became of an Answer's changes. In the caller's
+ * transaction, as `resolveProposals` is.
+ */
+export function decideProposals(
+  blocks: Y.XmlFragment,
+  picked: (proposal: ProposalRef) => boolean,
+  outcome: "accept" | "reject",
+): ResolvedProposal[] {
+  const resolved = resolveProposals(blocks, picked, outcome);
+  const requests = blocks.doc ? requestsOf(blocks.doc) : null;
+  if (!requests) return resolved;
+  const key = DECISION_KEYS[outcome];
+  const counts = new Map<string, number>();
+  for (const each of resolved) counts.set(each.request, (counts.get(each.request) ?? 0) + 1);
+  for (const [request, count] of counts) {
+    const made = requests.get(request);
+    if (typeof made !== "object" || made === null) continue;
+    const before = (made as Record<string, unknown>)[key];
+    requests.set(request, { ...made, [key]: (typeof before === "number" ? before : 0) + count });
+  }
+  return resolved;
+}
+
+/** How many of a request's Proposals the User accepted and rejected (`decideProposals`). */
+export function decisionsOn(doc: Y.Doc, request: string): { accepted: number; rejected: number } {
+  const made = requestsOf(doc).get(request);
+  const count = (key: string) => {
+    const value =
+      typeof made === "object" && made !== null ? (made as Record<string, unknown>)[key] : 0;
+    return typeof value === "number" ? value : 0;
+  };
+  return { accepted: count(DECISION_KEYS.accept), rejected: count(DECISION_KEYS.reject) };
+}
+
 /** Records what made a request's Proposals, in the Mind's document beside its Blocks. */
 export function recordProposalRequest(doc: Y.Doc, request: string, made: ProposalRequest): void {
   requestsOf(doc).set(request, { ...made });

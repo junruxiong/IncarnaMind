@@ -50,6 +50,8 @@ export function failedSentences(
       });
     } else if (shown.state === "needs-recheck") {
       failed.set(id, { id, check: "needs-recheck", why: shown.why });
+    } else if (shown.state === "supported" && check.citedCaseUnchecked) {
+      failed.set(id, { id, check: "cited-case-unchecked" });
     }
   }
   return failed;

@@ -398,6 +398,7 @@ const DocumentRow = memo(function DocumentRow({
             <span data-testid="row-text" className="min-w-0 truncate">
               {shownName}
             </span>
+            <NotCitedLabel item={item} />
             <TagMarks chips={chips} />
           </span>
           <DocumentStatusLabel item={item} />
@@ -417,6 +418,20 @@ const DocumentRow = memo(function DocumentRow({
     </li>
   );
 });
+
+export function NotCitedLabel({ item }: { item: Pick<Document, "notCited"> }) {
+  const t = useT();
+  if (!item.notCited) return null;
+  return (
+    <span
+      data-testid="document-not-cited"
+      title={t("evidence.notCited.hint")}
+      className="shrink-0 text-label font-semibold text-ink-meta"
+    >
+      {t("evidence.notCited.label")}
+    </span>
+  );
+}
 
 /**
  * The status at a row's end: "Missing" or "Unavailable" when its file isn't

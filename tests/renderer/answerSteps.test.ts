@@ -511,17 +511,20 @@ describe("the live step", () => {
       ...extra,
     });
 
-  // protects=the live line moves Reading → Searching → Writing → Checking from the Answer's state, starts at Searching when it reads no Mind, and waiting for approval wins; fails_when=a step comes out of order, reading shows without a Mind read, or approval is hidden; no_claim=the 1-second hold is the component's, tested end to end.
-  test("reading, searching, writing, checking; waiting for approval first", () => {
+  // protects=the live line moves Reading → Searching → Thinking → Writing → Checking from the Answer's state, starts at Searching when it reads no Mind, says Thinking once the model has been asked and nothing is written or running, and waiting for approval wins; fails_when=a step comes out of order, reading shows without a Mind read, Searching stays up while the model thinks, or approval is hidden; no_claim=the 1-second hold is the component's, tested end to end.
+  test("reading, searching, thinking, writing, checking; waiting for approval first", () => {
     expect(live({ read: READ })).toEqual({ kind: "reading", mind: READ });
-    expect(live({ read: READ }, { phase: "writing" })).toEqual({ kind: "reading", mind: READ });
+    expect(live({ read: READ }, { phase: "writing" })).toEqual({ kind: "thinking" });
     expect(live({ read: READ }, { phase: "searching" })).toEqual({ kind: "searching" });
     expect(live({ read: READ, toolCalls: [search("s1", "heat")] }, { phase: "writing" })).toEqual({
-      kind: "searching",
+      kind: "thinking",
     });
     expect(live({})).toEqual({ kind: "searching" });
-    expect(live({}, { phase: "writing" })).toEqual({ kind: "searching" });
+    expect(live({}, { phase: "writing" })).toEqual({ kind: "thinking" });
     expect(live({ toolCalls: [search("s1", "heat")] }, { phase: "writing" })).toEqual({
+      kind: "thinking",
+    });
+    expect(live({ toolCalls: [{ ...search("s1", "heat"), status: "running" }] })).toEqual({
       kind: "searching",
     });
     expect(live({ text: "Parks are cooler", toolCalls: [search("s1", "heat")] })).toEqual({

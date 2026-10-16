@@ -170,14 +170,19 @@ const modelOf = (kind: ChatProviderKind, modelId: string, thinking?: ChatModelSp
   });
 
 /** The body of one Answer's request, written by the Answer engine, and the reasoning it read. */
-async function answer(kind: ChatProviderKind, modelId: string, reply: () => Response) {
+async function answer(
+  kind: ChatProviderKind,
+  modelId: string,
+  reply: () => Response,
+  thinking: ChatModelSpec["thinking"] = "summary",
+) {
   const bodies = fakeApi(reply);
   const events: AnswerEngineEvent[] = [];
   for await (const event of createAiSdkAnswerEngine().generate({
     instructions: () => "Answer briefly.",
     messages: [{ role: "user", content: "When are spring tides?" }],
     question: "When are spring tides?",
-    model: modelOf(kind, modelId, "summary"),
+    model: modelOf(kind, modelId, thinking),
     documents: {
       documentCount: 0,
       searchDocuments: async () => ({ text: "", passageCount: 0 }),
@@ -193,15 +198,28 @@ async function answer(kind: ChatProviderKind, modelId: string, reply: () => Resp
 }
 
 describe("An Answer's request to a model that thinks", () => {
-  // protects=Claude 5 models are asked for their summarized thinking, older ones get no thinking turned on; fails_when=a Claude 5 request lacks display "summarized", or Claude 4.8's carries thinking; no_claim=the fake API doesn't check what Anthropic accepts.
+  // protects=Claude 5 models are asked for their summarized thinking, at the default effort for a call that isn't an Answer, a modest one for an Answer and a larger one for an Answer that checks or calculates, and older ones get no thinking turned on; fails_when=a call that isn't an Answer carries an effort, an Answer lacks its effort, or Claude 4.8's carries thinking; no_claim=the fake API doesn't check what Anthropic accepts.
   test.each([
-    ["claude-sonnet-5-5", { type: "adaptive", display: "summarized" }],
-    ["claude-haiku-5-5", { type: "adaptive", display: "summarized" }],
-    ["claude-opus-4-8", undefined],
-  ])("Anthropic's %s: thinking %j", async (modelId, thinking) => {
-    const { body } = await answer("anthropic", modelId, anthropicReply);
-    expect(body.thinking).toEqual(thinking);
-  });
+    ["claude-sonnet-5-5", "summary", { type: "adaptive", display: "summarized" }, undefined],
+    ["claude-sonnet-5-5", "answer", { type: "adaptive", display: "summarized" }, { effort: "low" }],
+    ["claude-haiku-5-5", "answer", { type: "adaptive", display: "summarized" }, { effort: "low" }],
+    ["claude-opus-5-5", "answer", { type: "adaptive", display: "summarized" }, { effort: "low" }],
+    [
+      "claude-sonnet-5-5",
+      "careful",
+      { type: "adaptive", display: "summarized" },
+      { effort: "high" },
+    ],
+    ["claude-opus-4-8", "answer", undefined, undefined],
+    ["claude-opus-4-8", "careful", undefined, undefined],
+  ] as const)(
+    "Anthropic's %s, %s: thinking %j, %j",
+    async (modelId, thinking, expected, outputConfig) => {
+      const { body } = await answer("anthropic", modelId, anthropicReply, thinking);
+      expect(body.thinking).toEqual(expected);
+      expect(body.output_config).toEqual(outputConfig);
+    },
+  );
 
   // protects=OpenAI's reasoning models are asked for a reasoning summary, others for none; fails_when=gpt-6-luna lacks reasoning.summary or gpt-4.1 carries reasoning; no_claim=the fake API doesn't check what OpenAI accepts.
   test("OpenAI's reasoning models are asked for a reasoning summary; a model that doesn't reason, for none", async () => {

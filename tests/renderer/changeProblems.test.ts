@@ -70,6 +70,8 @@ describe("Why a call changed nothing, on its row", () => {
     { kind: "several", name: "Notes" },
     { kind: "no-heading", mindId: "a", heading: "Risks" },
     { kind: "no-place", mindId: "a", place: "Risks" },
+    { kind: "several-places", mindId: "a", name: "Summary", adding: false },
+    { kind: "several-places", mindId: "a", name: "Summary", adding: true },
     { kind: "no-text", mindId: "a" },
     { kind: "too-long", mindId: "a" },
     { kind: "changed", mindId: "a" },
@@ -87,6 +89,25 @@ describe("Why a call changed nothing, on its row", () => {
       expect(text).not.toBeNull();
       expect(text).not.toMatch(/mindCall\./);
     }
+  });
+
+  // protects=a name that fits several places reads as adding when a Block was to be added, in English and Chinese; fails_when=an add_to_mind row says it couldn't change; no_claim=none beyond protects.
+  test("the several-places reason says add to for add_to_mind", () => {
+    const place: MindProblem = {
+      kind: "several-places",
+      mindId: "a",
+      name: "Summary",
+      adding: true,
+    };
+    expect(problemText(en, place, "Q3 review")).toBe(
+      "Couldn't add to “Q3 review”: more than one place is called “Summary”",
+    );
+    expect(problemText(zh, place, "Q3 review")).toBe(
+      "无法添加到“Q3 review”：有多个位置叫“Summary”",
+    );
+    expect(problemText(en, { ...place, adding: false }, "Q3 review")).toBe(
+      "Couldn't change “Q3 review”: more than one place is called “Summary”",
+    );
   });
 
   // protects=the waiting reason names the count, and the Chinese reads as Chinese apps say it; fails_when=the count or the Mind is lost; no_claim=none beyond protects.

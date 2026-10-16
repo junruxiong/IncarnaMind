@@ -157,7 +157,7 @@ const fields = (value: unknown): Record<string, unknown> =>
     ? (value as Record<string, unknown>)
     : {};
 
-/** A list given as an array, or as an array written in JSON, as some models send it. */
+/** A list given as an array, as an array written in JSON, or as its one item alone, as some models send it. */
 export function givenList(value: unknown): unknown[] {
   if (typeof value === "string") {
     try {
@@ -166,7 +166,8 @@ export function givenList(value: unknown): unknown[] {
       return [];
     }
   }
-  return Array.isArray(value) ? value : [];
+  if (Array.isArray(value)) return value;
+  return Object.keys(fields(value)).length > 0 ? [value] : [];
 }
 
 function givenInput(value: unknown): GivenInput {

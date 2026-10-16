@@ -24,6 +24,7 @@ const COPIED_MS = 1500;
 export function AnswerActions({
   answer,
   streaming,
+  stopAbove,
   canKeep,
   focusedMindName,
   onAdd,
@@ -31,6 +32,8 @@ export function AnswerActions({
 }: {
   answer: ConversationAnswer;
   streaming: boolean;
+  /** Stop is already on the line above, which says how long the wait takes. */
+  stopAbove: boolean;
   /** It has something to keep: Copy and Add to note. */
   canKeep: boolean;
   /** The Mind in focus, which Add to note adds to; null opens the ▾ instead. */
@@ -62,7 +65,9 @@ export function AnswerActions({
     return () => clearTimeout(timer);
   }, [copied]);
 
-  if (streaming) return <WritingLine onStop={() => stopAnswer(answer.id)} />;
+  if (streaming) {
+    return stopAbove ? null : <WritingLine onStop={() => stopAnswer(answer.id)} />;
+  }
 
   if (added) {
     return (

@@ -339,6 +339,7 @@ describe("exporting a Mind to HTML", () => {
           },
           pdf: { includeQuestions: false },
           html: { includeQuestions: true },
+          "share-page": { includeQuestions: false, citationCards: true, checkedLine: false },
         },
       },
     });

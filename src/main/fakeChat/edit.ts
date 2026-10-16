@@ -11,6 +11,7 @@
  * "slowly", then a line saying why (#202).
  */
 
+import { appliedEditReply } from "./appliedEdits";
 import { type Prompt, SHORTEN, SLOWLY, type StreamPart, USAGE } from "./prompt";
 
 const FILLER = /(?:\b(?:very|really|truly|quite|actually|basically)\s+|非常|真的|其实|十分)/giu;
@@ -81,6 +82,8 @@ function editedText(action: string, passage: string, asked: string): string {
       return `This passage says: ${words}…`;
     }
     default: {
+      const applied = appliedEditReply(passage, asked);
+      if (applied !== null) return applied;
       const replace =
         /replace\s+[“"]?(.+?)[”"]?\s+with\s+[“"]?(.+?)[”"]?\.?$/i.exec(asked) ??
         /把\s*[“"]?(.+?)[”"]?\s*换成\s*[“"]?(.+?)[”"]?。?$/u.exec(asked);

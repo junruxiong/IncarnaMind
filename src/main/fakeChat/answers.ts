@@ -14,7 +14,11 @@
  * asks "by quarter" (按季度) gets a table of quarterly figures, its marker in each cell
  * but the last, to chart (#436); "分季度" gets the same in Chinese, in 万元, and
  * "in millions" each figure as "$289.4 million"; one that asks for "four columns" gets a
- * table of four, wider than the assistant (#612); one with "cited below" (or 引用在下) gets a
+ * table of four, wider than the assistant (#612); one that asks for "two tables" (两个表) gets
+ * two small ones; one that asks for "nine rows" (九行) gets
+ * three peers' figures in nine rows, with the first column's labels; one that asks for "forty
+ * citations" (四十条引用) gets forty sentences, each with a marker, and one that asks for "twelve in a
+ * row" (连续十二条) gets one sentence with twelve markers side by side; one with "cited below" (or 引用在下) gets a
  * table whose one Citation stands in a paragraph under it, and one with "framed" (or 带说明)
  * gets a lead-in before its content and a closing note after it (#702).
  * One that asks how much something grew (增长) has the growth from the first
@@ -29,7 +33,7 @@
  */
 
 import { cellReply, isCell } from "./cells";
-import { passagesIn, recordFor, recordsFor } from "./passages";
+import { FORTY_CITATIONS, passagesIn, recordFor, recordsFor, TWELVE_IN_A_ROW } from "./passages";
 import {
   lastQuestion,
   type Prompt,
@@ -97,6 +101,105 @@ const wideTableAnswer = (marker: string) =>
     "",
     "That is all.",
   ].join("\n");
+
+const TWO_TABLES = /\btwo tables\b|两个表/i;
+
+function twoTablesAnswer(question: string): string {
+  const chinese = /\p{Script=Han}/u.test(question);
+  return (
+    chinese
+      ? [
+          "| 季度 | 收入 |",
+          "|:--|--:|",
+          "| 一季度 | 289.4 |",
+          "| 二季度 | 301.2 |",
+          "",
+          "| 地区 | 占比 |",
+          "|:--|--:|",
+          "| 北方 | 41% |",
+          "| 南方 | 59% |",
+          "",
+          "以上。",
+        ]
+      : [
+          "| Quarter | Revenue |",
+          "|:--|--:|",
+          "| Q1 | 289.4 |",
+          "| Q2 | 301.2 |",
+          "",
+          "| Region | Share |",
+          "|:--|--:|",
+          "| North | 41% |",
+          "| South | 59% |",
+          "",
+          "That is all.",
+        ]
+  ).join("\n");
+}
+
+const NINE_ROWS = /\bnine rows\b|九行/i;
+
+function nineRowsAnswer(question: string, marker: string): string {
+  const chinese = /\p{Script=Han}/u.test(question);
+  const rows = chinese
+    ? [
+        ["营业收入（近十二个月）", "128,460 百万元", "94,120 百万元", "21,050 百万元"],
+        ["上半年利润率", "40.3%", "39.5%", "37.9%"],
+        ["第三季度利润率", "38.4%", "37.1%", "36.8%"],
+        ["变化", "−1.9 个百分点", "−2.4 个百分点", "−1.1 个百分点"],
+        ["息税折旧摊销前利润（近十二个月）", "10,280 百万元", "6,110 百万元", "1,490 百万元"],
+        ["净债务", "24,670 百万元", "20,770 百万元", "3,880 百万元"],
+        ["净杠杆率", "2.4×", "3.4×", "2.6×"],
+        ["契约上限", "3.5×", "3.5×", "3.25×"],
+        ["余量", "1.1×", "0.1×", "0.65×"],
+      ]
+    : [
+        ["Revenue, LTM", "£12,846m", "£9,412m", "£2,105m"],
+        ["Margin, H1", "40.3%", "39.5%", "37.9%"],
+        ["Margin, Q3", "38.4%", "37.1%", "36.8%"],
+        ["Change", "−1.9 pts", "−2.4 pts", "−1.1 pts"],
+        ["EBITDA, LTM", "£1,028m", "£611m", "£149m"],
+        ["Net debt", "£2,467m", "£2,077m", "£388m"],
+        ["Net leverage", "2.4×", "3.4×", "2.6×"],
+        ["Covenant limit", "3.5×", "3.5×", "3.25×"],
+        ["Headroom", "1.1×", "0.1×", "0.65×"],
+      ];
+  const head = chinese
+    ? ["指标", "哈罗食品", "明智超市", "考尔德杂货"]
+    : ["Figure", "Harrow Foods", "Brightmart", "Calder Grocers"];
+  return [
+    `| ${head.join(" | ")} |`,
+    "|:--|--:|--:|--:|",
+    ...rows.map(([label, ...cells], index) => {
+      const cited = cells.map((cell, column) =>
+        index === 0 && column === 0 ? `${cell} ${marker}` : cell,
+      );
+      return `| ${label} | ${cited.join(" | ")} |`;
+    }),
+    "",
+    chinese ? "变化和余量为计算所得。" : "Change and headroom are calculated.",
+  ].join("\n");
+}
+
+function fortyCitationsAnswer(question: string): string {
+  const chinese = /\p{Script=Han}/u.test(question);
+  const sentences = Array.from({ length: 40 }, (_, index) =>
+    chinese
+      ? `第${index + 1}条说明潮水每天涨落两次，月亮的位置决定了涨落的时间[^${index + 1}]。`
+      : `Statement ${index + 1} says the tide rises and falls twice a day, at hours that follow the moon [^${index + 1}].`,
+  );
+  const paragraphs: string[] = [];
+  for (let at = 0; at < sentences.length; at += 8)
+    paragraphs.push(sentences.slice(at, at + 8).join(chinese ? "" : " "));
+  return paragraphs.join("\n\n");
+}
+
+const twelveInARowAnswer = (question: string) => {
+  const markers = Array.from({ length: 12 }, (_, index) => `[^${index + 1}]`).join("");
+  return /\p{Script=Han}/u.test(question)
+    ? `潮水每天涨落两次${markers}。`
+    : `The tide rises and falls twice a day ${markers}.`;
+};
 
 /** A Question whose table is cited under it, and one that is framed by a lead-in and a closing note (#702). */
 const CITED_BELOW = /\bcited below\b|引用在下/i;
@@ -263,12 +366,20 @@ export function answerReply(prompt: Prompt, tools: readonly string[]): Reply {
         )
       : FOUR_COLUMNS.test(question)
         ? wideTableAnswer(recorded[0] ?? "")
-        : CITED_BELOW.test(question) || FRAMED.test(question)
-          ? citedBelowAnswer(question, recorded[0] ?? "")
-          : AS_A_TABLE.test(question)
-            ? tableAnswer(recorded.join(" "))
-            : recorded.length > 1
-              ? `Your Documents answer this ${recorded.join(" ")}.\n\nThat is all.`
-              : CITED_ANSWER;
+        : TWO_TABLES.test(question)
+          ? twoTablesAnswer(question)
+          : NINE_ROWS.test(question)
+            ? nineRowsAnswer(question, recorded[0] ?? "")
+            : FORTY_CITATIONS.test(question)
+              ? fortyCitationsAnswer(question)
+              : TWELVE_IN_A_ROW.test(question)
+                ? twelveInARowAnswer(question)
+                : CITED_BELOW.test(question) || FRAMED.test(question)
+                  ? citedBelowAnswer(question, recorded[0] ?? "")
+                  : AS_A_TABLE.test(question)
+                    ? tableAnswer(recorded.join(" "))
+                    : recorded.length > 1
+                      ? `Your Documents answer this ${recorded.join(" ")}.\n\nThat is all.`
+                      : CITED_ANSWER;
   return { text: skill ? `Following the Skill ${skill}.\n\n${answer}` : answer };
 }

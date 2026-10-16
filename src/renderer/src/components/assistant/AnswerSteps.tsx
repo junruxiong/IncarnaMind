@@ -24,6 +24,7 @@ import { stepsScope } from "../../assistantContext";
 import { NO_SCOPE } from "../../composer";
 import { CallRow, SkillRow } from "../../editor/AnswerView";
 import { CheckMarkIcon, RegenerateSmallIcon } from "../../editor/icons";
+import { holdSteps, type ShownStep, type StepHold, takeOver } from "../../heldStep";
 import { useT } from "../../i18n";
 import { useMeetings } from "../../meetings";
 import { useModelNames } from "../../modelNames";
@@ -41,10 +42,9 @@ import {
   SparkLineIcon,
 } from "../lineIcons";
 import { ProblemLine } from "../ProblemLine";
+import { AnswerWait } from "./AnswerWait";
 import { mindCallText, namedMind } from "./MindCall";
 
-/** The least time a live step stays up while another replaces it, so the line never flickers. */
-const MIN_STEP_MS = 1000;
 /** Sources shown under a search before "+N more". */
 const SHOWN_SOURCES = 3;
 
@@ -59,12 +59,14 @@ export function AnswerSteps({
   question,
   streaming,
   waitingForApproval,
+  wait,
   onRegenerate,
 }: {
   answer: ConversationAnswer;
   question: ConversationQuestion | undefined;
   streaming: boolean;
   waitingForApproval: boolean;
+  wait: { usual: number | null } | null;
   onRegenerate(): void;
 }) {
   const t = useT();
@@ -78,11 +80,14 @@ export function AnswerSteps({
   if (streaming && open) setOpen(false);
   if (streaming) {
     return (
-      <LiveLine
-        step={liveStep({ answer, phase, waitingForApproval })}
-        scope={scopeOf(0)}
-        askedFrom={askedFrom}
-      />
+      <>
+        <LiveLine
+          step={liveStep({ answer, phase, waitingForApproval })}
+          scope={scopeOf(0)}
+          askedFrom={askedFrom}
+        />
+        {wait && <AnswerWait answer={answer} usual={wait.usual} />}
+      </>
     );
   }
   const line = foldedLine({ answer, askedFrom, meeting, selection });
@@ -165,34 +170,24 @@ export function LiveLine({
   );
 }
 
-/**
- * The step to show: a new one shows once the one before has been up a
- * second, then the latest; one that waits for the User shows at once.
- */
+/** The step to show (see `holdSteps`). */
 function useHeldStep(step: LiveStep): LiveStep {
-  const [shown, setShown] = useState(step);
-  const since = useRef(Date.now());
+  const taken = useRef<ShownStep | null | undefined>(undefined);
+  if (taken.current === undefined) taken.current = takeOver(step);
+  const [shown, setShown] = useState(taken.current?.step ?? step);
+  const hold = useRef<StepHold | null>(null);
+  hold.current ??= holdSteps(taken.current ?? { step, since: Date.now() }, setShown);
   const latest = useRef(step);
   latest.current = step;
   const key = liveStepKey(step);
-  const shownKey = liveStepKey(shown);
+  useEffect(() => hold.current?.mount(), []);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a step is offered when its kind changes; its count rides along in `step`.
   useEffect(() => {
-    if (key === shownKey) return;
-    const show = () => {
-      since.current = Date.now();
-      setShown(latest.current);
-    };
-    const waits = latest.current.kind === "waiting" || latest.current.kind === "consent";
-    const left = MIN_STEP_MS - (Date.now() - since.current);
-    if (waits || left <= 0) {
-      show();
-      return;
-    }
-    const timer = setTimeout(show, left);
-    return () => clearTimeout(timer);
-  }, [key, shownKey]);
+    hold.current?.offer(latest.current);
+    return () => hold.current?.stop();
+  }, [key]);
   // The same step with a new count (Citations) shows the new one.
-  return key === shownKey ? step : shown;
+  return key === liveStepKey(shown) ? step : shown;
 }
 
 function liveText(
@@ -214,6 +209,8 @@ function liveText(
       return t("steps.live.searching", { scope });
     case "call":
       return runningText(t, step.call, mindOf);
+    case "thinking":
+      return t("steps.live.thinking");
     case "writing":
       return t("answer.phase.writing");
     case "checking":

@@ -33,6 +33,7 @@ import type {
   Document,
   DocumentStatus,
   Money,
+  RecordAiUseInput,
   RunStop,
   TextPlace,
 } from "../../api";
@@ -42,7 +43,7 @@ import type { MindContent } from "../../mindContent";
 import type { PreparedChatModel } from "../../providers/chat";
 import { currentTask } from "../../runs/current";
 import { RunItemError, runItems } from "../../runs/stop";
-import { type ClaimCheckRequest, runFailureOf } from "./claimCheck";
+import { type ClaimCheckRequest, recordJudged, runFailureOf } from "./claimCheck";
 import {
   everySentence,
   markedSentences,
@@ -104,6 +105,7 @@ export interface WatchOptions {
     at: string,
   ): ClaimCheckAttributes;
   retainEvidence(mindId: string): void;
+  recordAiUse(inputs: RecordAiUseInput[]): void;
   track(requestId: string, mindId: string): { signal: AbortSignal; done(): void };
   background: Pick<BackgroundQueue, "add">;
   /** What a run's requests billed per token cost; null when none was priced. */
@@ -179,8 +181,10 @@ export function createContradictionWatch(options: WatchOptions) {
     folderId: string,
     claim: Claim,
     result: ClaimCheckResult,
+    prepared: PreparedChatModel,
   ) {
     const at = options.now().toISOString();
+    recordJudged(options.recordAiUse, mindId, prepared, result, at);
     const kept = content.edit(mindId, (blocks) => {
       const sentence = everySentence(blocks).find(
         (each) => each.blockId === claim.blockId && each.text === claim.text,
@@ -209,10 +213,14 @@ export function createContradictionWatch(options: WatchOptions) {
         state: "checking",
         reason: null,
         detail: null,
+        providerId: prepared.provider.id,
+        modelId: prepared.modelId,
         text: sentence.text,
         evidence: null,
         says: null,
         calculation: null,
+        citedCaseUnchecked: false,
+        citedCaseFound: false,
         scope: { folderId, widened: false },
         versions: [],
         excluded: [],
@@ -265,7 +273,7 @@ export function createContradictionWatch(options: WatchOptions) {
           const result = outcome.value;
           if (result.verdict !== "not-checked") checked++;
           if (result.verdict === "contradicted") contradicted++;
-          write(mindId, request, ready.folderId, claim, result);
+          write(mindId, request, ready.folderId, claim, result, prepared);
         },
       },
     );
@@ -368,7 +376,7 @@ export function createContradictionWatch(options: WatchOptions) {
               if (result.verdict !== "not-checked") checked++;
               if (result.verdict === "contradicted") contradicted++;
               options.requireMind(mindId);
-              write(mindId, request, ready.folderId, claim, result);
+              write(mindId, request, ready.folderId, claim, result, prepared);
             }
           } finally {
             if (!call.signal.aborted) finish();

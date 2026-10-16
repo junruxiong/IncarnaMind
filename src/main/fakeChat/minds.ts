@@ -6,7 +6,7 @@
  * the Mind, with who made each (#734).
  *
  * In the assistant, with the Minds' Tools (#202, `mindsReply`): a request to
- * shorten (缩短, 改短) calls edit_mind with the request as its instruction,
+ * shorten (缩短, 改短), or to "replace X with Y", calls edit_mind with the request as its instruction,
  * which Edit with AI's scripted model carries out as Shorten; one for a new
  * note (新笔记, 新建) calls create_mind, titled from what follows "called"
  * (叫), its content citing the Documents when there are any; and "add X to
@@ -18,6 +18,7 @@
  */
 
 import { answerReply, CITED_ANSWER } from "./answers";
+import { ASSISTANT_REPLACES } from "./appliedEdits";
 import {
   lastQuestion,
   lastResult,
@@ -102,7 +103,7 @@ export function mindsReply(prompt: Prompt, asked: string, names: readonly string
       text: `${firstSentence(lastResult(prompt, "add_to_mind") ?? "")} ${firstSentence(made)}`,
     };
   }
-  if (SHORTEN.test(question)) {
+  if (SHORTEN.test(question) || ASSISTANT_REPLACES.test(question)) {
     const result = lastResult(prompt, "edit_mind");
     // Asked "slowly", the edit is written slowly too.
     if (result === undefined) return { tool: "edit_mind", input: { instruction: asked } };

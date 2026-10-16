@@ -63,6 +63,7 @@ import type {
   SearchResultForModel,
   UnfoundQuote,
 } from "./engine";
+import { NOT_CITED_ATTRIBUTE } from "./prompt";
 
 /** How many times one Answer may search; later searches are refused, so the model answers. */
 const MAX_SEARCHES_PER_ANSWER = 5;
@@ -542,12 +543,13 @@ interface ShownPassage {
   /** For every kind but PDF: the label of the Units it covers, e.g. "slides 3–4". */
   location: string | null;
   text: string;
+  notCited: boolean;
 }
 
 /** Passages as the model sees them, each with its short id, Document, its date, and pages or Location. */
 function formatPassages(passages: readonly ShownPassage[]): string {
   return passages
-    .map(({ id, documentName, date, range, location, text }) => {
+    .map(({ id, documentName, date, range, location, text, notCited }) => {
       const pages = pagesLabel(range);
       const where = location
         ? ` location="${attribute(location)}"`
@@ -555,7 +557,8 @@ function formatPassages(passages: readonly ShownPassage[]): string {
           ? ` pages="${pages}"`
           : "";
       const dated = date ? ` date="${attribute(date)}"` : "";
-      return `<passage id="${id}" document="${attribute(documentName)}"${dated}${where}>\n${text}\n</passage>`;
+      const never = notCited ? NOT_CITED_ATTRIBUTE : "";
+      return `<passage id="${id}" document="${attribute(documentName)}"${dated}${where}${never}>\n${text}\n</passage>`;
     })
     .join("\n\n");
 }
@@ -733,7 +736,7 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
     if (!quote) return null;
     for (const [passageId, handle] of handleOf) {
       const source = documents.citationSource(passageId);
-      if (!source || source.documentDeleted) continue;
+      if (!source || source.documentDeleted || source.notCited) continue;
       const units = documents.pageTexts(
         source.documentId,
         source.contentHash,
@@ -790,6 +793,12 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
       return {
         ok: false,
         problem: `there is no Passage "${String(input.passage)}" in your search results; use a Passage's id, such as P1.`,
+      };
+    }
+    if (source.notCited) {
+      return {
+        ok: false,
+        problem: `${found.handle} is from the User's own working file, which is read but never cited; cite a Passage from another Document, or leave the claim without a marker.`,
       };
     }
     const passageUnits = documents.pageTexts(
@@ -952,7 +961,9 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
       const id = handleFor(passage.passageId);
       // A browser-made PDF's "⼤" for "大": every other reader of the text folds it (ADR-0009).
       const text = foldRadicals(withCueMarks(marked, units));
-      shownTexts.set(id, text);
+      const notCited = documents.citationSource(passage.passageId)?.notCited ?? false;
+      // What later requests offer for citing is what was shown here: never a Passage no record may name.
+      if (!notCited) shownTexts.set(id, text);
       return {
         id,
         documentName: passage.documentName,
@@ -960,6 +971,7 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
         range,
         location: passageLocation(units),
         text,
+        notCited,
       };
     });
     return formatPassages(formatted);

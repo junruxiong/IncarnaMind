@@ -89,6 +89,7 @@ export type LiveStep =
   | { kind: "reading"; mind: AskedFrom }
   | { kind: "searching" }
   | { kind: "call"; call: AnswerToolCall }
+  | { kind: "thinking" }
   | { kind: "writing" }
   | { kind: "checking"; count: number }
   | { kind: "checking-figures" };
@@ -306,7 +307,8 @@ export function foldedLine(input: StepsInput): FoldedLine | null {
  * text and its Citations: waiting for the User first; then loading,
  * checking quotes or figures, searching or another call running; then writing, which
  * becomes checking once every marker in the text has its Citation; before
- * any text, searching once it has searched, else reading the Mind it reads.
+ * any text, thinking once the model has been asked, else reading the Mind it
+ * reads, else searching.
  */
 export function liveStep({
   answer,
@@ -336,6 +338,7 @@ export function liveStep({
       ? { kind: "checking", count: markers.length }
       : { kind: "writing" };
   }
+  if (phase === "writing") return { kind: "thinking" };
   if (answer.read && !answer.toolCalls.some(isSearch))
     return { kind: "reading", mind: answer.read };
   return { kind: "searching" };

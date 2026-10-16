@@ -1,6 +1,7 @@
 import { generateText, streamText } from "ai";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { createAiSdkChatModel } from "../../src/core/providers/models";
+import { createAiSdkAnswerEngine } from "../../src/core/answers/engine";
+import { type ChatModelSpec, createAiSdkChatModel } from "../../src/core/providers/models";
 
 /*
  * A small call asks a Claude model not to think in the form that model takes (#907): the
@@ -37,15 +38,22 @@ const events = [
   { type: "message_stop" },
 ];
 
-/** Anthropic's Messages API, refusing a request whose `thinking` is `refusal.type` with its message. */
-function anthropic(refusal?: { type: string; message: string }): Body[] {
+/**
+ * Anthropic's Messages API, refusing with `refusal.message` a request whose `thinking` is
+ * `refusal.type`, or, with `effort`, one that carries an effort.
+ */
+function anthropic(refusal?: { type?: string; effort?: true; message: string }): Body[] {
   const bodies: Body[] = [];
   vi.stubGlobal(
     "fetch",
     vi.fn(async (_url: string, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body)) as Body;
       bodies.push(body);
-      if (refusal && body.thinking?.type === refusal.type) {
+      if (
+        refusal &&
+        ((refusal.type !== undefined && body.thinking?.type === refusal.type) ||
+          (refusal.effort && body.output_config?.effort !== undefined))
+      ) {
         return Response.json(
           { type: "error", error: { type: "invalid_request_error", message: refusal.message } },
           { status: 400 },
@@ -129,6 +137,93 @@ describe("A small call to a Claude model", () => {
   test("a refusal that names no other form is the call's failure, asked once", async () => {
     const bodies = anthropic({ type: "disabled", message: "max_tokens: too large" });
     await expect(ask("claude-next-8", "off")).rejects.toThrow("max_tokens");
+    expect(bodies).toHaveLength(1);
+  });
+});
+
+const EFFORT_REFUSAL = {
+  effort: true as const,
+  message: "output_config.effort: Extra inputs are not permitted",
+};
+
+const answering = (modelId: string, thinking: ChatModelSpec["thinking"]) =>
+  createAiSdkChatModel({ kind: "anthropic", baseUrl: null, apiKey: "key", modelId, thinking });
+
+/** An Answer written as the app writes one: its text, from the engine. */
+async function writeAnswer(modelId: string, thinking: ChatModelSpec["thinking"]) {
+  let text = "";
+  for await (const event of createAiSdkAnswerEngine().generate({
+    instructions: () => "Answer briefly.",
+    messages: [{ role: "user", content: "When are spring tides?" }],
+    question: "When are spring tides?",
+    model: answering(modelId, thinking),
+    documents: {
+      documentCount: 0,
+      searchDocuments: async () => ({ text: "", passageCount: 0 }),
+      cite: () => "",
+    },
+    tools: [],
+    signal: new AbortController().signal,
+  })) {
+    if (event.type === "text-delta") text += event.text;
+  }
+  return text;
+}
+
+describe("An Answer's thinking budget", () => {
+  // protects=a model that refuses the effort still writes its Answer, asked again once without it, and its later Answers leave the effort out from the start; fails_when=the Answer fails with the refusal, is asked twice with the effort, or a later Answer sends the effort again; no_claim=the refusal is Anthropic's recorded shape, not a live one.
+  test.each([
+    ["claude-sonnet-5-9", "answer", "low"],
+    ["claude-opus-5-9", "careful", "high"],
+  ] as const)(
+    "%s, %s: asked again without the effort, and then without it from the start",
+    async (modelId, thinking, effort) => {
+      const bodies = anthropic(EFFORT_REFUSAL);
+      expect(await writeAnswer(modelId, thinking)).toBe("OK");
+      expect(bodies.map((body) => body.output_config?.effort)).toEqual([effort, undefined]);
+      expect(bodies.map((body) => body.thinking?.type)).toEqual(["adaptive", "adaptive"]);
+
+      bodies.length = 0;
+      expect(await writeAnswer(modelId, thinking)).toBe("OK");
+      expect(bodies.map((body) => body.output_config?.effort)).toEqual([undefined]);
+    },
+  );
+
+  test("a call that isn't streamed is asked again without it too", async () => {
+    const bodies = anthropic(EFFORT_REFUSAL);
+    const reply = await generateText({
+      model: answering("claude-haiku-5-9", "answer"),
+      prompt: "Hi",
+      maxRetries: 0,
+    });
+    expect(reply.text).toBe("OK");
+    expect(bodies.map((body) => body.output_config?.effort)).toEqual(["low", undefined]);
+  });
+
+  test("two calls at once that are both refused are both asked again", async () => {
+    const bodies = anthropic(EFFORT_REFUSAL);
+    const model = answering("claude-sonnet-5-7", "answer");
+    const replies = await Promise.all(
+      ["A", "B"].map((prompt) => generateText({ model, prompt, maxRetries: 0 })),
+    );
+    expect(replies.map((reply) => reply.text)).toEqual(["OK", "OK"]);
+    expect(bodies.map((body) => body.output_config?.effort)).toEqual([
+      "low",
+      "low",
+      undefined,
+      undefined,
+    ]);
+  });
+
+  test("a refusal that doesn't name the effort is the call's failure, asked once", async () => {
+    const bodies = anthropic({ effort: true, message: "max_tokens: too large" });
+    await expect(
+      generateText({
+        model: answering("claude-sonnet-5-8", "answer"),
+        prompt: "Hi",
+        maxRetries: 0,
+      }),
+    ).rejects.toThrow("max_tokens");
     expect(bodies).toHaveLength(1);
   });
 });

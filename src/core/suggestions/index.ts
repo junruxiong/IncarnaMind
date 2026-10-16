@@ -321,7 +321,9 @@ export function createSuggestions(options: SuggestionsOptions) {
     if ((await pausedFor(choice)) !== null || !choice || signal.aborted) return NONE;
 
     const query = queryOf(paragraph);
-    const found = await citing.findPassages(query, documentIds, signal);
+    const found = (await citing.findPassages(query, documentIds, signal)).filter(
+      (passage) => !passage.notCited,
+    );
     const best = found[0];
     if (signal.aborted || !best || !isStrongMatch(query, best)) return NONE;
 

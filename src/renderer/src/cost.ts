@@ -7,15 +7,15 @@ type Translate = (key: MessageKey, params?: MessageParams) => string;
 
 /**
  * An amount in its currency: cents, and a small amount to its first figures
- * rather than "$0.00", so one short Answer still shows ("$0.0013"). Dollars
- * are "$" in every language, where Chinese would write "US$".
+ * rather than "$0.00", so one short Answer still shows ("$0.0013"). Each
+ * currency has its one symbol in every language: "$", never "US$", and "¥".
  */
 export function formatMoney({ amount, currency }: Money, language: Language): string {
   const small = amount > 0 && amount < 0.01;
   return new Intl.NumberFormat(language, {
     style: "currency",
     currency,
-    currencyDisplay: currency === "USD" ? "narrowSymbol" : "symbol",
+    currencyDisplay: "narrowSymbol",
     minimumFractionDigits: amount === 0 ? 0 : 2,
     maximumFractionDigits: small ? 4 : 2,
   }).format(amount);

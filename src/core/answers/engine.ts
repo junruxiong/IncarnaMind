@@ -111,6 +111,7 @@ import { retryFigures } from "./figureRetry";
 import { missingMarkerEvents, textEdits } from "./markerPlacement";
 import {
   datedDocumentsNote,
+  notCitedNote,
   SEARCH_QUERY_INSTRUCTIONS,
   searchQueryPrompt,
   TRANSLATE_QUERY_INSTRUCTIONS,
@@ -248,6 +249,12 @@ export interface AnswerTools {
    */
   correctQuote?(marker: number, quote: string): boolean;
   /**
+   * Whether the Answer wrote its text into a Mind: its Citations are
+   * there, so its reply only reports what was done, and no marker the model
+   * left out of the reply is placed in it, nor any asked for.
+   */
+  wroteIntoMind?(): boolean;
+  /**
    * Takes calculated figures (ADR-0021, ./calculations); returns what to tell
    * the model about them. Absent: the Answer offers no `calculate`.
    */
@@ -332,6 +339,13 @@ export interface AnswerRequest {
   question: string;
   /** The model to answer with, from `Core.prepareChatModel`. */
   model: ChatLanguageModel;
+  /**
+   * The quick-tasks model, for the calls that don't write the Answer:
+   * rewriting a follow-up Question into a search query, and translating the
+   * query. Asked for only when one is made; without it, or when it can't be
+   * had (e.g. its flow was declined), the Answer's model makes them.
+   */
+  quickModel?(): Promise<ChatLanguageModel>;
   /** Searching and citing the Documents: the Documents' Tools, and the search of a model without Tools. */
   documents: AnswerTools;
   /**
@@ -724,13 +738,16 @@ const recordsSchema = {
 
 /** Records from the model's JSON, kept only where they have the right shape. */
 function parseRecords(value: unknown): CitationRecordInput[] {
-  // Some models send the array as a JSON string.
+  // Some models send the array as a JSON string, or one record alone.
   if (typeof value === "string") {
     try {
       return parseRecords(JSON.parse(value));
     } catch {
       return [];
     }
+  }
+  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+    return parseRecords([value]);
   }
   if (!Array.isArray(value)) return [];
   return value.flatMap((item): CitationRecordInput[] => {
@@ -783,6 +800,39 @@ function queryIn(reply: string): string {
     .slice(0, MAX_QUERY_LENGTH);
 }
 
+/** The model a call that doesn't write the Answer goes to, with the temperature it gets. */
+interface SmallCallModel {
+  model: ChatLanguageModel;
+  temperature: number | undefined;
+}
+
+/** What a call that doesn't write the Answer gave: its text, and the tokens it counted. */
+interface SmallCallResult<T> {
+  value: T;
+  usage: TokenUsage | null;
+}
+
+/**
+ * The quick-tasks model, else the Answer's (see `AnswerRequest.quickModel`).
+ * Another model than the Answer's runs at its provider's own temperature.
+ */
+async function smallCallModel(
+  request: AnswerRequest,
+  temperature: number | undefined,
+): Promise<SmallCallModel> {
+  if (request.quickModel) {
+    try {
+      const quick = await request.quickModel();
+      if (quick !== request.model) return { model: quick, temperature: undefined };
+    } catch (error) {
+      if (!request.signal.aborted) {
+        console.error(`The quick-tasks model couldn't be used: ${messageOf(error)}`);
+      }
+    }
+  }
+  return { model: request.model, temperature };
+}
+
 /**
  * What a model that can't call Tools searches for: the Question, rewritten by
  * the model into one query that stands on its own, from the Question context
@@ -793,14 +843,15 @@ function queryIn(reply: string): string {
  */
 async function searchQuery(
   request: AnswerRequest,
-  temperature: number | undefined,
-): Promise<string> {
+  small: () => Promise<SmallCallModel>,
+): Promise<SmallCallResult<string>> {
   const { question, signal } = request;
   const earlier = earlierContext(request.messages, question);
-  if (!earlier) return question;
+  if (!earlier) return { value: question, usage: null };
   try {
-    const { text } = await generateText({
-      model: request.model,
+    const { model, temperature } = await small();
+    const { text, usage } = await generateText({
+      model,
       instructions: SEARCH_QUERY_INSTRUCTIONS,
       prompt: searchQueryPrompt(earlier, question),
       temperature,
@@ -810,12 +861,12 @@ async function searchQuery(
       maxRetries: 0,
       abortSignal: signal,
     });
-    return queryIn(text) || question;
+    return { value: queryIn(text) || question, usage: tokenUsageOf(usage) };
   } catch (error) {
     if (!signal.aborted) {
       console.error(`The Question couldn't be rewritten for search: ${messageOf(error)}`);
     }
-    return question;
+    return { value: question, usage: null };
   }
 }
 
@@ -880,11 +931,12 @@ async function translatedQuery(
   request: AnswerRequest,
   query: string,
   language: string,
-  temperature: number | undefined,
-): Promise<string | null> {
+  small: () => Promise<SmallCallModel>,
+): Promise<SmallCallResult<string | null>> {
   try {
-    const { text } = await generateText({
-      model: request.model,
+    const { model, temperature } = await small();
+    const { text, usage } = await generateText({
+      model,
       instructions: TRANSLATE_QUERY_INSTRUCTIONS,
       prompt: translateQueryPrompt(query, language),
       temperature,
@@ -894,12 +946,15 @@ async function translatedQuery(
       abortSignal: request.signal,
     });
     const translated = queryIn(text);
-    return translated && translated !== query ? translated : null;
+    return {
+      value: translated && translated !== query ? translated : null,
+      usage: tokenUsageOf(usage),
+    };
   } catch (error) {
     if (!request.signal.aborted) {
       console.error(`The search query couldn't be translated: ${messageOf(error)}`);
     }
-    return null;
+    return { value: null, usage: null };
   }
 }
 
@@ -1068,15 +1123,25 @@ function createWritingEngine(options: AiSdkAnswerEngineOptions): AnswerEngine {
       let searched: SearchResultForModel | undefined;
       async function* searchOnce(): AsyncGenerator<AnswerEngineEvent, SearchResultForModel> {
         if (searched !== undefined) return searched;
-        const query = await searchQuery(request, temperature());
+        // The quick-tasks model is asked for once, and only if a call needs it.
+        let small: Promise<SmallCallModel> | undefined;
+        const smallModel = () => {
+          small ??= smallCallModel(request, temperature());
+          return small;
+        };
+        const rewrite = await searchQuery(request, smallModel);
+        if (rewrite.usage) yield { type: "usage", usage: rewrite.usage };
+        const query = rewrite.value;
         signal.throwIfAborted();
         const language = searchLanguage(
           request.question,
           request.documents.documentLanguages ?? [],
         );
-        const translated = language
-          ? await translatedQuery(request, query, language, temperature())
+        const translation = language
+          ? await translatedQuery(request, query, language, smallModel)
           : null;
+        if (translation?.usage) yield { type: "usage", usage: translation.usage };
+        const translated = translation?.value ?? null;
         signal.throwIfAborted();
         const searches: [string, string][] = [
           ["question-search", query],
@@ -1268,6 +1333,7 @@ export function documentTools(
         // The dates are named from the Passages that fit, so never a Document the model wasn't handed.
         const notes = [
           datedDocumentsNote(result.text),
+          notCitedNote(result.text),
           unreadDocumentsNote(documents.unreadDocuments?.() ?? []),
         ];
         return [result.text, ...notes].filter((part) => part !== "").join("\n\n");
@@ -1537,8 +1603,10 @@ async function* toolLoop(
     yield* flag(keptText);
   }
   async function* endAnswer(): AsyncGenerator<AnswerEngineEvent> {
-    const placed = yield* missingMarkerEvents(keptText, cited, request.documents);
-    yield* citeUnmarked(request, placed, temperature, budget);
+    if (!request.documents.wroteIntoMind?.()) {
+      const placed = yield* missingMarkerEvents(keptText, cited, request.documents);
+      yield* citeUnmarked(request, placed, temperature, budget);
+    }
     yield { type: "finished" };
   }
   const runTools = tools.map(tracked);

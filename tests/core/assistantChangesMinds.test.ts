@@ -1,3 +1,4 @@
+import type { JSONContent } from "@tiptap/core";
 import type { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, test } from "vitest";
 import type { Core } from "../../src/core";
@@ -563,6 +564,453 @@ describe("New Blocks come in as the model writes them", { timeout: 30_000 }, () 
         proposals: 2,
         paragraphs: 1,
       },
+    ]);
+  });
+});
+
+describe("A name that fits several places asks which one", { timeout: 30_000 }, () => {
+  const PART_1 = "Part one was very good, and sales were really strong.";
+  const PART_2 = "Part two was very late, and the courier was really slow.";
+  const TWO_SUMMARIES = () => [
+    heading(1, "Part 1"),
+    heading(2, "Summary"),
+    note(PART_1),
+    heading(1, "Part 2"),
+    heading(2, "Summary"),
+    note(PART_2),
+  ];
+  const ASKS_WHICH =
+    "There are 2 headings called “Summary”: under “Part 1” and under “Part 2”. Which one?";
+
+  async function withBlocks(model: MockLanguageModelV4, blocks: JSONContent[]) {
+    const set = await setUp(model);
+    writeMind(set.client, blocks);
+    await set.client.settled();
+    return set;
+  }
+
+  /** The Mind still reads as it was, and nothing waits or was saved. */
+  async function expectUntouched(
+    { core, mind, client }: Awaited<ReturnType<typeof setUp>>,
+    shown: string[],
+  ) {
+    await client.settled();
+    expect(shownWithChanges(client)).toEqual(shown);
+    expect(pendingProposals(client.blocks)).toEqual([]);
+    expect(await checkpointsOf(core, mind.id)).toHaveLength(0);
+  }
+
+  // protects=a section name on two headings changes nothing and the model is told to ask, naming both places; fails_when=the first heading is changed, or the places aren't named by their parent headings; no_claim=how a real model words the question.
+  test("edit_mind on two headings called Summary changes nothing and names both places", async () => {
+    const model = toolModel(
+      { tool: "edit_mind", input: { part: "Summary", instruction: "Shorten it" } },
+      "There are two. Which one?",
+    );
+    const set = await withBlocks(model, TWO_SUMMARIES());
+
+    const answer = await ask(set.core, { text: "Make the Summary shorter", mindId: set.mind.id });
+
+    expect(mindCalls(answer)[0]?.status).toBe("failed");
+    expect(mindCalls(answer)[0]?.mindProblem).toEqual({
+      kind: "several-places",
+      mindId: set.mind.id,
+      name: "Summary",
+      adding: false,
+    });
+    expect(changesIn(answer)).toEqual([]);
+    expect(lastResult(model)).toContain(`"${ASKS_WHICH}"`);
+    expect(lastResult(model)).toContain(`as in part: "Part 1 > Summary"`);
+    expect(model.doStreamCalls).toHaveLength(2);
+    await expectUntouched(set, ["Part 1", "Summary", PART_1, "Part 2", "Summary", PART_2]);
+  });
+
+  // protects=naming the parent heading picks one of two same-named headings; fails_when=the other section changes, or the first is changed because it comes first; no_claim=none beyond protects.
+  test("edit_mind on Part 2 > Summary changes that section only", async () => {
+    const model = toolModel(
+      { tool: "edit_mind", input: { part: "Part 2 > Summary", instruction: "Shorten it" } },
+      "Shortened the summary under Part 2.",
+    );
+    const set = await withBlocks(model, TWO_SUMMARIES());
+
+    const answer = await ask(set.core, {
+      text: "Make the Summary under Part 2 shorter",
+      mindId: set.mind.id,
+    });
+
+    await set.client.settled();
+    expect(mindCalls(answer)[0]?.status).toBe("done");
+    expect(shownWithChanges(set.client)).toEqual([
+      "Part 1",
+      "Summary",
+      PART_1,
+      "Part 2",
+      "Summary",
+      "Part two was [-very -]late, and the courier was [-really -]slow.",
+    ]);
+  });
+
+  // protects=the headings a name is under are matched like any name, whole text first: "Chapter 1" is not "Chapter 10", the quotes round each heading are dropped, and a start under the named parent counts though a whole name sits elsewhere; fails_when=a section under Chapter 10 is changed for Chapter 1, the quoted path isn't found, or "Part 2 > Summary" fails because Part 2 holds only "Summary of Q3"; no_claim=none beyond protects.
+  test.each([
+    {
+      what: "Chapter 1 is not Chapter 10",
+      part: "Chapter 1 > Notes",
+      blocks: [
+        heading(1, "Chapter 1"),
+        heading(2, "Notes"),
+        note("One was very short."),
+        heading(1, "Chapter 10"),
+        heading(2, "Notes"),
+        note("Ten was very long."),
+      ],
+      shown: [
+        "Chapter 1",
+        "Notes",
+        "One was [-very -]short.",
+        "Chapter 10",
+        "Notes",
+        "Ten was very long.",
+      ],
+    },
+    {
+      what: "quotes round each heading",
+      part: "“Part 2” > “Summary”",
+      blocks: TWO_SUMMARIES(),
+      shown: [
+        "Part 1",
+        "Summary",
+        PART_1,
+        "Part 2",
+        "Summary",
+        "Part two was [-very -]late, and the courier was [-really -]slow.",
+      ],
+    },
+    {
+      what: "a start under the named parent, a whole name elsewhere",
+      part: "Part 2 > Summary",
+      blocks: [
+        heading(1, "Part 1"),
+        heading(2, "Summary"),
+        note("One was very short."),
+        heading(1, "Part 2"),
+        heading(2, "Summary of Q3"),
+        note("Two was very long."),
+      ],
+      shown: [
+        "Part 1",
+        "Summary",
+        "One was very short.",
+        "Part 2",
+        "Summary of Q3",
+        "Two was [-very -]long.",
+      ],
+    },
+  ])("a path to a section: $what", async ({ part, blocks, shown }) => {
+    const model = toolModel(
+      { tool: "edit_mind", input: { part, instruction: "Shorten it" } },
+      "Shortened it.",
+    );
+    const set = await withBlocks(model, blocks);
+
+    const answer = await ask(set.core, { text: "Shorten that section", mindId: set.mind.id });
+
+    await set.client.settled();
+    expect(mindCalls(answer)[0]?.status).toBe("done");
+    expect(shownWithChanges(set.client)).toEqual(shown);
+  });
+
+  // protects=the question echoes the heading's own case, not the model's; fails_when=a heading typed in lower case is asked about in lower case; no_claim=none beyond protects.
+  test("the question names the heading as written in the Mind", async () => {
+    const model = toolModel(
+      { tool: "edit_mind", input: { part: "summary", instruction: "Shorten it" } },
+      "Which one?",
+    );
+    const set = await withBlocks(model, TWO_SUMMARIES());
+
+    await ask(set.core, { text: "Make the summary shorter", mindId: set.mind.id });
+
+    expect(lastResult(model)).toContain(`"${ASKS_WHICH}"`);
+    expect(lastResult(model)).toContain(`as in part: "Part 1 > Summary"`);
+  });
+
+  // protects=a name on one heading behaves as before: the whole text wins over a start, and a start is enough alone; fails_when=either case asks which, or changes another section; no_claim=none beyond protects.
+  test.each(["summary", "Summary of"])("a single match is changed as before (%s)", async (part) => {
+    const model = toolModel(
+      { tool: "edit_mind", input: { part, instruction: "Shorten it" } },
+      "Shortened it.",
+    );
+    const set = await withBlocks(model, [
+      heading(2, "Summary of risks"),
+      note("Risk one is very small."),
+      heading(2, "Summary"),
+      note("Sales were really strong."),
+    ]);
+
+    await ask(set.core, { text: "Shorten the summary", mindId: set.mind.id });
+
+    await set.client.settled();
+    const [risks, risksText, summary, summaryText] = shownWithChanges(set.client);
+    expect([risks, summary]).toEqual(["Summary of risks", "Summary"]);
+    if (part === "summary") {
+      expect([risksText, summaryText]).toEqual([
+        "Risk one is very small.",
+        "Sales were [-really -]strong.",
+      ]);
+    } else {
+      expect([risksText, summaryText]).toEqual([
+        "Risk one is [-very -]small.",
+        "Sales were really strong.",
+      ]);
+    }
+  });
+
+  // protects=places with the same parent, or none, are told apart by number, and the model is told what the User can do; fails_when=two places are both named "under" one heading, or a number can't be told from another; no_claim=none beyond protects.
+  test("places that no parent heading tells apart are numbered", async () => {
+    const model = toolModel(
+      { tool: "edit_mind", input: { part: "Notes", instruction: "Shorten it" } },
+      "Which one?",
+    );
+    const set = await withBlocks(model, [
+      heading(1, "Notes"),
+      note("Note one."),
+      heading(1, "Notes"),
+      note("Note two."),
+    ]);
+
+    await ask(set.core, { text: "Shorten the notes", mindId: set.mind.id });
+
+    expect(lastResult(model)).toContain(
+      '"There are 2 headings called “Notes”: number 1 and number 2. Which one?"',
+    );
+    expect(lastResult(model)).toContain("select the one they mean in the Mind");
+    await expectUntouched(set, ["Notes", "Note one.", "Notes", "Note two."]);
+  });
+
+  // protects=every place is listed, however many; fails_when=a place is left out of the question; no_claim=none beyond protects.
+  test("three places are all named", async () => {
+    const model = toolModel(
+      { tool: "edit_mind", input: { part: "## Summary", instruction: "Shorten it" } },
+      "Which one?",
+    );
+    const set = await withBlocks(model, [
+      ...[1, 2, 3].flatMap((part) => [heading(1, `Part ${part}`), heading(2, "Summary")]),
+      note("Text."),
+    ]);
+
+    await ask(set.core, { text: "Shorten the summary", mindId: set.mind.id });
+
+    expect(lastResult(model)).toContain(
+      "There are 3 headings called “Summary”: under “Part 1”, under “Part 2”, and under “Part 3”. Which one?",
+    );
+  });
+
+  // protects=add_to_mind on a heading name found twice adds nothing, however the call is written, and the Answer goes on to ask; fails_when=text is added after the first, or the Answer fails while its input streams in; no_claim=none beyond protects.
+  test.each([
+    ["in one piece", false],
+    ["streamed in", true],
+  ])(
+    "add_to_mind after two headings called Summary adds nothing (%s)",
+    async (_how, streamInput) => {
+      const model = scriptedModel(
+        ({ results }): ScriptedReply =>
+          results.length === 0
+            ? {
+                calls: [
+                  {
+                    tool: "add_to_mind",
+                    input: { after: "Summary", content: "A new line.\n\nAnother new line." },
+                    streamInput,
+                  },
+                ],
+              }
+            : { text: "Which one?" },
+      );
+      const set = await withBlocks(model, TWO_SUMMARIES());
+
+      const answer = await ask(set.core, {
+        text: "Add a line to the Summary",
+        mindId: set.mind.id,
+      });
+
+      expect(mindCalls(answer)[0]?.status).toBe("failed");
+      expect(mindCalls(answer)[0]?.mindProblem).toMatchObject({
+        kind: "several-places",
+        adding: true,
+      });
+      expect(lastResult(model)).toContain(`"${ASKS_WHICH}"`);
+      expect(lastResult(model)).toContain(`as in after: "Part 1 > Summary"`);
+      await expectUntouched(set, ["Part 1", "Summary", PART_1, "Part 2", "Summary", PART_2]);
+    },
+  );
+
+  // protects=naming the parent heading adds at the end of that section; fails_when=the text goes after the first Summary; no_claim=none beyond protects.
+  test("add_to_mind after Part 2 > Summary adds at the end of that section", async () => {
+    const model = toolModel(
+      { tool: "add_to_mind", input: { after: "Part 2 > Summary", content: "A new line." } },
+      "Added it.",
+    );
+    const set = await withBlocks(model, TWO_SUMMARIES());
+
+    await ask(set.core, { text: "Add a line to the Summary under Part 2", mindId: set.mind.id });
+
+    await set.client.settled();
+    expect(shownWithChanges(set.client)).toEqual([
+      "Part 1",
+      "Summary",
+      PART_1,
+      "Part 2",
+      "Summary",
+      PART_2,
+      "+ A new line.",
+    ]);
+  });
+
+  // protects=a paragraph named by its first words, found under two headings, is asked about like a heading, and its parent picks one; fails_when=the first paragraph is chosen without asking, or the parent doesn't pick; no_claim=none beyond protects.
+  test("two paragraphs starting alike are asked about, and a parent heading picks one", async () => {
+    const blocks = [
+      heading(1, "Part 1"),
+      note("Revenue grew in the north."),
+      heading(1, "Part 2"),
+      note("Revenue grew in the south."),
+      note("Costs fell."),
+    ];
+    const asks = toolModel(
+      { tool: "add_to_mind", input: { after: "Revenue grew", content: "A new line." } },
+      "Which one?",
+    );
+    const first = await withBlocks(asks, blocks);
+
+    await ask(first.core, {
+      text: "Add a line after the revenue paragraph",
+      mindId: first.mind.id,
+    });
+
+    expect(lastResult(asks)).toContain(
+      '"There are 2 paragraphs starting “Revenue grew”: under “Part 1” and under “Part 2”. Which one?"',
+    );
+    await expectUntouched(first, [
+      "Part 1",
+      "Revenue grew in the north.",
+      "Part 2",
+      "Revenue grew in the south.",
+      "Costs fell.",
+    ]);
+
+    const picks = toolModel(
+      { tool: "add_to_mind", input: { after: "Part 2 > Revenue grew", content: "A new line." } },
+      "Added it.",
+    );
+    const second = await withBlocks(picks, blocks);
+
+    await ask(second.core, {
+      text: "Add a line after the revenue paragraph",
+      mindId: second.mind.id,
+    });
+
+    await second.client.settled();
+    expect(shownWithChanges(second.client)).toEqual([
+      "Part 1",
+      "Revenue grew in the north.",
+      "Part 2",
+      "Revenue grew in the south.",
+      "+ A new line.",
+      "Costs fell.",
+    ]);
+  });
+
+  // protects=a Question in Chinese is answered in Chinese's words for the places, and Chinese headings are told apart the same way; fails_when=the question is English, or the Chinese headings aren't found; no_claim=how a real model words it.
+  test("Chinese headings: the question is in Chinese, and the parent heading picks one", async () => {
+    const blocks = [
+      heading(1, "第一部分"),
+      heading(2, "摘要"),
+      note("第一部分：销售 really 强劲。"),
+      heading(1, "第二部分"),
+      heading(2, "摘要"),
+      note("第二部分：销售 really 强劲。"),
+    ];
+    const asks = toolModel(
+      { tool: "edit_mind", input: { part: "摘要", instruction: "改短一点" } },
+      "有两个。",
+    );
+    const first = await withBlocks(asks, blocks);
+
+    await ask(first.core, { text: "把摘要改短一点", mindId: first.mind.id });
+
+    expect(lastResult(asks)).toContain(
+      "有 2 个标题叫“摘要”：在“第一部分”下和在“第二部分”下。要改哪一个？",
+    );
+    await expectUntouched(first, [
+      "第一部分",
+      "摘要",
+      "第一部分：销售 really 强劲。",
+      "第二部分",
+      "摘要",
+      "第二部分：销售 really 强劲。",
+    ]);
+
+    const picks = toolModel(
+      { tool: "edit_mind", input: { part: "第二部分 > 摘要", instruction: "改短一点" } },
+      "已改短。",
+    );
+    const second = await withBlocks(picks, blocks);
+
+    await ask(second.core, { text: "把第二部分的摘要改短一点", mindId: second.mind.id });
+
+    await second.client.settled();
+    expect(shownWithChanges(second.client)).toEqual([
+      "第一部分",
+      "摘要",
+      "第一部分：销售 really 强劲。",
+      "第二部分",
+      "摘要",
+      "第二部分：销售 [-really -]强劲。",
+    ]);
+  });
+});
+
+describe("Arguments a model gets slightly wrong cost no extra step", { timeout: 30_000 }, () => {
+  const SPRING = "Spring tides happen just after a new moon or a full moon.";
+
+  // protects=cite takes its records as one record alone, or as an array written in JSON, even encoded twice, in the model's very next step; fails_when=the model has to send it again, or the Citation isn't checked; no_claim=what a real model sends.
+  test.each([
+    ["one record alone", (record: object) => record],
+    ["an array written in JSON", (record: object) => JSON.stringify([record])],
+    ["an array encoded twice", (record: object) => JSON.stringify(JSON.stringify([record]))],
+  ])("cite given %s", async (_how, wrap) => {
+    const model = scriptedModel(({ results }): ScriptedReply => {
+      const search = results.find((result) => result.tool === "search_documents");
+      if (!search)
+        return { calls: [{ tool: "search_documents", input: { query: "spring tides" } }] };
+      if (!results.some((result) => result.tool === "cite")) {
+        const [passage] = shownPassages(search.text);
+        const record = { marker: 1, passage: passage?.id, pageFrom: 1, pageTo: 1, quote: SPRING };
+        return { calls: [{ tool: "cite", input: { citations: wrap(record) } }] };
+      }
+      if (!results.some((result) => result.tool === "create_mind")) {
+        const content = "## Tides\n\nSpring tides come at new and full moon [^1].";
+        return { calls: [{ tool: "create_mind", input: { title: "Tide notes", content } }] };
+      }
+      return { text: "Made “Tide notes”." };
+    });
+    const { core, mind } = await setUp(model);
+    const sources = await createSourceFolder();
+    const pdf = buildPdf([{ lines: ["Spring and neap tides", SPRING] }]);
+    const added = await core.addDocuments([await writeSourceFile(sources, "Tides.pdf", pdf)]);
+    await waitForProcessing(
+      core,
+      added.documents.map((document) => document.id),
+    );
+
+    const answer = await ask(core, {
+      text: "Summarise these Documents into a new note",
+      mindId: mind.id,
+    });
+
+    expect(model.doStreamCalls).toHaveLength(4);
+    const [change] = changesIn(answer);
+    const madeClient = await connectToMind(core, change?.mindId ?? "");
+    expect(shownWithChanges(madeClient)).toEqual([
+      "+ Tides",
+      "+ Spring tides come at new and full moon ⟨found⟩.",
     ]);
   });
 });

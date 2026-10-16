@@ -110,6 +110,12 @@ test("Verify a PDF: its Mind opens beside it, its claims are checked, and the co
   // A model on this computer costs nothing: no estimate.
   await expect(line.getByTestId("verify-estimate")).toHaveCount(0);
   await screenshot(window, "verify-start-en");
+  await expect(
+    window
+      .getByTestId("document-list-item")
+      .filter({ hasText: "Harbour report" })
+      .getByTestId("document-not-cited"),
+  ).toHaveText("Not cited");
 
   await pointAndClick(window, check);
 

@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import {
   type ElectronApplication,
   _electron as electron,
@@ -577,10 +577,17 @@ export async function useOutputLocation(window: Page, folder: string): Promise<v
   }, folder);
 }
 
+/** What the result line says of a file saved in a folder, which it names as well as the file. */
+export function savedLine(name: string, folder: string, language: "en" | "zh-CN" = "en"): string {
+  return language === "zh-CN"
+    ? `已保存“${name}”到“${basename(folder)}”`
+    : `Saved “${name}” in ${basename(folder)}`;
+}
+
 /** The result line's saved file, once it says it saved one. */
 export async function savedPath(window: Page, name: string): Promise<string> {
   const done = window.getByTestId("export-result").getByTestId("export-done");
-  await expect(done).toHaveText(`Saved ${name}`, { timeout: 30_000 });
+  await expect(done).toContainText(`Saved “${name}” in `, { timeout: 30_000 });
   return (await done.getAttribute("title")) ?? "";
 }
 
@@ -1042,6 +1049,17 @@ export async function clickNow(window: Page, target: Locator): Promise<void> {
   await window.mouse.up();
 }
 
+/** How long an Answer may have no words before its line says how long it takes (15 seconds), so a test needn't wait that long. */
+export async function setSilentWaitMs(window: Page, ms: number): Promise<void> {
+  await window.evaluate(
+    (value) =>
+      (globalThis as { incarnamindTestHooks?: TestHooks }).incarnamindTestHooks?.setSilentWaitMs(
+        value,
+      ),
+    ms,
+  );
+}
+
 /** Plays every animation at `speed` (0.2: five times slower), so a test can look, or act, during one. */
 export async function setMotionSpeed(window: Page, speed: number): Promise<void> {
   await window.evaluate(
@@ -1454,7 +1472,11 @@ export const assistantAnswers = (window: Page) =>
  * assistant's conversation (#201); resolves with its Answer there once it is
  * written (the scripted model's, with `fakeChat`).
  */
-export async function askInAssistant(window: Page, question: string): Promise<Locator> {
+export async function askInAssistant(
+  window: Page,
+  question: string,
+  { timeout = 15_000 }: { timeout?: number } = {},
+): Promise<Locator> {
   const answers = assistantAnswers(window);
   const before = await answers.count();
   await window.keyboard.press("ControlOrMeta+j");
@@ -1465,9 +1487,20 @@ export async function askInAssistant(window: Page, question: string): Promise<Lo
   await expect(questions.last()).toContainText(question);
   await expect(answers).toHaveCount(before + 1);
   const answer = answers.last();
-  await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+  await expect(answer).toHaveAttribute("data-status", "done", { timeout });
   return answer;
 }
+
+/** Gives the Citations of an Answer in the assistant a check (#96 will produce them for real). */
+export const setCheck = (answer: Locator, patch: { check: string; verdict?: string | null }) =>
+  answer.getByTestId("assistant-answer-text").evaluate((dom, attributes) => {
+    const { view } = (dom as unknown as { editor: Editor }).editor;
+    view.state.doc.descendants((node, pos) => {
+      if (node.type.name !== "citation") return true;
+      view.dispatch(view.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, ...attributes }));
+      return false;
+    });
+  }, patch);
 
 /** The tiny MCP server the core tests use: `lookup_tide` is read-only, `book_boat` isn't. */
 const TIDE_SERVER = resolve(__dirname, "../tests/fixtures/mcp-server.mjs");
@@ -1532,6 +1565,32 @@ export async function addToNote(window: Page, answer: Locator): Promise<void> {
   await pointAt(window, answer.getByTestId("assistant-answer-text"));
   await pointAndClick(window, answer.getByTestId("answer-add"));
   await expect(answer.getByTestId("answer-added")).toBeVisible();
+}
+
+export type MindChild = Y.XmlElement | string;
+
+/** A node as the editor stores it in a Mind's Yjs document; strings are its text. */
+export function mindNode(
+  name: string,
+  attributes: Record<string, unknown>,
+  children: MindChild[] = [],
+): Y.XmlElement {
+  const element = new Y.XmlElement(name);
+  for (const [key, value] of Object.entries(attributes)) {
+    element.setAttribute(key, value as string);
+  }
+  element.insert(
+    0,
+    children.map((child) => (typeof child === "string" ? new Y.XmlText(child) : child)),
+  );
+  return element;
+}
+
+/** Blocks as one Yjs update, to apply to a Mind (`applyMindUpdate`), as an edit from another device arrives. */
+export function blocksUpdate(blocks: Y.XmlElement[]): Uint8Array {
+  const doc = new Y.Doc();
+  doc.getXmlFragment("blocks").insert(0, blocks);
+  return Y.encodeStateAsUpdate(doc);
 }
 
 /** A Block of a Mind as Minds held them before Questions went to the assistant (#201). */

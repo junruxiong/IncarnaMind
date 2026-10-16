@@ -409,8 +409,8 @@ function Option({
 }) {
   const words = item.kind === "note" || item.kind === "passage" || item.kind === "said";
   const ranges = item.kind === "object" || item.kind === "command" ? item.ranges : [];
-  const hint = item.kind === "command" ? item.hint : "";
-  const twoLines = words || hint !== "";
+  const purpose = item.kind === "command" ? item.purpose : "";
+  const twoLines = words || purpose !== "";
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: the field owns the keys (aria-activedescendant).
     <div
@@ -448,13 +448,13 @@ function Option({
             <Marked text={item.excerpt} ranges={item.highlights} />
           </span>
         )}
-        {hint !== "" && (
+        {purpose !== "" && (
           <span
-            data-testid="palette-hint"
+            data-testid="palette-purpose"
             className="block truncate text-[12px] leading-4 text-ink-meta"
-            title={hint}
+            title={purpose}
           >
-            {hint}
+            {purpose}
           </span>
         )}
       </span>

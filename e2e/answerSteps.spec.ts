@@ -2,6 +2,7 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
+import { openDatabase } from "../src/core/storage";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   acceptPlainTextKeys,
@@ -16,6 +17,7 @@ import {
   pointAndClick,
   pointAt,
   removeDataFolder,
+  setSilentWaitMs,
   setWindowSize,
   sidebarFolder,
   slideToHandle,
@@ -61,11 +63,11 @@ test.afterEach(async () => {
 
 const core = (window: Page) => ({
   /** An Anthropic key, whose models summarize their reasoning: choosing it allows Questions and tagging. */
-  anthropic: () =>
-    window.evaluate(async (modelId) => {
+  anthropic: (modelId = MODEL) =>
+    window.evaluate(async (id) => {
       const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
-      await bridge.saveChatProvider({ kind: "anthropic", apiKey: "sk-ant-test", modelId });
-    }, MODEL),
+      await bridge.saveChatProvider({ kind: "anthropic", apiKey: "sk-ant-test", modelId: id });
+    }, modelId),
   /** A Mind, in a Folder if given (its id and name), opened from the sidebar. */
   mind: async (title: string, folder: { id: string; name: string } | null = null) => {
     await window.evaluate(
@@ -106,7 +108,7 @@ const core = (window: Page) => ({
 });
 
 /** The app with Tides added; the chat model on an Anthropic key, or, `local`, on this computer. */
-async function start(options: { documents?: boolean; local?: boolean } = {}) {
+async function start(options: { documents?: boolean; local?: boolean; model?: string } = {}) {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
@@ -114,7 +116,7 @@ async function start(options: { documents?: boolean; local?: boolean } = {}) {
     await connectLocalChatModel(window);
   } else {
     await acceptPlainTextKeys(window);
-    await core(window).anthropic();
+    await core(window).anthropic(options.model);
   }
   if (options.documents !== false) {
     await writeFile(join(sources, "Tides.pdf"), TIDES);
@@ -136,17 +138,17 @@ async function ask(window: Page, question: string): Promise<Locator> {
   return answer;
 }
 
-/** The steps the live line showed, each with when it showed, from now on. */
-async function watchLiveLine(window: Page): Promise<() => Promise<{ step: string; at: number }[]>> {
+/** The steps the live line showed, in order, from now on. */
+async function watchLiveLine(window: Page): Promise<() => Promise<string[]>> {
   await window.evaluate(() => {
-    const shown: { step: string; at: number }[] = [];
+    const shown: string[] = [];
     (globalThis as unknown as { shownSteps: typeof shown }).shownSteps = shown;
     const record = () => {
       const live = document.querySelector(
         '[data-testid="assistant"] [data-testid="answer-steps-live"]',
       );
       const step = live?.getAttribute("data-step") ?? "none";
-      if (shown.at(-1)?.step !== step) shown.push({ step, at: performance.now() });
+      if (shown.at(-1) !== step) shown.push(step);
     };
     new MutationObserver(record).observe(document.body, {
       subtree: true,
@@ -156,9 +158,7 @@ async function watchLiveLine(window: Page): Promise<() => Promise<{ step: string
     });
   });
   return () =>
-    window.evaluate(
-      () => (globalThis as unknown as { shownSteps: { step: string; at: number }[] }).shownSteps,
-    );
+    window.evaluate(() => (globalThis as unknown as { shownSteps: string[] }).shownSteps);
 }
 
 const stepsOf = (timeline: Locator) =>
@@ -166,7 +166,7 @@ const stepsOf = (timeline: Locator) =>
     .getByTestId("answer-step")
     .evaluateAll((rows) => rows.map((row) => row.getAttribute("data-step")));
 
-test("while an Answer is written, its line moves Reading → Searching → Writing → Checking, each up a second or more; written, it folds to what it searched and its sources", async () => {
+test("while an Answer is written, its line moves from Reading through Thinking or Searching to Writing and Checking; written, it folds to what it searched and its sources", async () => {
   const { app, window } = await start();
   await core(window).mind("Lit review: tides");
   const shown = await watchLiveLine(window);
@@ -174,22 +174,170 @@ test("while an Answer is written, its line moves Reading → Searching → Writi
   // "Slowly": the scripted model takes a while over each step.
   const answer = await ask(window, "When do spring tides happen? Answer slowly.");
 
-  // The Answer's own line takes over from the one on its way, on the same step.
-  const steps = (await shown())
-    .filter((each) => each.step !== "none")
-    .filter((each, index, all) => each.step !== all[index - 1]?.step);
-  expect(steps.map((each) => each.step)).toEqual(["reading", "searching", "writing", "checking"]);
-  // Each is up at least a second before the next replaces it; the last goes as the Answer ends.
-  for (let index = 0; index + 1 < steps.length; index++) {
-    const step = steps[index];
-    const next = steps[index + 1];
-    expect((next?.at ?? 0) - (step?.at ?? 0)).toBeGreaterThanOrEqual(950);
-  }
+  // The Answer's own line takes over from the one on its way, on the same step. Between Reading and
+  // Writing the model thinks and searches, and a step that is over before the one before has had its
+  // time (see tests/renderer/heldStep.test.ts) is never shown.
+  const names = (await shown())
+    .filter((step) => step !== "none")
+    .filter((step, index, all) => step !== all[index - 1]);
+  expect(names[0]).toBe("reading");
+  expect(names.slice(-2)).toEqual(["writing", "checking"]);
+  const between = names.slice(1, -2);
+  expect(between.length).toBeGreaterThan(0);
+  for (const step of between) expect(["thinking", "searching"]).toContain(step);
   const line = answer.getByTestId("answer-steps");
   await expect(line).toHaveText("Searched All Documents · 1 source");
   await expect(line).toHaveAttribute("aria-expanded", "false");
   await expect(answer.getByTestId("answer-timeline")).toHaveCount(0);
   await screenshot(window, "steps-folded-en");
+  await app.close();
+});
+
+/** What an Answer being written shows, as it changes: its line only, then how long it takes, then its text. */
+async function watchWait(window: Page): Promise<() => Promise<string[]>> {
+  await window.evaluate(() => {
+    const shown: string[] = [];
+    (globalThis as unknown as { shownWaits: string[] }).shownWaits = shown;
+    const record = () => {
+      const assistant = document.querySelector('[data-testid="assistant"]');
+      const text = assistant?.querySelector('[data-testid="assistant-answer-text"]')?.textContent;
+      const state = text?.trim()
+        ? "text"
+        : assistant?.querySelector('[data-testid="answer-wait"]')
+          ? "wait"
+          : assistant?.querySelector('[data-testid="answer-steps-live"]')
+            ? "line"
+            : "none";
+      if (shown.at(-1) !== state) shown.push(state);
+    };
+    new MutationObserver(record).observe(document.body, {
+      subtree: true,
+      childList: true,
+      characterData: true,
+    });
+  });
+  return () =>
+    window.evaluate(() => (globalThis as unknown as { shownWaits: string[] }).shownWaits);
+}
+
+/** Asks slowly in the assistant, as a person does, without waiting for the Answer. */
+async function askSlowly(window: Page, question: string): Promise<void> {
+  await window.keyboard.press("ControlOrMeta+j");
+  await window.keyboard.type(question);
+  await window.keyboard.press("Enter");
+}
+
+test("a slow Answer shows its step line from the start, then how long it is taking with Stop, then its text; Stop works from that line", async () => {
+  const { app, window } = await start();
+  await core(window).mind("Lit review: tides");
+  await setSilentWaitMs(window, 600);
+  const shown = await watchWait(window);
+
+  await askSlowly(window, "When do spring tides happen? Answer slowly.");
+  const answer = assistantAnswers(window).last();
+  await expect(answer.getByTestId("answer-wait")).toBeVisible();
+  // Nothing in its history yet: it says it is working, and Stop is on that line, once.
+  await expect(answer.getByTestId("answer-wait")).toHaveText("Still working · Stop");
+  await expect(answer.getByTestId("answer-steps-live")).toBeVisible();
+  await expect(answer.getByTestId("answer-stop")).toHaveCount(1);
+  await expect(answer.getByTestId("answer-stop")).toBeVisible();
+  await screenshot(window, "wait-still-en");
+  await expect(answer).toHaveAttribute("data-status", "done", { timeout: 30_000 });
+  expect((await shown()).filter((state) => state !== "none")).toEqual(["line", "wait", "text"]);
+  await expect(answer.getByTestId("answer-wait")).toHaveCount(0);
+
+  // Stop, from the line, keeps what is written and says so.
+  await askSlowly(window, "When do neap tides happen? Answer slowly.");
+  const second = assistantAnswers(window).last();
+  await expect(second.getByTestId("answer-wait")).toBeVisible();
+  await pointAndClick(window, second.getByTestId("answer-wait").getByTestId("answer-stop"));
+  await expect(second).toHaveAttribute("data-status", "stopped");
+  await expect(second.getByTestId("answer-stopped")).toHaveText("Stopped");
+  await expect(second.getByTestId("answer-wait")).toHaveCount(0);
+  await app.close();
+});
+
+test("in Chinese, the step line and the wait line say so in Chinese", async () => {
+  const { app, window } = await start();
+  await core(window).mind("Lit review: tides");
+  await core(window).language("zh-CN");
+  await setSilentWaitMs(window, 600);
+
+  await askSlowly(window, "春潮什么时候出现？ Answer slowly.");
+  const answer = assistantAnswers(window).last();
+  await expect(answer.getByTestId("answer-wait")).toHaveText("仍在处理 · 停止");
+  await expect(answer.getByTestId("answer-steps-live")).toHaveText(/^正在/);
+  await screenshot(window, "wait-still-zh");
+  await pointAndClick(window, answer.getByTestId("answer-wait").getByTestId("answer-stop"));
+  await expect(answer).toHaveAttribute("data-status", "stopped");
+  await app.close();
+});
+
+/** Three Answers by `model` that each took 62 seconds to their words, then the app again over the same data. */
+async function startWithMinuteHistory(model?: string) {
+  const first = await start(model ? { model } : {});
+  await core(first.window).mind("Lit review: tides");
+  for (const question of [
+    "When do spring tides happen?",
+    "When do neap tides happen?",
+    "Why are there two tides a day?",
+  ]) {
+    await ask(first.window, question);
+  }
+  await first.app.close();
+  const db = openDatabase(join(dataDir, "incarnamind.db"));
+  try {
+    db.run(
+      "UPDATE conversation_messages SET steps = json_set(steps, '$.firstWordMs', 62000) WHERE kind = 'answer'",
+    );
+  } finally {
+    db.close();
+  }
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await setWindowSize(app, window, 1440, 900);
+  await setSilentWaitMs(window, 600);
+  await pointAndClick(window, window.getByTestId("mind-list-item"));
+  return { app, window };
+}
+
+test("with earlier Answers that took about a minute, the line says how long this model usually takes", async () => {
+  const { app, window } = await startWithMinuteHistory();
+  await askSlowly(window, "Where do neap tides come from? Answer slowly.");
+  const answer = assistantAnswers(window).last();
+  await expect(answer.getByTestId("answer-wait")).toHaveText(
+    `Usually about a minute with ${MODEL_NAME} · Stop`,
+  );
+  await screenshot(window, "wait-usually-en");
+  await window.evaluate(async () => {
+    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    await bridge.updateSettings({ user: { language: "zh-CN" } });
+  });
+  await expect(answer.getByTestId("answer-wait")).toHaveText(
+    `用 ${MODEL_NAME} 通常要 1 分钟左右 · 停止`,
+  );
+  await screenshot(window, "wait-usually-zh");
+  await pointAndClick(window, answer.getByTestId("answer-wait").getByTestId("answer-stop"));
+  await expect(answer).toHaveAttribute("data-status", "stopped");
+  await app.close();
+});
+
+test("a long model name wraps inside the wait line, and Stop stays inside the Answer", async () => {
+  const { app, window } = await startWithMinuteHistory(
+    "claude-haiku-5-5-with-a-very-long-experimental-identifier-20261016",
+  );
+  await askSlowly(window, "Where do neap tides come from? Answer slowly.");
+  const answer = assistantAnswers(window).last();
+  const wait = answer.getByTestId("answer-wait");
+  await expect(wait).toContainText("Usually about a minute with claude-haiku-5-5-with-a-very-long");
+  const stop = await wait.getByTestId("answer-stop").boundingBox();
+  const inside = await answer.boundingBox();
+  expect((stop?.x ?? 0) + (stop?.width ?? 0)).toBeLessThanOrEqual(
+    (inside?.x ?? 0) + (inside?.width ?? 0) + 1,
+  );
+  expect(await wait.evaluate((line) => line.scrollWidth <= line.clientWidth + 1)).toBe(true);
+  await screenshot(window, "wait-long-name-en");
+  await pointAndClick(window, wait.getByTestId("answer-stop"));
+  await expect(answer).toHaveAttribute("data-status", "stopped");
   await app.close();
 });
 

@@ -166,10 +166,10 @@ describe("⌘K's actions", () => {
         ?.items.find((item) => item.key === key);
 
     expect(itemOf("command:verify.document", "en")).toMatchObject({
-      hint: "Check the claims in a PDF someone else wrote",
+      purpose: "Check the claims in a PDF someone else wrote",
     });
     expect(itemOf("command:verify.document", "zh-CN")).toMatchObject({
-      hint: "核对别人写的 PDF 里的说法",
+      purpose: "核对别人写的 PDF 里的说法",
     });
     const [list] = palette.actionGroup(
       [],
@@ -177,7 +177,9 @@ describe("⌘K's actions", () => {
       "en",
       found.names,
     );
-    expect(list?.items.find((item) => item.key === "command:mind.new")).toMatchObject({ hint: "" });
+    expect(list?.items.find((item) => item.key === "command:mind.new")).toMatchObject({
+      purpose: "",
+    });
   });
 
   test("act on the selection, saying how many, or on the one thing in front, naming it", () => {

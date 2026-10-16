@@ -156,6 +156,32 @@ describe("A Tool that may change something asks first", { timeout: 30_000 }, () 
     ]);
   });
 
+  // protects=the wait an Answer keeps for its first words leaves out the time the User took to decide; fails_when=the wait includes the second the approval stood open; no_claim=the time before the approval is whatever the machine takes.
+  test("the time the User takes to decide isn't in how long the Answer waited for its words", async () => {
+    const { core, mind } = await setUp(toolModel());
+    const requested = nextEvent(core, "approval.requested");
+    const ended = new Promise<string>((resolve) => {
+      const stop = core.on("answer.finished", ({ answerId }) => {
+        stop();
+        resolve(answerId);
+      });
+    });
+    const asked = await core.askInConversation({
+      text: "Book me a boat from Dover.",
+      mindId: mind.id,
+    });
+    if (!asked.asked) throw new Error(`Not asked: ${JSON.stringify(asked)}`);
+    const request = await requested;
+    const decidedAfter = 1_000;
+    await new Promise((resolve) => setTimeout(resolve, decidedAfter));
+    await core.respondToApproval(request.requestId, "allow-once");
+    const answerId = await ended;
+    const { messages } = await core.getConversation(asked.conversation.id);
+    const answer = messages.find((message) => message.id === answerId);
+    if (answer?.kind !== "answer") throw new Error("No Answer.");
+    expect(answer.steps?.firstWordMs).toBeLessThan(decidedAfter);
+  });
+
   test("Allow once: the call is made and the Answer carries on to the end; the next call asks again", async () => {
     const { core, logFile, mind, client } = await setUp(toolModel());
     const { requested, resolved } = recordApprovals(core);

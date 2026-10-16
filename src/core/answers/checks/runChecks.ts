@@ -4,11 +4,17 @@
  * time, each result written onto its mark as it comes. The monthly cap or a
  * plan's limit stops the run, and the claims left say why they weren't checked.
  */
-import type { ClaimCheckAttributes, ClaimCheckResult, RunStop, ThirdPartyReason } from "../../api";
+import type {
+  ClaimCheckAttributes,
+  ClaimCheckResult,
+  RecordAiUseInput,
+  RunStop,
+  ThirdPartyReason,
+} from "../../api";
 import type { MindContent } from "../../mindContent";
 import type { PreparedChatModel } from "../../providers/chat";
 import { RunItemError, runItems } from "../../runs/stop";
-import { type ClaimCheckRequest, runFailureOf } from "./claimCheck";
+import { type ClaimCheckRequest, recordJudged, runFailureOf } from "./claimCheck";
 import { updateCheck } from "./sentences";
 
 const CLOUD_CLAIMS_AT_ONCE = 3;
@@ -31,6 +37,7 @@ export interface RunChecksOptions {
   ): ClaimCheckAttributes;
   /** Keeps the text of the evidence the Mind's checks show (#79). */
   retainEvidence(mindId: string): void;
+  recordAiUse(inputs: RecordAiUseInput[]): void;
   now(): Date;
 }
 
@@ -86,6 +93,7 @@ export async function runChecks(
         if (outcome.status === "done") {
           const at = options.now().toISOString();
           if (outcome.value.verdict !== "not-checked") checked++;
+          recordJudged(options.recordAiUse, mindId, prepared, outcome.value, at);
           write(claim.id, (each) => options.withResult(each, outcome.value, at));
         } else if (outcome.status === "not-checked") {
           write(claim.id, notChecked(outcome.stop.reason));

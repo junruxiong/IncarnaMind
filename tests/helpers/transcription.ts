@@ -8,7 +8,7 @@ import type {
   Transcriber,
   TranscriptionModelFiles,
 } from "../../src/core";
-import { createFakeCapture } from "../../src/core/meetings/fakeCapture";
+import { createFakeCapture, type FakeCaptureOptions } from "../../src/core/meetings/fakeCapture";
 import {
   createChannelTranscriber,
   serveTranscriber,
@@ -90,8 +90,9 @@ export function inProcessTranscriber(
 /**
  * A core that records Meetings with the fake capture (a tone from each
  * source) and transcribes them with the fake engine behind the channel the
- * desktop app uses: every two seconds of sound is a line, saying the next of
- * `FAKE_LINES`. The clock moves with the audio the test records.
+ * desktop app uses: every two seconds of sound is a line, the microphone's
+ * saying the next of `FAKE_LINES` and the computer sound's the next of
+ * `FAKE_THEIR_LINES`. The clock moves with the audio the test records.
  */
 export async function transcribingCore(
   dataDir: string,
@@ -100,8 +101,11 @@ export async function transcribingCore(
     model,
     loads,
     log,
+    capture: captureOptions,
   }: {
     engine?: FakeTranscriberOptions;
+    /** What the fake capture does, e.g. the computer's sound denied. */
+    capture?: FakeCaptureOptions;
     model?: Parameters<typeof scriptedModels>[0];
     /** The engine starts once this resolves, as a model loading slowly does. */
     loads?: Promise<void>;
@@ -109,7 +113,7 @@ export async function transcribingCore(
   } = {},
 ) {
   const clock = manualClock();
-  const capture = createFakeCapture();
+  const capture = createFakeCapture(captureOptions);
   const engineHost = inProcessTranscriber(engine, async () => {
     await loads;
     return createFakeSpeechEngine(engine);

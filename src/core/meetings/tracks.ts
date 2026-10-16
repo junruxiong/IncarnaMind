@@ -1,12 +1,13 @@
 /**
- * The microphone and the computer's sound mixed into one track for
- * transcription (#136), in the Meeting's time. Before the microphone joins
- * the mix, the echo of the computer's sound it picks up from the speakers is
- * taken out (./echo, #846), with the computer's sound as the reference, so
- * what the others say is in the computer's sound only. Each source's samples
- * are placed where they belong; audio is let out a moment behind the newest,
- * so a source a little late still joins in. Samples later than that go to
- * disk only. A stretch neither source covers is silence.
+ * The microphone and the computer's sound as two tracks for transcription
+ * (#136, #941), in the Meeting's time, so each is transcribed on its own and
+ * its lines say who spoke. The echo of the computer's sound the microphone
+ * picks up from the speakers is taken out of the microphone's track first
+ * (./echo, #846), with the computer's sound as the reference, so what the
+ * others say is in the computer's track only. Each source's samples are
+ * placed where they belong; both tracks are let out together, a moment
+ * behind the newest, so a source a little late still joins in. Samples later
+ * than that go to disk only. A stretch a source doesn't cover is silence.
  */
 import { MEETING_SAMPLE_RATE } from "../adapters";
 import type { AudioSource } from "../api";
@@ -18,13 +19,15 @@ const DELAY_MS = 300;
 const sampleAt = (ms: number) => Math.round((ms * MEETING_SAMPLE_RATE) / 1000);
 const msAt = (sample: number) => (sample * 1000) / MEETING_SAMPLE_RATE;
 
-export interface MixedAudio {
-  /** Where it starts, in the Meeting's time. */
+export interface TrackedAudio {
+  /** Where both tracks start, in the Meeting's time. */
   atMs: number;
-  samples: Int16Array;
+  microphone: Int16Array;
+  /** The computer's sound; null while none has been heard: a Meeting in a room has none. */
+  system: Int16Array | null;
 }
 
-export function createMixer(startMs: number) {
+export function createTracks(startMs: number) {
   /** The first sample not yet let out, in the Meeting's time. */
   let out = sampleAt(startMs);
   /** The computer's sound from `out` on. */
@@ -63,22 +66,28 @@ export function createMixer(startMs: number) {
     return microphone;
   }
 
-  function take(until: number): MixedAudio | null {
-    if (until <= out) return null;
-    const count = until - out;
-    const cleaned = cleanMicrophone(count);
+  const clipped = (source: Int32Array, count: number): Int16Array => {
     const samples = new Int16Array(count);
     for (let i = 0; i < count; i++) {
-      const sum = (system[i] as number) + (cleaned[i] as number);
-      samples[i] = Math.max(-32768, Math.min(32767, sum));
+      samples[i] = Math.max(-32768, Math.min(32767, source[i] as number));
     }
+    return samples;
+  };
+
+  function take(until: number): TrackedAudio | null {
+    if (until <= out) return null;
+    const count = until - out;
+    const audio = {
+      atMs: msAt(out),
+      microphone: clipped(cleanMicrophone(count), count),
+      system: canceller ? clipped(system, count) : null,
+    };
     for (const buffer of [system, microphone]) {
       buffer.copyWithin(0, count);
       buffer.fill(0, buffer.length - count);
     }
-    const atMs = msAt(out);
     out = until;
-    return { atMs, samples };
+    return audio;
   }
 
   /** Adds a source's samples, which start at `atMs` in the Meeting's time. */
@@ -106,14 +115,14 @@ export function createMixer(startMs: number) {
     put,
 
     /** Adds a source's samples, as `put`, and returns what is ready to go, in whole blocks. */
-    add(source: AudioSource, samples: Int16Array, atMs: number): MixedAudio | null {
+    add(source: AudioSource, samples: Int16Array, atMs: number): TrackedAudio | null {
       put(source, samples, atMs);
       const ready = newest - sampleAt(DELAY_MS) - out;
       return take(out + Math.floor(ready / ECHO_BLOCK) * ECHO_BLOCK);
     },
 
     /** Lets out everything heard. */
-    flush(): MixedAudio | null {
+    flush(): TrackedAudio | null {
       return take(newest);
     },
 
@@ -124,4 +133,4 @@ export function createMixer(startMs: number) {
   };
 }
 
-export type Mixer = ReturnType<typeof createMixer>;
+export type Tracks = ReturnType<typeof createTracks>;

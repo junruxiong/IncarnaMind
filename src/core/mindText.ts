@@ -112,6 +112,7 @@ export type FailedSentence = { id: string } & (
       nearest: { quote: string; source: string } | null;
     }
   | { check: "needs-recheck"; why: RecheckReason }
+  | { check: "cited-case-unchecked" }
 );
 
 /** Part of a change still waiting to be accepted (a Proposal), read for review (#107). */
@@ -406,13 +407,19 @@ export function countQuestions(blocks: Y.XmlFragment): number {
     .filter((child) => child instanceof Y.XmlElement && child.nodeName === QUESTION_BLOCK).length;
 }
 
-/** Every Citation's footnote in the Blocks, in order, those inside the User's footnotes too. */
-export function footnotesIn(blocks: readonly Block[]): Footnote[] {
+/**
+ * Every Citation's footnote in the Blocks, in order, those inside the User's footnotes too
+ * unless `inFootnotes` is false: there a Citation is words of the note, with no marker.
+ */
+export function footnotesIn(
+  blocks: readonly Block[],
+  { inFootnotes = true }: { inFootnotes?: boolean } = {},
+): Footnote[] {
   const found: Footnote[] = [];
   const inInline = (content: readonly Inline[]) => {
     for (const inline of content) {
       if (inline.kind === "citation") found.push(inline.footnote);
-      else if (inline.kind === "footnote") inInline(inline.content);
+      else if (inline.kind === "footnote" && inFootnotes) inInline(inline.content);
     }
   };
   const visit = (block: Block) => {

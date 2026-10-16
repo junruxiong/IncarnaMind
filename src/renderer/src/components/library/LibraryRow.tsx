@@ -15,7 +15,7 @@ import { isDeleteKey, isMoveToKey, isTagsKey, TREE_ROW } from "../../treeKeys";
 import { typesText } from "../../undo";
 import { useRename } from "../../useRename";
 import { CiteAsPanel } from "../CiteAsPanel";
-import { DocumentStatusLabel } from "../DocumentsSection";
+import { DocumentStatusLabel, NotCitedLabel } from "../DocumentsSection";
 import { InlineName } from "../InlineName";
 import { LibrarySelectBox } from "../LibrarySelection";
 import { DocumentLineIcon, FolderLineIcon } from "../lineIcons";
@@ -238,6 +238,7 @@ export const LibraryRow = memo(function LibraryRow({
                 </span>
               )}
               <span className="contents">
+                <NotCitedLabel item={doc} />
                 <DocumentStatusLabel item={doc} />
                 {notSorted !== null && (
                   <span

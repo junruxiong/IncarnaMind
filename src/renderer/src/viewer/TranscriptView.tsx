@@ -8,8 +8,9 @@ import {
   type TranscriptGap,
   transcriptUnits,
 } from "../../../core/documents/formats/vtt";
-import { clockTime } from "../../../shared/clock";
+import { clockTime, paddedClockTime } from "../../../shared/clock";
 import type { MessageKey } from "../../../shared/i18n";
+import { speakerName } from "../../../shared/speakers";
 import { transcriptHandle, useHandle } from "../commands/handles";
 import { PlusLineIcon } from "../components/lineIcons";
 import { useDismissOnEscape } from "../escapeDismiss";
@@ -101,6 +102,9 @@ type Row = { kind: "cue"; cue: Cue } | { kind: "gap"; gap: TranscriptGap };
 /** How long "Added to the note" shows in the header. */
 const ADDED_SHOWN_MS = 3000;
 
+/** Names a line: two can start together, so its start alone doesn't. */
+const lineId = (cue: Cue) => `${cue.startMs}-${cue.endMs}-${cue.speaker ?? ""}`;
+
 /** The line after or before this one: the Transcript's gaps between them aren't lines. */
 function lineBeside(from: Element, direction: "next" | "previous"): HTMLElement | null {
   let each = direction === "next" ? from.nextElementSibling : from.previousElementSibling;
@@ -137,8 +141,8 @@ function TranscriptContent({
   const [markRoom, setMarkRoom] = useState(0);
   const mark = quoteMarkOf(target.citation);
   const hintId = useId();
-  // The line the User is on, by where it starts: the one Enter, the button and ⌘K add.
-  const [active, setActive] = useState<number | null>(null);
+  // The line the User is on, by its id: the one Enter, the button and ⌘K add.
+  const [active, setActive] = useState<string | null>(null);
   const activeRef = useRef<Cue | null>(null);
   const [added, setAdded] = useState<LineAdded | null>(null);
 
@@ -214,7 +218,8 @@ function TranscriptContent({
     [addLine, meetingId],
   );
   useHandle(transcriptHandle, lend);
-  const firstStart = transcript.cues[0]?.startMs;
+  const first = transcript.cues[0];
+  const firstId = first ? lineId(first) : undefined;
 
   const onLineKey = (event: KeyboardEvent<HTMLElement>, cue: Cue) => {
     if (event.target !== event.currentTarget) return;
@@ -350,35 +355,40 @@ function TranscriptContent({
                   {t("transcript.line.hint")}
                 </p>
               )}
-              <ol ref={list} data-testid="transcript-lines" className="transcript-lines">
+              <ol
+                ref={list}
+                data-testid="transcript-lines"
+                data-hours={(transcript.cues.at(-1)?.startMs ?? 0) >= 3_600_000 ? "" : undefined}
+                className="transcript-lines"
+              >
                 {rows.map((row) =>
                   row.kind === "cue" ? (
                     <li
-                      key={`c${row.cue.startMs}-${row.cue.endMs}`}
+                      key={`c${lineId(row.cue)}`}
                       data-testid="transcript-line"
                       data-start={row.cue.startMs}
                       tabIndex={
-                        meetingId
-                          ? (active ?? firstStart) === row.cue.startMs
-                            ? 0
-                            : -1
-                          : undefined
+                        meetingId ? ((active ?? firstId) === lineId(row.cue) ? 0 : -1) : undefined
                       }
                       aria-describedby={meetingId ? hintId : undefined}
                       onFocus={() => {
-                        setActive(row.cue.startMs);
+                        setActive(lineId(row.cue));
                         activeRef.current = row.cue;
                       }}
                       onKeyDown={meetingId ? (event) => onLineKey(event, row.cue) : undefined}
                       className="transcript-line group"
                     >
                       <span data-quote-skip="" className="transcript-time">
-                        {clockTime(row.cue.startMs)}
+                        {paddedClockTime(row.cue.startMs)}
                       </span>
                       <div className="min-w-0">
                         {row.cue.speaker && (
-                          <p data-quote-skip="" className="transcript-speaker">
-                            {row.cue.speaker}
+                          <p
+                            data-testid="transcript-speaker"
+                            data-quote-skip=""
+                            className="transcript-speaker"
+                          >
+                            {speakerName(row.cue.speaker, t)}
                           </p>
                         )}
                         <p className="transcript-text">{row.cue.text}</p>
@@ -408,7 +418,7 @@ function TranscriptContent({
                       data-quote-skip=""
                       className="transcript-gap"
                     >
-                      <span className="transcript-time">{clockTime(row.gap.fromMs)}</span>
+                      <span className="transcript-time">{paddedClockTime(row.gap.fromMs)}</span>
                       <span>
                         {row.gap.toMs > row.gap.fromMs
                           ? t("transcript.gap", {
@@ -427,8 +437,13 @@ function TranscriptContent({
                     aria-live="polite"
                     className="transcript-line transcript-line--partial"
                   >
-                    <span className="transcript-time">{clockTime(partial.startMs)}</span>
-                    <p className="transcript-text">{partial.text}</p>
+                    <span className="transcript-time">{paddedClockTime(partial.startMs)}</span>
+                    <div className="min-w-0">
+                      <p data-testid="transcript-speaker" className="transcript-speaker">
+                        {speakerName(partial.speaker, t)}
+                      </p>
+                      <p className="transcript-text">{partial.text}</p>
+                    </div>
                   </li>
                 )}
               </ol>

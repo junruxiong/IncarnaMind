@@ -46,6 +46,7 @@ const SUPPORTED = "Spring tides happen at new and full moon.";
 const UNSUPPORTED = "Penguins nest on the harbour cliffs.";
 const CONTRADICTED = "Harbours publish the times of high water every 6 months.";
 const BLANK = "This line asks the model for a blank reply.";
+const LIGHTHOUSES = "Lighthouses guide ships past rocks at night.";
 
 let dataDir: string;
 let sources: string;
@@ -330,32 +331,16 @@ test("A supported sentence's card names the Document as it is named now, after a
   await expect(card.getByTestId("claim-source")).toHaveText(/^Tides of the coast · /);
 });
 
-async function askForChange(
-  window: Page,
-  line: Locator,
-  [from, to]: readonly [string, string],
-  instruction: string,
-) {
-  await slideSelect(window, line, from, { line, words: to });
-  await window.keyboard.press("ControlOrMeta+j");
-  await window.keyboard.type(instruction);
-  await window.keyboard.press("Enter");
-  await expect(window.getByTestId("edit-pending")).toHaveCount(0);
-}
+const PENGUINS_A = "Penguins nest on a harbour cliffs.";
+const HARBOURS_A = "Harbours publish a times of high water every 6 months.";
 
-const GULLS = "Gulls breed there.";
-
-/** Rewrites the unsupported sentence as GULLS and changes "the" in the contradicted one, both waiting. */
+/** Asks the assistant to change "the" to "a": its changes, in the two sentences with "the", wait as the assistant's do. */
 async function askForTwoChanges(window: Page, line: Locator) {
-  await askForChange(
-    window,
-    line,
-    ["Penguins", "harbour cliffs."],
-    `replace “${UNSUPPORTED}” with “${GULLS}”`,
-  );
-  await expect(line.locator("ins.proposal-insert")).toHaveText(["Gulls breed there"]);
-  await askForChange(window, line, ["Harbours publish", "6 months."], "replace the with a");
-  await expect(line.locator("ins.proposal-insert")).toHaveText(["Gulls breed there", "a"]);
+  await window.keyboard.press("ControlOrMeta+j");
+  await expect(window.getByTestId("composer-input")).toBeFocused();
+  await window.keyboard.type("replace the with a");
+  await window.keyboard.press("Enter");
+  await expect(line.locator("ins.proposal-insert")).toHaveText(["a", "a"], { timeout: 15_000 });
 }
 
 test("A check reads the text as it stands and says which sentences with changes waiting it left out; Accept all and check checks them, and Undo takes the accept back, in English and Chinese", async () => {
@@ -382,21 +367,65 @@ test("A check reads the text as it stands and says which sentences with changes 
   await pointAndClick(window, acceptAndCheck);
   const bar = window.getByTestId("proposals-bar");
   await expect(bar).toHaveCount(0);
-  await expect(line).toHaveText(
-    `${SUPPORTED} ${GULLS} Harbours publish a times of high water every 6 months.`,
-  );
+  await expect(line).toHaveText(`${SUPPORTED} ${PENGUINS_A} ${HARBOURS_A}`);
   await expect(marks(window)).toHaveCount(3);
   await expect(waiting).toHaveCount(0);
   await expect(window.getByTestId("undo-message")).toHaveText("已接受 2 处修订");
 
   await window.keyboard.press("ControlOrMeta+z");
-  await expect(line.locator("ins.proposal-insert")).toHaveText(["Gulls breed there", "a"]);
-  await expect(line.locator("del.proposal-delete")).toHaveText([
-    "Penguins nest on the harbour cliffs",
-    "the",
-  ]);
+  await expect(line.locator("ins.proposal-insert")).toHaveText(["a", "a"]);
+  await expect(line.locator("del.proposal-delete")).toHaveText(["the", "the"]);
   await expect(bar.getByTestId("proposals-count")).toHaveText(/2/);
 });
+
+/** Starts noting, every frame, where the element with this test id is; the reader gives back each place seen. */
+async function notePlaces(window: Page, testId: string) {
+  await window.evaluate((id) => {
+    const seen: { x: number; y: number }[] = [];
+    (globalThis as { placesSeen?: typeof seen }).placesSeen = seen;
+    const look = () => {
+      const box = document.querySelector(`[data-testid="${id}"]`)?.getBoundingClientRect();
+      if (box) seen.push({ x: box.x, y: box.y });
+      requestAnimationFrame(look);
+    };
+    requestAnimationFrame(look);
+  }, testId);
+  return () =>
+    window.evaluate(
+      () => (globalThis as { placesSeen?: { x: number; y: number }[] }).placesSeen ?? [],
+    );
+}
+
+for (const [language, width] of [
+  ["en", 1100],
+  ["en", 1440],
+  ["zh-CN", 1100],
+  ["zh-CN", 1440],
+] as const) {
+  test(`Accept all and check stays where it first showed while the counts fill in after the check (${language}, ${width}px)`, async () => {
+    const { app, window } = await launchWithTides();
+    await useLocalChatModel(window);
+    if (language === "zh-CN") await setLanguage(window, language);
+    const { line } = await mindWithSentences(window, [
+      SUPPORTED,
+      UNSUPPORTED,
+      CONTRADICTED,
+      LIGHTHOUSES,
+    ]);
+    await setWindowSize(app, window, width, 900);
+    await askForTwoChanges(window, line);
+    const places = await notePlaces(window, "checks-accept-and-check");
+
+    await checkAll(window, line, "Spring tides", "at night.", "check-against-documents");
+    await expect(window.getByTestId("checks-accept-and-check")).toBeVisible();
+    await expect(window.getByTestId("mind-health").getByTestId("health-unsupported")).toBeVisible();
+    await motionSettled(window);
+
+    const seen = await places();
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.every(({ x, y }) => x === seen[0]?.x && y === seen[0]?.y)).toBe(true);
+  });
+}
 
 test("Check against Documents on sentences that all have changes waiting sends nothing and says so; Accept all and check checks them against the Documents", async () => {
   const { app, window } = await launchWithTides();
@@ -414,7 +443,7 @@ test("Check against Documents on sentences that all have changes waiting sends n
 
   await motionSettled(window);
   await pointAndClick(window, waiting.getByTestId("checks-accept-and-check"));
-  await expect(line).toHaveText(`${GULLS} Harbours publish a times of high water every 6 months.`);
+  await expect(line).toHaveText(`${PENGUINS_A} ${HARBOURS_A}`);
   await expect(marks(window)).toHaveCount(2);
   await expect(marks(window).and(window.locator('[data-check="contradicted"]'))).toBeVisible();
   await expect(marks(window).and(window.locator('[data-check="unsupported"]'))).toBeVisible();
@@ -440,15 +469,13 @@ test("After the User accepts one change by hand and goes to another tab and back
   await expect(tabs).toHaveCount(2);
   await expect(waiting).toHaveCount(0);
   await pointAndClick(window, tabs.first());
-  await expect(line).toContainText(GULLS);
+  await expect(line).toContainText(PENGUINS_A);
   await expect(waiting).toContainText("2 sentences with changes waiting weren't checked");
 
   await motionSettled(window);
   await pointAndClick(window, waiting.getByTestId("checks-accept-and-check"));
   await expect(window.getByTestId("undo-message")).toHaveText("Accepted 1 change");
-  await expect(line).toHaveText(
-    `${SUPPORTED} ${GULLS} Harbours publish a times of high water every 6 months.`,
-  );
+  await expect(line).toHaveText(`${SUPPORTED} ${PENGUINS_A} ${HARBOURS_A}`);
   await expect(marks(window)).toHaveCount(3);
   await expect(waiting).toHaveCount(0);
 });

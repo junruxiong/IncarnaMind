@@ -18,7 +18,9 @@ const RED =
 /** A rule that sets red: its file, then its selectors from the outside in. */
 const RED_RULES = [
   "src/styles.css @theme",
-  'src/styles.css .margin-check[data-check="contradicted"], .citation-card--contradicted',
+  'src/styles.css .margin-check[data-check="contradicted"], .citation-marker[data-check="contradicted"], .citation-card--contradicted',
+  // A contradicted Citation's badge in an Answer, which has no margin for its mark.
+  'src/styles.css .mind-editor.assistant-answer-text .citation-marker &[data-check="contradicted"]',
   'src/styles.css .margin-check &[data-check="contradicted"]',
   'src/styles.css .citation-marker &[data-check="contradicted"]',
   'src/styles.css .citation-run &[data-check="contradicted"]',

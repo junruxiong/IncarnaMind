@@ -1,9 +1,11 @@
 /**
  * A speech-to-text engine with no model, for the tests and the smoke tests
  * (#136): sound louder than a whisper is speech, cut into stretches of at
- * most two seconds, and each stretch says the next of its lines in turn.
- * Deterministic, and never a real model. It can be slow, fail to read
- * stretches, and say it failed over to another engine, for capture health (#161).
+ * most two seconds, and each stretch says the next of its lines in turn: the
+ * User's lines on the microphone's stream, the other side's on the computer
+ * sound's (#941). Deterministic, and never a real model. It can be slow, fail
+ * to read stretches, and say it failed over to another engine, for capture
+ * health (#161).
  */
 import { MEETING_SAMPLE_RATE } from "../adapters";
 import type { TranscriberPort, TranscriberResponse } from "./channel";
@@ -18,9 +20,21 @@ export const FAKE_LINES: readonly string[] = [
   "I'll confirm the date with the payment provider by Friday.",
 ];
 
+/** What the other side says, in turn: not a word of `FAKE_LINES`, so no line of theirs repeats one of the User's. */
+export const FAKE_THEIR_LINES: readonly string[] = [
+  "Thanks for making time today, everyone.",
+  "Can you hear me clearly on your end?",
+  "Dana is joining us from the Leeds office.",
+  "Is there anything blocking the design review?",
+  "Please send the notes round before the weekend.",
+  "Good, let's pick this up again on Thursday.",
+];
+
 export interface FakeSpeechOptions {
-  /** What each stretch says, in turn, from the first again after the last. */
+  /** What each stretch of the microphone says, in turn, from the first again after the last. */
   lines?: readonly string[];
+  /** What each stretch of the computer's sound says, in turn: `FAKE_THEIR_LINES` by default. */
+  theirLines?: readonly string[];
   /** How long decoding takes, in ms. */
   decodeMs?: number;
   /** The longest stretch, in ms. */
@@ -80,9 +94,11 @@ const LEVEL = 0.01;
 const QUIET_FRAMES = 25;
 
 export function createFakeSpeechEngine(options: FakeSpeechOptions = {}): SpeechEngine {
-  const lines = options.lines ?? FAKE_LINES;
+  const mine = options.lines ?? FAKE_LINES;
+  const theirs = options.theirLines ?? FAKE_THEIR_LINES;
   const maxFrames = Math.round((options.maxSpeechMs ?? 2000) / 20);
   let said = 0;
+  const saidBy = { mine: 0, theirs: 0 };
 
   const detector = (): VoiceDetector => {
     let position = 0;
@@ -130,12 +146,14 @@ export function createFakeSpeechEngine(options: FakeSpeechOptions = {}): SpeechE
   return {
     detector,
     recognizer: {
-      async decode(samples) {
+      async decode(samples, stream) {
         const ms = options.realTimeFactor
           ? ((samples.length * 1000) / MEETING_SAMPLE_RATE) * options.realTimeFactor
           : options.decodeMs;
         if (ms) await new Promise((resolve) => setTimeout(resolve, ms));
-        const line = lines[said % lines.length] ?? "";
+        const theirSound = stream.endsWith(":system");
+        const lines = theirSound ? theirs : mine;
+        const line = lines[saidBy[theirSound ? "theirs" : "mine"]++ % lines.length] ?? "";
         said++;
         if (options.failing?.includes(said)) throw new Error("The fake engine can't read this.");
         return line;

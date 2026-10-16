@@ -6,6 +6,8 @@ const settings = (leaveOutOwnFiles: boolean): Pick<Settings, "user"> => ({
   user: {
     language: "en",
     chatModel: null,
+    quickTasksModel: null,
+    imageModel: null,
     suggestWhileWriting: false,
     leaveOutOwnFiles,
     exportOptions: {
@@ -18,6 +20,7 @@ const settings = (leaveOutOwnFiles: boolean): Pick<Settings, "user"> => ({
       },
       pdf: { includeQuestions: false },
       html: { includeQuestions: false },
+      "share-page": { includeQuestions: false, citationCards: true, checkedLine: false },
     },
     authorName: null,
     monthlyCap: null,

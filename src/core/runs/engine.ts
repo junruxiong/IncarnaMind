@@ -31,8 +31,9 @@ export interface RunEngine {
  *
  * A call's arguments are checked against `inputSchema` first, leniently,
  * taken as a small model meant them (a number or true/false sent as text, an
- * array or an object sent as JSON text, null for an optional one); the Tool
- * gets them as the model sent them. Arguments that don't match never reach
+ * array or an object sent as JSON text, null for an optional one, one object
+ * for an array); the Tool gets them as the model sent them, but for that object,
+ * which it gets as the array's only item. Arguments that don't match never reach
  * `gate` or the Tool: the call fails, and the model reads why.
  */
 export type RunTool = Pick<Tool, "name" | "description" | "inputSchema" | "call" | "streamInput">;

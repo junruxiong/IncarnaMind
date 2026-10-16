@@ -149,6 +149,57 @@ export function chatGroupClassifier(
 }
 
 /**
+ * A classifier whose scans, PDFs with no text, go to another that reads their
+ * pages (the image model), made when the first one comes. The rest go
+ * to `text`, which reads no images.
+ */
+export function withPageReader(
+  text: GroupClassifier,
+  pages: () => Promise<GroupClassifier>,
+): GroupClassifier {
+  let reader: Promise<GroupClassifier> | undefined;
+  const classifier: GroupClassifier = {
+    local: text.local,
+    pageImages: "no-text",
+    ...(text.model && { model: text.model }),
+    async decide(groups, excerpt, signal, images = []) {
+      return (await classifier.organize(groups, [], excerpt, signal, images)).groupId;
+    },
+    async organize(groups, tags, excerpt, signal, images = []) {
+      if (images.length === 0) {
+        if (text.model) classifier.model = text.model;
+        return text.organize(groups, tags, excerpt, signal);
+      }
+      reader ??= pages();
+      const chosen = await reader.catch((error: unknown) => {
+        // Not kept: the next scan asks again, e.g. once its flow is allowed.
+        reader = undefined;
+        throw error;
+      });
+      if (chosen.model) classifier.model = chosen.model;
+      return chosen.organize(groups, tags, excerpt, signal, images);
+    },
+  };
+  return classifier;
+}
+
+/** A classifier whose every request goes through `run`, e.g. the ChatGPT plan's pace (see ./planPace). */
+export function pacedBy(
+  classifier: GroupClassifier,
+  run: <T>(task: () => Promise<T>, signal: AbortSignal) => Promise<T>,
+): GroupClassifier {
+  const paced: GroupClassifier = {
+    ...classifier,
+    async decide(groups, excerpt, signal, images = []) {
+      return (await paced.organize(groups, [], excerpt, signal, images)).groupId;
+    },
+    organize: (groups, tags, excerpt, signal, images = []) =>
+      run(() => classifier.organize(groups, tags, excerpt, signal, images), signal),
+  };
+  return paced;
+}
+
+/**
  * Where a local decision model's probability that a Tag applies counts as
  * unsure: below `low` the Tag isn't applied; from `low` up to `high` it is,
  * marked "needs review". Models of different sizes are calibrated

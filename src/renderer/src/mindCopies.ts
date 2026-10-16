@@ -9,11 +9,29 @@
  * look at: nothing is ever sent from it.
  */
 import * as Y from "yjs";
-import type { MindAccess } from "../../core/api";
+import type { EditCause, MindAccess } from "../../core/api";
 import { core } from "./core";
 
 /** Marks changes that came from the core, so they aren't sent back to it. */
 const FROM_CORE = Symbol("from the core");
+
+/** The core's changes from an edit asked for here (#880): not sent back, but this window's Undo takes them back. */
+export const EDIT_FROM_CORE = Symbol("an edit asked for here, from the core");
+
+const takers = new Map<string, { doc: Y.Doc; take(update: Uint8Array, cause: EditCause): void }>();
+
+/** Hands the updates of this edit to `take`, in the copy `doc` only. Returns what stops it. */
+export function takeEditUpdates(
+  requestId: string,
+  doc: Y.Doc,
+  take: (update: Uint8Array, cause: EditCause) => void,
+): () => void {
+  const taker = { doc, take };
+  takers.set(requestId, taker);
+  return () => {
+    if (takers.get(requestId) === taker) takers.delete(requestId);
+  };
+}
 
 export interface OpenedCopy {
   access: MindAccess;
@@ -34,11 +52,16 @@ export function openMindCopy(
   let active = true;
   let editable = false;
   // Listen before opening, so nothing pushed in between is missed. Yjs merges in any order.
-  const stopListening = core.on("mind.update", ({ mindId: changed, update }) => {
-    if (changed === mindId) Y.applyUpdate(local, update, FROM_CORE);
+  const stopListening = core.on("mind.update", ({ mindId: changed, update, cause }) => {
+    if (changed !== mindId) return;
+    const taker = cause && takers.get(cause.requestId);
+    if (cause && taker?.doc === local) taker.take(update, cause);
+    else Y.applyUpdate(local, update, FROM_CORE);
   });
   const send = (update: Uint8Array, origin: unknown) => {
-    if (origin !== FROM_CORE && editable) core.applyMindUpdate(mindId, update).catch(failed);
+    if (origin !== FROM_CORE && origin !== EDIT_FROM_CORE && editable) {
+      core.applyMindUpdate(mindId, update).catch(failed);
+    }
   };
   local.on("update", send);
   core.openMind(mindId).then(

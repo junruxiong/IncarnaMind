@@ -137,6 +137,18 @@ describe("Models in the app, by the catalog", () => {
     expect(all).toContain("Newest note.");
   });
 
+  // protects=an Answer asks for a modest thinking budget, and a Question that asks to check or calculate for a larger one; fails_when=an Answer to "Calculate" is built with the modest budget or one to "Write a summary" with the larger; no_claim=only what the core asks the model factory for, not what a provider does with it.
+  test("an Answer is prepared with a modest thinking budget, and one that asks to calculate with a larger", async () => {
+    const { core, models } = await startWithCloudModel({
+      kind: "anthropic",
+      modelId: "claude-sonnet-5-5",
+    });
+    await askBelow(core, [], "Write a summary page of these documents");
+    expect(models.specs.at(-1)?.thinking).toBe("answer");
+    await askBelow(core, [], "Calculate the leverage headroom after the step-down");
+    expect(models.specs.at(-1)?.thinking).toBe("careful");
+  });
+
   test("a model the catalog says gives no structured output isn't tried with it when it refuses Tools", async () => {
     // GPT-4 Turbo calls Tools but has no JSON schema output; here its provider refuses the Tools.
     const model = scriptedModel((call) =>

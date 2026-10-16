@@ -53,6 +53,9 @@ export function exportLabels(language: Language): ExportLabels {
       if (sentence.check === "needs-recheck") {
         return t(`export.comment.sentence.needs-recheck.${sentence.why}`);
       }
+      if (sentence.check === "cited-case-unchecked") {
+        return t("export.comment.sentence.citedCaseUnchecked");
+      }
       if (sentence.check === "contradicted") {
         if (sentence.says)
           return t("export.comment.sentence.contradicted", { says: sentence.says });

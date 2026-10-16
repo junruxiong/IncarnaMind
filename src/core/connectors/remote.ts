@@ -15,10 +15,10 @@ import type { Browser } from "../adapters";
 import type { ConnectorError, ConnectorSignInError, ExternalService } from "../api";
 import { SecretStorageError } from "../errors";
 import {
-  type LoopbackRedirect,
   OAuthFlowError,
   type OAuthPage,
   openLoopbackRedirect,
+  type SignInRedirect,
 } from "../oauth";
 import {
   ClientIdRequiredError,
@@ -133,7 +133,7 @@ export interface RemoteSignInOptions {
 }
 
 /** The loopback redirect, on the port the last sign-in used if it is free, else on any free one. */
-async function openRedirect(options: RemoteSignInOptions): Promise<LoopbackRedirect> {
+async function openRedirect(options: RemoteSignInOptions): Promise<SignInRedirect> {
   const base = {
     path: CALLBACK_PATH,
     pages: options.pages,

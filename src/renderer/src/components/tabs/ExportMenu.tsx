@@ -28,6 +28,7 @@ const ICON_KIND: Readonly<Record<ExportFormat, DocumentKind>> = {
   pdf: "pdf",
   "source-pack": "pdf",
   html: "web",
+  "share-page": "web",
   markdown: "markdown",
 };
 

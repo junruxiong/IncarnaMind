@@ -82,6 +82,10 @@ _Avoid_: loose files, imports
 A short span of a Document that can be retrieved and cited.
 _Avoid_: chunk, snippet
 
+**Own workings**:
+A Document the User marks with "Don't cite this Document", such as a spreadsheet of figures copied from a report, with their own ratios. It is still searched and read to understand a Question, but an Answer never cites it and no check uses it as evidence, so it can't corroborate the report it was copied from. A check that finds only an own working file stating a claim says so. The interface says "Not cited" beside its name.
+_Avoid_: private Document, hidden Document, excluded Document
+
 **Citation**:
 A reference, anchored in the text of an Answer, to the Passage a claim was drawn from: the Location it cites, and a quote from the Passage that is checked against the text at that Location. Copied into a Note, it stays a Citation; Question context shows it as a plain reference to its Document. It names its Document as the Document is named now, so a rename shows in every Citation of it, on screen, in exports and in what a model or an outside agent reads; the name it was made with is kept, never rewritten, and shown only when the Document can't be found. A History comparison keeps each Checkpoint's own names.
 _Avoid_: source, reference
@@ -115,7 +119,7 @@ A public service that Find sources searches for works to add to the Library: Ope
 _Avoid_: source (a Document is not one), database, provider on its own (an AI model's provider)
 
 **Location**:
-Where in a Document a Citation points, in the unit the Document's own readers use: one or two pages of a PDF, one or two slides of a deck (speaker notes count as part of their slide), a sheet and a range of rows of a spreadsheet, the section a quote sits under in a Word file or Markdown (for a quote of a Word comment, the section the comment is anchored in, and that it is a comment by its author), the section and paragraphs of a Web page, a range of lines in plain text, or a range of time in a Transcript (shown as the time the quote starts, "14:26").
+Where in a Document a Citation points, in the unit the Document's own readers use: one or two pages of a PDF (named as the page names itself, by its page label or the number printed on it, with its place in the PDF beside it when they differ: "p. 68 · page 69 of the PDF"), one or two slides of a deck (speaker notes count as part of their slide), a sheet and a range of rows of a spreadsheet, the section a quote sits under in a Word file or Markdown (for a quote of a Word comment, the section the comment is anchored in, and that it is a comment by its author), the section and paragraphs of a Web page, a range of lines in plain text, or a range of time in a Transcript (shown as the time the quote starts, "14:26").
 _Avoid_: page (for anything that isn't a PDF), position, anchor
 
 **Cited page**:
@@ -240,7 +244,7 @@ The result of a Citation check when the Citation's quote, or words its sentence 
 _Avoid_: broken, invalid, failed
 
 **Unsupported**:
-The result for a sentence when Check against Documents, Verify or note health finds nothing in the Documents that backs it up. It is not a finding that the sentence is wrong.
+The result for a sentence when Check against Documents, Verify or note health finds nothing in the Documents that backs it up. It is not a finding that the sentence is wrong. A sentence that cites a court decision none of the Documents holds is unsupported too, and its card says the case can't be checked here.
 _Avoid_: not found, unverified, false
 
 **Contradicted**:
@@ -294,7 +298,7 @@ The words of a Meeting, in order and with times, kept as a Document so that a Ci
 _Avoid_: captions, subtitles, minutes
 
 **Speaker**:
-A person in a Transcript who is told apart from the others. A Speaker is named by the User, and a Citation to a Transcript names who said the quote.
+A person in a Transcript who is told apart from the others. A Speaker is named by the User, and a Citation to a Transcript names who said the quote. Before that, a live Meeting's lines are "Me" (the microphone) or "Them" (the computer's sound), or "Speaker ?" with no computer sound.
 _Avoid_: voice, participant, user
 
 ### Files
@@ -318,7 +322,7 @@ Anonymous events about using IncarnaMind, such as "a Question was asked with a l
 _Avoid_: telemetry, tracking
 
 **AI use record**:
-What the AI put into a Mind, or proposed and the User turned down, and what became of it (kept, edited, deleted), kept per Mind on this computer. It holds kinds, sizes, the model and times, never text, and is never sent, whatever the User chose about Usage data.
+What the AI put into a Mind, or proposed and the User turned down, and what became of it (kept, edited, deleted), and each sentence a model checked, kept per Mind on this computer. It holds kinds, sizes, the model and times, never text, and is never sent, whatever the User chose about Usage data.
 _Avoid_: AI log, AI history
 
 ### Window

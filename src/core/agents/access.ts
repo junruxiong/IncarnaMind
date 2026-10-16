@@ -268,6 +268,8 @@ export interface AgentAccessDeps {
   passage(passageId: string): WindowedPassage | null;
   passagesBetween(documentId: string, from: number, to: number): WindowedPassage[];
   citing: Pick<Citing, "citeQuote" | "locate">;
+  /** Whether the Passage's Document is the User's own workings: an agent reads it and never cites it. */
+  notCited(passageId: string): boolean;
   /** A Citation checked again against its Document as it is now. */
   recheck(input: {
     documentId: string;
@@ -492,7 +494,10 @@ export function createAgentAccess(deps: AgentAccessDeps, pairingId: string): Age
     terms: readonly string[],
   ): AgentPassage => {
     const sentence = bestSentence(passage.text, terms);
-    const citation = sentence ? deps.citing.citeQuote(passage.passageId, sentence) : null;
+    const citation =
+      sentence && !deps.notCited(passage.passageId)
+        ? deps.citing.citeQuote(passage.passageId, sentence)
+        : null;
     const found = citation?.check === "found" ? citation : null;
     const minted = found ? mint(pairing, found) : null;
     return {
@@ -608,6 +613,12 @@ export function createAgentAccess(deps: AgentAccessDeps, pairingId: string): Age
             unknown
           >;
           const passage = passageInScope(inScope, record.passageId);
+          if (deps.notCited(passage.passageId)) {
+            throw new AgentRefusedError(
+              "invalid",
+              "That Passage is from the User's own working file, which is read but never cited.",
+            );
+          }
           read.push(passage.documentId);
           const quote = text(record.quote, "quote", MAX_QUOTE_CHARS);
           const citation = deps.citing.citeQuote(passage.passageId, quote);

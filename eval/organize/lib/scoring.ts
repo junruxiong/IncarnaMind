@@ -23,6 +23,14 @@ export interface PredictedTag {
   needsReview: boolean;
 }
 
+/** Tokens a Document's model calls used, as the provider counted them. */
+export interface TokenCount {
+  input: number;
+  output: number;
+  /** Of the output, the tokens spent reasoning. */
+  reasoning: number;
+}
+
 export interface Prediction {
   id: string;
   /** Undefined when the request failed. */
@@ -37,6 +45,8 @@ export interface Prediction {
   model: string | null;
   /** Page images were sent. */
   images: boolean;
+  /** What its model calls used, for a route that counts them. */
+  tokens?: TokenCount;
 }
 
 export interface Summary {
@@ -54,6 +64,9 @@ export interface Summary {
   msMean: number;
   msMedian: number;
   msP90: number;
+  /** The Documents whose tokens were counted, and what they used in all. */
+  counted: number;
+  tokens: TokenCount;
 }
 
 export interface Mistake {
@@ -106,11 +119,19 @@ export function summarise(pairs: readonly { doc: Labelled; prediction: Predictio
     msMean: 0,
     msMedian: 0,
     msP90: 0,
+    counted: 0,
+    tokens: { input: 0, output: 0, reasoning: 0 },
   };
   const times: number[] = [];
   for (const { doc, prediction } of pairs) {
     if (prediction.error !== null) summary.errors++;
     else times.push(prediction.ms);
+    if (prediction.tokens) {
+      summary.counted++;
+      summary.tokens.input += prediction.tokens.input;
+      summary.tokens.output += prediction.tokens.output;
+      summary.tokens.reasoning += prediction.tokens.reasoning;
+    }
     if (folderCorrect(doc, prediction)) summary.folderCorrect++;
     if (folderLenient(doc, prediction)) summary.folderLenient++;
     const expected = new Set(doc.tags);
@@ -205,3 +226,16 @@ export const fraction = (part: number, whole: number) =>
 
 /** "0.83". */
 export const decimal = (value: number) => value.toFixed(2);
+
+/** What 100 Documents cost at a price per million tokens, from the tokens counted. */
+export function costPer100(
+  summary: Pick<Summary, "counted" | "tokens">,
+  price: { input: number; output: number },
+): number {
+  if (summary.counted === 0) return 0;
+  const perDocument =
+    (summary.tokens.input * price.input + summary.tokens.output * price.output) /
+    1e6 /
+    summary.counted;
+  return perDocument * 100;
+}

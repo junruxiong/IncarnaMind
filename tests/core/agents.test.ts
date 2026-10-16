@@ -196,6 +196,43 @@ describe("outside agents", () => {
     expect(read.passages.map((each) => each.passageId)).toEqual([passage.passageId]);
   });
 
+  it("read the User's own workings but never cite them: no Citation in a search, none for a quote, until the User cites them again", async () => {
+    const { core, launch, tides } = await pairedToCoast();
+    const agent = await connectLegacyAgent(launch);
+    await core.setNotCited(tides.id, true);
+
+    const [passage] = structured<SearchOut>(
+      await agent.callTool({ name: "search", arguments: { query: "neap tides" } }),
+    ).passages;
+    expect(passage).toMatchObject({ documentId: tides.id, quote: null, cite: null });
+    expect(passage?.text).toContain("Neap tides come at the first and third quarters");
+
+    const read = structured<{ passages: { text: string }[] }>(
+      await agent.callTool({
+        name: "read_passages",
+        arguments: { passageId: passage?.passageId },
+      }),
+    );
+    expect(read.passages[0]?.text).toContain("Neap tides come at the first and third quarters");
+
+    const refused = await agent.callTool({
+      name: "cite",
+      arguments: {
+        citations: [
+          { passageId: passage?.passageId, quote: "Their range is the smallest of the month." },
+        ],
+      },
+    });
+    expect(refused.isError).toBe(true);
+    expect(resultText(refused)).toMatch(/own working file/);
+
+    await core.setNotCited(tides.id, false);
+    const [again] = structured<SearchOut>(
+      await agent.callTool({ name: "search", arguments: { query: "neap tides" } }),
+    ).passages;
+    expect(again?.cite).toMatch(/^\[cite:[a-z0-9]{8}\]$/);
+  });
+
   it("are refused outside their Folders", async () => {
     const { core, launch, budget, finance, coast } = await pairedToCoast();
     const agent = await connectLegacyAgent(launch);

@@ -23,6 +23,26 @@ const MIN_SHARED = 2;
 /** ...and the least share of the sentence's own words (Chinese: its pairs of characters) they must be. */
 const MIN_SHARE = 0.4;
 
+const FIGURE = /(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?%?/g;
+
+const figuresIn = (text: string): { value: number; percent: boolean }[] =>
+  (text.match(FIGURE) ?? []).map((figure) => ({
+    value: Number(figure.replace(/[,%]/g, "")),
+    percent: figure.endsWith("%"),
+  }));
+
+/**
+ * Whether every figure the sentence states is in the text: "21%" is also "0.21", and "1,482.6" is
+ * "1482.6". A sentence without a figure has none to differ in.
+ */
+export function figuresMatch(sentence: string, text: string): boolean {
+  const there = figuresIn(text).map((figure) => figure.value);
+  const has = (wanted: number) => there.some((value) => Math.abs(value - wanted) < 1e-9);
+  return figuresIn(sentence).every(
+    ({ value, percent }) => has(value) || (percent && has(value / 100)),
+  );
+}
+
 export interface NearestLine {
   /** The id the model was shown the Passage by. */
   id: string;

@@ -1,8 +1,10 @@
 import type { Editor } from "@tiptap/core";
 import type { EditAction } from "../../../core/api";
 import { translate } from "../../../shared/i18n";
+import { actOnAppliedEdit, restoreChange, reviewedChangeAt } from "../appliedEdits";
 import { useComposer } from "../composer";
 import { holdsAiText } from "../editor/aiText";
+import { type AppliedAction, type AppliedLine, appliedLineIn } from "../editor/appliedEditLine";
 import { selectionForEdit } from "../editor/editSelection";
 import { noteHolding } from "../editor/noteKeymap";
 import { pendingAtSelection, pendingIn } from "../editor/proposalReview";
@@ -31,6 +33,12 @@ function noteOnProposal(ctx: CommandContext): Editor | null {
   return editor && !editor.isDestroyed && pendingAtSelection(editor.state).length > 0
     ? editor
     : null;
+}
+
+/** The note the cursor's Block is in, while the cursor is in an applied edit's change shown again. */
+function noteOnReviewedChange(ctx: CommandContext): Editor | null {
+  const editor = ctx.focus?.kind === "block" ? noteHolding(ctx.focus.id) : null;
+  return editor && !editor.isDestroyed && reviewedChangeAt(editor.state) !== null ? editor : null;
 }
 
 function resolveAt(ctx: CommandContext, outcome: "accept" | "reject"): void {
@@ -84,7 +92,7 @@ const editAction = (
   id: `edit.${action}`,
   label,
   group: "main",
-  // Its changes wait as Proposals: rejecting them leaves the text as it was.
+  // It applies at once; ⌘Z takes it back.
   reversible: true,
   when: () => withSelection() !== null,
   run() {
@@ -93,7 +101,52 @@ const editAction = (
   },
 });
 
+/** The Mind last written in, while the line over an edit it applied shows, of one of `kinds`. */
+function withAppliedLine(kinds: readonly AppliedLine["kind"][], also = (_: AppliedLine) => true) {
+  const note = noteHandle.current;
+  const line = note && !note.editor.isDestroyed ? appliedLineIn(note.editor.state) : null;
+  return note && line && kinds.includes(line.kind) && also(line) ? note : null;
+}
+
+/** What the line over an applied edit offers, from ⌘K while it shows. */
+const appliedCommand = (
+  id: `edit.${string}`,
+  label: Command["label"],
+  action: AppliedAction,
+  kinds: readonly AppliedLine["kind"][],
+  also?: (line: AppliedLine) => boolean,
+): Command => ({
+  id,
+  label,
+  group: "main",
+  // ⌘Z takes each back, the line's Undo the whole edit.
+  reversible: true,
+  when: () => withAppliedLine(kinds, also) !== null,
+  run() {
+    const note = withAppliedLine(kinds, also);
+    if (note) actOnAppliedEdit(note.editor, action);
+  },
+});
+
 export const proposalCommands: readonly Command[] = [
+  appliedCommand("edit.undoApplied", "command.edit.undoApplied", "undo", ["applied", "review"]),
+  appliedCommand(
+    "edit.reviewApplied",
+    "edit.applied.review",
+    "review",
+    ["applied"],
+    (line) => line.kind === "applied" && line.changes.length > 0,
+  ),
+  appliedCommand(
+    "edit.removeKept",
+    "command.edit.removeKept",
+    "remove-kept",
+    ["applied"],
+    (line) => line.kind === "applied" && line.kept !== null,
+  ),
+  appliedCommand("edit.reviewDone", "command.edit.reviewDone", "done", ["review"]),
+  appliedCommand("edit.applyHeld", "command.edit.applyHeld", "apply", ["held"]),
+  appliedCommand("edit.discardHeld", "command.edit.discardHeld", "discard", ["held"]),
   {
     id: "proposal.accept",
     label: "command.proposal.accept",
@@ -107,13 +160,24 @@ export const proposalCommands: readonly Command[] = [
   },
   {
     id: "proposal.reject",
-    label: "command.proposal.reject",
+    label: (ctx, t) =>
+      noteOnProposal(ctx) === null && noteOnReviewedChange(ctx) !== null
+        ? t("edit.review.restore")
+        : t("command.proposal.reject"),
     shortcut: { keys: "CmdOrCtrl+Backspace", inText: true },
     group: "main",
     appliesTo: ["block"],
     reversible: true,
-    when: (ctx) => noteOnProposal(ctx) !== null,
-    run: (ctx) => resolveAt(ctx, "reject"),
+    when: (ctx) => noteOnProposal(ctx) !== null || noteOnReviewedChange(ctx) !== null,
+    run(ctx) {
+      if (noteOnProposal(ctx)) {
+        resolveAt(ctx, "reject");
+        return;
+      }
+      const editor = noteOnReviewedChange(ctx);
+      const index = editor ? reviewedChangeAt(editor.state) : null;
+      if (editor && index !== null) restoreChange(editor, index);
+    },
   },
   {
     // "Regenerate" under a change out of date, from the keyboard and ⌘K.
@@ -153,7 +217,7 @@ export const proposalCommands: readonly Command[] = [
     id: "edit.withAi",
     label: "editor.ai.edit",
     group: "main",
-    // Nothing changes until the User says what, and then only as Proposals.
+    // What the User then asks for applies at once; ⌘Z takes it back.
     reversible: true,
     when: () => withSelection() !== null,
     run() {

@@ -42,7 +42,7 @@ function cited(
           windowTo: 0,
         },
       ],
-      citationSource: () => ({ ...source, documentKind, documentDeleted: false }),
+      citationSource: () => ({ ...source, documentKind, documentDeleted: false, notCited: false }),
       pageTexts: (_id, _hash, from, to) =>
         units.filter(
           (unit) => unit.page !== null && unit.page >= (from ?? 0) && unit.page <= (to ?? 0),
