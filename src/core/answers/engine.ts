@@ -119,6 +119,7 @@ import {
   unreadDocumentsNote,
 } from "./prompt";
 import { retryQuotes } from "./quoteRetry";
+import { claimsOf, createNudges, settleReply, type TurnCheck } from "./turnChecks";
 import { citeUnmarked } from "./unmarkedQuotes";
 import { createWindowBudget, SEARCH_RESERVE_TOKENS, type WindowBudget } from "./window";
 
@@ -397,16 +398,14 @@ export interface AnswerRequest {
    */
   cacheKey?: string;
   /**
-   * Reads the reply once it is written: the changes to a Mind it claims
-   * that none of the Answer's Tool calls made, and what to tell the model so
-   * it writes the reply again; null when it claims none. In the Tool loop the
-   * model is asked once more with `note`; a reply that still claims one, or one
-   * written without Tools, ends with "claims-unbacked".
+   * The end-of-turn checks (see ./turnChecks), in order. In the Tool loop the
+   * model is asked once more with a check's note, and a reply that still
+   * trips one, or one written without Tools, ends with "claims-unbacked".
    */
-  checkReply?(text: string): { claims: ClaimedChange[]; note: string } | null;
+  turnChecks?: readonly TurnCheck[];
   /**
    * How much of a reply being written may show while it streams: up to the
-   * first sentence that may claim a change, which waits for `checkReply`.
+   * first sentence that may claim a change, which waits for the checks.
    * Absent: all of it.
    */
   shownUpTo?(text: string): number;
@@ -1575,11 +1574,12 @@ async function* toolLoop(
   const calls = new Map<string, Tool>();
   /** Searches running now: the Answer is "searching" while there are any. */
   let searching = 0;
-  /** The reply as first written, once the model is asked once more because it claims a change no call made. */
-  let first: string | null = null;
+  /** The reply that stands if the model, asked once more, fails: as it was before the last ask. */
+  let standing: string | null = null;
   let again: readonly RunMessage[] | null = null;
   /** Model calls made so far: asked once more, the model gets what is left of `maxSteps`. */
   let steps = 0;
+  const nudges = createNudges(maxSteps, () => steps);
   /** How much of `keptText + stepText` the Answer shows: a claim of a change waits until it is checked. */
   let released = 0;
   function* release(upTo: number): Generator<AnswerEngineEvent> {
@@ -1591,7 +1591,7 @@ async function* toolLoop(
   }
   const releasable = (text: string) => request.shownUpTo?.(text) ?? text.length;
   function* flag(text: string): Generator<AnswerEngineEvent> {
-    const claims = request.checkReply?.(text)?.claims ?? [];
+    const claims = claimsOf(request.turnChecks ?? [], text);
     if (claims.length > 0) yield { type: "claims-unbacked", claims };
   }
   function* backToFirst(written: string): Generator<AnswerEngineEvent> {
@@ -1605,7 +1605,9 @@ async function* toolLoop(
   async function* endAnswer(): AsyncGenerator<AnswerEngineEvent> {
     if (!request.documents.wroteIntoMind?.()) {
       const placed = yield* missingMarkerEvents(keptText, cited, request.documents);
-      yield* citeUnmarked(request, placed, temperature, budget);
+      yield* citeUnmarked(request, placed, temperature, budget, () =>
+        nudges.take("unmarked-quotes"),
+      );
     }
     yield { type: "finished" };
   }
@@ -1613,7 +1615,7 @@ async function* toolLoop(
   async function* runs(): AsyncGenerator<RunEvent> {
     let history: readonly RunMessage[] = messages.map(runMessage);
     for (;;) {
-      yield* engine.run(runRequest(history, Math.max(1, maxSteps - steps)));
+      yield* engine.run(runRequest(history, maxSteps - steps));
       if (!again) return;
       history = [...history, ...again];
       again = null;
@@ -1745,9 +1747,9 @@ async function* toolLoop(
         break;
       }
       case "refused":
-        // Asked once more, its first reply stands: trying another way now would call its Tools again.
-        if (first !== null) {
-          yield* backToFirst(first);
+        // Asked once more, the reply before stands: trying another way now would call its Tools again.
+        if (standing !== null) {
+          yield* backToFirst(standing);
           yield* endAnswer();
           return;
         }
@@ -1764,11 +1766,9 @@ async function* toolLoop(
         return;
       case "failed":
         for (const source of unannounced.splice(0)) yield { type: "read-third-party", source };
-        if (first !== null) {
-          console.error(
-            `Asking again for a reply that claims changes failed: ${event.error.message}`,
-          );
-          yield* backToFirst(first);
+        if (standing !== null) {
+          console.error(`Asking again for a better reply failed: ${event.error.message}`);
+          yield* backToFirst(standing);
           yield* endAnswer();
           return;
         }
@@ -1776,22 +1776,20 @@ async function* toolLoop(
         return;
       case "finished": {
         if (keptText.trim() === "" && unmarked.trim() !== "") keptText = unmarked;
-        const unbacked = request.checkReply?.(keptText) ?? null;
-        if (unbacked && first === null) {
-          first = keptText;
+        const settled = settleReply(request.turnChecks ?? [], keptText, nudges);
+        if ("nudge" in settled) {
+          standing = keptText;
           if (released > 0) yield { type: "text-retracted", length: released };
           released = 0;
           keptText = "";
           stepText = "";
           answered = false;
           unmarked = "";
-          again = [...event.messages, { role: "user", text: unbacked.note }];
+          again = [...event.messages, { role: "user", text: settled.nudge }];
           break;
         }
         yield* release(keptText.length);
-        if (unbacked && unbacked.claims.length > 0) {
-          yield { type: "claims-unbacked", claims: unbacked.claims };
-        }
+        if (settled.claims.length > 0) yield { type: "claims-unbacked", claims: settled.claims };
         yield* endAnswer();
         return;
       }
@@ -1923,8 +1921,8 @@ async function* structured(
 }
 
 function* flagClaims(request: AnswerRequest, text: string): Generator<AnswerEngineEvent> {
-  const unbacked = request.checkReply?.(text);
-  if (unbacked) yield { type: "claims-unbacked", claims: unbacked.claims };
+  const claims = claimsOf(request.turnChecks ?? [], text);
+  if (claims.length > 0) yield { type: "claims-unbacked", claims };
 }
 
 /** A plain streamed Answer, with no Tools and no Citations. */
