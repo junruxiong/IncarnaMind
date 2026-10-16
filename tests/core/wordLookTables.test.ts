@@ -1,5 +1,8 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
+import * as Y from "yjs";
 import {
+  BLOCK_ID_ATTRIBUTE,
+  MIND_WORD_LOOK_FIELD,
   WORD_LOOK_ATTRIBUTE,
   WORD_RUN_MARK,
   type WordCellLook,
@@ -8,9 +11,12 @@ import {
   type WordRunLook,
 } from "../../src/core";
 import { WORD_LOOK_VERSION } from "../../src/core/documents/formats/docxLook";
+import { setWordSource, wordFingerprint, wordSourceOf } from "../../src/shared/wordFiles";
 import { wordLookOf } from "../../src/shared/wordLook";
-import { createTempDataFolder, startCore } from "../helpers/core";
-import type { MindClient } from "../helpers/mindClient";
+import { createTempDataFolder, queryDatabase, startCore } from "../helpers/core";
+import { unzip } from "../helpers/docx";
+import { recordingLog } from "../helpers/log";
+import { connectToMind, type MindClient } from "../helpers/mindClient";
 import { readMind } from "../helpers/minds";
 import { paragraph, run, wordFile } from "../helpers/word";
 import { importWordBytes } from "../helpers/wordMinds";
@@ -87,7 +93,7 @@ async function imported(body: string, styles = STYLES) {
   });
   const look = wordLookOf(mind.client.doc);
   if (!look) throw new Error("No look.");
-  return { ...mind, look, cells: cellsOf(mind.client, look) };
+  return { dataDir, core, ...mind, look, cells: cellsOf(mind.client, look) };
 }
 
 const byText = (cells: Cell[], text: string) => {
@@ -237,5 +243,63 @@ describe("indents in characters", () => {
     expect(looks.get("Indented by its style")).toMatchObject({ left: 24 });
     expect(looks.get("Indented by a length")).toMatchObject({ left: 36 });
     expect(looks.get("Hanging one character")).toMatchObject({ firstLine: -12 });
+  });
+});
+
+function findText(blocks: Y.XmlFragment, text: string): Y.XmlText {
+  for (const element of blocks.createTreeWalker(() => true)) {
+    if (!(element instanceof Y.XmlText)) continue;
+    const plain = (element.toDelta() as { insert: unknown }[])
+      .map((each) => (typeof each.insert === "string" ? each.insert : ""))
+      .join("");
+    if (plain.startsWith(text)) return element;
+  }
+  throw new Error(`No "${text}".`);
+}
+
+const documentXml = (bytes: Uint8Array) => unzip(bytes).get("word/document.xml")?.toString() ?? "";
+
+describe("exporting a table with conditional formatting", () => {
+  test("untouched, it writes the file's own bytes", async () => {
+    const body = report({ rows: FIGURES });
+    const { core, mindId } = await imported(body);
+    const result = await core.exportMind(mindId, { format: "docx" });
+    expect(documentXml(result.data)).toBe(documentXml(wordFile({ styles: STYLES, body })));
+  });
+
+  test("a heading-row paragraph edited in a Mind read before conditional formatting keeps the row's bold; the rest is written as it was", async () => {
+    const body = report({ rows: FIGURES });
+    const { dataDir, core, mindId, client } = await imported(body);
+    // As version 2 read and recorded it: no bold from the heading row. Then the User edits one of its cells.
+    client.doc.transact(() => {
+      for (const text of ["Region", "Q1", "Q2"]) {
+        const cell = findText(client.blocks, text);
+        cell.format(0, cell.length, { bold: null });
+        const paragraph = cell.parent;
+        const id =
+          paragraph instanceof Y.XmlElement ? paragraph.getAttribute(BLOCK_ID_ATTRIBUTE) : null;
+        const source = typeof id === "string" ? wordSourceOf(client.doc, id) : null;
+        if (!id || !source || !(paragraph instanceof Y.XmlElement)) throw new Error("No source.");
+        setWordSource(client.doc, id, { ...source, f: wordFingerprint(paragraph) });
+      }
+      const region = findText(client.blocks, "Region");
+      region.insert(region.length, ", edited");
+      client.doc.getMap(MIND_WORD_LOOK_FIELD).set("version", 2);
+    });
+    await client.settled();
+    core.close();
+    queryDatabase(dataDir, "UPDATE word_packages SET look_version = 2 WHERE mind_id = ?", [mindId]);
+
+    const { log, entries } = recordingLog();
+    const restarted = startCore(dataDir, { log });
+    await connectToMind(restarted, mindId);
+    await vi.waitFor(() =>
+      expect(entries).toContainEqual(expect.objectContaining({ event: "word.look.done" })),
+    );
+    const xml = documentXml((await restarted.exportMind(mindId, { format: "docx" })).data);
+    expect(xml).not.toContain('w:val="0"');
+    expect(xml).toBe(
+      documentXml(wordFile({ styles: STYLES, body })).replace(">Region<", ">Region, edited<"),
+    );
   });
 });

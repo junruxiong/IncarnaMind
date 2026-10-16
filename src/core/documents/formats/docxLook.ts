@@ -26,6 +26,9 @@ import { child, descendants, elements, local, onOff, parseXml, type XmlElement }
  */
 export const WORD_LOOK_VERSION = 3;
 
+/** The first version that read table styles' conditional formatting. */
+export const CONDITIONAL_FORMATTING_VERSION = 3;
+
 const MAX_STYLE_DEPTH = 20;
 
 /** Twips (or 1/`per` points) to points, to a hundredth. */
