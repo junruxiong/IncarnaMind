@@ -13,7 +13,7 @@
  */
 import type { ChatProviderKind } from "../../api";
 import { PRESETS } from "./presets";
-import type { CatalogProvider, Endpoint, ProviderOptions } from "./types";
+import type { CatalogProvider, Endpoint, EndpointField, ProviderOptions } from "./types";
 
 const GLOBAL = { en: "Global", zh: "全球" };
 
@@ -63,8 +63,16 @@ const PROVIDERS = [
         ],
       },
       // Claude 5 models think by default, and return only an empty block unless asked for the summary.
+      // At the default effort, a summary of three Documents took 30 to 85 seconds to start (#899).
       reasoningSummary: {
         options: { anthropic: { thinking: { type: "adaptive", display: "summarized" } } },
+        answer: {
+          anthropic: { thinking: { type: "adaptive", display: "summarized" }, effort: "low" },
+        },
+        careful: {
+          anthropic: { thinking: { type: "adaptive", display: "summarized" }, effort: "high" },
+        },
+        refused: [{ names: "effort", options: { anthropic: { effort: undefined } } }],
         only: [
           "claude-fable-5",
           "claude-mythos-5",
@@ -695,13 +703,20 @@ export function kindOfCatalogId(id: string): ChatProviderKind {
 export const untestedForCitations = (provider: CatalogProvider | undefined): boolean =>
   isPreset(provider) && provider.citingTested === undefined;
 
+/** The presets that run on this computer (LM Studio, Unsloth Studio), by catalog id: set up beside Ollama, not by a key. */
+export const LOCAL_PRESETS: readonly string[] = CATALOG_PROVIDERS.filter(
+  (each) => isPreset(each) && each.group === "local",
+).map((each) => each.id);
+
 /**
  * The providers set up with a key or a server address, by catalog id, in
  * catalog order: every hosted provider and preset, then a server the User
- * gives. Ollama has its own card.
+ * gives. Ollama and the presets on this computer have their own place.
  */
 export const KEY_PROVIDERS: readonly string[] = CATALOG_PROVIDERS.filter(
-  (each) => each.endpoints.length > 0 || each.id === "openai-compatible",
+  (each) =>
+    (each.endpoints.length > 0 || each.id === "openai-compatible") &&
+    !LOCAL_PRESETS.includes(each.id),
 ).map((each) => each.id);
 
 /**
@@ -719,6 +734,24 @@ export function keyProviderGroups(setUp: readonly string[] = []): {
   const keptSetUp = KEY_PROVIDERS.filter((id) => !firstClass.includes(id) && setUp.includes(id));
   const main = [...firstClass, ...keptSetUp];
   return { main, more: KEY_PROVIDERS.filter((id) => !main.includes(id)) };
+}
+
+export const fieldAccepts = (field: EndpointField, value: string): boolean =>
+  field.choices
+    ? field.choices.some((each) => each.value === value)
+    : new RegExp(`^(?:${field.pattern ?? ".+"})$`).test(value);
+
+/** An endpoint's address with its field's value in it. */
+export const fieldUrl = (endpoint: Endpoint, value: string): string =>
+  endpoint.field ? endpoint.baseUrl.replace(`{${endpoint.field.name}}`, value) : endpoint.baseUrl;
+
+/** The field's value a saved address was built with; null when it wasn't built from this endpoint. */
+export function fieldValueOf(endpoint: Endpoint, baseUrl: string | null): string | null {
+  if (!endpoint.field || !baseUrl) return null;
+  const [before = "", after = ""] = endpoint.baseUrl.split(`{${endpoint.field.name}}`);
+  if (!baseUrl.startsWith(before) || !baseUrl.endsWith(after)) return null;
+  const value = baseUrl.slice(before.length, baseUrl.length - after.length);
+  return fieldAccepts(endpoint.field, value) ? value : null;
 }
 
 /** The provider's endpoint with this id, else its first (the default); none for a server the User gives. */
