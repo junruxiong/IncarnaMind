@@ -37,7 +37,6 @@ interface Part {
   raised: string | null;
 }
 
-/** One work's Locations in a cluster as one: "12" and "15" are "12, 15", the first's label kept. */
 function mergedLocator(cites: readonly EngineCite[], separator: string): Partial<EngineCite> {
   const given = cites.filter((cite) => cite.locator);
   const [first] = given;

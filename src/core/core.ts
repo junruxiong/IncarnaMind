@@ -1413,7 +1413,6 @@ export function createCore(adapters: CoreAdapters): Core {
     reportError: (error) => console.error(error),
   });
 
-  /** The live Document, or undefined for one deleted. */
   const liveDocument = (id: string): Document | undefined => {
     try {
       return documents.get(id);

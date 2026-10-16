@@ -99,7 +99,6 @@ const JOURNAL = /文献标识码|中图分类号|文章编号/u;
 
 const meaningful = (text: string) => (text.match(LETTER)?.length ?? 0) >= 2;
 
-/** Lines joined as one: no space between two Han characters, one between anything else. */
 function joinLines(texts: readonly string[]): string {
   return texts.reduce((joined, text) => {
     if (joined === "") return text;
@@ -108,7 +107,6 @@ function joinLines(texts: readonly string[]): string {
   }, "");
 }
 
-/** The size most of the page's text is set in. */
 function bodySize(lines: readonly PageLine[]): number {
   const weight = new Map<number, number>();
   for (const line of lines) {
@@ -269,7 +267,6 @@ function yearOf(lines: readonly PageLine[]): string | null {
   return null;
 }
 
-/** The kind of work the page says it is, if it says. */
 function typeOf(text: string): FirstPageReading["type"] {
   if (THESIS.test(text)) return "thesis";
   if (JOURNAL.test(text)) return "article-journal";

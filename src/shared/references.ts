@@ -261,26 +261,34 @@ export function isCitableWork(record: Pick<ReferenceRecord, "fields"> | null): b
   return type !== "document" && (authors.length > 0 || issued !== "");
 }
 
+/** What reading a file guesses at, as a style prints it; not a DOI or an address, found as written. */
+const GUESSED: readonly ReferenceField[] = [
+  "title",
+  "authors",
+  "issued",
+  "containerTitle",
+  "volume",
+  "issue",
+  "pages",
+  "publisher",
+];
+
 /**
- * What was read from the file and is waiting for the User to check it: every field with a
- * value that reading gave ("file"), but its language, which only picks a style's terms, and a
- * type of Other, which says nothing. A field the User edited, or Look up or an import filled,
- * isn't one.
+ * What was read from the file and is waiting for the User to check it: each field a style
+ * prints that reading gave ("file") a value. A field the User edited, or Look up or an import
+ * filled, isn't one.
  */
 export function fieldsToCheck(
   record: Pick<ReferenceRecord, "fields" | "sources">,
 ): ReferenceField[] {
-  return referenceFieldOrder.filter(
-    (field) =>
-      field !== "language" &&
-      record.sources[field] === "file" &&
-      !isEmptyValue(field, record.fields[field]),
+  return GUESSED.filter(
+    (field) => record.sources[field] === "file" && !isEmptyValue(field, record.fields[field]),
   );
 }
 
 /**
- * Whether a record shows "Check" (需要核对) on its Library row: a work of a known type with
- * something read from its file not yet checked. A record of type Other (a contract, a deck)
+ * Whether a record shows "Needs checking" (需要核对) on its Library row: a work of a known type
+ * with something read from its file not yet checked. A record of type Other (a contract, a deck)
  * keeps the check to its "Cite as" panel.
  */
 export const needsCheck = (record: Pick<ReferenceRecord, "fields" | "sources">): boolean =>

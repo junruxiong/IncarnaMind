@@ -109,7 +109,6 @@ function runsOf(runs: FormattedCitations["clusters"][number]["runs"]): StyledRun
 /** Full-width punctuation, which carries its own space. */
 const FULL_WIDTH = /[\u3000-\u303f\uff00-\uffef]/u;
 
-/** An entry with `mark` after it, as an export flags one whose record is too thin to cite. */
 function marked(runs: readonly StyledRun[], mark: string): StyledRun[] {
   const last = runs.at(-1)?.text ?? "";
   const space = FULL_WIDTH.test(last.slice(-1)) || FULL_WIDTH.test(mark[0] ?? "") ? "" : " ";
