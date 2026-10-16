@@ -16,10 +16,18 @@ import type { CitationAttributes, CitationLocation } from "../core/api";
 import { clockTime, parseClockTime } from "./clock";
 import { type MessageKey, type MessageParams, translate } from "./i18n";
 import { findQuote, type MatchOptions, type TextRange } from "./quoteMatch";
-import { anchorsOf, lineAt, parseCellRef, parseCueTarget, type UnitText } from "./units";
+import {
+  anchorsOf,
+  isPrintedName,
+  lineAt,
+  parseCellRef,
+  parseCueTarget,
+  type UnitText,
+} from "./units";
 
 /** "12" or "12–14". */
-const span = (from: number, to: number) => (to !== from ? `${from}–${to}` : `${from}`);
+const span = (from: number | string, to: number | string) =>
+  to !== from ? `${from}–${to}` : `${from}`;
 
 const isCount = (value: unknown): value is number =>
   typeof value === "number" && Number.isInteger(value) && value >= 1;
@@ -27,6 +35,14 @@ const isCount = (value: unknown): value is number =>
 /** A time in a Transcript, in ms from its start. */
 const isTime = (value: unknown): value is number =>
   typeof value === "number" && Number.isInteger(value) && value >= 0;
+
+function parsePrinted(value: unknown): { from: string; to: string } | null {
+  if (typeof value !== "object" || value === null || !("from" in value) || !("to" in value)) {
+    return null;
+  }
+  const { from, to } = value;
+  return isPrintedName(from) && isPrintedName(to) ? { from, to } : null;
+}
 
 /** A stored Location, checked; null if it isn't one. */
 export function parseLocation(value: unknown): CitationLocation | null {
@@ -41,7 +57,11 @@ export function parseLocation(value: unknown): CitationLocation | null {
   const location = value as Record<string, unknown>;
   const { kind, from, to } = location;
   switch (kind) {
-    case "page":
+    case "page": {
+      if (!isCount(from) || !isCount(to) || to < from) return null;
+      const printed = parsePrinted(location.printed);
+      return printed ? { kind, from, to, printed } : { kind, from, to };
+    }
     case "slide":
     case "lines":
       return isCount(from) && isCount(to) && to >= from ? { kind, from, to } : null;
@@ -78,6 +98,7 @@ export function parseLocation(value: unknown): CitationLocation | null {
         paragraphs.to >= paragraphs.from
           ? { paragraphs: { from: paragraphs.from, to: paragraphs.to } }
           : {}),
+        ...(isCount(location.figure) ? { figure: location.figure } : {}),
       };
     }
     default:
@@ -109,8 +130,10 @@ export type Translate = (key: MessageKey, params?: MessageParams) => string;
 /** A Location's short label, e.g. "slide 4" or "Revenue, rows 12–14". */
 export function formatLocation(location: CitationLocation, t: Translate): string {
   switch (location.kind) {
-    case "page":
-      return t("location.page", { range: span(location.from, location.to) });
+    case "page": {
+      const { from, to } = location.printed ?? location;
+      return t("location.page", { range: span(from, to) });
+    }
     case "slide":
       return t(location.to !== location.from ? "location.slide.other" : "location.slide.one", {
         range: span(location.from, location.to),
@@ -138,6 +161,9 @@ export function formatLocation(location: CitationLocation, t: Translate): string
           ? t("location.section", { heading: location.heading })
           : t("location.section.start");
       const { paragraphs } = location;
+      if (location.figure) {
+        return t("location.section.figure", { section, number: location.figure });
+      }
       if (paragraphs) {
         return t(
           paragraphs.to !== paragraphs.from
@@ -154,9 +180,30 @@ export function formatLocation(location: CitationLocation, t: Translate): string
   }
 }
 
-/** A Location's label in English: for the model's prompt and for Citations copied as text. */
+/** "p. 68 · page 69 of the PDF" for a page that calls itself something other than its number in the PDF; null otherwise. */
+export function formatLocationWithPdf(location: CitationLocation, t: Translate): string | null {
+  if (location.kind !== "page" || !location.printed) return null;
+  return t(
+    location.to !== location.from ? "location.page.withPdf.other" : "location.page.withPdf.one",
+    {
+      printed: formatLocation(location, t),
+      range: span(location.from, location.to),
+    },
+  );
+}
+
+const english: Translate = (key, params) => translate("en", key, params);
+
+/** A PDF page by its number in the PDF, which is how a model cites it. */
 export const englishLocation = (location: CitationLocation): string =>
-  formatLocation(location, (key, params) => translate("en", key, params));
+  formatLocation(
+    location.kind === "page" ? { kind: "page", from: location.from, to: location.to } : location,
+    english,
+  );
+
+/** A Citation copied as text names the page the Document prints. */
+export const englishPrintedLocation = (location: CitationLocation): string =>
+  formatLocation(location, english);
 
 /** The kinds of Location the card's "Open …" button names: the page, the slide, the section… */
 export const openKind = (location: CitationLocation | null) =>
@@ -321,6 +368,22 @@ function paragraphsCovered(
   return numbers.length > 0 ? { from: Math.min(...numbers), to: Math.max(...numbers) } : null;
 }
 
+/** The picture a quote starts in, as its anchor numbers it ("figure2", "figure2.line3"); null in text. */
+function figureAt(where: UnitText, offset: number): number | null {
+  for (const anchor of anchorsOf(where)) {
+    const number = /^figure(\d+)$/.exec(anchor.target)?.[1];
+    if (number && anchor.start <= offset && offset < anchor.end) return Number(number);
+  }
+  return null;
+}
+
+function printedNames(first: UnitText, last: UnitText): { from: string; to: string } | null {
+  const from = first.label?.printed;
+  const to = last.label?.printed;
+  if (!isPrintedName(from) || !isPrintedName(to)) return null;
+  return from === String(first.page) && to === String(last.page) ? null : { from, to };
+}
+
 /** A request for a narrower range than the Units cited: rows or lines the model named. */
 export interface RowsOrLines {
   from: number;
@@ -351,11 +414,15 @@ export function locationOf(
     return from <= to ? { from, to } : whole;
   };
   switch (kind) {
-    case "page":
     case "slide":
       return first.page === null || last.page === null
         ? null
-        : ({ kind, from: first.page, to: last.page } as CitationLocation);
+        : { kind, from: first.page, to: last.page };
+    case "page": {
+      if (first.page === null || last.page === null) return null;
+      const printed = printedNames(first, last);
+      return { kind, from: first.page, to: last.page, ...(printed && { printed }) };
+    }
     case "text":
       return null;
     case "section": {
@@ -364,6 +431,8 @@ export function locationOf(
       if (section?.kind !== "section") return section;
       const comment = parts[0] ? commentAt(where, parts[0].start) : null;
       if (comment) return { ...section, comment };
+      const figure = parts[0] ? figureAt(where, parts[0].start) : null;
+      if (figure) return { ...section, figure };
       const paragraphs = paragraphsCovered(units, parts, where);
       return paragraphs ? { ...section, paragraphs } : section;
     }
@@ -438,9 +507,9 @@ export type RequestedLocation =
  */
 const A_COMMENT = /\s*(?:[,，;(]\s*(?:a\s+)?comment(?:\s+by\b.*)?|[,，]\s*[^,，]*批注)\)?$/iu;
 
-/** What a web page's Location adds after its section: ", ¶ 3", "，第 3 段" (#261). */
+/** What a web page's Location adds after its section: ", ¶ 3", "，第 3 段" (#261), ", figure 2", "，图 2". */
 const A_PARAGRAPH =
-  /\s*[,，;]?\s*(?:¶{1,2}\s*\d+(?:\s*[-–—]\s*\d+)?|第\s*\d+(?:\s*[-–—]\s*\d+)?\s*段)$/u;
+  /\s*[,，;]?\s*(?:¶{1,2}\s*\d+(?:\s*[-–—]\s*\d+)?|第\s*\d+(?:\s*[-–—]\s*\d+)?\s*段|(?:figure|fig\.?)\s*\d+|图\s*\d+)$/iu;
 
 const RANGE = String.raw`(\d{1,7})(?:\s*(?:-|–|—|to|and)\s*(\d{1,7}))?`;
 const range = (from: string | undefined, to: string | undefined) => {

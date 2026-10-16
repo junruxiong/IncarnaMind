@@ -150,19 +150,19 @@ describe("Mixing the microphone and the computer's sound", () => {
     const mixer = createMixer(1000);
     const tone = (value: number, length: number) => new Int16Array(length).fill(value);
     // The computer's sound, 100 ms: held back a moment for the microphone.
-    expect(mixer.add(tone(30_000, 1600), 1000)).toBeNull();
-    // The microphone, from 50 ms in: what is 300 ms older than the newest goes out.
-    const out = mixer.add(tone(5000, 8000), 1050);
+    expect(mixer.add("system", tone(30_000, 1600), 1000)).toBeNull();
+    // The microphone, from 50 ms in: what is 300 ms older than the newest goes out, in whole blocks.
+    const out = mixer.add("microphone", tone(5000, 8000), 1050);
     expect(out?.atMs).toBe(1000);
-    expect(out?.samples.length).toBe(4000);
+    expect(out?.samples.length).toBe(3840);
     expect([out?.samples[0], out?.samples[800], out?.samples[1700]]).toEqual([
       30_000, 32_767, 5000,
     ]);
     const rest = mixer.flush();
-    expect(rest?.atMs).toBe(1250);
-    expect(rest?.samples.length).toBe(4800);
+    expect(rest?.atMs).toBe(1240);
+    expect(rest?.samples.length).toBe(4960);
     // Samples later than what has gone out go to disk only.
-    expect(mixer.add(tone(5, 160), 1000)).toBeNull();
+    expect(mixer.add("microphone", tone(5, 160), 1000)).toBeNull();
     expect(mixer.flush()).toBeNull();
   });
 });

@@ -74,7 +74,7 @@ test("the assistant comes with the first Question, and stays after a restart (#1
   await useLocalChatModel(first.window);
   await first.window.keyboard.press("ControlOrMeta+j");
   await expect(first.window.getByTestId("assistant")).toBeVisible();
-  await first.window.keyboard.type("Where does tea come from?");
+  await first.window.keyboard.type("Is Northwind inside its leverage covenant?");
   await first.window.keyboard.press("Enter");
   await expect(assistantAnswers(first.window).last()).toHaveAttribute("data-status", "done", {
     timeout: 15_000,
@@ -113,7 +113,9 @@ test("File > Export names the Mind in front and exports it while the tab strip i
         .find((each) => each.id === "mind.export");
       return found ? { label: found.label, enabled: found.enabled } : null;
     });
-  await expect.poll(item).toEqual({ label: "Export “Where tea comes from”…", enabled: true });
+  await expect
+    .poll(item)
+    .toEqual({ label: "Export “Draft: credit committee paper”…", enabled: true });
 
   await app.evaluate(({ Menu }) => {
     Menu.getApplicationMenu()
@@ -121,7 +123,7 @@ test("File > Export names the Mind in front and exports it while the tab strip i
       .find((each) => each.id === "mind.export")
       ?.click();
   });
-  await savedPath(window, "Where tea comes from.docx");
+  await savedPath(window, "Draft credit committee paper.docx");
   await app.close();
 });
 

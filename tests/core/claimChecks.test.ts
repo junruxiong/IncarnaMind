@@ -78,9 +78,12 @@ const LEFT_CHECKING: ClaimCheckAttributes = {
   state: "checking",
   reason: null,
   detail: null,
+  providerId: null,
+  modelId: null,
   text: SUPPORTED,
   evidence: null,
   says: null,
+  calculation: null,
   scope: { folderId: null, widened: false },
   versions: [],
   excluded: [],
@@ -215,6 +218,50 @@ describe("Find support", () => {
     const { core, client, check } = await mindWith([UNSUPPORTED], checkingModel(plans));
     await check();
     expect((await shownChecks(core, client))[0]?.shown).toEqual({ state: "unsupported" });
+  });
+
+  test("a sentence holding a change still waiting is left out and counted; with only such sentences, nothing is sent", async () => {
+    const calls: ModelCall[] = [];
+    const { core, client, mind } = await setUpWithDocuments(checkingModel(PLANS, calls), [TIDES]);
+    const change = { id: "change-1", request: "request-1", target: "x" };
+    const block = paragraph(text(`${SUPPORTED} Penguins nest `), {
+      type: "text",
+      text: "on the cliffs above the harbour.",
+      marks: [{ type: "proposalInsert", attrs: change }],
+    });
+    writeMind(client, [block]);
+    await client.settled();
+    const length = SUPPORTED.length + 1 + UNSUPPORTED.length;
+    const check = (from: number) =>
+      core.checkSentences({
+        requestId: crypto.randomUUID(),
+        mindId: mind.id,
+        action: "find-support",
+        from: { blockId: block.attrs.id, offset: from },
+        to: { blockId: block.attrs.id, offset: length },
+      });
+
+    const leftOut = {
+      sentences: [
+        {
+          from: { blockId: block.attrs.id, offset: SUPPORTED.length + 1 },
+          to: { blockId: block.attrs.id, offset: length },
+        },
+      ],
+      changeIds: ["change-1"],
+    };
+    expect(await check(0)).toEqual({
+      kind: "checked",
+      sentences: 1,
+      checked: 1,
+      smallModel: false,
+      waiting: leftOut,
+    });
+    expect((await shownChecks(core, client)).map((each) => each.sentence)).toEqual([SUPPORTED]);
+
+    calls.length = 0;
+    expect(await check(SUPPORTED.length + 1)).toEqual({ kind: "waiting", waiting: leftOut });
+    expect(calls).toEqual([]);
   });
 
   test("with nothing to check against, nothing is sent", async () => {
@@ -456,6 +503,264 @@ describe("One claim check", () => {
   });
 });
 
+describe("A figure the Documents don't state, worked out (#707)", () => {
+  const BOARD = {
+    name: "Board update.md",
+    contents: [
+      "# Board update",
+      "",
+      "Net debt was £1,234m at the end of 2025.",
+      "",
+      "EBITDA was £942m in 2025.",
+      "",
+      "Revenue was £131.9m in 2025, compared with £118.2m in 2024.",
+      "",
+      "Costs were £86.5m in 2025, and staff cost £40.1m of that.",
+    ].join("\n"),
+  };
+  const NET_DEBT = {
+    name: "nd",
+    label: "Net debt 2025",
+    quote: "Net debt was £1,234m",
+    number: "£1,234m",
+  };
+  const EBITDA = { name: "e", label: "EBITDA 2025", quote: "EBITDA was £942m", number: "£942m" };
+  const REVENUE = (number: string, label: string, name: string) => ({
+    name,
+    label,
+    quote: "Revenue was £131.9m in 2025, compared with £118.2m in 2024.",
+    number,
+  });
+  const COSTS = { name: "c", label: "Costs 2025", quote: "Costs were £86.5m", number: "£86.5m" };
+  const STAFF = {
+    name: "s",
+    label: "Staff costs 2025",
+    quote: "staff cost £40.1m",
+    number: "£40.1m",
+  };
+  const RATIO = { inputs: [NET_DEBT, EBITDA], formula: "nd / e", as: "times" };
+  const GROWTH = {
+    inputs: [REVENUE("£131.9m", "Revenue 2025", "r25"), REVENUE("£118.2m", "Revenue 2024", "r24")],
+    formula: "r25 / r24 - 1",
+    as: "percent",
+  };
+  const SUM = { inputs: [NET_DEBT, EBITDA], formula: "nd + e" };
+  const DIFFERENCE = { inputs: [COSTS, STAFF], formula: "c - s" };
+
+  /** A check whose model is Claude Haiku 5.5, scripted: one measured to use calculate (ADR-0021). */
+  async function calculatingCheck(model: ReturnType<typeof checkingModel>) {
+    const setup = await setUpWithDocuments(model, [BOARD]);
+    const saved = await setup.core.saveChatProvider({
+      kind: "anthropic",
+      apiKey: "sk-test",
+      modelId: "claude-haiku-5-5",
+    });
+    if (saved.service) await setup.core.allowDataFlow("checks", saved.service.id);
+    return { ...setup, board: setup.documents[0] as Document };
+  }
+
+  test.each([
+    ["ratio", "Net debt to EBITDA fell to 1.3x.", RATIO, "1.3x", "supported", "1.31x"],
+    ["ratio", "Net debt to EBITDA fell to 1.1x.", RATIO, "1.1x", "contradicted", "1.31x"],
+    ["growth", "Revenue grew 11.6% in 2025.", GROWTH, "11.6%", "supported", "11.6%"],
+    ["growth", "Revenue grew 15% in 2025.", GROWTH, "15%", "contradicted", "11.6%"],
+    ["sum", "Net debt and EBITDA come to £2,176m.", SUM, "£2,176m", "supported", "£2,176m"],
+    ["sum", "Net debt and EBITDA come to £2,276m.", SUM, "£2,276m", "contradicted", "£2,176m"],
+    [
+      "difference",
+      "Costs other than staff were £46.4m.",
+      DIFFERENCE,
+      "£46.4m",
+      "supported",
+      "£46.4m",
+    ],
+    [
+      "difference",
+      "Costs other than staff were £56.4m.",
+      DIFFERENCE,
+      "£56.4m",
+      "contradicted",
+      "£46.4m",
+    ],
+  ])(
+    "a %s: “%s” is checked by calculation",
+    async (_kind, claim, figure, stated, verdict, shown) => {
+      // The model's own verdict is the other one: the calculation decides, not the model.
+      const said = verdict === "supported" ? "contradicted" : "supported";
+      const plans = { [claim]: { verdict: said, calculation: { ...figure, stated } } } as const;
+      const { core, board } = await calculatingCheck(checkingModel(plans));
+
+      const result = await core.checkClaim({ claim });
+      expect(result).toMatchObject({
+        verdict,
+        says: null,
+        evidence: { documentId: board.id, check: "found" },
+        calculation: { stated, figure: { shown } },
+      });
+      if (result.verdict === "not-checked") throw new Error("Not checked.");
+      for (const input of result.calculation?.figure.inputs ?? []) {
+        expect(input.citation).toMatchObject({ documentId: board.id, check: "found" });
+      }
+    },
+  );
+
+  test("a model that calculates is offered calculate, with the sentence's number to name, and told when to use it; one that doesn't isn't", async () => {
+    const calls: ModelCall[] = [];
+    const claim = "Net debt to EBITDA fell to 1.1x.";
+    const plans = {
+      [claim]: { verdict: "unsupported", calculation: { ...RATIO, stated: "1.1x" } },
+    } as const;
+    const { core } = await calculatingCheck(checkingModel(plans, calls));
+    await core.checkClaim({ claim });
+
+    expect(calls[0]?.tools.sort()).toEqual(["calculate", "cite", "search_documents"]);
+    expect(calls[0]?.system).toContain("isn't judged in your head");
+    const offered = JSON.stringify(calls[0]?.options.tools);
+    expect(offered).toContain("The number as the sentence to check writes it");
+
+    const localCalls: ModelCall[] = [];
+    const local = await setUpWithDocuments(checkingModel(plans, localCalls), [BOARD]);
+    await local.core.checkClaim({ claim });
+    expect(localCalls[0]?.tools.sort()).toEqual(["cite", "search_documents"]);
+    expect(localCalls[0]?.system).not.toContain("isn't judged in your head");
+  });
+
+  test("the sentence's mark keeps the working: the figure, its inputs' Citations and the sentence's number, and their Documents' versions are kept", async () => {
+    const claim = "Net debt to EBITDA fell to 1.1x.";
+    const plans = {
+      [claim]: { verdict: "supported", calculation: { ...RATIO, stated: "1.1x" } },
+    } as const;
+    const { core, client, mind, board, dataDir } = await calculatingCheck(checkingModel(plans));
+    const block = paragraph(text(claim));
+    writeMind(client, [block]);
+    await client.settled();
+
+    await core.checkSentences({
+      requestId: "r1",
+      mindId: mind.id,
+      action: "find-support",
+      ...whole(block, claim.length),
+    });
+
+    const [checked] = await shownChecks(core, client);
+    expect(checked?.shown).toEqual({ state: "contradicted" });
+    expect(checked?.check.calculation).toMatchObject({
+      stated: "1.1x",
+      figure: {
+        formula: "nd / e",
+        shown: "1.31x",
+        inputs: [
+          {
+            label: "Net debt 2025",
+            number: { chars: "£1,234m" },
+            citation: { quote: "Net debt was £1,234m", check: "found" },
+          },
+          {
+            label: "EBITDA 2025",
+            number: { chars: "£942m" },
+            citation: { quote: "EBITDA was £942m", check: "found" },
+          },
+        ],
+      },
+    });
+    expect(
+      queryDatabase(
+        dataDir,
+        "SELECT DISTINCT content_hash FROM retained_versions WHERE kind = 'check-result' AND deleted_at IS NULL",
+      ),
+    ).toEqual([{ content_hash: board.contentHash }]);
+  });
+
+  test("in Chinese: a multiple worked out from amounts in 万元 contradicts the sentence's", async () => {
+    const report = {
+      name: "董事会报告.md",
+      contents: "# 董事会报告\n\n截至2026年9月30日，净负债为12,340万元。全年EBITDA为9,420万元。\n",
+    };
+    const claim = "净负债与 EBITDA 之比降至 1.1 倍。";
+    const calculation = {
+      inputs: [
+        { name: "nd", label: "净负债", quote: "净负债为12,340万元", number: "12,340万元" },
+        { name: "e", label: "EBITDA", quote: "全年EBITDA为9,420万元", number: "9,420万元" },
+      ],
+      formula: "nd / e",
+      as: "times",
+      stated: "1.1 倍",
+    };
+    const model = checkingModel({ [claim]: { verdict: "supported", calculation } });
+    const setup = await setUpWithDocuments(model, [report]);
+    const saved = await setup.core.saveChatProvider({
+      kind: "anthropic",
+      apiKey: "sk-test",
+      modelId: "claude-haiku-5-5",
+    });
+    if (saved.service) await setup.core.allowDataFlow("checks", saved.service.id);
+
+    expect(await setup.core.checkClaim({ claim })).toMatchObject({
+      verdict: "contradicted",
+      calculation: { stated: "1.1 倍", figure: { shown: "1.31倍" } },
+    });
+  });
+
+  test("a figure that agrees settles only its number: a Passage that contradicts the rest of the sentence still does", async () => {
+    const claim = "Revenue grew 11.6% in 2025, to £141.9m.";
+    const plans = {
+      [claim]: {
+        verdict: "contradicted",
+        quote: "Revenue was £131.9m in 2025",
+        says: "The update says revenue was £131.9m in 2025, not £141.9m.",
+        calculation: { ...GROWTH, stated: "11.6%" },
+      },
+    } as const;
+    const { core } = await calculatingCheck(checkingModel(plans));
+
+    expect(await core.checkClaim({ claim })).toMatchObject({
+      verdict: "contradicted",
+      evidence: { quote: "Revenue was £131.9m in 2025", check: "found" },
+      says: "The update says revenue was £131.9m in 2025, not £141.9m.",
+      calculation: { stated: "11.6%", agrees: true, figure: { shown: "11.6%" } },
+    });
+  });
+
+  test.each([
+    ["Net debt to EBITDA was about 1.4x.", "about 1.4x", "supported"],
+    ["Net debt to EBITDA was 1.4x.", "1.4x", "contradicted"],
+  ])(
+    "an approximate number is a place looser: “%s” against 1.31x",
+    async (claim, stated, verdict) => {
+      const plans = {
+        [claim]: { verdict: "unsupported", calculation: { ...RATIO, stated } },
+      } as const;
+      const { core } = await calculatingCheck(checkingModel(plans));
+      expect(await core.checkClaim({ claim })).toMatchObject({ verdict });
+    },
+  );
+
+  test("a bare number isn't compared with a ratio: “1.31” could be a share or a multiple", async () => {
+    const claim = "Net debt to EBITDA was 1.31.";
+    const plans = {
+      [claim]: { verdict: "unsupported", calculation: { ...RATIO, stated: "1.31" } },
+    } as const;
+    const { core } = await calculatingCheck(checkingModel(plans));
+    expect(await core.checkClaim({ claim })).toMatchObject({
+      verdict: "unsupported",
+      calculation: null,
+    });
+  });
+
+  test("a figure for a number the sentence doesn't have decides nothing: the model's own verdict stands", async () => {
+    const claim = "Net debt to EBITDA fell to 1.1x.";
+    const plans = {
+      [claim]: { verdict: "unsupported", calculation: { ...RATIO, stated: "2.5x" } },
+    } as const;
+    const { core } = await calculatingCheck(checkingModel(plans));
+
+    expect(await core.checkClaim({ claim })).toMatchObject({
+      verdict: "unsupported",
+      calculation: null,
+    });
+  });
+});
+
 describe("When the model can't check a sentence", () => {
   const failing = (reply: ScriptedReply): Plan => ({ reply });
   test.each<{ reason: ClaimCheckAttributes["reason"]; plan: Plan }>([
@@ -600,6 +905,32 @@ describe("Needs re-check", () => {
         "SELECT content_hash FROM retained_versions WHERE kind = 'check-result' AND deleted_at IS NULL",
       ),
     ).toEqual([{ content_hash: tides.contentHash }]);
+  });
+
+  // protects=a result stays when a Document it only read goes, as an example's do when the interface language changes (#962), and needs a re-check when the one it rests on goes; fails_when=any Document read, deleted, makes a result need a re-check, or the evidence's own deletion doesn't; no_claim=new versions, tested above.
+  test("a Document the check only read, deleted, leaves its result as it was; its evidence Document, deleted, makes it need a re-check", async () => {
+    const moons = {
+      name: "Moons.md",
+      contents: "# Moons\n\nSpring tides and neap tides follow the moon around the harbour.",
+    };
+    const { core, client, check, tides, documents } = await mindWith([SUPPORTED], checkingModel(), [
+      moons,
+    ]);
+    const read = documents[1] as Document;
+    await check();
+    const [checked] = await shownChecks(core, client);
+    expect(checked?.shown).toEqual({ state: "supported" });
+    expect(checked?.check.evidence?.documentId).toBe(tides.id);
+    expect(checked?.check.versions.map((each) => each.documentId)).toContain(read.id);
+
+    await core.deleteDocument(read.id);
+    expect((await shownChecks(core, client))[0]?.shown).toEqual({ state: "supported" });
+
+    await core.deleteDocument(tides.id);
+    expect((await shownChecks(core, client))[0]?.shown).toEqual({
+      state: "needs-recheck",
+      why: "document-removed",
+    });
   });
 
   test("a Mind deleted permanently lets go of its checks' evidence", async () => {

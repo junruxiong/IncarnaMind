@@ -20,6 +20,7 @@ import type { StyledRun } from "../api";
 import { writeZip } from "../documents/formats/zip";
 import {
   type Block,
+  type FailedSentence,
   type Footnote,
   type Image,
   type Inline,
@@ -48,14 +49,7 @@ import {
   WordIds,
   XML_DECLARATION,
 } from "./wordml";
-import {
-  type Authorship,
-  passagesOf,
-  Review,
-  type ReviewChoices,
-  trackBlocks,
-  trackInline,
-} from "./wordReview";
+import { type Piece, Review, type ReviewChoices, trackBlocks, trackInline } from "./wordReview";
 
 export interface DocxOptions {
   /** The Mind's title, as the document's title. Empty: none. */
@@ -120,13 +114,16 @@ const HANGING = 360;
 const EMU_PER_TWIP = 635;
 const EMU_PER_PIXEL = 9525;
 
-export function renderDocx(blocks: readonly Block[], options: DocxOptions): Uint8Array {
+export function renderDocx(
+  blocks: readonly Block[],
+  options: DocxOptions,
+): { data: Uint8Array; commented: FailedSentence[] } {
   const paper = PAPER[options.paper];
   const target = new NewDocxTarget();
   const review = options.review
     ? new Review(options.review, target.ids, options.labels, () => NEW_DOCUMENT_STYLES.comment)
     : null;
-  review?.mark(passagesOf(piecesOf(blocks)));
+  review?.mark(piecesOf(blocks));
   const writer = new DocxWriter(options.labels, paper.width - 2 * MARGIN, target, review);
   const title = options.title ? paragraph({ style: "Title" }, run(options.title)) : "";
   const body = writer.body(blocks);
@@ -149,7 +146,7 @@ export function renderDocx(blocks: readonly Block[], options: DocxOptions): Uint
     ...target.relationships,
   ];
 
-  return writeZip(
+  const data = writeZip(
     [
       { name: "[Content_Types].xml", data: contentTypes(comments.length > 0) },
       {
@@ -180,6 +177,7 @@ export function renderDocx(blocks: readonly Block[], options: DocxOptions): Uint
     ],
     deflateRawSync,
   );
+  return { data, commented: review?.commentedSentences() ?? [] };
 }
 
 interface Relationship {
@@ -778,13 +776,11 @@ const isWebLink = (href: string) => /^(https?:|mailto:)/i.test(href);
 
 /**
  * The pieces of text in Blocks, in the order the writer writes them, for
- * finding AI text's passages (`passagesOf`): text is the AI's or the User's;
- * what a change still waiting adds, a Citation, a chart's values and the
- * Bibliography are neither.
+ * finding AI text's passages and the sentences to comment on (`Review.mark`):
+ * text is the AI's or the User's; what a change still waiting adds, a
+ * Citation, a chart's values and the Bibliography are neither.
  */
-export function* piecesOf(
-  blocks: readonly Block[],
-): Generator<{ key: object; authorship: Authorship }> {
+export function* piecesOf(blocks: readonly Block[]): Generator<Piece> {
   for (const block of blocks) {
     if (block.inserted) continue;
     switch (block.kind) {
@@ -794,7 +790,7 @@ export function* piecesOf(
         for (const inline of block.content) {
           if (inline.kind !== "text" || inline.inserted) continue;
           const authorship = inline.ai ? "ai" : inline.text.trim() === "" ? "neither" : "own";
-          yield { key: inline, authorship };
+          yield { key: inline, authorship, sentence: inline.sentenceCheck };
         }
         break;
       case "list":

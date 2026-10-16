@@ -9,18 +9,20 @@
  * - "free": a model on this computer.
  *
  * Only "per-token" requests are priced, reserved against the monthly cap and
- * estimated before large runs. The ChatGPT plan's requests are counted, never priced.
+ * estimated before large runs. A plan's requests (ChatGPT, a Claude account, Copilot) are counted, never priced.
  */
 import type { Billing, ChatProviderKind, ExternalService } from "../../api";
 import type { OffPeak, Price } from "./types";
 
 export function billingOf(kind: ChatProviderKind, service: ExternalService | null): Billing {
-  if (kind === "chatgpt") return "plan";
+  if (kind === "chatgpt" || kind === "claude-account" || kind === "copilot") return "plan";
   return service === null ? "free" : "per-token";
 }
 
 /** Where Ollama shows an account's usage and plan. */
 export const OLLAMA_USAGE_URL = "https://ollama.com/settings";
+
+export const OLLAMA_DOWNLOAD_URL = "https://ollama.com/download";
 
 /** Yuan to the dollar, for counting spending in one currency against a cap in the other. */
 export const CNY_PER_USD = 7.1;

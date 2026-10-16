@@ -8,13 +8,16 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { CJK } from "../../shared/text";
 import type { TextUnit } from "../../shared/units";
-import type { PagePicture, RecognizedLine } from "../adapters";
+import type { LogFields, PagePicture, PictureRead, RecognizedLine } from "../adapters";
 import type { DocumentKind } from "../api";
 import { isRecord } from "../errors";
 import { ExtractionError, extractUnits } from "./formats";
+import { type FigureReading, readWebPage, webUnits } from "./formats/web";
 import { passwordProblem } from "./pdfPasswords";
+import { printedPageNames } from "./printedPages";
 import { scannedUnit } from "./scan/layout";
 import { type CanvasFactory, isScanned, pagePicture } from "./scan/pages";
+import { PICTURE_LIMITS, pictureSize, pictureType } from "./web/pictures";
 
 export { ExtractionError };
 
@@ -26,6 +29,10 @@ export interface PageReading {
   keep: ReadonlyMap<number, TextUnit>;
   /** The lines on a page's picture. Rejects with `ReadingUnavailable` when no page can be read now. */
   read(page: number, picture: PagePicture): Promise<RecognizedLine[]>;
+  /** As `read`, for a picture file, decoded where the model runs. */
+  readFile(page: number, file: Uint8Array): Promise<PictureRead>;
+  /** Logs in the core, with the Document's id: the worker's own console reaches no log. */
+  log(event: string, fields: LogFields): void;
   /** `read` of `of` scanned pages are read; `unit` is the one just read. */
   progress(read: number, of: number, unit: TextUnit | null): void;
   /** Aborted when the job is stopped: no further page is read. */
@@ -45,15 +52,97 @@ export interface ExtractedText {
   unread: { pages: number[]; message: string } | null;
 }
 
-/** `password`: what opens a locked PDF, from ./pdfPasswords (#763). */
+/**
+ * `password`: what opens a locked PDF, from ./pdfPasswords (#763).
+ * `readPicture`: a saved web page's picture, by its path in the snapshot,
+ * whose text is read when `reading` is given.
+ */
 export async function extractText(
   kind: DocumentKind,
   bytes: Uint8Array,
   reading: PageReading | null = null,
   password?: string,
+  readPicture: ((src: string) => Promise<Uint8Array>) | null = null,
 ): Promise<ExtractedText> {
   if (kind === "pdf") return extractPdf(bytes, reading, password);
+  if (kind === "web" && reading && readPicture) {
+    return { pageCount: null, units: await extractWeb(bytes, reading, readPicture), unread: null };
+  }
   return { pageCount: null, units: await extractUnits(kind, bytes), unread: null };
+}
+
+/**
+ * A web page's Units with its saved pictures' text read. A picture that
+ * isn't one to read, or that fails to decode or read, keeps its description
+ * alone; once the model can't be had, the pictures left are marked unread.
+ */
+async function extractWeb(
+  bytes: Uint8Array,
+  reading: PageReading,
+  readPicture: (src: string) => Promise<Uint8Array>,
+): Promise<TextUnit[]> {
+  const source = new TextDecoder().decode(bytes);
+  const readings = new Map<number, FigureReading>();
+  const figures = readWebPage(source).blocks.flatMap((block) =>
+    block.figure === undefined
+      ? []
+      : [{ number: block.figure, src: block.element.attrs.src ?? "" }],
+  );
+  const unread: FigureReading = { reader: reading.reader, text: "", lines: [], unread: true };
+  let unavailable = false;
+  if (figures.length > 0) reading.progress(0, figures.length, null);
+  for (const [index, figure] of figures.entries()) {
+    reading.signal.throwIfAborted();
+    if (unavailable) {
+      readings.set(figure.number, unread);
+      continue;
+    }
+    try {
+      const read = await readFigure(figure.number, figure.src, reading, readPicture);
+      if (read) readings.set(figure.number, read);
+    } catch (error) {
+      reading.signal.throwIfAborted();
+      if (error instanceof ReadingUnavailable) {
+        unavailable = true;
+        readings.set(figure.number, unread);
+      } else {
+        // Marked unread, it would be read again at every start, and fail again.
+        reading.log("documents.pictureNotRead", {
+          picture: figure.src,
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    reading.progress(index + 1, figures.length, null);
+  }
+  return webUnits(source, readings);
+}
+
+async function readFigure(
+  number: number,
+  src: string,
+  reading: PageReading,
+  readPicture: (src: string) => Promise<Uint8Array>,
+): Promise<FigureReading | null> {
+  const file = await readPicture(src);
+  const type = pictureType(file);
+  const size = type && pictureSize(file, type);
+  if (!size || size.width * size.height > PICTURE_LIMITS.maxPixels) {
+    reading.log("documents.pictureNotRead", {
+      picture: src,
+      message: size ? `${size.width} × ${size.height} pixels` : "not a picture",
+    });
+    return null;
+  }
+  const picture = await reading.readFile(number, file);
+  const read = scannedUnit(number, picture.lines, picture, reading.reader);
+  const unsure = read.label?.scan?.unsure;
+  return {
+    reader: reading.reader,
+    text: read.text,
+    lines: (read.anchors ?? []).map(({ start, end, quad }) => ({ start, end, quad: quad ?? [] })),
+    ...(unsure && { unsure }),
+  };
 }
 
 type PdfJs = typeof import("pdfjs-dist/legacy/build/pdf.mjs");
@@ -223,7 +312,12 @@ async function extractPdf(
       reading && scanned.length > 0
         ? await readScannedPages(document, pages, scanned, reading)
         : null;
-    return { pageCount: pages.length, units: pages, unread };
+    const names = printedPageNames(
+      await document.getPageLabels(),
+      pages.map((unit) => unit.text),
+    );
+    const units = pages.map((unit, index) => withPrintedName(unit, names[index] ?? null));
+    return { pageCount: pages.length, units, unread };
   } catch (error) {
     if (reading?.signal.aborted) throw reading.signal.reason;
     const name = error instanceof Error ? error.name : "";
@@ -235,6 +329,13 @@ async function extractPdf(
   } finally {
     await task.destroy();
   }
+}
+
+function withPrintedName(unit: TextUnit, name: string | null): TextUnit {
+  // A scanned page kept from an earlier read has the name that read gave it.
+  const { printed: _earlier, ...label } = unit.label ?? {};
+  const named = name === null ? label : { ...label, printed: name };
+  return { ...unit, label: Object.keys(named).length > 0 ? named : null };
 }
 
 /**

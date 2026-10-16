@@ -81,10 +81,10 @@ const isProcessing = (status: DocumentStatus) =>
 
 /**
  * The sidebar's tree: "All Documents", then a switcher, "Folders | Tags |
- * Source locations" (with the Tag filter and "+" for a new Folder), over one
+ * Folders on disk" (with the Tag filter and "+" for a new Folder), over one
  * of three views. Folders, the first, is the User's projects: each Folder
  * with its Minds and Documents, then Not in a Folder (see `LibraryFolders`).
- * Tags lists the Tags (see `SidebarTags`); Source locations, each Linked
+ * Tags lists the Tags (see `SidebarTags`); Folders on disk, each Linked
  * folder with its folders as on disk, then "Other Documents", the files
  * added on their own (see `FolderTree`). With nothing to browse but Minds,
  * there is no switcher. Each Document is one row: its name, its Tags' colours (see
@@ -136,6 +136,11 @@ export function DocumentsSection() {
   const view = views.includes(chosenView) ? chosenView : "folders";
   // A Folder just made is named in its row, which only the Folders view has.
   const naming = useRequests((state) => state.nameFolder !== null);
+  // A folder just linked: the view that shows it, with its row in sight and washed for a moment (#763).
+  const justLinked = useRequests((state) => state.showLinked);
+  useEffect(() => {
+    if (justLinked !== null) setView("sources");
+  }, [justLinked]);
   useEffect(() => {
     if (naming) setView("folders");
   }, [naming]);
@@ -412,6 +417,7 @@ const DocumentRow = memo(function DocumentRow({
             <span data-testid="row-text" className="min-w-0 truncate">
               {shownName}
             </span>
+            <NotCitedLabel item={item} />
             <TagMarks chips={chips} />
           </span>
           <DocumentStatusLabel item={item} />
@@ -431,6 +437,20 @@ const DocumentRow = memo(function DocumentRow({
     </li>
   );
 });
+
+export function NotCitedLabel({ item }: { item: Pick<Document, "notCited"> }) {
+  const t = useT();
+  if (!item.notCited) return null;
+  return (
+    <span
+      data-testid="document-not-cited"
+      title={t("evidence.notCited.hint")}
+      className="shrink-0 text-label font-semibold text-ink-meta"
+    >
+      {t("evidence.notCited.label")}
+    </span>
+  );
+}
 
 /**
  * The status at a row's end: "Missing" or "Unavailable" when its file isn't

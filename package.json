@@ -1,7 +1,7 @@
 {
   "name": "incarnamind",
   "productName": "IncarnaMind",
-  "version": "0.1.0-alpha.1",
+  "version": "0.1.0-alpha.2",
   "private": true,
   "description": "A local-first notebook that answers Questions from your own Documents.",
   "license": "Apache-2.0",
@@ -31,10 +31,11 @@
     "eval:ocr": "vitest run --config eval/ocr/vitest.config.ts",
     "eval:transcription": "vitest run --config eval/transcription/vitest.config.ts",
     "eval:score": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON eval/score.ts",
-    "catalog:update": "node scripts/catalogModels.ts",
+    "catalog:update": "node --import ./scripts/tsResolve.mjs scripts/catalogModels.ts",
     "dist": "electron-vite build && electron-builder --publish never",
     "dist:dir": "electron-vite build && electron-builder --dir --publish never",
-    "check:package": "node scripts/check-package.mjs"
+    "check:package": "node scripts/check-package.mjs",
+    "icons": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/icons.ts"
   },
   "dependencies": {
     "@ai-sdk/alibaba": "2.0.65",

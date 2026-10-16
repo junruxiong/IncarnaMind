@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import { describe, expect, test } from "vitest";
 import { RECOMMENDED_OLLAMA_MODEL } from "../../src/core";
 import { type ChatProviderKind, chatProviderKinds } from "../../src/core/api";
+import { automaticTagging } from "../../src/core/library/tagging";
 import {
   calculates,
   cloudWindow,
@@ -16,6 +17,8 @@ import {
   catalogFacts,
   catalogModel,
   catalogModels,
+  catalogRoleModel,
+  type EndpointField,
   isNonChatModel,
   LOCAL_MODEL_TIERS,
   LOCAL_MODELS,
@@ -24,22 +27,36 @@ import {
   recommendedLocalModels,
 } from "../../src/core/providers/catalog";
 import { OVERRIDES } from "../../src/core/providers/catalog/overrides";
+import { PRESETS } from "../../src/core/providers/catalog/presets";
 import {
   catalogProvider,
-  KEY_PROVIDER_KINDS,
+  fieldAccepts,
+  fieldUrl,
+  isPreset,
+  KEY_PROVIDERS,
   keyProviderGroups,
+  kindOfCatalogId,
+  LOCAL_PRESETS,
+  untestedForCitations,
 } from "../../src/core/providers/catalog/providers";
 import { KNOWN_PLAN_MODELS } from "../../src/core/providers/chatgpt/planEndpoint";
 import {
   baseUrlFor,
   endpointUrl,
+  isLoopbackHost,
   requiresApiKey,
   serviceFor,
 } from "../../src/core/providers/kinds";
+import { OLLAMA_CLOUD } from "../../src/core/providers/ollamaCloud";
 import { en } from "../../src/shared/i18n/en";
 import { zhCN } from "../../src/shared/i18n/zh-CN";
 
 const GIB = 1024 ** 3;
+
+const sampleFieldValue = (field: EndpointField): string =>
+  field.choices?.[0]?.value ??
+  field.default ??
+  (field.name === "account" ? "0123456789abcdef0123456789abcdef" : "");
 const REPO_ROOT = resolve(__dirname, "../..");
 
 /** What the catalog alone says of a model on a provider kind. */
@@ -61,6 +78,16 @@ describe("The provider catalog", () => {
       "glm",
       "siliconflow",
       "ollama",
+      "groq",
+      "together",
+      "fireworks",
+      "cerebras",
+      "cohere",
+      "venice",
+      "bedrock",
+      "cloudflare",
+      "lmstudio",
+      "unsloth",
       "openai-compatible",
     ]);
     for (const provider of CATALOG_PROVIDERS) {
@@ -77,8 +104,16 @@ describe("The provider catalog", () => {
       // A hosted provider has its API; a server the User gives has a URL rule instead.
       if (provider.endpoints.length > 0) {
         for (const endpoint of provider.endpoints) {
-          expect(new URL(endpoint.baseUrl).protocol, where).toBe("https:");
+          const value = endpoint.field ? sampleFieldValue(endpoint.field) : "";
+          expect(new URL(fieldUrl(endpoint, value)).protocol, where).toBe(
+            provider.group === "local" ? "http:" : "https:",
+          );
           expect(endpoint.label.en && endpoint.label.zh, where).toBeTruthy();
+          if (endpoint.field) {
+            expect(endpoint.baseUrl, where).toContain(`{${endpoint.field.name}}`);
+            expect(fieldAccepts(endpoint.field, value), where).toBe(true);
+            expect(fieldAccepts(endpoint.field, "elsewhere.example.com/x"), where).toBe(false);
+          }
         }
       } else {
         expect(provider.serverUrl, where).toBeDefined();
@@ -95,7 +130,9 @@ describe("The provider catalog", () => {
   });
 
   test("a hosted provider offers every role: a capable, cheaper Answers model, its strongest one click away, a cheap quick-tasks model and one that reads images", () => {
-    for (const provider of CATALOG_PROVIDERS.filter((each) => each.endpoints.length > 0)) {
+    for (const provider of CATALOG_PROVIDERS.filter(
+      (each) => each.endpoints.length > 0 && !isPreset(each),
+    )) {
       const { answers, strongest, quickTasks, images } = provider.roles;
       const model = (id: string | undefined) => {
         const found = id ? catalogModel(provider.id, id) : undefined;
@@ -135,10 +172,16 @@ describe("The provider catalog", () => {
   test("the generated facts cover the hosted providers, with unique ids, and their sources' licences ship with the app", async () => {
     expect(providersWithModels().sort()).toEqual([
       "anthropic",
+      "bedrock",
+      "cerebras",
+      "cloudflare",
+      "cohere",
       "deepseek",
+      "fireworks",
       "glm",
       "glm/intl",
       "google",
+      "groq",
       "kimi",
       "kimi/intl",
       "mistral",
@@ -148,6 +191,8 @@ describe("The provider catalog", () => {
       "qwen/intl",
       "siliconflow",
       "siliconflow/intl",
+      "together",
+      "venice",
       "xai",
     ]);
     for (const providerId of providersWithModels()) {
@@ -437,6 +482,11 @@ describe("The providers of #178", () => {
       expect(catalogProvider(id)?.request?.thinkingOff, id).toBeDefined();
     }
     expect(catalogProvider("glm")?.request?.thinkingOff?.unless).toEqual(["glm-5.3"]);
+    // OpenAI's small calls run with reasoning off, except on the models that refuse "none".
+    expect(catalogProvider("openai")?.request?.thinkingOff?.except).toEqual(
+      expect.arrayContaining(["gpt-6.1-sol", "gpt-6-astra", "gpt-5", "gpt-5-mini", "gpt-5-nano"]),
+    );
+    expect(catalogProvider("openai")?.request?.thinkingOff?.except).not.toContain("gpt-6-luna");
   });
 
   test("a provider needs a key and takes no server URL; a region comes with the endpoint", () => {
@@ -447,6 +497,62 @@ describe("The providers of #178", () => {
       );
       expect(baseUrlFor(id as ChatProviderKind, undefined), id).toBeNull();
     }
+  });
+});
+
+describe("Tagging models", () => {
+  test("a provider tags with its quick-tasks model, except Mistral, whose tagging model is Mistral Small 4", () => {
+    const tagging = CATALOG_PROVIDERS.filter((each) => each.roles.tagging !== undefined);
+    expect(tagging.map((each) => [each.id, each.roles.tagging])).toEqual([
+      ["mistral", "mistral-small-2603"],
+    ]);
+    // Same input price as Ministral 8B, which is nearly all of what tagging costs.
+    expect(catalogModel("mistral", "mistral-small-2603")?.price?.input).toBe(
+      catalogModel("mistral", "ministral-8b-2512")?.price?.input,
+    );
+    expect(
+      catalogRoleModel({ kind: "anthropic", catalogId: "anthropic" }, "tagging"),
+    ).toBeUndefined();
+    expect(catalogRoleModel({ kind: "anthropic", catalogId: "anthropic" }, "quickTasks")).toBe(
+      "claude-haiku-5-5",
+    );
+  });
+
+  test("a preset tags with its own quick-tasks model", () => {
+    expect(catalogRoleModel({ kind: "openai-compatible", catalogId: "groq" }, "quickTasks")).toBe(
+      "openai/gpt-oss-20b",
+    );
+    expect(
+      catalogRoleModel({ kind: "openai-compatible", catalogId: "openai-compatible" }, "quickTasks"),
+    ).toBeUndefined();
+  });
+
+  test("the ChatGPT plan tags with GPT-6 Luna", () => {
+    expect(catalogRoleModel({ kind: "chatgpt", catalogId: null }, "tagging")).toBe("gpt-6-luna");
+    expect(catalogRoleModel({ kind: "chatgpt", catalogId: null }, "quickTasks")).toBe("gpt-6-luna");
+    expect(catalogRoleModel({ kind: "chatgpt", catalogId: null }, "images")).toBeUndefined();
+  });
+
+  test("Ollama's cloud models get no tagging default: Automatic passes them by", () => {
+    expect(catalogRoleModel({ kind: "ollama", catalogId: "ollama" }, "tagging")).toBeUndefined();
+    const cloud = {
+      choice: { providerId: "ollama", modelId: "gpt-oss:20b-cloud" },
+      kind: "ollama" as const,
+      catalogId: "ollama",
+      service: OLLAMA_CLOUD,
+      ollamaCloud: true,
+      readsImages: false,
+      name: "gpt-oss:20b-cloud",
+      price: undefined,
+    };
+    const picked = automaticTagging({
+      localOnly: false,
+      jev: { enabled: false, local: false },
+      chat: { model: cloud, tagging: cloud, reason: "answers-model" },
+      decision: null,
+      localChat: null,
+    });
+    expect(picked).toBeNull();
   });
 });
 
@@ -470,7 +576,48 @@ describe("Support tiers (ADR-0019)", () => {
     const supportOf = (tier: string) =>
       CATALOG_PROVIDERS.filter((each) => each.support === tier).map((each) => each.id);
     expect(supportOf("first-class").sort()).toEqual([...FIRST_CLASS].sort());
-    expect(supportOf("best-effort").sort()).toEqual([...BEST_EFFORT, "openai-compatible"].sort());
+    expect(supportOf("best-effort").sort()).toEqual(
+      [...BEST_EFFORT, "openai-compatible", ...PRESETS.map((each) => each.id)].sort(),
+    );
+  });
+
+  test("a hosted preset is an OpenAI-compatible row with a key page and an Answers model, a local one a server on this computer; each is saved as that kind, and not yet tested is never first-class", () => {
+    expect(PRESETS.length).toBeGreaterThan(0);
+    for (const preset of PRESETS) {
+      const where = preset.id;
+      expect(isPreset(preset), where).toBe(true);
+      expect(chatProviderKinds as readonly string[], where).not.toContain(preset.id);
+      expect(preset.adapter, where).toBe("openai-compatible");
+      expect(kindOfCatalogId(preset.id), where).toBe("openai-compatible");
+      expect(preset.endpoints.length, where).toBeGreaterThan(0);
+      expect(untestedForCitations(preset), where).toBe(preset.citingTested === undefined);
+      if (untestedForCitations(preset)) expect(preset.support, where).toBe("best-effort");
+      if (preset.group === "local") {
+        // The models are whatever the User has loaded: none is named here.
+        expect(preset.roles, where).toEqual({});
+        // Set up at its default address, it is on this computer; and it is in no list of keys.
+        for (const endpoint of preset.endpoints) {
+          const address = endpoint.field?.default ?? "";
+          expect(isLoopbackHost(new URL(fieldUrl(endpoint, address)).hostname), where).toBe(true);
+        }
+        expect(KEY_PROVIDERS, where).not.toContain(preset.id);
+        expect(LOCAL_PRESETS, where).toContain(preset.id);
+        continue;
+      }
+      expect(preset.keyUrl ?? preset.endpoints[0]?.keyUrl, where).toMatch(/^https:\/\//);
+      expect(preset.roles.answers, where).toBeDefined();
+      // An Answers model that calls Tools, and quick tasks that cost no more.
+      const output = (id: string | undefined) =>
+        id ? catalogModel(preset.id, id)?.price?.output : undefined;
+      expect(catalogModel(preset.id, preset.roles.answers ?? "")?.tools, where).toBe(true);
+      expect(output(preset.roles.quickTasks) ?? Number.NaN, where).toBeLessThanOrEqual(
+        output(preset.roles.answers) ?? Number.NaN,
+      );
+    }
+    // Rows that aren't presets are never marked untested.
+    expect(
+      CATALOG_PROVIDERS.filter((each) => untestedForCitations(each) && !isPreset(each)),
+    ).toEqual([]);
   });
 
   test("the first-run list holds exactly the first-class providers that take a key", () => {
@@ -480,7 +627,7 @@ describe("Support tiers (ADR-0019)", () => {
     ).map((each) => each.id);
     expect(main).toEqual(expected);
     // Settings' "More providers" holds the rest, and nothing is lost between the two.
-    expect([...main, ...more].sort()).toEqual([...KEY_PROVIDER_KINDS].sort());
+    expect([...main, ...more].sort()).toEqual([...KEY_PROVIDERS].sort());
     expect(more).toEqual(expect.arrayContaining([...BEST_EFFORT, "openai-compatible"]));
   });
 

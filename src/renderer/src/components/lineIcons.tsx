@@ -1,5 +1,6 @@
 import type { ReactNode, SVGProps } from "react";
 import type { DocumentKind } from "../../../core/api";
+import { SPARK_PATH } from "./iconPaths";
 
 type IconProps = SVGProps<SVGSVGElement>;
 
@@ -38,6 +39,16 @@ export function SearchLineIcon(props: IconProps) {
     <LineIcon {...props}>
       <circle cx="11" cy="11" r="6.5" />
       <path d="m20 20-4.35-4.35" />
+    </LineIcon>
+  );
+}
+
+/** A Research plan: layers, one step on another. */
+export function PlanLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="m12 4 8 4-8 4-8-4z" />
+      <path d="m4 12 8 4 8-4M4 16l8 4 8-4" />
     </LineIcon>
   );
 }
@@ -139,6 +150,15 @@ export function DocumentLineIcon({ kind, ...props }: IconProps & { kind: Documen
       <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
       <path d="M14 3v5h5" />
       <path d={KIND_MARK[kind]} />
+    </LineIcon>
+  );
+}
+
+export function TableLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <rect x="3.5" y="4" width="17" height="16" rx="2" />
+      <path d="M3.5 9.5h17M3.5 14.75h17M9.5 9.5V20" />
     </LineIcon>
   );
 }
@@ -260,7 +280,16 @@ export function MergeLineIcon(props: IconProps) {
 export function SparkLineIcon(props: IconProps) {
   return (
     <LineIcon strokeWidth={2} {...props}>
-      <path d="M12 3c.6 4.6 3.4 7.4 8 8-4.6.6-7.4 3.4-8 8-.6-4.6-3.4-7.4-8-8 4.6-.6 7.4-3.4 8-8z" />
+      <path d={SPARK_PATH} />
+    </LineIcon>
+  );
+}
+
+export function KeyLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <circle cx="8" cy="15" r="4.5" />
+      <path d="m11.2 11.8 8.8-8.8M16.5 6.5l2.5 2.5M14 9l2 2" />
     </LineIcon>
   );
 }

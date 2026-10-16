@@ -1,11 +1,12 @@
 import { mkdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { homedir, tmpdir, userInfo } from "node:os";
+import { tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 import * as Y from "yjs";
 import { isCitationStyleId } from "../shared/citationStyles";
 import type { DrawnPage } from "../shared/citedPage";
 import { translate } from "../shared/i18n";
+import { organizeModelOf, supportsLibraryImages } from "../shared/libraryModels";
 import { bibliographyShown } from "../shared/mindBibliography";
 import {
   chosenCitationStyle,
@@ -15,6 +16,8 @@ import {
 import { mindModelOf } from "../shared/mindModel";
 import { mindName } from "../shared/naming";
 import { paperFor } from "../shared/printDocument";
+import { resolveProposals, restoreRevised } from "../shared/proposals";
+import { RESEARCH_TASK } from "../shared/research";
 import { wordFileOf } from "../shared/wordFiles";
 import { logActivity, silentLogger } from "./activityLog";
 import type { CoreAdapters } from "./adapters";
@@ -23,7 +26,9 @@ import { createAgentSetup, skillInstalled } from "./agents/setup";
 import { createAiUse } from "./aiUse";
 import { createAiUseStatement } from "./aiUseStatement";
 import { createAiSdkAnswerEngine, createAnswers } from "./answers";
+import { topLevelBlocks } from "./answers/blocks";
 import { createChecks } from "./answers/checks";
+import { AFTER_NEW_VERSION_MS, CLAIM_TIME_LIMIT_MS } from "./answers/checks/watch";
 import { recheckCitation, recheckKept } from "./answers/citations";
 import {
   addCitedUnits,
@@ -56,6 +61,7 @@ import {
   type OwnFileKind,
   type ProviderError,
   type SavedExport,
+  type ScannedQuoteInput,
   type SearchScope,
   type Task,
   type UnlockDocumentInput,
@@ -111,6 +117,7 @@ import { createLocalExecutor } from "./execution";
 import { createExports } from "./exports";
 import { exportLabels } from "./exports/labels";
 import { renderMarkdown } from "./exports/markdown";
+import { setTextOnlyDocuments, textOnlyDocuments } from "./exports/sharedPictures";
 import { createFileLock } from "./fileLock";
 import { safeFileName, writeNewFile } from "./fileNames";
 import { createFolders } from "./folders";
@@ -119,8 +126,17 @@ import { createLayouts } from "./layout";
 import { CLASSIFICATION_FLOW_SENDS, createLibrary } from "./library";
 import { automaticGroupClassifier } from "./library/automatic";
 import { createBatches } from "./library/batches";
-import { chatGroupClassifier, decisionGroupClassifier } from "./library/classifier";
+import {
+  chatGroupClassifier,
+  decisionGroupClassifier,
+  type GroupClassifier,
+  pacedBy,
+  withPageReader,
+} from "./library/classifier";
 import { documentCitedPages, documentPageImages } from "./library/pageImages";
+import { createPlanPace } from "./library/planPace";
+import { createTagging } from "./library/tagging";
+import type { TaggingClassifier } from "./library/types";
 import { createMeetings } from "./meetings";
 import { listParts, meetingFolder } from "./meetings/audioFiles";
 import { createCaptureHealth } from "./meetings/health";
@@ -142,15 +158,23 @@ import { createPrivacy, type NetworkTrafficRegistry } from "./privacy";
 import { readsImages } from "./providers/capabilities";
 import { CHAT_FLOW_SENDS, createChat, type PreparedChatModel } from "./providers/chat";
 import { CHATGPT_PLAN_ENDPOINTS, createChatGptPlan } from "./providers/chatgpt/plan";
+import { createClaudeAccount } from "./providers/claudeAccount/account";
+import { ANTHROPIC_OAUTH } from "./providers/claudeAccount/config";
+import { createCopilotAccount } from "./providers/copilot/account";
+import { COPILOT_PROFILES } from "./providers/copilot/config";
 import { createAiSdkEmbeddingModel } from "./providers/embeddings";
-import { ollamaBaseUrl } from "./providers/kinds";
+import { defaultOllamaUrl, ollamaBaseUrl } from "./providers/kinds";
+import { createLocalServers } from "./providers/localServers";
 import { createAiSdkChatModel } from "./providers/models";
 import {
   detectOllama,
   hasOllamaModel,
+  installedOllamaModels,
   OLLAMA_REGISTRY,
+  OLLAMA_START_TIMEOUT_MS,
   pullOllamaModel,
   RECOMMENDED_OLLAMA_MODEL,
+  waitForOllama,
 } from "./providers/ollama";
 import { isCloudModelName } from "./providers/ollamaCloud";
 import { createOllamaModels } from "./providers/ollamaModels";
@@ -164,6 +188,7 @@ import {
 } from "./referenceRecords";
 import { parseReference } from "./references";
 import { BUILT_IN_RERANKING_MODEL, createRerankingModel } from "./reranking";
+import { createResearch } from "./research";
 import { createTasks, type TaskKind, type TaskNotice } from "./runs/tasks";
 import { parseSearchScope, resolveSearchScope } from "./scope";
 import { createSecrets } from "./secrets";
@@ -177,11 +202,12 @@ import { createPace, realTimers } from "./sources/pace";
 import { createSourceProviders, sourceKeySecret } from "./sources/providers";
 import { migrate, openDatabase } from "./storage";
 import { createSuggestions } from "./suggestions";
-import { createTags } from "./tags";
+import { createTags, tagsOfDocument } from "./tags";
 import { chatClassifier } from "./tags/classify";
-import { createJevTagging } from "./tags/jev";
+import { createJevTagging, decisionModelTagger } from "./tags/jev";
 import { createTagger, TAGGING_FLOW_SENDS } from "./tags/tagger";
 import { createWebSearch, WEB_SEARCH_SENDS } from "./tools/web";
+import { createPublicFetch } from "./tools/web/fetcher";
 import {
   createTranscriptionModel,
   QWEN3_ASR_0_6B,
@@ -207,9 +233,11 @@ export interface Core extends CoreApi, CoreEventSource {
   openDocumentFile(documentId: string): Promise<DocumentFile>;
   /**
    * Opens a picture a live Markdown Document shows from beside it, by the
-   * relative path written in the file ("figures/map.png"), for the host to
-   * serve to the viewer: only images, only from the file's folder or below
-   * it. Throws NotFoundError for anything else.
+   * relative path written in the file ("figures/map.png"), or one a saved web
+   * page shows, by its path in the snapshot ("pictures/<hash>.png", #756),
+   * for the host to serve to the viewer: only images, only from the file's
+   * folder or below it, only those the page's versions show. Throws
+   * NotFoundError for anything else.
    */
   openDocumentImage(documentId: string, path: string): Promise<DocumentImage>;
   /**
@@ -321,6 +349,22 @@ function parseUnlock(input: unknown): UnlockDocumentInput {
   return { documentId: parseDocumentId(input.documentId), password };
 }
 
+/** A Citation's Document, Units and quote, as `readScannedQuote` and `readableQuote` take them. */
+function parseQuoted(input: unknown): ScannedQuoteInput {
+  if (!isRecord(input) || typeof input.quote !== "string") {
+    throw new InvalidInputError("A Citation's Document, Units and quote are needed.");
+  }
+  const unit = (value: unknown) =>
+    typeof value === "number" && Number.isInteger(value) && value >= 1 ? value : null;
+  return {
+    documentId: typeof input.documentId === "string" ? input.documentId : "",
+    contentHash: typeof input.contentHash === "string" ? input.contentHash : null,
+    pageFrom: unit(input.pageFrom),
+    pageTo: unit(input.pageTo),
+    quote: input.quote,
+  };
+}
+
 export function createCore(adapters: CoreAdapters): Core {
   const { dataDir } = adapters.paths;
   mkdirSync(dataDir, { recursive: true });
@@ -374,8 +418,8 @@ export function createCore(adapters: CoreAdapters): Core {
   // The assistant's conversations (ADR-0017); Answers a quit left being written are settled now.
   const conversations = createConversations(db, now);
   const conversationsChanged = () => events.emit("conversations.changed", null);
-  const content = createMindContent(db, now, (mindId, update) => {
-    events.emit("mind.update", { mindId, update });
+  const content = createMindContent(db, now, (mindId, update, cause) => {
+    events.emit("mind.update", { mindId, update, ...(cause && { cause }) });
     // Only notes the change; what became of AI text is worked out once the Mind is quiet.
     aiUse.contentStored(mindId);
     checkpoints.edited(mindId);
@@ -527,6 +571,7 @@ export function createCore(adapters: CoreAdapters): Core {
       db,
       dataDir,
       now,
+      log: adapters.log ?? silentLogger,
       model: embedding.model,
       textRecognition: textRecognitionModel,
       pdfPassword: (id) => pdfPasswords.of(id),
@@ -639,6 +684,8 @@ export function createCore(adapters: CoreAdapters): Core {
     db.close();
     throw error;
   }
+  // A saved page's pictures may come from any host: only the public internet is reached (#756).
+  const pictureFetcher = createPublicFetch(adapters.web);
   const webPages = createWebPages({
     db,
     dataDir,
@@ -646,6 +693,10 @@ export function createCore(adapters: CoreAdapters): Core {
     documents,
     languages: () =>
       settings.get().language === "zh-CN" ? ["zh-CN", "zh;q=0.9", "en;q=0.8"] : ["en", "*;q=0.5"],
+    pictureFetch: pictureFetcher.fetch,
+    ...(adapters.pageLook ? { look: adapters.pageLook } : {}),
+    keepLookByDefault: () => settings.get().user.keepWebPageLook,
+    reportError: (error) => console.error("A web page's picture or look couldn't be kept:", error),
     ...adapters.webPages,
   });
   webPages.dropPurged().catch((error: unknown) => console.error(error));
@@ -776,6 +827,7 @@ export function createCore(adapters: CoreAdapters): Core {
 
   // Sign-in changes can happen in the middle of a request (a refresh that fails), so they report through events.
   let chatGptChanged = () => {};
+  let chatGptLimitsChanged = () => {};
   const chatGptStore = adapters.chatGptStore;
   const chatGpt = createChatGptPlan({
     endpoints: { ...CHATGPT_PLAN_ENDPOINTS, ...adapters.chatGptPlan },
@@ -790,10 +842,30 @@ export function createCore(adapters: CoreAdapters): Core {
     browser: adapters.browser,
     now: () => (adapters.now?.() ?? new Date()).getTime(),
     onChange: () => chatGptChanged(),
+    onLimitsChange: () => chatGptLimitsChanged(),
   });
   // What the experimental ChatGPT provider left on this device goes (see migration 53).
   chatGpt.forgetCodexSignIn().catch((error: unknown) => {
     console.error("The experimental ChatGPT provider's sign-in couldn't be removed.", error);
+  });
+  let claudeAccountChanged = () => {};
+  const claudeProfile = adapters.claudeAccount ?? ANTHROPIC_OAUTH;
+  const claudeAccount = createClaudeAccount({
+    config: claudeProfile,
+    secrets,
+    language: () => settings.get().language,
+    browser: adapters.browser,
+    now: () => (adapters.now?.() ?? new Date()).getTime(),
+    onChange: () => claudeAccountChanged(),
+  });
+  let copilotChanged = () => {};
+  const copilotProfiles = adapters.copilotProfiles ?? COPILOT_PROFILES;
+  const copilot = createCopilotAccount({
+    profiles: copilotProfiles,
+    secrets,
+    browser: adapters.browser,
+    now: () => (adapters.now?.() ?? new Date()).getTime(),
+    onChange: () => copilotChanged(),
   });
   const meter = createMeter({
     db,
@@ -810,6 +882,8 @@ export function createCore(adapters: CoreAdapters): Core {
     consent,
     createModel: adapters.createChatModel ?? createAiSdkChatModel,
     chatGpt,
+    claudeAccount,
+    copilot,
     ollamaModels: adapters.ollamaModels ?? createOllamaModels(),
     localOnly: () => embedding.localOnly(),
     meter,
@@ -929,7 +1003,8 @@ export function createCore(adapters: CoreAdapters): Core {
       }
     },
     async savePage(address, folderId, added) {
-      const result = await webPages.save({ address }, added);
+      // A found source's copy is the text the User asked for, not how its page looks.
+      const result = await webPages.save({ address, keepLook: false }, added);
       if (result.outcome === "failed") return null;
       if (!result.existing && folderId !== null) library.assign(result.document.id, folderId);
       return { document: documents.get(result.document.id), existing: result.existing };
@@ -971,6 +1046,50 @@ export function createCore(adapters: CoreAdapters): Core {
       organizedFolderDocuments: (folderId) => library.documentIds(folderId),
       documentIds: (filter) => documents.ids(filter),
     });
+  // A Folder of the Library holds no file that isn't a Document, so it names the folders on disk
+  // its Documents are in: a Linked folder filed into it whole names the Linked folder.
+  const foldersOnDisk = (folderIds: readonly string[]) => {
+    const all = folders.list();
+    const named = all.filter((folder) => folderIds.includes(folder.id));
+    const filed = new Set(
+      folderIds
+        .filter((id) => !named.some((folder) => folder.id === id))
+        .flatMap((id) => documents.getMany(library.documentIds(id)))
+        .map((document) => document.folderId),
+    );
+    return [...named, ...all.filter((folder) => filed.has(folder.id))];
+  };
+  const unreadIn = (wanted: SearchScope | null): UnreadFile[] => {
+    const inScope = wanted ? resolveScope(wanted) : null;
+    const unread = findUnreadDocuments(documents.unread(inScope ?? undefined));
+    // Files in a format not read belong to folders on disk only: a Tag or a Document can't name
+    // them. A folder holds those in it and under it, even where no Document is.
+    const named = wanted ? foldersOnDisk(wanted.folderIds) : null;
+    const files = documents.linkedFolders
+      .unsupportedFiles()
+      .filter(
+        (file) =>
+          named === null ||
+          named.some(
+            (folder) =>
+              folder.linkedFolderId === file.linkedFolderId &&
+              (folder.relativePath === "" ||
+                file.relativeFolder === folder.relativePath ||
+                file.relativeFolder.startsWith(`${folder.relativePath}/`)),
+          ),
+      )
+      .map(
+        (file): UnreadFile => ({
+          id: file.path,
+          name: file.name,
+          reason: "format",
+          extension: file.extension,
+          documentId: null,
+          pages: [],
+        }),
+      );
+    return [...unread, ...files];
+  };
   // What checks and comparison tables search (#80): as Answers do, without IncarnaMind's own
   // files and the document being checked. Answers themselves search everything, as before.
   const evidence = createEvidence({
@@ -991,7 +1110,8 @@ export function createCore(adapters: CoreAdapters): Core {
     enabled: () => settings.get().user.webSearch && !embedding.localOnly(),
     readiness: (model) => chat.readiness(model),
     prepare: (model) => chat.prepareModel(model, "web-search", "off"),
-    savePage: (address, fetch) => webPages.save({ address }, undefined, fetch),
+    // A page an Answer saves is never loaded whole: that is for the User to ask for, page by page.
+    savePage: (address, fetch) => webPages.save({ address, keepLook: false }, undefined, fetch),
     folderOf: (place) => {
       try {
         if (place.mindId !== null) return minds.get(place.mindId).folderId;
@@ -1023,8 +1143,17 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     liveTranscript: (mindId) => liveTranscriptOf(mindId),
     providerExists: (providerId) => chat.exists(providerId),
-    readiness: (choice) => chat.readiness(choice),
-    prepareModel: (choice) => chat.prepareModel(choice),
+    readiness: async (choice) => chat.readiness(await chat.answeringModel(choice)),
+    prepareModel: (choice, thinking) => chat.prepareModel(choice, "chat", thinking),
+    async prepareQuickModel(answers, prepared) {
+      const quick = chat.quickTasksModel(answers);
+      if (!quick || (quick.providerId === answers.providerId && quick.modelId === answers.modelId))
+        return prepared.model;
+      // An Answer on this computer keeps its small calls there too.
+      if (prepared.provider.service === null && chat.describeModel(quick)?.service !== null)
+        return prepared.model;
+      return (await chat.prepareModel(quick, "chat", "off")).model;
+    },
     documents: {
       searchableCount: (documentIds) => documents.searchableCount(documentIds ?? undefined),
       names: () => documents.names(),
@@ -1086,7 +1215,21 @@ export function createCore(adapters: CoreAdapters): Core {
       },
       folderName: (folderId) =>
         library.folders().find((folder) => folder.id === folderId)?.name ?? null,
+      writing: (mindId, place) => events.emit("mind.writing", { mindId, place }),
       proposeInMind: (input) => edits.proposeInMind(input),
+    },
+    withdrawChanges: (changes) => {
+      for (const change of changes) {
+        if (!mindExists(change.mindId)) continue;
+        const emptied = content.edit(change.mindId, (blocks) => {
+          resolveProposals(blocks, (ref) => ref.request === change.request, "reject");
+          if (change.revised) restoreRevised(blocks, change.request);
+          return topLevelBlocks(blocks).every(
+            (block) => block.nodeName === "paragraph" && block.length === 0,
+          );
+        });
+        if (change.created && emptied) removeMind(change.mindId);
+      }
     },
     approvals: {
       decide: (call) => approvals.decide(call),
@@ -1130,6 +1273,7 @@ export function createCore(adapters: CoreAdapters): Core {
       },
     },
     resolveScope,
+    interfaceLanguage: () => settings.get().language,
     emptyScopeAnswer: () => translate(settings.get().language, "scope.answer.empty"),
     onWritingChange: (writing) => {
       background.setAnswering(writing);
@@ -1171,7 +1315,11 @@ export function createCore(adapters: CoreAdapters): Core {
   const taskName = (kind: string) =>
     translate(
       settings.get().language,
-      kind === COMPARISON_TASK ? "task.kind.comparison" : "task.kind.other",
+      kind === COMPARISON_TASK
+        ? "task.kind.comparison"
+        : kind === RESEARCH_TASK
+          ? "task.kind.research"
+          : "task.kind.other",
     );
   /** Whether a Mind is the tab shown in a group of one of these windows. */
   const mindShown = (mindId: string | null, windowIds: readonly string[]) =>
@@ -1202,12 +1350,13 @@ export function createCore(adapters: CoreAdapters): Core {
           : "task.notify.finished",
       { task: name },
     );
-    let body = "";
+    let mind = "";
     try {
-      body = task.mindId ? minds.get(task.mindId).title : "";
+      mind = task.mindId ? minds.get(task.mindId).title : "";
     } catch {
-      body = "";
+      mind = "";
     }
+    const body = [mind, what === "finished" ? task.summary : null].filter(Boolean).join(" · ");
     notifications.show(
       { title, body: body || translate(language, "task.notify.body") },
       (windowIds) => mindShown(task.mindId, windowIds),
@@ -1215,8 +1364,75 @@ export function createCore(adapters: CoreAdapters): Core {
         events.emit("task.shown", { taskId: task.id, mindId: task.mindId, blockId: task.blockId }),
     );
   };
-  // Tasks (#126): their journal survives a force-quit; comparison tables fill as one.
-  const taskKinds: TaskKind[] = [comparisons.taskKind, ...(adapters.taskKinds ?? [])];
+  const research = createResearch({
+    requireMind: (mindId) => writableMind(mindId).id,
+    mindExists,
+    mindName: (mindId) => (mindExists(mindId) ? mindName(minds.get(mindId)) || null : null),
+    folderOfMind: (mindId) => (mindExists(mindId) ? minds.get(mindId).folderId : null),
+    createMind: (title, folderId) => makeMind({ title, kind: DEFAULT_MIND_KIND, folderId }).id,
+    documents: {
+      webPagesSince: (ids, since) =>
+        documents
+          .getMany(ids)
+          .filter((document) => document.kind === "web" && document.createdAt >= since)
+          .map((document) => ({ id: document.id, name: document.name })),
+      live: (ids) => documents.getMany(ids).map((document) => document.id),
+    },
+    library: {
+      folderExists: (folderId) => library.folders().some((folder) => folder.id === folderId),
+      folderNames: () => library.folders().map((folder) => folder.name),
+      createFolder: (name, description) => library.create({ name, description }).id,
+      file: (documentIds, folderId) => {
+        db.transaction(() => library.move(documentIds, folderId));
+        library.moved([...documentIds]);
+      },
+    },
+    tags: {
+      list: () => tags.list().map((tag) => ({ id: tag.id, name: tag.name })),
+      create: (name, description) => {
+        const tag = tags.create({ name, description });
+        tagsChanged();
+        return tag.id;
+      },
+      apply: (documentId, tagIds) => {
+        const kept = tagsOfDocument(db, documentId)
+          .filter((link) => link.source === "automatic")
+          .map((link) => link.tagId);
+        const decided = [...new Set([...kept, ...tagIds])].map((tagId) => ({
+          tagId,
+          confidence: null,
+          needsReview: false,
+        }));
+        if (tags.applyAutomatic(documentId, decided)) announceTagged([documentId]);
+      },
+    },
+    notes: {
+      proposed: (mindId, request) => noteAdding.proposed(mindId, request),
+      propose: (mindId, blocks, request, made) => noteAdding.propose(mindId, blocks, request, made),
+    },
+    now: () => adapters.now?.() ?? new Date(),
+    reportError: (error) => console.error(error),
+    chat: {
+      providerExists: (providerId) => chat.exists(providerId),
+      readiness: (choice) => chat.readiness(choice),
+      prepareModel: (choice) => chat.prepareModel(choice),
+      runsLocally: (choice) => chat.metered(choice)?.billing === "free",
+    },
+    answers,
+    resolveScope,
+    tasks: {
+      start: (kind, mindId, input) => tasks.start(kind, mindId, input),
+      get: (taskId) => tasks.record(taskId),
+      steps: (taskId) => tasks.steps(taskId),
+    },
+    say: (key, params) => translate(settings.get().language, key, params),
+  });
+  // Tasks (#126): their journal survives a force-quit; comparison tables fill as one, and Research is one.
+  const taskKinds: TaskKind[] = [
+    comparisons.taskKind,
+    research.taskKind,
+    ...(adapters.taskKinds ?? []),
+  ];
   const tasks = createTasks({
     db,
     now,
@@ -1279,6 +1495,19 @@ export function createCore(adapters: CoreAdapters): Core {
       folderDefault: folderId === null ? null : library.citationStyle(folderId),
     }));
   };
+  /** Sends a Mind to Recently deleted; its tabs close. */
+  const removeMind = (mindId: unknown) => {
+    const at = now();
+    const deleted = db.transaction(() => {
+      const mind = minds.delete(mindId, at);
+      content.remove(mind.id, at);
+      return mind;
+    });
+    meetings.mindDeleted(deleted.id);
+    mindsChanged();
+    layouts.forgetDeletedMinds();
+  };
+
   // Edit with AI (#93): the change comes back as Proposals; Citations it keeps are checked again.
   const edits = createEdits({
     content,
@@ -1290,6 +1519,10 @@ export function createCore(adapters: CoreAdapters): Core {
     consent,
     localOnly: () => embedding.localOnly(),
     recheck: (attributes) => recheckKept(documents, attributes),
+    writing: (mindId, place) => events.emit("mind.writing", { mindId, place }),
+    checkpoint: (mindId) => {
+      checkpoints.save(mindId, "accept");
+    },
     now: () => adapters.now?.() ?? new Date(),
   });
 
@@ -1315,8 +1548,17 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     requireFolder: (folderId) => void library.folder(folderId),
     async addFile(path, folderId) {
-      const added = await addDocuments([path], folderId === null ? {} : { groupId: folderId });
-      return added.documents[0] ?? null;
+      const fresh = new Set<string>();
+      const added = await addDocuments(
+        [path],
+        folderId === null ? {} : { groupId: folderId },
+        (documentId) => fresh.add(documentId),
+      );
+      const [document] = added.documents;
+      // Someone else's file, checked: not proof of its own claims. One the Library already had keeps the User's choice.
+      return document && fresh.has(document.id)
+        ? documents.setNotCited(document.id, true)
+        : (document ?? null);
     },
     document: (documentId) => documents.get(documentId),
     onStatus: (listener) => events.on("document.status", listener),
@@ -1328,13 +1570,25 @@ export function createCore(adapters: CoreAdapters): Core {
         kind: DEFAULT_MIND_KIND,
         folderId,
       }),
+    watch: {
+      minds: () => minds.list().map((mind) => ({ id: mind.id, folderId: mind.folderId })),
+      documentVersions: () =>
+        new Map(documents.list().map((document) => [document.id, document.contentHash])),
+      background,
+      runCost: (runId) => meter.taskCost(runId),
+      delayMs: adapters.contradictionWatch?.delayMs ?? AFTER_NEW_VERSION_MS,
+      claimTimeLimitMs: adapters.contradictionWatch?.claimTimeLimitMs ?? CLAIM_TIME_LIMIT_MS,
+      log: adapters.log ?? silentLogger,
+    },
     mindFolder: (mindId) => minds.get(mindId).folderId,
     originalOf: (mindId) => wordImports.originalOf(mindId),
     defaultModel: () => settings.get().user.chatModel,
+    recordAiUse: (inputs) => void aiUse.record(inputs),
     chat,
     consent,
     localOnly: () => embedding.localOnly(),
     resolveScope,
+    unread: unreadIn,
     evidence,
     documents: {
       searchableCount: (documentIds) => documents.searchableCount(documentIds ?? undefined),
@@ -1385,11 +1639,30 @@ export function createCore(adapters: CoreAdapters): Core {
     read: (mindId, look) => content.read(mindId, look),
     liveDocuments: () => documents.list(),
     keptCitationTexts: () => documents.keptCitationTexts(),
+    readableQuote: ({ documentId, contentHash, pageFrom, pageTo, quote }) =>
+      documentId && quote
+        ? documents.readableQuote({
+            documentId,
+            contentHash: contentHash ?? null,
+            pageFrom: pageFrom ?? null,
+            pageTo: pageTo ?? null,
+            quote,
+          })
+        : null,
     language: () => settings.get().language,
+    folderName: (folderId) =>
+      library.folders().find((folder) => folder.id === folderId)?.name ?? null,
     citationStyle: (mindId) => mindCitationStyle(mindId).style,
     bibliography: (mindId) => content.readSettings(mindId, bibliographyShown),
     formatCitations: (request) => citationStyles.format(request),
     citedPage: (citation) => citedPages.image(citation),
+    citedUnits: ({ documentId, contentHash, pageFrom, pageTo }) => {
+      if (!documentId || !contentHash) return [];
+      const from = typeof pageFrom === "number" ? pageFrom : null;
+      const to = from === null ? null : Math.max(from, typeof pageTo === "number" ? pageTo : from);
+      return documents.pageTexts(documentId, contentHash, from, to);
+    },
+    sharePageTextOnly: (mindId) => content.readSettings(mindId, textOnlyDocuments),
     printer: adapters.printer ?? null,
     paper: () => paperFor(systemRegion(adapters.systemRegion?.(), adapters.systemLanguages())),
     ...(adapters.pictures && { pictures: adapters.pictures }),
@@ -1437,7 +1710,7 @@ export function createCore(adapters: CoreAdapters): Core {
     events,
     now,
     settings,
-    suggested: join(adapters.paths.documents ?? join(homedir(), "Documents"), "IncarnaMind"),
+    suggested: join(adapters.paths.documents, "IncarnaMind"),
     linkedFolders: () => documents.linkedFolders.list(),
     recordOwnFile,
   });
@@ -1478,14 +1751,47 @@ export function createCore(adapters: CoreAdapters): Core {
     hostedUrl: adapters.jevHostedUrl,
     signal: lifetime.signal,
   });
+  // Tagging on a ChatGPT plan goes gently, and waits while the plan's limit holds.
+  const planPace = createPlanPace({
+    pace,
+    timers: paceTimers,
+    resumed: () => {
+      tagger.resume();
+      library.resume();
+    },
+    signal: lifetime.signal,
+  });
+  // The one Tagging setting: the model automatic tagging uses, and Organize when picked by hand.
+  const tagging = createTagging({
+    setting: () => library.settings().classifier,
+    chat: {
+      list: () => chat.list(),
+      defaultModel: () => settings.get().user.chatModel,
+      describeModel: (choice) => chat.describeModel(choice),
+      quickTasksModel: (answers) => chat.quickTasksModel(answers),
+    },
+    jev,
+    localOnly: () => embedding.localOnly(),
+    ollamaUrl: adapters.ollamaUrl ?? defaultOllamaUrl(),
+    localModels: adapters.localModels ?? installedOllamaModels,
+    planPausedUntil: () => planPace.pausedUntil(),
+    now: () => paceTimers.now(),
+  });
+  const tagsWith = (): TaggingClassifier | null => {
+    const setting = library.settings().classifier;
+    return setting.kind === "automatic" ? tagging.lastResolved() : setting;
+  };
+  const onPlan = <T>(run: () => Promise<T>, signal: AbortSignal) => planPace.run(run, signal);
+  const taggingServices = async (): Promise<ExternalService[]> => {
+    const classifier = await tagging.resolve();
+    const service = classifier && tagging.service(classifier);
+    return service ? [service] : [];
+  };
   consent.registry.register({
     id: "tagging",
     sends: TAGGING_FLOW_SENDS,
     background: true,
-    async services() {
-      const service = jev.enabled() ? jev.service() : chat.defaultService();
-      return service ? [service] : [];
-    },
+    services: taggingServices,
   });
   /** Pushes "documents.tagged" for those of these Documents that still exist. */
   const announceTagged = (documentIds: readonly string[]) => {
@@ -1507,27 +1813,78 @@ export function createCore(adapters: CoreAdapters): Core {
     if (changed.length > 0) events.emit("documents.tagged", documents.getMany(changed));
     return documents.getMany(ids);
   };
-  // Existing installations keep the legacy tagger until organization is configured.
-  // Once folders are in use, only the selected organizer may suggest tags.
-  const organizationConfigured = () =>
-    !!settings.readDeviceValue("library") ||
+  /**
+   * Until there are Folders and Organize has a model, automatic tagging decides
+   * Tags alone; then Organize does both. Automatic covers tagging only.
+   */
+  const organizing = () =>
+    organizeModelOf(library.settings()) !== null &&
     !!db.get("SELECT 1 FROM library_groups WHERE deleted_at IS NULL LIMIT 1");
+  // Ollama's decision models run only on this computer, as when one is picked by hand: elsewhere
+  // they would get Document text with no consent asked.
+  const decisionModelElsewhere = (classifier: TaggingClassifier) =>
+    (classifier.kind === "auto" || classifier.kind === "ollama") &&
+    tagging.service(classifier) !== null;
+  const notOnThisComputer = (classifier: TaggingClassifier) =>
+    new TaggingNotReadyError({
+      key:
+        classifier.kind === "auto" ? "error.library.autoNotLocal" : "error.library.ollamaNotLocal",
+    });
   const tagger = createTagger({
     db,
     now,
     tags,
-    enabled: () => !organizationConfigured(),
+    enabled: () => !organizing(),
     canRun: async () => {
-      if (jev.enabled()) return jev.canRun();
-      const readiness = await chat.readiness(undefined, "tagging");
-      return readiness.ready && readiness.consent !== "needed";
+      const classifier = await tagging.resolve();
+      if (!classifier) return false;
+      if (classifier.kind === "jev") return jev.canRun();
+      if (classifier.kind === "chat") {
+        const readiness = await chat.readiness(classifier.choice, "tagging");
+        return readiness.ready && readiness.consent !== "needed";
+      }
+      return !decisionModelElsewhere(classifier);
     },
-    mightBeReady: () => (jev.enabled() ? jev.mightBeReady() : chat.mightBeReady("tagging")),
+    mightBeReady: () => {
+      const classifier = tagsWith();
+      if (!classifier || decisionModelElsewhere(classifier)) return false;
+      if (embedding.localOnly() && tagging.service(classifier)) return false;
+      if (classifier.kind === "jev") return jev.mightBeReady();
+      if (classifier.kind === "chat") return chat.mightBeReady("tagging", classifier.choice);
+      return true;
+    },
     prepare: async () => {
-      if (jev.enabled()) return jev.prepare();
-      const prepared = await chat.prepareModel(undefined, "tagging");
-      // No service to send to: the model runs on a server on this computer.
-      return chatClassifier(prepared.model, { local: prepared.provider.service === null });
+      const classifier = await tagging.resolve();
+      if (!classifier) throw new TaggingNotReadyError({ key: "error.tagging.noModel" });
+      if (decisionModelElsewhere(classifier)) throw notOnThisComputer(classifier);
+      if (embedding.localOnly() && tagging.service(classifier))
+        throw new TaggingNotReadyError({ key: "error.tagging.cloudPaused" });
+      switch (classifier.kind) {
+        case "jev":
+          return jev.prepare();
+        case "auto": {
+          const model = await tagging.textDecisionModel(classifier.baseUrl);
+          if (!model)
+            throw new TaggingNotReadyError({
+              key: "error.tagging.installModel",
+              values: { model: "tev1:4b" },
+            });
+          return decisionModelTagger({ baseUrl: classifier.baseUrl, model });
+        }
+        case "ollama":
+          return decisionModelTagger({ baseUrl: classifier.baseUrl, model: classifier.modelId });
+        case "chat": {
+          const prepared = await chat.prepareModel(classifier.choice, "tagging");
+          if (embedding.localOnly() && prepared.provider.service)
+            throw new TaggingNotReadyError({ key: "error.tagging.cloudPaused" });
+          // No service to send to: the model runs on a server on this computer.
+          const chosen = chatClassifier(prepared.model, {
+            local: prepared.provider.service === null,
+          });
+          if (prepared.provider.kind !== "chatgpt") return chosen;
+          return { ...chosen, decide: (input) => onPlan(() => chosen.decide(input), input.signal) };
+        }
+      }
     },
     announce: announceTagged,
     reportError: (error) => console.error(error),
@@ -1550,7 +1907,18 @@ export function createCore(adapters: CoreAdapters): Core {
       batches.changed(assignments.map((each) => each.documentId));
     },
     providerExists: (id) => chat.exists(id),
-    chatReadsImages: (choice) => chat.readsImages(choice),
+    readsPages: (classifier) => {
+      switch (classifier.kind) {
+        case "auto":
+          return true;
+        case "ollama":
+          return supportsLibraryImages(classifier.modelId) && classifier.usePageImages === true;
+        case "jev":
+          return false;
+        case "chat":
+          return chat.readsImages(classifier.choice) || chat.imageModel(classifier.choice) !== null;
+      }
+    },
     async pageImages(id, contentHash, signal) {
       try {
         return await documentPageImages(
@@ -1564,8 +1932,10 @@ export function createCore(adapters: CoreAdapters): Core {
         throw new Error(error instanceof Error ? error.message : String(error), { cause: error });
       }
     },
-    async prepare({ classifier }) {
-      if (!classifier) throw new TaggingNotReadyError({ key: "error.tagging.noModel" });
+    async prepare(settings) {
+      const classifier = organizeModelOf(settings);
+      if (!classifier) throw new TaggingNotReadyError({ key: "error.library.noClassifier" });
+      if (decisionModelElsewhere(classifier)) throw notOnThisComputer(classifier);
       if (classifier.kind === "auto") {
         let automatic = automaticClassifiers.get(classifier.baseUrl);
         if (!automatic) {
@@ -1590,32 +1960,43 @@ export function createCore(adapters: CoreAdapters): Core {
           throw new TaggingNotReadyError({ key: "error.tagging.cloudPaused" });
         return prepared;
       }
-      const ready = await chat.readiness(classifier.choice, "classification");
+      const { choice } = classifier;
+      const ready = await chat.readiness(choice, "classification");
       if (embedding.localOnly() && "provider" in ready && ready.provider.service)
         throw new TaggingNotReadyError({ key: "error.tagging.cloudPaused" });
-      const prepared = await chat.prepareModel(classifier.choice, "classification");
+      const prepared = await chat.prepareModel(choice, "classification");
       if (embedding.localOnly() && prepared.provider.service)
         throw new TaggingNotReadyError({ key: "error.tagging.cloudPaused" });
       // prepareModel got consent for everything the classification flow sends, page images included.
       const images = readsImages(prepared.capabilities);
-      return {
+      let chosen: GroupClassifier = {
         ...chatGroupClassifier(prepared.model, prepared.provider.service === null, images),
-        model: { id: classifier.choice.modelId, images, reason: "selected" as const },
+        model: { id: choice.modelId, images, reason: "selected" as const },
       };
+      // A scan goes to the image model when this one can't read its pages.
+      const imageModel = images ? null : chat.imageModel(choice);
+      if (imageModel) {
+        chosen = withPageReader(chosen, async () => {
+          const reader = await chat.prepareModel(imageModel, "classification");
+          return {
+            ...chatGroupClassifier(reader.model, reader.provider.service === null, true),
+            model: { id: imageModel.modelId, images: true, reason: "selected" as const },
+          };
+        });
+      }
+      return prepared.provider.kind === "chatgpt" ? pacedBy(chosen, onPlan) : chosen;
     },
   });
-  /** The service the model organizing Documents sends to, if it isn't on this computer. */
+  /** The services Organize sends to: its model's, and the image model's for the scans it can't read. */
   const classificationServices = async (): Promise<ExternalService[]> => {
-    const selected = library.settings().classifier;
-    if (selected?.kind === "jev") {
-      const service = jev.service();
-      return service ? [service] : [];
-    }
-    if (selected?.kind === "chat") {
-      const provider = (await chat.list()).find((item) => item.id === selected.choice.providerId);
-      return provider?.service ? [provider.service] : [];
-    }
-    return [];
+    const classifier = organizeModelOf(library.settings());
+    const service = classifier && tagging.service(classifier);
+    const reader =
+      classifier?.kind === "chat" && !chat.readsImages(classifier.choice)
+        ? chat.imageModel(classifier.choice)
+        : null;
+    const pages = reader && chat.describeModel(reader)?.service;
+    return [...(service ? [service] : []), ...(pages && pages.id !== service?.id ? [pages] : [])];
   };
   consent.registry.register({
     id: "classification",
@@ -1677,6 +2058,12 @@ export function createCore(adapters: CoreAdapters): Core {
   });
   wordImports.resume();
   wordImports.dropPurged().catch((error: unknown) => console.error(error));
+  wordImports.addLooks().catch((error: unknown) =>
+    (adapters.log ?? silentLogger).error("word.look.failed", {
+      error: error instanceof Error ? error.name : "unknown",
+      message: error instanceof Error ? error.message : String(error),
+    }),
+  );
 
   const recentlyDeleted = createRecentlyDeleted({
     db,
@@ -1711,13 +2098,28 @@ export function createCore(adapters: CoreAdapters): Core {
     console.error("Deleting what waited 30 days in Recently deleted failed.", error);
   }
 
+  /**
+   * What tagging may use changed (a model, a key, local mode): Automatic picks
+   * again, and Documents waiting may go on.
+   */
+  const taggingChanged = async () => {
+    try {
+      await tagging.resolve();
+    } catch (error) {
+      if (lifetime.signal.aborted) return;
+      console.error("The model to tag with couldn't be worked out.", error);
+    }
+    if (lifetime.signal.aborted) return;
+    tagger.resume();
+    library.resume();
+  };
+
   /** Jev was set up, changed or removed: say so, and Documents waiting may go on. */
   const jevChanged = async () => {
     const status = await jev.status();
     if (lifetime.signal.aborted) return status;
     events.emit("jev.changed", status);
-    tagger.resume();
-    library.resume();
+    await taggingChanged();
     return status;
   };
   documentReady = (documentId) => tagger.documentReady(documentId);
@@ -1732,10 +2134,7 @@ export function createCore(adapters: CoreAdapters): Core {
       if (!lifetime.signal.aborted) throw error;
     }
     // Documents waiting for a chat model may be able to go on now.
-    if (!lifetime.signal.aborted) {
-      tagger.resume();
-      library.resume();
-    }
+    if (!lifetime.signal.aborted) await taggingChanged();
   };
   chatGptChanged = () => {
     const report = async () => {
@@ -1748,9 +2147,45 @@ export function createCore(adapters: CoreAdapters): Core {
       if (!lifetime.signal.aborted) console.error(error);
     });
   };
+  claudeAccountChanged = () => {
+    const report = async () => {
+      const status = await claudeAccount.status();
+      if (lifetime.signal.aborted) return;
+      events.emit("claudeAccount.changed", status);
+      await readinessChanged();
+    };
+    report().catch((error: unknown) => {
+      if (!lifetime.signal.aborted) console.error(error);
+    });
+  };
+  // Not a readiness change: the renderer keeps its model lists.
+  chatGptLimitsChanged = () => {
+    chatGpt.status().then(
+      (status) => {
+        if (!lifetime.signal.aborted) events.emit("chatGptPlan.changed", status);
+      },
+      (error: unknown) => {
+        if (!lifetime.signal.aborted) console.error(error);
+      },
+    );
+  };
+  copilotChanged = () => {
+    const report = async () => {
+      const status = await copilot.status();
+      if (lifetime.signal.aborted) return;
+      events.emit("copilot.changed", status);
+      await readinessChanged();
+    };
+    report().catch((error: unknown) => {
+      if (!lifetime.signal.aborted) console.error(error);
+    });
+  };
 
-  // Tagging a quit interrupted starts again; Documents waiting for a chat model are checked.
-  tagger.start();
+  // Tagging a quit interrupted starts again, once Automatic knows what it tags with;
+  // Documents waiting for a model are checked.
+  void taggingChanged().then(() => {
+    if (!lifetime.signal.aborted) tagger.start();
+  });
 
   // Traffic that carries nothing of the User's, for the Privacy page.
   const modelSource = adapters.embeddingModelSource ?? BUILT_IN_EMBEDDING_MODEL.source;
@@ -1810,6 +2245,37 @@ export function createCore(adapters: CoreAdapters): Core {
     id: "chatgpt-sign-in",
     service: { id: chatGptSignIn.origin, name: "OpenAI" },
     listed: () => chatGpt.used(),
+  });
+  if (claudeProfile) {
+    const { authorizeUrl, tokenUrl, revokeUrl } = claudeProfile;
+    const signInHosts = new Map(
+      [authorizeUrl, tokenUrl, revokeUrl]
+        .filter((url): url is string => url !== undefined)
+        .map((url) => new URL(url))
+        .map((url) => [url.origin, url.host]),
+    );
+    privacy.traffic.register({
+      id: "claude-sign-in",
+      services: () => [...signInHosts].map(([id, name]) => ({ id, name })),
+      listed: () => claudeAccount.used(),
+    });
+  }
+  const copilotHosts = new Map(
+    Object.values(copilotProfiles)
+      .flatMap((profile) => [
+        profile.deviceCodeUrl,
+        profile.tokenUrl,
+        profile.tokenExchange?.url,
+        profile.apiBaseUrl,
+      ])
+      .filter((url): url is string => url !== undefined)
+      .map((url) => new URL(url))
+      .map((url) => [url.origin, url.host]),
+  );
+  privacy.traffic.register({
+    id: "copilot-sign-in",
+    services: () => [...copilotHosts].map(([id, name]) => ({ id, name })),
+    listed: () => copilot.used(),
   });
   privacy.traffic.register({
     id: "remote-connectors",
@@ -1910,11 +2376,16 @@ export function createCore(adapters: CoreAdapters): Core {
     linkedFolderExists: (linkedFolderId) =>
       documents.linkedFolders.list().some((folder) => folder.id === linkedFolderId),
     documentsIn: (linkedFolderId) => documents.list({ linkedFolderId }),
+    mindFolder: (mindId) => minds.get(mindId).folderId,
+    now,
     checksRelyOn: (documentIds) => retention.isRetained("check-result", documentIds),
     recheck: (input) => recheckCitation(documents, input),
     changed: (value) => events.emit("examples.changed", value),
   });
   events.on("document.status", () => examples.documentChanged());
+  // A new version of a Document in a Folder: its Minds' cited claims are checked for contradictions (#112).
+  checks.startWatching();
+  events.on("document.status", (document) => checks.documentChanged(document));
   // Linked folders and single files are compared with the disk, then watched.
   documents.start();
 
@@ -1922,6 +2393,8 @@ export function createCore(adapters: CoreAdapters): Core {
     if (input !== undefined && !isRecord(input)) throw new InvalidInputError("Expected an object.");
     return ollamaBaseUrl(input?.baseUrl);
   };
+  const ollamaInstalled = async () => (await adapters.ollamaApp?.installed()) ?? false;
+  const localServers = adapters.localServers ?? createLocalServers();
 
   // Transcripts (#136): a Meeting is transcribed on this computer as it records, where this copy can.
   let listMeetings: (() => Meeting[]) | undefined;
@@ -2067,9 +2540,10 @@ export function createCore(adapters: CoreAdapters): Core {
 
   // Outside agents (#351): the User's own agent, paired in Settings, reads its Folders over the
   // socket and gets Citations IncarnaMind minted and checked. Off until the User turns it on.
-  // Where agents keep their settings and skills.
-  const home = adapters.agents?.home ?? homedir();
+  const { home } = adapters.paths;
   const agents = createAgents({
+    offered: adapters.agents?.offered ?? true,
+    log: adapters.log ?? silentLogger,
     db,
     now,
     clock: () => performance.now(),
@@ -2102,6 +2576,7 @@ export function createCore(adapters: CoreAdapters): Core {
       passage: (passageId) => documents.passage(passageId),
       passagesBetween: (documentId, from, to) => documents.passagesBetween(documentId, from, to),
       citing,
+      notCited: (passageId) => documents.citationSource(passageId)?.notCited ?? false,
       recheck: (input) => recheckCitation(documents, input),
       minds: () => minds.list().filter((mind) => isKnownKind(mind.kind)),
       liveDocuments: () => documents.names(),
@@ -2149,11 +2624,18 @@ export function createCore(adapters: CoreAdapters): Core {
     reportError: (error) => console.error(error),
   });
 
-  const addDocuments: CoreApi["addDocuments"] = async (paths, options) => {
+  const addDocuments = async (
+    paths: string[],
+    options?: Parameters<CoreApi["addDocuments"]>[1],
+    onNew?: (documentId: string) => void,
+  ): ReturnType<CoreApi["addDocuments"]> => {
     const batchId = batches.begin(library.target(options));
     const since = now();
     const result = await documents
-      .add(paths, (documentId) => batches.added(batchId, documentId))
+      .add(paths, (documentId) => {
+        batches.added(batchId, documentId);
+        onNew?.(documentId);
+      })
       .finally(() => batches.done(batchId));
     usageData.record({ event: "documents_added", fields: addedCounts(result, since) });
     return { ...result, batchId };
@@ -2178,17 +2660,7 @@ export function createCore(adapters: CoreAdapters): Core {
       mindsChanged();
       return mind;
     },
-    deleteMind: async (mindId) => {
-      const at = now();
-      const deleted = db.transaction(() => {
-        const mind = minds.delete(mindId, at);
-        content.remove(mind.id, at);
-        return mind;
-      });
-      meetings.mindDeleted(deleted.id);
-      mindsChanged();
-      layouts.forgetDeletedMinds();
-    },
+    deleteMind: async (mindId) => removeMind(mindId),
     openMind: async (mindId) => {
       const mind = minds.get(mindId);
       // A Mind this version may only read is shown from what is stored: nothing is
@@ -2220,6 +2692,7 @@ export function createCore(adapters: CoreAdapters): Core {
       return documents.searchableCount((wanted ? resolveScope(wanted) : null) ?? undefined);
     },
     stopConversationAnswer: async (input) => answers.stopInConversation(input),
+    usualAnswerWait: async (answerId) => conversations.usualWait(answerId),
     listConversations: async (options) => conversations.list(options),
     getConversation: async (conversationId) => conversations.content(conversationId),
     searchConversations: async (query) => conversations.search(query),
@@ -2254,10 +2727,13 @@ export function createCore(adapters: CoreAdapters): Core {
     getLayout: async (windowId) => layouts.get(windowId),
     changeLayout: async (windowId, change) => layouts.change(windowId, change),
     updateSettings: async (patch) => {
-      // The default chat model must be on a saved provider.
-      const chatModel = isRecord(patch) && isRecord(patch.user) ? patch.user.chatModel : undefined;
-      if (isChatModelChoice(chatModel) && !chat.exists(chatModel.providerId)) {
-        throw new InvalidInputError("That chat provider doesn't exist.");
+      // The default chat model, and the quick-tasks and image models, must be on a saved provider.
+      const user = isRecord(patch) && isRecord(patch.user) ? patch.user : {};
+      const chatModel = user.chatModel;
+      for (const choice of [chatModel, user.quickTasksModel, user.imageModel]) {
+        if (isChatModelChoice(choice) && !chat.exists(choice.providerId)) {
+          throw new InvalidInputError("That chat provider doesn't exist.");
+        }
       }
       const scriptsWere = settings.get().device.skillScriptsEnabled;
       let change = patch;
@@ -2279,6 +2755,9 @@ export function createCore(adapters: CoreAdapters): Core {
       }
       const flowChanged = syncChatFlow();
       if (chatModel !== undefined || flowChanged) await readinessChanged();
+      // Automatic may tag with another model now.
+      else if (user.quickTasksModel !== undefined || user.imageModel !== undefined)
+        await taggingChanged();
       // The examples follow the new language before this returns, so whoever awaits it can rely on it.
       if (updated.language !== languageWas) {
         await examples
@@ -2311,6 +2790,7 @@ export function createCore(adapters: CoreAdapters): Core {
         ? { ...result, document: documents.get(result.document.id) }
         : result;
     },
+    keepWebPageLook: async (documentId) => webPages.keepLook(documentId),
     fetchWebPageAgain: async (documentId) => webPages.fetchAgain(documentId),
     saveTextAsDocument: async (input) => {
       if (!isRecord(input) || typeof input.text !== "string" || input.text.trim() === "") {
@@ -2372,22 +2852,8 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     readDocumentText: async (id) => documents.readText(id),
     readScannedText: async (id) => documents.readScannedText(id),
-    readScannedQuote: async (input) => {
-      if (!isRecord(input) || typeof input.quote !== "string") {
-        throw new InvalidInputError(
-          "readScannedQuote needs a Citation's Document, Units and quote.",
-        );
-      }
-      const unit = (value: unknown) =>
-        typeof value === "number" && Number.isInteger(value) && value >= 1 ? value : null;
-      return documents.readScannedQuote({
-        documentId: typeof input.documentId === "string" ? input.documentId : "",
-        contentHash: typeof input.contentHash === "string" ? input.contentHash : null,
-        pageFrom: unit(input.pageFrom),
-        pageTo: unit(input.pageTo),
-        quote: input.quote,
-      });
-    },
+    readScannedQuote: async (input) => documents.readScannedQuote(parseQuoted(input)),
+    readableQuote: async (input) => documents.readableQuote(parseQuoted(input)),
     previewLinkedFolder: (path) => documents.linkedFolders.preview(path),
     addLinkedFolder: async (path, options) => {
       const groupId = library.target(options);
@@ -2402,40 +2868,7 @@ export function createCore(adapters: CoreAdapters): Core {
       return { ...linked, batchId };
     },
     listLinkedFolders: async () => documents.linkedFolders.list(),
-    listUnreadFiles: async (scope) => {
-      const wanted = parseSearchScope(scope);
-      const inScope = wanted ? resolveScope(wanted) : null;
-      const unread = findUnreadDocuments(documents.unread(inScope ?? undefined));
-      // Files in a format not read belong to Folders only: a Tag or a Document can't name them.
-      // A Folder holds those in it and under it, even where no Document is.
-      const named = wanted
-        ? folders.list().filter((folder) => wanted.folderIds.includes(folder.id))
-        : null;
-      const files = documents.linkedFolders
-        .unsupportedFiles()
-        .filter(
-          (file) =>
-            named === null ||
-            named.some(
-              (folder) =>
-                folder.linkedFolderId === file.linkedFolderId &&
-                (folder.relativePath === "" ||
-                  file.relativeFolder === folder.relativePath ||
-                  file.relativeFolder.startsWith(`${folder.relativePath}/`)),
-            ),
-        )
-        .map(
-          (file): UnreadFile => ({
-            id: file.path,
-            name: file.name,
-            reason: "format",
-            extension: file.extension,
-            documentId: null,
-            pages: [],
-          }),
-        );
-      return [...unread, ...files];
-    },
+    listUnreadFiles: async (scope) => unreadIn(parseSearchScope(scope)),
     locateLinkedFolder: (linkedFolderId, path) =>
       documents.linkedFolders.locate(linkedFolderId, path),
     removeLinkedFolder: async (linkedFolderId) => unlinkFolder(linkedFolderId),
@@ -2493,6 +2926,7 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     setCountedAsEvidence: async (documentId, counted) =>
       documents.setCountedAsEvidence(documentId, counted),
+    setNotCited: async (documentId, notCited) => documents.setNotCited(documentId, notCited),
     getEmbeddingModel: async () => embeddingModel.status(),
     downloadEmbeddingModel: async () => embeddingModel.retry(),
     getTextRecognitionModel: async () =>
@@ -2546,16 +2980,24 @@ export function createCore(adapters: CoreAdapters): Core {
     getCostSummary: async () => meter.summary(),
     estimateRun: async (input) => {
       if (!isRecord(input)) throw new InvalidInputError("estimateRun expects an object.");
-      const { items, model } = input;
+      const { items, model, searches = 0 } = input;
       if (typeof items !== "number" || !Number.isInteger(items) || items < 0 || items > 100_000) {
         throw new InvalidInputError("items must be a whole number from 0 to 100,000.");
       }
       if (model !== undefined && !isChatModelChoice(model)) {
         throw new InvalidInputError("model must be a provider and a model.");
       }
+      if (
+        typeof searches !== "number" ||
+        !Number.isInteger(searches) ||
+        searches < 0 ||
+        searches > 1_000
+      ) {
+        throw new InvalidInputError({ key: "error.estimate.searches", values: { max: 1_000 } });
+      }
       const metered = chat.metered(model);
       if (!metered) throw new InvalidInputError("There is no model to estimate for.");
-      return meter.estimate(metered, items);
+      return meter.estimate(metered, items, searches);
     },
     compareDocuments: (input) => comparisons.compareDocuments(input),
     fillComparisonTable: (input) => comparisons.fillComparisonTable(input),
@@ -2567,6 +3009,11 @@ export function createCore(adapters: CoreAdapters): Core {
     stopTask: (taskId) => tasks.stop(taskId),
     answerTaskAsk: (taskId, answer) => tasks.answer(taskId, answer),
     listTaskSteps: async (taskId) => tasks.listSteps(taskId),
+    tellTask: async (taskId, text) => tasks.tell(taskId, text),
+    untellTask: async (taskId, messageId) => tasks.untell(taskId, messageId),
+    getResearchPlan: async (taskId) => research.planView(taskId),
+    planResearch: (input) => research.plan(input),
+    startResearch: (input) => research.start(input),
 
     askQuestion: async (input) => answers.ask(input),
     regenerateAnswer: async (input) =>
@@ -2585,11 +3032,39 @@ export function createCore(adapters: CoreAdapters): Core {
     verifyDocument: (input) => checks.verifyDocument(input),
     findClaims: (input) => checks.findClaims(input),
     verifyClaims: (input) => checks.verifyClaims(input),
+    planContradictionCheck: (mindId) => checks.planContradictionCheck(mindId),
+    checkContradictions: (input) => checks.checkContradictions(input),
+    planMindCheck: (mindId, mode, allDocuments) => checks.planMindCheck(mindId, mode, allDocuments),
+    checkMind: (input) => checks.checkMind(input),
 
     getSecretStorage: async () => secrets.status(),
     acceptPlainTextSecretStorage: async () => secrets.acceptPlainText(),
 
-    detectOllama: (input) => detectOllama(ollamaUrl(input)),
+    detectOllama: (input) => detectOllama(ollamaUrl(input), ollamaInstalled),
+    detectLocalServer: async (input) => {
+      if (!isRecord(input) || typeof input.catalogId !== "string") {
+        throw new InvalidInputError({
+          key: "error.provider.unknown",
+          values: { provider: String(isRecord(input) ? input.catalogId : input) },
+        });
+      }
+      const apiKey = typeof input.apiKey === "string" && input.apiKey.trim() ? input.apiKey : null;
+      return localServers.detect(
+        input.catalogId,
+        apiKey,
+        typeof input.address === "string" ? input.address : null,
+      );
+    },
+    openOllama: async (input) => {
+      const baseUrl = ollamaUrl(input);
+      if (!(await ollamaInstalled())) {
+        throw new InvalidInputError({ key: "error.provider.ollamaCantOpen" });
+      }
+      await adapters.ollamaApp?.open();
+      return waitForOllama(baseUrl, ollamaInstalled, {
+        timeoutMs: adapters.ollamaStartTimeoutMs ?? OLLAMA_START_TIMEOUT_MS,
+      });
+    },
     selectOllama: async (input) => {
       const baseUrl = ollamaUrl(input);
       const model = input?.model ?? RECOMMENDED_OLLAMA_MODEL;
@@ -2619,10 +3094,45 @@ export function createCore(adapters: CoreAdapters): Core {
     },
 
     getChatGptPlan: () => chatGpt.status(),
+    answerWithPlanModel: async (input) => {
+      const models = await chatGpt.models();
+      if (
+        !isRecord(input) ||
+        typeof input.insteadOf !== "string" ||
+        !models.some((model) => model.id === input.modelId)
+      ) {
+        throw new InvalidInputError({ key: "error.chatgpt.notPlanModel" });
+      }
+      chatGpt.limits.answerWith(input.insteadOf, input.modelId);
+      return chatGpt.status();
+    },
+    endPlanStandIn: async () => {
+      chatGpt.limits.endStandIn();
+      return chatGpt.status();
+    },
     signInToChatGpt: (input) =>
       chatGpt.signIn({ anotherAccount: isRecord(input) && input.anotherAccount === true }),
     cancelChatGptSignIn: () => chatGpt.cancelSignIn(),
+    reopenChatGptSignIn: () => chatGpt.reopenSignInPage(),
     signOutOfChatGpt: () => chatGpt.signOut(),
+    pasteChatGptSignInAddress: async (address) =>
+      chatGpt.pasteSignInAddress(typeof address === "string" ? address : ""),
+    getClaudeAccount: () => claudeAccount.status(),
+    signInToClaude: () => claudeAccount.signIn(),
+    cancelClaudeSignIn: () => claudeAccount.cancelSignIn(),
+    reopenClaudeSignIn: () => claudeAccount.reopenSignInPage(),
+    signOutOfClaude: () => claudeAccount.signOut(),
+    pasteClaudeSignInAddress: async (address) =>
+      claudeAccount.pasteSignInAddress(typeof address === "string" ? address : ""),
+    getCopilot: () => copilot.status(),
+    signInToCopilot: (input) =>
+      copilot.signIn(
+        isRecord(input) && (input.profile === "own" || input.profile === "editor")
+          ? { profile: input.profile }
+          : {},
+      ),
+    cancelCopilotSignIn: () => copilot.cancelSignIn(),
+    signOutOfCopilot: () => copilot.signOut(),
 
     listDataFlows: () => consent.list(),
     listConsentRequests: async () => consent.requests(),
@@ -2680,21 +3190,29 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     addLibraryStarterGroups: async (keys) => library.addStarters(keys),
     saveLibrarySettings: async (input) => {
-      const before = JSON.stringify(library.settings().classifier);
-      const saved = library.saveSettings(input);
-      // Choosing the model that organizes Documents, where Settings says what goes, allows it
-      // (ADR-0022). Saving the same one again, for another setting, isn't a new choice.
-      if (JSON.stringify(library.settings().classifier) !== before) {
+      const before = library.settings();
+      library.saveSettings(input);
+      const after = library.settings();
+      // Choosing the model that tags or organizes Documents, where a line says what goes,
+      // allows it (ADR-0022). Saving the same one again, for another setting, isn't a new choice.
+      const tagsAnew = JSON.stringify(after.classifier) !== JSON.stringify(before.classifier);
+      const organizesAnew =
+        JSON.stringify(organizeModelOf(after)) !== JSON.stringify(organizeModelOf(before));
+      if (tagsAnew) {
+        for (const service of await taggingServices()) consent.choose(["tagging"], service);
+      }
+      if (organizesAnew) {
         for (const service of await classificationServices()) {
           consent.choose(["classification"], service);
         }
-        await dataFlowsChanged();
       }
-      return saved;
+      if (tagsAnew || organizesAnew) await dataFlowsChanged();
+      await taggingChanged();
     },
+    getTaggingModels: () => tagging.models(),
     classifyDocuments: async (ids) => {
       library.classify(ids);
-      const classifier = library.settings().classifier;
+      const classifier = organizeModelOf(library.settings());
       if (classifier) {
         usageData.record({
           event: "organize_run",
@@ -2793,7 +3311,7 @@ export function createCore(adapters: CoreAdapters): Core {
       return { tag: tags.get(intoTagId), merged: { kind: "tag", id: tagId, links } };
     },
     retagDocuments: async (documentIds) => {
-      if (organizationConfigured()) return library.classify(documentIds);
+      if (organizing()) return library.classify(documentIds);
       tagger.retag(documentIds);
     },
 
@@ -2895,6 +3413,16 @@ export function createCore(adapters: CoreAdapters): Core {
     },
 
     previewMindExport: async (mindId, options) => mindExports.preview(mindId, options),
+    previewSharePage: (mindId, options) => mindExports.previewSharePage(mindId, options),
+    setSharePageTextOnly: async (mindId, documentIds) => {
+      if (!Array.isArray(documentIds) || documentIds.some((each) => typeof each !== "string")) {
+        throw new InvalidInputError({ key: "error.export.textOnly" });
+      }
+      const mind = writableMind(mindId);
+      content.editSettings(mind.id, (mindSettings) =>
+        setTextOnlyDocuments(mindSettings, documentIds),
+      );
+    },
     exportMind: async (mindId, options) => {
       const exported = await mindExports.export(mindId, options);
       // The host saves these bytes as a file: IncarnaMind's, wherever it goes.
@@ -3044,6 +3572,7 @@ export function createCore(adapters: CoreAdapters): Core {
       // the User's approval are denied, and Skill scripts running are stopped.
       answers.stopAll();
       void webSearch.close().catch((error: unknown) => console.error(error));
+      void pictureFetcher.close().catch((error: unknown) => console.error(error));
       suggestions.stop();
       edits.stopAll();
       checks.stopAll();

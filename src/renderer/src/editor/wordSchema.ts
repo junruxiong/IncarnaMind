@@ -1,6 +1,18 @@
-import { mergeAttributes, Node, type NodeViewRenderer } from "@tiptap/core";
-import { IMAGE_NODE, WORD_ATOM_NODE, WORD_BLOCK_NODE } from "../../../core/api";
+import { Extension, Mark, mergeAttributes, Node, type NodeViewRenderer } from "@tiptap/core";
+import { TableView } from "@tiptap/extension-table";
+import { Fragment, type Node as ProseMirrorNode, Slice } from "@tiptap/pm/model";
+import { Plugin } from "@tiptap/pm/state";
+import type * as Y from "yjs";
+import {
+  IMAGE_NODE,
+  WORD_ATOM_NODE,
+  WORD_BLOCK_NODE,
+  WORD_LOOK_ATTRIBUTE,
+  WORD_RUN_MARK,
+} from "../../../core/api";
 import { readWordAtom, wordAtomText } from "../../../shared/wordFiles";
+import { wordLookOf } from "../../../shared/wordLook";
+import { editorDoc } from "./proposalReview";
 
 /**
  * An attribute kept in the HTML as `data-word-<name>`, so an atom copied and
@@ -174,4 +186,108 @@ export const InlineImage = Node.create({
   renderText({ node }) {
     return typeof node.attrs.alt === "string" ? node.attrs.alt : "";
   },
+});
+
+export const WORD_LOOK_TYPES = ["paragraph", "heading", "table", "tableCell", "tableHeader"];
+
+/** Tiptap's table view keeps the attributes it was made with, so a look given while the Mind is open (the start-up backfill, a sync) makes a new one. */
+export class WordLookTableView extends TableView {
+  override update(node: ProseMirrorNode): boolean {
+    if (node.attrs[WORD_LOOK_ATTRIBUTE] !== this.node.attrs[WORD_LOOK_ATTRIBUTE]) return false;
+    return super.update(node);
+  }
+}
+export const WORD_LOOK_DOM_ATTRIBUTE = "data-word-look";
+export const WORD_RUN_DOM_ATTRIBUTE = "data-word-run";
+
+function lookKeysOf(doc: Y.Doc | null): ReadonlySet<string> {
+  const look = doc ? wordLookOf(doc) : null;
+  if (!look) return new Set();
+  return new Set(
+    [look.paragraphs, look.runs, look.tables, look.cells].flatMap((styles) => Object.keys(styles)),
+  );
+}
+
+/**
+ * Keys name a look by its content, so a pasted key the Mind has is the same
+ * look; one it doesn't have came from another file and is dropped.
+ */
+function withKnownLooks(fragment: Fragment, known: ReadonlySet<string>): Fragment {
+  const nodes: ProseMirrorNode[] = [];
+  fragment.forEach((node) => {
+    const marks = node.marks.filter(
+      (mark) => mark.type.name !== WORD_RUN_MARK || known.has(String(mark.attrs.k)),
+    );
+    if (node.isText) {
+      nodes.push(node.mark(marks));
+      return;
+    }
+    const key = node.attrs[WORD_LOOK_ATTRIBUTE];
+    const attrs =
+      typeof key === "string" && !known.has(key)
+        ? { ...node.attrs, [WORD_LOOK_ATTRIBUTE]: null }
+        : node.attrs;
+    nodes.push(node.type.create(attrs, withKnownLooks(node.content, known), marks));
+  });
+  return Fragment.fromArray(nodes);
+}
+
+/** `keepOnSplit`: Word gives a new paragraph the properties of the one before. */
+export const WordLookAttribute = Extension.create({
+  name: "wordLookAttribute",
+
+  addProseMirrorPlugins() {
+    const editor = this.editor;
+    return [
+      new Plugin({
+        props: {
+          transformPasted: (slice) =>
+            new Slice(
+              withKnownLooks(slice.content, lookKeysOf(editorDoc(editor))),
+              slice.openStart,
+              slice.openEnd,
+            ),
+        },
+      }),
+    ];
+  },
+
+  addGlobalAttributes() {
+    return [
+      {
+        types: WORD_LOOK_TYPES,
+        attributes: {
+          [WORD_LOOK_ATTRIBUTE]: {
+            default: null,
+            keepOnSplit: true,
+            parseHTML: (element: HTMLElement) => element.getAttribute(WORD_LOOK_DOM_ATTRIBUTE),
+            renderHTML: (attributes: Record<string, unknown>) => {
+              const key = attributes[WORD_LOOK_ATTRIBUTE];
+              return typeof key === "string" ? { [WORD_LOOK_DOM_ATTRIBUTE]: key } : {};
+            },
+          },
+        },
+      },
+    ];
+  },
+});
+
+/** Inclusive: text typed at a run's end takes its formatting, as in Word. */
+export const WordRun = Mark.create({
+  name: WORD_RUN_MARK,
+  inclusive: true,
+
+  addAttributes() {
+    return {
+      k: {
+        default: null,
+        parseHTML: (element: HTMLElement) => element.getAttribute(WORD_RUN_DOM_ATTRIBUTE),
+        renderHTML: (attributes: Record<string, unknown>) =>
+          typeof attributes.k === "string" ? { [WORD_RUN_DOM_ATTRIBUTE]: attributes.k } : {},
+      },
+    };
+  },
+
+  parseHTML: () => [{ tag: `span[${WORD_RUN_DOM_ATTRIBUTE}]` }],
+  renderHTML: ({ HTMLAttributes }) => ["span", HTMLAttributes, 0],
 });

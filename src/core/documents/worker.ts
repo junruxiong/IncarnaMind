@@ -9,7 +9,6 @@
  * the job between pages.
  */
 import { parentPort } from "node:worker_threads";
-import type { RecognizedLine } from "../adapters";
 import { ReadingUnavailable } from "./extract";
 import { type ReadingChannel, runJob, type WorkerRequest, type WorkerResponse } from "./processing";
 
@@ -17,17 +16,24 @@ const port = parentPort;
 if (!port) throw new Error("The Document-processing worker must run as a worker thread.");
 
 const send = (response: WorkerResponse) => {
-  // A picture's pixels move to the core rather than being copied.
-  const transfer = "picture" in response ? [response.picture.pixels.buffer as ArrayBuffer] : [];
+  // A picture's pixels, or its file, move to the core rather than being copied.
+  const transfer =
+    "picture" in response
+      ? [response.picture.pixels.buffer as ArrayBuffer]
+      : "file" in response
+        ? [response.file.buffer as ArrayBuffer]
+        : [];
   port.postMessage(response, transfer);
 };
+
+type Answer = Pick<Extract<WorkerRequest, { request: number }>, "lines" | "read">;
 
 /** The jobs under way, by id: their stop signals and the pages waiting to be read. */
 const running = new Map<
   number,
   {
     stop: AbortController;
-    waiting: Map<number, { resolve(lines: RecognizedLine[]): void; reject(error: Error): void }>;
+    waiting: Map<number, { resolve(answer: Answer): void; reject(error: Error): void }>;
   }
 >();
 let nextRequest = 1;
@@ -41,11 +47,26 @@ port.on("message", (message: WorkerRequest) => {
       signal: job.stop.signal,
       progress: (contentHash, read, of, unit) =>
         send({ id, progress: { contentHash, read, of, unit } }),
+      log: (event, fields) => send({ id, log: { event, fields } }),
       read: (page, picture) =>
         new Promise((resolve, reject) => {
           const request = nextRequest++;
-          job.waiting.set(request, { resolve, reject });
+          job.waiting.set(request, {
+            resolve: (answer: Answer) =>
+              answer.lines ? resolve(answer.lines) : reject(new Error("No lines were read.")),
+            reject,
+          });
           send({ id, request, page, picture });
+        }),
+      readFile: (page, file) =>
+        new Promise((resolve, reject) => {
+          const request = nextRequest++;
+          job.waiting.set(request, {
+            resolve: (answer: Answer) =>
+              answer.read ? resolve(answer.read) : reject(new Error("No lines were read.")),
+            reject,
+          });
+          send({ id, request, page, file });
         }),
     };
     void runJob(message.job, channel, message.password).then((result) => {
@@ -65,7 +86,7 @@ port.on("message", (message: WorkerRequest) => {
   const waiter = job.waiting.get(message.request);
   job.waiting.delete(message.request);
   if (!waiter) return;
-  if (message.lines) waiter.resolve(message.lines);
+  if (message.lines || message.read) waiter.resolve(message);
   else {
     const { message: text = "", unavailable = false } = message.error ?? {};
     waiter.reject(unavailable ? new ReadingUnavailable(text) : new Error(text));

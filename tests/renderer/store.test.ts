@@ -77,7 +77,7 @@ const snapshot = (assignments: DocumentGroupAssignment[]): LibrarySnapshot => ({
   ],
   deletedGroups: [],
   assignments,
-  settings: { classifier: null, automatic: false },
+  settings: { classifier: { kind: "automatic" }, automatic: false, organizeWith: null },
 });
 
 let useAppStore: typeof import("../../src/renderer/src/store").useAppStore;
@@ -451,6 +451,48 @@ describe("making a Mind", () => {
   });
 });
 
+describe("Get started's Add your Documents", () => {
+  const inFolder = (id: string, linkedFolderId: string | null) =>
+    ({ ...doc(id), linkedFolderId }) as Document;
+  const example = (linkedFolderId: string) =>
+    ({
+      group: "credit",
+      available: true,
+      mindId: "m",
+      linkedFolderId,
+      answerId: "a",
+      more: [],
+    }) satisfies CoreEvents["examples.changed"];
+  const ticked = () => useAppStore.getState().settings?.device.gettingStarted.indexed;
+
+  beforeEach(() => {
+    useAppStore.setState({
+      examples: example("old"),
+      otherExamples: [],
+      settings: {
+        device: {
+          gettingStarted: {
+            started: true,
+            hidden: false,
+            citationChecked: false,
+            indexed: false,
+            askedOwn: false,
+          },
+        },
+      } as unknown as NonNullable<ReturnType<typeof useAppStore.getState>["settings"]>,
+    });
+  });
+
+  test("the example's Documents after it follows the language don't tick it, a Document the User adds does", () => {
+    emit("examples.changed", example("new"));
+    emit("document.status", inFolder("a", "new"));
+    expect(ticked()).toBe(false);
+
+    emit("document.status", inFolder("mine", "theirs"));
+    expect(ticked()).toBe(true);
+  });
+});
+
 describe("changing a Linked folder", () => {
   const linked = {
     id: "l",
@@ -731,7 +773,7 @@ describe("making a Folder", () => {
 describe("loading keeps a list the core pushed after reading it", () => {
   beforeEach(() => {
     method("getExamples").mockResolvedValue({
-      group: "tea",
+      group: "credit",
       available: false,
       mindId: null,
       linkedFolderId: null,

@@ -1,3 +1,4 @@
+import { writeSync } from "node:fs";
 import { join, resolve } from "node:path";
 import {
   app,
@@ -18,7 +19,10 @@ import {
 } from "../core";
 import { DataFromNewerVersionError } from "../core/errors";
 import type { Language } from "../core/language";
+import { defaultOllamaUrl } from "../core/providers/kinds";
+import { installedOllamaModels } from "../core/providers/ollama";
 import { channelFor, EVENT_CHANNEL } from "../shared/bridge";
+import { showDevelopmentDockIcon, windowIcon } from "./appIcon";
 import { registerDocumentScheme, serveDocumentFiles } from "./documentProtocol";
 import { serveFileActions } from "./files";
 import { handle } from "./ipc";
@@ -26,11 +30,22 @@ import { startLogging } from "./logging";
 import { isCaptureWindow } from "./meetings/capture";
 import { installAppMenu } from "./menu";
 import { createSystemNotifications } from "./notifications";
-import { chooseExecutor, createElectronAdapters, systemBrowser } from "./platform";
+import { chooseExecutor, createElectronAdapters, homeFolder, systemBrowser } from "./platform";
 import { DOWNLOAD_BUTTON, RELEASES_PAGE, startupDialog } from "./startupError";
+import { realHomeProblem } from "./testHome";
 import { reportFullScreen, titleBarOptions } from "./titleBar";
 import { registerUpdateCheck, startAutoUpdates } from "./updater";
 import { keepWindowPlace, windowPlace } from "./windowState";
+
+// A test build refuses the real home folder before anything is written. It says why on stderr and
+// exits: a dialog would leave the smoke test waiting.
+if (import.meta.env.MODE === "test") {
+  const problem = realHomeProblem(homeFolder());
+  if (problem) {
+    writeSync(2, `${problem}\n`);
+    process.exit(1);
+  }
+}
 
 // Points the app at another data folder: the smoke test uses a temporary one.
 // Set before anything reads `userData`, so Chromium's own data moves there too.
@@ -137,6 +152,7 @@ function createWindow(): BrowserWindow {
     backgroundColor: "#F4F5F7",
     // No title row of the system's: its window buttons sit in the app's top band.
     ...titleBarOptions(process.platform),
+    ...windowIcon(),
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),
       contextIsolation: true,
@@ -216,6 +232,7 @@ async function showStartupError(error: unknown): Promise<void> {
 }
 
 app.whenReady().then(async () => {
+  showDevelopmentDockIcon();
   const createChatModel = await testChatModel();
   const taskKinds = await testTaskKinds();
   const executor = await scriptExecutor;
@@ -228,6 +245,12 @@ app.whenReady().then(async () => {
       notifications: createSystemNotifications(appWindows),
       ...(executor && { executor }),
       ...(createChatModel && { createChatModel }),
+      // A smoke test never reaches an Ollama that happens to run on the computer: only a
+      // stand-in it starts at another address.
+      ...(testHooks && {
+        localModels: (baseUrl: string) =>
+          baseUrl === defaultOllamaUrl() ? Promise.resolve([]) : installedOllamaModels(baseUrl),
+      }),
       ...(taskKinds.length > 0 && { taskKinds }),
     });
   } catch (error) {
@@ -260,6 +283,13 @@ app.whenReady().then(async () => {
   // A Meeting saves what it has before the computer sleeps, and records again when it wakes.
   powerMonitor.on("suspend", () => core?.systemSleeping());
   powerMonitor.on("resume", () => core?.systemAwake());
+});
+
+// Electron would answer a site's request with the first certificate in the system's store: on
+// a managed Mac, an identity with the User's name. No page of IncarnaMind's needs one.
+app.on("select-client-certificate", (event, _contents, _url, _list, callback) => {
+  event.preventDefault();
+  callback();
 });
 
 app.on("window-all-closed", () => {

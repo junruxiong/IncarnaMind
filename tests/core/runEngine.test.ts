@@ -222,6 +222,43 @@ describe.each(ENGINES)("A Run engine: $name", ({ create }) => {
     ]);
   });
 
+  // protects=a Tool hears a call's input as the model writes it only when the request says the Tool may (#202), so nothing acts before a gate that could ask; fails_when=a Tool's streamInput runs for a request that didn't allow it, or doesn't when it did; no_claim=what a Tool does with the input.
+  test("a Tool hears its calls' input as it comes only when the request lets it", async () => {
+    const heard: string[] = [];
+    const writer: RunTool = {
+      ...testTool("write_notes"),
+      streamInput: (_id, text) => {
+        heard.push(text);
+      },
+    };
+    const model = () =>
+      scriptedModel(
+        (call) =>
+          call.index === 0
+            ? {
+                calls: [{ tool: "write_notes", input: { query: "high water" }, streamInput: true }],
+              }
+            : { text: "Done." },
+        { chunkSize: 6 },
+      );
+
+    const without = await collect(create(), request(model(), { tools: [writer] }));
+    expect(heard).toEqual([]);
+    expect(without.events.some((event) => event.type === "tool-input-started")).toBe(false);
+
+    const allowed = await collect(
+      create(),
+      request(model(), { tools: [writer], streamsInput: (tool) => tool === "write_notes" }),
+    );
+    expect(allowed.events).toContainEqual({
+      type: "tool-input-started",
+      id: "call-0-0",
+      tool: "write_notes",
+    });
+    expect(heard.length).toBeGreaterThan(1);
+    expect(heard.at(-1)).toBe(JSON.stringify({ query: "high water" }));
+  });
+
   // protects=a model's reasoning reaches the caller as reasoning events, one paragraph a block, apart from the text and the messages; fails_when=it comes as text, joins its blocks, or is kept in the Run's messages; no_claim=a scripted model stands in for a provider.
   test("the model's reasoning comes as reasoning events, a block a paragraph, never as text or in the messages", async () => {
     const search = testTool("search_documents");
@@ -717,6 +754,80 @@ describe.each(ENGINES)("A Run engine: $name", ({ create }) => {
 
     expect(add.calls.map((call) => call.input)).toEqual([sent]);
     expect(run.events).toContainEqual({ type: "tool-result", id: "call-0-0", ok: true });
+  });
+
+  test("the check also takes one object for an array, and JSON text encoded twice, without another step", async () => {
+    const add = testTool("add_rows", {
+      schema: {
+        type: "object",
+        properties: {
+          rows: { type: "array", items: { type: "object", properties: { n: { type: "number" } } } },
+          tags: { type: "array", items: { type: "string" } },
+        },
+        required: ["rows", "tags"],
+      },
+    });
+    const sent = { rows: { n: "1" }, tags: JSON.stringify(JSON.stringify(["a", "b"])) };
+    const model = stepsModel([[{ tool: "add_rows", input: sent }]], "Added.");
+
+    const run = await collect(create(), request(model, { tools: [add] }));
+
+    expect(add.calls.map((call) => call.input)).toEqual([{ rows: [{ n: "1" }], tags: sent.tags }]);
+    expect(run.events).toContainEqual({ type: "tool-result", id: "call-0-0", ok: true });
+    expect(model.doStreamCalls).toHaveLength(2);
+  });
+
+  test("an object sent as JSON text for an array reaches the Tool as the array's only item", async () => {
+    const add = testTool("add_rows", {
+      schema: {
+        type: "object",
+        properties: {
+          rows: { type: "array", items: { type: "object" } },
+          note: { type: "string" },
+        },
+        required: ["rows"],
+      },
+    });
+    const model = stepsModel(
+      [[{ tool: "add_rows", input: { rows: '{"n": 1}', note: '{"n": 1}' } }]],
+      "Added.",
+    );
+
+    await collect(create(), request(model, { tools: [add] }));
+
+    expect(add.calls.map((call) => call.input)).toEqual([{ rows: [{ n: 1 }], note: '{"n": 1}' }]);
+  });
+
+  test("an object where the schema wants a list of text, text that isn't JSON, or JSON text encoded three times, still doesn't match", async () => {
+    const add = testTool("add_rows", {
+      schema: {
+        type: "object",
+        properties: { tags: { type: "array", items: { type: "string" } } },
+        required: ["tags"],
+      },
+    });
+    const model = stepsModel(
+      [
+        [{ tool: "add_rows", input: { tags: { a: 1 } } }],
+        [{ tool: "add_rows", input: { tags: "a, b" } }],
+        [
+          {
+            tool: "add_rows",
+            input: { tags: JSON.stringify(JSON.stringify(JSON.stringify(["a"]))) },
+          },
+        ],
+      ],
+      "Sorry.",
+    );
+
+    await collect(create(), request(model, { tools: [add] }));
+
+    expect(add.calls).toEqual([]);
+    expect(resultsSent(model, 3).map((each) => each.type)).toEqual([
+      "error-text",
+      "error-text",
+      "error-text",
+    ]);
   });
 });
 

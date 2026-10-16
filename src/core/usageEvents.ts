@@ -57,7 +57,7 @@ type Exactly<List extends readonly string[], T extends string> = [T] extends [Li
   : never;
 
 const LANGUAGES = ["en", "zh-CN"] as const;
-const EXAMPLE_GROUPS = ["tea", "papers", "reports", "contracts", "meetings"] as const;
+const EXAMPLE_GROUPS = ["credit", "papers", "reports", "contracts", "meetings"] as const;
 const PROVIDER_KINDS = [
   "openai",
   "anthropic",
@@ -73,6 +73,8 @@ const PROVIDER_KINDS = [
   "openai-compatible",
   "ollama",
   "chatgpt",
+  "claude-account",
+  "copilot",
 ] as const;
 const CITATION_CHECKS = [
   "checking",
@@ -82,7 +84,7 @@ const CITATION_CHECKS = [
   "unsupported",
   "contradicted",
 ] as const;
-const EXPORT_FORMATS = ["markdown", "docx", "pdf", "source-pack", "html"] as const;
+const EXPORT_FORMATS = ["markdown", "docx", "pdf", "source-pack", "html", "share-page"] as const;
 
 /** The Settings pages (src/renderer/src/settingsPages.ts; a test keeps them the same). */
 export const SETTINGS_PAGES = [
@@ -116,6 +118,7 @@ const ANSWER_ERRORS = [
   "provider",
   "consent-declined",
   "local-mode",
+  "ollama-not-running",
   "not-signed-in",
   "plan-limit",
   "blocked",
@@ -131,6 +134,7 @@ const DOCUMENT_ERRORS = [
   "file-missing",
   "processing-error",
   "pages-unread",
+  "app-stopped",
 ] as const;
 const CONNECTOR_ERRORS = [
   "missing-command",
@@ -178,7 +182,6 @@ void _inStep;
 export const USAGE_EVENTS = {
   /** IncarnaMind started. `language`: the interface language. */
   app_opened: { language: oneOf(LANGUAGES) },
-  /** The User opened another example from an example's banner (#123): which group, nothing else. */
   example_opened: { group: oneOf(EXAMPLE_GROUPS) },
   /** The User made a Mind (not the example Mind). */
   mind_created: {},

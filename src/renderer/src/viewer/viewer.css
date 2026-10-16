@@ -6,6 +6,7 @@
     container: viewer / inline-size;
     /* The quote's wash: a found Citation's green, unless the scroller says otherwise. */
     --quote-wash: var(--color-success-wash);
+    --quote-edge: var(--color-success);
   }
 
   /*
@@ -175,10 +176,12 @@
   }
   [data-quote-tone="not-found"] {
     --quote-wash: var(--color-warning-wash);
+    --quote-edge: var(--color-warning);
   }
   /* Contradicted is never green: no fill, the words outlined in red. */
   [data-quote-tone="contradicted"] {
     --quote-wash: transparent;
+    --quote-edge: var(--color-danger);
     .quote-highlight,
     .highlight {
       box-shadow: 0 0 0 1.5px var(--color-danger);
@@ -417,6 +420,14 @@
     /* A picture beside the file; a placeholder for one from the web, or one not found. */
     .document-image {
       @apply inline-block max-w-full rounded-sm align-top;
+    }
+    /* A saved web page's picture (#756): a box of its size until its file is read. */
+    .document-web-picture {
+      @apply my-2 block h-auto bg-frame;
+    }
+    .document-web-picture[data-cited] {
+      outline: 2px solid var(--quote-edge);
+      outline-offset: 3px;
     }
     .document-image-loading {
       @apply inline-block h-24 w-40 rounded-sm bg-frame align-top;

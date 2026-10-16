@@ -16,17 +16,21 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createXai } from "@ai-sdk/xai";
 import { createZai } from "@ai-sdk/zai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
-import type { LanguageModel } from "ai";
+import { APICallError, type LanguageModel, wrapLanguageModel } from "ai";
 import type { ChatProviderKind } from "../api";
-import { catalogFacts, modelsProviderOfKind } from "./catalog";
-import { catalogProviderOfKind } from "./catalog/providers";
+import type { OAuthCredentials } from "../oauthAccount";
+import { catalogFacts, modelsProviderOfKind, withoutDateSuffix } from "./catalog";
+import { catalogProviderOf, catalogProviderOfKind } from "./catalog/providers";
+import type { ProviderOptions, RequestQuirks } from "./catalog/types";
 import { createPlanChatModel } from "./chatgpt/planEndpoint";
-import type { ChatGptCredentials } from "./chatgpt/signIn";
+import { createClaudeAccountChatModel } from "./claudeAccount/messages";
+import { createCopilotChatModel } from "./copilot/requests";
 import { endpointUrl } from "./kinds";
 import { createOllamaChatModel } from "./ollamaChat";
 import { DEFAULT_OLLAMA_SETTINGS, type OllamaModelSettings } from "./ollamaModels";
 import { withCacheBreakpoints } from "./promptCache";
-import { withoutStorage, withProviderOptions } from "./responsesStore";
+import { withOptionsOver, withoutStorage } from "./responsesStore";
+import type { RequestTransform } from "./signedFetch";
 
 /** A model object, never a model id string (which the AI SDK would send to its gateway). */
 export type ChatLanguageModel = Exclude<LanguageModel, string>;
@@ -42,18 +46,25 @@ export interface ChatModelSpec {
   baseUrl: string | null;
   /** A hosted provider's endpoint id, to tell which region's models it is (its first when left out). */
   endpoint?: string | null;
+  /** A preset's catalog id, whose endpoint and request quirks it takes. */
+  catalogId?: string | null;
   /**
    * "off": a small call that doesn't write the Answer (tagging, classifying),
    * which asks a model that thinks to skip it, where the provider lets it.
    * "summary": a call that writes the Answer, which asks a model that thinks
    * for its provider's summary of its reasoning, where there is one
    * (`reasoningSummaryOptions`).
+   * "answer": the same with a modest budget, for the Answer to a Question.
+   * "careful": the same with a larger budget, for an Answer to a Question
+   * that asks to check or calculate.
    */
-  thinking?: "off" | "summary";
+  thinking?: "off" | "summary" | "answer" | "careful";
   apiKey: string | null;
   modelId: string;
-  /** "chatgpt" only: the User's ChatGPT sign-in, which signs (and refreshes) every request. */
-  credentials?: ChatGptCredentials;
+  /** "chatgpt", "claude-account" and "copilot": the User's sign-in, which signs (and refreshes) every request. */
+  credentials?: OAuthCredentials;
+  /** "claude-account" and "copilot": what the client profile adds to every request. */
+  request?: RequestTransform;
   /** "ollama" only: the settings every request to the model carries (see ./ollamaModels). */
   ollama?: OllamaModelSettings;
 }
@@ -85,7 +96,7 @@ function requireBaseUrl(spec: ChatModelSpec): string {
 
 /** A hosted provider's API: the spec's endpoint, else the catalog's first for its kind. */
 const hostedUrl = (spec: ChatModelSpec): string =>
-  spec.baseUrl ?? endpointUrl(spec.kind) ?? requireBaseUrl(spec);
+  spec.baseUrl ?? endpointUrl(spec.kind, null, spec.catalogId) ?? requireBaseUrl(spec);
 
 /**
  * The AI SDK provider for each kind, with what every request to its provider
@@ -94,23 +105,28 @@ const hostedUrl = (spec: ChatModelSpec): string =>
  * for the Answer's, the request for a summary of the model's reasoning.
  */
 export const createAiSdkChatModel: ChatModelFactory = (spec) => {
-  const request = catalogProviderOfKind(spec.kind)?.request;
+  const request = catalogProviderOf(anthropicFor(spec.kind), spec.catalogId)?.request;
   let model = providerModel(spec);
   if (request?.store === false) {
     model = withoutStorage(model, spec.kind === "xai" ? "xai" : "openai");
   }
-  if (spec.kind === "anthropic") model = withCacheBreakpoints(model);
+  if (anthropicFor(spec.kind) === "anthropic") model = withCacheBreakpoints(model);
   if (spec.thinking === "off" && request?.thinkingOff && canSkipThinking(spec, request)) {
-    model = withProviderOptions(model, request.thinkingOff.options);
+    model = withThinkingOff(model, spec, request.thinkingOff);
   }
-  const summary = spec.thinking === "summary" ? reasoningSummaryOptions(spec) : null;
-  if (summary) model = withProviderOptions(model, summary);
+  const summary = spec.thinking && spec.thinking !== "off" ? reasoningSummaryOptions(spec) : null;
+  if (summary) model = withAnswerThinking(model, spec, summary);
   return model;
 };
 
+/** A Claude account's requests are Anthropic's Messages API, with what the catalog says of it. */
+const anthropicFor = (kind: ChatProviderKind): ChatProviderKind =>
+  kind === "claude-account" ? "anthropic" : kind;
+
 /** The ChatGPT plan is OpenAI's Responses API: its reasoning is summarized as OpenAI's is. */
 const summaryQuirk = (kind: ChatProviderKind) =>
-  catalogProviderOfKind(kind === "chatgpt" ? "openai" : kind)?.request?.reasoningSummary;
+  catalogProviderOfKind(kind === "chatgpt" ? "openai" : anthropicFor(kind))?.request
+    ?.reasoningSummary;
 
 /**
  * Whether a provider's reasoning comes back as its own summary (Anthropic,
@@ -126,13 +142,15 @@ export const summarizesReasoning = (kind: ChatProviderKind): boolean =>
  * isn't turned on for one), or one the catalog knows doesn't reason.
  */
 export function reasoningSummaryOptions(
-  spec: Pick<ChatModelSpec, "kind" | "modelId" | "endpoint">,
-): Record<string, Record<string, unknown>> | null {
+  spec: Pick<ChatModelSpec, "kind" | "modelId" | "endpoint" | "catalogId" | "thinking">,
+): ProviderOptions | null {
   const summary = summaryQuirk(spec.kind);
   if (!summary) return null;
   if (summary.only && !summary.only.some((prefix) => spec.modelId.startsWith(prefix))) return null;
-  const set = modelsProviderOfKind(spec.kind, spec.endpoint);
-  return catalogFacts(set, spec.modelId)?.reasoning === false ? null : summary.options;
+  const set = modelsProviderOfKind(spec.kind, spec.endpoint, spec.catalogId);
+  if (catalogFacts(set, spec.modelId)?.reasoning === false) return null;
+  if (spec.thinking === "careful") return summary.careful ?? summary.options;
+  return (spec.thinking === "answer" && summary.answer) || summary.options;
 }
 
 /** Whether thinking can be turned off on this model: not on one the provider says always thinks, nor one the catalog knows doesn't think. */
@@ -140,10 +158,112 @@ function canSkipThinking(
   spec: ChatModelSpec,
   request: NonNullable<ReturnType<typeof catalogProviderOfKind>>["request"],
 ): boolean {
-  const { unless = [] } = request?.thinkingOff ?? {};
+  const { unless = [], except = [] } = request?.thinkingOff ?? {};
   if (unless.some((prefix) => spec.modelId.startsWith(prefix))) return false;
-  const set = modelsProviderOfKind(spec.kind, spec.endpoint);
+  if (except.includes(spec.modelId) || except.includes(withoutDateSuffix(spec.modelId))) {
+    return false;
+  }
+  const set = modelsProviderOfKind(spec.kind, spec.endpoint, spec.catalogId);
   return catalogFacts(set, spec.modelId)?.reasoning !== false;
+}
+
+const namedByRefusal = new Map<string, ProviderOptions>();
+
+function refusedForm(
+  error: unknown,
+  refused: readonly { names: string; options: ProviderOptions }[] | undefined,
+): ProviderOptions | undefined {
+  if (!APICallError.isInstance(error) || error.statusCode !== 400) return undefined;
+  const said = `${error.message} ${error.responseBody ?? ""}`;
+  return refused?.find((each) => said.includes(each.names))?.options;
+}
+
+/**
+ * Every call carries the options of the model's form; a call a model refuses is asked again once
+ * in the form `named` gives for its refusal, judged against the options that call sent, and that
+ * form is kept for the model's later calls.
+ */
+function withRememberedForm(
+  model: ChatLanguageModel,
+  key: string,
+  initial: () => ProviderOptions,
+  named: (error: unknown, sent: ProviderOptions) => ProviderOptions | undefined,
+): ChatLanguageModel {
+  const options = () => namedByRefusal.get(key) ?? initial();
+  const sentBy = new WeakMap<object, ProviderOptions>();
+  return wrapLanguageModel({
+    model,
+    middleware: {
+      specificationVersion: "v4",
+      transformParams: async ({ params }) => {
+        const sent = options();
+        const next = withOptionsOver(params, sent);
+        sentBy.set(next, sent);
+        return next;
+      },
+      wrapGenerate: async ({ doGenerate, params, model: inner }) => {
+        try {
+          return await doGenerate();
+        } catch (error) {
+          const form = named(error, sentBy.get(params) ?? options());
+          if (!form) throw error;
+          namedByRefusal.set(key, form);
+          return inner.doGenerate(withOptionsOver(params, form));
+        }
+      },
+      wrapStream: async ({ doStream, params, model: inner }) => {
+        try {
+          return await doStream();
+        } catch (error) {
+          const form = named(error, sentBy.get(params) ?? options());
+          if (!form) throw error;
+          namedByRefusal.set(key, form);
+          return inner.doStream(withOptionsOver(params, form));
+        }
+      },
+    },
+  });
+}
+
+// A model the catalog doesn't know yet may refuse the provider's form; its refusal names the one it takes (#907).
+function withThinkingOff(
+  model: ChatLanguageModel,
+  spec: ChatModelSpec,
+  thinkingOff: NonNullable<RequestQuirks["thinkingOff"]>,
+): ChatLanguageModel {
+  const set = modelsProviderOfKind(spec.kind, spec.endpoint, spec.catalogId);
+  return withRememberedForm(
+    model,
+    `${spec.catalogId ?? spec.kind}\n${spec.modelId}`,
+    () => catalogFacts(set, spec.modelId)?.thinkingOff ?? thinkingOff.options,
+    (error, sent) => {
+      const form = refusedForm(error, thinkingOff.refused);
+      return form && form !== sent ? form : undefined;
+    },
+  );
+}
+
+// A model must never fail for its thinking budget: one that refuses it is asked again without it (#899).
+function withAnswerThinking(
+  model: ChatLanguageModel,
+  spec: ChatModelSpec,
+  options: ProviderOptions,
+): ChatLanguageModel {
+  const refused = summaryQuirk(spec.kind)?.refused;
+  return withRememberedForm(
+    model,
+    `answers\n${spec.catalogId ?? spec.kind}\n${spec.modelId}`,
+    () => options,
+    (error, sent) => {
+      const without = refusedForm(error, refused);
+      const dropsSomething = Object.entries(without ?? {}).some(([provider, values]) =>
+        Object.keys(values).some((name) => sent[provider]?.[name] !== undefined),
+      );
+      return without && dropsSomething
+        ? withOptionsOver({ providerOptions: sent }, without).providerOptions
+        : undefined;
+    },
+  );
 }
 
 function providerModel(spec: ChatModelSpec): ChatLanguageModel {
@@ -178,22 +298,18 @@ function providerModel(spec: ChatModelSpec): ChatLanguageModel {
         compatibility: "strict",
         extraBody: catalogProviderOfKind("openrouter")?.request?.body ?? {},
       })(spec.modelId);
-    case "siliconflow": {
-      const quirks = catalogProviderOfKind("siliconflow")?.request?.openAiCompatible;
+    case "siliconflow":
+    case "openai-compatible": {
+      const provider = catalogProviderOf(spec.kind, spec.catalogId);
+      const quirks = provider?.request?.openAiCompatible;
       return createOpenAICompatible({
-        name: "siliconflow",
+        name: provider?.id ?? spec.kind,
         baseURL: hostedUrl(spec),
-        apiKey: requireKey(spec),
+        apiKey: provider?.apiKey === "required" ? requireKey(spec) : (spec.apiKey ?? undefined),
         includeUsage: quirks?.includeUsage ?? false,
         supportsStructuredOutputs: quirks?.supportsStructuredOutputs ?? false,
       })(spec.modelId);
     }
-    case "openai-compatible":
-      return createOpenAICompatible({
-        name: "openai-compatible",
-        baseURL: requireBaseUrl(spec),
-        apiKey: spec.apiKey ?? undefined,
-      })(spec.modelId);
     case "ollama":
       // Ollama's own API, which sets the context window and refuses rather than cuts a
       // longer request (see ./ollamaChat). It holds a reply to a JSON schema too, which
@@ -209,6 +325,22 @@ function providerModel(spec: ChatModelSpec): ChatLanguageModel {
         baseUrl: requireBaseUrl(spec),
         modelId: spec.modelId,
         credentials: spec.credentials,
+      });
+    case "claude-account":
+      if (!spec.credentials) throw new Error("A Claude sign-in is required.");
+      return createClaudeAccountChatModel({
+        baseUrl: requireBaseUrl(spec),
+        modelId: spec.modelId,
+        credentials: spec.credentials,
+        request: spec.request ?? {},
+      });
+    case "copilot":
+      if (!spec.credentials) throw new Error("A GitHub sign-in is required.");
+      return createCopilotChatModel({
+        baseUrl: requireBaseUrl(spec),
+        modelId: spec.modelId,
+        credentials: spec.credentials,
+        headers: spec.request?.headers ?? {},
       });
   }
 }
