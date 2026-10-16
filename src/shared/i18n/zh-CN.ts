@@ -4050,6 +4050,7 @@ export const zhCN = {
   "mindCall.failed.noText": "无法修改“{mind}”：那里没有可修改的文字",
   "mindCall.failed.tooLong": "无法修改“{mind}”：一次要改的文字太多",
   "mindCall.failed.changed": "无法修改“{mind}”：读取时文字有了变化",
+  "mindCall.failed.copy": "未添加到“{mind}”：“{text}”已在其中，待确认",
   "mindCall.failed.contentNotOwn": "无法修改“{mind}”：只有助手自己待确认的文字可以整段重写",
   "mindCall.failed.stopped": "已停止，“{mind}”没有改动",
   "mindCall.failed.noTable": "未能生成表格，因此没有向“{mind}”添加内容",
