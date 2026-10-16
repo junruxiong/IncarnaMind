@@ -102,6 +102,10 @@ export const en = {
   "library.progress.other": "Organizing {count} Documents…",
   "library.progressWith.one": "Organizing 1 Document with {service}…",
   "library.progressWith.other": "Organizing {count} Documents with {service}…",
+  "library.progressSends.one":
+    "Organizing 1 Document with {service}: its name, outline and short excerpts are sent",
+  "library.progressSends.other":
+    "Organizing {count} Documents with {service}: each one's name, outline and short excerpts are sent",
   "library.waiting":
     "{count} Documents need text, a model or permission. Open their details to check.",
   "library.count": "{count} Documents",
@@ -1168,6 +1172,11 @@ export const en = {
   "status.tagging.other": "Tagging {count} Documents…",
   "status.taggingWith.one": "Tagging 1 Document with {service}…",
   "status.taggingWith.other": "Tagging {count} Documents with {service}…",
+  "status.taggingSends.one":
+    "Tagging 1 Document with {service}: its name, outline and short excerpts are sent",
+  "status.taggingSends.other":
+    "Tagging {count} Documents with {service}: each one's name, outline and short excerpts are sent",
+  "status.sendsScans": " (page images for scans)",
   "status.taggingWaiting": "No AI model for Tags",
   "status.taggingPermission": "Tags need your OK",
   "status.taggingFailed.one": "1 Document couldn't be tagged",

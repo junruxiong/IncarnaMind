@@ -94,6 +94,9 @@ export const zhCN = {
   "library.progress.other": "正在整理 {count} 个文档…",
   "library.progressWith.one": "正在用 {service} 整理 1 个文档…",
   "library.progressWith.other": "正在用 {service} 整理 {count} 个文档…",
+  "library.progressSends.one": "正在用 {service} 整理 1 个文档：会发送它的名称、目录和简短摘录",
+  "library.progressSends.other":
+    "正在用 {service} 整理 {count} 个文档：会发送每个文档的名称、目录和简短摘录",
   "library.waiting": "{count} 个文档暂时无法整理：缺少文字、模型或权限。展开详情查看。",
   "library.count": "{count} 个文档",
   "library.count.one": "1 个文档",
@@ -1114,6 +1117,10 @@ export const zhCN = {
   "status.tagging.other": "正在为 {count} 个文档打标签…",
   "status.taggingWith.one": "正在用 {service} 给 1 个文档打标签…",
   "status.taggingWith.other": "正在用 {service} 给 {count} 个文档打标签…",
+  "status.taggingSends.one": "正在用 {service} 给 1 个文档打标签：会发送它的名称、目录和简短摘录",
+  "status.taggingSends.other":
+    "正在用 {service} 给 {count} 个文档打标签：会发送每个文档的名称、目录和简短摘录",
+  "status.sendsScans": "（扫描件会发送页面图片）",
   "status.taggingWaiting": "打标签需要 AI 模型",
   "status.taggingPermission": "打标签需要你允许",
   "status.taggingFailed.one": "1 个文档未能打标签",
