@@ -344,20 +344,14 @@ test("an Answer written as a Markdown table shows as a table, with its Citation 
   await expect(table.locator("td").nth(1)).toHaveCSS("text-align", "right");
   await expect(answer).not.toContainText("|");
 
-  // The marker in the cell is a Citation whose quote was found, with its check in the margin.
+  // The marker in the cell is a Citation whose quote was found, with its check in its badge.
   const citation = table.locator("td").first().getByTestId("citation");
   await expect(citation).toHaveAttribute("data-check", "found");
   await expect(citation.getByTestId("citation-chip")).toHaveAttribute(
     "aria-label",
     "Citation 1: Tides, p. 2. Quote found on p. 2",
   );
-  const check = answer.getByTestId("margin-check");
-  await expect(check).toHaveAttribute("data-check", "found");
-  // The check is level with the cell's line.
-  const chip = await citation.getByTestId("citation-chip").boundingBox();
-  const mark = await check.boundingBox();
-  if (!chip || !mark) throw new Error("The Citation or its check isn't visible.");
-  expect(Math.abs(chip.y + chip.height / 2 - (mark.y + mark.height / 2))).toBeLessThanOrEqual(10);
+  await expect(citation.locator(".citation-marker-icon")).toBeVisible();
   await screenshot(window, "table-answer-en");
 
   // Added to the note, it is a table there, its Citation found in the same cell.
