@@ -19,6 +19,7 @@ export const FORMAT_LABELS: Readonly<Record<ExportFormat, MessageKey>> = {
   pdf: "export.format.pdf",
   "source-pack": "export.format.source-pack",
   html: "export.format.html",
+  "share-page": "export.format.share-page",
   markdown: "export.format.markdown",
 };
 
@@ -33,6 +34,7 @@ const DEFAULT_PREFERENCES: ExportPreferences = {
   },
   pdf: { includeQuestions: false },
   html: { includeQuestions: false },
+  "share-page": { includeQuestions: false, citationCards: true, checkedLine: false },
 };
 
 export const exportPreferences = (): ExportPreferences =>
@@ -51,6 +53,13 @@ export const optionsFor = (
 ): ExportMindOptions => {
   if (format === "docx") return { format, ...preferences.docx };
   if (format === "source-pack") return { format };
+  if (format === "share-page") {
+    return {
+      format,
+      ...preferences["share-page"],
+      theirChanges: preferences.theirChanges ?? "shown",
+    };
+  }
   const theirChanges = preferences.theirChanges ?? "shown";
   return hasQuestionsOption(format)
     ? { format, includeQuestions: preferences[format].includeQuestions, theirChanges }
