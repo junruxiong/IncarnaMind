@@ -639,7 +639,8 @@
     align-items: center;
     /* As well as the basis: the strip sizes to its tabs' widths, which would otherwise be their text's. */
     width: 220px;
-    min-width: 64px;
+    /* Its chrome and the start of its name (#905): the strip scrolls rather than shrink a tab past it. */
+    min-width: calc(70px + var(--tab-label-min, 0px));
     height: 34px;
     color: var(--color-ink-secondary);
     font-size: 13px;
@@ -652,7 +653,7 @@
     &[aria-selected="true"] {
       z-index: 1;
       /* Its title stays readable while the others shrink. */
-      min-width: min(132px, 100%);
+      min-width: max(min(132px, 100%), calc(70px + var(--tab-label-min, 0px)));
       height: 32px;
       border-radius: 10px 10px 0 0;
       background: var(--color-sheet);
