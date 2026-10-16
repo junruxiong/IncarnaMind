@@ -4,7 +4,7 @@ import { useAppStore } from "../store";
 import type { Command } from "./registry";
 import { documentsOf, everyDocument } from "./targets";
 
-/** "Count it" for the files IncarnaMind wrote (#80), and taking it back; and "Don't cite this Document" (#897). */
+/** "Count it" for the files IncarnaMind wrote (#80), and taking it back; and "Don't cite this Document". */
 export const evidenceCommands: readonly Command[] = [
   {
     id: "document.countAsEvidence",

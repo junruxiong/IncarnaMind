@@ -3,7 +3,7 @@
  * (#80): whether a Document on screen is left out, and Count it, which the
  * Document's menu, its viewer's line and a check's result line (#96) all
  * call, each with Undo; and the Documents the User keeps as their own
- * workings (#897), which Answers never cite.
+ * workings, which Answers never cite.
  */
 import type { Document } from "../../core/api";
 import { displayName } from "../../shared/documentNames";
@@ -41,7 +41,6 @@ const NOT_CITED: Choice = {
   many: { on: "evidence.notCited.doneMany", off: "evidence.citeAgain.doneMany" },
 };
 
-/** Sets a choice on Documents and offers Undo, which puts each back. Every window hears of it from "document.status". */
 async function choose(
   documents: readonly Pick<Document, "id" | "name" | "title">[],
   choice: Choice,
@@ -73,7 +72,7 @@ export const countAsEvidence = (
   counted: boolean,
 ) => choose(documents, COUNTING, counted);
 
-/** Keeps Documents as the User's own workings ("Don't cite this Document", #897), or cites them again. */
+/** Keeps Documents as the User's own workings ("Don't cite this Document"), or cites them again. */
 export const markNotCited = (
   documents: readonly Pick<Document, "id" | "name" | "title">[],
   notCited: boolean,

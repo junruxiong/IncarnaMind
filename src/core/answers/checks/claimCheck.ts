@@ -6,8 +6,8 @@
  * The Run is the Answer engine's Tool-calling loop (ADR-0007) with the check
  * Tool set: the Documents' search and `cite`, nothing else (ADR-0013, #78).
  * Its searches leave out what a check may not use as evidence (#80): the
- * files IncarnaMind wrote, unless counted, the User's own workings (#897) and
- * the document being checked.
+ * files IncarnaMind wrote, unless counted, the User's own workings and the
+ * document being checked.
  * The model records the Passage that decides the claim with `cite`, and its
  * quote must pass the Citation check before the verdict is taken: a
  * "supported" or "contradicted" without a quote that is found is not
@@ -193,7 +193,6 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       ),
       excluded: [...excluded.values()].filter((each) => each.reason === "own-file"),
     });
-    /** The User's own workings with a line that speaks to the sentence. */
     const workingsSayingIt = (): LeftOutDocument[] =>
       [...workings].flatMap(([documentId, passages]) => {
         const left = excluded.get(documentId);

@@ -543,7 +543,6 @@ interface ShownPassage {
   /** For every kind but PDF: the label of the Units it covers, e.g. "slides 3–4". */
   location: string | null;
   text: string;
-  /** Its Document is the User's own workings: read, never cited (`Document.notCited`). */
   notCited: boolean;
 }
 
