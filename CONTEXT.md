@@ -82,6 +82,10 @@ _Avoid_: loose files, imports
 A short span of a Document that can be retrieved and cited.
 _Avoid_: chunk, snippet
 
+**Own workings**:
+A Document the User marks with "Don't cite this Document", such as a spreadsheet of figures copied from a report, with their own ratios. It is still searched and read to understand a Question, but an Answer never cites it and no check uses it as evidence, so it can't corroborate the report it was copied from. A check that finds only an own working file stating a claim says so. The interface says "Not cited" beside its name.
+_Avoid_: private Document, hidden Document, excluded Document
+
 **Citation**:
 A reference, anchored in the text of an Answer, to the Passage a claim was drawn from: the Location it cites, and a quote from the Passage that is checked against the text at that Location. Copied into a Note, it stays a Citation; Question context shows it as a plain reference to its Document. It names its Document as the Document is named now, so a rename shows in every Citation of it, on screen, in exports and in what a model or an outside agent reads; the name it was made with is kept, never rewritten, and shown only when the Document can't be found. A History comparison keeps each Checkpoint's own names.
 _Avoid_: source, reference
