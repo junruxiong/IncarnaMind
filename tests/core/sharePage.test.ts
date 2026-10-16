@@ -640,6 +640,7 @@ describe("what a web page to share says of its checks", () => {
             name: hostile,
             web: {
               address: "javascript:alert(1)",
+              origin: "search",
               siteName: hostile,
               author: null,
               published: null,

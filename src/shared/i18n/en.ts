@@ -578,6 +578,13 @@ export const en = {
   "claim.unsupported.inFolder": "Nothing in “{folder}” says this.",
   "claim.unsupported.anywhere": "Nothing in your Documents says this.",
   "claim.unsupported.differs": "Your Documents say something different:",
+  "claim.courtDecision.title": "This cites a court decision.",
+  "claim.courtDecision.body":
+    "IncarnaMind can't check that the case exists or that it says this. Look it up in your legal research service before you rely on it.",
+  "claim.citedCaseUnchecked":
+    "The case this sentence cites isn't in your Documents, so it hasn't been checked. Look it up in your legal research service before you rely on it.",
+  "claim.courtDecision.held":
+    "This cites a court decision. The quoted words were found in your saved copy of the opinion ({document}, {location}). Whether it has been overruled or changed isn't checked: look it up in your legal research service before you rely on it.",
   "claim.unsupported.ownWorkings": "Only your own working file says this.",
   "claim.fixSentence": "Fix the sentence",
   "claim.findSources": "Find sources",
@@ -1265,6 +1272,7 @@ export const en = {
   "webPages.copyAddress": "Copy address",
   "webPages.menuTitle": "Web page",
   "webPages.fetched": "Fetched {date}",
+  "webPages.source": "Saved web page · {address} · saved {date}",
   "webPages.drop": "Drop to save the web page, or drop it on a Folder in the sidebar",
   "status.alreadyAdded.one": "1 already added",
   "status.alreadyAdded.other": "{count} already added",
@@ -3023,6 +3031,7 @@ export const en = {
     "Contradicted: your Documents give {shown}, and the sentence says {stated}.",
   "export.comment.sentence.contradicted.plain": "Contradicted by your Documents.",
   "export.comment.sentence.unsupported": "Unsupported: nothing in your Documents says this.",
+  "export.comment.sentence.citedCaseUnchecked": "Cited case not checked: not in the Documents.",
   "export.comment.sentence.unsupported.folder": "Unsupported: nothing in “{folder}” says this.",
   "export.comment.sentence.unsupported.differs":
     "Unsupported: your Documents say something different (“{quote}”, {source})",
