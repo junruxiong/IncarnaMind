@@ -117,7 +117,7 @@ export function ReferencesLine({ editor, mindId }: { editor: Editor; mindId: str
       action={{
         label: t("verify.tryAgain"),
         testId: "references-try-again",
-        onClick: () => void checkReferences(mindId, count),
+        onClick: () => void checkReferences(mindId, count, true),
       }}
     >
       {reason === "rate-limited" && resetsAt
@@ -184,7 +184,7 @@ export function ReferencesLine({ editor, mindId }: { editor: Editor; mindId: str
               type="button"
               data-testid="references-again"
               className="mind-verify-link"
-              onClick={() => void checkReferences(mindId, count)}
+              onClick={() => void checkReferences(mindId, count, true)}
             >
               {t("claim.checkAgain")}
             </button>

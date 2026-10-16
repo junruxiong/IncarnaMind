@@ -7710,9 +7710,11 @@ export interface CoreApi {
    * else as written; then in OpenAlex when Crossref has no record of it or
    * only one that differs; an arXiv number on arXiv. Calling it is the
    * consent to the "reference-check" flow (ADR-0022); in local mode every
-   * entry is "not-checked". One check of a Mind at a time.
+   * entry is "not-checked". One check of a Mind at a time. Answers are kept:
+   * a found record for good, a miss for seven days; `again` asks about every
+   * miss again.
    */
-  checkReferences(mindId: string): Promise<CheckReferencesResult>;
+  checkReferences(mindId: string, options?: { again?: boolean }): Promise<CheckReferencesResult>;
   /** Stops a Mind's `checkReferences`: it gives "cancelled". Stopping none does nothing. */
   stopReferenceCheck(mindId: string): Promise<void>;
   /**

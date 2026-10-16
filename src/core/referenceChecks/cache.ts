@@ -1,17 +1,20 @@
 /**
- * Every answer a service gave, kept for good (migration 96): checking a list
- * again asks no service twice, so it never spends OpenAlex's free daily
- * allowance, which everyone on a network shares. Kept by DOI or arXiv number,
- * else by the reference's normalised title (and year, for Crossref's matching,
- * which reads the whole reference). A failure isn't kept, so it is asked again.
+ * Services' answers, kept on this computer (migration 96) so checking a list
+ * again doesn't spend OpenAlex's free daily allowance, which everyone on a
+ * network shares. A record of the work cited is kept for good. A miss (no
+ * record, a DOI no agency registered yet, a search that found the work
+ * nowhere) is kept seven days, and Check again asks about it again: a work
+ * can be registered or indexed later. A failure isn't kept.
  */
 import { randomUUID } from "node:crypto";
-import { titleWords, yearOf } from "../../shared/referenceList";
+import { titleWords } from "../../shared/referenceList";
 import type { ReferenceName, ReferenceService } from "../api";
 import { isRecord } from "../errors";
 import type { Database } from "../storage";
 import type { Lookups } from "./lookups";
-import { titleOf, type WorkRecord } from "./match";
+import type { WorkRecord } from "./match";
+
+const MISS_KEPT_MS = 7 * 24 * 60 * 60_000;
 
 /** What a check reads of a record, which is all the cache keeps. */
 const kept = (record: WorkRecord) => ({
@@ -46,87 +49,150 @@ function recordOf(value: unknown): WorkRecord | null {
 const recordsOf = (value: unknown): WorkRecord[] =>
   Array.isArray(value) ? value.map(recordOf).filter((each) => each !== null) : [];
 
-const titleKey = (title: string) => titleWords(title).join(" ");
+/** A text as its words, folded: the same title or reference written another way is the same key. */
+const wordsKey = (text: string) => titleWords(text).join(" ");
 
-export function cachedLookups(lookups: Lookups, db: Database, now: () => string): Lookups {
-  const lookUp = (service: ReferenceService, kind: string, key: string) =>
-    db.get<{ answer: string }>(
-      `SELECT answer FROM reference_lookups
-       WHERE service = ? AND kind = ? AND lookup_key = ? AND deleted_at IS NULL`,
-      [service, kind, key],
-    )?.answer;
-
-  const remember = async <T>(
-    service: ReferenceService,
-    kind: string,
-    key: string,
-    ask: () => Promise<T>,
-    write: (answer: T) => unknown,
-    read: (stored: unknown) => T,
-  ): Promise<T> => {
-    const stored = lookUp(service, kind, key);
-    if (stored !== undefined) {
-      try {
-        return read(JSON.parse(stored));
-      } catch (error) {
-        console.error(`A kept ${service} answer couldn't be read; asking again.`, error);
-      }
-    }
-    const answer = await ask();
-    const at = now();
-    db.run(
-      `INSERT INTO reference_lookups (id, service, kind, lookup_key, answer, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT (service, kind, lookup_key) WHERE deleted_at IS NULL
-       DO UPDATE SET answer = excluded.answer, updated_at = excluded.updated_at`,
-      [randomUUID(), service, kind, key, JSON.stringify(write(answer)), at, at],
-    );
-    return answer;
-  };
-
-  const record = (
-    service: ReferenceService,
-    kind: string,
-    key: string,
-    ask: () => Promise<WorkRecord | null>,
-  ) => remember(service, kind, key, ask, (answer) => answer && kept(answer), recordOf);
-  const records = (
-    service: ReferenceService,
-    kind: string,
-    key: string,
-    ask: () => Promise<WorkRecord[]>,
-  ) => remember(service, kind, key, ask, (answer) => answer.map(kept), recordsOf);
-
-  const { crossref, openalex, arxiv } = lookups;
+/** A list's lookups, each reference's settled by its verdict. */
+export function createLookupCache(lookups: Lookups, db: Database, now: () => string) {
   return {
-    crossref: {
-      byDoi: (doi, signal) =>
-        record("crossref", "doi", doi.toLowerCase(), () => crossref.byDoi(doi, signal)),
-      agency: (doi, signal) =>
-        remember(
-          "crossref",
-          "agency",
-          doi.toLowerCase(),
-          () => crossref.agency(doi, signal),
-          (agency) => agency,
-          (stored) => (typeof stored === "string" ? stored : null),
-        ),
-      search: (reference, signal) =>
-        records(
-          "crossref",
-          "search",
-          `${titleKey(titleOf(reference) ?? reference)}|${yearOf(reference) ?? ""}`,
-          () => crossref.search(reference, signal),
-        ),
-    },
-    openalex: {
-      byDoi: (doi, signal) =>
-        record("openalex", "doi", doi.toLowerCase(), () => openalex.byDoi(doi, signal)),
-      search: (title, signal) =>
-        records("openalex", "title", titleKey(title), () => openalex.search(title, signal)),
-    },
-    arxiv: {
-      byId: (id, signal) => record("arxiv", "id", id, () => arxiv.byId(id, signal)),
+    /**
+     * The lookups for one reference. What they keep is a miss until `settle`
+     * says the reference's record was found; `askMissesAgain` (Check again)
+     * asks about every kept miss again.
+     */
+    forReference(askMissesAgain: boolean) {
+      const used = new Set<string>();
+
+      const remember = async <T>(
+        service: ReferenceService,
+        kind: string,
+        key: string,
+        ask: () => Promise<T>,
+        stored: {
+          write: (answer: T) => unknown;
+          read: (value: unknown) => T;
+          found: (answer: T) => boolean;
+        },
+      ): Promise<T> => {
+        const row = db.get<{ id: string; answer: string; kept: number; updated_at: string }>(
+          `SELECT id, answer, kept, updated_at FROM reference_lookups
+           WHERE service = ? AND kind = ? AND lookup_key = ? AND deleted_at IS NULL`,
+          [service, kind, key],
+        );
+        const fresh = row && Date.parse(now()) - Date.parse(row.updated_at) < MISS_KEPT_MS;
+        if (row && (row.kept === 1 || (fresh && !askMissesAgain))) {
+          try {
+            const answer = stored.read(JSON.parse(row.answer));
+            used.add(row.id);
+            return answer;
+          } catch (error) {
+            console.error(`A kept ${service} answer couldn't be read; asking again.`, error);
+          }
+        }
+        const answer = await ask();
+        const at = now();
+        const id = row?.id ?? randomUUID();
+        db.run(
+          `INSERT INTO reference_lookups
+             (id, service, kind, lookup_key, answer, kept, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT (service, kind, lookup_key) WHERE deleted_at IS NULL
+           DO UPDATE SET answer = excluded.answer, kept = excluded.kept,
+             updated_at = excluded.updated_at`,
+          [
+            id,
+            service,
+            kind,
+            key,
+            JSON.stringify(stored.write(answer)),
+            stored.found(answer) ? 1 : 0,
+            at,
+            at,
+          ],
+        );
+        used.add(id);
+        return answer;
+      };
+
+      const record = {
+        write: (answer: WorkRecord | null) => answer && kept(answer),
+        read: recordOf,
+        found: (answer: WorkRecord | null) => answer !== null,
+      };
+      // A search's candidates may all be other works: only the verdict says it found this one.
+      const records = {
+        write: (answer: WorkRecord[]) => answer.map(kept),
+        read: recordsOf,
+        found: () => false,
+      };
+      const agency = {
+        write: (answer: string | null) => answer,
+        read: (value: unknown) => (typeof value === "string" ? value : null),
+        found: (answer: string | null) => answer !== null,
+      };
+
+      const { crossref, openalex, arxiv } = lookups;
+      const cached: Lookups = {
+        crossref: {
+          byDoi: (doi, signal) =>
+            remember(
+              "crossref",
+              "doi",
+              doi.toLowerCase(),
+              () => crossref.byDoi(doi, signal),
+              record,
+            ),
+          agency: (doi, signal) =>
+            remember(
+              "crossref",
+              "agency",
+              doi.toLowerCase(),
+              () => crossref.agency(doi, signal),
+              agency,
+            ),
+          search: (reference, signal) =>
+            remember(
+              "crossref",
+              "search",
+              wordsKey(reference),
+              () => crossref.search(reference, signal),
+              records,
+            ),
+        },
+        openalex: {
+          byDoi: (doi, signal) =>
+            remember(
+              "openalex",
+              "doi",
+              doi.toLowerCase(),
+              () => openalex.byDoi(doi, signal),
+              record,
+            ),
+          search: (title, signal) =>
+            remember(
+              "openalex",
+              "title",
+              wordsKey(title),
+              () => openalex.search(title, signal),
+              records,
+            ),
+        },
+        arxiv: {
+          byId: (id, signal) => remember("arxiv", "id", id, () => arxiv.byId(id, signal), record),
+        },
+      };
+      return {
+        lookups: cached,
+        /** Keeps for good what found the reference's record, once the check says it did. */
+        settle(found: boolean) {
+          if (!found || used.size === 0) return;
+          const ids = [...used];
+          db.run(
+            `UPDATE reference_lookups SET kept = 1 WHERE id IN (${ids.map(() => "?").join(", ")})`,
+            ids,
+          );
+        },
+      };
     },
   };
 }
