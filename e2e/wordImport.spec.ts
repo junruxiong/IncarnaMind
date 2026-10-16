@@ -337,7 +337,10 @@ test("someone else's tracked changes wait in place with who made them and when: 
   // Export: what was resolved leaves no trace; what waits is in the file as it was.
   await exportFromMenu(window);
   const result = window.getByTestId("export-result");
-  await expect(result.getByTestId("export-done")).toHaveText("Saved Lease redline.docx");
+  await expect(result.getByTestId("export-done")).toContainText("Saved Lease redline.docx");
+  await expect(result.getByTestId("export-tracked")).toContainText(
+    "1 change waiting, as tracked changes",
+  );
   const document =
     unzip(await readFile(join(output, "Lease redline.docx")))
       .get("word/document.xml")
