@@ -73,6 +73,7 @@ import {
   readSelection,
   type Selection,
   takeBackForRegenerate,
+  type Written,
 } from "../proposals/write";
 import type { PreparedChatModel } from "../providers/chat";
 import { classifyProviderError } from "../providers/providerErrors";
@@ -581,12 +582,17 @@ export function createEdits(options: EditsOptions) {
       if (!stream)
         return proposeAfter(blocks, selection, reply, request, randomUUID).proposals.length > 0;
       const more = stream.write(reply, true);
+      if (stream.written().unmadeTable) return false;
       // Written before the reason came: recorded again with it.
       return stream.finish() || more || (wrote && reason !== null);
     });
     if (refused) {
       takeBackWritten();
       return ended({ kind: "changed" });
+    }
+    if (stream?.written().unmadeTable) {
+      takeBackWritten();
+      return ended({ kind: "no-table", text: reply });
     }
     if (!wrote) return ended({ kind: "unchanged" });
     return { result: arrived(), reply, reason };
@@ -710,18 +716,14 @@ export function createEdits(options: EditsOptions) {
       const reply = readEditReply(streamed.raw, selection.text);
       if (sameText(reply, selection.text)) return nothing({ kind: "unchanged" });
       const request = randomUUID();
-      let droppedCitations = 0;
+      let written: Written = { proposals: [], droppedCitations: 0 };
       fork.transact(() => {
         const fresh = freshCitations(selection, options.recheck)(reply);
-        droppedCitations = proposeRewrite(
-          selection,
-          reply,
-          request,
-          randomUUID,
-          fresh,
-        ).droppedCitations;
+        written = proposeRewrite(selection, reply, request, randomUUID, fresh);
         resolveProposals(blocks, (each) => each.request === request, "accept");
       });
+      if (written.unmadeTable) return nothing({ kind: "no-table", text: reply });
+      const { droppedCitations } = written;
       const top = topLevelBlocks(blocks);
       const revised = top
         .slice(bounds.before, top.length - bounds.after)

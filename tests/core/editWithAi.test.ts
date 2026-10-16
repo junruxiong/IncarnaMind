@@ -1350,6 +1350,89 @@ describe("Edit with AI over Blocks of several kinds", () => {
       "p Steps:⟨hardBreak⟩- check the gauges",
     ]);
   });
+
+  // protects=a list turned into a table comes back as a table Block beside where the list was, out of the list, its cell keeping the item's Citation (#961); fails_when=the table is pipe text, lands in the list, or the Citation is lost; no_claim=how a real model lays out a table.
+  test("a list made into a table becomes a table, out of the list, its Citation in its cell", async () => {
+    const { core, mind, client, tides } = await setUp(
+      editingModel(() =>
+        [
+          "| Tide | When |",
+          "|:--|--:|",
+          "| Spring | At new moon [1] |",
+          "| Neap | Weakest \\| smallest |",
+        ].join("\n"),
+      ),
+    );
+    writeMind(client, [
+      list(
+        "bulletList",
+        [text("Spring tides are strongest at new moon. "), citation(tides)],
+        [text("Neap tides are weakest.")],
+      ),
+    ]);
+    await client.settled();
+
+    const result = await core.editWithAi({
+      ...whole(client, mind.id),
+      instruction: "Make it a table",
+    });
+
+    expect(result).toMatchObject({ kind: "proposed" });
+    await resolveChanges(client, "accept");
+    expect(
+      readMind(client)
+        .toJSON()
+        .content?.map((block: JSONContent) => block.type),
+    ).toEqual(["table"]);
+    expect(await exported(core, mind.id)).toContain(
+      "| Tide | When |\n| :--- | ---: |\n| Spring | At new moon[^1] |\n| Neap | Weakest \\| smallest |",
+    );
+    expect(structure(client)).toEqual([
+      "p Tide",
+      "p When",
+      "p Spring",
+      "p At new moon ⟨found⟩",
+      "p Neap",
+      "p Weakest | smallest",
+    ]);
+  });
+
+  // protects=pipe lines that make no table (no row of --- under the first) are written nowhere, and the request says why (#961); fails_when=they land in the Mind as a paragraph of pipes; no_claim=none beyond protects.
+  test("pipe lines that make no table change nothing, and say so", async () => {
+    const { core, mind, client } = await setUp(
+      editingModel(() => "| Tide | When |\n| Spring | At new moon |"),
+    );
+    const note = paragraph(text("Spring tides are strongest at new moon."));
+    writeMind(client, [note]);
+    await client.settled();
+    const before = JSON.stringify(client.blocks.toJSON());
+
+    const result = await core.editWithAi(
+      wholeParagraph(client, mind.id, note.attrs.id, "instruction", "Make it a table"),
+    );
+
+    expect(result).toEqual({ kind: "no-table", text: "| Tide | When |\n| Spring | At new moon |" });
+    await client.settled();
+    expect(JSON.stringify(client.blocks.toJSON())).toBe(before);
+  });
+
+  // protects=pipe lines the User's own text already holds don't stop a rewrite of it; fails_when=shortening a paragraph with a pipe line is refused as a broken table; no_claim=none beyond protects.
+  test("pipe lines already in the User's text can still be rewritten", async () => {
+    const { core, mind, client } = await setUp(
+      editingModel(({ passage }) => passage.replace("really ", "")),
+    );
+    const note = paragraph(
+      text("| Draft | Owner |"),
+      { type: "hardBreak" },
+      text("The tides are really strong."),
+    );
+    writeMind(client, [note]);
+    await client.settled();
+
+    const result = await core.editWithAi(wholeParagraph(client, mind.id, note.attrs.id, "shorten"));
+
+    expect(result).toMatchObject({ kind: "proposed", proposals: 1 });
+  });
 });
 
 describe("Changes out of date", () => {

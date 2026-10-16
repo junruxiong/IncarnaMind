@@ -47,6 +47,8 @@ function whyNot(problem: MindProblem | undefined): string {
       return "new text can only replace your own waiting changes";
     case "stopped":
       return "it was stopped";
+    case "no-table":
+      return "its table couldn't be made";
     case "local-mode":
       return "“Keep everything on this computer” is on";
     case "not-ready":
@@ -58,12 +60,13 @@ function whyNot(problem: MindProblem | undefined): string {
   }
 }
 
-function citationsOf(change: MindChange): string {
+function detailsOf(change: MindChange): string {
+  const tables = change.tables ? `, ${counted(change.tables, "table")} among them` : "";
   const cited = change.cited ? `, with ${counted(change.cited, "Citation")}` : "";
   const left = change.unrecorded
     ? `; ${counted(change.unrecorded, "marker")} had no Citation recorded with cite, so ${change.unrecorded === 1 ? "it was" : "they were"} left out`
     : "";
-  return `${cited}${left}`;
+  return `${tables}${cited}${left}`;
 }
 
 function mindOf(call: AnswerToolCall, names: MindNames): string {
@@ -82,7 +85,7 @@ function mindLine(call: AnswerToolCall, names: MindNames): string {
     return `${call.tool} ${mind}${section}: ${verb}: ${whyNot(call.mindProblem)}`;
   }
   const proposed = change
-    ? `proposed ${counted(change.proposals, "change")}, waiting for the User${citationsOf(change)}`
+    ? `proposed ${counted(change.proposals, "change")}, waiting for the User${detailsOf(change)}`
     : "";
   switch (call.tool) {
     case "read_mind":
@@ -92,7 +95,7 @@ function mindLine(call: AnswerToolCall, names: MindNames): string {
         ? `create_mind: made the Mind ${mind} and ${proposed}`
         : `create_mind: made the Mind ${mind}, empty`;
     case "add_to_mind":
-      return `add_to_mind ${mind}: proposed ${counted(change?.proposals ?? 0, "new Block")}, waiting for the User${change ? citationsOf(change) : ""}`;
+      return `add_to_mind ${mind}: proposed ${counted(change?.proposals ?? 0, "new Block")}, waiting for the User${change ? detailsOf(change) : ""}`;
     default:
       if (!change) return `${call.tool} ${mind}${section}: no change was needed`;
       return change.revised
