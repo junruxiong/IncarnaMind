@@ -459,6 +459,52 @@ describe("sentences whose check isn't good", () => {
     expect(unzip(exported.data).has("word/comments.xml")).toBe(false);
   });
 
+  test.each([
+    ["en", "Cited case not checked: not in the Documents."],
+    ["zh-CN", "所引判决尚未核对：不在文档中。"],
+  ] as const)(
+    "a Supported sentence whose cited case is in no Document gets a comment, one whose case is among them none (%s)",
+    async (language, comment) => {
+      const core = startCore(await createTempDataFolder());
+      await core.updateSettings({ user: { language } });
+      const document = await tides(core);
+      const { id } = await mindWith(core, [
+        paragraph(
+          text("Spring tides happen at new moon, see Fake v. Case, 1 U.S. 1 (1800).", [
+            checkOf(
+              document,
+              "c1",
+              "supported",
+              "Spring tides happen at new moon, see Fake v. Case, 1 U.S. 1 (1800).",
+              {
+                citedCaseUnchecked: true,
+              },
+            ),
+          ]),
+        ),
+        paragraph(
+          text("Spring tides happen at full moon, see Real v. Case, 2 U.S. 2 (1801).", [
+            checkOf(
+              document,
+              "c2",
+              "supported",
+              "Spring tides happen at full moon, see Real v. Case, 2 U.S. 2 (1801).",
+              {
+                citedCaseFound: true,
+              },
+            ),
+          ]),
+        ),
+      ]);
+
+      const exported = await word(core, id, { commentFailedChecks: true });
+
+      expect(commentsOn(exported)).toEqual([
+        { comment, on: "Spring tides happen at new moon, see Fake v. Case, 1 U.S. 1 (1800)." },
+      ]);
+    },
+  );
+
   test("an Unsupported sentence with a nearest line says what the Documents say instead, and where", async () => {
     const core = startCore(await createTempDataFolder());
     const document = await tides(core);
