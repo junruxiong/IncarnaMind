@@ -438,6 +438,7 @@ export function createComparisons(options: ComparisonsOptions) {
     fill.task.started(stepOf(cell));
     const [document] = options.documents.live([cell.documentId]);
     if (!document) return { kind: "problem", problem: "source-removed" };
+    if (document.notCited) return { kind: "problem", problem: "not-cited" };
     const documentIds = options.evidence([document.id]);
     if (documentIds.length === 0) return { kind: "problem", problem: "left-out" };
     if (options.documents.searchableCount(documentIds) === 0) {

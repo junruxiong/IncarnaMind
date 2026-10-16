@@ -2133,6 +2133,7 @@ export const zhCN = {
   "comparison.cell.nothingToSearch": "没有可搜索的文字",
   "comparison.cell.sourceRemoved": "来源已删除",
   "comparison.cell.leftOut": "已排除：由 IncarnaMind 生成",
+  "comparison.cell.notCited": "已排除：你自己的工作文件",
   "comparison.cell.auth": "密钥被拒绝",
   "comparison.cell.rateLimit": "服务繁忙",
   "comparison.cell.network": "无法连接服务",
