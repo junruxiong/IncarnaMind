@@ -50,18 +50,6 @@ export const pageRowClass = (selected: boolean) =>
     selected ? "bg-accent-wash" : "hover:bg-frame"
   } has-[[data-row-main]:focus-visible]:shadow-[inset_0_0_0_2px_var(--color-accent)] has-[:popover-open]:shadow-[inset_0_0_0_2px_var(--color-accent)]`;
 
-const markedIn = new WeakMap<readonly Document[], boolean>();
-
-/** One scan per list of Documents, not one per row: a Library of thousands asks on every change. */
-function anyMarked(documents: readonly Document[]): boolean {
-  let marked = markedIn.get(documents);
-  if (marked === undefined) {
-    marked = documents.some((each) => each.notCited);
-    markedIn.set(documents, marked);
-  }
-  return marked;
-}
-
 /** Keeps the preview showing a Document, if one does. */
 function keepPreviewOf(documentId: string): void {
   const { layout, changeLayout } = useAppStore.getState();
@@ -150,7 +138,6 @@ export const LibraryRow = memo(function LibraryRow({
   const [citing, setCiting] = useState<{ focus: ReferenceField | null } | null>(null);
   const citeToggle = useRef<HTMLButtonElement>(null);
   const citePanelId = useId();
-  const anyNotCited = useAppStore((state) => anyMarked(state.documents));
   const objectMenu = useObjectMenu({ kind: "document", id: doc.id });
   const inside = match?.text ?? null;
   const foundAt = inside ? passagePlace(doc.kind, inside, t) : "";
@@ -307,11 +294,9 @@ export const LibraryRow = memo(function LibraryRow({
         <div data-row-cell="tags" className={`${COLUMN_CLASSES.tags} flex min-w-0 items-center`}>
           <RowTags document={doc} />
         </div>
-        {anyNotCited && (
-          <span data-row-cell="status" className={COLUMN_CLASSES.status}>
-            <NotCitedLabel item={doc} />
-          </span>
-        )}
+        <span data-row-cell="status" className={COLUMN_CLASSES.status}>
+          <NotCitedLabel item={doc} />
+        </span>
         <span
           data-testid="library-document-format"
           className={`${COLUMN_CLASSES.format} truncate text-[13px] text-ink-secondary`}

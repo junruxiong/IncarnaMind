@@ -185,6 +185,36 @@ test("In the Library and in Chinese: the same menu item and label, one Undo for 
   await expect(notes.getByTestId("document-not-cited")).toHaveCount(0);
 });
 
+test("In the Library, marking the first Document moves no column", async () => {
+  const { window } = await launchApp(dataDir);
+  await addReportAndWorkings(window);
+  await window.getByTestId("open-library").click();
+  const workings = libraryRow(window, "Workings");
+  const report = libraryRow(window, "Annual report");
+  await expect(workings).toBeVisible();
+  const columns = async () => {
+    const boxes = await Promise.all(
+      [workings, report].flatMap((row) =>
+        [
+          "library-document-name",
+          "document-tags",
+          "library-document-format",
+          "library-document-added",
+        ].map(async (id) => (await row.getByTestId(id).boundingBox())?.x),
+      ),
+    );
+    if (boxes.some((x) => x === undefined)) throw new Error("A column isn't laid out.");
+    return boxes;
+  };
+  const before = await columns();
+
+  await openLibraryMenu(workings);
+  await pointAndClick(window, workings.getByTestId("document.dontCite"));
+  await expect(workings.getByTestId("document-not-cited")).toBeVisible();
+
+  expect(await columns()).toEqual(before);
+});
+
 test("A sentence only the marked file states is Unsupported, and its card says so, in English and Chinese", async () => {
   const { window } = await launchApp(dataDir, { fakeChat: true });
   await useLocalChatModel(window);
