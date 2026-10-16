@@ -248,6 +248,12 @@ export interface AnswerTools {
    */
   correctQuote?(marker: number, quote: string): boolean;
   /**
+   * Whether the Answer wrote its text into a Mind: its Citations are
+   * there, so its reply only reports what was done, and no marker the model
+   * left out of the reply is placed in it, nor any asked for.
+   */
+  wroteIntoMind?(): boolean;
+  /**
    * Takes calculated figures (ADR-0021, ./calculations); returns what to tell
    * the model about them. Absent: the Answer offers no `calculate`.
    */
@@ -1537,8 +1543,10 @@ async function* toolLoop(
     yield* flag(keptText);
   }
   async function* endAnswer(): AsyncGenerator<AnswerEngineEvent> {
-    const placed = yield* missingMarkerEvents(keptText, cited, request.documents);
-    yield* citeUnmarked(request, placed, temperature, budget);
+    if (!request.documents.wroteIntoMind?.()) {
+      const placed = yield* missingMarkerEvents(keptText, cited, request.documents);
+      yield* citeUnmarked(request, placed, temperature, budget);
+    }
     yield { type: "finished" };
   }
   const runTools = tools.map(tracked);
