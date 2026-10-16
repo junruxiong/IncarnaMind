@@ -5771,6 +5771,12 @@
     &:hover {
       color: var(--color-accent-strong);
     }
+
+    /* Can't undo here, with its reason on hover. */
+    &[aria-disabled="true"] {
+      cursor: default;
+      color: var(--color-ink-meta);
+    }
   }
   .answer-coverage {
     margin: 0;

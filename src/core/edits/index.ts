@@ -62,6 +62,7 @@ import {
   acceptOwnIn,
   boundsOf,
   type OwnWaiting,
+  ownAsked,
   replaceOwn,
   waitingIn,
 } from "../proposals/ownWaiting";
@@ -303,7 +304,7 @@ export interface ProposeInput {
   signal: AbortSignal;
   beforeWriting(): void;
   written(request: string, count: number): void;
-  /** What the User's words asked for, which its request records; null: neither. Not for a revision. */
+  /** What the User's words asked for, which its request records; null: neither. A revision records it only when its text was asked for too. */
   requested: RequestedChange | null;
 }
 
@@ -809,8 +810,14 @@ export function createEdits(options: EditsOptions) {
       };
       input.beforeWriting();
       const blockIds = content.edit(input.mindId, (mind) => {
+        const asked = input.requested !== null && ownAsked(mind, own);
         const ids = replaceOwn(mind, own, revised, request);
-        if (ids && mind.doc) recordProposalRequest(mind.doc, request, made);
+        if (ids && mind.doc) {
+          recordProposalRequest(mind.doc, request, {
+            ...made,
+            ...(asked && { requested: "edit" }),
+          });
+        }
         return ids;
       });
       if (!blockIds) return nothing({ kind: "changed" });

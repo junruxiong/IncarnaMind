@@ -1,4 +1,4 @@
-import { type AskedOutcome, reviewAsked, undoAsked } from "../../askedChanges";
+import { type AskedOutcome, reviewAsked, undoAsked, useAskedState } from "../../askedChanges";
 import type { ChangedMind } from "../../changedMinds";
 import { changeFact, leftText } from "../../changeFacts";
 import { useT } from "../../i18n";
@@ -9,7 +9,8 @@ import { PencilLineIcon } from "../lineIcons";
  * The card under an Answer whose changes the User asked for applied at once
  * (#880): a line for each Mind with the count its own line shows,
  * "Changed 12 places in “Credit note: draft” · Undo · Review changes", where
- * Undo takes the whole turn back; then a line of their own for the changes
+ * Undo takes back this Answer's changes alone, and says why it can't once
+ * the Mind changed since or closed; then a line of their own for the changes
  * it made beyond the request, which wait: "I also suggested 2 changes in
  * “Sources” · Review".
  */
@@ -47,34 +48,7 @@ export function AskedChangesCard({
                 {changeFact(t, row, nameOf(row))}
               </span>
               {outcome === "applied" && (
-                <>
-                  <Dot />
-                  <button
-                    type="button"
-                    data-testid="mind-changes-undo"
-                    onClick={() => undoAsked(answerId)}
-                    className="mind-changes-review"
-                  >
-                    {t("edit.applied.undo")}
-                  </button>
-                  <Dot />
-                  <button
-                    type="button"
-                    data-testid="mind-changes-review"
-                    onClick={() => void reviewAsked(row.mindId)}
-                    className="mind-changes-review"
-                  >
-                    {t("edit.applied.review")}
-                  </button>
-                </>
-              )}
-              {outcome === "undone" && (
-                <>
-                  <Dot />
-                  <span data-testid="mind-changes-undone" className="mind-changes-count">
-                    {t("mindChanges.undone")}
-                  </span>
-                </>
+                <AppliedActions answerId={answerId} mindId={row.mindId} name={nameOf(row)} />
               )}
               {outcome === "held" && (
                 <>
@@ -118,6 +92,63 @@ export function AskedChangesCard({
         </p>
       ))}
     </section>
+  );
+}
+
+function AppliedActions({
+  answerId,
+  mindId,
+  name,
+}: {
+  answerId: string;
+  mindId: string;
+  name: string;
+}) {
+  const t = useT();
+  const state = useAskedState(answerId, mindId);
+  if (state === "undone") {
+    return (
+      <>
+        <Dot />
+        <span data-testid="mind-changes-undone" className="mind-changes-count">
+          {t("mindChanges.undone")}
+        </span>
+      </>
+    );
+  }
+  const why =
+    state === "changed-since"
+      ? t("mindChanges.undo.changedSince", { mind: name })
+      : state === "closed"
+        ? t("mindChanges.undo.closed", { mind: name })
+        : undefined;
+  return (
+    <>
+      <Dot />
+      <button
+        type="button"
+        data-testid="mind-changes-undo"
+        aria-disabled={why !== undefined || undefined}
+        title={why}
+        onClick={() => undoAsked(answerId, mindId)}
+        className="mind-changes-review"
+      >
+        {t("edit.applied.undo")}
+      </button>
+      {state !== "closed" && (
+        <>
+          <Dot />
+          <button
+            type="button"
+            data-testid="mind-changes-review"
+            onClick={() => void reviewAsked(mindId)}
+            className="mind-changes-review"
+          >
+            {t("edit.applied.review")}
+          </button>
+        </>
+      )}
+    </>
   );
 }
 

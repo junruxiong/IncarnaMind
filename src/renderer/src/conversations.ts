@@ -224,6 +224,7 @@ export async function regenerateAnswer(
   settleAsk(answerId, null);
   try {
     watchMindsMadeBy(answerId);
+    applyWhatWasAsked(answerId);
     settleAsk(
       answerId,
       await core.regenerateConversationAnswer({

@@ -20,7 +20,6 @@ export function registerMindEditor(mindId: string, editor: Editor): () => void {
   };
 }
 
-/** An editor showing the Mind; null when none is open. */
 export const mindEditor = (mindId: string): Editor | null =>
   open.get(mindId)?.find((each) => !each.isDestroyed) ?? null;
 

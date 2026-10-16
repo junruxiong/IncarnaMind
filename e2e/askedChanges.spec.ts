@@ -2,11 +2,13 @@ import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import {
   askInAssistant,
+  assistantAnswers,
   createDataFolder,
   dismissChatSetup,
   enterContent,
   launchApp,
   newMind,
+  openSteps,
   pointAndClick,
   removeDataFolder,
   setLanguage,
@@ -81,12 +83,77 @@ test("“write a summary page” makes the page with the summary applied, “mak
   await pointAndClick(window, line.getByTestId("applied-done"));
   await expect(paragraphs).toHaveText([`${SPRING} It says more.`, `${NEAP} It says more.`]);
 
-  // One step of Undo for each request: first the longer text goes, then the summary.
+  const longer = [`${SPRING} It says more.`, `${NEAP} It says more.`];
+  // The Answer `askInAssistant` gave is the last one, whichever that is now.
+  const summary = assistantAnswers(window).first();
+  const firstUndo = summary.getByTestId("mind-changes-undo");
+  const secondUndo = second.getByTestId("mind-changes-undo");
+  const changedSince =
+    "“Summary” has changed since, so this can't be undone here alone. Review changes restores each change.";
+
+  // Each card undoes its own request: the summary's can't while the longer text is on top of it.
+  await expect(firstUndo).toHaveAttribute("aria-disabled", "true");
+  await expect(firstUndo).toHaveAttribute("title", changedSince);
+  await expect(secondUndo).not.toHaveAttribute("aria-disabled");
+  await screenshot(window, "asked-undo-since-en");
+  await pointAndClick(window, firstUndo);
+  await expect(paragraphs).toHaveText(longer);
+  await pointAndClick(window, secondUndo);
+  await expect(paragraphs).toHaveText([SPRING, NEAP]);
+  await expect(second.getByTestId("mind-changes-undone")).toHaveText("Undone");
+  await expect(firstUndo).not.toHaveAttribute("aria-disabled");
+
+  // Redo and Undo in the Mind move the change, and its card says where it is.
   await editor.focus();
+  await window.keyboard.press("ControlOrMeta+Shift+z");
+  await expect(paragraphs).toHaveText(longer);
+  await expect(secondUndo).not.toHaveAttribute("aria-disabled");
+  await expect(firstUndo).toHaveAttribute("aria-disabled", "true");
   await window.keyboard.press("ControlOrMeta+z");
   await expect(paragraphs).toHaveText([SPRING, NEAP]);
-  await window.keyboard.press("ControlOrMeta+z");
+  await expect(second.getByTestId("mind-changes-undone")).toBeVisible();
+
+  // Typed after the summary, its card says why it can't undo it, until the typing is taken back.
+  await paragraphs.last().click();
+  await window.keyboard.press("End");
+  await window.keyboard.type(" Typed.");
+  await expect(paragraphs.last()).toHaveText(`${NEAP} Typed.`);
+  await expect(firstUndo).toHaveAttribute("aria-disabled", "true");
+  await expect(async () => {
+    if ((await paragraphs.last().textContent())?.includes("Typed")) {
+      await window.keyboard.press("ControlOrMeta+z");
+    }
+    await expect(paragraphs).toHaveText([SPRING, NEAP]);
+  }).toPass();
+  await expect(firstUndo).not.toHaveAttribute("aria-disabled");
+  await pointAndClick(window, firstUndo);
   await expect(editor).not.toContainText("Spring tides");
+  await expect(summary.getByTestId("mind-changes-undone")).toHaveText("Undone");
+});
+
+test("an Answer written again applies what was asked as the first did, and its card can undo it", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await setWindowSize(app, window, 1440, 900);
+  await newMind(window);
+  await askInAssistant(window, "write a summary page");
+  const editor = window.getByTestId("mind-editor");
+  const paragraphs = editor.locator(":scope > p");
+  await expect(paragraphs).toHaveText([SPRING, NEAP]);
+
+  const answer = await askInAssistant(window, "make it longer");
+  await expect(paragraphs).toHaveText([`${SPRING} It says more.`, `${NEAP} It says more.`]);
+  await openSteps(window, answer);
+  await pointAndClick(window, answer.getByTestId("answer-regenerate"));
+  await expect(paragraphs).toHaveText([
+    `${SPRING} It says more. It says more.`,
+    `${NEAP} It says more. It says more.`,
+  ]);
+  await expect(editor.locator("ins.proposal-insert, del.proposal-delete")).toHaveCount(0);
+  await pointAndClick(window, answer.getByTestId("mind-changes-undo"));
+  await expect(paragraphs).toHaveText([`${SPRING} It says more.`, `${NEAP} It says more.`]);
+  await expect(answer.getByTestId("mind-changes-undone")).toHaveText("Undone");
 });
 
 const NOTES = [
