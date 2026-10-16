@@ -33,6 +33,7 @@ import {
   WordLookTableView,
   WordRun,
 } from "./wordSchema";
+import { WordTab } from "./wordTabs";
 
 /** The attribute each Block keeps its UUID in. It is stored in the Mind's Yjs document. */
 export { BLOCK_ID_ATTRIBUTE };
@@ -164,6 +165,7 @@ export function noteExtensions({
     InlineImage,
     WordLookAttribute,
     WordRun,
+    WordTab,
     QuestionContextFlag,
     // Proposals waiting for the User: words struck and added, and whole Blocks (#93).
     ProposalInsert,
