@@ -69,6 +69,17 @@ test("“write a summary page” makes the page with the summary applied, “mak
     "Changed 2 places in “Summary”",
   );
   await screenshot(window, "asked-edit-en");
+  await setLanguage(window, "zh-CN");
+  await expect(line.getByTestId("applied-count")).toHaveText("已修改 2 处");
+  await expect(second.getByTestId("mind-changes-title")).toHaveText("在“Summary”中已修改 2 处");
+  await setLanguage(window, "en");
+
+  // Review changes from the Answer shows what was added, the text still applied.
+  await pointAndClick(window, second.getByTestId("mind-changes-review"));
+  await expect(line.getByTestId("applied-count")).toHaveText("2 changes made by the assistant");
+  await expect(editor.locator(".applied-new")).toHaveText([" It says more.", " It says more."]);
+  await pointAndClick(window, line.getByTestId("applied-done"));
+  await expect(paragraphs).toHaveText([`${SPRING} It says more.`, `${NEAP} It says more.`]);
 
   // One step of Undo for each request: first the longer text goes, then the summary.
   await editor.focus();
@@ -125,4 +136,41 @@ test("a rewrite that would take out most of the User's own text waits, in Englis
   await editor.focus();
   await window.keyboard.press("ControlOrMeta+z");
   await expect(paragraphs).toHaveText(NOTES);
+});
+
+/** A new Mind, its title and its Notes typed as a person types them. */
+async function writeMind(window: Page, title: string, notes: readonly string[]): Promise<void> {
+  await newMind(window);
+  await expect(window.getByTestId("mind-title")).toBeFocused();
+  await window.keyboard.type(title);
+  await enterContent(window);
+  for (const [index, note] of notes.entries()) {
+    if (index > 0) await window.keyboard.press("Enter");
+    await window.keyboard.type(note);
+  }
+}
+
+test("asked to write in a Mind not in view, the assistant opens it in a tab beside the one in view and writes there, applied", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await setWindowSize(app, window, 1440, 900);
+  await writeMind(window, "Project plan", ["Hire a designer."]);
+  await writeMind(window, "Q3 review", ["The quarter was good."]);
+  const tabs = window.getByTestId("mind-tab");
+  await expect(tabs).toHaveCount(2);
+
+  const answer = await askInAssistant(window, "Add a note about the meeting to Project plan");
+  await expect(answer.getByTestId("mind-changes-title")).toHaveText(
+    "Wrote 1 paragraph in “Project plan”",
+  );
+  await expect(tabs.filter({ hasText: "Q3 review" })).toHaveCount(1);
+  await expect(tabs.filter({ hasText: "Project plan" })).toHaveCount(1);
+  await expect(window.getByTestId("mind-title")).toHaveValue("Project plan");
+  const editor = window.getByTestId("mind-editor");
+  await expect(editor.locator(":scope > p")).toHaveText([
+    "Hire a designer.",
+    "a note about the meeting",
+  ]);
+  await expect(editor.getByTestId("applied-count")).toHaveText("Wrote 1 paragraph");
 });

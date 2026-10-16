@@ -440,7 +440,12 @@ function undoEdit(editor: Editor): void {
 function review(editor: Editor): void {
   const line = appliedLineIn(editor.state);
   if (line?.kind !== "applied" || line.changes.length === 0 || editor.isDestroyed) return;
-  setAppliedLine(editor, { kind: "review", blockId: line.blockId, changes: line.changes });
+  setAppliedLine(editor, {
+    kind: "review",
+    blockId: line.blockId,
+    changes: line.changes,
+    ...(line.facts && { byAssistant: true }),
+  });
   const first = line.changes
     .map((change) => placeOfChange(editor.state, change))
     .find((place) => place !== null);
