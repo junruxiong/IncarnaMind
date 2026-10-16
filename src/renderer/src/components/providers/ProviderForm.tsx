@@ -5,6 +5,7 @@ import type {
   SecretStorageStatus,
   TestChatConnectionInput,
 } from "../../../../core/api";
+import type { DataUse } from "../../../../core/providers/catalog";
 import { catalogMenu } from "../../../../core/providers/catalog";
 import {
   catalogProvider,
@@ -19,6 +20,7 @@ import {
 } from "../../../../core/providers/catalog/providers";
 import type { Role } from "../../../../core/providers/catalog/types";
 import type { MessageKey } from "../../../../shared/i18n";
+import { gap } from "../../../../shared/i18n/join";
 import { modelName } from "../../../../shared/modelName";
 import { core } from "../../core";
 import { dayOf } from "../../dates";
@@ -36,6 +38,7 @@ import {
   primaryButtonClass,
   successTextClass,
 } from "../ui";
+import { KeyHelp } from "./KeyHelp";
 import { keyProviderName, testErrorKey, useProviderKey } from "./shared";
 
 type CatalogId = string;
@@ -450,18 +453,16 @@ export function ProviderForm({
             {saved?.hasApiKey && (
               <span className={hintClass}>{t("providers.form.apiKeySaved")}</span>
             )}
-            {(endpoint?.keyUrl ?? catalog?.keyUrl) && (
-              <a
-                href={endpoint?.keyUrl ?? catalog?.keyUrl}
-                target="_blank"
-                rel="noreferrer"
-                data-testid="provider-key-link"
-                className={`${hintClass} underline`}
-              >
-                {t("providers.form.whereKey")} ↗
-              </a>
-            )}
           </label>
+          {catalog && (
+            <KeyHelp
+              key={`${kind}:${endpoint?.id}`}
+              provider={catalog}
+              keyUrl={endpoint?.keyUrl ?? catalog.keyUrl}
+              name={shortName(kind)}
+              firstRun={standalone}
+            />
+          )}
 
           {secretStorage && !secretStorage.canSave && (
             <SecretStorageNotice status={secretStorage} onAccept={() => void acceptPlainText()} />
@@ -475,7 +476,18 @@ export function ProviderForm({
               {modelIdField}
             </div>
           ) : (
-            <div>
+            <div className="relative">
+              {!standalone && catalog?.docsUrl && (
+                <a
+                  href={catalog.docsUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  data-testid="provider-docs-link"
+                  className="absolute top-0 right-0 text-[12px] leading-5 text-ink-meta underline"
+                >
+                  {t("providers.form.modelsAndPrices")} ↗
+                </a>
+              )}
               <label className={fieldLabelClass}>
                 {t("providers.form.model")}
                 <select
@@ -523,6 +535,7 @@ export function ProviderForm({
                 ? (hostOf(baseUrl) ?? t("providers.kind.openai-compatible"))
                 : providerName
             }
+            dataUse={catalog?.dataUse}
           />
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -581,11 +594,30 @@ function KeyRefusedLine({ id, refused }: { id: string; refused: KeyRefusal }) {
  * Above the button that chooses the chat model's provider: what goes to it.
  * Choosing it is the consent for all of that (ADR-0022).
  */
-export function ProviderSendsLine({ provider }: { provider: string }) {
+export function ProviderSendsLine({ provider, dataUse }: { provider: string; dataUse?: DataUse }) {
   const t = useT();
+  const language = useLanguage();
+  const words = language === "zh-CN" ? "zh" : "en";
+  const sends = t("providers.sends", { provider });
+  const summary = dataUse && t("providers.form.dataUse", { summary: dataUse.summary[words] });
+  const terms = `${t("providers.form.terms")} ↗`;
   return (
     <p data-testid="provider-sends" className={hintClass}>
-      {t("providers.sends", { provider })}
+      {sends}
+      {dataUse && summary && (
+        <span data-testid="provider-data-use">
+          {gap(language, sends, summary)}
+          {summary}
+          {dataUse.url && (
+            <>
+              {gap(language, summary, terms)}
+              <a href={dataUse.url} target="_blank" rel="noreferrer" className="underline">
+                {terms}
+              </a>
+            </>
+          )}
+        </span>
+      )}
     </p>
   );
 }
