@@ -21,12 +21,19 @@ import {
 } from "../helpers/checks";
 import { answerEnded, shownPassages } from "../helpers/citations";
 import { createTempDataFolder, manualClock, startCore } from "../helpers/core";
-import { addAndProcess, waitForProcessing, writeSourceFile } from "../helpers/documents";
+import {
+  addAndProcess,
+  waitForDocuments,
+  waitForProcessing,
+  writeSourceFile,
+} from "../helpers/documents";
 import { GIB } from "../helpers/localModels";
 import { connectToMind, type MindClient, typeInto } from "../helpers/mindClient";
 import { editMind, question, readMind, writeMind } from "../helpers/minds";
 import { type ModelCall, scriptedModel, scriptedModels } from "../helpers/models";
 import { startOllamaServer } from "../helpers/ollama";
+import { wordFile, paragraph as wordParagraph } from "../helpers/word";
+import { importWordBytes } from "../helpers/wordMinds";
 
 const TIDES = {
   name: "Tides.md",
@@ -249,6 +256,34 @@ describe("Check for contradictions", () => {
     writeMind(plainClient, [{ type: "paragraph", content: [text(UNCITED)] }]);
     await plainClient.settled();
     expect(await core.planContradictionCheck(plain.id)).toEqual({ kind: "nothing" });
+  });
+
+  // protects=#972; fails_when=a Mind imported from Word has its claims checked against its own original, which can clear a real contradiction; no_claim=Check this Mind, which tests/core/mindCheck.test.ts covers.
+  test("never checks a Mind's claims against the file it was imported from", async () => {
+    const calls: ModelCall[] = [];
+    const { core, tides, office, folder } = await setUp({ calls });
+    const sources = await createTempDataFolder();
+    const { mindId, client } = await importWordBytes(
+      core,
+      sources,
+      wordFile({ body: wordParagraph(YEARLY) }),
+      { name: "Harbour draft.docx", origin: "own", folderId: folder.id, addOriginal: true },
+    );
+    await waitForDocuments(core, (listed) =>
+      expect(listed.filter((each) => each.status === "ready")).toHaveLength(3),
+    );
+    writeMind(client, [
+      {
+        type: "paragraph",
+        attrs: { id: "imported" },
+        content: [text(`${YEARLY} `), citation(tides, YEARLY)],
+      },
+    ]);
+    await client.settled();
+
+    await core.checkContradictions({ requestId: "imported", mindId });
+
+    expect(searched(calls)).toEqual(new Set([office.name]));
   });
 });
 

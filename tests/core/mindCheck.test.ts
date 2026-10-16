@@ -272,6 +272,8 @@ describe("Check this Mind", () => {
 });
 
 describe("A sentence gets the same verdict in Check this Mind as checked alone", () => {
+  /** The model calls a check's Run may make (the engine's `MAX_STEPS`). */
+  const STEPS = 10;
   const LOAN = "The Northgate Bank term loan stood at £214,480.00 at 31 March 2026.";
   const BANK = "Balance outstanding at 31 March 2026: GBP 212,480.00.";
   const MEMO = `Revenue for the year was £1,284,300. ${LOAN}`;
@@ -319,10 +321,14 @@ describe("A sentence gets the same verdict in Check this Mind as checked alone",
   }
 
   /** A bank confirmation, and a memo imported from Word with its original added, in one Folder. */
-  async function yearEnd(unread = 0) {
+  async function yearEnd(
+    unread = 0,
+    model: (runs: ModelCall[]) => ReturnType<typeof scriptedModel> = (runs) =>
+      readingModel(runs, unread),
+  ) {
     const runs: ModelCall[] = [];
     const core = startCore(await createTempDataFolder(), {
-      createChatModel: scriptedModels(readingModel(runs, unread)).createChatModel,
+      createChatModel: scriptedModels(model(runs)).createChatModel,
     });
     await core.saveChatProvider({ kind: "ollama", modelId: "local-model" });
     const sources = await createTempDataFolder();
@@ -393,5 +399,29 @@ describe("A sentence gets the same verdict in Check this Mind as checked alone",
     const { core, mindId, loanCheck } = await yearEnd(2);
     await core.checkMind(request(mindId, "all"));
     expect(loanCheck()).toMatchObject({ state: "not-checked", reason: "unread" });
+  });
+
+  test("asking once more comes out of the check's own steps, not a new Run's", async () => {
+    const { core, mindId, loanCheck, runs } = await yearEnd(0, (runs) =>
+      scriptedModel(
+        (call) => {
+          const sentence = sentenceOf(call);
+          if (sentence !== LOAN) {
+            return call.results.length === 0
+              ? { calls: [{ tool: "search_documents", input: { query: sentence } }] }
+              : { text: "Verdict: unsupported" };
+          }
+          runs.push(call);
+          // Busy with everything but a search until its last step, which gives a verdict.
+          return call.results.length < STEPS - 1
+            ? { calls: [{ tool: "cite", input: { citations: [] } }] }
+            : { text: "Verdict: unsupported" };
+        },
+        { generate: checkGenerate({ [LOAN]: { verdict: "unsupported" } }) },
+      ),
+    );
+    await core.checkMind(request(mindId, "all"));
+    expect(loanCheck()).toMatchObject({ state: "not-checked", reason: "unread" });
+    expect(runs).toHaveLength(STEPS + 1);
   });
 });

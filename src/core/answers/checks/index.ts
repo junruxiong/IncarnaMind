@@ -342,10 +342,20 @@ export function createChecks(options: ChecksOptions) {
     recordCheckUnread(blocks.doc, request, files, requests);
   }
 
+  /** What a check of a Mind's sentence never reads: the file the Mind was imported from, and `checked`. */
+  function leftOutOf(mindId: string, checked: CheckedDocument = {}): CheckedDocument {
+    const original = options.originalOf(mindId);
+    return {
+      documentIds: [...(original?.documentIds ?? []), ...(checked.documentIds ?? [])],
+      contentHashes: [...(original?.contentHashes ?? []), ...(checked.contentHashes ?? [])],
+    };
+  }
+
   /**
    * Where a Mind's sentences are checked: its Folder, or every Document, never
-   * the file the Mind was imported from, nor `checked`. Every check of a Mind
-   * scopes here, so a sentence finds the same evidence alone or in a whole check.
+   * what `leftOutOf` leaves out. Every check of a Mind's sentences scopes here
+   * (the contradiction watch leaves out the same), so a sentence finds the same
+   * evidence alone or in a whole check.
    */
   function scopeOf(mindId: string, allDocuments: boolean, checked: CheckedDocument = {}) {
     const folderId = options.mindFolder(mindId);
@@ -354,12 +364,10 @@ export function createChecks(options: ChecksOptions) {
       allDocuments || folderId === null
         ? null
         : { folderIds: [folderId], tagIds: [], documentIds: [] };
-    const original = options.originalOf(mindId);
-    const leftOut: CheckedDocument = {
-      documentIds: [...(original?.documentIds ?? []), ...(checked.documentIds ?? [])],
-      contentHashes: [...(original?.contentHashes ?? []), ...(checked.contentHashes ?? [])],
-    };
-    const scope = options.evidence.scope(wanted && options.resolveScope(wanted), leftOut);
+    const scope = options.evidence.scope(
+      wanted && options.resolveScope(wanted),
+      leftOutOf(mindId, checked),
+    );
     return {
       searchable: options.documents.searchableCount(scope.documentIds),
       folderId: allDocuments ? null : folderId,
@@ -492,8 +500,8 @@ export function createChecks(options: ChecksOptions) {
     ...options.watch,
     folderDocuments: (folderId) =>
       options.resolveScope({ folderIds: [folderId], tagIds: [], documentIds: [] }) ?? [],
-    evidenceScope: (documentIds, citedIds) =>
-      options.evidence.scope(documentIds, { documentIds: [...citedIds] }),
+    evidenceScope: (mindId, documentIds, citedIds) =>
+      options.evidence.scope(documentIds, leftOutOf(mindId, { documentIds: [...citedIds] })),
     searchableCount: (documentIds) => options.documents.searchableCount(documentIds),
     prepare,
     prepareQuietly,
