@@ -3,8 +3,8 @@
  * one (./docx) and the one that writes back into an imported file
  * (./wordPatch). Changes go in as tracked changes: those still waiting to be
  * accepted by IncarnaMind, and, in a file imported from Word, the User's own
- * edits under their name. IncarnaMind comments on AI text and on Citations
- * whose check failed.
+ * edits under their name. IncarnaMind comments on AI text, on Citations
+ * whose check failed and on sentences whose check isn't good.
  *
  * A tracked change wraps XML already written: `trackInline` wraps a
  * paragraph's runs in `w:ins` or `w:del`, and `trackBlocks` marks whole
@@ -14,7 +14,7 @@
  * writes it.
  */
 import { elements, parseXml, type XmlElement } from "../documents/formats/xml";
-import type { Footnote, Pending } from "../mindText";
+import type { FailedSentence, Footnote, Pending } from "../mindText";
 import type { ExportLabels } from "./labels";
 import {
   type CommentStyles,
@@ -298,6 +298,13 @@ export function trackBlocks(xml: string, tracking: Tracking, ids: WordIds): stri
 /** Who wrote a piece of text, for finding the passages of AI text. */
 export type Authorship = "ai" | "own" | "neither";
 
+/** A piece of the text a writer writes, in document order, for finding where comments go. */
+export interface Piece {
+  key: object;
+  authorship: Authorship;
+  sentence?: FailedSentence | undefined;
+}
+
 /** Where IncarnaMind's comments on AI text start and end: at pieces of the text, by identity. */
 export interface Passages {
   starts: ReadonlySet<object>;
@@ -327,15 +334,41 @@ export function passagesOf(pieces: Iterable<{ key: object; authorship: Authorshi
   return { starts, ends };
 }
 
+/** Where IncarnaMind's comments on sentences start and end: at pieces of the text, by identity. */
+export interface SentencePassages {
+  starts: ReadonlyMap<object, FailedSentence>;
+  ends: ReadonlyMap<object, FailedSentence>;
+}
+
+/** Each sentence whose check isn't good, from its first piece of text to its last. */
+export function sentencePassagesOf(pieces: Iterable<Piece>): SentencePassages {
+  const first = new Map<string, { key: object; sentence: FailedSentence }>();
+  const last = new Map<string, object>();
+  for (const { key, sentence } of pieces) {
+    if (!sentence) continue;
+    if (!first.has(sentence.id)) first.set(sentence.id, { key, sentence });
+    last.set(sentence.id, key);
+  }
+  return {
+    starts: new Map([...first.values()].map(({ key, sentence }) => [key, sentence])),
+    ends: new Map(
+      [...first.values()].map(({ sentence }) => [last.get(sentence.id) as object, sentence]),
+    ),
+  };
+}
+
 /**
  * IncarnaMind's comments in one Word file, as both writers write them: on AI
- * text's passages, and on Citations whose check failed. Their XML for the
- * comments part is in `comments`, in order.
+ * text's passages, on Citations whose check failed and on sentences whose
+ * check isn't good. Their XML for the comments part is in `comments`, in order.
  */
 export class Review {
   readonly comments: string[] = [];
   private passages: Passages = { starts: new Set(), ends: new Set() };
   private open: number | null = null;
+  private sentences: SentencePassages = { starts: new Map(), ends: new Map() };
+  private readonly openSentences = new Map<string, number>();
+  private readonly commented = new Map<string, FailedSentence>();
   private readonly trackings = new Map<string, Tracking>();
 
   constructor(
@@ -346,9 +379,11 @@ export class Review {
     private readonly styles: () => CommentStyles,
   ) {}
 
-  /** Where AI text's passages are, when they are marked. */
-  mark(passages: Passages): void {
-    if (this.choices.markAiText) this.passages = passages;
+  /** Where AI text's passages and the sentences to comment on are, as far as each is asked for. */
+  mark(pieces: Iterable<Piece>): void {
+    const all = [...pieces];
+    if (this.choices.markAiText) this.passages = passagesOf(all);
+    if (this.choices.commentFailedChecks) this.sentences = sentencePassagesOf(all);
   }
 
   /**
@@ -379,19 +414,30 @@ export class Review {
   }
 
   /**
-   * The part's text with no passage of AI text left open: one whose end
-   * wasn't written (it fell where the text couldn't be written again) loses
-   * its comment rather than leave Word a range without an end.
+   * The part's text with no comment's range left open, of AI text or of a
+   * sentence: one whose end wasn't written (it fell where the text couldn't
+   * be written again) loses its comment rather than leave Word a range
+   * without an end.
    */
   finish(text: string): string {
-    if (this.open === null) return text;
-    const id = this.open;
+    const unfinished = [...this.openSentences.values()];
+    if (this.open !== null) unfinished.push(this.open);
     this.open = null;
-    this.comments.splice(
-      this.comments.findIndex((each) => each.startsWith(`<w:comment w:id="${id}"`)),
-      1,
-    );
-    return text.replace(commentStart(id), "");
+    for (const id of this.openSentences.keys()) this.commented.delete(id);
+    this.openSentences.clear();
+    let out = text;
+    for (const id of unfinished) {
+      this.comments.splice(
+        this.comments.findIndex((each) => each.startsWith(`<w:comment w:id="${id}"`)),
+        1,
+      );
+      out = out.replace(commentStart(id), "");
+    }
+    return out;
+  }
+
+  commentedSentences(): FailedSentence[] {
+    return [...this.commented.values()];
   }
 
   private add(text: string): number {
@@ -400,19 +446,37 @@ export class Review {
     return id;
   }
 
-  /** What goes before a piece of text: the start of a passage of AI text's comment. */
+  /** What goes before a piece of text: the start of a sentence's comment, and of a passage of AI text's. */
   before(key: object): string {
-    if (!this.passages.starts.has(key) || this.open !== null) return "";
-    this.open = this.add(this.labels.aiText);
-    return commentStart(this.open);
+    let xml = "";
+    const sentence = this.sentences.starts.get(key);
+    if (sentence) {
+      const id = this.add(this.labels.failedSentence(sentence));
+      this.openSentences.set(sentence.id, id);
+      this.commented.set(sentence.id, sentence);
+      xml += commentStart(id);
+    }
+    if (this.passages.starts.has(key) && this.open === null) {
+      this.open = this.add(this.labels.aiText);
+      xml += commentStart(this.open);
+    }
+    return xml;
   }
 
-  /** What goes after a piece of text: the end of the passage of AI text it ends, and the comment's mark. */
+  /** What goes after a piece of text: the end of the comments it ends, with each one's mark. */
   after(key: object): string {
-    if (!this.passages.ends.has(key) || this.open === null) return "";
-    const id = this.open;
-    this.open = null;
-    return commentEnd(id, this.styles().reference);
+    let xml = "";
+    if (this.passages.ends.has(key) && this.open !== null) {
+      xml += commentEnd(this.open, this.styles().reference);
+      this.open = null;
+    }
+    const sentence = this.sentences.ends.get(key);
+    const id = sentence && this.openSentences.get(sentence.id);
+    if (sentence && id !== undefined) {
+      this.openSentences.delete(sentence.id);
+      xml += commentEnd(id, this.styles().reference);
+    }
+    return xml;
   }
 
   /** A Citation's XML with a comment on it for each of its checks that failed, when asked for. */
