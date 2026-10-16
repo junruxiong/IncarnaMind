@@ -7,10 +7,8 @@
  */
 import type { AnswerCoverage } from "../api";
 
-/** How many Documents one summary covers well. */
 export const COVERED_AT_ONCE = 8;
 
-/** A Document an Answer may cover, and how much text it has, in characters. */
 export interface SizedDocument {
   id: string;
   name: string;
@@ -19,8 +17,15 @@ export interface SizedDocument {
 
 const SUMMARY =
   /\b(?:summar(?:y|ies|i[sz]e[sd]?|i[sz]ing)|overview|digest|recap|synops[ie]s)\b|总结|概括|概述|摘要|综述|汇总/i;
-const THE_SET =
-  /\b(?:these|those|the|all(?: of)?(?: the| my)?|both|my|each of the|every one of the)\s+(?:\d+\s+|two\s+|three\s+|four\s+|five\s+|six\s+|seven\s+|eight\s+|nine\s+|ten\s+)?(?:documents|docs|papers|files|reports|articles|sources|filings|contracts|pdfs)\b|\b(?:each|every)\s+(?:document|doc|paper|file|report|article|source)\b|这些(?:文档|论文|文件|报告|文章|资料)|这(?:两|几|[二三四五六七八九十]|\d+)(?:份|篇|个)|(?:所有|全部)的?(?:文档|论文|文件|报告|资料)|每(?:一)?(?:份|篇|个)/i;
+const DOCUMENT_WORDS = "(?:documents|docs|papers|files|reports)";
+const ZH_DOCUMENT_WORDS = "(?:文档|论文|文件|报告)";
+const THE_SET = new RegExp(
+  `\\b(?:these|those|the|all(?: of)?(?: the| my)?|both|my|each of the|every one of the)\\s+(?:\\d+\\s+|two\\s+|three\\s+|four\\s+|five\\s+|six\\s+|seven\\s+|eight\\s+|nine\\s+|ten\\s+)?${DOCUMENT_WORDS}\\b|\\b(?:each|every)\\s+(?:document|doc|paper|file|report)\\b|这些${ZH_DOCUMENT_WORDS}|这(?:两|几|[二三四五六七八九十]|\\d+)(?:份|篇|个)${ZH_DOCUMENT_WORDS}|(?:所有|全部)的?${ZH_DOCUMENT_WORDS}|每一?(?:份|篇|个)${ZH_DOCUMENT_WORDS}`,
+  "i",
+);
+// "What the documents say about leverage" asks about a topic: every Document is searched for it.
+const TOPIC =
+  /\b(?:about|on|regarding|concerning)\s+(?!(?:a|the|my)?\s*(?:new\s+)?(?:page|note|mind)\b)\p{L}|关于|有关|对于/iu;
 
 const NUMBER_WORDS: Record<string, number> = {
   one: 1,
@@ -35,8 +40,10 @@ const NUMBER_WORDS: Record<string, number> = {
   四: 4,
   五: 5,
 };
-const MAIN =
-  /\b(?:the\s+)?(\d|one|two|three|four|five)\s+(?:main|most important|key|principal|core)\s+(?:documents|docs|papers|files|reports|ones|sources|articles)\b/i;
+const MAIN = new RegExp(
+  `\\b(?:the\\s+)?(\\d|one|two|three|four|five)\\s+(?:main|most important|key|principal|core)\\s+${DOCUMENT_WORDS}\\b`,
+  "i",
+);
 const THE_MAIN =
   /\bthe\s+(?:main|most important|key|principal)\s+(?:document|doc|paper|file|report)\b/i;
 const ZH_MAIN =
@@ -49,7 +56,7 @@ export function documentsAsked(question: string): { each: boolean; main: number 
   const parsed = Number.parseInt(count, 10);
   const asked = Number.isNaN(parsed) ? (NUMBER_WORDS[count.toLowerCase()] ?? null) : parsed;
   return {
-    each: SUMMARY.test(question) && THE_SET.test(question),
+    each: SUMMARY.test(question) && THE_SET.test(question) && !TOPIC.test(question),
     main: asked ?? (THE_MAIN.test(question) ? 1 : null),
   };
 }

@@ -427,17 +427,76 @@ describe("The Minds' Tools find what the model names", { timeout: 30_000 }, () =
     }
   });
 
-  // protects=a paragraph the User leaves alone by its place isn't the one changed; fails_when=only that paragraph is rewritten; no_claim=none beyond protects.
-  test("“everything but the second paragraph” rewrites the rest", async () => {
+  // protects=a request that leaves the named paragraph alone, or reaches past it, isn't narrowed to it; fails_when=only that paragraph is rewritten, the opposite of what was asked; no_claim=what a real model then changes.
+  test.each([
+    "Shorten everything but the second paragraph",
+    "Don't change the second paragraph, shorten the rest",
+    "第二段不要改，其他的缩短",
+    "Make the whole thing more formal, especially the second paragraph",
+  ])("“%s” isn't narrowed to that paragraph", async (text) => {
     const model = toolModel({ tool: "edit_mind", input: { instruction: "Shorten it" } }, "Done.");
     const { core, mind, client } = await setUp(model);
     writeMind(client, [note("Sales were really strong."), note("Margins were really thin.")]);
     await client.settled();
 
-    await ask(core, { text: "Shorten everything but the second paragraph", mindId: mind.id });
+    await ask(core, { text, mindId: mind.id });
 
     await client.settled();
     expect(shownWithChanges(client)[0]).toBe("Sales were [-really -]strong.");
+  });
+
+  // protects=a section named as <mind> shows it, marks and all, is found; fails_when=the call is refused for no such heading; no_claim=none beyond protects.
+  test.each(["### [waiting change, adds: Risks]", "## **Risks**"])(
+    "a section named “%s” is what changes",
+    async (part) => {
+      const model = toolModel(
+        { tool: "edit_mind", input: { part, instruction: "Shorten it" } },
+        "Done.",
+      );
+      const { core, mind, client } = await setUp(model);
+      writeMind(client, [
+        heading(2, "Summary"),
+        note("Sales were really strong."),
+        heading(2, "Risks"),
+        note("The supplier is very late."),
+      ]);
+      await client.settled();
+
+      await ask(core, { text: "Shorten the risks", mindId: mind.id });
+
+      await client.settled();
+      expect(shownWithChanges(client)).toEqual([
+        "Summary",
+        "Sales were really strong.",
+        "Risks",
+        "The supplier is [-very -]late.",
+      ]);
+    },
+  );
+
+  // protects=a paragraph named by a few Chinese first words, or by a start the model got wrong while the User named its place, is all that changes; fails_when=the call is refused or the other paragraphs change; no_claim=none beyond protects.
+  test.each([
+    ["把第三段缩短", "团队里有两个人请假"],
+    ["Shorten the third paragraph", "Nothing starts like this"],
+  ])("“%s” with part “%s” changes the third paragraph only", async (text, part) => {
+    const model = toolModel(
+      { tool: "edit_mind", input: { part, instruction: "Shorten it" } },
+      "Done.",
+    );
+    const { core, mind, client } = await setUp(model);
+    writeMind(client, [
+      note("Sales were really strong."),
+      note("Margins were really thin."),
+      note("团队里有两个人请假，进度 really 很慢。"),
+    ]);
+    await client.settled();
+
+    await ask(core, { text, mindId: mind.id });
+
+    await client.settled();
+    const shown = shownWithChanges(client);
+    expect(shown.slice(0, 2)).toEqual(["Sales were really strong.", "Margins were really thin."]);
+    expect(shown[2]).toContain("[-really -]");
   });
 
   // protects=read_mind gives another Mind's text, as the Mind in focus is read; fails_when=the model gets nothing, or the wrong Mind; no_claim=none beyond protects.

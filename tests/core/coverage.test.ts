@@ -25,8 +25,13 @@ describe("What a Question asks of the Documents in scope", () => {
   // protects=Questions about a topic, or one Document, don't; fails_when=one raises the search limit or caps the scope; no_claim=none beyond protects.
   test.each([
     "What do the documents say about leverage?",
+    "Overview of what the documents say about leverage",
+    "总结这些文档中关于杠杆的内容",
     "Summarise the 10-K",
     "这份文件讲了什么？",
+    "Give me an overview of the sources",
+    "总结一下这两个",
+    "每个都总结一下",
   ])("%s doesn't", (question) => {
     expect(documentsAsked(question).each).toBe(false);
   });
@@ -40,6 +45,15 @@ describe("What a Question asks of the Documents in scope", () => {
     ["比较最重要的三篇", 3],
   ])("%s asks for the main %i", (question, main) => {
     expect(documentsAsked(question).main).toBe(main);
+  });
+
+  // protects=only Document words ask for the main few; fails_when=a Question about something else cuts the search to a few Documents; no_claim=none beyond protects.
+  test.each([
+    "What are the two main sources of revenue?",
+    "Summarise the 2 main ones",
+    "List the three key articles of the treaty",
+  ])("%s asks for no main few", (question) => {
+    expect(documentsAsked(question).main).toBeNull();
   });
 
   const sized = (count: number) =>
@@ -126,6 +140,20 @@ describe("A summary of many Documents, through the core", { timeout: 60_000 }, (
     expect(answer.steps?.coverage?.rest).toHaveLength(2);
     expect(calls[0]?.system).toContain("This Answer covers the 8 largest of 10 Documents");
     expect(calls[0]?.system).not.toContain("Report 9");
+  });
+
+  // protects=a Question about a topic across many Documents searches them all, with no cap; fails_when=it covers only the largest 8; no_claim=what the model writes.
+  test("“what the documents say about” a topic searches all 10", async () => {
+    const { core, mind, scope, calls } = await withDocuments(10);
+
+    const answer = await askAssistant(core, {
+      text: "Overview of what the documents say about leverage",
+      mindId: mind.id,
+      scope,
+    });
+
+    expect(answer.steps?.coverage).toBeUndefined();
+    expect(calls[0]?.system).not.toContain("This Answer covers the 8 largest");
   });
 
   // protects=the two main Documents are the two largest, named to the model, with the rest kept to offer; fails_when=the model is asked to choose, or the rest is lost; no_claim=none beyond protects.

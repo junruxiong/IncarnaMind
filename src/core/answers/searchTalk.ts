@@ -7,16 +7,23 @@
 
 const PROCESS =
   /\b(?:passages?|search(?:es|ed|ing)?|search results?)\b[^.!?]{0,80}?\b(?:found|retrieved|returned|turned up|did not|didn't|do not|don't|does not|doesn't|covered?|include[sd]?|show(?:ed|s)?|gave|give)\b|\b(?:retrieved|found) passages?\b/i;
+// The assistant's own: in the first person, or the Passages and searches of this Answer. A
+// Document's words about retrieval ("Passages retrieved by dense retrieval…") have neither.
 const SELF =
-  /\b(?:I|my|we|our)\b|\bpassages?\b|\bthe searches\b|\b(?:the|these|your) (?:documents|files)\b/i;
+  /\b(?:I|my|me|we|our)\b|\b(?:the|these|those) (?:passages?|searches)\b|\b(?:the|these|your) (?:documents|files)\b/i;
 const LIMIT = /\bsearch(?:ing)? limit\b|\blimit (?:on|of) (?:my )?searches\b/i;
 const CHINESE =
-  /检索到的?(?:段落|内容|资料)|未检索到|没有检索到|检索结果|搜索结果|搜索(?:次数|上限|限制)|找到的段落|段落中(?:没有|未)/;
+  /检索到的?(?:段落|内容|资料)|未检索到|没有检索到|(?:检索|搜索)结果(?:中|里)?(?:没有|未|不包括|不含)|搜索(?:次数|上限|限制)|找到的段落|段落中(?:没有|未)|我们?的?(?:检索|搜索)/;
+// A cited sentence is the Document's.
+const CITED = /\[\^?\d+\]/;
 
 const SENTENCE = /[^.!?。！？\n]+(?:[.!?。！？]+["”’)]*|$)\s*/g;
 
 const aboutSearching = (sentence: string) =>
-  LIMIT.test(sentence) || CHINESE.test(sentence) || (PROCESS.test(sentence) && SELF.test(sentence));
+  !CITED.test(sentence) &&
+  (LIMIT.test(sentence) ||
+    CHINESE.test(sentence) ||
+    (PROCESS.test(sentence) && SELF.test(sentence)));
 
 /**
  * Markdown to write into a Mind without its sentences about searching, and

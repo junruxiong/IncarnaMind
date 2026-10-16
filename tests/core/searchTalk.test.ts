@@ -20,6 +20,10 @@ describe("Text written into a Mind, without talk of searching", () => {
   // protects=the Documents' own words about search, figures and lists stay as written; fails_when=content is cut; no_claim=none beyond protects.
   test.each([
     "Search results returned by the engine show a 3.5× lift [^1].",
+    "Passages retrieved by dense retrieval improve recall over BM25.",
+    "Passages retrieved by dense retrieval improve recall over BM25 [^2].",
+    "该方法提升了搜索结果的相关性。",
+    "该方法提升了搜索结果的相关性[^3]。",
     "The paper found that leverage is capped at 3.5× (clause 7.1).",
     "- Revenue rose 3% to £27.4bn.\n- Net debt was £2.6bn.",
     "| Search | Found |\n|---|---|\n| a | b |",
