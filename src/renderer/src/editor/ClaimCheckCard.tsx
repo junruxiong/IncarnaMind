@@ -13,6 +13,7 @@ import { askInAssistant } from "../conversations";
 import { useFindSources } from "../findSources";
 import { translateNow, useLanguage, useT } from "../i18n";
 import { groupsMerged } from "../layoutSlice";
+import { firstOpenOf } from "../nudges";
 import { openCited } from "../openCited";
 import { useAppStore } from "../store";
 import { useReadableQuote } from "./citationScan";
@@ -116,6 +117,11 @@ export function ClaimMark({
   }, []);
   useEffect(() => () => window.clearTimeout(timer.current), []);
 
+  const guided = useAppStore((app) => {
+    const progress = app.settings?.device.gettingStarted;
+    return state === "contradicted" && !progress?.citationChecked && firstOpenOf(progress);
+  });
+
   /** After an action the card goes, and the focus stays in the Mind. */
   const done = () => {
     dismiss();
@@ -131,6 +137,7 @@ export function ClaimMark({
         data-check={state}
         data-claim={claim.check.id}
         data-open={open || undefined}
+        data-guided={guided || undefined}
         data-addable={plus || undefined}
         className={`margin-check claim-mark ${reveal ? "margin-check--reveal" : ""}`}
         style={style}
@@ -146,7 +153,7 @@ export function ClaimMark({
         onBlur={() => hold("focus", false)}
         onClick={() => {
           setPinned(true);
-          // "Open a check in the example", in Get started.
+          // Step 1 of the first open's steps, "See a mistake it caught".
           const { examples, updateGettingStarted } = useAppStore.getState();
           if (examples?.mindId === mindId) updateGettingStarted({ citationChecked: true });
         }}

@@ -6,7 +6,7 @@ import { useAppStore } from "./store";
 
 export function useQuietAssistant(): boolean {
   const firstOpen = useFirstOpen();
-  const asked = useConversations((state) => state.list.length > 0);
+  const asked = useConversations((state) => state.list.length > 0 || state.openId !== null);
   const askedOwn = useAppStore((state) => state.settings?.device.gettingStarted.askedOwn === true);
   const focusWanted = useComposer((state) => state.focusWanted);
   const [revealed, setRevealed] = useState(false);

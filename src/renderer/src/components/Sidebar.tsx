@@ -244,6 +244,16 @@ function PlusMenu() {
           <span className="flex-1">{t("menu.newFolder")}</span>
           <span className="pl-4 text-[13px] text-ink-meta">{shortcutLabel("folder.new")}</span>
         </button>
+        <button
+          type="button"
+          role="menuitem"
+          data-testid="plus-starter-folders"
+          onClick={choose(() => void commands.run("folder.starters").catch(reportError))}
+          className={`${menuItemClass} pl-2`}
+        >
+          <FolderLineIcon className="size-4 shrink-0 text-ink-meta" />
+          <span className="flex-1">{t("folder.fromStarters")}</span>
+        </button>
         <div className={menuRuleClass} />
         <button
           type="button"

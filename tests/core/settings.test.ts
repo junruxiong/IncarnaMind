@@ -1,5 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { type Executor, type ExportPreferences, InvalidInputError } from "../../src/core";
+import {
+  type Executor,
+  type ExportPreferences,
+  type GettingStarted,
+  InvalidInputError,
+} from "../../src/core";
 import { createTempDataFolder, startCore } from "../helpers/core";
 
 /**
@@ -57,6 +62,7 @@ describe("Settings", () => {
           citationChecked: false,
           indexed: false,
           askedOwn: false,
+          askedReady: false,
           hidden: false,
         },
         skillScriptsEnabled: true,
@@ -157,6 +163,7 @@ describe("Settings", () => {
         citationChecked: false,
         indexed: false,
         askedOwn: false,
+        askedReady: false,
         hidden: false,
       },
       skillScriptsEnabled: true,
@@ -186,6 +193,28 @@ describe("Settings", () => {
     });
   });
 
+  test("Get started's progress kept before the ready Question reads it as not asked (#123)", async () => {
+    const dataDir = await createTempDataFolder();
+    const before = startCore(dataDir);
+    const kept = {
+      started: true,
+      citationChecked: true,
+      indexed: false,
+      askedOwn: true,
+      hidden: false,
+    };
+    await before.updateSettings({
+      device: { gettingStarted: kept as unknown as GettingStarted },
+    });
+    before.close();
+
+    const after = startCore(dataDir);
+    expect((await after.getSettings()).device.gettingStarted).toEqual({
+      ...kept,
+      askedReady: false,
+    });
+  });
+
   test("a width must be a number", async () => {
     const core = startCore(await createTempDataFolder());
 
@@ -206,6 +235,7 @@ describe("Settings", () => {
         citationChecked: true,
         indexed: false,
         askedOwn: false,
+        askedReady: true,
         hidden: true,
       },
       skillScriptsEnabled: false,

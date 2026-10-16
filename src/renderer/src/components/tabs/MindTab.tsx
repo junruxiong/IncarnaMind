@@ -13,7 +13,8 @@ import { useFittedName } from "../../useFittedName";
 import { useGroupsMerged } from "../../useWindowWidth";
 import { isWordFile, useWordImport } from "../../wordImport";
 import { ExportResultLine } from "../ExportResultLine";
-import { ExampleBanner, useIsExample } from "../GettingStarted";
+import { ExampleIntro } from "../FirstOpenSteps";
+import { useIsExample } from "../GettingStarted";
 import { PlusLineIcon } from "../lineIcons";
 import { MakeSkillCard } from "../MakeSkillCard";
 import { MeetingInMind } from "../MeetingInMind";
@@ -45,7 +46,7 @@ export function MindTab({ mindId }: { mindId: string }) {
         {/* Every text in it starts at one edge (styles.css, `.mind-column`). */}
         <article data-testid="mind-pane" data-mind-id={mind.id} className="mind-column">
           <div className="mind-measure">
-            {isExample && <ExampleBanner mindId={mindId} />}
+            {isExample && <ExampleIntro mindId={mindId} />}
             <MindTitle mind={mind} />
             <div ref={setCountSlot} data-testid="mind-count-slot" />
             <MeetingInMind mindId={mind.id} />
