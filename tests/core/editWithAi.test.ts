@@ -466,7 +466,7 @@ describe("Edit with AI", () => {
     ]);
   });
 
-  test("a paragraph the new text leaves out stays as it was, unless the User asked for text to go; paragraphs it adds are new Blocks", async () => {
+  test("Shorten that joins two paragraphs takes the second out; an instruction's new text that leaves one out keeps it, unless it asks for text to go; paragraphs it adds are new Blocks", async () => {
     const { core, mind, client } = await setUp(
       editingModel(({ passage }) =>
         passage.includes("Second") ? "First and second, together." : "One line.\n\nAnother line.",
@@ -478,7 +478,7 @@ describe("Edit with AI", () => {
     writeMind(client, [first, second, third]);
     await client.settled();
     const both = (action: EditWithAiInput["action"], instruction?: string): EditWithAiInput => ({
-      requestId: `edit-join-${action}`,
+      requestId: `edit-join-${action}-${++ids}`,
       mindId: mind.id,
       from: { blockId: first.attrs.id, offset: 0 },
       to: { blockId: second.attrs.id, offset: "Second paragraph.".length },
@@ -487,7 +487,24 @@ describe("Edit with AI", () => {
       ...(instruction !== undefined && { instruction }),
     });
 
-    expect(await core.editWithAi(both("shorten"))).toMatchObject({
+    expect(await core.editWithAi(both("shorten"))).not.toHaveProperty("leftOut");
+    await core.editWithAi(wholeParagraph(client, mind.id, third.attrs.id, "instruction", "Split"));
+    expect(shownWithChanges(client)).toEqual([
+      "First [-paragraph-]{+and second, together+}.",
+      "- Second paragraph.",
+      "[-Single-]{+One+} line.",
+      "+ Another line.",
+    ]);
+    await resolveChanges(client, "accept");
+    expect(shownWithChanges(client)).toEqual([
+      "First and second, together.",
+      "One line.",
+      "Another line.",
+    ]);
+
+    writeMind(client, [first, second]);
+    await client.settled();
+    expect(await core.editWithAi(both("instruction", "Make it read better"))).toMatchObject({
       kind: "proposed",
       leftOut: [
         {
@@ -499,23 +516,12 @@ describe("Edit with AI", () => {
         },
       ],
     });
-    await core.editWithAi(wholeParagraph(client, mind.id, third.attrs.id, "instruction", "Split"));
     expect(shownWithChanges(client)).toEqual([
       "First [-paragraph-]{+and second, together+}.",
       "Second paragraph.",
-      "[-Single-]{+One+} line.",
-      "+ Another line.",
     ]);
-    await resolveChanges(client, "accept");
-    expect(shownWithChanges(client)).toEqual([
-      "First and second, together.",
-      "Second paragraph.",
-      "One line.",
-      "Another line.",
-    ]);
+    await resolveChanges(client, "reject");
 
-    writeMind(client, [first, second]);
-    await client.settled();
     const asked = await core.editWithAi(both("instruction", "Join them and delete the rest"));
     expect(asked).not.toHaveProperty("leftOut");
     expect(shownWithChanges(client)).toEqual([
@@ -1747,6 +1753,37 @@ describe("An edit the User asked for (#880)", () => {
       expect.stringContaining("{+"),
       THIRD,
     ]);
+  });
+
+  test("in Chinese, a paragraph rewritten between two kept as they were changes that paragraph, not its neighbour", async () => {
+    const lines = [
+      "我们周二和港务局开会，讨论新的潮位计。",
+      "说实话旧的潮位计挺乱的，老是坏，大家都不太信那些数了。",
+      "港务局下个月会就预算投票。",
+    ];
+    const formal = "现有潮位计运行状况不稳定，故障频发，各方对其采集数据的可靠性普遍存疑。";
+    const { core, mind, client } = await setUp(
+      editingModel(() => [lines[0], formal, lines[2]].join("\n\n")),
+    );
+    const blocks = lines.map((line) => paragraph(text(line)));
+    writeMind(client, blocks);
+    await client.settled();
+
+    const result = await core.editWithAi({
+      requestId: `asked-${++ids}`,
+      mindId: mind.id,
+      from: { blockId: blocks[0]?.attrs.id ?? "", offset: 0 },
+      to: { blockId: blocks[2]?.attrs.id ?? "", offset: lines[2]?.length ?? 0 },
+      text: lines.join("\n"),
+      action: "instruction",
+      instruction: "把第二段改得更正式，其他段落保持不变",
+    });
+
+    expect(result).toMatchObject({ kind: "proposed" });
+    expect(result).not.toHaveProperty("held");
+    expect(result).not.toHaveProperty("leftOut");
+    await resolveChanges(client, "accept");
+    expect(shownWithChanges(client)).toEqual([lines[0], formal, lines[2]]);
   });
 
   test('an explicit "delete…" takes out what the new text leaves out, and applies', async () => {

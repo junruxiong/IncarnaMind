@@ -49,6 +49,7 @@ import {
   type ProposalRef,
   type TextPlace,
 } from "../api";
+import { mapsOnto } from "../edits/applies";
 import { diffSteps, hunksOf, type Step, splitWords } from "./diff";
 
 /** The Blocks whose text can be edited: Notes' and Answers' paragraphs and headings. */
@@ -995,13 +996,14 @@ const targetOf = (tokens: readonly OldToken[]) => tokens.map((token) => token.ta
 interface CitationNotes {
   removed: Set<string>;
   added: Set<string>;
-  characters: { removed: number; added: number };
+  /** Characters: what the old text loses, what the new text has that the old hadn't, and all the new text. */
+  characters: { removed: number; added: number; written: number };
 }
 
 const notesOf = (): CitationNotes => ({
   removed: new Set(),
   added: new Set(),
-  characters: { removed: 0, added: 0 },
+  characters: { removed: 0, added: 0, written: 0 },
 });
 
 const lengthOf = (tokens: readonly { text?: string }[]) =>
@@ -1086,15 +1088,33 @@ function proposalsOf(request: string, newId: () => string) {
   return { proposals, next };
 }
 
-/** The words of a run, for telling how alike two runs are: no spaces or punctuation, any case. */
-const wordsOf = (tokens: readonly { key: string; text?: string }[]) =>
-  tokens.flatMap((token) =>
-    token.text === undefined
-      ? [token.key.replace(/\*$/, "")]
-      : /[\p{L}\p{N}]/u.test(token.text)
-        ? [token.text.toLowerCase()]
-        : [],
-  );
+const HAN = /^\p{Script=Han}$/u;
+
+/**
+ * The words of a run, for telling how alike two runs are: no spaces or
+ * punctuation, any case. Chinese runs count by pairs of characters, as any two
+ * Chinese paragraphs share many single ones.
+ */
+function wordsOf(tokens: readonly { key: string; text?: string }[]): string[] {
+  const words: string[] = [];
+  let run: string[] = [];
+  const endRun = () => {
+    if (run.length === 1) words.push(run[0] ?? "");
+    for (let index = 1; index < run.length; index++) words.push(`${run[index - 1]}${run[index]}`);
+    run = [];
+  };
+  for (const token of tokens) {
+    if (token.text !== undefined && HAN.test(token.text)) {
+      run.push(token.text);
+      continue;
+    }
+    endRun();
+    if (token.text === undefined) words.push(token.key.replace(/\*$/, ""));
+    else if (/[\p{L}\p{N}]/u.test(token.text)) words.push(token.text.toLowerCase());
+  }
+  endRun();
+  return words;
+}
 
 /** How alike two runs of words are, from 0 to 1: the share of their words they have in common. */
 function likeness(old: readonly OldToken[], next: readonly NewToken[]): number {
@@ -1259,7 +1279,6 @@ export function createRewriteStream(
   let unlike = 0;
   /** Two were like none: the text is written anew, and each pairs in order. */
   let anew = false;
-  let mapped = false;
   const kept: Segment[] = [];
 
   const remove = (gone: readonly Segment[]) => {
@@ -1286,7 +1305,7 @@ export function createRewriteStream(
   const pairWith = (paragraph: NewParagraph, index: number) => {
     const segment = segments[index];
     if (!segment) return;
-    if (likeness(segment.tokens, paragraph.tokens) >= UNKNOWN_KIND_LIKENESS) mapped = true;
+    notes.characters.written += lengthOf(paragraph.tokens);
     removeUpTo(index);
     writeHunks(segment, paragraph.tokens, next, newId, notes);
     place = { element: segment.element, kind: segment.kind, side: "after" };
@@ -1298,6 +1317,7 @@ export function createRewriteStream(
     const kind = paragraph.kind ?? kindByLikeness(segments, paragraph);
     for (const token of paragraph.tokens) noteCitation(notes.added, token);
     notes.characters.added += lengthOf(paragraph.tokens);
+    notes.characters.written += lengthOf(paragraph.tokens);
     const added = addBlock(place, kind, paragraph.tokens, next(""), newId);
     place = { element: added, kind, side: "after" };
   };
@@ -1305,7 +1325,14 @@ export function createRewriteStream(
   /** The paragraphs held, written: paired with the selection's from `at` to `to` as `pairUp` pairs them. */
   const writeHeld = (to: number) => {
     const from = at;
-    const paired = pairUp(segments.slice(from, to), held);
+    const between = segments.slice(from, to);
+    // As many new paragraphs as old ones between two that held their place: each rewrites its own.
+    const inPlace =
+      between.length === held.length &&
+      held.every(
+        (paragraph, index) => paragraph.kind === null || paragraph.kind === between[index]?.kind,
+      );
+    const paired = inPlace ? held.map((_, index) => index) : pairUp(between, held);
     for (const [index, paragraph] of held.entries()) {
       const pair = paired[index];
       if (pair === null || pair === undefined) addNew(paragraph);
@@ -1314,14 +1341,20 @@ export function createRewriteStream(
     held.length = 0;
   };
 
-  /** The first of the selection's paragraphs from `at` much like `paragraph`, or null. */
+  /** The selection's paragraph from `at` most like `paragraph`, when much like it; else null. */
   const muchLike = (paragraph: NewParagraph): number | null => {
+    let best: number | null = null;
+    let most = MOVED_LIKENESS;
     for (let index = at; index < segments.length; index++) {
       const segment = segments[index] as Segment;
       if (paragraph.kind !== null && paragraph.kind !== segment.kind) continue;
-      if (likeness(segment.tokens, paragraph.tokens) >= MOVED_LIKENESS) return index;
+      const alike = likeness(segment.tokens, paragraph.tokens);
+      if (alike > most || (best === null && alike === most)) {
+        best = index;
+        most = alike;
+      }
     }
-    return null;
+    return best;
   };
 
   const take = (paragraph: NewParagraph) => {
@@ -1386,6 +1419,7 @@ export function createRewriteStream(
             addNew(paragraph);
             continue;
           }
+          notes.characters.written += lengthOf(paragraph.tokens);
           writeHunks(segment, paragraph.tokens, next, newId, notes);
           place = { element: segment.element, kind: segment.kind, side: "after" };
           at += 1;
@@ -1405,7 +1439,7 @@ export function createRewriteStream(
 
     /** Characters removed count the paragraphs it left out. */
     extent: () => ({
-      mapped,
+      mapped: mapsOnto(notes.characters.written - notes.characters.added, notes.characters.written),
       removed:
         notes.characters.removed + kept.reduce((sum, segment) => sum + lengthOf(segment.tokens), 0),
       added: notes.characters.added,

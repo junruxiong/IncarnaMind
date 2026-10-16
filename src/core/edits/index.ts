@@ -61,6 +61,7 @@ import {
   proposeAfter,
   type ReadResult,
   type RewritePlace,
+  type RewriteStream,
   readSelection,
   type Selection,
   takeBackForRegenerate,
@@ -370,6 +371,7 @@ export function createEdits(options: EditsOptions) {
     const request = randomUUID();
     const blocks = fork.getXmlFragment(MIND_CONTENT_FIELD);
     const { requestId } = hooks;
+    const removing = asksToRemove(ask.action, ask.instruction);
     // Explain's few sentences go in once they are all there.
     const stream = explain
       ? null
@@ -380,7 +382,7 @@ export function createEdits(options: EditsOptions) {
           freshCitations(selection, options.recheck),
           {
             leftOut:
-              requestId !== undefined && !asksToRemove(ask.action, ask.instruction)
+              requestId !== undefined && ask.action === "instruction" && !removing
                 ? "keep"
                 : "remove",
           },
@@ -422,6 +424,13 @@ export function createEdits(options: EditsOptions) {
         ...(leftOut.length > 0 && { leftOut }),
       };
     };
+    const holdsBack = (written: RewriteStream) =>
+      waitsForUser({
+        action: ask.action,
+        removing,
+        ...written.extent(),
+        selected: selection.characters,
+      });
     const appliesNow = () =>
       explain || ask.action === "translate" || (stream?.extent().mapped ?? false);
     let wrote = false;
@@ -517,7 +526,10 @@ export function createEdits(options: EditsOptions) {
     if (signal.aborted && closing) return ended({ kind: "cancelled" });
     if (signal.aborted && !refused) {
       // Stopped: what is finished stays.
-      if (stream) step(() => stream.stop());
+      if (stream) {
+        step(() => stream.stop());
+        held = requestId !== undefined && holdsBack(stream);
+      }
       if (!refused) return ended(wrote ? arrived() : { kind: "cancelled" });
     }
     if (failure !== null && !refused) {
@@ -545,11 +557,7 @@ export function createEdits(options: EditsOptions) {
       const more = stream.write(reply, true);
       const finished = stream.finish();
       if (requestId !== undefined) {
-        held = waitsForUser({
-          action: ask.action,
-          ...stream.extent(),
-          selected: selection.characters,
-        });
+        held = holdsBack(stream);
         if (held) stream.removeLeftOut();
       }
       // Written before the reason came: recorded again with it.
