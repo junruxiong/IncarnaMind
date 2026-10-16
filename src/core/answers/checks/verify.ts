@@ -253,6 +253,8 @@ export function createVerify(options: VerifyOptions) {
           evidence: null,
           says: null,
           calculation: null,
+          citedCaseUnchecked: false,
+          citedCaseFound: false,
           scope: check.marked,
           versions: [],
           excluded: [],

@@ -2413,6 +2413,12 @@ export interface EvidenceSearchResult {
 export interface WebPageInfo {
   /** The address it was saved from: http or https, without a fragment. */
   address: string;
+  /**
+   * Who saved it: "user" (Add a web page, Save page, a source the User chose to add) or "search"
+   * (read by an Answer's web search). A page from before this was kept reads as "search" until
+   * the User saves its address again.
+   */
+  origin: WebPageOrigin;
   /** The site's name, as the page gives it, else its host. */
   siteName: string;
   author: string | null;
@@ -2430,6 +2436,8 @@ export interface WebPageInfo {
   /** The last fetch kept as it looks; null when it wasn't asked to be. */
   look: WebPageLook | null;
 }
+
+export type WebPageOrigin = "user" | "search";
 
 /** What `saveWebPage` takes. */
 export interface SaveWebPageInput {
@@ -4322,6 +4330,13 @@ export type ClaimCheckResult =
       says: string | null;
       /** A figure worked out that decided it; null when a Passage did. */
       calculation: ClaimCalculation | null;
+      /**
+       * The sentence cites a court decision that none of the Documents holds: the citation itself
+       * isn't checked, whatever else backs the sentence.
+       */
+      citedCaseUnchecked: boolean;
+      /** The Passage that decides it is in the opinion of the court decision it cites, among the Documents. */
+      citedCaseFound: boolean;
       /** The versions of the Documents it read, each once. */
       versions: CheckedVersion[];
       excluded: LeftOutDocument[];
@@ -4400,6 +4415,8 @@ export interface ClaimCheckAttributes {
   says: string | null;
   /** A figure worked out that decided it; null when a Passage did. */
   calculation: ClaimCalculation | null;
+  citedCaseUnchecked: boolean;
+  citedCaseFound: boolean;
   scope: ClaimCheckScope;
   versions: CheckedVersion[];
   excluded: LeftOutDocument[];

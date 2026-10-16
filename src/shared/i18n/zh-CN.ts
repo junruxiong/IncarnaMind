@@ -559,6 +559,13 @@ export const zhCN = {
   "claim.unsupported.inFolder": "“{folder}”中没有内容提到这一点。",
   "claim.unsupported.anywhere": "你的文档中没有内容提到这一点。",
   "claim.unsupported.differs": "你的文档里是另一种说法：",
+  "claim.courtDecision.title": "本句引用了法院判决。",
+  "claim.courtDecision.body":
+    "IncarnaMind 无法核对这个判决是否存在、是否这样说。依赖它之前，请在你使用的法律数据库中查一下。",
+  "claim.citedCaseUnchecked":
+    "本句引用的判决不在你的文档中，因此尚未核对。依赖它之前，请在你使用的法律数据库中查一下。",
+  "claim.courtDecision.held":
+    "本句引用了法院判决。引用的文字已在你保存的判决书副本中找到（{document}，{location}）。之后有没有法院推翻或修改这个判决，尚未核对；依赖它之前，请在你使用的法律数据库中查一下。",
   "claim.unsupported.ownWorkings": "只有你自己的工作文件这样写。",
   "claim.fixSentence": "修改这句话",
   "claim.findSources": "查找资料",
@@ -1209,6 +1216,7 @@ export const zhCN = {
   "webPages.copyAddress": "复制网址",
   "webPages.menuTitle": "网页",
   "webPages.fetched": "抓取于 {date}",
+  "webPages.source": "保存的网页 · {address} · 保存于 {date}",
   "webPages.drop": "松开即可保存网页，也可以拖到侧边栏的文件夹上",
   "status.alreadyAdded.one": "1 个已存在",
   "status.alreadyAdded.other": "{count} 个已存在",
@@ -2890,6 +2898,7 @@ export const zhCN = {
     "与文档矛盾：根据文档算出 {shown}，句子里写的是 {stated}。",
   "export.comment.sentence.contradicted.plain": "与文档矛盾。",
   "export.comment.sentence.unsupported": "无依据：你的文档里没有这样写。",
+  "export.comment.sentence.citedCaseUnchecked": "所引判决尚未核对：不在文档中。",
   "export.comment.sentence.unsupported.folder": "无依据：“{folder}”里没有这样写。",
   "export.comment.sentence.unsupported.differs":
     "无依据：你的文档里是另一种说法（“{quote}”，{source}）",
