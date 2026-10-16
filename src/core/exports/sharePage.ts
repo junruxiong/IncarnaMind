@@ -50,6 +50,8 @@ a.cite:focus-visible,.card-close:focus-visible{outline:2px solid var(--accent);o
 .card-body{margin-top:10px;padding:12px 14px;border:1px solid var(--rule);border-radius:6px;background:#fbfbfc;color:var(--ink-answer)}
 .card-passage{margin:0;font-family:var(--serif);font-size:14px;line-height:22px;white-space:pre-line}
 mark.quote{background:var(--success-wash);color:var(--ink)}
+.card-picture{margin-top:10px;overflow:hidden;border:1px solid var(--rule);border-radius:6px;background:#fff}
+.card-picture img{display:block;width:100%;height:auto}
 .card-cells{width:100%;margin:0;border-collapse:collapse;font-size:12.5px;line-height:18px;font-variant-numeric:tabular-nums}
 .card-cells th,.card-cells td{padding:4px 6px;border:1px solid var(--rule);text-align:left;vertical-align:top}
 .card-cells th{background:var(--frame);font-weight:600;color:var(--ink-secondary)}
@@ -313,7 +315,7 @@ function cardHtml(number: number, card: CitationCard, date: string, t: Translate
       ? `<p class="card-verdict">${escapeHtml(t("citation.changedAfterCited"))}</p>`
       : "",
     "</div>",
-    contentHtml(card.content, t),
+    contentHtml(card.content, card.spoken, t),
     `<p class="card-swipe">${escapeHtml(t("share.card.swipe"))}</p>`,
     "</section>",
   ].join("");
@@ -328,7 +330,7 @@ const runsHtml = (runs: readonly CardRun[]) =>
 
 const small = (text: string) => `<p class="card-small">${escapeHtml(text)}</p>`;
 
-function contentHtml(content: CardContent, t: Translate): string {
+function contentHtml(content: CardContent, spoken: string, t: Translate): string {
   const part = small(t("share.card.part"));
   switch (content.kind) {
     case "passage": {
@@ -362,6 +364,12 @@ function contentHtml(content: CardContent, t: Translate): string {
     case "quote":
       if (!content.text) return "";
       return `<div class="card-body"><p class="card-passage">“${escapeHtml(content.text)}”</p></div>${content.scan ? small(t("citation.scan")) : ""}`;
+    case "picture": {
+      const data = Buffer.from(content.data).toString("base64");
+      const alt = t("share.card.pictureAlt", { source: spoken });
+      const note = t(content.slide ? "share.card.slidePicture" : "share.card.pagePicture");
+      return `<div class="card-picture"><img src="data:image/webp;base64,${data}" width="${Math.round(content.width / 2)}" height="${Math.round(content.height / 2)}" alt="${escapeHtml(alt)}"></div>${small(note)}${content.scan ? small(t("citation.scan")) : ""}`;
+    }
     case "missing":
       return `${content.quote ? `<div class="card-body"><p class="card-passage">“${escapeHtml(content.quote)}”</p></div>` : ""}${small(t("share.card.missing"))}`;
   }
