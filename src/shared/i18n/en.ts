@@ -1623,7 +1623,11 @@ export const en = {
   "providers.form.keyGuide": "How do I get one?",
   "providers.form.getKey": "Get a key",
   "providers.form.planCredits": "Learn more",
-  "providers.form.dataUse": "What it does with your data.",
+  "providers.form.dataUse": "{summary}",
+  "providers.form.terms": "Terms",
+  "providers.form.details": "Details",
+  "providers.form.keyPage": "Open {name}'s key page",
+  "providers.form.modelsAndPrices": "Models and prices",
   "providers.form.baseUrl": "Server URL",
   "providers.form.baseUrlHint":
     "For example https://api.deepseek.com/v1 or http://localhost:1234/v1",
