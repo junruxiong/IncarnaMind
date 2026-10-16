@@ -42,17 +42,43 @@ describe("Speech kept as one line of words (#981)", () => {
     expect(cleanSpeech("\u0001\u0002\n")).toBe("");
   });
 
+  test("a break beside another control character still keeps the words apart", () => {
+    expect(cleanSpeech("launch\n\u0007moves")).toBe("launch moves");
+    expect(cleanSpeech("launch\u0007\nmoves")).toBe("launch moves");
+    expect(cleanSpeech("launch\u0000\t\u0001moves\r\u007f\nto")).toBe("launch moves to");
+    expect(cleanSpeech("发布\n\u0000日期")).toBe("发布 日期");
+  });
+
+  test("a control character between two letters with no break is left out", () => {
+    expect(cleanSpeech("launch\u0007moves")).toBe("launchmoves");
+  });
+
   test("text with no control characters is left as it is", () => {
     expect(cleanSpeech("  Plain words, 你好。 ")).toBe("Plain words, 你好。");
   });
 });
 
 describe("The words after the model's header (#981)", () => {
-  test("the header the model wrote before them is left out, wherever it begins", () => {
+  test("the header at the start is taken off, with a stray token the model began with", () => {
+    expect(wordsOnly("language English<asr_text>Local authorities are warning.")).toBe(
+      "Local authorities are warning.",
+    );
     expect(wordsOnly("提uggestion\nlanguage English<asr_text>Local authorities are warning.")).toBe(
       "Local authorities are warning.",
     );
+    expect(wordsOnly("language Chinese<asr_text>发布日期推迟了。")).toBe("发布日期推迟了。");
     expect(wordsOnly("language English<asr_text>")).toBe("");
+  });
+
+  test("a header further in leaves the words around it, which can't be told from it", () => {
+    const said =
+      "Local authorities are warning residents language English<asr_text>to stay indoors.";
+    expect(wordsOnly(said)).toBe(said);
+    const twice = "language English<asr_text>First words. language English<asr_text>More words.";
+    expect(wordsOnly(twice)).toBe("First words. language English<asr_text>More words.");
+    expect(wordsOnly("Hello there\nlanguage English<asr_text>and more.")).toBe(
+      "Hello there\nlanguage English<asr_text>and more.",
+    );
   });
 
   test("words with no header are as they are", () => {
