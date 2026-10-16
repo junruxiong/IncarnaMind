@@ -685,15 +685,15 @@ export const en = {
   "mindCheck.ask.folder":
     "Check this Mind’s {count} sentences against this Folder’s Documents? {estimate}",
   "mindCheck.ask.folder.range":
-    "Check the claims in this Mind, about {least}–{most} sentences, against this Folder’s Documents? {estimate}",
+    "Check about {least}–{most} claims in this Mind against this Folder’s Documents? {estimate}",
   "mindCheck.ask.folder.about":
-    "Check the claims in this Mind, about {count} sentences, against this Folder’s Documents? {estimate}",
+    "Check about {count} claims in this Mind against this Folder’s Documents? {estimate}",
   "mindCheck.ask.all.one": "Check this Mind’s sentence against your Documents? {estimate}",
   "mindCheck.ask.all": "Check this Mind’s {count} sentences against your Documents? {estimate}",
   "mindCheck.ask.all.range":
-    "Check the claims in this Mind, about {least}–{most} sentences, against your Documents? {estimate}",
+    "Check about {least}–{most} claims in this Mind against your Documents? {estimate}",
   "mindCheck.ask.all.about":
-    "Check the claims in this Mind, about {count} sentences, against your Documents? {estimate}",
+    "Check about {count} claims in this Mind against your Documents? {estimate}",
   "mindCheck.check": "Check",
   "mindCheck.cancel": "Not now",
   "verify.command": "Verify a document…",

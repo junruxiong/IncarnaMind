@@ -9,8 +9,8 @@ import {
   createDataFolder,
   dismissChatSetup,
   launchApp,
-  motionSettled,
   mindWrittenBefore,
+  motionSettled,
   pointAndClick,
   removeDataFolder,
   setLanguage,
@@ -133,7 +133,7 @@ test("Check this Mind from ⌘K: the estimate first on a cloud model, then every
   // sentences, the 15 whose words read as claims are likely checked, and are.
   const ask = window.getByTestId("mind-check-ask");
   await expect(ask).toContainText(
-    "Check the claims in this Mind, about 15–20 sentences, against your Documents? About $",
+    "Check about 15–20 claims in this Mind against your Documents? About $",
   );
   await expect(window.getByTestId("palette-search")).toBeHidden();
   await motionSettled(window);
