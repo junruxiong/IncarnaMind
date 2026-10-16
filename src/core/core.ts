@@ -17,6 +17,7 @@ import { mindModelOf } from "../shared/mindModel";
 import { mindName } from "../shared/naming";
 import { paperFor } from "../shared/printDocument";
 import { resolveProposals, restoreRevised } from "../shared/proposals";
+import { isCitableWork } from "../shared/references";
 import { RESEARCH_TASK } from "../shared/research";
 import { wordFileOf } from "../shared/wordFiles";
 import { logActivity, silentLogger } from "./activityLog";
@@ -96,6 +97,7 @@ import { createVersionRetention, type VersionRetention } from "./documents/reten
 import { BUILT_IN_TEXT_RECOGNITION_MODEL, createTextRecognitionModel } from "./documents/scan";
 import type { WindowedPassage } from "./documents/search";
 import { tunedSearch } from "./documents/searchTuning";
+import { LANGUAGE_SAMPLE, writtenInChinese } from "./documents/textLanguage";
 import { findUnreadDocuments } from "./documents/unread";
 import { createViewing } from "./documents/viewing";
 import { fsWatchFolder } from "./documents/watcher";
@@ -152,7 +154,7 @@ import {
   parseIds,
   parseMindId,
 } from "./minds";
-import { firstLineOf, readBlocks, theirChangesReading } from "./mindText";
+import { firstLineOf, readBlocks, textStart, theirChangesReading } from "./mindText";
 import { createNoteAdding, insertBlocks } from "./noteAdding";
 import { createOutputFiles } from "./outputFiles";
 import { createPrivacy, type NetworkTrafficRegistry } from "./privacy";
@@ -1477,22 +1479,33 @@ export function createCore(adapters: CoreAdapters): Core {
     reportError: (error) => console.error(error),
   });
 
+  const liveDocument = (id: string): Document | undefined => {
+    try {
+      return documents.get(id);
+    } catch (error) {
+      if (error instanceof NotFoundError) return undefined;
+      throw error;
+    }
+  };
   // Citation styles (#289): formatted on their own thread, from the Documents' reference records.
   const citationStyles = createCitationStyles({
     folder: adapters.paths.citationStyles,
-    document: (id): Document | undefined => {
-      try {
-        return documents.get(id);
-      } catch (error) {
-        if (error instanceof NotFoundError) return undefined;
-        throw error;
-      }
-    },
+    document: liveDocument,
   });
   const mindCitationStyle = (mindId: string): MindCitationStyle => {
     const { folderId } = minds.get(mindId);
+    const { chineseText, cited } = content.read(mindId, (blocks) => {
+      const versions: CitedVersions = new Map();
+      addCitedVersions(blocks, versions);
+      return {
+        chineseText: writtenInChinese(textStart(blocks, LANGUAGE_SAMPLE)),
+        cited: [...versions.keys()],
+      };
+    });
+    const citesWorks = cited.some((id) => isCitableWork(liveDocument(id)?.reference ?? null));
+    const context = { language: settings.get().language, chineseText, citesWorks };
     return content.readSettings(mindId, (mindSettings) => ({
-      style: citationStyleIn(mindSettings),
+      style: citationStyleIn(mindSettings, context),
       chosen: chosenCitationStyle(mindSettings) !== null,
       folderDefault: folderId === null ? null : library.citationStyle(folderId),
     }));
@@ -1862,6 +1875,7 @@ export function createCore(adapters: CoreAdapters): Core {
     now,
     tags,
     enabled: () => !organizing(),
+    stopped: (id) => library.taggingStoppedFor(id),
     canRun: async () => {
       const classifier = await tagging.resolve();
       if (!classifier) return false;
@@ -2903,6 +2917,7 @@ export function createCore(adapters: CoreAdapters): Core {
     updateReference: async (documentId, patch) => references.update(documentId, patch),
     restoreReference: async (documentId, before, fields) =>
       references.restore(documentId, before, fields),
+    confirmReference: async (documentId) => references.confirm(documentId),
     lookUpReference: (documentId) => references.lookUp(documentId),
     listSourceProviders: () => sources.list(),
     setSourceProviderKey: (providerId, key) => sources.setKey(providerId, key),
@@ -3340,6 +3355,19 @@ export function createCore(adapters: CoreAdapters): Core {
     retagDocuments: async (documentIds) => {
       if (organizing()) return library.classify(documentIds);
       tagger.retag(documentIds);
+    },
+    stopTagging: async () => {
+      const places = library.taggingPlaces();
+      library.setTaggingStopped(places, true);
+      tagger.resume();
+      return places;
+    },
+    setTaggingWithAi: async (folderId, on) => {
+      if ((folderId !== null && typeof folderId !== "string") || typeof on !== "boolean") {
+        throw new InvalidInputError({ key: "error.tagging.place" });
+      }
+      library.setTaggingStopped([folderId], !on);
+      tagger.resume();
     },
 
     getJevSettings: () => jev.status(),

@@ -103,6 +103,8 @@ export type ExportResult =
       tracked: number;
       /** The header and footer kept in a Word file though deleted from the Mind (#105). */
       kept: ("header" | "footer")[];
+      /** The Documents whose entries are too thin to cite, marked so in the file. */
+      needsDetails: string[];
       /** The first save, which took Documents › IncarnaMind: the line says where (D209). */
       defaulted: boolean;
     }
@@ -167,6 +169,7 @@ function savedResult(
       checks: "sentenceChecks" in saved ? saved.sentenceChecks : NO_CHECKS,
       tracked: "trackedChanges" in saved ? saved.trackedChanges : 0,
       kept: "word" in saved ? (saved.word?.keptFurniture ?? []) : [],
+      needsDetails: "needsDetails" in saved ? saved.needsDetails : [],
       defaulted: saved.file.defaulted,
     };
   }
@@ -261,6 +264,20 @@ export function exportAgain(
 ): Promise<void> {
   if (!isCheckRecord(kind)) return exportMind(mindId, kind, first);
   return exportCheckRecord(mindId, kind === "check-record-pdf" ? "pdf" : "csv", first);
+}
+
+/**
+ * Shows the first entry of the Mind's References too thin to cite, as the result line's Show
+ * does: scrolled to the middle, its "Needs details" focused, which opens its "Cite as" on Enter.
+ */
+export function revealNeedsDetails(mindId: string): boolean {
+  const needs = document.querySelector<HTMLElement>(
+    `article[data-mind-id="${CSS.escape(mindId)}"] [data-testid="reference-entry"][data-needs-details] [data-testid="reference-needs-details"]`,
+  );
+  if (!needs) return false;
+  needs.scrollIntoView({ block: "center" });
+  needs.focus();
+  return true;
 }
 
 /**

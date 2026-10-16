@@ -72,23 +72,51 @@ function Line({ line }: { line: UndoLineState }) {
     );
   }
 
-  const { message } = line.change;
+  const { message, also } = line.change;
+  const undo = (
+    <button
+      type="button"
+      data-testid="undo-action"
+      aria-label={t("move.undoLabel", { message })}
+      title={t("undo.title", { shortcut: shortcutLabel("edit.undo") })}
+      onClick={() => void useUndo.getState().undo()}
+      className={actionClass}
+    >
+      {t("move.undo")}
+    </button>
+  );
+  if (also) {
+    // A longer line, said for the User rather than by them: all of it, its actions under it.
+    return (
+      <div ref={shown} className={`${lineClass} flex-col`}>
+        <span data-testid="undo-message" className="min-w-0 break-words">
+          {message}
+        </span>
+        <span className="-ml-1 flex items-center gap-1">
+          <button
+            type="button"
+            data-testid={also.testId}
+            onClick={() => {
+              useUndo.getState().dismiss();
+              also.run();
+            }}
+            className={actionClass}
+          >
+            {also.label}
+          </button>
+          <span aria-hidden="true">·</span>
+          {undo}
+        </span>
+      </div>
+    );
+  }
   return (
     <div ref={shown} className={`${lineClass} items-center`}>
       <span data-testid="undo-message" title={message} className="min-w-0 truncate">
         {message}
       </span>
       <span aria-hidden="true">·</span>
-      <button
-        type="button"
-        data-testid="undo-action"
-        aria-label={t("move.undoLabel", { message })}
-        title={t("undo.title", { shortcut: shortcutLabel("edit.undo") })}
-        onClick={() => void useUndo.getState().undo()}
-        className={actionClass}
-      >
-        {t("move.undo")}
-      </button>
+      {undo}
     </div>
   );
 }
