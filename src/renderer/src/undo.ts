@@ -170,6 +170,11 @@ export const useUndo = create<UndoState>()((set, get) => {
   };
 });
 
+export const useAnswerLine = (answerId: string) =>
+  useUndo((state) =>
+    state.line?.change?.shownAt === answerUndoPlace(answerId) ? state.line : null,
+  );
+
 /**
  * Whether a key goes to something the User types in, whose ⌘Z is its own: a
  * field that takes text, or editable text such as the note. A checkbox or a
