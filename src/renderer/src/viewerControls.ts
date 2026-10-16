@@ -4,10 +4,12 @@
  * page URL): open a Document at a page range and quote, as a Citation does
  * from the group the User is in, and, not about the viewer, answer the Skill
  * picker without the system's dialog, add files and folders by path as a drop
- * would, or wait for, slow down and look at what moves, or read the command
- * registry as data.
+ * would, or wait for, slow down and look at what moves, shorten how long an Answer
+ * is silent before its line says how long it takes, or read the command registry
+ * as data.
  */
 import type { TestHooks } from "../../shared/testHooks";
+import { setSilentWaitMs } from "./answerWaitWords";
 import { menuEntries, menuKinds } from "./commands/menus";
 import { COMMAND_GROUPS, commands } from "./commands/registry";
 import { findable } from "./finding";
@@ -51,6 +53,7 @@ export function installTestHooks(): void {
       ),
       found: findable.all().map((kind) => kind.kind),
     }),
+    setSilentWaitMs,
     motionRunning,
     setMotionSpeed,
     leavingCopies,
