@@ -8,6 +8,7 @@ import {
   addDocuments,
   addToNote,
   askInAssistant,
+  clickEndOf,
   createDataFolder,
   dismissChatSetup,
   focusEditor,
@@ -540,8 +541,7 @@ test("copying a paragraph with the assistant's changes waiting gives the text as
   await expect(note).toHaveText("The tides here are powerful and really regular.");
 
   // Shorten drops "really": waiting, the copy still has it; accepted, it doesn't.
-  await focusEditor(window, editor);
-  await window.keyboard.press("ArrowRight");
+  await clickEndOf(window, note);
   await askTheAssistant(window, "Shorten this");
   await expect(note.locator("del.proposal-delete")).toHaveText("really ");
   const shortening = await copyParagraph();

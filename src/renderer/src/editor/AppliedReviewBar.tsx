@@ -8,6 +8,8 @@ import { useBarOver } from "./ProposalBars";
 
 /** How long the bar stays once the pointer leaves its change, so it can reach the bar. */
 const LEAVE_MS = 300;
+/** How long the pointer rests on a change before the bar moves to it, so passing over one on the way doesn't. */
+const REST_MS = 150;
 
 /** "Change 1 of 3 · Restore original" over an applied edit's change shown again (#880). */
 export function AppliedReviewBar({ editor }: { editor: Editor }) {
@@ -36,8 +38,10 @@ export function AppliedReviewBar({ editor }: { editor: Editor }) {
       const target = event.target instanceof Element ? event.target : null;
       const index = target?.closest("[data-applied-change]")?.getAttribute("data-applied-change");
       clearTimeout(timer);
-      if (index) setHovered(Number(index));
-      else timer = setTimeout(() => !over.current && setHovered(null), LEAVE_MS);
+      if (over.current) return;
+      timer = index
+        ? setTimeout(() => setHovered(Number(index)), REST_MS)
+        : setTimeout(() => !over.current && setHovered(null), LEAVE_MS);
     };
     dom.addEventListener("mousemove", move);
     return () => {
