@@ -1653,6 +1653,7 @@ export const en = {
   "providers.form.needsKey": "Paste the key first.",
   "providers.form.needsAddress": "Enter the server's address first.",
   "providers.form.needsField": "Fill in {field} first.",
+  "providers.form.needsServer": "Start {provider} first.",
   "providers.form.needsModel": "Choose a model first.",
   "providers.form.badKey": "This key isn’t valid for {provider}. Check it on {site}.",
 
@@ -1691,6 +1692,15 @@ export const en = {
   "providers.ollama.use": "Use local models ({model}, 3.3 GB)",
   "providers.ollama.pulling": "Downloading {model} (3.3 GB)… This can take a while.",
   "providers.ollama.checkAgain": "Check again",
+  "providers.local.checking": "Looking for {provider} on this computer…",
+  "providers.local.running":
+    "{provider} is running on this computer. Your Questions and Documents stay on it.",
+  "providers.local.notRunning":
+    "Nothing answers at {address}. Start {provider} and its local server, or change the address.",
+  "providers.local.runningAway": "{provider} answers at {address}.",
+  "providers.local.also": "Also works with",
+  "providers.local.rowRunning": "Running on this computer.",
+  "providers.local.rowNotRunning": "Not running yet.",
   "providers.ollama.get": "Get Ollama",
 
   "providers.readiness.no-provider":
