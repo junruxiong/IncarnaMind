@@ -96,6 +96,8 @@ test("a Mind with nothing to check is bare; a claim no check has looked at shows
   await screenshot(window, "check-badge-card-en-1100");
   await setWindowSize(app, window, 1440, 900);
   await pointAndClick(window, card.getByTestId("health-check"));
+  // The model names the claims, and the card asks before it checks them.
+  await pointAndClick(window, card.getByTestId("mind-check-ask").getByTestId("mind-check-check"));
   // A check the User started: the badge says what it checked, until they type.
   await expect(window.getByTestId("claim-mark")).toHaveAttribute("data-check", "supported");
   await expect(badge).toContainText("1 checked");
@@ -191,6 +193,7 @@ test("each row's Next goes through its sentences in order and round to the first
   await window.keyboard.type(`${first} Whales sing in the deep bay.`);
   const card = await checkCard(window);
   await pointAndClick(window, card.getByTestId("health-check"));
+  await pointAndClick(window, card.getByTestId("mind-check-ask").getByTestId("mind-check-check"));
   const marks = window.getByTestId("claim-mark");
   await expect(marks.and(window.locator('[data-check="unsupported"]'))).toHaveCount(2);
   const unsupported = (await checkCard(window)).getByTestId("health-unsupported");
@@ -207,7 +210,9 @@ test("each row's Next goes through its sentences in order and round to the first
   await editor.click();
   await window.keyboard.press("End");
   await window.keyboard.type(" Seals sleep on the rocks slowly. Gulls circle the pier slowly.");
-  await pointAndClick(window, (await checkCard(window)).getByTestId("health-check"));
+  const again = await checkCard(window);
+  await pointAndClick(window, again.getByTestId("health-check"));
+  await pointAndClick(window, again.getByTestId("mind-check-ask").getByTestId("mind-check-check"));
   const stop = window.getByTestId("badge-stop");
   await expect(stop).toBeVisible();
   await expect(window.getByTestId("badge-progress")).toContainText("Checking");
