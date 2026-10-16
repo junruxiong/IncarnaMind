@@ -3494,6 +3494,7 @@ export const en = {
     "“{name}” is the name of a built-in Skill, whose files can't be replaced. Give the Skill another name in its SKILL.md, or duplicate the built-in Skill to make your own.",
   "error.approval.riskNotAccepted":
     "Confirm the risk warning before always running a Skill's scripts.",
+  "error.mindStyle.invalid": "That isn't a font and a text size IncarnaMind has.",
   "error.privacy.usageDataLocalMode":
     "Usage data stays off while “Keep everything on this computer” is on.",
   "error.check.claimTooLong": "The claim is too long to check: at most {max} characters.",

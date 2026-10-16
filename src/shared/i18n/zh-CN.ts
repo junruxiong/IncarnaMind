@@ -3334,6 +3334,7 @@ export const zhCN = {
   "error.skill.builtInName":
     "“{name}”是内置技能的名称，内置技能的文件无法替换。在 SKILL.md 中换一个名字，或将内置技能复制为你自己的技能。",
   "error.approval.riskNotAccepted": "总是运行技能脚本之前，先确认风险提示。",
+  "error.mindStyle.invalid": "无法使用这个字体和字号。",
   "error.privacy.usageDataLocalMode": "开启“所有内容都留在这台电脑上”后，使用数据保持关闭。",
   "error.check.claimTooLong": "这条说法太长，无法核对：最多 {max} 个字符。",
   "error.check.localMode": "已开启“所有内容都留在这台电脑上”，而这个模型不在这台电脑上。",
