@@ -158,6 +158,22 @@ export function assistantTabOf(layout: WindowLayout | null, merged: boolean): La
   return shown.map((group) => activeTabOf(group)).find((tab) => tab?.item.kind === "mind") ?? null;
 }
 
+/** The tab showing a Mind where the User is: the focused group's, else the first on screen. */
+export function frontTabOfMind(
+  layout: WindowLayout | null,
+  mindId: string,
+  merged: boolean,
+): LayoutTab | null {
+  if (!layout) return null;
+  const focused = focusedGroupOf(layout);
+  const shown = [focused, ...visibleGroupsOf(layout, merged).filter((group) => group !== focused)];
+  return (
+    shown
+      .map((group) => activeTabOf(group))
+      .find((tab) => tab?.item.kind === "mind" && tab.item.mindId === mindId) ?? null
+  );
+}
+
 /** Whether a group shows this, in its front tab. */
 export function isShown(layout: WindowLayout | null, item: TabItem, merged = false): boolean {
   if (!layout) return false;

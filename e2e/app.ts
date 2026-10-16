@@ -1168,17 +1168,9 @@ export async function checkCard(window: Page, scope: Page | Locator = window): P
   if (!(await card.isVisible())) {
     const badge = scope.getByTestId("check-badge-open").first();
     if (await badge.isVisible()) {
-      // Its counts change size as a check ends: aim once it holds still.
+      // "Checking 2 of 2 · Stop" shrinks to the counts as a check ends: aim once it has.
+      await expect(scope.getByTestId("badge-stop")).toHaveCount(0);
       await motionSettled(window);
-      let last = "";
-      await expect
-        .poll(async () => {
-          const now = JSON.stringify(await badge.boundingBox());
-          const still = now === last;
-          last = now;
-          return still;
-        })
-        .toBe(true);
       await pointAndClick(window, badge);
     } else {
       const chinese = (await window.evaluate(() => document.documentElement.lang)) === "zh-CN";

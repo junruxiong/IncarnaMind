@@ -62,7 +62,7 @@ interface ChecksState {
   problems: Readonly<Record<string, CheckProblem>>;
   /** By Mind: its last verdicts came from a model too small to judge reliably (#680). */
   smallModel: Readonly<Record<string, true>>;
-  /** By Mind: its check badge's card is open (#909). */
+  /** By tab, else by Mind: its check badge's card is open (#909). A Mind beside itself has a card in each. */
   cardOpen: Readonly<Record<string, true>>;
 }
 
@@ -96,8 +96,9 @@ export const setCheckRunning = (mindId: string, running: CheckRunning | null) =>
 export const setCheckSmallModel = (mindId: string, small: boolean) =>
   setFor("smallModel", mindId, small ? true : null);
 
-export const setCheckCardOpen = (mindId: string, open: boolean) =>
-  setFor("cardOpen", mindId, open ? true : null);
+/** `place`: the tab the card is in, else its Mind. */
+export const setCheckCardOpen = (place: string, open: boolean) =>
+  setFor("cardOpen", place, open ? true : null);
 
 /** Says why a check of a Mind gave no marks, in its check badge's card. */
 export const setCheckProblem = (mindId: string, problem: CheckProblem) =>

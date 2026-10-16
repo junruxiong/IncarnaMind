@@ -5,10 +5,14 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import type * as Y from "yjs";
 import type { Verification } from "../../../shared/verification";
 import { setCheckCardOpen, stopCheck, useChecks } from "../checks";
+import { useTabPlace } from "../components/tabs/tabItems";
 import { startContradictionCheck, useContradictions } from "../contradictions";
 import { useLanguage, useT } from "../i18n";
+import { frontTabOfMind } from "../layoutSlice";
 import { startMindCheck, useMindCheck, useMindCheckRun } from "../mindCheck";
 import { useFade } from "../motion";
+import { useAppStore } from "../store";
+import { useGroupsMerged } from "../useWindowWidth";
 import { stopVerify } from "../verify";
 import { type Badge, type BadgeInput, badgeOf } from "./badgeState";
 import { ContradictionLine } from "./ContradictionLine";
@@ -182,6 +186,7 @@ function VerifyBadge({
 }) {
   const t = useT();
   const language = useLanguage();
+  const place = useCardPlace(mindId);
   const state = useVerifyState(editor, doc, mindId, verification);
   const { rows, marked, checking } = state.marks;
   const checked = useJustChecked(editor, state.running, () => (state.problem ? 0 : marked));
@@ -224,11 +229,14 @@ function VerifyBadge({
         mindId={mindId}
         verification={verification}
         state={state}
-        onNotNow={() => setCheckCardOpen(mindId, false)}
+        onNotNow={() => setCheckCardOpen(place, false)}
       />
     </BadgeFrame>
   );
 }
+
+/** Where a badge's card opens: its tab, else its Mind. */
+export const useCardPlace = (mindId: string) => useTabPlace()?.tabId ?? mindId;
 
 /**
  * The badge and its card. The card opens by itself when `ask` turns on: a
@@ -251,12 +259,24 @@ function BadgeFrame({
   children: ReactNode;
 }) {
   const t = useT();
-  const open = useChecks((state) => state.cardOpen[mindId] === true);
+  const place = useCardPlace(mindId);
+  const tab = useTabPlace()?.tabId;
+  const merged = useGroupsMerged();
+  // A Mind beside itself asks in one card: where the User is.
+  const front = useAppStore(
+    (state) => tab === undefined || frontTabOfMind(state.layout, mindId, merged)?.id === tab,
+  );
+  const open = useChecks((state) => state.cardOpen[place] === true);
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   useEffect(() => {
-    if (ask) setCheckCardOpen(mindId, true);
-  }, [ask, mindId]);
-  useEffect(() => () => setCheckCardOpen(mindId, false), [mindId]);
+    if (ask && front) setCheckCardOpen(place, true);
+  }, [ask, front, place]);
+  useEffect(() => () => setCheckCardOpen(place, false), [place]);
+  const close = (refocus: boolean) => {
+    // Closed from inside, the card would leave the focus nowhere: it goes back to the badge.
+    if (refocus && document.activeElement?.closest(".check-card")) anchor?.focus();
+    setCheckCardOpen(place, false);
+  };
   return (
     <div className="check-badge-place">
       {badge ? (
@@ -264,7 +284,7 @@ function BadgeFrame({
           badge={badge}
           open={open}
           running={running}
-          onToggle={() => setCheckCardOpen(mindId, !open)}
+          onToggle={() => setCheckCardOpen(place, !open)}
           onStop={onStop}
           anchorRef={setAnchor}
         />
@@ -279,7 +299,7 @@ function BadgeFrame({
           aria-label={t("health.label")}
           data-testid="check-card"
           className="check-card"
-          onDismiss={() => setCheckCardOpen(mindId, false)}
+          onDismiss={(how) => close(how === "escape")}
         >
           {children}
           <div className="check-card-foot">
@@ -287,7 +307,7 @@ function BadgeFrame({
               type="button"
               data-testid="check-card-close"
               className="check-card-close"
-              onClick={() => setCheckCardOpen(mindId, false)}
+              onClick={() => close(true)}
             >
               {t("checks.close")}
             </button>
@@ -349,7 +369,13 @@ function BadgePill({
       : []),
     ...(badge.checked !== null ? [t("badge.checked", { count: format(badge.checked) })] : []),
   ];
-  const label = said.length > 0 ? `${t("health.label")}: ${said.join(", ")}` : t("health.label");
+  const label =
+    said.length > 0
+      ? t("badge.label", {
+          label: t("health.label"),
+          parts: new Intl.ListFormat(language, { type: "conjunction" }).format(said),
+        })
+      : t("health.label");
   if (badge.running && running) {
     parts.push(
       <span key="running" className="check-badge-running">

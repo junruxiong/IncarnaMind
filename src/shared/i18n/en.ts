@@ -630,6 +630,7 @@ export const en = {
   "health.notChecked": "{count} not checked",
   "health.unchecked.one": "1 claim not checked yet",
   "health.unchecked": "{count} claims not checked yet",
+  "badge.label": "{label}: {parts}",
   "badge.next": "Next",
   "badge.toCheck": "to check",
   "badge.checked": "{count} checked",
