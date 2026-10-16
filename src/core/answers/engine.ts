@@ -176,6 +176,8 @@ export interface AnswerSearchOptions {
   rerank?: boolean;
   /** Counts for this search instead of the Tool's defaults. */
   parameters?: Partial<SearchToolParameters>;
+  /** Only this Document, by its name as the instructions list it. */
+  document?: string;
 }
 
 /** What a search gives the model. */
@@ -1312,17 +1314,28 @@ export function documentTools(
             description:
               'What to look for: words likely to be in the Passages, in their language. Name what the Question refers to instead of pronouns or words that point back, such as "it", "they" or "that paper".',
           },
+          document: {
+            type: "string",
+            description:
+              "Search only this Document, named as the instructions list it: to find what each of several Documents says.",
+          },
         },
         required: ["query"],
       },
-      shownInput: ({ query }) => ({ query: String(query ?? "") }),
+      shownInput: ({ query, document }) => ({
+        query: String(query ?? ""),
+        ...(typeof document === "string" && document !== "" && { document }),
+      }),
       effects: () => [{ action: "read", scope: { kind: "documents" } }],
       // The User didn't write their Documents.
       untrustedResult: true,
-      async call({ query }, { toolCallId, signal, readThirdParty }) {
+      async call({ query, document }, { toolCallId, signal, readThirdParty }) {
         let found: SearchResultForModel;
         try {
-          found = await documents.searchDocuments(String(query ?? ""), signal, { rerank: false });
+          found = await documents.searchDocuments(String(query ?? ""), signal, {
+            rerank: false,
+            ...(typeof document === "string" && document !== "" && { document }),
+          });
         } catch (error) {
           // A failed search is the app's problem, so it is logged; the model is told it failed.
           if (!signal.aborted) {

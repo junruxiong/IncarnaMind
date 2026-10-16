@@ -112,6 +112,18 @@ body {
   color: var(--ink-meta);
 }
 
+.page-footer {
+  position: absolute;
+  right: var(--page-margin);
+  bottom: calc(var(--page-margin) / 2 + 22px);
+  left: var(--page-margin);
+  text-align: center;
+  font-family: var(--sans);
+  font-size: 7.5pt;
+  line-height: 1.25;
+  color: var(--ink-meta);
+}
+
 .mind-title {
   margin: 0 0 16pt;
   font-size: 22pt;
@@ -423,4 +435,61 @@ img {
 
 .pack-quote {
   margin: 8pt 0 0;
+}
+
+.record-summary th {
+  width: 28%;
+}
+
+.record-note {
+  margin: 0 0 8pt;
+  font-family: var(--sans);
+  font-size: 9pt;
+  color: var(--ink-meta);
+}
+
+.record-item {
+  margin: 0 0 8pt;
+  padding: 6pt 8pt;
+  border: 0.75pt solid var(--rule-strong);
+  font-size: 10pt;
+  line-height: 1.4;
+}
+
+.record-item p {
+  margin: 0 0 3pt;
+}
+
+.record-item > :last-child {
+  margin-bottom: 0;
+}
+
+.record-text {
+  font-weight: 600;
+}
+
+.record-result,
+.record-detail {
+  font-family: var(--sans);
+  font-size: 9pt;
+  color: var(--ink-answer);
+}
+
+.record-label {
+  color: var(--ink-meta);
+}
+
+.record-hash {
+  font-size: 8pt;
+  overflow-wrap: anywhere;
+}
+
+.record-shape {
+  display: inline-block;
+  margin-right: 5pt;
+  vertical-align: -1.5pt;
+}
+
+.record-summary td div + div {
+  margin-top: 2pt;
 }

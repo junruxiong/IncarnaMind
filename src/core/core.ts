@@ -72,6 +72,7 @@ import {
 import { createApprovals } from "./approvals";
 import { createBackgroundQueue } from "./backgroundQueue";
 import { createCheckpoints } from "./checkpoints";
+import { createCheckRecord } from "./checkRecord";
 import { createCitationStyles } from "./citationStyles";
 import { type CitedPages, type CitedPlace, createCitedPages } from "./citedPages";
 import { COMPARISON_TASK, createComparisons } from "./comparisons";
@@ -182,6 +183,7 @@ import { isCloudModelName } from "./providers/ollamaCloud";
 import { createOllamaModels } from "./providers/ollamaModels";
 import { createAiSdkRerankingModel, createRerank } from "./providers/rerank";
 import { createRecentlyDeleted } from "./recentlyDeleted";
+import { createReferenceChecks } from "./referenceChecks";
 import {
   createReferenceImport,
   createReferences,
@@ -806,6 +808,8 @@ export function createCore(adapters: CoreAdapters): Core {
   if (documents.searchableCount() > 0) rerank.prepare();
   /** Set once outside agents exist: Local mode pauses them. */
   let agentsLocalModeChanged = () => {};
+  /** Set once Connectors exist: Local mode pauses those on other computers. */
+  let connectorsLocalModeChanged = () => {};
   /**
    * Local mode on or off: embeddings may switch back to the built-in model,
    * rerank pauses, usage data stops, and outside agents pause.
@@ -818,6 +822,7 @@ export function createCore(adapters: CoreAdapters): Core {
       usageData.localModeChanged();
       privacyChanged();
       agentsLocalModeChanged();
+      connectorsLocalModeChanged();
       await rerankChanged();
       // Questions to a cloud model are refused now (or allowed again): the chat model's readiness changed.
       await readinessChanged();
@@ -901,6 +906,7 @@ export function createCore(adapters: CoreAdapters): Core {
     processes: adapters.processes,
     browser: adapters.browser,
     consent,
+    localOnly: () => embedding.localOnly(),
     signInPages: (name) => {
       const { language } = settings.get();
       return {
@@ -921,6 +927,7 @@ export function createCore(adapters: CoreAdapters): Core {
       timing: { signInTimeoutMs: adapters.connectorSignInTimeoutMs },
     }),
   });
+  connectorsLocalModeChanged = () => connectors.localModeChanged();
   /** Skill scripts can run: the User hasn't turned them off, and a Skill that is on has some. */
   const scriptsOffered = () =>
     settings.get().device.skillScriptsEnabled && skills.anyEnabledWithScripts();
@@ -1162,6 +1169,7 @@ export function createCore(adapters: CoreAdapters): Core {
       names: () => documents.names(),
       searchableNames: (documentIds, limit) =>
         documents.searchableNames(documentIds ?? undefined, limit),
+      searchableBySize: (documentIds) => documents.searchableBySize(documentIds ?? undefined),
       searchableLanguages: (documentIds) => documents.searchableLanguages(documentIds ?? undefined),
       unread: (documentIds) => findUnreadDocuments(documents.unread(documentIds ?? undefined)),
       search: searchDocuments,
@@ -1276,6 +1284,12 @@ export function createCore(adapters: CoreAdapters): Core {
       },
     },
     resolveScope,
+    unscopedDocuments: (mindId) => {
+      const made = examples.made();
+      if (made.documentIds.length === 0 || (mindId && made.mindIds.includes(mindId))) return null;
+      const left = new Set(made.documentIds);
+      return documents.ids({}).filter((id) => !left.has(id));
+    },
     interfaceLanguage: () => settings.get().language,
     emptyScopeAnswer: () => translate(settings.get().language, "scope.answer.empty"),
     onWritingChange: (writing) => {
@@ -1686,6 +1700,30 @@ export function createCore(adapters: CoreAdapters): Core {
     log: adapters.log ?? silentLogger,
     now,
   });
+  const checkRecord = createCheckRecord({
+    mind: (mindId) => minds.get(mindId),
+    read: (mindId, look) => content.peek(mindId, look),
+    providers: () => chat.list(),
+    documents: () => documents.list(),
+    keptCitationTexts: () => documents.keptCitationTexts(),
+    readableQuote: ({ documentId, contentHash, pageFrom, pageTo, quote }) =>
+      documentId && quote
+        ? documents.readableQuote({
+            documentId,
+            contentHash: contentHash ?? null,
+            pageFrom: pageFrom ?? null,
+            pageTo: pageTo ?? null,
+            quote,
+          })
+        : null,
+    folderName: (folderId) =>
+      library.folders().find((folder) => folder.id === folderId)?.name ?? null,
+    localMode: () => embedding.localOnly(),
+    language: () => settings.get().language,
+    printer: adapters.printer ?? null,
+    paper: () => paperFor(systemRegion(adapters.systemRegion?.(), adapters.systemLanguages())),
+    now,
+  });
   const ownFileOf = (options: ExportMindOptions): OwnFileKind =>
     options.format === "source-pack" ? "source-pack" : "export";
   /** Usage data: which format, and whether Questions went with it. */
@@ -2035,6 +2073,19 @@ export function createCore(adapters: CoreAdapters): Core {
     changed: (list) => events.emit("references.changed", list),
     signal: lifetime.signal,
     pace,
+  });
+  // Checking a Mind's reference list sends each reference only, to Crossref, OpenAlex
+  // and arXiv, once the User starts it where a line says so; never in local mode.
+  const referenceChecks = createReferenceChecks({
+    consent,
+    localOnly: () => embedding.localOnly(),
+    http: createSourceHttp(pace, paceTimers),
+    urls: adapters.referenceLookup,
+    content,
+    db,
+    now,
+    progress: (event) => events.emit("referenceCheck.progress", event),
+    signal: lifetime.signal,
   });
   // Importing references (#287) reads a file the User chose and sends nothing.
   const referenceImport = createReferenceImport({
@@ -2894,6 +2945,9 @@ export function createCore(adapters: CoreAdapters): Core {
       references.restore(documentId, before, fields),
     confirmReference: async (documentId) => references.confirm(documentId),
     lookUpReference: (documentId) => references.lookUp(documentId),
+    checkReferences: (mindId, options) =>
+      referenceChecks.check(mindId, isRecord(options) && options.again === true),
+    stopReferenceCheck: async (mindId) => referenceChecks.stop(mindId),
     listSourceProviders: () => sources.list(),
     setSourceProviderKey: (providerId, key) => sources.setKey(providerId, key),
     findSources: (input) => sources.search(input),
@@ -2997,7 +3051,10 @@ export function createCore(adapters: CoreAdapters): Core {
     getCostSummary: async () => meter.summary(),
     estimateRun: async (input) => {
       if (!isRecord(input)) throw new InvalidInputError("estimateRun expects an object.");
-      const { items, model, searches = 0 } = input;
+      const { items, model, searches = 0, each = "answer" } = input;
+      if (each !== "answer" && each !== "check") {
+        throw new InvalidInputError({ key: "error.estimate.each" });
+      }
       if (typeof items !== "number" || !Number.isInteger(items) || items < 0 || items > 100_000) {
         throw new InvalidInputError("items must be a whole number from 0 to 100,000.");
       }
@@ -3014,7 +3071,7 @@ export function createCore(adapters: CoreAdapters): Core {
       }
       const metered = chat.metered(model);
       if (!metered) throw new InvalidInputError("There is no model to estimate for.");
-      return meter.estimate(metered, items, searches);
+      return meter.estimate(metered, items, searches, each);
     },
     compareDocuments: (input) => comparisons.compareDocuments(input),
     fillComparisonTable: (input) => comparisons.fillComparisonTable(input),
@@ -3052,6 +3109,7 @@ export function createCore(adapters: CoreAdapters): Core {
     planContradictionCheck: (mindId) => checks.planContradictionCheck(mindId),
     checkContradictions: (input) => checks.checkContradictions(input),
     planMindCheck: (mindId, mode, allDocuments) => checks.planMindCheck(mindId, mode, allDocuments),
+    findMindClaims: (input) => checks.findMindClaims(input),
     checkMind: (input) => checks.checkMind(input),
 
     getSecretStorage: async () => secrets.status(),
@@ -3479,6 +3537,10 @@ export function createCore(adapters: CoreAdapters): Core {
         ownFileOf(options),
       );
       return saved.status === "saved" ? { ...saved, ...counts, word } : saved;
+    },
+    saveCheckRecord: async (mindId, format) => {
+      const { fileName, data } = await checkRecord.file(mindId, format);
+      return saveExport(fileName, data);
     },
     saveSkillExport: async (skillId) => {
       const { fileName, data } = await skills.exportZip(skillId);

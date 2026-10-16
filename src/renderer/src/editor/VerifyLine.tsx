@@ -31,6 +31,7 @@ import {
 import { AnswerError } from "./AnswerView";
 import { coverageOf, type ShownClaim, sameCoverage, shownClaims } from "./claimChecks";
 import { useMindModel, useRunModel } from "./ModelChip";
+import { ReferencesLine } from "./ReferencesLine";
 import { UncoveredLine } from "./UncoveredLine";
 
 const partsOf = (...parts: ReactNode[]): ReactNode[] => parts;
@@ -143,7 +144,7 @@ export function VerifyLine({
     if (!asking) return;
     let current = true;
     core
-      .estimateRun({ items: total, ...(model && { model }) })
+      .estimateRun({ items: total, each: "check", ...(model && { model }) })
       .then((result) => {
         if (current) setEstimate(estimateLine(result, t, language));
       })
@@ -392,6 +393,7 @@ export function VerifyLine({
           {t("verify.problem.error", { message: outcome.message })}
         </ProblemLine>
       )}
+      {running === null && <ReferencesLine editor={editor} mindId={mindId} />}
     </>
   );
 }

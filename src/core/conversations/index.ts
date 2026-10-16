@@ -24,6 +24,7 @@ import {
 } from "../answers/citedVersions";
 import { usualWait } from "../answers/usualWait";
 import type {
+  AnswerCoverage,
   AnswerPhase,
   AnswerStatus,
   AnswerSteps,
@@ -173,6 +174,7 @@ const ERROR_KINDS: Record<ProviderErrorKind, true> = {
   "consent-declined": true,
   "local-mode": true,
   "ollama-not-running": true,
+  "data-retention": true,
   "not-signed-in": true,
   "plan-limit": true,
   blocked: true,
@@ -218,6 +220,7 @@ function storedSteps(value: string | null): AnswerSteps | null {
     careful,
     unbackedClaims,
     withoutMindTools,
+    coverage,
   } = parsed;
   const claimed = Array.isArray(unbackedClaims)
     ? unbackedClaims.filter((each): each is ClaimedChange =>
@@ -248,7 +251,23 @@ function storedSteps(value: string | null): AnswerSteps | null {
     ...(careful === true && { careful }),
     ...(claimed.length > 0 && { unbackedClaims: claimed }),
     ...(withoutMindTools === true && { withoutMindTools }),
+    ...(storedCoverage(coverage) ?? {}),
   };
+}
+
+function storedCoverage(value: unknown): { coverage: AnswerCoverage } | null {
+  if (!isRecord(value) || (value.kind !== "main" && value.kind !== "largest")) return null;
+  const used = Array.isArray(value.used)
+    ? value.used.flatMap((each) =>
+        isRecord(each) && typeof each.id === "string" && typeof each.name === "string"
+          ? [{ id: each.id, name: each.name }]
+          : [],
+      )
+    : [];
+  const rest = Array.isArray(value.rest)
+    ? value.rest.filter((each): each is string => typeof each === "string")
+    : [];
+  return used.length > 0 ? { coverage: { kind: value.kind, used, rest } } : null;
 }
 
 /** A conversation's name: the title the User typed, else its own. */

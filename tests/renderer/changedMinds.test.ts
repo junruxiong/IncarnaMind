@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import type { AnswerToolCall, MindChange } from "../../src/core/api";
 import { changedMinds } from "../../src/renderer/src/changedMinds";
+import { translate } from "../../src/shared/i18n";
 
 /*
  * The rows of an Answer's card of Minds changed (#202): one per Mind, in the
@@ -234,5 +235,15 @@ describe("The Minds an Answer changed", () => {
       ],
     });
     expect(row).toMatchObject({ tables: 2, unlinkedSources: 3, extraCells: 3 });
+  });
+
+  // protects=the card's note on a table's sources uses the glossary's word for a Citation's source, 出处, in Chinese (#961); fails_when=it says 来源; no_claim=how the card lays it out.
+  test("the note on a table's sources says 出处 in Chinese", () => {
+    expect(translate("zh-CN", "mindChanges.unlinked.one")).toBe(
+      "· 表格中有 1 处出处无法关联，已作为文字显示",
+    );
+    expect(translate("zh-CN", "mindChanges.unlinked", { count: 3 })).toBe(
+      "· 表格中有 3 处出处无法关联，已作为文字显示",
+    );
   });
 });
