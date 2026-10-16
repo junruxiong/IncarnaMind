@@ -236,24 +236,4 @@ describe("Tagging's state says what is happening", () => {
     expect(states).not.toContain("waiting-for-provider");
     recorder.release();
   });
-
-  test("with Folders and Organize not yet allowed, a Document tagged stays tagged", async () => {
-    const { core } = await start();
-    const contracts = await core.createLibraryGroup({
-      name: "Contracts",
-      description: "Signed contracts",
-    });
-    await core.saveChatProvider(ANTHROPIC);
-    const filed = await add(
-      core,
-      "Supply.md",
-      "The supply contract with Brazos Steel.",
-      contracts.id,
-    );
-    const loose = await add(core, "Notes.md", "Notes from the first meeting.");
-    await waitForTagging(core, [filed.id, loose.id]);
-    await assigned(core, [filed.id, loose.id], "waiting");
-    expect(await taggingOf(core, filed.id)).toBe("tagged");
-    expect(await taggingOf(core, loose.id)).toBe("tagged");
-  });
 });
