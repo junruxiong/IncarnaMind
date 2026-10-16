@@ -87,6 +87,7 @@ import { OriginalNotAdded, useWordFile, WordOrigin } from "../editor/WordOrigin"
 import { useWordLookStyle } from "../editor/wordLookStyle";
 import { setWritingPlace, WritingPlace } from "../editor/writingPlace";
 import { requestEdit, startEditing, TRANSLATE_LANGUAGES } from "../editWithAi";
+import { useFirstOpen } from "../firstOpen";
 import { translateNow, useT } from "../i18n";
 import { markSelectionAsMine } from "../markAsMine";
 import { useMeetingOf, useMeetings } from "../meetings";
@@ -628,6 +629,7 @@ function MindEditorView({
   }, [empty, explained]);
   const findShown = useMindTools((state) => state.findMindId === mindId);
   const outlineShown = useMindTools((state) => state.outlineMindId === mindId);
+  const firstOpen = useFirstOpen();
   const guide = useGettingStarted() !== null && empty && !isExample && !readOnly;
   const verification = useVerification(doc);
   const frame = useRef<HTMLDivElement>(null);
@@ -644,12 +646,13 @@ function MindEditorView({
             {verification ? (
               <VerifyFrom verification={verification} />
             ) : (
-              <WordCount editor={editor} doc={doc} />
+              <WordCount editor={editor} doc={doc} quiet={firstOpen && isExample} />
             )}
           </>,
           countSlot,
         )}
       {badgeSlot &&
+        !(firstOpen && isExample) &&
         createPortal(
           <CheckBadge editor={editor} doc={doc} mindId={mindId} verification={verification} />,
           badgeSlot,

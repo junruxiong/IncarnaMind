@@ -8,7 +8,7 @@ import { useRequests } from "../requests";
 import { sorted } from "../sort";
 import { type SortScope, sortOf, useSort } from "../sortChoices";
 import { documentFields, folderFields, mindFields } from "../sortFields";
-import { useAppStore } from "../store";
+import { allExamples, useAppStore } from "../store";
 import { foldKeys, TreeLevelOffset, useTreeItem } from "../treeKeys";
 import { useRename } from "../useRename";
 import { InlineName } from "./InlineName";
@@ -121,10 +121,12 @@ const useFolds = create<Folds>()((set, get) => {
 export function LibraryFolders({
   documents,
   renderDocument,
+  quiet = false,
 }: {
   /** The Documents to show, already filtered by Tag. */
   documents: readonly Document[];
   renderDocument(document: Document, depth: number): ReactNode;
+  quiet?: boolean;
 }) {
   const groups = useAppStore((state) => state.library?.groups) ?? [];
   const assignments = useAppStore((state) => state.library?.assignments);
@@ -198,6 +200,7 @@ export function LibraryFolders({
           minds={looseMinds}
           documents={looseDocuments}
           renderDocument={renderDocument}
+          quiet={quiet}
         />
       )}
     </div>
@@ -413,10 +416,12 @@ function NotInAFolder({
   minds,
   documents,
   renderDocument,
+  quiet,
 }: {
   minds: readonly Mind[];
   documents: readonly Document[];
   renderDocument(document: Document, depth: number): ReactNode;
+  quiet: boolean;
 }) {
   const t = useT();
   const folded = useFolds((state) => state.looseFolded);
@@ -424,6 +429,10 @@ function NotInAFolder({
   const Chevron = folded ? ChevronRightLineIcon : ChevronDownLineIcon;
   const treeItem = useTreeItem({ depth: 0, expanded: !folded });
   const fold = foldKeys(!folded, () => useFolds.getState().toggle(NOT_IN_A_FOLDER));
+  const examplesOnly = useAppStore((state) => {
+    const examples = allExamples(state);
+    return quiet && minds.every((mind) => examples.some((each) => each.mindId === mind.id));
+  });
   return (
     <div
       data-testid="not-in-a-folder"
@@ -443,17 +452,21 @@ function NotInAFolder({
             onKeyDown={fold}
             className="flex max-w-full items-center gap-1 rounded-sm hover:text-ink-secondary"
           >
-            <span className="truncate">{t("library.unsorted")}</span>
+            <span className="truncate">
+              {t(examplesOnly ? "sidebar.examples" : "library.unsorted")}
+            </span>
             <Chevron className="size-3 shrink-0" />
           </button>
         </div>
-        <span
-          data-testid="not-in-a-folder-hint"
-          title={t("sidebar.notInFolder.title")}
-          className="ml-auto min-w-0 truncate font-normal text-ink-meta"
-        >
-          {t("sidebar.notInFolder.hint")}
-        </span>
+        {!examplesOnly && (
+          <span
+            data-testid="not-in-a-folder-hint"
+            title={t("sidebar.notInFolder.title")}
+            className="ml-auto min-w-0 truncate font-normal text-ink-meta"
+          >
+            {t("sidebar.notInFolder.hint")}
+          </span>
+        )}
       </div>
       {!folded && (
         <TreeLevelOffset value={1}>

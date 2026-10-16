@@ -7,6 +7,7 @@ import {
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  leaveFirstOpen,
   newMind,
   pointAndClick,
   removeDataFolder,
@@ -97,6 +98,7 @@ test("an example's Documents a check relies on stay when the language changes, a
     home: sources,
   });
   await setWindowSize(app, window, 1440, 900);
+  await leaveFirstOpen(window);
   await expect(window.getByTestId("document-list-item")).toHaveCount(2);
   await useLocalChatModel(window);
   await newMind(window);
@@ -130,6 +132,7 @@ test("with the examples kept and All Documents searched, a Contradicted result o
     home: sources,
   });
   await setWindowSize(app, window, 1440, 900);
+  await leaveFirstOpen(window);
   await expect(window.getByTestId("document-list-item")).toHaveCount(2);
   await useLocalChatModel(window);
   await window.getByTestId("add-documents-input").setInputFiles([join(sources, "Tides.pdf")]);

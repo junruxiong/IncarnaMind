@@ -30,6 +30,7 @@ export function installAppMenu(language: Language, { developer }: { developer: b
 /** What the menu was last built from, to build it again when the sidebar is hidden or shown. */
 let installed: { language: Language; developer: boolean } | null = null;
 let sidebarHidden = false;
+let exportedMind: string | null = null;
 
 /** Until the window says where its focus is, Undo and Redo show as a field's: enabled, naming nothing. */
 let editMenu: EditMenuState = { text: "field", undo: null, redo: null };
@@ -49,6 +50,12 @@ export function isEditMenuState(value: unknown): value is EditMenuState {
   if (typeof value !== "object" || value === null) return false;
   const { text, undo, redo } = value as Record<string, unknown>;
   return isTextPlace(text) && isNamed(undo) && isNamed(redo);
+}
+
+export function setExportMenu(mindName: string | null): void {
+  if (mindName === exportedMind) return;
+  exportedMind = mindName;
+  if (installed) buildMenu();
 }
 
 /** Makes View say "Show Sidebar" while the sidebar is hidden, "Hide Sidebar" otherwise. */
@@ -124,6 +131,16 @@ function buildMenu(): void {
       submenu: [
         command("mind.new"),
         command("folder.new"),
+        { type: "separator" },
+        {
+          ...command("mind.export", "menu.export"),
+          id: "mind.export",
+          label:
+            exportedMind === null
+              ? t("menu.export")
+              : translate(language, "menu.export.named", { name: exportedMind }),
+          enabled: exportedMind !== null,
+        },
         { type: "separator" },
         command("tab.close"),
         command("tab.reopen"),
