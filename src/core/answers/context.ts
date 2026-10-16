@@ -61,6 +61,10 @@ const MIN_TAIL_TOKENS = 64;
 
 const RECORDS_SHARE = 0.5;
 
+/** A Document's whole text given with the Question (./documentText): it says it is whole, so it is never cut. */
+const DOCUMENT_TEXT_BLOCK = /<document-text>[\s\S]*?<\/document-text>/g;
+const WHOLE_OR_RECORD = new RegExp(`${RECORD_BLOCK.source}|${DOCUMENT_TEXT_BLOCK.source}`, "g");
+
 interface Piece {
   role: AnswerMessage["role"];
   text: string;
@@ -75,6 +79,8 @@ interface Piece {
   record?: { answer: string; alone: boolean; priority: boolean };
   /** An earlier Answer's text: its id, which its record names. */
   answer?: string;
+  /** Kept whole or not at all, as a record is, but on its own (`DOCUMENT_TEXT_BLOCK`). */
+  whole?: true;
 }
 
 /** Characters written with one token each, roughly: CJK, kana, Hangul and full-width forms. */
@@ -637,7 +643,7 @@ function fitting(
       remaining -= cost;
       continue;
     }
-    if (!piece.record && remaining >= MIN_TAIL_TOKENS) {
+    if (!piece.record && !piece.whole && remaining >= MIN_TAIL_TOKENS) {
       chosen.set(piece, { ...piece, text: tail(piece.text, remaining) });
     }
     remaining = 0;
@@ -773,7 +779,7 @@ export function fitQuestionContext(
   return withMind(mindText, keptWithinBudget(above.reverse(), remaining), asked);
 }
 
-/** Messages as pieces, the records of earlier Answers' Tool calls apart from the messages that hold them. */
+/** Messages as pieces, the records of earlier Answers' Tool calls and a Document's whole text apart from the messages that hold them. */
 function piecesOf(messages: readonly AnswerMessage[]): Piece[] {
   return messages.flatMap((message, index): Piece[] => {
     if (message.role === "assistant") {
@@ -781,10 +787,15 @@ function piecesOf(messages: readonly AnswerMessage[]): Piece[] {
     }
     const pieces: Piece[] = [];
     let at = 0;
-    for (const found of message.content.matchAll(RECORD_BLOCK)) {
+    for (const found of message.content.matchAll(WHOLE_OR_RECORD)) {
       const start = found.index ?? 0;
       const before = message.content.slice(at, start).trim();
       if (before) pieces.push({ role: "user", text: before });
+      at = start + found[0].length;
+      if (!found[0].startsWith("<tool-record>")) {
+        pieces.push({ role: "user", text: found[0], whole: true });
+        continue;
+      }
       // A record right after an Answer's text is that Answer's.
       const follows = start === 0 && messages[index - 1]?.role === "assistant";
       pieces.push({
@@ -796,7 +807,6 @@ function piecesOf(messages: readonly AnswerMessage[]): Piece[] {
           priority: tellsOfChanges(found[0]),
         },
       });
-      at = start + found[0].length;
     }
     const rest = message.content.slice(at).trim();
     if (rest || pieces.length === 0) pieces.push({ role: "user", text: rest || message.content });

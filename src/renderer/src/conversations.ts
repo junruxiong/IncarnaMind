@@ -9,7 +9,7 @@ import type {
 import { conversationName } from "../../shared/naming";
 import { settleAsk, useAnswers } from "./answers";
 import { watchMindsMadeBy } from "./assistantMinds";
-import { composerKey } from "./composer";
+import { composerKey, useComposer } from "./composer";
 import { core } from "./core";
 import { translateNow } from "./i18n";
 import { useModelSetup, waitForModel } from "./modelSetup";
@@ -223,7 +223,12 @@ function askWaitingQuestion(): void {
 }
 
 core.on("chatReadiness.changed", (readiness) => {
-  if (readiness.ready) askWaitingQuestion();
+  if (!readiness.ready) return;
+  const { wanted, waiting } = useModelSetup.getState();
+  useModelSetup.setState({ wanted: false });
+  // The setup card goes with the focus in it: the composer, where the User asks next, takes it.
+  if (wanted || waiting) useComposer.getState().requestFocus();
+  askWaitingQuestion();
 });
 
 /**
