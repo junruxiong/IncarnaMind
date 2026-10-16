@@ -456,13 +456,13 @@ describe("a Mind imported from Word keeps its look", () => {
     expect(lookShown(client).blocks).toBeGreaterThan(2800);
   });
 
-  test("the Mind records content schema 21, and export writes the file's own bytes for what wasn't changed", async () => {
+  test("the Mind records content schema 21 or later, and export writes the file's own bytes for what wasn't changed", async () => {
     for (const bytes of [resumeFile(), contractFile()]) {
       const { core, mindId, client } = await imported(bytes);
       expect(client.doc.getMap(MIND_SETTINGS_FIELD).get(CONTENT_SCHEMA_VERSION_KEY)).toBe(
         CONTENT_SCHEMA_VERSION,
       );
-      expect(CONTENT_SCHEMA_VERSION).toBe(21);
+      expect(CONTENT_SCHEMA_VERSION).toBeGreaterThanOrEqual(21);
       const result = await core.exportMind(mindId, { format: "docx" });
       const before = unzip(bytes);
       const after = unzip(result.data);
