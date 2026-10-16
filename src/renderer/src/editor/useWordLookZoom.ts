@@ -17,15 +17,12 @@ export function useWordLookZoom(frame: RefObject<HTMLElement | null>, css: strin
   useLayoutEffect(() => {
     const element = frame.current;
     if (!element || css === null) return;
-    const toFit = () => {
+    const toFit = (entries?: ResizeObserverEntry[]) => {
       const full = Number.parseFloat(getComputedStyle(element).maxWidth);
-      const zoom =
-        full > 0
-          ? Math.min(
-              1,
-              Math.max(LEAST_WORD_ZOOM, Math.floor((element.clientWidth / full) * 1000) / 1000),
-            )
-          : 1;
+      const width = entries?.[0]?.contentRect.width ?? element.getBoundingClientRect().width;
+      // Rounded down, with room for layout's 1/64 px, so the content never ends wider than the frame.
+      const fit = Math.floor((width / full) * 1000 + 0.05) / 1000;
+      const zoom = full > 0 ? Math.min(1, Math.max(LEAST_WORD_ZOOM, fit)) : 1;
       element.style.setProperty("--word-zoom", String(zoom));
     };
     toFit();
