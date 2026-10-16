@@ -47,10 +47,13 @@ export function ExportResultLine({ mindId }: { mindId: string }) {
   const result = useExports((state) => (state.result?.mindId === mindId ? state.result : null));
   const dismiss = useExports((state) => state.dismiss);
   const line = useRef<HTMLDivElement>(null);
-  const expired =
-    result?.state === "saved" &&
-    isPlainSaved(result, t) &&
-    Date.now() - result.at >= SAVED_SHOWN_MS;
+  // Judged when the line mounts, so a line the pointer is on isn't dropped by a later render.
+  const [stale] = useState(() =>
+    result?.state === "saved" && isPlainSaved(result, t) && Date.now() - result.at >= SAVED_SHOWN_MS
+      ? result
+      : null,
+  );
+  const expired = result !== null && result === stale;
   const shown = result !== null && !expired;
   useEffect(() => {
     if (expired) dismiss();

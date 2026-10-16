@@ -17,6 +17,7 @@ import { mindModelOf } from "../shared/mindModel";
 import { mindName } from "../shared/naming";
 import { paperFor } from "../shared/printDocument";
 import { resolveProposals, restoreRevised } from "../shared/proposals";
+import { readableQuoteText } from "../shared/readableQuote";
 import { RESEARCH_TASK } from "../shared/research";
 import { wordFileOf } from "../shared/wordFiles";
 import { logActivity, silentLogger } from "./activityLog";
@@ -44,6 +45,7 @@ import type { AnswerSearchOptions } from "./answers/engine";
 import {
   type AddDocumentsResult,
   type ChatModelChoice,
+  type CitationAttributes,
   type CoreApi,
   type CoreEventSource,
   type CreateMindInput,
@@ -1636,21 +1638,31 @@ export function createCore(adapters: CoreAdapters): Core {
     const marked = ownFiles.record(data, kind);
     for (const document of documents.getMany(marked)) events.emit("document.status", document);
   };
+  const quoteAsRead = ({
+    documentId,
+    contentHash,
+    pageFrom,
+    pageTo,
+    quote,
+  }: Partial<CitationAttributes>): string | null => {
+    if (!quote) return null;
+    const fromDocument = documentId
+      ? documents.readableQuote({
+          documentId,
+          contentHash: contentHash ?? null,
+          pageFrom: pageFrom ?? null,
+          pageTo: pageTo ?? null,
+          quote,
+        })
+      : null;
+    return fromDocument ?? readableQuoteText(quote);
+  };
   const mindExports = createExports({
     mind: (mindId) => minds.get(mindId),
     read: (mindId, look) => content.read(mindId, look),
     liveDocuments: () => documents.list(),
     keptCitationTexts: () => documents.keptCitationTexts(),
-    readableQuote: ({ documentId, contentHash, pageFrom, pageTo, quote }) =>
-      documentId && quote
-        ? documents.readableQuote({
-            documentId,
-            contentHash: contentHash ?? null,
-            pageFrom: pageFrom ?? null,
-            pageTo: pageTo ?? null,
-            quote,
-          })
-        : null,
+    readableQuote: quoteAsRead,
     language: () => settings.get().language,
     folderName: (folderId) =>
       library.folders().find((folder) => folder.id === folderId)?.name ?? null,
@@ -1715,6 +1727,7 @@ export function createCore(adapters: CoreAdapters): Core {
     suggested: join(adapters.paths.documents, "IncarnaMind"),
     linkedFolders: () => documents.linkedFolders.list(),
     recordOwnFile,
+    log: adapters.log ?? silentLogger,
   });
   /** Saves an export in the Output location, as the window's save: what went wrong is a result, not an error. */
   const saveExport = async (

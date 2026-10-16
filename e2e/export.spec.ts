@@ -293,6 +293,52 @@ test("the Saved line names the folder, goes by itself after ten seconds unless t
   await app.close();
 });
 
+for (const [language, query, label] of [
+  ["en", "output location", "Change output location…"],
+  ["zh-CN", "保存位置", "更改保存位置…"],
+] as const) {
+  test(`⌘K changes the output location, which the next export then uses (${language})`, async () => {
+    const { app, window } = await launchApp(dataDir);
+    await dismissChatSetup(window);
+    await bridge(window).language(language);
+    await newMind(window);
+    await window.getByTestId("mind-title").fill("Tides");
+    await window.getByTestId("mind-editor").click();
+    await window.keyboard.type("Spring tides come twice a month.");
+    const elsewhere = join(sources, "Elsewhere");
+    await mkdir(elsewhere);
+    await interceptOpenDialog(app, elsewhere);
+
+    await window.keyboard.press("ControlOrMeta+k");
+    await expect(window.getByTestId("palette-search")).toBeFocused();
+    await window.keyboard.type(`>${query}`);
+    const item = window
+      .getByTestId("palette")
+      .locator('[data-key="command:export.changeLocation"]');
+    await expect(item).toContainText(label);
+    await screenshot(window, `change-location-cmdk-${language}`);
+    await pointAndClick(window, item);
+    await expect
+      .poll(() =>
+        window.evaluate(
+          async () =>
+            (
+              await (
+                globalThis as unknown as { incarnamind: CoreBridge }
+              ).incarnamind.getOutputSettings()
+            ).location,
+        ),
+      )
+      .toBe(await realpath(elsewhere));
+
+    await exportFromMenu(window);
+    await expect(window.getByTestId("export-done")).toHaveText(
+      savedLine("Tides.docx", elsewhere, language),
+    );
+    await app.close();
+  });
+}
+
 test("in Chinese, at the narrowest window, the first export says it went to 文稿 (文档 off macOS) › IncarnaMind, its long name wrapped whole; if that folder can't be made, the save asks where instead, in plain words, and Esc saves nothing", async () => {
   // A file where the folder would be made.
   await mkdir(join(dataDir, "Documents"), { recursive: true });
