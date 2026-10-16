@@ -1,5 +1,5 @@
 /**
- * The font and text size of each Mind (#121) as this window knows them. A Mind's page reads its
+ * The font and text size of each Mind as this window knows them. A Mind's page reads its
  * style from here; the editor keeps it current from the Mind's document, and a choice made in
  * Style is written through the core, so a Mind that isn't open takes it too.
  */
@@ -43,13 +43,14 @@ const useMindStyles = create<MindStylesState>()((set) => ({
 /** The Mind's style as the window has it: the default until the core has said. */
 export function useMindStyle(mindId: string): MindStyle {
   const known = useMindStyles((state) => state.byMind[mindId]);
+  const listed = useAppStore((state) => state.minds.some((mind) => mind.id === mindId));
   useEffect(() => {
-    if (known) return;
+    if (known || !listed) return;
     core.getMindStyle(mindId).then(
       (style) => useMindStyles.getState().know(mindId, style),
       (error: unknown) => useAppStore.getState().reportError(error),
     );
-  }, [mindId, known]);
+  }, [mindId, known, listed]);
   return known ?? DEFAULT_MIND_STYLE;
 }
 
@@ -72,7 +73,6 @@ export function followMindStyle(mindId: string, doc: Y.Doc): () => void {
   return () => settings.unobserve(publish);
 }
 
-/** The style new Minds start in. */
 export const useNewMindStyle = (): MindStyle =>
   useAppStore((state) => state.settings?.user.newMindStyle) ?? DEFAULT_MIND_STYLE;
 

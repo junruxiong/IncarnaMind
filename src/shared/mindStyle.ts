@@ -1,5 +1,5 @@
 /**
- * The font and text size a Mind is written in (#121). Like its model (`mindModel.ts`) and its
+ * The font and text size a Mind is written in. Like its model (`mindModel.ts`) and its
  * citation style (`mindCitationStyle.ts`), they live in the Mind's Yjs settings
  * (`MIND_SETTINGS_FIELD`), so they go wherever the Mind goes and its content schema stays as it
  * is. A Mind with no choice is in the default style (`DEFAULT_MIND_STYLE`).
@@ -61,7 +61,6 @@ export function isMindStyle(value: unknown): value is MindStyle {
   return Object.keys(rest).length === 0 && isMindFont(font) && isTextSize(size);
 }
 
-/** The family a font names, or null for a preset. */
 export const familyOf = (font: MindFont): string | null =>
   typeof font === "string" ? null : font.family;
 

@@ -100,7 +100,7 @@ export interface ExportsDependencies {
   folderName(folderId: string): string | null;
   /** The Mind's citation style (#289). */
   citationStyle(mindId: string): CitationStyleId;
-  /** The family the Mind's font is written as in Word and HTML (#121); null: the default. */
+  /** The family the Mind's font is written as in Word and HTML; null: the default. */
   font(mindId: string): string | null;
   /** Whether the Mind shows its Bibliography without a citation style (#102). */
   bibliography(mindId: string): boolean;

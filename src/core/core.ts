@@ -1563,7 +1563,6 @@ export function createCore(adapters: CoreAdapters): Core {
   });
 
   // Find support and Check against Documents (#96): check Runs that can only search and cite.
-  /** A new Mind starts in the font and text size the User made the default (#121). */
   const startInWritingStyle = (mindId: string) => {
     const style = settings.get().user.newMindStyle;
     if (sameStyle(style, DEFAULT_MIND_STYLE)) return;
