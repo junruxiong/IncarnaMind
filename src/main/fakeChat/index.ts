@@ -8,7 +8,7 @@
  * does when it finds or checks claims. A key with "refused" in it is refused,
  * as a provider refuses a wrong key (HTTP 401). A model whose id ends "-no-tools" refuses
  * Tools and structured output, as a small server model does, so its Answers have no Citations.
- * A Document whose text says "slowly" takes a moment to tag; one whose text says "unreachable"
+ * A Document whose text says "slowly" takes a moment to tag or organize; one whose text says "unreachable"
  * can't reach the model the first time it is tagged.
  */
 

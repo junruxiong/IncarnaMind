@@ -218,7 +218,6 @@ export function createLibrary(options: {
     const { taggingStopped } = getSettings();
     return taggingStopped.length > 0 && taggingStopped.includes(placeOf(id));
   };
-  /** Documents the User asked to organize: Organize goes on for them where Tagging is stopped. */
   const asked = new Set<string>();
   const checkClassifier = (selected: Record<string, unknown>) => {
     if (selected.kind === "chat") {
@@ -362,7 +361,6 @@ export function createLibrary(options: {
     options.tagged([id]);
     announce([id]);
   };
-  /** Tagging with AI is stopped where it is (#895): nothing is sent, and its Tags don't come. */
   const stopped = (id: string) => {
     db.run(
       "UPDATE document_groups SET status = 'classified', updated_at = ? WHERE document_id = ? AND deleted_at IS NULL",
@@ -633,9 +631,10 @@ export function createLibrary(options: {
       return [...new Set(ids.map(placeOf))];
     },
     /**
-     * Stops automatic Tagging with AI in these places, or turns it back on
-     * (#895). Turned back on while Organize tags, their stopped Documents
-     * are organized again; otherwise automatic tagging picks them up.
+     * Stops automatic Tagging with AI in these places, or turns it back on.
+     * Turned back on while Organize tags, their stopped Documents are
+     * organized as the User asked, even with automatic Organize off;
+     * otherwise automatic tagging picks them up.
      */
     setTaggingStopped(places: readonly (string | null)[], stop: boolean): void {
       if (stop) for (const place of places) if (place !== null) group(place);
@@ -644,15 +643,15 @@ export function createLibrary(options: {
         ? [...new Set([...before.taggingStopped, ...places])]
         : before.taggingStopped.filter((each) => !places.includes(each));
       settings.writeDeviceValue("library", { ...before, taggingStopped });
-      revision++;
       changed();
-      if (stop || !before.automatic || !organizeModelOf(before) || groups().length === 0) return;
+      if (stop || !organizeModelOf(before) || groups().length === 0) return;
       const ids = db
         .all<{ id: string }>(
           "SELECT id FROM documents WHERE deleted_at IS NULL AND tagging_status = 'stopped'",
         )
         .map((row) => row.id)
         .filter((id) => places.includes(placeOf(id)));
+      for (const id of ids) asked.add(id);
       db.transaction(() => {
         for (const id of ids) {
           const existing = assignment(id);

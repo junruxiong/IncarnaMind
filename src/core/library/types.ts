@@ -111,7 +111,7 @@ export interface LibrarySettings {
    */
   automatic: boolean;
   /**
-   * Where automatic Tagging with AI is stopped (#895): Folder ids, and null
+   * Where automatic Tagging with AI is stopped: Folder ids, and null
    * for Not in a Folder. Empty until the User presses Stop.
    */
   taggingStopped: (string | null)[];

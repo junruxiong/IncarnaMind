@@ -2,7 +2,7 @@ import { EXCERPT_END, EXCERPT_START } from "../../core/tags/classify";
 import { type GenerateOptions, type Prompt, SLOWLY } from "./prompt";
 import { fakeSuggestion } from "./suggestion";
 
-/** How long tagging a Document whose text says "slowly" takes: long enough for a test to Stop it (#895). */
+/** How long tagging a Document whose text says "slowly" takes: long enough for a test to Stop it. */
 export const SLOW_TAGGING_MS = 1500;
 
 const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -25,8 +25,23 @@ const taggingExcerpt = (options: GenerateOptions): string | null => {
   return schema?.properties?.tags && !schema.properties.groupId ? excerptOf(options.prompt) : null;
 };
 
-export const tagsSlowly = (options: GenerateOptions): boolean =>
-  SLOWLY.test(taggingExcerpt(options) ?? "");
+const organizeInput = (options: GenerateOptions): string => {
+  const message = options.prompt.find((part) => part.role === "user");
+  return message && typeof message.content !== "string"
+    ? message.content
+        .filter((part) => part.type === "text")
+        .map((part) => part.text)
+        .join("")
+    : "";
+};
+
+/** Tagging, or Organize, takes a moment for a Document whose text says "slowly". */
+export const tagsSlowly = (options: GenerateOptions): boolean => {
+  const format = options.responseFormat;
+  const schema = format?.type === "json" ? format.schema : undefined;
+  if (schema?.properties?.groupId) return SLOWLY.test(organizeInput(options));
+  return SLOWLY.test(taggingExcerpt(options) ?? "");
+};
 
 const unreachedOnce = new Set<string>();
 
@@ -65,15 +80,7 @@ export function fakeStructuredOutput(options: GenerateOptions): string {
   const schema = format?.type === "json" ? format.schema : undefined;
   if (schema?.properties?.quote && schema.properties.passage) return fakeSuggestion(options);
   if (schema?.properties?.groupId) {
-    const message = options.prompt.find((part) => part.role === "user");
-    const text =
-      message && typeof message.content !== "string"
-        ? message.content
-            .filter((part) => part.type === "text")
-            .map((part) => part.text)
-            .join("")
-        : "";
-    const input = JSON.parse(text) as {
+    const input = JSON.parse(organizeInput(options)) as {
       groups: { id: string; name: string }[];
       tags?: { id: string; name: string }[];
       document: { name: string; text: string };
