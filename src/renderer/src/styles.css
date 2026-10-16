@@ -3423,6 +3423,12 @@
     }
   }
   .mind-editor .applied-keys {
+    padding: 0 4px;
+    border-radius: 3px;
+    background: var(--color-chip);
+    font-family: var(--font-sans);
+    font-size: 10px;
+    line-height: 16px;
     color: var(--color-ink-meta);
   }
   /* One change's own bar, over its first line: "Change 1 of 3 · Accept · Reject". */
