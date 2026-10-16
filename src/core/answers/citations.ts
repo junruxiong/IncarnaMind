@@ -634,9 +634,8 @@ export interface CitationSessionEvents {
  * One Answer's Citations: the Passages it was given (each with a short id such
  * as "P3", which is what the model cites), the records it gave, and the Tools
  * the Answer engine offers the model. `opening`, when the Question is asked
- * beside the working copy of a Document too long to give whole (#1036): that
- * Document's opening Passages, which a search that finds nothing gives
- * instead, once.
+ * beside the working copy of a Document (#1036): that Document's opening
+ * Passages, which a search that finds nothing gives instead, once.
  */
 export function createCitationSession(
   documents: AnswerDocuments,
@@ -954,8 +953,12 @@ export function createCitationSession(
     };
   }
 
-  /** The Passages as the model reads them, each under the id it cites it by. */
-  function show(found: readonly WindowedPassage[]): string {
+  /**
+   * The Passages as the model reads them, each under the id it cites it by.
+   * `measuring`: only to count what showing them would send, so nothing is recorded as shown.
+   */
+  function show(found: readonly WindowedPassage[], measuring = false): string {
+    let unseen = 0;
     const dates = new Map<string, string | null>();
     const dateOf = (documentId: string) => {
       if (!dates.has(documentId)) dates.set(documentId, documents.documentDate(documentId));
@@ -976,12 +979,14 @@ export function createCitationSession(
         units.length > 1 || units.some((unit) => innerMarks(unit).length > 0)
           ? withUnitMarks(passage.text, units)
           : passage.text;
-      const id = handleFor(passage.passageId);
+      const id = measuring
+        ? (handleOf.get(passage.passageId) ?? `P${handleOf.size + ++unseen}`)
+        : handleFor(passage.passageId);
       // A browser-made PDF's "⼤" for "大": every other reader of the text folds it (ADR-0009).
       const text = foldRadicals(withCueMarks(marked, units));
       const notCited = documents.citationSource(passage.passageId)?.notCited ?? false;
       // What later requests offer for citing is what was shown here: never a Passage no record may name.
-      if (!notCited) shownTexts.set(id, text);
+      if (!notCited && !measuring) shownTexts.set(id, text);
       return {
         id,
         documentName: passage.documentName,
@@ -1030,6 +1035,9 @@ export function createCitationSession(
         text: `No Passages match these words. The opening of “${opening.name}”, which the Mind is the working copy of, instead:\n${show(passages)}`,
         passageCount: passages.length,
         passageIds: passages.map((passage) => passage.passageId),
+        ...(passages.some((passage) => passage.documentKind === "web") && {
+          thirdParty: ["web-page"] as const,
+        }),
       };
     },
 
@@ -1150,10 +1158,14 @@ export function createCitationSession(
       search(query, signal, [documentId]),
 
     /**
-     * Gives the model Passages without a search: a meeting's live transcript (#144). They can
-     * be cited as a search's are, and don't count as one of the Answer's searches.
+     * Gives the model Passages without a search: a meeting's live transcript (#144), a short
+     * Document's whole text (#1036). They can be cited as a search's are, and don't count as
+     * one of the Answer's searches.
      */
-    show,
+    show: (found: readonly WindowedPassage[]) => show(found),
+
+    /** What `show` would send for these Passages, recording nothing. */
+    measure: (found: readonly WindowedPassage[]) => show(found, true),
 
     quotes,
 

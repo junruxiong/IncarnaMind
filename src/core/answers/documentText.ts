@@ -5,35 +5,56 @@
  * model needs no search and its Citations are checked as a search's are.
  */
 import type { WindowedPassage } from "../documents/search";
+import type { ContextWindow } from "../providers/models";
 import { estimateTokens } from "./context";
-import type { AnswerMessage } from "./engine";
-import { withBeforeQuestion } from "./liveTranscript";
+import type { SizedDocument } from "./coverage";
 
-/** The most text given up front: about 6k tokens, a résumé, a letter or a memo. */
 export const UP_FRONT_TOKEN_LIMIT = 6_000;
-/** How much of a working copy's original opens an empty search's result. */
 export const OPENING_TOKEN_LIMIT = 3_000;
-// A pre-check by size: a Document over this many characters is never given whole.
-const UP_FRONT_CHARACTERS = UP_FRONT_TOKEN_LIMIT * 4;
+/** Summing a large scope's sizes takes long (half a second at 300k Passages), and its text wouldn't fit. */
+export const SMALL_SCOPE_DOCUMENTS = 12;
 
-/** Every Passage when all of them fit in `tokens`, in reading order; none when they don't. */
-export function allWithin(passages: readonly WindowedPassage[], tokens: number): WindowedPassage[] {
-  let total = 0;
+/** At most a quarter of the model's window, as a live transcript gets, when the window is known. */
+export const upFrontTokens = (window: ContextWindow | undefined) =>
+  window ? Math.min(UP_FRONT_TOKEN_LIMIT, Math.floor(window.tokens / 4)) : UP_FRONT_TOKEN_LIMIT;
+
+// Long enough that a match is the overlap, not a phrase the next Passage happens to start with.
+const OVERLAP_PROBE = 40;
+
+/**
+ * The Passages in reading order with what each repeats of the one before it
+ * left out: consecutive Passages of a Document overlap (a sliding window).
+ * A Passage left with nothing goes.
+ */
+export function withoutOverlap(passages: readonly WindowedPassage[]): WindowedPassage[] {
+  const kept: WindowedPassage[] = [];
+  let previous: WindowedPassage | undefined;
   for (const passage of passages) {
-    total += estimateTokens(passage.text);
-    if (total > tokens) return [];
+    let text = passage.text;
+    if (previous && previous.documentId === passage.documentId) {
+      const before = previous.text;
+      const probe = text.slice(0, OVERLAP_PROBE);
+      for (let at = before.indexOf(probe); at >= 0; at = before.indexOf(probe, at + 1)) {
+        if (text.startsWith(before.slice(at))) {
+          text = text.slice(before.length - at).trimStart();
+          break;
+        }
+      }
+    }
+    previous = passage;
+    if (text !== "") kept.push(text === passage.text ? passage : { ...passage, text });
   }
-  return [...passages];
+  return kept;
 }
 
-/** The opening Passages that fit in `tokens`, in reading order. */
+/** The opening Passages, without their overlap, that fit in `tokens`, in reading order. */
 export function openingWithin(
   passages: readonly WindowedPassage[],
   tokens: number,
 ): WindowedPassage[] {
   const kept: WindowedPassage[] = [];
   let left = tokens;
-  for (const passage of passages) {
+  for (const passage of withoutOverlap(passages)) {
     const cost = estimateTokens(passage.text);
     if (cost > left) break;
     kept.push(passage);
@@ -43,32 +64,30 @@ export function openingWithin(
 }
 
 /**
- * The Documents given whole: the working copy's original when it fits, else
- * every Document of the scope when all of them fit together; none otherwise.
- * `sized`: the scope's Documents, `size` in characters.
+ * The first of `candidates` (each a set of Documents) whose whole text, as
+ * `block` sends it, fits in `tokens`: its Passages without their overlap,
+ * and the block. Null when none fits.
  */
-export function givenWhole(
-  sized: readonly { id: string; size: number }[],
-  workingCopy: string | null,
+export function givenUpFront(
+  candidates: readonly (readonly SizedDocument[])[],
+  tokens: number,
   passagesOf: (documentId: string) => WindowedPassage[],
-): WindowedPassage[] {
-  const original = workingCopy === null ? undefined : sized.find((each) => each.id === workingCopy);
-  if (original && original.size <= UP_FRONT_CHARACTERS) {
-    const whole = allWithin(passagesOf(original.id), UP_FRONT_TOKEN_LIMIT);
-    if (whole.length > 0) return whole;
+  block: (passages: readonly WindowedPassage[]) => string,
+): { passages: WindowedPassage[]; block: string } | null {
+  for (const documents of candidates) {
+    // A token is at most 4 characters, and overlapping Passages hold less than twice the text.
+    const size = documents.reduce((sum, each) => sum + each.size, 0);
+    if (documents.length === 0 || size > tokens * 4 * 2) continue;
+    const passages = withoutOverlap(documents.flatMap((each) => passagesOf(each.id)));
+    if (passages.length === 0) continue;
+    const text = block(passages);
+    if (estimateTokens(text) <= tokens) return { passages, block: text };
   }
-  const total = sized.reduce((sum, each) => sum + each.size, 0);
-  if (sized.length === 0 || total > UP_FRONT_CHARACTERS) return [];
-  return allWithin(
-    sized.flatMap((each) => passagesOf(each.id)),
-    UP_FRONT_TOKEN_LIMIT,
-  );
+  return null;
 }
 
-/** The messages with the Documents' text (`shown`: its Passages as the model reads them) before the Question. */
-export function withDocumentText(
-  messages: readonly AnswerMessage[],
-  shown: string,
-): AnswerMessage[] {
-  return withBeforeQuestion(messages, `<document-text>\n${shown}\n</document-text>`);
+/** The block that gives these Documents' whole text (`shown`: its Passages as the model reads them). */
+export function documentTextBlock(names: readonly string[], shown: string): string {
+  const which = names.map((name) => `"${name}"`).join(", ");
+  return `<document-text>\nThe whole text of ${which}, as Passages. Answer from them and cite them as you cite any Passage; search only for what they don't hold.\n\n${shown}\n</document-text>`;
 }
