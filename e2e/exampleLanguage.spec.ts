@@ -55,7 +55,7 @@ test("switching the interface to Chinese and back swaps the untouched example, i
     "第三季度业绩写的是毛利率 38.6%，不是 36.8%。",
   );
   await expect(card.getByTestId("claim-quote")).toHaveText(
-    "集团毛利率为 38.6%，上年同期为 40.3%，主要受线上业务拖累。",
+    "集团毛利率为38.6%，上年同期为40.3%，主要受线上业务拖累。",
   );
   await window.keyboard.press("Escape");
 
