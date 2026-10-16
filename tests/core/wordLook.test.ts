@@ -761,7 +761,7 @@ describe("a Mind imported before gets its look once", () => {
     );
   });
 
-  test("a table edited before the look keeps the plain look; its paragraphs the User didn't change get theirs", async () => {
+  test("a table edited before the look gets its table and cell looks while its rows and cells are as imported; the paragraph the User changed stays plain", async () => {
     const { dataDir, mindId } = await importedBefore({
       change: (doc) => {
         const cell = findText(doc.getXmlFragment(MIND_CONTENT_FIELD), "Flour and fats");
@@ -777,8 +777,36 @@ describe("a Mind imported before gets its look once", () => {
     );
     const look = wordLookOf(after.doc) as WordLook;
     const nodes = styled(after, look);
-    expect(nodes.find((node) => node.type === "table")?.look).toBeNull();
+    expect(nodes.find((node) => node.type === "table")?.look).toEqual({ columns: [100, 100] });
     expect(nodes.find((node) => node.text === "Flour and fats, edited")?.look).toBeNull();
+    expect(
+      nodes.find((node) => node.type === "paragraph" && node.text === "Products")?.runs,
+    ).toEqual([{ font: "Calibri", size: 11 }]);
+  });
+
+  test("a table whose rows the User changed before the look keeps the plain look", async () => {
+    const { dataDir, mindId } = await importedBefore({
+      change: (doc) => {
+        const table = doc
+          .getXmlFragment(MIND_CONTENT_FIELD)
+          .toArray()
+          .find(
+            (child): child is Y.XmlElement =>
+              child instanceof Y.XmlElement && child.nodeName === "table",
+          );
+        const row = table?.toArray().findIndex((each) => !each.toString().includes("Products"));
+        if (table && row !== undefined && row >= 0) table.delete(row, 1);
+      },
+    });
+
+    const { log, entries } = recordingLog();
+    const restarted = startCore(dataDir, { log });
+    const after = await connectToMind(restarted, mindId);
+    await vi.waitFor(() =>
+      expect(entries).toContainEqual(expect.objectContaining({ event: "word.look.done" })),
+    );
+    const nodes = styled(after, wordLookOf(after.doc) as WordLook);
+    expect(nodes.find((node) => node.type === "table")?.look).toBeNull();
     expect(
       nodes.find((node) => node.type === "paragraph" && node.text === "Products")?.runs,
     ).toEqual([{ font: "Calibri", size: 11 }]);
