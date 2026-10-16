@@ -2395,7 +2395,9 @@ export const en = {
   "cost.cap.interrupted": "{count} requests were interrupted; their cost isn’t known.",
   "cost.cap.amount": "Monthly cap",
   "cost.cap.currency": "Currency",
-  "cost.provider.thisMonth": "This month: {spent}",
+  "cost.provider.thisMonth": "This month: {spent} spent",
+  "cost.setAside": "{amount} set aside for work in progress",
+  "cost.setAside.hint": "Kept aside so running work can't go over your monthly limit",
   "cost.provider.unpriced": "This month: {tokens} tokens, price unknown",
 
   "citation.label": "Citation {number}: {document}. {badge}",

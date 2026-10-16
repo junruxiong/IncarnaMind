@@ -3482,7 +3482,8 @@ export interface Money {
  * The most IncarnaMind may spend in a calendar month on models billed per
  * token. Before each such request its most (its prompt and its output limit)
  * is reserved, and a request whose reservation would pass the cap isn't sent.
- * Spending in the other currency counts at a fixed rate.
+ * What is spent and what is still reserved both count against it. Spending
+ * in the other currency counts at a fixed rate.
  */
 export interface MonthlyCap {
   amount: number;
@@ -3494,8 +3495,10 @@ export interface ProviderCost {
   providerId: string;
   billing: Billing;
   requests: number;
-  /** What its requests cost, in each currency they were priced in. */
+  /** What its settled requests cost, in each currency they were priced in. */
   spent: Money[];
+  /** Reserved for its open requests, per currency. */
+  setAside: Money[];
   /** Tokens of requests to models with no known price: counted here, not toward the cap. */
   unpricedTokens: number;
   /** Requests a quit cut short with no usage known: counted as costing nothing (#636). */
@@ -3506,10 +3509,14 @@ export interface ProviderCost {
 export interface CostSummary {
   /** When the counted month began (ISO 8601), in the computer's time zone. */
   monthStart: string;
-  /** What per-token requests cost this month, settled and still reserved, per currency. */
+  /** What per-token requests cost this month once settled, per currency. */
   spent: Money[];
-  /** All of it in the cap's currency (the other at a fixed rate), when a cap is set. */
+  /** Reserved for open requests, per currency. */
+  setAside: Money[];
+  /** `spent` in the cap's currency (the other at a fixed rate), when a cap is set. */
   spentTowardCap: Money | null;
+  /** `setAside` in the cap's currency; it counts against the cap too. */
+  setAsideTowardCap: Money | null;
   cap: MonthlyCap | null;
   /** The providers used this month. */
   providers: ProviderCost[];
@@ -3653,7 +3660,7 @@ export interface Task {
   progress: TaskProgress | null;
   /** "failed": why, as a `ProviderErrorKind` or another short kind. */
   problem: string | null;
-  /** What its model requests have cost, settled and reserved; null with none billed. */
+  /** What its model requests have cost once settled; null with none billed. */
   cost: Money | null;
   /** What its kind lets the User ask of it, whatever it is doing now. */
   actions: TaskAction[];
@@ -3775,6 +3782,7 @@ export type RunEstimate =
       /** Null for a model with no known price. */
       cost: Money | null;
       spentTowardCap: Money | null;
+      setAsideTowardCap: Money | null;
       cap: MonthlyCap | null;
     }
   | { billing: "plan" | "free" };
