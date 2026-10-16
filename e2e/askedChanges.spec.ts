@@ -126,6 +126,9 @@ test("a rewrite that would take out most of the User's own text waits, in Englis
 
   await pointAndClick(window, line.getByTestId("applied-discard"));
   await expect(paragraphs).toHaveText(NOTES);
+  await expect(answer.getByTestId("mind-changes-left")).toHaveText("· none waiting");
+  // The text keeps the focus, a frame later: ⌘J before that would lose the composer's.
+  await expect(editor).toBeFocused();
 
   await askInAssistant(window, "Rewrite the intro to be clearer");
   await pointAndClick(window, line.getByTestId("applied-apply"));

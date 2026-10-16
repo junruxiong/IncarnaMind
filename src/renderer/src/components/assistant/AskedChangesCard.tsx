@@ -1,6 +1,6 @@
 import { type AskedOutcome, reviewAsked, undoAsked } from "../../askedChanges";
 import type { ChangedMind } from "../../changedMinds";
-import { changeFact } from "../../changeFacts";
+import { changeFact, leftText } from "../../changeFacts";
 import { useT } from "../../i18n";
 import { showChanges, type Waiting } from "../../mindChanges";
 import { PencilLineIcon } from "../lineIcons";
@@ -38,7 +38,7 @@ export function AskedChangesCard({
     <section data-testid="mind-changes" className="mind-changes">
       {applied.map((row) => {
         const outcome = outcomes[row.mindId];
-        const left = waiting[rows.indexOf(row)];
+        const left = leftText(t, row, waiting[rows.indexOf(row)]);
         return (
           <div key={row.mindId} className="mind-changes-head">
             <PencilLineIcon aria-hidden="true" className="mind-changes-icon" />
@@ -78,12 +78,10 @@ export function AskedChangesCard({
               )}
               {outcome === "held" && (
                 <>
-                  {typeof left === "number" && left > 0 && (
+                  {left && (
                     <span data-testid="mind-changes-left" className="mind-changes-count">
                       {" "}
-                      {left === 1
-                        ? t("mindChanges.left.one")
-                        : t("mindChanges.left", { count: left })}
+                      {left}
                     </span>
                   )}
                   <Dot />
