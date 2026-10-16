@@ -41,13 +41,11 @@ function selectedRange(editor: Editor): { from: number; to: number } | null {
   }
 }
 
-/** The top-level tables of an Answer shown in the assistant, in order, as the Answer wrote them. */
 export function answerTables(answerId: string): NodeJSON[] {
   const editor = editors.get(answerId);
   return editor && !editor.isDestroyed ? tablesOf(editor.state.doc) : [];
 }
 
-/** Which of an Answer's top-level tables, from 0, holds the focused element or the selection; null when none does. */
 export function tableHolding(answerId: string, active: Element | null): number | null {
   const editor = editors.get(answerId);
   if (!editor || editor.isDestroyed) return null;

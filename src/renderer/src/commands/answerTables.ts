@@ -7,12 +7,6 @@ import { usePalette } from "../palette";
 import { assistantHandle } from "./handles";
 import type { Command } from "./registry";
 
-/*
- * "Open as a table" from ⌘K, as its button under a table does. Where the focus or the selection
- * is in a table of an Answer, it opens that one; otherwise it lists the tables of the Answer in
- * view (the one the focus is in, else the newest), one row each, "Open table 2 as a table".
- */
-
 const MOST_LISTED = 4;
 
 interface InView {
