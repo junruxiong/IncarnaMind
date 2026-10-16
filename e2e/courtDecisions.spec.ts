@@ -1,6 +1,11 @@
 import { writeFile } from "node:fs/promises";
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import { join } from "node:path";
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
+import { formatShortDate } from "../src/shared/dates";
+import { translate } from "../src/shared/i18n";
+import { savedPageSource } from "../src/shared/webSource";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   addDocuments,
@@ -16,12 +21,6 @@ import {
   useLocalChatModel,
 } from "./app";
 
-/**
- * A sentence that cites a court decision no Document holds says so on its
- * card, instead of treating it as one more unsupported sentence, and offers no
- * web search to settle it. With the opinion among the Documents it is checked
- * against it as usual.
- */
 let dataDir: string;
 let sources: string;
 test.beforeEach(async () => {
@@ -55,16 +54,43 @@ const WORDS = {
     title: "This cites a court decision.",
     body: "IncarnaMind can't check that the case exists or that it says this. Look it up in your legal research service before you rely on it.",
     nothing: "Nothing in your Documents says this.",
+    held: (document: string, location: string) =>
+      `This cites a court decision. The quoted words were found in your saved copy of the opinion (${document}, ${location}). Whether it has been overruled or changed isn't checked: look it up in your legal research service before you rely on it.`,
+    page: "p. 1",
   },
   "zh-CN": {
     title: "本句引用了法院判决。",
-    body: "IncarnaMind 无法核实这个判决是否存在、是否这样说。依赖它之前，请在你使用的法律数据库中查一下。",
+    body: "IncarnaMind 无法核对这个判决是否存在、是否这样说。依赖它之前，请在你使用的法律数据库中查一下。",
     nothing: "你的文档中没有内容提到这一点。",
+    held: (document: string, location: string) =>
+      `这里引用了一项法院判决。引用的文字在你保存的判决书副本中找到（${document}，${location}）。它是否已被推翻或修改没有核对，引用前请在你的法律检索服务中查证。`,
+    page: "第 1 页",
   },
 } as const;
 
+/** Types each text as a paragraph of its own, selects them all and runs Find support on them. */
+async function findSupportFor(window: Page, texts: readonly string[], firstWords: string) {
+  const editor = window.getByTestId("mind-editor");
+  await editor.click();
+  for (const [index, text] of texts.entries()) {
+    if (index > 0) await window.keyboard.press("Enter");
+    await window.keyboard.type(text);
+  }
+  const lines = editor.locator(":scope > p");
+  const last = texts.length - 1;
+  await slideSelect(window, lines.first(), firstWords, {
+    line: lines.nth(last),
+    words: (texts[last] ?? "").split(" ").at(-1) ?? "",
+  });
+  await pointAndClick(
+    window,
+    window.getByTestId("selection-menu").getByTestId("selection-action-find-support"),
+  );
+  await expect(window.getByTestId("claim-mark")).toHaveCount(texts.length);
+}
+
 for (const language of ["en", "zh-CN"] as const) {
-  test(`the card of a cited court decision no Document holds says it can't be checked (${language})`, async () => {
+  test(`a cited court decision no Document holds is a card that says it can't be checked, with Remove the mark only (${language})`, async () => {
     test.setTimeout(120_000);
     const words = WORDS[language];
     await writeFile(join(sources, "Tides.pdf"), TIDES);
@@ -75,35 +101,20 @@ for (const language of ["en", "zh-CN"] as const) {
     await setLanguage(window, language);
     await addDocuments(window, [join(sources, "Tides.pdf")]);
     await newMind(window);
-    const editor = window.getByTestId("mind-editor");
-    await editor.click();
-    await window.keyboard.type(INVENTED);
-    await window.keyboard.press("Enter");
-    await window.keyboard.type(BESIDE);
-    const lines = editor.locator(":scope > p");
-    await slideSelect(window, lines.first(), "See Hallmark", {
-      line: lines.nth(1),
-      words: "cliffs.",
-    });
-    await pointAndClick(
-      window,
-      window.getByTestId("selection-menu").getByTestId("selection-action-find-support"),
-    );
+    await findSupportFor(window, [INVENTED, BESIDE], "See Hallmark");
     const marks = window.getByTestId("claim-mark");
-    await expect(marks).toHaveCount(2);
     const card = window.getByTestId("claim-card");
 
     await pointAndClick(window, marks.first());
     await expect(marks.first()).toHaveAttribute("data-check", "unsupported");
     await expect(card.getByTestId("claim-badge")).toHaveAttribute("data-check", "unsupported");
-    const notice = card.getByTestId("claim-court-decision");
-    await expect(notice).toContainText(words.title);
-    await expect(notice).toContainText(words.body);
+    await expect(card.getByTestId("claim-badge")).toHaveText(words.title);
+    await expect(card.getByTestId("claim-court-decision")).toHaveText(words.body);
     await expect(card.getByTestId("claim-nothing")).toHaveCount(0);
+    await expect(card.getByTestId("claim-find-sources")).toHaveCount(0);
     await expect(card.getByTestId("claim-search-web")).toHaveCount(0);
     await expect(card.getByTestId("claim-remove")).toBeVisible();
 
-    // The sentence beside it keeps the plain card, with every way to look.
     await window.keyboard.press("Escape");
     await expect(card).toHaveCount(0);
     await pointAndClick(window, marks.nth(1));
@@ -111,7 +122,6 @@ for (const language of ["en", "zh-CN"] as const) {
     await expect(card.getByTestId("claim-court-decision")).toHaveCount(0);
     await expect(card.getByTestId("claim-search-web")).toBeVisible();
 
-    // Remove the mark takes the cited sentence's mark away.
     await window.keyboard.press("Escape");
     await expect(card).toHaveCount(0);
     await pointAndClick(window, marks.first());
@@ -119,36 +129,114 @@ for (const language of ["en", "zh-CN"] as const) {
     await expect(marks).toHaveCount(1);
     await app.close();
   });
+
+  test(`a cited court decision whose opinion is among the Documents is checked against it, and the card says where it was found (${language})`, async () => {
+    test.setTimeout(120_000);
+    const words = WORDS[language];
+    await writeFile(join(sources, "Tides.pdf"), TIDES);
+    await writeFile(join(sources, "Hallmark Builders v Rio Grande Supply.pdf"), OPINION);
+    const { app, window } = await launchApp(dataDir, { fakeChat: true, home: sources });
+    await setWindowSize(app, window, 1440, 900);
+    await dismissChatSetup(window);
+    await useLocalChatModel(window);
+    await setLanguage(window, language);
+    await addDocuments(window, [
+      join(sources, "Tides.pdf"),
+      join(sources, "Hallmark Builders v Rio Grande Supply.pdf"),
+    ]);
+    await newMind(window);
+    await findSupportFor(window, [HELD], "A supplier");
+    const marks = window.getByTestId("claim-mark");
+    await expect(marks.first()).toHaveAttribute("data-check", "supported");
+
+    await pointAndClick(window, marks.first());
+    const card = window.getByTestId("claim-card");
+    await expect(card.getByTestId("claim-badge")).toHaveAttribute("data-check", "supported");
+    await expect(card.getByTestId("claim-court-decision-held")).toHaveText(
+      words.held("Hallmark Builders v Rio Grande Supply", words.page),
+    );
+    await expect(card.getByTestId("claim-court-decision")).toHaveCount(0);
+    await expect(card.getByTestId("claim-web-source")).toHaveCount(0);
+    await app.close();
+  });
 }
 
-test("a cited court decision whose opinion is among the Documents is checked against it as usual", async () => {
-  test.setTimeout(120_000);
-  await writeFile(join(sources, "Tides.pdf"), TIDES);
-  await writeFile(join(sources, "Hallmark Builders v Rio Grande Supply.pdf"), OPINION);
-  const { app, window } = await launchApp(dataDir, { fakeChat: true, home: sources });
-  await setWindowSize(app, window, 1440, 900);
-  await dismissChatSetup(window);
-  await useLocalChatModel(window);
-  await addDocuments(window, [
-    join(sources, "Tides.pdf"),
-    join(sources, "Hallmark Builders v Rio Grande Supply.pdf"),
-  ]);
-  await newMind(window);
-  const editor = window.getByTestId("mind-editor");
-  await editor.click();
-  await window.keyboard.type(HELD);
-  const line = editor.locator(":scope > p").first();
-  await slideSelect(window, line, "A supplier", { line, words: "2017)." });
-  await pointAndClick(
-    window,
-    window.getByTestId("selection-menu").getByTestId("selection-action-find-support"),
-  );
-  const marks = window.getByTestId("claim-mark");
-  await expect(marks).toHaveCount(1);
-  await expect(marks.first()).toHaveAttribute("data-check", "supported");
-  await pointAndClick(window, marks.first());
-  const card = window.getByTestId("claim-card");
-  await expect(card.getByTestId("claim-badge")).toHaveAttribute("data-check", "supported");
-  await expect(card.getByTestId("claim-court-decision")).toHaveCount(0);
-  await app.close();
+const OPINION_PATH =
+  "/opinions/2017/supreme-court/hallmark-builders-v-rio-grande-supply-512-sw3d-101.html";
+const OPINION_TITLE = "Hallmark Builders v. Rio Grande Supply";
+const OPINION_PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${OPINION_TITLE}</title></head><body><article><h1>${OPINION_TITLE}</h1><p>A supplier lien attaches when the materials are delivered to the job site.</p><p>${CITATION}.</p>${Array.from(
+  { length: 6 },
+  () =>
+    "<p>Construction law lets suppliers of materials secure payment against the property improved with them, provided they give the owner written notice within the time the statute allows.</p>",
+).join("")}</article></body></html>`;
+
+test.describe("a web page the User saved", () => {
+  let server: Server;
+  let port: number;
+  test.beforeEach(async () => {
+    server = createServer((request, response) => {
+      if (request.url === OPINION_PATH) {
+        response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+        response.end(OPINION_PAGE);
+      } else {
+        response.writeHead(404);
+        response.end("Not found");
+      }
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    port = (server.address() as AddressInfo).port;
+  });
+  test.afterEach(async () => {
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  });
+
+  for (const language of ["en", "zh-CN"] as const) {
+    test(`counts as the opinion, and the card names it with its address cut in the middle and the day it was saved (${language})`, async () => {
+      test.setTimeout(120_000);
+      const address = `http://127.0.0.1:${port}${OPINION_PATH}`;
+      const { app, window } = await launchApp(dataDir, {
+        fakeChat: true,
+        home: sources,
+        web: port,
+      });
+      await setWindowSize(app, window, 1440, 900);
+      await dismissChatSetup(window);
+      await useLocalChatModel(window);
+      await setLanguage(window, language);
+      await window.getByTestId("plus-menu").click();
+      await window.getByTestId("plus-add-web-page").click();
+      const dialog = window.getByTestId("add-web-page-dialog");
+      await dialog.getByTestId("add-web-page-addresses").fill(address);
+      await dialog.getByTestId("add-web-page-confirm").click();
+      await expect(dialog).toBeHidden();
+      const row = window.getByTestId("document-list-item").filter({ hasText: OPINION_TITLE });
+      await expect(row).toHaveAttribute("data-status", "ready");
+      await newMind(window);
+      await findSupportFor(window, [HELD], "A supplier");
+      const marks = window.getByTestId("claim-mark");
+      await expect(marks.first()).toHaveAttribute("data-check", "supported");
+
+      await pointAndClick(window, marks.first());
+      const card = window.getByTestId("claim-card");
+      const source = card.getByTestId("claim-web-source");
+      const t = (
+        ...args: Parameters<typeof translate> extends [unknown, ...infer Rest] ? Rest : never
+      ) => translate(language, ...args);
+      const savedAt = new Date().toISOString();
+      const shown = savedPageSource({ address, savedAt }, language, t, { compact: true });
+      await expect(source).toHaveText(shown);
+      expect(shown).toContain("…");
+      expect(shown).not.toContain(address);
+      expect(shown).toContain(formatShortDate(savedAt, language));
+      await expect(source).toHaveAttribute(
+        "title",
+        savedPageSource({ address, savedAt }, language, t, { compact: false }),
+      );
+      await expect(card.getByTestId("claim-court-decision-held")).toContainText(
+        language === "en" ? `(${OPINION_TITLE}, ` : `（${OPINION_TITLE}，`,
+      );
+      await app.close();
+    });
+  }
 });

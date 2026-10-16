@@ -2345,6 +2345,12 @@ export interface EvidenceSearchResult {
 export interface WebPageInfo {
   /** The address it was saved from: http or https, without a fragment. */
   address: string;
+  /**
+   * Who saved it: "user" (Add a web page, Save page, a source the User chose to add) or "search"
+   * (read by an Answer's web search). A page from before this was kept reads as "search" until
+   * the User saves its address again.
+   */
+  origin: WebPageOrigin;
   /** The site's name, as the page gives it, else its host. */
   siteName: string;
   author: string | null;
@@ -2362,6 +2368,8 @@ export interface WebPageInfo {
   /** The last fetch kept as it looks; null when it wasn't asked to be. */
   look: WebPageLook | null;
 }
+
+export type WebPageOrigin = "user" | "search";
 
 /** What `saveWebPage` takes. */
 export interface SaveWebPageInput {
@@ -4228,6 +4236,14 @@ export type UnlockDocumentResult =
   | { kind: "unlocked"; document: Document }
   | { kind: "wrong-password" };
 
+/**
+ * What a sentence's check found of the court decision it cites. "held": the Passage that decides
+ * it is in the opinion, among the Documents. "missing": a decision it cites isn't among them, so
+ * no check can find it or say what it holds. Null: it cites none, or the opinion is there but
+ * isn't what decided it.
+ */
+export type CitedDecision = "held" | "missing";
+
 /** What one claim check found: the claim-check function's result (`checkClaim`). */
 export type ClaimCheckResult =
   | {
@@ -4244,11 +4260,7 @@ export type ClaimCheckResult =
       says: string | null;
       /** A figure worked out that decided it; null when a Passage did. */
       calculation: ClaimCalculation | null;
-      /**
-       * "unsupported": the sentence cites a court decision that none of the Documents holds,
-       * which no check here can find or judge. Absent, or false, otherwise.
-       */
-      citesDecision?: boolean;
+      citedDecision: CitedDecision | null;
       /** The versions of the Documents it read, each once. */
       versions: CheckedVersion[];
       excluded: LeftOutDocument[];
@@ -4324,8 +4336,7 @@ export interface ClaimCheckAttributes {
   says: string | null;
   /** A figure worked out that decided it; null when a Passage did. */
   calculation: ClaimCalculation | null;
-  /** "unsupported": the sentence cites a court decision that none of the Documents holds. */
-  citesDecision: boolean;
+  citedDecision: CitedDecision | null;
   scope: ClaimCheckScope;
   versions: CheckedVersion[];
   excluded: LeftOutDocument[];

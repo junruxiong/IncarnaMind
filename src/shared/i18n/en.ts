@@ -597,6 +597,8 @@ export const en = {
   "claim.courtDecision.title": "This cites a court decision.",
   "claim.courtDecision.body":
     "IncarnaMind can't check that the case exists or that it says this. Look it up in your legal research service before you rely on it.",
+  "claim.courtDecision.held":
+    "This cites a court decision. The quoted words were found in your saved copy of the opinion ({document}, {location}). Whether it has been overruled or changed isn't checked: look it up in your legal research service before you rely on it.",
   "claim.fixSentence": "Fix the sentence",
   "claim.findSources": "Find sources",
   "claim.searchWeb": "Search the web",
@@ -1244,6 +1246,7 @@ export const en = {
   "webPages.copyAddress": "Copy address",
   "webPages.menuTitle": "Web page",
   "webPages.fetched": "Fetched {date}",
+  "webPages.source": "Saved web page · {address} · saved {date}",
   "webPages.drop": "Drop to save the web page, or drop it on a Folder in the sidebar",
   "status.alreadyAdded.one": "1 already added",
   "status.alreadyAdded.other": "{count} already added",

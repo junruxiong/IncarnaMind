@@ -6,11 +6,12 @@ import { CITATION_NODE, type CitationAttributes, type ClaimCalculation } from ".
 import { shownDocumentName } from "../../../shared/citations";
 import { formulaText } from "../../../shared/formula";
 import { citationLocation, formatLocation, openKind } from "../../../shared/locations";
+import { savedPageSource } from "../../../shared/webSource";
 import { addAsCitation, checkAgain, removeClaimMark } from "../checks";
 import { CountItLine } from "../components/CountItLine";
 import { askInAssistant } from "../conversations";
 import { useFindSources } from "../findSources";
-import { translateNow, useT } from "../i18n";
+import { translateNow, useLanguage, useT } from "../i18n";
 import { groupsMerged } from "../layoutSlice";
 import { openCited } from "../openCited";
 import { useAppStore } from "../store";
@@ -278,7 +279,8 @@ function Working({ calculation, onOpen }: { calculation: ClaimCalculation; onOpe
  * when it isn't cited yet; for a contradiction, what the Document says; for a
  * figure worked out, its working and inputs; for nothing found, where it
  * looked, with Search all Documents, or, for a court decision no Document
- * holds, that it can't be checked here; otherwise why, with Check again.
+ * holds, that it can't be checked here, with Remove the mark only; otherwise
+ * why, with Check again. A Passage from a saved web page names the page.
  * Documents IncarnaMind wrote that matched are named, with Count it.
  */
 function ClaimCard({
@@ -305,6 +307,7 @@ function ClaimCard({
   onRemove(): void;
 }) {
   const t = useT();
+  const language = useLanguage();
   const webSearchOn = useAppStore((store) => store.settings?.user.webSearch === true);
   // Search the web with web search off says why, and where to turn it on, before anything else happens.
   const [webOffShown, setWebOffShown] = useState(false);
@@ -316,16 +319,25 @@ function ClaimCard({
   const fromPassage = !calculation || (state === "contradicted" && calculation.agrees);
   // An unsupported sentence keeps the nearest line when it says something different (#770).
   const differs = state === "unsupported" && check.evidence !== null;
-  const courtDecision = state === "unsupported" && check.citesDecision;
   const evidence = (decided && fromPassage) || differs ? check.evidence : null;
   const location = evidence ? citationLocation(evidence) : null;
   const where = location ? formatLocation(location, t) : null;
+  const decisionMissing = state === "unsupported" && check.citedDecision === "missing";
+  const decisionHeld =
+    check.citedDecision === "held" &&
+    (state === "supported" || state === "contradicted" || state === "unsupported") &&
+    evidence !== null &&
+    where !== null;
   const folderName = useAppStore((store) =>
     check.scope.folderId === null
       ? null
       : (store.library?.groups.find((group) => group.id === check.scope.folderId)?.name ?? null),
   );
   const documents = useAppStore((store) => store.documents);
+  const savedPage = evidence
+    ? documents.find((each) => each.id === evidence.documentId)?.web
+    : undefined;
+  const savedFrom = savedPage && { address: savedPage.address, savedAt: savedPage.fetchedAt };
   const searchedFolder = !check.scope.widened && folderName !== null;
   const reason =
     shown.state === "not-checked"
@@ -339,7 +351,9 @@ function ClaimCard({
       <div className="citation-card-head">
         <p data-testid="claim-badge" data-check={state} className="citation-badge">
           <ClaimMarkIcon state={state} className="citation-badge-icon" />
-          <span>{t(`claim.state.${state}`)}</span>
+          <span>
+            {decisionMissing ? t("claim.courtDecision.title") : t(`claim.state.${state}`)}
+          </span>
         </p>
         {state === "contradicted" && check.says && (
           <p data-testid="claim-says" className="claim-card-says">
@@ -356,6 +370,15 @@ function ClaimCard({
             {[shownDocumentName(evidence, documents), where].filter(Boolean).join(" · ")}
           </p>
         )}
+        {savedFrom && (
+          <p
+            data-testid="claim-web-source"
+            className="citation-card-source whitespace-normal"
+            title={savedPageSource(savedFrom, language, t, { compact: false })}
+          >
+            {savedPageSource(savedFrom, language, t, { compact: true })}
+          </p>
+        )}
       </div>
       {evidence?.quote && (
         <figure className="citation-card-quote">
@@ -368,13 +391,20 @@ function ClaimCard({
         </figure>
       )}
       {calculation && <Working calculation={calculation} onOpen={onOpen} />}
-      {courtDecision && (
+      {decisionMissing && (
         <p data-testid="claim-court-decision" className="citation-card-note">
-          <strong className="block font-semibold text-ink">{t("claim.courtDecision.title")}</strong>
           {t("claim.courtDecision.body")}
         </p>
       )}
-      {state === "unsupported" && !differs && !courtDecision && (
+      {decisionHeld && evidence && (
+        <p data-testid="claim-court-decision-held" className="citation-card-note">
+          {t("claim.courtDecision.held", {
+            document: shownDocumentName(evidence, documents) ?? "",
+            location: where ?? "",
+          })}
+        </p>
+      )}
+      {state === "unsupported" && !differs && !decisionMissing && (
         <p data-testid="claim-nothing" className="citation-card-note">
           {searchedFolder
             ? t("claim.unsupported.inFolder", { folder: folderName })
@@ -447,7 +477,7 @@ function ClaimCard({
             {t("claim.fixSentence")}
           </button>
         )}
-        {state === "unsupported" && searchedFolder && (
+        {state === "unsupported" && searchedFolder && !decisionMissing && (
           <button
             type="button"
             data-testid="claim-search-all"
@@ -458,25 +488,25 @@ function ClaimCard({
           </button>
         )}
         {/* Where the Documents say something different the card has Open the page and Fix the sentence already, so it offers no more ways to look. */}
-        {state === "unsupported" && !differs && (
-          <button
-            type="button"
-            data-testid="claim-find-sources"
-            className="citation-card-action"
-            onClick={onFindSources}
-          >
-            {t("claim.findSources")}
-          </button>
-        )}
-        {state === "unsupported" && !differs && !courtDecision && (
-          <button
-            type="button"
-            data-testid="claim-search-web"
-            className="citation-card-action"
-            onClick={() => (webSearchOn ? onSearchWeb() : setWebOffShown(true))}
-          >
-            {t("claim.searchWeb")}
-          </button>
+        {state === "unsupported" && !differs && !decisionMissing && (
+          <>
+            <button
+              type="button"
+              data-testid="claim-find-sources"
+              className="citation-card-action"
+              onClick={onFindSources}
+            >
+              {t("claim.findSources")}
+            </button>
+            <button
+              type="button"
+              data-testid="claim-search-web"
+              className="citation-card-action"
+              onClick={() => (webSearchOn ? onSearchWeb() : setWebOffShown(true))}
+            >
+              {t("claim.searchWeb")}
+            </button>
+          </>
         )}
         {state === "unsupported" && (
           <button

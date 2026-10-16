@@ -576,7 +576,9 @@ export const zhCN = {
   "claim.unsupported.differs": "你的文档里是另一种说法：",
   "claim.courtDecision.title": "本句引用了法院判决。",
   "claim.courtDecision.body":
-    "IncarnaMind 无法核实这个判决是否存在、是否这样说。依赖它之前，请在你使用的法律数据库中查一下。",
+    "IncarnaMind 无法核对这个判决是否存在、是否这样说。依赖它之前，请在你使用的法律数据库中查一下。",
+  "claim.courtDecision.held":
+    "这里引用了一项法院判决。引用的文字在你保存的判决书副本中找到（{document}，{location}）。它是否已被推翻或修改没有核对，引用前请在你的法律检索服务中查证。",
   "claim.fixSentence": "修改这句话",
   "claim.findSources": "查找来源",
   "claim.searchWeb": "网页搜索",
@@ -1188,6 +1190,7 @@ export const zhCN = {
   "webPages.copyAddress": "复制网址",
   "webPages.menuTitle": "网页",
   "webPages.fetched": "抓取于 {date}",
+  "webPages.source": "保存的网页 · {address} · 保存于 {date}",
   "webPages.drop": "松开即可保存网页，也可以拖到侧边栏的文件夹上",
   "status.alreadyAdded.one": "1 个已存在",
   "status.alreadyAdded.other": "{count} 个已存在",

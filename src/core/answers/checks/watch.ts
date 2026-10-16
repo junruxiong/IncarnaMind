@@ -213,7 +213,7 @@ export function createContradictionWatch(options: WatchOptions) {
         evidence: null,
         says: null,
         calculation: null,
-        citesDecision: false,
+        citedDecision: null,
         scope: { folderId, widened: false },
         versions: [],
         excluded: [],

@@ -27,6 +27,7 @@ import type { FigureContext } from "../../../shared/figures";
 import type {
   CheckedVersion,
   Citation,
+  CitedDecision,
   ClaimCalculation,
   ClaimCheckFailure,
   ClaimCheckResult,
@@ -79,7 +80,7 @@ export interface ClaimCheckDependencies {
   documents: Pick<AnswerDocuments, "citationSource" | "pageTexts" | "documentDate"> & {
     searchableCount(documentIds: readonly string[] | null): number;
     searchableLanguages(documentIds: readonly string[] | null): DocumentLanguage[];
-    isWebPage(documentId: string): boolean;
+    savedBySearch(documentId: string): boolean;
   };
 }
 
@@ -130,11 +131,11 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       searchableCount: () => deps.documents.searchableCount(scope.documentIds),
       async search(query, searchSignal) {
         const found = await deps.evidence.search(query, scope, searchSignal);
-        // A web result never settles a citation of a court decision, and a saved web page is one.
+        // A web search's result never settles a citation of a court decision.
         const passages =
           decisions.length === 0
             ? found.passages
-            : found.passages.filter((passage) => !deps.documents.isWebPage(passage.documentId));
+            : found.passages.filter((passage) => !deps.documents.savedBySearch(passage.documentId));
         for (const passage of passages) read.set(passage.documentId, passage.contentHash);
         for (const each of found.excluded) {
           if (excluded.has(each.documentId)) continue;
@@ -202,6 +203,19 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       ...facts(),
     });
 
+    let opinions: Opinions;
+    try {
+      opinions = await opinionsOf(decisions, scoped, signal);
+    } catch (error) {
+      if (signal.aborted) return notChecked("stopped");
+      throw error;
+    }
+    const citedDecision = (evidence: Citation | null): CitedDecision | null => {
+      if (decisions.length === 0) return null;
+      if (opinions.missing) return "missing";
+      return evidence && opinions.documentIds.has(evidence.documentId ?? "") ? "held" : null;
+    };
+
     let reply = "";
     let failed: ProviderError | null = null;
     let finished = false;
@@ -246,6 +260,7 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
         evidence: worked.evidence,
         says: null,
         calculation: worked.calculation,
+        citedDecision: citedDecision(worked.evidence),
         ...facts(),
       };
     }
@@ -254,6 +269,7 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       evidence: worked.evidence,
       says: null,
       calculation: worked.calculation,
+      citedDecision: citedDecision(worked.evidence),
       ...facts(),
     };
     if (!finished || reply.trim() === "") return byCalculation ?? notChecked("empty");
@@ -265,14 +281,13 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
     /** Unsupported, with the nearest line when it states another value for the same thing (#770). */
     const unsupported = async (): Promise<ClaimCheckResult> => {
       const nearest = await nearestDifferent(request, session, signal);
-      const citesDecision = !signal.aborted && (await lacksDecision(decisions, scoped, signal));
       if (signal.aborted) return notChecked("stopped");
       return {
         verdict: "unsupported",
         evidence: nearest,
         says: null,
         calculation: null,
-        citesDecision,
+        citedDecision: citedDecision(nearest),
         ...facts(),
       };
     };
@@ -295,6 +310,7 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
             evidence,
             says: null,
             calculation: null,
+            citedDecision: citedDecision(evidence),
             ...facts(),
           }
         );
@@ -305,6 +321,7 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       evidence,
       says: verdict.says,
       calculation: worked?.calculation ?? null,
+      citedDecision: citedDecision(evidence),
       ...facts(),
     };
   };
@@ -415,19 +432,29 @@ async function confirmContradiction(
   }
 }
 
-async function lacksDecision(
+interface Opinions {
+  /** The Documents that name a decision the sentence cites. */
+  documentIds: ReadonlySet<string>;
+  /** A decision the sentence cites is named by none of the Documents. */
+  missing: boolean;
+}
+
+async function opinionsOf(
   decisions: readonly CaseCitation[],
   documents: AnswerDocuments,
   signal: AbortSignal,
-): Promise<boolean> {
+): Promise<Opinions> {
+  const documentIds = new Set<string>();
+  let missing = false;
   for (const decision of decisions) {
     const query = [decision.name, decision.cite].filter(Boolean).join(" ");
-    const passages = await documents.search(query, signal);
-    if (!passages.some((each) => namesDecision(`${each.documentName} ${each.text}`, decision))) {
-      return true;
-    }
+    const named = (await documents.search(query, signal)).filter((each) =>
+      namesDecision(`${each.documentName} ${each.text}`, decision),
+    );
+    if (named.length === 0) missing = true;
+    for (const each of named) documentIds.add(each.documentId);
   }
-  return false;
+  return { documentIds, missing };
 }
 
 /**
