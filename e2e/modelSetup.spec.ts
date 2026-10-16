@@ -1,4 +1,4 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import { createFakeOpenAI, signInAt } from "../tests/helpers/fakeOpenAI";
 import {
@@ -74,22 +74,36 @@ async function askFirstQuestion(window: Page) {
   return card;
 }
 
-const WHO = {
+const WORDS = {
   en: {
-    chatgpt: "If you pay for ChatGPT Plus or Pro · No key needed · ",
-    key: "From OpenAI, Anthropic, Google, DeepSeek and more, yours or your company's.",
+    title: "Choose your AI",
+    chatgpt: "Plus or Pro · no key needed",
+    sends: "Sends your questions and document text to ChatGPT. · Details",
+    key: "OpenAI, Anthropic, Google, DeepSeek and more",
   },
   "zh-CN": {
-    chatgpt: "如果你订阅了 ChatGPT Plus 或 Pro（中国大陆无法使用）· 无需密钥 · ",
-    key: "来自 OpenAI、Anthropic、Google、DeepSeek 等，你自己的或公司的。",
+    title: "选择你的 AI",
+    chatgpt: "Plus 或 Pro（中国大陆不可用）· 无需密钥",
+    sends: "会把你的问题和文档内容发送给 ChatGPT。· 详情",
+    key: "OpenAI、Anthropic、Google、DeepSeek 等",
   },
 } as const;
+
+/** One line of text: no taller than its line height, with room for rounding. */
+async function expectOneLine(line: Locator): Promise<void> {
+  const [box, lineHeight] = await Promise.all([
+    line.boundingBox(),
+    line.evaluate((element) => Number.parseFloat(getComputedStyle(element).lineHeight)),
+  ]);
+  if (!box) throw new Error("The line isn't laid out.");
+  expect(box.height).toBeLessThan(lineHeight * 1.5);
+}
 
 for (const [width, height] of [
   [1100, 760],
   [1440, 900],
 ] as const) {
-  test(`at ${width} px the card offers the ChatGPT plan and Paste an API key at the same size, each with who it's for; in Chinese the key comes first`, async () => {
+  test(`at ${width} px the card offers the ChatGPT plan and Paste an API key at the same size, each with a short line under it; in Chinese the key comes first`, async () => {
     const { app, window } = await launchApp(dataDir);
     try {
       await setWindowSize(app, window, width, height);
@@ -99,8 +113,15 @@ for (const [width, height] of [
         await setLanguage(window, language);
         const plan = card.getByTestId("setup-chatgpt");
         const key = card.getByTestId("setup-key");
-        await expect(card.getByTestId("setup-chatgpt-sends")).toContainText(WHO[language].chatgpt);
-        await expect(card.getByTestId("setup-key-for")).toHaveText(WHO[language].key);
+        const words = WORDS[language];
+        await expect(card.getByRole("heading", { level: 2 })).toHaveText(words.title);
+        await expect(card.getByTestId("setup-chatgpt-line")).toHaveText(words.chatgpt);
+        await expect(card.getByTestId("setup-chatgpt-sends").locator("p")).toHaveText(words.sends);
+        await expect(card.getByTestId("setup-key-for")).toHaveText(words.key);
+        if (width === 1440) {
+          await expectOneLine(card.getByTestId("setup-chatgpt-line"));
+          await expectOneLine(card.getByTestId("setup-key-for"));
+        }
         await expect(plan).toBeInViewport({ ratio: 1 });
         await expect(key).toBeInViewport({ ratio: 1 });
         const planBox = await plan.boundingBox();

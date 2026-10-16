@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { AgentClient, ChatProvider } from "../../../../core/api";
+import { CHATGPT_SERVICE } from "../../../../core/providers/chatgpt/service";
 import { SHOW_AGENT_CONNECTION } from "../../../../shared/agentConnection";
-import { chosenFlowSummary } from "../../chosenFlows";
 import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useLanguage, useT } from "../../i18n";
@@ -26,6 +26,7 @@ import {
   useOllama,
 } from "./OllamaCard";
 import { ProviderForm } from "./ProviderForm";
+import { SendsLine } from "./SendsLine";
 
 const CLAUDE_DOWNLOAD = "https://claude.ai/download";
 
@@ -62,17 +63,12 @@ export function ModelSetupCard() {
       aria-labelledby="model-setup-title"
       className="flex max-h-[85vh] flex-col gap-2.5 overflow-y-auto px-4 py-2.5"
     >
-      <div className="flex flex-col gap-1">
-        <h2
-          id="model-setup-title"
-          className={view === null ? "text-[15px] leading-6 font-semibold text-ink" : "sr-only"}
-        >
-          {t("setup.title")}
-        </h2>
-        {view === null && (
-          <p className="text-[13px] leading-5 text-ink-secondary">{t("setup.body")}</p>
-        )}
-      </div>
+      <h2
+        id="model-setup-title"
+        className={view === null ? "text-[15px] leading-6 font-semibold text-ink" : "sr-only"}
+      >
+        {t("setup.title")}
+      </h2>
 
       {view === null ? (
         <>
@@ -173,12 +169,11 @@ function LeadingWays({
         <ChatGptMark className="size-4" />
         {t("setup.chatgpt.use")}
       </button>
-      {/* It signs in at once, so its line also says what goes to OpenAI (ADR-0022). */}
-      <p data-testid="setup-chatgpt-sends" className={lineClass}>
-        {t(chinese ? "setup.chatgpt.line.china" : "setup.chatgpt.line", {
-          sends: chosenFlowSummary(t),
-        })}
+      <p data-testid="setup-chatgpt-line" className={lineClass}>
+        {t(chinese ? "setup.chatgpt.line.china" : "setup.chatgpt.line")}
       </p>
+      {/* It signs in at once, so it says here what goes to OpenAI (ADR-0022). */}
+      <SendsLine provider={CHATGPT_SERVICE.name} testId="setup-chatgpt-sends" />
     </div>
   );
   const key = (
