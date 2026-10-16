@@ -305,9 +305,9 @@ test("in Chinese: the row is first under Other ways too and a model on this comp
     const card = await askFirstQuestion(window);
     await card.getByTestId("setup-other").click();
     const ways = card.locator("[data-testid^='way-']:not([data-testid$='-open'])");
-    await expect(ways).toHaveCount(2);
-    await expect(ways.nth(0)).toHaveAttribute("data-testid", "way-claude");
-    await expect(ways.nth(1)).toHaveAttribute("data-testid", "way-local");
+    // Every plan comes before a model on this computer.
+    await expect(ways.first()).toHaveAttribute("data-testid", "way-claude");
+    await expect(ways.last()).toHaveAttribute("data-testid", "way-local");
 
     const row = card.getByTestId("way-claude");
     await expect(row).toContainText("使用我的 Claude 订阅");

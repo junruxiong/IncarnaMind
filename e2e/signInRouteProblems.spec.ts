@@ -26,6 +26,9 @@ async function screenshot(target: Page | Locator, name: string): Promise<void> {
   if (SCREENSHOTS) await target.screenshot({ path: join(SCREENSHOTS, `${name}.png`) });
 }
 
+/** Nothing listens here: as if Ollama weren't on this computer. */
+const NO_OLLAMA = "http://127.0.0.1:9";
+
 let dataDir: string;
 let github: FakeGitHub;
 test.beforeEach(async () => {
@@ -58,7 +61,7 @@ async function signInToCopilot(window: Page): Promise<void> {
 }
 
 test("an organization's policy stops a Copilot Answer: GitHub's line, an API key or another model", async () => {
-  const { app, window } = await launchApp(dataDir, { copilot: github.origin });
+  const { app, window } = await launchApp(dataDir, { copilot: github.origin, ollama: NO_OLLAMA });
   await interceptOpenExternal(app);
   await setWindowSize(app, window, 1100, 800);
   await signInToCopilot(window);
@@ -100,7 +103,7 @@ test("an organization's policy stops a Copilot Answer: GitHub's line, an API key
 });
 
 test("signed out of Copilot, the lines name GitHub Copilot with its ways back, and Sign in with GitHub opens its place in Settings › Models", async () => {
-  const { app, window } = await launchApp(dataDir, { copilot: github.origin });
+  const { app, window } = await launchApp(dataDir, { copilot: github.origin, ollama: NO_OLLAMA });
   await interceptOpenExternal(app);
   await setWindowSize(app, window, 1100, 800);
   await signInToCopilot(window);
@@ -128,5 +131,12 @@ test("signed out of Copilot, the lines name GitHub Copilot with its ways back, a
   await expect(settings).toHaveAttribute("data-page", "models");
   await expect(window.getByTestId("plans-settings")).toBeInViewport();
   await expect(settings.getByRole("note")).toHaveText("You're not signed in to GitHub Copilot.");
+  const row = settings.getByTestId("plans-copilot");
+  await expect(row).toBeInViewport();
+  await pointAndClick(window, row.getByTestId("copilot-sign-in"));
+  await expect(row.getByTestId("copilot-code")).toBeVisible();
+  github.approve();
+  await expect(row.getByTestId("plans-copilot-sign-out")).toBeVisible();
+  await expect(window.getByTestId("chat-readiness")).toBeHidden();
   await app.close();
 });
