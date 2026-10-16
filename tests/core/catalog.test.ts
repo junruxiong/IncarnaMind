@@ -390,7 +390,7 @@ describe("The providers of #178", () => {
     }
   });
 
-  test("each says whether it may train on API data: Mistral and Kimi may, DeepSeek's and Z.ai's terms don't say", () => {
+  test("each says whether it may train on API data: Mistral may, with an opt-out; Kimi's, DeepSeek's and Z.ai's terms don't say", () => {
     const training = Object.fromEntries(
       added.map((id) => [id, catalogProvider(id)?.dataUse.training]),
     );
@@ -400,7 +400,7 @@ describe("The providers of #178", () => {
       xai: "no",
       deepseek: "unknown",
       qwen: "no",
-      kimi: "opt-out",
+      kimi: "unknown",
       glm: "unknown",
       siliconflow: "no",
     });
@@ -409,9 +409,11 @@ describe("The providers of #178", () => {
     );
   });
 
-  test("Anthropic's data line says which model needs 30-day retention, and no link uses an address that has moved", () => {
-    expect(catalogProvider("anthropic")?.dataUse.summary.en).toContain("Fable 5.1");
-    expect(catalogProvider("anthropic")?.dataUse.summary.zh).toContain("Fable 5.1");
+  test("Anthropic's data line names every model that needs 30-day retention, and no link uses an address that has moved", () => {
+    for (const model of ["Fable 5.1", "Fable 5", "Mythos 5.1", "Mythos 5"]) {
+      expect(catalogProvider("anthropic")?.dataUse.summary.en, model).toContain(model);
+      expect(catalogProvider("anthropic")?.dataUse.summary.zh, model).toContain(model);
+    }
     const links = CATALOG_PROVIDERS.flatMap((each) => [each.docsUrl, each.dataUse.url]);
     expect(
       links.filter((url) => /docs\.anthropic\.com|platform\.openai\.com\/docs/.test(url ?? "")),

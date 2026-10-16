@@ -76,7 +76,6 @@ export function contextOverflow(
   };
 }
 
-/** Anthropic's 400 for a model that requires 30-day data retention, asked by an organization or workspace without it. */
 const refusesWithoutRetention = (error: APICallError) =>
   error.statusCode === 400 &&
   /must have data retention enabled/i.test(`${error.message} ${error.responseBody ?? ""}`);
