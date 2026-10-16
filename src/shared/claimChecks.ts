@@ -5,8 +5,11 @@
  * that have changed since needs a re-check.
  */
 import {
+  type CalculatedFigure,
   type CheckedVersion,
+  type Citation,
   type CitationAttributes,
+  type ClaimCalculation,
   type ClaimCheckAction,
   type ClaimCheckAttributes,
   type ClaimCheckFailure,
@@ -38,7 +41,7 @@ const FAILURES: readonly ClaimCheckFailure[] = [
   "stopped",
 ];
 
-const EXCLUSIONS: readonly EvidenceExclusion[] = ["own-file", "checked-document"];
+const EXCLUSIONS: readonly EvidenceExclusion[] = ["own-file", "own-workings", "checked-document"];
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -67,6 +70,20 @@ function excludedOf(value: unknown): LeftOutDocument[] {
   });
 }
 
+/** A figure worked out that decided a check (#707), as its mark keeps it. */
+function calculationOf(value: unknown): ClaimCalculation | null {
+  if (!isRecord(value) || !isRecord(value.figure)) return null;
+  const stated = text(value.stated);
+  const { figure } = value;
+  if (stated === null || !Array.isArray(figure.inputs) || typeof figure.shown !== "string")
+    return null;
+  return {
+    figure: figure as unknown as CalculatedFigure,
+    stated,
+    agrees: value.agrees === true,
+  };
+}
+
 function scopeOf(value: unknown): ClaimCheckScope {
   if (!isRecord(value)) return { folderId: null, widened: false };
   return { folderId: text(value.folderId), widened: value.widened === true };
@@ -87,9 +104,12 @@ export function readClaimCheck(value: unknown): ClaimCheckAttributes | null {
     state,
     reason: FAILURES.find((each) => each === value.reason) ?? null,
     detail: text(value.detail),
+    providerId: text(value.providerId),
+    modelId: text(value.modelId),
     text: text(value.text) ?? "",
     evidence: isRecord(value.evidence) ? (value.evidence as unknown as CitationAttributes) : null,
     says: text(value.says),
+    calculation: calculationOf(value.calculation),
     scope: scopeOf(value.scope),
     versions: versionsOf(value.versions),
     excluded: excludedOf(value.excluded),
@@ -100,7 +120,8 @@ export function readClaimCheck(value: unknown): ClaimCheckAttributes | null {
 /**
  * Why a check no longer holds: its sentence was edited (an accepted change
  * or a restored Checkpoint edits it too), a Document it read has a new
- * version or was deleted, or the Mind moved to another Folder.
+ * version, one its result rests on was deleted, or the Mind moved to another
+ * Folder.
  */
 export type RecheckReason = "edited" | "new-version" | "document-removed" | "scope";
 
@@ -121,6 +142,15 @@ export interface ClaimCheckNow {
   folderId: string | null;
 }
 
+/** What a check's result rests on: its evidence, and the quotes a worked-out figure read its numbers from. */
+export function restsOn(check: ClaimCheckAttributes): (CitationAttributes | Citation)[] {
+  const inputs = check.calculation?.figure.inputs ?? [];
+  return [
+    check.evidence,
+    ...inputs.flatMap((input) => [input.citation, input.unitStatement?.citation ?? null]),
+  ].filter((each): each is CitationAttributes | Citation => each !== null);
+}
+
 /** How a check shows, given the sentence, the Documents and the Mind's Folder as they are now. */
 export function claimCheckShown(check: ClaimCheckAttributes, now: ClaimCheckNow): ClaimCheckShown {
   if (check.state === "checking") return { state: "checking" };
@@ -128,10 +158,16 @@ export function claimCheckShown(check: ClaimCheckAttributes, now: ClaimCheckNow)
     return { state: "needs-recheck", why: "edited" };
   }
   if (now.versions) {
+    const relied = new Set(restsOn(check).map((each) => each.documentId));
     for (const version of check.versions) {
       const current = now.versions.get(version.documentId);
-      if (current === undefined) return { state: "needs-recheck", why: "document-removed" };
-      if (current !== version.contentHash) return { state: "needs-recheck", why: "new-version" };
+      // A Document only read, gone, takes nothing from the result: an example's, swapped for the interface language, among them (#962).
+      if (current === undefined && relied.has(version.documentId)) {
+        return { state: "needs-recheck", why: "document-removed" };
+      }
+      if (current !== undefined && current !== version.contentHash) {
+        return { state: "needs-recheck", why: "new-version" };
+      }
     }
   }
   if (!check.scope.widened && check.scope.folderId !== now.folderId) {

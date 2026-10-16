@@ -14,6 +14,7 @@ import {
   dismissChatSetup,
   enterContent,
   launchApp,
+  ollamaListing,
   openSteps,
   pointAndClick,
   pointAt,
@@ -240,14 +241,14 @@ test("typing in the composer and pressing Enter shows the Question in the assist
   // The Mind is as it was written.
   await expect.poll(() => order(editor)).toEqual(["Spring tides come twice a month."]);
 
-  // The Citation is checked: found on page 2, its check in the margin beside it.
+  // The Citation is checked: found on page 2, its check in its badge.
   const citation = answer.getByTestId("citation");
   await expect(citation).toHaveAttribute("data-check", "found");
   await expect(citation.getByTestId("citation-chip")).toHaveAttribute(
     "aria-label",
     "Citation 1: Tides, p. 2. Quote found on p. 2",
   );
-  await expect(answer.getByTestId("margin-check")).toHaveAttribute("data-check", "found");
+  await expect(citation.locator(".citation-marker-icon")).toBeVisible();
   // The composer is empty and keeps the focus, for a follow-up.
   await expect(input).toHaveValue("");
   await expect(input).toBeFocused();
@@ -543,28 +544,6 @@ test("⌘J focuses the composer from the note; Shift+Enter breaks the Question's
   await expect.poll(() => order(editor)).toEqual(["First thought noted", "Second thought"]);
   await app.close();
 });
-
-/**
- * An Ollama server that lists models, for the model chip's menu, after
- * `delayMs` as a slow provider does. It answers nothing else.
- */
-async function ollamaListing(models: string[], { delayMs = 0 }: { delayMs?: number } = {}) {
-  const server: Server = createServer((request, response) => {
-    request.resume();
-    if (request.url === "/api/tags") {
-      setTimeout(() => {
-        response.writeHead(200, { "content-type": "application/json" });
-        response.end(JSON.stringify({ models: models.map((name) => ({ name, model: name })) }));
-      }, delayMs);
-      return;
-    }
-    response.writeHead(404);
-    response.end();
-  });
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const { port } = server.address() as AddressInfo;
-  return { server, url: `http://127.0.0.1:${port}` };
-}
 
 test("the model chip chooses the model for one Mind, which remembers it after a restart, while new Minds take the default", async () => {
   // Listed a second late, so the menu opens before its models are there, as on a slow machine

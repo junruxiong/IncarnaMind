@@ -7,6 +7,7 @@ import type {
 } from "../../../../core/api";
 import { shownDocumentName } from "../../../../shared/citations";
 import { citationLocation, formatLocation } from "../../../../shared/locations";
+import { mindName } from "../../../../shared/naming";
 import {
   type FoldedLine,
   foldedLine,
@@ -40,6 +41,7 @@ import {
   SparkLineIcon,
 } from "../lineIcons";
 import { ProblemLine } from "../ProblemLine";
+import { AnswerWait } from "./AnswerWait";
 import { mindCallText, namedMind } from "./MindCall";
 
 /** The least time a live step stays up while another replaces it, so the line never flickers. */
@@ -58,12 +60,14 @@ export function AnswerSteps({
   question,
   streaming,
   waitingForApproval,
+  wait,
   onRegenerate,
 }: {
   answer: ConversationAnswer;
   question: ConversationQuestion | undefined;
   streaming: boolean;
   waitingForApproval: boolean;
+  wait: { usual: number | null } | null;
   onRegenerate(): void;
 }) {
   const t = useT();
@@ -76,7 +80,16 @@ export function AnswerSteps({
   // Written again, it starts folded.
   if (streaming && open) setOpen(false);
   if (streaming) {
-    return <LiveLine step={liveStep({ answer, phase, waitingForApproval })} scope={scopeOf(0)} />;
+    return (
+      <>
+        <LiveLine
+          step={liveStep({ answer, phase, waitingForApproval })}
+          scope={scopeOf(0)}
+          askedFrom={askedFrom}
+        />
+        {wait && <AnswerWait answer={answer} usual={wait.usual} />}
+      </>
+    );
   }
   const line = foldedLine({ answer, askedFrom, meeting, selection });
   if (!line) return null;
@@ -115,10 +128,30 @@ export function AnswerSteps({
  * pulsing accent dot, or what it waits for, with the attention dot. `scope`
  * is what its Question searches (`stepsScope`).
  */
-export function LiveLine({ step, scope }: { step: LiveStep; scope: string }) {
+export function LiveLine({
+  step,
+  scope,
+  askedFrom = null,
+}: {
+  step: LiveStep;
+  scope: string;
+  /** The Mind the Question was asked from: the one a Minds' Tool changes when it names none. */
+  askedFrom?: AskedFrom | null;
+}) {
   const t = useT();
   const shown = useHeldStep(step);
-  const label = liveText(t, shown, scope);
+  const minds = useAppStore((state) => state.minds);
+  // A Minds' Tool's call names its Mind once it has changed it; before, by its input, else the one asked from.
+  const mindOf = (call: AnswerToolCall) => {
+    const changed = minds.find((mind) => mind.id === call.mindChange?.mindId);
+    if (changed) return mindName(changed);
+    if (call.tool === "create_mind")
+      return typeof call.input.title === "string" ? call.input.title : "";
+    return typeof call.input.mind === "string"
+      ? call.input.mind
+      : askedFrom?.name || namedMind(t, call);
+  };
+  const label = liveText(t, shown, scope, mindOf);
   const waiting = shown.kind === "waiting" || shown.kind === "consent";
   return (
     <p
@@ -168,7 +201,12 @@ function useHeldStep(step: LiveStep): LiveStep {
   return key === shownKey ? step : shown;
 }
 
-function liveText(t: Translate, step: LiveStep, scope: string): string {
+function liveText(
+  t: Translate,
+  step: LiveStep,
+  scope: string,
+  mindOf: (call: AnswerToolCall) => string,
+): string {
   switch (step.kind) {
     case "waiting":
       return t("approvals.answer.waiting");
@@ -181,7 +219,9 @@ function liveText(t: Translate, step: LiveStep, scope: string): string {
     case "searching":
       return t("steps.live.searching", { scope });
     case "call":
-      return runningText(t, step.call);
+      return runningText(t, step.call, mindOf);
+    case "thinking":
+      return t("steps.live.thinking");
     case "writing":
       return t("answer.phase.writing");
     case "checking":
@@ -198,12 +238,16 @@ const field = (call: AnswerToolCall, name: string): string => {
 };
 
 /** What a call that runs is doing, in the words its row uses. */
-function runningText(t: Translate, call: AnswerToolCall): string {
+function runningText(
+  t: Translate,
+  call: AnswerToolCall,
+  mindOf: (call: AnswerToolCall) => string,
+): string {
   if (call.source === "connector") {
     return t("connectors.call.running", { connector: call.connector?.name ?? "", tool: call.tool });
   }
   if (call.source === "sources") return t("sources.call.running", { query: field(call, "query") });
-  if (call.source === "minds") return mindCallText(t, call, namedMind(t, call));
+  if (call.source === "minds") return mindCallText(t, call, mindOf(call));
   if (call.source === "web") {
     return call.tool === "search_web"
       ? t("web.call.searching", { query: field(call, "query") })

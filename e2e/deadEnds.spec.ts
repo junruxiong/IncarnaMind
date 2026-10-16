@@ -170,7 +170,43 @@ test("most sentences unsupported says so once; an unsupported card offers its th
   await expect(card.getByTestId("claim-find-sources")).toHaveText("Find sources");
   await expect(card.getByTestId("claim-search-web")).toHaveText("Search the web");
   await expect(card.getByTestId("claim-remove")).toHaveText("Remove the mark");
+  // With web search off (the default) Search the web says why, and where to turn it on.
+  await pointAndClick(window, card.getByTestId("claim-search-web"));
+  await expect(card.getByTestId("claim-web-off")).toContainText("Turn on web search");
+  await expect(card.getByTestId("claim-web-off-settings")).toBeVisible();
   await pointAndClick(window, card.getByTestId("claim-remove"));
   await expect(marks).toHaveCount(1);
+  await app.close();
+});
+
+test("in Chinese, the card's button and the panel it opens have one name, 查找资料, and the AI action that shortens is 精简", async () => {
+  test.setTimeout(120_000);
+  await writeFile(join(sources, "Tides.pdf"), TIDES);
+  const { app, window } = await launchApp(dataDir, { fakeChat: true, home: sources });
+  await setWindowSize(app, window, 1440, 900);
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await setLanguage(window, "zh-CN");
+  await addDocuments(window, [join(sources, "Tides.pdf")]);
+  await newMind(window);
+  const editor = window.getByTestId("mind-editor");
+  await editor.click();
+  await window.keyboard.type(`${UNSUPPORTED} ${UNSUPPORTED_TOO}`);
+  const line = editor.locator(":scope > p").first();
+  await slideSelect(window, line, "Penguins", { line, words: "waters." });
+  const menu = window.getByTestId("selection-menu");
+  await expect(menu.getByTestId("selection-action-shorten")).toContainText("精简");
+  await pointAndClick(window, menu.getByTestId("selection-action-find-support"));
+  const marks = window.getByTestId("claim-mark");
+  await expect(marks).toHaveCount(2);
+
+  await pointAndClick(window, marks.first());
+  const button = window.getByTestId("claim-card").getByTestId("claim-find-sources");
+  await expect(button).toHaveText("查找资料");
+  await expect(window.getByTestId("claim-card").getByTestId("claim-search-web")).toHaveText(
+    "联网搜索",
+  );
+  await pointAndClick(window, button);
+  await expect(window.getByTestId("find-sources").getByRole("heading")).toHaveText("查找资料");
   await app.close();
 });

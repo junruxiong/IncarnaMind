@@ -52,13 +52,13 @@ export function isEditMenuState(value: unknown): value is EditMenuState {
   return isTextPlace(text) && isNamed(undo) && isNamed(redo);
 }
 
-/** Makes View say "Show Sidebar" while the sidebar is hidden, "Hide Sidebar" otherwise. */
 export function setExportMenu(mindName: string | null): void {
   if (mindName === exportedMind) return;
   exportedMind = mindName;
   if (installed) buildMenu();
 }
 
+/** Makes View say "Show Sidebar" while the sidebar is hidden, "Hide Sidebar" otherwise. */
 export function setMenuSidebarHidden(hidden: boolean): void {
   if (hidden === sidebarHidden) return;
   sidebarHidden = hidden;

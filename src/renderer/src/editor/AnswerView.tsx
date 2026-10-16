@@ -23,6 +23,10 @@ import { PlugIcon, ScriptIcon, SkillIcon, StopIcon } from "../components/icons";
 import { DocumentLineIcon, FindSourcesLineIcon } from "../components/lineIcons";
 import { ObjectMenu, useObjectMenu } from "../components/ObjectMenu";
 import { ProblemLine, ProblemMark } from "../components/ProblemLine";
+import {
+  LocalModelRefusedLine,
+  OllamaNotRunningLine,
+} from "../components/providers/OllamaProblems";
 import { core } from "../core";
 import { formatResetTime } from "../cost";
 import { useFindSources } from "../findSources";
@@ -30,12 +34,14 @@ import { useLanguage, useT } from "../i18n";
 import { useKeyRefusals, useKeySavedSince } from "../keyRefusals";
 import { requestModelMenu } from "../modelMenu";
 import { useModelNames } from "../modelNames";
+import { useStoppedByPlanLimit } from "../planLimits";
 import { ANSWER_PROBLEMS, answerProblem } from "../problems";
 import type { SettingsPage } from "../settingsPages";
 import { useAppStore } from "../store";
 import { reasonKey } from "../webPages";
 import { ChevronRightSmallIcon, RegenerateSmallIcon } from "./icons";
 import { useMindId } from "./mindContext";
+import { PlanLimitLine } from "./PlanLimitLine";
 import { ThirdPartyLine } from "./ThirdPartyLine";
 
 const text = (value: unknown) => (typeof value === "string" ? value : null);
@@ -85,10 +91,16 @@ export function AnswerView({ node, editor, getPos }: ReactNodeViewProps) {
   const waiting = useApprovals((state) => state.waiting);
   const approvals = useMemo(() => waitingFor(waiting, answerId), [waiting, answerId]);
   const isExample = useIsExampleAnswer(answerId);
+  const planModel = useStoppedByPlanLimit(
+    status === "failed" && isErrorKind(node.attrs.errorKind) ? node.attrs.errorKind : null,
+    text(node.attrs.providerId),
+  )
+    ? modelId
+    : null;
 
   // One the User edited comes back as changes over their version: nothing to confirm.
-  const writeAgain = () => {
-    if (answerId && questionId) void regenerate(mindId, answerId, questionId);
+  const writeAgain = async () => {
+    if (answerId && questionId) await regenerate(mindId, answerId, questionId);
   };
   const objectMenu = useObjectMenu({ kind: "answer", id: answerId ?? "" });
   const here = {
@@ -162,7 +174,7 @@ export function AnswerView({ node, editor, getPos }: ReactNodeViewProps) {
         </div>
       )}
 
-      {!streaming && status === "failed" && (
+      {!streaming && status === "failed" && !planModel && (
         <AnswerError
           kind={isErrorKind(node.attrs.errorKind) ? node.attrs.errorKind : "unknown"}
           modelId={modelId}
@@ -171,6 +183,14 @@ export function AnswerView({ node, editor, getPos }: ReactNodeViewProps) {
           details={text(node.attrs.errorMessage)}
           onRetry={questionId ? () => writeAgain() : undefined}
           onOpenSettings={openSettings}
+        />
+      )}
+      {!streaming && status === "failed" && planModel && (
+        <PlanLimitLine
+          modelId={planModel}
+          providerId={text(node.attrs.providerId)}
+          details={text(node.attrs.errorMessage)}
+          onAnswerAgain={writeAgain}
         />
       )}
 
@@ -249,6 +269,9 @@ export function NoCitationsLine({
   );
 }
 
+/** Asked for once per run: while offline, asking again on every error would only fail again. */
+let modelsAsked = false;
+
 /** Failures that can come of a model that can't answer, rather than of the connection. */
 const WRONG_MODEL: ReadonlySet<ProviderErrorKind> = new Set([
   "model",
@@ -285,15 +308,21 @@ export function AnswerError({
   const t = useT();
   const language = useLanguage();
   const shownModel = useModelNames()(modelId ?? "", providerId);
-  const provider = useAnswers(
-    (state) => state.models?.find((group) => group.provider.id === providerId)?.provider.kind,
+  const providerInUse = useAnswers(
+    (state) => state.models?.find((group) => group.provider.id === providerId)?.provider,
   );
+  const provider = providerInUse?.kind;
+  const service = providerInUse
+    ? (providerInUse.service?.name ?? t(`providers.kind.${providerInUse.kind}`))
+    : t("answer.error.thisService");
   const [shownAt] = useState(() => new Date().toISOString());
   const keySaved = useKeySavedSince(providerId, failedAt ?? shownAt);
   // Whose plan it was decides where its usage is managed.
   useEffect(() => {
-    if (kind === "plan-limit" || WRONG_MODEL.has(kind)) useAnswers.getState().loadModels();
-  }, [kind]);
+    if (modelsAsked) return;
+    modelsAsked = true;
+    useAnswers.getState().loadModels();
+  }, []);
   // A model the User added to the menu that then failed: one click takes it back out.
   const added = useAnswers((state) =>
     state.models?.some(
@@ -311,6 +340,15 @@ export function AnswerError({
         }
       : undefined;
   const { line, fix } = answerProblem(kind, provider);
+  if (fix.kind === "ollama") return <OllamaNotRunningLine details={details} onRetry={onRetry} />;
+  if (fix.kind === "local-model") {
+    return (
+      <LocalModelRefusedLine
+        model={modelId ? shownModel.name : t("answer.error.thisModel")}
+        details={details}
+      />
+    );
+  }
   const action = removeFromMenu
     ? { label: t("answer.error.removeFromMenu"), onClick: removeFromMenu }
     : kind === "auth" && keySaved && onRetry
@@ -348,7 +386,7 @@ export function AnswerError({
         title={details ?? undefined}
         className="mt-1 select-none"
       >
-        {t(line, { model: modelId ? shownModel.name : t("answer.error.thisModel") })}
+        {t(line, { model: modelId ? shownModel.name : t("answer.error.thisModel"), service })}
         {removeFromMenu && kind !== "model" && ` · ${shownModel.name}`}
         {kind === "plan-limit" && resetsAt && (
           <>

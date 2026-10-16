@@ -5,6 +5,7 @@ import {
   formatSpent,
   notCheckedKey,
   runStopText,
+  setAsideText,
 } from "../../src/renderer/src/cost";
 import { type MessageKey, type MessageParams, translate } from "../../src/shared/i18n";
 
@@ -21,13 +22,46 @@ describe("Cost in words", () => {
     expect(formatMoney({ amount: 1.4, currency: "CNY" }, "zh-CN")).toBe("¥1.40");
   });
 
-  test("spending in two currencies names both", () => {
+  test.each(["en", "zh-CN"] as const)(
+    'dollars are "$" and yuan "¥" in %s, never "US$" or "CN¥"',
+    (language) => {
+      expect(formatMoney({ amount: 1.4, currency: "USD" }, language)).toBe("$1.40");
+      expect(formatMoney({ amount: 1.4, currency: "CNY" }, language)).toBe("¥1.40");
+      expect(formatMoney({ amount: 0.0013, currency: "USD" }, language)).toBe("$0.0013");
+      expect(formatMoney({ amount: 0.0013, currency: "CNY" }, language)).toBe("¥0.0013");
+    },
+  );
+
+  test("what is set aside for running work is named apart from what was spent, and absent when nothing is", () => {
+    const aside = [{ amount: 1.28, currency: "USD" as const }];
+    expect(setAsideText(aside, t("en"), "en")).toBe("$1.28 set aside for work in progress");
+    expect(setAsideText(aside, t("zh-CN"), "zh-CN")).toBe("进行中的任务预留 $1.28");
+    expect(
+      setAsideText([...aside, { amount: 1.4, currency: "CNY" as const }], t("zh-CN"), "zh-CN"),
+    ).toBe("进行中的任务预留 $1.28 和 ¥1.40");
+    expect(setAsideText([], t("en"), "en")).toBeNull();
+    expect(setAsideText([{ amount: 0, currency: "USD" }], t("en"), "en")).toBeNull();
+    expect(translate("en", "cost.provider.thisMonth", { spent: "$0.01" })).toBe(
+      "This month: $0.01 spent",
+    );
+    expect(translate("zh-CN", "cost.provider.thisMonth", { spent: "$0.01" })).toBe(
+      "本月已花 $0.01",
+    );
+    expect(translate("en", "cost.setAside.hint")).toBe(
+      "Kept aside so running work can't go over your monthly limit",
+    );
+    expect(translate("zh-CN", "cost.setAside.hint")).toBe(
+      "预留出来，避免进行中的任务超出你的月度上限",
+    );
+  });
+
+  test("spending in two currencies names both, told apart by their symbols", () => {
     const spent = [
       { amount: 3.2, currency: "USD" as const },
       { amount: 1.4, currency: "CNY" as const },
     ];
-    expect(formatSpent(spent, t("en"), "en")).toBe("$3.20 and CN¥1.40");
-    expect(formatSpent(spent, t("zh-CN"), "zh-CN")).toBe("US$3.20 和 ¥1.40");
+    expect(formatSpent(spent, t("en"), "en")).toBe("$3.20 and ¥1.40");
+    expect(formatSpent(spent, t("zh-CN"), "zh-CN")).toBe("$3.20 和 ¥1.40");
     expect(formatSpent([], t("en"), "en")).toBeNull();
   });
 
@@ -65,14 +99,28 @@ describe("Cost in words", () => {
       tokens: 310_000,
       cost: { amount: 0.4, currency: "USD" as const },
       spentTowardCap: { amount: 12.4, currency: "USD" as const },
+      setAsideTowardCap: { amount: 0, currency: "USD" as const },
       cap: { amount: 20, currency: "USD" as const },
     };
     expect(estimateText(estimate, t("en"), "en")).toBe(
       "About 24 calls, 310K tokens, $0.40 · $12.40 of $20.00 used this month",
     );
-    expect(estimateText({ ...estimate, cap: null, spentTowardCap: null }, t("en"), "en")).toBe(
-      "About 24 calls, 310K tokens, $0.40",
+    expect(
+      estimateText(
+        { ...estimate, setAsideTowardCap: { amount: 1.28, currency: "USD" } },
+        t("en"),
+        "en",
+      ),
+    ).toBe(
+      "About 24 calls, 310K tokens, $0.40 · $12.40 of $20.00 used this month · $1.28 set aside for work in progress",
     );
+    expect(
+      estimateText(
+        { ...estimate, cap: null, spentTowardCap: null, setAsideTowardCap: null },
+        t("en"),
+        "en",
+      ),
+    ).toBe("About 24 calls, 310K tokens, $0.40");
     expect(estimateText({ ...estimate, cost: null, cap: null }, t("zh-CN"), "zh-CN")).toBe(
       "约 24 次调用、31万 token",
     );

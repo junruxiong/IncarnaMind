@@ -35,7 +35,7 @@ const vector = () => {
 /**
  * A data folder as version 4 of processing left it, before migration 22: a
  * Markdown and a TXT file stored as one text each (page NULL), and a PDF by
- * page, all ready and embedded.
+ * page, all ready and embedded; the PDF is as the current version reads PDFs.
  */
 async function beforeUnits(): Promise<{
   dataDir: string;
@@ -64,7 +64,7 @@ async function beforeUnits(): Promise<{
         `INSERT INTO documents (id, content_hash, name, kind, size, status, page_count, path,
            file_status, file_mtime_ms, processing_version, embedding_model, embedding_dimensions,
            tagging_status, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, 'ready', ?, ?, 'available', ?, 4, 'multilingual-e5-small-int8',
+         VALUES (?, ?, ?, ?, ?, 'ready', ?, ?, 'available', ?, ?, 'multilingual-e5-small-int8',
            384, 'tagged', ?, ?)`,
         [
           IDS[key],
@@ -75,6 +75,7 @@ async function beforeUnits(): Promise<{
           key === "pdf" ? 2n : null,
           paths[key],
           info.mtimeMs,
+          BigInt(key === "pdf" ? CURRENT_SINCE.pdf : 4),
           AT,
           AT,
         ],
@@ -144,7 +145,7 @@ describe("Migration 22: Units", { timeout: 30_000 }, () => {
   });
 
   test("at startup, Markdown and TXT are processed again into sections and lines; PDFs are left as they are", async () => {
-    expect(CURRENT_SINCE).toMatchObject({ pdf: 4, markdown: 5, text: 5 });
+    expect(CURRENT_SINCE).toMatchObject({ markdown: 5, text: 5 });
     const { dataDir } = await beforeUnits();
     const core = startCore(dataDir);
     const statuses: [string, Document["status"]][] = [];

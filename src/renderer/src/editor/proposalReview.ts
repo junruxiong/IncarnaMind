@@ -14,21 +14,23 @@ import {
   CITATION_NODE,
   type CitationAttributes,
   type KeptCitationText,
+  MIND_PROPOSAL_REQUESTS_FIELD,
   PROPOSAL_ATTRIBUTE,
   PROPOSAL_DELETE_MARK,
   PROPOSAL_INSERT_MARK,
+  type TextPlace,
   WORD_CHANGE_ID,
 } from "../../../core/api";
 import { citationState } from "../../../shared/citations";
 import { type MessageKey, type MessageParams, translate } from "../../../shared/i18n";
 import {
+  decideProposals,
   INLINE_NODES,
   NODE_CHARACTER,
   proposalRequestOf,
   type ResolvedProposal,
   readProposalAttribute,
   readProposalRef,
-  resolveProposals,
   targetHash,
 } from "../../../shared/proposals";
 
@@ -66,7 +68,11 @@ export interface PendingProposal {
 }
 
 interface ReviewState {
+  /** Waiting for the User: all but those of requests `applying`. */
   proposals: readonly PendingProposal[];
+  /** Requests of edits applying (#880), drawn as the text they make. */
+  applying: ReadonlySet<string>;
+  applied: readonly PendingProposal[];
   /** The Proposal under the pointer, by id. */
   hovered: string | null;
   /** Text waiting for Edit with AI to come back, or the selection the composer is editing. */
@@ -74,7 +80,10 @@ interface ReviewState {
   decorations: DecorationSet;
 }
 
-type Meta = { hovered: string | null } | { target: { from: number; to: number } | null };
+type Meta =
+  | { hovered: string | null }
+  | { target: { from: number; to: number } | null }
+  | { applying: ReadonlySet<string> };
 
 export const proposalReviewKey = new PluginKey<ReviewState>("proposalReview");
 
@@ -299,6 +308,73 @@ export function acceptedSlice(slice: Slice): Slice {
     : new Slice(content, slice.openStart, slice.openEnd);
 }
 
+/** A place in a paragraph or heading: its id, and how far into its text, an inline node counting as one. */
+export interface BlockPlace {
+  blockId: string;
+  offset: number;
+}
+
+const goesOnAccept = (node: ProseMirrorNode) =>
+  readProposalAttribute(node.attrs[PROPOSAL_ATTRIBUTE])?.kind === "delete" ||
+  node.marks.some((mark) => mark.type.name === PROPOSAL_DELETE_MARK);
+
+/**
+ * Where a place in a paragraph or heading will be once the changes there are
+ * accepted, counted in the text that stays; null when a change removes its
+ * Block. Unlike a position in the editor, it holds through the accept, which
+ * comes back from Yjs as a new document.
+ */
+export function placeOnAccept(doc: ProseMirrorNode, place: TextPlace): BlockPlace | null {
+  let found: BlockPlace | null = null;
+  doc.descendants((node, pos) => {
+    if (found) return false;
+    if (!node.isTextblock) return true;
+    if (node.attrs.id !== place.blockId) return false;
+    const $pos = doc.resolve(pos + 1);
+    for (let depth = $pos.depth; depth > 0; depth--) {
+      if (readProposalAttribute($pos.node(depth).attrs[PROPOSAL_ATTRIBUTE])?.kind === "delete") {
+        return false;
+      }
+    }
+    let left = place.offset;
+    let offset = 0;
+    node.forEach((child) => {
+      const part = Math.min(child.isText ? child.nodeSize : 1, Math.max(left, 0));
+      if (!goesOnAccept(child)) offset += part;
+      left -= part;
+    });
+    found = { blockId: place.blockId, offset };
+    return false;
+  });
+  return found;
+}
+
+/** Where a Block's place is in the editor now; null when the Block is gone. */
+export function positionOf(doc: ProseMirrorNode, place: BlockPlace): number | null {
+  let found: number | null = null;
+  doc.descendants((node, pos) => {
+    if (found !== null) return false;
+    if (!node.isTextblock) return true;
+    if (node.attrs.id !== place.blockId) return false;
+    let left = place.offset;
+    let at = pos + 1;
+    for (let index = 0; index < node.childCount && left > 0; index++) {
+      const child = node.child(index);
+      const size = child.isText ? child.nodeSize : 1;
+      if (child.isText && left <= size) {
+        at += left;
+        left = 0;
+        break;
+      }
+      left -= size;
+      at += child.nodeSize;
+    }
+    found = at;
+    return false;
+  });
+  return found;
+}
+
 /** The Proposals waiting in the editor's Mind. */
 export const pendingIn = (state: EditorState): readonly PendingProposal[] =>
   proposalReviewKey.getState(state)?.proposals ?? [];
@@ -317,6 +393,14 @@ export function shownProposal(state: EditorState): PendingProposal | null {
 
 /** The text waiting for Edit with AI, or being edited from the composer. */
 export const editTarget = (state: EditorState) => proposalReviewKey.getState(state)?.target ?? null;
+
+export function setApplying(editor: Editor, applying: ReadonlySet<string>): void {
+  if (editor.isDestroyed) return;
+  editor.view.dispatch(editor.state.tr.setMeta(proposalReviewKey, { applying } satisfies Meta));
+}
+
+export const applyingIn = (state: EditorState): ReadonlySet<string> =>
+  proposalReviewKey.getState(state)?.applying ?? new Set();
 
 /** Marks text as waiting for Edit with AI, or clears it (null). */
 export function setEditTarget(editor: Editor, target: { from: number; to: number } | null): void {
@@ -347,7 +431,23 @@ function bringsProposals(tr: Transaction): boolean {
 }
 
 /** A change that came from the Mind's document (the core, another window, Undo), not the User typing here. */
-const fromDocument = (tr: Transaction) => !!tr.getMeta(ySyncPluginKey)?.isChangeOrigin;
+export const fromDocument = (tr: Transaction) => !!tr.getMeta(ySyncPluginKey)?.isChangeOrigin;
+
+/**
+ * Watches for the User moving the cursor or editing the Mind from now on;
+ * changes that come from the Mind's document, as an AI change streaming in
+ * does (#202), don't count. `stop` ends the watch.
+ */
+export function watchMovedOn(editor: Editor): { movedOn(): boolean; stop(): void } {
+  let moved = false;
+  const look = ({ transaction }: { transaction: Transaction }) => {
+    if (!fromDocument(transaction) && (transaction.selectionSet || transaction.docChanged)) {
+      moved = true;
+    }
+  };
+  editor.on("transaction", look);
+  return { movedOn: () => moved, stop: () => editor.off("transaction", look) };
+}
 
 /**
  * The line under a change out of date (DESIGN.md, AI edits): "Out of date ·
@@ -401,11 +501,21 @@ type Translate = (key: MessageKey, params?: MessageParams) => string;
 function decorationsFor(
   doc: ProseMirrorNode,
   proposals: readonly PendingProposal[],
+  applied: readonly PendingProposal[],
   current: string | null,
   target: { from: number; to: number } | null,
   t: Translate,
 ): DecorationSet {
   const decorations: Decoration[] = [];
+  for (const range of applied.flatMap((proposal) => proposal.ranges)) {
+    decorations.push(
+      range.node
+        ? Decoration.node(range.from, range.to, {
+            class: `proposal-node proposal-node--${range.node} proposal-applying`,
+          })
+        : Decoration.inline(range.from, range.to, { class: "proposal-applying" }),
+    );
+  }
   for (const [index, proposal] of proposals.entries()) {
     const stale = proposal.outOfDate ? " proposal-stale" : "";
     for (const range of proposal.ranges) {
@@ -479,11 +589,14 @@ export const ProposalReview = Extension.create<{ translate: Translate }>({
             const proposals = proposalsIn(state.doc);
             return {
               proposals,
+              applying: new Set(),
+              applied: [],
               hovered: null,
               target: null,
               decorations: decorationsFor(
                 state.doc,
                 proposals,
+                [],
                 proposalsAt(proposals, state.selection)[0]?.id ?? null,
                 null,
                 t,
@@ -492,13 +605,16 @@ export const ProposalReview = Extension.create<{ translate: Translate }>({
           },
           apply(tr, value, oldState, state): ReviewState {
             const meta = tr.getMeta(proposalReviewKey) as Meta | undefined;
-            let { proposals, hovered, target } = value;
-            // Typing brings no Proposal, only moves or removes one: a Mind with none stays without.
-            if (
+            let { proposals, applying, applied, hovered, target } = value;
+            const found =
               tr.docChanged &&
-              (proposals.length > 0 || fromDocument(tr) || bringsProposals(tr))
-            ) {
-              proposals = proposalsIn(state.doc);
+              (proposals.length + applied.length > 0 || fromDocument(tr) || bringsProposals(tr));
+            if (meta && "applying" in meta) applying = meta.applying;
+            // Typing brings no Proposal, only moves or removes one: a Mind with none stays without.
+            if (found || applying !== value.applying) {
+              const all = found ? proposalsIn(state.doc) : [...proposals, ...applied];
+              proposals = all.filter((each) => !applying.has(each.request));
+              applied = all.filter((each) => applying.has(each.request));
             }
             if (target && tr.docChanged) {
               const from = tr.mapping.map(target.from, 1);
@@ -511,22 +627,26 @@ export const ProposalReview = Extension.create<{ translate: Translate }>({
             const current = proposalsAt(proposals, state.selection)[0]?.id ?? null;
             const unchanged =
               proposals === value.proposals &&
+              applied === value.applied &&
               target === value.target &&
               current === (proposalsAt(value.proposals, oldState.selection)[0]?.id ?? null);
             return {
               proposals,
+              applying,
+              applied,
               hovered,
               target,
               decorations: unchanged
                 ? value.decorations.map(tr.mapping, tr.doc)
-                : decorationsFor(state.doc, proposals, current, target, t),
+                : decorationsFor(state.doc, proposals, applied, current, target, t),
             };
           },
         },
 
         // What the User types or pastes into a Proposal's words is theirs, not the Proposal's.
         appendTransaction(transactions, before, after) {
-          if (pendingIn(before).length === 0) return null;
+          const review = proposalReviewKey.getState(before);
+          if (!review || review.proposals.length + review.applied.length === 0) return null;
           const typed = transactions.filter((tr) => tr.docChanged && !fromDocument(tr));
           if (typed.length === 0) return null;
           const marks = proposalMarks(after);
@@ -621,30 +741,46 @@ export function theirChange(
   return made?.source === "word-change" ? { author: made.author, date: made.date } : null;
 }
 
+/** Why the assistant made a change, in the model's few words (#202); null when it didn't say. */
+export function changeReason(
+  editor: Editor,
+  proposal: Pick<PendingProposal, "request">,
+): string | null {
+  const doc = editorDoc(editor);
+  const made = doc ? proposalRequestOf(doc, proposal.request) : null;
+  return made?.source === "edit-with-ai" ? (made.reason ?? null) : null;
+}
+
 /**
  * Accepts or rejects Proposals in the editor's copy of the Mind, as one step
  * of its Undo (⌘Z takes it back), the same way the core does anywhere
- * (`resolveProposals`). The change reaches the core as the User's edits do.
+ * (`decideProposals`). The change reaches the core as the User's edits do.
  * `"all"` takes every Proposal the Mind holds when it runs, ones an Undo has
- * just brought back included, rather than a list read earlier.
+ * just brought back included, rather than a list read earlier, but those an
+ * edit is applying and those of the requests `except` names.
  */
 export function resolveInEditor(
   editor: Editor,
   ids: ReadonlySet<string> | "all",
   outcome: "accept" | "reject",
+  except: ReadonlySet<string> = new Set(),
 ): ResolvedProposal[] {
   const binding = bindingOf(editor);
   if (!binding || (ids !== "all" && ids.size === 0)) return [];
-  const undo: { stopCapturing(): void } | undefined = yUndoPluginKey.getState(
-    editor.state,
-  )?.undoManager;
+  const undo: Y.UndoManager | undefined = yUndoPluginKey.getState(editor.state)?.undoManager;
+  // The counts of what was decided (`decideProposals`) go back with the Blocks.
+  undo?.addToScope(binding.doc.getMap(MIND_PROPOSAL_REQUESTS_FIELD));
   undo?.stopCapturing();
   let resolved: ResolvedProposal[] = [];
+  const applying = applyingIn(editor.state);
   // As the editor's own change, so its Undo takes it back.
   binding.doc.transact(() => {
-    resolved = resolveProposals(
+    resolved = decideProposals(
       binding.type,
-      (proposal) => ids === "all" || ids.has(proposal.id),
+      (proposal) =>
+        ids === "all"
+          ? !applying.has(proposal.request) && !except.has(proposal.request)
+          : ids.has(proposal.id),
       outcome,
     );
   }, ySyncPluginKey);

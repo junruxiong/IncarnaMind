@@ -13,10 +13,12 @@ import {
   createCore,
   DATABASE_FILE,
   type Keychain,
+  type Paths,
   type SaveChatProviderInput,
   type SecretProtection,
 } from "../../src/core";
 import { createFakeEmbedder } from "../../src/core/embedding/fake";
+import { scriptedLocalServers } from "../../src/core/providers/localServers";
 import { createFakeCrossEncoder } from "../../src/core/reranking/fake";
 import { openDatabase, type SqlValue } from "../../src/core/storage";
 
@@ -73,6 +75,9 @@ export function createMemoryKeychain(protection: SecretProtection = "os"): Memor
   };
 }
 
+/** Adapters a test overrides; the paths it leaves out keep `startCore`'s. */
+export type TestAdapters = Omit<Partial<CoreAdapters>, "paths"> & { paths?: Partial<Paths> };
+
 /**
  * Starts the core on `dataDir` with test adapters: an English OS, an in-memory
  * keychain, no browser, shell or processes, the deterministic fake embedding
@@ -80,10 +85,9 @@ export function createMemoryKeychain(protection: SecretProtection = "os"): Memor
  * and no lookups of models in Ollama. Closed when the current test finishes; call `close()` yourself to
  * simulate quitting the app.
  */
-export function startCore(dataDir: string, overrides: Partial<CoreAdapters> = {}): Core {
+export function startCore(dataDir: string, overrides: TestAdapters = {}): Core {
+  const { paths, ...rest } = overrides;
   const core = createCore({
-    // A Documents folder of its own, so a test that saves a file never writes into the User's.
-    paths: { dataDir, documents: join(dataDir, "Documents"), citationStyles: CITATION_STYLES },
     systemLanguages: () => ["en-US"],
     systemUserName: () => "Priya Raman",
     keychain: createMemoryKeychain(),
@@ -100,8 +104,16 @@ export function startCore(dataDir: string, overrides: Partial<CoreAdapters> = {}
     createChatModel: () => {
       throw new Error("This test didn't provide a chat model.");
     },
-    // Nothing asks the Ollama on this computer: its models get the default settings.
-    ollamaModels: { describe: async () => null, loaded: async () => null },
+    // Nothing asks the LM Studio or Unsloth Studio on this computer: neither runs.
+    localServers: scriptedLocalServers(),
+    // Nothing asks the Ollama on this computer: it runs, and its models get the default settings.
+    // Automatic tagging finds no local decision models unless a test gives some.
+    ollamaModels: {
+      describe: async () => null,
+      loaded: async () => null,
+      running: async () => true,
+    },
+    localModels: async () => [],
     embedder: createFakeEmbedder(),
     embeddingModelSource: NO_MODEL_FILES,
     crossEncoder: createFakeCrossEncoder(),
@@ -118,7 +130,22 @@ export function startCore(dataDir: string, overrides: Partial<CoreAdapters> = {}
       ecfr: NOWHERE,
       govinfo: NOWHERE,
     },
-    ...overrides,
+    // The public internet's fetcher (web search, a saved page's pictures) reaches no host from a
+    // test: a test that fetches gives its stand-in web (../helpers/web).
+    web: {
+      resolve: async (host) => {
+        throw new Error(`Tests reach no host: ${host}.`);
+      },
+    },
+    ...rest,
+    // A home and a Documents folder of its own, so a test never reads or writes the User's.
+    paths: {
+      dataDir,
+      home: join(dataDir, "home"),
+      documents: join(dataDir, "Documents"),
+      citationStyles: CITATION_STYLES,
+      ...paths,
+    },
     // Linked folders settle and retry quickly in tests.
     linkedFolders: { settleMs: 30, retryMs: 300, ...overrides.linkedFolders },
   });

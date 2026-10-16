@@ -2,6 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
+import { SHOW_AGENT_CONNECTION } from "../src/shared/agentConnection";
 import { createFakeOpenAI, signInAt } from "../tests/helpers/fakeOpenAI";
 import {
   acceptPlainTextKeys,
@@ -24,7 +25,7 @@ import {
 const SCREENSHOTS = process.env.INCARNAMIND_SCREENSHOTS;
 
 /** Each page, its name in the list, and the sections on it. */
-const PAGES = [
+const ALL_PAGES = [
   {
     page: "general",
     name: "General",
@@ -40,7 +41,7 @@ const PAGES = [
   {
     page: "models",
     name: "Models",
-    sections: ["chat-model-settings", "chatgpt-settings", "jev-settings", "organization-settings"],
+    sections: ["chat-model-settings", "chatgpt-settings", "tagging-settings", "jev-settings"],
   },
   { page: "search", name: "Search", sections: ["embedding-settings", "rerank-settings"] },
   { page: "meetings", name: "Meetings", sections: ["meetings-settings"] },
@@ -58,6 +59,9 @@ const PAGES = [
   },
 ] as const;
 
+const shown = (page: string) => page !== "agents" || SHOW_AGENT_CONNECTION;
+const PAGES = ALL_PAGES.filter((each) => shown(each.page));
+
 let dataDir: string;
 test.beforeEach(async () => {
   dataDir = await createDataFolder();
@@ -72,7 +76,7 @@ async function shot(window: Page, name: string) {
   await window.screenshot({ path: join(SCREENSHOTS, `${name}.png`) });
 }
 
-test("Settings lists eight pages, and each holds its settings", async () => {
+test("Settings lists its pages, and each holds its settings", async () => {
   const { app, window } = await launchApp(dataDir);
   try {
     await dismissChatSetup(window);
@@ -91,8 +95,8 @@ test("Settings lists eight pages, and each holds its settings", async () => {
       }
       await shot(window, `settings-${page}`);
       if (page === "models") {
-        await content.getByTestId("organization-settings").scrollIntoViewIfNeeded();
-        await shot(window, "settings-models-organization");
+        await content.getByTestId("tagging-settings").scrollIntoViewIfNeeded();
+        await shot(window, "settings-models-tagging");
       }
     }
   } finally {
@@ -125,7 +129,7 @@ test("the list of pages works by keyboard, with a focus ring", async () => {
   }
 });
 
-test("Organize in the Library, with no model chosen yet, opens Models, where Organization is", async () => {
+test("Organize in the Library, with no model chosen yet, opens Models, where Tagging is", async () => {
   const { app, window } = await launchApp(dataDir);
   try {
     await dismissChatSetup(window);
@@ -148,7 +152,7 @@ test("Organize in the Library, with no model chosen yet, opens Models, where Org
     await window.getByTestId("library").getByTestId("library-organize-set-up").click();
     const settings = window.getByTestId("settings");
     await expect(settings).toHaveAttribute("data-page", "models");
-    await expect(settings.getByTestId("organization-settings")).toBeVisible();
+    await expect(settings.getByTestId("tagging-settings")).toBeAttached();
   } finally {
     await app.close();
   }
@@ -165,35 +169,28 @@ test("the pages are named in Chinese too", async () => {
     );
     await window.getByRole("button", { name: "设置" }).click();
     const nav = window.getByTestId("settings-nav");
-    await expect(nav.getByRole("button")).toHaveText([
-      "通用",
-      "模型",
-      "搜索",
-      "会议",
-      "连接器",
-      "技能",
-      "智能体",
-      "隐私",
-    ]);
-    const names = [
-      "general",
-      "models",
-      "search",
-      "meetings",
-      "connectors",
-      "skills",
-      "agents",
-      "privacy",
-    ];
-    for (const page of names) {
+    const chinese = (
+      [
+        ["general", "通用"],
+        ["models", "模型"],
+        ["search", "搜索"],
+        ["meetings", "会议"],
+        ["connectors", "连接器"],
+        ["skills", "技能"],
+        ["agents", "智能体"],
+        ["privacy", "隐私"],
+      ] as const
+    ).filter(([page]) => shown(page));
+    await expect(nav.getByRole("button")).toHaveText(chinese.map(([, name]) => name));
+    for (const [page] of chinese) {
       await window.getByTestId(`settings-nav-${page}`).click();
       await expect(window.getByTestId("settings")).toHaveAttribute("data-page", page);
       if (page === "models")
         await expect(window.getByTestId("settings-page-title")).toHaveText("模型");
       await shot(window, `settings-${page}-zh`);
       if (page === "models") {
-        await window.getByTestId("organization-settings").scrollIntoViewIfNeeded();
-        await shot(window, "settings-models-organization-zh");
+        await window.getByTestId("tagging-settings").scrollIntoViewIfNeeded();
+        await shot(window, "settings-models-tagging-zh");
       }
     }
   } finally {

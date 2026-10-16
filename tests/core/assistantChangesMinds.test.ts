@@ -1,20 +1,15 @@
+import type { JSONContent } from "@tiptap/core";
 import type { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, test } from "vitest";
-import type {
-  AnswerToolCall,
-  AskInConversationInput,
-  ConversationAnswer,
-  Core,
-  MindChange,
-} from "../../src/core";
+import type { Core } from "../../src/core";
 import { pendingProposals } from "../../src/shared/proposals";
+import { askAssistant, changesIn, lastResult, mindCalls } from "../helpers/assistant";
 import { answerEnded, shownPassages } from "../helpers/citations";
 import { createTempDataFolder, startCore } from "../helpers/core";
 import { createSourceFolder, waitForProcessing, writeSourceFile } from "../helpers/documents";
 import { connectToMind, type MindClient } from "../helpers/mindClient";
 import { heading, note, shownWithChanges, writeMind } from "../helpers/minds";
 import {
-  type GenerateCall,
   type ModelCall,
   type ScriptedReply,
   scriptedModel,
@@ -34,16 +29,16 @@ import { buildPdf } from "../helpers/pdf";
 /** A model that calls one Minds' Tool first, then replies with `reply`; edits drop "very" and "really". */
 function toolModel(call: { tool: string; input: Record<string, unknown> } | null, reply: string) {
   return scriptedModel(
-    ({ results }: ModelCall): ScriptedReply =>
-      call && results.length === 0 ? { calls: [call] } : { text: reply },
-    { generate: shortened },
+    (model: ModelCall): ScriptedReply =>
+      shortened(model) ??
+      (call && model.results.length === 0 ? { calls: [call] } : { text: reply }),
   );
 }
 
-/** Edit with AI's reply: the passage with its "very"s and "really"s taken out. */
-function shortened({ prompt }: GenerateCall) {
-  const passage = /<passage>\n([\s\S]*?)\n<\/passage>/.exec(prompt)?.[1] ?? "";
-  return { text: passage.replace(/\b(?:very|really) /g, "") };
+/** Edit with AI's reply, to the request edit_mind makes: the passage with its "very"s and "really"s taken out. */
+function shortened({ prompt }: ModelCall): ScriptedReply | null {
+  const passage = /<passage>\n([\s\S]*?)\n<\/passage>/.exec(prompt)?.[1];
+  return passage === undefined ? null : { text: passage.replace(/\b(?:very|really) /g, "") };
 }
 
 async function setUp(model: MockLanguageModelV4) {
@@ -61,42 +56,11 @@ async function setUp(model: MockLanguageModelV4) {
   return { core, mind, client };
 }
 
-/** Asks in the assistant and resolves with the Answer as stored once it has ended. */
-async function ask(core: Core, input: AskInConversationInput): Promise<ConversationAnswer> {
-  const result = await core.askInConversation(input);
-  if (!result.asked) throw new Error(`The Question wasn't asked: ${JSON.stringify(result)}`);
-  expect((await answerEnded(core, result.answerId)).event).toBe("finished");
-  const { messages } = await core.getConversation(result.conversation.id);
-  const answer = messages.find((message) => message.id === result.answerId);
-  if (answer?.kind !== "answer") throw new Error("No Answer.");
-  return answer;
-}
-
-const mindCalls = (answer: ConversationAnswer): AnswerToolCall[] =>
-  answer.toolCalls.filter((call) => call.source === "minds");
-
-const changesIn = (answer: ConversationAnswer): MindChange[] =>
-  mindCalls(answer).flatMap((call) => (call.mindChange ? [call.mindChange] : []));
+const ask = askAssistant;
 
 async function checkpointsOf(core: Core, mindId: string) {
   return (await core.listCheckpoints(mindId)).checkpoints;
 }
-
-/** What the model was told a Tool call came to: the last Tool result it read. */
-const lastResult = (model: MockLanguageModelV4) => {
-  const prompt = model.doStreamCalls.at(-1)?.prompt ?? [];
-  const results = prompt.flatMap((message) =>
-    message.role === "tool"
-      ? message.content.flatMap((part) =>
-          part.type === "tool-result" &&
-          (part.output.type === "text" || part.output.type === "error-text")
-            ? [part.output.value]
-            : [],
-        )
-      : [],
-  );
-  return results.at(-1) ?? "";
-};
 
 describe("The assistant changes Minds as Proposals", { timeout: 30_000 }, () => {
   // protects=a change request edits the Mind in focus as Proposals, after a Checkpoint, and its card says so; fails_when=the Mind changes outright, no Checkpoint is saved first, or the card doesn't name the Mind; no_claim=how well a real model rewrites.
@@ -185,7 +149,13 @@ describe("The assistant changes Minds as Proposals", { timeout: 30_000 }, () => 
     expect(await checkpointsOf(core, plan.id)).toHaveLength(1);
     expect(await checkpointsOf(core, mind.id)).toHaveLength(0);
     expect(changesIn(answer)).toEqual([
-      { mindId: plan.id, created: false, request: expect.any(String), proposals: 1 },
+      {
+        mindId: plan.id,
+        created: false,
+        request: expect.any(String),
+        proposals: 1,
+        paragraphs: 1,
+      },
     ]);
   });
 
@@ -290,6 +260,74 @@ describe("The assistant changes Minds as Proposals", { timeout: 30_000 }, () => 
   });
 });
 
+describe("Written again", { timeout: 30_000 }, () => {
+  // protects=Regenerate on an Answer that changed Minds takes back what still waits from it first, so nothing is proposed twice and a Mind it made, still empty of the User's words, goes; fails_when=the changes double, or the first new Mind stays beside the second; no_claim=what the User has accepted, which stays.
+  test("regenerating takes back its changes still waiting, and the Mind it made", async () => {
+    const model = scriptedModel(
+      (call): ScriptedReply =>
+        shortened(call) ??
+        (call.results.length === 0
+          ? {
+              calls: [
+                { tool: "edit_mind", input: { instruction: "Shorten it" } },
+                { tool: "create_mind", input: { title: "Notes", content: "One line." } },
+              ],
+            }
+          : { text: "Done." }),
+    );
+    const { core, mind, client } = await setUp(model);
+    const first = await ask(core, { text: "Shorten it and make notes", mindId: mind.id });
+    const made = changesIn(first).find((change) => change.created)?.mindId;
+    await client.settled();
+    expect(pendingProposals(client.blocks)).toHaveLength(2);
+
+    const result = await core.regenerateConversationAnswer({
+      conversationId: first.conversationId,
+      answerId: first.id,
+    });
+    if (!result.asked) throw new Error("Not asked again.");
+    await answerEnded(core, result.answerId);
+
+    await client.settled();
+    expect(pendingProposals(client.blocks)).toHaveLength(2);
+    expect(shownWithChanges(client)).toEqual([
+      "Summary",
+      "The quarter was [-very -]good, and sales were [-really -]strong.",
+    ]);
+    const notes = (await core.listMinds()).filter((each) => each.title === "Notes");
+    expect(notes).toHaveLength(1);
+    expect(notes[0]?.id).not.toBe(made);
+  });
+});
+
+describe("A Search scope with no Documents", { timeout: 30_000 }, () => {
+  // protects=a request to change a Mind in a Folder with no Documents still changes it, and the model is told the scope is empty; fails_when=the canned empty-scope Answer comes instead, or search is offered; no_claim=what a real model says to a Question there.
+  test("a Mind in a Folder with no Documents can still be changed, and the model knows the scope is empty", async () => {
+    const model = toolModel(
+      { tool: "edit_mind", input: { instruction: "Shorten it" } },
+      "Shortened the summary.",
+    );
+    const { core, mind, client } = await setUp(model);
+    const folder = await core.createLibraryGroup({ name: "Empty", description: "" });
+
+    const answer = await ask(core, {
+      text: "Shorten the summary",
+      mindId: mind.id,
+      scope: { folderIds: [folder.id], tagIds: [], documentIds: [] },
+    });
+
+    expect(answer.text).toBe("Shortened the summary.");
+    expect(answer.model).not.toBeNull();
+    const [first] = model.doStreamCalls;
+    expect(first?.tools?.map((each) => each.name)).not.toContain("search_documents");
+    expect(JSON.stringify(first?.prompt)).toContain(
+      "holds no Documents, so there is nothing to search",
+    );
+    await client.settled();
+    expect(pendingProposals(client.blocks).length).toBe(2);
+  });
+});
+
 describe("The Minds' Tools find what the model names", { timeout: 30_000 }, () => {
   // protects=edit_mind with a section's heading changes that section only, to the next heading as high; fails_when=the rest of the Mind is rewritten, or a lower heading ends the section; no_claim=none beyond protects.
   test("a section named by its heading is what changes", async () => {
@@ -348,3 +386,631 @@ const blockIdAt = (client: MindClient, index: number): string => {
   if (typeof id !== "string") throw new Error("That Block has no id.");
   return id;
 };
+
+describe("New Blocks come in as the model writes them", { timeout: 30_000 }, () => {
+  const CONTENT = "## Risks\n\nThe supplier is late.\n\nThe courier contract renews in February.";
+
+  /** A model that adds CONTENT, its input streamed, held back from "courier" on until `until`. */
+  function streamingAdd(until: Promise<void>) {
+    const after = JSON.stringify({ content: CONTENT }).indexOf("courier");
+    return scriptedModel(
+      ({ results }): ScriptedReply =>
+        results.length === 0
+          ? {
+              calls: [{ tool: "add_to_mind", input: { content: CONTENT }, streamInput: true }],
+              pause: { after, until },
+            }
+          : { text: "Added a risks section." },
+    );
+  }
+
+  /** Each "mind.writing" event, in order, as they come: whether it is writing. */
+  const writingEvents = (core: Core) => {
+    const seen: { writing: boolean }[] = [];
+    core.on("mind.writing", ({ place }) => seen.push({ writing: place !== null }));
+    return seen;
+  };
+
+  // protects=each Block the model finishes goes into the Mind as a change while the rest is still being written, with "Writing…" where the next goes, and all of them once it ends, none twice; fails_when=nothing shows until the call ends, a Block is written twice, or Writing… stays; no_claim=how a real provider chunks its input.
+  test("finished Blocks are in the Mind while the rest is written, then all of them, once each", async () => {
+    let release: () => void = () => undefined;
+    const until = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const { core, mind, client } = await setUp(streamingAdd(until));
+    const seen = writingEvents(core);
+    const asked = await core.askInConversation({ text: "Add a risks section", mindId: mind.id });
+    if (!asked.asked) throw new Error("Not asked.");
+
+    await expect
+      .poll(() => shownWithChanges(client), { timeout: 10_000 })
+      .toEqual([
+        "Summary",
+        "The quarter was very good, and sales were really strong.",
+        "+ Risks",
+        "+ The supplier is late.",
+      ]);
+    expect(seen.at(-1)?.writing).toBe(true);
+    // The card says so while the call is still being written.
+    const stored = async () => {
+      const { messages } = await core.getConversation(asked.conversation.id);
+      const answer = messages.find((message) => message.id === asked.answerId);
+      return answer?.kind === "answer" ? changesIn(answer) : [];
+    };
+    await expect.poll(stored).toEqual([
+      {
+        mindId: mind.id,
+        created: false,
+        request: expect.any(String),
+        proposals: 2,
+        paragraphs: 1,
+      },
+    ]);
+
+    release();
+    expect((await answerEnded(core, asked.answerId)).event).toBe("finished");
+    await client.settled();
+    expect(shownWithChanges(client)).toEqual([
+      "Summary",
+      "The quarter was very good, and sales were really strong.",
+      "+ Risks",
+      "+ The supplier is late.",
+      "+ The courier contract renews in February.",
+    ]);
+    expect(seen.at(-1)?.writing).toBe(false);
+    expect(await checkpointsOf(core, mind.id)).toHaveLength(1);
+  });
+
+  // protects=a call that names another Mind writes its Blocks there as they come, never first into the Mind in focus; fails_when=Blocks show in the focused Mind, even for a moment; no_claim=a model that names the Mind after its content.
+  test("a call naming another Mind writes there as it comes, never into the Mind in focus", async () => {
+    const input = { mind: "Project plan", content: CONTENT };
+    const after = JSON.stringify(input).indexOf("courier");
+    const { core, mind, client } = await setUp(
+      scriptedModel(
+        ({ results }): ScriptedReply =>
+          results.length === 0
+            ? {
+                calls: [{ tool: "add_to_mind", input, streamInput: true }],
+                pause: { after, until: new Promise(() => undefined) },
+              }
+            : { text: "Added." },
+        { chunkSize: 4 },
+      ),
+    );
+    const plan = await core.createMind({ title: "Project plan" });
+    const planClient = await connectToMind(core, plan.id);
+    let focusedChanged = false;
+    client.blocks.observeDeep(() => {
+      if (pendingProposals(client.blocks).length > 0) focusedChanged = true;
+    });
+
+    const asked = await core.askInConversation({
+      text: "Add risks to Project plan",
+      mindId: mind.id,
+    });
+    if (!asked.asked) throw new Error("Not asked.");
+    await expect
+      .poll(() => shownWithChanges(planClient), { timeout: 10_000 })
+      .toEqual(["+ Risks", "+ The supplier is late."]);
+    expect(focusedChanged).toBe(false);
+    await core.stopConversationAnswer({
+      conversationId: asked.conversation.id,
+      answerId: asked.answerId,
+    });
+  });
+
+  // protects=a model that writes its content before naming the Mind gets its Blocks taken back from the Mind in focus and written into the one it named, once each, with nothing left behind; fails_when=a streamed Block stays in the focused Mind, or one is written twice; no_claim=how long the take-back shows.
+  test("content written before the Mind is named is taken back from the Mind in focus and goes to the one named", async () => {
+    // Content first, then the Mind: against the schema's order, as a model may write it.
+    const input = { content: CONTENT, mind: "Project plan" };
+    const { core, mind, client } = await setUp(
+      scriptedModel(
+        ({ results }): ScriptedReply =>
+          results.length === 0
+            ? { calls: [{ tool: "add_to_mind", input, streamInput: true }] }
+            : { text: "Added." },
+        { chunkSize: 4 },
+      ),
+    );
+    const plan = await core.createMind({ title: "Project plan" });
+    const planClient = await connectToMind(core, plan.id);
+    let streamedHere = false;
+    client.blocks.observeDeep(() => {
+      if (pendingProposals(client.blocks).length > 0) streamedHere = true;
+    });
+
+    const asked = await core.askInConversation({ text: "Add risks", mindId: mind.id });
+    if (!asked.asked) throw new Error("Not asked.");
+    expect((await answerEnded(core, asked.answerId)).event).toBe("finished");
+    await client.settled();
+    await planClient.settled();
+
+    expect(streamedHere).toBe(true);
+    expect(shownWithChanges(client)).toEqual([
+      "Summary",
+      "The quarter was very good, and sales were really strong.",
+    ]);
+    expect(pendingProposals(client.blocks)).toEqual([]);
+    expect(shownWithChanges(planClient)).toEqual([
+      "+ Risks",
+      "+ The supplier is late.",
+      "+ The courier contract renews in February.",
+    ]);
+  });
+
+  // protects=Stop while the model writes keeps the Blocks already written, as changes, on the Answer's card, and Writing… goes; fails_when=they vanish, or the card has no row for them; no_claim=none beyond protects.
+  test("Stop keeps the Blocks already written, as changes on the card", async () => {
+    const { core, mind, client } = await setUp(streamingAdd(new Promise(() => undefined)));
+    const seen = writingEvents(core);
+    const asked = await core.askInConversation({ text: "Add a risks section", mindId: mind.id });
+    if (!asked.asked) throw new Error("Not asked.");
+    await expect.poll(() => pendingProposals(client.blocks).length, { timeout: 10_000 }).toBe(2);
+
+    await core.stopConversationAnswer({
+      conversationId: asked.conversation.id,
+      answerId: asked.answerId,
+    });
+    await client.settled();
+    expect(pendingProposals(client.blocks)).toHaveLength(2);
+    expect(seen.at(-1)?.writing).toBe(false);
+    const { messages } = await core.getConversation(asked.conversation.id);
+    const stopped = messages.find((message) => message.id === asked.answerId);
+    if (stopped?.kind !== "answer") throw new Error("No Answer.");
+    expect(changesIn(stopped)).toEqual([
+      {
+        mindId: mind.id,
+        created: false,
+        request: expect.any(String),
+        proposals: 2,
+        paragraphs: 1,
+      },
+    ]);
+  });
+});
+
+describe("A name that fits several places asks which one", { timeout: 30_000 }, () => {
+  const PART_1 = "Part one was very good, and sales were really strong.";
+  const PART_2 = "Part two was very late, and the courier was really slow.";
+  const TWO_SUMMARIES = () => [
+    heading(1, "Part 1"),
+    heading(2, "Summary"),
+    note(PART_1),
+    heading(1, "Part 2"),
+    heading(2, "Summary"),
+    note(PART_2),
+  ];
+  const ASKS_WHICH =
+    "There are 2 headings called “Summary”: under “Part 1” and under “Part 2”. Which one?";
+
+  async function withBlocks(model: MockLanguageModelV4, blocks: JSONContent[]) {
+    const set = await setUp(model);
+    writeMind(set.client, blocks);
+    await set.client.settled();
+    return set;
+  }
+
+  /** The Mind still reads as it was, and nothing waits or was saved. */
+  async function expectUntouched(
+    { core, mind, client }: Awaited<ReturnType<typeof setUp>>,
+    shown: string[],
+  ) {
+    await client.settled();
+    expect(shownWithChanges(client)).toEqual(shown);
+    expect(pendingProposals(client.blocks)).toEqual([]);
+    expect(await checkpointsOf(core, mind.id)).toHaveLength(0);
+  }
+
+  // protects=a section name on two headings changes nothing and the model is told to ask, naming both places; fails_when=the first heading is changed, or the places aren't named by their parent headings; no_claim=how a real model words the question.
+  test("edit_mind on two headings called Summary changes nothing and names both places", async () => {
+    const model = toolModel(
+      { tool: "edit_mind", input: { part: "Summary", instruction: "Shorten it" } },
+      "There are two. Which one?",
+    );
+    const set = await withBlocks(model, TWO_SUMMARIES());
+
+    const answer = await ask(set.core, { text: "Make the Summary shorter", mindId: set.mind.id });
+
+    expect(mindCalls(answer)[0]?.status).toBe("failed");
+    expect(mindCalls(answer)[0]?.mindProblem).toEqual({
+      kind: "several-places",
+      mindId: set.mind.id,
+      name: "Summary",
+      adding: false,
+    });
+    expect(changesIn(answer)).toEqual([]);
+    expect(lastResult(model)).toContain(`"${ASKS_WHICH}"`);
+    expect(lastResult(model)).toContain(`as in part: "Part 1 > Summary"`);
+    expect(model.doStreamCalls).toHaveLength(2);
+    await expectUntouched(set, ["Part 1", "Summary", PART_1, "Part 2", "Summary", PART_2]);
+  });
+
+  // protects=naming the parent heading picks one of two same-named headings; fails_when=the other section changes, or the first is changed because it comes first; no_claim=none beyond protects.
+  test("edit_mind on Part 2 > Summary changes that section only", async () => {
+    const model = toolModel(
+      { tool: "edit_mind", input: { part: "Part 2 > Summary", instruction: "Shorten it" } },
+      "Shortened the summary under Part 2.",
+    );
+    const set = await withBlocks(model, TWO_SUMMARIES());
+
+    const answer = await ask(set.core, {
+      text: "Make the Summary under Part 2 shorter",
+      mindId: set.mind.id,
+    });
+
+    await set.client.settled();
+    expect(mindCalls(answer)[0]?.status).toBe("done");
+    expect(shownWithChanges(set.client)).toEqual([
+      "Part 1",
+      "Summary",
+      PART_1,
+      "Part 2",
+      "Summary",
+      "Part two was [-very -]late, and the courier was [-really -]slow.",
+    ]);
+  });
+
+  // protects=the headings a name is under are matched like any name, whole text first: "Chapter 1" is not "Chapter 10", the quotes round each heading are dropped, and a start under the named parent counts though a whole name sits elsewhere; fails_when=a section under Chapter 10 is changed for Chapter 1, the quoted path isn't found, or "Part 2 > Summary" fails because Part 2 holds only "Summary of Q3"; no_claim=none beyond protects.
+  test.each([
+    {
+      what: "Chapter 1 is not Chapter 10",
+      part: "Chapter 1 > Notes",
+      blocks: [
+        heading(1, "Chapter 1"),
+        heading(2, "Notes"),
+        note("One was very short."),
+        heading(1, "Chapter 10"),
+        heading(2, "Notes"),
+        note("Ten was very long."),
+      ],
+      shown: [
+        "Chapter 1",
+        "Notes",
+        "One was [-very -]short.",
+        "Chapter 10",
+        "Notes",
+        "Ten was very long.",
+      ],
+    },
+    {
+      what: "quotes round each heading",
+      part: "“Part 2” > “Summary”",
+      blocks: TWO_SUMMARIES(),
+      shown: [
+        "Part 1",
+        "Summary",
+        PART_1,
+        "Part 2",
+        "Summary",
+        "Part two was [-very -]late, and the courier was [-really -]slow.",
+      ],
+    },
+    {
+      what: "a start under the named parent, a whole name elsewhere",
+      part: "Part 2 > Summary",
+      blocks: [
+        heading(1, "Part 1"),
+        heading(2, "Summary"),
+        note("One was very short."),
+        heading(1, "Part 2"),
+        heading(2, "Summary of Q3"),
+        note("Two was very long."),
+      ],
+      shown: [
+        "Part 1",
+        "Summary",
+        "One was very short.",
+        "Part 2",
+        "Summary of Q3",
+        "Two was [-very -]long.",
+      ],
+    },
+  ])("a path to a section: $what", async ({ part, blocks, shown }) => {
+    const model = toolModel(
+      { tool: "edit_mind", input: { part, instruction: "Shorten it" } },
+      "Shortened it.",
+    );
+    const set = await withBlocks(model, blocks);
+
+    const answer = await ask(set.core, { text: "Shorten that section", mindId: set.mind.id });
+
+    await set.client.settled();
+    expect(mindCalls(answer)[0]?.status).toBe("done");
+    expect(shownWithChanges(set.client)).toEqual(shown);
+  });
+
+  // protects=the question echoes the heading's own case, not the model's; fails_when=a heading typed in lower case is asked about in lower case; no_claim=none beyond protects.
+  test("the question names the heading as written in the Mind", async () => {
+    const model = toolModel(
+      { tool: "edit_mind", input: { part: "summary", instruction: "Shorten it" } },
+      "Which one?",
+    );
+    const set = await withBlocks(model, TWO_SUMMARIES());
+
+    await ask(set.core, { text: "Make the summary shorter", mindId: set.mind.id });
+
+    expect(lastResult(model)).toContain(`"${ASKS_WHICH}"`);
+    expect(lastResult(model)).toContain(`as in part: "Part 1 > Summary"`);
+  });
+
+  // protects=a name on one heading behaves as before: the whole text wins over a start, and a start is enough alone; fails_when=either case asks which, or changes another section; no_claim=none beyond protects.
+  test.each(["summary", "Summary of"])("a single match is changed as before (%s)", async (part) => {
+    const model = toolModel(
+      { tool: "edit_mind", input: { part, instruction: "Shorten it" } },
+      "Shortened it.",
+    );
+    const set = await withBlocks(model, [
+      heading(2, "Summary of risks"),
+      note("Risk one is very small."),
+      heading(2, "Summary"),
+      note("Sales were really strong."),
+    ]);
+
+    await ask(set.core, { text: "Shorten the summary", mindId: set.mind.id });
+
+    await set.client.settled();
+    const [risks, risksText, summary, summaryText] = shownWithChanges(set.client);
+    expect([risks, summary]).toEqual(["Summary of risks", "Summary"]);
+    if (part === "summary") {
+      expect([risksText, summaryText]).toEqual([
+        "Risk one is very small.",
+        "Sales were [-really -]strong.",
+      ]);
+    } else {
+      expect([risksText, summaryText]).toEqual([
+        "Risk one is [-very -]small.",
+        "Sales were really strong.",
+      ]);
+    }
+  });
+
+  // protects=places with the same parent, or none, are told apart by number, and the model is told what the User can do; fails_when=two places are both named "under" one heading, or a number can't be told from another; no_claim=none beyond protects.
+  test("places that no parent heading tells apart are numbered", async () => {
+    const model = toolModel(
+      { tool: "edit_mind", input: { part: "Notes", instruction: "Shorten it" } },
+      "Which one?",
+    );
+    const set = await withBlocks(model, [
+      heading(1, "Notes"),
+      note("Note one."),
+      heading(1, "Notes"),
+      note("Note two."),
+    ]);
+
+    await ask(set.core, { text: "Shorten the notes", mindId: set.mind.id });
+
+    expect(lastResult(model)).toContain(
+      '"There are 2 headings called “Notes”: number 1 and number 2. Which one?"',
+    );
+    expect(lastResult(model)).toContain("select the one they mean in the Mind");
+    await expectUntouched(set, ["Notes", "Note one.", "Notes", "Note two."]);
+  });
+
+  // protects=every place is listed, however many; fails_when=a place is left out of the question; no_claim=none beyond protects.
+  test("three places are all named", async () => {
+    const model = toolModel(
+      { tool: "edit_mind", input: { part: "## Summary", instruction: "Shorten it" } },
+      "Which one?",
+    );
+    const set = await withBlocks(model, [
+      ...[1, 2, 3].flatMap((part) => [heading(1, `Part ${part}`), heading(2, "Summary")]),
+      note("Text."),
+    ]);
+
+    await ask(set.core, { text: "Shorten the summary", mindId: set.mind.id });
+
+    expect(lastResult(model)).toContain(
+      "There are 3 headings called “Summary”: under “Part 1”, under “Part 2”, and under “Part 3”. Which one?",
+    );
+  });
+
+  // protects=add_to_mind on a heading name found twice adds nothing, however the call is written, and the Answer goes on to ask; fails_when=text is added after the first, or the Answer fails while its input streams in; no_claim=none beyond protects.
+  test.each([
+    ["in one piece", false],
+    ["streamed in", true],
+  ])(
+    "add_to_mind after two headings called Summary adds nothing (%s)",
+    async (_how, streamInput) => {
+      const model = scriptedModel(
+        ({ results }): ScriptedReply =>
+          results.length === 0
+            ? {
+                calls: [
+                  {
+                    tool: "add_to_mind",
+                    input: { after: "Summary", content: "A new line.\n\nAnother new line." },
+                    streamInput,
+                  },
+                ],
+              }
+            : { text: "Which one?" },
+      );
+      const set = await withBlocks(model, TWO_SUMMARIES());
+
+      const answer = await ask(set.core, {
+        text: "Add a line to the Summary",
+        mindId: set.mind.id,
+      });
+
+      expect(mindCalls(answer)[0]?.status).toBe("failed");
+      expect(mindCalls(answer)[0]?.mindProblem).toMatchObject({
+        kind: "several-places",
+        adding: true,
+      });
+      expect(lastResult(model)).toContain(`"${ASKS_WHICH}"`);
+      expect(lastResult(model)).toContain(`as in after: "Part 1 > Summary"`);
+      await expectUntouched(set, ["Part 1", "Summary", PART_1, "Part 2", "Summary", PART_2]);
+    },
+  );
+
+  // protects=naming the parent heading adds at the end of that section; fails_when=the text goes after the first Summary; no_claim=none beyond protects.
+  test("add_to_mind after Part 2 > Summary adds at the end of that section", async () => {
+    const model = toolModel(
+      { tool: "add_to_mind", input: { after: "Part 2 > Summary", content: "A new line." } },
+      "Added it.",
+    );
+    const set = await withBlocks(model, TWO_SUMMARIES());
+
+    await ask(set.core, { text: "Add a line to the Summary under Part 2", mindId: set.mind.id });
+
+    await set.client.settled();
+    expect(shownWithChanges(set.client)).toEqual([
+      "Part 1",
+      "Summary",
+      PART_1,
+      "Part 2",
+      "Summary",
+      PART_2,
+      "+ A new line.",
+    ]);
+  });
+
+  // protects=a paragraph named by its first words, found under two headings, is asked about like a heading, and its parent picks one; fails_when=the first paragraph is chosen without asking, or the parent doesn't pick; no_claim=none beyond protects.
+  test("two paragraphs starting alike are asked about, and a parent heading picks one", async () => {
+    const blocks = [
+      heading(1, "Part 1"),
+      note("Revenue grew in the north."),
+      heading(1, "Part 2"),
+      note("Revenue grew in the south."),
+      note("Costs fell."),
+    ];
+    const asks = toolModel(
+      { tool: "add_to_mind", input: { after: "Revenue grew", content: "A new line." } },
+      "Which one?",
+    );
+    const first = await withBlocks(asks, blocks);
+
+    await ask(first.core, {
+      text: "Add a line after the revenue paragraph",
+      mindId: first.mind.id,
+    });
+
+    expect(lastResult(asks)).toContain(
+      '"There are 2 paragraphs starting “Revenue grew”: under “Part 1” and under “Part 2”. Which one?"',
+    );
+    await expectUntouched(first, [
+      "Part 1",
+      "Revenue grew in the north.",
+      "Part 2",
+      "Revenue grew in the south.",
+      "Costs fell.",
+    ]);
+
+    const picks = toolModel(
+      { tool: "add_to_mind", input: { after: "Part 2 > Revenue grew", content: "A new line." } },
+      "Added it.",
+    );
+    const second = await withBlocks(picks, blocks);
+
+    await ask(second.core, {
+      text: "Add a line after the revenue paragraph",
+      mindId: second.mind.id,
+    });
+
+    await second.client.settled();
+    expect(shownWithChanges(second.client)).toEqual([
+      "Part 1",
+      "Revenue grew in the north.",
+      "Part 2",
+      "Revenue grew in the south.",
+      "+ A new line.",
+      "Costs fell.",
+    ]);
+  });
+
+  // protects=a Question in Chinese is answered in Chinese's words for the places, and Chinese headings are told apart the same way; fails_when=the question is English, or the Chinese headings aren't found; no_claim=how a real model words it.
+  test("Chinese headings: the question is in Chinese, and the parent heading picks one", async () => {
+    const blocks = [
+      heading(1, "第一部分"),
+      heading(2, "摘要"),
+      note("第一部分：销售 really 强劲。"),
+      heading(1, "第二部分"),
+      heading(2, "摘要"),
+      note("第二部分：销售 really 强劲。"),
+    ];
+    const asks = toolModel(
+      { tool: "edit_mind", input: { part: "摘要", instruction: "改短一点" } },
+      "有两个。",
+    );
+    const first = await withBlocks(asks, blocks);
+
+    await ask(first.core, { text: "把摘要改短一点", mindId: first.mind.id });
+
+    expect(lastResult(asks)).toContain(
+      "有 2 个标题叫“摘要”：在“第一部分”下和在“第二部分”下。要改哪一个？",
+    );
+    await expectUntouched(first, [
+      "第一部分",
+      "摘要",
+      "第一部分：销售 really 强劲。",
+      "第二部分",
+      "摘要",
+      "第二部分：销售 really 强劲。",
+    ]);
+
+    const picks = toolModel(
+      { tool: "edit_mind", input: { part: "第二部分 > 摘要", instruction: "改短一点" } },
+      "已改短。",
+    );
+    const second = await withBlocks(picks, blocks);
+
+    await ask(second.core, { text: "把第二部分的摘要改短一点", mindId: second.mind.id });
+
+    await second.client.settled();
+    expect(shownWithChanges(second.client)).toEqual([
+      "第一部分",
+      "摘要",
+      "第一部分：销售 really 强劲。",
+      "第二部分",
+      "摘要",
+      "第二部分：销售 [-really -]强劲。",
+    ]);
+  });
+});
+
+describe("Arguments a model gets slightly wrong cost no extra step", { timeout: 30_000 }, () => {
+  const SPRING = "Spring tides happen just after a new moon or a full moon.";
+
+  // protects=cite takes its records as one record alone, or as an array written in JSON, even encoded twice, in the model's very next step; fails_when=the model has to send it again, or the Citation isn't checked; no_claim=what a real model sends.
+  test.each([
+    ["one record alone", (record: object) => record],
+    ["an array written in JSON", (record: object) => JSON.stringify([record])],
+    ["an array encoded twice", (record: object) => JSON.stringify(JSON.stringify([record]))],
+  ])("cite given %s", async (_how, wrap) => {
+    const model = scriptedModel(({ results }): ScriptedReply => {
+      const search = results.find((result) => result.tool === "search_documents");
+      if (!search)
+        return { calls: [{ tool: "search_documents", input: { query: "spring tides" } }] };
+      if (!results.some((result) => result.tool === "cite")) {
+        const [passage] = shownPassages(search.text);
+        const record = { marker: 1, passage: passage?.id, pageFrom: 1, pageTo: 1, quote: SPRING };
+        return { calls: [{ tool: "cite", input: { citations: wrap(record) } }] };
+      }
+      if (!results.some((result) => result.tool === "create_mind")) {
+        const content = "## Tides\n\nSpring tides come at new and full moon [^1].";
+        return { calls: [{ tool: "create_mind", input: { title: "Tide notes", content } }] };
+      }
+      return { text: "Made “Tide notes”." };
+    });
+    const { core, mind } = await setUp(model);
+    const sources = await createSourceFolder();
+    const pdf = buildPdf([{ lines: ["Spring and neap tides", SPRING] }]);
+    const added = await core.addDocuments([await writeSourceFile(sources, "Tides.pdf", pdf)]);
+    await waitForProcessing(
+      core,
+      added.documents.map((document) => document.id),
+    );
+
+    const answer = await ask(core, {
+      text: "Summarise these Documents into a new note",
+      mindId: mind.id,
+    });
+
+    expect(model.doStreamCalls).toHaveLength(4);
+    const [change] = changesIn(answer);
+    const madeClient = await connectToMind(core, change?.mindId ?? "");
+    expect(shownWithChanges(madeClient)).toEqual([
+      "+ Tides",
+      "+ Spring tides come at new and full moon ⟨found⟩.",
+    ]);
+  });
+});

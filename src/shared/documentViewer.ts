@@ -26,9 +26,9 @@ export function documentIdFromUrl(url: string): string | null {
 }
 
 /**
- * The URL the main process serves a picture a Markdown Document shows from
- * beside it at: the picture's path, as written in the file, under the
- * Document's own URL.
+ * The URL the main process serves a picture a Document shows at: a Markdown
+ * file's from beside it, by the path written in the file, or a saved web
+ * page's (#756), by its path in the snapshot, under the Document's own URL.
  */
 export const documentImageUrl = (documentId: string, path: string): string =>
   `${documentFileUrl(documentId)}${path.split("/").map(encodeURIComponent).join("/")}`;

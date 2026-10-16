@@ -22,7 +22,9 @@ import type { Translate } from "../../shared/locations";
 import { mindName } from "../../shared/naming";
 import type { PrintPaper } from "../../shared/printDocument";
 import { pendingProposals } from "../../shared/proposals";
+import { readableQuoteText } from "../../shared/readableQuote";
 import type { SourceDocument } from "../../shared/sources";
+import type { UnitText } from "../../shared/units";
 import { wordFileOf, wordImportProgressOf } from "../../shared/wordFiles";
 import type { Logger, Pictures, Printer } from "../adapters";
 import {
@@ -37,8 +39,11 @@ import {
   type Mind,
   type MindExport,
   type MindExportPreview,
+  type SharedDocument,
+  type SharePagePreview,
   WORD_CHANGE_ID,
 } from "../api";
+import { citedPageKey } from "../citedPages";
 import { InvalidInputError, isRecord } from "../errors";
 import { safeFileName } from "../fileNames";
 import type { Language } from "../language";
@@ -46,6 +51,7 @@ import {
   type Block,
   countQuestions,
   type FailedCheck,
+  type FailedSentence,
   type Footnote,
   footnotesIn,
   type ReadOptions,
@@ -54,13 +60,23 @@ import {
   theirChangesReading,
 } from "../mindText";
 import { withChangesAccepted } from "../shownChanges";
+import { type CitationCard, citationCard } from "./citationCards";
 import { addSources, styleCitations } from "./citations";
-import { renderDocx } from "./docx";
+import { piecesOf, renderDocx } from "./docx";
 import { renderHtml } from "./html";
 import { exportLabels } from "./labels";
 import { renderMarkdown } from "./markdown";
 import { unifyIdeographs } from "./pdfUnicode";
 import { renderPrintHtml } from "./printHtml";
+import { failedSentences } from "./sentenceChecks";
+import {
+  drawPictures,
+  type PictureDrawn,
+  type PicturePlan,
+  picturedKind,
+  planPicture,
+} from "./sharedPictures";
+import { renderSharePage, type SharePicture } from "./sharePage";
 import { isUnverified, numberCitations, packPages, renderSourcePack } from "./sourcePack";
 import { exportWordPatch } from "./wordPatch";
 import type { ReviewChoices } from "./wordReview";
@@ -77,8 +93,11 @@ export interface ExportsDependencies {
   liveDocuments(): SourceDocument[];
   /** The text kept of Documents unlinked with their Linked folder: Citations quoting it still check. */
   keptCitationTexts(): KeptCitationText[];
+  /** A Citation's quote as its Document's text reads it, or null when the Document or the quote isn't there. */
+  readableQuote(attributes: Partial<CitationAttributes>): string | null;
   /** The interface language, which the export's own words are in. */
   language(): Language;
+  folderName(folderId: string): string | null;
   /** The Mind's citation style (#289). */
   citationStyle(mindId: string): CitationStyleId;
   /** Whether the Mind shows its Bibliography without a citation style (#102). */
@@ -87,6 +106,12 @@ export interface ExportsDependencies {
   formatCitations(request: CitationFormatRequest): Promise<FormattedCitations>;
   /** A Citation's saved page (#133); null if none is saved. */
   citedPage(citation: Readonly<Record<string, unknown>>): Promise<DrawnPage | null>;
+  /**
+   * The stored text of the Units a Citation cites, of the version it quotes (`pageTexts` in
+   * ../documents): what a web page to share's card shows a part of. Empty once it is gone.
+   */
+  citedUnits(citation: Partial<CitationAttributes>): UnitText[];
+  sharePageTextOnly(mindId: string): string[];
   /** Prints a PDF; null where this copy can't. */
   printer: Printer | null;
   /** The paper a PDF is printed on, which goes by the computer's region (`paperFor`). */
@@ -112,6 +137,7 @@ const EXTENSIONS: Readonly<Record<ExportFormat, string>> = {
   pdf: "pdf",
   "source-pack": "pdf",
   html: "html",
+  "share-page": "html",
 };
 
 /** What an export holds, read once for both its preview and its file. */
@@ -125,6 +151,8 @@ interface Prepared {
   word: { importing: boolean } | null;
   blocks: Block[];
   preview: MindExportPreview;
+  failedSentences: FailedSentence[];
+  trackedChanges: number;
   language: Language;
   style: CitationStyle;
   documents: readonly SourceDocument[];
@@ -144,13 +172,20 @@ export function createExports(deps: ExportsDependencies) {
     const kept = deps.keptCitationTexts();
     const attributesOf = new Map<Footnote, Partial<CitationAttributes>>();
     const footnote = (attributes: Record<string, unknown>): Footnote => {
-      const note = footnoteOf(attributes as Partial<CitationAttributes>, documents, kept, language);
+      const note = footnoteOf(
+        attributes as Partial<CitationAttributes>,
+        documents,
+        kept,
+        language,
+        deps,
+      );
       attributesOf.set(note, attributes as Partial<CitationAttributes>);
       return note;
     };
-    // Footnotes go right after the word, and so do Numbered's Citations; a style decides for
-    // its own (./citations).
-    const trimBeforeCitation = style.form === "numbered";
+    // Footnotes go right after the word, and so do Numbered's Citations and a shared page's
+    // markers; a style decides for its own (./citations).
+    const trimBeforeCitation =
+      style.form === "numbered" || (format === "share-page" && options.citationCards);
 
     const live = new Set(documents.map((document) => document.id));
     const readOptions: ReadOptions = {
@@ -161,23 +196,38 @@ export function createExports(deps: ExportsDependencies) {
       comparisonText: (key, params) => translate(language, key, params),
       documentRemoved: (documentId) => !live.has(documentId),
     };
-    const { read, questions, word, theirChanges } = deps.read(mind.id, (fragment) => {
-      const { doc } = fragment;
-      const fromWord = doc !== null && wordFileOf(doc) !== null;
-      // A Word file shows what is waiting as tracked changes, and can mark AI text (#107); the
-      // others show someone's changes from the Word file as changes, or accepted (#734).
-      if (format === "docx") readOptions.review = reviewReading(fragment);
-      else if (doc && fromWord && format !== "source-pack")
-        readOptions.review = theirChangesReading(doc);
-      return {
-        read: readBlocks(fragment, readOptions),
-        questions: countQuestions(fragment),
-        word: doc && fromWord ? { importing: wordImportProgressOf(doc) !== null } : null,
-        theirChanges: fromWord
-          ? pendingProposals(fragment).filter((each) => each.id.startsWith(WORD_CHANGE_ID)).length
-          : 0,
-      };
-    });
+    const { read, questions, word, theirChanges, trackedChanges } = deps.read(
+      mind.id,
+      (fragment) => {
+        const { doc } = fragment;
+        const fromWord = doc !== null && wordFileOf(doc) !== null;
+        // A Word file shows what is waiting as tracked changes, and can mark AI text (#107); the
+        // others show someone's changes from the Word file as changes, or accepted (#734).
+        if (format === "docx") readOptions.review = reviewReading(fragment);
+        else if (doc && fromWord && format !== "source-pack")
+          readOptions.review = theirChangesReading(doc);
+        readOptions.sentenceChecks = failedSentences(fragment, {
+          versions: new Map(documents.map((document) => [document.id, document.contentHash])),
+          folderId: mind.folderId,
+          folderName: deps.folderName,
+          sourceOf: (passage) => footnoteOf(passage, documents, kept, language, deps).source,
+        });
+        const { review } = readOptions;
+        const waiting = pendingProposals(fragment);
+        return {
+          read: readBlocks(fragment, readOptions),
+          questions: countQuestions(fragment),
+          word: doc && fromWord ? { importing: wordImportProgressOf(doc) !== null } : null,
+          theirChanges: fromWord
+            ? waiting.filter((each) => each.id.startsWith(WORD_CHANGE_ID)).length
+            : 0,
+          trackedChanges:
+            format === "docx" && review
+              ? waiting.filter((each) => !review.skips(each.id)).length
+              : 0,
+        };
+      },
+    );
     const blocks =
       format !== "docx" && options.theirChanges === "accepted" ? withChangesAccepted(read) : read;
     // A source pack holds the Citations the Mind numbers; the others, every footnote.
@@ -194,6 +244,8 @@ export function createExports(deps: ExportsDependencies) {
       fromWord: word !== null,
       theirChanges,
     };
+    const failed = new Map<string, FailedSentence>();
+    for (const { sentence } of piecesOf(blocks)) if (sentence) failed.set(sentence.id, sentence);
     return {
       format,
       options,
@@ -203,6 +255,8 @@ export function createExports(deps: ExportsDependencies) {
       word,
       blocks,
       preview,
+      failedSentences: [...failed.values()],
+      trackedChanges,
       language,
       style,
       documents,
@@ -229,6 +283,191 @@ export function createExports(deps: ExportsDependencies) {
       unverifiedCitations: pages.flatMap((page) => page.entries).filter(isUnverified).length,
       data: unifyIdeographs(printed),
       word: null,
+      sentenceChecks: { contradicted: 0, unsupported: 0, needsRecheck: 0, commented: false },
+      trackedChanges: 0,
+    };
+  };
+
+  const shareBlocks = ({ bibliography, blocks, language, documents }: Prepared) =>
+    bibliography
+      ? addSources(blocks, { language, documents }, translate(language, "bibliography.title"))
+      : blocks;
+
+  const unitsOf = (attributes: Partial<CitationAttributes>) =>
+    deps.citedUnits({
+      ...attributes,
+      documentId:
+        citationState(attributes, deps.liveDocuments()).documentId ?? attributes.documentId ?? null,
+    });
+
+  const shareCards = async (prepared: Prepared, blocks: readonly Block[]) => {
+    const { language, documents } = prepared;
+    const t: Translate = (key, params) => translate(language, key, params);
+    const kept = deps.keptCitationTexts();
+    const pages = new Map<string, DrawnPage | null>();
+    const cards: {
+      footnote: Footnote;
+      documentId: string | null;
+      card: CitationCard;
+      plan: PicturePlan | null;
+    }[] = [];
+    for (const footnote of footnotesIn(blocks, { inFootnotes: false })) {
+      const attributes = prepared.attributesOf.get(footnote) ?? {};
+      const card = citationCard(attributes, { documents, kept, units: deps.citedUnits, t });
+      const key =
+        picturedKind(attributes) && card.content.kind !== "missing" && citedPageKey(attributes);
+      let plan: PicturePlan | null = null;
+      if (key) {
+        if (!pages.has(key)) pages.set(key, await deps.citedPage(attributes));
+        const page = pages.get(key);
+        plan = page
+          ? planPicture(
+              page,
+              attributes,
+              card.check,
+              page.text.length > 0 ? [] : unitsOf(attributes),
+            )
+          : null;
+      }
+      cards.push({ footnote, documentId: attributes.documentId ?? null, card, plan });
+    }
+    return cards;
+  };
+
+  const renderShare = async (
+    prepared: Prepared,
+    blocks: readonly Block[],
+    cards: ReadonlyMap<Footnote, CitationCard>,
+    pictures: readonly SharePicture[] = [],
+  ) => {
+    const { title, language, preview } = prepared;
+    return new TextEncoder().encode(
+      renderSharePage({
+        title,
+        blocks: await withPictures(blocks, language, deps),
+        labels: exportLabels(language),
+        language,
+        name: preview.fileName.slice(0, -".html".length),
+        at: deps.now(),
+        cards,
+        pictures,
+        checkedLine: prepared.options.checkedLine,
+      }),
+    );
+  };
+
+  /**
+   * Draws each picture once, however many Citations show it. One that can't be drawn leaves its
+   * Citations their text cards, and the rest of the page is made all the same.
+   */
+  const drawShared = async (plans: ReadonlyMap<string, PicturePlan & { documentId: string }>) => {
+    let drawn: PictureDrawn[] = [];
+    try {
+      drawn = await drawPictures([...plans.values()]);
+    } catch (error) {
+      deps.log.error("export.sharePictures", {
+        pictures: plans.size,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+    const pictures: SharePicture[] = [];
+    const indexOf = new Map<string, number>();
+    [...plans].forEach(([key, plan], at) => {
+      const result = drawn[at];
+      if (!result) return;
+      if ("failed" in result) {
+        deps.log.warn("export.sharePicture", {
+          documentId: plan.documentId,
+          message: result.failed,
+        });
+        return;
+      }
+      indexOf.set(key, pictures.length);
+      pictures.push({ data: result.data, width: plan.width, height: plan.height });
+    });
+    return { pictures, indexOf };
+  };
+
+  /**
+   * A web page to share: its Citations numbered as in Numbered whatever the Mind's style, since
+   * its readers click a number for each, with the Bibliography only where a Numbered Mind shows
+   * one. A Document the User keeps as text gives its Citations no pictures.
+   */
+  const sharePage = async (prepared: Prepared): Promise<Uint8Array> => {
+    const blocks = shareBlocks(prepared);
+    const textOnly = new Set(deps.sharePageTextOnly(prepared.mindId));
+    const entries = await shareCards(prepared, blocks);
+    const plans = new Map<string, PicturePlan & { documentId: string }>();
+    for (const { documentId, plan } of entries) {
+      if (plan && documentId !== null && !textOnly.has(documentId)) {
+        plans.set(plan.key, { ...plan, documentId });
+      }
+    }
+    const { pictures, indexOf } = await drawShared(plans);
+    const cards = new Map<Footnote, CitationCard>();
+    for (const { footnote, card, plan } of entries) {
+      const picture = plan && plans.has(plan.key) ? indexOf.get(plan.key) : undefined;
+      cards.set(
+        footnote,
+        plan && picture !== undefined
+          ? {
+              ...card,
+              content: {
+                kind: "picture",
+                picture,
+                width: plan.width,
+                height: plan.height,
+                slide: plan.slide,
+                scan: card.content.kind === "quote" && card.content.scan,
+              },
+            }
+          : card,
+      );
+    }
+    return renderShare(prepared, blocks, cards, pictures);
+  };
+
+  const previewSharePage = async (mindId: unknown, options: unknown): Promise<SharePagePreview> => {
+    const prepared = prepare(mindId, {
+      ...(isRecord(options) ? options : {}),
+      format: "share-page",
+    });
+    const blocks = shareBlocks(prepared);
+    const textOnly = new Set(deps.sharePageTextOnly(prepared.mindId));
+    const unnamed = translate(prepared.language, "export.unnamedDocument");
+    const entries = await shareCards(prepared, blocks);
+    const documents = new Map<string, SharedDocument & { keys: Set<string> }>();
+    for (const { footnote, documentId, plan } of entries) {
+      if (!documentId) continue;
+      let shared = documents.get(documentId);
+      if (!shared) {
+        const attributes = prepared.attributesOf.get(footnote) ?? {};
+        shared = {
+          documentId,
+          name: shownDocumentName(attributes, prepared.documents) || unnamed,
+          quotes: 0,
+          pictures: 0,
+          pictureBytes: 0,
+          textOnly: textOnly.has(documentId),
+          keys: new Set(),
+        };
+        documents.set(documentId, shared);
+      }
+      shared.quotes++;
+      if (plan && !shared.keys.has(plan.key)) {
+        shared.keys.add(plan.key);
+        shared.pictures++;
+        shared.pictureBytes += plan.bytes;
+      }
+    }
+    const text = await renderShare(
+      prepared,
+      blocks,
+      new Map(entries.map(({ footnote, card }) => [footnote, card])),
+    );
+    return {
+      documents: [...documents.values()].map(({ keys: _, ...shared }) => shared),
+      textBytes: text.length,
     };
   };
 
@@ -236,6 +475,8 @@ export function createExports(deps: ExportsDependencies) {
     preview(mindId: unknown, options: unknown): MindExportPreview {
       return prepare(mindId, options).preview;
     },
+
+    previewSharePage,
 
     async export(mindId: unknown, options: unknown): Promise<MindExport> {
       const prepared = prepare(mindId, options);
@@ -245,6 +486,14 @@ export function createExports(deps: ExportsDependencies) {
       }
       if (format === "source-pack") return sourcePack(prepared);
       if (format === "docx" && prepared.word) return exportIntoWord(prepared, prepared.word);
+      if (format === "share-page" && prepared.options.citationCards) {
+        return {
+          ...preview,
+          data: await sharePage(prepared),
+          word: null,
+          ...reviewOf(prepared, []),
+        };
+      }
       const blocks =
         style.form !== "numbered"
           ? await styleCitations(prepared.blocks, style, deps.formatCitations)
@@ -257,18 +506,19 @@ export function createExports(deps: ExportsDependencies) {
             : prepared.blocks;
       const labels = exportLabels(language);
       let data: Uint8Array;
+      let commented: readonly FailedSentence[] = [];
       if (format === "markdown") {
         data = new TextEncoder().encode(renderMarkdown(title, blocks, labels));
       } else if (format === "docx") {
-        data = renderDocx(await withPictures(blocks, language, deps), {
+        ({ data, commented } = renderDocx(await withPictures(blocks, language, deps), {
           title,
           labels,
           language: language === "zh-CN" ? "zh-CN" : "en-US",
           paper: language === "en" ? "letter" : "a4",
           created: deps.now(),
           review: reviewChoices(prepared, false),
-        });
-      } else if (format === "html") {
+        }));
+      } else if (format === "html" || format === "share-page") {
         const drawn = await withPictures(blocks, language, deps);
         data = new TextEncoder().encode(
           renderHtml(title, drawn, labels, {
@@ -289,7 +539,7 @@ export function createExports(deps: ExportsDependencies) {
         });
         data = unifyIdeographs(printed);
       }
-      return { ...preview, data, word: null };
+      return { ...preview, data, word: null, ...reviewOf(prepared, commented) };
     },
   };
 
@@ -318,7 +568,7 @@ export function createExports(deps: ExportsDependencies) {
     const doc = new Y.Doc();
     try {
       if (state) Y.applyUpdate(doc, state);
-      const { data, report } = await exportWordPatch({
+      const { data, report, commented } = await exportWordPatch({
         bytes: await deps.wordPackage(prepared.mindId),
         blocks: doc.getXmlFragment(MIND_CONTENT_FIELD),
         readOptions: prepared.readOptions,
@@ -335,11 +585,30 @@ export function createExports(deps: ExportsDependencies) {
         notKept: report.notKept.length,
         unknownParts: report.unknownParts.length,
       });
-      return { ...prepared.preview, data, word: report };
+      return { ...prepared.preview, data, word: report, ...reviewOf(prepared, commented) };
     } finally {
       doc.destroy();
     }
   }
+}
+
+function reviewOf(
+  prepared: Prepared,
+  commented: readonly FailedSentence[],
+): Pick<MindExport, "sentenceChecks" | "trackedChanges"> {
+  const asComments = prepared.format === "docx" && prepared.options.commentFailedChecks;
+  const counted = asComments ? commented : prepared.failedSentences;
+  const count = (check: FailedSentence["check"]) =>
+    counted.filter((each) => each.check === check).length;
+  return {
+    sentenceChecks: {
+      contradicted: count("contradicted"),
+      unsupported: count("unsupported"),
+      needsRecheck: count("needs-recheck"),
+      commented: asComments,
+    },
+    trackedChanges: prepared.trackedChanges,
+  };
 }
 
 /** A picture that can't be drawn leaves the chart's table, and the log says why. */
@@ -405,16 +674,19 @@ async function withPictures(
 function parseExportOptions(input: unknown): Required<ExportMindOptions> {
   if (!isRecord(input)) throw new InvalidInputError("Export options must be an object.");
   const { format, includeQuestions, accept, theirChanges } = input;
-  const choice = (name: "trackChanges" | "markAiText" | "commentFailedChecks") => {
+  const choice = (
+    name: "trackChanges" | "markAiText" | "commentFailedChecks" | "citationCards" | "checkedLine",
+    absent = false,
+  ) => {
     const value = input[name];
     if (value !== undefined && typeof value !== "boolean") {
       throw new InvalidInputError({ key: "error.export.choice", values: { name } });
     }
-    return value === true;
+    return value ?? absent;
   };
   if (!EXPORT_FORMATS.some((each) => each === format)) {
     throw new InvalidInputError(
-      'The export format must be "markdown", "docx", "pdf", "source-pack" or "html".',
+      'The export format must be "markdown", "docx", "pdf", "source-pack", "html" or "share-page".',
     );
   }
   if (includeQuestions !== undefined && typeof includeQuestions !== "boolean") {
@@ -437,6 +709,8 @@ function parseExportOptions(input: unknown): Required<ExportMindOptions> {
     trackChanges: choice("trackChanges"),
     markAiText: choice("markAiText"),
     commentFailedChecks: choice("commentFailedChecks"),
+    citationCards: choice("citationCards", true),
+    checkedLine: choice("checkedLine"),
     theirChanges: theirChanges ?? "shown",
   };
 }
@@ -463,6 +737,7 @@ function footnoteOf(
   documents: readonly LiveDocument[],
   kept: readonly KeptCitationText[],
   language: Language,
+  { readableQuote }: Pick<ExportsDependencies, "readableQuote">,
 ): Footnote {
   const t: Translate = (key, params) => translate(language, key, params);
   const document = shownDocumentName(attributes, documents) || t("export.unnamedDocument");
@@ -471,7 +746,13 @@ function footnoteOf(
   const unverified = state.check !== "found";
   const failed: FailedCheck | null =
     state.check === "not-found" || state.check === "unsupported" || state.check === "contradicted"
-      ? { check: state.check, quote: attributes.quote ?? null, verdict: attributes.verdict ?? null }
+      ? {
+          check: state.check,
+          quote: attributes.quote
+            ? (readableQuote(attributes) ?? readableQuoteText(attributes.quote))
+            : null,
+          verdict: attributes.verdict ?? null,
+        }
       : null;
   const web = documents.find((each) => each.id === state.documentId)?.web;
   if (!web) {

@@ -9,12 +9,16 @@
  *    gets the passage, the paragraphs around it and the task (./prompt).
  * 3. Every Citation the reply keeps is checked again against its Document; one
  *    whose check comes out differently now comes back as a checked copy.
- * 4. The reply is compared with the passage word by word and written as
- *    Proposals. A reply that drops a Citation leaves it in a Proposal, for
- *    the User to see before accepting. If the User edited the passage while
- *    the model worked, the Proposals are written over the passage as the
- *    model read it and merged with the edits (../proposals/merge): those
- *    whose words the User changed arrive out of date (#94).
+ * 4. The reply streams in, and each paragraph is compared with the passage's
+ *    word by word and written as Proposals once it is finished (#202), with
+ *    "Writing…" where the next goes (`writing`). A reply that drops a
+ *    Citation leaves it in a Proposal, for the User to see before accepting.
+ *    The Proposals are written into a copy of the Mind as the model read it
+ *    and merged into the Mind (../proposals/merge), so if the User edits the
+ *    passage meanwhile, those whose words they changed arrive out of date
+ *    (#94). Stopped, what is written stays; failed, it goes.
+ * 5. The model says why it changed the passage, in a few words, which the
+ *    change's bar shows.
  *
  * A change out of date can be made again (`regenerateProposal`): the same
  * request, from the text it covers as it is now, the User's edits included.
@@ -24,16 +28,19 @@
  * Each request can be stopped (`cancel`).
  */
 import { randomUUID } from "node:crypto";
-import { generateText } from "ai";
+import { streamText } from "ai";
 import type * as Y from "yjs";
 import {
   outOfDateProposals,
   pendingProposals,
   proposalRequestOf,
   recordProposalRequest,
+  resolveProposals,
 } from "../../shared/proposals";
+import { topLevelBlocks } from "../answers/blocks";
 import { createWindowBudget } from "../answers/window";
 import {
+  BLOCK_ID_ATTRIBUTE,
   type ChatModelChoice,
   type ChatReadiness,
   type EditAction,
@@ -41,7 +48,9 @@ import {
   type ExternalService,
   editActions,
   MIND_CONTENT_FIELD,
+  type ProposalRequest,
   type TextPlace,
+  type WritingPlace,
 } from "../api";
 import type { Consent } from "../consent";
 import { ChatNotReadyError, ConsentDeclinedError, InvalidInputError, isRecord } from "../errors";
@@ -49,21 +58,33 @@ import type { MindContent } from "../mindContent";
 import { parseMindId } from "../minds";
 import { docOf, forkChanges } from "../proposals/merge";
 import {
+  acceptOwnIn,
+  boundsOf,
+  type OwnWaiting,
+  replaceOwn,
+  waitingIn,
+} from "../proposals/ownWaiting";
+import {
+  createRewriteStream,
   proposeAfter,
   proposeRewrite,
   type ReadResult,
+  type RewritePlace,
+  type RewriteStream,
   readSelection,
   type Selection,
   takeBackForRegenerate,
-  type Written,
 } from "../proposals/write";
 import type { PreparedChatModel } from "../providers/chat";
 import { classifyProviderError } from "../providers/providerErrors";
+import { asksToRemove, waitsForUser } from "./applies";
 import {
   EDIT_INSTRUCTIONS,
   EXPLAIN_INSTRUCTIONS,
   editPrompt,
+  passageSoFar,
   readEditReply,
+  reasonOf,
   sameText,
 } from "./prompt";
 
@@ -96,6 +117,10 @@ export interface EditsOptions {
   localOnly(): boolean;
   /** A Citation's attributes checked again now, or null when its check comes out the same. */
   recheck(attributes: Attributes): Attributes | null;
+  /** Says where a request writes next in a Mind as its changes come in (#202); null once it has stopped. */
+  writing(mindId: string, place: WritingPlace | null): void;
+  /** A Checkpoint just before an edit that applies at once writes (#113). */
+  checkpoint(mindId: string): void;
   now(): Date;
 }
 
@@ -121,8 +146,29 @@ interface ParsedRegenerate {
   model: ChatModelChoice | null;
 }
 
-/** Writes a request's Proposals for the selection read again where they go (`propose`). */
-type Writer = (propose: (blocks: Y.XmlFragment, selection: Selection) => Written) => Written | null;
+/**
+ * A copy of a Mind as the model read it, with the selection in it: a
+ * request's Proposals are written there, and merged into the Mind.
+ */
+interface Draft {
+  mindId: string;
+  /** The Mind's whole state the copy was made from. */
+  base: Uint8Array;
+  fork: Y.Doc;
+  selection: Selection;
+}
+
+/** What a request does besides writing its Proposals. */
+interface Hooks {
+  /** The model gave the text back as it was. */
+  settle?(): void;
+  /** Just before the request's first Proposals go into the Mind: a Checkpoint (#113). */
+  beforeWriting?(): void;
+  /** More of the request's Proposals are in the Mind: how many there are now. */
+  written?(request: string, count: number): void;
+  /** An edit the User asked for (#880): its updates name it. */
+  requestId?: string;
+}
 
 export function parsePlace(value: unknown, what: string): TextPlace {
   if (
@@ -207,25 +253,140 @@ function takeBack(doc: Y.Doc, blocks: Y.XmlFragment, proposalId: string) {
   return taken.region;
 }
 
-/** The Citations the reply keeps, by marker, that come back checked differently now. */
+/**
+ * The Citations a reply keeps, by marker, that come back checked differently
+ * now: each checked once, when the reply first has its marker.
+ */
 function freshCitations(
   selection: Selection,
-  reply: string,
   recheck: EditsOptions["recheck"],
-): Map<number, Attributes> {
+): (reply: string) => ReadonlyMap<number, Attributes> {
   const fresh = new Map<number, Attributes>();
-  const kept = new Set([...reply.matchAll(/\[(\d+)\]/g)].map((match) => Number(match[1])));
-  selection.citations.forEach((attributes, index) => {
-    if (!kept.has(index + 1)) return;
-    const checked = recheck(attributes);
-    if (checked) fresh.set(index + 1, checked);
+  const checked = new Set<number>();
+  return (reply) => {
+    for (const match of reply.matchAll(/\[(\d+)\]/g)) {
+      const marker = Number(match[1]);
+      if (checked.has(marker)) continue;
+      checked.add(marker);
+      const attributes = selection.citations[marker - 1];
+      const again = attributes ? recheck(attributes) : null;
+      if (again) fresh.set(marker, again);
+    }
+    return fresh;
+  };
+}
+
+/** Where a stream writes next, as the editor finds it: by the paragraph's id. */
+function placeOf(at: RewritePlace | null): WritingPlace | null {
+  if (!at) return null;
+  const element = "over" in at ? at.over : at.after;
+  const id = element.getAttribute(BLOCK_ID_ATTRIBUTE);
+  if (typeof id !== "string" || id === "") return null;
+  return "over" in at ? { over: id } : { after: id };
+}
+
+/** A change the assistant asks for in a Mind (#202, `proposeInMind`). */
+export interface ProposeInput {
+  mindId: string;
+  from: TextPlace;
+  to: TextPlace;
+  instruction: string;
+  prepared: PreparedChatModel;
+  signal: AbortSignal;
+  beforeWriting(): void;
+  written(request: string, count: number): void;
+}
+
+export interface Proposed {
+  result: EditWithAiResult;
+  length: { before: string; after: string } | null;
+  reason: string | null;
+  revised: { blockIds: string[] } | null;
+}
+
+const askOf = (input: ProposeInput): Ask => ({
+  mindId: input.mindId,
+  action: "instruction",
+  instruction: input.instruction,
+  model: { providerId: input.prepared.provider.id, modelId: input.prepared.modelId },
+});
+
+interface EditCall {
+  instructions: string;
+  prompt: string;
+  maxOutputTokens: number;
+}
+
+/** The request for `ask` over `selection`; null when it is more than the model can take at once. */
+function editCall(prepared: PreparedChatModel, ask: Ask, selection: Selection): EditCall | null {
+  const explain = ask.action === "explain";
+  const instructions = explain ? EXPLAIN_INSTRUCTIONS : EDIT_INSTRUCTIONS;
+  const prompt = editPrompt({
+    action: ask.action,
+    instruction: ask.instruction,
+    passage: selection.text,
+    context: selection.context,
+    // Explain writes under the passage, not into it: the words around it don't matter.
+    ...(!explain && { before: selection.before, after: selection.after }),
   });
-  return fresh;
+  // The reply is about as long as the passage; a translation into Chinese can count more.
+  let maxOutputTokens = Math.min(16_000, Math.max(1_024, Math.ceil(selection.characters * 1.5)));
+  if (prepared.window) {
+    const budget = createWindowBudget(prepared.window);
+    const expected = explain ? 512 : Math.ceil(budget.tokens(selection.text) * 1.5) + 64;
+    if (expected > prepared.window.outputTokens) return null;
+    if (budget.roomBeside([instructions, prompt], expected) < 0) return null;
+    maxOutputTokens = prepared.window.outputTokens;
+  }
+  return { instructions, prompt, maxOutputTokens };
+}
+
+/**
+ * Streams the model's reply to a request: `onText` hears it grow, the reply
+ * so far and the piece just come, and stops it by returning true. `failure`:
+ * why it failed, or null.
+ */
+async function streamEdit(
+  prepared: PreparedChatModel,
+  call: EditCall,
+  signal: AbortSignal,
+  onText?: (raw: string, piece: string) => boolean,
+): Promise<{ raw: string; failure: unknown }> {
+  let raw = "";
+  let failure: unknown = null;
+  const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+  try {
+    const result = streamText({
+      model: prepared.model,
+      instructions: call.instructions,
+      prompt: call.prompt,
+      maxOutputTokens: call.maxOutputTokens,
+      maxRetries: 1,
+      abortSignal: AbortSignal.any([signal, timeout]),
+      onError: () => undefined,
+    });
+    for await (const part of result.fullStream) {
+      if (part.type === "error") throw part.error;
+      if (part.type === "abort") {
+        // Not the User's Stop: it took too long, and what came isn't the whole text.
+        if (!signal.aborted) failure = timeout.reason;
+        break;
+      }
+      if (part.type !== "text-delta") continue;
+      raw += part.text;
+      if (onText?.(raw, part.text)) break;
+    }
+  } catch (error) {
+    failure = error;
+  }
+  return { raw, failure };
 }
 
 export function createEdits(options: EditsOptions) {
   const { chat, content } = options;
   const running = new Map<string, AbortController>();
+  /** The core is closing: a request stopped now writes nothing more, as the Mind's storage closes. */
+  let closing = false;
 
   options.consent.registry.register({
     id: "edits",
@@ -243,18 +404,16 @@ export function createEdits(options: EditsOptions) {
     readiness.ready ? null : { kind: "not-ready", readiness };
 
   /**
-   * Asks the model to change `selection` as `ask` says, and writes what comes
-   * back as Proposals through `write`. `settle` runs when the model gives the
-   * text back as it was.
+   * Asks the model to change the draft's selection as `ask` says, and writes
+   * what comes back as Proposals.
    */
   async function run(
     ask: Ask,
-    selection: Selection,
-    write: Writer,
+    draft: Draft,
     signal: AbortSignal,
-    settle?: () => void,
+    hooks: Hooks = {},
   ): Promise<EditWithAiResult> {
-    if (selection.characters > MAX_SELECTION_CHARACTERS) return { kind: "too-long" };
+    if (draft.selection.characters > MAX_SELECTION_CHARACTERS) return { kind: "too-long" };
 
     const choice = ask.model ?? options.defaultModel();
     const readiness = await readinessOf(choice);
@@ -276,179 +435,245 @@ export function createEdits(options: EditsOptions) {
       throw error;
     }
     if (signal.aborted) return { kind: "cancelled" };
-    return rewrite(prepared, ask, selection, write, signal, settle);
+    return (await rewrite(prepared, ask, draft, signal, hooks)).result;
   }
 
   /**
    * `run`, on a model already prepared: what goes to it, and what comes back
-   * as Proposals. `heard` gets the passage's new text, before it is written.
+   * as Proposals, each paragraph as soon as it is finished. Also gives the
+   * passage's new text and why it changed, once the model is done.
    */
   async function rewrite(
     prepared: PreparedChatModel,
     ask: Ask,
-    selection: Selection,
-    write: Writer,
+    draft: Draft,
     signal: AbortSignal,
-    settle?: () => void,
-    heard?: (reply: string) => void,
-  ): Promise<EditWithAiResult> {
+    hooks: Hooks,
+  ): Promise<{ result: EditWithAiResult; reply: string; reason: string | null }> {
+    const { mindId, fork, selection } = draft;
     const explain = ask.action === "explain";
-    const instructions = explain ? EXPLAIN_INSTRUCTIONS : EDIT_INSTRUCTIONS;
-    const prompt = editPrompt({
+    const ended = (result: EditWithAiResult) => ({ result, reply: "", reason: null });
+    const call = editCall(prepared, ask, selection);
+    if (!call) return ended({ kind: "too-long" });
+
+    const request = randomUUID();
+    const blocks = fork.getXmlFragment(MIND_CONTENT_FIELD);
+    const { requestId } = hooks;
+    const removing = asksToRemove(ask.action, ask.instruction);
+    // Explain's few sentences go in once they are all there.
+    const stream = explain
+      ? null
+      : createRewriteStream(
+          selection,
+          request,
+          randomUUID,
+          freshCitations(selection, options.recheck),
+          {
+            leftOut:
+              requestId !== undefined && ask.action === "instruction" && !removing
+                ? "keep"
+                : "remove",
+          },
+        );
+    let held = false;
+    // Counted as written: the window accepts an edit the User asked for, so the Mind no longer holds them.
+    let proposed = 0;
+    let landed = false;
+    const made: Extract<ProposalRequest, { source: "edit-with-ai" }> = {
+      source: "edit-with-ai",
+      providerId: prepared.provider.id,
+      modelId: prepared.modelId,
+      createdAt: options.now().toISOString(),
       action: ask.action,
       instruction: ask.instruction,
-      passage: selection.text,
-      context: selection.context,
-      // Explain writes under the passage, not into it: the words around it don't matter.
-      ...(!explain && { before: selection.before, after: selection.after }),
-    });
-    // The reply is about as long as the passage; a translation into Chinese can count more.
-    let maxOutputTokens = Math.min(16_000, Math.max(1_024, Math.ceil(selection.characters * 1.5)));
-    if (prepared.window) {
-      const budget = createWindowBudget(prepared.window);
-      const expected = explain ? 512 : Math.ceil(budget.tokens(selection.text) * 1.5) + 64;
-      if (expected > prepared.window.outputTokens) return { kind: "too-long" };
-      if (budget.roomBeside([instructions, prompt], expected) < 0) return { kind: "too-long" };
-      maxOutputTokens = prepared.window.outputTokens;
-    }
-
-    let replyText: string;
-    try {
-      const result = await generateText({
-        model: prepared.model,
-        instructions,
-        prompt,
-        maxOutputTokens,
-        maxRetries: 1,
-        abortSignal: AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]),
+    };
+    const mine = (mind: Y.XmlFragment) =>
+      pendingProposals(mind).filter((each) => each.request === request);
+    /**
+     * What the Proposals came to in the Mind: merged with the User's edits,
+     * some may have gone with the text they were in, or be out of date.
+     */
+    const arrived = (): EditWithAiResult => {
+      const now = content.read(mindId, (mind) => {
+        const stale = outOfDateProposals(mind);
+        const waiting = mine(mind);
+        return { count: waiting.length, outOfDate: waiting.filter((each) => stale.has(each.id)) };
       });
-      replyText = result.text;
-    } catch (error) {
-      if (signal.aborted) return { kind: "cancelled" };
-      return { kind: "failed", error: classifyProviderError(error) };
-    }
-    if (signal.aborted) return { kind: "cancelled" };
-    const reply = readEditReply(replyText, selection.text);
-    if (reply === "") {
+      const count = requestId === undefined ? now.count : landed ? proposed : 0;
+      if (count === 0) return { kind: "changed" };
+      const leftOut = held ? [] : (stream?.leftOut() ?? []);
       return {
+        kind: "proposed",
+        request,
+        proposals: count,
+        droppedCitations: stream?.written().droppedCitations ?? 0,
+        outOfDate: now.outOfDate.length,
+        ...(held && { held: true as const }),
+        ...(leftOut.length > 0 && { leftOut }),
+      };
+    };
+    const holdsBack = (written: RewriteStream) =>
+      waitsForUser({
+        action: ask.action,
+        removing,
+        ...written.extent(),
+        selected: selection.characters,
+      });
+    const appliesNow = () =>
+      explain || ask.action === "translate" || (stream?.extent().mapped ?? false);
+    let wrote = false;
+    let refused = false;
+    /**
+     * Writes in the copy; once that has written Proposals, merges the copy
+     * into the Mind, the first time after `beforeWriting`. A merge that would
+     * change the User's text is refused, and nothing more is written.
+     */
+    const step = (write: () => boolean): void => {
+      if (refused) return;
+      let changed = false;
+      fork.transact(() => {
+        changed = write();
+        if (changed) recordProposalRequest(fork, request, made);
+      });
+      if (!changed) return;
+      if (!wrote) hooks.beforeWriting?.();
+      wrote = true;
+      const update = forkChanges(draft.base, fork, content.state(mindId));
+      if (!update) {
+        refused = true;
+        return;
+      }
+      proposed = explain ? proposed : (stream?.written().proposals.length ?? proposed);
+      content.apply(
+        mindId,
+        update,
+        requestId === undefined ? undefined : { requestId, request, apply: appliesNow() },
+      );
+      const inMind = content.read(mindId, mine).length;
+      landed ||= inMind > 0;
+      hooks.written?.(request, inMind);
+    };
+    /** What was written goes again: the request failed, or its changes can't be merged. */
+    const takeBackWritten = () => {
+      if (!wrote) return;
+      content.edit(mindId, (mind) => {
+        resolveProposals(mind, (each) => each.request === request, "reject");
+      });
+    };
+    const showWriting = () => {
+      if (stream) options.writing(mindId, placeOf(stream.writingAt()));
+    };
+
+    let shown = false;
+    let afterBreak = false;
+    let streamed: { raw: string; failure: unknown };
+    try {
+      streamed = await streamEdit(prepared, call, signal, (raw, piece) => {
+        if (!stream) return false;
+        // A paragraph is finished once the next one starts after a line break: the reply is read
+        // again only at a break and just after one, not at every word.
+        const reread = piece.includes("\n") || afterBreak;
+        afterBreak = piece.includes("\n");
+        if (shown && !reread) return false;
+        const sofar = passageSoFar(raw, selection.text);
+        if (sofar === null) return false;
+        if (!shown) {
+          shown = true;
+          showWriting();
+        }
+        if (!reread) return false;
+        step(() => stream.write(sofar));
+        if (refused) return true;
+        showWriting();
+        return false;
+      });
+    } finally {
+      if (stream) options.writing(mindId, null);
+    }
+    const { raw, failure } = streamed;
+
+    if (signal.aborted && closing) return ended({ kind: "cancelled" });
+    if (signal.aborted && !refused) {
+      // Stopped: what is finished stays.
+      if (stream) {
+        step(() => stream.stop());
+        held = requestId !== undefined && holdsBack(stream);
+      }
+      if (!refused) return ended(wrote ? arrived() : { kind: "cancelled" });
+    }
+    if (failure !== null && !refused) {
+      takeBackWritten();
+      return ended({ kind: "failed", error: classifyProviderError(failure) });
+    }
+    const reply = readEditReply(raw, selection.text);
+    if (reply === "" && !wrote && !refused) {
+      return ended({
         kind: "failed",
         error: { kind: "provider", message: "The model gave nothing back." },
-      };
+      });
     }
-    if (!explain && sameText(reply, selection.text)) {
-      settle?.();
-      return { kind: "unchanged" };
+    if (!explain && !wrote && !refused && sameText(reply, selection.text)) {
+      hooks.settle?.();
+      return ended({ kind: "unchanged" });
     }
-    heard?.(reply);
-
-    const fresh = explain ? new Map() : freshCitations(selection, reply, options.recheck);
-    const request = randomUUID();
-    const written = write((blocks, again) => {
-      const result = explain
-        ? proposeAfter(blocks, again, reply, request, randomUUID)
-        : proposeRewrite(again, reply, request, randomUUID, fresh);
-      const doc = blocks.doc;
-      if (result.proposals.length > 0 && doc && !proposalRequestOf(doc, request)) {
-        recordProposalRequest(doc, request, {
-          source: "edit-with-ai",
-          providerId: prepared.provider.id,
-          modelId: prepared.modelId,
-          createdAt: options.now().toISOString(),
-          action: ask.action,
-          instruction: ask.instruction,
-        });
+    const reason = explain ? null : reasonOf(raw);
+    if (reason) made.reason = reason;
+    step(() => {
+      if (!stream) {
+        proposed = proposeAfter(blocks, selection, reply, request, randomUUID).proposals.length;
+        return proposed > 0;
       }
-      return result;
+      const more = stream.write(reply, true);
+      const finished = stream.finish();
+      if (requestId !== undefined) {
+        held = holdsBack(stream);
+        if (held) stream.removeLeftOut();
+      }
+      // Written before the reason came: recorded again with it.
+      return finished || more || held || (wrote && reason !== null);
     });
-    if (!written) return { kind: "changed" };
-    if (written.proposals.length === 0) return { kind: "unchanged" };
-    // Merged with the User's edits, some may have gone with the text they were in, or be out of date.
-    const arrived = content.read(ask.mindId, (blocks) => {
-      const stale = outOfDateProposals(blocks);
-      const mine = pendingProposals(blocks).filter((each) => each.request === request);
-      return { count: mine.length, outOfDate: mine.filter((each) => stale.has(each.id)).length };
-    });
-    if (arrived.count === 0) return { kind: "changed" };
-    return {
-      kind: "proposed",
-      request,
-      proposals: arrived.count,
-      droppedCitations: written.droppedCitations,
-      outOfDate: arrived.outOfDate,
-    };
+    if (refused) {
+      takeBackWritten();
+      return ended({ kind: "changed" });
+    }
+    if (!wrote) return ended({ kind: "unchanged" });
+    return { result: arrived(), reply, reason };
   }
 
   /**
-   * Writes Proposals into `fork`, a copy of the Mind made from `base`, and
-   * merges what it changed into the Mind (see ../proposals/merge); null when
-   * there was nothing to write, or the merge would change the User's text.
-   */
-  function mergeFrom<T>(
-    mindId: string,
-    base: Uint8Array,
-    fork: Y.Doc,
-    change: (blocks: Y.XmlFragment) => T | null,
-  ): T | null {
-    const changed: { result: T | null } = { result: null };
-    fork.transact(() => {
-      changed.result = change(fork.getXmlFragment(MIND_CONTENT_FIELD));
-    });
-    if (changed.result === null) return null;
-    const update = forkChanges(base, fork, content.state(mindId));
-    if (!update) return null;
-    content.apply(mindId, update);
-    return changed.result;
-  }
-
-  /**
-   * The text from `from` to `to` in a Mind as the model will read it, and how
-   * Proposals for it are written once the model replies: over the text as it
-   * is then, or, if the User edited it meanwhile, over the text as the model
-   * read it, merged with the edits.
+   * The text from `from` to `to` in a Mind as the model will read it, in a
+   * copy of the Mind that its Proposals are written into (`Draft`). Close
+   * the copy (`fork.destroy`) once done.
    */
   function readForEdit(
     mindId: string,
     from: TextPlace,
     to: TextPlace,
-  ): { ok: true; selection: Selection; write: Writer } | Extract<ReadResult, { ok: false }> {
-    // The Mind as the model reads it: Proposals are written over it if the User edits the text meanwhile.
+  ): { ok: true; draft: Draft } | Extract<ReadResult, { ok: false }> {
     const base = content.state(mindId);
-    const read = content.read(mindId, (blocks) => readSelection(blocks, from, to));
-    if (!read.ok) return read;
-    const { selection } = read;
-    const reread = (blocks: Y.XmlFragment) => {
-      const again = readSelection(blocks, from, to);
-      return again.ok ? again.selection : null;
-    };
-    const write: Writer = (propose) => {
-      const now = content.read(mindId, reread);
-      if (now?.plain === selection.plain) {
-        return content.edit(mindId, (blocks) => {
-          const again = reread(blocks);
-          return again ? propose(blocks, again) : null;
-        });
-      }
-      // Edited while the model worked: written as the model read it, and merged with the edits.
-      const fork = docOf(base);
-      try {
-        return mergeFrom(mindId, base, fork, (blocks) => {
-          const then = reread(blocks);
-          return then ? propose(blocks, then) : null;
-        });
-      } finally {
-        fork.destroy();
-      }
-    };
-    return { ok: true, selection, write };
+    const fork = docOf(base);
+    const read = readSelection(fork.getXmlFragment(MIND_CONTENT_FIELD), from, to);
+    if (!read.ok) {
+      fork.destroy();
+      return read;
+    }
+    return { ok: true, draft: { mindId, base, fork, selection: read.selection } };
   }
 
   async function edit(input: ParsedInput, signal: AbortSignal): Promise<EditWithAiResult> {
     const read = readForEdit(input.mindId, input.from, input.to);
     if (!read.ok) return { kind: read.reason === "has-proposals" ? "has-proposals" : "changed" };
-    const { selection, write } = read;
-    if (selection.plain !== input.text) return { kind: "changed" };
-    if (selection.text === "") return { kind: "unchanged" };
-    return run(input, selection, write, signal);
+    const { draft } = read;
+    try {
+      if (draft.selection.plain !== input.text) return { kind: "changed" };
+      if (draft.selection.text === "") return { kind: "unchanged" };
+      return await run(input, draft, signal, {
+        requestId: input.requestId,
+        beforeWriting: () => options.checkpoint(input.mindId),
+      });
+    } finally {
+      draft.fork.destroy();
+    }
   }
 
   async function regenerate(
@@ -473,17 +698,13 @@ export function createEdits(options: EditsOptions) {
       if (!read.ok) return { kind: read.reason === "has-proposals" ? "has-proposals" : "changed" };
       /** The change goes: there is no change to make now. */
       const withdraw = () => {
-        mergeFrom(input.mindId, base, fork, () => true);
+        const update = forkChanges(base, fork, content.state(input.mindId));
+        if (update) content.apply(input.mindId, update);
       };
       if (read.selection.text === "") {
         withdraw();
         return { kind: "unchanged" };
       }
-      const write: Writer = (propose) =>
-        mergeFrom(input.mindId, base, fork, (forked) => {
-          const again = readSelection(forked, from, to);
-          return again.ok ? propose(forked, again.selection) : null;
-        });
       return await run(
         {
           mindId: input.mindId,
@@ -491,11 +712,95 @@ export function createEdits(options: EditsOptions) {
           instruction: made.instruction ?? "",
           model: input.model,
         },
-        read.selection,
-        write,
+        { mindId: input.mindId, base, fork, selection: read.selection },
         signal,
-        withdraw,
+        { settle: withdraw },
       );
+    } finally {
+      fork.destroy();
+    }
+  }
+
+  /**
+   * Revises the assistant's own changes still waiting over the stretch:
+   * their text, as it reads once accepted, is rewritten as asked in a
+   * copy of the Mind, and the new text takes their place, still waiting, as
+   * Blocks of a new request (../proposals/ownWaiting). Nothing goes into the
+   * Mind until the model is done; the User's own text isn't touched.
+   */
+  async function revise(input: ProposeInput, own: OwnWaiting): Promise<Proposed> {
+    const nothing = (result: EditWithAiResult): Proposed => ({
+      result,
+      length: null,
+      reason: null,
+      revised: null,
+    });
+    const fork = docOf(content.state(input.mindId));
+    try {
+      const blocks = fork.getXmlFragment(MIND_CONTENT_FIELD);
+      fork.transact(() => acceptOwnIn(blocks, own));
+      const read = readSelection(blocks, input.from, input.to);
+      const bounds = boundsOf(blocks, own);
+      if (!read.ok || !bounds) return nothing({ kind: "changed" });
+      const { selection } = read;
+      if (selection.text === "") return nothing({ kind: "unchanged" });
+      if (selection.characters > MAX_SELECTION_CHARACTERS) return nothing({ kind: "too-long" });
+      const call = editCall(input.prepared, askOf(input), selection);
+      if (!call) return nothing({ kind: "too-long" });
+      let streamed: { raw: string; failure: unknown };
+      options.writing(input.mindId, { over: input.from.blockId });
+      try {
+        streamed = await streamEdit(input.prepared, call, input.signal);
+      } finally {
+        options.writing(input.mindId, null);
+      }
+      if (input.signal.aborted) return nothing({ kind: "cancelled" });
+      if (streamed.failure !== null) {
+        return nothing({ kind: "failed", error: classifyProviderError(streamed.failure) });
+      }
+      const reply = readEditReply(streamed.raw, selection.text);
+      if (sameText(reply, selection.text)) return nothing({ kind: "unchanged" });
+      const request = randomUUID();
+      let droppedCitations = 0;
+      fork.transact(() => {
+        const fresh = freshCitations(selection, options.recheck)(reply);
+        droppedCitations = proposeRewrite(
+          selection,
+          reply,
+          request,
+          randomUUID,
+          fresh,
+        ).droppedCitations;
+        resolveProposals(blocks, (each) => each.request === request, "accept");
+      });
+      const top = topLevelBlocks(blocks);
+      const revised = top
+        .slice(bounds.before, top.length - bounds.after)
+        .map((element) => element.clone());
+      const made: ProposalRequest = {
+        source: "answer-added",
+        providerId: input.prepared.provider.id,
+        modelId: input.prepared.modelId,
+        createdAt: options.now().toISOString(),
+      };
+      input.beforeWriting();
+      const blockIds = content.edit(input.mindId, (mind) => {
+        const ids = replaceOwn(mind, own, revised, request);
+        if (ids && mind.doc) recordProposalRequest(mind.doc, request, made);
+        return ids;
+      });
+      if (!blockIds) return nothing({ kind: "changed" });
+      const proposals = content.read(
+        input.mindId,
+        (mind) => pendingProposals(mind).filter((each) => each.request === request).length,
+      );
+      input.written(request, proposals);
+      return {
+        result: { kind: "proposed", request, proposals, droppedCitations, outOfDate: 0 },
+        length: { before: selection.text, after: reply },
+        reason: reasonOf(streamed.raw),
+        revised: { blockIds },
+      };
     } finally {
       fork.destroy();
     }
@@ -532,56 +837,49 @@ export function createEdits(options: EditsOptions) {
     /**
      * A change the assistant asks for in a Mind (#202): `instruction`, over the
      * text from `from` to `to`, on the model its Answer is written with, which
-     * the User has allowed. As Edit with AI's, it comes back as Proposals.
-     * `length`: the text before and after, when it proposed.
+     * the User has allowed. As Edit with AI's, it comes back as Proposals,
+     * each paragraph as it is finished. Over the assistant's own changes
+     * still waiting, it revises them instead (`revise`). `length`: the
+     * text before and after, when it proposed; `reason`: why, as the model
+     * says; `revised`: the Blocks that took the place of its waiting ones.
      */
-    async proposeInMind(input: {
-      mindId: string;
-      from: TextPlace;
-      to: TextPlace;
-      instruction: string;
-      prepared: PreparedChatModel;
-      signal: AbortSignal;
-      /** Runs once the change is known, just before its Proposals are written: a Checkpoint (#113). */
-      beforeWriting(): void;
-    }): Promise<{ result: EditWithAiResult; length: { before: string; after: string } | null }> {
+    async proposeInMind(input: ProposeInput): Promise<Proposed> {
       options.requireMind(input.mindId);
+      const nothing = (result: EditWithAiResult): Proposed => ({
+        result,
+        length: null,
+        reason: null,
+        revised: null,
+      });
       const read = readForEdit(input.mindId, input.from, input.to);
       if (!read.ok) {
+        if (read.reason !== "has-proposals") return nothing({ kind: "changed" });
+        const waiting = content.read(input.mindId, (mind) => waitingIn(mind, input.from, input.to));
+        return waiting.kind === "own"
+          ? await revise(input, waiting)
+          : nothing({ kind: "has-proposals" });
+      }
+      const { draft } = read;
+      try {
+        const { selection } = draft;
+        if (selection.text === "") return nothing({ kind: "unchanged" });
+        if (selection.characters > MAX_SELECTION_CHARACTERS) return nothing({ kind: "too-long" });
+        const { result, reply, reason } = await rewrite(
+          input.prepared,
+          askOf(input),
+          draft,
+          input.signal,
+          { beforeWriting: input.beforeWriting, written: input.written },
+        );
         return {
-          result: { kind: read.reason === "has-proposals" ? "has-proposals" : "changed" },
-          length: null,
+          result,
+          length: result.kind === "proposed" ? { before: selection.text, after: reply } : null,
+          reason,
+          revised: null,
         };
+      } finally {
+        draft.fork.destroy();
       }
-      const { selection, write } = read;
-      if (selection.text === "") return { result: { kind: "unchanged" }, length: null };
-      if (selection.characters > MAX_SELECTION_CHARACTERS) {
-        return { result: { kind: "too-long" }, length: null };
-      }
-      let reply = "";
-      const result = await rewrite(
-        input.prepared,
-        {
-          mindId: input.mindId,
-          action: "instruction",
-          instruction: input.instruction,
-          model: { providerId: input.prepared.provider.id, modelId: input.prepared.modelId },
-        },
-        selection,
-        (propose) => {
-          input.beforeWriting();
-          return write(propose);
-        },
-        input.signal,
-        undefined,
-        (text) => {
-          reply = text;
-        },
-      );
-      return {
-        result,
-        length: result.kind === "proposed" ? { before: selection.text, after: reply } : null,
-      };
     },
 
     cancel(requestId: unknown): void {
@@ -591,6 +889,7 @@ export function createEdits(options: EditsOptions) {
 
     /** The core is closing: requests still waiting stop. */
     stopAll(): void {
+      closing = true;
       for (const controller of running.values()) controller.abort();
       running.clear();
     },

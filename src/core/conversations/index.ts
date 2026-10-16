@@ -14,6 +14,7 @@ import { randomUUID } from "node:crypto";
 import { withFigureText } from "../../shared/figureMarkers";
 import { conversationName, cutTitle } from "../../shared/naming";
 import { parseThirdPartySource } from "../../shared/textOrigins";
+import { asksToCheckOrCalculate } from "../answers/carefulIntent";
 import {
   addCitedUnit,
   addCitedVersion,
@@ -21,6 +22,7 @@ import {
   type CitedUnits,
   type CitedVersions,
 } from "../answers/citedVersions";
+import { usualWait } from "../answers/usualWait";
 import type {
   AnswerPhase,
   AnswerStatus,
@@ -29,6 +31,7 @@ import type {
   AskedFrom,
   ChatModelChoice,
   CitationSupport,
+  ClaimedChange,
   Conversation,
   ConversationAnswer,
   ConversationContent,
@@ -45,6 +48,7 @@ import type {
   SearchScope,
   ThirdPartySource,
 } from "../api";
+import { CLAIMED_CHANGES } from "../api";
 import { InvalidInputError, isRecord, NotFoundError } from "../errors";
 import { parseSearchScope } from "../scope";
 import { isChatModelChoice } from "../settings";
@@ -168,6 +172,7 @@ const ERROR_KINDS: Record<ProviderErrorKind, true> = {
   provider: true,
   "consent-declined": true,
   "local-mode": true,
+  "ollama-not-running": true,
   "not-signed-in": true,
   "plan-limit": true,
   blocked: true,
@@ -205,7 +210,12 @@ function storedSteps(value: string | null): AnswerSteps | null {
   }
   if (!isRecord(parsed)) return null;
   const phases = Array.isArray(parsed.phases) ? parsed.phases.filter(isRecord) : [];
-  const { reasoning, readShare, citedAfterChecking } = parsed;
+  const { reasoning, readShare, citedAfterChecking, firstWordMs, careful, unbackedClaims } = parsed;
+  const claimed = Array.isArray(unbackedClaims)
+    ? unbackedClaims.filter((each): each is ClaimedChange =>
+        CLAIMED_CHANGES.some((claim) => claim === each),
+      )
+    : [];
   return {
     sentAt: timeOrNull(parsed.sentAt),
     finishedAt: timeOrNull(parsed.finishedAt),
@@ -226,6 +236,9 @@ function storedSteps(value: string | null): AnswerSteps | null {
     ...(typeof citedAfterChecking === "number" &&
       Number.isInteger(citedAfterChecking) &&
       citedAfterChecking > 0 && { citedAfterChecking }),
+    ...(typeof firstWordMs === "number" && firstWordMs >= 0 && { firstWordMs }),
+    ...(careful === true && { careful }),
+    ...(claimed.length > 0 && { unbackedClaims: claimed }),
   };
 }
 
@@ -578,6 +591,34 @@ export function createConversations(db: Database, now: () => string) {
       return { conversation, messages: messagesOf(messageRows(conversation.id)) };
     },
 
+    usualWait(answerId: unknown): number | null {
+      if (typeof answerId !== "string") return null;
+      const asked = db.get<{ provider_id: string | null; model_id: string | null; text: string }>(
+        `SELECT answer.provider_id, answer.model_id, question.text
+         FROM conversation_messages answer
+         JOIN conversation_messages question ON question.id = answer.question_id
+         WHERE answer.id = ? AND answer.kind = 'answer' AND answer.deleted_at IS NULL`,
+        [answerId],
+      );
+      if (!asked?.provider_id || !asked.model_id) return null;
+      const careful = asksToCheckOrCalculate(asked.text);
+      const rows = db.all<{ steps: string }>(
+        `SELECT steps FROM conversation_messages
+         WHERE kind = 'answer' AND status = 'done' AND provider_id = ? AND model_id = ?
+           AND steps IS NOT NULL AND id != ? AND deleted_at IS NULL
+         ORDER BY created_at DESC LIMIT ?`,
+        [asked.provider_id, asked.model_id, answerId, 50],
+      );
+      return usualWait(
+        rows.flatMap((row) => {
+          const steps = storedSteps(row.steps);
+          return steps?.firstWordMs !== undefined && (steps.careful === true) === careful
+            ? [steps.firstWordMs]
+            : [];
+        }),
+      );
+    },
+
     /**
      * Reads `askInConversation`'s input: the Question's text, its conversation (not
      * deleted), the Mind in focus (not deleted, with its Folder), its Search scope, model
@@ -705,7 +746,12 @@ export function createConversations(db: Database, now: () => string) {
     },
 
     /** The Question of an Answer, both live, to write the Answer again. */
-    questionOf(input: unknown): { answerId: string; question: ConversationQuestion } {
+    questionOf(input: unknown): {
+      answerId: string;
+      question: ConversationQuestion;
+      /** The Tool calls the Answer made, as it stands before it is written again. */
+      toolCalls: AnswerToolCall[];
+    } {
       if (!isRecord(input)) {
         throw new InvalidInputError("Expected { conversationId, answerId }.");
       }
@@ -718,7 +764,11 @@ export function createConversations(db: Database, now: () => string) {
       if (question?.kind !== "question") {
         throw new NotFoundError({ key: "error.answer.questionGone" });
       }
-      return { answerId: answer.id, question: toQuestion(question) };
+      return {
+        answerId: answer.id,
+        question: toQuestion(question),
+        toolCalls: storedList<AnswerToolCall>(answer.tool_calls),
+      };
     },
 
     /** Takes the Search scope off a Question, so its Answers search every Document (#748). */
