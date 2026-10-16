@@ -33,6 +33,7 @@ import { useGap, useLanguage, useT } from "../i18n";
 import { groupsMerged } from "../layoutSlice";
 import type { ObjectRef } from "../objects";
 import { openCited as openCitedPlace, quoteSaysSo } from "../openCited";
+import { pinCitation, takePinnedCitation, unpinCitation } from "../pinnedCitation";
 import { recordUsage, useAppStore } from "../store";
 import { pageDate } from "../webPages";
 import { CitationQuotedWords } from "./CitationQuotedWords";
@@ -142,6 +143,13 @@ export function CitationView({
     window.clearTimeout(timer.current);
     setPinned(false);
     setPeeking(false);
+    unpinCitation();
+  }, []);
+  // The window showed one group and the Document came to the front: the card is open when the Mind returns.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only when the node view is made.
+  useEffect(() => {
+    const at = getPos();
+    if (mindId && at !== undefined && takePinnedCitation(mindId, at)) setPinned(true);
   }, []);
   useEffect(() => {
     const element = marker.current;
@@ -167,6 +175,8 @@ export function CitationView({
 
   const onClick = () => {
     setPinned(true);
+    const at = getPos();
+    if (mindId && at !== undefined && groupsMerged()) pinCitation(mindId, at);
     // "Open a check in the example", in Get started.
     useAppStore.getState().updateGettingStarted({ citationChecked: true });
     recordUsage({ event: "citation_opened", fields: { check: state.check } });
