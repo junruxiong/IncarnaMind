@@ -19,11 +19,13 @@
  * waiting stays as it was there; one accepted or rejected leaves no trace.
  */
 import type { NodeJSON } from "../../../shared/blockJson";
+import { readClaimCheck } from "../../../shared/claimChecks";
 import { readWordAtom } from "../../../shared/wordFiles";
-import { GENERATED_MARK, IMAGE_NODE, WORD_ATOM_NODE } from "../../api";
+import { CLAIM_CHECK_MARK, GENERATED_MARK, IMAGE_NODE, WORD_ATOM_NODE } from "../../api";
 import type { Places } from "../../documents/formats/docxImport";
 import { elements, type XmlElement } from "../../documents/formats/xml";
 import {
+  type FailedSentence,
   type Inline,
   isWordChange,
   type Pending,
@@ -64,6 +66,7 @@ export interface Token {
   pending: Pendings;
   /** It is AI text. */
   ai: boolean;
+  sentence?: FailedSentence;
 }
 
 const BREAK = "\u0001break";
@@ -162,7 +165,7 @@ export function sourceOf(node: NodeJSON): string | null {
  * writes (Citations, footnotes, maths, a new picture); other inline nodes
  * read as their text. Read for review (`reading`), what changes still waiting
  * do to each is marked, and AI text (all of it, `wholeAi`, in an Answer from
- * before AI text was marked).
+ * before AI text was marked), and the sentences in `checks` whose check isn't good.
  */
 export function currentTokens(
   content: readonly NodeJSON[],
@@ -170,6 +173,7 @@ export function currentTokens(
   textOf: (node: NodeJSON) => string,
   reading?: ReviewReading,
   wholeAi = false,
+  checks?: ReadonlyMap<string, FailedSentence>,
 ): Token[] {
   const tokens: Token[] = [];
   const marked = (made: Token[], node: NodeJSON, pending: Pendings): Token[] => {
@@ -186,13 +190,17 @@ export function currentTokens(
   };
   for (const node of content) {
     if (node.type === "text") {
-      tokens.push(
-        ...marked(
-          textTokens(node.text ?? "", marksOf(node.marks), null),
-          node,
-          textPendings(node, reading),
-        ),
+      const made = marked(
+        textTokens(node.text ?? "", marksOf(node.marks), null),
+        node,
+        textPendings(node, reading),
       );
+      const checkId = readClaimCheck(
+        node.marks?.find((mark) => mark.type === CLAIM_CHECK_MARK)?.attrs,
+      )?.id;
+      const sentence = checkId === undefined ? undefined : checks?.get(checkId);
+      if (sentence) for (const token of made) token.sentence = sentence;
+      tokens.push(...made);
     } else if (node.type === "hardBreak") {
       tokens.push(
         ...marked(
@@ -577,7 +585,8 @@ export function writeParagraph(
       if (
         piece &&
         (!samePendings(was.pending, now.pending) ||
-          (isText(was) && !sameMarks(was.marks, now.marks)))
+          (isText(was) && !sameMarks(was.marks, now.marks)) ||
+          (now.sentence !== undefined && review.choices.commentFailedChecks))
       )
         piece.dirty = true;
       if (isText(was)) {

@@ -1,7 +1,7 @@
 import { formatDate } from "../../shared/dates";
 import { translate } from "../../shared/i18n";
 import type { Language } from "../language";
-import type { Footnote } from "../mindText";
+import type { FailedSentence, Footnote } from "../mindText";
 import type { NotedChange } from "../shownChanges";
 
 export interface ExportLabels {
@@ -18,6 +18,8 @@ export interface ExportLabels {
   aiText: string;
   /** A Word file's comment on a Citation whose check failed: what failed, and the source. */
   failedCheck(footnote: Footnote): string;
+  /** A Word file's comment on a sentence whose check isn't good: its result, and why. */
+  failedSentence(sentence: FailedSentence): string;
   /** Who made someone's change shown in an export, and when (#734): "Deleted by Priya Nair, 2 Oct 2026". */
   change(change: NotedChange): string;
 }
@@ -46,6 +48,23 @@ export function exportLabels(language: Language): ExportLabels {
             : t("export.comment.notFound.noQuote", { source })
           : t(`export.comment.${failed.check}`, { source });
       return failed.verdict ? `${said}\n${failed.verdict}` : said;
+    },
+    failedSentence: (sentence) => {
+      if (sentence.check === "needs-recheck") {
+        return t(`export.comment.sentence.needs-recheck.${sentence.why}`);
+      }
+      if (sentence.check === "contradicted") {
+        if (sentence.says)
+          return t("export.comment.sentence.contradicted", { says: sentence.says });
+        return sentence.worked
+          ? t("export.comment.sentence.contradicted.worked", sentence.worked)
+          : t("export.comment.sentence.contradicted.plain");
+      }
+      if (sentence.nearest)
+        return t("export.comment.sentence.unsupported.differs", sentence.nearest);
+      return sentence.folder
+        ? t("export.comment.sentence.unsupported.folder", { folder: sentence.folder })
+        : t("export.comment.sentence.unsupported");
     },
     change: ({ kind, pending }) => {
       const author = pending.by || t("export.change.someone");

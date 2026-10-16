@@ -1,8 +1,8 @@
 /**
  * Presets: hosted services that speak OpenAI's API, each one catalog row on
- * the shared "openai-compatible" kind. Every preset in the catalog goes through
- * the same path; a row of the test's own is added only to show that a row is
- * all a preset needs.
+ * the shared "openai-compatible" kind. Every hosted preset in the catalog goes
+ * through the same path; a row of the test's own is added only to show that a
+ * row is all a preset needs. The ones on this computer are in localPresets.test.ts.
  */
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { InvalidInputError } from "../../src/core";
@@ -47,7 +47,7 @@ const FIELD_VALUES: Record<string, string> = {
   account: "0123456789abcdef0123456789abcdef",
 };
 
-const PRESETS = CATALOG_PRESETS.map((each) => {
+const PRESETS = CATALOG_PRESETS.filter((each) => each.group !== "local").map((each) => {
   const [endpoint] = each.endpoints;
   const value = endpoint?.field ? FIELD_VALUES[endpoint.field.name] : undefined;
   const base = endpoint ? fieldUrl(endpoint, value ?? "") : "";

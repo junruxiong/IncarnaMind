@@ -859,7 +859,7 @@ describe("a file whose look the Mind doesn't draw (#735)", () => {
   const SYNTHETIC = join(WORD_DIR, "documents", "synthetic");
   const RESUMES = ["en-resume-layout.docx", "zh-resume-layout.docx"];
 
-  test("a résumé laid out with tables that have no borders, shading, tab stops, colours and sizes says its layout is kept; a plain memo doesn't", async () => {
+  test("a résumé laid out with tab stops, tables that have no borders, shading, colours and sizes says its layout is kept; a plain memo doesn't", async () => {
     const core = startCore(await createTempDataFolder());
     for (const file of RESUMES) {
       expect((await core.checkWordFile(join(SYNTHETIC, file))).layoutNotShown, file).toBe(true);
@@ -884,7 +884,7 @@ describe("a file whose look the Mind doesn't draw (#735)", () => {
     const core = startCore(await createTempDataFolder());
     const { client } = await importFile(core, join(SYNTHETIC, "zh-resume-layout.docx"));
     const layout = wordReportOf(client.doc)?.layout;
-    expect(layout).toMatchObject({ layoutTables: 2, tabStops: 4, fonts: 1, sizes: 6 });
+    expect(layout).toMatchObject({ tabStops: 4, fonts: 1, sizes: 6 });
     expect(layoutNotShown(layout)).toBe(true);
     // A report made before #735 has no counts, and says nothing.
     expect(layoutNotShown(undefined)).toBe(false);

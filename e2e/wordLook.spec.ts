@@ -348,10 +348,10 @@ test("a Mind written in the app, beside a Word Mind, keeps the app's look and ha
   expect(await fontOf(line)).not.toMatch(/Book Antiqua/);
   await expect(second.locator("[data-word-look], [data-word-run]")).toHaveCount(0);
   await expect(second.locator(".mind-editor-frame > style")).toHaveCount(0);
-  // The file's body size is drawn at the Mind's writing size.
+  // The file's body size is drawn at the Mind's writing size, zoomed as far as 80% to fit half the window.
   const sizeOf = (target: Locator) =>
-    target.evaluate((element) => getComputedStyle(element).fontSize);
-  expect(await sizeOf(clause)).toBe(await sizeOf(line));
+    target.evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize));
+  expect((await sizeOf(clause)) / (await sizeOf(line))).toBeCloseTo(0.8, 2);
   if (SCREENSHOTS) {
     await window.screenshot({ path: join(SCREENSHOTS, "word-look-beside-native.png") });
   }

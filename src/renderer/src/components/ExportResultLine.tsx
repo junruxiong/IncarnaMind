@@ -1,8 +1,10 @@
-import { type RefObject, useEffect, useRef, useState } from "react";
+import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
 import { core, files } from "../core";
 import { CheckStateIcon } from "../editor/icons";
 import { errorMessage } from "../errors";
 import { useDismissOnEscape } from "../escapeDismiss";
+import { commentedChecks, trackedChanges, unmarkedChecks } from "../exportChecks";
+import { useExportDialog } from "../exportDialog";
 import {
   type ExportResult,
   exportMind,
@@ -95,12 +97,21 @@ function ResultBody({
   const dismiss = useExports((state) => state.dismiss);
   const [error, setError] = useState<string | null>(null);
   const held = useHeld(line);
+  const unmarked = result.state === "saved" ? unmarkedChecks(result.checks, t) : null;
+  const withFile =
+    result.state === "saved"
+      ? [
+          { testId: "export-comments", text: commentedChecks(result.checks, t) },
+          { testId: "export-tracked", text: trackedChanges(result.tracked, t) },
+        ].flatMap(({ testId, text }) => (text ? [{ testId, text }] : []))
+      : [];
   // The first save says where it went (D209): it stays until it is closed, as a problem does.
   const plain =
     result.state === "saved" &&
     !result.defaulted &&
     result.unverified === 0 &&
     result.kept.length === 0 &&
+    unmarked === null &&
     error === null;
   useDismissOnEscape(result.state !== "saving", dismiss);
 
@@ -165,12 +176,15 @@ function ResultBody({
                 role="status"
                 data-testid="export-done"
                 title={result.path}
-                className="flex min-w-0 items-start gap-2 text-[14px] leading-5 text-ink-secondary"
+                className={`flex min-w-0 items-start gap-2 text-[14px] leading-5 text-ink-secondary ${
+                  withFile.length > 0 ? "grow basis-75" : ""
+                }`}
               >
                 <CheckIcon />
                 <SavedName
                   name={result.name}
                   folder={result.defaulted ? defaultFolderLabel(t) : null}
+                  withFile={withFile}
                 />
               </p>
               <span className="flex shrink-0 gap-1">
@@ -225,6 +239,31 @@ function ResultBody({
                   : t("export.unverified.line.other", { count: result.unverified })}
               </ProblemLine>
             )}
+            {unmarked && (
+              <ProblemLine
+                role="status"
+                testId="export-unmarked"
+                action={
+                  result.format === "docx"
+                    ? {
+                        label: t("export.options"),
+                        testId: "export-unmarked-options",
+                        onClick: () => useExportDialog.getState().open(result.mindId),
+                      }
+                    : {
+                        label: t("export.unmarked.word"),
+                        testId: "export-unmarked-word",
+                        onClick: () => void exportMind(result.mindId, "docx"),
+                      }
+                }
+              >
+                <CheckStateIcon
+                  check="unsupported"
+                  className="mr-2 inline size-4 align-[-3px] text-warning"
+                />
+                {unmarked}
+              </ProblemLine>
+            )}
             {result.kept.length > 0 && (
               <ProblemLine role="status" testId="export-kept">
                 {result.kept.length > 1
@@ -273,20 +312,57 @@ function ResultBody({
 
 /**
  * "Saved Tides.pdf", or "Saved “Tides.pdf” in Documents › IncarnaMind", the
- * file's name in the ink, wrapped rather than cut short so all of it shows.
+ * file's name in the ink, wrapped rather than cut short so all of it shows;
+ * then what went into the file, each part after a "·" that a wrapped line
+ * leaves off its start: "Saved “Tides.docx” · 2 Contradicted, as comments".
  */
-function SavedName({ name, folder }: { name: string; folder: string | null }) {
+function SavedName({
+  name,
+  folder,
+  withFile,
+}: {
+  name: string;
+  folder: string | null;
+  withFile: readonly { testId: string; text: string }[];
+}) {
   const t = useT();
   const said =
     folder === null
       ? t("export.done", { name: "\u0000" })
       : t("export.doneIn", { name: "\u0000", folder });
   const [before = "", after = ""] = said.split("\u0000");
-  return (
+  const saved = (
     <span className="min-w-0 break-words">
       {before}
       <span className="font-semibold text-ink">{name}</span>
       {after}
+    </span>
+  );
+  if (withFile.length === 0) return saved;
+  return (
+    <span className="block min-w-0 grow overflow-hidden">
+      <span className="-ml-4 flex flex-wrap">
+        <FilePart>{saved}</FilePart>
+        {withFile.map(({ testId, text }) => (
+          <FilePart key={testId} testId={testId}>
+            {text}
+          </FilePart>
+        ))}
+      </span>
+    </span>
+  );
+}
+
+function FilePart({ children, testId }: { children: ReactNode; testId?: string }) {
+  return (
+    <span
+      data-testid={testId}
+      className="block max-w-full overflow-hidden text-ellipsis whitespace-nowrap first:whitespace-normal"
+    >
+      <span aria-hidden="true" className="inline-block w-4 text-center text-ink-placeholder">
+        ·
+      </span>
+      {children}
     </span>
   );
 }

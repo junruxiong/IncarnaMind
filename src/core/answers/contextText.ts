@@ -10,7 +10,9 @@
  * "^[…]". Underline and highlight add nothing, and an image adds nothing (the
  * model can't see it). In a Mind imported from a Word file, someone's changes
  * still waiting are read as changes, with who made them and when:
- * "[deleted by Priya Nair, 2026-10-02: …]" (#734).
+ * "[deleted by Priya Nair, 2026-10-02: …]" (#734). Read for the assistant
+ * (`readMind`), the AI's own changes still waiting are read as changes too:
+ * "[waiting change, adds: …]".
  */
 
 import type * as Y from "yjs";
@@ -26,6 +28,7 @@ import {
   type Inline,
   type Marks,
   type ReadOptions,
+  type ReviewReading,
   readBlock,
   readBlocks,
   type TableCell,
@@ -104,25 +107,48 @@ const readOptions = (documents: Documents): ReadOptions => ({
   trimBeforeCitation: false,
 });
 
-/** How an element is read: in a Mind imported from a Word file, with someone's changes as changes. */
-function readingOf(element: Y.XmlElement, documents: Documents): ReadOptions {
+/**
+ * How an element is read: with the changes `review` reads as changes, else, in a Mind
+ * imported from a Word file, with someone's changes as changes.
+ */
+function readingOf(
+  element: Y.XmlElement,
+  documents: Documents,
+  review: ReviewReading | undefined,
+): ReadOptions {
   const { doc } = element;
   const options = readOptions(documents);
+  if (review) return { ...options, review };
   return doc && wordFileOf(doc) ? { ...options, review: theirChangesReading(doc) } : options;
 }
 
 /**
  * A Block (or any element) as Markdown, e.g. for Question context. Its Citations name their
  * Documents as `documents` names them now. An Answer's fingerprint (`contentHash`) gives none
- * and reads the names as cited, or a rename would make every Answer look edited.
+ * and reads the names as cited, or a rename would make every Answer look edited. `review`:
+ * the changes still waiting to read as changes (see `ReadOptions.review`).
  */
-export function elementMarkdown(element: Y.XmlElement, documents: Documents = null): string {
-  return blocksMarkdown(readBlock(element, readingOf(element, documents)), documents).trim();
+export function elementMarkdown(
+  element: Y.XmlElement,
+  documents: Documents = null,
+  review?: ReviewReading,
+): string {
+  return blocksMarkdown(
+    readBlock(element, readingOf(element, documents, review)),
+    documents,
+  ).trim();
 }
 
 /** An element's content as Markdown: its child Blocks separated by blank lines. */
-export function contentMarkdownOf(element: Y.XmlElement, documents: Documents = null): string {
-  return blocksMarkdown(readBlocks(element, readingOf(element, documents)), documents).trim();
+export function contentMarkdownOf(
+  element: Y.XmlElement,
+  documents: Documents = null,
+  review?: ReviewReading,
+): string {
+  return blocksMarkdown(
+    readBlocks(element, readingOf(element, documents, review)),
+    documents,
+  ).trim();
 }
 
 function blocksMarkdown(blocks: readonly Block[], documents: Documents): string {
@@ -132,7 +158,37 @@ function blocksMarkdown(blocks: readonly Block[], documents: Documents): string 
     .join("\n\n");
 }
 
+/** A Block a change adds or removes whole, its change on each of the Blocks inside it, or on all of it. */
 function blockMarkdown(block: Block, documents: Documents): string {
+  const change: ShownChange | null = block.deleted
+    ? { kind: "delete", pending: block.deleted }
+    : block.inserted
+      ? { kind: "insert", pending: block.inserted }
+      : null;
+  if (!change) return plainBlockMarkdown(block, documents);
+  const { inserted: _inserted, deleted: _deleted, ...plain } = block;
+  const spread = (inner: readonly Block[]) =>
+    inner.map((each) => ({ ...each, ...changeOf(change) }));
+  switch (plain.kind) {
+    case "paragraph":
+    case "heading":
+    case "question":
+      return plainBlockMarkdown(block, documents);
+    case "list":
+      return plainBlockMarkdown({ ...plain, items: plain.items.map(spread) }, documents);
+    case "quote":
+      return plainBlockMarkdown({ ...plain, content: spread(plain.content) }, documents);
+    default: {
+      const text = plainBlockMarkdown(plain, documents);
+      return text ? `[${changeWords(change)}:\n${text}\n]` : "";
+    }
+  }
+}
+
+const changeOf = ({ kind, pending }: ShownChange) =>
+  kind === "insert" ? { inserted: pending } : { deleted: pending };
+
+function plainBlockMarkdown(block: Block, documents: Documents): string {
   switch (block.kind) {
     case "paragraph":
     case "question":
@@ -270,14 +326,19 @@ function inlineMarkdown(content: readonly Inline[]): string {
     .join("");
 }
 
-/** Text that reads like a change's mark, escaped: only the reader writes "[deleted by …". */
-const notAMark = (text: string) => text.replace(/\[(?=\s*(?:inserted|deleted) by\b)/gi, "\\[");
+/** Text that reads like a change's mark, escaped: only the reader writes "[deleted by …" or "[waiting change". */
+const notAMark = (text: string) =>
+  text.replace(/\[(?=\s*(?:(?:inserted|deleted) by\b|waiting change\b))/gi, "\\[");
 
 /** The longest author name a change's mark shows: the file says what it likes. */
 const AUTHOR_LENGTH = 80;
 
-/** Who made a change and when, for the model: "deleted by Priya Nair, 2026-10-02". */
+/**
+ * Who made a change and when, for the model: "deleted by Priya Nair, 2026-10-02"; one of
+ * IncarnaMind's own, which names no one, as waiting: "waiting change, adds".
+ */
 function changeWords({ kind, pending }: ShownChange): string {
+  if (pending.by === undefined) return `waiting change, ${kind === "insert" ? "adds" : "removes"}`;
   const day = /^\d{4}-\d{2}-\d{2}/.exec(pending.at ?? "")?.[0];
   // A name can't close the mark, or open another.
   const author = (pending.by ?? "")

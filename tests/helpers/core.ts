@@ -18,6 +18,7 @@ import {
   type SecretProtection,
 } from "../../src/core";
 import { createFakeEmbedder } from "../../src/core/embedding/fake";
+import { scriptedLocalServers } from "../../src/core/providers/localServers";
 import { createFakeCrossEncoder } from "../../src/core/reranking/fake";
 import { openDatabase, type SqlValue } from "../../src/core/storage";
 
@@ -103,6 +104,8 @@ export function startCore(dataDir: string, overrides: TestAdapters = {}): Core {
     createChatModel: () => {
       throw new Error("This test didn't provide a chat model.");
     },
+    // Nothing asks the LM Studio or Unsloth Studio on this computer: neither runs.
+    localServers: scriptedLocalServers(),
     // Nothing asks the Ollama on this computer: it runs, and its models get the default settings.
     ollamaModels: {
       describe: async () => null,

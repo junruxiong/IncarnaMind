@@ -1,5 +1,6 @@
 import type { AnswerToolCall } from "../../../../core/api";
 import { mindName } from "../../../../shared/naming";
+import { problemText } from "../../changeProblems";
 import { useT } from "../../i18n";
 import type { Translate } from "../../objects";
 import { useAppStore } from "../../store";
@@ -13,12 +14,14 @@ const field = (call: AnswerToolCall, name: string): string => {
 
 /**
  * The Mind a call of a Minds' Tool (#202) is about, as the User knows it: the
- * one it changed or made, by its name now; else the one it named, or the
- * title it gave; else the Mind in focus.
+ * one it changed or made, or the one it couldn't change, by its name now;
+ * else the one it named, or the title it gave; else the Mind in focus.
  */
 function useCallMind(call: AnswerToolCall): { mindId: string | null; name: string } {
   const t = useT();
-  const changed = call.mindChange?.mindId ?? null;
+  const problem = call.mindProblem;
+  const changed =
+    call.mindChange?.mindId ?? (problem && "mindId" in problem ? problem.mindId : null);
   const mind = useAppStore((state) =>
     changed ? state.minds.find((each) => each.id === changed) : undefined,
   );
@@ -40,6 +43,8 @@ export function mindCallText(t: Translate, call: AnswerToolCall, mind: string): 
     return t(call.tool === "add_to_mind" ? "mindCall.adding" : "mindCall.editing", { mind });
   }
   if (call.status === "failed") {
+    const why = call.mindProblem && problemText(t, call.mindProblem, mind);
+    if (why) return why;
     if (call.tool === "read_mind") return t("mindCall.readFailed", { mind });
     return t(call.tool === "create_mind" ? "mindCall.createFailed" : "mindCall.failed", { mind });
   }
@@ -50,6 +55,10 @@ export function mindCallText(t: Translate, call: AnswerToolCall, mind: string): 
     return t(count === 1 ? "mindCall.created.one" : "mindCall.created.changes", { mind, count });
   }
   if (!change) return t("mindCall.unchanged", { mind });
+  if (change.revised) {
+    if (count === 0) return t("mindCall.revised.none", { mind });
+    return t(count === 1 ? "mindCall.revised.one" : "mindCall.revised", { mind, count });
+  }
   return t(count === 1 ? "mindCall.edited.one" : "mindCall.edited", { mind, count });
 }
 

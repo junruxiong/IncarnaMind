@@ -3,6 +3,7 @@ import type {
   ExportFormat,
   ExportMindOptions,
   ExportPreferences,
+  SentenceChecksExported,
   WordExportReport,
 } from "../../core/api";
 import type { MessageKey } from "../../shared/i18n";
@@ -66,6 +67,10 @@ export type ExportResult =
       path: string;
       name: string;
       unverified: number;
+      /** The sentences whose check isn't good: how many, and whether they went in as comments. */
+      checks: SentenceChecksExported;
+      /** The changes waiting that went into a Word file as tracked changes. */
+      tracked: number;
       /** The header and footer kept in a Word file though deleted from the Mind (#105). */
       kept: ("header" | "footer")[];
       /** The first save, which took Documents › IncarnaMind: the line says where (D209). */
@@ -146,6 +151,8 @@ export async function exportMind(
         path: saved.file.path,
         name: saved.file.name,
         unverified: saved.unverifiedCitations,
+        checks: saved.sentenceChecks,
+        tracked: saved.trackedChanges,
         kept: saved.word?.keptFurniture ?? [],
         defaulted: saved.file.defaulted,
       });

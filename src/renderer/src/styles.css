@@ -170,6 +170,13 @@
   }
 }
 
+/* The Word look's point (wordLookCss.ts): a length, so its zoom to the frame's width is worked out once, not in every rule. */
+@property --word-pt {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+
 @layer base {
   html,
   body,
@@ -5453,8 +5460,10 @@
     border-bottom: 1px solid var(--color-rule);
   }
   .mind-changes-head {
+    /* The icon stays beside the first line when the head wraps. */
+    align-items: flex-start;
     gap: 6px;
-    padding: 6px 10px;
+    padding: 7px 10px;
     background: var(--color-frame);
     font-weight: 600;
   }
@@ -5471,7 +5480,14 @@
     flex-shrink: 0;
     color: var(--color-ink-meta);
   }
-  .mind-changes-title,
+  .mind-changes-head .mind-changes-icon {
+    margin-top: 3px;
+  }
+  .mind-changes-line {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+  }
   .mind-changes-name {
     min-width: 0;
     overflow: hidden;

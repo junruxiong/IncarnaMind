@@ -192,7 +192,7 @@ test("a résumé laid out with tables, shading and tab stops says, before Import
   const dialog = await importWordFromMenu(window);
   const note = dialog.getByTestId("word-import-layout");
   await expect(note).toHaveText(
-    "Some of this file’s layout (table lines and aligned columns) isn’t shown in the Mind yet. It’s kept, and comes back when you export to Word.",
+    "Some of this file’s layout (aligned columns) isn’t shown in the Mind yet. It’s kept, and comes back when you export to Word.",
   );
   // Before Import, in one place: above the buttons.
   const noteBox = await note.boundingBox();
@@ -215,7 +215,7 @@ test("a résumé laid out with tables, shading and tab stops says, before Import
   await window.getByTestId("plus-menu").click();
   await window.getByTestId("plus-import-word").click();
   await expect(dialog.getByTestId("word-import-layout")).toHaveText(
-    "这份文件的部分版式（表格边框和对齐的列）在 Mind 里暂不显示，会保留，导出 Word 时原样还原。",
+    "这份文件的部分版式（对齐的列）在 Mind 里暂不显示，会保留，导出 Word 时原样还原。",
   );
   await screenshot(dialog, "word-import-layout-zh");
   await dialog.getByTestId("word-import-confirm").click();
@@ -337,7 +337,10 @@ test("someone else's tracked changes wait in place with who made them and when: 
   // Export: what was resolved leaves no trace; what waits is in the file as it was.
   await exportFromMenu(window);
   const result = window.getByTestId("export-result");
-  await expect(result.getByTestId("export-done")).toHaveText("Saved Lease redline.docx");
+  await expect(result.getByTestId("export-done")).toContainText("Saved Lease redline.docx");
+  await expect(result.getByTestId("export-tracked")).toContainText(
+    "1 change waiting, as tracked changes",
+  );
   const document =
     unzip(await readFile(join(output, "Lease redline.docx")))
       .get("word/document.xml")

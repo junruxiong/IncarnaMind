@@ -12,8 +12,9 @@
  * hosted provider's list gives the menu only the catalog's current chat
  * models (OpenAI's list says nothing of what a model is, only when one shuts
  * down); the other ids are `other`: ones the catalog doesn't know, deprecated
- * ones, and ones that need another API than chat. Where a list says what a model can do (Anthropic's capabilities and limits, Ollama's capabilities),
- * that is kept as the server's word on it (see ./capabilities).
+ * ones, and ones that need another API than chat. Where a list says what a
+ * model can do (Anthropic's capabilities and limits, Ollama's and LM Studio's
+ * capabilities), that is kept as the server's word on it (see ./capabilities).
  */
 import type { ChatProviderKind, OtherModel } from "../api";
 import { isRecord } from "../errors";
@@ -26,7 +27,7 @@ import {
   otherModel,
 } from "./catalog";
 import { KNOWN_PLAN_MODELS } from "./chatgpt/planEndpoint";
-import { endpointUrl } from "./kinds";
+import { endpointUrl, requiresApiKey } from "./kinds";
 import { isCloudModelName, isRemoteEntry } from "./ollamaCloud";
 
 const LIST_TIMEOUT_MS = 5_000;
@@ -125,6 +126,41 @@ export function mistralModelFacts(model: Record<string, unknown>): ModelFactsLay
   return facts;
 }
 
+const loadedInstances = (model: Record<string, unknown>): Record<string, unknown>[] =>
+  Array.isArray(model.loaded_instances) ? model.loaded_instances.filter(isRecord) : [];
+
+/** What LM Studio's `/api/v1/models` says of a model; its window is the one it is loaded with, else its longest. */
+export function lmStudioModelFacts(model: Record<string, unknown>): ModelFactsLayer {
+  const facts: ModelFactsLayer = {};
+  const capabilities = isRecord(model.capabilities) ? model.capabilities : null;
+  if (capabilities) {
+    if (typeof capabilities.trained_for_tool_use === "boolean") {
+      facts.tools = capabilities.trained_for_tool_use;
+    }
+    if (typeof capabilities.vision === "boolean") {
+      facts.input = capabilities.vision ? ["text", "image"] : ["text"];
+    }
+  }
+  const [loaded] = loadedInstances(model);
+  const config = loaded && isRecord(loaded.config) ? loaded.config : null;
+  const context = positive(config?.context_length) ?? positive(model.max_context_length);
+  if (context) facts.context = context;
+  return facts;
+}
+
+/** LM Studio's language models, from its own list (the OpenAI-shaped one has no capabilities); a loaded one by its instance, which a request must name. */
+function lmStudioModels(body: unknown): ListedModel[] {
+  const models = isRecord(body) && Array.isArray(body.models) ? body.models.filter(isRecord) : [];
+  return models.flatMap((model): ListedModel[] => {
+    if (model.type !== "llm") return [];
+    const [loaded] = loadedInstances(model);
+    const id = typeof loaded?.id === "string" ? loaded.id : model.key;
+    if (typeof id !== "string") return [];
+    const facts = lmStudioModelFacts(model);
+    return [{ id, ...(Object.keys(facts).length > 0 && { facts }) }];
+  });
+}
+
 /** What OpenRouter's model list says of a model: its inputs, context window, longest reply, and Tools. */
 export function openRouterModelFacts(model: Record<string, unknown>): ModelFactsLayer {
   const facts: ModelFactsLayer = {};
@@ -202,7 +238,10 @@ async function fetchModels({ kind, baseUrl, apiKey, endpoint, catalogId }: Model
       );
     }
     case "openai-compatible":
-      if (hosted && !apiKey) return [];
+      if (!apiKey && requiresApiKey(kind, catalogId)) return [];
+      if (catalogId === "lmstudio" && baseUrl) {
+        return lmStudioModels(await getJson(`${new URL(baseUrl).origin}/api/v1/models`, bearer));
+      }
       return idsOf(await getJson(`${hosted ?? baseUrl}/models`, bearer));
     case "deepseek":
     case "qwen":

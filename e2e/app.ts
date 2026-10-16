@@ -56,6 +56,8 @@ export interface LaunchOptions {
    * only counts (`ollamaAppOpened`). Without it, the scripted chat model's Ollama always runs.
    */
   ollamaApp?: "installed" | "missing";
+  /** The LM Studio and Unsloth Studio on this computer are never asked: those named here, by catalog id, run and list these models. */
+  localServers?: Record<string, string[]>;
   /**
    * Where crash reports go: a test build offers them only with this, and
    * ignores the DSN a real build is made with. Point it at a local server.
@@ -174,6 +176,7 @@ export async function launchApp(
     fakeChat = false,
     ollama,
     ollamaApp,
+    localServers,
     sentryDsn,
     usageData,
     examples = false,
@@ -202,6 +205,8 @@ export async function launchApp(
   if (ollama) env.OLLAMA_HOST = ollama;
   delete env.INCARNAMIND_TEST_OLLAMA_APP;
   if (ollamaApp) env.INCARNAMIND_TEST_OLLAMA_APP = ollamaApp;
+  delete env.INCARNAMIND_TEST_LOCAL_SERVERS;
+  if (localServers) env.INCARNAMIND_TEST_LOCAL_SERVERS = JSON.stringify(localServers);
   delete env.INCARNAMIND_TEST_SENTRY_DSN;
   delete env.INCARNAMIND_TEST_EXAMPLES;
   delete env.INCARNAMIND_TEST_POSTHOG_KEY;

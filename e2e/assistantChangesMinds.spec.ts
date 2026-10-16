@@ -119,8 +119,12 @@ test("the card lists each Mind changed: Open shows the change, Reject all remove
   const card = answer.getByTestId("mind-changes");
   await expect(card.getByTestId("mind-changes-title")).toHaveText("2 Minds changed");
   const rows = card.getByTestId("mind-changes-row");
-  await expect(rows.nth(0)).toContainText("Edited: Project plan· 1 change");
-  await expect(rows.nth(1)).toContainText("Created: Fieldwork plan· 2 changes");
+  await expect(rows.nth(0)).toContainText("Edited: Project plan· 1 waiting");
+  await expect(rows.nth(1)).toContainText("Created: Fieldwork plan· 2 waiting");
+  await expect(rows.nth(0).locator(".mind-changes-name")).toHaveAttribute(
+    "title",
+    "Wrote 1 paragraph in “Project plan”",
+  );
   await screenshot(window, "card-two-minds");
 
   await pointAndClick(window, rows.nth(0).getByTestId("mind-changes-open"));
@@ -130,15 +134,15 @@ test("the card lists each Mind changed: Open shows the change, Reject all remove
   await pointAndClick(window, card.getByTestId("mind-changes-reject-all"));
   const made = window.getByTestId("mind-tab").filter({ hasText: "Fieldwork plan" });
   await expect(made).toHaveCount(0);
-  await expect(rows.nth(0)).toContainText("· none waiting");
+  await expect(rows.nth(0)).toContainText("Edited: Project plan· none waiting");
   await expect(rows.nth(1)).toContainText("Removed: Fieldwork plan");
   await expect(window.getByTestId("proposals-bar")).toHaveCount(0);
   await expect(answer.getByTestId("answer-added")).toContainText("Rejected 3 changes");
 
   await pointAndClick(window, answer.getByTestId("answer-added-undo"));
-  await expect(rows.nth(1)).toContainText("Created: Fieldwork plan· 2 changes");
+  await expect(rows.nth(1)).toContainText("Created: Fieldwork plan· 2 waiting");
   await expect(made).toHaveCount(1);
-  await expect(rows.nth(0)).toContainText("· 1 change");
+  await expect(rows.nth(0)).toContainText("· 1 waiting");
 
   await pointAndClick(window, card.getByTestId("mind-changes-accept-all"));
   await expect(rows.nth(0)).toContainText("· none waiting");
@@ -150,7 +154,7 @@ test("the card lists each Mind changed: Open shows the change, Reject all remove
   ]);
 });
 
-test("one Mind changed: the card says how many changes wait there, Review goes to the first, Accept all applies them, and ⌘Z takes them back", async () => {
+test("one Mind changed: the card says what was changed and how much of it waits, Review goes to the first, Accept all applies them, and ⌘Z takes them back", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
   await useLocalChatModel(window);
@@ -160,7 +164,10 @@ test("one Mind changed: the card says how many changes wait there, Review goes t
 
   const answer = await askInAssistant(window, "把这段缩短");
   const card = answer.getByTestId("mind-changes");
-  await expect(card.getByTestId("mind-changes-title")).toHaveText("“第三季度”中有 2 处修订");
+  const title = card.getByTestId("mind-changes-title");
+  const left = card.getByTestId("mind-changes-left");
+  await expect(title).toHaveText("在“第三季度”中已修改 2 处");
+  await expect(left).toHaveText("· 2 处待确认");
   await expect(card.getByTestId("mind-changes-row")).toHaveCount(0);
   await screenshot(window, "card-one-mind-zh");
 
@@ -170,10 +177,11 @@ test("one Mind changed: the card says how many changes wait there, Review goes t
   await pointAndClick(window, card.getByTestId("mind-changes-accept-all"));
   const editor = window.getByTestId("mind-editor");
   await expect(editor.locator("p")).toHaveText(["销售好，利润很高。"]);
-  await expect(card.getByTestId("mind-changes-title")).toHaveText("“第三季度”中没有待处理的修订");
+  await expect(title).toHaveText("在“第三季度”中已修改 2 处");
+  await expect(left).toHaveText("· 没有待确认的修订");
 
   await window.keyboard.press("ControlOrMeta+z");
-  await expect(card.getByTestId("mind-changes-title")).toHaveText("“第三季度”中有 2 处修订");
+  await expect(left).toHaveText("· 2 处待确认");
   await expect(window.getByTestId("proposals-count")).toHaveText("来自助手的 2 处修订");
 });
 
@@ -272,9 +280,9 @@ test("Reject all keeps a Mind the assistant made once the User has written in it
     "Make a new note called Fieldwork plan with a summary",
   );
   const card = answer.getByTestId("mind-changes");
-  await expect(card.getByTestId("mind-changes-title")).toHaveText(
-    "Created “Fieldwork plan with a summary” · 2 changes",
-  );
+  const fact = "Created “Fieldwork plan with a summary” and wrote 1 paragraph";
+  await expect(card.getByTestId("mind-changes-title")).toHaveText(fact);
+  await expect(card.getByTestId("mind-changes-left")).toHaveText("· 2 waiting");
   const made = window.getByTestId("mind-tab").filter({ hasText: "Fieldwork plan with a summary" });
   await expect(made).toHaveCount(1);
 
@@ -300,16 +308,13 @@ test("Reject all keeps a Mind the assistant made once the User has written in it
   await expect(window.getByTestId("proposals-bar")).toHaveCount(0);
   await expect(made).toHaveCount(1);
   await expect(editor.locator("p")).toHaveText(["Ask the roastery about Tuesdays."]);
-  await expect(card.getByTestId("mind-changes-title")).toHaveText(
-    "Created “Fieldwork plan with a summary”",
-  );
+  await expect(card.getByTestId("mind-changes-title")).toHaveText(fact);
+  await expect(card.getByTestId("mind-changes-left")).toHaveText("· none waiting");
   await expect(answer.getByTestId("answer-added")).toContainText("Rejected 2 changes");
 
   await pointAndClick(window, answer.getByTestId("answer-added-undo"));
   await expect(window.getByTestId("proposals-count")).toHaveText("2 changes from the assistant");
-  await expect(card.getByTestId("mind-changes-title")).toHaveText(
-    "Created “Fieldwork plan with a summary” · 2 changes",
-  );
+  await expect(card.getByTestId("mind-changes-left")).toHaveText("· 2 waiting");
   await expect(editor).toContainText("Ask the roastery about Tuesdays.");
   await expect(made).toHaveCount(1);
 });
@@ -327,17 +332,17 @@ test("Reject all keeps a Mind the assistant made once something of it was accept
     "Add Ship the beta in May to Project plan and make a new note called Fieldwork plan",
   );
   const rows = answer.getByTestId("mind-changes-row");
-  await expect(rows.nth(1)).toContainText("Created: Fieldwork plan· 2 changes");
+  await expect(rows.nth(1)).toContainText("Created: Fieldwork plan· 2 waiting");
 
   // Fieldwork plan is open beside, with the cursor in its first change: ⌘↵ accepts that one.
   await pointAndClick(window, rows.nth(1).getByTestId("mind-changes-open"));
   await expect(window.getByTestId("mind-title")).toHaveValue("Fieldwork plan");
   await expect(window.getByTestId("change-bar")).toContainText("Change 1 of 2");
   await window.keyboard.press("ControlOrMeta+Enter");
-  await expect(rows.nth(1)).toContainText("· 1 change");
+  await expect(rows.nth(1)).toContainText("· 1 waiting");
 
   await pointAndClick(window, answer.getByTestId("mind-changes-reject-all"));
-  await expect(rows.nth(1)).toContainText("Created: Fieldwork plan");
+  await expect(rows.nth(1)).toContainText("Created: Fieldwork plan· none waiting");
   await expect(window.getByTestId("mind-tab").filter({ hasText: "Fieldwork plan" })).toHaveCount(1);
   await expect(rows.nth(0)).toContainText("· none waiting");
 });
@@ -375,7 +380,9 @@ test("a change the assistant makes in a Mind comes in paragraph by paragraph, wi
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 30_000 });
   await expect(writing).toHaveCount(0);
   await expect(window.getByTestId("proposals-count")).toHaveText("6 changes from the assistant");
-  await expect(answer.getByTestId("mind-changes-title")).toContainText("6 changes in “Q3 review”");
+  await expect(answer.getByTestId("mind-changes-title")).toHaveText(
+    "Changed 6 places in “Q3 review”",
+  );
   await screenshot(window, "assistant-edit-done");
 });
 
@@ -405,6 +412,6 @@ test("a new Mind's text comes in Block by Block as the assistant writes it, with
   await expect(writing).toHaveCount(0);
   await expect(window.getByTestId("proposals-count")).toHaveText("2 changes from the assistant");
   await expect(answer.getByTestId("mind-changes-title")).toHaveText(
-    "Created “Field notes with a summary” · 2 changes",
+    "Created “Field notes with a summary” and wrote 1 paragraph",
   );
 });

@@ -521,6 +521,100 @@ describe("IncarnaMind's comments in an imported file (#107)", () => {
   });
 });
 
+describe("sentences whose check isn't good, in an imported file (#900)", () => {
+  const checked = (value: string, state: "contradicted" | "unsupported", says: string | null) => ({
+    ...text(value),
+    marks: [
+      {
+        type: "claimCheck",
+        attrs: {
+          id: `check-${state}`,
+          request: "r1",
+          action: "check-against-documents",
+          state,
+          reason: null,
+          detail: null,
+          text: value,
+          evidence: null,
+          says,
+          calculation: null,
+          scope: { folderId: null, widened: false },
+          versions: [],
+          excluded: [],
+          checkedAt: "2026-10-12T14:30:00.000Z",
+        },
+      },
+    ],
+  });
+
+  test("each gets a comment on its own words, written into its paragraph; the others stay as they were", async () => {
+    const { core, bytes, mindId, client } = await setUp({
+      body:
+        paragraph("Halden held cash of £192.9m.") +
+        paragraph("Nothing to check here.") +
+        paragraph("Margins widened in 2026."),
+    });
+    editMind(client, ([first, second, third]) => [
+      {
+        ...(first as JSONContent),
+        content: [
+          checked("Halden held cash of £192.9m.", "contradicted", "The report says £182.9m."),
+        ],
+      },
+      second as JSONContent,
+      {
+        ...(third as JSONContent),
+        content: [checked("Margins widened in 2026.", "unsupported", null)],
+      },
+    ]);
+    await client.settled();
+
+    const result = await core.exportMind(mindId, { format: "docx", commentFailedChecks: true });
+    const files = unzip(result.data);
+    const comments = files.get("word/comments.xml")?.toString("utf8") ?? "";
+    const document = files.get("word/document.xml")?.toString("utf8") ?? "";
+
+    expect(result.sentenceChecks).toEqual({
+      contradicted: 1,
+      unsupported: 1,
+      needsRecheck: 0,
+      commented: true,
+    });
+    expect([...comments.matchAll(/<w:comment /g)]).toHaveLength(2);
+    expect(textOf(comments)).toContain("Contradicted: The report says £182.9m.");
+    expect(textOf(comments)).toContain("Unsupported: nothing in your Documents says this.");
+    const [first, second, third] = paragraphsIn(document);
+    expect(first).toMatch(
+      /<w:commentRangeStart w:id="(\d+)"\/>[\s\S]*Halden held cash of £192\.9m\.[\s\S]*<w:commentRangeEnd w:id="\1"\/>/,
+    );
+    expect(third).toMatch(
+      /<w:commentRangeStart w:id="(\d+)"\/>[\s\S]*Margins widened in 2026\.[\s\S]*<w:commentRangeEnd w:id="\1"\/>/,
+    );
+    const before = paragraphsIn(unzip(bytes).get("word/document.xml")?.toString("utf8") ?? "");
+    expect(second).toBe(before[1]);
+  });
+
+  test("with the option off the file is the one it was", async () => {
+    const { core, bytes, mindId, client } = await setUp({
+      body: paragraph("Halden held cash of £192.9m."),
+    });
+    editMind(client, ([first]) => [
+      {
+        ...(first as JSONContent),
+        content: [
+          checked("Halden held cash of £192.9m.", "contradicted", "The report says £182.9m."),
+        ],
+      },
+    ]);
+    await client.settled();
+
+    const result = await core.exportMind(mindId, { format: "docx", commentFailedChecks: false });
+
+    expect(changed(unzip(bytes), unzip(result.data))).toEqual([]);
+    expect(result.sentenceChecks.commented).toBe(false);
+  });
+});
+
 describe("Blocks added, deleted and moved", () => {
   test("a new paragraph with a Citation goes after the one before it, in its look; the Citation is a footnote", async () => {
     const { core, mindId, client } = await setUp({

@@ -1,4 +1,5 @@
 import { Extension, Mark, mergeAttributes, Node, type NodeViewRenderer } from "@tiptap/core";
+import { TableView } from "@tiptap/extension-table";
 import { Fragment, type Node as ProseMirrorNode, Slice } from "@tiptap/pm/model";
 import { Plugin } from "@tiptap/pm/state";
 import type * as Y from "yjs";
@@ -188,6 +189,14 @@ export const InlineImage = Node.create({
 });
 
 export const WORD_LOOK_TYPES = ["paragraph", "heading", "table", "tableCell", "tableHeader"];
+
+/** Tiptap's table view keeps the attributes it was made with, so a look given while the Mind is open (the start-up backfill, a sync) makes a new one. */
+export class WordLookTableView extends TableView {
+  override update(node: ProseMirrorNode): boolean {
+    if (node.attrs[WORD_LOOK_ATTRIBUTE] !== this.node.attrs[WORD_LOOK_ATTRIBUTE]) return false;
+    return super.update(node);
+  }
+}
 export const WORD_LOOK_DOM_ATTRIBUTE = "data-word-look";
 export const WORD_RUN_DOM_ATTRIBUTE = "data-word-run";
 

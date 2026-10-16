@@ -12,35 +12,43 @@ import { MindLineIcon, PencilLineIcon } from "../lineIcons";
 /** The names of Minds seen in a card, for a row whose Mind has since been removed. */
 const seenNames = new Map<string, string>();
 
-/** What a card says of one Mind: made or changed, by its name, and how many of its changes wait. */
-function oneMindText(t: Translate, row: ChangedMind, name: string, waiting: Waiting) {
+/** What an Answer did in one Mind, from its calls: the same counts the Mind's own line shows. */
+function factText(t: Translate, row: ChangedMind, name: string, waiting: Waiting) {
   if (waiting === "gone") return t("mindChanges.one.removed", { mind: name });
+  const count = row.wrote + row.changed;
   if (row.created) {
-    if (waiting === null || waiting === 0) return t("mindChanges.one.created.none", { mind: name });
-    return waiting === 1
-      ? t("mindChanges.one.created.one", { mind: name })
-      : t("mindChanges.one.created", { mind: name, count: waiting });
+    if (count === 0) return t("mindChanges.one.created.none", { mind: name });
+    return count === 1
+      ? t("mindChanges.created.one", { mind: name })
+      : t("mindChanges.created", { mind: name, count });
   }
-  if (waiting === null) return t("mindChanges.one.edited", { mind: name });
-  if (waiting === 0) return t("mindChanges.one.none", { mind: name });
-  return waiting === 1
-    ? t("mindChanges.one.one", { mind: name })
-    : t("mindChanges.one", { mind: name, count: waiting });
+  if (count === 0) return t("mindChanges.one.edited", { mind: name });
+  if (row.changed === 0) {
+    return count === 1
+      ? t("mindChanges.wrote.one", { mind: name })
+      : t("mindChanges.wrote", { mind: name, count });
+  }
+  return count === 1
+    ? t("mindChanges.changed.one", { mind: name })
+    : t("mindChanges.changed", { mind: name, count });
 }
 
-function countText(t: Translate, waiting: number): string {
-  if (waiting === 0) return t("mindChanges.row.none");
-  return waiting === 1 ? t("mindChanges.row.one") : t("mindChanges.row.count", { count: waiting });
+/** How many of what it did still wait, while that is known and there was something. */
+function leftText(t: Translate, row: ChangedMind, waiting: Waiting): string | null {
+  if (typeof waiting !== "number" || row.wrote + row.changed === 0) return null;
+  if (waiting === 0) return t("mindChanges.left.none");
+  return waiting === 1 ? t("mindChanges.left.one") : t("mindChanges.left", { count: waiting });
 }
 
 /**
- * The card under the reply of an Answer that changed Minds (#202, D148; the
- * boards Asst-Changes and Asst-Change-In-Mind): "2 Minds changed · Review",
- * a row for each Mind, Created or Edited, with how many of its changes wait
- * and Open, then Accept all · Reject all. For one Mind, its row is the card's
- * head: "3 changes in “Q3 review” · Review". Review and Open show the Mind
- * at its first change; Accept all and Reject all offer Undo on the Answer's
- * line. Rejecting a Mind the Answer made removes it.
+ * The card under the reply of an Answer that changed Minds (#202, D148):
+ * what its calls did, from their record rather than the reply's words.
+ * "2 Minds changed · Review", a row for each Mind ("Edited: Q3 review · 4
+ * waiting") with Open, then Accept all · Reject all while changes wait. For
+ * one Mind, its row is the card's head: "Changed 3 places in “Q3 review” · 3
+ * waiting · Review". Review and Open show the Mind at its first change;
+ * Accept all and Reject all offer Undo on the Answer's line. Rejecting a Mind
+ * the Answer made removes it.
  */
 export function MindChangesCard({
   answer,
@@ -71,42 +79,60 @@ export function MindChangesCard({
   const [only] = rows;
   const head =
     rows.length === 1 && only
-      ? oneMindText(t, only, nameOf(only), waiting[0] ?? null)
+      ? factText(t, only, nameOf(only), waiting[0] ?? null)
       : t("mindChanges.minds", { count: rows.length });
+  const headLeft = rows.length === 1 && only ? leftText(t, only, waiting[0] ?? null) : null;
 
   return (
-    <section aria-label={head} data-testid="mind-changes" className="mind-changes">
+    <section
+      aria-label={headLeft ? `${head} ${headLeft}` : head}
+      data-testid="mind-changes"
+      className="mind-changes"
+    >
       <div className="mind-changes-head">
         <PencilLineIcon aria-hidden="true" className="mind-changes-icon" />
-        <span data-testid="mind-changes-title" className="mind-changes-title" title={head}>
-          {head}
-        </span>
-        {first && (
-          <>
-            <span aria-hidden="true" className="mind-changes-dot">
-              ·
-            </span>
-            <button
-              type="button"
-              data-testid="mind-changes-review"
-              onClick={() => showChanges(first)}
-              className="mind-changes-review"
-            >
-              {t("mindChanges.review")}
-            </button>
-          </>
-        )}
+        <p className="mind-changes-line">
+          <span data-testid="mind-changes-title" className="mind-changes-title">
+            {head}
+          </span>
+          {headLeft && (
+            <>
+              {" "}
+              <span data-testid="mind-changes-left" className="mind-changes-count">
+                {headLeft}
+              </span>
+            </>
+          )}
+          {first && (
+            <>
+              <span aria-hidden="true" className="mind-changes-dot">
+                {" · "}
+              </span>
+              <button
+                type="button"
+                data-testid="mind-changes-review"
+                onClick={() => showChanges(first)}
+                className="mind-changes-review"
+              >
+                {t("mindChanges.review")}
+              </button>
+            </>
+          )}
+        </p>
       </div>
       {rows.length > 1 &&
         rows.map((row, index) => {
           const count = waiting[index] ?? null;
           const name = nameOf(row);
+          // Its name first, so a narrow panel cuts the verb rather than the name; the fact is on hover.
           const label =
             count === "gone"
               ? t("mindChanges.row.removed", { mind: name })
               : t(row.created ? "mindChanges.row.created" : "mindChanges.row.edited", {
                   mind: name,
                 });
+          const fact = factText(t, row, name, count);
+          const left = leftText(t, row, count);
           return (
             <div
               key={row.mindId}
@@ -115,11 +141,13 @@ export function MindChangesCard({
               className="mind-changes-row"
             >
               <MindLineIcon aria-hidden="true" className="mind-changes-icon" />
-              <span className="mind-changes-name" title={label}>
+              <span className="mind-changes-name" title={fact}>
                 {label}
               </span>
-              {typeof count === "number" && !(row.created && count === 0) && (
-                <span className="mind-changes-count">{countText(t, count)}</span>
+              {left && (
+                <span data-testid="mind-changes-left" className="mind-changes-count">
+                  {left}
+                </span>
               )}
               <span className="flex-1" />
               {count !== "gone" && (

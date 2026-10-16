@@ -1,7 +1,7 @@
 /**
- * Hosted services that speak OpenAI's API, one catalog row each. They share
- * the "openai-compatible" kind and its code, told apart by their catalog id,
- * so adding one is a row here and nothing else.
+ * Services that speak OpenAI's API, hosted or on this computer, one catalog
+ * row each. They share the "openai-compatible" kind and its code, told apart
+ * by their catalog id, so adding one is a row here and nothing else.
  */
 import type { CatalogProvider } from "./types";
 
@@ -283,6 +283,72 @@ export const PRESETS: readonly CatalogProvider[] = [
         zh: "Cloudflare 不会用你发送给 Workers AI 的内容训练任何模型。",
       },
       url: "https://developers.cloudflare.com/workers-ai/platform/data-usage/",
+    },
+    checked: "2026-10-15",
+  },
+  {
+    id: "lmstudio",
+    name: { en: "LM Studio", zh: "LM Studio" },
+    support: "best-effort",
+    group: "local",
+    adapter: "openai-compatible",
+    endpoints: [
+      {
+        id: "local",
+        label: { en: "On this computer", zh: "本机" },
+        baseUrl: "http://{address}/v1",
+        field: {
+          name: "address",
+          label: { en: "Address", zh: "地址" },
+          pattern: "(?:[A-Za-z0-9.-]+|\\[[0-9A-Fa-f:]+\\])(?::[0-9]{1,5})?",
+          default: "127.0.0.1:1234",
+        },
+      },
+    ],
+    // A token is needed only when the User turned on authentication in its server settings.
+    apiKey: "optional",
+    docsUrl: "https://lmstudio.ai/docs/developer/openai-compat",
+    request: { openAiCompatible: { includeUsage: false, supportsStructuredOutputs: true } },
+    roles: {},
+    dataUse: {
+      training: "no",
+      summary: {
+        en: "LM Studio runs on this computer, so what you ask stays on it.",
+        zh: "LM Studio 在这台电脑上运行，你的提问不会离开这台电脑。",
+      },
+    },
+    checked: "2026-10-15",
+  },
+  {
+    id: "unsloth",
+    name: { en: "Unsloth Studio", zh: "Unsloth Studio" },
+    support: "best-effort",
+    group: "local",
+    adapter: "openai-compatible",
+    endpoints: [
+      {
+        id: "local",
+        label: { en: "On this computer", zh: "本机" },
+        baseUrl: "http://{address}/v1",
+        field: {
+          name: "address",
+          label: { en: "Address", zh: "地址" },
+          pattern: "(?:[A-Za-z0-9.-]+|\\[[0-9A-Fa-f:]+\\])(?::[0-9]{1,5})?",
+          default: "127.0.0.1:8888",
+        },
+      },
+    ],
+    apiKey: "required",
+    keyUrl: "https://unsloth.ai/docs/basics/api",
+    docsUrl: "https://unsloth.ai/docs/basics/api",
+    request: { openAiCompatible: { includeUsage: false, supportsStructuredOutputs: false } },
+    roles: {},
+    dataUse: {
+      training: "no",
+      summary: {
+        en: "Unsloth Studio runs on this computer, so what you ask stays on it.",
+        zh: "Unsloth Studio 在这台电脑上运行，你的提问不会离开这台电脑。",
+      },
     },
     checked: "2026-10-15",
   },

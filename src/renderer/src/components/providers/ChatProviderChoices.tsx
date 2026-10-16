@@ -22,6 +22,7 @@ import {
   useContinueWithChatGpt,
 } from "./ChatGptSignIn";
 import { KeepLocalChoice } from "./KeepLocalChoice";
+import { LocalServersAlso, localChoice, useLocalServers } from "./LocalServerChoices";
 import { type Ollama, OllamaProgress, ollamaDescription } from "./OllamaCard";
 import { ProviderForm, ProviderSendsLine } from "./ProviderForm";
 import { keyProviderName } from "./shared";
@@ -34,7 +35,7 @@ const SHORT_NAMES: Partial<
 };
 
 /** Where Answers come from: local models, an API key, or the User's ChatGPT plan. */
-export type ChatProviderChoice = "ollama" | "api-key" | "chatgpt";
+export type ChatProviderChoice = "ollama" | "api-key" | "chatgpt" | ReturnType<typeof localChoice>;
 
 interface ChatProviderChoicesProps {
   /** Nothing is chosen at first: no provider is preselected. */
@@ -67,6 +68,7 @@ export function ChatProviderChoices(props: ChatProviderChoicesProps) {
   const t = useT();
   const language = useLanguage();
   const name = useId();
+  const local = useLocalServers(withMoreProviders);
 
   const apiKeyBody = withMoreProviders
     ? t("providers.choice.apiKey.body")
@@ -120,8 +122,41 @@ export function ChatProviderChoices(props: ChatProviderChoicesProps) {
           <span data-testid="ollama-status" className={choiceTextClass}>
             {ollamaDescription(ollama, t)}
           </span>
+          <LocalServersAlso
+            closed={local.closed}
+            onOpen={(catalogId) => {
+              local.open(catalogId);
+              onChoose(localChoice(catalogId));
+            }}
+          />
         </span>
       </Choice>
+
+      {local.shown.map((catalogId) => (
+        <Choice
+          key={catalogId}
+          inputId={`${name}-${localChoice(catalogId)}`}
+          chosen={choice === localChoice(catalogId)}
+          details={
+            <ProviderForm
+              only={catalogId}
+              providers={providers}
+              onSaved={onSaved}
+              withMoreProviders
+            />
+          }
+        >
+          {radio(localChoice(catalogId))}
+          <span className="flex min-w-0 flex-col gap-1">
+            <span className={choiceTitleClass}>{keyProviderName(catalogId, t, language)}</span>
+            <span data-testid={`${localChoice(catalogId)}-status`} className={choiceTextClass}>
+              {local.found[catalogId]?.running
+                ? t("providers.local.rowRunning")
+                : t("providers.local.rowNotRunning")}
+            </span>
+          </span>
+        </Choice>
+      ))}
 
       <Choice
         inputId={`${name}-api-key`}

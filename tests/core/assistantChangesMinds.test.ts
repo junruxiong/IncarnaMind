@@ -1,13 +1,8 @@
 import type { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, test } from "vitest";
-import type {
-  AnswerToolCall,
-  AskInConversationInput,
-  ConversationAnswer,
-  Core,
-  MindChange,
-} from "../../src/core";
+import type { Core } from "../../src/core";
 import { pendingProposals } from "../../src/shared/proposals";
+import { askAssistant, changesIn, lastResult, mindCalls } from "../helpers/assistant";
 import { answerEnded, shownPassages } from "../helpers/citations";
 import { createTempDataFolder, startCore } from "../helpers/core";
 import { createSourceFolder, waitForProcessing, writeSourceFile } from "../helpers/documents";
@@ -60,42 +55,11 @@ async function setUp(model: MockLanguageModelV4) {
   return { core, mind, client };
 }
 
-/** Asks in the assistant and resolves with the Answer as stored once it has ended. */
-async function ask(core: Core, input: AskInConversationInput): Promise<ConversationAnswer> {
-  const result = await core.askInConversation(input);
-  if (!result.asked) throw new Error(`The Question wasn't asked: ${JSON.stringify(result)}`);
-  expect((await answerEnded(core, result.answerId)).event).toBe("finished");
-  const { messages } = await core.getConversation(result.conversation.id);
-  const answer = messages.find((message) => message.id === result.answerId);
-  if (answer?.kind !== "answer") throw new Error("No Answer.");
-  return answer;
-}
-
-const mindCalls = (answer: ConversationAnswer): AnswerToolCall[] =>
-  answer.toolCalls.filter((call) => call.source === "minds");
-
-const changesIn = (answer: ConversationAnswer): MindChange[] =>
-  mindCalls(answer).flatMap((call) => (call.mindChange ? [call.mindChange] : []));
+const ask = askAssistant;
 
 async function checkpointsOf(core: Core, mindId: string) {
   return (await core.listCheckpoints(mindId)).checkpoints;
 }
-
-/** What the model was told a Tool call came to: the last Tool result it read. */
-const lastResult = (model: MockLanguageModelV4) => {
-  const prompt = model.doStreamCalls.at(-1)?.prompt ?? [];
-  const results = prompt.flatMap((message) =>
-    message.role === "tool"
-      ? message.content.flatMap((part) =>
-          part.type === "tool-result" &&
-          (part.output.type === "text" || part.output.type === "error-text")
-            ? [part.output.value]
-            : [],
-        )
-      : [],
-  );
-  return results.at(-1) ?? "";
-};
 
 describe("The assistant changes Minds as Proposals", { timeout: 30_000 }, () => {
   // protects=a change request edits the Mind in focus as Proposals, after a Checkpoint, and its card says so; fails_when=the Mind changes outright, no Checkpoint is saved first, or the card doesn't name the Mind; no_claim=how well a real model rewrites.
@@ -184,7 +148,13 @@ describe("The assistant changes Minds as Proposals", { timeout: 30_000 }, () => 
     expect(await checkpointsOf(core, plan.id)).toHaveLength(1);
     expect(await checkpointsOf(core, mind.id)).toHaveLength(0);
     expect(changesIn(answer)).toEqual([
-      { mindId: plan.id, created: false, request: expect.any(String), proposals: 1 },
+      {
+        mindId: plan.id,
+        created: false,
+        request: expect.any(String),
+        proposals: 1,
+        paragraphs: 1,
+      },
     ]);
   });
 
@@ -466,9 +436,15 @@ describe("New Blocks come in as the model writes them", { timeout: 30_000 }, () 
       const answer = messages.find((message) => message.id === asked.answerId);
       return answer?.kind === "answer" ? changesIn(answer) : [];
     };
-    await expect
-      .poll(stored)
-      .toEqual([{ mindId: mind.id, created: false, request: expect.any(String), proposals: 2 }]);
+    await expect.poll(stored).toEqual([
+      {
+        mindId: mind.id,
+        created: false,
+        request: expect.any(String),
+        proposals: 2,
+        paragraphs: 1,
+      },
+    ]);
 
     release();
     expect((await answerEnded(core, asked.answerId)).event).toBe("finished");
@@ -580,7 +556,13 @@ describe("New Blocks come in as the model writes them", { timeout: 30_000 }, () 
     const stopped = messages.find((message) => message.id === asked.answerId);
     if (stopped?.kind !== "answer") throw new Error("No Answer.");
     expect(changesIn(stopped)).toEqual([
-      { mindId: mind.id, created: false, request: expect.any(String), proposals: 2 },
+      {
+        mindId: mind.id,
+        created: false,
+        request: expect.any(String),
+        proposals: 2,
+        paragraphs: 1,
+      },
     ]);
   });
 });

@@ -29,6 +29,7 @@ import type {
   AskedFrom,
   ChatModelChoice,
   CitationSupport,
+  ClaimedChange,
   Conversation,
   ConversationAnswer,
   ConversationContent,
@@ -45,6 +46,7 @@ import type {
   SearchScope,
   ThirdPartySource,
 } from "../api";
+import { CLAIMED_CHANGES } from "../api";
 import { InvalidInputError, isRecord, NotFoundError } from "../errors";
 import { parseSearchScope } from "../scope";
 import { isChatModelChoice } from "../settings";
@@ -206,7 +208,12 @@ function storedSteps(value: string | null): AnswerSteps | null {
   }
   if (!isRecord(parsed)) return null;
   const phases = Array.isArray(parsed.phases) ? parsed.phases.filter(isRecord) : [];
-  const { reasoning, readShare, citedAfterChecking } = parsed;
+  const { reasoning, readShare, citedAfterChecking, unbackedClaims } = parsed;
+  const claimed = Array.isArray(unbackedClaims)
+    ? unbackedClaims.filter((each): each is ClaimedChange =>
+        CLAIMED_CHANGES.some((claim) => claim === each),
+      )
+    : [];
   return {
     sentAt: timeOrNull(parsed.sentAt),
     finishedAt: timeOrNull(parsed.finishedAt),
@@ -227,6 +234,7 @@ function storedSteps(value: string | null): AnswerSteps | null {
     ...(typeof citedAfterChecking === "number" &&
       Number.isInteger(citedAfterChecking) &&
       citedAfterChecking > 0 && { citedAfterChecking }),
+    ...(claimed.length > 0 && { unbackedClaims: claimed }),
   };
 }
 

@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../../src/core/api";
 import { longContract } from "../../tests/helpers/longContract";
+import { resumeFile } from "../../tests/helpers/wordLookFiles";
 import {
   busy,
   cdp,
@@ -73,6 +74,8 @@ test("typing in the 304-page contract, and opening it and the corpus's largest f
   const files = tempDir("files");
   const contract = join(files, "Framework Services Agreement.docx");
   writeFileSync(contract, longContract());
+  const resume = join(files, "林晓_简历.docx");
+  writeFileSync(resume, resumeFile());
   const launched = await launch(dataDir);
   const { window } = launched;
   const elsewhere = () =>
@@ -138,6 +141,20 @@ test("typing in the 304-page contract, and opening it and the corpus's largest f
     const first = await typeIn(2);
     const last = await typeIn((await paragraphs.count()) - 2);
 
+    const resumeId = await importWord(window, resume);
+    const resumeOpen = await timedOpens(resumeId, ".ProseMirror td", async () => {
+      await expect(window.locator(".ProseMirror td")).toHaveCount(10);
+      return 10;
+    });
+    const cell = window.locator(".ProseMirror td p", { hasText: "Wind" });
+    await cell.click({ position: { x: 20, y: 6 } });
+    await window.keyboard.press("End");
+    for (let key = 0; key < 30; key++) {
+      await window.keyboard.type("x");
+      await window.waitForTimeout(40);
+    }
+    const typingResumeTable = await takeKeyLatency(window);
+
     const corpus = largestCorpusFile();
     const corpusId = await importWord(window, corpus);
     const corpusOpen = await timedOpens(corpusId, ".ProseMirror > *", async () => {
@@ -158,6 +175,8 @@ test("typing in the 304-page contract, and opening it and the corpus's largest f
       contractPlainOpenMs: contractPlainOpen,
       typingFirstPage: first,
       typingLastPage: last,
+      resumeOpenMs: resumeOpen,
+      typingResumeTable,
       corpusFile: corpus.slice(corpus.indexOf("eval/word")),
       corpusOpenMs: corpusOpen,
       corpusPlainOpenMs: corpusPlainOpen,

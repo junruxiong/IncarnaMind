@@ -1,0 +1,102 @@
+/**
+ * The guards every everyday request in the assistant is held to, read from
+ * what the core stored, as a User would see it:
+ *
+ * - **Asked to write, the Mind changed.**
+ * - **Every claimed change is real**, as a model judges the reply against the
+ *   record of what the calls did (./judge), never the app's own net.
+ * - **Citations are there**: in the reply, or, for text written into a Mind,
+ *   in the Mind.
+ * - **Every Document is covered**: asked about all the Documents in scope,
+ *   each is cited, or named in a sentence saying it wasn't covered.
+ */
+import { changeLogOf } from "../../src/core/answers/claimedChanges";
+import type { ConversationAnswer, MarkedCitation } from "../../src/core/api";
+import type { ClaimVerdict } from "./judge";
+
+/** What a request expects of its Answer. */
+export interface Expected {
+  /** It asks for text in a Mind: writing, adding, changing, making one. */
+  write: boolean;
+  /** Its Answer must cite the Documents in scope. */
+  cite: boolean;
+  /** It asks about every Document in scope ("summarise these papers"). */
+  coverAll: boolean;
+}
+
+export interface RequestOutcome {
+  expected: Expected;
+  answer: Pick<ConversationAnswer, "text" | "toolCalls" | "steps"> & {
+    citations: readonly Pick<MarkedCitation, "documentId">[];
+  };
+  verdict: ClaimVerdict;
+  /** The Documents the Citations it wrote into Minds quote, by id. */
+  citedInMinds: readonly string[];
+  scoped: readonly { id: string; name: string }[];
+}
+
+export type RequestFailure =
+  | { kind: "no-change" }
+  /** `flagged`: the app's own net said so under the reply. */
+  | { kind: "unbacked"; sentences: string[]; flagged: boolean }
+  | { kind: "no-citations" }
+  | { kind: "uncovered"; documents: string[] };
+
+const key = (text: string) => text.replace(/\s+/g, " ").trim().toLocaleLowerCase();
+
+const NOT_COVERED =
+  /\b(?:couldn't|could not|can't|cannot|didn't|did not|wasn't|weren't|isn't|aren't|not|no|unable|left out|missing|skipped)\b|没有|未能|未|无法|不能|缺少|略去/i;
+
+function namedAsUncovered(reply: string, name: string): boolean {
+  return reply
+    .split(/(?<=[.!?])\s+|(?<=[。！？])|\n+/)
+    .some((sentence) => key(sentence).includes(key(name)) && NOT_COVERED.test(sentence));
+}
+
+/** The ways one request failed its guards; none when it passed. */
+export function requestFailures(outcome: RequestOutcome): RequestFailure[] {
+  const { expected, answer } = outcome;
+  const failures: RequestFailure[] = [];
+  const log = changeLogOf(answer.toolCalls);
+  if (expected.write && log.changed.size === 0 && log.made.size === 0) {
+    failures.push({ kind: "no-change" });
+  }
+  if (outcome.verdict.unbacked.length > 0) {
+    failures.push({
+      kind: "unbacked",
+      sentences: outcome.verdict.unbacked,
+      flagged: (answer.steps?.unbackedClaims ?? []).length > 0,
+    });
+  }
+  const citedHere = expected.write ? outcome.citedInMinds.length : answer.citations.length;
+  if (expected.cite && outcome.scoped.length > 0 && citedHere === 0) {
+    failures.push({ kind: "no-citations" });
+  }
+  if (expected.coverAll) {
+    const cited = new Set([
+      ...answer.citations.map((citation) => citation.documentId),
+      ...outcome.citedInMinds,
+    ]);
+    const uncovered = outcome.scoped
+      .filter(
+        (document) => !cited.has(document.id) && !namedAsUncovered(answer.text, document.name),
+      )
+      .map((document) => document.name);
+    if (uncovered.length > 0) failures.push({ kind: "uncovered", documents: uncovered });
+  }
+  return failures;
+}
+
+/** A failure as the evaluation's report lists it. */
+export function failureLine(failure: RequestFailure): string {
+  switch (failure.kind) {
+    case "no-change":
+      return "asked to write, it changed no Mind";
+    case "unbacked":
+      return `claims a change no call made${failure.flagged ? " (flagged under the reply)" : ""}: ${failure.sentences.map((sentence) => `“${sentence}”`).join(" ")}`;
+    case "no-citations":
+      return "Documents in scope, and nothing it wrote cites them";
+    case "uncovered":
+      return `neither cites nor names as left out ${failure.documents.map((name) => `“${name}”`).join(", ")}`;
+  }
+}
