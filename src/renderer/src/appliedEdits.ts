@@ -4,8 +4,9 @@
  * accepts them, all one step of its Undo.
  */
 import type { Editor } from "@tiptap/core";
-import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
+import { Fragment, type Node as ProseMirrorNode } from "@tiptap/pm/model";
 import type { EditorState } from "@tiptap/pm/state";
+import { absolutePositionToRelativePosition, ySyncPluginKey } from "@tiptap/y-tiptap";
 import * as Y from "yjs";
 import {
   BLOCK_ID_ATTRIBUTE,
@@ -13,22 +14,32 @@ import {
   type EditWithAiResult,
   type LeftOutPart,
   MIND_CONTENT_FIELD,
+  PROPOSAL_ATTRIBUTE,
+  PROPOSAL_DELETE_MARK,
+  PROPOSAL_INSERT_MARK,
+  type ProposalRef,
 } from "../../core/api";
-import { aiUseOfAccepted, proposalRequestOf, resolveProposals } from "../../shared/proposals";
+import {
+  aiUseOfAccepted,
+  proposalRequestOf,
+  readProposalAttribute,
+  resolveProposals,
+} from "../../shared/proposals";
 import { core } from "./core";
 import {
-  type AppliedLine,
+  type AppliedAction,
+  type AppliedChange,
   appliedLineIn,
   appliedLineKey,
   type KeptLine,
+  placeOfChange,
   setAppliedLine,
 } from "./editor/appliedEditLine";
-import { asOneStep, offerEditorUndo, undoStackOf } from "./editor/editorUndo";
+import { asOneStep, offerEditorUndo, type UndoStep, undoStackOf } from "./editor/editorUndo";
 import {
   applyingIn,
   editorDoc,
-  pendingIn,
-  proposalReviewKey,
+  type PendingProposal,
   proposalsIn,
   resolveInEditor,
   setApplying,
@@ -41,23 +52,15 @@ import { useAppStore } from "./store";
 // An origin the editor's Undo tracks, and its copy sends to the core.
 class AcceptingEdit {}
 
-/** The top-level Blocks an edit changed, with its Proposals, between the Blocks around them (null: the Mind's edge). */
-interface Changed {
-  after: string | null;
-  until: string | null;
-  blocks: readonly ProseMirrorNode[];
-}
-
 export interface Applying {
   requestId: string;
   mindId: string;
   editor: Editor;
   doc: Y.Doc;
   request: string | null;
-  step: unknown;
-  /** Later steps that belong to it: removing what it left out. */
-  more: unknown[];
-  changed: Changed | null;
+  steps: UndoStep[];
+  /** Later steps that belong to it: restoring a change, removing what it left out. */
+  more: UndoStep[];
   leftOut: readonly LeftOutPart[];
   stopTaking(): void;
   forget(): void;
@@ -65,10 +68,11 @@ export interface Applying {
 
 const latest = new WeakMap<Editor, Applying>();
 
-/** One step of Undo for the whole edit, however long it streams, apart from the User's typing. */
+/** Part of the edit's Undo, kept apart from the User's typing before and after it. */
 function asEditStep(edit: Applying, change: () => void): void {
   const stack = undoStackOf(edit.editor);
-  if (stack && edit.step !== null && stack.undoStack.at(-1) === edit.step) {
+  const last = edit.steps.at(-1);
+  if (stack && last && stack.undoStack.at(-1) === last) {
     // Yjs joins a change to the last step when it comes soon after that step's last change.
     stack.lastChange = Date.now();
   } else stack?.stopCapturing();
@@ -77,9 +81,34 @@ function asEditStep(edit: Applying, change: () => void): void {
     change();
   } finally {
     const after = stack?.undoStack.at(-1);
-    if (after !== undefined && (after !== before || after === edit.step)) edit.step = after;
+    if (after && after !== before) edit.steps.push(after);
     stack?.stopCapturing();
   }
+}
+
+/** One step of Undo for the whole edit, even when the User typed while it streamed in. */
+function foldSteps(edit: Applying): void {
+  const stack = undoStackOf(edit.editor);
+  const last = edit.steps.at(-1);
+  const earlier = edit.steps.slice(0, -1);
+  if (!stack || !last || earlier.length === 0) return;
+  last.insertions = Y.mergeDeleteSets([...earlier.map((step) => step.insertions), last.insertions]);
+  last.deletions = Y.mergeDeleteSets([...earlier.map((step) => step.deletions), last.deletions]);
+  for (const step of earlier) {
+    const index = stack.undoStack.indexOf(step);
+    if (index >= 0) stack.undoStack.splice(index, 1);
+  }
+  edit.steps = [last];
+}
+
+/** The core took back what a failed edit wrote: its steps would undo nothing. */
+function dropSteps(edit: Applying): void {
+  const stack = undoStackOf(edit.editor);
+  for (const step of edit.steps) {
+    const index = stack?.undoStack.indexOf(step) ?? -1;
+    if (index >= 0) stack?.undoStack.splice(index, 1);
+  }
+  edit.steps = [];
 }
 
 function drawApplying(editor: Editor, request: string, applying: boolean): void {
@@ -100,8 +129,8 @@ export function startApplying(editor: Editor, mindId: string, requestId: string)
   setAppliedLine(editor, null);
   stack.addTrackedOrigin(EDIT_FROM_CORE);
   stack.addTrackedOrigin(AcceptingEdit);
-  const popped = ({ stackItem }: { stackItem: unknown }) => {
-    if (stackItem === edit.step && latest.get(editor) === edit) setAppliedLine(editor, null);
+  const popped = ({ stackItem }: { stackItem: UndoStep }) => {
+    if (edit.steps.includes(stackItem) && latest.get(editor) === edit) setAppliedLine(editor, null);
   };
   const edit: Applying = {
     requestId,
@@ -109,9 +138,8 @@ export function startApplying(editor: Editor, mindId: string, requestId: string)
     editor,
     doc,
     request: null,
-    step: null,
+    steps: [],
     more: [],
-    changed: null,
     leftOut: [],
     stopTaking: () => undefined,
     forget: () => {
@@ -130,13 +158,13 @@ export function startApplying(editor: Editor, mindId: string, requestId: string)
   return edit;
 }
 
-const holds = (state: EditorState, request: string) =>
-  proposalsIn(state.doc).some((each) => each.request === request);
+const ofRequest = (state: EditorState, request: string) =>
+  proposalsIn(state.doc).filter((each) => each.request === request);
 
 /** The Proposals come with the core's updates, before its reply: this is a backstop. */
 function whenHeld(editor: Editor, request: string): Promise<boolean> {
   return new Promise((resolve) => {
-    if (editor.isDestroyed || holds(editor.state, request)) {
+    if (editor.isDestroyed || ofRequest(editor.state, request).length > 0) {
       resolve(!editor.isDestroyed);
       return;
     }
@@ -146,59 +174,89 @@ function whenHeld(editor: Editor, request: string): Promise<boolean> {
       resolve(held);
     };
     const check = () => {
-      if (holds(editor.state, request)) done(true);
+      if (ofRequest(editor.state, request).length > 0) done(true);
     };
-    const timer = setTimeout(() => done(holds(editor.state, request)), 5_000);
+    const timer = setTimeout(() => done(ofRequest(editor.state, request).length > 0), 5_000);
     editor.on("transaction", check);
   });
 }
 
-const idOf = (node: ProseMirrorNode | null): string | null | undefined => {
-  if (!node) return null;
-  const id: unknown = node.attrs[BLOCK_ID_ATTRIBUTE];
-  return typeof id === "string" && id !== "" ? id : undefined;
+const isProposalMark = (name: string) =>
+  name === PROPOSAL_INSERT_MARK || name === PROPOSAL_DELETE_MARK;
+
+const kindOf = (node: ProseMirrorNode): "insert" | "delete" | null => {
+  if (node.marks.some((mark) => mark.type.name === PROPOSAL_DELETE_MARK)) return "delete";
+  if (node.marks.some((mark) => mark.type.name === PROPOSAL_INSERT_MARK)) return "insert";
+  return readProposalAttribute(node.attrs[PROPOSAL_ATTRIBUTE])?.kind ?? null;
 };
 
-/** For Review changes; null when a Block around them has no id to find them by. */
-function changedBlocks(doc: ProseMirrorNode, request: string): Changed | null {
-  const indexes = proposalsIn(doc)
-    .filter((each) => each.request === request)
-    .flatMap((each) => each.ranges)
-    .flatMap((range) => [doc.resolve(range.from).index(0), doc.resolve(range.to - 1).index(0)]);
-  if (indexes.length === 0) return null;
-  const first = Math.min(...indexes);
-  const last = Math.max(...indexes);
-  const after = idOf(first > 0 ? doc.child(first - 1) : null);
-  const until = idOf(last + 1 < doc.childCount ? doc.child(last + 1) : null);
-  if (after === undefined || until === undefined) return null;
-  const blocks: ProseMirrorNode[] = [];
-  for (let index = first; index <= last; index++) blocks.push(doc.child(index));
-  return { after, until, blocks };
+/** A node as it was before a change took it out: none of the change's marks or attribute. */
+function asItWas(node: ProseMirrorNode): ProseMirrorNode {
+  const marks = node.marks.filter((mark) => !isProposalMark(mark.type.name));
+  if (node.isText) return node.mark(marks);
+  const attrs =
+    PROPOSAL_ATTRIBUTE in node.attrs ? { ...node.attrs, [PROPOSAL_ATTRIBUTE]: null } : node.attrs;
+  return node.type.create(attrs, node.content, marks);
 }
 
-function placeOfChanged(
-  doc: ProseMirrorNode,
-  changed: Changed,
-): { from: number; to: number } | null {
-  let from = 0;
-  let to = doc.content.size;
-  doc.forEach((node, pos) => {
-    if (node.attrs[BLOCK_ID_ATTRIBUTE] === changed.after) from = pos + node.nodeSize;
-    if (node.attrs[BLOCK_ID_ATTRIBUTE] === changed.until) to = pos;
+/** Where each of the request's changes will be once accepted, and what it takes out, read before accepting. */
+function changesOf(state: EditorState, request: string): AppliedChange[] {
+  const binding = ySyncPluginKey.getState(state)?.binding;
+  if (!binding) return [];
+  const relative = (pos: number): unknown =>
+    absolutePositionToRelativePosition(pos, binding.type, binding.mapping);
+  const { doc } = state;
+  return ofRequest(state, request).map((proposal: PendingProposal): AppliedChange => {
+    if (proposal.block) {
+      const node = doc.nodeAt(proposal.from);
+      const gone = proposal.block === "delete" && node;
+      return {
+        from: relative(proposal.from),
+        to: relative(gone ? proposal.from : proposal.to),
+        removed: gone ? Fragment.from(asItWas(node)) : Fragment.empty,
+        block: true,
+      };
+    }
+    const removed: ProseMirrorNode[] = [];
+    const added = { from: -1, to: -1 };
+    let end = proposal.from;
+    for (const range of proposal.ranges) {
+      doc.nodesBetween(range.from, range.to, (node, pos) => {
+        if (node.isBlock) return true;
+        const from = Math.max(pos, range.from);
+        const to = Math.min(pos + node.nodeSize, range.to);
+        const kind = kindOf(node);
+        if (kind === "delete") {
+          removed.push(asItWas(node.isText ? node.cut(from - pos, to - pos) : node));
+          end = to;
+        } else if (kind === "insert") {
+          if (added.from < 0) added.from = from;
+          added.to = to;
+        }
+        return false;
+      });
+    }
+    const words = added.from < 0 ? { from: end, to: end } : added;
+    return {
+      from: relative(words.from),
+      to: relative(words.to),
+      removed: Fragment.from(removed),
+      block: false,
+    };
   });
-  return from <= to ? { from, to } : null;
 }
 
-function firstBlockIn(
-  doc: ProseMirrorNode,
-  place: { from: number; to: number },
-  until: string | null,
-) {
-  let found: string | null = null;
-  doc.forEach((node, pos) => {
-    if (found === null && pos >= place.from && pos < place.to) found = idOf(node) ?? null;
-  });
-  return found ?? until;
+/** The top-level Block the first change is in, after it applied; null at the Mind's end. */
+function firstBlockOf(state: EditorState, changes: readonly AppliedChange[]): string | null {
+  for (const change of changes) {
+    const place = placeOfChange(state, change);
+    if (!place) continue;
+    const index = state.doc.resolve(Math.min(place.from, state.doc.content.size)).index(0);
+    if (index >= state.doc.childCount) return null;
+    const id: unknown = state.doc.child(index).attrs[BLOCK_ID_ATTRIBUTE];
+    return typeof id === "string" ? id : null;
+  }
+  return null;
 }
 
 function reasonOf(doc: Y.Doc, request: string): string | null {
@@ -212,45 +270,42 @@ function keptLineOf(leftOut: readonly LeftOutPart[]): KeptLine | null {
   return {
     blockId: first.blockId,
     count: leftOut.length,
-    mixed: new Set(leftOut.map((part) => part.kind)).size > 1,
+    mixed: !leftOut.every((part) => part.kind === "paragraph"),
   };
-}
-
-function accept(edit: Applying, request: string): number {
-  const blocks = edit.doc.getXmlFragment(MIND_CONTENT_FIELD);
-  edit.changed = changedBlocks(edit.editor.state.doc, request);
-  let resolved: ReturnType<typeof resolveProposals> = [];
-  asEditStep(edit, () => {
-    edit.doc.transact(() => {
-      resolved = resolveProposals(blocks, (ref) => ref.request === request, "accept");
-    }, new AcceptingEdit());
-  });
-  drawApplying(edit.editor, request, false);
-  const entries = aiUseOfAccepted(edit.doc, edit.mindId, resolved, new Date().toISOString());
-  if (entries.length > 0) core.recordAiUse(entries).catch(useAppStore.getState().reportError);
-  return resolved.length;
-}
-
-function apply(edit: Applying, request: string): number {
-  const places = accept(edit, request);
-  if (places === 0 || edit.editor.isDestroyed) return places;
-  const { doc } = edit.editor.state;
-  const place = edit.changed ? placeOfChanged(doc, edit.changed) : null;
-  const message = appliedMessage(places);
-  setAppliedLine(edit.editor, {
-    kind: "applied",
-    blockId: place && edit.changed ? firstBlockIn(doc, place, edit.changed.until) : null,
-    places,
-    reason: reasonOf(edit.doc, request),
-    reviewable: place !== null,
-    kept: keptLineOf(edit.leftOut.filter((part) => blockAt(doc, part.blockId) !== null)),
-  });
-  offerEditorUndo(edit.editor, message);
-  return places;
 }
 
 export const appliedMessage = (places: number) =>
   places === 1 ? t("edit.applied.one") : t("edit.applied", { count: places });
+
+/** Accepts the edit's Proposals as part of its Undo step, and shows the line over it. Returns how many places changed. */
+function apply(edit: Applying, request: string): number {
+  const { editor } = edit;
+  const changes = changesOf(editor.state, request);
+  const blocks = edit.doc.getXmlFragment(MIND_CONTENT_FIELD);
+  let resolved: ReturnType<typeof resolveProposals> = [];
+  asEditStep(edit, () => {
+    edit.doc.transact(() => {
+      resolved = resolveProposals(blocks, (ref: ProposalRef) => ref.request === request, "accept");
+    }, new AcceptingEdit());
+  });
+  foldSteps(edit);
+  drawApplying(editor, request, false);
+  const entries = aiUseOfAccepted(edit.doc, edit.mindId, resolved, new Date().toISOString());
+  if (entries.length > 0) core.recordAiUse(entries).catch(useAppStore.getState().reportError);
+  const places = resolved.length;
+  if (places === 0 || editor.isDestroyed) return places;
+  const { doc } = editor.state;
+  setAppliedLine(editor, {
+    kind: "applied",
+    blockId: firstBlockOf(editor.state, changes),
+    places,
+    reason: reasonOf(edit.doc, request),
+    changes,
+    kept: keptLineOf(edit.leftOut.filter((part) => blockAt(doc, part.blockId) !== null)),
+  });
+  offerEditorUndo(editor, appliedMessage(places));
+  return places;
+}
 
 /** Applies the edit once it is back, or leaves it waiting when the core held it back. */
 export async function finishApplying(
@@ -260,19 +315,26 @@ export async function finishApplying(
   if (result.kind !== "proposed") {
     edit.stopTaking();
     if (edit.request) drawApplying(edit.editor, edit.request, false);
+    dropSteps(edit);
     return null;
   }
   edit.request ??= result.request;
   const there = await whenHeld(edit.editor, result.request);
   edit.stopTaking();
-  if (!there || edit.editor.isDestroyed) return null;
+  if (!there || edit.editor.isDestroyed) {
+    drawApplying(edit.editor, result.request, false);
+    return null;
+  }
   edit.leftOut = result.leftOut ?? [];
   if (result.held) {
     drawApplying(edit.editor, result.request, false);
-    const changed = changedBlocks(edit.editor.state.doc, result.request);
+    const first = ofRequest(edit.editor.state, result.request)[0];
+    const index = first ? edit.editor.state.doc.resolve(first.from).index(0) : -1;
+    const id: unknown =
+      index >= 0 ? edit.editor.state.doc.maybeChild(index)?.attrs[BLOCK_ID_ATTRIBUTE] : null;
     setAppliedLine(edit.editor, {
       kind: "held",
-      blockId: changed ? (idOf(changed.blocks[0] ?? null) ?? null) : null,
+      blockId: typeof id === "string" ? id : null,
       request: result.request,
     });
     return "held";
@@ -280,12 +342,12 @@ export async function finishApplying(
   return { applied: apply(edit, result.request) };
 }
 
-/** The whole edit, with what was done since to what it left out. */
+/** The whole edit, with what was done since to its changes and to what it left out. */
 function undoEdit(editor: Editor): void {
   const edit = latest.get(editor);
   const stack = undoStackOf(editor);
-  if (!edit || !stack || edit.step === null) return;
-  const steps = [edit.step, ...edit.more];
+  if (!edit || !stack || edit.steps.length === 0) return;
+  const steps = [...edit.steps, ...edit.more];
   let top = stack.undoStack.at(-1);
   while (!editor.isDestroyed && top !== undefined && steps.includes(top)) {
     editor.commands.undo();
@@ -296,65 +358,68 @@ function undoEdit(editor: Editor): void {
 }
 
 function review(editor: Editor): void {
-  const edit = latest.get(editor);
-  const changed = edit?.changed;
-  const request = edit?.request;
-  if (!changed || !request || editor.isDestroyed) return;
-  const place = placeOfChanged(editor.state.doc, changed);
-  if (!place) return;
-  const line: AppliedLine = {
-    kind: "review",
-    blockId: idOf(changed.blocks[0] ?? null) ?? changed.until,
-    request,
-  };
-  const tr = editor.state.tr.replaceWith(place.from, place.to, changed.blocks);
-  tr.setMeta(proposalReviewKey, { shownAgain: true });
-  tr.setMeta(appliedLineKey, line);
-  asOneStep(editor, () => editor.view.dispatch(tr));
-  const first = pendingIn(editor.state).find((each) => each.request === request);
-  if (first && !editor.isDestroyed) {
-    const at = first.block ? first.from + 1 : first.from;
-    editor
-      .chain()
-      .setTextSelection(Math.min(at, editor.state.doc.content.size))
-      .scrollIntoView()
-      .run();
-  }
+  const line = appliedLineIn(editor.state);
+  if (line?.kind !== "applied" || line.changes.length === 0 || editor.isDestroyed) return;
+  setAppliedLine(editor, { kind: "review", blockId: line.blockId, changes: line.changes });
+  const first = line.changes
+    .map((change) => placeOfChange(editor.state, change))
+    .find((place) => place !== null);
+  if (first) editor.chain().setTextSelection(first.from).scrollIntoView().run();
 }
 
-const ofRequest = (editor: Editor, request: string) =>
-  new Set(
-    proposalsIn(editor.state.doc)
-      .filter((each) => each.request === request)
-      .map((each) => each.id),
-  );
+/** The change shown again whose words the cursor is in, by its place in the line's list. */
+export function reviewedChangeAt(state: EditorState): number | null {
+  const line = appliedLineIn(state);
+  if (line?.kind !== "review") return null;
+  const { from } = state.selection;
+  const index = line.changes.findIndex((change) => {
+    const place = placeOfChange(state, change);
+    return place !== null && place.from <= from && from <= place.to;
+  });
+  return index >= 0 ? index : null;
+}
 
-function resolveShown(editor: Editor, outcome: "accept" | "reject"): void {
+/** Restore original: one change's old words back in place of its new ones, one step of Undo. */
+export function restoreChange(editor: Editor, index: number): void {
   const line = appliedLineIn(editor.state);
-  if (!line || line.kind === "applied") return;
-  if (line.kind === "held" && outcome === "accept") {
-    const edit = latest.get(editor);
-    if (edit && edit.request === line.request) {
-      apply(edit, line.request);
-      return;
-    }
+  const change = line?.kind === "review" ? line.changes[index] : undefined;
+  const place = change ? placeOfChange(editor.state, change) : null;
+  if (line?.kind !== "review" || !change || !place || editor.isDestroyed) return;
+  const tr = editor.state.tr.replaceWith(place.from, place.to, change.removed);
+  tr.setMeta(appliedLineKey, {
+    ...line,
+    changes: line.changes.filter((_, each) => each !== index),
+  });
+  asOneStep(editor, () => editor.view.dispatch(tr));
+  const top = undoStackOf(editor)?.undoStack.at(-1);
+  if (top) latest.get(editor)?.more.push(top);
+  // Placed again now that the change has reached the Mind's document.
+  const now = appliedLineIn(editor.state);
+  if (now) setAppliedLine(editor, { ...now });
+  offerEditorUndo(editor, t("edit.review.restored.one"));
+}
+
+/** "Apply" and "Discard" for an edit held back. */
+function resolveHeld(editor: Editor, outcome: "accept" | "reject"): void {
+  const line = appliedLineIn(editor.state);
+  if (line?.kind !== "held") return;
+  const edit = latest.get(editor);
+  if (outcome === "accept" && edit?.request === line.request) {
+    apply(edit, line.request);
+    return;
   }
-  const count = resolveInEditor(editor, ofRequest(editor, line.request), outcome).length;
+  const ids = new Set(ofRequest(editor.state, line.request).map((each) => each.id));
+  const count = resolveInEditor(editor, ids, outcome).length;
   setAppliedLine(editor, null);
-  if (count > 0 && outcome === "reject") {
+  if (count > 0) {
     offerEditorUndo(
       editor,
-      line.kind === "review"
-        ? count === 1
-          ? t("edit.review.restored.one")
-          : t("edit.review.restored", { count })
-        : count === 1
-          ? t("proposal.rejected.one")
-          : t("proposal.rejected", { count }),
+      count === 1 ? t("proposal.rejected.one") : t("proposal.rejected", { count }),
     );
   }
 }
 
+/** "Remove them": what the edit left out and kept goes after all, one step of Undo. */
 function removeKept(editor: Editor): void {
   const edit = latest.get(editor);
   const line = appliedLineIn(editor.state);
@@ -374,14 +439,30 @@ function removeKept(editor: Editor): void {
   tr.setMeta(appliedLineKey, { ...line, kept: null });
   asOneStep(editor, () => editor.view.dispatch(tr));
   const top = undoStackOf(editor)?.undoStack.at(-1);
-  if (top !== undefined && top !== edit.step) edit.more.push(top);
+  if (top && !edit.steps.includes(top)) edit.more.push(top);
   offerEditorUndo(editor, t("edit.kept.removed"));
 }
 
-export function actOnAppliedEdit(editor: Editor, action: string): void {
-  if (action === "undo") undoEdit(editor);
-  else if (action === "review") review(editor);
-  else if (action === "done" || action === "apply") resolveShown(editor, "accept");
-  else if (action === "undo-all" || action === "discard") resolveShown(editor, "reject");
-  else if (action === "remove-kept") removeKept(editor);
+export function actOnAppliedEdit(editor: Editor, action: AppliedAction): void {
+  switch (action) {
+    case "undo":
+    case "undo-all":
+      undoEdit(editor);
+      return;
+    case "review":
+      review(editor);
+      return;
+    case "done":
+      setAppliedLine(editor, null);
+      return;
+    case "apply":
+      resolveHeld(editor, "accept");
+      return;
+    case "discard":
+      resolveHeld(editor, "reject");
+      return;
+    case "remove-kept":
+      removeKept(editor);
+      return;
+  }
 }

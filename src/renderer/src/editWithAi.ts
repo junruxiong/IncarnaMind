@@ -417,12 +417,9 @@ export function resolveProposalsIn(
   }
   const picked = pendingIn(editor.state).filter((each) => ids === "all" || ids.includes(each.id));
   const line = appliedLineIn(editor.state);
-  const reviewed =
-    outcome === "reject" &&
-    line?.kind === "review" &&
-    picked.length > 0 &&
-    picked.every((each) => each.request === line.request);
-  const resolved = resolveInEditor(editor, ids === "all" ? ids : new Set(ids), outcome);
+  // An edit held back waits for its own Apply or Discard.
+  const held = new Set(line?.kind === "held" ? [line.request] : []);
+  const resolved = resolveInEditor(editor, ids === "all" ? ids : new Set(ids), outcome, held);
   if (resolved.length === 0) {
     // Only changes out of date were picked: they can't be accepted, and the User hears why.
     const theirs = picked.length > 0 && picked.every((each) => each.theirs);
@@ -438,11 +435,8 @@ export function resolveProposalsIn(
     }
   }
   const count = resolved.length;
-  const message = reviewed
-    ? count === 1
-      ? t("edit.review.restored.one")
-      : t("edit.review.restored", { count })
-    : outcome === "accept"
+  const message =
+    outcome === "accept"
       ? count === 1
         ? t("proposal.accepted.one")
         : t("proposal.accepted", { count })

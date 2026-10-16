@@ -82,9 +82,7 @@ interface ReviewState {
 type Meta =
   | { hovered: string | null }
   | { target: { from: number; to: number } | null }
-  | { applying: ReadonlySet<string> }
-  /** An applied edit's changes shown again (#880): not the User's typing. */
-  | { shownAgain: true };
+  | { applying: ReadonlySet<string> };
 
 export const proposalReviewKey = new PluginKey<ReviewState>("proposalReview");
 
@@ -434,11 +432,6 @@ function bringsProposals(tr: Transaction): boolean {
 /** A change that came from the Mind's document (the core, another window, Undo), not the User typing here. */
 export const fromDocument = (tr: Transaction) => !!tr.getMeta(ySyncPluginKey)?.isChangeOrigin;
 
-const shownAgain = (tr: Transaction) => {
-  const meta = tr.getMeta(proposalReviewKey) as Meta | undefined;
-  return meta !== undefined && "shownAgain" in meta;
-};
-
 /**
  * Watches for the User moving the cursor or editing the Mind from now on;
  * changes that come from the Mind's document, as an AI change streaming in
@@ -653,9 +646,7 @@ export const ProposalReview = Extension.create<{ translate: Translate }>({
         appendTransaction(transactions, before, after) {
           const review = proposalReviewKey.getState(before);
           if (!review || review.proposals.length + review.applied.length === 0) return null;
-          const typed = transactions.filter(
-            (tr) => tr.docChanged && !fromDocument(tr) && !shownAgain(tr),
-          );
+          const typed = transactions.filter((tr) => tr.docChanged && !fromDocument(tr));
           if (typed.length === 0) return null;
           const marks = proposalMarks(after);
           const ranges: { from: number; to: number }[] = [];
@@ -765,12 +756,13 @@ export function changeReason(
  * (`resolveProposals`). The change reaches the core as the User's edits do.
  * `"all"` takes every Proposal the Mind holds when it runs, ones an Undo has
  * just brought back included, rather than a list read earlier, but those an
- * edit is applying.
+ * edit is applying and those of the requests `except` names.
  */
 export function resolveInEditor(
   editor: Editor,
   ids: ReadonlySet<string> | "all",
   outcome: "accept" | "reject",
+  except: ReadonlySet<string> = new Set(),
 ): ResolvedProposal[] {
   const binding = bindingOf(editor);
   if (!binding || (ids !== "all" && ids.size === 0)) return [];
@@ -784,7 +776,10 @@ export function resolveInEditor(
   binding.doc.transact(() => {
     resolved = resolveProposals(
       binding.type,
-      (proposal) => (ids === "all" ? !applying.has(proposal.request) : ids.has(proposal.id)),
+      (proposal) =>
+        ids === "all"
+          ? !applying.has(proposal.request) && !except.has(proposal.request)
+          : ids.has(proposal.id),
       outcome,
     );
   }, ySyncPluginKey);
