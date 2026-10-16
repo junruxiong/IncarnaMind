@@ -1,20 +1,14 @@
-import type { WordBorder, WordLook, WordParagraphLook, WordRunLook } from "../../../core/api";
+import type { WordLook, WordParagraphLook, WordRunLook } from "../../../core/api";
+import { attribute, border, pt, rule } from "./wordCss";
+import { wordLookZoomCss } from "./wordLookZoom";
 import { WORD_LOOK_DOM_ATTRIBUTE, WORD_RUN_DOM_ATTRIBUTE } from "./wordSchema";
+import { wordTableCss } from "./wordTableCss";
 
 /** Word's single line spacing for common fonts. */
 const SINGLE_LINE = 1.15;
 /** Word draws super- and subscript at about two thirds of the size. */
 const RAISED_SIZE = 0.66;
 const DEFAULT_BODY = 11;
-
-const BORDER_STYLES = new Map([
-  ["double", "double"],
-  ["dotted", "dotted"],
-  ["dashed", "dashed"],
-  ["dashSmallGap", "dashed"],
-  ["dotDash", "dashed"],
-  ["dotDotDash", "dotted"],
-]);
 
 const HIGHLIGHTS = new Map([
   ["yellow", "#FFFF00"],
@@ -44,14 +38,7 @@ export const wordLookScope = (mindId: string) => `word-look-${mindId}`;
 
 const escapedClass = (name: string) => name.replace(/[^\w-]/g, (character) => `\\${character}`);
 
-const pt = (value: number) => `calc(var(--word-pt) * ${value})`;
 const quoted = (font: string) => `"${font.replace(/["\\]/g, "")}"`;
-const attribute = (name: string, key: string) => `[${name}="${key.replace(/["\\]/g, "")}"]`;
-
-function border(value: WordBorder): string {
-  const width = Math.max(value.width, 0.25);
-  return `${pt(width)} ${BORDER_STYLES.get(value.style) ?? "solid"} ${value.color ? `#${value.color}` : "currentColor"}`;
-}
 
 function fontFamily(look: WordRunLook): string | null {
   const fonts = [...new Set([look.font, look.eastAsia])].filter((each): each is string =>
@@ -124,9 +111,6 @@ function paragraphDeclarations(look: WordParagraphLook): string[] {
   ].filter(Boolean);
 }
 
-const rule = (selector: string, declarations: string[]) =>
-  declarations.length > 0 ? `${selector} { ${declarations.join("; ")}; }` : "";
-
 /** Sizes and lengths are relative to the file's body size, which takes the Mind's writing size. */
 export function wordLookCss(mindId: string, look: WordLook): string {
   const scope = `.${escapedClass(wordLookScope(mindId))}`;
@@ -137,7 +121,10 @@ export function wordLookCss(mindId: string, look: WordLook): string {
     `${scope} li > [${WORD_LOOK_DOM_ATTRIBUTE}] { margin-left: 0; margin-right: 0; text-indent: 0; }`,
   ];
   for (const [key, paragraph] of Object.entries(look.paragraphs)) {
-    const run = paragraph.run ? look.runs[paragraph.run] : undefined;
+    const run =
+      paragraph.run && Object.hasOwn(look.runs, paragraph.run)
+        ? look.runs[paragraph.run]
+        : undefined;
     const selector = `${scope} ${attribute(WORD_LOOK_DOM_ATTRIBUTE, key)}`;
     rules.push(
       rule(selector, [...paragraphDeclarations(paragraph), ...(run ? runDeclarations(run) : [])]),
@@ -168,5 +155,6 @@ export function wordLookCss(mindId: string, look: WordLook): string {
     `${scope} :is(code, a) [${WORD_RUN_DOM_ATTRIBUTE}] { font-family: inherit; color: inherit; }`,
     `${scope} [${WORD_LOOK_DOM_ATTRIBUTE}] :is([contenteditable="false"], .citation-marker) { text-indent: 0; letter-spacing: normal; text-transform: none; font-variant-caps: normal; }`,
   );
+  rules.push(...wordTableCss(scope, look), ...wordLookZoomCss(scope, look));
   return rules.filter(Boolean).join("\n");
 }
