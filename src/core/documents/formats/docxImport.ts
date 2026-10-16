@@ -45,7 +45,6 @@ import {
   type WordAtomKind,
   type WordChangeRequest,
   type WordImportReport,
-  type WordLayout,
   type WordLook,
   type WordRunLook,
   type WordSource,
@@ -520,64 +519,6 @@ const paragraphNode = (
 });
 
 // ---------------------------------------------------------------------------
-// The look the Mind doesn't draw (#735)
-
-/** Shading that paints nothing: no fill, or white. */
-const NO_FILL = new Set(["auto", "FFFFFF"]);
-const NO_COLOUR = new Set(["auto", "000000"]);
-
-/** A border side, or any side of a border, that draws a line. */
-const drawsLine = (borders: XmlElement | undefined): boolean =>
-  borders !== undefined &&
-  elements(borders).some((side) => !["nil", "none"].includes(side.attrs["w:val"] ?? "none"));
-
-/** Counts a document's layout (`WordLayout`) from its own formatting; the Word look draws all but aligned columns. */
-export function layoutOf(document: XmlElement): WordLayout {
-  const layout: WordLayout = {
-    shading: 0,
-    borders: 0,
-    tabStops: 0,
-    colours: 0,
-    fonts: 0,
-    sizes: 0,
-  };
-  const colours = new Set<string>();
-  const fonts = new Set<string>();
-  const sizes = new Set<string>();
-  for (const element of walk(document)) {
-    const value = element.attrs["w:val"];
-    switch (element.name) {
-      case "w:shd": {
-        const fill = (element.attrs["w:fill"] ?? "auto").toUpperCase();
-        const solid =
-          value === "solid" && !NO_FILL.has((element.attrs["w:color"] ?? "auto").toUpperCase());
-        if (!NO_FILL.has(fill) || solid) layout.shading++;
-        break;
-      }
-      case "w:pBdr":
-        if (drawsLine(element)) layout.borders++;
-        break;
-      case "w:tabs":
-        layout.tabStops += elements(element).filter((tab) => tab.attrs["w:val"] !== "clear").length;
-        break;
-      case "w:color":
-        if (value && !NO_COLOUR.has(value.toUpperCase())) colours.add(value.toUpperCase());
-        break;
-      case "w:rFonts":
-        for (const key of ["w:ascii", "w:hAnsi", "w:eastAsia", "w:cs"]) {
-          const font = element.attrs[key];
-          if (font) fonts.add(font);
-        }
-        break;
-      case "w:sz":
-        if (value) sizes.add(value);
-        break;
-    }
-  }
-  return { ...layout, colours: colours.size, fonts: fonts.size, sizes: sizes.size };
-}
-
-// ---------------------------------------------------------------------------
 // The reader
 
 class Reader {
@@ -829,7 +770,6 @@ class Reader {
     this.wholeChanges(blocks);
     this.countKeptChanges();
     const { header, footer } = this.pageFurniture(body);
-    this.report.layout = layoutOf(this.document);
     return {
       blocks: [...header, ...blocks, ...footer],
       sources: this.sources,

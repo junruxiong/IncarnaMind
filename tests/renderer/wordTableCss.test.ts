@@ -68,6 +68,7 @@ describe("a Word table's stylesheet", () => {
       version: 3,
       body: 12,
       width: 450,
+      defaultTab: null,
       paragraphs: {},
       runs: {},
       tables: {
