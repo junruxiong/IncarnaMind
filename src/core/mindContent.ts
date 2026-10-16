@@ -3,6 +3,7 @@ import * as Y from "yjs";
 import {
   CONTENT_SCHEMA_VERSION,
   CONTENT_SCHEMA_VERSION_KEY,
+  type EditCause,
   MIND_CONTENT_FIELD,
   MIND_SETTINGS_FIELD,
 } from "./api";
@@ -44,7 +45,8 @@ interface LoadedMind {
   /** Rows stored for this Mind, a compacted one included. */
   storedRows: number;
   /** Updates the document emitted that aren't stored yet. */
-  outbox: Uint8Array[];
+  outbox: { update: Uint8Array; cause: EditCause | undefined }[];
+  cause: EditCause | undefined;
 }
 
 /**
@@ -57,7 +59,7 @@ interface LoadedMind {
 export function createMindContent(
   db: Database,
   now: () => string,
-  onStored: (mindId: string, update: Uint8Array) => void,
+  onStored: (mindId: string, update: Uint8Array, cause: EditCause | undefined) => void,
 ) {
   const loaded = new Map<string, LoadedMind>();
 
@@ -102,11 +104,11 @@ export function createMindContent(
     if (existing) return existing;
 
     const { doc, rows } = fromStorage(mindId);
-    const mind: LoadedMind = { doc, storedRows: rows, outbox: [] };
+    const mind: LoadedMind = { doc, storedRows: rows, outbox: [], cause: undefined };
     // Listening only after loading, so the stored rows aren't stored again. The
     // listener must not throw: Yjs calls it while finishing a transaction.
     doc.on("update", (update: Uint8Array) => {
-      mind.outbox.push(update);
+      mind.outbox.push({ update, cause: mind.cause });
     });
     loaded.set(mindId, mind);
     // A Mind a newer version wrote is left exactly as stored.
@@ -121,7 +123,7 @@ export function createMindContent(
     try {
       const at = now();
       db.transaction(() => {
-        for (const update of updates) insert(mindId, update, at);
+        for (const { update } of updates) insert(mindId, update, at);
       });
     } catch (error) {
       // Memory is now ahead of storage: drop the document, so the next use reloads what was stored.
@@ -129,7 +131,7 @@ export function createMindContent(
       throw error;
     }
     mind.storedRows += updates.length;
-    for (const update of updates) onStored(mindId, update);
+    for (const { update, cause } of updates) onStored(mindId, update, cause);
     if (mind.storedRows >= COMPACT_AFTER_UPDATES) compact(mindId, mind);
   };
 
@@ -176,13 +178,14 @@ export function createMindContent(
       }
     },
 
-    apply(mindId: string, update: unknown): void {
+    apply(mindId: string, update: unknown, cause?: EditCause): void {
       if (!(update instanceof Uint8Array) || update.byteLength === 0) {
         throw new InvalidInputError("A Mind update must be a non-empty Uint8Array.");
       }
       const mind = load(mindId);
       requireWritable(mind);
       let failure: unknown;
+      mind.cause = cause;
       try {
         // One transaction, so recording the version rides in the same stored update.
         mind.doc.transact(() => {
@@ -191,6 +194,8 @@ export function createMindContent(
         }, CORE_ORIGIN);
       } catch (error) {
         failure = error;
+      } finally {
+        mind.cause = undefined;
       }
       // Whatever Yjs took in is in the document now, so it is stored even if the rest was malformed.
       flush(mindId, mind);

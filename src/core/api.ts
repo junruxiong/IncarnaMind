@@ -1688,6 +1688,34 @@ export interface MindUpdate {
   mindId: string;
   /** A Yjs update (the default v1 encoding). */
   update: Uint8Array;
+  /** The edit the User asked for that wrote it (#880). */
+  cause?: EditCause;
+}
+
+/** An edit the User asked for (#880): the window that asked takes its updates in as its own change, one step of Undo. */
+export interface EditCause {
+  /** `EditWithAiInput.requestId`. */
+  requestId: string;
+  /** Its Proposals' `ProposalRef.request`. */
+  request: string;
+  /** Drawn as applied while it streams in; false until its new text maps onto the selection. */
+  apply: boolean;
+}
+
+/**
+ * What kind of Block a paragraph of a selection is, as the model reads it and
+ * writes it back: a heading of a level ("heading:2"), a bullet, a numbered
+ * item, a quote, or a plain paragraph.
+ */
+export type BlockKind = "paragraph" | "bullet" | "numbered" | "quote" | `heading:${number}`;
+
+/** Part of the selection an edit's new text left out, kept (#880): `from`..`to` of a Block's text. */
+export interface LeftOutPart {
+  blockId: string;
+  from: number;
+  to: number;
+  whole: boolean;
+  kind: BlockKind;
 }
 
 /** Settings that belong to the User and will sync across their devices (ADR-0003). */
@@ -4143,6 +4171,10 @@ export type EditWithAiResult =
       proposals: number;
       droppedCitations: number;
       outOfDate: number;
+      /** An edit the User asked for that waits for them instead of applying (#880). */
+      held?: true;
+      /** What its new text left out of the selection, kept; absent when nothing. */
+      leftOut?: LeftOutPart[];
     }
   /** The model gave the text back as it was: there is nothing to propose. */
   | { kind: "unchanged" }
