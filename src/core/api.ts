@@ -7071,6 +7071,12 @@ export interface MeetingHelp {
   kind: MeetingHelpKind;
   conversationId: string;
   answerId: string;
+  /**
+   * The line it answers, for its heading: the other side's newest ("Them"), the User's own for
+   * "Am I leading them?", or the newest of all where speakers aren't told apart. `speaker` as
+   * the Transcript has it ("Me", "Them", "Speaker ?"). Null for the buttons about the whole call.
+   */
+  heard: { text: string; speaker: string | null } | null;
 }
 
 export interface AskMeetingHelpInput {

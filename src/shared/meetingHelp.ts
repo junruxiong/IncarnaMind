@@ -28,6 +28,27 @@ export const helpKindsFor = (template: MeetingHelpTemplate | null): readonly Mee
   ...(template ? TEMPLATE_HELP[template] : []),
 ];
 
+/** How a button's Answer is laid out: options to say, readings of what they want, or short lines. */
+export type HelpShape = "options" | "readings" | "lines";
+
+export const HELP_SHAPE: Readonly<Record<MeetingHelpKind, HelpShape>> = {
+  say: "options",
+  answer: "options",
+  want: "readings",
+  sum: "lines",
+  no: "options",
+  ask: "options",
+  check: "lines",
+  objection: "options",
+  nextStep: "options",
+  facts: "lines",
+  followUp: "options",
+  leading: "options",
+  notCovered: "lines",
+  decisions: "lines",
+  disagree: "lines",
+};
+
 /** The buttons whose options rest on the User's Documents: their Answers search them. */
 export const SEARCHING_HELP: ReadonlySet<MeetingHelpKind> = new Set<MeetingHelpKind>([
   "answer",
@@ -35,6 +56,22 @@ export const SEARCHING_HELP: ReadonlySet<MeetingHelpKind> = new Set<MeetingHelpK
   "facts",
   "notCovered",
 ]);
+
+/**
+ * Whose newest line a button answers, for the heading over its suggestion: the other side's,
+ * the User's own ("Am I leading them?"), or anyone's. Absent: it is about the whole call.
+ */
+export const HEARD_FROM: Partial<Record<MeetingHelpKind, "them" | "me" | "anyone">> = {
+  say: "them",
+  answer: "them",
+  no: "them",
+  ask: "them",
+  objection: "them",
+  nextStep: "them",
+  followUp: "them",
+  leading: "me",
+  check: "anyone",
+};
 
 /** What each button says, which is also the Question it asks. */
 export const helpLabel = (kind: MeetingHelpKind): MessageKey => `meetings.help.${kind}`;

@@ -8,6 +8,7 @@ import type { DrawnPage } from "../shared/citedPage";
 import { translate } from "../shared/i18n";
 import { organizeModelOf, supportsLibraryImages } from "../shared/libraryModels";
 import {
+  HEARD_FROM,
   helpKindsFor,
   helpLabel,
   isMeetingHelpKind,
@@ -24,6 +25,7 @@ import { mindName } from "../shared/naming";
 import { paperFor } from "../shared/printDocument";
 import { resolveProposals, restoreRevised } from "../shared/proposals";
 import { RESEARCH_TASK } from "../shared/research";
+import { SPEAKER_ME, SPEAKER_THEM } from "../shared/speakers";
 import { wordFileOf } from "../shared/wordFiles";
 import { logActivity, silentLogger } from "./activityLog";
 import type { CoreAdapters } from "./adapters";
@@ -2558,10 +2560,18 @@ export function createCore(adapters: CoreAdapters): Core {
     const result = await answers.askInConversation(asked);
     if (result.asked) {
       helpConversations.set(meeting.id, result.conversation.id);
+      const from = HEARD_FROM[kind];
+      const newest = (speaker?: string) => transcripts?.newestLine(meeting.id, speaker) ?? null;
       meetings.helped(meeting.id, {
         kind,
         conversationId: result.conversation.id,
         answerId: result.answerId,
+        heard:
+          from === undefined
+            ? null
+            : from === "anyone"
+              ? newest()
+              : (newest(from === "me" ? SPEAKER_ME : SPEAKER_THEM) ?? newest()),
       });
     }
     return result;
