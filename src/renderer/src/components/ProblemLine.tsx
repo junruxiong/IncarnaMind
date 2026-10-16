@@ -1,4 +1,4 @@
-import { Fragment, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { ExclamationIcon } from "../viewer/icons";
 
 /**
@@ -22,6 +22,30 @@ export interface ProblemAction {
   testId?: string;
   /** Not while it is already running. */
   disabled?: boolean;
+}
+
+/** An action after a line's words: " · Show"; after a full-width stop "。· 重试", as Chinese sets it. */
+export function LineAction({
+  action,
+  afterStop = false,
+}: {
+  action: ProblemAction;
+  afterStop?: boolean;
+}) {
+  return (
+    <>
+      <span aria-hidden="true">{afterStop ? "· " : " · "}</span>
+      <button
+        type="button"
+        data-testid={action.testId}
+        disabled={action.disabled}
+        onClick={action.onClick}
+        className="rounded-sm font-semibold text-accent underline-offset-2 hover:underline disabled:opacity-50 disabled:hover:no-underline"
+      >
+        {action.label}
+      </button>
+    </>
+  );
 }
 
 /**
@@ -61,20 +85,13 @@ export function ProblemLine({
     >
       <span>{children}</span>
       {[action, also].map(
-        (each) =>
+        (each, index) =>
           each && (
-            <Fragment key={each.label}>
-              <span aria-hidden="true"> · </span>
-              <button
-                type="button"
-                data-testid={each.testId}
-                disabled={each.disabled}
-                onClick={each.onClick}
-                className="rounded-sm font-semibold text-accent underline-offset-2 hover:underline disabled:opacity-50 disabled:hover:no-underline"
-              >
-                {each.label}
-              </button>
-            </Fragment>
+            <LineAction
+              key={each.label}
+              action={each}
+              afterStop={index === 0 && typeof children === "string" && /[。！？]$/.test(children)}
+            />
           ),
       )}
     </p>

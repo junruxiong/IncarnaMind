@@ -32,6 +32,7 @@ import { LibraryFolders } from "./LibraryFolders";
 import { LinkFolderDialog } from "./LinkFolderDialog";
 import { DocumentLineIcon, MoreLineIcon } from "./lineIcons";
 import { ObjectMenu, useObjectMenu } from "./ObjectMenu";
+import { ProblemLine } from "./ProblemLine";
 import { SidebarSearch } from "./SidebarSearch";
 import { SidebarTags } from "./SidebarTags";
 import {
@@ -77,10 +78,10 @@ const isProcessing = (status: DocumentStatus) =>
 
 /**
  * The sidebar's tree: "All Documents", then a switcher, "Folders | Tags |
- * Source locations" (with the Tag filter and "+" for a new Folder), over one
+ * Folders on disk" (with the Tag filter and "+" for a new Folder), over one
  * of three views. Folders, the first, is the User's projects: each Folder
  * with its Minds and Documents, then Not in a Folder (see `LibraryFolders`).
- * Tags lists the Tags (see `SidebarTags`); Source locations, each Linked
+ * Tags lists the Tags (see `SidebarTags`); Folders on disk, each Linked
  * folder with its folders as on disk, then "Other Documents", the files
  * added on their own (see `FolderTree`). With nothing to browse but Minds,
  * there is no switcher. Each Document is one row: its name, its Tags' colours (see
@@ -127,6 +128,11 @@ export function DocumentsSection() {
   const view = views.includes(chosenView) ? chosenView : "folders";
   // A Folder just made is named in its row, which only the Folders view has.
   const naming = useRequests((state) => state.nameFolder !== null);
+  // A folder just linked: the view that shows it, with its row in sight and washed for a moment (#763).
+  const justLinked = useRequests((state) => state.showLinked);
+  useEffect(() => {
+    if (justLinked !== null) setView("sources");
+  }, [justLinked]);
   useEffect(() => {
     if (naming) setView("folders");
   }, [naming]);
@@ -264,13 +270,23 @@ export function DocumentsSection() {
         (filtering ? (
           <p className="px-2 py-1 text-[13px] leading-5 text-ink-meta">{t("tags.filter.empty")}</p>
         ) : (
-          // Adding is the header's "+" menu's: this only says where.
-          <p
-            data-testid="documents-empty"
-            className="px-2 pt-2 pb-1 text-[13px] leading-5 text-ink-meta"
+          <ProblemLine
+            role="status"
+            testId="documents-empty"
+            className="px-2 pt-2 pb-1"
+            action={{
+              label: t("documents.none.addFiles"),
+              testId: "documents-empty-add-files",
+              onClick: () => void useAppStore.getState().pickDocuments(),
+            }}
+            also={{
+              label: t("sidebar.plus.linkFolder"),
+              testId: "documents-empty-link-folder",
+              onClick: () => void useAppStore.getState().addLinkedFolder(),
+            }}
           >
             {t("documents.none")}
-          </p>
+          </ProblemLine>
         ))}
       <LinkFolderDialog />
       <TagNamesTip />

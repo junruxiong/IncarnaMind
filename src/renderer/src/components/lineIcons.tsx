@@ -42,6 +42,16 @@ export function SearchLineIcon(props: IconProps) {
   );
 }
 
+/** A Research plan: layers, one step on another. */
+export function PlanLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="m12 4 8 4-8 4-8-4z" />
+      <path d="m4 12 8 4 8-4M4 16l8 4 8-4" />
+    </LineIcon>
+  );
+}
+
 /** A Mind: a notebook. */
 export function MindLineIcon(props: IconProps) {
   return (
@@ -261,6 +271,15 @@ export function SparkLineIcon(props: IconProps) {
   return (
     <LineIcon strokeWidth={2} {...props}>
       <path d="M12 3c.6 4.6 3.4 7.4 8 8-4.6.6-7.4 3.4-8 8-.6-4.6-3.4-7.4-8-8 4.6-.6 7.4-3.4 8-8z" />
+    </LineIcon>
+  );
+}
+
+export function KeyLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <circle cx="8" cy="15" r="4.5" />
+      <path d="m11.2 11.8 8.8-8.8M16.5 6.5l2.5 2.5M14 9l2 2" />
     </LineIcon>
   );
 }

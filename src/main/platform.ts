@@ -2,11 +2,12 @@
  * Electron implementations of the core's adapters. This is the only place that
  * turns Electron APIs into capabilities the core can use.
  */
-import { mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { connect } from "node:net";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { app, safeStorage, shell } from "electron";
+import { Agent, fetch as undiciFetch } from "undici";
 import {
   type AudioCapture,
   type Browser,
@@ -14,18 +15,25 @@ import {
   BUILT_IN_SKILLS_SOURCE,
   type CoreAdapters,
   type CrashReporter,
+  createOllamaModels,
   type Executor,
   type FileShell,
   type Keychain,
   type Logger,
+  type OllamaApp,
   type UsageDataSender,
 } from "../core";
+import type { PageFetch } from "../core/documents/web/fetch";
 import { createFakeCapture, type FakeCapture } from "../core/meetings/fakeCapture";
+import { type Resolve, systemResolve } from "../core/tools/web/addresses";
 import type { FakeTranscriberOptions } from "../core/transcription/fake";
+import { SHOW_AGENT_CONNECTION } from "../shared/agentConnection";
 import { createCitedPageCapture } from "./citedPageCapture";
 import { createSentryCrashReporter } from "./crashReports";
 import { createUtilityProcessEmbedder } from "./embedder";
 import { createElectronAudioCapture } from "./meetings/capture";
+import { createFakeOllamaApp, createOllamaApp } from "./ollamaApp";
+import { createPageLook } from "./pageLook";
 import { createElectronPictures } from "./pictures";
 import { createElectronPrinter } from "./printPdf";
 import { createLoginShellProcesses } from "./processes";
@@ -97,6 +105,29 @@ const fileShell: FileShell = {
     shell.showItemInFolder(path);
   },
 };
+
+/**
+ * Test-only launch flag ("installed" or "missing"). Without it, the scripted chat model's
+ * Ollama always runs, so a test that saves an Ollama provider needs no server.
+ */
+const testOllamaApp =
+  import.meta.env.MODE === "test" ? process.env.INCARNAMIND_TEST_OLLAMA_APP : undefined;
+
+function ollamaApp(): OllamaApp {
+  if (import.meta.env.MODE === "test") {
+    return createFakeOllamaApp(testOllamaApp === "installed" ? "installed" : "missing");
+  }
+  return createOllamaApp({
+    platform: process.platform,
+    home: app.getPath("home"),
+    localAppData: process.env.LOCALAPPDATA,
+    exists: existsSync,
+    async openPath(path) {
+      const error = await shell.openPath(path);
+      if (error) throw new Error(error);
+    },
+  });
+}
 
 /**
  * Local Connectors and Skill scripts start with the User's login-shell
@@ -215,6 +246,13 @@ function citationStylesFolder(): string {
 }
 
 /**
+ * The home folder the core gets. Node's, not `app.getPath("home")`: on macOS
+ * that ignores HOME, which the smoke tests point at a temporary folder, and
+ * their agents' settings would land in the real one.
+ */
+export const homeFolder = (): string => homedir();
+
+/**
  * The User's Documents folder, where the first save offers to put the Output
  * location. A test build uses one in its data folder, so the smoke tests never
  * write into the User's.
@@ -328,6 +366,14 @@ const sourceProvidersUrl =
   import.meta.env.MODE === "test" ? process.env.INCARNAMIND_TEST_SOURCES : undefined;
 
 /**
+ * Test-only launch flag: how long after a new version of a Document
+ * contradiction watch checks its Folder's Minds (#112), so the smoke tests
+ * needn't wait the 30 seconds. Only a test build honours it.
+ */
+const contradictionWatchDelay =
+  import.meta.env.MODE === "test" ? process.env.INCARNAMIND_TEST_CONTRADICTION_DELAY_MS : undefined;
+
+/**
  * Test-only launch flag: a JSON file of Connectors directory entries (#148)
  * in place of the list that ships with the app, so the smoke tests connect
  * an entry served by a local stand-in. Only a test build honours it.
@@ -352,12 +398,26 @@ const connectorRegistryUrl =
  * connects there, its guard still deciding which hosts it reaches, so the
  * smoke tests reach no site. Only a test build honours it.
  */
-function webStandIn(): CoreAdapters["web"] {
+function standInPort(): number | undefined {
   const port =
     import.meta.env.MODE === "test" ? Number(process.env.INCARNAMIND_TEST_WEB) : Number.NaN;
-  if (!Number.isInteger(port) || port <= 0) return undefined;
+  return Number.isInteger(port) && port > 0 ? port : undefined;
+}
+
+/**
+ * Every host is public there, but a name under "loopback.test", which is this
+ * computer, as a name could resolve to: for the smoke tests of the guard.
+ */
+const standInResolve: Resolve = async (hostname) =>
+  hostname.endsWith(".loopback.test")
+    ? [{ address: "127.0.0.1", family: 4 }]
+    : [{ address: "93.184.215.14", family: 4 }];
+
+function webStandIn(): CoreAdapters["web"] {
+  const port = standInPort();
+  if (port === undefined) return undefined;
   return {
-    resolve: async () => [{ address: "93.184.215.14", family: 4 }],
+    resolve: standInResolve,
     connector: (lookup) => (options, callback) => {
       lookup(options.hostname, {}, (error) => {
         if (error) {
@@ -370,6 +430,29 @@ function webStandIn(): CoreAdapters["web"] {
       });
     },
   };
+}
+
+/** Test builds: a page saved by its address is fetched from the stand-in too, whatever its host. */
+function standInPageFetch(port: number): PageFetch {
+  const agent = new Agent({
+    connect: (_options, callback) => {
+      const socket = connect(port, "127.0.0.1");
+      socket.once("connect", () => callback(null, socket));
+      socket.once("error", (failure) => callback(failure, null));
+    },
+  });
+  return (address, init) => undiciFetch(address, { ...init, dispatcher: agent });
+}
+
+/**
+ * Test-only launch flag: how long keeping a page as it looks may take, in
+ * milliseconds, so the smoke tests see a page that never loads closed within
+ * seconds. Only a test build honours it.
+ */
+function lookLimit(): { limitMs?: number } {
+  const limit =
+    import.meta.env.MODE === "test" ? Number(process.env.INCARNAMIND_TEST_LOOK_LIMIT) : Number.NaN;
+  return Number.isInteger(limit) && limit > 0 ? { limitMs: limit } : {};
 }
 
 /**
@@ -440,13 +523,21 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
   const chatGptStore = chatGptTestProfile(log);
   const chatGptPlan = chatGptStandIn();
   const web = webStandIn();
+  const standIn = standInPort();
   const connectorDirectory = testConnectorDirectory();
+  const scriptedOllama =
+    import.meta.env.MODE === "test" &&
+    process.env.INCARNAMIND_FAKE_CHAT === "1" &&
+    testOllamaApp === undefined
+      ? { ...createOllamaModels(), running: async () => true }
+      : undefined;
   return {
     ...(connectorDirectory !== undefined && { connectorDirectory }),
     ...(connectorRegistryUrl && { connectorRegistryUrl }),
     ...(chatGptStore && { chatGptStore }),
     ...(chatGptPlan && { chatGptPlan }),
     ...(web && { web }),
+    ...(standIn !== undefined && { webPages: { fetch: standInPageFetch(standIn) } }),
     ...(crashReporter && { crashReporter }),
     ...(usageData && { usageData }),
     ...(referenceLookupUrl && {
@@ -455,6 +546,9 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
         arxiv: referenceLookupUrl,
         openalex: referenceLookupUrl,
       },
+    }),
+    ...(contradictionWatchDelay && {
+      contradictionWatch: { delayMs: Number(contradictionWatchDelay) },
     }),
     ...(sourceProvidersUrl && {
       sourceProviders: {
@@ -477,6 +571,7 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
       builtInSkills: builtInSkillsFolder(),
       examples: examplesFolder(),
       citationStyles: citationStylesFolder(),
+      home: homeFolder(),
       documents: documentsFolder(dataDir),
     },
     systemLanguages: () => app.getPreferredSystemLanguages(),
@@ -485,7 +580,15 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
     keychain: createSafeStorageKeychain(dataDir),
     browser: systemBrowser,
     shell: fileShell,
+    ollamaApp: ollamaApp(),
+    ...(scriptedOllama && { ollamaModels: scriptedOllama }),
     printer: createElectronPrinter({ log, rendererUrl: process.env.ELECTRON_RENDERER_URL }),
+    pageLook: createPageLook({
+      log,
+      resolve: web?.resolve ?? systemResolve,
+      ...(standIn !== undefined && { standIn }),
+      ...lookLimit(),
+    }),
     pictures: createElectronPictures(log),
     processes: loginShellProcesses,
     // JavaScript Skill scripts run on Electron's own Node, as plain Node: nothing to install.
@@ -495,6 +598,7 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
     // An outside agent starts the shim (#351) the same way: this app's binary, as plain Node,
     // running the shim built beside this file (inside app.asar, which Node mode reads).
     agents: {
+      offered: SHOW_AGENT_CONNECTION,
       launcher: {
         command: process.execPath,
         args: [join(__dirname, "agentShim.js")],

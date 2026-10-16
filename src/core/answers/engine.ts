@@ -80,6 +80,7 @@ import type {
   QuoteRetry,
   ReadThirdPartySource,
   ThirdPartyReason,
+  UnreadFile,
 } from "../api";
 import { ONE_SEARCH_PARAMETERS, type SearchToolParameters } from "../documents/searchTool";
 import { detectLanguage } from "../documents/textLanguage";
@@ -111,6 +112,7 @@ import {
   searchQueryPrompt,
   TRANSLATE_QUERY_INSTRUCTIONS,
   translateQueryPrompt,
+  unreadDocumentsNote,
 } from "./prompt";
 import { retryQuotes } from "./quoteRetry";
 import { citeUnmarked } from "./unmarkedQuotes";
@@ -210,6 +212,8 @@ export interface AnswerTools {
    * Question is in another language. Empty or absent when they can't be told.
    */
   readonly documentLanguages?: readonly DocumentLanguage[];
+  /** The Documents in the Search scope whose text couldn't be read: the search Tool says so. Absent: none are known. */
+  unreadDocuments?(): readonly UnreadFile[];
   /** The document-search Tool. */
   searchDocuments(
     query: string,
@@ -339,6 +343,8 @@ export interface AnswerRequest {
    * it, every call runs.
    */
   gate?(tool: Tool, call: GatedCall): Promise<GateDecision>;
+  /** Whether a Tool hears its calls' input as it comes (see `RunRequest.streamsInput`). Without it, none does. */
+  streamsInput?(tool: Tool): boolean;
   /** Which Tools the Run is offered. Absent: "answer", every Tool. */
   toolSet?: ToolSet;
   /**
@@ -643,6 +649,25 @@ const calculationsSchema = {
       },
     },
     required: ["marker", "inputs", "formula"],
+  },
+} as const;
+
+/**
+ * In a check Run (#707), each figure also names the number of the sentence it
+ * is for, which IncarnaMind compares the result with.
+ */
+const checkCalculationsSchema = {
+  ...calculationsSchema,
+  items: {
+    ...calculationsSchema.items,
+    properties: {
+      ...calculationsSchema.items.properties,
+      stated: {
+        type: "string",
+        description: 'The number as the sentence to check writes it: "1.1x", "12%".',
+      },
+    },
+    required: [...calculationsSchema.items.required, "stated"],
   },
 } as const;
 
@@ -990,8 +1015,12 @@ function createWritingEngine(options: AiSdkAnswerEngineOptions): AnswerEngine {
       // With no Documents there is nothing to search or cite: Skills and
       // Connector Tools alone, or a plain Answer. Web search saves what it reads as
       // Documents, which are cited, so with it the Documents' Tools are offered too.
+      // So are they where the only Documents in scope couldn't be read: the search says so (#485).
       const savesDocuments = request.tools.some((each) => each.provider.kind === "web");
-      if (request.documents.documentCount === 0 && !savesDocuments) {
+      const hasUnread =
+        (request.support ?? "tools") === "tools" &&
+        (request.documents.unreadDocuments?.().length ?? 0) > 0;
+      if (request.documents.documentCount === 0 && !savesDocuments && !hasUnread) {
         if (request.tools.length > 0 && (request.support ?? "tools") === "tools") {
           let unsupported = false;
           for await (const event of fitted(() =>
@@ -1175,8 +1204,10 @@ interface DocumentToolsHooks {
 export function documentTools(
   documents: AnswerTools,
   hooks: DocumentToolsHooks,
+  toolSet: ToolSet = "answer",
 ): { search: Tool; cite: Tool; calculate: Tool | null } {
   const own = (name: string) => ({ name, provider: DOCUMENTS_PROVIDER, providerTool: name });
+  const checking = toolSet === "check";
   return {
     search: {
       ...own(DOCUMENT_TOOLS.search),
@@ -1211,9 +1242,12 @@ export function documentTools(
         for (const source of found.thirdParty ?? []) readThirdParty?.(source);
         const result = hooks.fit(found);
         hooks.searched(toolCallId, result.passageCount, found.passageIds);
-        // Named from the Passages that fit, so it never names a Document the model wasn't handed.
-        const note = datedDocumentsNote(result.text);
-        return note ? `${result.text}\n\n${note}` : result.text;
+        // The dates are named from the Passages that fit, so never a Document the model wasn't handed.
+        const notes = [
+          datedDocumentsNote(result.text),
+          unreadDocumentsNote(documents.unreadDocuments?.() ?? []),
+        ];
+        return [result.text, ...notes].filter((part) => part !== "").join("\n\n");
       },
     },
     cite: {
@@ -1236,11 +1270,14 @@ export function documentTools(
     calculate: documents.calculate
       ? {
           ...own(DOCUMENT_TOOLS.calculate),
-          description:
-            'Work out a number from numbers in the Passages instead of in your head, and get its result back. Give figures, each {marker, label, inputs, formula, as}. Each input is {name, label, citation, number}: citation is the marker of a cite record whose quote has the number (1 for [^1]), or give passage, location and quote instead; number is the number as it is written there. The formula is in Excel\'s syntax over the inputs\' names. For example: {"figures": [{"marker": 1, "label": "Revenue growth 2025", "inputs": [{"name": "r24", "label": "Revenue 2024", "citation": 1, "number": "$1,231.0 million"}, {"name": "r25", "label": "Revenue 2025", "citation": 1, "number": "$1,482.6 million"}], "formula": "r25 / r24 - 1", "as": "percent"}]}. IncarnaMind reads each number from its quote, checks the quote and does the arithmetic. Inputs are read in base units with their page\'s scale ("单位：万元", "in millions") applied, so give scale ("亿", "billion") for the scale a figure is shown in, never multiply or divide by 1000 or 10000 in the formula. Write the figure\'s marker, such as [=1], in the number\'s place; never write the number yourself.',
+          description: `Work out a number from numbers in the Passages instead of in your head, and get its result back. Give figures, each {marker, label, inputs, formula, as}. Each input is {name, label, citation, number}: citation is the marker of a cite record whose quote has the number (1 for [^1]), or give passage, location and quote instead; number is the number as it is written there. The formula is in Excel's syntax over the inputs' names. For example: {"figures": [{"marker": 1, "label": "Revenue growth 2025", "inputs": [{"name": "r24", "label": "Revenue 2024", "citation": 1, "number": "$1,231.0 million"}, {"name": "r25", "label": "Revenue 2025", "citation": 1, "number": "$1,482.6 million"}], "formula": "r25 / r24 - 1", "as": "percent"}]}. IncarnaMind reads each number from its quote, checks the quote and does the arithmetic. Inputs are read in base units with their page's scale ("单位：万元", "in millions") applied, so give scale ("亿", "billion") for the scale a figure is shown in, never multiply or divide by 1000 or 10000 in the formula. ${
+            checking
+              ? "Give stated, the number as the sentence to check writes it: IncarnaMind compares the result with it."
+              : "Write the figure's marker, such as [=1], in the number's place; never write the number yourself."
+          }`,
           inputSchema: {
             type: "object",
-            properties: { figures: calculationsSchema },
+            properties: { figures: checking ? checkCalculationsSchema : calculationsSchema },
             required: ["figures"],
           },
           effects: () => [],
@@ -1320,16 +1357,20 @@ async function* toolLoop(
   // The Documents' Tools fit what they return themselves: a search's Passages, and records take no room.
   const documents =
     mode === "tools"
-      ? documentTools(request.documents, {
-          fit: (found) =>
-            loop ? loop.passages(found.text, found.passageCount, found.ranks) : found,
-          searched: (toolCallId, count, passageIds) => {
-            results.set(toolCallId, count);
-            if (passageIds) found.set(toolCallId, passageIds);
+      ? documentTools(
+          request.documents,
+          {
+            fit: (found) =>
+              loop ? loop.passages(found.text, found.passageCount, found.ranks) : found,
+            searched: (toolCallId, count, passageIds) => {
+              results.set(toolCallId, count);
+              if (passageIds) found.set(toolCallId, passageIds);
+            },
+            failed: (toolCallId, error) => failures.set(toolCallId, classifyProviderError(error)),
+            cited: (records) => cited.push(...records),
           },
-          failed: (toolCallId, error) => failures.set(toolCallId, classifyProviderError(error)),
-          cited: (records) => cited.push(...records),
-        })
+          request.toolSet,
+        )
       : null;
   const search = documents?.search ?? null;
   const cite = documents?.cite ?? null;
@@ -1458,6 +1499,10 @@ async function* toolLoop(
         ? request.gate(tool, { ...call, tainted, thirdParty: [...thirdParty] })
         : RUN;
     },
+    streamsInput: (name) => {
+      const tool = offered.get(name);
+      return tool !== undefined && (request.streamsInput?.(tool) ?? false);
+    },
     window,
     // The Answer written beside `cite` or `calculate`, with all they were given taken, is complete:
     // another call would only write it again.
@@ -1482,6 +1527,19 @@ async function* toolLoop(
         if (stepText === "" && keptText !== "" && !/\s$/.test(keptText)) text = `\n\n${text}`;
         stepText += text;
         yield { type: "text-delta", text };
+        break;
+      }
+      case "tool-input-started": {
+        // A Tool that writes as its input comes (the Minds'): its card shows from the start.
+        const called = offered.get(event.tool);
+        if (!called || recording(called)) break;
+        yield {
+          type: "tool-call-started",
+          id: event.id,
+          provider: called.provider,
+          tool: called.providerTool,
+          input: {},
+        };
         break;
       }
       case "tool-call": {

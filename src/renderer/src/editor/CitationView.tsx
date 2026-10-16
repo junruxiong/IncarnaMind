@@ -14,6 +14,7 @@ import {
   type CitationState,
   citationSource,
   citationState,
+  parseQuotedWords,
   withShownName,
 } from "../../../shared/citations";
 import {
@@ -34,6 +35,7 @@ import type { ObjectRef } from "../objects";
 import { openCited as openCitedPlace, quoteSaysSo } from "../openCited";
 import { recordUsage, useAppStore } from "../store";
 import { pageDate } from "../webPages";
+import { CitationQuotedWords } from "./CitationQuotedWords";
 import {
   type ClusterPlace,
   citationClusters,
@@ -165,7 +167,7 @@ export function CitationView({
 
   const onClick = () => {
     setPinned(true);
-    // "Check a Citation in the example", in Get started.
+    // "Open a check in the example", in Get started.
     useAppStore.getState().updateGettingStarted({ citationChecked: true });
     recordUsage({ event: "citation_opened", fields: { check: state.check } });
     if (quoteSaysSo(state.check)) openCited(true);
@@ -511,6 +513,7 @@ function CitationCard({
         ? t(`citation.reason.${state.reason}`)
         : null;
   const removed = state.reason === "document-removed";
+  const quotedWords = state.check === "not-found" && parseQuotedWords(attributes.quotedWords);
   const scanned = useScannedQuote(attributes);
   return (
     <div className={`citation-card citation-card--${state.check}`} contentEditable={false}>
@@ -537,6 +540,7 @@ function CitationCard({
           </blockquote>
         </figure>
       )}
+      {state.check === "not-found" && <CitationQuotedWords attributes={attributes} />}
       {attributes.verdict && (
         <p data-testid="citation-verdict" className="citation-card-verdict">
           {attributes.verdict}
@@ -554,6 +558,7 @@ function CitationCard({
           {reason}
         </p>
       )}
+      {quotedWords && <p className="citation-card-note">{t("citation.quoted.why")}</p>}
       {state.check === "found" && <p className="citation-card-note">{t("citation.meaning")}</p>}
       <div className="citation-card-actions">
         {state.check === "not-found" ? (

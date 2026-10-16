@@ -19,6 +19,7 @@ import {
   newMind,
   removeDataFolder,
   setWindowSize,
+  showFolders,
   showSourceLocations,
   sidebarFolder,
   useLocalChatModel,
@@ -166,7 +167,10 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
     "mind.exportAs.html",
     "mind.exportAs.markdown",
     "mind.exportOptions",
+    "mind.aiUseStatement",
     "mind.history",
+    "mind.checkAll",
+    "mind.checkContradictions",
     "mind.citationStyle",
     "skill.fromMind",
     "—",
@@ -251,9 +255,9 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
     tag.getByTestId("tag-actions"),
   );
   expect(tagMenu).toEqual(["tag.open", "—", "tag.manage", "tag.rename", "—", "tag.delete"]);
-  await window.getByTestId("browse-views").getByRole("button", { name: "Folders" }).click();
+  await showFolders(window);
 
-  // A Linked folder, in Source locations.
+  // A Linked folder, in Folders on disk.
   await linkFolderFromSidebar(app, window, library);
   await showSourceLocations(window);
   const linked = linkedFolderRow(window, "Library");
@@ -276,7 +280,7 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
     "—",
     "linkedFolder.unlink",
   ]);
-  await window.getByTestId("browse-views").getByRole("button", { name: "Folders" }).click();
+  await showFolders(window);
 
   // A tab: its own actions, then Close and Close other tabs last. The keyboard opens the same menu
   // as the right-click, its ⋯ being out of sight in the tab.
@@ -285,7 +289,7 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
   const tabMenu = tab.getByTestId("tab-actions");
   const byRightClick = await menuCommands(tabMenu);
   // Its Mind's items first, then the tab's own.
-  expect(byRightClick.slice(0, 11)).toEqual([
+  expect(byRightClick.slice(0, 14)).toEqual([
     "mind.outline",
     "mind.export",
     "mind.exportAs.pdf",
@@ -293,7 +297,10 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
     "mind.exportAs.html",
     "mind.exportAs.markdown",
     "mind.exportOptions",
+    "mind.aiUseStatement",
     "mind.history",
+    "mind.checkAll",
+    "mind.checkContradictions",
     "—",
     "mind.delete",
     "—",
@@ -418,7 +425,10 @@ test("each item shows its shortcut as the system writes it, and the labels are i
     "导出为 HTML",
     "导出为 Markdown（.md）",
     "导出选项…",
+    "导出 AI 使用声明",
     "历史版本",
+    "核对整个 Mind",
+    "检查矛盾",
     "引用格式…",
     "做成技能",
     /^移动到…(⇧⌘M|Ctrl\+Shift\+M)$/,

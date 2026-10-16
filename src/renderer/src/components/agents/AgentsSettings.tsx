@@ -183,7 +183,6 @@ export function AgentsSettings() {
 
       <ConnectAgentDialog
         client={connecting}
-        folders={folders}
         busy={busy}
         problem={problem}
         onAllow={(folderIds, name) => connecting && void allow(connecting, folderIds, name)}

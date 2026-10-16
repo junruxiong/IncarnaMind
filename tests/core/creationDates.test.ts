@@ -11,7 +11,13 @@ import { stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, test, vi } from "vitest";
 import { DATABASE_FILE, type Document, type DocumentKind } from "../../src/core";
-import { creationDate, pdfDate, w3cDate, yearWritten } from "../../src/core/documents/creationDate";
+import {
+  creationDate,
+  isPlaceholderDate,
+  pdfDate,
+  w3cDate,
+  yearWritten,
+} from "../../src/core/documents/creationDate";
 import { METADATA_VERSION, PROCESSING_VERSION } from "../../src/core/documents/processing";
 import { migrate, openDatabase } from "../../src/core/storage";
 import { migrations } from "../../src/core/storage/migrations";
@@ -511,5 +517,15 @@ describe("Existing Documents get their creation date once, in the background", {
       ).filter((row) => row.id !== control?.id),
     ).toEqual(written);
     expect(embedder.texts).toEqual([]);
+  });
+});
+
+describe("A placeholder date is never a Document's date (#821)", () => {
+  test("midnight on 1 January 2000, like the other zero dates, isn't taken", () => {
+    expect(isPlaceholderDate("2000-01-01")).toBe(true);
+    expect(isPlaceholderDate("2000-01-01T00:00:00Z")).toBe(true);
+    expect(isPlaceholderDate("2000-01-02")).toBe(false);
+    expect(creationDate(["2000-01-01T00:00:00Z", "2019-03-04"], null, 2026)).toBe("2019-03-04");
+    expect(creationDate(["2000-01-01"], null, 2026)).toBeNull();
   });
 });

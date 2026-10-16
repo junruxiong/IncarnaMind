@@ -2,17 +2,21 @@ import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Document } from "../../../core/api";
 import { readWebPage, type WebPage } from "../../../core/documents/formats/web";
 import type { XmlNode } from "../../../core/documents/formats/xml";
+import { documentImageUrl } from "../../../shared/documentViewer";
 import type { MessageKey } from "../../../shared/i18n";
 import { useLanguage, useT } from "../i18n";
 import type { ViewerTarget } from "../store";
 import { pageDate } from "../webPages";
 import { useCitedArea } from "./citedArea";
+import { loadDocumentPicture } from "./documentPicture";
 import { markQuote, textNodes, unmarkQuote } from "./domQuote";
 import { FileStates } from "./FileStates";
+import { PdfView } from "./PdfView";
 import { CitationMark, marginRoom, markTopFor, quoteMarkOf, quoteTone } from "./quoteMark";
 import { OutlineButton, type OutlineEntry, UnitOutline } from "./UnitOutline";
 import { useDocumentFile } from "./useDocumentFile";
 import { ViewerHeader } from "./ViewerHeader";
+import { WebLookBar, WebLookLine } from "./WebLook";
 
 const read = (bytes: Uint8Array): WebPage => readWebPage(new TextDecoder().decode(bytes));
 
@@ -52,21 +56,88 @@ const DRAWN = new Set([
   "mark",
 ]);
 
-const count = (value: string | undefined) => {
+const count = (value: string | undefined, below = 1000) => {
   const number = Number(value);
-  return Number.isInteger(number) && number > 0 && number < 1000 ? String(number) : null;
+  return Number.isInteger(number) && number > 0 && number < below ? String(number) : null;
 };
+
+/** A picture the page shows from its own saved files (#756): "pictures/<hash>.png". */
+const SAVED_PICTURE = /^pictures\/[0-9a-f]{64}\.(?:png|jpg|gif|webp|avif)$/;
+
+/** Where a snapshot is drawn: its Document, and what stops its pictures' loading. */
+interface DrawContext {
+  documentId: string;
+  signal: AbortSignal;
+  t: (key: MessageKey) => string;
+  /** Pictures shown so far, numbered as the page shows them. */
+  pictures: number;
+}
+
+/** The page the viewer draws into (the name `Document` is the Library's). */
+type Page = HTMLElement["ownerDocument"];
+
+/** A labelled box for a picture that isn't shown: its description, and why. */
+function placeholder(owner: Page, alt: string, note: string, t: DrawContext["t"]): HTMLElement {
+  const element = owner.createElement("span");
+  element.className = "document-image-placeholder";
+  element.dataset.quoteSkip = "";
+  const label = owner.createElement("span");
+  label.className = "document-image-placeholder-label";
+  label.textContent = alt || t("viewer.markdown.image");
+  const why = owner.createElement("span");
+  why.className = "document-image-placeholder-note";
+  why.textContent = note;
+  element.append(label, why);
+  return element;
+}
+
+/**
+ * A picture saved with the page, read from its file once drawn; a box of its
+ * size meanwhile, so the page doesn't move as it comes in.
+ */
+function savedPicture(
+  owner: Page,
+  src: string,
+  alt: string,
+  size: { width: string | null; height: string | null },
+  context: DrawContext,
+): HTMLElement {
+  const picture = owner.createElement("img");
+  picture.alt = alt;
+  picture.className = "document-image document-web-picture";
+  picture.dataset.quoteSkip = "";
+  picture.dataset.testid = "web-picture";
+  context.pictures += 1;
+  picture.dataset.figure = String(context.pictures);
+  if (size.width && size.height) {
+    picture.style.aspectRatio = `${size.width} / ${size.height}`;
+    picture.style.width = `min(100%, ${size.width}px)`;
+  }
+  loadDocumentPicture(context.documentId, src, context.signal).then(
+    (url) => {
+      if (!context.signal.aborted) picture.src = url;
+    },
+    () => {
+      if (context.signal.aborted) return;
+      picture.replaceWith(
+        placeholder(owner, alt, context.t("viewer.markdown.imageMissing"), context.t),
+      );
+    },
+  );
+  return picture;
+}
 
 /**
  * Draws a snapshot's article with DOM calls, never as markup: only the
  * elements in `DRAWN`, links to web addresses (which open in the browser),
- * and a placeholder for each picture, which isn't fetched.
+ * the pictures saved with the page, from its own files, and a placeholder
+ * for each picture that wasn't saved, which isn't fetched.
  */
 function draw(
   nodes: readonly XmlNode[],
   parent: HTMLElement,
   blocks: ReadonlyMap<XmlNode, number>,
-  t: (key: MessageKey) => string,
+  context: DrawContext,
 ): void {
   const owner = parent.ownerDocument;
   for (const node of nodes) {
@@ -78,17 +149,19 @@ function draw(
     let element: HTMLElement | null = null;
     let inner: HTMLElement | null = null;
     if (name === "img") {
-      element = owner.createElement("span");
-      element.className = "document-image-placeholder";
-      element.dataset.quoteSkip = "";
-      const label = owner.createElement("span");
-      label.className = "document-image-placeholder-label";
-      label.textContent = node.attrs.alt?.trim() || t("viewer.markdown.image");
-      const note = owner.createElement("span");
-      note.className = "document-image-placeholder-note";
-      note.textContent = t("viewer.markdown.imageWeb");
-      element.append(label, note);
-      parent.append(element);
+      const alt = node.attrs.alt?.trim() ?? "";
+      const src = node.attrs.src ?? "";
+      parent.append(
+        SAVED_PICTURE.test(src)
+          ? savedPicture(
+              owner,
+              src,
+              alt,
+              { width: count(node.attrs.width, 20_000), height: count(node.attrs.height, 20_000) },
+              context,
+            )
+          : placeholder(owner, alt, context.t("viewer.web.pictureNotSaved"), context.t),
+      );
       continue;
     }
     if (name === "a") {
@@ -116,19 +189,42 @@ function draw(
     }
     const block = blocks.get(node);
     if (element && block !== undefined) element.dataset.block = String(block);
-    draw(node.children, inner ?? element ?? parent, blocks, t);
+    draw(node.children, inner ?? element ?? parent, blocks, context);
     if (element) parent.append(element);
   }
 }
 
-/** Opened at a Citation, the quote is highlighted in the cited section, else anywhere on the page. */
+/**
+ * Opened at a Citation, the quote is highlighted in the cited section, else
+ * anywhere on the page. A page kept as it looks can be shown as it looked,
+ * in the PDF view, until the User goes back to its text or opens a Citation.
+ */
 export function WebView({ document, target }: { document: Document; target: ViewerTarget }) {
   const loaded = useDocumentFile(document.id, read);
+  const [lookShownFor, setLookShownFor] = useState<number | null>(null);
+  const look = document.web?.look;
+  if (look?.status === "saved" && lookShownFor === target.request) {
+    return (
+      <PdfView
+        document={document}
+        target={{ documentId: document.id, request: target.request }}
+        source={documentImageUrl(document.id, look.path)}
+        banner={<WebLookBar look={look} onShowText={() => setLookShownFor(null)} />}
+      />
+    );
+  }
   return (
     <FileStates
       loaded={loaded}
       quote={target.quote}
-      ready={(page) => <WebPageContent page={page} document={document} target={target} />}
+      ready={(page) => (
+        <WebPageContent
+          page={page}
+          document={document}
+          target={target}
+          onShowLook={() => setLookShownFor(target.request)}
+        />
+      )}
     />
   );
 }
@@ -137,10 +233,12 @@ function WebPageContent({
   page,
   document,
   target,
+  onShowLook,
 }: {
   page: WebPage;
   document: Document;
   target: ViewerTarget;
+  onShowLook(): void;
 }) {
   const t = useT();
   const language = useLanguage();
@@ -168,6 +266,7 @@ function WebPageContent({
     [page],
   );
   const site = page.meta.siteName ?? document.web?.siteName ?? null;
+  const leftOut = document.web?.picturesLeftOut ?? 0;
   const byline = [page.meta.author, page.meta.published && pageDate(page.meta.published, language)]
     .filter(Boolean)
     .join(" · ");
@@ -175,9 +274,18 @@ function WebPageContent({
   useLayoutEffect(() => {
     const body = host.current;
     if (!body || !page.article) return;
-    draw(page.article.children, body, blocks, t);
-    return () => body.replaceChildren();
-  }, [page, blocks, t]);
+    const loading = new AbortController();
+    draw(page.article.children, body, blocks, {
+      documentId: document.id,
+      signal: loading.signal,
+      t,
+      pictures: 0,
+    });
+    return () => {
+      loading.abort();
+      body.replaceChildren();
+    };
+  }, [page, blocks, t, document.id]);
 
   /** The cited sections' first block, and their range as drawn, to the last one's last block. */
   const citedSections = useCallback((): { first: Element | null; range: Range | null } => {
@@ -201,26 +309,35 @@ function WebPageContent({
   const citedArea = useCallback(() => citedSections().range, [citedSections]);
   useCitedArea(true, citedArea);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: each open request goes there again
+  // biome-ignore lint/correctness/useExhaustiveDependencies: each open request goes there again, and so does a page drawn again in another language
   useLayoutEffect(() => {
     const body = host.current;
     const container = scroller.current;
     if (!body || !container) return;
     unmarkQuote(body);
+    for (const cited of body.querySelectorAll<HTMLElement>("[data-cited]")) {
+      delete cited.dataset.cited;
+    }
     const { first, range } = citedSections();
     const quote = target.quote;
-    const marks = quote
-      ? ((range && markQuote(textNodes(body, range), quote)) ?? markQuote(textNodes(body), quote))
+    // A picture's quote is its text read, which the page doesn't show: the picture is outlined.
+    const picture = target.figure
+      ? body.querySelector<HTMLElement>(`[data-figure="${target.figure}"]`)
       : null;
+    if (picture) picture.dataset.cited = "";
+    const marks =
+      quote && !picture
+        ? ((range && markQuote(textNodes(body, range), quote)) ?? markQuote(textNodes(body), quote))
+        : null;
     setHighlighted((count) => (marks ? count + 1 : 0));
-    const anchor = marks?.[0] ?? first ?? null;
+    const anchor = marks?.[0] ?? picture ?? first ?? null;
     const top = anchor
       ? anchor.getBoundingClientRect().top -
         container.getBoundingClientRect().top +
         container.scrollTop
       : 0;
     container.scrollTop = Math.max(0, top - (marks ? container.clientHeight / 3 : 24));
-  }, [page, target.request, target.quote, target.pageFrom, target.pageTo]);
+  }, [page, t, target.request, target.quote, target.pageFrom, target.pageTo, target.figure]);
 
   useLayoutEffect(() => {
     const element = column.current;
@@ -289,6 +406,19 @@ function WebPageContent({
                   {page.meta.title ?? document.name}
                 </h1>
                 {byline && <p className="document-web-byline">{byline}</p>}
+                <WebLookLine document={document} onShow={onShowLook} />
+                {leftOut > 0 && (
+                  <p data-testid="viewer-web-left-out" className="document-web-byline">
+                    {t(
+                      leftOut === 1
+                        ? "viewer.web.picturesLeftOut.one"
+                        : "viewer.web.picturesLeftOut",
+                      {
+                        count: leftOut,
+                      },
+                    )}
+                  </p>
+                )}
               </header>
               <div ref={host} data-testid="viewer-web-article" className="document-markdown" />
               {mark && markTop !== null && (

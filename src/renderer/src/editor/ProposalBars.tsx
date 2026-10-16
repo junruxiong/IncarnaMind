@@ -8,6 +8,7 @@ import { regenerateChange, resolveProposalsIn, speak, useEdits } from "../editWi
 import { useLanguage, useT } from "../i18n";
 import { useAppStore } from "../store";
 import {
+  changeReason,
   clearHovered,
   editorDoc,
   type PendingProposal,
@@ -39,7 +40,9 @@ const spokenText = (text: string) => {
  * - over the change the pointer or the cursor is on, its own bar: "Change 1
  *   of 3 · Accept · Reject" (⌘↵, ⌘⌫), with who made someone's change and
  *   when, and when it would remove a Citation, that it does, or when a
- *   Document it cites has been deleted, "Source removed" (#94);
+ *   Document it cites has been deleted, "Source removed" (#94); why the
+ *   assistant made it, as a tooltip, and as a line under the bar when the
+ *   cursor is in it (#202);
  * - under a change out of date, instead of its bar, "Out of date ·
  *   Regenerate · Reject" (drawn by `ProposalReview`; its buttons are handled
  *   here), without Regenerate for someone's: it can't be accepted;
@@ -250,6 +253,10 @@ interface Shown {
   citations: PendingProposal["citations"];
   /** Who made someone's change, and when; null for the assistant's. */
   made: { author: string | null; date: string | null } | null;
+  /** Why the assistant made it; null when it didn't say. */
+  reason: string | null;
+  /** The cursor is in it, not only the pointer on it. */
+  focused: boolean;
 }
 
 function ChangeBar({ editor, mindId }: { editor: Editor; mindId: string }) {
@@ -273,6 +280,8 @@ function ChangeBar({ editor, mindId }: { editor: Editor; mindId: string }) {
         dropped: proposal.droppedCitations,
         citations: proposal.citations,
         made: proposal.theirs ? theirChange(current, proposal) : null,
+        reason: proposal.theirs ? null : changeReason(current, proposal),
+        focused: pendingAtSelection(current.state).some((each) => each.id === proposal.id),
       };
     },
   });
@@ -344,6 +353,7 @@ function ChangeBar({ editor, mindId }: { editor: Editor; mindId: string }) {
   const keys = isMacOS()
     ? { accept: "⌘↩", reject: "⌘⌫" }
     : { accept: "Ctrl+Enter", reject: "Ctrl+Backspace" };
+  const why = shown.reason ? t("proposal.why", { reason: shown.reason }) : null;
   return (
     // biome-ignore lint/a11y/useSemanticElements: a toolbar of one change's actions, beside the text.
     <div
@@ -361,56 +371,64 @@ function ChangeBar({ editor, mindId }: { editor: Editor; mindId: string }) {
       }}
       // The text keeps the focus and its selection.
       onMouseDown={(event) => event.preventDefault()}
+      title={why ?? undefined}
       className="change-bar"
       style={{ visibility: "hidden" }}
     >
-      <span className="change-bar-position">
-        {t("proposal.position", { index: shown.index, count: shown.count })}
-      </span>
-      {madeBy && (
-        <span data-testid="change-bar-author" className="change-bar-author">
-          {madeBy}
+      <div className="change-bar-row">
+        <span className="change-bar-position">
+          {t("proposal.position", { index: shown.index, count: shown.count })}
         </span>
-      )}
-      {shown.dropped > 0 && (
-        <span data-testid="change-bar-drops" className="change-bar-drops">
-          {shown.dropped === 1
-            ? t("proposal.dropsCitations.one")
-            : t("proposal.dropsCitations", { count: shown.dropped })}
-        </span>
-      )}
-      {removedSources > 0 && (
-        <span
-          data-testid="change-bar-source-removed"
-          title={t("proposal.sourceRemoved.why")}
-          className="change-bar-drops"
+        {madeBy && (
+          <span data-testid="change-bar-author" className="change-bar-author">
+            {madeBy}
+          </span>
+        )}
+        {shown.dropped > 0 && (
+          <span data-testid="change-bar-drops" className="change-bar-drops">
+            {shown.dropped === 1
+              ? t("proposal.dropsCitations.one")
+              : t("proposal.dropsCitations", { count: shown.dropped })}
+          </span>
+        )}
+        {removedSources > 0 && (
+          <span
+            data-testid="change-bar-source-removed"
+            title={t("proposal.sourceRemoved.why")}
+            className="change-bar-drops"
+          >
+            {t("proposal.sourceRemoved")}
+          </span>
+        )}
+        <button
+          type="button"
+          data-testid="change-accept"
+          title={`${t("proposal.accept")} (${keys.accept})`}
+          aria-keyshortcuts={isMacOS() ? "Meta+Enter" : "Control+Enter"}
+          onClick={(event) => resolve(event, "accept")}
+          className="proposal-action"
         >
-          {t("proposal.sourceRemoved")}
+          {t("proposal.accept")}
+        </button>
+        <span aria-hidden="true" className="proposal-dot">
+          ·
         </span>
+        <button
+          type="button"
+          data-testid="change-reject"
+          title={`${t("proposal.reject")} (${keys.reject})`}
+          aria-keyshortcuts={isMacOS() ? "Meta+Backspace" : "Control+Backspace"}
+          onClick={(event) => resolve(event, "reject")}
+          className="proposal-action"
+        >
+          {t("proposal.reject")}
+        </button>
+      </div>
+      {why && shown.focused && (
+        <div data-testid="change-bar-why" className="change-bar-why">
+          {why}
+        </div>
       )}
-      <button
-        type="button"
-        data-testid="change-accept"
-        title={`${t("proposal.accept")} (${keys.accept})`}
-        aria-keyshortcuts={isMacOS() ? "Meta+Enter" : "Control+Enter"}
-        onClick={(event) => resolve(event, "accept")}
-        className="proposal-action"
-      >
-        {t("proposal.accept")}
-      </button>
-      <span aria-hidden="true" className="proposal-dot">
-        ·
-      </span>
-      <button
-        type="button"
-        data-testid="change-reject"
-        title={`${t("proposal.reject")} (${keys.reject})`}
-        aria-keyshortcuts={isMacOS() ? "Meta+Backspace" : "Control+Backspace"}
-        onClick={(event) => resolve(event, "reject")}
-        className="proposal-action"
-      >
-        {t("proposal.reject")}
-      </button>
     </div>
   );
 }

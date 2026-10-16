@@ -5,10 +5,10 @@
  * finds in what it read, and its time a page.
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "vitest";
+import { evalCache } from "../lib/cache";
 import { commitOf } from "../lib/commit";
 import { createLog } from "../lib/log";
 import { type Engine, engines } from "./lib/engines";
@@ -16,9 +16,7 @@ import { type PageScore, type SetPage, scorePage } from "./lib/score";
 
 const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const setDir = join(root, "tests/fixtures/scans");
-const cacheDir = resolve(
-  process.env.INCARNAMIND_EVAL_CACHE ?? join(homedir(), ".cache", "incarnamind-eval"),
-);
+const cacheDir = evalCache();
 /** How many times each page is read; the fastest counts, as the machine may be busy. */
 const RUNS = Number(process.env.INCARNAMIND_OCR_RUNS ?? 2);
 

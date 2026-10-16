@@ -1,7 +1,9 @@
 import type { ChatReadiness } from "../../../../core/api";
 import { signInAgain } from "../../chatGptSignIn";
-import { useT } from "../../i18n";
+import { useLanguage, useT } from "../../i18n";
 import { turnOffLocalMode } from "../../localMode";
+import { useModelSetup } from "../../modelSetup";
+import { useRequests } from "../../requests";
 import type { SettingsPage } from "../../settingsPages";
 import { useAppStore } from "../../store";
 import { ProblemLine } from "../ProblemLine";
@@ -55,7 +57,8 @@ export function ReadinessExplanation({
   inLine?: boolean;
 }) {
   const t = useT();
-  const service = "provider" in readiness ? serviceName(readiness.provider, t) : "";
+  const language = useLanguage();
+  const service = "provider" in readiness ? serviceName(readiness.provider, t, language) : "";
   const words = t(readinessKey(readiness.reason), { service });
   return <>{inLine ? words.replace(/[.。]$/, "") : words}</>;
 }
@@ -81,6 +84,7 @@ export function ReadinessLine({
   refused?: boolean;
 }) {
   const t = useT();
+  const language = useLanguage();
   const openSettings = useAppStore((state) => state.openSettings);
   if (readiness.reason === "local-mode") {
     return (
@@ -91,7 +95,7 @@ export function ReadinessLine({
         action={{
           label: t("localMode.useLocal"),
           testId: "local-mode-use-local",
-          onClick: () => openSettings("models"),
+          onClick: () => useRequests.getState().ask({ chooseLocalModel: true }),
         }}
         also={{
           label: t("localMode.turnOff"),
@@ -101,7 +105,7 @@ export function ReadinessLine({
         }}
       >
         {refused ? (
-          <>{t("localMode.refused", { service: serviceName(readiness.provider, t) })}</>
+          <>{t("localMode.refused", { service: serviceName(readiness.provider, t, language) })}</>
         ) : (
           <ReadinessExplanation readiness={readiness} inLine />
         )}
@@ -127,7 +131,9 @@ export function ReadinessLine({
 export function ChatReadinessNotice() {
   const t = useT();
   const readiness = useAppStore((state) => state.chatReadiness);
-  if (!readiness || readiness.ready) return null;
+  // The setup card, waiting with the Question, already says it.
+  const settingUp = useModelSetup((state) => state.waiting !== null);
+  if (!readiness || readiness.ready || settingUp) return null;
   return (
     <ReadinessLine
       readiness={readiness}

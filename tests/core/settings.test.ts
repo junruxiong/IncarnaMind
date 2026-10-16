@@ -25,6 +25,7 @@ const PDF_EXPORT = {
   docx: { ...DEFAULT_WORD, markAiText: false },
   pdf: { includeQuestions: true },
   html: { includeQuestions: false },
+  theirChanges: "accepted",
 } as const;
 
 describe("Settings", () => {
@@ -41,6 +42,7 @@ describe("Settings", () => {
         authorName: null,
         monthlyCap: null,
         webSearch: false,
+        keepWebPageLook: false,
       },
       device: {
         sidebarWidth: 248,
@@ -135,6 +137,7 @@ describe("Settings", () => {
       authorName: null,
       monthlyCap: null,
       webSearch: false,
+      keepWebPageLook: false,
     });
     expect(settings.device).toEqual({
       sidebarWidth: 320,
@@ -196,6 +199,7 @@ describe("Settings", () => {
         authorName: "P. Raman",
         monthlyCap: { amount: 20, currency: "USD" },
         webSearch: true,
+        keepWebPageLook: true,
       },
       device,
     });
@@ -213,6 +217,7 @@ describe("Settings", () => {
         authorName: "P. Raman",
         monthlyCap: { amount: 20, currency: "USD" },
         webSearch: true,
+        keepWebPageLook: true,
       },
       device,
       language: "zh-CN",
@@ -259,6 +264,10 @@ describe("Settings", () => {
     {
       name: "export options whose Questions switch isn't true or false",
       patch: { user: { exportOptions: { ...DEFAULT_EXPORT, pdf: { includeQuestions: "yes" } } } },
+    },
+    {
+      name: "a way to show someone's changes that isn't one",
+      patch: { user: { exportOptions: { ...DEFAULT_EXPORT, theirChanges: "hidden" } } },
     },
     {
       name: "a default model without a model",
