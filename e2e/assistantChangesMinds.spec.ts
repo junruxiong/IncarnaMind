@@ -429,10 +429,13 @@ for (const [width, language] of [
     await writeMind(window, zh ? "第三季度" : "Q3 review", [note.trim()]);
     await askInAssistant(window, zh ? "缩短摘要" : "Shorten the summary");
 
-    // The change farthest to the right: where a bar the width of its words reaches under the assistant.
+    // The change farthest to the right, on one line (a change that wraps has no one place to point at):
+    // where a bar the width of its words reaches under the assistant.
     const changes = window.getByTestId("mind-editor").locator(".proposal-delete");
     const rights = await changes.evaluateAll((each) =>
-      each.map((element) => element.getBoundingClientRect().right),
+      each.map((element) =>
+        element.getClientRects().length === 1 ? element.getBoundingClientRect().right : -1,
+      ),
     );
     expect(rights.length).toBeGreaterThan(4);
     const far = changes.nth(rights.indexOf(Math.max(...rights)));
