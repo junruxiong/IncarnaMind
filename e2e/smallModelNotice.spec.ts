@@ -119,9 +119,20 @@ for (const language of ["en", "zh-CN"] as const) {
     const notice = window.getByTestId("checks-small-model");
     await expect(notice).toHaveText(NOTICE[language]);
     // Quiet: beside the health line without covering it, and not a problem.
-    const health = await window.getByTestId("mind-health").boundingBox();
+    // The health line's parts sit directly in the count's row, so its extent is theirs.
+    const parts = await window
+      .getByTestId("mind-health")
+      .locator(".mind-health-part")
+      .evaluateAll((elements) =>
+        elements.map((element) => {
+          const { x, y, width, height } = element.getBoundingClientRect();
+          return { x, y, width, height };
+        }),
+      );
+    const last = parts.at(-1);
     const line = await notice.boundingBox();
-    if (!health || !line) throw new Error("The lines aren't drawn.");
+    if (!last || !line) throw new Error("The lines aren't drawn.");
+    const health = { x: last.x, y: last.y, width: last.width, height: last.height };
     const apart = line.x >= health.x + health.width - 1 || line.y >= health.y + health.height - 1;
     expect(apart).toBe(true);
     await expect(window.getByTestId("checks-problem")).toHaveCount(0);

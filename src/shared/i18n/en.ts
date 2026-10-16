@@ -663,9 +663,8 @@ export const en = {
   "contradictions.command.keywords":
     "contradictions conflict contradicted cited claims Folder watch",
   "contradictions.command.purpose": "Where your Documents disagree with this Mind's Citations",
-  "contradictions.ask.one": "Check 1 cited claim against this Folder’s other Documents? {estimate}",
-  "contradictions.ask":
-    "Check {count} cited claims against this Folder’s other Documents? {estimate}",
+  "contradictions.ask.one": "Check 1 cited claim against this Folder’s other Documents?",
+  "contradictions.ask": "Check {count} cited claims against this Folder’s other Documents?",
   "contradictions.check": "Check",
   "contradictions.cancel": "Not now",
   "contradictions.none": "No contradictions in {count} cited claims",
@@ -675,16 +674,13 @@ export const en = {
   "contradictions.noneChecked": "None of the {count} cited claims could be checked",
   "contradictions.found": "{contradicted} of {count} cited claims contradicted",
   "contradictions.after": "After “{document}” changed: {result}",
-  "contradictions.cost": "{result} · {cost}",
   "mindCheck.command": "Check this Mind",
   "mindCheck.command.keywords": "check all whole draft before sending claims sentences verify",
   "mindCheck.command.purpose": "Whether each claim has support in your Documents",
-  "mindCheck.ask.folder.one":
-    "Check this Mind’s sentence against this Folder’s Documents? {estimate}",
-  "mindCheck.ask.folder":
-    "Check this Mind’s {count} sentences against this Folder’s Documents? {estimate}",
-  "mindCheck.ask.all.one": "Check this Mind’s sentence against your Documents? {estimate}",
-  "mindCheck.ask.all": "Check this Mind’s {count} sentences against your Documents? {estimate}",
+  "mindCheck.ask.folder.one": "Check this Mind’s sentence against this Folder’s Documents?",
+  "mindCheck.ask.folder": "Check this Mind’s {count} sentences against this Folder’s Documents?",
+  "mindCheck.ask.all.one": "Check this Mind’s sentence against your Documents?",
+  "mindCheck.ask.all": "Check this Mind’s {count} sentences against your Documents?",
   "mindCheck.check": "Check",
   "mindCheck.cancel": "Not now",
   "verify.command": "Verify a document…",
@@ -739,6 +735,8 @@ export const en = {
   "edit.problem.retry": "Try again",
   "edit.problem.cant-regenerate":
     "This change can't be made again. Reject it, then select the text and edit it with AI.",
+  "edit.problem.no-table":
+    "The AI's table wasn't complete, so nothing was changed. Try again, or ask for a list instead.",
   "composer.edit.placeholder": "Say what to change…",
   "composer.edit.label": "Say what to change in the selected text",
   "composer.edit.quote": "Editing “{text}”",
@@ -2572,8 +2570,12 @@ export const en = {
   "command.researchPlan.keywords": "plan steps research running",
 
   "cost.and": "{first} and {second}",
-  "cost.estimate": "About {calls} calls, {tokens} tokens, {cost}",
-  "cost.estimate.unpriced": "About {calls} calls, {tokens} tokens",
+  "cost.estimate.price": "About {cost}",
+  "cost.estimate.calls.one": "1 model call",
+  "cost.estimate.calls": "{calls} model calls",
+  "cost.estimate.callsAbout.one": "About 1 model call",
+  "cost.estimate.callsAbout": "About {calls} model calls",
+  "cost.estimate.tokens": "{tokens} tokens",
   "cost.estimate.month": "{spent} of {cap} used this month",
   "cost.cap.title": "Monthly spending cap",
   "cost.cap.switch": "Cap what your keys spend each month",
@@ -4205,6 +4207,17 @@ export const en = {
   "mindChanges.wrote.one": "Wrote 1 paragraph in “{mind}”",
   "mindChanges.created": "Created “{mind}” and wrote {count} paragraphs",
   "mindChanges.created.one": "Created “{mind}” and wrote 1 paragraph",
+  "mindChanges.tables": "Added {tables} to “{mind}”",
+  "mindChanges.wrote.tables": "Wrote {paragraphs} and {tables} in “{mind}”",
+  "mindChanges.changed.tables": "Changed {places} and added {tables} in “{mind}”",
+  "mindChanges.created.tables": "Created “{mind}” and added {tables}",
+  "mindChanges.created.wrote.tables": "Created “{mind}” and wrote {paragraphs} and {tables}",
+  "mindChanges.count.tables": "{count} tables",
+  "mindChanges.count.tables.one": "a table",
+  "mindChanges.count.paragraphs": "{count} paragraphs",
+  "mindChanges.count.paragraphs.one": "1 paragraph",
+  "mindChanges.count.places": "{count} places",
+  "mindChanges.count.places.one": "1 place",
   "mindChanges.left": "· {count} waiting",
   "mindChanges.left.one": "· 1 waiting",
   "mindChanges.left.none": "· none waiting",
@@ -4254,9 +4267,16 @@ export const en = {
   "mindCall.failed.noText": "Couldn't change “{mind}”: there's no text there to change",
   "mindCall.failed.tooLong": "Couldn't change “{mind}”: that's too much text to change at once",
   "mindCall.failed.changed": "Couldn't change “{mind}”: its text changed while it was being read",
+  "mindCall.failed.copy": "Didn't add to “{mind}”: “{text}” is there already, waiting",
   "mindCall.failed.contentNotOwn":
     "Couldn't change “{mind}”: only the assistant's own waiting text can be written anew",
   "mindCall.failed.stopped": "Stopped before “{mind}” changed",
+  "mindCall.failed.noTable": "Couldn't make the table, so nothing was added to “{mind}”",
+  "mindChanges.unlinked":
+    "· {count} sources in the table couldn't be linked, so they're shown as text",
+  "mindChanges.unlinked.one": "· 1 source in the table couldn't be linked, so it's shown as text",
+  "mindChanges.extraCells": "· {count} extra cells were kept as text",
+  "mindChanges.extraCells.one": "· 1 extra cell was kept as text",
   "mindCall.failed.localMode":
     "Couldn't change “{mind}”: “Keep everything on this computer” is on, and the model isn't on this computer",
   "mindCall.failed.notReady": "Couldn't change “{mind}”: the model can't be used now",
@@ -4306,6 +4326,8 @@ export const en = {
     "There are {count} paragraphs starting “{name}”: {places}. Which one?",
   "assistant.place.under": "under “{heading}”",
   "assistant.place.number": "number {n}",
+  "assistant.table.unmade":
+    "I couldn't make this into a table, so it's below as text. Nothing was added to “{mind}”.",
   // Outside agents (#351): the consent for each agent the User connects, and what IncarnaMind
   // tells an agent when a call can't be done, which the agent passes on to the User.
   "consent.flow.agents": "Your AI agents",

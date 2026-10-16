@@ -1129,6 +1129,94 @@ export async function widthOf(locator: Locator): Promise<number> {
 }
 
 /**
+ * By geometry, for each part after the first of a line of parts joined by
+ * dots (#684): its dot shows only where the part before it is on the same
+ * line, and then sits between the two. A part draws its dot as a `.meta-dot`
+ * or, as a flex item of the line, in a `::before` that is out in the gap
+ * before it; a `::before` in the part's own text counts as shown, and not
+ * between. `clips` is whether the row cuts off what sticks out of it: the dot
+ * of a part that starts a row is hidden by that, not by where it is.
+ */
+export async function dotsOf(line: Locator) {
+  return line.evaluate((element) => {
+    const row = element.getBoundingClientRect();
+    const clips = ["clip", "hidden"].includes(getComputedStyle(element).overflowX);
+    const parts: Element[] = [];
+    const collect = (parent: Element) => {
+      for (const child of parent.children) {
+        const { display, position } = getComputedStyle(child);
+        if (display === "contents") collect(child);
+        else if (display !== "none" && position !== "absolute" && child.tagName !== "UL")
+          parts.push(child);
+      }
+    };
+    collect(element);
+    return parts.slice(1).map((part, index) => {
+      const before = parts[index]?.getBoundingClientRect();
+      const here = part.getBoundingClientRect();
+      const dot = part.querySelector(":scope > .meta-dot")?.getBoundingClientRect();
+      const pseudo = getComputedStyle(part, "::before");
+      const inText = !dot && pseudo.content !== "none" && pseudo.position !== "absolute";
+      const glyphCentre = dot
+        ? dot.left + dot.width / 2
+        : inText
+          ? here.left + 1
+          : here.left - Number.parseFloat(pseudo.width) / 2;
+      return {
+        clips,
+        sameLine: before !== undefined && Math.abs(before.top - here.top) < 2,
+        shown: inText || glyphCentre > row.left + 4,
+        between:
+          !inText &&
+          before !== undefined &&
+          glyphCentre >= before.right - 1 &&
+          glyphCentre <= here.left + 1,
+      };
+    });
+  });
+}
+
+/**
+ * What copying the selected `within` (the whole row when left out) of a line
+ * of parts puts on the clipboard as plain text, read from a copy event of our
+ * own so the computer's clipboard is left alone; `taken` is whether the app
+ * answered it, as it does for a selection across parts.
+ */
+export async function copyFrom(line: Locator, within?: string) {
+  return line.evaluate((element, selector) => {
+    const range = document.createRange();
+    range.selectNodeContents((selector && element.querySelector(selector)) || element);
+    getSelection()?.removeAllRanges();
+    getSelection()?.addRange(range);
+    const data = new DataTransfer();
+    const event = new ClipboardEvent("copy", {
+      clipboardData: data,
+      bubbles: true,
+      cancelable: true,
+    });
+    element.dispatchEvent(event);
+    return { text: data.getData("text/plain"), taken: event.defaultPrevented };
+  }, within);
+}
+
+/**
+ * No line of parts joined by dots starts or ends with a dot: a part's dot is
+ * there only beside the part before it, and the row clips the rest. Returns
+ * whether some part started a row, so a test can say it wrapped.
+ */
+export async function expectDotsBetweenParts(line: Locator): Promise<boolean> {
+  let wrapped = false;
+  for (const dot of await dotsOf(line)) {
+    expect(dot.clips).toBe(true);
+    expect(dot.shown).toBe(dot.sameLine);
+    if (dot.shown) expect(dot.between).toBe(true);
+    if (!dot.sameLine) wrapped = true;
+  }
+  expect((await line.innerText()).trimEnd().endsWith("·")).toBe(false);
+  return wrapped;
+}
+
+/**
  * Checks that the window's first group's tabs start at the card's left edge:
  * flush with it on macOS, where the sidebar's button sits in the sidebar's
  * header beside the traffic lights; on Windows and Linux just after that

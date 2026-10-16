@@ -1,7 +1,7 @@
 import type { Editor } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { useEditorState } from "@tiptap/react";
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type * as Y from "yjs";
 import type { CitationAttributes } from "../../../core/api";
 import { citationState } from "../../../shared/citations";
@@ -339,49 +339,33 @@ export function NoteHealth({
         )}
       {(parts.length > 0 || checkedAll || canCheck) && (
         <fieldset className="mind-health" data-testid="mind-health" aria-label={t("health.label")}>
-          {checkedAll && !running && (
-            <>
-              <span className="mind-health-dot" aria-hidden="true">
-                ·
-              </span>
-              <CheckedWhen run={checkedAll} />
-            </>
-          )}
+          {checkedAll && !running && <CheckedWhen run={checkedAll} />}
           {parts.map((part) => {
             const text = label(part, health[part].length);
             return (
-              <Fragment key={part}>
-                <span className="mind-health-dot" aria-hidden="true">
-                  ·
-                </span>
-                <button
-                  type="button"
-                  data-testid={`health-${part}`}
-                  data-count={health[part].length}
-                  data-part={part}
-                  className="mind-health-part"
-                  aria-label={t("health.next", { part: text })}
-                  title={t("health.next", { part: text })}
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => goToNext(part)}
-                >
-                  <PartMark part={part} />
-                  {text}
-                </button>
-              </Fragment>
+              <button
+                key={part}
+                type="button"
+                data-testid={`health-${part}`}
+                data-count={health[part].length}
+                data-part={part}
+                className="mind-health-part"
+                aria-label={t("health.next", { part: text })}
+                title={t("health.next", { part: text })}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => goToNext(part)}
+              >
+                <PartMark part={part} />
+                {text}
+              </button>
             );
           })}
           {canCheck && (
-            <>
-              <span className="mind-health-dot" aria-hidden="true">
-                ·
-              </span>
-              <MindCheckAction
-                unchecked={health.unchecked.length}
-                recheck={health.recheck.length}
-                onCheck={() => void startMindCheck(mindId, "changed")}
-              />
-            </>
+            <MindCheckAction
+              unchecked={health.unchecked.length}
+              recheck={health.recheck.length}
+              onCheck={() => void startMindCheck(mindId, "changed")}
+            />
           )}
         </fieldset>
       )}

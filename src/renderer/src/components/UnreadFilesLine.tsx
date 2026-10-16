@@ -3,6 +3,7 @@ import type { UnreadFile } from "../../../core/api";
 import { UNREAD_REASON_KEYS } from "../../../shared/unreadFiles";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
+import { MetaLine } from "./MetaLine";
 import { LineAction, ProblemLine } from "./ProblemLine";
 
 /**
@@ -77,41 +78,48 @@ function UnreadFileRow({ file }: { file: UnreadFile }) {
       data-reason={file.reason}
       className="font-sans text-[13px] leading-5 break-words text-ink-meta"
     >
-      {documentId === null ? (
-        file.name
-      ) : (
-        <button
-          type="button"
-          data-testid="unread-file-open"
-          onClick={() => openDocument({ documentId })}
-          className="rounded-sm text-accent underline-offset-2 hover:underline"
-        >
-          {file.name}
-        </button>
-      )}
-      {t("unread.file.reason", {
-        reason: lockedPdf
-          ? t("unread.reason.passwordPdf")
-          : t(UNREAD_REASON_KEYS[file.reason], { extension: file.extension ?? "" }),
-      })}
-      {lockedPdf?.fileStatus === "available" && (
-        <LineAction
-          action={{
-            label: t("documents.unlockAction"),
-            testId: "unread-file-unlock",
-            onClick: () => openDocument({ documentId: lockedPdf.id }),
-          }}
-        />
-      )}
-      {file.reason === "pages" && retryable && documentId !== null && (
-        <LineAction
-          action={{
-            label: t("unread.ocr"),
-            testId: "unread-file-ocr",
-            onClick: () => void retryDocument(documentId),
-          }}
-        />
-      )}
+      <MetaLine
+        as="div"
+        parts={[
+          <>
+            {documentId === null ? (
+              file.name
+            ) : (
+              <button
+                type="button"
+                data-testid="unread-file-open"
+                onClick={() => openDocument({ documentId })}
+                className="rounded-sm text-accent underline-offset-2 hover:underline"
+              >
+                {file.name}
+              </button>
+            )}
+            {t("unread.file.reason", {
+              reason: lockedPdf
+                ? t("unread.reason.passwordPdf")
+                : t(UNREAD_REASON_KEYS[file.reason], { extension: file.extension ?? "" }),
+            })}
+          </>,
+          lockedPdf?.fileStatus === "available" && (
+            <LineAction
+              action={{
+                label: t("documents.unlockAction"),
+                testId: "unread-file-unlock",
+                onClick: () => openDocument({ documentId: lockedPdf.id }),
+              }}
+            />
+          ),
+          file.reason === "pages" && retryable && documentId !== null && (
+            <LineAction
+              action={{
+                label: t("unread.ocr"),
+                testId: "unread-file-ocr",
+                onClick: () => void retryDocument(documentId),
+              }}
+            />
+          ),
+        ]}
+      />
     </li>
   );
 }
