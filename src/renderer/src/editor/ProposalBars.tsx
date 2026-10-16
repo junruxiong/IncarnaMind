@@ -7,6 +7,7 @@ import { PencilLineIcon, SparkLineIcon } from "../components/lineIcons";
 import { regenerateChange, resolveProposalsIn, speak, useEdits } from "../editWithAi";
 import { useLanguage, useT } from "../i18n";
 import { useAppStore } from "../store";
+import { type BarRoom, roomForBar } from "./barRoom";
 import {
   changeReason,
   clearHovered,
@@ -96,6 +97,12 @@ export function ProposalBars({ editor, mindId }: { editor: Editor; mindId: strin
       <Spoken editor={editor} mindId={mindId} />
     </>
   );
+}
+
+function barRoom(editor: Editor): BarRoom {
+  const card = editor.view.dom.closest(".app-card")?.getBoundingClientRect() ?? null;
+  const dock = document.querySelector<HTMLElement>("[data-assistant]")?.dataset.dock;
+  return roomForBar(card, dock, { width: window.innerWidth, height: window.innerHeight });
 }
 
 /** The second click of a double click: it does nothing more. */
@@ -331,15 +338,13 @@ function ChangeBar({ editor, mindId }: { editor: Editor; mindId: string }) {
         ?.querySelector(".proposals-bar")
         ?.getBoundingClientRect().bottom;
       const top = Math.max(8, covered ?? 0);
-      // Within the card, not the window: the assistant docked beside it is drawn over what passes its edge.
-      const card = editor.view.dom.closest(".app-card");
       void computePosition(reference, element, {
         placement: "top-start",
         strategy: "fixed",
         middleware: [
           offset(6),
           flip({ padding: { top } }),
-          shift({ padding: 8, ...(card && { boundary: card }) }),
+          shift({ padding: 8, rootBoundary: barRoom(editor) }),
         ],
       }).then(({ x, y }) => {
         Object.assign(element.style, { left: `${x}px`, top: `${y}px`, visibility: "visible" });

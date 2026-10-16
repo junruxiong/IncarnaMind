@@ -443,6 +443,7 @@ for (const [width, language] of [
 
     const bar = window.getByTestId("change-bar");
     await expect(bar).toBeVisible();
+    await screenshot(window, `change-bar-${width}-${language}`);
     const [shown, panel, change] = await Promise.all([
       bar.boundingBox(),
       window.getByTestId("assistant").boundingBox(),
@@ -452,6 +453,5 @@ for (const [width, language] of [
     // Where the Mind fills the card, the change is near enough the edge for the bar to need to move; at 1,440 its column ends well short of it.
     if (width < 1200) expect(change.x + shown.width).toBeGreaterThan(panel.x);
     expect(shown.x + shown.width).toBeLessThanOrEqual(panel.x);
-    await screenshot(window, `change-bar-${width}-${language}`);
   });
 }
