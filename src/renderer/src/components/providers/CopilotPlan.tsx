@@ -12,6 +12,8 @@ import { copyText } from "../../copied";
 import {
   type CopilotFailure,
   cancelCopilotSignIn,
+  chooseCopilotPlan,
+  closeCopilotNotice,
   openCopilotNotice,
   signInWithCopilot,
   useCopilot,
@@ -54,12 +56,6 @@ function useOfferedWay(): { status: CopilotStatus; experimental: boolean } | nul
   return status && way ? { status, experimental: way.experimental } : null;
 }
 
-const close = () => {
-  if (useCopilot.getState().status?.signingIn) void cancelCopilotSignIn();
-  openCopilotNotice(false);
-  useCopilot.setState({ failure: null });
-};
-
 function ExperimentalTag() {
   const t = useT();
   return (
@@ -87,7 +83,7 @@ export function CopilotSetupWay({ onKey }: { onKey(): void }) {
         type="button"
         data-testid="way-copilot"
         aria-expanded={expanded}
-        onClick={() => (expanded ? close() : openCopilotNotice(true))}
+        onClick={() => (expanded ? closeCopilotNotice() : openCopilotNotice())}
         className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-hover"
       >
         <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
@@ -118,12 +114,23 @@ export function CopilotPlanRow() {
   const offered = useOfferedWay();
   const open = useCopilot((state) => state.open);
   const failure = useCopilot((state) => state.failure);
+  const providerSaved = useCopilot((state) => state.providerSaved);
   const row = useSettingsTarget<HTMLLIElement>(TARGET, offered !== null);
-  if (!offered) return null;
-  const { status } = offered;
+  const signOut = useRef<HTMLButtonElement>(null);
+  const status = offered?.status;
+  const signedIn = status?.account.state === "signed-in" && !status.signingIn;
+  const ready = signedIn && providerSaved !== false;
+  const wasSigningIn = useRef(false);
+  useEffect(() => {
+    if (status?.signingIn) wasSigningIn.current = true;
+    else if (ready && wasSigningIn.current) {
+      wasSigningIn.current = false;
+      signOut.current?.focus();
+    }
+  }, [status?.signingIn, ready]);
+  if (!offered || !status) return null;
   const { account } = status;
-  const signedIn = account.state === "signed-in" && !status.signingIn;
-  const expanded = !signedIn && (open || status.signingIn || failure !== null);
+  const expanded = open || status.signingIn || failure !== null;
   return (
     <li ref={row} data-testid="plans-copilot" className={ruledRowClass}>
       <div className="flex min-w-0 flex-col gap-0.5">
@@ -131,14 +138,14 @@ export function CopilotPlanRow() {
           {t("plans.copilot.title")}
           {offered.experimental && <ExperimentalTag />}
         </span>
-        {signedIn && account.state === "signed-in" ? (
+        {account.state === "signed-in" ? (
           <>
             <span data-testid="plans-copilot-account" className={rowTextClass}>
               {[t(account.plan ? PLAN_NAMES[account.plan] : "copilot.plan.unknown"), account.login]
                 .filter(Boolean)
                 .join(" · ")}
             </span>
-            <span className={rowTextClass}>{t("copilot.signedIn.usage")}</span>
+            {ready && <span className={rowTextClass}>{t("copilot.signedIn.usage")}</span>}
           </>
         ) : (
           <span className={rowTextClass}>
@@ -149,8 +156,19 @@ export function CopilotPlanRow() {
         )}
       </div>
       <div className={rowButtonsClass}>
+        {signedIn && !ready && !expanded && (
+          <button
+            type="button"
+            data-testid="plans-copilot-use"
+            onClick={() => void chooseCopilotPlan({ keepDefault: true })}
+            className={buttonStyle("primary", "sm")}
+          >
+            {t("copilot.use")}
+          </button>
+        )}
         {signedIn ? (
           <button
+            ref={signOut}
             type="button"
             data-testid="plans-copilot-sign-out"
             onClick={() =>
@@ -168,7 +186,7 @@ export function CopilotPlanRow() {
             <button
               type="button"
               data-testid="plans-copilot-sign-in"
-              onClick={() => openCopilotNotice(true)}
+              onClick={openCopilotNotice}
               className={buttonStyle("secondary", "sm")}
             >
               {t(
@@ -247,7 +265,7 @@ function Notice({
           ref={cancel}
           type="button"
           data-testid="copilot-cancel"
-          onClick={close}
+          onClick={closeCopilotNotice}
           className={buttonStyle("ghost", "sm")}
         >
           {t("copilot.cancel")}
@@ -265,6 +283,12 @@ function Notice({
 function Waiting({ status }: { status: CopilotStatus }) {
   const t = useT();
   const code = status.deviceCode;
+  const copy = useRef<HTMLButtonElement>(null);
+  const cancel = useRef<HTMLButtonElement>(null);
+  const shown = code !== null;
+  useEffect(() => {
+    (shown ? copy : cancel).current?.focus();
+  }, [shown]);
   return (
     <div data-testid="copilot-waiting" className="flex flex-col gap-2">
       {code ? (
@@ -273,11 +297,12 @@ function Waiting({ status }: { status: CopilotStatus }) {
           <div className="flex flex-wrap items-center gap-2">
             <span
               data-testid="copilot-code"
-              className="rounded-sm border border-rule-strong bg-sheet px-2 font-mono text-[20px] leading-8 tracking-[0.04em] text-ink select-all"
+              className="rounded-sm border border-rule-strong bg-sheet px-2 font-mono text-[20px] leading-8 font-semibold tracking-[0.04em] text-ink select-all"
             >
               {code.userCode}
             </span>
             <button
+              ref={copy}
               type="button"
               data-testid="copilot-copy-code"
               onClick={() =>
@@ -313,6 +338,7 @@ function Waiting({ status }: { status: CopilotStatus }) {
           </button>
         )}
         <button
+          ref={cancel}
           type="button"
           data-testid="copilot-cancel"
           onClick={() => void cancelCopilotSignIn()}
@@ -336,29 +362,35 @@ function Failure({
 }) {
   const t = useT();
   const openSettings = useAppStore((state) => state.openSettings);
+  const first = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    first.current?.focus();
+  }, []);
   const words = failureWords(failure);
+  const keepDefault = place === "settings";
+  const signIn = () => void signInWithCopilot({ keepDefault });
   const anotherModel = () => {
-    close();
+    closeCopilotNotice();
     if (place === "settings") openSettings("models", "chat-model");
   };
   const run: Record<RouteWayBack, (() => void) | undefined> = {
-    "sign-in": () => void signInWithCopilot({ keepDefault: place === "settings" }),
-    "sign-in-again": () => void signInWithCopilot({ keepDefault: place === "settings" }),
-    "try-again": () => void signInWithCopilot({ keepDefault: place === "settings" }),
+    "sign-in": signIn,
+    "sign-in-again": signIn,
+    // Signed in already, a plan that listed no model needs only its list read again.
+    "try-again":
+      failure.kind === "no-models" ? () => void chooseCopilotPlan({ keepDefault }) : signIn,
     "use-another-model": anotherModel,
-    "paste-api-key":
-      place === "setup"
-        ? onKey
-        : () => {
-            close();
-            openSettings("models", "chat-model");
-          },
+    "paste-api-key": place === "setup" ? onKey : anotherModel,
   };
   // First run has no other model yet: there, leaving the route is choosing another way.
   const label = (wayBack: RouteWayBack) =>
     place === "setup" && wayBack === "use-another-model"
       ? t("copilot.chooseAnotherWay")
       : t(wayBackLabel("copilot", wayBack));
+  const actions = words.waysBack.flatMap((wayBack) => {
+    const onClick = run[wayBack];
+    return onClick ? [{ wayBack, onClick }] : [];
+  });
   return (
     <div
       role="alert"
@@ -377,22 +409,18 @@ function Failure({
         </p>
       )}
       <div className="flex flex-wrap items-center gap-2">
-        {words.waysBack.map((wayBack, index) => {
-          const onClick = run[wayBack];
-          return (
-            onClick && (
-              <button
-                key={wayBack}
-                type="button"
-                data-testid={`copilot-way-back-${wayBack}`}
-                onClick={onClick}
-                className={buttonStyle(index === 0 ? "secondary" : "ghost", "sm")}
-              >
-                {label(wayBack)}
-              </button>
-            )
-          );
-        })}
+        {actions.map(({ wayBack, onClick }, index) => (
+          <button
+            key={wayBack}
+            ref={index === 0 ? first : undefined}
+            type="button"
+            data-testid={`copilot-way-back-${wayBack}`}
+            onClick={onClick}
+            className={buttonStyle(index === 0 ? "secondary" : "ghost", "sm")}
+          >
+            {label(wayBack)}
+          </button>
+        ))}
       </div>
     </div>
   );

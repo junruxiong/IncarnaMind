@@ -84,6 +84,8 @@ export interface FakeGitHub {
   sku: string;
   /** The account's name isn't given: GitHub answers this status instead. */
   userStatus: number | null;
+  /** What Copilot's model list holds. */
+  listedModels: unknown[];
   /** The token exchange answers only once this resolves. */
   holdExchange: Promise<void> | null;
   /** The next replies of the chat API, then answers. */
@@ -179,6 +181,7 @@ export async function createFakeGitHub(): Promise<FakeGitHub> {
     exchangePolicy: false,
     sku: "plus_monthly_subscriber_quota",
     userStatus: null,
+    listedModels: LISTED_MODELS,
     holdExchange: null,
     replies: [],
     script: null,
@@ -370,7 +373,7 @@ export async function createFakeGitHub(): Promise<FakeGitHub> {
         if (request.method === "GET" && path === "/models") {
           if (!live.has(bearer(request)))
             return sendJson(response, 401, { message: "Bad credentials" });
-          return sendJson(response, 200, { data: LISTED_MODELS, object: "list" });
+          return sendJson(response, 200, { data: fake.listedModels, object: "list" });
         }
         if (request.method === "POST" && path === "/chat/completions") {
           return chat(body, request, response);
