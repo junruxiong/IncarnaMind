@@ -1,13 +1,18 @@
 import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
+import { PARAGRAPHS } from "../src/main/fakeChat/paragraphs";
+import { countFor, countText } from "../src/shared/wordCount";
 import {
+  askInAssistant,
   createDataFolder,
   dismissChatSetup,
   launchApp,
   newMind,
+  pointAndClick,
   removeDataFolder,
   setWindowSize,
+  useLocalChatModel,
   WORD_KEY,
 } from "./app";
 
@@ -161,6 +166,49 @@ test("the target's field keeps the focus when the menu's toggle event comes late
   await expect(window.getByTestId("mind-count-progress")).toBeVisible();
   await app.close();
 });
+
+const COUNTS = {
+  en: { empty: "0 words", written: PARAGRAPHS.en, ask: "Write three paragraphs", unit: "words" },
+  "zh-CN": { empty: "0 字", written: PARAGRAPHS.zh, ask: "写三段", unit: "字" },
+} as const;
+
+for (const language of ["en", "zh-CN"] as const) {
+  test(`text the assistant wrote is counted once accepted, and not before, and Undo takes it back (${language})`, async () => {
+    const { empty, written, ask, unit } = COUNTS[language];
+    const { app, window } = await launchApp(dataDir, { fakeChat: true });
+    await dismissChatSetup(window);
+    await useLocalChatModel(window);
+    await setLanguage(window, language);
+    await setWindowSize(app, window, 1440, 900);
+    await newMind(window);
+    const button = window.getByTestId("mind-count-button");
+    await expect(button).toHaveText(empty);
+    const words = (paragraphs: readonly string[]) =>
+      countFor(countText(paragraphs.join("\n")), "words");
+    const total = words(written);
+
+    await askInAssistant(window, ask);
+    const bar = window.getByTestId("proposals-bar");
+    await expect(bar.getByTestId("proposals-count")).toBeVisible();
+    // Waiting text isn't the Mind's yet.
+    await expect(button).toHaveText(empty);
+
+    await pointAndClick(window, bar.getByTestId("proposals-accept-all"));
+    await expect(button).toHaveText(`${total} ${unit}`);
+    await expect(bar).toHaveCount(0);
+
+    await window.getByTestId("mind-editor").click();
+    await window.keyboard.press("ControlOrMeta+z");
+    await expect(bar.getByTestId("proposals-accept-all")).toBeVisible();
+    await expect(button).toHaveText(empty);
+
+    // Accepting one change counts that change's words.
+    await window.getByTestId("mind-editor").locator("p").first().click();
+    await pointAndClick(window, window.getByTestId("change-accept"));
+    await expect(button).toHaveText(`${words([written[0]])} ${unit}`);
+    await app.close();
+  });
+}
 
 for (const language of ["en", "zh-CN"] as const) {
   for (const width of [1440, 900]) {

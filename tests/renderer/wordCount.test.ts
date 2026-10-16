@@ -10,7 +10,13 @@ import {
   setWordTarget,
   wordTargetOf,
 } from "../../src/shared/mindWordCount";
-import { countFor, countText, mostlyCjk, parseTarget } from "../../src/shared/wordCount";
+import {
+  countedUnit,
+  countFor,
+  countText,
+  mostlyCjk,
+  parseTarget,
+} from "../../src/shared/wordCount";
 
 const schema = getSchema(noteExtensions());
 
@@ -68,6 +74,16 @@ describe("counting text", () => {
     const count = countText("ab cd\nef");
     expect(countFor(count, "characters")).toBe(7);
     expect(countFor(count, "charactersNoSpaces")).toBe(6);
+  });
+
+  test.each([
+    ["an empty Mind in English", "", "words", false, "words"],
+    ["an empty Mind in a Chinese interface", "", "words", true, "characters"],
+    ["English text in a Chinese interface", "The tide turns", "words", true, "words"],
+    ["Chinese text in an English interface", "潮水每天涨落", "words", false, "characters"],
+    ["characters asked for", "The tide turns", "characters", false, "characters"],
+  ] as const)("%s is counted in %s", (_, written, basis, chinese, unit) => {
+    expect(countedUnit(countText(written), basis, chinese)).toBe(unit);
   });
 
   test("an emoji is one character", () => {
