@@ -76,6 +76,12 @@ export interface UnitLabel {
   header?: boolean;
   /** page: a scanned page, whose text was read from its picture (#397), not taken from the PDF. */
   scan?: UnitScan;
+  /**
+   * page: the page's own name when the PDF has one: a page label ("xii",
+   * "A-3") or the number its header or footer prints (#901). It is kept
+   * for the pages of a PDF that names pages differently from its page index.
+   */
+  printed?: string;
   /** section: a web page's pictures in it whose text was read on this computer. */
   figures?: UnitFigure[];
   /**
@@ -85,6 +91,9 @@ export interface UnitLabel {
    */
   values?: Record<string, number>;
 }
+
+/** The longest name kept for a printed page: "xxxviii" or "A-12", not a sentence a PDF writer put in a label. */
+export const MAX_PRINTED_PAGE_LENGTH = 16;
 
 /**
  * How a scanned page's text was read (#397). Its anchors are its lines, in

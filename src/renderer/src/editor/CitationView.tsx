@@ -20,6 +20,7 @@ import {
 import {
   citationLocation,
   formatLocation,
+  formatLocationWithPdf,
   isTranscriptLocation,
   openKind,
 } from "../../../shared/locations";
@@ -491,6 +492,7 @@ function CitationCard({
   );
   const location = citationLocation(attributes);
   const where = location ? formatLocation(location, t) : null;
+  const withPdfPage = location ? formatLocationWithPdf(location, t) : null;
   const opens = web ? "web" : openKind(location);
   const name = attributes.documentName ?? "";
   // When the version it quotes was fetched: an older one's, if the page changed since.
@@ -523,6 +525,11 @@ function CitationCard({
           <span>{badgeText}</span>
         </p>
         {source && <p className="citation-card-source">{source}</p>}
+        {withPdfPage && (
+          <p data-testid="citation-pdf-page" className="citation-card-source">
+            {withPdfPage}
+          </p>
+        )}
         {scanned && <ScanLine scanned={scanned} />}
         {web && fetchedAt && (
           <p data-testid="citation-web-source" className="citation-card-source">
