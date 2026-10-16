@@ -196,7 +196,7 @@ for (const language of ["en", "zh-CN"] as const) {
     await expect(sends).toHaveText(
       language === "en"
         ? "Sends document names and excerpts to llm.example.com. · Details"
-        : "会把文档名称和摘录发送给 llm.example.com。 · 详情",
+        : "会把文档名称和摘录发送给 llm.example.com。· 详情",
     );
     const details = sends.getByTestId("library-organize-sends-details");
     await details.focus();
