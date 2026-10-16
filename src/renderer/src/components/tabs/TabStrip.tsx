@@ -1,23 +1,24 @@
-import { type KeyboardEvent, type RefObject, useEffect, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  type KeyboardEvent,
+  type RefObject,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import type { LayoutGroup, LayoutTab } from "../../../../core/api";
 import { shortcutLabel } from "../../commands/keymap";
-import { commands } from "../../commands/registry";
-import { FORMAT_LABELS, useExports } from "../../exports";
 import { useFirstOpen } from "../../firstOpen";
 import { useT } from "../../i18n";
 import { focusedGroupOf, groupOfTab } from "../../layoutSlice";
 import { useAppStore } from "../../store";
+import { tabLabelEm } from "../../tabLabel";
 import { InlineName } from "../InlineName";
-import {
-  CloseLineIcon,
-  ExportLineIcon,
-  PinLineIcon,
-  PlusLineIcon,
-  SplitLineIcon,
-} from "../lineIcons";
+import { CloseLineIcon, PinLineIcon, PlusLineIcon, SplitLineIcon } from "../lineIcons";
 import { ObjectMenu, useObjectMenu } from "../ObjectMenu";
 import { SidebarToggle } from "../SidebarToggle";
 import { TasksChip } from "../TasksChip";
+import { ExportMenu } from "./ExportMenu";
 import { GroupMenu, StripButton } from "./TabMenus";
 import { focusTab, splitToTheRight } from "./tabActions";
 import { MeetingTabTime, TabIcon, useTabTitle } from "./tabItems";
@@ -88,6 +89,7 @@ export function TabStrip({
       <header
         data-testid="tab-strip"
         data-group-id={group.id}
+        data-first-group={index === 0 || undefined}
         data-quiet=""
         className="tab-strip title-bar"
       >
@@ -151,7 +153,7 @@ export function TabStrip({
       </button>
       <span className="tab-strip-spacer" />
       {last && <TasksChip />}
-      {shown?.item.kind === "mind" && <ExportButton mindId={shown.item.mindId} />}
+      {shown?.item.kind === "mind" && <ExportMenu mindId={shown.item.mindId} />}
       {!merged && (
         <span className="tab-split">
           <StripButton
@@ -165,38 +167,6 @@ export function TabStrip({
       )}
       <GroupMenu groupId={group.id} merged={merged} />
     </header>
-  );
-}
-
-/** Export: one click exports the Mind in the last format, as ⇧⌘E does (#100). */
-function ExportButton({ mindId }: { mindId: string }) {
-  const t = useT();
-  const format = useAppStore((state) => state.settings?.user.exportOptions.format ?? "docx");
-  const saving = useExports(
-    (state) => state.result?.mindId === mindId && state.result.state === "saving",
-  );
-  const label = t("export.action.title", {
-    format: t(FORMAT_LABELS[format]),
-    shortcut: shortcutLabel("mind.export"),
-  });
-  return (
-    <button
-      type="button"
-      data-testid="export-mind"
-      data-format={format}
-      aria-label={label}
-      aria-busy={saving || undefined}
-      title={label}
-      onClick={() =>
-        commands
-          .run("mind.export", { focus: { kind: "mind", id: mindId }, surface: "mind" })
-          .catch(useAppStore.getState().reportError)
-      }
-      className="tab-export"
-    >
-      <ExportLineIcon />
-      <span>{t("export.action")}</span>
-    </button>
   );
 }
 
@@ -265,6 +235,7 @@ function Tab({ tab, groupId, selected, focusedGroup, divider, dragged, drag }: T
       data-focused-group={focusedGroup || undefined}
       data-divider={divider || undefined}
       data-dragging={dragged || undefined}
+      style={{ "--tab-label-min": `${tabLabelEm(title)}em` } as CSSProperties}
       className="tab"
       onPointerDown={(event) => {
         if (!renaming && !fromInside(event)) drag.onTabPointerDown(event, tab.id);

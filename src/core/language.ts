@@ -4,6 +4,12 @@ const languages = ["en", "zh-CN"] as const;
 
 export type Language = (typeof languages)[number];
 
+/** An interface language as a model is told to write in it. */
+export const LANGUAGE_NAMES: Record<Language, string> = {
+  en: "English",
+  "zh-CN": "Simplified Chinese",
+};
+
 /** "system" follows the OS language. */
 export type LanguagePreference = Language | "system";
 

@@ -12,19 +12,25 @@ import type { AgentLauncher } from "./agents";
 import type { AnswerEngine } from "./answers/engine";
 import type {
   AudioSource,
+  CopilotProfileId,
   EngineSwitchReason,
   ExternalService,
   SandboxLevel,
   SecretProtection,
   TranscriptionEngine,
+  WebPageLookFailure,
 } from "./api";
 import type { StatIdentity } from "./documents/files";
 import type { Reranker } from "./documents/searchTool";
 import type { AnswerSearchTuning } from "./documents/searchTuning";
 import type { WatchFolder } from "./documents/watcher";
 import type { FetchLimits, PageFetch } from "./documents/web/fetch";
+import type { PictureLimits } from "./documents/web/pictures";
 import type { ChatGptPlanEndpoints } from "./providers/chatgpt/plan";
+import type { AnthropicOAuthConfig } from "./providers/claudeAccount/config";
+import type { CopilotProfile } from "./providers/copilot/config";
 import type { EmbeddingModelFactory } from "./providers/embeddings";
+import type { LocalServers } from "./providers/localServers";
 import type { ChatModelFactory } from "./providers/models";
 import type { OllamaModels } from "./providers/ollamaModels";
 import type { RerankingModelFactory } from "./providers/rerank";
@@ -174,6 +180,17 @@ export interface OllamaApp {
  */
 export interface Printer {
   print(document: PrintDocument): Promise<Uint8Array>;
+}
+
+/**
+ * Makes a PDF of a web page as a browser shows it, for "Keep the page as it
+ * looks". The desktop app loads it once in a hidden page that reaches only
+ * the public internet (src/main/pageLook.ts).
+ */
+export interface PageLook {
+  render(
+    address: string,
+  ): Promise<{ pdf: Uint8Array } | { failure: WebPageLookFailure; message: string }>;
 }
 
 /** How Linked folders are watched and checked (see ./documents/library). The defaults suit the app. */
@@ -466,8 +483,20 @@ export interface TextRecognizer {
    * loaded or fails on it.
    */
   read(picture: PagePicture, page: number): Promise<RecognizedLine[]>;
+  /**
+   * The lines of text on a picture file (PNG, JPEG, GIF, WebP or AVIF), and
+   * the size it was read at. It is decoded where the model runs, so a file
+   * that breaks the decoder takes only that down.
+   */
+  readFile(file: Uint8Array, page: number): Promise<PictureRead>;
   /** Stops the model and frees its memory. Loading again starts it afresh. */
   close(): void;
+}
+
+export interface PictureRead {
+  lines: RecognizedLine[];
+  width: number;
+  height: number;
 }
 
 /** One file of a built-in model, as recorded when the app was built. */
@@ -702,6 +731,8 @@ export interface CoreAdapters {
   ollamaStartTimeoutMs?: number;
   /** Prints PDF exports. Absent (tests that don't export PDFs): a PDF export is refused. */
   printer?: Printer;
+  /** Keeps web pages as they look. Absent (tests that aren't about it): none is kept. */
+  pageLook?: PageLook;
   /**
    * Draws a chart's picture for a Word export. Absent (tests that don't need
    * it): a chart goes into Word as the table of its values instead.
@@ -713,7 +744,7 @@ export interface CoreAdapters {
    * How web pages are fetched (#261). Defaults to Node's fetch, within 20
    * seconds and 10 MB; tests shorten the limits.
    */
-  webPages?: { fetch?: PageFetch; limits?: FetchLimits };
+  webPages?: { fetch?: PageFetch; limits?: FetchLimits; pictureLimits?: PictureLimits };
   /**
    * How web search's fetcher resolves host names and makes its connections
    * (#128): the system's resolver and undici's by default. Tests stand a
@@ -737,6 +768,12 @@ export interface CoreAdapters {
    * src/core/agents/socket.ts), and the version the server names itself with.
    */
   agents?: {
+    /**
+     * Whether connecting agents is offered at all (the desktop app's
+     * `SHOW_AGENT_CONNECTION`). Not offered, the socket never listens and
+     * Privacy lists no agents, whatever an earlier build saved. Defaults to offered.
+     */
+    offered?: boolean;
     launcher?: AgentLauncher;
     socketPath?: string;
     version?: string;
@@ -789,11 +826,32 @@ export interface CoreAdapters {
    * this computer's memory; tests pass a stub.
    */
   ollamaModels?: OllamaModels;
+  /** Looks for the servers of the presets on this computer. Tests pass a stand-in, so none is asked. */
+  localServers?: LocalServers;
+  /**
+   * Where Ollama is for the Tagging setting's Automatic when no Ollama
+   * provider is saved. Defaults to OLLAMA_HOST, else 127.0.0.1:11434.
+   */
+  ollamaUrl?: string;
+  /**
+   * Which models Ollama has installed at an address, for Automatic tagging's
+   * local decision models. Defaults to asking Ollama (`/api/tags`);
+   * tests, and the smoke tests' scripted model, give their own, so nothing
+   * reaches an Ollama that happens to run on the computer.
+   */
+  localModels?(baseUrl: string): Promise<readonly string[]>;
   /**
    * Where the ChatGPT plan provider signs in and sends Questions. Defaults to
    * OpenAI's servers; tests point it at a local fake authorization server and API.
    */
   chatGptPlan?: Partial<ChatGptPlanEndpoints>;
+  /** In place of this build's Claude account profile: tests point it at a local fake. */
+  claudeAccount?: AnthropicOAuthConfig;
+  /**
+   * The Copilot route's ways to sign in, in place of the ones this build has
+   * (./providers/copilot/config); tests point them at a local fake of GitHub.
+   */
+  copilotProfiles?: Partial<Record<CopilotProfileId, CopilotProfile>>;
   /**
    * Where the ChatGPT sign-in is kept instead of `keychain`: a store that
    * several data folders on this computer share, and a lock file that keeps
@@ -806,6 +864,12 @@ export interface CoreAdapters {
    * Defaults to five minutes; tests shorten it.
    */
   connectorSignInTimeoutMs?: number;
+  /**
+   * Contradiction watch's timings (#112), which tests shorten: how long after
+   * a new version of a Document its Folder's Minds are checked (30 seconds),
+   * and how long a background check of one claim may take (3 minutes).
+   */
+  contradictionWatch?: { delayMs?: number; claimTimeLimitMs?: number };
   /**
    * The Connectors directory's entries, in its JSON form, in place of the
    * list that ships with the app; tests point an entry at a local stand-in.

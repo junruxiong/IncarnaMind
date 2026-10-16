@@ -97,6 +97,8 @@ export function cellProblemMessage(problem: ComparisonProblem): {
       return { key: "comparison.cell.sourceRemoved" };
     case "left-out":
       return { key: "comparison.cell.leftOut" };
+    case "not-cited":
+      return { key: "comparison.cell.notCited" };
     case "cost-cap":
       return { key: "run.notChecked.cost-cap" };
     case "plan-limit":

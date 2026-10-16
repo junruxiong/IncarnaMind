@@ -18,6 +18,7 @@ import {
   type SecretProtection,
 } from "../../src/core";
 import { createFakeEmbedder } from "../../src/core/embedding/fake";
+import { scriptedLocalServers } from "../../src/core/providers/localServers";
 import { createFakeCrossEncoder } from "../../src/core/reranking/fake";
 import { openDatabase, type SqlValue } from "../../src/core/storage";
 
@@ -103,12 +104,16 @@ export function startCore(dataDir: string, overrides: TestAdapters = {}): Core {
     createChatModel: () => {
       throw new Error("This test didn't provide a chat model.");
     },
+    // Nothing asks the LM Studio or Unsloth Studio on this computer: neither runs.
+    localServers: scriptedLocalServers(),
     // Nothing asks the Ollama on this computer: it runs, and its models get the default settings.
+    // Automatic tagging finds no local decision models unless a test gives some.
     ollamaModels: {
       describe: async () => null,
       loaded: async () => null,
       running: async () => true,
     },
+    localModels: async () => [],
     embedder: createFakeEmbedder(),
     embeddingModelSource: NO_MODEL_FILES,
     crossEncoder: createFakeCrossEncoder(),
@@ -124,6 +129,13 @@ export function startCore(dataDir: string, overrides: TestAdapters = {}): Core {
       clinicaltrials: NOWHERE,
       ecfr: NOWHERE,
       govinfo: NOWHERE,
+    },
+    // The public internet's fetcher (web search, a saved page's pictures) reaches no host from a
+    // test: a test that fetches gives its stand-in web (../helpers/web).
+    web: {
+      resolve: async (host) => {
+        throw new Error(`Tests reach no host: ${host}.`);
+      },
     },
     ...rest,
     // A home and a Documents folder of its own, so a test never reads or writes the User's.

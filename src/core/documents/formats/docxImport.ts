@@ -26,6 +26,7 @@
  */
 import type { MarkJSON, NodeJSON } from "../../../shared/blockJson";
 import { NODE_CHARACTER, targetHash } from "../../../shared/proposals";
+import { runLookOf } from "../../../shared/wordLook";
 import {
   BLOCK_ID_ATTRIBUTE,
   IMAGE_NODE,
@@ -37,14 +38,19 @@ import {
   WORD_ATOM_NODE,
   WORD_BLOCK_NODE,
   WORD_CHANGE_ID,
+  WORD_LOOK_ATTRIBUTE,
+  WORD_RUN_MARK,
   type WordAtomInfo,
   type WordAtomKind,
   type WordChangeRequest,
   type WordImportReport,
   type WordLayout,
+  type WordLook,
+  type WordRunLook,
   type WordSource,
 } from "../../api";
 import { headingLevelOf, textIn } from "./docx";
+import { LookReader, type ParagraphLookContext, type TableLookContext } from "./docxLook";
 import {
   NS_STRICT,
   NS_TRANSITIONAL,
@@ -56,7 +62,7 @@ import {
   type WordReview,
 } from "./docxPackage";
 import { dataUrlOf, imageTypeOf } from "./images";
-import { child, descendants, elements, parseXml, walk, type XmlElement } from "./xml";
+import { child, descendants, elements, onOff, parseXml, walk, type XmlElement } from "./xml";
 
 /** The largest picture made editable; a larger one is kept as is. */
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
@@ -75,6 +81,9 @@ export interface WordStructure {
   report: WordImportReport;
   /** Someone's tracked changes read as Proposals (#108), by their request: who made each, and when. */
   changes: Map<string, WordChangeRequest>;
+  look: WordLook;
+  /** Parts the look couldn't read (a broken `settings.xml`): it went on without them. */
+  lookUnreadable: string[];
 }
 
 /** Reads a Word package's main document as Blocks. Throws `WordRefusedError` for one that can't be read. */
@@ -83,6 +92,19 @@ export async function readWordStructure(
   review: WordReview,
 ): Promise<WordStructure> {
   return (await readWordDocument(pkg, review)).structure;
+}
+
+/** Each node mapped from the document, by its place ("w:p#12"). */
+export function nodesByPlace(structure: WordStructure): Map<string, NodeJSON> {
+  const byPlace = new Map<string, NodeJSON>();
+  const visit = (node: NodeJSON) => {
+    const id = node.attrs?.[BLOCK_ID_ATTRIBUTE];
+    const source = typeof id === "string" ? structure.sources.get(id) : undefined;
+    if (source) byPlace.set(source.n, node);
+    for (const each of node.content ?? []) visit(each);
+  };
+  for (const block of structure.blocks) visit(block);
+  return byPlace;
 }
 
 /**
@@ -359,9 +381,18 @@ function fieldType(instruction: string): string {
   return first === "ADDIN" && words[1] ? `ADDIN ${words[1].toUpperCase()}` : first;
 }
 
-/** Whether a toggle in run properties (`w:b`, `w:i`…) is on. */
-const isOn = (element: XmlElement | undefined) =>
-  element !== undefined && !["false", "0", "off"].includes(element.attrs["w:val"] ?? "true");
+const isOn = (element: XmlElement | undefined) => onOff(element) === true;
+
+const RESOLVED_MARKS: ReadonlySet<string> = new Set(["bold", "italic", "underline", "strike"]);
+
+function formattingMarks(look: WordRunLook): MarkJSON[] {
+  return [
+    look.bold && { type: "bold" },
+    look.italic && { type: "italic" },
+    look.underline && { type: "underline" },
+    (look.strike || look.doubleStrike) && { type: "strike" },
+  ].filter((mark): mark is MarkJSON => Boolean(mark));
+}
 
 /** The editor's marks for a run's own formatting. */
 export function runMarks(rPr: XmlElement | undefined): MarkJSON[] {
@@ -476,10 +507,13 @@ const nodeText = (node: NodeJSON): string =>
       ? NODE_CHARACTER
       : (node.content ?? []).map(nodeText).join("");
 
-const paragraphNode = (type: "paragraph" | "heading", attrs: Record<string, unknown>) => ({
+const paragraphNode = (
+  type: "paragraph" | "heading",
+  attrs: Record<string, unknown>,
+): { type: string; attrs: Record<string, unknown>; content: NodeJSON[] } => ({
   type,
   attrs: { [BLOCK_ID_ATTRIBUTE]: newId(), ...attrs },
-  content: [] as NodeJSON[],
+  content: [],
 });
 
 // ---------------------------------------------------------------------------
@@ -494,21 +528,12 @@ const drawsLine = (borders: XmlElement | undefined): boolean =>
   borders !== undefined &&
   elements(borders).some((side) => !["nil", "none"].includes(side.attrs["w:val"] ?? "none"));
 
-/** A table with no lines of its own or from a style: its cells only place text. */
-function placesText(tbl: XmlElement): boolean {
-  const tblPr = child(tbl, "w:tblPr");
-  if (tblPr && child(tblPr, "w:tblStyle")) return false;
-  if (drawsLine(tblPr && child(tblPr, "w:tblBorders"))) return false;
-  return !descendants(tbl, "w:tcBorders").some((borders) => drawsLine(borders));
-}
-
-/** Counts what the Mind doesn't draw of a document's look (`WordLayout`), from its own formatting. */
+/** Counts a document's layout (`WordLayout`) from its own formatting; the Word look draws all but aligned columns. */
 export function layoutOf(document: XmlElement): WordLayout {
   const layout: WordLayout = {
     shading: 0,
     borders: 0,
     tabStops: 0,
-    layoutTables: 0,
     colours: 0,
     fonts: 0,
     sizes: 0,
@@ -531,9 +556,6 @@ export function layoutOf(document: XmlElement): WordLayout {
         break;
       case "w:tabs":
         layout.tabStops += elements(element).filter((tab) => tab.attrs["w:val"] !== "clear").length;
-        break;
-      case "w:tbl":
-        if (placesText(element)) layout.layoutTables++;
         break;
       case "w:color":
         if (value && !NO_COLOUR.has(value.toUpperCase())) colours.add(value.toUpperCase());
@@ -589,6 +611,8 @@ class Reader {
   private readonly absorbed = new Set<XmlElement>();
   /** Someone's changes kept as is, by kind. */
   private readonly kept: Partial<Record<KeptChangeKind, number>> = {};
+  private paragraphLook: ParagraphLookContext = { look: {}, runs: [] };
+  private tableLook: TableLookContext | null = null;
 
   private constructor(
     private readonly documentText: string,
@@ -602,6 +626,7 @@ class Reader {
     /** The text of each header and footer part. */
     private readonly partTexts: Map<string, string>,
     review: WordReview,
+    private readonly look: LookReader,
   ) {
     this.report = {
       paragraphs: 0,
@@ -636,8 +661,19 @@ class Reader {
       const target = partOf(suffix);
       return target && zip.has(target) ? zip.readText(target) : undefined;
     };
-    const styles = readStyles(await read("/styles"));
-    const numbering = readNumbering(await read("/numbering"), styles);
+    const stylesXml = await read("/styles");
+    const numberingXml = await read("/numbering");
+    const styles = readStyles(stylesXml);
+    const numbering = readNumbering(numberingXml, styles);
+    const themeXml = await read("/theme");
+    const settingsXml = await read("/settings");
+    const look = new LookReader({
+      ...(stylesXml !== undefined && { styles: stylesXml }),
+      ...(numberingXml !== undefined && { numbering: numberingXml }),
+      ...(themeXml !== undefined && { theme: themeXml }),
+      ...(settingsXml !== undefined && { settings: settingsXml }),
+      document,
+    });
     const comments = new Map<string, Comment>();
     const commentsXml = await read("/comments");
     for (const comment of commentsXml ? elements(parseXml(commentsXml)) : []) {
@@ -687,6 +723,7 @@ class Reader {
       images,
       partTexts,
       review,
+      look,
     );
   }
 
@@ -795,6 +832,8 @@ class Reader {
       sources: this.sources,
       report: this.report,
       changes: this.changes,
+      look: this.look.look(),
+      lookUnreadable: this.look.unreadable,
     };
   }
 
@@ -826,7 +865,7 @@ class Reader {
     const kind = deletion ? "delete" : "insert";
     for (const run of elements(element)) {
       this.currentRun = run;
-      const own = [...marks, ...runMarks(child(run, "w:rPr")), mark];
+      const own = [...marks, ...this.marksOfRun(run), mark];
       for (const each of elements(run)) {
         switch (each.name) {
           case "w:t":
@@ -1102,6 +1141,7 @@ class Reader {
     const styleId = (pPr && child(pPr, "w:pStyle")?.attrs["w:val"]) ?? this.styles.defaultId;
     const level = this.headingLevel(styleId, pPr);
     const list = level === null ? this.listOf(styleId, pPr) : null;
+    this.paragraphLook = this.look.paragraph(p, this.tableLook);
     const node =
       level === null
         ? paragraphNode("paragraph", {})
@@ -1120,6 +1160,10 @@ class Reader {
         }),
       );
     }
+    const main = this.mainRunLook(node.content, pPr);
+    if (main !== null) this.markOnlyOtherRuns(node.content, main);
+    const look = this.look.paragraphKey(this.paragraphLook, main);
+    if (look) node.attrs[WORD_LOOK_ATTRIBUTE] = look;
     this.noteWhole(node, pPr, inCell);
     const sectPr = pPr && child(pPr, "w:sectPr");
     if (sectPr) {
@@ -1193,9 +1237,24 @@ class Reader {
 
     const occupied = placed.map(() => new Array<boolean>(width).fill(false));
     const content = new Map<Placed, NodeJSON[]>();
-    placed.forEach((row) => {
+    const outer = this.tableLook;
+    const tableLook = this.look.table(tbl);
+    const cellLooks = new Map<Placed, TableLookContext>();
+    const rowSpanOf = (at: Placed, r: number) =>
+      Math.max(1, Math.min(rowspans.get(at) ?? 1, placed.length - r));
+    const spanOf = (at: Placed) => Math.min(at.span, width - at.column);
+    placed.forEach((row, r) => {
       for (const at of row) {
         if (at.merge === "continue" && mergedInto.has(at)) continue;
+        this.tableLook = this.look.cellAt(tableLook, {
+          row: r,
+          rows: placed.length,
+          rowSpan: rowSpanOf(at, r),
+          column: at.column,
+          span: spanOf(at),
+          columns: width,
+        });
+        cellLooks.set(at, this.tableLook);
         const blocks: NodeJSON[] = [];
         this.blocks(at.cell, blocks, true);
         content.set(at, blocks);
@@ -1208,8 +1267,10 @@ class Reader {
         !["w:drawing", "w:pict", "w:object", "w:bookmarkStart"].some(
           (name) => descendants(cell.cell, name).length > 0,
         );
+      this.tableLook = cellLooks.get(into) ?? tableLook;
       if (!empty) this.blocks(cell.cell, content.get(into) ?? [], true);
     }
+    this.tableLook = outer;
 
     const tableRows: NodeJSON[] = placed.map((row, r) => {
       const trPr = rows[r] && child(rows[r].element, "w:trPr");
@@ -1223,8 +1284,8 @@ class Reader {
       for (let column = 0; column < width; ) {
         const at = starts.get(column);
         if (at) {
-          const rowspan = Math.max(1, Math.min(rowspans.get(at) ?? 1, placed.length - r));
-          const colspan = Math.min(at.span, width - column);
+          const rowspan = rowSpanOf(at, r);
+          const colspan = spanOf(at);
           for (let down = r; down < r + rowspan; down++) {
             for (let across = column; across < column + colspan; across++) {
               const line = occupied[down];
@@ -1232,9 +1293,10 @@ class Reader {
             }
           }
           const blocks = content.get(at) ?? [];
+          const cellLook = this.look.cell(at.cell, cellLooks.get(at) ?? tableLook);
           const cellNode: NodeJSON = {
             type: cellType,
-            attrs: { colspan, rowspan },
+            attrs: { colspan, rowspan, ...(cellLook && { [WORD_LOOK_ATTRIBUTE]: cellLook }) },
             content: blocks.length > 0 ? blocks : [paragraphNode("paragraph", {})],
           };
           this.origins.set(cellNode, at.cell);
@@ -1271,7 +1333,14 @@ class Reader {
     const id = newId();
     this.sources.set(id, { n: this.place(tbl) });
     this.report.tables++;
-    return { type: "table", attrs: { [BLOCK_ID_ATTRIBUTE]: id }, content: tableRows };
+    return {
+      type: "table",
+      attrs: {
+        [BLOCK_ID_ATTRIBUTE]: id,
+        [WORD_LOOK_ATTRIBUTE]: tableLook.key,
+      },
+      content: tableRows,
+    };
   }
 
   // -------------------------------------------------------------------------
@@ -1398,8 +1467,60 @@ class Reader {
     });
   }
 
+  /** The run look most of the paragraph's text has, of those a paragraph can draw; its mark's when empty. */
+  private mainRunLook(content: NodeJSON[], pPr: XmlElement | undefined): string | null {
+    const characters = new Map<string | null, number>();
+    for (const node of content) {
+      if (node.type !== "text" || !node.text) continue;
+      const key = runLookOf(node);
+      characters.set(key, (characters.get(key) ?? 0) + node.text.length);
+    }
+    if (characters.size === 0) {
+      const run = this.look.run(pPr && child(pPr, "w:rPr"), this.paragraphLook, 0).key;
+      return run !== null && this.look.canBeParagraphRun(run) ? run : null;
+    }
+    let main: string | null = null;
+    let most = 0;
+    for (const [key, count] of characters) {
+      if (key !== null && !this.look.canBeParagraphRun(key)) continue;
+      if (count > most) {
+        most = count;
+        main = key;
+      }
+    }
+    return main;
+  }
+
+  /** Unmarked text gets the plain mark, or the paragraph's run would draw on it. */
+  private markOnlyOtherRuns(content: NodeJSON[], main: string): void {
+    const plain = content.some((node) => node.type === "text" && runLookOf(node) === null)
+      ? this.look.plainRun()
+      : null;
+    for (const node of content) {
+      if (node.type !== "text") continue;
+      const key = runLookOf(node);
+      if (key === main) {
+        node.marks = node.marks?.filter((mark) => mark.type !== WORD_RUN_MARK);
+        if (node.marks?.length === 0) delete node.marks;
+      } else if (key === null && plain) {
+        node.marks = [...(node.marks ?? []), { type: WORD_RUN_MARK, attrs: { k: plain } }];
+      }
+    }
+  }
+
+  /** Bold, italic, underline and strike as Word resolves them, styles included, so the editor's toggles act on them. */
+  private marksOfRun(run: XmlElement): MarkJSON[] {
+    const rPr = child(run, "w:rPr");
+    const { key, look } = this.look.run(rPr, this.paragraphLook, textIn(run).length);
+    return [
+      ...formattingMarks(look),
+      ...runMarks(rPr).filter((mark) => !RESOLVED_MARKS.has(mark.type)),
+      ...(key ? [{ type: WORD_RUN_MARK, attrs: { k: key } }] : []),
+    ];
+  }
+
   private run(run: XmlElement, marks: MarkJSON[], out: NodeJSON[]): void {
-    const own = [...marks, ...runMarks(child(run, "w:rPr"))];
+    const own = [...marks, ...this.marksOfRun(run)];
     this.currentRun = run;
     for (const element of elements(run)) {
       if (element.name === "w:rPr") continue;

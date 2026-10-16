@@ -24,11 +24,17 @@ export interface ProblemAction {
   disabled?: boolean;
 }
 
-/** An action after a line's words: " · Show". */
-export function LineAction({ action }: { action: ProblemAction }) {
+/** An action after a line's words: " · Show"; after a full-width stop "。· 重试", as Chinese sets it. */
+export function LineAction({
+  action,
+  afterStop = false,
+}: {
+  action: ProblemAction;
+  afterStop?: boolean;
+}) {
   return (
     <>
-      <span aria-hidden="true"> · </span>
+      <span aria-hidden="true">{afterStop ? "· " : " · "}</span>
       <button
         type="button"
         data-testid={action.testId}
@@ -78,7 +84,16 @@ export function ProblemLine({
       className={`font-sans text-[13px] leading-5 break-words text-ink-meta ${className}`}
     >
       <span>{children}</span>
-      {[action, also].map((each) => each && <LineAction key={each.label} action={each} />)}
+      {[action, also].map(
+        (each, index) =>
+          each && (
+            <LineAction
+              key={each.label}
+              action={each}
+              afterStop={index === 0 && typeof children === "string" && /[。！？]$/.test(children)}
+            />
+          ),
+      )}
     </p>
   );
 }

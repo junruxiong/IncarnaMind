@@ -182,7 +182,8 @@ export function createReferences(options: ReferencesOptions) {
       const document = options.document(documentId);
       const identifier = lookupIdentifier(document.reference?.fields ?? emptyReferenceFields());
       if (!identifier) return failed("no-identifier", "The record has no DOI or arXiv id.");
-      const local = () => failed("local-mode", "Look up is off in local mode.");
+      const local = () =>
+        failed("local-mode", "Look up is off while “Keep everything on this computer” is on.");
       if (options.localOnly()) return local();
       const service = identifier.kind === "doi" ? CROSSREF : ARXIV;
       try {

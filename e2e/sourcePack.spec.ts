@@ -17,6 +17,7 @@ import {
   askInAssistant,
   createDataFolder,
   dismissChatSetup,
+  exportFromMenu,
   launchApp,
   motionSettled,
   newMind,
@@ -177,7 +178,7 @@ test("Export options › Source pack writes a cover list and a page for each cit
   if (SCREENSHOTS) await writeFile(join(SCREENSHOTS, "source-pack.pdf"), pdf);
 
   // Exported again, it is the same pack under the next free name.
-  await pointAndClick(window, exportButton);
+  await exportFromMenu(window);
   const again = await savedPath(window, "Tides 潮汐 - source pack 2.pdf");
   expect(await pdfText(await readFile(again))).toEqual(pages);
   expect((await readdir(out)).sort()).toEqual([
@@ -224,7 +225,7 @@ test("a Mind with no Citations says so in the sheet and on Export, and in Chines
   await expect(sheet).toBeHidden();
 
   // Export says it on the Mind, with no file made and no fix offered for a place that is fine.
-  await pointAndClick(window, window.getByTestId("export-mind"));
+  await exportFromMenu(window);
   const problem = window.getByTestId("export-result").getByTestId("export-problem");
   await expect(problem).toHaveText(
     "This Mind has no Citations yet, so there are no cited pages to put in a pack.",

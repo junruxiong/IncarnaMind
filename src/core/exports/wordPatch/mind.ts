@@ -8,7 +8,7 @@
  */
 import * as Y from "yjs";
 import type { MarkJSON, NodeJSON } from "../../../shared/blockJson";
-import { readProposalAttribute } from "../../../shared/proposals";
+import { readProposalAttribute, readProposalRef } from "../../../shared/proposals";
 import { readWordAtom } from "../../../shared/wordFiles";
 import {
   ANSWER_BLOCK,
@@ -77,6 +77,56 @@ export function textPendings(node: NodeJSON, review: ReviewReading | undefined):
   const inserted = pendingOf(attrsOf(PROPOSAL_INSERT_MARK), review);
   const deleted = pendingOf(attrsOf(PROPOSAL_DELETE_MARK), review);
   return { ...(inserted && { inserted }), ...(deleted && { deleted }) };
+}
+
+const MARK_KINDS: ReadonlyMap<string, "insert" | "delete"> = new Map([
+  [PROPOSAL_INSERT_MARK, "insert"],
+  [PROPOSAL_DELETE_MARK, "delete"],
+]);
+
+/**
+ * The changes on what a Mind's node holds, its text and the nodes within it, not on the node
+ * itself (that is its counterpart's `pending`): each by its id and kind, with its request.
+ */
+export function changesWithin(element: Y.XmlElement): Map<string, string> {
+  const found = new Map<string, string>();
+  const visit = (parent: Y.XmlElement) => {
+    for (const child of parent.toArray()) {
+      if (child instanceof Y.XmlText) {
+        for (const run of child.toDelta() as { attributes?: Record<string, unknown> }[]) {
+          for (const [mark, kind] of MARK_KINDS) {
+            const ref = readProposalRef(run.attributes?.[mark]);
+            if (ref) found.set(`${ref.id} ${kind}`, ref.request);
+          }
+        }
+      } else if (child instanceof Y.XmlElement) {
+        const own = readProposalAttribute(child.getAttribute(PROPOSAL_ATTRIBUTE));
+        if (own) found.set(`${own.id} ${own.kind}`, own.request);
+        visit(child);
+      }
+    }
+  };
+  visit(element);
+  return found;
+}
+
+/** As `changesWithin`, for a node as the import reads it. */
+export function importedChangesWithin(node: NodeJSON): Map<string, string> {
+  const found = new Map<string, string>();
+  const visit = (parent: NodeJSON) => {
+    for (const child of parent.content ?? []) {
+      for (const mark of child.marks ?? []) {
+        const kind = MARK_KINDS.get(mark.type);
+        const ref = kind ? readProposalRef(mark.attrs) : null;
+        if (kind && ref) found.set(`${ref.id} ${kind}`, ref.request);
+      }
+      const own = readProposalAttribute(child.attrs?.[PROPOSAL_ATTRIBUTE]);
+      if (own) found.set(`${own.id} ${own.kind}`, own.request);
+      visit(child);
+    }
+  };
+  visit(node);
+  return found;
 }
 
 /**

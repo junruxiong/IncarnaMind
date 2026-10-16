@@ -18,7 +18,9 @@ import { startCompareDocuments, useComparisons } from "../comparisons";
 import { chosenScope, useComposer } from "../composer";
 import { core } from "../core";
 import { AnswerView } from "../editor/AnswerView";
+import { AppliedReviewBar } from "../editor/AppliedReviewBar";
 import { holdsAiText } from "../editor/aiText";
+import { AppliedEditLine } from "../editor/appliedEditLine";
 import { BlockHandle } from "../editor/BlockHandle";
 import { BlockCommands } from "../editor/blockCommands";
 import { BlockOrigins } from "../editor/blockOrigins";
@@ -27,6 +29,7 @@ import { CitationStylePrompt } from "../editor/CitationStylePrompt";
 import { CitationView } from "../editor/CitationView";
 import { CodeBlockView } from "../editor/CodeBlockView";
 import { ComparisonTableView } from "../editor/ComparisonTableView";
+import { ContradictionLine } from "../editor/ContradictionLine";
 import { CitationClusters } from "../editor/citationClusters";
 import { CitationNumbers, redrawFootnotes, setCitationForm } from "../editor/citationNumbers";
 import { ClaimChecks, setClaimContext } from "../editor/claimChecks";
@@ -47,6 +50,7 @@ import { HeldSelection } from "../editor/heldSelection";
 import { LinkBubble } from "../editor/LinkBubble";
 import { MarginChecks } from "../editor/MarginChecks";
 import { MathEditing, MathEditor } from "../editor/MathEditor";
+import { MindCheckAsk } from "../editor/MindCheckLine";
 import { MindOutline } from "../editor/MindOutline";
 import { MeetingNotes } from "../editor/meetingNotes";
 import {
@@ -76,6 +80,7 @@ import { useVerification, VerifyLine } from "../editor/VerifyLine";
 import { wordAtomView, wordBlockView } from "../editor/WordAtomView";
 import { WordCount } from "../editor/WordCount";
 import { OriginalNotAdded, useWordFile, WordOrigin } from "../editor/WordOrigin";
+import { useWordLookStyle } from "../editor/wordLookStyle";
 import { setWritingPlace, WritingPlace } from "../editor/writingPlace";
 import { requestEdit, startEditing, TRANSLATE_LANGUAGES } from "../editWithAi";
 import { useFirstOpen } from "../firstOpen";
@@ -369,6 +374,10 @@ function MindEditorView({
         }),
         QuestionFold.configure({ mindId }),
         ProposalReview.configure({ translate: translateNow }),
+        AppliedEditLine.configure({
+          translate: translateNow,
+          undoKeys: () => shortcutLabel("edit.undo"),
+        }),
         WritingPlace.configure({ label: () => translateNow("mind.writing") }),
         Suggestions.configure({
           request: (request) => askForSuggestion(mindId, doc, request),
@@ -457,7 +466,7 @@ function MindEditorView({
     };
   }, [reads, editor, mindId, doc]);
 
-  // The selection menu's AI section: each comes back as changes to accept or reject; Mark as mine acts at once.
+  // The selection menu's AI section: each applies at once (#880), as Mark as mine does.
   const hasDocuments = useAppStore((state) => state.documents.length > 0);
   const aiActions = useMemo((): SelectionAction[] => {
     const available = (current: typeof editor) => selectionForEdit(current.state) !== null;
@@ -619,6 +628,7 @@ function MindEditorView({
   const verification = useVerification(doc);
   const frame = useRef<HTMLDivElement>(null);
   useClickBelowNote(editor, frame);
+  const wordLook = useWordLookStyle(doc, mindId, editor);
 
   return (
     <MindIdContext.Provider value={mindId}>
@@ -631,15 +641,22 @@ function MindEditorView({
               <VerifyLine editor={editor} doc={doc} mindId={mindId} verification={verification} />
             ) : (
               <WordCount editor={editor} doc={doc} quiet={firstOpen && isExample}>
-                <NoteHealth editor={editor} mindId={mindId} doc={doc} />
+                <NoteHealth editor={editor} doc={doc} mindId={mindId} />
+                <ContradictionLine doc={doc} mindId={mindId} />
+                <MindCheckAsk mindId={mindId} />
               </WordCount>
             )}
           </>,
           countSlot,
         )}
       {readOnly && <MindNotice kind="read-only" />}
-      <div ref={frame} className={`mind-editor-frame ${guide ? "mind-editor-frame--guide" : ""}`}>
+      <div
+        ref={frame}
+        className={`mind-editor-frame ${guide ? "mind-editor-frame--guide" : ""} ${wordLook?.className ?? ""}`}
+      >
+        {wordLook && <style>{wordLook.css}</style>}
         {!readOnly && <ProposalBars editor={editor} mindId={mindId} />}
+        {!readOnly && <AppliedReviewBar editor={editor} />}
         <EditorContent editor={editor} />
         {!readOnly && <EndHint editor={editor} text={hintText} onAsk={askOnLine} />}
         <MarginChecks editor={editor} mind={{ id: mindId, doc }} />

@@ -355,12 +355,18 @@ describe("Streaming Answers into the Mind", () => {
       asGenerated([
         {
           type: "heading",
-          attrs: { id: expect.any(String), level: 2, includeInContext: null, proposal: null },
+          attrs: {
+            id: expect.any(String),
+            level: 2,
+            includeInContext: null,
+            proposal: null,
+            wordLook: null,
+          },
           content: [{ type: "text", text: "Tidal forces" }],
         },
         {
           type: "paragraph",
-          attrs: { id: expect.any(String), includeInContext: null, proposal: null },
+          attrs: { id: expect.any(String), includeInContext: null, proposal: null, wordLook: null },
           content: [
             { type: "text", text: "The " },
             { type: "text", text: "Moon", marks: [{ type: "bold" }] },
@@ -379,7 +385,12 @@ describe("Streaming Answers into the Mind", () => {
               content: [
                 {
                   type: "paragraph",
-                  attrs: { id: expect.any(String), includeInContext: null, proposal: null },
+                  attrs: {
+                    id: expect.any(String),
+                    includeInContext: null,
+                    proposal: null,
+                    wordLook: null,
+                  },
                   content: [{ type: "text", text: "High tide faces the Moon" }],
                 },
               ],
@@ -390,7 +401,12 @@ describe("Streaming Answers into the Mind", () => {
               content: [
                 {
                   type: "paragraph",
-                  attrs: { id: expect.any(String), includeInContext: null, proposal: null },
+                  attrs: {
+                    id: expect.any(String),
+                    includeInContext: null,
+                    proposal: null,
+                    wordLook: null,
+                  },
                   content: [
                     { type: "text", text: "Another", marks: [{ type: "italic" }] },
                     { type: "text", text: " one is opposite" },
@@ -421,7 +437,7 @@ describe("Streaming Answers into the Mind", () => {
         },
         {
           type: "paragraph",
-          attrs: { id: expect.any(String), includeInContext: null, proposal: null },
+          attrs: { id: expect.any(String), includeInContext: null, proposal: null, wordLook: null },
           content: [
             { type: "text", text: "See " },
             {
@@ -803,7 +819,7 @@ describe("Choosing the model", () => {
         baseUrl: "http://127.0.0.1:1234/v1",
         apiKey: null,
         modelId: "picked-model",
-        thinking: "summary",
+        thinking: "answer",
       },
     ]);
     expect(answerIn(reader, answerId).attrs).toMatchObject({
