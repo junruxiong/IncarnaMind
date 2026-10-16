@@ -77,7 +77,43 @@ const REPORTERS = [
   "Ill. 2d",
   "Ill. App. 3d",
   "Mass.",
+  "Mass. App. Ct.",
+  "Wash.",
   "Wash. 2d",
+  "Wash. App.",
+  "Wn.2d",
+  "Wn. App.",
+  "Wn. App. 2d",
+  "Pa.",
+  "Pa. Super.",
+  "Pa. Commw.",
+  "N.J.",
+  "N.J. Super.",
+  "Ohio St.",
+  "Ohio St. 2d",
+  "Ohio St. 3d",
+  "Ohio App. 3d",
+  "Mich.",
+  "Mich. App.",
+  "Md.",
+  "Md. App.",
+  "Ga.",
+  "Ga. App.",
+  "N.C.",
+  "N.C. App.",
+  "Va.",
+  "Wis.",
+  "Wis. 2d",
+  "Ky.",
+  "La.",
+  "Mo.",
+  "Tenn.",
+  "Conn.",
+  "Minn.",
+  "Colo.",
+  "Fla.",
+  "Tex.",
+  "Tex. App.",
 ];
 
 const NEUTRAL_COURTS = [
@@ -141,6 +177,7 @@ const LAW_REPORTS = [
 const escaped = (text: string) =>
   text
     .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    .replace(/\\\. /g, "\\.\\s*")
     .replace(/ /g, "\\s+")
     .replace(/'/g, "['’]");
 
@@ -150,27 +187,91 @@ const alternatives = (names: readonly string[]) =>
     .map(escaped)
     .join("|");
 
-const CAPITALISED = String.raw`[A-Z][\p{L}\p{N}.'’&-]*`;
-const COMPANY_SUFFIX = String.raw`(?:,\s+(?:Inc|Ltd|LLC|LLP|Co|Corp|Jr|Sr)\.?)?`;
-const PARTY = `${CAPITALISED}(?:\\s+(?:${CAPITALISED}|of|the|and|for|ex|rel\\.|de|la|&)){0,6}${COMPANY_SUFFIX}`;
+const INTRODUCERS = [
+  "See",
+  "Also",
+  "But",
+  "Cf",
+  "Compare",
+  "Accord",
+  "Contra",
+  "Under",
+  "In",
+  "Per",
+  "As",
+  "By",
+  "From",
+  "Following",
+  "Citing",
+  "And",
+  "With",
+  "Since",
+  "Because",
+  "While",
+  "Although",
+  "Thus",
+  "So",
+  "Then",
+  "Yet",
+  "After",
+  "Before",
+  "Despite",
+  "Unlike",
+  "Like",
+].join("|");
+
+const ABBREVIATIONS = [
+  "Inc",
+  "Ltd",
+  "Co",
+  "Cos",
+  "Corp",
+  "Bros",
+  "Jr",
+  "Sr",
+  "Dr",
+  "St",
+  "No",
+  "Mt",
+  "Ass'n",
+  "Dep't",
+  "Dept",
+  "Bd",
+  "Cty",
+  "Univ",
+  "Mfg",
+  "Int'l",
+  "Nat'l",
+  "Comm'r",
+  "Auth",
+  "Assocs",
+  "Mgmt",
+  "Ins",
+  "Hosp",
+].map(escaped);
+
+// A period ends a party's word only in an abbreviation or initials: "Act.", "Texas." and "IBM." end a sentence.
+const WORD = String.raw`(?:(?:[A-Z]\.){1,4}|(?:${ABBREVIATIONS.join("|")})\.|(?!(?:${INTRODUCERS})\b)[A-Z][\p{L}\p{N}'’&-]*)`;
+const COMPANY_SUFFIX = String.raw`(?:,\s+(?:Inc|Ltd|LLC|L\.L\.C|LLP|L\.L\.P|Co|Corp|PC|P\.C|Jr|Sr)\.?)?`;
+const PARTY = `${WORD}(?:\\s+(?:${WORD}|of|the|and|for|ex|rel\\.|de|la|&)){0,6}${COMPANY_SUFFIX}`;
+const INTRODUCED = `(?:(?:${INTRODUCERS})\\.?,?\\s+)*`;
 const NAME = `${PARTY}\\s+v\\.?\\s+${PARTY}`;
-const SIGNAL = /^(?:(?:see|also|but|cf|compare|accord|contra|e\.g)\b[.,]?\s+)+/i;
+const ARTICLES = /^(?:(?:the|a|an)\s+)+/i;
 
 const US_CITE = String.raw`\d{1,4}\s+(?:${alternatives(REPORTERS)})\s+\d{1,5}`;
 const NEUTRAL_CITE = String.raw`\[(?:1[89]|20)\d{2}\]\s+(?:${alternatives(NEUTRAL_COURTS)})\s+\d{1,5}(?:\s*\([A-Za-z]{1,8}\))?`;
 const REPORT_CITE = String.raw`\[(?:1[89]|20)\d{2}\]\s+(?:\d{1,2}\s+)?(?:${alternatives(LAW_REPORTS)})\s+\d{1,5}`;
 
-const AMERICAN = new RegExp(`(${NAME}),?\\s+(${US_CITE})(?![\\p{L}\\p{N}])`, "gu");
+const AMERICAN = new RegExp(`${INTRODUCED}(${NAME}),?\\s+(${US_CITE})(?![\\p{L}\\p{N}])`, "gu");
 const COMMONWEALTH = new RegExp(`${NEUTRAL_CITE}|${REPORT_CITE}`, "gu");
-const NAME_BEFORE = new RegExp(`(${NAME}),?\\s*$`, "u");
+const NAME_BEFORE = new RegExp(`${INTRODUCED}(${NAME}),?\\s*$`, "u");
 
 const spaced = (text: string) => text.replace(/\s+/g, " ").trim();
-const bare = (name: string) => spaced(name.replace(SIGNAL, ""));
+const bare = (name: string) => spaced(name).replace(ARTICLES, "");
 
 const MAY_CITE = /\sv\.?\s|\[(?:1[89]|20)\d{2}\]/u;
 const TRAILER = /^(?:,\s*\d{1,5}(?:[-–]\d{1,5})?)*(?:\s*\([^()]{0,40}\d{4}\))?/u;
 
-/** The court decisions a text cites, in order, where each is. */
 export function citedCases(text: string): CitedCase[] {
   if (!MAY_CITE.test(text)) return [];
   const found: CitedCase[] = [];
@@ -179,9 +280,9 @@ export function citedCases(text: string): CitedCase[] {
     found.push({ name, cite: spaced(cite), from, to });
   };
   for (const match of text.matchAll(AMERICAN)) {
-    const [, name, cite] = match;
+    const [whole, name, cite] = match;
     if (name !== undefined && cite !== undefined) {
-      add(bare(name), cite, match.index, match.index + match[0].length);
+      add(bare(name), cite, match.index, match.index + whole.length);
     }
   }
   for (const match of text.matchAll(COMMONWEALTH)) {
@@ -197,7 +298,6 @@ export function citedCases(text: string): CitedCase[] {
   return found.sort((a, b) => a.from - b.from);
 }
 
-/** The court decisions a sentence cites, in the order it cites them. */
 export const caseCitations = (sentence: string): CaseCitation[] =>
   citedCases(sentence).map(({ name, cite }) => ({ name, cite }));
 
