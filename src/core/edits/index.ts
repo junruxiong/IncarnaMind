@@ -614,7 +614,8 @@ export function createEdits(options: EditsOptions) {
       return ended({ kind: "failed", error: classifyProviderError(failure) });
     }
     const reply = readEditReply(raw, selection.text);
-    if (reply === "" && !wrote && !refused) {
+    // Asked to remove the passage, a model gives back no text, only why.
+    if (reply === "" && !wrote && !refused && (explain || reasonOf(raw) === null)) {
       return ended({
         kind: "failed",
         error: { kind: "provider", message: "The model gave nothing back." },
