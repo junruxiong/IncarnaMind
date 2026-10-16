@@ -198,6 +198,7 @@ import {
 import { quotedWordsIn, withoutQuotationMarks } from "./quotedWords";
 import { type RequestContext, routeRequest } from "./routeRequest";
 import type { ChangeStates } from "./toolRecord";
+import type { TurnCheck } from "./turnChecks";
 
 export type { AnswerDocuments } from "./citations";
 export { createAiSdkAnswerEngine } from "./engine";
@@ -1586,16 +1587,25 @@ export function createAnswers(options: AnswersOptions) {
       const changedAMind = () => [...mindChanges.values()].some(changesAMind);
       const owesAWrite = () => requested !== null && !changedAMind() && mindProblems.size === 0;
       const heldBack = holdBack(() => mindsListed().map((mind) => mind.name));
-      const checkReply = (text: string) => {
-        mindsNow = null;
-        const claims = claimsNoCallMade(text, toolCalls, mindsListed());
-        if (claims.length > 0) {
-          return { claims, note: askAgainNote(claims, toolCalls, options.readableMindName) };
-        }
-        return owesAWrite()
-          ? { claims, note: askToWriteNote(toolCalls, options.readableMindName) }
-          : null;
-      };
+      const turnChecks: TurnCheck[] = [
+        {
+          name: "claimed-change",
+          check: (text) => {
+            mindsNow = null;
+            const claims = claimsNoCallMade(text, toolCalls, mindsListed());
+            return claims.length > 0
+              ? { claims, note: askAgainNote(claims, toolCalls, options.readableMindName) }
+              : null;
+          },
+        },
+        {
+          name: "owed-write",
+          check: () =>
+            owesAWrite()
+              ? { claims: [], note: askToWriteNote(toolCalls, options.readableMindName) }
+              : null,
+        },
+      ];
       for await (const event of engine.generate({
         instructions: (
           mode,
@@ -1650,7 +1660,7 @@ export function createAnswers(options: AnswersOptions) {
         retryQuotes: prepared.retryQuotes,
         cacheKey: place.conversationId ?? place.mindId ?? undefined,
         ...(input.assistant && {
-          checkReply,
+          turnChecks,
           shownUpTo: (text: string) => (owesAWrite() ? 0 : heldBack(text)),
           mayEndBlank: changedAMind,
         }),
