@@ -31,7 +31,6 @@ import * as Y from "yjs";
 import { recordProposalRequest } from "../shared/proposals";
 import { setTextOrigin } from "../shared/textOrigins";
 import {
-  layoutNotShown,
   linkWordFileDocument,
   recordWordImportProgress,
   setWordSource,
@@ -326,7 +325,6 @@ export function createWordImports(options: WordImportsOptions) {
           refusal: read.refusal,
           origin: "own",
           authors: [],
-          layoutNotShown: false,
           changes: 0,
           comments: 0,
           earlierDraft: null,
@@ -337,7 +335,6 @@ export function createWordImports(options: WordImportsOptions) {
         fileName,
         refusal: null,
         origin: defaultOrigin(read.review),
-        layoutNotShown: layoutNotShown(read.structure.report.layout),
         ...read.review,
         earlierDraft: earlierDraft(fileName, path, sha256, folderId),
       };
@@ -559,7 +556,7 @@ export function createWordImports(options: WordImportsOptions) {
               if (!doc) return null;
               const look = wordLookOf(doc);
               if (look && look.version >= WORD_LOOK_VERSION) return null;
-              if (look) clearLook(doc, blocks);
+              if (look) clearLook(doc, blocks, structure.look);
               const planned = planLook(doc, blocks, structure, look?.version ?? null);
               applyLook(doc, planned);
               setWordLook(doc, structure.look);

@@ -3,6 +3,17 @@ import { attribute, border, pt, rule } from "./wordCss";
 import { wordLookZoomCss } from "./wordLookZoom";
 import { WORD_LOOK_DOM_ATTRIBUTE, WORD_RUN_DOM_ATTRIBUTE } from "./wordSchema";
 import { wordTableCss } from "./wordTableCss";
+import { alignsColumns, DEFAULT_TAB_STOP } from "./wordTabStops";
+import { WORD_TAB_DOM_ATTRIBUTE } from "./wordTabs";
+
+const LEADERS = [
+  ["dot", "."],
+  ["hyphen", "-"],
+  ["underscore", "_"],
+  ["heavy", "_"],
+  ["middleDot", "·"],
+] as const;
+const LEADER_LENGTH = 400;
 
 /** Word's single line spacing for common fonts. */
 const SINGLE_LINE = 1.15;
@@ -114,11 +125,20 @@ function paragraphDeclarations(look: WordParagraphLook): string[] {
 /** Sizes and lengths are relative to the file's body size, which takes the Mind's writing size. */
 export function wordLookCss(mindId: string, look: WordLook): string {
   const scope = `.${escapedClass(wordLookScope(mindId))}`;
+  const tab = pt(look.defaultTab ?? DEFAULT_TAB_STOP);
   const rules = [
     `${scope} { --word-pt: calc(var(--text-body) / ${look.body ?? DEFAULT_BODY}); }`,
     look.width ? `${scope} { max-width: ${pt(look.width)}; }` : "",
     // A list draws its own indents.
     `${scope} li > [${WORD_LOOK_DOM_ATTRIBUTE}] { margin-left: 0; margin-right: 0; text-indent: 0; }`,
+    // Until measured, a tab takes one default stop. overflow: clip, unlike hidden, leaves the baseline where it is.
+    `${scope} [${WORD_TAB_DOM_ATTRIBUTE}] { display: inline-block; position: relative; width: ${tab}; tab-size: ${tab}; white-space: pre; text-indent: 0; text-align: left; overflow: clip; }`,
+    // Out of the flow, so the tab character still starts the box.
+    `${scope} [${WORD_TAB_DOM_ATTRIBUTE}][data-leader]::before { position: absolute; inset: 0; overflow: clip; pointer-events: none; }`,
+    ...LEADERS.map(
+      ([leader, character]) =>
+        `${scope} [${WORD_TAB_DOM_ATTRIBUTE}][data-leader="${leader}"]::before { content: "${character.repeat(LEADER_LENGTH)}"; }`,
+    ),
   ];
   for (const [key, paragraph] of Object.entries(look.paragraphs)) {
     const run =
@@ -129,6 +149,15 @@ export function wordLookCss(mindId: string, look: WordLook): string {
     rules.push(
       rule(selector, [...paragraphDeclarations(paragraph), ...(run ? runDeclarations(run) : [])]),
     );
+    if (alignsColumns(paragraph)) {
+      rules.push(
+        rule(`${selector}:has([${WORD_TAB_DOM_ATTRIBUTE}])`, [
+          "white-space: pre",
+          "overflow-x: auto",
+          "overflow-y: hidden",
+        ]),
+      );
+    }
     if (paragraph.contextual) {
       const same = attribute(WORD_LOOK_DOM_ATTRIBUTE, key);
       rules.push(
