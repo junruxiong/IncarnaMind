@@ -180,6 +180,18 @@ describe("the fonts installed on this computer", () => {
     expect(logged).toHaveLength(1);
   });
 
+  test("come back empty when the page has no font list to ask", async () => {
+    const page = (globalThis as unknown as { window: Record<string, unknown> }).window;
+    const asked = page.queryLocalFonts;
+    delete page.queryLocalFonts;
+    try {
+      expect(await styles.installedFamilies()).toEqual([]);
+    } finally {
+      page.queryLocalFonts = asked;
+    }
+    expect(reported).toEqual([]);
+  });
+
   test("come back empty when there are none", async () => {
     localFonts = async () => [];
     expect(await styles.installedFamilies()).toEqual([]);

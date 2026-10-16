@@ -59,10 +59,7 @@ export function useMindStyle(mindId: string): MindStyle {
 export function useWritingProperties(mindId: string): CSSProperties {
   const style = useMindStyle(mindId);
   const installed = useFontInstalled(style.font);
-  return useMemo(
-    () => writingProperties(writingType(style, installed)) as CSSProperties,
-    [style, installed],
-  );
+  return useMemo(() => writingProperties(writingType(style, installed)), [style, installed]);
 }
 
 /** Keeps the window's copy of a Mind's style current from its open document. Returns how to stop. */
@@ -163,7 +160,6 @@ export async function makeDefaultForNewMinds(style: MindStyle): Promise<void> {
 const PROBE_TEXT = "mmmmmmmmmmlliWwQq0O1,.中文字体";
 const PROBE_BASES = ["monospace", "serif", "sans-serif"] as const;
 
-/** Draws `text` at 72px in a CSS `font` and says how wide it came out. */
 type Measure = (font: string, text: string) => number;
 
 const canvasMeasure = (): Measure | null => {

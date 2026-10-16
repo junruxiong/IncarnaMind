@@ -11,6 +11,7 @@ import {
   type MindStyle,
   mindStyleOf,
   sameStyle,
+  TEXT_SIZES,
   writeMindStyle,
   writingProperties,
   writingType,
@@ -107,19 +108,16 @@ describe("the type a Mind is written in", () => {
   });
 
   test("the writing is 14/23, 16/26 and 18/29, and a step up in Serif: 15/24, 17/28 and 19/31", () => {
-    const body = (font: "default" | "serif" | "mono", size: "small" | "default" | "large") =>
-      writingType({ font, size }, true).body;
-    expect(["small", "default", "large"].map((size) => body("default", size as never))).toEqual([
+    const bodies = (font: "default" | "serif" | "mono") =>
+      TEXT_SIZES.map((size) => writingType({ font, size }, true).body);
+    const other = [
       { size: 14, leading: 23 },
       { size: 16, leading: 26 },
       { size: 18, leading: 29 },
-    ]);
-    expect(["small", "default", "large"].map((size) => body("mono", size as never))).toEqual([
-      { size: 14, leading: 23 },
-      { size: 16, leading: 26 },
-      { size: 18, leading: 29 },
-    ]);
-    expect(["small", "default", "large"].map((size) => body("serif", size as never))).toEqual([
+    ];
+    expect(bodies("default")).toEqual(other);
+    expect(bodies("mono")).toEqual(other);
+    expect(bodies("serif")).toEqual([
       { size: 15, leading: 24 },
       { size: 17, leading: 28 },
       { size: 19, leading: 31 },

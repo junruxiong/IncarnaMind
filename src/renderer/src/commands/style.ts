@@ -4,7 +4,6 @@ import { mindShown, onlyOne } from "./targets";
 
 const buttonAt = (selector: string) => document.querySelector<HTMLButtonElement>(selector);
 
-/** The ⋯ of the object the command was asked on, else of the Mind's shown tab; none: the window's top. */
 function anchorFor(ctx: CommandContext, mindId: string): HTMLButtonElement | null {
   const target = ctx.selection[0] ?? ctx.focus;
   const own =

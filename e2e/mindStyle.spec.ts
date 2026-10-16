@@ -365,6 +365,7 @@ for (const { language, width } of [
 for (const { language, listing } of [
   { language: "en", listing: "denied" },
   { language: "zh-CN", listing: "empty" },
+  { language: "en", listing: "failing" },
 ] as const) {
   test(`Style with no installed fonts to list (${listing}, ${language}): Default, Serif and Mono stay, and nothing alarms`, async () => {
     const { app, window } = await launchApp(dataDir);
@@ -386,10 +387,17 @@ for (const { language, listing } of [
     ).toBe("granted");
 
     await window.evaluate((mode) => {
-      (globalThis as unknown as Window).queryLocalFonts =
-        mode === "denied"
-          ? () => Promise.reject(new DOMException("Permission denied", "NotAllowedError"))
-          : () => Promise.resolve([]);
+      const page = globalThis as unknown as Window;
+      if (mode === "denied") {
+        page.queryLocalFonts = () =>
+          Promise.reject(new DOMException("Permission denied", "NotAllowedError"));
+      } else if (mode === "failing") {
+        page.queryLocalFonts = () => {
+          throw new TypeError("The font list failed.");
+        };
+      } else {
+        page.queryLocalFonts = () => Promise.resolve([]);
+      }
     }, listing);
 
     const panel = await openStyle(window);

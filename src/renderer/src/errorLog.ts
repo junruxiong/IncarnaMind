@@ -20,7 +20,6 @@ function report(kind: RendererErrorReport["kind"], reason: unknown): void {
   }
 }
 
-/** Writes an error the window caught, and showed in its own words, to the log. */
 export const logCaught = (reason: unknown): void => report("error", reason);
 
 /**
