@@ -110,7 +110,8 @@ test("a rewrite that would take out most of the User's own text waits, in Englis
   const paragraphs = editor.locator(":scope > p");
   await expect(paragraphs).toHaveText(NOTES);
 
-  await askInAssistant(window, "Rewrite the intro to be clearer");
+  const answer = await askInAssistant(window, "Rewrite the intro to be clearer");
+  await expect(answer.getByTestId("mind-changes-left")).toHaveText("· 2 waiting");
   const line = editor.getByTestId("applied-line");
   await expect(line.getByTestId("applied-count")).toHaveText(
     "This would rewrite most of your text, so it's waiting for you",
