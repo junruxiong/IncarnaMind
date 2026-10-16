@@ -108,6 +108,13 @@ function sparkle(): SVGSVGElement {
   return svg;
 }
 
+function keys(label: string): HTMLElement {
+  const kbd = document.createElement("kbd");
+  kbd.className = "applied-keys";
+  kbd.textContent = label;
+  return kbd;
+}
+
 function text(className: string, words: string, testId?: string): HTMLSpanElement {
   const span = document.createElement("span");
   span.className = className;
@@ -132,7 +139,7 @@ function mainLine(doc: ProseMirrorNode, line: AppliedLine, options: Options): HT
       what,
       dot(),
       button("undo", t("edit.applied.undo")),
-      text("applied-keys", options.undoKeys()),
+      keys(options.undoKeys()),
     ];
     if (line.reviewable) parts.push(dot(), button("review", t("edit.applied.review")));
     const element = lineElement("applied-line", "applied-line", parts);
