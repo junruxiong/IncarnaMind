@@ -241,7 +241,10 @@ test("help during the call: the floating panel above the meeting gives one or tw
 
   // Closed, it stays closed for this meeting, and the buttons sit at the top of the assistant,
   // which shows the help asked there; ⌘K shows the panel again.
-  await pointAndClick(panel, panel.getByTestId("panel-close"));
+  // The window goes as the click lands, which a click Playwright waits on would call a failure.
+  const close = panel.getByTestId("panel-close");
+  await close.hover();
+  await close.evaluate((button) => setTimeout(() => (button as HTMLElement).click(), 0));
   await expect.poll(() => panelOpen(app)).toBe(false);
   const strip = window.getByTestId("help-strip");
   await expect(strip.getByTestId("help-button")).toHaveCount(9);

@@ -3332,6 +3332,9 @@ export const en = {
   "error.meeting.notRecording": "That Meeting isn't recording.",
   "error.meeting.notPaused": "That Meeting isn't paused.",
   "error.meeting.notBeingRecorded": "That Meeting isn't being recorded.",
+  "error.meeting.helpButton": "That isn't one of this meeting's help buttons.",
+  "error.meeting.template":
+    "A meeting's template is a sales call, a user interview or a team meeting.",
   "error.comparison.noQuestion": "Add a Question to compare by.",
   "error.comparison.tooManyQuestions": "A comparison table has at most {max} Questions.",
   "error.comparison.noDocuments": "There are no Documents to compare.",
