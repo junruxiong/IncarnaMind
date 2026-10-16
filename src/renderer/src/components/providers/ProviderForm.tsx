@@ -18,6 +18,7 @@ import {
   untestedForCitations,
 } from "../../../../core/providers/catalog/providers";
 import type { Role } from "../../../../core/providers/catalog/types";
+import { serviceForUrl } from "../../../../core/providers/service";
 import type { MessageKey } from "../../../../shared/i18n";
 import { modelName } from "../../../../shared/modelName";
 import { core } from "../../core";
@@ -36,6 +37,7 @@ import {
   primaryButtonClass,
   successTextClass,
 } from "../ui";
+import { LocalServerLine, useLocalServer } from "./LocalServerLine";
 import { keyProviderName, testErrorKey, useProviderKey } from "./shared";
 
 type CatalogId = string;
@@ -51,6 +53,12 @@ const isSuggestion = (model: string) =>
 
 /** The providers shown as one row of choices; the rest are under "More…". */
 const ROW: readonly CatalogId[] = ["anthropic", "openai", "google", "deepseek", "qwen"];
+
+/** What a provider's address field holds when it is chosen. */
+const fieldDefault = (kind: CatalogId): string => {
+  const provider = catalogProvider(kind);
+  return (provider && endpointOf(provider, "")?.field?.default) ?? "";
+};
 
 /** The "Another model…" choice of the model list. */
 const OTHER_MODEL = "\u0000other";
@@ -102,6 +110,7 @@ export function ProviderForm({
   onSaved,
   withMoreProviders = false,
   initialKind,
+  only,
   refused = null,
   standalone = false,
 }: {
@@ -112,6 +121,8 @@ export function ProviderForm({
   withMoreProviders?: boolean;
   /** The provider chosen when the form opens: the one the User came from. DeepSeek in Chinese, else Anthropic. */
   initialKind?: CatalogId;
+  /** The one provider this form sets up, with no chips to change it: a local server's row. */
+  only?: CatalogId;
   /** A key its provider refused: the form opens on that provider, says so by the key, and focuses it. */
   refused?: KeyRefusal | null;
   /** The setup card's key step: the form is titled with the company picked, and opens on the key. */
@@ -121,7 +132,7 @@ export function ProviderForm({
   const id = useId();
   const language = useLanguage();
   const first: CatalogId =
-    refused?.catalogId ?? initialKind ?? (language === "zh-CN" ? "deepseek" : "anthropic");
+    only ?? refused?.catalogId ?? initialKind ?? (language === "zh-CN" ? "deepseek" : "anthropic");
   const [kind, setKind] = useState<CatalogId | null>(first);
   const [otherModel, setOtherModel] = useState(
     refused !== null && !catalogMenu(refused.catalogId, refused.endpoint).includes(refused.modelId),
@@ -131,7 +142,7 @@ export function ProviderForm({
   const [endpointId, setEndpointId] = useState(refused?.endpoint ?? "");
   const key = useProviderKey();
   const { apiKey } = key;
-  const [fieldValue, setFieldValue] = useState("");
+  const [fieldValue, setFieldValue] = useState(() => fieldDefault(first));
   const [baseUrl, setBaseUrl] = useState("");
   const [modelId, setModelId] = useState(refused?.modelId ?? suggestedModel(first));
   const [busy, setBusy] = useState<"saving" | null>(null);
@@ -161,16 +172,20 @@ export function ProviderForm({
     keyField.current?.focus({ preventScroll: true });
   }, []);
   const catalog = kind ? catalogProvider(kind) : undefined;
+  const local = catalog?.group === "local";
+  const server = useLocalServer(local ? kind : null);
   const words = language === "zh-CN" ? "zh" : "en";
   const endpoint = catalog ? endpointOf(catalog, endpointId) : undefined;
   const field = endpoint?.field;
   const fieldUsed = (fieldValue || field?.choices?.[0]?.value || "").trim();
   const fieldAddress =
     endpoint && field && fieldAccepts(field, fieldUsed) ? fieldUrl(endpoint, fieldUsed) : null;
+  // An address elsewhere is a service like any other: it says what goes to it, and choosing it is the consent.
+  const away = local && fieldAddress !== null && serviceForUrl(fieldAddress) !== null;
   const saved = kind
     ? providers.find((each) => sameServer(each, kind, endpoint?.id ?? "", baseUrl, fieldAddress))
     : undefined;
-  const keyRequired = kind !== null && kind !== "openai-compatible";
+  const keyRequired = catalog?.apiKey === "required";
   const hasKey = apiKey.trim() !== "" || Boolean(saved?.hasApiKey);
   const keyBlocked = apiKey.trim() !== "" && secretStorage !== null && !secretStorage.canSave;
   const missing: MessageKey | null =
@@ -180,12 +195,14 @@ export function ProviderForm({
         ? "providers.form.needsAddress"
         : field && fieldAddress === null
           ? "providers.form.needsField"
-          : keyRequired && !hasKey
-            ? "providers.form.needsKey"
-            : modelId.trim() === ""
-              ? "providers.form.needsModel"
-              : null;
-  const complete = kind !== null && missing === null;
+          : local && server.status?.running === false
+            ? "providers.form.needsServer"
+            : keyRequired && !hasKey
+              ? "providers.form.needsKey"
+              : modelId.trim() === ""
+                ? "providers.form.needsModel"
+                : null;
+  const complete = kind !== null && missing === null && (!local || server.status?.running === true);
 
   const shortName = (option: CatalogId) =>
     option === "qwen"
@@ -219,13 +236,19 @@ export function ProviderForm({
     setKind(next);
     if (more.includes(next)) setMoreOpen(true);
     setEndpointId("");
-    setFieldValue("");
+    setFieldValue(fieldDefault(next));
     setModelId((current) =>
       current === "" || isSuggestion(current) ? suggestedModel(next) : current,
     );
     setTest(null);
     setError(null);
   };
+
+  useEffect(() => {
+    const models = server.status?.running ? server.status.models : [];
+    const [first] = models;
+    if (first !== undefined) setModelId((current) => (models.includes(current) ? current : first));
+  }, [server.status]);
 
   const changeField = (value: string) => {
     setFieldValue(value);
@@ -291,7 +314,9 @@ export function ProviderForm({
   };
   const site = siteOf(endpoint?.keyUrl ?? catalog?.keyUrl);
   const providerName = kind ? keyProviderName(kind, t, language) : "";
-  const choices = kind && kind !== "openai-compatible" ? catalogMenu(kind, endpoint?.id) : [];
+  const listed = server.status?.running ? server.status.models : [];
+  const choices =
+    kind && kind !== "openai-compatible" ? (local ? listed : catalogMenu(kind, endpoint?.id)) : [];
   const recommended = choices[0];
   const shownName = (id: string) =>
     modelName(id, { kind: kind ? kindOfCatalogId(kind) : undefined, endpoint: endpoint?.id });
@@ -331,23 +356,25 @@ export function ProviderForm({
             : t("providers.form.title", { provider: shortName(kind) })}
         </h3>
       )}
-      <fieldset>
-        <legend className="sr-only">{t("providers.form.label")}</legend>
-        <div className="flex flex-wrap gap-1">
-          {[...rowKinds, ...(moreOpen ? underMore : [])].map(chip)}
-          {underMore.length > 0 && !moreOpen && (
-            <button
-              type="button"
-              data-testid="provider-more-toggle"
-              aria-expanded={moreOpen}
-              onClick={() => setMoreOpen(true)}
-              className={`${buttonClass} h-7 px-2.5`}
-            >
-              {t("providers.form.moreShort")}
-            </button>
-          )}
-        </div>
-      </fieldset>
+      {!only && (
+        <fieldset>
+          <legend className="sr-only">{t("providers.form.label")}</legend>
+          <div className="flex flex-wrap gap-1">
+            {[...rowKinds, ...(moreOpen ? underMore : [])].map(chip)}
+            {underMore.length > 0 && !moreOpen && (
+              <button
+                type="button"
+                data-testid="provider-more-toggle"
+                aria-expanded={moreOpen}
+                onClick={() => setMoreOpen(true)}
+                className={`${buttonClass} h-7 px-2.5`}
+              >
+                {t("providers.form.moreShort")}
+              </button>
+            )}
+          </div>
+        </fieldset>
+      )}
 
       {kind && (
         <>
@@ -404,6 +431,7 @@ export function ProviderForm({
                   data-testid="provider-field"
                   value={fieldValue}
                   onChange={(event) => changeField(event.target.value)}
+                  onBlur={() => local && void server.detect(apiKey, fieldUsed)}
                   autoComplete="off"
                   spellCheck={false}
                   className={inputClass}
@@ -415,6 +443,15 @@ export function ProviderForm({
                 </span>
               )}
             </label>
+          )}
+
+          {local && (
+            <LocalServerLine
+              provider={keyProviderName(kind, t, language)}
+              status={server.status}
+              away={away}
+              onCheckAgain={() => void server.detect(apiKey, fieldUsed)}
+            />
           )}
 
           {kind === "openai-compatible" && (
@@ -440,6 +477,7 @@ export function ProviderForm({
               type="password"
               value={apiKey}
               onChange={(event) => key.type(event.target.value, baseUrl)}
+              onBlur={() => local && apiKey.trim() !== "" && void server.detect(apiKey, fieldUsed)}
               autoComplete="off"
               spellCheck={false}
               ref={keyField}
@@ -517,13 +555,15 @@ export function ProviderForm({
             </div>
           )}
 
-          <ProviderSendsLine
-            provider={
-              kind === "openai-compatible"
-                ? (hostOf(baseUrl) ?? t("providers.kind.openai-compatible"))
-                : providerName
-            }
-          />
+          {(!local || away) && (
+            <ProviderSendsLine
+              provider={
+                kind === "openai-compatible"
+                  ? (hostOf(baseUrl) ?? t("providers.kind.openai-compatible"))
+                  : providerName
+              }
+            />
+          )}
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="submit"
@@ -531,13 +571,15 @@ export function ProviderForm({
               disabled={!complete || keyBlocked || busy !== null}
               className={primaryButtonClass}
             >
-              {busy ? t("providers.form.checking") : t("providers.form.useKey")}
+              {busy
+                ? t("providers.form.checking")
+                : t(local && !keyRequired ? "providers.form.save" : "providers.form.useKey")}
             </button>
             {missing && (
               <span data-testid="provider-use-key-why" className={hintClass}>
                 {missing === "providers.form.needsField" && field
                   ? t(missing, { field: field.label[words] })
-                  : t(missing)}
+                  : t(missing, { provider: providerName })}
               </span>
             )}
           </div>
