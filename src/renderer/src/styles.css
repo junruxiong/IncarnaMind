@@ -1332,7 +1332,7 @@
 
     & + &::before {
       content: "·";
-      margin: 0 4px 0 2px;
+      margin: 0 2px 0 6px;
       font-weight: 400;
       color: var(--color-rule-strong);
     }
