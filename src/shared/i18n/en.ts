@@ -752,6 +752,8 @@ export const en = {
     "Neither has a record like it, but neither holds every conference paper, preprint or Chinese journal, so the work may still exist.",
   "references.stopped.unreachable": "{service} couldn't be reached.",
   "references.stopped.rate-limited": "{service} asked to slow down. Try again later.",
+  "references.stopped.rate-limitedUntil":
+    "{service}'s free searches for this network are used up until {time}.",
   "references.record.etAl": "{names} et al.",
   "references.difference.year.cited": "Year: {cited} here, {found} in {service}",
   "references.difference.title": "Title in {service}: {found}",

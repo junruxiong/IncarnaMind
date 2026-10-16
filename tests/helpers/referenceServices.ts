@@ -130,7 +130,9 @@ export async function startReferenceServices(answers: {
     if (failing && failure !== null) {
       // Offline, the connection drops with no answer.
       if (failure === "unreachable") response.socket?.destroy();
-      else response.writeHead(failure).end();
+      // A used-up allowance says when it resets, in seconds, as OpenAlex does.
+      else
+        response.writeHead(failure, failure === 429 ? { "x-ratelimit-reset": "3600" } : {}).end();
       return;
     }
     const json = (body: unknown) =>

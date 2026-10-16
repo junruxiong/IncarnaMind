@@ -51,10 +51,12 @@ export function citedReference(text: string): CitedReference {
   };
 }
 
-const LIST_NUMBER = /^\s*(?:\[\d{1,3}\]|\d{1,3}\.)\s+/;
-/** What an author list goes on with after an initial's dot: "Vaswani, N", "Shazeer", not a title. */
+const LIST_NUMBER = /^\s*(?:\[\d{1,3}\]|\d{1,3}[.)])\s*/;
+/** What an author list goes on with after an initial's dot: "Vaswani, N", "Shazeer", "and Hinton, G". */
 const AUTHORS_GO_ON =
-  /^(?:\p{Lu}[\p{L}'’-]*(?:,\s*\p{Lu}\b\.?|$)|\p{Lu}[\p{L}'’-]*,\s*(?:and\s+)?\p{Lu}\b)/u;
+  /^(?:(?:and|&)\s+)?(?:\p{Lu}[\p{L}'’-]*(?:,\s*\p{Lu}\b\.?|$)|\p{Lu}[\p{L}'’-]*,\s*(?:and\s+)?\p{Lu}\b)/u;
+/** Where a reference's parts end; "Schmidhuber, J.: Long short-term memory" too. */
+const PART_END = /[.。]\s+|(?<=\p{Lu}\.):\s+/u;
 /** A title in quotation marks, as numbered styles write it: “Attention is all you need,”. */
 const QUOTED_TITLE = /[“"]([^”"]{3,}?)[,.]?[”"]/;
 /** A title before its type, as GB/T 7714 writes it: 机器学习[M]. */
@@ -69,7 +71,7 @@ export function titleOf(reference: string): string | null {
     const title = pattern.exec(reference)?.[1]?.trim();
     if (title && titleWords(title).length > 0) return title;
   }
-  const [, ...parts] = reference.replace(LIST_NUMBER, "").split(/[.。]\s+/);
+  const [, ...parts] = reference.replace(LIST_NUMBER, "").split(PART_END);
   const afterAuthors = parts.findIndex((part) => !AUTHORS_GO_ON.test(part));
   return (
     parts

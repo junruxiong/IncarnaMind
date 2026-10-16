@@ -22,6 +22,8 @@ export class ServiceFailure extends Error {
   constructor(
     readonly service: ReferenceService,
     readonly reason: ReferenceCheckReason,
+    /** When a service that asked to slow down takes requests again, epoch milliseconds. */
+    readonly resetsAt: number | null = null,
     cause?: unknown,
   ) {
     super(`${service}: ${reason}`, { cause });
@@ -31,7 +33,7 @@ export class ServiceFailure extends Error {
 /** One check of a list: the services, and those it stopped asking (offline, or asked to slow down). */
 export interface CheckRun {
   readonly lookups: Lookups;
-  readonly stopped: Map<ReferenceService, ReferenceCheckReason>;
+  readonly stopped: Map<ReferenceService, ServiceFailure>;
 }
 
 const reasonOf = (error: unknown): ReferenceCheckReason =>
@@ -48,14 +50,16 @@ async function ask<T>(
   call: () => Promise<T>,
 ): Promise<T> {
   const stopped = run.stopped.get(service);
-  if (stopped) throw new ServiceFailure(service, stopped);
+  if (stopped) throw stopped;
   try {
     return await call();
   } catch (error) {
     if (signal.aborted) throw error;
     const reason = reasonOf(error);
-    if (reason !== "service-error") run.stopped.set(service, reason);
-    throw new ServiceFailure(service, reason, error);
+    const resetsAt = error instanceof SourceError ? error.resetsAt : null;
+    const failure = new ServiceFailure(service, reason, resetsAt, error);
+    if (reason !== "service-error") run.stopped.set(service, failure);
+    throw failure;
   }
 }
 
@@ -152,12 +156,20 @@ export async function checkReference(
       const agency = await ask(run, "crossref", signal, () => crossref.agency(doi, signal));
       if (agency === null) return unmatched("not-found", "crossref");
     }
-    const inOpenAlex = await lookUp("openalex", () => openalex.byDoi(doi, signal));
-    if (inOpenAlex) return inOpenAlex;
     const { arxiv: id } = cited;
+    // A preprint is still looked for on arXiv while OpenAlex can't be asked; the outage stands otherwise.
+    let openAlexDown: ServiceFailure | null = null;
+    try {
+      const inOpenAlex = await lookUp("openalex", () => openalex.byDoi(doi, signal));
+      if (inOpenAlex) return inOpenAlex;
+    } catch (error) {
+      if (!(id && error instanceof ServiceFailure)) throw error;
+      openAlexDown = error;
+    }
     // Asked only about a number that exists: arXiv's API can hang on one that doesn't.
     const onArxiv = id && (await lookUp("arxiv", () => arxiv.byId(id, signal)));
     if (onArxiv) return onArxiv;
+    if (openAlexDown) throw openAlexDown;
     return (
       fewestDifferences(checks) ?? {
         ...unmatched("not-checked", null),

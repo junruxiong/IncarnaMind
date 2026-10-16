@@ -107,7 +107,12 @@ export function createReferenceChecks(options: ReferenceChecksOptions) {
             } catch (error) {
               if (signal.aborted) return { kind: "cancelled" };
               if (!(error instanceof ServiceFailure)) throw error;
-              result = notChecked(entry.cited.text, error.reason, error.service);
+              result = {
+                ...notChecked(entry.cited.text, error.reason, error.service),
+                ...(error.resetsAt !== null && {
+                  resetsAt: new Date(error.resetsAt).toISOString(),
+                }),
+              };
             }
           }
           references.push({ blockId: entry.blockId, ...result });

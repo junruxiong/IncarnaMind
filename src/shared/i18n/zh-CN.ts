@@ -688,9 +688,9 @@ export const zhCN = {
   "verify.problem.error": "无法核对：{message}",
   "verify.tryAgain": "重试",
   "references.ask":
-    "在 Crossref 中查找列表里的 {count} 条参考文献，必要时再在 OpenAlex 或 arXiv 中查找，只发送每条参考文献的原文。",
+    "在 Crossref 中查询列表里的 {count} 条参考文献，必要时再在 OpenAlex 或 arXiv 中查询，只发送每条参考文献的原文。",
   "references.ask.one":
-    "在 Crossref 中查找列表里的这条参考文献，必要时再在 OpenAlex 或 arXiv 中查找，只发送这条参考文献的原文。",
+    "在 Crossref 中查询列表里的这条参考文献，必要时再在 OpenAlex 或 arXiv 中查询，只发送这条参考文献的原文。",
   "references.check": "核对参考文献",
   "references.checking": "正在核对参考文献：{done}/{total}…",
   "references.checked": "已核对 {count} 条参考文献",
@@ -723,12 +723,14 @@ export const zhCN = {
     "两者都没有相近的记录，但它们并未收录所有会议论文、预印本和中文期刊，这篇文献仍可能存在。",
   "references.stopped.unreachable": "无法连接 {service}。",
   "references.stopped.rate-limited": "{service} 要求放慢速度，请稍后再试。",
+  "references.stopped.rate-limitedUntil":
+    "当前网络在 {service} 的免费查询次数已用完，{time} 恢复。",
   "references.record.etAl": "{names} 等",
   "references.difference.year.cited": "年份：这里是 {cited}，{service} 记录为 {found}",
   "references.difference.title": "{service} 记录的标题：{found}",
   "references.difference.authors": "{service} 记录的作者：{found}",
-  "references.localMode": "已开启“所有内容都留在这台电脑上”，无法查找这 {count} 条参考文献。",
-  "references.localMode.one": "已开启“所有内容都留在这台电脑上”，无法查找这条参考文献。",
+  "references.localMode": "已开启“所有内容都留在这台电脑上”，无法查询这 {count} 条参考文献。",
+  "references.localMode.one": "已开启“所有内容都留在这台电脑上”，无法查询这条参考文献。",
   "references.localMode.turnOff": "关闭",
   "references.problem": "无法核对参考文献：{message}",
   "consent.flow.checks": "查找出处与核对文档",
