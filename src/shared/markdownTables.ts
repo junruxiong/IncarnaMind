@@ -47,6 +47,22 @@ export function tableCellRanges(text: string): CellRange[] {
   });
 }
 
+/**
+ * Each column's alignment, when a table starts at `lines[i]`: a row with a
+ * pipe, then a delimiter row with as many cells.
+ */
+export function tableStart(lines: readonly string[], i: number): TableAlign[] | null {
+  const head = lines[i];
+  const below = lines[i + 1];
+  if (head === undefined || below === undefined || !head.includes("|")) return null;
+  const align = delimiterRow(below);
+  return align && tableCellRanges(head).length === align.length ? align : null;
+}
+
+/** A line of text that reads as a table's row or delimiter row: what is left of a table that couldn't be made. */
+export const looksLikeTableRow = (line: string): boolean =>
+  /^\s*\|.*\|\s*$/.test(line) || /\|\s*:?-{3,}:?\s*\|/.test(line);
+
 /** Each column's alignment, when `text` is a table's delimiter row ("|:--|--:|"); otherwise null. */
 export function delimiterRow(text: string): TableAlign[] | null {
   if (!text.includes("-") || text.trim() === "") return null;

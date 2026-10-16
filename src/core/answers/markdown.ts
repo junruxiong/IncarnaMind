@@ -17,7 +17,7 @@
  */
 
 import type { MarkJSON, NodeJSON } from "../../shared/blockJson";
-import { delimiterRow, type TableAlign, tableCellRanges } from "../../shared/markdownTables";
+import { type TableAlign, tableCellRanges, tableStart } from "../../shared/markdownTables";
 
 export interface MarkdownOptions {
   /** The text may continue: hold back, or close, what is unfinished at its end. */
@@ -88,18 +88,6 @@ function startsBlock(line: string): boolean {
     QUOTE.test(line) ||
     LIST_ITEM.test(line)
   );
-}
-
-/**
- * Each column's alignment, when a table starts at `lines[i]`: a row with a
- * pipe, then a delimiter row with as many cells.
- */
-function tableStart(lines: readonly string[], i: number): TableAlign[] | null {
-  const head = lines[i];
-  const below = lines[i + 1];
-  if (head === undefined || below === undefined || !head.includes("|")) return null;
-  const align = delimiterRow(below);
-  return align && tableCellRanges(head).length === align.length ? align : null;
 }
 
 /**

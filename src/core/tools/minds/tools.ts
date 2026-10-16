@@ -31,6 +31,7 @@
 import { randomUUID } from "node:crypto";
 import * as Y from "yjs";
 import { setOrigins } from "../../../shared/blockOrigins";
+import { looksLikeTableRow } from "../../../shared/markdownTables";
 import {
   pendingProposals,
   readProposalAttribute,
@@ -331,6 +332,34 @@ function lengths(before: string, after: string): string {
 
 const changes = (count: number) => (count === 1 ? "1 change" : `${count} changes`);
 
+const tablesNote = (tables: number | undefined): string[] =>
+  !tables ? [] : [tables === 1 ? "One of them adds a table." : `${tables} of them add tables.`];
+
+function noTableMessage(name: string, text: string | null): string {
+  // A rewrite's markers are the passage's Citations, which the reply can't give.
+  const given =
+    text === null
+      ? "the text you wrote"
+      : `this text, written again as you would an Answer: <text>${text.replace(/\s*\[\^?\d+\]/g, "")}</text>`;
+  return [
+    `Nothing was added to “${name}”: its table couldn't be made, as a table needs a heading row, a row of ---, and then each row on a line of its own.`,
+    `Say so first, in one sentence in the User's language, in these words: “I couldn't make this into a table, so it's below as text. Nothing was added to “${name}”.” In Chinese: “这些内容没法做成表格，所以写在下面，没有添加到“${name}”。”`,
+    `Then, below it, give ${given}, so the User still has it. Don't add it to a Mind another way.`,
+  ].join(" ");
+}
+
+function unmadeTable(node: NodeJSON): boolean {
+  if (node.type === "codeBlock") return false;
+  if (node.type === "paragraph" || node.type === "heading") {
+    const lines = (node.content ?? [])
+      .map((child) => (child.type === "hardBreak" ? "\n" : (child.text ?? "")))
+      .join("")
+      .split("\n");
+    return lines.some(looksLikeTableRow);
+  }
+  return (node.content ?? []).some(unmadeTable);
+}
+
 const WAITING =
   "They wait in the Mind for the User to accept or reject them; until then nothing of the User's text has changed.";
 
@@ -383,6 +412,8 @@ function notProposed(result: EditWithAiResult, mind: ChangeableMind): Refusal | 
         { kind: "stopped", mindId },
         "The change was stopped. Nothing was proposed.",
       );
+    case "no-table":
+      return new Refusal({ kind: "no-table", mindId }, noTableMessage(name, result.text));
     case "proposed":
       return "";
   }
@@ -418,21 +449,23 @@ function stretchText(blocks: Y.XmlFragment, { from, to }: Stretch): string {
     .join("\n\n");
 }
 
-/** The paragraphs in the whole Blocks a request wrote, in lists and quotes too; a heading or a table's cells are none. */
-function paragraphsWritten(note: Y.XmlFragment, request: string): number {
-  let count = 0;
-  const visit = (element: Y.XmlElement) => {
-    if (element.nodeName === "paragraph") count++;
-    else if (element.nodeName !== "table") {
-      for (const child of element.toArray()) if (child instanceof Y.XmlElement) visit(child);
+/**
+ * What the whole Blocks a request wrote hold: paragraphs, in lists and quotes
+ * too, and tables. A heading is no paragraph, nor a table's cell.
+ */
+function writtenBy(note: Y.XmlFragment, request: string): { paragraphs: number; tables: number } {
+  const counts = { paragraphs: 0, tables: 0 };
+  const visit = (element: Y.XmlElement, written: boolean) => {
+    const proposal = readProposalAttribute(element.getAttribute(PROPOSAL_ATTRIBUTE));
+    const ours = written || (proposal?.kind === "insert" && proposal.request === request);
+    if (ours && element.nodeName === "table") counts.tables++;
+    else if (ours && element.nodeName === "paragraph") counts.paragraphs++;
+    else {
+      for (const child of element.toArray()) if (child instanceof Y.XmlElement) visit(child, ours);
     }
   };
-  for (const block of note.toArray()) {
-    if (!(block instanceof Y.XmlElement)) continue;
-    const proposal = readProposalAttribute(block.getAttribute(PROPOSAL_ATTRIBUTE));
-    if (proposal?.kind === "insert" && proposal.request === request) visit(block);
-  }
-  return count;
+  for (const block of note.toArray()) if (block instanceof Y.XmlElement) visit(block, false);
+  return counts;
 }
 
 /** The Minds' Tools for one Answer in the assistant (see the module's comment). */
@@ -542,11 +575,18 @@ export function mindTools(options: MindToolsOptions): Tool[] {
 
   /** What a request did in a Mind: how many of its changes wait there now. */
   const changeIn = (mindId: string, request: string, created: boolean): MindChange => {
-    const { proposals, paragraphs } = minds.read(mindId, (note) => ({
+    const { proposals, paragraphs, tables } = minds.read(mindId, (note) => ({
       proposals: pendingProposals(note).filter((each) => each.request === request).length,
-      paragraphs: paragraphsWritten(note, request),
+      ...writtenBy(note, request),
     }));
-    return { mindId, created, request, proposals, ...(paragraphs > 0 && { paragraphs }) };
+    return {
+      mindId,
+      created,
+      request,
+      proposals,
+      ...(paragraphs > 0 && { paragraphs }),
+      ...(tables > 0 && { tables }),
+    };
   };
 
   const changeOf = (writer: Writer, created: boolean): MindChange =>
@@ -610,14 +650,17 @@ export function mindTools(options: MindToolsOptions): Tool[] {
       stream.created = opened.created;
     }
     const { writer } = stream;
-    writeMore(writer, options.blocksOf(content.value).blocks.slice(0, -1));
+    const finished = options.blocksOf(content.value).blocks.slice(0, -1);
+    const unmade = finished.findIndex(unmadeTable);
+    writeMore(writer, unmade < 0 ? finished : finished.slice(0, unmade));
     minds.writing(writer.mind.id, { after: writer.anchor });
     if (writer.written > 0) options.changed(toolCallId, changeOf(writer, stream.created));
   };
 
   /**
    * A call of `add_to_mind` or `create_mind` with all its input: the rest of
-   * its Blocks, after any written as it came, into `mind` after `after`.
+   * its Blocks, after any written as it came, into `mind` after `after`. Null:
+   * a table in it couldn't be made, and none of it stays in the Mind.
    */
   const finishContent = (
     toolCallId: string,
@@ -625,18 +668,20 @@ export function mindTools(options: MindToolsOptions): Tool[] {
     after: string | null,
     markdown: string,
     made: boolean,
-  ): { change: MindChange; notFound: number; unrecorded: number } => {
+  ): { change: MindChange; notFound: number; unrecorded: number } | null => {
     const stream = streams.get(toolCallId);
     streams.delete(toolCallId);
     ended.add(toolCallId);
+    const { blocks, cited, notFound, unrecorded } = options.blocksOf(markdown);
+    const unmade = blocks.some(unmadeTable);
     let writer = stream?.writer ?? null;
-    if (writer && (writer.mind.id !== mind.id || writer.named !== after)) {
+    if (writer && (unmade || writer.mind.id !== mind.id || writer.named !== after)) {
       withdraw(writer);
       minds.writing(writer.mind.id, null);
       writer = null;
     }
+    if (unmade) return null;
     writer ??= writerFor(mind, after, made);
-    const { blocks, cited, notFound, unrecorded } = options.blocksOf(markdown);
     writeMore(writer, blocks);
     minds.writing(writer.mind.id, null);
     const change = { ...changeOf(writer, made), ...citedIn({ cited, unrecorded }) };
@@ -645,9 +690,11 @@ export function mindTools(options: MindToolsOptions): Tool[] {
   };
 
   /** What the model reads of Blocks it added: how many, and what of their Citations didn't hold. */
-  const added = (written: ReturnType<typeof finishContent>, where: string): string =>
+  const added = (written: NonNullable<ReturnType<typeof finishContent>>, where: string): string =>
     [
-      `Proposed ${written.change.proposals === 1 ? "1 new Block" : `${written.change.proposals} new Blocks`} ${where}. ${WAITING}`,
+      `Proposed ${written.change.proposals === 1 ? "1 new Block" : `${written.change.proposals} new Blocks`} ${where}.`,
+      ...tablesNote(written.change.tables),
+      WAITING,
       ...citationNotes(written),
     ].join(" ");
 
@@ -682,7 +729,7 @@ export function mindTools(options: MindToolsOptions): Tool[] {
   const contentProperty = {
     type: "string",
     description:
-      "The text, in Markdown, cited as an Answer is, with markers like [^1] for Citations recorded with cite. A new section starts with its heading. Write it last, after the other fields.",
+      "The text, in Markdown, cited as an Answer is, with markers like [^1] for Citations recorded with cite, in a table's cells too, right after the words each backs. Never write a source as its name in brackets, like [Tides, p. 3]. A new section starts with its heading. A table has a heading row, a row of ---, then each row on a line of its own. Write it last, after the other fields.",
   };
 
   const revisedText = (name: string, change: MindChange, went: string): string =>
@@ -699,6 +746,9 @@ export function mindTools(options: MindToolsOptions): Tool[] {
     markdown: string,
   ): { change: MindChange; notFound: number; unrecorded: number } => {
     const { blocks, cited, notFound, unrecorded } = options.blocksOf(markdown);
+    if (blocks.some(unmadeTable)) {
+      throw new Refusal({ kind: "no-table", mindId: mind.id }, noTableMessage(mind.name, null));
+    }
     const request = randomUUID();
     minds.checkpoint(mind.id);
     const ids = minds.edit(mind.id, (note) => {
@@ -738,7 +788,7 @@ export function mindTools(options: MindToolsOptions): Tool[] {
   const edit: Tool = {
     name: MIND_TOOLS.edit,
     description:
-      "Change text that is already in a Mind, as the User asks: shorten, lengthen, rewrite, restructure, correct, translate or reword it, or remove part of it. Say what to change in instruction, and the text is rewritten for you, its Citations kept. Text you proposed that still waits ([waiting change, adds: …]) is revised in place; for it you may give its whole new text as content instead, cited as add_to_mind's, e.g. to add more from the Documents. It arrives in the Mind as changes the User accepts or rejects.",
+      "Change text that is already in a Mind, as the User asks: shorten, lengthen, rewrite, restructure, correct, translate or reword it, or remove part of it. Say what to change in instruction, and the text is rewritten for you, its Citations kept. The rewrite reads only that text: it can't search the Documents or cite anything new, so new facts from the Documents, a table of them too, go in with add_to_mind, cited. Text you proposed that still waits ([waiting change, adds: …]) is revised in place; for it you may give its whole new text as content instead, cited as add_to_mind's, e.g. to add more from the Documents. It arrives in the Mind as changes the User accepts or rejects.",
     inputSchema: {
       type: "object",
       properties: {
@@ -796,6 +846,7 @@ export function mindTools(options: MindToolsOptions): Tool[] {
         const revised = reviseWith(toolCallId, mind, waiting, markdown);
         return [
           revisedText(mind.name, revised.change, ` (${lengths(before, markdown)})`),
+          ...tablesNote(revised.change.tables),
           ...citationNotes(revised),
         ].join(" ");
       }
@@ -821,9 +872,16 @@ export function mindTools(options: MindToolsOptions): Tool[] {
         }
         throw why;
       }
+      const tables = minds.read(mind.id, (note) => writtenBy(note, result.request).tables);
       const change: MindChange = revised
         ? { ...changeIn(mind.id, result.request, false), revised: true }
-        : { mindId: mind.id, created: false, request: result.request, proposals: result.proposals };
+        : {
+            mindId: mind.id,
+            created: false,
+            request: result.request,
+            proposals: result.proposals,
+            ...(tables > 0 && { tables }),
+          };
       if (revised) {
         minds.edit(mind.id, (note) => {
           if (note.doc) setOrigins(note.doc, revised.blockIds, options.origin);
@@ -835,6 +893,7 @@ export function mindTools(options: MindToolsOptions): Tool[] {
         revised
           ? revisedText(mind.name, change, went)
           : `Proposed ${changes(result.proposals)} in “${mind.name}”${went}. ${WAITING}`,
+        ...tablesNote(change.tables),
         ...(reason ? [`Why, as the rewrite says: ${reason}`] : []),
         ...(result.droppedCitations > 0
           ? [
@@ -853,7 +912,7 @@ export function mindTools(options: MindToolsOptions): Tool[] {
   const add: Tool = {
     name: MIND_TOOLS.add,
     description:
-      "Add new text to a Mind: a section, a paragraph or a list you write from the Documents or this conversation. Cite it as an Answer: call cite first and put its markers in content. It arrives in the Mind as changes the User accepts or rejects. To change text already there, your own waiting changes included, use edit_mind.",
+      "Add new text to a Mind: a section, a paragraph, a list or a table you write from the Documents or this conversation. Cite it as an Answer: call cite first and put its markers in content, in each table cell as in a paragraph. It arrives in the Mind as changes the User accepts or rejects. To change text already there, your own waiting changes included, use edit_mind.",
     inputSchema: {
       type: "object",
       properties: {
@@ -888,6 +947,9 @@ export function mindTools(options: MindToolsOptions): Tool[] {
       const mind = found(targetOf(input));
       const after = optional(input.after);
       const written = finishContent(toolCallId, mind, after, markdown, false);
+      if (!written) {
+        throw new Refusal({ kind: "no-table", mindId: mind.id }, noTableMessage(mind.name, null));
+      }
       return added(written, `in “${mind.name}”, ${after ? `after “${after}”` : "at its end"}`);
     },
   };
@@ -939,6 +1001,10 @@ export function mindTools(options: MindToolsOptions): Tool[] {
         return `${made}. It is empty.`;
       }
       const written = finishContent(toolCallId, mind, null, markdown, true);
+      if (!written) {
+        options.changed(toolCallId, { mindId: mind.id, created: true, request: "", proposals: 0 });
+        return `${made}. It is empty. ${noTableMessage(mind.name, null)}`;
+      }
       return `${made}. ${added(written, "in it")}`;
     },
   };

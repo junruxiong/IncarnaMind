@@ -16,6 +16,7 @@ const seenNames = new Map<string, string>();
 function factText(t: Translate, row: ChangedMind, name: string, waiting: Waiting) {
   if (waiting === "gone") return t("mindChanges.one.removed", { mind: name });
   const count = row.wrote + row.changed;
+  if (row.tables > 0) return tablesFact(t, row, name);
   if (row.created) {
     if (count === 0) return t("mindChanges.one.created.none", { mind: name });
     return count === 1
@@ -33,9 +34,25 @@ function factText(t: Translate, row: ChangedMind, name: string, waiting: Waiting
     : t("mindChanges.changed", { mind: name, count });
 }
 
+function tablesFact(t: Translate, row: ChangedMind, name: string) {
+  const counted = (count: number, what: "tables" | "paragraphs" | "places") =>
+    count === 1 ? t(`mindChanges.count.${what}.one`) : t(`mindChanges.count.${what}`, { count });
+  const tables = counted(row.tables, "tables");
+  const count = row.wrote + row.changed;
+  if (count === 0) {
+    return row.created
+      ? t("mindChanges.created.tables", { mind: name, tables })
+      : t("mindChanges.tables", { mind: name, tables });
+  }
+  const paragraphs = counted(count, "paragraphs");
+  if (row.created) return t("mindChanges.created.wrote.tables", { mind: name, paragraphs, tables });
+  if (row.changed === 0) return t("mindChanges.wrote.tables", { mind: name, paragraphs, tables });
+  return t("mindChanges.changed.tables", { mind: name, places: counted(count, "places"), tables });
+}
+
 /** How many of what it did still wait, while that is known and there was something. */
 function leftText(t: Translate, row: ChangedMind, waiting: Waiting): string | null {
-  if (typeof waiting !== "number" || row.wrote + row.changed === 0) return null;
+  if (typeof waiting !== "number" || row.wrote + row.changed + row.tables === 0) return null;
   if (waiting === 0) return t("mindChanges.left.none");
   return waiting === 1 ? t("mindChanges.left.one") : t("mindChanges.left", { count: waiting });
 }

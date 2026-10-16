@@ -11,6 +11,9 @@
  *   own: the words it removes stay, under `proposalDelete`, and the words it
  *   adds go after them, under `proposalInsert`. Paragraphs the new text adds
  *   or drops are Proposals on whole Blocks.
+ *   A Markdown table in the new text is a new table Block (#961), its cells'
+ *   markers the stretch's Citations; pipe lines that make no table are
+ *   written nowhere (`Written.unmadeTable`).
  * - `proposeAfter` adds new paragraphs under the stretch, each a Proposal.
  * - `proposeBlocks` writes new content for a whole element (an Answer
  *   written again) over what it holds: Blocks kept as they are, paragraphs
@@ -26,6 +29,12 @@
  */
 import * as Y from "yjs";
 import { INLINE_CODE_MARK } from "../../shared/aiText";
+import {
+  looksLikeTableRow,
+  type TableAlign,
+  tableCellRanges,
+  tableStart,
+} from "../../shared/markdownTables";
 import {
   INLINE_NODES,
   NODE_CHARACTER,
@@ -61,6 +70,9 @@ const WRAPPERS: ReadonlySet<string> = new Set([
   "orderedList",
   "blockquote",
 ]);
+
+/** What a table holds, which a new table climbs out of to go beside: tables don't go in tables. */
+const TABLE_PARTS: ReadonlySet<string> = new Set(["table", "tableRow", "tableCell", "tableHeader"]);
 
 const MATH = "inlineMath";
 const BREAK = "hardBreak";
@@ -124,9 +136,10 @@ interface Segment {
 /**
  * What kind of Block a paragraph of the selection is, as the model reads it
  * and writes it back: a heading of a level ("heading:2"), a bullet, a
- * numbered item, a quote, or a plain paragraph.
+ * numbered item, a quote, or a plain paragraph. Only the new text has
+ * tables.
  */
-type BlockKind = "paragraph" | "bullet" | "numbered" | "quote" | `heading:${number}`;
+type BlockKind = "paragraph" | "bullet" | "numbered" | "quote" | "table" | `heading:${number}`;
 
 /** A paragraph's or heading's kind of Block, from where it is. */
 function kindOf(element: Y.XmlElement): BlockKind {
@@ -522,7 +535,58 @@ const MARKER = /\[\^(\d+)\]|\[(\d+)\]|\$([^$\n]+)\$|\n/g;
  */
 interface NewParagraph {
   kind: BlockKind | null;
+  /** Its words and inline nodes; a table's, all its cells'. */
   tokens: NewToken[];
+  /** A table: each row's cells' tokens, the heading row first, and its columns' alignment. */
+  table?: { align: TableAlign[]; rows: NewToken[][][] };
+  /** It holds lines that read as a table's rows but make no table. */
+  unmade?: true;
+}
+
+interface TableText {
+  align: TableAlign[];
+  rows: string[][];
+}
+
+/** As many cells as the table has columns: a missing one empty, an extra one left out. */
+function cellsOf(line: string, columns: number): string[] {
+  const ranges = tableCellRanges(line);
+  return Array.from({ length: columns }, (_, column) => {
+    const range = ranges[column];
+    return range
+      ? line
+          .slice(range.start, range.end)
+          .replace(/\\\|/g, "|")
+          .replace(/<br[ \t]*\/?>/gi, "\n")
+      : "";
+  });
+}
+
+/** The new text's tables, read as ../answers/markdown reads them, and the text around them. */
+function tablesApart(text: string): (string | TableText)[] {
+  const lines = text.split("\n");
+  const parts: (string | TableText)[] = [];
+  let from = 0;
+  let at = 0;
+  while (at < lines.length) {
+    const align = tableStart(lines, at);
+    if (!align) {
+      at++;
+      continue;
+    }
+    parts.push(lines.slice(from, at).join("\n"));
+    const rows = [cellsOf(lines[at] ?? "", align.length)];
+    at += 2;
+    for (; at < lines.length; at++) {
+      const line = lines[at] ?? "";
+      if (line.trim() === "" || !line.includes("|")) break;
+      rows.push(cellsOf(line, align.length));
+    }
+    parts.push({ align, rows });
+    from = at;
+  }
+  parts.push(lines.slice(from).join("\n"));
+  return parts;
 }
 
 /**
@@ -532,7 +596,7 @@ interface NewParagraph {
  * A formula the selection had is kept; another stays text. When the
  * selection was shown with its Blocks' markers, each paragraph's marker is
  * read off as its kind, and the escapes of text that looks like one are
- * taken off.
+ * taken off. A table is one paragraph of kind "table".
  */
 function newParagraphs(
   text: string,
@@ -597,26 +661,43 @@ function newParagraphs(
   const apart = selection.marked
     ? new RegExp(String.raw`\n[ \t]*\n+|\n(?=${BLOCK_MARKER})`)
     : /\n[ \t]*\n+/;
-  const paragraphs = text
-    .split(apart)
-    .map((paragraph) => paragraph.trim())
-    .filter((paragraph) => paragraph !== "")
-    .map((written) => {
-      if (!selection.marked) return { marker: null, paragraph: written };
-      const marker = readBlockMarker(written);
-      return {
-        marker,
-        paragraph: unescapeMarkers(
-          marker ? written.slice(marker.length) : written,
-          marker !== null,
-        ),
-      };
-    });
-  const anyMarker = paragraphs.some(({ marker }) => marker !== null);
-  return paragraphs.map(({ marker, paragraph }) => ({
-    kind: marker?.kind ?? (selection.marked && !anyMarker ? null : "paragraph"),
-    tokens: tokensOf(paragraph),
-  }));
+  // Pipe lines the passage already had are the User's text, not a table that failed.
+  const had = new Set(selection.text.split("\n").map((line) => line.trim()));
+  const unmade = (paragraph: string) =>
+    paragraph.split("\n").some((line) => looksLikeTableRow(line) && !had.has(line.trim()));
+  type Part = TableText | { marker: ReturnType<typeof readBlockMarker>; paragraph: string };
+  const parts = tablesApart(text).flatMap((part): Part[] =>
+    typeof part !== "string"
+      ? [part]
+      : part
+          .split(apart)
+          .map((paragraph) => paragraph.trim())
+          .filter((paragraph) => paragraph !== "")
+          .map((written) => {
+            if (!selection.marked) return { marker: null, paragraph: written };
+            const marker = readBlockMarker(written);
+            return {
+              marker,
+              paragraph: unescapeMarkers(
+                marker ? written.slice(marker.length) : written,
+                marker !== null,
+              ),
+            };
+          }),
+  );
+  const anyMarker = parts.some((part) => "marker" in part && part.marker !== null);
+  return parts.map((part): NewParagraph => {
+    if ("rows" in part) {
+      const rows = part.rows.map((row) => row.map(tokensOf));
+      return { kind: "table", tokens: rows.flat(2), table: { align: part.align, rows } };
+    }
+    const { marker, paragraph } = part;
+    return {
+      kind: marker?.kind ?? (selection.marked && !anyMarker ? null : "paragraph"),
+      tokens: tokensOf(paragraph),
+      ...(unmade(paragraph) && { unmade: true }),
+    };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -627,6 +708,8 @@ export interface Written {
   proposals: ProposalRef[];
   /** Citations the Proposals would remove and add back nowhere. */
   droppedCitations: number;
+  /** The text holds lines that read as a table's rows but make no table: nothing from them on was written. */
+  unmadeTable?: true;
 }
 
 /** What a Proposal's marks and attributes hold: which it is, and the text it changes. */
@@ -893,13 +976,48 @@ function addBeside(anchor: Y.XmlElement, elements: Y.XmlElement[], side: "after"
   parent.insert(side === "after" ? index + 1 : index, elements);
 }
 
-/** The list item, list or quote a Block sits in, as far out as they go. */
-function outermost(element: Y.XmlElement): Y.XmlElement {
+/** The list item, list or quote a Block sits in, as far out as they go; with `tables`, a table too. */
+function outermost(element: Y.XmlElement, tables = false): Y.XmlElement {
   let current = element;
-  while (current.parent instanceof Y.XmlElement && WRAPPERS.has(current.parent.nodeName)) {
+  while (
+    current.parent instanceof Y.XmlElement &&
+    (WRAPPERS.has(current.parent.nodeName) || (tables && TABLE_PARTS.has(current.parent.nodeName)))
+  ) {
     current = current.parent;
   }
   return current;
+}
+
+/** Like `addBlock`, for a table: it goes out of any list, quote or table the place is in. */
+function addTable(
+  place: Place,
+  table: NonNullable<NewParagraph["table"]>,
+  ref: ProposalRef,
+  newId: () => string,
+): Y.XmlElement {
+  const element = createElement({ type: "table" });
+  element.insert(
+    0,
+    table.rows.map((cells, index) => {
+      const row = createElement({ type: "tableRow" });
+      row.insert(
+        0,
+        cells.map((tokens, column) => {
+          const align = table.align[column];
+          const cell = createElement({
+            type: index === 0 ? "tableHeader" : "tableCell",
+            attrs: { colspan: 1, rowspan: 1, ...(align && { align }) },
+          });
+          cell.insert(0, [textBlockOf(tokens, newId)]);
+          return cell;
+        }),
+      );
+      return row;
+    }),
+  );
+  setProposal(element, { ...refOf(ref), kind: "insert" });
+  addBeside(outermost(place.element, true), [element], place.side);
+  return element;
 }
 
 /** Where a new Block goes: next to a paragraph or heading, which is of this kind. */
@@ -1245,6 +1363,8 @@ export function createRewriteStream(
   let unlike = 0;
   /** Two were like none: the text is written anew, and each pairs in order. */
   let anew = false;
+  /** A finished paragraph reads as a table's rows but makes none: nothing more is written. */
+  let unmade = false;
 
   /** The selection's paragraphs before `to` not paired go, each whole one with its Block. */
   const removeUpTo = (to: number) => {
@@ -1274,7 +1394,9 @@ export function createRewriteStream(
     if (!place) return;
     const kind = paragraph.kind ?? kindByLikeness(segments, paragraph);
     for (const token of paragraph.tokens) noteCitation(notes.added, token);
-    const added = addBlock(place, kind, paragraph.tokens, next(""), newId);
+    const added = paragraph.table
+      ? addTable(place, paragraph.table, next(""), newId)
+      : addBlock(place, kind, paragraph.tokens, next(""), newId);
     place = { element: added, kind, side: "after" };
   };
 
@@ -1331,12 +1453,17 @@ export function createRewriteStream(
      */
     write: (text: string, done = false): boolean =>
       wrote(() => {
+        if (unmade) return;
         const paragraphs = newParagraphs(text, selection, fresh(text));
+        const finished = done ? paragraphs.length : paragraphs.length - 1;
+        if (paragraphs.slice(taken, finished).some((paragraph) => paragraph.unmade)) {
+          unmade = true;
+          return;
+        }
         if (done && taken === 0) {
           held.push(...paragraphs);
           taken = paragraphs.length;
         }
-        const finished = done ? paragraphs.length : paragraphs.length - 1;
         for (; taken < finished; taken++) {
           const paragraph = paragraphs[taken];
           if (paragraph) take(paragraph);
@@ -1372,12 +1499,17 @@ export function createRewriteStream(
     /** The model is done: the selection's paragraphs it never reached go. */
     finish: (): boolean =>
       wrote(() => {
+        if (unmade) return;
         writeHeld(segments.length);
         removeUpTo(segments.length);
       }),
 
     /** The Proposals written so far. */
-    written: (): Written => ({ proposals: [...proposals], droppedCitations: droppedOf(notes) }),
+    written: (): Written => ({
+      proposals: [...proposals],
+      droppedCitations: droppedOf(notes),
+      ...(unmade && { unmadeTable: true }),
+    }),
 
     /** Where the next paragraph goes; null with no place for any. */
     writingAt(): RewritePlace | null {
