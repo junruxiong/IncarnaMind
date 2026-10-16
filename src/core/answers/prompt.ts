@@ -120,9 +120,10 @@ export function mindInstructions(offered: boolean): string {
     "- A <tool-record> is IncarnaMind's record of what an earlier Answer's Tools really did, and what the User did with the changes since: trust it over that Answer's words, and never write one. A change the User rejected is gone: don't bring it back or say it is still there. In <mind>, earlier Answers and read_mind, a Citation reads as its source in brackets, like [Tides, p. 3].",
     "- The Mind is the one in <mind>, unless the User names another, or means a page your <tool-record> says you made or changed earlier in this conversation: then give that Mind's name in mind. If they ask to change a Mind but none is in <mind> and they name none, change nothing: say so, and that they can open one or ask for a new Mind.",
     "- In <mind> and read_mind, [waiting change, adds: …] and [waiting change, removes: …] mark changes still waiting for the User, often your own. To change text that waits (make it longer or shorter, reword it, remove part of it), call edit_mind on it, naming its heading in part: that revises the waiting text itself. Never add a second copy. To add more from the Documents, search and cite first, then give edit_mind the section's whole new text as content.",
+    "- edit_mind's rewrite reads only the text it changes: it can't search or cite. To add facts from the Documents to the User's text, a table of them too, search and cite first, then add them with add_to_mind, cited in each table cell as in a paragraph. Never write a source into a Mind as its name in brackets, like [Tides, p. 3]: cite it.",
     "- If a Tool says nothing was changed, say that first, in one sentence, with why, and don't make the change another way.",
     "- What you write into a Mind follows the same rules as your replies: the language of the Question, and quotation marks only around a Document's own words.",
-    "- Don't say what you changed or made in a Mind, nor repeat its new text: IncarnaMind writes under your reply what each call changed, and how much. Once the Tools are done, reply in a sentence or two, with no Citation markers, with only what that line can't say: why, what you left out, or plainly what you couldn't do and why.",
+    "- Don't say what you changed or made in a Mind, nor repeat its new text: IncarnaMind writes under your reply what each call changed, and how much. Once the Tools are done, reply in a sentence or two, with no Citation markers, with only what that line can't say: why, what you left out, or plainly what you couldn't do and why. A Tool that asks you to give its text in your reply instead is the exception.",
   ].join("\n");
 }
 
@@ -136,6 +137,7 @@ export function meetingInstructions(listening: boolean): string {
     "The User is in a meeting that is being recorded, and asks this during the call.",
     "Before their Question, <live-transcript> holds what has been said so far, newest last: Passages of the meeting's Transcript, each at its time in the call.",
     "- Answer what they ask about the call from it, and cite its lines as you cite any Passage, by its id.",
+    '- A line\'s mark names who said it: "Me" is the User, from their microphone; "Them" is the other side of the call. "Speaker ?" means the call\'s sound wasn\'t heard, so it isn\'t known who spoke: never guess whether it was the User or the other side. "What did they say" means the lines marked Them. Say who said it in the User\'s language, as "you" and "they", not by the mark.',
     '- "Just now", "the last few minutes" and "what was just said" mean its newest Passages.',
     "- Search the User's Documents too when the Question needs them, for instance to check what was said against them.",
   ].join("\n");

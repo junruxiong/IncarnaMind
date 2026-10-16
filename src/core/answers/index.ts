@@ -47,6 +47,7 @@ import { runsByDefault } from "../../shared/approvalRules";
 import { citationNode, withCitations } from "../../shared/blockJson";
 import type { LiveDocument } from "../../shared/citations";
 import { withFigures, withFigureText } from "../../shared/figureMarkers";
+import { linkTableSources } from "../../shared/markdownTables";
 import {
   decisionsOn,
   pendingProposals,
@@ -1438,17 +1439,20 @@ export function createAnswers(options: AnswersOptions) {
                 let notFound = 0;
                 let unrecorded = 0;
                 let firstUnrecorded = -1;
-                const cited = markdownToBlocks(withoutFootnoteDefinitions(text)).flatMap(
-                  (block, index) =>
-                    withCitations([block], (marker) => {
-                      const node = session.checkedNode(marker);
-                      if (!node) {
-                        unrecorded++;
-                        if (firstUnrecorded < 0) firstUnrecorded = index;
-                      } else if (node.attrs?.check === "not-found") notFound++;
-                      else found++;
-                      return node;
-                    }),
+                const tables = linkTableSources(withoutFootnoteDefinitions(text), (source) => {
+                  const marker = session.markerFor(source);
+                  return marker === null ? null : `[^${marker}]`;
+                });
+                const cited = markdownToBlocks(tables.markdown).flatMap((block, index) =>
+                  withCitations([block], (marker) => {
+                    const node = session.checkedNode(marker);
+                    if (!node) {
+                      unrecorded++;
+                      if (firstUnrecorded < 0) firstUnrecorded = index;
+                    } else if (node.attrs?.check === "not-found") notFound++;
+                    else found++;
+                    return node;
+                  }),
                 );
                 const blocks = asGenerated(
                   calculating
@@ -1465,6 +1469,8 @@ export function createAnswers(options: AnswersOptions) {
                   notFound,
                   unrecorded,
                   firstUnrecorded,
+                  unlinkedSources: tables.unlinked,
+                  extraCells: tables.extraCells,
                 };
               },
               changed: (toolCallId, change) => {
@@ -1477,7 +1483,16 @@ export function createAnswers(options: AnswersOptions) {
                   writeSoon();
                 }
               },
-              failed: (toolCallId, problem) => mindProblems.set(toolCallId, problem),
+              failed: (toolCallId, problem) => {
+                mindProblems.set(toolCallId, problem);
+                // Whatever it wrote as its input came in was taken back: nothing of it counts.
+                mindChanges.delete(toolCallId);
+                const call = toolCalls.find((each) => each.id === toolCallId);
+                if (call?.mindChange) {
+                  delete call.mindChange;
+                  writeSoon();
+                }
+              },
               signal: controller.signal,
               now: () => new Date(),
             })

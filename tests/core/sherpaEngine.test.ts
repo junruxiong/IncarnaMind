@@ -38,7 +38,9 @@ describe("The sherpa-onnx recognizer", () => {
     RESULTS.push('{"lang": "", "text": "The launch\nmoves to the eighteenth.", "tokens": []}');
     expect(() => JSON.parse(latest())).toThrow(SyntaxError);
 
-    expect(await engine.recognizer.decode(samples)).toBe("The launch\nmoves to the eighteenth.");
+    expect(await engine.recognizer.decode(samples, "meeting:1:microphone")).toBe(
+      "The launch\nmoves to the eighteenth.",
+    );
   });
 
   test("leaves out the model's header that sherpa-onnx left in the text, with its control characters too", async () => {
@@ -47,20 +49,24 @@ describe("The sherpa-onnx recognizer", () => {
       '{"lang": "", "text": "提uggestion\nlanguage English<asr_text>Local authorities are warning.", "tokens": []}',
     );
 
-    expect(await engine.recognizer.decode(samples)).toBe("Local authorities are warning.");
+    expect(await engine.recognizer.decode(samples, "meeting:1:microphone")).toBe(
+      "Local authorities are warning.",
+    );
   });
 
   test("gives the text of an ordinary result as the package reads it", async () => {
     const engine = await createSherpaEngine(model);
     RESULTS.push('{"lang": "", "text": "Plain words.", "tokens": []}');
 
-    expect(await engine.recognizer.decode(samples)).toBe("Plain words.");
+    expect(await engine.recognizer.decode(samples, "meeting:1:microphone")).toBe("Plain words.");
   });
 
   test("fails for a result it can't read at all, as before", async () => {
     const engine = await createSherpaEngine(model);
     RESULTS.push("not json");
 
-    await expect(engine.recognizer.decode(samples)).rejects.toThrow(SyntaxError);
+    await expect(engine.recognizer.decode(samples, "meeting:1:microphone")).rejects.toThrow(
+      SyntaxError,
+    );
   });
 });

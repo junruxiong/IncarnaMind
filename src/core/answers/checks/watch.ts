@@ -219,6 +219,8 @@ export function createContradictionWatch(options: WatchOptions) {
         evidence: null,
         says: null,
         calculation: null,
+        citedCaseUnchecked: false,
+        citedCaseFound: false,
         scope: { folderId, widened: false },
         versions: [],
         excluded: [],
