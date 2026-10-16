@@ -1090,7 +1090,7 @@ export function createCore(adapters: CoreAdapters): Core {
     liveTranscript: (mindId) => liveTranscriptOf(mindId),
     providerExists: (providerId) => chat.exists(providerId),
     readiness: async (choice) => chat.readiness(await chat.answeringModel(choice)),
-    prepareModel: (choice) => chat.prepareModel(choice),
+    prepareModel: (choice, thinking) => chat.prepareModel(choice, "chat", thinking),
     documents: {
       searchableCount: (documentIds) => documents.searchableCount(documentIds ?? undefined),
       names: () => documents.names(),
@@ -2417,6 +2417,7 @@ export function createCore(adapters: CoreAdapters): Core {
       return documents.searchableCount((wanted ? resolveScope(wanted) : null) ?? undefined);
     },
     stopConversationAnswer: async (input) => answers.stopInConversation(input),
+    usualAnswerWait: async (answerId) => conversations.usualWait(answerId),
     listConversations: async (options) => conversations.list(options),
     getConversation: async (conversationId) => conversations.content(conversationId),
     searchConversations: async (query) => conversations.search(query),
