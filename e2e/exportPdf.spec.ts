@@ -444,6 +444,7 @@ test("Export options remembers the format and its options; Export and ⇧⌘E us
     /^Word \(\.docx\)(⇧⌘E|Ctrl\+Shift\+E)$/,
     "PDF",
     "More formats",
+    /^Citation style/,
     "Export options…",
   ]);
   await window.keyboard.press("Escape");
@@ -525,6 +526,7 @@ test("Export options remembers the format and its options; Export and ⇧⌘E us
     /^PDF(⇧⌘E|Ctrl\+Shift\+E)$/,
     "Word（.docx）",
     "更多格式",
+    /^引用格式/,
     "导出选项…",
   ]);
   await window.keyboard.press("Escape");
