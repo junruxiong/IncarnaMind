@@ -3047,11 +3047,13 @@ export const en = {
   "error.privacy.usageDataLocalMode":
     "Usage data stays off while “Keep everything on this computer” is on.",
   "error.check.claimTooLong": "The claim is too long to check: at most {max} characters.",
-  "error.check.localMode": "Local mode is on, and the model isn't on this computer.",
+  "error.check.localMode":
+    "“Keep everything on this computer” is on, and the model isn't on this computer.",
   "error.check.declined":
     "You declined sending the claim to the model's service, so nothing was sent.",
   "error.tagging.noModel": "Choose a classification model.",
-  "error.tagging.cloudPaused": "Cloud classification is paused in local mode.",
+  "error.tagging.cloudPaused":
+    "Cloud classification is paused while “Keep everything on this computer” is on.",
   "error.tagging.jevNotSetUp": "Jev isn't set up.",
   "error.tagging.jevKeyUnreadable": "The Jev key can't be read on this device.",
   "error.tagging.startOllama": "Start Ollama to use automatic local classification.",
