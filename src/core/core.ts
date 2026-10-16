@@ -1749,6 +1749,16 @@ export function createCore(adapters: CoreAdapters): Core {
   const organizing = () =>
     organizeModelOf(library.settings()) !== null &&
     !!db.get("SELECT 1 FROM library_groups WHERE deleted_at IS NULL LIMIT 1");
+  // Ollama's decision models run only on this computer, as when one is picked by hand: elsewhere
+  // they would get Document text with no consent asked.
+  const decisionModelElsewhere = (classifier: TaggingClassifier) =>
+    (classifier.kind === "auto" || classifier.kind === "ollama") &&
+    tagging.service(classifier) !== null;
+  const notOnThisComputer = (classifier: TaggingClassifier) =>
+    new TaggingNotReadyError({
+      key:
+        classifier.kind === "auto" ? "error.library.autoNotLocal" : "error.library.ollamaNotLocal",
+    });
   const tagger = createTagger({
     db,
     now,
@@ -1762,11 +1772,11 @@ export function createCore(adapters: CoreAdapters): Core {
         const readiness = await chat.readiness(classifier.choice, "tagging");
         return readiness.ready && readiness.consent !== "needed";
       }
-      return true;
+      return !decisionModelElsewhere(classifier);
     },
     mightBeReady: () => {
       const classifier = tagsWith();
-      if (!classifier) return false;
+      if (!classifier || decisionModelElsewhere(classifier)) return false;
       if (embedding.localOnly() && tagging.service(classifier)) return false;
       if (classifier.kind === "jev") return jev.mightBeReady();
       if (classifier.kind === "chat") return chat.mightBeReady("tagging", classifier.choice);
@@ -1775,6 +1785,7 @@ export function createCore(adapters: CoreAdapters): Core {
     prepare: async () => {
       const classifier = await tagging.resolve();
       if (!classifier) throw new TaggingNotReadyError({ key: "error.tagging.noModel" });
+      if (decisionModelElsewhere(classifier)) throw notOnThisComputer(classifier);
       if (embedding.localOnly() && tagging.service(classifier))
         throw new TaggingNotReadyError({ key: "error.tagging.cloudPaused" });
       switch (classifier.kind) {
@@ -1853,6 +1864,7 @@ export function createCore(adapters: CoreAdapters): Core {
     async prepare(settings) {
       const classifier = organizeModelOf(settings);
       if (!classifier) throw new TaggingNotReadyError({ key: "error.library.noClassifier" });
+      if (decisionModelElsewhere(classifier)) throw notOnThisComputer(classifier);
       if (classifier.kind === "auto") {
         let automatic = automaticClassifiers.get(classifier.baseUrl);
         if (!automatic) {
