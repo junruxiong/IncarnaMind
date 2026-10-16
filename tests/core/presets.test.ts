@@ -8,7 +8,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { InvalidInputError } from "../../src/core";
 import type { CatalogProvider } from "../../src/core/providers/catalog";
 import { PRESETS as CATALOG_PRESETS } from "../../src/core/providers/catalog/presets";
-import { catalogProvider } from "../../src/core/providers/catalog/providers";
+import { catalogProvider, fieldUrl } from "../../src/core/providers/catalog/providers";
 import { createAiSdkChatModel } from "../../src/core/providers/models";
 import { askAndFinish, citationsIn, setUpWithDocuments } from "../helpers/citations";
 import { fakeProvider, type RecordedRequest } from "../helpers/fakeProvider";
@@ -42,9 +42,16 @@ const TIDES = buildPdf([
 ]);
 const SPRING = "Spring tides happen at new moon and at full moon.";
 
+const FIELD_VALUES: Record<string, string> = {
+  region: "eu-west-1",
+  account: "0123456789abcdef0123456789abcdef",
+};
+
 const PRESETS = CATALOG_PRESETS.map((each) => {
-  const base = each.endpoints[0]?.baseUrl ?? "";
-  return { catalogId: each.id, origin: new URL(base).origin, base };
+  const [endpoint] = each.endpoints;
+  const value = endpoint?.field ? FIELD_VALUES[endpoint.field.name] : undefined;
+  const base = endpoint ? fieldUrl(endpoint, value ?? "") : "";
+  return { catalogId: each.id, origin: new URL(base).origin, base, value: value ?? null };
 });
 
 const posts = (requests: RecordedRequest[]) => requests.filter((each) => each.method === "POST");
@@ -52,7 +59,7 @@ const posts = (requests: RecordedRequest[]) => requests.filter((each) => each.me
 describe("Presets on the shared OpenAI-compatible path", () => {
   test.each(PRESETS)(
     "$catalogId: saved as the shared kind with its own service, its models listed and a Question answered at its endpoint",
-    async ({ catalogId, origin, base }) => {
+    async ({ catalogId, origin, base, value }) => {
       const modelId = catalogProvider(catalogId)?.roles.answers as string;
       const { core, client, mind } = await setUpWithDocuments(
         replyingModel(),
@@ -62,6 +69,7 @@ describe("Presets on the shared OpenAI-compatible path", () => {
       const saved = await core.saveChatProvider({
         kind: "openai-compatible",
         catalogId,
+        ...(value && { endpointValue: value }),
         apiKey: `key-for-${catalogId}`,
         modelId,
       });
@@ -69,7 +77,7 @@ describe("Presets on the shared OpenAI-compatible path", () => {
         kind: "openai-compatible",
         catalogId,
         endpoint: "global",
-        baseUrl: null,
+        baseUrl: value ? base : null,
         hasApiKey: true,
         service: { id: origin, name: catalogProvider(catalogId)?.name.en },
       });
@@ -179,6 +187,47 @@ describe("Presets on the shared OpenAI-compatible path", () => {
       expect(request.url).toBe("https://api.groq.com/openai/v1/chat/completions");
       expect(request.headers.authorization).toBe("Bearer key-groq");
     }
+  });
+
+  test("each value of an address field is a provider of its own, with its own origin and consent; a missing or wrong value is refused", async () => {
+    const { core } = await setUpWithDocuments(replyingModel(), [], {
+      createChatModel: createAiSdkChatModel,
+    });
+    const chatConsent = async (origin: string) =>
+      (await core.listDataFlows()).find(
+        (each) => each.flow.id === "chat" && each.flow.service.id === origin,
+      )?.consent ?? "not-asked";
+    const bedrock = (region?: string) =>
+      core.saveChatProvider({
+        kind: "openai-compatible",
+        catalogId: "bedrock",
+        ...(region !== undefined && { endpointValue: region }),
+        apiKey: "key-bedrock",
+        modelId: "openai.gpt-oss-120b",
+      });
+    const ireland = await bedrock("eu-west-1");
+    expect(ireland).toMatchObject({
+      baseUrl: "https://bedrock-mantle.eu-west-1.api.aws/v1",
+      service: { id: "https://bedrock-mantle.eu-west-1.api.aws", name: "Amazon Bedrock" },
+    });
+    expect(await chatConsent("https://bedrock-mantle.us-east-1.api.aws")).toBe("not-asked");
+    const virginia = await bedrock("us-east-1");
+    expect(virginia.id).not.toBe(ireland.id);
+    expect(await chatConsent("https://bedrock-mantle.eu-west-1.api.aws")).toBe("accepted");
+    expect(await chatConsent("https://bedrock-mantle.us-east-1.api.aws")).toBe("accepted");
+    expect((await bedrock("eu-west-1")).id).toBe(ireland.id);
+
+    await expect(bedrock()).rejects.toThrow(InvalidInputError);
+    await expect(bedrock("evil.example.com/x")).rejects.toThrow(InvalidInputError);
+    await expect(
+      core.saveChatProvider({
+        kind: "openai-compatible",
+        catalogId: "cloudflare",
+        endpointValue: "not-an-account",
+        apiKey: "key",
+        modelId: "@cf/zai-org/glm-5.3-flash",
+      }),
+    ).rejects.toThrow(InvalidInputError);
   });
 
   test("a server the User gives is still its own provider, beside a preset", async () => {

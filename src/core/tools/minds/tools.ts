@@ -365,7 +365,7 @@ function notProposed(result: EditWithAiResult, mind: ChangeableMind): Refusal | 
     case "local-mode":
       return new Refusal(
         { kind: "local-mode" },
-        "Local mode is on, and the model isn't on this computer. Nothing was proposed.",
+        "“Keep everything on this computer” is on, and the model isn't on this computer. Nothing was proposed.",
       );
     case "not-ready":
       return new Refusal(
