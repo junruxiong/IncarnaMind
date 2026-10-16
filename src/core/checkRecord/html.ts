@@ -1,9 +1,19 @@
-import { formatDate, formatFullDateTime } from "../../shared/dates";
-import { translate } from "../../shared/i18n";
 import { escapeHtml } from "../exports/printHtml";
+import type { Language } from "../language";
 import type { CheckRecord } from "./index";
-import { ORIGIN_LABELS, resultKey } from "./labels";
+import {
+  checkedBy,
+  KIND_LABELS,
+  ORIGIN_LABELS,
+  recordTime,
+  resultKey,
+  type Translator,
+  translatorFor,
+} from "./labels";
 import type { RecordItem } from "./read";
+import { shapeOf } from "./shapes";
+
+const shortHash = (sha256: string) => `${sha256.slice(0, 4)}…${sha256.slice(-4)}`;
 
 /**
  * A record as HTML to print as a PDF (see `renderPrintHtml`): the summary, then each checked
@@ -12,8 +22,7 @@ import type { RecordItem } from "./read";
  */
 export function renderRecordHtml(record: CheckRecord): string {
   const { language } = record;
-  const t = (key: Parameters<typeof translate>[1], params?: Parameters<typeof translate>[2]) =>
-    translate(language, key, params);
+  const t = translatorFor(language);
   const number = new Intl.NumberFormat(language === "zh-CN" ? "zh-CN" : "en").format;
   const none = t("checkRecord.summary.none");
 
@@ -25,69 +34,21 @@ export function renderRecordHtml(record: CheckRecord): string {
     }
     return [...counts].map(([label, total]) => `${label} ${number(total)}`).join(" · ") || none;
   };
-  const summary: [string, string][] = [
-    [t("checkRecord.summary.mind"), record.mind],
-    [t("checkRecord.summary.exported"), formatDate(record.exportedAt, language)],
-    [t("checkRecord.summary.folder"), record.folder ?? t("checkRecord.summary.allDocuments")],
+  const lines = (values: readonly string[]) => (values.length > 0 ? values : [none]);
+  const summary: [string, readonly string[]][] = [
+    [t("checkRecord.summary.mind"), [record.mind]],
+    [t("checkRecord.summary.exported"), [recordTime(record.exportedAt, language, t)]],
+    [t("checkRecord.summary.folder"), lines(record.searched)],
     [
       t("checkRecord.summary.localMode"),
-      t(record.localMode ? "checkRecord.summary.on" : "checkRecord.summary.off"),
+      [t(record.localMode ? "checkRecord.summary.on" : "checkRecord.summary.off")],
     ],
-    [t("checkRecord.summary.models"), record.models.join("; ") || none],
-    [t("checkRecord.summary.sentences"), count(record.sentences)],
-    [t("checkRecord.summary.citations"), count(record.citations)],
+    [t("checkRecord.summary.models"), lines(record.models)],
+    [t("checkRecord.summary.sentences"), [count(record.sentences)]],
+    [t("checkRecord.summary.citations"), [count(record.citations)]],
   ];
 
-  const detail = (label: string, text: string) =>
-    `<p class="record-detail"><span class="record-label">${escapeHtml(label)}</span> ${text}</p>`;
-  const item = (each: RecordItem): string => {
-    const model = each.model
-      ? `${each.model.name} (${each.model.service ?? t("checkRecord.thisComputer")})`
-      : null;
-    const facts = [
-      `<b>${escapeHtml(t(resultKey(each)))}</b>`,
-      escapeHtml(t(ORIGIN_LABELS[each.origin])),
-      ...(model ? [escapeHtml(model)] : []),
-      ...(each.checkedAt ? [escapeHtml(formatFullDateTime(each.checkedAt, language))] : []),
-    ];
-    const { evidence } = each;
-    const where = evidence
-      ? [evidence.name, evidence.location].filter((part) => part !== null && part !== "")
-      : [];
-    const separator = t("export.citation.separator");
-    const file = evidence
-      ? [
-          evidence.file,
-          evidence.size === null ? null : t("checkRecord.bytes", { count: number(evidence.size) }),
-        ].filter((part) => part !== null)
-      : [];
-    return [
-      '<div class="record-item">',
-      `<p class="record-text">${escapeHtml(each.text)}</p>`,
-      `<p class="record-result">${facts.join(" · ")}</p>`,
-      ...(evidence
-        ? [detail(t("checkRecord.column.document"), escapeHtml(where.join(separator)))]
-        : []),
-      ...(evidence?.quote
-        ? [detail(t("checkRecord.column.quote"), `“${escapeHtml(evidence.quote)}”`)]
-        : []),
-      ...(each.says ? [detail(t("checkRecord.column.says"), escapeHtml(each.says))] : []),
-      ...(evidence && (file.length > 0 || evidence.sha256)
-        ? [
-            detail(
-              t("checkRecord.column.file"),
-              [
-                ...file.map((part) => escapeHtml(part)),
-                ...(evidence.sha256
-                  ? [`SHA-256 <code class="record-hash">${escapeHtml(evidence.sha256)}</code>`]
-                  : []),
-              ].join(" · "),
-            ),
-          ]
-        : []),
-      "</div>",
-    ].join("");
-  };
+  const item = (each: RecordItem) => renderItem(each, { t, number, language });
 
   const section = (heading: string, items: readonly RecordItem[], empty: string) =>
     [
@@ -99,8 +60,10 @@ export function renderRecordHtml(record: CheckRecord): string {
     `<h1 class="mind-title">${escapeHtml(t("checkRecord.title", { name: record.mind }))}</h1>`,
     `<table class="record-summary">${summary
       .map(
-        ([label, value]) =>
-          `<tr><th scope="row">${escapeHtml(label)}</th><td>${escapeHtml(value)}</td></tr>`,
+        ([label, values]) =>
+          `<tr><th scope="row">${escapeHtml(label)}</th><td>${values
+            .map((value) => `<div>${escapeHtml(value)}</div>`)
+            .join("")}</td></tr>`,
       )
       .join("")}</table>`,
     `<p class="record-note">${escapeHtml(t("checkRecord.modelNote"))}</p>`,
@@ -114,5 +77,58 @@ export function renderRecordHtml(record: CheckRecord): string {
       record.citations,
       t("checkRecord.citations.none"),
     ),
+  ].join("");
+}
+
+function renderItem(
+  each: RecordItem,
+  { t, number, language }: { t: Translator; number: (value: number) => string; language: Language },
+): string {
+  const detail = (label: string, html: string) =>
+    `<p class="record-detail"><span class="record-label">${escapeHtml(label)}</span> ${html}</p>`;
+  const { evidence } = each;
+  const by = checkedBy(each, t);
+  const at = each.kind === "sentence" ? each.check?.at : null;
+  const where = evidence
+    ? [evidence.name, evidence.location].filter((part) => part !== null && part !== "")
+    : [];
+  const file = evidence
+    ? [
+        evidence.deleted ? t("checkRecord.documentDeleted") : evidence.file,
+        evidence.size === null ? null : t("checkRecord.bytes", { count: number(evidence.size) }),
+      ]
+        .filter((part) => part !== null)
+        .map(escapeHtml)
+    : [];
+  const hash = evidence?.sha256
+    ? [`SHA-256 <code class="record-hash">${escapeHtml(shortHash(evidence.sha256))}</code>`]
+    : [];
+  const checker = by && [
+    escapeHtml(
+      by.place === null ? by.name : t("checkRecord.modelAt", { name: by.name, place: by.place }),
+    ),
+    ...(at ? [escapeHtml(recordTime(at, language, t))] : []),
+  ];
+  return [
+    '<div class="record-item">',
+    `<p class="record-text">${escapeHtml(each.text)}</p>`,
+    `<p class="record-result"><span class="record-shape">${shapeOf(each.result)}</span><b>${escapeHtml(t(resultKey(each)))}</b> · ${escapeHtml(t(KIND_LABELS[each.kind]))} · ${escapeHtml(t(ORIGIN_LABELS[each.origin]))}</p>`,
+    ...(evidence
+      ? [
+          detail(
+            t("checkRecord.column.document"),
+            escapeHtml(where.join(t("export.citation.separator"))),
+          ),
+        ]
+      : []),
+    ...(evidence?.quote
+      ? [detail(t("checkRecord.column.quote"), `“${escapeHtml(evidence.quote)}”`)]
+      : []),
+    ...(each.says ? [detail(t("checkRecord.column.says"), escapeHtml(each.says))] : []),
+    ...(file.length + hash.length > 0
+      ? [detail(t("checkRecord.column.file"), [...file, ...hash].join(" · "))]
+      : []),
+    ...(checker ? [detail(t("checkRecord.checkedBy"), checker.join(" · "))] : []),
+    "</div>",
   ].join("");
 }

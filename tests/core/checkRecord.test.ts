@@ -11,7 +11,6 @@ import {
   type Document,
   GENERATED_MARK,
 } from "../../src/core";
-import { formatDate, formatFullDateTime } from "../../src/shared/dates";
 import { setTextOrigin } from "../../src/shared/textOrigins";
 import { createTempDataFolder, manualClock, startCore } from "../helpers/core";
 import { parseCsv } from "../helpers/csv";
@@ -111,7 +110,8 @@ async function setUp(options: { printer?: ReturnType<typeof fakePrinter>["printe
   const out = await createTempDataFolder();
   const core = startCore(dataDir, { now: manualClock(NOW).now, ...options });
   const file = await writeSourceFile(sources, "Tides.txt", QUOTE);
-  const [tides] = (await addAndProcess(core, [file])) as [Document];
+  const [tides] = await addAndProcess(core, [file]);
+  if (!tides) throw new Error("Tides was not added.");
   const local = await core.saveChatProvider({ kind: "ollama", modelId: "local-model" });
   const haiku = await core.saveChatProvider({
     kind: "anthropic",
@@ -126,9 +126,10 @@ async function setUp(options: { printer?: ReturnType<typeof fakePrinter>["printe
     core,
     mind,
     client,
-    tides: tides as Document,
+    tides,
     file,
     out,
+    folderId: folder.id,
     localModel: { providerId: local.id, modelId: "local-model" },
     haikuModel: { providerId: haiku.id, modelId: "claude-haiku-5-5" },
   };
@@ -137,7 +138,7 @@ async function setUp(options: { printer?: ReturnType<typeof fakePrinter>["printe
 type Setup = Awaited<ReturnType<typeof setUp>>;
 
 /** A Mind with every result and every kind of text. */
-async function writeNotes({ core, mind, client, tides, localModel, haikuModel }: Setup) {
+async function writeNotes({ core, mind, client, tides, folderId, localModel, haikuModel }: Setup) {
   const [own, ai, theirs, mixed] = [randomUUID(), randomUUID(), randomUUID(), randomUUID()];
   const sentences = [
     ["Spring tides come at new moon.", "supported"],
@@ -150,7 +151,9 @@ async function writeNotes({ core, mind, client, tides, localModel, haikuModel }:
       ...sentences.flatMap(([sentence, state]) => [
         text(sentence, {
           type: "claimCheck",
-          attrs: checked(tides, sentence, state, localModel),
+          attrs: checked(tides, sentence, state, localModel, {
+            scope: { folderId, widened: false },
+          }),
         }),
         text(" "),
       ]),
@@ -222,7 +225,7 @@ describe("The check record as CSV", () => {
 
     expect(saved.name).toBe("Harbour notes - check record.csv");
     const csv = readFileSync(saved.path, "utf8");
-    expect(csv.startsWith("﻿")).toBe(true);
+    expect(csv.startsWith("\uFEFF")).toBe(true);
     const rows = rowsOf(csv);
     const sha256 = createHash("sha256").update(readFileSync(setup.file)).digest("hex");
     const size = statSync(setup.file).size;
@@ -234,8 +237,9 @@ describe("The check record as CSV", () => {
       Location: "p. 1",
       Quote: QUOTE,
     };
-    const local = { Model: "local-model", Service: "this computer" };
+    const local = { Model: "local-model", Service: "On this computer" };
     const haiku = { Model: "Claude Haiku 5.5", Service: "Anthropic" };
+    const incarnaMind = { Model: "IncarnaMind", Service: "On this computer" };
     const none = {
       Document: "",
       File: "",
@@ -259,7 +263,7 @@ describe("The check record as CSV", () => {
         Quote: row.Quote,
         Model: row.Model,
         Service: row.Service,
-        Checked: row.Checked,
+        Checked: row["Checked (UTC)"],
       })),
     ).toEqual([
       {
@@ -286,8 +290,9 @@ describe("The check record as CSV", () => {
         Result: "Not checked",
         Text: "Your text",
         ...none,
-        ...local,
-        Checked: CHECKED,
+        Model: "",
+        Service: "",
+        Checked: "",
       },
       {
         Kind: "Sentence",
@@ -304,7 +309,7 @@ describe("The check record as CSV", () => {
         Result: "Quote found",
         Text: "AI text",
         ...tidesVersion,
-        ...local,
+        ...incarnaMind,
         Checked: "",
       },
       {
@@ -313,7 +318,7 @@ describe("The check record as CSV", () => {
         Result: "Quote not found",
         Text: "AI text",
         ...tidesVersion,
-        ...haiku,
+        ...incarnaMind,
         Checked: "",
       },
       {
@@ -322,8 +327,7 @@ describe("The check record as CSV", () => {
         Result: "Quote found",
         Text: "Your text",
         ...tidesVersion,
-        Model: "",
-        Service: "",
+        ...incarnaMind,
         Checked: "",
       },
     ]);
@@ -339,9 +343,11 @@ describe("The check record as CSV", () => {
     const summary = summaryOf(csv);
     expect(parseCsv(csv)[0]).toEqual(["Check record: Harbour notes"]);
     expect(summary.get("Exported")).toBe(NOW);
-    expect(summary.get("Documents searched")).toBe("Harbours");
+    expect(summary.get("Documents searched")).toBe("Harbours; All Documents");
     expect(summary.get("“Keep everything on this computer” when exported")).toBe("Off");
-    expect(summary.get("Models")).toBe("Claude Haiku 5.5 (Anthropic); local-model");
+    expect(summary.get("Models")).toBe(
+      "Claude Haiku 5.5 (Anthropic), 1 sentence check; local-model (On this computer), 2 sentence checks",
+    );
     expect(summary.get("Sentences")).toBe(
       "Supported 1; Unsupported 1; Not checked 1; Contradicted 1",
     );
@@ -352,7 +358,7 @@ describe("The check record as CSV", () => {
     expect(summaryOf(on).get("“Keep everything on this computer” when exported")).toBe("On");
   });
 
-  test("a Mind in no Folder says it searched every Document; one never checked says so, and still has its header", async () => {
+  test("a Mind nothing was checked in says nothing was searched and no model was used, and still has its header", async () => {
     const { core, out } = await setUp();
     const mind = await core.createMind({ title: "Empty" });
 
@@ -360,7 +366,7 @@ describe("The check record as CSV", () => {
 
     expect(saved.status).toBe("saved");
     const csv = readFileSync(`${out}/Empty - check record.csv`, "utf8");
-    expect(summaryOf(csv).get("Documents searched")).toBe("All Documents");
+    expect(summaryOf(csv).get("Documents searched")).toBe("None");
     expect(summaryOf(csv).get("Models")).toBe("None");
     expect(rowsOf(csv)).toEqual([]);
     expect(parseCsv(csv).some((row) => row[0] === "Kind" && row[1] === "Sentence")).toBe(true);
@@ -440,7 +446,10 @@ describe("The check record as CSV", () => {
     const csv = readFileSync(saved.path, "utf8");
     expect(parseCsv(csv)[0]).toEqual(["核对记录：Harbour notes"]);
     const summary = summaryOf(csv);
-    expect(summary.get("搜索范围")).toBe("Harbours");
+    expect(summary.get("搜索范围")).toBe("Harbours; 全部文档");
+    expect(summary.get("AI 模型")).toBe(
+      "Claude Haiku 5.5（Anthropic），1 次句子核对; local-model（在这台电脑上），2 次句子核对",
+    );
     expect(summary.get("导出时“所有内容都留在这台电脑上”")).toBe("未开启");
     const [first, , , , citationRow] = rowsOf(csv);
     expect(first).toMatchObject({
@@ -449,13 +458,128 @@ describe("The check record as CSV", () => {
       文字来源: "你写的文字",
       文档: "Tides",
       位置: "第 1 页",
-      服务: "本机",
+      服务: "在这台电脑上",
     });
     expect(citationRow).toMatchObject({
       类型: "引用",
       核对结果: "找到引文",
       文字来源: "AI 生成的文字",
+      模型: "IncarnaMind",
+      服务: "在这台电脑上",
     });
+  });
+});
+
+describe("What the check record can't know", () => {
+  const sentence = "Spring tides come at new moon.";
+  async function checkedBy(setup: Setup, model: Model) {
+    writeMind(setup.client, [
+      paragraph(
+        randomUUID(),
+        text(sentence, {
+          type: "claimCheck",
+          attrs: checked(setup.tides, sentence, "supported", model, {
+            scope: { folderId: setup.folderId, widened: false },
+          }),
+        }),
+      ),
+    ]);
+    await setup.client.settled();
+  }
+
+  test("a model whose provider was removed since says its service isn't recorded, not that it ran on this computer", async () => {
+    const setup = await setUp();
+    await checkedBy(setup, setup.haikuModel);
+    await setup.core.deleteChatProvider(setup.haikuModel.providerId);
+
+    const csv = readFileSync((await saveRecord(setup, "csv")).path, "utf8");
+
+    expect(rowsOf(csv).map((row) => [row.Model, row.Service])).toEqual([
+      ["Claude Haiku 5.5", "Not recorded"],
+    ]);
+    expect(summaryOf(csv).get("Models")).toBe("Claude Haiku 5.5 (Not recorded), 1 sentence check");
+
+    await setup.core.updateSettings({ user: { language: "zh-CN" } });
+    const zh = readFileSync((await saveRecord(setup, "csv")).path, "utf8");
+    expect(rowsOf(zh).map((row) => [row.模型, row.服务])).toEqual([["Claude Haiku 5.5", "未记录"]]);
+  });
+
+  test("a check whose mark names no model says so", async () => {
+    const setup = await setUp();
+    await checkedBy(setup, { providerId: "", modelId: "" });
+
+    const csv = readFileSync((await saveRecord(setup, "csv")).path, "utf8");
+
+    expect(rowsOf(csv).map((row) => [row.Model, row.Service, row["Checked (UTC)"]])).toEqual([
+      ["Not recorded", "", CHECKED],
+    ]);
+    expect(summaryOf(csv).get("Models")).toBe("Not recorded, 1 sentence check");
+  });
+
+  test("a Document deleted since says so where its file and size would be, and its hash stays", async () => {
+    const { printed, printer } = fakePrinter();
+    const setup = await setUp({ printer });
+    await checkedBy(setup, setup.localModel);
+    await setup.core.deleteDocument(setup.tides.id);
+
+    const csv = readFileSync((await saveRecord(setup, "csv")).path, "utf8");
+    await saveRecord(setup, "pdf");
+
+    const [row] = rowsOf(csv);
+    expect(row).toMatchObject({
+      Document: "Tides",
+      File: "Document deleted",
+      "Size (bytes)": "",
+      "SHA-256": setup.tides.contentHash,
+    });
+    expect(printed[0]?.body).toContain("File</span> Document deleted ·");
+
+    await setup.core.updateSettings({ user: { language: "zh-CN" } });
+    const zh = readFileSync((await saveRecord(setup, "csv")).path, "utf8");
+    expect(rowsOf(zh)[0]?.文件).toBe("文档已删除");
+  });
+
+  test("the Documents searched are the ones the checks searched: a Folder, everything, or a Folder since deleted", async () => {
+    const setup = await setUp();
+    const own = { folderId: setup.folderId, widened: false };
+    const gone = await setup.core.createLibraryGroup({ name: "Old harbours", description: "" });
+    const checks = [
+      ["Spring tides come at new moon.", own],
+      ["Neap tides are weaker.", { folderId: null, widened: true }],
+      ["Tidal ranges differ between harbours.", { folderId: gone.id, widened: false }],
+    ] as const;
+    writeMind(setup.client, [
+      paragraph(
+        randomUUID(),
+        ...checks.flatMap(([sentence, scope]) => [
+          text(sentence, {
+            type: "claimCheck",
+            attrs: checked(setup.tides, sentence, "supported", setup.localModel, { scope }),
+          }),
+          text(" "),
+        ]),
+      ),
+    ]);
+    await setup.client.settled();
+    await setup.core.deleteLibraryGroup(gone.id);
+
+    const csv = readFileSync((await saveRecord(setup, "csv")).path, "utf8");
+
+    expect(summaryOf(csv).get("Documents searched")).toBe(
+      "Harbours; All Documents; A deleted Folder",
+    );
+  });
+
+  test("times are in UTC in both formats, with the year", async () => {
+    const { printed, printer } = fakePrinter();
+    const setup = await setUp({ printer });
+    await checkedBy(setup, setup.localModel);
+
+    const csv = readFileSync((await saveRecord(setup, "csv")).path, "utf8");
+    await saveRecord(setup, "pdf");
+
+    expect(rowsOf(csv)[0]?.["Checked (UTC)"]).toBe(CHECKED);
+    expect(printed[0]?.body).toContain("15 Oct 2026, 14:20 UTC");
   });
 });
 
@@ -481,12 +605,14 @@ describe("The check record as PDF", () => {
     const body = document?.body ?? "";
     const sha256 = createHash("sha256").update(readFileSync(setup.file)).digest("hex");
     expect(body).toContain("Check record: Harbour notes");
-    expect(body).toContain(formatDate(NOW, "en"));
-    expect(body).toContain("Harbours");
+    expect(body).toContain("16 Oct 2026, 09:00 UTC");
+    expect(body).toContain("<div>Harbours</div><div>All Documents</div>");
     expect(body).toContain(
-      '<th scope="row">“Keep everything on this computer” when exported</th><td>On</td>',
+      '<th scope="row">“Keep everything on this computer” when exported</th><td><div>On</div></td>',
     );
-    expect(body).toContain("Claude Haiku 5.5 (Anthropic); local-model");
+    expect(body).toContain(
+      "<div>Claude Haiku 5.5 (Anthropic), 1 sentence check</div><div>local-model (On this computer), 2 sentence checks</div>",
+    );
     expect(body).toContain("Sentences checked against the Documents (4)");
     expect(body).toContain("Citations (3)");
     for (const sentence of [
@@ -496,10 +622,17 @@ describe("The check record as PDF", () => {
     ]) {
       expect(body).toContain(sentence);
     }
-    expect(body).toContain(formatFullDateTime(CHECKED, "en"));
-    expect(body).toContain(`<code class="record-hash">${sha256}</code>`);
-    expect(body).toContain("Someone else&#39;s text");
-    expect(body).toContain("Quote not found");
+    expect(body).toContain(
+      "Checked by</span> Claude Haiku 5.5 (Anthropic) · 15 Oct 2026, 14:20 UTC",
+    );
+    expect(body).toContain("Checked by</span> IncarnaMind (On this computer)</p>");
+    expect(body).toContain(
+      `<code class="record-hash">${sha256.slice(0, 4)}…${sha256.slice(-4)}</code>`,
+    );
+    expect(body).not.toContain(sha256);
+    expect(body).toContain("Contradicted</b> · Sentence · Someone else&#39;s text");
+    expect(body).toContain("Quote not found</b> · Citation · AI text");
+    expect(body.match(/class="record-shape"/g)).toHaveLength(7);
   });
 
   test("shows the Mind's words as text: markup in a sentence or a quote is escaped", async () => {
@@ -540,6 +673,20 @@ describe("The check record as PDF", () => {
     });
     expect(printed[0]?.body).toContain("核对记录：Harbour notes");
     expect(printed[0]?.body).toContain("对照文档核对的句子（4）");
+    expect(printed[0]?.body).toContain("核对方式</span> IncarnaMind（在这台电脑上）</p>");
+    expect(printed[0]?.body).toContain("2026年10月15日 14:20 UTC");
+  });
+
+  test("a sentence no check ran for lists no model and no time", async () => {
+    const { printed, printer } = fakePrinter();
+    const setup = await setUp({ printer });
+    await writeNotes(setup);
+
+    await saveRecord(setup, "pdf");
+
+    const body = printed[0]?.body ?? "";
+    const refused = body.slice(body.indexOf("Nobody would say."));
+    expect(refused.slice(0, refused.indexOf("</div>"))).not.toContain("Checked by");
   });
 
   test("a printer that fails says so and saves nothing; a copy with no printer can't make one", async () => {

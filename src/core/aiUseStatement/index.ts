@@ -44,7 +44,9 @@ export interface AiUseStatementOptions {
 function modelNamer(providers: readonly ChatProvider[]) {
   return (providerId: string | null, modelId: string | null): string | null => {
     const model = describeModel(providers, providerId, modelId);
-    return model && (model.service ? `${model.name} (${model.service})` : model.name);
+    return (
+      model && (model.place.kind === "service" ? `${model.name} (${model.place.name})` : model.name)
+    );
   };
 }
 

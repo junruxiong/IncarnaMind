@@ -1,13 +1,21 @@
 import { modelName } from "../shared/modelName";
 import type { ChatProvider } from "./api";
 
-/** A model as a statement or record names it, with the service it runs on: null for one on this computer. */
+export type ModelPlace =
+  | { kind: "service"; name: string }
+  | { kind: "this-computer" }
+  | { kind: "unknown" };
+
 export interface ModelDescription {
   name: string;
-  service: string | null;
+  place: ModelPlace;
 }
 
-/** The model a record of AI use names, or null when it names none. */
+/**
+ * The model a record of AI use names, or null when it names none. A provider
+ * that is no longer saved leaves the place unknown: the model may have run on
+ * a service, and a record never guesses.
+ */
 export function describeModel(
   providers: readonly ChatProvider[],
   providerId: string | null,
@@ -15,9 +23,11 @@ export function describeModel(
 ): ModelDescription | null {
   if (!modelId) return null;
   const provider = providers.find((each) => each.id === providerId);
-  const name = modelName(
-    modelId,
-    provider ? { kind: provider.kind, endpoint: provider.endpoint } : {},
-  );
-  return { name, service: provider?.service?.name ?? null };
+  if (!provider) return { name: modelName(modelId, {}), place: { kind: "unknown" } };
+  return {
+    name: modelName(modelId, { kind: provider.kind, endpoint: provider.endpoint }),
+    place: provider.service
+      ? { kind: "service", name: provider.service.name }
+      : { kind: "this-computer" },
+  };
 }

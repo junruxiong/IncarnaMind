@@ -483,3 +483,13 @@ img {
   font-size: 8pt;
   overflow-wrap: anywhere;
 }
+
+.record-shape {
+  display: inline-block;
+  margin-right: 5pt;
+  vertical-align: -1.5pt;
+}
+
+.record-summary td div + div {
+  margin-top: 2pt;
+}
