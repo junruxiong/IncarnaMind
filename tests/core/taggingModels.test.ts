@@ -471,7 +471,9 @@ describe("Local mode", () => {
         (await core.getLibrary()).assignments.find((each) => each.documentId === text.id),
       ).toMatchObject({
         status: "waiting",
-        error: { message: "Cloud classification is paused in local mode." },
+        error: {
+          message: "Cloud classification is paused while “Keep everything on this computer” is on.",
+        },
       }),
     );
     // Automatic: no model on this computer, so nothing tags, and no small call leaves it.

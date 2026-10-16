@@ -42,6 +42,8 @@ const TYPICAL_REQUEST = { input: 1_500, output: 25 };
 /** How long what Ollama said it has installed is trusted before it is asked again. */
 const INSTALLED_TTL_MS = 30_000;
 
+const OLLAMA = { kind: "ollama", catalogId: "ollama" } as const;
+
 /** Ollama lists a model pulled without a tag as "name:latest". */
 const installed = (models: readonly string[], name: string) =>
   models.includes(name) || (!name.includes(":") && models.includes(`${name}:latest`));
@@ -184,7 +186,7 @@ export function createTagging(options: TaggingOptions) {
    * ChatGPT plan's, or the quick-tasks model for Answers with it.
    */
   function providerTagging(model: DescribedModel) {
-    const role = catalogRoleModel(model.kind, "tagging");
+    const role = catalogRoleModel(model, "tagging");
     const reason: "plan" | "tagging-model" | "quick-model" | "answers-model" =
       model.kind === "chatgpt" ? "plan" : role ? "tagging-model" : "quick-model";
     const choice = role
@@ -210,7 +212,7 @@ export function createTagging(options: TaggingOptions) {
     const described = defaultModel ? chat.describeModel(defaultModel) : undefined;
     // On this computer: the default chat model, else Ollama's own small model when it is installed.
     const ollama = providers.find((each) => each.kind === "ollama" && each.service === null);
-    const ollamaModel = catalogRoleModel("ollama", "quickTasks");
+    const ollamaModel = catalogRoleModel(OLLAMA, "quickTasks");
     const localChat =
       described && described.service === null
         ? described.choice
@@ -356,8 +358,7 @@ export function createTagging(options: TaggingOptions) {
           modelId ? { providerId: provider.id, modelId } : null;
         if (!local) {
           const tagging = on(
-            catalogRoleModel(provider.kind, "tagging") ??
-              catalogRoleModel(provider.kind, "quickTasks"),
+            catalogRoleModel(provider, "tagging") ?? catalogRoleModel(provider, "quickTasks"),
           );
           if (tagging) add(chatOption(tagging, true));
         }
@@ -365,7 +366,7 @@ export function createTagging(options: TaggingOptions) {
         const answers = on(catalogProvider(provider.catalogId)?.roles.answers);
         if (answers && !local) add(chatOption(answers, false));
         // Ollama's own small model, when it is installed: the one measured with IncarnaMind.
-        const small = on(catalogRoleModel("ollama", "quickTasks"));
+        const small = on(catalogRoleModel(OLLAMA, "quickTasks"));
         if (provider.kind === "ollama" && local && small && installed(models, small.modelId)) {
           add(chatOption(small, false));
         }

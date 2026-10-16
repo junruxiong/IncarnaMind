@@ -22,6 +22,8 @@ function examplesOver(store: Map<string, unknown>, random: () => number) {
     unlinkFolder: unused,
     linkedFolderExists: () => false,
     documentsIn: () => [],
+    mindFolder: () => null,
+    now: () => "2026-10-14T09:00:00.000Z",
     checksRelyOn: () => false,
     recheck: unused,
     changed: () => undefined,
@@ -33,8 +35,8 @@ describe("the examples a banner offers (#123)", () => {
   test("the first-run example offers the other three, in an order picked once per install", () => {
     const first = new Map<string, unknown>();
     const second = new Map<string, unknown>();
-    const orderA = examplesOver(first, () => 0).status("tea").more;
-    const orderB = examplesOver(second, () => 0.99).status("tea").more;
+    const orderA = examplesOver(first, () => 0).status("credit").more;
+    const orderB = examplesOver(second, () => 0.99).status("credit").more;
     expect([...orderA].sort()).toEqual(["contracts", "meetings", "papers"]);
     expect([...orderB].sort()).toEqual(["contracts", "meetings", "papers"]);
     expect(orderA).not.toEqual(orderB);
@@ -42,11 +44,14 @@ describe("the examples a banner offers (#123)", () => {
 
   test("the order is the same after a restart, and for every example", () => {
     const store = new Map<string, unknown>();
-    const before = examplesOver(store, () => 0).status("tea").more;
+    const before = examplesOver(store, () => 0).status("credit").more;
     const after = examplesOver(store, () => 0.99);
-    expect(after.status("tea").more).toEqual(before);
+    expect(after.status("credit").more).toEqual(before);
     for (const group of before) {
-      expect(after.status(group).more).toEqual(["tea", ...before.filter((each) => each !== group)]);
+      expect(after.status(group).more).toEqual([
+        "credit",
+        ...before.filter((each) => each !== group),
+      ]);
     }
   });
 });

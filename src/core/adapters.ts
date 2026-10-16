@@ -467,8 +467,20 @@ export interface TextRecognizer {
    * loaded or fails on it.
    */
   read(picture: PagePicture, page: number): Promise<RecognizedLine[]>;
+  /**
+   * The lines of text on a picture file (PNG, JPEG, GIF, WebP or AVIF), and
+   * the size it was read at. It is decoded where the model runs, so a file
+   * that breaks the decoder takes only that down.
+   */
+  readFile(file: Uint8Array, page: number): Promise<PictureRead>;
   /** Stops the model and frees its memory. Loading again starts it afresh. */
   close(): void;
+}
+
+export interface PictureRead {
+  lines: RecognizedLine[];
+  width: number;
+  height: number;
 }
 
 /** One file of a built-in model, as recorded when the app was built. */
@@ -825,6 +837,12 @@ export interface CoreAdapters {
    * Defaults to five minutes; tests shorten it.
    */
   connectorSignInTimeoutMs?: number;
+  /**
+   * Contradiction watch's timings (#112), which tests shorten: how long after
+   * a new version of a Document its Folder's Minds are checked (30 seconds),
+   * and how long a background check of one claim may take (3 minutes).
+   */
+  contradictionWatch?: { delayMs?: number; claimTimeLimitMs?: number };
   /**
    * The Connectors directory's entries, in its JSON form, in place of the
    * list that ships with the app; tests point an entry at a local stand-in.

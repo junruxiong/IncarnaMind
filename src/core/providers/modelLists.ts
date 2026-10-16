@@ -18,14 +18,18 @@
 import type { ChatProviderKind, OtherModel } from "../api";
 import { isRecord } from "../errors";
 import type { ModelFactsLayer } from "./capabilities";
-import { isNonChatModel, type ModelInput, modelsProviderOfKind, otherModel } from "./catalog";
+import {
+  isNonChatModel,
+  MAX_MENU_MODELS,
+  type ModelInput,
+  modelsProviderOfKind,
+  otherModel,
+} from "./catalog";
 import { KNOWN_PLAN_MODELS } from "./chatgpt/planEndpoint";
 import { endpointUrl } from "./kinds";
 import { isCloudModelName, isRemoteEntry } from "./ollamaCloud";
 
 const LIST_TIMEOUT_MS = 5_000;
-/** The picker shows at most this many models per provider. */
-const MAX_MODELS = 100;
 
 export interface ModelListSpec {
   kind: ChatProviderKind;
@@ -34,6 +38,8 @@ export interface ModelListSpec {
   apiKey: string | null;
   /** A hosted provider's endpoint id; its first when left out. */
   endpoint?: string | null;
+  /** A preset's catalog id: its endpoint is the server. */
+  catalogId?: string | null;
 }
 
 /** A model a provider lists, with what the list says it can do, if anything. */
@@ -162,9 +168,9 @@ const listed = (
       : [{ id: model.id }];
   });
 
-async function fetchModels({ kind, baseUrl, apiKey, endpoint }: ModelListSpec) {
+async function fetchModels({ kind, baseUrl, apiKey, endpoint, catalogId }: ModelListSpec) {
   const bearer: Record<string, string> = apiKey ? { authorization: `Bearer ${apiKey}` } : {};
-  const hosted = endpointUrl(kind, endpoint);
+  const hosted = endpointUrl(kind, endpoint, catalogId);
   switch (kind) {
     case "chatgpt":
       // Read with the sign-in by the plan itself (see ./chatgpt/plan); these are its fallback.
@@ -196,7 +202,8 @@ async function fetchModels({ kind, baseUrl, apiKey, endpoint }: ModelListSpec) {
       );
     }
     case "openai-compatible":
-      return idsOf(await getJson(`${baseUrl}/models`, bearer));
+      if (hosted && !apiKey) return [];
+      return idsOf(await getJson(`${hosted ?? baseUrl}/models`, bearer));
     case "deepseek":
     case "qwen":
     case "kimi":
@@ -256,7 +263,7 @@ async function fetchModels({ kind, baseUrl, apiKey, endpoint }: ModelListSpec) {
 /** The models a provider lists: the menu's first, then `other`, each sorted; empty if it can't be reached. */
 export async function listProviderModels(spec: ModelListSpec): Promise<ListedModel[]> {
   try {
-    const catalogId = modelsProviderOfKind(spec.kind, spec.endpoint);
+    const catalogId = modelsProviderOfKind(spec.kind, spec.endpoint, spec.catalogId);
     const byId = new Map<string, ListedModel>();
     for (const model of await fetchModels(spec)) {
       if (!byId.has(model.id) && !isNonChatModel(catalogId, model.id)) byId.set(model.id, model);
@@ -271,8 +278,8 @@ export async function listProviderModels(spec: ModelListSpec): Promise<ListedMod
       return other ? { ...model, other } : model;
     });
     return [
-      ...classified.filter((model) => !model.other).slice(0, MAX_MODELS),
-      ...classified.filter((model) => model.other).slice(0, MAX_MODELS),
+      ...classified.filter((model) => !model.other).slice(0, MAX_MENU_MODELS),
+      ...classified.filter((model) => model.other).slice(0, MAX_MENU_MODELS),
     ];
   } catch {
     return [];

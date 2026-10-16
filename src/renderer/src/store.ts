@@ -1036,7 +1036,10 @@ export const useAppStore = create<AppState>()((set, get) => {
     // The core closes each Mind's tab; its Documents go with their Linked folder.
     removeExamples: () =>
       attempt(async () => {
-        const groups = madeExamples(get()).map((each) => each.group);
+        // The earlier version's tea example is removed as the default one; Undo makes the credit paper.
+        const groups = madeExamples(get()).map((each) =>
+          each.group === "tea" ? undefined : each.group,
+        );
         const remove = async () => {
           for (const group of groups) await core.removeExamples(group);
         };
@@ -1458,10 +1461,12 @@ export const isOwnDocument = (document: Document, examples: readonly Examples[])
   document.linkedFolderId === null ||
   !examples.some((each) => each.linkedFolderId === document.linkedFolderId);
 
+/** The example a first run makes, shown first; the earlier version's tea example stands in for it. */
+const FIRST_RUN_EXAMPLE: ExampleGroup = "credit";
 const withExamples =
   (examples: Examples) =>
   (state: Pick<AppState, "otherExamples">): Partial<AppState> =>
-    examples.group === "tea"
+    examples.group === FIRST_RUN_EXAMPLE || examples.group === "tea"
       ? { examples }
       : {
           otherExamples: [
@@ -1470,7 +1475,7 @@ const withExamples =
           ],
         };
 
-const OTHER_EXAMPLE_GROUPS = EXAMPLE_GROUPS.filter((group) => group !== "tea");
+const OTHER_EXAMPLE_GROUPS = EXAMPLE_GROUPS.filter((group) => group !== FIRST_RUN_EXAMPLE);
 const isMade = (examples: Examples) => examples.mindId !== null || examples.linkedFolderId !== null;
 
 export const allExamples = (state: Pick<AppState, "examples" | "otherExamples">): Examples[] =>
@@ -1505,7 +1510,7 @@ core.on("minds.changed", (minds) => {
   // An example Mind deleted like any other: no longer an example.
   for (const examples of allExamples(state)) {
     if (examples.mindId && !minds.some((mind) => mind.id === examples.mindId)) {
-      core.getExamples(examples.group).then(
+      core.getExamples(examples.group === "tea" ? undefined : examples.group).then(
         (current) => useAppStore.setState(withExamples(current)),
         () => undefined,
       );
