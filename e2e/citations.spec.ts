@@ -279,6 +279,8 @@ test("a Citation's badge in an Answer opens its card, and every state has its wo
     await expect(answer.getByTestId("citation")).toHaveAttribute("data-check", check);
     await expect(mark).toHaveAttribute("data-check", check);
     await expect(mark).toHaveAttribute("aria-label", new RegExp(word));
+    // The badge keeps the focus Esc left on it: it takes it again.
+    await mark.blur();
     await mark.focus();
     await expect(card.getByTestId("citation-badge")).toContainText(word);
     if (verdict) await expect(card.getByTestId("citation-verdict")).toHaveText(verdict);
