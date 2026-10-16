@@ -19,6 +19,7 @@ export function cellContext(
   const framing = [
     `This is one cell of a comparison table: its row is the Document "${documentName}", its column the Question below. Answer from that Document alone.`,
     "- Answer the way a table's cell holds a value: the figure, period, date, name or short phrase alone (a few words, like a period of notice given as its length), then its citation marker. No preamble, no conditions or who it applies to unless they change the answer, and no sentence around it.",
+    '- Write a negative amount as the Document does: "(12,500)" is negative, so it stays in brackets in the cell.',
     `- If the Document doesn't answer the Question, reply with exactly ${NOT_FOUND} and nothing else.`,
     ...(instruction ? [`- The User asked the table to show this too: ${instruction}`] : []),
   ].join("\n");
