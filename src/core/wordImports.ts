@@ -560,7 +560,7 @@ export function createWordImports(options: WordImportsOptions) {
               const look = wordLookOf(doc);
               if (look && look.version >= WORD_LOOK_VERSION) return null;
               if (look) clearLook(doc, blocks);
-              const planned = planLook(doc, blocks, structure);
+              const planned = planLook(doc, blocks, structure, look?.version ?? null);
               applyLook(doc, planned);
               setWordLook(doc, structure.look);
               return planned;
