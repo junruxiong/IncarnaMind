@@ -67,7 +67,7 @@ test("a Question is answered and changes nothing; a request to shorten comes bac
   await expect(window.getByTestId("proposals-bar")).toHaveCount(0);
   await expect(editor.locator("p")).toHaveText([note]);
 
-  const changed = await askInAssistant(window, "Shorten the summary");
+  const changed = await askInAssistant(window, "Could you shorten the summary?");
   const bar = window.getByTestId("proposals-bar");
   await expect(bar.getByTestId("proposals-count")).toHaveText("2 changes from the assistant");
   await expect(changed.getByTestId("assistant-answer-text")).toHaveText(
@@ -162,7 +162,7 @@ test("one Mind changed: the card says what was changed and how much of it waits,
   await setWindowSize(app, window, 900, 760);
   await writeMind(window, "第三季度", ["销售非常好，利润真的很高。"]);
 
-  const answer = await askInAssistant(window, "把这段缩短");
+  const answer = await askInAssistant(window, "能把这段缩短吗？");
   const card = answer.getByTestId("mind-changes");
   const title = card.getByTestId("mind-changes-title");
   const left = card.getByTestId("mind-changes-left");
@@ -226,12 +226,12 @@ test("with no Mind open, a request to change one says so, and New Mind makes one
   await screenshot(window, "no-mind-open");
   await pointAndClick(window, offer.getByTestId("mind-changes-new-mind"));
 
-  // The request goes to the new Mind, as a change there, asked again from it.
+  // The request goes to the new Mind, asked again from it, and applies there as asked (#880).
   await expect(window.getByTestId("mind-tab")).toHaveCount(1);
   const again = assistantAnswers(window).last();
   await expect(assistantAnswers(window)).toHaveCount(2);
   await expect(again).toHaveAttribute("data-status", "done", { timeout: 15_000 });
-  await expect(window.getByTestId("proposals-count")).toHaveText("1 change from the assistant");
+  await expect(window.getByTestId("applied-count")).toHaveText("Wrote 1 paragraph");
   await expect(window.getByTestId("mind-editor")).toContainText("a risks section");
   await expect(again.getByTestId("mind-changes-no-mind")).toHaveCount(0);
 });
@@ -243,7 +243,7 @@ test("changes stay in their Mind when the User moves to another and back, and go
   await setLanguage(window, "en");
   await setWindowSize(app, window, 1440, 900);
   await writeMind(window, "Q3 review", ["Sales were really strong, and margins were very high."]);
-  await askInAssistant(window, "Shorten the summary");
+  await askInAssistant(window, "Could you shorten the summary?");
   const count = window.getByTestId("proposals-count");
   await expect(count).toHaveText("2 changes from the assistant");
 
@@ -277,7 +277,7 @@ test("Reject all keeps a Mind the assistant made once the User has written in it
 
   const answer = await askInAssistant(
     window,
-    "Make a new note called Fieldwork plan with a summary",
+    "Can you make a new note called Fieldwork plan with a summary",
   );
   const card = answer.getByTestId("mind-changes");
   const fact = "Created “Fieldwork plan with a summary” and wrote 1 paragraph";
@@ -396,7 +396,7 @@ test("a new Mind's text comes in Block by Block as the assistant writes it, with
 
   await window.keyboard.press("ControlOrMeta+j");
   await expect(window.getByTestId("composer-input")).toBeFocused();
-  await window.keyboard.type("Make a new note called Field notes with a summary slowly");
+  await window.keyboard.type("Can you make a new note called Field notes with a summary slowly");
   await window.keyboard.press("Enter");
 
   // Opened as soon as it is made: its heading is in while its paragraph is still being written.

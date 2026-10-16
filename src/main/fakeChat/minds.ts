@@ -6,7 +6,7 @@
  * the Mind, with who made each (#734).
  *
  * In the assistant, with the Minds' Tools (#202, `mindsReply`): a request to
- * shorten (缩短, 改短) or lengthen (长一点), or to "replace X with Y", calls edit_mind with the request as its instruction,
+ * shorten (缩短, 改短), lengthen (长一点) or rewrite (改写), or to "replace X with Y", calls edit_mind with the request as its instruction,
  * which Edit with AI's scripted model carries out as Shorten, and so does one
  * "with a table" (加上表格), which it carries out by adding one (#961); one
  * for a new note (新笔记, 新建) calls create_mind, titled from what follows "called"
@@ -73,6 +73,8 @@ export function mindRead(prompt: Prompt): string | null {
 /** The owner's two requests (#880): a summary page, then the same made longer (写一个总结页面, 再长一点). */
 const SUMMARY_PAGE = /\bwrite a summary page\b|写一个总结页面/i;
 const LONGER = /\blonger\b|长一点|更长/i;
+/** A rewrite of the User's text (改写), which Edit with AI's scripted model writes anew. */
+const REWRITE = /\brewrite\b|改写/i;
 const SUMMARY = [
   "## Summary",
   "Spring tides come at new and full moon, when the Sun and the Moon pull together.",
@@ -130,6 +132,7 @@ export function mindsReply(prompt: Prompt, asked: string, names: readonly string
   if (
     SHORTEN.test(question) ||
     LONGER.test(question) ||
+    REWRITE.test(question) ||
     ASSISTANT_REPLACES.test(question) ||
     WITH_A_TABLE.test(question)
   ) {
