@@ -533,8 +533,9 @@ export function createDocuments(options: DocumentsOptions) {
       folderId: row.folder_id,
       tags: tagsOfDocument(db, row.id),
       tagging,
+      // Why it failed, or why it waits when that is worth saying (the ChatGPT plan's limit).
       taggingError:
-        tagging === "failed"
+        tagging === "failed" || (tagging === "waiting-for-provider" && row.tagging_error_kind)
           ? {
               kind: (row.tagging_error_kind ?? "unknown") as ProviderErrorKind,
               message: row.tagging_error_message ?? "",
@@ -1424,15 +1425,31 @@ export function createDocuments(options: DocumentsOptions) {
     for (const units of options.citedUnits(upgraded)) byDocument.get(units.documentId)?.push(units);
     citedAtStart = byDocument;
   }
+  // A Document read well before, being read again for a newer pipeline, isn't what stopped the app.
+  const rereadForNewerPipeline = (row: DocumentRow) =>
+    row.processing_version <
+      (Object.entries(CURRENT_SINCE).find(([kind]) => kind === row.kind)?.[1] ??
+        PROCESSING_VERSION) && indexedStatus(row) !== null;
   for (const row of unfinished) {
     if (row.status === "extracting") {
-      // Read again by itself, what stopped the app could stop it again, at every start.
-      db.run(
-        `UPDATE documents SET status = ?, failure_reason = 'app-stopped',
-           failure_message = ?, updated_at = ? WHERE id = ?`,
-        [indexedStatus(row) ?? "failed", "The app stopped while it was being read.", now(), row.id],
-      );
-      continue;
+      if (!rereadForNewerPipeline(row)) {
+        // Read again by itself, what stopped the app could stop it again, at every start.
+        db.run(
+          `UPDATE documents SET status = ?, failure_reason = 'app-stopped',
+             failure_message = ?, updated_at = ? WHERE id = ?`,
+          [
+            indexedStatus(row) ?? "failed",
+            "The app stopped while it was being read.",
+            now(),
+            row.id,
+          ],
+        );
+        continue;
+      }
+      db.run("UPDATE documents SET status = 'queued', updated_at = ? WHERE id = ?", [
+        now(),
+        row.id,
+      ]);
     }
     if (!isPaused(row.id)) processor.enqueue(jobFor(row));
   }

@@ -15,6 +15,7 @@ import { useReferenceImport } from "../referenceImport";
 import { useAppStore } from "../store";
 import { verifyDocument } from "../verify";
 import { useWordImport } from "../wordImport";
+import { answerTableCommands } from "./answerTables";
 import { assistantCommands } from "./assistant";
 import { bibliographyCommands } from "./bibliography";
 import { chartCommands } from "./charts";
@@ -51,6 +52,7 @@ import { selectionCommands } from "./selection";
 import { settingsPageCommands } from "./settings";
 import { tableCommands } from "./tables";
 import { tabCommands } from "./tabs";
+import { taggingCommands } from "./tagging";
 import { mindInFront, mindShown, onlyOne } from "./targets";
 import { taskCommands } from "./tasks";
 import { webPageCommands } from "./webPages";
@@ -109,6 +111,7 @@ const appCommands: readonly Command[] = [
   ...documentCommands,
   ...peekCommands,
   ...folderCommands,
+  ...taggingCommands,
   ...newFolderCommands,
   ...tagCommands,
   ...linkedFolderCommands,
@@ -163,6 +166,7 @@ const appCommands: readonly Command[] = [
     run: () => useFindSources.getState().show(),
   },
   ...assistantCommands,
+  ...answerTableCommands,
   {
     id: "citation.open",
     label: "command.citation.open",

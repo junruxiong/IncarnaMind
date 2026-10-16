@@ -1,7 +1,9 @@
 /** The Organize benchmark's report: Markdown for people, JSON for everything. */
+import type { Price } from "../../../src/core/providers/catalog";
 import type { RouteName } from "./routes";
 import {
   breakdown,
+  costPer100,
   decimal,
   f1,
   fraction,
@@ -20,6 +22,34 @@ export interface RouteResult {
   route: RouteName;
   label: string;
   predictions: Prediction[];
+  /** Its model's price in the catalog, when the route pays per token. */
+  price?: Price;
+}
+
+/** Tokens per Document, and what 100 Documents cost at the model's price. */
+function tokenLines(results: readonly RouteResult[], documents: readonly SetDocument[]): string[] {
+  const counted = results.flatMap((result) => {
+    const s = summarise(paired(documents, result));
+    return s.counted ? [{ result, s }] : [];
+  });
+  if (counted.length === 0) return [];
+  const perDocument = (tokens: number, count: number) =>
+    Math.round(tokens / count).toLocaleString("en");
+  return [
+    "",
+    "## Tokens and cost",
+    "",
+    "As the provider counted them, per Document, over the Documents whose calls reported tokens. Cost at the catalog's price for the model.",
+    "",
+    "| | Docs | Input | Output | Of it reasoning | Per 100 Documents |",
+    "|---|---:|---:|---:|---:|---:|",
+    ...counted.map(({ result, s }) => {
+      const cost = result.price
+        ? `${result.price.currency === "CNY" ? "¥" : "$"}${costPer100(s, result.price).toFixed(3)}`
+        : "–";
+      return `| ${result.route} | ${s.counted} | ${perDocument(s.tokens.input, s.counted)} | ${perDocument(s.tokens.output, s.counted)} | ${perDocument(s.tokens.reasoning, s.counted)} | ${cost} |`;
+    }),
+  ];
 }
 
 export interface RunInfo {
@@ -81,6 +111,7 @@ export function markdownReport(
     "",
     "Folder: the labelled Folder (Unsorted included). Lenient: a two-Folder case's second Folder counts too. Tags: every applied Tag, including those marked needs review; precision, recall and F1 are micro-averaged. Exact: the Tag set is exactly the labelled one. Needs review: of the Tags applied with that mark, how many were right. Errors count as a wrong Folder and no Tags. Time: the classifier call per Document, page rendering excluded.",
   ];
+  lines.push(...tokenLines(results, documents));
   for (const split of info.splits) {
     const inSplit = documents.filter((doc) => doc.split === split);
     lines.push(
@@ -166,8 +197,11 @@ export function summaryLines(
       );
       if (!pairs.length) return [];
       const s = summarise(pairs);
+      const tokens = s.counted
+        ? `; ${Math.round(s.tokens.input / s.counted)} in / ${Math.round(s.tokens.output / s.counted)} out tokens a Document${result.price ? `, ${result.price.currency === "CNY" ? "¥" : "$"}${costPer100(s, result.price).toFixed(3)} per 100` : ""}`
+        : "";
       return [
-        `${split.padEnd(7)} ${result.route.padEnd(10)} Folder ${fraction(s.folderCorrect, s.count)}, lenient ${fraction(s.folderLenient, s.count)}; Tags P ${decimal(precision(s))} R ${decimal(recall(s))} F1 ${decimal(f1(s))}, exact ${fraction(s.exact, s.count)}; needs review ${s.review ? fraction(s.reviewCorrect, s.review) : "none"} right; ${s.errors} errors; median ${seconds(s.msMedian)} s`,
+        `${split.padEnd(7)} ${result.route.padEnd(10)} Folder ${fraction(s.folderCorrect, s.count)}, lenient ${fraction(s.folderLenient, s.count)}; Tags P ${decimal(precision(s))} R ${decimal(recall(s))} F1 ${decimal(f1(s))}, exact ${fraction(s.exact, s.count)}; needs review ${s.review ? fraction(s.reviewCorrect, s.review) : "none"} right; ${s.errors} errors; median ${seconds(s.msMedian)} s${tokens}`,
       ];
     }),
   );
