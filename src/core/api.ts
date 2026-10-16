@@ -8425,6 +8425,11 @@ export interface CoreApi {
    * events report progress. Documents still being processed are tagged when they finish.
    */
   retagDocuments(documentIds?: string[]): Promise<void>;
+  /**
+   * The computer is back online: the Documents whose tagging couldn't reach
+   * the AI model are tagged again, once however often it is said.
+   */
+  backOnline(): Promise<void>;
 
   /** TypeSafe Jev, the optional tagger: whether it is set up on this device, and how. */
   getJevSettings(): Promise<JevSettings>;
@@ -9162,6 +9167,7 @@ const methods: Record<CoreApiMethod, true> = {
   revertDocumentTags: true,
   mergeTags: true,
   retagDocuments: true,
+  backOnline: true,
   getJevSettings: true,
   saveJevSettings: true,
   removeJevSettings: true,

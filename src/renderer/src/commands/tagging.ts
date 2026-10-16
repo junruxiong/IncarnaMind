@@ -1,4 +1,6 @@
+import { organizes } from "../../../shared/libraryModels";
 import { useAppStore } from "../store";
+import { failedTagging, retryTagging } from "../taggingRetry";
 import { stoppedPlaces, stopTagging, taggingPlaces, tagWithAi } from "../taggingStop";
 import type { Command } from "./registry";
 
@@ -20,5 +22,14 @@ export const taggingCommands: readonly Command[] = [
     when: () => stoppedPlaces(store().library).includes(null),
     reversible: true,
     run: () => tagWithAi([null]),
+  },
+  {
+    id: "tagging.retry",
+    label: "tagging.retry",
+    group: "main",
+    when: () => !organizes(store().library) && failedTagging(store()).length > 0,
+    // Only automatic Tags change; the User's own stay.
+    reversible: true,
+    run: () => retryTagging(),
   },
 ];

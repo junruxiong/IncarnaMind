@@ -5,6 +5,7 @@ import { useT } from "../i18n";
 import { NEEDS_REVIEW } from "../libraryFilters";
 import { useAppStore } from "../store";
 import { CheckLineIcon, CloseLineIcon, TagLineIcon } from "./lineIcons";
+import { testErrorKey } from "./providers/shared";
 import { rowActionButtonClass, rowClass } from "./sidebarRows";
 import { ReviewRing, TagDot } from "./TagColour";
 import { pickerLabel, TagPicker, tagPopoverClass, useTagPopover } from "./TagPicker";
@@ -90,7 +91,7 @@ export function DocumentTagFooter({ item, close }: { item: Document; close(): vo
       {taggingLine && (
         <span
           data-testid="document-tagging"
-          title={item.taggingError?.message}
+          title={item.taggingError ? t(testErrorKey(item.taggingError.kind)) : undefined}
           className="flex max-w-28 items-center gap-1.5 px-1 text-[12px] text-ink-meta"
         >
           {item.tagging === "failed" && (

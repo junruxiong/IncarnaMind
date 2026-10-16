@@ -1,7 +1,7 @@
 /**
  * When the AI model can't be reached, the sidebar's status says so in one line,
- * with Retry, and the Documents are tagged again once the computer is back
- * online. The scripted model can't be reached the first time it tags a
+ * with Retry, also in ⌘K, and the Documents are tagged again once the computer
+ * is back online. The scripted model can't be reached the first time it tags a
  * Document whose text says "unreachable".
  */
 import { writeFile } from "node:fs/promises";
@@ -14,6 +14,7 @@ import {
   createDataFolder,
   launchApp,
   removeDataFolder,
+  runFromPalette,
   setLanguage,
   setWindowSize,
 } from "./app";
@@ -38,7 +39,7 @@ async function unreachable(name: string): Promise<string> {
 const item = (window: Page, name: string) =>
   window.getByTestId("document-list-item").filter({ hasText: name });
 
-test("Documents that couldn't reach the model: one line with Retry, and tagged again once back online", async () => {
+test("Documents that couldn't reach the model: one line with Retry, Retry in ⌘K, and tagged again once back online", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await setWindowSize(app, window, 1280, 800);
   await acceptPlainTextKeys(window);
@@ -54,7 +55,7 @@ test("Documents that couldn't reach the model: one line with Retry, and tagged a
   await expect(failed.getByTestId("status-label")).toHaveText("1 Document couldn't be tagged");
   await expect(failed).toHaveAttribute(
     "title",
-    /^The AI model couldn't be reached\. Tagging tries again when you're back online, or now with Retry\./,
+    "The AI model couldn't be reached. Tagging tries again when you're back online, or now with Retry.",
   );
   await failed.getByTestId("tagging-failed-retry").click();
   await expect(item(window, "Invoice 51")).toHaveAttribute("data-tagging", "tagged");
@@ -62,10 +63,16 @@ test("Documents that couldn't reach the model: one line with Retry, and tagged a
 
   await window.getByTestId("add-documents-input").setInputFiles([await unreachable("Invoice 52")]);
   await expect(item(window, "Invoice 52")).toHaveAttribute("data-tagging", "failed");
+  await runFromPalette(window, "Retry Tagging");
+  await expect(item(window, "Invoice 52")).toHaveAttribute("data-tagging", "tagged");
+  await expect(failed).toHaveCount(0);
+
+  await window.getByTestId("add-documents-input").setInputFiles([await unreachable("Invoice 53")]);
+  await expect(item(window, "Invoice 53")).toHaveAttribute("data-tagging", "failed");
   await setLanguage(window, "zh-CN");
   await expect(failed.getByTestId("status-label")).toHaveText("1 个文档未能打标签");
   await window.evaluate(() => globalThis.dispatchEvent(new Event("online")));
-  await expect(item(window, "Invoice 52")).toHaveAttribute("data-tagging", "tagged");
+  await expect(item(window, "Invoice 53")).toHaveAttribute("data-tagging", "tagged");
   await expect(failed).toHaveCount(0);
   await app.close();
 });

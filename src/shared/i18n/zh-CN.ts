@@ -1495,6 +1495,7 @@ export const zhCN = {
   "tagging.stop": "停止",
   "tagging.stop.command": "停止打标签",
   "tagging.tagNotInFolder": "用 AI 给不在文件夹中的文档打标签",
+  "tagging.retry": "重试打标签",
   "tagging.stop.title": "停止。重新开启前，不再用 AI 给{places}的新文档打标签",
   "tagging.place.folders": "{names}里",
   "tagging.place.notInFolder": "不在文件夹中",

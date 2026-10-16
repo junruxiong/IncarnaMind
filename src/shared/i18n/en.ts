@@ -1573,6 +1573,7 @@ export const en = {
   "tagging.stop": "Stop",
   "tagging.stop.command": "Stop Tagging",
   "tagging.tagNotInFolder": "Tag Documents not in a Folder with AI",
+  "tagging.retry": "Retry Tagging",
   "tagging.stop.title":
     "Stop, and don't tag new Documents {places} with AI until you turn it back on",
   "tagging.place.folders": "in {names}",

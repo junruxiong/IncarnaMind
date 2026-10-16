@@ -364,6 +364,16 @@ export async function newMind(window: Page): Promise<void> {
   await motionSettled(window);
 }
 
+/** Runs a command from ⌘K by its label, as the User types and clicks it. */
+export async function runFromPalette(window: Page, label: string): Promise<void> {
+  await window.keyboard.press("ControlOrMeta+k");
+  await expect(window.getByTestId("palette-search")).toBeFocused();
+  await window.keyboard.type(label);
+  const item = window.getByTestId("palette-item").filter({ hasText: label }).first();
+  await expect(item).toBeVisible();
+  await item.click();
+}
+
 /** A Folder's row in the sidebar's Folders view, with what is listed in it, by its name. */
 export const sidebarFolder = (window: Page, name: string) =>
   window

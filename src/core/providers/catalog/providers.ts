@@ -805,7 +805,8 @@ export const endpointOf = (
 
 /**
  * A provider's model for a job that isn't Answers, from the catalog: the
- * ChatGPT plan's from its own roles. Undefined when it names none.
+ * ChatGPT plan's from its own roles, a Claude account's from Anthropic's, as
+ * it serves the same models. Undefined when it names none.
  */
 export const catalogRoleModel = (
   { kind, catalogId }: { kind: ChatProviderKind; catalogId: string | null },
@@ -815,4 +816,4 @@ export const catalogRoleModel = (
     ? role === "images"
       ? undefined
       : CHATGPT_PLAN_ROLES[role]
-    : catalogProviderOf(kind, catalogId)?.roles[role];
+    : catalogProviderOf(kind === "claude-account" ? "anthropic" : kind, catalogId)?.roles[role];
