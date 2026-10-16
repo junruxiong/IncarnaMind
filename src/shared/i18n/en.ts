@@ -1626,7 +1626,7 @@ export const en = {
   "providers.form.dataUse": "{summary}",
   "providers.form.terms": "Terms",
   "providers.form.details": "Details",
-  "providers.form.keyPage": "Open {name}'s key page",
+  "providers.form.keyPage": "Open {provider}'s key page",
   "providers.form.modelsAndPrices": "Models and prices",
   "providers.form.baseUrl": "Server URL",
   "providers.form.baseUrlHint":

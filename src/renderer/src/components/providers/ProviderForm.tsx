@@ -495,9 +495,9 @@ export function ProviderForm({
           {catalog && (
             <KeyHelp
               key={`${kind}:${endpoint?.id}`}
-              provider={catalog}
+              catalog={catalog}
               keyUrl={endpoint?.keyUrl ?? catalog.keyUrl}
-              name={shortName(kind)}
+              provider={shortName(kind)}
               firstRun={standalone}
             />
           )}
@@ -514,40 +514,43 @@ export function ProviderForm({
               {modelIdField}
             </div>
           ) : (
-            <div className="relative">
-              {!standalone && catalog?.docsUrl && (
-                <a
-                  href={catalog.docsUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  data-testid="provider-docs-link"
-                  className="absolute top-0 right-0 text-[12px] leading-5 text-ink-meta underline"
-                >
-                  {t("providers.form.modelsAndPrices")} ↗
-                </a>
-              )}
-              <label className={fieldLabelClass}>
-                {t("providers.form.model")}
-                <select
-                  data-testid="provider-model"
-                  value={!otherModel && choices.includes(modelId) ? modelId : OTHER_MODEL}
-                  onChange={(event) => {
-                    const chosen = event.target.value;
-                    setOtherModel(chosen === OTHER_MODEL);
-                    setModelId(chosen === OTHER_MODEL ? "" : chosen);
-                    setTest(null);
-                    setError(null);
-                  }}
-                  className={inputClass}
-                >
-                  {choices.map((id) => (
-                    <option key={id} value={id} title={id}>
-                      {optionName(id)}
-                    </option>
-                  ))}
-                  <option value={OTHER_MODEL}>{t("providers.form.anotherModel")}</option>
-                </select>
-              </label>
+            <div>
+              <div className="flex items-baseline justify-between gap-3">
+                <label htmlFor={`${id}-model`} className={fieldLabelClass}>
+                  {t("providers.form.model")}
+                </label>
+                {!standalone && catalog?.docsUrl && (
+                  <a
+                    href={catalog.docsUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    data-testid="provider-docs-link"
+                    className="text-[12px] leading-5 text-ink-meta underline"
+                  >
+                    {t("providers.form.modelsAndPrices")} ↗
+                  </a>
+                )}
+              </div>
+              <select
+                id={`${id}-model`}
+                data-testid="provider-model"
+                value={!otherModel && choices.includes(modelId) ? modelId : OTHER_MODEL}
+                onChange={(event) => {
+                  const chosen = event.target.value;
+                  setOtherModel(chosen === OTHER_MODEL);
+                  setModelId(chosen === OTHER_MODEL ? "" : chosen);
+                  setTest(null);
+                  setError(null);
+                }}
+                className={inputClass}
+              >
+                {choices.map((id) => (
+                  <option key={id} value={id} title={id}>
+                    {optionName(id)}
+                  </option>
+                ))}
+                <option value={OTHER_MODEL}>{t("providers.form.anotherModel")}</option>
+              </select>
               {otherModel ? (
                 <div className="mt-2">
                   <label htmlFor={`${id}-model-id`} className="sr-only">

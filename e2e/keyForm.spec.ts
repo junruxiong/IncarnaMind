@@ -97,7 +97,7 @@ test("Where do I find it? opens with the keyboard, and holds the notes, the step
     await acceptPlainTextKeys(window);
     // The first provider is Anthropic in English, which has all four; DeepSeek in Chinese, with no plan's credits.
     for (const [value, plan, keyPage] of [
-      ["en", 1, "Open Anthropic’s key page ↗"],
+      ["en", 1, "Open Anthropic's key page ↗"],
       ["zh-CN", 0, "打开 DeepSeek 的密钥页面 ↗"],
     ] as const) {
       await language(window, value);
@@ -114,7 +114,7 @@ test("Where do I find it? opens with the keyboard, and holds the notes, the step
       await expect(help.getByTestId("provider-note")).toHaveCount(1);
       await expect(help.locator("ol > li")).toHaveCount(3);
       await expect(help.getByTestId("provider-plan-credits")).toHaveCount(plan);
-      await expect(help.getByTestId("provider-key-link")).toHaveText(keyPage.replace("’", "'"));
+      await expect(help.getByTestId("provider-key-link")).toHaveText(keyPage);
       if (process.env.INCARNAMIND_SCREENSHOTS) {
         await window.screenshot({
           path: `${process.env.INCARNAMIND_SCREENSHOTS}/key-help-open-${value}.png`,
@@ -133,7 +133,9 @@ test("Where do I find it? opens with the keyboard, and holds the notes, the step
           ? ["provider-note", "OL", "provider-plan-credits", "provider-key-link"]
           : ["provider-note", "OL", "provider-key-link"],
       );
-      // Nothing of it is under the key field outside the disclosure at first run, and no docs link by the model.
+      // At first run the notes and the credits are in the disclosure only, and the model has no docs link.
+      await expect(form.getByTestId("provider-note")).toHaveCount(1);
+      await expect(form.getByTestId("provider-plan-credits")).toHaveCount(plan);
       await expect(form.getByTestId("provider-docs-link")).toHaveCount(0);
       await window.keyboard.press("Enter");
       await expect(help).not.toHaveAttribute("open", "");
@@ -165,12 +167,27 @@ test("in Settings the notes and the plan's credits are under the key field, the 
           path: `${process.env.INCARNAMIND_SCREENSHOTS}/key-settings-${value}.png`,
         });
       }
-      await expect(form.getByTestId("provider-note")).toBeVisible();
-      await expect(form.getByTestId("provider-plan-credits")).toBeVisible();
+      const note = form.getByTestId("provider-note");
+      const credits = form.getByTestId("provider-plan-credits");
+      await expect(note).toBeVisible();
+      await expect(credits).toBeVisible();
+      // One column with the hint lines' own spacing, no more.
+      const [noteBox, creditsBox] = await Promise.all([note.boundingBox(), credits.boundingBox()]);
+      expect(
+        (creditsBox?.y ?? 0) - ((noteBox?.y ?? 0) + (noteBox?.height ?? 0)),
+      ).toBeLessThanOrEqual(4);
       await expect(help.locator("ol")).toBeHidden();
       await expect(form.getByTestId("provider-docs-link")).toHaveText(link);
       await expect(form.getByTestId("provider-docs-link")).toHaveAttribute("href", /^https:\/\//);
     }
+    // The link is on the model's heading line, above its list: Tab goes from one to the other.
+    const docs = form.getByTestId("provider-docs-link");
+    const picker = form.getByTestId("provider-model");
+    const [docsBox, pickerBox] = await Promise.all([docs.boundingBox(), picker.boundingBox()]);
+    expect(docsBox?.y ?? 0).toBeLessThan(pickerBox?.y ?? 0);
+    await docs.focus();
+    await window.keyboard.press("Tab");
+    await expect(picker).toBeFocused();
     await help.getByTestId("provider-key-help-toggle").click();
     await expect(help.locator("ol > li")).toHaveCount(3);
     await expect(help.getByTestId("provider-note")).toHaveCount(0);
