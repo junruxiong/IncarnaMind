@@ -1,6 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type ElectronApplication, expect, type Locator, type Page, test } from "@playwright/test";
+import type { Editor } from "@tiptap/core";
 import { contractFile, resumeFile } from "../tests/helpers/wordLookFiles";
 import {
   createDataFolder,
@@ -99,7 +100,6 @@ test("the résumé's tables as the file draws them: layout tables without lines,
   const skills = editor.locator("table", { hasText: "语言" });
   await expect(skills).toBeVisible();
 
-  // A layout table: no lines, no radius, no minimum width or heading style of the app's.
   expect(await sidesOf(internship)).toEqual({ top: 0, right: 0, bottom: 0, left: 0 });
   for (const cell of await internship.locator("td").all()) {
     expect(await sidesOf(cell)).toEqual({ top: 0, right: 0, bottom: 0, left: 0 });
@@ -108,7 +108,6 @@ test("the résumé's tables as the file draws them: layout tables without lines,
   await expect(internship.locator("td").first()).toHaveCSS("min-width", "0px");
   await expect(internship.locator("td").last().locator("p")).toHaveCSS("text-align", "right");
 
-  // The skills table: its outer lines and the inside ones between its rows and columns.
   await expect(skills).toHaveCSS("border-collapse", "collapse");
   const language = skills.locator("td", { hasText: "语言" });
   const tools = skills.locator("td", { hasText: "工具" });
@@ -145,7 +144,6 @@ test("the résumé's tables as the file draws them: layout tables without lines,
   await setLanguage(window, "en");
   await shot(window, "word-look-tables-resume-1100");
 
-  // Two Minds side by side leave each a column under 80% of the file: prose reflows, tables scroll in their frames.
   await window.getByTestId("split-group").click();
   await window
     .getByRole("region", { name: "Group 1" })
@@ -220,5 +218,41 @@ test("the contract's tables: the bordered definitions with a shaded heading row 
   await window.getByTestId("group-menu").click();
   await window.getByTestId("look-word").click();
   await expect(definitions).toHaveCSS("border-top-left-radius", "0px");
+  await app.close();
+});
+
+/** Sets the first table's look in this pane's editor, which the Mind's other panes get as a sync. */
+const setTableLook = (pane: Locator, key: string | null) =>
+  pane.locator(".ProseMirror").evaluate((dom, value) => {
+    const { view } = (dom as unknown as { editor: Editor }).editor;
+    let at = -1;
+    view.state.doc.descendants((node, pos) => {
+      if (at < 0 && node.type.name === "table") at = pos;
+      return at < 0;
+    });
+    const table = view.state.doc.nodeAt(at);
+    if (!table) throw new Error("No table.");
+    view.dispatch(view.state.tr.setNodeMarkup(at, undefined, { ...table.attrs, wordLook: value }));
+  }, key);
+
+test("a table look that arrives while the Mind is open, as the start-up backfill or a sync gives it, redraws the table", async () => {
+  const { app, window } = await launchApp(dataDir, { home });
+  await setWindowSize(app, window, 1440, 900);
+  await dismissChatSetup(window);
+  await importFile(app, window, "Supply agreement.docx", contractFile());
+  await window.getByTestId("split-group").click();
+  const panes = window.locator('[data-testid="mind-pane"]:visible');
+  await expect(panes).toHaveCount(2);
+  const [here, there] = [panes.nth(0), panes.nth(1)];
+  const table = there.locator("table", { hasText: "Meaning" });
+  const key = await table.getAttribute("data-word-look");
+  expect(key).toBeTruthy();
+
+  await setTableLook(here, null);
+  await expect(table).not.toHaveAttribute("data-word-look");
+  await expect(table).toHaveCSS("border-top-left-radius", "8px");
+  await setTableLook(here, key);
+  await expect(table).toHaveAttribute("data-word-look", key ?? "");
+  await expect(table).toHaveCSS("border-top-left-radius", "0px");
   await app.close();
 });
