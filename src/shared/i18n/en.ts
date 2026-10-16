@@ -3917,7 +3917,6 @@ export const en = {
   "references.export": "Export…",
   "references.needsDetails.open": "Add the details of “{name}” in Cite as",
   "references.needsDetails.removed": "Its Document was deleted, so its details can't be added.",
-  "references.fallback": "{name}.",
   "references.formatting": "Formatting the references…",
   "references.failed": "Couldn't format the references in {style}: {reason}",
   "references.retry": "Try again",

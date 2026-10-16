@@ -5,7 +5,6 @@
  */
 import { type CitationStyle, citationStyle } from "../../shared/citationStyles";
 import { displayName, titleWithoutSite } from "../../shared/documentNames";
-import { translate } from "../../shared/i18n";
 import { missingDetails } from "../../shared/references";
 import type {
   BibliographyEntry,
@@ -15,7 +14,6 @@ import type {
   FormattedCitations,
   StyledRun,
 } from "../api";
-import type { Language } from "../language";
 import { type CslItem, cslItemOf, locatorOf, nameOnlyItem } from "./csl";
 import { CitationFormatError, type CitationStyleEngine, createWorkerEngine } from "./engine";
 import type { FormatJob } from "./format";
@@ -103,14 +101,14 @@ function referenceOf(work: CitedWork, document: Document | undefined): Reference
 
 /**
  * The entry for a work with no details, which some styles leave blank (Chicago notes) and the
- * rest print as little more than a title: its name, in the style's language. Nothing the app
- * knows of the file (its format, the day it was added) is a fact to cite it by, so the entry
- * is flagged as needing details instead. The style's own number, if it has one, stays.
+ * rest print as little more than a title: its name, ended as every shipped style ends an entry,
+ * GB/T 7714's included. Nothing the app knows of the file (its format, the day it was added) is
+ * a fact to cite it by, so the entry is flagged as needing details instead. The style's own
+ * number, if it has one, stays.
  */
-function fallbackRuns(reference: Reference, language: Language): StyledRun[] {
+function fallbackRuns(reference: Reference): StyledRun[] {
   if (!reference.bare) return [];
-  const name = reference.name.replace(/[.。]+$/, "");
-  return [{ text: translate(language, "references.fallback", { name }) }];
+  return [{ text: `${reference.name.replace(/[.。]+$/, "")}.` }];
 }
 
 /** The version of a web page a Citation quotes, as the page's fetches recorded it. */
@@ -187,10 +185,7 @@ export function createCitationStyles(options: CitationStylesOptions) {
       raisedLocators,
     };
     const fallbacks = new Map(
-      [...references.values()].map((reference) => [
-        reference.item.id,
-        fallbackRuns(reference, style.language),
-      ]),
+      [...references.values()].map((reference) => [reference.item.id, fallbackRuns(reference)]),
     );
     const key = JSON.stringify([style.id, job, [...fallbacks.values()]]);
     const known = cache.get(key);

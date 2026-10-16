@@ -1,9 +1,9 @@
 /**
  * A reference record from what a PDF's first page prints: its title, in the page's largest
- * type; its authors, under the title or after "作者："; the institution a thesis or report comes
- * from; the year on its cover or in its running header; and the kind of work it says it is.
- * Pure. What isn't plainly there is left out, and what is read is a suggestion the User checks
- * (`fieldsToCheck` in ../../shared/references), never a fact.
+ * type; its authors, under the title or after "作者："; the university a thesis or the
+ * organisation a report comes from; the year on its cover or in its running header; and the kind
+ * of work its cover says it is. Pure. What isn't plainly there is left out, and what is read is a
+ * suggestion the User checks (`fieldsToCheck` in ../../shared/references), never a fact.
  */
 
 import { parseName } from "../../shared/references";
@@ -21,9 +21,29 @@ export type FirstPageReading = Partial<
 const HAN = /\p{Script=Han}/u;
 const LETTER = /\p{L}/gu;
 
-/** Headings that open a page but name no work, a thesis cover's "硕士学位论文" among them. */
+/** The top of a page, where a running header and a cover's first lines are. */
+const TOP = 0.15;
+
+/** Headings that open a page but name no work. */
 const GENERIC =
-  /^(?:abstract|summary|executive summary|contents|table of contents|preface|foreword|introduction|acknowledge?ments?|appendix|preprint|draft|chapter\s+\d+|(?:master|doctoral|bachelor)(?:'s)?\s+(?:thesis|dissertation)|摘\s*要|目\s*录|前\s*言|序\s*言|引\s*言|致\s*谢|附\s*录|第[一二三四五六七八九十\d]+章|(?:硕\s*士|博\s*士|学\s*士)?\s*学\s*位\s*论\s*文|毕\s*业\s*(?:论\s*文|设\s*计))(?:$|[\s:：.])/iu;
+  /^(?:abstract|summary|executive summary|contents|table of contents|preface|foreword|introduction|acknowledge?ments?|appendix|preprint|draft|chapter\s+\d+|摘\s*要|目\s*录|前\s*言|序\s*言|引\s*言|致\s*谢|附\s*录|第[一二三四五六七八九十\d]+章)(?:$|[\s:：.])/iu;
+/**
+ * A thesis cover's heading, which says what kind of work it is and is never its title:
+ * "硕士学位论文", "博士研究生学位论文", "华东师范大学硕士专业学位论文", "Doctoral Dissertation".
+ */
+const THESIS_HEADING =
+  /^(?:\S{0,16}(?:大学|学院|研究院|研究所)\s*)?(?:(?:硕\s*士|博\s*士|学\s*士)\s*(?:研\s*究\s*生\s*)?(?:专\s*业\s*)?)?学\s*位\s*论\s*文$|^毕\s*业\s*(?:论\s*文|设\s*计)$|^(?:an?\s+)?(?:(?:master|doctoral|bachelor)(?:'s)?\s+|ph\.?\s?d\.?\s+)?(?:thesis|dissertation)$/iu;
+/** What only a thesis's cover says: "A dissertation submitted to…", "in partial fulfillment of…". */
+const THESIS_STATEMENT =
+  /^an?\s+(?:thesis|dissertation)\s+submitted\b|partial\s+fulfil+ment\s+of\s+the\s+requirements/iu;
+const THESIS = /学位论文|毕业论文|\b(?:thesis|dissertation)\b/iu;
+const REPORT =
+  /工作报告|研究报告|调查报告|年度报告|白皮书|\b(?:annual|technical|research|working)\s+(?:report|paper)\b|\bwhite\s+paper\b/iu;
+/** What a Chinese journal prints on an article's first page. */
+const JOURNAL = /文献标识码|中图分类号|文章编号/u;
+/** A journal's running header ("第 41 卷 第 3 期…中国科学院院刊"), which names no institution of the work's. */
+const JOURNAL_HEADER =
+  /第\s*\d+\s*[卷期]|\bvol(?:ume)?\.?\s*\d|\bno\.\s*\d|\bissn\b|学报|院刊|杂志|期刊|\bjournal\b|\bproceedings\b/iu;
 /** A cover's university or organisation, set as large as a title: "华东师范大学". */
 const ONLY_AN_INSTITUTION = /^.{0,14}(?:大学|学院|研究所|研究院|university|college|institute)$/iu;
 
@@ -44,14 +64,21 @@ const hasSurname = (name: string) =>
 
 /** Words in a heading or a sentence that no person's name has. */
 const NOT_A_NAME = /\b(?:of|the|for|in|on|to|with|from|at)\b/iu;
+/** Words that end a heading under a title, never a name: "文献综述", "研究进展". */
+const NOT_A_CHINESE_NAME =
+  /(?:综述|研究|进展|分析|报告|论文|摘要|引言|概述|简介|绪论|目录|前言|要点|专论|述评|评论)$/u;
 /** A date on the line ("2026年10月15日"), whose numbers are no affiliation marks. */
 const DATE_ON_LINE = /\d\s*[年月日]/u;
 
 /** A label before a value on a cover: "作者：张三", "Author: Jane Smith". */
 const AUTHOR_LABEL =
   /^(?:作\s*者(?:\s*姓\s*名)?|著\s*者|研\s*究\s*生|学\s*生\s*姓\s*名|姓\s*名|申\s*请\s*人|authors?|by)\s*[:：]?\s*(.+)$/iu;
-const INSTITUTION_LABEL =
-  /^(?:培\s*养\s*单\s*位|学\s*位\s*授\s*予\s*单\s*位|授\s*予\s*单\s*位|学\s*校|单\s*位|institution|university)\s*[:：]\s*(.+)$/iu;
+/** Labels of a cover's institution, the degree-granting one first. */
+const INSTITUTION_LABELS = [
+  /^(?:学\s*位\s*)?授\s*予\s*单\s*位\s*[:：]\s*(.+)$/u,
+  /^(?:学\s*校|university)\s*[:：]\s*(.+)$/iu,
+  /^(?:培\s*养\s*单\s*位|单\s*位|institution)\s*[:：]\s*(.+)$/iu,
+];
 const DATE_LABEL =
   /^(?:完\s*成\s*日\s*期|答\s*辩\s*日\s*期|提\s*交\s*日\s*期|论\s*文\s*日\s*期|日\s*期|date)\s*[:：]/iu;
 /** Dates that aren't the work's: when a paper was received or accepted, or a preprint's version posted. */
@@ -59,6 +86,8 @@ const OTHER_DATE =
   /收稿|修回|录用|接收|基金|received|revised|accepted|submitted|funding|arxiv\s*:/iu;
 const INSTITUTION =
   /大学|学院|研究所|研究院|研究中心|科学院|实验室|university|institute|college|academy|school of|laborator/iu;
+const UNIVERSITY =
+  /^.*?大学|[^,，]*\buniversity\b[^,，]*|[^,，]*\binstitute of technology\b[^,，]*/iu;
 
 /** Superscript affiliation numbers and marks after a name: "曲清莉 1，2", "Asai†", "Smith1,2". */
 const CJK_MARKS = /(?:\d+\s*[,，]\s*)*\d+\s*\*?|[*†‡§¶#∗♢]/gu;
@@ -71,11 +100,13 @@ const YEAR_IN_DATE = new RegExp(
     "((?:19|20)\\d{2})\\s*年",
     "\\b((?:19|20)\\d{2})[-/.](?:0?[1-9]|1[0-2])\\b",
     `\\b(?:${MONTHS})\\.?\\s+(?:\\d{1,2},?\\s+)?((?:19|20)\\d{2})\\b`,
-    "\\b\\d{1,2}\\s+(?:" + MONTHS + ")\\.?\\s+((?:19|20)\\d{2})\\b",
+    `\\b\\d{1,2}\\s+(?:${MONTHS})\\.?\\s+((?:19|20)\\d{2})\\b`,
+    "([〇零一二三四五六七八九]{4})\\s*年",
   ].join("|"),
-  "iu",
+  "giu",
 );
-const CHINESE_YEAR = /([〇零一二三四五六七八九]{4})\s*年/u;
+/** The end of a range of years before a date's year: "2020—" in "2020—2024 年". */
+const RANGE_BEFORE = /(?:19|20)\d{2}\s*年?\s*[—–\-~～至到]\s*$/u;
 const CHINESE_DIGITS: Readonly<Record<string, string>> = {
   〇: "0",
   零: "0",
@@ -90,14 +121,8 @@ const CHINESE_DIGITS: Readonly<Record<string, string>> = {
   九: "9",
 };
 
-const THESIS =
-  /学位论文|毕业论文|毕业设计|(?:master|doctoral|ph\.?\s?d\.?|bachelor)(?:'s)?\s+(?:thesis|dissertation)|\bdissertation\b|partial fulfil+ment/iu;
-const REPORT =
-  /工作报告|研究报告|调查报告|年度报告|白皮书|\b(?:annual|technical|research|working)\s+(?:report|paper)\b|\bwhite\s+paper\b/iu;
-/** What a Chinese journal prints on an article's first page. */
-const JOURNAL = /文献标识码|中图分类号|文章编号/u;
-
 const meaningful = (text: string) => (text.match(LETTER)?.length ?? 0) >= 2;
+const isHeading = (text: string) => GENERIC.test(text) || THESIS_HEADING.test(text);
 
 function joinLines(texts: readonly string[]): string {
   return texts.reduce((joined, text) => {
@@ -107,37 +132,36 @@ function joinLines(texts: readonly string[]): string {
   }, "");
 }
 
+/**
+ * The size the page's running text is set in: the smallest that holds a fifth of its characters,
+ * so a cover whose title has more characters than its few labelled lines still has its labels'.
+ */
 function bodySize(lines: readonly PageLine[]): number {
   const weight = new Map<number, number>();
+  let total = 0;
   for (const line of lines) {
     weight.set(line.size, (weight.get(line.size) ?? 0) + line.text.length);
+    total += line.text.length;
   }
-  let body = 0;
-  let most = 0;
-  for (const [size, chars] of weight) {
-    if (chars > most) [body, most] = [size, chars];
-  }
-  return body;
+  const sizes = [...weight].sort(([a], [b]) => a - b);
+  return sizes.find(([, chars]) => chars >= total / 5)?.[0] ?? 0;
 }
 
-/** The title, in the largest type set well above the body's, and the index of its last line. */
-function titleOf(lines: readonly PageLine[]): { title: string; end: number } | null {
+function titleOf(lines: readonly PageLine[]): { title: string; start: number; end: number } | null {
   const body = bodySize(lines);
   const sizes = [...new Set(lines.filter((line) => meaningful(line.text)).map((l) => l.size))]
     .filter((size) => size >= body * 1.15)
     .sort((a, b) => b - a)
     .slice(0, 3);
+  const sized = (line: PageLine | undefined, size: number) =>
+    line !== undefined && Math.abs(line.size - size) < 0.5;
   for (const size of sizes) {
-    const start = lines.findIndex(
-      (line) => Math.abs(line.size - size) < 0.5 && meaningful(line.text),
-    );
+    const start = lines.findIndex((line) => sized(line, size) && meaningful(line.text));
     let end = start;
-    while (end + 1 < lines.length && Math.abs((lines[end + 1] as PageLine).size - size) < 0.5) {
-      end++;
-    }
+    while (sized(lines[end + 1], size)) end++;
     const title = joinLines(lines.slice(start, end + 1).map((line) => line.text));
-    if (!GENERIC.test(title) && !ONLY_AN_INSTITUTION.test(title) && title.length <= 300) {
-      return { title, end };
+    if (!isHeading(title) && !ONLY_AN_INSTITUTION.test(title) && title.length <= 300) {
+      return { title, start, end };
     }
   }
   return null;
@@ -160,7 +184,9 @@ function chineseNames(text: string, labelled: boolean): ReferenceName[] | null {
     .filter((token) => token !== "");
   const valid = (name: string) =>
     /^\p{Script=Han}{2,6}(?:·\p{Script=Han}{2,6})+$/u.test(name) ||
-    (/^\p{Script=Han}{2,4}$/u.test(name) && (labelled || hasSurname(name)));
+    (/^\p{Script=Han}{2,4}$/u.test(name) &&
+      !NOT_A_CHINESE_NAME.test(name) &&
+      (labelled || hasSurname(name)));
   if (tokens.length === 0 || tokens.length > 30 || !tokens.every(valid)) return null;
   return tokens.map((literal) => ({ literal }));
 }
@@ -204,7 +230,6 @@ export const withoutAffiliationMarks = (text: string): string =>
     ? text.replace(CJK_MARKS, "").replace(/[^\p{Script=Han}·\s,，、;；/]/gu, "")
     : text.replace(LATIN_MARKS, "");
 
-/** The authors: after a label anywhere, else on the lines just under the title. */
 function authorsOf(lines: readonly PageLine[], titleEnd: number): ReferenceName[] | null {
   for (const line of lines) {
     const value = AUTHOR_LABEL.exec(line.text)?.[1];
@@ -219,59 +244,87 @@ function authorsOf(lines: readonly PageLine[], titleEnd: number): ReferenceName[
   return null;
 }
 
-/** The institution, as a cover labels it or as the first line naming one gives it. */
+/**
+ * The institution a thesis is from is its university, as the degree-granting body: a labelled
+ * department ("培养单位：计算机科学与技术系") gives way to the university the cover names.
+ */
 function institutionOf(lines: readonly PageLine[]): string | null {
   const tidy = (text: string) =>
     text
       .replace(/^[（(]?\s*\d+\s*[.．、]\s*|^[*†‡§¶#∗♢]+/u, "")
       .split(/[，,；;]|\s{2,}|[*†‡§¶#∗♢]/u)[0]
       ?.trim() ?? "";
-  for (const line of lines) {
-    const value = INSTITUTION_LABEL.exec(line.text)?.[1];
-    if (value) return tidy(value) || null;
-  }
-  for (const line of lines) {
-    // A line of the body that mentions one ("国家实验室体系建设…。") names no institution of the work's.
-    if (!INSTITUTION.test(line.text) || /[@。！？!?]/u.test(line.text)) continue;
-    const named = tidy(line.text);
-    if (INSTITUTION.test(named) && named.length <= 60 && /^[\p{L}\p{N}]/u.test(named)) {
-      return named;
-    }
-  }
-  return null;
+  const universityIn = (text: string) => UNIVERSITY.exec(text)?.[0]?.trim() || null;
+  const labelled = INSTITUTION_LABELS.map((label) =>
+    lines.map((line) => label.exec(line.text)?.[1]?.trim()).find(Boolean),
+  );
+  // A line of the body that mentions one ("国家实验室体系建设…。") names no institution of the work's.
+  const named = lines
+    .map((line) => line.text)
+    .filter(
+      (text) => INSTITUTION.test(text) && !JOURNAL_HEADER.test(text) && !/[@。！？!?]/u.test(text),
+    )
+    .map(tidy)
+    .filter((text) => INSTITUTION.test(text) && text.length <= 60 && /^[\p{L}\p{N}]/u.test(text));
+  const [granting, school, unit] = labelled;
+  for (const value of [granting, school]) if (value) return universityIn(value) ?? tidy(value);
+  const university = [unit, ...named]
+    .map((text) => (text ? universityIn(text) : null))
+    .find(Boolean);
+  return university ?? (unit ? tidy(unit) : null) ?? named[0] ?? null;
 }
 
 /**
- * The year, from a date on a short line (a cover's, a running header's) that isn't when the
- * paper was received or accepted; a labelled date first. Years written in Chinese numerals
- * ("二〇二六年五月") count.
+ * The year from a cover's or a running header's date, a labelled one first: a date on a line
+ * that is mostly the date, or at the top of the page. Not a date in a sentence of the abstract,
+ * nor the end of a range ("2020—2024 年"), nor when the paper was received or accepted. Years in
+ * Chinese numerals ("二〇二六年五月") count.
  */
 function yearOf(lines: readonly PageLine[]): string | null {
-  const yearIn = (text: string): string | null => {
-    const chinese = CHINESE_YEAR.exec(text)?.[1];
-    if (chinese) return [...chinese].map((digit) => CHINESE_DIGITS[digit]).join("");
-    const match = YEAR_IN_DATE.exec(text);
-    return match?.slice(1).find((group) => group !== undefined) ?? null;
-  };
-  const dated = lines.filter((line) => line.text.length <= 40 && !OTHER_DATE.test(line.text));
-  for (const line of dated) {
-    if (DATE_LABEL.test(line.text)) {
-      const year = yearIn(line.text);
-      if (year) return year;
+  const yearIn = (line: PageLine): string | null => {
+    if (OTHER_DATE.test(line.text)) return null;
+    for (const match of line.text.matchAll(YEAR_IN_DATE)) {
+      if (RANGE_BEFORE.test(line.text.slice(0, match.index))) continue;
+      const written = match.slice(1).find((group) => group !== undefined) ?? "";
+      const year = [...written].map((digit) => CHINESE_DIGITS[digit] ?? digit).join("");
+      const rest = line.text
+        .replace(match[0], "")
+        .replace(DATE_LABEL, "")
+        .replace(/[\d\s月日.,，]/gu, "");
+      if (line.top < TOP || rest.length <= 12 || DATE_LABEL.test(line.text)) return year;
     }
-  }
-  for (const line of dated) {
-    const year = yearIn(line.text);
+    return null;
+  };
+  const labelled = lines.filter((line) => DATE_LABEL.test(line.text));
+  for (const line of [...labelled, ...lines]) {
+    const year = yearIn(line);
     if (year) return year;
   }
   return null;
 }
 
-function typeOf(text: string): FirstPageReading["type"] {
-  if (THESIS.test(text)) return "thesis";
-  if (JOURNAL.test(text)) return "article-journal";
-  if (REPORT.test(text)) return "report";
-  return undefined;
+/**
+ * What its cover says the work is: a thesis by a cover's heading or statement, or by a line at the
+ * top of the page that isn't the title (a title about theses is no thesis's); a journal article by
+ * a Chinese journal's article marks; a report by its title or the top of the page.
+ */
+function typeOf(
+  lines: readonly PageLine[],
+  title: { start: number; end: number } | null,
+): FirstPageReading["type"] {
+  const inTitle = (index: number) => title !== null && index >= title.start && index <= title.end;
+  const thesis = lines.some(
+    (line, index) =>
+      THESIS_HEADING.test(line.text) ||
+      THESIS_STATEMENT.test(line.text) ||
+      (line.top < TOP && !inTitle(index) && THESIS.test(line.text)),
+  );
+  if (thesis) return "thesis";
+  if (lines.some((line) => JOURNAL.test(line.text))) return "article-journal";
+  const report = lines.some(
+    (line, index) => (inTitle(index) || line.top < TOP) && REPORT.test(line.text),
+  );
+  return report ? "report" : undefined;
 }
 
 /** What a PDF's first page gives of its reference record: only what it plainly prints. */
@@ -288,7 +341,7 @@ export function readFirstPage(printed: readonly PageLine[]): FirstPageReading {
   if (institution) read.institution = institution;
   const year = yearOf(lines);
   if (year) read.issued = year;
-  const type = typeOf(lines.map((line) => line.text).join("\n"));
+  const type = typeOf(lines, found);
   if (type) read.type = type;
   return read;
 }

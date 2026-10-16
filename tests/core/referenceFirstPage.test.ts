@@ -71,6 +71,40 @@ const reportPdf = () =>
     },
   ]);
 
+/** A journal article about theses: its title says 博士学位论文, and it has a DOI. */
+const articleAboutThesesPdf = () =>
+  buildPdf([
+    {
+      printed: [
+        { text: "学位与研究生教育 2025 年 6 月", size: 9 },
+        { text: "我国博士学位论文抽检结果分析", size: 18 },
+        { text: "王明 1，赵静 2", size: 11 },
+        { text: "摘要：本文分析了 2020—2024 年博士学位论文抽检的结果。", size: 10 },
+        { text: "DOI: 10.5555/thesis-checks-2025", size: 9 },
+      ],
+    },
+  ]);
+
+/** A paper with a DOI that mentions a doctoral dissertation in its text. */
+const paperCitingADissertationPdf = () =>
+  buildPdf([
+    {
+      printed: [
+        { text: "Night-time cooling in twelve cities", size: 17 },
+        { text: "Diana E. Bowler and Andrew S. Pullin", size: 11 },
+        { text: "https://doi.org/10.5555/night-cooling-2024", size: 9 },
+        {
+          text: "This extends the methods of an earlier doctoral dissertation on urban parks",
+          size: 10,
+        },
+        {
+          text: "and measures the cooling of parks at night across twelve cities in Europe.",
+          size: 10,
+        },
+      ],
+    },
+  ]);
+
 async function addPdf(core: Core, name: string, contents: Uint8Array): Promise<Document> {
   const sources = await createSourceFolder();
   const [document] = await addAndProcess(core, [await writeSourceFile(sources, name, contents)]);
@@ -87,7 +121,8 @@ describe("引用信息 from a PDF's first page", () => {
       title: "城市绿地与夏季降温调查",
       authors: [{ literal: "林小雨" }],
       issued: "2026",
-      publisher: "华东师范大学地理科学学院",
+      // The degree-granting university, not its school.
+      publisher: "华东师范大学",
       language: "zh",
     });
   });
@@ -123,14 +158,28 @@ describe("引用信息 from a PDF's first page", () => {
     });
   });
 
+  test("a title about theses, or a dissertation the text mentions, doesn't make a paper with a DOI a thesis", async () => {
+    const core = startCore(await createTempDataFolder());
+    const aboutTheses = await addPdf(core, "theses.pdf", articleAboutThesesPdf());
+    expect(aboutTheses.reference?.fields).toMatchObject({
+      type: "article-journal",
+      title: "我国博士学位论文抽检结果分析",
+      authors: [{ literal: "王明" }, { literal: "赵静" }],
+      // The date in the running header, not the end of a range in the abstract.
+      issued: "2025",
+    });
+    const citing = await addPdf(core, "cooling.pdf", paperCitingADissertationPdf());
+    expect(citing.reference?.fields.type).toBe("article-journal");
+  });
+
   test("what was read waits to be checked; Mark as checked makes it the User's, and Undo puts it back", async () => {
     const core = startCore(await createTempDataFolder());
     const thesis = await addPdf(core, "lin-2026.pdf", thesisPdf());
     const before = thesis.reference;
     if (!before) throw new Error("The thesis has no record.");
     expect(needsCheck(before)).toBe(true);
-    // What a style prints; not the type or the language the reading tells from the page.
-    expect(fieldsToCheck(before)).toEqual(["title", "authors", "issued", "publisher"]);
+    // What a style prints, the kind of work too; not the language, which only picks its terms.
+    expect(fieldsToCheck(before)).toEqual(["type", "title", "authors", "issued", "publisher"]);
 
     const checked = await core.confirmReference(thesis.id);
     expect(checked.reference && needsCheck(checked.reference)).toBe(false);
@@ -143,7 +192,7 @@ describe("引用信息 from a PDF's first page", () => {
   });
 });
 
-const line = (text: string, size = 10): PageLine => ({ text, size });
+const line = (text: string, size = 10, top = 0.5): PageLine => ({ text, size, top });
 
 describe("reading a first page leaves out what it doesn't plainly print", () => {
   test("a heading under the title is no author, and a body line naming a laboratory is no institution", () => {
@@ -183,5 +232,72 @@ describe("reading a first page leaves out what it doesn't plainly print", () => 
       { literal: "裴栋" },
     ]);
     expect(read.type).toBe("article-journal");
+  });
+
+  test("a thesis cover's heading, however it is worded, is no title", () => {
+    for (const heading of ["博士研究生学位论文", "硕士专业学位论文", "华东师范大学硕士学位论文"]) {
+      const read = readFirstPage([
+        line(heading, 26, 0.1),
+        line("城市绿地与夏季降温调查", 20, 0.3),
+        line("作者姓名：林小雨", 14, 0.6),
+      ]);
+      expect(read.title, heading).toBe("城市绿地与夏季降温调查");
+      expect(read.type, heading).toBe("thesis");
+    }
+  });
+
+  test("a thesis's institution is its university, not the department its cover labels", () => {
+    const read = readFirstPage([
+      line("清华大学", 28, 0.08),
+      line("博士学位论文", 24, 0.2),
+      line("面向城市热岛的遥感反演方法", 20, 0.35),
+      line("培养单位：计算机科学与技术系", 14, 0.7),
+      line("二〇二五年六月", 14, 0.85),
+    ]);
+    expect(read).toMatchObject({
+      title: "面向城市热岛的遥感反演方法",
+      institution: "清华大学",
+      issued: "2025",
+      type: "thesis",
+    });
+  });
+
+  test("a journal's running header names no institution, and its date is the year, not a range in the abstract", () => {
+    const read = readFirstPage([
+      line("第 41 卷 第 3 期 2026 年 3 月 中国科学院院刊", 8, 0.04),
+      line("城市更新中的绿地格局", 16, 0.12),
+      line("李明 1，张华 2", 11, 0.17),
+      line("摘要：基于 2020—2024 年的数据，分析了城市绿地的变化。", 9, 0.25),
+      line("文献标识码：A", 9, 0.3),
+    ]);
+    expect(read.institution).toBeUndefined();
+    expect(read.issued).toBe("2026");
+    expect(read.type).toBe("article-journal");
+  });
+
+  test("a heading under the title (文献综述) is no author, and a title about theses is no thesis", () => {
+    const read = readFirstPage([
+      line("我国博士学位论文抽检结果分析", 16, 0.1),
+      line("文献综述", 11, 0.14),
+      line("摘要：本文梳理了学位论文抽检的研究。", 9, 0.3),
+    ]);
+    expect(read.title).toBe("我国博士学位论文抽检结果分析");
+    expect(read.authors).toBeUndefined();
+    expect(read.type).toBeUndefined();
+  });
+
+  test("a dissertation the text mentions makes no thesis; a cover's statement does", () => {
+    expect(
+      readFirstPage([
+        line("Night-time cooling in twelve cities", 17, 0.1),
+        line("This extends the methods of an earlier doctoral dissertation on parks.", 10, 0.5),
+      ]).type,
+    ).toBeUndefined();
+    expect(
+      readFirstPage([
+        line("Night-time cooling in twelve cities", 17, 0.3),
+        line("A dissertation submitted to the University of Leeds", 12, 0.6),
+      ]).type,
+    ).toBe("thesis");
   });
 });

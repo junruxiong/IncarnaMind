@@ -188,29 +188,40 @@ function pageText(items: readonly object[]): string {
 export interface PageLine {
   text: string;
   size: number;
+  /** How far down the page its baseline is, from 0 at the top to 1 at the foot. */
+  top: number;
 }
 
 /**
  * A page's lines across it, in the order pdf.js reads them. Text set at an angle (arXiv's stamp
  * up the margin) is left out: it is no line of the page's own.
  */
-function pageLines(items: readonly object[]): PageLine[] {
+function pageLines(items: readonly object[], height: number): PageLine[] {
   const lines: PageLine[] = [];
   let text = "";
   let size = 0;
+  let baseline: number | null = null;
   const end = () => {
     const tidy = text.replaceAll("\u0000", "").replace(/\s+/g, " ").trim();
-    if (tidy !== "" && size > 0) lines.push({ text: tidy, size });
+    if (tidy !== "" && size > 0 && baseline !== null) {
+      const top = height > 0 ? Math.min(1, Math.max(0, 1 - baseline / height)) : 0;
+      lines.push({ text: tidy, size, top });
+    }
     text = "";
     size = 0;
+    baseline = null;
   };
   for (const item of items) {
     if (!("str" in item) || typeof item.str !== "string") continue;
-    const transform = "transform" in item && Array.isArray(item.transform) ? item.transform : [];
-    const [a = 0, b = 0, c = 0, d = 0] = transform as number[];
+    const transform: number[] =
+      "transform" in item && Array.isArray(item.transform) ? item.transform : [];
+    const [a = 0, b = 0, c = 0, d = 0, , f = 0] = transform;
     if (Math.abs(b) < 0.01 && Math.abs(c) < 0.01 && a > 0) {
       text += item.str;
-      if (item.str.trim() !== "") size = Math.max(size, Math.round(Math.abs(d) * 10) / 10);
+      if (item.str.trim() !== "") {
+        size = Math.max(size, Math.round(Math.abs(d) * 10) / 10);
+        baseline ??= f;
+      }
     }
     if ("hasEOL" in item && item.hasEOL === true) end();
   }
@@ -275,7 +286,7 @@ export async function pdfMetadata(
       const page = await document.getPage(number);
       const { items } = await page.getTextContent();
       if (number <= pages) firstPages.push(pageText(items));
-      if (number === 1) firstPageLines = pageLines(items);
+      if (number === 1) firstPageLines = pageLines(items, page.getViewport({ scale: 1 }).height);
       page.cleanup();
     }
     return {

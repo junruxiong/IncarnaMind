@@ -317,8 +317,7 @@ function ResultBody({
   );
 }
 
-/** How many Documents needing details the line names before "…". */
-const NAMED = 3;
+const NAMED_BEFORE_MORE = 3;
 
 /**
  * The Documents whose entries went into the file marked "[needs details]", by name, and Show,
@@ -333,14 +332,14 @@ function NeedsDetailsLine({ mindId, documentIds }: { mindId: string; documentIds
     return document ? [displayName(document)] : [];
   });
   if (names.length === 0) return null;
-  const listed = names.slice(0, NAMED).map((name) => `“${name}”`);
+  const listed = names.slice(0, NAMED_BEFORE_MORE).map((name) => `“${name}”`);
   const separator = language === "zh-CN" ? "、" : ", ";
   const text =
     names.length === 1
       ? t("export.needsDetails.line.one", { name: names[0] ?? "" })
       : t("export.needsDetails.line.other", {
           count: names.length,
-          names: `${listed.join(separator)}${names.length > NAMED ? "…" : ""}`,
+          names: `${listed.join(separator)}${names.length > NAMED_BEFORE_MORE ? "…" : ""}`,
         });
   return (
     <ProblemLine

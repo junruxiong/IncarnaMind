@@ -18,10 +18,14 @@ import {
   type StyledRun,
 } from "../../core/api";
 import { LANGUAGE_SAMPLE, writtenInChinese } from "../../core/documents/textLanguage";
-import { type CitationStyleId, defaultCitationStyle } from "../../shared/citationStyles";
+import type { CitationStyleId } from "../../shared/citationStyles";
 import { displayName } from "../../shared/documentNames";
 import { bibliographyShown } from "../../shared/mindBibliography";
-import { chosenCitationStyle, citationStylePromptDismissed } from "../../shared/mindCitationStyle";
+import {
+  chosenCitationStyle,
+  citationStylePromptDismissed,
+  resolvedCitationStyle,
+} from "../../shared/mindCitationStyle";
 import { isCitableWork } from "../../shared/references";
 import { core } from "./core";
 import { citationClusters, citedWorkOf } from "./editor/citationClusters";
@@ -139,7 +143,7 @@ export function useCitesWorks(editor: Editor): boolean {
 
 /**
  * The style the Mind is in: its choice, else the default for the interface's language, the
- * Mind's text and what it cites (`defaultCitationStyle`), as the core works it out for exports.
+ * Mind's text and what it cites (`resolvedCitationStyle`), as the core works it out for exports.
  */
 export function useMindCitationStyle(editor: Editor, choice: MindStyleChoice): CitationStyleId {
   const language = useLanguage();
@@ -153,7 +157,7 @@ export function useMindCitationStyle(editor: Editor, choice: MindStyleChoice): C
       return writtenInChinese(doc.textBetween(0, end, "\n"));
     },
   });
-  return choice.chosen ?? defaultCitationStyle(language, { chineseText, citesWorks });
+  return resolvedCitationStyle(choice, { language, chineseText, citesWorks });
 }
 
 /** How long the editor waits after a change before it asks again: a run of changes asks once. */

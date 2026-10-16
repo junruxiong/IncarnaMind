@@ -29,12 +29,12 @@ export interface FormatJob {
 /**
  * One citation as the engine is asked for it: a job's citation with each work once, or, when
  * Locations are raised, one of its works on its own. `works` maps each of its items to the
- * job citation's, and `raised` is the Location written after it.
+ * job citation's; `after` is what follows it, its page raised or another Location in brackets.
  */
 interface Part {
   citation: EngineCitation;
   works: number[];
-  raised: string | null;
+  after: EngineRun[];
 }
 
 function mergedLocator(cites: readonly EngineCite[], separator: string): Partial<EngineCite> {
@@ -46,37 +46,80 @@ function mergedLocator(cites: readonly EngineCite[], separator: string): Partial
 }
 
 /**
+ * What follows a work cited on its own in a style that raises Locations: its pages raised, as
+ * the standard prints them; a slide, a section or lines, which it has no form for, in brackets
+ * on the line, "（第 1 行）".
+ */
+function locationAfter(cite: EngineCite, work: number): EngineRun[] {
+  if (!cite.locator) return [];
+  if (cite.label === "page") return [{ text: cite.locator, script: "sup", item: work }];
+  const text = hasCjk.test(cite.locator) ? `（${cite.locator}）` : ` (${cite.locator})`;
+  return [{ text, item: work }];
+}
+
+/**
  * A job's citation as the engine is asked for it: a work it cites twice cited once, so a
  * cluster never reads "[1,1]"; and, with raised Locations, each work on its own once any has
  * a Location, so each is followed by its own.
  */
 function partsOf(citation: EngineCitation, raised: boolean): Part[] {
   const firstOf = new Map<string, number>();
-  const merged: { cites: EngineCite[]; work: number }[] = [];
+  const merged: { cites: [EngineCite, ...EngineCite[]]; work: number }[] = [];
   citation.items.forEach((cite, index) => {
     const at = firstOf.get(cite.id);
-    if (at === undefined) {
+    const known = at === undefined ? undefined : merged[at];
+    if (known) {
+      known.cites.push(cite);
+    } else {
       firstOf.set(cite.id, merged.length);
       merged.push({ cites: [cite], work: index });
-    } else {
-      merged[at]?.cites.push(cite);
     }
   });
-  const items = merged.map(({ cites }) => {
-    const { locator: _, label: __, ...rest } = cites[0] as EngineCite;
-    return { ...rest, ...mergedLocator(cites, raised ? "," : ", ") };
+  const items = merged.map(({ cites: [first, ...more], work }) => {
+    const { locator: _, label: __, ...rest } = first;
+    return { cite: { ...rest, ...mergedLocator([first, ...more], raised ? "," : ", ") }, work };
   });
-  const works = merged.map((each) => each.work);
   const noteIndex = citation.noteIndex === undefined ? {} : { noteIndex: citation.noteIndex };
-  if (!raised || !items.some((item) => item.locator)) {
-    return [{ citation: { ...noteIndex, items }, works, raised: null }];
+  if (!raised || !items.some(({ cite }) => cite.locator)) {
+    return [
+      {
+        citation: { ...noteIndex, items: items.map(({ cite }) => cite) },
+        works: items.map(({ work }) => work),
+        after: [],
+      },
+    ];
   }
-  return items.map(({ locator, label: _, ...item }, index) => ({
-    citation: { ...noteIndex, items: [item] },
-    works: [works[index] as number],
-    raised: locator ?? null,
-  }));
+  return items.map(({ cite, work }) => {
+    const { locator: _, label: __, ...bare } = cite;
+    return {
+      citation: { ...noteIndex, items: [bare] },
+      works: [work],
+      after: locationAfter(cite, work),
+    };
+  });
 }
+
+/**
+ * What a style writes between two works in one citation, "; " in "(Oke, 1982; Kuhn, 2012)", as
+ * a render of the whole cluster shows it: the runs between the first work's and the next's.
+ */
+function delimiterOf(runs: readonly EngineRun[]): string {
+  const firstAt = runs.findIndex((run) => run.item !== undefined);
+  const first = runs[firstAt]?.item;
+  const nextAt = runs.findIndex(
+    (run, at) => at > firstAt && run.item !== undefined && run.item !== first,
+  );
+  if (firstAt < 0 || nextAt < 0) return "";
+  let from = nextAt;
+  while (from > firstAt && runs[from - 1]?.item === undefined) from--;
+  return runs
+    .slice(from, nextAt)
+    .map((run) => run.text)
+    .join("");
+}
+
+/** A work cited on its own in brackets, which the next is set apart from by the style's delimiter. */
+const parenthesised = (runs: readonly EngineRun[]) => /[)）]$/u.test(runs.at(-1)?.text ?? "");
 
 const hasCjk = new RegExp(`[${CJK}]`, "u");
 
@@ -159,9 +202,25 @@ export function formatJob(
 ): EngineOutput {
   const partsByCitation = job.citations.map((citation) => partsOf(citation, job.raisedLocators));
   const parts = partsByCitation.flat();
+  // A whole cluster split into its works, rendered once more as one, for its delimiter.
+  const probes = partsByCitation.flatMap((each, index) =>
+    each.length > 1
+      ? [
+          {
+            index,
+            citation: {
+              ...(job.citations[index]?.noteIndex === undefined
+                ? {}
+                : { noteIndex: job.citations[index]?.noteIndex }),
+              items: each.flatMap((part) => part.citation.items),
+            },
+          },
+        ]
+      : [],
+  );
   const request: EngineRequest = {
     items: job.items,
-    citations: parts.map((part) => part.citation),
+    citations: [...parts.map((part) => part.citation), ...probes.map((probe) => probe.citation)],
   };
   let output = render(request);
   const others = new Set(job.items.filter((item) => !isChineseItem(item)).map((item) => item.id));
@@ -182,18 +241,25 @@ export function formatJob(
       }),
     };
   }
+  const delimiters = new Map(
+    probes.map((probe, at) => [
+      probe.index,
+      delimiterOf(output.citations[parts.length + at] ?? []),
+    ]),
+  );
   let next = 0;
-  const citations = partsByCitation.map((each) =>
-    each.flatMap((part) => {
+  const citations = partsByCitation.map((each, index) =>
+    each.flatMap((part, at) => {
       const runs = (output.citations[next++] ?? []).map(
         ({ item, ...run }): EngineRun =>
-          item === undefined ? run : { ...run, item: part.works[item] as number },
+          item === undefined ? run : { ...run, item: part.works[item] ?? item },
       );
-      if (part.raised === null) return runs;
-      return [
-        ...runs,
-        { text: part.raised, script: "sup" as const, item: part.works[0] as number },
-      ];
+      const delimiter = delimiters.get(index) ?? "";
+      const between =
+        at < each.length - 1 && delimiter !== "" && parenthesised(runs)
+          ? [{ text: delimiter }]
+          : [];
+      return [...runs, ...part.after, ...between];
     }),
   );
   const chinese = <T extends EngineRun>(runs: readonly T[]) =>
