@@ -106,6 +106,12 @@ export function recordFor(
   return { record, shared: best, quoted };
 }
 
+export const FORTY_CITATIONS = /\bforty citations\b|四十条引用/i;
+export const TWELVE_IN_A_ROW = /\btwelve in a row\b|连续十二条/i;
+
+export const citationsAsked = (question: string) =>
+  FORTY_CITATIONS.test(question) ? 40 : TWELVE_IN_A_ROW.test(question) ? 12 : 0;
+
 /**
  * The records for a search result: for the first Passage, or with "each" in
  * the Question, for each Document found, its Passage with the line that
@@ -113,6 +119,13 @@ export function recordFor(
  */
 export function recordsFor(result: string, question: string): Record<string, unknown>[] {
   const passages = passagesIn(result);
+  const asked = citationsAsked(question);
+  if (asked > 0) {
+    const first = passages[0];
+    return Array.from({ length: asked }, (_, index) =>
+      first ? (recordFor(first, question, index + 1)?.record ?? null) : null,
+    ).filter((record) => record !== null);
+  }
   if (!/\beach\b/i.test(question)) {
     const first = passages[0] && recordFor(passages[0], question, 1);
     return first ? [first.record] : [];
