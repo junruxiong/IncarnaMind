@@ -3,10 +3,10 @@ import { describe, expect, test } from "vitest";
 import type { Core } from "../../src/core";
 import { EDIT_INSTRUCTIONS } from "../../src/core/edits/prompt";
 import { pendingProposals, proposalRequestOf, resolveProposals } from "../../src/shared/proposals";
-import { askAssistant, changesIn } from "../helpers/assistant";
+import { askAssistant, changesIn, lastResult } from "../helpers/assistant";
 import { createTempDataFolder, startCore } from "../helpers/core";
 import { connectToMind } from "../helpers/mindClient";
-import { heading, note, writeMind } from "../helpers/minds";
+import { heading, note, shownWithChanges, writeMind } from "../helpers/minds";
 import {
   type ModelCall,
   type ScriptedReply,
@@ -182,4 +182,48 @@ describe("What each change's request records", { timeout: 30_000 }, () => {
     expect(changesIn(editing)[0]).not.toHaveProperty("revised");
     expect(tagOf(editing)).toMatchObject({ source: "edit-with-ai", requested: "edit" });
   });
+});
+
+describe("A second copy", { timeout: 30_000 }, () => {
+  const RISKS = "## Risks\n\nThe supplier is late.";
+
+  // protects=adding again a section the assistant wrote and that still waits is refused, the Mind keeps one, and the model is told to revise it with edit_mind, as it streams in and as it ends; fails_when=a second copy is written, or the model isn't told how to revise; no_claim=that a real model then revises.
+  test.each([false, true])(
+    "of its own waiting section is refused, streamed: %s",
+    async (streamed) => {
+      const model = scriptedModel((call): ScriptedReply => {
+        if (call.results.some((each) => each.tool === "add_to_mind")) return { text: "Done." };
+        const longer = asked(call).includes("write more about the risks");
+        return {
+          calls: [
+            {
+              tool: "add_to_mind",
+              input: { content: longer ? `${RISKS}\n\nThe courier is late too.` : RISKS },
+              streamInput: streamed,
+            },
+          ],
+        };
+      });
+      const { core, mind } = await setUp(model);
+      const client = await connectToMind(core, mind.id);
+      const first = await askAssistant(core, { text: "add a risks section", mindId: mind.id });
+
+      const second = await askAssistant(core, {
+        text: "write more about the risks",
+        mindId: mind.id,
+        conversationId: first.conversationId,
+      });
+
+      await client.settled();
+      expect(shownWithChanges(client).filter((line) => line.includes("Risks"))).toEqual([
+        "+ Risks",
+      ]);
+      const [refused] = second.toolCalls.filter((call) => call.tool === "add_to_mind");
+      expect(refused).toMatchObject({
+        status: "failed",
+        mindProblem: { kind: "copy", mindId: mind.id, text: "Risks" },
+      });
+      expect(lastResult(model)).toContain("Revise it with edit_mind");
+    },
+  );
 });

@@ -45,6 +45,8 @@ function whyNot(problem: MindProblem | undefined): string {
       return "its text changed while it was being read";
     case "content-not-own":
       return "new text can only replace your own waiting changes";
+    case "copy":
+      return `“${problem.text}” is there already, as your own waiting text: revise it with edit_mind`;
     case "stopped":
       return "it was stopped";
     case "local-mode":
