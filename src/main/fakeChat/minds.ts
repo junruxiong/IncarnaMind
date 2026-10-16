@@ -6,7 +6,7 @@
  * the Mind, with who made each (#734).
  *
  * In the assistant, with the Minds' Tools (#202, `mindsReply`): a request to
- * shorten (缩短, 改短), or to "replace X with Y", calls edit_mind with the request as its instruction,
+ * shorten (缩短, 改短) or lengthen (长一点), or to "replace X with Y", calls edit_mind with the request as its instruction,
  * which Edit with AI's scripted model carries out as Shorten, and so does one
  * "with a table" (加上表格), which it carries out by adding one (#961); one
  * for a new note (新笔记, 新建) calls create_mind, titled from what follows "called"
@@ -16,7 +16,8 @@
  * calls both. Each then replies with the first sentence of what its calls
  * came to; add_to_mind's and create_mind's input streams in word by word,
  * slowly for a Question asked "slowly", as does edit_mind's edit. "Write three
- * paragraphs" is `paragraphsReply`'s.
+ * paragraphs" is `paragraphsReply`'s. "Write a summary page" (写一个总结页面)
+ * calls create_mind with a short summary.
  */
 
 import { answerReply, CITED_ANSWER } from "./answers";
@@ -69,6 +70,15 @@ export function mindRead(prompt: Prompt): string | null {
   ].join("\n\n");
 }
 
+/** The owner's two requests (#880): a summary page, then the same made longer (写一个总结页面, 再长一点). */
+const SUMMARY_PAGE = /\bwrite a summary page\b|写一个总结页面/i;
+const LONGER = /\blonger\b|长一点|更长/i;
+const SUMMARY = [
+  "## Summary",
+  "Spring tides come at new and full moon, when the Sun and the Moon pull together.",
+  "Neap tides come in between, at the quarter moons.",
+].join("\n\n");
+
 /** A request to change the Mind so it has a table: "…, with a table" (加上表格). */
 const WITH_A_TABLE = /\bwith a table\b|加上?表格/i;
 
@@ -111,7 +121,18 @@ export function mindsReply(prompt: Prompt, asked: string, names: readonly string
       text: `${firstSentence(lastResult(prompt, "add_to_mind") ?? "")} ${firstSentence(made)}`,
     };
   }
-  if (SHORTEN.test(question) || ASSISTANT_REPLACES.test(question) || WITH_A_TABLE.test(question)) {
+  if (SUMMARY_PAGE.test(question)) {
+    const made = lastResult(prompt, "create_mind");
+    if (made === undefined)
+      return { tool: "create_mind", input: { title: "Summary", content: SUMMARY } };
+    return { text: firstSentence(made) };
+  }
+  if (
+    SHORTEN.test(question) ||
+    LONGER.test(question) ||
+    ASSISTANT_REPLACES.test(question) ||
+    WITH_A_TABLE.test(question)
+  ) {
     const result = lastResult(prompt, "edit_mind");
     // Asked "slowly", the edit is written slowly too.
     if (result === undefined) return { tool: "edit_mind", input: { instruction: asked } };

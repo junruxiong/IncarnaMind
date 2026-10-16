@@ -19,6 +19,11 @@ export function appliedEditReply(passage: string, asked: string): string | null 
   }
   if (/add a closing paragraph|加一段结尾/iu.test(asked))
     return `${passage}\n\nThat is all for now.`;
+  if (/\blonger\b|长一点|更长/iu.test(asked)) {
+    return paragraphs
+      .map((each) => (each.startsWith("#") ? each : `${each} It says more.`))
+      .join("\n\n");
+  }
   if (/haiku|俳句/iu.test(asked)) {
     return "Gulls wheel, crying\n\nsalt wind on stone\n\nnight falls soft";
   }
