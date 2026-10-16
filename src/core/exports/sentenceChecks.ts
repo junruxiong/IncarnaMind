@@ -6,9 +6,7 @@ import type { FailedSentence } from "../mindText";
 
 /** What the checks of a Mind's sentences are compared with, and how an export names things. */
 export interface SentenceCheckContext {
-  /** Each live Document's current version, by id. */
   versions: ReadonlyMap<string, string>;
-  /** The Folder the Mind is in; null for none. */
   folderId: string | null;
   folderName(folderId: string): string | null;
   /** A Passage's Document and Location, as a footnote says it. */

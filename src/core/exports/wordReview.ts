@@ -368,7 +368,6 @@ export class Review {
   private passages: Passages = { starts: new Set(), ends: new Set() };
   private open: number | null = null;
   private sentences: SentencePassages = { starts: new Map(), ends: new Map() };
-  /** The comment of each sentence whose range is open, by check id. */
   private readonly openSentences = new Map<string, number>();
   private readonly trackings = new Map<string, Tracking>();
 
