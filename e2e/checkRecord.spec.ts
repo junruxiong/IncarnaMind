@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { readdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import { parseCsv } from "../tests/helpers/csv";
 import { buildPdf } from "../tests/helpers/pdf";
@@ -86,6 +86,7 @@ test.afterEach(async () => {
 async function saved(window: Page, name: string): Promise<string> {
   const done = window.getByTestId("export-result").getByTestId("export-done");
   await expect(done).toContainText(name, { timeout: 30_000 });
+  await expect(done).toContainText(`${basename(out)}`);
   return (await done.getAttribute("title")) ?? "";
 }
 
