@@ -20,7 +20,7 @@ import {
  * first; the Mind's ⋯ menu opens History over the whole window, with that
  * version beside the Mind now in grey marks; Restore brings it back as a new
  * change, and ⌘Z takes the restore back. The scripted model (see
- * src/main/fakeChatModel.ts) shortens by dropping "very" and "really" (非常).
+ * src/main/fakeChat/edit.ts) shortens by dropping "very" and "really" (非常).
  * Set INCARNAMIND_SCREENSHOTS to a folder to also save screenshots.
  */
 
