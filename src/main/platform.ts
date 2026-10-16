@@ -25,6 +25,7 @@ import {
 } from "../core";
 import type { PageFetch } from "../core/documents/web/fetch";
 import { createFakeCapture, type FakeCapture } from "../core/meetings/fakeCapture";
+import { type LocalServers, scriptedLocalServers } from "../core/providers/localServers";
 import { type Resolve, systemResolve } from "../core/tools/web/addresses";
 import type { FakeTranscriberOptions } from "../core/transcription/fake";
 import { SHOW_AGENT_CONNECTION } from "../shared/agentConnection";
@@ -208,6 +209,16 @@ const fakeScans = fakeEmbedder ? (process.env.INCARNAMIND_TEST_SCANS ?? null) : 
 const fakeTranscriber: FakeTranscriberOptions | undefined =
   import.meta.env.MODE === "test" && process.env.INCARNAMIND_TEST_TRANSCRIBER === "fake"
     ? JSON.parse(process.env.INCARNAMIND_TEST_TRANSCRIBER_OPTIONS ?? "{}")
+    : undefined;
+
+/**
+ * A test build never asks the LM Studio or Unsloth Studio on this computer:
+ * INCARNAMIND_TEST_LOCAL_SERVERS (JSON) names the models each one lists, and
+ * one it doesn't name isn't running. Only a test build honours it.
+ */
+const scriptedServers: LocalServers | undefined =
+  import.meta.env.MODE === "test"
+    ? scriptedLocalServers(JSON.parse(process.env.INCARNAMIND_TEST_LOCAL_SERVERS ?? "{}"))
     : undefined;
 
 /**
@@ -578,6 +589,7 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
     shell: fileShell,
     ollamaApp: ollamaApp(),
     ...(scriptedOllama && { ollamaModels: scriptedOllama }),
+    ...(scriptedServers && { localServers: scriptedServers }),
     printer: createElectronPrinter({ log, rendererUrl: process.env.ELECTRON_RENDERER_URL }),
     pageLook: createPageLook({
       log,

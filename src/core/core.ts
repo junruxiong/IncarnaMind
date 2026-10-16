@@ -15,7 +15,7 @@ import {
 import { mindModelOf } from "../shared/mindModel";
 import { mindName } from "../shared/naming";
 import { paperFor } from "../shared/printDocument";
-import { resolveProposals } from "../shared/proposals";
+import { resolveProposals, restoreRevised } from "../shared/proposals";
 import { RESEARCH_TASK } from "../shared/research";
 import { wordFileOf } from "../shared/wordFiles";
 import { logActivity, silentLogger } from "./activityLog";
@@ -148,6 +148,7 @@ import { CHAT_FLOW_SENDS, createChat, type PreparedChatModel } from "./providers
 import { CHATGPT_PLAN_ENDPOINTS, createChatGptPlan } from "./providers/chatgpt/plan";
 import { createAiSdkEmbeddingModel } from "./providers/embeddings";
 import { ollamaBaseUrl } from "./providers/kinds";
+import { createLocalServers } from "./providers/localServers";
 import { createAiSdkChatModel } from "./providers/models";
 import {
   detectOllama,
@@ -1159,6 +1160,7 @@ export function createCore(adapters: CoreAdapters): Core {
         if (!mindExists(change.mindId)) continue;
         const emptied = content.edit(change.mindId, (blocks) => {
           resolveProposals(blocks, (ref) => ref.request === change.request, "reject");
+          if (change.revised) restoreRevised(blocks, change.request);
           return topLevelBlocks(blocks).every(
             (block) => block.nodeName === "paragraph" && block.length === 0,
           );
@@ -1562,6 +1564,8 @@ export function createCore(adapters: CoreAdapters): Core {
     liveDocuments: () => documents.list(),
     keptCitationTexts: () => documents.keptCitationTexts(),
     language: () => settings.get().language,
+    folderName: (folderId) =>
+      library.folders().find((folder) => folder.id === folderId)?.name ?? null,
     citationStyle: (mindId) => mindCitationStyle(mindId).style,
     bibliography: (mindId) => content.readSettings(mindId, bibliographyShown),
     formatCitations: (request) => citationStyles.format(request),
@@ -2121,6 +2125,7 @@ export function createCore(adapters: CoreAdapters): Core {
     return ollamaBaseUrl(input?.baseUrl);
   };
   const ollamaInstalled = async () => (await adapters.ollamaApp?.installed()) ?? false;
+  const localServers = adapters.localServers ?? createLocalServers();
 
   // Transcripts (#136): a Meeting is transcribed on this computer as it records, where this copy can.
   let listMeetings: (() => Meeting[]) | undefined;
@@ -2765,6 +2770,20 @@ export function createCore(adapters: CoreAdapters): Core {
     acceptPlainTextSecretStorage: async () => secrets.acceptPlainText(),
 
     detectOllama: (input) => detectOllama(ollamaUrl(input), ollamaInstalled),
+    detectLocalServer: async (input) => {
+      if (!isRecord(input) || typeof input.catalogId !== "string") {
+        throw new InvalidInputError({
+          key: "error.provider.unknown",
+          values: { provider: String(isRecord(input) ? input.catalogId : input) },
+        });
+      }
+      const apiKey = typeof input.apiKey === "string" && input.apiKey.trim() ? input.apiKey : null;
+      return localServers.detect(
+        input.catalogId,
+        apiKey,
+        typeof input.address === "string" ? input.address : null,
+      );
+    },
     openOllama: async (input) => {
       const baseUrl = ollamaUrl(input);
       if (!(await ollamaInstalled())) {

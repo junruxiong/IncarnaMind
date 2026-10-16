@@ -146,8 +146,12 @@ export interface CreateMindInput {
  * - 21: a Word file's look (#746): the `wordLook` attribute and the
  *   `wordRun` mark, which an older version's editor would strip. Older
  *   content is version 21 content as it is.
+ * - 22: the assistant's own waiting Blocks a revision replaced, kept in
+ *   `MIND_REVISIONS_FIELD` so rejecting the revision brings them back. An
+ *   older version would reject it and lose them. Older content is version
+ *   22 content as it is.
  */
-export const CONTENT_SCHEMA_VERSION = 21;
+export const CONTENT_SCHEMA_VERSION = 22;
 
 /**
  * The key, in the Mind's settings map (`MIND_SETTINGS_FIELD`), of the content
@@ -356,6 +360,15 @@ export interface ProposalAttribute extends ProposalRef {
  * wrote it.
  */
 export const MIND_PROPOSAL_REQUESTS_FIELD = "proposalRequests";
+
+/**
+ * The name of the Y.Map, beside a Mind's Blocks, that keeps the top-level
+ * Blocks each revision of the assistant's own waiting changes replaced, and
+ * the id of the Block before them, by the revising request: rejecting all of
+ * that request, or writing its Answer again, puts them back as they were
+ * (`restoreRevised`); accepting any of it lets them go.
+ */
+export const MIND_REVISIONS_FIELD = "revisions";
 
 /**
  * What made a request's Proposals: Edit with AI (#93), with what it was asked
@@ -835,7 +848,30 @@ export interface AnswerToolCall {
   uncalculated?: number;
   /** A Minds' Tool that changed a Mind or made one, once it ended (#202). Absent otherwise. */
   mindChange?: MindChange;
+  /** A Minds' Tool that changed nothing: why, as its card says. Absent otherwise. */
+  mindProblem?: MindProblem;
 }
+
+/**
+ * Why a call of a Minds' Tool changed nothing. "waiting": changes
+ * still wait in the text it was to change, which the assistant can't revise
+ * (someone else's, or the User's own requests), `count` of them in the Mind;
+ * "mixed": its own waiting text sits beside the User's there. "model": the
+ * model failed, as `message` says.
+ */
+export type MindProblem =
+  | { kind: "waiting"; mindId: string; count: number; mixed: boolean }
+  | { kind: "no-mind" }
+  | { kind: "not-found"; name: string }
+  | { kind: "several"; name: string }
+  | { kind: "no-heading"; mindId: string; heading: string }
+  | { kind: "no-place"; mindId: string; place: string }
+  | {
+      kind: "no-text" | "too-long" | "changed" | "content-not-own" | "stopped";
+      mindId: string;
+    }
+  | { kind: "local-mode" | "not-ready" }
+  | { kind: "model"; mindId: string; message: string };
 
 /**
  * Where the assistant writes next in a Mind, as its changes come in (#202):
@@ -862,6 +898,17 @@ export interface MindChange {
   request: string;
   /** How many Proposals it made there. */
   proposals: number;
+  /** How many paragraphs the whole Blocks it wrote hold (a heading or a table holds none). Absent: none. */
+  paragraphs?: number;
+  /**
+   * It revised the assistant's own changes still waiting there: they
+   * are gone, and its request holds the new text and the rest of them.
+   */
+  revised?: true;
+  /** How many Citations the text it wrote there holds. Absent: none, or it rewrote text keeping its own. */
+  cited?: number;
+  /** How many of its text's markers had no Citation recorded, and were left out. Absent: none. */
+  unrecorded?: number;
 }
 
 /** What a call of `read_web_page` came to (see `AnswerToolCall.webPage`). */
@@ -1114,15 +1161,13 @@ export interface WordImportReport {
 /**
  * What a Word file's look holds that a Mind doesn't draw (#735), counted from
  * the document's own formatting: paragraphs, runs and cells shaded;
- * paragraphs with a border; tab stops set; tables with no borders, which
- * place text; and how many text colours (other than black), fonts and sizes
- * it sets.
+ * paragraphs with a border; tab stops set; and how many text colours (other
+ * than black), fonts and sizes it sets.
  */
 export interface WordLayout {
   shading: number;
   borders: number;
   tabStops: number;
-  layoutTables: number;
   colours: number;
   fonts: number;
   sizes: number;
@@ -4604,7 +4649,20 @@ export interface AnswerSteps {
    * it wrote without markers that match the Passages it read (#760).
    */
   citedAfterChecking?: number;
+  /**
+   * The changes its reply says it made to a Mind that none of its Tool calls
+   * made, even once the model was asked again with what they did.
+   * Absent: none.
+   */
+  unbackedClaims?: ClaimedChange[];
 }
+
+/**
+ * The changes an Answer's reply can say it made to a Mind: made one,
+ * added text to one, changed text in one, or removed or replaced text in one.
+ */
+export const CLAIMED_CHANGES = ["made", "added", "changed", "removed"] as const;
+export type ClaimedChange = (typeof CLAIMED_CHANGES)[number];
 
 /** A Tool call of an Answer started, or finished (see `call.status`). */
 export interface AnswerToolCallEvent extends AnswerPlace {
@@ -5316,6 +5374,18 @@ export type OllamaStatus =
       /** The model one click pulls and selects. */
       recommendedModel: string;
     };
+
+/** What runs at a local preset's address: `address` is its host and port, `models` the language models it lists. */
+export type LocalServerStatus =
+  | { running: false; address: string }
+  | { running: true; address: string; models: string[] };
+
+export interface DetectLocalServerInput {
+  catalogId: string;
+  apiKey?: string;
+  /** A host and port; the preset's default when left out. */
+  address?: string;
+}
 
 export interface SelectOllamaInput {
   /** Defaults to Ollama's local port. */
@@ -6367,8 +6437,9 @@ export interface ExportMindOptions {
   theirChanges?: TheirChangesShown;
   /**
    * Word only: a Citation whose check failed (its quote wasn't found, or its
-   * claim is unsupported or contradicted) gets a comment by IncarnaMind
-   * saying so. Absent: off.
+   * claim is unsupported or contradicted), and a sentence checked
+   * Contradicted, Unsupported or Needs re-check, gets a comment by
+   * IncarnaMind saying so. Absent: off.
    */
   commentFailedChecks?: boolean;
 }
@@ -6397,12 +6468,24 @@ export interface MindExportPreview {
   theirChanges: number;
 }
 
+/** The sentences an export holds whose check isn't good, by result (`MindExport.sentenceChecks`). */
+export interface SentenceChecksExported {
+  contradicted: number;
+  unsupported: number;
+  needsRecheck: number;
+  /** They went into the file as comments: a Word file, with `commentFailedChecks` on. Otherwise they went out unmarked. */
+  commented: boolean;
+}
+
 /** A Mind exported as a file, for the host to save where the User chooses. */
 export interface MindExport extends MindExportPreview {
   /** The file's contents: UTF-8 text for Markdown and HTML, a ZIP package for .docx, a PDF for PDF and a source pack. */
   data: Uint8Array;
   /** For a Mind imported from a Word file, exported back into it: what it kept and couldn't keep. */
   word: WordExportReport | null;
+  sentenceChecks: SentenceChecksExported;
+  /** Changes still waiting that a Word file holds as tracked changes. */
+  trackedChanges: number;
 }
 
 /** What `saveMindExport` did. */
@@ -6411,7 +6494,8 @@ export type SavedMindExport =
   | ({ status: "saved"; file: SavedFile; word: WordExportReport | null } & Omit<
       MindExportPreview,
       "fileName" | "fromWord" | "theirChanges"
-    >)
+    > &
+      Pick<MindExport, "sentenceChecks" | "trackedChanges">)
   /**
    * Not saved: a Mind imported from Word can't keep something in its file
    * (`WordExportReport.notKept`) the User hasn't accepted (`ExportMindOptions.accept`).
@@ -7924,6 +8008,8 @@ export interface CoreApi {
 
   /** Looks for Ollama, on its default local port unless another URL is given. */
   detectOllama(input?: { baseUrl?: string }): Promise<OllamaStatus>;
+  /** Looks for a preset's server on this computer at its address, and lists its models. */
+  detectLocalServer(input: DetectLocalServerInput): Promise<LocalServerStatus>;
   /**
    * Opens Ollama's app and waits, for up to twenty seconds, until Ollama answers; resolves with
    * what `detectOllama` then finds. Rejects when the app can't be opened from here.
@@ -8757,6 +8843,7 @@ const methods: Record<CoreApiMethod, true> = {
   getSecretStorage: true,
   acceptPlainTextSecretStorage: true,
   detectOllama: true,
+  detectLocalServer: true,
   openOllama: true,
   selectOllama: true,
   getChatGptPlan: true,
