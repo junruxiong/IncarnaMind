@@ -443,7 +443,9 @@ export function proposalRequestOf(doc: Y.Doc, request: string): ProposalRequest 
   if (source === "answer") {
     return isText(record.answerId) ? { ...made, source, answerId: record.answerId } : null;
   }
-  if (source === "answer-added") return { ...made, source };
+  const requested =
+    record.requested === "edit" || record.requested === "write" ? record.requested : null;
+  if (source === "answer-added") return { ...made, source, ...(requested && { requested }) };
   if (source === "comparison-table") {
     return isText(record.tableId) ? { ...made, source, tableId: record.tableId } : null;
   }
@@ -458,6 +460,7 @@ export function proposalRequestOf(doc: Y.Doc, request: string): ProposalRequest 
     ...(action && { action }),
     ...(typeof record.instruction === "string" && { instruction: record.instruction }),
     ...(isText(record.reason) && { reason: record.reason }),
+    ...(requested && { requested }),
   };
 }
 

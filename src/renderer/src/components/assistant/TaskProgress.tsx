@@ -12,6 +12,7 @@ import { needsYou } from "../../taskGroups";
 import { pauseTask, resumeTask, reviewTask, stopTask, useTasks } from "../../tasks";
 import { stepLine, taskName } from "../../taskText";
 import { CheckLineIcon } from "../lineIcons";
+import { MetaLine } from "../MetaLine";
 
 /**
  * What a Task's progress offers that its kind brings (#130's plan card, and
@@ -66,14 +67,14 @@ function waitingLine(task: Task, t: Translate, language: Language): string | nul
   return task.status === "paused" ? stepLine(task, t, language) : null;
 }
 
-function details(task: Task, t: Translate, language: Language): string {
+function details(task: Task, t: Translate, language: Language): string[] {
   const parts: string[] = [];
   if (task.kind === "comparison" && task.progress) {
     parts.push(t("task.details.cells", { done: task.progress.done, total: task.progress.total }));
   }
   parts.push(t("task.details.started", { time: formatDateTime(task.startedAt, language) }));
   if (task.cost) parts.push(t("task.details.cost", { cost: formatMoney(task.cost, language) }));
-  return parts.join(" · ");
+  return parts;
 }
 
 function StepMark({ step, live }: { step: TaskStep; live: boolean }) {
@@ -290,9 +291,12 @@ export function TaskProgress({
         </div>
       )}
       {detailsOpen && (
-        <p id={detailsId} data-testid="task-progress-record" className="task-progress-details">
-          {details(task, t, language)}
-        </p>
+        <MetaLine
+          id={detailsId}
+          data-testid="task-progress-record"
+          className="task-progress-details"
+          parts={details(task, t, language)}
+        />
       )}
       <div data-testid="task-progress-actions" className="task-progress-actions">
         {task.summary && (

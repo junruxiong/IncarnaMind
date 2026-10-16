@@ -8,8 +8,10 @@ import { buildPdf } from "../tests/helpers/pdf";
 import {
   askInAssistant,
   useLocalChatModel as connectLocalChatModel,
+  copyFrom,
   createDataFolder,
   dismissChatSetup,
+  expectDotsBetweenParts,
   interceptOpenDialog,
   launchApp,
   newMind,
@@ -251,9 +253,7 @@ for (const language of ["en", "zh-CN"] as const) {
       await pointAndClick(window, window.getByTestId("plus-verify-document"));
       const line = window.getByTestId("verify-line");
       await pointAndClick(window, line.getByTestId("verify-check"));
-      await expect(line.getByTestId("verify-done")).toContainText(
-        language === "en" ? "Checked 1 claim" : "已核对 1 条说法",
-      );
+      await expect(line).toContainText(language === "en" ? "Checked 1 claim" : "已核对 1 条说法");
 
       const unread = line.getByTestId("verify-unread");
       await expect(unread).toContainText(WORDS[language].count);
@@ -267,6 +267,49 @@ for (const language of ["en", "zh-CN"] as const) {
       ).toBe(true);
       await pointAndClick(window, unread.getByTestId("verify-unread-show"));
       await expectReasons(unread, line, language, app, window, "verify");
+      await app.close();
+    } finally {
+      await removeDataFolder(outside);
+    }
+  });
+}
+
+for (const language of ["en", "zh-CN"] as const) {
+  test(`beside its PDF, the Verify line wraps between its parts and no row starts or ends with a dot (${language})`, async () => {
+    test.setTimeout(120_000);
+    const outside = await createDataFolder();
+    try {
+      const report = join(
+        outside,
+        "Harbour trade statistics report for the second half of 2026.pdf",
+      );
+      await writeFile(report, buildPdf([{ lines: ["Harbour report", SENTENCE] }]));
+      const { app, window } = await start(language);
+      await interceptOpenDialog(app, report);
+      await pointAndClick(window, window.getByTestId("plus-menu"));
+      await pointAndClick(window, window.getByTestId("plus-verify-document"));
+      const line = window.getByTestId("verify-line");
+      await pointAndClick(window, line.getByTestId("verify-check"));
+      await expect(line).toContainText(language === "en" ? "Checked 1 claim" : "已核对 1 条说法");
+      await expect(line.getByTestId("verify-unread")).toContainText(WORDS[language].count);
+
+      // The PDF is open beside the Mind, so the Mind's column is half the window.
+      await setWindowSize(app, window, 1440, 900);
+      await expect(window.getByTestId("viewer")).toBeVisible();
+      await screenshot(window, `verify-wrap-${language}`);
+      let wrapped = false;
+      for (const row of await line.locator(".meta-line").all()) {
+        if (await expectDotsBetweenParts(row)) wrapped = true;
+      }
+      expect(wrapped).toBe(true);
+
+      // Copied across its parts, a line reads as one line, "A · B · C", and within a part the browser copies it.
+      const whole = line.locator(".meta-line").first();
+      const across = await copyFrom(whole);
+      expect(across.taken).toBe(true);
+      expect(across.text).not.toContain("\n");
+      expect(across.text.split(" · ")).toHaveLength(5);
+      expect((await copyFrom(whole, ".meta-part")).taken).toBe(false);
       await app.close();
     } finally {
       await removeDataFolder(outside);
