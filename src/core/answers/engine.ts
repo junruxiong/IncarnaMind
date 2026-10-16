@@ -318,11 +318,9 @@ export interface GatedCall extends RunToolCall {
  *   a send;
  * - "documents": the Documents' Tools as an Answer has them, and nothing the
  *   request brings: help during a call (#839), which reads a transcript
- *   someone else spoke;
- * - "cite": the same without the search, for help that answers from the
- *   transcript alone, sooner.
+ *   someone else spoke.
  */
-export type ToolSet = "answer" | "check" | "documents" | "cite";
+export type ToolSet = "answer" | "check" | "documents";
 
 export interface AnswerRequest {
   /**
@@ -1518,11 +1516,7 @@ async function* toolLoop(
   /** The Tools offered, by the name the model calls them; never a Connector's with one of ours. */
   const offered = new Map(
     offeredTools([
-      ...(documents
-        ? request.toolSet === "cite"
-          ? [documents.cite]
-          : [documents.search, documents.cite]
-        : []),
+      ...(documents ? [documents.search, documents.cite] : []),
       ...(calculate ? [calculate] : []),
       ...request.tools,
     ]).map((each) => [each.name, each]),

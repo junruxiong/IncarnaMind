@@ -49,14 +49,6 @@ export const HELP_SHAPE: Readonly<Record<MeetingHelpKind, HelpShape>> = {
   disagree: "lines",
 };
 
-/** The buttons whose options rest on the User's Documents: their Answers search them. */
-export const SEARCHING_HELP: ReadonlySet<MeetingHelpKind> = new Set<MeetingHelpKind>([
-  "answer",
-  "check",
-  "facts",
-  "notCovered",
-]);
-
 /**
  * Whose newest line a button answers, for the heading over its suggestion: the other side's,
  * the User's own ("Am I leading them?"), or anyone's. Absent: it is about the whole call.

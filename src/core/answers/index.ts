@@ -48,7 +48,7 @@ import { citationNode, withCitations } from "../../shared/blockJson";
 import type { LiveDocument } from "../../shared/citations";
 import { withFigures, withFigureText } from "../../shared/figureMarkers";
 import { linkTableSources } from "../../shared/markdownTables";
-import { type MeetingHelpKind, SEARCHING_HELP } from "../../shared/meetingHelp";
+import type { MeetingHelpKind } from "../../shared/meetingHelp";
 import {
   decisionsOn,
   pendingProposals,
@@ -372,7 +372,7 @@ export interface AnswersOptions {
   /** The model, once the User has accepted its data flow (see `Core.prepareChatModel`). */
   prepareModel(
     choice: ChatModelChoice,
-    thinking: "summary" | "answer" | "careful",
+    thinking: "off" | "summary" | "answer" | "careful",
   ): Promise<PreparedChatModel>;
   /**
    * The quick-tasks model for an Answer asked with `answers`, prepared as
@@ -719,8 +719,7 @@ export function createAnswers(options: AnswersOptions) {
     listening?: () => Promise<WindowedPassage[] | null>;
     /**
      * One-click help during the call (#839): the button pressed. Its Answer is laid out as
-     * the panel reads it, and is offered the Documents' Tools only, their search only for
-     * the buttons that need the User's Documents.
+     * the panel reads it, and is offered the Documents' Tools only.
      */
     help?: MeetingHelpKind;
     /** Written for a Task (#126), which gives way to Answers itself (see ../runs/tasks). */
@@ -768,7 +767,6 @@ export function createAnswers(options: AnswersOptions) {
     /** It listened to a meeting's live transcript: the Question went with it. */
     let listening = false;
     const { help } = input;
-    const helpSearches = help !== undefined && SEARCHING_HELP.has(help);
     /** Passages of the User's Documents found ahead for a help button's Question. */
     let foundAhead = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -1352,7 +1350,8 @@ export function createAnswers(options: AnswersOptions) {
       try {
         prepared = await options.prepareModel(
           model,
-          input.task ? "summary" : careful ? "careful" : "answer",
+          // Help during a call is read within seconds: the model answers without thinking first.
+          help ? "off" : input.task ? "summary" : careful ? "careful" : "answer",
         );
       } catch (error) {
         finish({ status: "failed", error: failureOf(error) });
@@ -1379,9 +1378,9 @@ export function createAnswers(options: AnswersOptions) {
           messages = withTranscript(messages, session.show(kept));
           listening = true;
         }
-        // A help button that needs the Documents gets what they say about the newest lines at
-        // once, with no search the model has to call first (#839).
-        if (helpSearches && kept.length > 0) {
+        // Help gets what the User's Documents say about the newest lines at once, with no search
+        // the model has to call first (#839).
+        if (help && kept.length > 0) {
           const transcript = new Set(kept.map((passage) => passage.documentId));
           try {
             const found = await session.find(newestSaid(kept), controller.signal, {
@@ -1650,7 +1649,10 @@ export function createAnswers(options: AnswersOptions) {
             mindInstructions(withMindTools),
             meetingInstructions(listening),
             help
-              ? meetingHelpInstructions(help, { searches: helpSearches, found: foundAhead })
+              ? meetingHelpInstructions(help, {
+                  found: foundAhead,
+                  language: options.interfaceLanguage(),
+                })
               : "",
             signInNeededInstructions(signInNeeded.map((connector) => connector.name)),
             language,
@@ -1666,7 +1668,7 @@ export function createAnswers(options: AnswersOptions) {
         tools: [...provided, ...fromSkills, ...fromWeb, ...(mindsTools?.tools ?? [])],
         gate,
         streamsInput,
-        toolSet: input.toolSet ?? (help ? (helpSearches ? "documents" : "cite") : undefined),
+        toolSet: input.toolSet ?? (help ? "documents" : undefined),
         thirdParty: contextReasons,
         support: startingSupport(prepared.support, supportByModel.get(learntKey)),
         structuredOutput: givesStructuredOutput(prepared.capabilities),
@@ -2001,18 +2003,18 @@ export function createAnswers(options: AnswersOptions) {
   ): ConversationAskResult {
     const { conversation, question, answer } = turn;
     const help = mind ? (options.meetingHelp?.(mind.mindId, question.text) ?? null) : null;
+    // Each press of a help button stands alone: an earlier suggestion would only steer this one.
+    const earlier = help ? [] : turn.earlier;
     // A long Mind is cut to what the conversation's Questions are about, the earlier ones too: a
     // follow-up keeps the part the first one found, and so the same start for the prompt cache.
     const asking = [
-      ...turn.earlier.flatMap((message) => (message.kind === "question" ? [message.text] : [])),
+      ...earlier.flatMap((message) => (message.kind === "question" ? [message.text] : [])),
       question.text,
     ].join("\n");
     const section =
-      mind && turn.earlier.length > 0
-        ? mind.reading.section(MIND_TOKEN_LIMIT, asking)
-        : mind?.section;
+      mind && earlier.length > 0 ? mind.reading.section(MIND_TOKEN_LIMIT, asking) : mind?.section;
     const documents = options.documents.names();
-    const { context, origins } = conversationContextOf(turn.earlier, question.text, {
+    const { context, origins } = conversationContextOf(earlier, question.text, {
       mind: section,
       documents,
       mindNames: options.readableMindName,
@@ -2044,7 +2046,7 @@ export function createAnswers(options: AnswersOptions) {
                 return null;
               const smaller = mind.reading.section(tokens, asking);
               return {
-                context: conversationContextOf(turn.earlier, question.text, {
+                context: conversationContextOf(earlier, question.text, {
                   mind: smaller,
                   documents,
                   mindNames: options.readableMindName,

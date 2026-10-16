@@ -89,5 +89,7 @@ export function readHelpReply(markdown: string): ReplyItem[] {
     }
     items.push({ recommended, lead: pieces(text), notes: [], effect: null });
   }
-  return items;
+  // One recommendation: a second star a model adds is dropped.
+  const first = items.findIndex((item) => item.recommended);
+  return items.map((item, index) => (index === first ? item : { ...item, recommended: false }));
 }

@@ -51,6 +51,11 @@ describe("A help reply", () => {
     ]);
   });
 
+  test("only the first star is a recommendation", () => {
+    const items = readHelpReply("★ One\n→ a\n\n★ Two\n→ b");
+    expect(items.map((item) => item.recommended)).toEqual([true, false]);
+  });
+
   test("while it streams, an option before its arrow has no effect yet", () => {
     const items = readHelpReply("★ We can extend the pil");
     expect(items).toHaveLength(1);

@@ -75,6 +75,8 @@ function Pieces({ pieces, answer }: { pieces: readonly ReplyPiece[]; answer: Con
           return <span key={key}>{figure?.shown ?? ""}</span>;
         }
         const citation = answer.citations.find((each) => each.marker === piece.marker);
+        // A marker with no Citation is left out, as the assistant shows an Answer.
+        if (!citation && answer.status !== "streaming") return null;
         return <CitationChip key={key} citation={citation} marker={piece.marker} />;
       })}
     </>

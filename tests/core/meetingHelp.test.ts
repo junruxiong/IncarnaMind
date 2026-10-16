@@ -1,9 +1,9 @@
 /**
  * One-click help during a call (#839), through the core's public interface as the floating
- * panel and the assistant ask: a button's Question goes with the live transcript and the shape
- * its Answer takes; the buttons that need the User's Documents get them found ahead and may
- * search, the others may not; the Meeting names its latest help, the line it answers and the
- * conversation it went to; the template adds its buttons.
+ * panel and the assistant ask: a button's Question goes with the live transcript, the shape its
+ * Answer takes and what the User's Documents say about the newest lines, found ahead; the
+ * Meeting names its latest help, the line it answers and the conversation it went to; the
+ * template adds its buttons.
  */
 import { describe, expect, test } from "vitest";
 import type { Core, Meeting, MeetingHelpKind } from "../../src/core";
@@ -69,7 +69,7 @@ async function press(core: Core, meeting: Meeting, kind: MeetingHelpKind, conver
 }
 
 describe("Help during the call", { timeout: 60_000 }, () => {
-  test("a button asks its name with the live transcript and the options' shape, without the Documents' search, and the Meeting names its help", async () => {
+  test("a button asks its name with the live transcript and the options' shape, offered the Documents' Tools only, and the Meeting names its help", async () => {
     const { core, meeting, calls } = await setUp();
 
     const { result, answer, messages, latest } = await press(core, meeting, "no");
@@ -78,8 +78,8 @@ describe("Help during the call", { timeout: 60_000 }, () => {
     expect(first?.system).toContain("pressed a button for help");
     expect(first?.system).toContain('starting with "★ "');
     expect(first?.prompt).toContain("<live-transcript>");
-    expect(first?.tools).not.toContain("search_documents");
-    expect(first?.tools).toContain("cite");
+    expect(first?.tools).toEqual(expect.arrayContaining(["search_documents", "cite"]));
+    expect(first?.tools).not.toContain("add_to_mind");
     expect(messages[0]).toMatchObject({ kind: "question", text: "Say no politely" });
     expect(answer.text).toMatch(/^★ /);
     expect(latest?.help).toEqual({
