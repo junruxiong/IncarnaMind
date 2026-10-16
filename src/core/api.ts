@@ -380,6 +380,13 @@ export const MIND_PROPOSAL_REQUESTS_FIELD = "proposalRequests";
 export const MIND_REVISIONS_FIELD = "revisions";
 
 /**
+ * What the User's words in the assistant asked for, as `routeRequest` read
+ * them: text changed ("make it longer") or written ("write a summary page").
+ * Absent: neither, or a revision of the assistant's own waiting changes.
+ */
+export type RequestedChange = "edit" | "write";
+
+/**
  * What made a request's Proposals: Edit with AI (#93), with what it was asked
  * so a change can be made again (regenerated) once it is out of date;
  * Regenerate of an Answer the User had edited (#94); an Answer from the
@@ -390,6 +397,7 @@ export const MIND_REVISIONS_FIELD = "revisions";
 export type ProposalRequest =
   | (ProposalMaker & {
       source: "edit-with-ai";
+      requested?: RequestedChange;
       /** Absent on requests made before #94: their changes can't be regenerated. */
       action?: EditAction;
       /** What the User asked for ("translate", "instruction"); "" for none. */
@@ -398,7 +406,7 @@ export type ProposalRequest =
       reason?: string;
     })
   | (ProposalMaker & { source: "answer"; answerId: string })
-  | (ProposalMaker & { source: "answer-added" })
+  | (ProposalMaker & { source: "answer-added"; requested?: RequestedChange })
   | (ProposalMaker & { source: "comparison-table"; tableId: string })
   | (ProposalMaker & { source: "research"; taskId: string })
   | WordChangeRequest;
@@ -884,7 +892,8 @@ export type MindProblem =
       mindId: string;
     }
   | { kind: "local-mode" | "not-ready" }
-  | { kind: "model"; mindId: string; message: string };
+  | { kind: "model"; mindId: string; message: string }
+  | { kind: "copy"; mindId: string; text: string };
 
 /**
  * Where the assistant writes next in a Mind, as its changes come in (#202):
