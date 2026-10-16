@@ -239,11 +239,19 @@ describe("formatting a Mind's Citations", () => {
       "(Kahneman & Tversky, 1979, pp. 68–69)",
       "(Kahneman & Tversky, 1979, p. xii)",
       "(Kahneman & Tversky, 1979, p. 1\u20113)",
-      "(Kahneman & Tversky, 1979, p. iii–iv)",
+      "(Kahneman & Tversky, 1979, pp. iii–iv)",
     ]);
     expect(locatorOf(printed("1-3"), "en")).toEqual({ locator: "p. 1\u20113", label: "custom" });
+    expect(locatorOf(printed("iii", "iv"), "en")).toEqual({
+      locator: "pp. iii–iv",
+      label: "custom",
+    });
     expect(locatorOf(printed("iii", "iv"), "zh-CN")).toEqual({
       locator: "第 iii–iv 页",
+      label: "custom",
+    });
+    expect(locatorOf(printed("5-12", "5-13"), "en")).toEqual({
+      locator: "pp. 5\u201112–5\u201113",
       label: "custom",
     });
     expect(locatorOf(printed("68", "69"), "en")).toEqual({ locator: "68-69", label: "page" });

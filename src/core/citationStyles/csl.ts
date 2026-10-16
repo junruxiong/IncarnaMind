@@ -2,7 +2,7 @@
  * What the engine is given (ADR-0016): each cited Document's reference record (#286) as a CSL
  * JSON item, and each Citation's Location as a CSL locator.
  */
-import { translate } from "../../shared/i18n";
+import { type MessageKey, type MessageParams, translate } from "../../shared/i18n";
 import { formatLocation } from "../../shared/locations";
 import { CJK } from "../../shared/text";
 import type { CitationLocation, ReferenceFields, ReferenceName } from "../api";
@@ -82,14 +82,15 @@ const RANGE_MARK = /[-–—]/;
  * rows of a sheet or a section as the Location's own words in the style's language ("slide 4",
  * "§ History"), which the style prints with no label rather than as an invented page. So is a page
  * a PDF names with letters or a hyphen ("A-3", "iii–iv"): CSL reads a hyphen in a locator as a
- * range, and only of numbers.
+ * range, and only of numbers. Such a range still reads "pp." like a range of numbers, though the
+ * app's own labels say "p." for any range.
  */
 export function locatorOf(location: CitationLocation | null, language: Language): Locator {
   if (!location) return {};
   if (location.kind === "lines") {
     return { locator: span(location.from, location.to), label: "line" };
   }
-  const words = formatLocation(location, (key, params) => translate(language, key, params));
+  const t = (key: MessageKey, params?: MessageParams) => translate(language, key, params);
   if (location.kind === "page") {
     const from = location.printed?.from ?? String(location.from);
     const to = location.printed?.to ?? String(location.to);
@@ -97,7 +98,13 @@ export function locatorOf(location: CitationLocation | null, language: Language)
     const plain = single ? !RANGE_MARK.test(from) : /^\d+$/.test(from) && /^\d+$/.test(to);
     if (plain) return { locator: single ? from : `${from}-${to}`, label: "page" };
     // CSL turns even a custom locator's hyphen between digits into an en dash, a range.
-    if (single) return { locator: words.replaceAll("-", "\u2011"), label: "custom" };
+    const kept = (name: string) => name.replaceAll("-", "\u2011");
+    return {
+      locator: single
+        ? t("location.page", { range: kept(from) })
+        : t("location.pages", { range: `${kept(from)}–${kept(to)}` }),
+      label: "custom",
+    };
   }
-  return { locator: words, label: "custom" };
+  return { locator: formatLocation(location, t), label: "custom" };
 }
