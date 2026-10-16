@@ -407,6 +407,8 @@ test("âŒ˜J's change streams in and applies paragraph by paragraph, with Writingâ
 async function askTheAssistant(window: Page, request: string) {
   await window.keyboard.press("ControlOrMeta+j");
   await expect(window.getByTestId("composer-input")).toBeFocused();
+  // As a person waits for Stop to turn back into Ask before asking again.
+  await expect(window.getByTestId("composer-ask")).toBeVisible();
   await window.keyboard.type(request);
   await window.keyboard.press("Enter");
   await expect(window.getByTestId("proposals-bar")).toBeVisible({ timeout: 15_000 });

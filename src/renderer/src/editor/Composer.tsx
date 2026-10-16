@@ -62,6 +62,7 @@ import { taskName } from "../taskText";
 import { AnswerAnnouncer } from "./AnswerAnnouncer";
 import { AskProblem } from "./AskProblem";
 import { EditStatus } from "./EditStatus";
+import { selectionForEdit } from "./editSelection";
 import { AskArrowIcon, CollapseIcon, ExpandIcon, RemoveIcon } from "./icons";
 import { ModelChip, useMindModel } from "./ModelChip";
 import { useMindSelection } from "./mindSelection";
@@ -467,6 +468,7 @@ export function Composer({
       selection.quote !== "" &&
       current.pastes.length === 0 &&
       !current.skill &&
+      selectionForEdit(mind.editor.state) !== null &&
       routeRequest(current.text).kind === "edit"
     ) {
       const asked = current.text;

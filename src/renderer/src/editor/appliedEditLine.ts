@@ -5,7 +5,7 @@
  */
 import { type Editor, Extension } from "@tiptap/core";
 import type { Fragment, Node as ProseMirrorNode } from "@tiptap/pm/model";
-import { type EditorState, Plugin, PluginKey } from "@tiptap/pm/state";
+import { type EditorState, Plugin, PluginKey, TextSelection } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import { relativePositionToAbsolutePosition, ySyncPluginKey } from "@tiptap/y-tiptap";
 import type { Language } from "../../../core/language";
@@ -321,6 +321,25 @@ export const AppliedEditLine = Extension.create<Options>({
         },
         props: {
           decorations: (state) => appliedLineKey.getState(state)?.marks ?? null,
+          handleDOMEvents: {
+            // A click on a change shown again puts the cursor in it, for ⌘⌫ and its bar.
+            mousedown(view, event) {
+              const target = event.target instanceof Element ? event.target : null;
+              const index = Number(
+                target?.closest("[data-applied-change]")?.getAttribute("data-applied-change"),
+              );
+              const line = appliedLineKey.getState(view.state)?.line;
+              const change = line?.kind === "review" ? line.changes[index] : undefined;
+              const place = change ? placeOfChange(view.state, change) : null;
+              if (!place) return false;
+              event.preventDefault();
+              view.focus();
+              view.dispatch(
+                view.state.tr.setSelection(TextSelection.create(view.state.doc, place.from)),
+              );
+              return true;
+            },
+          },
         },
       }),
     ];
