@@ -8,14 +8,37 @@ import { ARXIV_ID, normalizeDoi } from "./references";
 
 const HEADING =
   /^(?:[\dIVX]+\.?\s*)?(?:references|reference list|bibliography|works cited|literature cited|literature|参考文献|参考资料|引用文献)\s*[:：]?$/i;
-/** Where a numbered entry starts inside a Block, as a PDF's list can come out: "[12] " or "12. ". */
-const NUMBERED = /\s(?=\[\d{1,3}\]\s)|(?<=[.)])\s+(?=\d{1,3}\.\s+\p{Lu})/u;
-const NUMBER_START = /^(?:\[\d{1,3}\]|\d{1,3}\.)\s/;
-/** A family name, a comma, then initials or a given name: "Maas, Andrew L", "Tieleman, T.", not "However, the". */
-const AUTHOR_START =
-  /^\p{Lu}[\p{L}'’-]+,\s+(?:\p{Lu}\.|\p{Lu}[\p{L}'’-]*(?:,|\s+\p{Lu}\b|\s+and\b))/u;
+/** Paragraphs that end a list no heading closes. */
+const AFTER_LIST =
+  /^(?:[\dA-Z]{1,3}\.?\s+)?(?:acknowledge?ments?|appendix|appendices|supplementary material|致谢|附录)/i;
+/** Where a numbered entry starts inside a Block, as a PDF's list can come out: "[12] ", "。[12]" or "12. ". */
+const NUMBERED = /\s(?=\[\d{1,3}\])|(?<=[.。])(?=\[\d{1,3}\])|(?<=[.)])\s+(?=\d{1,3}\.\s+\p{Lu})/u;
+/** "[12]", "12." or "12)", with or without a space after it, but not a DOI's "10.1016". */
+const NUMBER_START = /^(?:\[\d{1,3}\]|\d{1,3}[.)](?!\d))/;
+const PARTICLES = "(?:(?:van|von|de|der|den|du|da|di|del|della|le|la|ten|ter)\\s+)*";
+const NAME = "\\p{Lu}[\\p{L}'’-]+";
+/** How an entry starts with its authors, as styles write them; not "However, the" or "We thank". */
+const ENTRY_START = new RegExp(
+  [
+    // "Maas, Andrew L", "Tieleman, T.", "Amari, Shun-Ichi.", "van der Maaten, L."
+    `^${PARTICLES}${NAME},\\s+(?:\\p{Lu}\\.|${NAME}(?:,|\\.|\\s+\\p{Lu}\\b|\\s+and\\b))`,
+    // "A. Vaswani", "J.-P. Sartre"
+    `^\\p{Lu}\\.(?:[\\s-]?\\p{Lu}\\.)*\\s+${PARTICLES}${NAME}`,
+    // "Diederik Kingma and", "Jimmy Lei Ba,", "Sepp Hochreiter."
+    `^${NAME}(?:\\s+(?:${NAME}|\\p{Lu}\\.?)){1,3}(?:,|\\.|\\s+and\\b|\\s+&)`,
+    // "Smith J,", "SMITH JA."
+    `^${PARTICLES}${NAME}\\s+\\p{Lu}{1,3}[,.]`,
+    // "OpenAI. (2022)", "World Health Organization (2020)"
+    `^(?:${NAME}\\s+){0,5}${NAME}\\.?\\s*\\((?:1[5-9]|20)\\d\\d`,
+    // "张三,", "周志华."
+    "^\\p{Script=Han}{2,4}[,，.。、]",
+  ].join("|"),
+  "u",
+);
 /** An entry's paragraphs before its year, DOI or number run no longer than this. */
 const LONGEST_OPENING = 400;
+/** The longest paragraph read as the end of a last numbered entry broken over two. */
+const SHORT_PART = 160;
 
 export const DOI_IN_TEXT = /(?:doi\.org\/|doi\s*[:：]?\s*)?(10\.\d{4,9}\/[^\s"<>]+)/i;
 /** An arXiv number as a reference writes it: "arXiv:1706.03762", "CoRR, abs/1409.0473", or in an arxiv.org address. */
@@ -44,20 +67,28 @@ const BROKEN_DOI = /(10\.\d{4,9}\/\S*[./-])\s+(?=\d[\w-]*[./][\w./-]*\d)/g;
 export const joinBrokenDoi = (text: string) => text.replace(BROKEN_DOI, "$1");
 
 /**
- * The year a reference names: not part of a number ("abs/1512.00567"), nor
- * a page in a range ("9(8):1735–1780"), but the first year of a range of
- * years ("2017–2018") or of a date ("2019-06-12").
+ * The year a reference names. A number joined to another by a dash is a page
+ * in a range, unless both are years and nothing else names one; then a year
+ * in brackets, else the last: "(2019)", "pp. 1735-1780, 1997", "(2017–2018)",
+ * "(2019-06-12)". Never part of a number ("abs/1512.00567").
  */
 export function yearOf(text: string): number | null {
+  const found: { year: number; bracketed: boolean; ranged: boolean }[] = [];
   for (const match of text.matchAll(YEARS)) {
     const before = text.slice(0, match.index);
     const after = text.slice(match.index + 4);
-    if (/[/:.]$|\d[–—-]$/.test(before) || /^\.\d/.test(after)) continue;
-    const range = /^[–—](\d{4})(?!\d)/.exec(after);
-    if (range && Number(range[1]) - Number(match[1]) > 10) continue;
-    return Number(match[1]);
+    if (/[/:.]$/.test(before) || /^\.\d/.test(after)) continue;
+    const date = /^-\d{2}(?:-\d{2})?(?!\d)/.test(after);
+    const ranged = !date && (/^\s?[-–—]\s?\d/.test(after) || /\d\s?[-–—]\s?$/.test(before));
+    found.push({ year: Number(match[1]), bracketed: /\(\s*$/.test(before), ranged });
   }
-  return null;
+  const alone = found.filter((each) => !each.ranged);
+  const chosen =
+    alone.find((each) => each.bracketed) ??
+    alone.at(-1) ??
+    found.find((each) => each.bracketed) ??
+    found[0];
+  return chosen?.year ?? null;
 }
 /** Fewer title words than this, and a reference says too little to look up. */
 const MIN_WORDS = 4;
@@ -141,9 +172,10 @@ const continues = (text: string) =>
 
 /**
  * The entries of a reference list, in order; none without a heading that
- * starts one. A PDF can break an entry into paragraphs: a numbered entry
- * goes on until the next number (the last, until it names a year), and an
- * entry whose authors stand alone goes on into the paragraph with its year.
+ * starts one. A numbered entry, or one whose authors come first, starts an
+ * entry. A PDF can break an entry into paragraphs: a numbered one goes on
+ * until the next number, and one whose authors stand alone goes on into the
+ * paragraph with its year. The list ends at a paragraph that is neither.
  */
 function referenceEntries(blocks: readonly ListBlock[]): ListedReference[] {
   const parts = partsOf(blocks);
@@ -155,41 +187,72 @@ function referenceEntries(blocks: readonly ListBlock[]): ListedReference[] {
     return false;
   };
   const entries: ListedReference[] = [];
-  let listing = false;
-  let current: ListedReference | null = null;
-  let opening: ListedReference | null = null;
+  // An object, so the closures below and the loop see one state.
+  const state: {
+    listing: boolean;
+    current: ListedReference | null;
+    opening: ListedReference | null;
+  } = { listing: false, current: null, opening: null };
+  const start = (part: Part) => {
+    state.current = { blockId: part.blockId, text: part.text };
+    entries.push(state.current);
+  };
+  const closeOpening = () => {
+    if (state.opening) entries.push(state.opening);
+    state.current = state.opening;
+    state.opening = null;
+  };
+  const end = () => {
+    closeOpening();
+    state.listing = false;
+    state.current = null;
+  };
+  const append = (entry: ListedReference, text: string) => {
+    entry.text = `${entry.text} ${text}`;
+  };
   for (const [at, part] of parts.entries()) {
+    const { text } = part;
     if (isHeading(part)) {
-      listing = HEADING.test(part.text);
-      current = null;
-      opening = null;
+      end();
+      state.listing = HEADING.test(text);
       continue;
     }
-    if (!listing) continue;
-    if (opening) {
-      opening.text = `${opening.text} ${part.text}`;
-      if (REFERENCE_SIGN.test(part.text)) {
-        entries.push(opening);
-        current = opening;
-        opening = null;
-      } else if (opening.text.length > LONGEST_OPENING) {
-        listing = false;
+    if (!state.listing) continue;
+    if (AFTER_LIST.test(text)) {
+      end();
+      continue;
+    }
+    const numbered = NUMBER_START.test(text);
+    const startsEntry = numbered || ENTRY_START.test(text);
+    if (state.opening && startsEntry) closeOpening();
+    if (state.opening) {
+      append(state.opening, text);
+      if (REFERENCE_SIGN.test(text)) closeOpening();
+      else if (state.opening.text.length > LONGEST_OPENING) {
+        state.opening = null;
+        end();
       }
-    } else if (current && continues(part.text)) {
-      current.text = `${current.text} ${part.text}`;
-    } else if (current && NUMBER_START.test(current.text) && !NUMBER_START.test(part.text)) {
-      const unfinished = yearOf(current.text) === null && part.text.length <= LONGEST_OPENING;
-      if (numberedLater(at) || unfinished) current.text = `${current.text} ${part.text}`;
-      else listing = false;
-    } else if (REFERENCE_SIGN.test(part.text)) {
-      current = { blockId: part.blockId, text: part.text };
-      entries.push(current);
-    } else if (AUTHOR_START.test(part.text)) {
-      opening = { blockId: part.blockId, text: part.text };
+    } else if (numbered) {
+      start(part);
+    } else if (state.current && NUMBER_START.test(state.current.text)) {
+      const lastFinishes =
+        yearOf(state.current.text) === null &&
+        REFERENCE_SIGN.test(text) &&
+        text.length <= SHORT_PART;
+      if (numberedLater(at) || continues(text) || lastFinishes) append(state.current, text);
+      else end();
+    } else if (startsEntry) {
+      if (REFERENCE_SIGN.test(text)) start(part);
+      else state.opening = { blockId: part.blockId, text };
+    } else if (state.current && continues(text)) {
+      append(state.current, text);
+    } else if (entries.length === 0 && REFERENCE_SIGN.test(text)) {
+      start(part);
     } else {
-      listing = false;
+      end();
     }
   }
+  closeOpening();
   return entries;
 }
 

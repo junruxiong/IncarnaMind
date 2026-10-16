@@ -420,7 +420,9 @@ describe("Checking a reference list", { timeout: 30_000 }, () => {
     const { core, services, mindId } = await setUp([REAL, CONFERENCE, INVENTED]);
     services.fail(429, "openalex");
 
-    expect(await core.checkReferences(mindId)).toMatchObject({
+    const result = await core.checkReferences(mindId);
+
+    expect(result).toMatchObject({
       kind: "checked",
       references: [
         { mark: "found", service: "crossref" },
@@ -429,6 +431,20 @@ describe("Checking a reference list", { timeout: 30_000 }, () => {
       ],
     });
     expect(services.requests.filter(({ path }) => path.includes("search="))).toHaveLength(1);
+    // It says when its free searches come back: an hour from now.
+    const resetsAt = result.kind === "checked" ? result.references[1]?.resetsAt : undefined;
+    expect(Date.parse(resetsAt ?? "") - Date.now()).toBeGreaterThan(3_500_000);
+  });
+
+  // protects=while OpenAlex can't be asked, a reference with an arXiv number is still looked up on arXiv; fails_when=an arXiv preprint reads "not checked" though arXiv answers; no_claim=none beyond protects.
+  test("while OpenAlex can't be reached, an arXiv number is still looked up on arXiv", async () => {
+    const { core, services, mindId } = await setUp([ON_ARXIV]);
+    services.fail("unreachable", "openalex");
+
+    expect(await core.checkReferences(mindId)).toMatchObject({
+      kind: "checked",
+      references: [{ mark: "found", service: "arxiv" }],
+    });
   });
 
   test("when OpenAlex can't be reached, Crossref's answers stand and OpenAlex is asked once", async () => {
@@ -501,6 +517,13 @@ describe("Reading a reference as written", () => {
     expect(citedReference("Doe, J. (2017–2018). Widget surveys. Widget Letters.")).toMatchObject({
       year: 2017,
     });
+    for (const [text, year] of [
+      ["Hochreiter, S. Long short-term memory. Neural Comput., pp. 1735-1780, 1997.", 1997],
+      ["Hochreiter, S. Long short-term memory. Neural Comput. 9(8), 1735-1780 (1997).", 1997],
+      ["Doe, J. Widget surveys. Widget Letters, 1999–2003 (2019).", 2019],
+    ] as const) {
+      expect(citedReference(text).year, text).toBe(year);
+    }
     expect(
       citedReference(
         "Graves, A. (2014). Neural Turing machines. Neural Netw. doi:10.1016/j.neunet. 2014.09.003",
@@ -547,6 +570,16 @@ describe("Reading a reference as written", () => {
     expect(titleOf("A. Vaswani, N. Shazeer. Attention is all you need. NeurIPS 2017.")).toBe(
       "Attention is all you need",
     );
+    expect(
+      titleOf(
+        "Tieleman, T. and Hinton, G. Lecture 6.5 - RMSProp, COURSERA. Technical report, 2012.",
+      ),
+    ).toBe("Lecture 6.5 - RMSProp, COURSERA");
+    expect(
+      titleOf(
+        "Hochreiter, S., Schmidhuber, J.: Long short-term memory. Neural Comput. 9(8) (1997)",
+      ),
+    ).toBe("Long short-term memory");
     expect(titleOf("Smith J, Doe K. Widgets in coastal towns. J Widgets. 2020;12:3-4.")).toBe(
       "Widgets in coastal towns",
     );
@@ -660,6 +693,58 @@ describe("Reading a reference as written", () => {
       "2. Moore T. Tides and widgets. J Widgets. 2020;12:3-4.",
       "3. Zhu M, Chen W. Fast and accurate widget counting. In Proceedings of the 51st Annual Meeting of the Widget Society, pages 434–443, August 2013.",
     ]);
+  });
+
+  // protects=a numbered marker always starts an entry, with or without a space (CNKI writes none); an author-first entry without a year stays apart from the next; a lowercase particle starts an entry; the list ends at prose, an acknowledgement, or a short paragraph after the last numbered entry; fails_when=entries merge, a list ends early, or prose is looked up; no_claim=none beyond protects.
+  test("where entries start and where the list ends, in more styles", () => {
+    const block = (id: string, text: string, isHeading = false) => ({
+      id,
+      heading: isHeading,
+      text,
+    });
+    const blockIds = (blocks: ReturnType<typeof block>[]) =>
+      checkableReferences(blocks).map((entry) => entry.blockId);
+
+    expect(
+      blockIds([
+        block("h", "参考文献", true),
+        block("a", "[1]张三,李四.海岸小部件的分布研究[J].海洋科学,2019,12(3):1-10."),
+        block("b", "[2]王五.小部件与潮汐[M].北京:海洋出版社,2020."),
+        block(
+          "c",
+          "[3]赵六.潮间带小部件调查[J].地理学报,2018,7(1):2-9.[4]钱七.小部件图谱[M].上海:科学出版社,2017.",
+        ),
+      ]),
+    ).toEqual(["a", "b", "c", "c"]);
+
+    expect(
+      blockIds([
+        block("h", "References", true),
+        block("a", "Baker, L. A field guide to coastal widgets. Widget Society."),
+        block("b", "Cole, M. (2019). Widgets and the tide. Coast News."),
+        block("c", "van der Maaten, L. (2008). Visualizing data using t-SNE. JMLR, 9, 2579–2605."),
+        block("p", "We thank Jane Doe for reading the 2019 draft of this survey."),
+        block("q", "Doe, J. (2020). A later study of widgets. Widget Letters."),
+      ]),
+    ).toEqual(["a", "b", "c"]);
+
+    expect(
+      blockIds([
+        block("h", "References", true),
+        block("a", "Cole, M. (2019). Widgets and the tide. Coast News."),
+        block("b", "Acknowledgements"),
+        block("c", "Doe, J. (2020). A later study of widgets. Widget Letters."),
+      ]),
+    ).toEqual(["a"]);
+
+    expect(
+      checkableReferences([
+        block("h", "References", true),
+        block("a", "[1] Ann Abel. Widgets at the coast of the northern sea. Widget Press"),
+        block("b", "Thanks to the reviewers."),
+        block("c", "Their notes since 2019 helped."),
+      ]).map((entry) => entry.text),
+    ).toEqual(["[1] Ann Abel. Widgets at the coast of the northern sea. Widget Press"]);
   });
 
   // protects=a short title must stand alone in the reference, so a record titled "Introduction" isn't a longer title's work; a short real title still is; fails_when=either is wrong; no_claim=none beyond protects.

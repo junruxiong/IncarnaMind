@@ -2621,6 +2621,8 @@ export interface ReferenceCheck {
   differences: ReferenceDifference[];
   /** For "not-checked": why. */
   reason: ReferenceCheckReason | null;
+  /** "rate-limited": when the service takes requests again, as it said (ISO 8601). */
+  resetsAt?: string;
 }
 
 export type CheckReferencesResult =

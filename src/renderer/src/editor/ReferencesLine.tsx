@@ -4,6 +4,7 @@ import { TextSelection } from "@tiptap/pm/state";
 import { useEditorState } from "@tiptap/react";
 import { useState } from "react";
 import type { ReferenceCheckReason } from "../../../core/api";
+import { formatDateTime } from "../../../shared/dates";
 import { checkableReferences, type ListBlock } from "../../../shared/referenceList";
 import { ProblemLine } from "../components/ProblemLine";
 import { buttonStyle } from "../components/ui";
@@ -104,11 +105,11 @@ export function ReferencesLine({ editor, mindId }: { editor: Editor; mindId: str
           ...new Map(
             state.references
               .filter((reference) => STOPPED.has(reference.reason) && reference.service)
-              .map((reference) => [reference.service, reference.reason] as const),
+              .map((reference) => [reference.service, reference] as const),
           ),
         ]
       : [];
-  const stopped = stoppedBy.map(([service, reason]) => (
+  const stopped = stoppedBy.map(([service, { reason, resetsAt }]) => (
     <ProblemLine
       key={service}
       testId="references-stopped"
@@ -119,12 +120,17 @@ export function ReferencesLine({ editor, mindId }: { editor: Editor; mindId: str
         onClick: () => void checkReferences(mindId, count),
       }}
     >
-      {t(
-        reason === "rate-limited"
-          ? "references.stopped.rate-limited"
-          : "references.stopped.unreachable",
-        { service: service ? SERVICE_NAMES[service] : "" },
-      )}
+      {reason === "rate-limited" && resetsAt
+        ? t("references.stopped.rate-limitedUntil", {
+            service: service ? SERVICE_NAMES[service] : "",
+            time: formatDateTime(resetsAt, language),
+          })
+        : t(
+            reason === "rate-limited"
+              ? "references.stopped.rate-limited"
+              : "references.stopped.unreachable",
+            { service: service ? SERVICE_NAMES[service] : "" },
+          )}
     </ProblemLine>
   ));
 
