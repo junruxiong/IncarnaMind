@@ -7,10 +7,9 @@
  * word once case, accents and punctuation are set aside. Then its year must
  * be within a year of one of the record's (issued, in print or online; a
  * preprint's year and its proceedings' often differ by one), and its first
- * author's family name must be in it. A title that is
- * only partly there is a work by another title: by DOI, that is a mismatch
- * (the DOI leads to a record, but not to this work); found by searching, it
- * is no match at all.
+ * author's family name must be in it. A title that is only partly there is
+ * a work by another title: by DOI, that is a mismatch (the DOI leads to a
+ * record, but not to this work); found by searching, it is no match at all.
  */
 import {
   ARXIV_IN_TEXT,
