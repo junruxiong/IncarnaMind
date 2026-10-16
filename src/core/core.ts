@@ -15,7 +15,7 @@ import {
 import { mindModelOf } from "../shared/mindModel";
 import { mindName } from "../shared/naming";
 import { paperFor } from "../shared/printDocument";
-import { resolveProposals } from "../shared/proposals";
+import { resolveProposals, restoreRevised } from "../shared/proposals";
 import { RESEARCH_TASK } from "../shared/research";
 import { wordFileOf } from "../shared/wordFiles";
 import { logActivity, silentLogger } from "./activityLog";
@@ -148,6 +148,7 @@ import { CHAT_FLOW_SENDS, createChat, type PreparedChatModel } from "./providers
 import { CHATGPT_PLAN_ENDPOINTS, createChatGptPlan } from "./providers/chatgpt/plan";
 import { createAiSdkEmbeddingModel } from "./providers/embeddings";
 import { ollamaBaseUrl } from "./providers/kinds";
+import { createLocalServers } from "./providers/localServers";
 import { createAiSdkChatModel } from "./providers/models";
 import {
   detectOllama,
@@ -660,7 +661,9 @@ export function createCore(adapters: CoreAdapters): Core {
     languages: () =>
       settings.get().language === "zh-CN" ? ["zh-CN", "zh;q=0.9", "en;q=0.8"] : ["en", "*;q=0.5"],
     pictureFetch: pictureFetcher.fetch,
-    reportError: (error) => console.error("A web page's picture couldn't be fetched:", error),
+    ...(adapters.pageLook ? { look: adapters.pageLook } : {}),
+    keepLookByDefault: () => settings.get().user.keepWebPageLook,
+    reportError: (error) => console.error("A web page's picture or look couldn't be kept:", error),
     ...adapters.webPages,
   });
   webPages.dropPurged().catch((error: unknown) => console.error(error));
@@ -946,7 +949,8 @@ export function createCore(adapters: CoreAdapters): Core {
       }
     },
     async savePage(address, folderId, added) {
-      const result = await webPages.save({ address }, added);
+      // A found source's copy is the text the User asked for, not how its page looks.
+      const result = await webPages.save({ address, keepLook: false }, added);
       if (result.outcome === "failed") return null;
       if (!result.existing && folderId !== null) library.assign(result.document.id, folderId);
       return { document: documents.get(result.document.id), existing: result.existing };
@@ -1052,7 +1056,8 @@ export function createCore(adapters: CoreAdapters): Core {
     enabled: () => settings.get().user.webSearch && !embedding.localOnly(),
     readiness: (model) => chat.readiness(model),
     prepare: (model) => chat.prepareModel(model, "web-search", "off"),
-    savePage: (address, fetch) => webPages.save({ address }, undefined, fetch),
+    // A page an Answer saves is never loaded whole: that is for the User to ask for, page by page.
+    savePage: (address, fetch) => webPages.save({ address, keepLook: false }, undefined, fetch),
     folderOf: (place) => {
       try {
         if (place.mindId !== null) return minds.get(place.mindId).folderId;
@@ -1155,6 +1160,7 @@ export function createCore(adapters: CoreAdapters): Core {
         if (!mindExists(change.mindId)) continue;
         const emptied = content.edit(change.mindId, (blocks) => {
           resolveProposals(blocks, (ref) => ref.request === change.request, "reject");
+          if (change.revised) restoreRevised(blocks, change.request);
           return topLevelBlocks(blocks).every(
             (block) => block.nodeName === "paragraph" && block.length === 0,
           );
@@ -1204,6 +1210,7 @@ export function createCore(adapters: CoreAdapters): Core {
       },
     },
     resolveScope,
+    interfaceLanguage: () => settings.get().language,
     emptyScopeAnswer: () => translate(settings.get().language, "scope.answer.empty"),
     onWritingChange: (writing) => {
       background.setAnswering(writing);
@@ -1557,6 +1564,8 @@ export function createCore(adapters: CoreAdapters): Core {
     liveDocuments: () => documents.list(),
     keptCitationTexts: () => documents.keptCitationTexts(),
     language: () => settings.get().language,
+    folderName: (folderId) =>
+      library.folders().find((folder) => folder.id === folderId)?.name ?? null,
     citationStyle: (mindId) => mindCitationStyle(mindId).style,
     bibliography: (mindId) => content.readSettings(mindId, bibliographyShown),
     formatCitations: (request) => citationStyles.format(request),
@@ -2116,6 +2125,7 @@ export function createCore(adapters: CoreAdapters): Core {
     return ollamaBaseUrl(input?.baseUrl);
   };
   const ollamaInstalled = async () => (await adapters.ollamaApp?.installed()) ?? false;
+  const localServers = adapters.localServers ?? createLocalServers();
 
   // Transcripts (#136): a Meeting is transcribed on this computer as it records, where this copy can.
   let listMeetings: (() => Meeting[]) | undefined;
@@ -2496,6 +2506,7 @@ export function createCore(adapters: CoreAdapters): Core {
         ? { ...result, document: documents.get(result.document.id) }
         : result;
     },
+    keepWebPageLook: async (documentId) => webPages.keepLook(documentId),
     fetchWebPageAgain: async (documentId) => webPages.fetchAgain(documentId),
     saveTextAsDocument: async (input) => {
       if (!isRecord(input) || typeof input.text !== "string" || input.text.trim() === "") {
@@ -2759,6 +2770,20 @@ export function createCore(adapters: CoreAdapters): Core {
     acceptPlainTextSecretStorage: async () => secrets.acceptPlainText(),
 
     detectOllama: (input) => detectOllama(ollamaUrl(input), ollamaInstalled),
+    detectLocalServer: async (input) => {
+      if (!isRecord(input) || typeof input.catalogId !== "string") {
+        throw new InvalidInputError({
+          key: "error.provider.unknown",
+          values: { provider: String(isRecord(input) ? input.catalogId : input) },
+        });
+      }
+      const apiKey = typeof input.apiKey === "string" && input.apiKey.trim() ? input.apiKey : null;
+      return localServers.detect(
+        input.catalogId,
+        apiKey,
+        typeof input.address === "string" ? input.address : null,
+      );
+    },
     openOllama: async (input) => {
       const baseUrl = ollamaUrl(input);
       if (!(await ollamaInstalled())) {

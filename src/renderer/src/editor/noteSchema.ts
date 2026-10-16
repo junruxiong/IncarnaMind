@@ -25,7 +25,14 @@ import { DocumentChip } from "./documentChipSchema";
 import { Footnote } from "./footnoteSchema";
 import { ProposalAttributes, ProposalDelete, ProposalInsert } from "./proposalSchema";
 import { Answer, MindDocument, Question, QuestionContextFlag } from "./questionSchema";
-import { InlineImage, WordAtom, WordBlock, WordLookAttribute, WordRun } from "./wordSchema";
+import {
+  InlineImage,
+  WordAtom,
+  WordBlock,
+  WordLookAttribute,
+  WordLookTableView,
+  WordRun,
+} from "./wordSchema";
 
 /** The attribute each Block keeps its UUID in. It is stored in the Mind's Yjs document. */
 export { BLOCK_ID_ATTRIBUTE };
@@ -139,7 +146,7 @@ export function noteExtensions({
     // A checklist: its items hold a box and Blocks, as list items do.
     TaskList,
     TaskItem.configure({ nested: true }),
-    Table.configure({ resizable: false }),
+    Table.configure({ resizable: false, View: WordLookTableView }),
     TableRow,
     TableHeader,
     TableCell,

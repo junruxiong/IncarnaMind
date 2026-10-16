@@ -2,6 +2,7 @@ import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Document } from "../../../core/api";
 import { readWebPage, type WebPage } from "../../../core/documents/formats/web";
 import type { XmlNode } from "../../../core/documents/formats/xml";
+import { documentImageUrl } from "../../../shared/documentViewer";
 import type { MessageKey } from "../../../shared/i18n";
 import { useLanguage, useT } from "../i18n";
 import type { ViewerTarget } from "../store";
@@ -10,10 +11,12 @@ import { useCitedArea } from "./citedArea";
 import { loadDocumentPicture } from "./documentPicture";
 import { markQuote, textNodes, unmarkQuote } from "./domQuote";
 import { FileStates } from "./FileStates";
+import { PdfView } from "./PdfView";
 import { CitationMark, marginRoom, markTopFor, quoteMarkOf, quoteTone } from "./quoteMark";
 import { OutlineButton, type OutlineEntry, UnitOutline } from "./UnitOutline";
 import { useDocumentFile } from "./useDocumentFile";
 import { ViewerHeader } from "./ViewerHeader";
+import { WebLookBar, WebLookLine } from "./WebLook";
 
 const read = (bytes: Uint8Array): WebPage => readWebPage(new TextDecoder().decode(bytes));
 
@@ -191,14 +194,37 @@ function draw(
   }
 }
 
-/** Opened at a Citation, the quote is highlighted in the cited section, else anywhere on the page. */
+/**
+ * Opened at a Citation, the quote is highlighted in the cited section, else
+ * anywhere on the page. A page kept as it looks can be shown as it looked,
+ * in the PDF view, until the User goes back to its text or opens a Citation.
+ */
 export function WebView({ document, target }: { document: Document; target: ViewerTarget }) {
   const loaded = useDocumentFile(document.id, read);
+  const [lookShownFor, setLookShownFor] = useState<number | null>(null);
+  const look = document.web?.look;
+  if (look?.status === "saved" && lookShownFor === target.request) {
+    return (
+      <PdfView
+        document={document}
+        target={{ documentId: document.id, request: target.request }}
+        source={documentImageUrl(document.id, look.path)}
+        banner={<WebLookBar look={look} onShowText={() => setLookShownFor(null)} />}
+      />
+    );
+  }
   return (
     <FileStates
       loaded={loaded}
       quote={target.quote}
-      ready={(page) => <WebPageContent page={page} document={document} target={target} />}
+      ready={(page) => (
+        <WebPageContent
+          page={page}
+          document={document}
+          target={target}
+          onShowLook={() => setLookShownFor(target.request)}
+        />
+      )}
     />
   );
 }
@@ -207,10 +233,12 @@ function WebPageContent({
   page,
   document,
   target,
+  onShowLook,
 }: {
   page: WebPage;
   document: Document;
   target: ViewerTarget;
+  onShowLook(): void;
 }) {
   const t = useT();
   const language = useLanguage();
@@ -378,6 +406,7 @@ function WebPageContent({
                   {page.meta.title ?? document.name}
                 </h1>
                 {byline && <p className="document-web-byline">{byline}</p>}
+                <WebLookLine document={document} onShow={onShowLook} />
                 {leftOut > 0 && (
                   <p data-testid="viewer-web-left-out" className="document-web-byline">
                     {t(

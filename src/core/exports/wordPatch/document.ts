@@ -35,7 +35,7 @@ import { type DocxWriter, piecesOf, WRITER_NAMESPACES } from "../docx";
 import { dateAttribute, escapeXml, type WordIds } from "../wordml";
 import {
   type Authorship,
-  passagesOf,
+  type Piece,
   type Review,
   type Tracking,
   trackBlocks,
@@ -175,6 +175,7 @@ export class DocumentPatch {
       counterpartsOf(input.current, input.currentKey, input.reading),
       input.currentKey,
       (counterpart) => {
+        this.forceForComments(counterpart);
         if (!counterpart.list) return;
         this.listItems.set(counterpart.list.list, [
           ...(this.listItems.get(counterpart.list.list) ?? []),
@@ -216,6 +217,21 @@ export class DocumentPatch {
       review: input.review,
       removedHere: (source) => !input.plan.writtenElsewhere(source),
     };
+  }
+
+  /** Copied as it was, a paragraph has no runs a comment's range could start and end in. */
+  private forceForComments(counterpart: Counterpart): void {
+    const based = counterpart.key ? this.based.get(counterpart.key) : undefined;
+    if (
+      !based ||
+      counterpart.kind !== "paragraph" ||
+      !this.input.review.choices.commentFailedChecks ||
+      !this.input.tokensOf(counterpart.node).some((token) => token.sentence)
+    ) {
+      return;
+    }
+    for (let at: XmlElement | undefined = based.element; at; at = this.parents.get(at))
+      this.forced.add(at);
   }
 
   /** The Mind's counterparts in some of its Blocks, read for review. */
@@ -305,13 +321,12 @@ export class DocumentPatch {
   }
 
   /**
-   * The pieces of text written, in document order, for finding AI text's
-   * passages: a paragraph written as it was is the User's; one written again,
-   * its new words by who wrote them; new Blocks as the native writer writes them.
+   * The pieces of text written, in document order, for finding where comments
+   * go: a paragraph written as it was is the User's; one written again, its
+   * new words by who wrote them, and its sentences with a check that isn't
+   * good; new Blocks as the native writer writes them.
    */
-  private *pieces(
-    counterparts: readonly Counterpart[],
-  ): Generator<{ key: object; authorship: Authorship }> {
+  private *pieces(counterparts: readonly Counterpart[]): Generator<Piece> {
     for (const counterpart of counterparts) {
       if (counterpart.pending.inserted) continue;
       const based = counterpart.key ? this.based.get(counterpart.key) : undefined;
@@ -336,7 +351,7 @@ export class DocumentPatch {
                   : /^\s$/u.test(token.char)
                     ? "neither"
                     : "own";
-          yield { key: token, authorship };
+          yield { key: token, authorship, sentence: token.sentence };
         }
       } else if (counterpart.kind === "table" && based) {
         if (!this.input.edited(counterpart.node) && !this.forced.has(based.element)) {
@@ -384,7 +399,7 @@ export class DocumentPatch {
     const body = child(this.input.base.root, "w:body");
     if (!body) return this.text;
     const current = this.currentOf(this.input.current);
-    this.input.review.mark(passagesOf(this.pieces(current)));
+    this.input.review.mark(this.pieces(current));
     const splices = this.container({
       element: body,
       contentStart: body.openEnd ?? startOf(body),

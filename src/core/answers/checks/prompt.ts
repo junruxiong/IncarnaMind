@@ -5,7 +5,7 @@
  * one sentence on what the Document says, carrying the marker.
  */
 import type { CitationSupport, ClaimVerdict } from "../../api";
-import type { Language } from "../../language";
+import { LANGUAGE_NAMES, type Language } from "../../language";
 
 const VERDICTS: readonly ClaimVerdict[] = ["supported", "unsupported", "contradicted"];
 
@@ -26,9 +26,6 @@ const RULES = [
   "- a Passage that says something else happened, without saying the sentence is false;",
   "- a sentence that adds a detail the Passages don't mention.",
 ];
-
-/** The interface language, as the model is told to write in it. */
-const LANGUAGE_NAMES: Record<Language, string> = { en: "English", "zh-CN": "Simplified Chinese" };
 
 /**
  * The sentence is written in the interface's language, whatever language the
