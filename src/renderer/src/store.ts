@@ -1058,8 +1058,11 @@ export const useAppStore = create<AppState>()((set, get) => {
         const groups = madeExamples(get()).map((each) =>
           each.group === "tea" ? undefined : each.group,
         );
+        // The first open can't go on without its example: removing them ends it, Undo resumes it.
+        const hidden = get().settings?.device.gettingStarted.hidden ?? false;
         const remove = async () => {
           for (const group of groups) await core.removeExamples(group);
+          get().updateGettingStarted({ hidden: true });
         };
         await remove();
         push({
@@ -1067,6 +1070,7 @@ export const useAppStore = create<AppState>()((set, get) => {
           name: t("undo.name.removeExamples"),
           undo: async () => {
             for (const group of groups) await core.createExamples(group);
+            get().updateGettingStarted({ hidden });
           },
           redo: remove,
         });
