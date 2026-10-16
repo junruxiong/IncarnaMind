@@ -73,7 +73,8 @@ export interface Locator {
   label?: string;
 }
 
-const span = (from: number, to: number) => (to > from ? `${from}-${to}` : String(from));
+const span = (from: number | string, to: number | string) =>
+  to !== from ? `${from}-${to}` : String(from);
 
 /**
  * A Citation's Location as a locator: pages and lines as CSL's own ("p. 4", "pp. 4–5"); a slide,
@@ -82,7 +83,10 @@ const span = (from: number, to: number) => (to > from ? `${from}-${to}` : String
  */
 export function locatorOf(location: CitationLocation | null, language: Language): Locator {
   if (!location) return {};
-  if (location.kind === "page") return { locator: span(location.from, location.to), label: "page" };
+  if (location.kind === "page") {
+    const { from, to } = location.printed ?? location;
+    return { locator: span(from, to), label: "page" };
+  }
   if (location.kind === "lines") {
     return { locator: span(location.from, location.to), label: "line" };
   }

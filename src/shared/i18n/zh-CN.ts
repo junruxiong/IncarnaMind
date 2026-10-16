@@ -885,6 +885,8 @@ export const zhCN = {
   "viewer.docx.comment": "{author} 的批注",
 
   "location.page": "第 {range} 页",
+  "location.page.withPdf.one": "{printed} · PDF 第 {range} 页",
+  "location.page.withPdf.other": "{printed} · PDF 第 {range} 页",
   "location.slide.one": "第 {range} 张幻灯片",
   "location.slide.other": "第 {range} 张幻灯片",
   "location.rows.one": "第 {range} 行",
