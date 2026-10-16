@@ -6,6 +6,7 @@ import type {
   ExportPreferences,
   SavedExport,
   SavedMindExport,
+  SentenceChecksExported,
   WordExportReport,
 } from "../../core/api";
 import type { MessageKey } from "../../shared/i18n";
@@ -84,6 +85,10 @@ export type ExportResult =
       path: string;
       name: string;
       unverified: number;
+      /** The sentences whose check isn't good: how many, and whether they went in as comments. */
+      checks: SentenceChecksExported;
+      /** The changes waiting that went into a Word file as tracked changes. */
+      tracked: number;
       /** The header and footer kept in a Word file though deleted from the Mind (#105). */
       kept: ("header" | "footer")[];
       /** The first save, which took Documents › IncarnaMind: the line says where (D209). */
@@ -127,6 +132,13 @@ function begin(mindId: string, kind: ExportKind): ((next: ExportResult | null) =
   };
 }
 
+const NO_CHECKS: SentenceChecksExported = {
+  contradicted: 0,
+  unsupported: 0,
+  needsRecheck: 0,
+  commented: false,
+};
+
 /** What a save says in the result line; null when the User didn't choose where new files go: nothing went wrong. */
 function savedResult(
   mindId: string,
@@ -141,6 +153,8 @@ function savedResult(
       path: saved.file.path,
       name: saved.file.name,
       unverified: "unverifiedCitations" in saved ? saved.unverifiedCitations : 0,
+      checks: "sentenceChecks" in saved ? saved.sentenceChecks : NO_CHECKS,
+      tracked: "trackedChanges" in saved ? saved.trackedChanges : 0,
       kept: "word" in saved ? (saved.word?.keptFurniture ?? []) : [],
       defaulted: saved.file.defaulted,
     };
