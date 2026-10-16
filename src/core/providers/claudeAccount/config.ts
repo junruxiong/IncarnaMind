@@ -1,14 +1,7 @@
 /** The only place that names Anthropic's side of the route, so a change there touches only this file. */
 import { EXPERIMENTAL_SIGN_IN_ROUTES } from "../../buildFlags";
 import type { RedirectShape, TokenRequestFormat } from "../../oauth";
-
-/** What a route adds to every request it sends, besides IncarnaMind's own. */
-export interface RequestTransform {
-  /** System blocks before IncarnaMind's own. */
-  systemBlocks?: readonly string[];
-  /** Headers to set; an `anthropic-beta` adds its flags to those the request has. */
-  headers?: Readonly<Record<string, string>>;
-}
+import type { RequestTransform } from "../signedFetch";
 
 export interface AnthropicOAuthConfig {
   clientId: string;

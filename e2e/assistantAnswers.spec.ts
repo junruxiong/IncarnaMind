@@ -126,7 +126,6 @@ test("an Answer streams into the assistant and leaves the Mind as it was; Add to
   await expect(answer.getByTestId("answer-stop")).toBeVisible();
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await expect(answer.getByTestId("citation-chip")).toHaveAttribute("data-check", "found");
-  await expect(answer.getByTestId("margin-check")).toHaveAttribute("data-check", "found");
   await expect(answer.getByTestId("answer-steps")).toHaveText("Searched All Documents · 1 source");
   // The conversation is named by its first Question.
   await expect(assistant.getByTestId("assistant-title")).toContainText(

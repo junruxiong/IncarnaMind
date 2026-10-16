@@ -1,5 +1,5 @@
 import { APICallError, RetryError, UnsupportedFunctionalityError } from "ai";
-import type { ClaudeAccountProblem, ProviderError, ProviderErrorKind } from "../api";
+import type { ProviderError, ProviderErrorKind, SignInRouteProblem } from "../api";
 import { ConsentDeclinedError, TranslatableError } from "../errors";
 import { OAuthTokenError } from "../oauth";
 import { ChatGptPlanError, ChatGptSignInRequiredError } from "./chatgpt/errors";
@@ -49,27 +49,31 @@ export class PlanLimitError extends Error {
 }
 
 /**
- * The Claude account route stopped, for one of the reasons its own lines and
- * ways back explain (`CLAUDE_ACCOUNT_PROBLEMS`).
+ * A route signed in with the User's own account (a Claude account, Copilot)
+ * stopped, for one of the reasons its own lines and ways back explain (./signInRoutes).
  */
-export class ClaudeAccountError extends Error {
-  override name = "ClaudeAccountError";
+export class SignInRouteError extends Error {
+  override name = "SignInRouteError";
   constructor(
-    readonly problem: Exclude<ClaudeAccountProblem, "sign-in-cancelled">,
+    readonly problem: Exclude<SignInRouteProblem, "sign-in-cancelled">,
     message: string,
-    /** When the plan's limit resets (epoch milliseconds), when Anthropic says. */
+    /** When the plan's limit resets (epoch milliseconds), when the provider says. */
     readonly resetsAt: number | null = null,
   ) {
     super(message);
   }
 }
 
-const CLAUDE_ACCOUNT_KINDS: Record<ClaudeAccountError["problem"], ProviderErrorKind> = {
+const ROUTE_KINDS: Record<SignInRouteError["problem"], ProviderErrorKind> = {
   "signed-out": "not-signed-in",
   "sign-in-expired": "not-signed-in",
   refused: "blocked",
   "plan-limit": "plan-limit",
   "unexpected-response": "provider",
+  "no-plan": "blocked",
+  "policy-blocked": "blocked",
+  "model-unavailable": "model",
+  "rate-limited": "rate-limit",
 };
 
 /** When a reached limit resets, as ISO 8601, from an error that says (epoch milliseconds). */
@@ -138,8 +142,8 @@ export function refusesFeature(
  * Sorts a failed provider request into a kind the UI can explain: a bad key,
  * an unknown model, rate limiting, no connection, or the provider's own error.
  * For the ChatGPT plan, also a missing or expired sign-in, a reached plan
- * limit, or OpenAI refusing the sign-in; for a Claude account, the same and
- * an answer the route doesn't know (`claudeAccount`); for an Ollama Cloud model, its
+ * limit, or OpenAI refusing the sign-in; for a route signed in with the
+ * User's own account (Claude, Copilot), its own problems (`signInRoute`); for an Ollama Cloud model, its
  * used-up allowance; for any priced model, the monthly cap. Jev's errors come sorted already.
  * For a local model, a request too long for its context window.
  * Answers (#29) reuse it for errors shown inside an Answer.
@@ -151,7 +155,7 @@ export function classifyProviderError(error: unknown): ProviderError {
     retried instanceof Error &&
     (retried.cause instanceof ChatGptPlanError ||
       retried.cause instanceof PlanLimitError ||
-      retried.cause instanceof ClaudeAccountError)
+      retried.cause instanceof SignInRouteError)
       ? retried.cause
       : retried;
   const message = messageOf(cause);
@@ -170,11 +174,11 @@ export function classifyProviderError(error: unknown): ProviderError {
   if (cause instanceof ChatGptSignInRequiredError) return { kind: "not-signed-in", message };
   if (cause instanceof ChatGptPlanError) return { kind: cause.kind, message, ...resetsAtOf(cause) };
   if (cause instanceof PlanLimitError) return { kind: "plan-limit", message, ...resetsAtOf(cause) };
-  if (cause instanceof ClaudeAccountError) {
+  if (cause instanceof SignInRouteError) {
     return {
-      kind: CLAUDE_ACCOUNT_KINDS[cause.problem],
+      kind: ROUTE_KINDS[cause.problem],
       message,
-      claudeAccount: cause.problem,
+      signInRoute: cause.problem,
       ...resetsAtOf(cause),
     };
   }

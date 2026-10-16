@@ -241,14 +241,14 @@ test("typing in the composer and pressing Enter shows the Question in the assist
   // The Mind is as it was written.
   await expect.poll(() => order(editor)).toEqual(["Spring tides come twice a month."]);
 
-  // The Citation is checked: found on page 2, its check in the margin beside it.
+  // The Citation is checked: found on page 2, its check in its badge.
   const citation = answer.getByTestId("citation");
   await expect(citation).toHaveAttribute("data-check", "found");
   await expect(citation.getByTestId("citation-chip")).toHaveAttribute(
     "aria-label",
     "Citation 1: Tides, p. 2. Quote found on p. 2",
   );
-  await expect(answer.getByTestId("margin-check")).toHaveAttribute("data-check", "found");
+  await expect(citation.locator(".citation-marker-icon")).toBeVisible();
   // The composer is empty and keeps the focus, for a follow-up.
   await expect(input).toHaveValue("");
   await expect(input).toBeFocused();

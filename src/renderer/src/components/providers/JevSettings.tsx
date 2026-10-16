@@ -28,6 +28,7 @@ import {
   sectionTitleClass,
 } from "../ui";
 import { SecretStorageNotice, TestResult } from "./ProviderForm";
+import { useJevSettings } from "./useJevSettings";
 
 /** TypeSafe's hosted API, shown as the server's placeholder. */
 const HOSTED_URL = "https://api.typesafe.ai";
@@ -35,19 +36,14 @@ const HOSTED_URL = "https://api.typesafe.ai";
 const toPercent = (probability: number) => Math.round(probability * 100);
 
 /**
- * Settings → Models → Automatic tagging: the chat model by default, or TypeSafe Jev
- * with a key (and, for Jev-compatible models, another server), plus the band
- * of probabilities whose Tags are marked for review.
+ * Settings → Models → Tagging, at its foot: TypeSafe Jev with a key (and, for
+ * Jev-compatible models, another server), plus the band of probabilities
+ * whose Tags are marked for review. Once set up, Automatic tags with it.
  */
-export function JevSettingsSection() {
+export function JevSettingsSection({ embedded = false }: { embedded?: boolean }) {
   const t = useT();
-  const [jev, setJev] = useState<JevSettings | null>(null);
+  const [jev, setJev] = useJevSettings();
   const [editing, setEditing] = useState(false);
-
-  useEffect(() => {
-    core.getJevSettings().then(setJev, () => undefined);
-    return core.on("jev.changed", setJev);
-  }, []);
 
   const remove = async () => {
     try {
@@ -59,8 +55,12 @@ export function JevSettingsSection() {
 
   if (!jev) return null;
   return (
-    <section data-testid="jev-settings" className="flex flex-col">
-      <h4 className={sectionTitleClass}>{t("jev.settings.title")}</h4>
+    <section data-testid="jev-settings" className={`flex flex-col ${embedded ? "mt-5" : ""}`}>
+      {embedded ? (
+        <h5 className="text-ui font-semibold text-ink">{t("jev.settings.title")}</h5>
+      ) : (
+        <h4 className={sectionTitleClass}>{t("jev.settings.title")}</h4>
+      )}
       <p className={sectionNoteClass}>{t("jev.settings.body")}</p>
 
       {jev.enabled && !editing && (

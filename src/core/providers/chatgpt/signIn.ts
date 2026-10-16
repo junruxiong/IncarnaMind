@@ -24,12 +24,12 @@ import { randomBytes, randomUUID } from "node:crypto";
 import type { Browser } from "../../adapters";
 import { nonEmptyText, type OAuthPage, type OAuthTokens, refreshOAuthTokens } from "../../oauth";
 import {
-  type Authorize,
   createOAuthAccount,
   type OAuthAccountRecord,
   parseAccountRecord,
   type RefreshLock,
   revokeRefreshToken,
+  type SignInFlows,
 } from "../../oauthAccount";
 import type { Secrets } from "../../secrets";
 import {
@@ -190,7 +190,11 @@ export function createChatGptSignIn(options: {
     return fresh;
   };
 
-  const signInOnce = async (authorize: Authorize, signal: AbortSignal, anotherAccount: boolean) => {
+  const signInOnce = async (
+    authorize: SignInFlows["browser"],
+    signal: AbortSignal,
+    anotherAccount: boolean,
+  ) => {
     const stored = await prepare();
     const registered = anotherAccount ? null : stored.clientId;
     const nonce = randomBytes(24).toString("base64url");
@@ -305,8 +309,8 @@ export function createChatGptSignIn(options: {
      * `ChatGptPlanNotAllowedError` or `ChatGptOtherAccountError`.
      */
     signIn: (signInOptions: { anotherAccount?: boolean } = {}): Promise<{ firstTime: boolean }> =>
-      account.signIn((authorize, signal) =>
-        signInOnce(authorize, signal, signInOptions.anotherAccount === true),
+      account.signIn((flows, signal) =>
+        signInOnce(flows.browser, signal, signInOptions.anotherAccount === true),
       ),
 
     cancelSignIn: account.cancelSignIn,

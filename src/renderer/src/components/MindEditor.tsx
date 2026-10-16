@@ -18,7 +18,9 @@ import { startCompareDocuments, useComparisons } from "../comparisons";
 import { chosenScope, useComposer } from "../composer";
 import { core } from "../core";
 import { AnswerView } from "../editor/AnswerView";
+import { AppliedReviewBar } from "../editor/AppliedReviewBar";
 import { holdsAiText } from "../editor/aiText";
+import { AppliedEditLine } from "../editor/appliedEditLine";
 import { BlockHandle } from "../editor/BlockHandle";
 import { BlockCommands } from "../editor/blockCommands";
 import { BlockOrigins } from "../editor/blockOrigins";
@@ -371,6 +373,10 @@ function MindEditorView({
         }),
         QuestionFold.configure({ mindId }),
         ProposalReview.configure({ translate: translateNow }),
+        AppliedEditLine.configure({
+          translate: translateNow,
+          undoKeys: () => shortcutLabel("edit.undo"),
+        }),
         WritingPlace.configure({ label: () => translateNow("mind.writing") }),
         Suggestions.configure({
           request: (request) => askForSuggestion(mindId, doc, request),
@@ -459,7 +465,7 @@ function MindEditorView({
     };
   }, [reads, editor, mindId, doc]);
 
-  // The selection menu's AI section: each comes back as changes to accept or reject; Mark as mine acts at once.
+  // The selection menu's AI section: each applies at once (#880), as Mark as mine does.
   const hasDocuments = useAppStore((state) => state.documents.length > 0);
   const aiActions = useMemo((): SelectionAction[] => {
     const available = (current: typeof editor) => selectionForEdit(current.state) !== null;
@@ -648,6 +654,7 @@ function MindEditorView({
       >
         {wordLook && <style>{wordLook.css}</style>}
         {!readOnly && <ProposalBars editor={editor} mindId={mindId} />}
+        {!readOnly && <AppliedReviewBar editor={editor} />}
         <EditorContent editor={editor} />
         {!readOnly && <EndHint editor={editor} text={hintText} onAsk={askOnLine} />}
         <MarginChecks editor={editor} mind={{ id: mindId, doc }} />

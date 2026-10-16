@@ -48,8 +48,8 @@ const setLanguage = (window: Page, language: "en" | "zh-CN") =>
     language,
   );
 
-/** Writes a line in a new Mind, has the assistant shorten it, and accepts every change. */
-async function shortenAndAccept(window: Page, line: string, shortened: string): Promise<Locator> {
+/** Writes a line in a new Mind and shortens it from the selection menu, which applies at once. */
+async function shorten(window: Page, line: string, shortened: string): Promise<Locator> {
   await newMind(window);
   const editor = window.getByTestId("mind-editor");
   await editor.click();
@@ -58,10 +58,6 @@ async function shortenAndAccept(window: Page, line: string, shortened: string): 
   await expect(note).toHaveText(line);
   await slideSelect(window, note, line);
   await pointAndClick(window, window.getByTestId("selection-action-shorten"));
-  const bar = window.getByTestId("proposals-bar");
-  await expect(bar).toBeVisible();
-  await pointAndClick(window, bar.getByTestId("proposals-accept-all"));
-  await expect(bar).toHaveCount(0);
   await expect(note).toHaveText(shortened);
   return note;
 }
@@ -80,11 +76,11 @@ async function openHistoryFromTabMenu(window: Page, tab: Locator): Promise<void>
   await expect(menu.getByTestId("mind.history")).toBeFocused();
 }
 
-test("accepting changes saves a version; History compares it with now, Restore brings it back, ⌘Z takes it back", async () => {
+test("an AI edit saves a version first; History compares it with now, Restore brings it back, ⌘Z takes it back", async () => {
   const { window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
   await useLocalChatModel(window);
-  const note = await shortenAndAccept(
+  const note = await shorten(
     window,
     "The tides here are very strong and really regular.",
     "The tides here are strong and regular.",
@@ -175,7 +171,7 @@ test("in Chinese, at a narrow window: an empty History, then by the keyboard fro
   await window.keyboard.press("Escape");
   await expect(history).toBeHidden();
 
-  await shortenAndAccept(window, "潮水每天非常规律地涨落两次。", "潮水每天规律地涨落两次。");
+  await shorten(window, "潮水每天非常规律地涨落两次。", "潮水每天规律地涨落两次。");
   await openHistoryFromTabMenu(window, window.getByRole("tab", { selected: true }).first());
   await window.keyboard.press("Enter");
   await expect(history).toBeVisible();

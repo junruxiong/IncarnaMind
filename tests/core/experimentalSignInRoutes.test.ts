@@ -4,31 +4,51 @@ import { fileURLToPath } from "node:url";
 import { build } from "vite";
 import { describe, expect, test } from "vitest";
 import { ANTHROPIC_OAUTH } from "../../src/core/providers/claudeAccount/config";
+import { COPILOT_PROFILES } from "../../src/core/providers/copilot/config";
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
-const CONFIG = "src/core/providers/claudeAccount/config.ts";
 
-/** Every text the profile holds, which nothing but its config module may name. */
-function profileTexts(): string[] {
-  if (!ANTHROPIC_OAUTH) throw new Error("Tests build with the experimental sign-in routes on.");
-  const { clientId, authorizeUrl, tokenUrl, redirect, request } = ANTHROPIC_OAUTH;
+const required = <T>(value: T | null | undefined): T => {
+  if (!value) throw new Error("Tests build with the experimental sign-in routes on.");
+  return value;
+};
+
+/** Each route's config module, and every text only its experimental profile holds, which nothing else may name. */
+function routes(): { config: string; texts: string[] }[] {
+  const claude = required(ANTHROPIC_OAUTH);
+  const editor = required(COPILOT_PROFILES.editor);
   return [
-    clientId,
-    authorizeUrl,
-    tokenUrl,
-    ...(redirect.kind === "page" ? [redirect.uri] : []),
-    ...(request?.systemBlocks ?? []),
-    ...Object.values(request?.headers ?? {}),
+    {
+      config: "src/core/providers/claudeAccount/config.ts",
+      texts: [
+        claude.clientId,
+        claude.authorizeUrl,
+        claude.tokenUrl,
+        ...(claude.redirect.kind === "page" ? [claude.redirect.uri] : []),
+        ...(claude.request?.systemBlocks ?? []),
+        ...Object.values(claude.request?.headers ?? {}),
+      ],
+    },
+    {
+      config: "src/core/providers/copilot/config.ts",
+      texts: [
+        editor.clientId,
+        ...Object.values(editor.signInHeaders ?? {}),
+        ...Object.values(editor.requestHeaders ?? {}),
+        ...(editor.tokenExchange ? [editor.tokenExchange.url] : []),
+        ...Object.values(editor.tokenExchange?.headers ?? {}),
+      ],
+    },
   ];
 }
 
-async function bundle(on: boolean): Promise<string> {
+async function bundle(config: string, on: boolean): Promise<string> {
   const output = await build({
     configFile: false,
     root,
     logLevel: "silent",
     define: { __EXPERIMENTAL_SIGN_IN_ROUTES__: JSON.stringify(on) },
-    build: { ssr: CONFIG, write: false, minify: false },
+    build: { ssr: config, write: false, minify: false },
   });
   const results = Array.isArray(output) ? output : "output" in output ? [output] : [];
   return results
@@ -46,22 +66,24 @@ async function sourceFiles(dir: string): Promise<string[]> {
 
 describe("The experimental sign-in routes", () => {
   test("are in a bundle built with them, and not at all in one built without", async () => {
-    const texts = profileTexts();
-    const withRoutes = await bundle(true);
-    const without = await bundle(false);
-
-    for (const text of texts) {
-      expect(withRoutes, text).toContain(text);
-      expect(without, text).not.toContain(text);
+    for (const { config, texts } of routes()) {
+      const withRoutes = await bundle(config, true);
+      const without = await bundle(config, false);
+      for (const text of texts) {
+        expect(withRoutes, text).toContain(text);
+        expect(without, text).not.toContain(text);
+      }
     }
   });
 
   test("are named only in their config module", async () => {
-    const texts = profileTexts();
+    const all = routes();
     for (const file of await sourceFiles(join(root, "src"))) {
-      if (relative(root, file) === CONFIG) continue;
       const source = await readFile(file, "utf8");
-      for (const text of texts) expect(source.includes(text), `${file}: ${text}`).toBe(false);
+      for (const { config, texts } of all) {
+        if (relative(root, file) === config) continue;
+        for (const text of texts) expect(source.includes(text), `${file}: ${text}`).toBe(false);
+      }
     }
   });
 });

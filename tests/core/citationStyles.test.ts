@@ -217,6 +217,50 @@ describe("formatting a Mind's Citations", () => {
     expect(locatorOf(null, "en")).toEqual({});
   });
 
+  test("a PDF page is cited by the page it prints, not by its number in the PDF", async () => {
+    const { core, prospect } = await setUp();
+    const printed = (from: string, to = from): CitationLocation => ({
+      kind: "page",
+      from: 14,
+      to: 14 + (to === from ? 0 : 1),
+      printed: { from, to },
+    });
+    const formatted = await format(
+      core,
+      "apa",
+      [work(prospect, printed("265"))],
+      [work(prospect, printed("68", "69"))],
+      [work(prospect, printed("xii"))],
+      [work(prospect, printed("1-3"))],
+      [work(prospect, printed("A-3"))],
+      [work(prospect, printed("iii", "iv"))],
+      [work(prospect, printed("5-12", "5-13"))],
+    );
+    expect(formatted.clusters.map((cluster) => plain(cluster.runs))).toEqual([
+      "(Kahneman & Tversky, 1979, p. 265)",
+      "(Kahneman & Tversky, 1979, pp. 68–69)",
+      "(Kahneman & Tversky, 1979, p. xii)",
+      "(Kahneman & Tversky, 1979, p. 1-3)",
+      "(Kahneman & Tversky, 1979, p. A-3)",
+      "(Kahneman & Tversky, 1979, pp. iii–iv)",
+      "(Kahneman & Tversky, 1979, pp. 5-12–5-13)",
+    ]);
+    expect(locatorOf(printed("1-3"), "en")).toEqual({ locator: "p. 1-3", label: "custom" });
+    expect(locatorOf(printed("iii", "iv"), "en")).toEqual({
+      locator: "pp. iii–iv",
+      label: "custom",
+    });
+    expect(locatorOf(printed("iii", "iv"), "zh-CN")).toEqual({
+      locator: "第 iii–iv 页",
+      label: "custom",
+    });
+    expect(locatorOf(printed("5-12", "5-13"), "en")).toEqual({
+      locator: "pp. 5-12–5-13",
+      label: "custom",
+    });
+    expect(locatorOf(printed("68", "69"), "en")).toEqual({ locator: "68-69", label: "page" });
+  });
+
   test("Citations side by side are one cluster, its runs marked with the Citation each belongs to", async () => {
     const { core, prospect, qian } = await setUp();
     const formatted = await format(core, "ieee", [work(qian), work(prospect)]);

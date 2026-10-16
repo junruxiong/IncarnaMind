@@ -38,6 +38,8 @@ describe("Settings", () => {
       user: {
         language: "system",
         chatModel: null,
+        quickTasksModel: null,
+        imageModel: null,
         suggestWhileWriting: false,
         leaveOutOwnFiles: true,
         exportOptions: DEFAULT_EXPORT,
@@ -133,6 +135,8 @@ describe("Settings", () => {
     expect(settings.user).toEqual({
       language: "zh-CN",
       chatModel: null,
+      quickTasksModel: null,
+      imageModel: null,
       suggestWhileWriting: false,
       leaveOutOwnFiles: true,
       exportOptions: DEFAULT_EXPORT,
@@ -227,6 +231,8 @@ describe("Settings", () => {
       user: {
         language: "zh-CN",
         chatModel: null,
+        quickTasksModel: null,
+        imageModel: null,
         suggestWhileWriting: true,
         leaveOutOwnFiles: false,
         exportOptions: PDF_EXPORT,

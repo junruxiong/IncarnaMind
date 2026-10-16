@@ -19,7 +19,7 @@ import { displayName } from "./documentNames";
 import type { MessageKey } from "./i18n";
 import {
   citationLocation,
-  englishLocation,
+  englishPrintedLocation,
   formatLocation,
   isTranscriptLocation,
   readsIn,
@@ -222,7 +222,7 @@ export function citationReference(attributes: Partial<CitationAttributes>): stri
   const name = attributes.documentName;
   if (!name) return "";
   const location = citationLocation(attributes);
-  return location ? `[${name}, ${englishLocation(location)}]` : `[${name}]`;
+  return location ? `[${name}, ${englishPrintedLocation(location)}]` : `[${name}]`;
 }
 
 /** How a Citation's place reads in a sentence, and the parameters its message takes. */

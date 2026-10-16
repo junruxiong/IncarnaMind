@@ -1,10 +1,14 @@
 import { randomUUID } from "node:crypto";
-import { writeFile } from "node:fs/promises";
+import { copyFile, realpath, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type ElectronApplication, expect, type Page, test } from "@playwright/test";
 import type { CitationAttributes, CoreBridge, Document } from "../src/core/api";
+import { openDatabase } from "../src/core/storage";
+import { buildPdf } from "../tests/helpers/pdf";
 import {
   addDocuments,
+  addToNote,
+  askInAssistant,
   blocksUpdate,
   createDataFolder,
   dismissChatSetup,
@@ -18,6 +22,7 @@ import {
   removeDataFolder,
   savedPath,
   setLanguage,
+  useLocalChatModel,
   useOutputLocation,
 } from "./app";
 
@@ -281,5 +286,140 @@ test("a web page to share: the sheet offers it, and the file loads nothing and o
   );
   await expect(sheet.getByText("读者可以打开每条引用")).toBeVisible();
   await expect(sheet.getByText("在页脚注明“引用已由 IncarnaMind 核对”")).toBeVisible();
+  await app.close();
+});
+
+/** The saved pages' sizes, by their Document's name, as the data folder's database has them. */
+function savedPages(dataFolder: string): Record<string, { width: number; height: number }> {
+  const db = openDatabase(join(dataFolder, "incarnamind.db"));
+  try {
+    const rows = db.all<{ name: string; width: number; height: number }>(
+      `SELECT d.name, p.width, p.height FROM cited_pages p JOIN documents d ON d.id = p.document_id
+       WHERE p.deleted_at IS NULL AND p.image_type IS NOT NULL`,
+    );
+    return Object.fromEntries(rows.map(({ name, ...size }) => [name, size]));
+  } finally {
+    db.close();
+  }
+}
+
+test("page pictures: the sheet says what goes in the file and updates as a Document is unticked; a PDF's card carries a crop and a slide's the slide", async () => {
+  test.setTimeout(240_000);
+  const library = await realpath(sources);
+  const deck = "Quarterly Research Update.pptx";
+  const fixtures = join(__dirname, "..", "tests", "fixtures", "formats");
+  for (const file of [
+    "Coastal Flood Risk Review.docx",
+    deck,
+    "Regional Revenue.xlsx",
+    "Orders.csv",
+  ]) {
+    await copyFile(join(fixtures, file), join(library, file));
+  }
+  await writeFile(
+    join(library, "Tide Gauges.pdf"),
+    buildPdf([
+      { lines: ["Tide gauges"] },
+      { lines: ["Felixstowe", "The Felixstowe gauges recorded the highest readings of the year."] },
+    ]),
+  );
+  const { app, window } = await launchApp(dataDir, { fakeChat: true, home });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await addDocuments(window, [
+    join(library, "Coastal Flood Risk Review.docx"),
+    join(library, deck),
+    join(library, "Regional Revenue.xlsx"),
+    join(library, "Orders.csv"),
+    join(library, "Tide Gauges.pdf"),
+  ]);
+  await newMind(window);
+  await window.getByTestId("mind-title").fill("Gauges");
+  await addToNote(
+    window,
+    await askInAssistant(
+      window,
+      "Compare each: the western fastest growth, the barrier crest halves damage, and West totals in rows.",
+    ),
+  );
+  await addToNote(
+    window,
+    await askInAssistant(window, "Which gauges recorded the highest readings?"),
+  );
+  await expect(window.getByTestId("mind-editor").getByTestId("citation")).toHaveCount(5);
+  await expect
+    .poll(() => Object.keys(savedPages(dataDir)).sort(), { timeout: 60_000 })
+    .toEqual(expect.arrayContaining(["Quarterly Research Update", "Tide Gauges"]));
+  await useOutputLocation(window, out);
+
+  await openOptions(window, "Export options");
+  const sheet = window.getByTestId("export-dialog");
+  await sheet.getByTestId("export-format").selectOption("share-page");
+  const contents = sheet.getByTestId("share-contents");
+  await expect(contents.locator("p").first()).toHaveText(
+    "In the file: 5 quotes and 2 page pictures from 5 Documents. Anyone you send it to can read them. The Documents themselves aren't included.",
+  );
+  await expect(contents.getByTestId("share-document")).toHaveCount(5);
+  await expect(contents.getByTestId("share-size")).toHaveText(/^The file will be about \d/);
+  const gauges = contents.getByTestId("share-document").filter({ hasText: "Tide Gauges" });
+  await expect(gauges).toContainText("1 quote · 1 picture");
+  await pointAndClick(window, gauges.getByRole("checkbox"));
+  await expect(gauges).toContainText("1 quote · as text only");
+  await expect(contents.locator("p").first()).toContainText(
+    "5 quotes and 1 page picture from 5 Documents.",
+  );
+  await pointAndClick(window, gauges.getByRole("checkbox"));
+  await expect(gauges.getByRole("checkbox")).toBeChecked();
+  await pointAndClick(window, sheet.getByTestId("export-save"));
+  await expect(sheet).toBeHidden();
+
+  await exportFromMenu(window);
+  const page = await openOffline(app, await savedPath(window, "Gauges.html"));
+  const pictureOf = (name: string) =>
+    page
+      .locator("section.card", { has: page.locator(".card-source", { hasText: name }) })
+      .locator(".card-picture svg");
+  const sizes = savedPages(dataDir);
+  for (const name of ["Tide Gauges", deck.replace(".pptx", "")]) {
+    const picture = pictureOf(name);
+    await expect(picture).toHaveCount(1);
+    // The card points at the page's one copy of the picture, which the browser decodes.
+    const drawn = await picture.evaluate(async (svg) => {
+      const id = svg.querySelector("use")?.getAttribute("href") ?? "";
+      const href = document.querySelector(id)?.getAttribute("href") ?? "";
+      const image = new Image();
+      image.src = href.startsWith("data:image/webp;base64,") ? href : "";
+      await image.decode();
+      return [image.naturalWidth, image.naturalHeight];
+    });
+    const saved = sizes[name];
+    if (!saved) throw new Error(`${name}'s page wasn't saved.`);
+    if (name === "Tide Gauges") {
+      expect(drawn[0] ?? 0).toBeLessThanOrEqual(Math.min(saved.width, 1600));
+      expect(drawn[1] ?? 0).toBeLessThanOrEqual(saved.height / 3);
+    } else {
+      const scale = Math.min(saved.width, 1600) / saved.width;
+      expect(drawn).toEqual([Math.min(saved.width, 1600), Math.round(saved.height * scale)]);
+    }
+  }
+  // Opened, the card draws the picture at its width.
+  const gaugesCard = page.locator("section.card", {
+    has: page.locator(".card-source", { hasText: "Tide Gauges" }),
+  });
+  const number = ((await gaugesCard.getAttribute("id")) ?? "").replace("card-", "");
+  await page.locator(`main a.cite[data-card="${number}"]`).click();
+  await expect(gaugesCard).toBeVisible();
+  const shown = await pictureOf("Tide Gauges").boundingBox();
+  const card = await gaugesCard.boundingBox();
+  expect(shown?.width ?? 0).toBeGreaterThan((card?.width ?? 0) / 2);
+  expect(shown?.height ?? 0).toBeGreaterThan(20);
+  expect((await requestsMade(app)).filter((url) => !url.startsWith("file:"))).toEqual([]);
+  await page.close();
+
+  await setLanguage(window, "zh-CN");
+  await openOptions(window, "导出选项");
+  await expect(sheet.getByTestId("share-contents").locator("p").first()).toHaveText(
+    "文件中包含：来自 5 个文档的 5 处引文和 2 张页面截图。收到文件的人都能看到这些内容；文档本身不会包含在内。",
+  );
   await app.close();
 });

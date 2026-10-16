@@ -107,11 +107,13 @@ export function startCore(dataDir: string, overrides: TestAdapters = {}): Core {
     // Nothing asks the LM Studio or Unsloth Studio on this computer: neither runs.
     localServers: scriptedLocalServers(),
     // Nothing asks the Ollama on this computer: it runs, and its models get the default settings.
+    // Automatic tagging finds no local decision models unless a test gives some.
     ollamaModels: {
       describe: async () => null,
       loaded: async () => null,
       running: async () => true,
     },
+    localModels: async () => [],
     embedder: createFakeEmbedder(),
     embeddingModelSource: NO_MODEL_FILES,
     crossEncoder: createFakeCrossEncoder(),

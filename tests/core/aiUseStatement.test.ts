@@ -83,6 +83,8 @@ function checked(
     evidence: null,
     says: null,
     calculation: null,
+    citedCaseUnchecked: false,
+    citedCaseFound: false,
     scope: { folderId: null, widened: false },
     versions: [{ documentId: document.id, contentHash: document.contentHash }],
     excluded: [],

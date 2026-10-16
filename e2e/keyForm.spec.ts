@@ -19,7 +19,9 @@ import {
 
 /*
  * The key form (#719): one row of providers, the key, a Model pick list and one "Use this key"
- * that tests the key as it saves, all in view at 900px high; and the ChatGPT sign-in's way back.
+ * that tests the key as it saves, in view at 900px high or in a card that scrolls inside itself;
+ * "Where do I find it?", closed, with what the catalog knows of getting a key (#920); and the
+ * ChatGPT sign-in's way back.
  */
 
 let dataDir: string;
@@ -51,7 +53,7 @@ async function openKeyForm(window: Page) {
   return card;
 }
 
-test("at 900px high the key form shows provider, key, Model and its button without scrolling, in English and Chinese", async () => {
+test("at 900px high the key form is in view, or scrolls inside its card, in English and Chinese", async () => {
   const { app, window } = await launchApp(dataDir);
   try {
     await setWindowSize(app, window, 1100, 900);
@@ -67,8 +69,14 @@ test("at 900px high the key form shows provider, key, Model and its button witho
       await expect(form.getByTestId("provider-model").locator("option").first()).toContainText(
         value === "en" ? "Recommended" : "推荐",
       );
-      await expect(form.getByTestId("provider-key-link")).toBeVisible();
+      await expect(form.getByTestId("provider-key-help-toggle")).toBeVisible();
+      await expect(form.getByTestId("provider-key-link")).toBeHidden();
+      // The card stays in the window; what doesn't fit scrolls inside it.
+      const box = await card.boundingBox();
+      expect((box?.y ?? 0) + (box?.height ?? 0)).toBeLessThanOrEqual(900);
+      await form.getByTestId("provider-use-key").scrollIntoViewIfNeeded();
       await expect(form.getByTestId("provider-use-key")).toBeInViewport({ ratio: 1 });
+      await form.getByTestId("provider-model").scrollIntoViewIfNeeded();
       await expect(form.getByTestId("provider-model")).toBeInViewport({ ratio: 1 });
       if (process.env.INCARNAMIND_SCREENSHOTS) {
         await window.screenshot({
@@ -77,6 +85,146 @@ test("at 900px high the key form shows provider, key, Model and its button witho
       }
       await card.getByTestId("setup-back").click();
     }
+  } finally {
+    await app.close();
+  }
+});
+
+test("Where do I find it? opens with the keyboard, and holds the notes, the steps, the plan's credits and the key page, in English and Chinese", async () => {
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await setWindowSize(app, window, 1100, 900);
+    await acceptPlainTextKeys(window);
+    // The first provider is Anthropic in English, which has all four; DeepSeek in Chinese, with no plan's credits.
+    for (const [value, plan, keyPage] of [
+      ["en", 1, "Open Anthropic's key page ↗"],
+      ["zh-CN", 0, "打开 DeepSeek 的密钥页面 ↗"],
+    ] as const) {
+      await language(window, value);
+      const card = await openKeyForm(window);
+      await card.getByTestId("setup-key").click();
+      const form = card.getByTestId("provider-form");
+      const help = form.getByTestId("provider-key-help");
+      await expect(help).not.toHaveAttribute("open", "");
+      await form.locator('input[type="password"]').focus();
+      await window.keyboard.press("Tab");
+      await expect(form.getByTestId("provider-key-help-toggle")).toBeFocused();
+      await window.keyboard.press("Enter");
+      await expect(help).toHaveAttribute("open", "");
+      await expect(help.getByTestId("provider-note")).toHaveCount(1);
+      await expect(help.locator("ol > li")).toHaveCount(3);
+      await expect(help.getByTestId("provider-plan-credits")).toHaveCount(plan);
+      await expect(help.getByTestId("provider-key-link")).toHaveText(keyPage);
+      if (process.env.INCARNAMIND_SCREENSHOTS) {
+        await window.screenshot({
+          path: `${process.env.INCARNAMIND_SCREENSHOTS}/key-help-open-${value}.png`,
+        });
+      }
+      // The notes come first, then the steps, then the credits, then the key page.
+      const order = await help.evaluate((element) =>
+        [
+          ...element.querySelectorAll(
+            "[data-testid=provider-note], ol, [data-testid=provider-plan-credits], [data-testid=provider-key-link]",
+          ),
+        ].map((each) => each.getAttribute("data-testid") ?? each.tagName),
+      );
+      expect(order).toEqual(
+        plan
+          ? ["provider-note", "OL", "provider-plan-credits", "provider-key-link"]
+          : ["provider-note", "OL", "provider-key-link"],
+      );
+      // At first run the notes and the credits are in the disclosure only, and the model has no docs link.
+      await expect(form.getByTestId("provider-note")).toHaveCount(1);
+      await expect(form.getByTestId("provider-plan-credits")).toHaveCount(plan);
+      await expect(form.getByTestId("provider-docs-link")).toHaveCount(0);
+      await window.keyboard.press("Enter");
+      await expect(help).not.toHaveAttribute("open", "");
+      await card.getByTestId("setup-back").click();
+    }
+  } finally {
+    await app.close();
+  }
+});
+
+test("in Settings the notes and the plan's credits are under the key field, the steps and the key page behind Where do I find it?, and the model has a link to its models and prices; in English and Chinese", async () => {
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await setWindowSize(app, window, 1100, 900);
+    await acceptPlainTextKeys(window);
+    await language(window, "en");
+    const settings = await openSettings(window, "models");
+    await settings.getByTestId("chat-choice-api-key").check();
+    const form = settings.getByTestId("provider-form");
+    const help = form.getByTestId("provider-key-help");
+    // The form opens on Anthropic, which has all of it, whichever language is chosen after.
+    for (const [value, link] of [
+      ["en", "Models and prices ↗"],
+      ["zh-CN", "模型和价格 ↗"],
+    ] as const) {
+      await language(window, value);
+      if (process.env.INCARNAMIND_SCREENSHOTS) {
+        await settings.screenshot({
+          path: `${process.env.INCARNAMIND_SCREENSHOTS}/key-settings-${value}.png`,
+        });
+      }
+      const note = form.getByTestId("provider-note");
+      const credits = form.getByTestId("provider-plan-credits");
+      await expect(note).toBeVisible();
+      await expect(credits).toBeVisible();
+      // One column with the hint lines' own spacing, no more.
+      const [noteBox, creditsBox] = await Promise.all([note.boundingBox(), credits.boundingBox()]);
+      expect(
+        (creditsBox?.y ?? 0) - ((noteBox?.y ?? 0) + (noteBox?.height ?? 0)),
+      ).toBeLessThanOrEqual(4);
+      await expect(help.locator("ol")).toBeHidden();
+      await expect(form.getByTestId("provider-docs-link")).toHaveText(link);
+      await expect(form.getByTestId("provider-docs-link")).toHaveAttribute("href", /^https:\/\//);
+    }
+    // The link is on the model's heading line, above its list: Tab goes from one to the other.
+    const docs = form.getByTestId("provider-docs-link");
+    const picker = form.getByTestId("provider-model");
+    const [docsBox, pickerBox] = await Promise.all([docs.boundingBox(), picker.boundingBox()]);
+    expect(docsBox?.y ?? 0).toBeLessThan(pickerBox?.y ?? 0);
+    await docs.focus();
+    await window.keyboard.press("Tab");
+    await expect(picker).toBeFocused();
+    await help.getByTestId("provider-key-help-toggle").click();
+    await expect(help.locator("ol > li")).toHaveCount(3);
+    await expect(help.getByTestId("provider-note")).toHaveCount(0);
+    await expect(help.getByTestId("provider-plan-credits")).toHaveCount(0);
+    await expect(help.getByTestId("provider-key-link")).toHaveText("打开 Anthropic 的密钥页面 ↗");
+  } finally {
+    await app.close();
+  }
+});
+
+test("the provider's own line on what it does with the data sits under the sentence of where it goes, with a link to its terms, in English and Chinese, at first run and in Settings", async () => {
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await setWindowSize(app, window, 1100, 900);
+    await acceptPlainTextKeys(window);
+    for (const [value, terms, lead] of [
+      ["en", "Terms ↗", ""],
+      ["zh-CN", "条款 ↗", "数据使用："],
+    ] as const) {
+      await language(window, value);
+      const card = await openKeyForm(window);
+      await card.getByTestId("setup-key").click();
+      const line = card.getByTestId("provider-form").getByTestId("provider-data-use");
+      await expect(line).toContainText(lead);
+      await expect(line.getByRole("link")).toHaveText(terms);
+      await expect(line.getByRole("link")).toHaveAttribute("href", /^https:\/\//);
+      await card.getByTestId("setup-back").click();
+    }
+
+    await language(window, "en");
+    const settings = await openSettings(window, "models");
+    await settings.getByTestId("chat-choice-api-key").check();
+    const line = settings.getByTestId("provider-form").getByTestId("provider-data-use");
+    await expect(line.getByRole("link")).toHaveText("Terms ↗");
+    await language(window, "zh-CN");
+    await expect(line).toContainText("数据使用：");
+    await expect(line.getByRole("link")).toHaveText("条款 ↗");
   } finally {
     await app.close();
   }

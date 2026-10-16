@@ -294,6 +294,7 @@ describe("Automatic tagging in the background queue", () => {
       now,
       tags,
       background,
+      stopped: () => false,
       canRun: async () => true,
       mightBeReady: () => true,
       prepare: async () => classifier,

@@ -10,6 +10,7 @@ import { useRequests } from "../requests";
 import { useAppStore } from "../store";
 import { findTab } from "../tabs";
 import { deleteTag } from "../tagChanges";
+import { stoppedPlaces, tagWithAi } from "../taggingStop";
 import { type Command, type CommandContext, needsHere } from "./registry";
 import { documentsOf, everyDocument, idsOf, onlyOne } from "./targets";
 
@@ -355,6 +356,21 @@ export const folderCommands: readonly Command[] = [
     async run(ctx) {
       if (!store().library?.settings.classifier) return store().openSettings("models");
       await core.classifyDocuments(folderDocumentIds(ctx));
+    },
+  },
+  {
+    id: "folder.tagWithAi",
+    label: "folder.tagWithAi",
+    group: "main",
+    appliesTo: ["folder"],
+    when: (ctx) => {
+      const id = idsOf(ctx, "folder")[0];
+      return !!id && stoppedPlaces(store().library).includes(id);
+    },
+    reversible: true,
+    async run(ctx) {
+      const id = idsOf(ctx, "folder")[0];
+      if (id) return tagWithAi([id]);
     },
   },
   {

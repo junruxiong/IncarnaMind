@@ -20,6 +20,7 @@ import {
 import {
   citationLocation,
   formatLocation,
+  formatLocationWithPdf,
   isTranscriptLocation,
   openKind,
 } from "../../../shared/locations";
@@ -43,7 +44,7 @@ import {
   memberMarker,
 } from "./citationClusters";
 import { citationNumberOf } from "./citationNumbers";
-import { QuoteWithUnsureWords, ScanLine, useScannedQuote } from "./citationScan";
+import { QuoteWithUnsureWords, ScanLine, useReadableQuote, useScannedQuote } from "./citationScan";
 import { CheckMarkIcon, CheckStateIcon } from "./icons";
 import { InFootnoteContext, MindIdContext, RegenerateAnswerContext } from "./mindContext";
 import { Popover } from "./Popover";
@@ -81,7 +82,7 @@ function answerAround(
  * note style, or in Numbered, an 18px marker with its number, its place among
  * the Mind's footnotes (see `CitationNumbers`). It stays neutral unless the
  * quote wasn't found; the check itself shows in the margin (`MarginChecks`),
- * or, in a narrow Mind, as an icon inside the marker. In a footnote's text
+ * or, in a narrow Mind and in an Answer in the assistant, as an icon inside the marker. In a footnote's text
  * it is part of the footnote: the marker shows where it points and its
  * check's icon instead of a number. Hovering or focusing it (or its mark in
  * the margin) shows its card: the check in words, the quote, and Open; Esc
@@ -491,6 +492,7 @@ function CitationCard({
   );
   const location = citationLocation(attributes);
   const where = location ? formatLocation(location, t) : null;
+  const withPdfPage = location ? formatLocationWithPdf(location, t) : null;
   const opens = web ? "web" : openKind(location);
   const name = attributes.documentName ?? "";
   // When the version it quotes was fetched: an older one's, if the page changed since.
@@ -498,14 +500,16 @@ function CitationCard({
     web?.versions.find((each) => each.contentHash === attributes.contentHash)?.fetchedAt ??
     web?.fetchedAt;
   const checked = state.check === "found" || state.check === "not-found";
-  // Once checked, the state line names the place, or the Document if it names none.
-  const source = checked
-    ? where
-      ? name
-      : null
-    : where
-      ? citationSource(attributes, t).text
-      : name;
+  // Once checked, the state line names the place, or the Document if it names none; a page line
+  // under the name says the place, so the name stands alone.
+  const source =
+    checked || withPdfPage
+      ? where
+        ? name
+        : null
+      : where
+        ? citationSource(attributes, t).text
+        : name;
   const reason =
     state.check === "checking"
       ? t("citation.reason.checking")
@@ -515,6 +519,7 @@ function CitationCard({
   const removed = state.reason === "document-removed";
   const quotedWords = state.check === "not-found" && parseQuotedWords(attributes.quotedWords);
   const scanned = useScannedQuote(attributes);
+  const quote = useReadableQuote(attributes);
   return (
     <div className={`citation-card citation-card--${state.check}`} contentEditable={false}>
       <div className="citation-card-head">
@@ -523,6 +528,11 @@ function CitationCard({
           <span>{badgeText}</span>
         </p>
         {source && <p className="citation-card-source">{source}</p>}
+        {withPdfPage && (
+          <p data-testid="citation-pdf-page" className="citation-card-source">
+            {withPdfPage}
+          </p>
+        )}
         {scanned && <ScanLine scanned={scanned} />}
         {web && fetchedAt && (
           <p data-testid="citation-web-source" className="citation-card-source">
@@ -535,7 +545,7 @@ function CitationCard({
           <figcaption className="sr-only">{t("citation.quote")}</figcaption>
           <blockquote>
             <span className="citation-card-wash">
-              <QuoteWithUnsureWords quote={attributes.quote} unsure={scanned?.unsure ?? []} />
+              <QuoteWithUnsureWords quote={quote} unsure={scanned?.unsure ?? []} />
             </span>
           </blockquote>
         </figure>

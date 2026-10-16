@@ -16,7 +16,7 @@ import type {
   StyledRun,
 } from "../api";
 import type { Language } from "../language";
-import { type CslItem, cslItemOf, locatorOf, nameOnlyItem } from "./csl";
+import { type CslItem, cslItemOf, locatorOf, nameOnlyItem, restoreHyphens } from "./csl";
 import { CitationFormatError, type CitationStyleEngine, createWorkerEngine } from "./engine";
 import type { FormatJob } from "./format";
 import { parseRequest } from "./request";
@@ -215,8 +215,16 @@ export function createCitationStyles(options: CitationStylesOptions) {
     const formatted: FormattedCitations = {
       style: style.id,
       form: description.class === "note" ? "note" : "in-text",
-      clusters: output.citations.map((runs) => ({
-        runs: runs.map(({ item, ...run }) => (item === undefined ? run : { ...run, work: item })),
+      clusters: output.citations.map((runs, cluster) => ({
+        runs: runs.map(({ item, ...run }) => {
+          if (item === undefined) return run;
+          const cite = job.citations[cluster]?.items[item];
+          const text =
+            cite?.label === "custom" && cite.locator
+              ? restoreHyphens(run.text, cite.locator)
+              : run.text;
+          return { ...run, text, work: item };
+        }),
       })),
       bibliography: output.bibliography.map((entry): BibliographyEntry => {
         const reference = byId.get(entry.id);

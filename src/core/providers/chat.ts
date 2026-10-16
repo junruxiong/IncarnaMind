@@ -36,17 +36,21 @@ import {
 import {
   cannotAnswerReason,
   catalogFacts,
+  catalogModel,
   catalogProvider,
   catalogProviderOf,
   catalogProviderOfKind,
+  catalogRoleModel,
   isPreset,
   modelsProviderOfKind,
+  type Price,
   withRolesFirst,
 } from "./catalog";
 import { billingOf, ollamaCloudPrice } from "./catalog/billing";
 import { endpointOf, fieldAccepts, fieldUrl } from "./catalog/providers";
 import type { ChatGptPlan } from "./chatgpt/plan";
 import type { ClaudeSignIn } from "./claudeAccount/account";
+import type { CopilotSignIn } from "./copilot/account";
 import {
   acceptsApiKey,
   baseUrlFor,
@@ -141,6 +145,23 @@ export interface PreparedChatModel {
    * first wait for it to load; null when that can't be told.
    */
   loaded?: () => Promise<boolean | null>;
+}
+
+/** What is known now of a model on a saved provider (see `describeModel`). */
+export interface DescribedModel {
+  choice: ChatModelChoice;
+  kind: ChatProviderKind;
+  /** Its provider's catalog entry, or null for one the catalog doesn't have (the ChatGPT plan). */
+  catalogId: string | null;
+  /** Where its requests go; null for a model on this computer. */
+  service: ExternalService | null;
+  /** A model in Ollama that runs on ollama.com. */
+  ollamaCloud: boolean;
+  readsImages: boolean;
+  /** Its name in the catalog, else its id. */
+  name: string;
+  /** Its price in the catalog, when known. */
+  price: Price | undefined;
 }
 
 /** A model in Ollama that can't answer Questions, such as an embedding model, fails before anything is sent. */
@@ -267,6 +288,11 @@ export type ClaudeAccountAccess = Pick<
   "hasSignIn" | "credentials" | "apiBaseUrl" | "request"
 >;
 
+export type CopilotAccess = Pick<
+  CopilotSignIn,
+  "hasSignIn" | "credentials" | "requests" | "models"
+>;
+
 export function createChat(options: {
   db: Database;
   now: () => string;
@@ -276,6 +302,7 @@ export function createChat(options: {
   createModel: ChatModelFactory;
   chatGpt: ChatGptPlanAccess;
   claudeAccount: ClaudeAccountAccess;
+  copilot: CopilotAccess;
   /** Looks up models in Ollama, for the settings their requests carry and how they cite. */
   ollamaModels: OllamaModels;
   /** Whether "Keep everything on this computer" is on: Questions then go only to a model on this computer. */
@@ -292,13 +319,15 @@ export function createChat(options: {
     createModel,
     chatGpt,
     claudeAccount,
+    copilot,
     ollamaModels,
     meter,
   } = options;
 
   const needsSignIn = async (kind: ChatProviderKind) =>
     (kind === "chatgpt" && !(await chatGpt.hasSignIn())) ||
-    (kind === "claude-account" && !(await claudeAccount.hasSignIn()));
+    (kind === "claude-account" && !(await claudeAccount.hasSignIn())) ||
+    (kind === "copilot" && !(await copilot.hasSignIn()));
 
   /** What the meter needs to know of a model: how it's billed, its price and its output limit. */
   const meteredModel = (
@@ -384,10 +413,11 @@ export function createChat(options: {
     const cacheKey = listKey(row);
     const cached = modelLists.get(cacheKey);
     let listed = cached && Date.now() - cached.at < MODEL_LIST_TTL_MS ? cached.models : null;
-    if (provider.kind === "chatgpt") {
+    if (provider.kind === "chatgpt" || provider.kind === "copilot") {
       // The account's own list, read with its sign-in like the sign-in's own traffic, and
       // kept by the plan itself: it carries nothing of the User's.
-      listed = (await chatGpt.models()).map(({ id, name }) => ({ id, name }));
+      const models = provider.kind === "chatgpt" ? chatGpt.models() : copilot.models();
+      listed = (await models).map(({ id, name }) => ({ id, name }));
     }
     if (!listed && !mayAsk) listed = [];
     if (!listed) {
@@ -465,7 +495,7 @@ export function createChat(options: {
    * sign with the sign-in instead of a key, and a model in Ollama gets its
    * fixed settings, the defaults when Ollama couldn't say.
    */
-  const specFor = (
+  const specFor = async (
     server: {
       kind: ChatProviderKind;
       baseUrl: string | null;
@@ -476,7 +506,7 @@ export function createChat(options: {
     modelId: string,
     profile: OllamaModelProfile | null = null,
     thinking?: ChatModelSpec["thinking"],
-  ): ChatModelSpec => {
+  ): Promise<ChatModelSpec> => {
     const { kind } = server;
     if (kind === "chatgpt") {
       return {
@@ -496,6 +526,18 @@ export function createChat(options: {
         modelId,
         credentials: claudeAccount.credentials,
         request: claudeAccount.request,
+        ...(thinking && { thinking }),
+      };
+    }
+    if (kind === "copilot") {
+      const { apiBaseUrl, headers } = await copilot.requests();
+      return {
+        kind,
+        baseUrl: apiBaseUrl,
+        apiKey: null,
+        modelId,
+        credentials: copilot.credentials,
+        request: { headers },
         ...(thinking && { thinking }),
       };
     }
@@ -550,6 +592,57 @@ export function createChat(options: {
     await refreshRemote(row.kind as ChatProviderKind, row.base_url, choice.modelId);
     return toProvider(row, choice.modelId);
   };
+
+  /**
+   * What is known now of a model on a saved provider: its provider's kind and
+   * catalog entry, where its requests go, whether it is an Ollama cloud model,
+   * whether it reads images, its name and its price. Undefined when its
+   * provider is gone.
+   */
+  function describeModel(choice: ChatModelChoice): DescribedModel | undefined {
+    const row = rowById(choice.providerId);
+    if (!row || !isKnownRow(row)) return undefined;
+    const kind = row.kind;
+    const set = modelsProviderOfKind(kind, row.endpoint, row.catalog_id);
+    const capabilities = capabilitiesOf(row, choice.modelId);
+    const service = knownService(row, choice.modelId);
+    return {
+      choice,
+      kind,
+      catalogId: row.catalog_id,
+      service,
+      ollamaCloud: kind === "ollama" && service?.id === OLLAMA_CLOUD.id,
+      readsImages: readsImages(capabilities),
+      name: catalogModel(set, choice.modelId)?.name ?? choice.modelId,
+      price: capabilities.facts.price,
+    };
+  }
+
+  /**
+   * A role's model for Answers asked with `base` (see `quickTasksModel` and
+   * `imageModel`): the User's, else the catalog's for a cloud provider (the
+   * ChatGPT plan's own for the jobs it has), else `base`.
+   */
+  function roleModel(
+    role: "quickTasks" | "images",
+    base: ChatModelChoice | null,
+  ): ChatModelChoice | null {
+    const own = settings.get().user[role === "quickTasks" ? "quickTasksModel" : "imageModel"];
+    const answers = base && describeModel(base);
+    let chosen: ChatModelChoice | null = own && rowById(own.providerId) ? own : null;
+    if (!chosen && answers) {
+      // A model server the User runs (Ollama, here or elsewhere, or one on this computer)
+      // does its own small calls: its catalog roles name models it may not have.
+      const catalogRole =
+        answers.service === null || answers.kind === "ollama"
+          ? undefined
+          : catalogRoleModel(answers, role);
+      chosen = catalogRole ? { providerId: answers.choice.providerId, modelId: catalogRole } : base;
+    }
+    if (!chosen || !options.localOnly()) return chosen;
+    if (describeModel(chosen)?.service === null) return chosen;
+    return answers?.service === null ? answers.choice : null;
+  }
 
   consent.registry.register({
     id: "chat",
@@ -722,6 +815,40 @@ export function createChat(options: {
       return !!row && isKnownRow(row) && readsImages(capabilitiesOf(row, choice.modelId));
     },
 
+    describeModel,
+
+    /**
+     * The quick-tasks model for Answers asked with `answers` (the default
+     * model when left out), for the calls that don't write the Answer:
+     * the one the User set, else the catalog's for a cloud provider, else the
+     * Answers model itself. A model on this computer, or in Ollama anywhere,
+     * does its own small calls, as a second one would push it out of memory. In local mode a cloud model
+     * gives way to the Answers model, when that is on this computer, or to
+     * none. Null with no Answers model.
+     */
+    quickTasksModel(answers?: ChatModelChoice | null): ChatModelChoice | null {
+      return roleModel(
+        "quickTasks",
+        answers === undefined ? settings.get().user.chatModel : answers,
+      );
+    },
+
+    /**
+     * The model that reads a scan's pages for Answers asked with `answers` (the
+     * default model when left out): the Answers model when it reads images,
+     * else the one the User set, else the catalog's for a cloud provider, when
+     * it reads images. Null when none does, or, in local mode, when the one
+     * that would isn't on this computer.
+     */
+    imageModel(answers?: ChatModelChoice | null): ChatModelChoice | null {
+      const base = answers === undefined ? settings.get().user.chatModel : answers;
+      const described = base && describeModel(base);
+      const chosen = described?.readsImages ? base : roleModel("images", base);
+      const reader = chosen && describeModel(chosen);
+      if (!reader?.readsImages) return null;
+      return options.localOnly() && reader.service !== null ? null : reader.choice;
+    },
+
     /**
      * Whether Questions can be asked with `choice`, or with the default model
      * when it is left out. With another `flow`, whether that flow can use it.
@@ -737,15 +864,16 @@ export function createChat(options: {
     },
 
     /**
-     * A quick check, with nothing to wait for: false when the default chat
-     * model certainly can't be used on `flow` (there is none, or the User
-     * declined the flow to its service, or, for background work, which never
-     * asks, hasn't allowed it). `readiness` checks keys and sign-ins too.
+     * A quick check, with nothing to wait for: false when `model` (the
+     * default chat model when left out) certainly can't be used on `flow`
+     * (there is none, or the User declined the flow to its service, or, for
+     * background work, which never asks, hasn't allowed it). `readiness`
+     * checks keys and sign-ins too.
      */
-    mightBeReady(flow: DataFlowId): boolean {
-      const row = defaultRow();
+    mightBeReady(flow: DataFlowId, model?: ChatModelChoice): boolean {
+      const row = model ? rowById(model.providerId) : defaultRow();
       if (!row) return false;
-      const choice = settings.get().user.chatModel;
+      const choice = model ?? settings.get().user.chatModel;
       const service = choice ? knownService(row, choice.modelId) : rowService(row);
       if (!service) return true;
       const decision = consent.status(flow, service);
@@ -869,7 +997,17 @@ export function createChat(options: {
           error: {
             kind: "not-signed-in",
             message: "Sign in with your Claude account first.",
-            claudeAccount: "signed-out",
+            signInRoute: "signed-out",
+          },
+        };
+      }
+      if (server.kind === "copilot" && !(await copilot.hasSignIn())) {
+        return {
+          ok: false,
+          error: {
+            kind: "not-signed-in",
+            message: "Sign in with GitHub to use your Copilot plan first.",
+            signInRoute: "signed-out",
           },
         };
       }
@@ -886,7 +1024,11 @@ export function createChat(options: {
           ),
         });
         const model = meter.wrap(
-          watchedPlan(server.kind, createModel(specFor(server, apiKey, modelId, profile)), modelId),
+          watchedPlan(
+            server.kind,
+            createModel(await specFor(server, apiKey, modelId, profile)),
+            modelId,
+          ),
           meteredModel(
             { kind: server.kind, service },
             rowByServer(server)?.id ?? server.catalogId ?? server.kind,
@@ -960,11 +1102,12 @@ export function createChat(options: {
       }
       const profile = await profileFor(provider.kind, provider.baseUrl, modelId);
       checkCanChat(profile, modelId);
-      // The calls that don't write the Answer (tagging, classifying) skip thinking where they can.
+      // The calls that don't write the Answer (tagging, classifying, an Answer's search query)
+      // skip thinking where they can.
       const model = watchedPlan(
         provider.kind,
         createModel(
-          specFor(
+          await specFor(
             provider,
             apiKey,
             modelId,
