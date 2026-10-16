@@ -48,6 +48,8 @@ function checked(
     state,
     reason,
     detail: null,
+    providerId: null,
+    modelId: null,
     text: sentence,
     evidence: null,
     says: null,

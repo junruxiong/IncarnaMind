@@ -19,7 +19,7 @@ import {
 } from "../helpers/localModels";
 import { connectToMind } from "../helpers/mindClient";
 import { question, writeMind } from "../helpers/minds";
-import { scriptedModels, streamingModel } from "../helpers/models";
+import { controlledModel, scriptedModels, streamingModel } from "../helpers/models";
 import { startOllamaServer } from "../helpers/ollama";
 
 /**
@@ -50,6 +50,22 @@ const phasesOf = (core: Core) => {
 };
 
 describe("What the meta line shows while an Answer is written", () => {
+  // protects=a cloud model's Answer says it is writing once its Question has gone, before the model has sent anything; fails_when=the first phase comes with the first words; no_claim=none beyond protects.
+  test("writing at once, before the model says anything", async () => {
+    const model = controlledModel();
+    const core = startCore(await createTempDataFolder(), {
+      createChatModel: scriptedModels(model.model).createChatModel,
+    });
+    core.on("consent.requested", (asked) => void core.respondToConsent(asked.requestId, true));
+    await core.saveChatProvider({ kind: "openai", apiKey: "sk-test", modelId: "gpt-test" });
+    const phases = phasesOf(core);
+    const started = await core.askInConversation({ text: "What is a Mind?" });
+    if (!started.asked) throw new Error(`Not asked: ${JSON.stringify(started)}`);
+    await model.requested();
+    expect(phases).toEqual(["writing"]);
+    model.finish();
+  });
+
   test("loading while Ollama loads the model, searching the Documents, then writing", async () => {
     const ollama = await startOllamaServer({
       models: [QWEN35_9B],
