@@ -1283,7 +1283,11 @@ export async function checkCard(window: Page, scope: Page | Locator = window): P
       // "Checking 2 of 2 · Stop" shrinks to the counts as a check ends: aim once it has.
       await expect(scope.getByTestId("badge-stop")).toHaveCount(0);
       await motionSettled(window);
-      await pointAndClick(window, badge);
+      // The counts are worked out a moment after a change, and the badge can narrow under the pointer: aim again.
+      await expect(async () => {
+        if (!(await card.isVisible())) await pointAndClick(window, badge);
+        await expect(card).toBeVisible({ timeout: 1000 });
+      }).toPass();
     } else {
       const chinese = (await window.evaluate(() => document.documentElement.lang)) === "zh-CN";
       const command = chinese ? "句子和引用" : "Sentences and Citations";
