@@ -45,6 +45,9 @@ export const isChatModelChoice = (value: unknown): value is ChatModelChoice =>
   isNonBlankText(value.providerId) &&
   isNonBlankText(value.modelId);
 
+const isModelSetting = (value: unknown): value is ChatModelChoice | null =>
+  value === null || isChatModelChoice(value);
+
 const hasOnly = (value: unknown, keys: readonly string[]): value is Record<string, unknown> =>
   isRecord(value) &&
   Object.keys(value).length === keys.length &&
@@ -115,6 +118,8 @@ const userScope: Scope<UserSettings> = {
   defaults: {
     language: "system",
     chatModel: null,
+    quickTasksModel: null,
+    imageModel: null,
     suggestWhileWriting: false,
     leaveOutOwnFiles: true,
     // Word is the deliverable most asked for; the deliverables leave the Questions out.
@@ -132,8 +137,9 @@ const userScope: Scope<UserSettings> = {
   },
   validators: {
     language: isLanguagePreference,
-    chatModel: (value): value is ChatModelChoice | null =>
-      value === null || isChatModelChoice(value),
+    chatModel: isModelSetting,
+    quickTasksModel: isModelSetting,
+    imageModel: isModelSetting,
     suggestWhileWriting: isBoolean,
     leaveOutOwnFiles: isBoolean,
     exportOptions: isExportPreferences,
