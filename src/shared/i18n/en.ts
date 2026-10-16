@@ -1712,6 +1712,7 @@ export const en = {
   "providers.setup.later": "Set up later",
   "setup.title": "Choose where Answers come from",
   "setup.body": "Your Question waits here and is answered as soon as you pick.",
+  "setup.body.ask": "Your Questions are answered with the one you pick.",
   "setup.waiting": "Waiting for you to choose a model",
   "setup.chatgpt.use": "Use my ChatGPT plan",
   "setup.chatgpt.line":
@@ -3940,6 +3941,8 @@ export const en = {
   "firstOpen.step.files.body":
     "Your files stay where they are. IncarnaMind reads them on this computer.",
   "firstOpen.done.title": "You're set up.",
+  "firstOpen.model.body": "One more step: choose an AI model to ask about your own files.",
+  "firstOpen.model.choose": "Choose a model",
   "firstOpen.next.lead": "Try next:",
   "firstOpen.next.compare": "Compare documents in a table",
   "firstOpen.next.meeting": "Record a meeting",
