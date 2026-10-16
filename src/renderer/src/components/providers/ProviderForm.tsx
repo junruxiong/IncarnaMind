@@ -71,7 +71,7 @@ const ROLE_HINTS = {
   strongest: "providers.form.hint.strongest",
   quickTasks: "providers.form.hint.quickTasks",
   images: "providers.form.hint.images",
-} as const satisfies Record<Role, MessageKey>;
+} as const satisfies Record<Exclude<Role, "tagging">, MessageKey>;
 
 function roleHint(kind: CatalogId, modelId: string): MessageKey | undefined {
   const roles = catalogProvider(kind)?.roles;

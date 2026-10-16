@@ -4,11 +4,7 @@ import { fakeSuggestion } from "./suggestion";
 
 const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-/**
- * The scripted tagger: of the Tag names offered, those that appear as a word
- * (ignoring case) in the Document's excerpt, i.e. its name or text.
- */
-function fakeTags(prompt: Prompt, offered: readonly string[]): string[] {
+function excerptOf(prompt: Prompt): string {
   const text = prompt
     .map((message) =>
       typeof message.content === "string"
@@ -17,7 +13,28 @@ function fakeTags(prompt: Prompt, offered: readonly string[]): string[] {
     )
     .join("\n");
   // The instructions name the markers too: the excerpt is between the last ones.
-  const excerpt = text.slice(text.lastIndexOf(EXCERPT_START), text.lastIndexOf(EXCERPT_END));
+  return text.slice(text.lastIndexOf(EXCERPT_START), text.lastIndexOf(EXCERPT_END));
+}
+
+const unreachedOnce = new Set<string>();
+
+/** A Document whose text says "unreachable" finds the model unreachable the first time it is tagged, as offline. */
+export function tagsUnreachable(options: GenerateOptions): boolean {
+  const format = options.responseFormat;
+  const schema = format?.type === "json" ? format.schema : undefined;
+  if (!schema?.properties?.tags || schema.properties.groupId) return false;
+  const excerpt = excerptOf(options.prompt);
+  if (!/\bunreachable\b/i.test(excerpt) || unreachedOnce.has(excerpt)) return false;
+  unreachedOnce.add(excerpt);
+  return true;
+}
+
+/**
+ * The scripted tagger: of the Tag names offered, those that appear as a word
+ * (ignoring case) in the Document's excerpt, i.e. its name or text.
+ */
+function fakeTags(prompt: Prompt, offered: readonly string[]): string[] {
+  const excerpt = excerptOf(prompt);
   return offered.filter((name) =>
     new RegExp(`(?<![\\p{L}\\p{N}])${escapeRegExp(name)}(?![\\p{L}\\p{N}])`, "iu").test(excerpt),
   );

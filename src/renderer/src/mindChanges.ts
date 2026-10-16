@@ -14,8 +14,8 @@
  */
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import * as Y from "yjs";
-import { MIND_CONTENT_FIELD, type ProposalRef } from "../../core/api";
-import { aiUseOfAccepted, pendingProposals, resolveProposals } from "../../shared/proposals";
+import { MIND_CONTENT_FIELD, MIND_PROPOSAL_REQUESTS_FIELD, type ProposalRef } from "../../core/api";
+import { aiUseOfAccepted, decideProposals, pendingProposals } from "../../shared/proposals";
 import type { ChangedMind } from "./changedMinds";
 import { readMindHandle } from "./commands/handles";
 import { core } from "./core";
@@ -255,10 +255,13 @@ async function resolveRow(row: ChangedMind, outcome: "accept" | "reject"): Promi
     }
   }
   const origin = { mindChanges: row.mindId };
-  const steps = new Y.UndoManager(blocks, { trackedOrigins: new Set([origin]) });
-  let resolved: ReturnType<typeof resolveProposals> = [];
+  // The requests' map too, which keeps what the User decided (`decideProposals`).
+  const steps = new Y.UndoManager([blocks, doc.getMap(MIND_PROPOSAL_REQUESTS_FIELD)], {
+    trackedOrigins: new Set([origin]),
+  });
+  let resolved: ReturnType<typeof decideProposals> = [];
   doc.transact(() => {
-    resolved = resolveProposals(blocks, picked, outcome);
+    resolved = decideProposals(blocks, picked, outcome);
   }, origin);
   if (outcome === "accept") {
     const entries = aiUseOfAccepted(doc, row.mindId, resolved, new Date().toISOString());

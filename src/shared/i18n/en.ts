@@ -28,7 +28,7 @@ export const en = {
   "library.organize.needsModel": "Organize needs an AI model",
   "library.organize.use": "Use {company}",
   "library.organize.sends":
-    "Sends your Documents' text, Folder names and Tag definitions to {company}",
+    "Each Document's name and the start of its text (for a scan, images of its first pages), and your Folders' and Tags' names and descriptions, go to {company}",
   "library.organize.dismiss": "Not now",
   "library.organize.setUp": "Set up a model on this computer",
   "library.organize.done.one": "Organize suggested a Folder for 1 Document",
@@ -88,10 +88,6 @@ export const en = {
   "library.needsAttention": "Needs attention",
   "library.folder": "Folder",
   "library.document": "Document",
-  "library.settingsSaved": "Settings saved.",
-  "library.settingsIntro":
-    "Organize assigns one folder and relevant tags to each document. Your files stay at their original locations, and your manual choices are kept.",
-  "library.settingsTitle": "Organization",
   "library.showMore": "Show more Documents",
   "library.loading": "Loading Library…",
   "library.groups": "Folders",
@@ -123,17 +119,8 @@ export const en = {
   "library.startersHint":
     "Start with the folders you need. Rename them or add your own at any time.",
   "library.addSelected": "Add selected folders",
-  "library.modelHint":
-    "Choose the model that assigns folders and tags. This can be different from your AI model. A cloud model receives your document text, folder names and tag definitions, and, if it can read images, the first pages of scanned PDFs.",
   "library.connection": "Connection",
-  "library.manualOnly": "Organize manually",
-  "library.jev": "Jev · saved connection",
   "library.ollama": "Local decision model · Ollama",
-  "library.auto": "Auto · local models",
-  "library.autoHint":
-    "Use Tev1 4B for text and Clef-Flash with page images for PDFs with little readable text. Switch to Tev1 0.8B when text classification stays slow or memory is limited; it is faster but may miss more groups. You can select a specific model instead.",
-  "library.autoModels":
-    "Uses installed Ollama models: tev1:4b, tev1:0.8b and clef-flash. Missing models are shown on affected Documents. Nothing is downloaded automatically. Images in Word and PowerPoint files are not included.",
   "library.usedPages": "Text + PDF pages",
   "library.usedText": "Text",
   "library.route.slow": "Faster model after slow calls",
@@ -141,12 +128,9 @@ export const en = {
   "library.route.unavailable": "4B model not installed",
   "library.model": "Model name",
   "library.server": "Local Ollama address",
-  "library.localHint":
-    "Use an installed model: Tev1 for text, or Clef-Flash for text and PDF pages. Clef-Flash needs Ollama 0.35.1 or later. Nothing is downloaded automatically.",
   "library.pageImages":
     "Include up to 3 PDF page images with local Clef-Flash. Other formats use text only.",
   "library.automatic": "Organize new and changed Documents automatically. Keep my manual choices.",
-  "library.saveModel": "Save settings",
   "library.preset.research": "Research papers",
   "library.preset.research.description": "Academic papers, experiments and research methods.",
   "library.preset.reports": "Reports & presentations",
@@ -594,6 +578,13 @@ export const en = {
   "claim.unsupported.inFolder": "Nothing in “{folder}” says this.",
   "claim.unsupported.anywhere": "Nothing in your Documents says this.",
   "claim.unsupported.differs": "Your Documents say something different:",
+  "claim.courtDecision.title": "This cites a court decision.",
+  "claim.courtDecision.body":
+    "IncarnaMind can't check that the case exists or that it says this. Look it up in your legal research service before you rely on it.",
+  "claim.citedCaseUnchecked":
+    "The case this sentence cites isn't in your Documents, so it hasn't been checked. Look it up in your legal research service before you rely on it.",
+  "claim.courtDecision.held":
+    "This cites a court decision. The quoted words were found in your saved copy of the opinion ({document}, {location}). Whether it has been overruled or changed isn't checked: look it up in your legal research service before you rely on it.",
   "claim.unsupported.ownWorkings": "Only your own working file says this.",
   "claim.fixSentence": "Fix the sentence",
   "claim.findSources": "Find sources",
@@ -1215,6 +1206,11 @@ export const en = {
   "status.tagging.other": "Tagging {count} Documents…",
   "status.taggingWaiting": "No AI model for Tags",
   "status.taggingPermission": "Tags need your OK",
+  "status.taggingFailed.one": "1 Document couldn't be tagged",
+  "status.taggingFailed.other": "{count} Documents couldn't be tagged",
+  "status.taggingFailed.offline":
+    "The AI model couldn't be reached. Tagging tries again when you're back online, or now with Retry.",
+  "status.taggingFailed.full": "The AI model couldn't tag them. Retry to try again.",
   "status.choose": "Choose…",
   "status.downloading": "Search model",
   "status.downloadFailed": "Search model download failed",
@@ -1276,6 +1272,7 @@ export const en = {
   "webPages.copyAddress": "Copy address",
   "webPages.menuTitle": "Web page",
   "webPages.fetched": "Fetched {date}",
+  "webPages.source": "Saved web page · {address} · saved {date}",
   "webPages.drop": "Drop to save the web page, or drop it on a Folder in the sidebar",
   "status.alreadyAdded.one": "1 already added",
   "status.alreadyAdded.other": "{count} already added",
@@ -1473,7 +1470,7 @@ export const en = {
   "tags.state.tagging": "Tagging…",
   "tags.state.failed": "Tagging failed. Re-tag to try again.",
   "tags.dialog.body":
-    "Organize gives each Document a Folder and Tags, going by these names and descriptions, with the model chosen in Settings → Organization: your connected AI model, Auto · local models (Tev1 on this computer, and Clef-Flash for PDFs that are mostly images), or a local model you name, such as Clef-Flash. Tags you add to or remove from a Document are never changed automatically.",
+    "Documents get their Tags, and once you have Folders a suggested Folder, going by these names and descriptions, from the model chosen in Settings → Models → Tagging: Automatic, unless you choose another. Tags you add to or remove from a Document are never changed automatically.",
   "tags.dialog.preset": "Preset",
   "tags.dialog.empty": "No Tags yet. Add one below.",
   "tags.dialog.name": "Name",
@@ -1498,10 +1495,10 @@ export const en = {
   "jev.chip.review":
     "{tag}: added automatically, but only {percent}% likely. Confirm it to keep it, or remove it.",
   "jev.chip.confirm": "Confirm {tag} on {name}",
-  "jev.settings.title": "Automatic tagging",
+  "jev.settings.title": "TypeSafe Jev",
   "jev.settings.body":
-    "Documents are tagged with your AI model. With a TypeSafe Jev key, Jev tags them instead: it is quicker and cheaper, and says how likely each Tag is. Tags it isn't sure about are marked for you to review.",
-  "jev.settings.inUse": "TypeSafe Jev tags your Documents.",
+    "With a TypeSafe Jev key, Jev can tag your Documents: it says how likely each Tag is, and marks the ones it isn't sure of for you to review. Automatic uses it first.",
+  "jev.settings.inUse": "Your Jev key is saved.",
   "jev.settings.server": "Server: {server}",
   "jev.settings.hosted": "TypeSafe",
   "jev.settings.keyMissing":
@@ -1520,6 +1517,55 @@ export const en = {
   "jev.form.reviewHint":
     "Below the first number a Tag isn't applied; from the second it is applied without a mark.",
   "jev.form.save": "Use Jev for tagging",
+  "tagging.title": "Tagging",
+  "tagging.intro":
+    "Tags each Document you add and, once you have Folders, suggests its Folder. Tags and Folders you set yourself are never changed.",
+  "tagging.model": "Model for tagging",
+  "tagging.automatic": "Automatic",
+  "tagging.using.jev": "Using {model}, with your Jev key",
+  "tagging.using.tagging-model": "Using {model}, your {provider} key's tagging model",
+  "tagging.using.quick-model": "Using {model}, your {provider} key's quick model",
+  "tagging.using.answers-model": "Using {model}, your {provider} model for Answers",
+  "tagging.using.plan": "Using {model}, through your ChatGPT plan",
+  "tagging.using.decision-models": "Using the local decision models on this computer ({model})",
+  "tagging.using.local-chat": "Using {model}, on this computer",
+  "tagging.using.none":
+    "No model to tag with yet: set up an AI model, or install Tev1 in Ollama. Documents wait until then.",
+  "tagging.group.plan": "ChatGPT plan",
+  "tagging.group.local": "On this computer",
+  "tagging.label.good": "Good for tagging",
+  "tagging.label.decision": "Local decision model",
+  "tagging.cost.free": "Free, on this computer",
+  "tagging.cost.plan": "Uses your ChatGPT plan",
+  "tagging.cost.unknown": "Cost per 100 Documents unknown",
+  "tagging.cost.underCent": "Under 1¢ per 100 Documents",
+  "tagging.cost.cents": "About {amount}¢ per 100 Documents",
+  "tagging.cost.dollars": "About {dollars} per 100 Documents",
+  "tagging.cost.underYuan": "Under ¥0.01 per 100 Documents",
+  "tagging.cost.yuan": "About ¥{amount} per 100 Documents",
+  "tagging.decision.auto": "Tev1 and Clef-Flash, picked per Document",
+  "tagging.other": "Other model…",
+  "tagging.other.hint": "A model the list doesn't have, by its name",
+  "tagging.other.decision": "{model}, a local decision model",
+  "tagging.other.auto": "Local decision models, picked per Document · Ollama",
+  "tagging.other.save": "Use this model",
+  "tagging.organize.ask": "Organize asks in the Library before it first uses a model.",
+  "tagging.organize.with": "Organize uses {model}, as you chose in the Library.",
+  "tagging.organize.same": "Organize uses this model too.",
+  "tagging.localMode":
+    "“Keep everything on this computer” is on, so only models on this computer tag your Documents.",
+  "tagging.plan":
+    "Uses your ChatGPT plan, one Document at a time, so it doesn't use up what you chat with. If the plan's limit is reached, tagging waits for it to reset.",
+  "tagging.plan.local": "To keep your plan for chatting, tag on this computer instead.",
+  "tagging.plan.useLocal": "Use {model}",
+  "tagging.plan.paused": "Your ChatGPT plan's limit is reached: tagging goes on at {time}.",
+  "tagging.review.marked":
+    "This model says how likely each Tag is, and marks the ones it isn't sure of for you to review.",
+  "tagging.review.kept":
+    "This model doesn't say how sure it is, so every Tag it adds is kept. Remove any you don't want.",
+  "status.taggingPaused": "Tagging waits for your ChatGPT plan",
+  "status.taggingPaused.full":
+    "Your ChatGPT plan's limit is reached, so tagging waits for it to reset, then goes on by itself.",
   "jev.form.sends": "Document text for Tags goes to Jev when it tags your Documents.",
 
   "settings.title": "Settings",
@@ -1646,6 +1692,7 @@ export const en = {
   "providers.kind.chatgpt": "ChatGPT plan",
 
   "providers.kind.claude-account": "Claude account",
+  "providers.kind.copilot": "GitHub Copilot plan",
   "providers.form.label": "Service",
   "providers.form.apiKey": "API key",
   "providers.form.apiKeyOptional": "API key (optional)",
@@ -1831,6 +1878,25 @@ export const en = {
   "claudeAccount.page.success.body": "You can close this tab and go back to IncarnaMind.",
   "claudeAccount.page.failure.title": "The Claude sign-in didn't work",
   "claudeAccount.page.failure.body": "Close this tab and try again in IncarnaMind.",
+  "copilot.wayBack.signIn": "Sign in with GitHub",
+  "copilot.problem.signInCancelled": "GitHub sign-in cancelled: nothing was kept",
+  "copilot.problem.signedOut": "You're not signed in to GitHub Copilot",
+  "copilot.problem.signInExpired": "Your GitHub sign-in has expired",
+  "copilot.problem.refused": "GitHub didn't let IncarnaMind use your Copilot plan",
+  "copilot.problem.noPlan": "Your GitHub account has no Copilot plan",
+  "copilot.problem.policyBlocked": "Your organization doesn't allow this app",
+  "copilot.problem.modelUnavailable": "GitHub Copilot doesn't offer this model to IncarnaMind",
+  "copilot.problem.planLimit": "Your Copilot plan's usage limit is reached",
+  "copilot.problem.rateLimited": "GitHub Copilot asked to slow down for a while",
+  "copilot.signIn.codeExpired": "The code expired",
+  "copilot.signIn.declined": "You declined on GitHub's page",
+  "copilot.signIn.unreachable": "GitHub couldn't be reached",
+  "copilot.signIn.serviceError": "GitHub had a problem signing you in",
+  "copilot.signIn.unavailable": "This version doesn't offer that way to sign in",
+  "copilot.signIn.secretStorage": "This computer can't keep the sign-in safely",
+  "copilot.signIn.failed": "The GitHub sign-in didn't work",
+  "copilot.problem.unexpectedResponse":
+    "GitHub Copilot answered in a way IncarnaMind didn't expect",
   "claudeAccount.problem.signInCancelled": "Claude sign-in cancelled: nothing was kept",
   "claudeAccount.problem.signedOut": "You're not signed in to Claude",
   "claudeAccount.problem.signInExpired": "Your Claude sign-in has expired",
@@ -1839,10 +1905,11 @@ export const en = {
   "claudeAccount.problem.planLimitUntil": "Your Claude plan's usage limit is reached until {time}",
   "claudeAccount.problem.unexpectedResponse": "Claude answered in a way IncarnaMind didn't expect",
   "claudeAccount.wayBack.signIn": "Sign in with Claude",
-  "claudeAccount.wayBack.signInAgain": "Sign in again",
-  "claudeAccount.wayBack.useAnotherModel": "Use another model",
-  "claudeAccount.wayBack.pasteApiKey": "Paste an API key instead",
-  "claudeAccount.wayBack.useClaudeCode": "Use Claude Code",
+  "signInRoute.wayBack.tryAgain": "Try again",
+  "signInRoute.wayBack.signInAgain": "Sign in again",
+  "signInRoute.wayBack.useAnotherModel": "Use another model",
+  "signInRoute.wayBack.pasteApiKey": "Use an API key instead",
+  "signInRoute.wayBack.useClaudeCode": "Use Claude Code",
   "chatgpt.welcome.title": "You're using your ChatGPT plan",
   "chatgpt.welcome.body":
     "Questions you ask in IncarnaMind with a ChatGPT model now use your ChatGPT plan. You can see and limit this in ChatGPT's settings.",
@@ -2071,6 +2138,9 @@ export const en = {
   "privacy.traffic.claude-sign-in": "Sign in with Claude",
   "privacy.traffic.claude-sign-in.description":
     "When you sign in with your Claude account, IncarnaMind signs you in with Anthropic and renews the sign-in. Questions asked with your plan are the chat flow above.",
+  "privacy.traffic.copilot-sign-in": "Sign in with GitHub for Copilot",
+  "privacy.traffic.copilot-sign-in.description":
+    "When you sign in with GitHub for Copilot, IncarnaMind signs you in with GitHub, renews the sign-in and reads the models your plan offers. Questions asked with your plan are the chat flow above.",
   "privacy.traffic.remote-connectors": "Remote Connectors and their sign-in",
   "privacy.traffic.remote-connectors.description":
     "IncarnaMind connects to your remote Connectors' servers to list their Tools, and to the sign-in services they name to sign you in and renew the sign-in. What their Tools are sent is the Connectors flow above.",
@@ -2915,7 +2985,6 @@ export const en = {
   "export.failed.notAllowed": "you haven't allowed new files in “{folder}”, a Linked folder",
   "export.changeLocation": "Change output location…",
   "export.allow": "Allow",
-  "export.done": "Saved {name}",
   "export.doneIn": "Saved “{name}” in {folder}",
   "export.changeFolder": "Change folder…",
   "export.parts.separator": ", ",
@@ -2962,6 +3031,7 @@ export const en = {
     "Contradicted: your Documents give {shown}, and the sentence says {stated}.",
   "export.comment.sentence.contradicted.plain": "Contradicted by your Documents.",
   "export.comment.sentence.unsupported": "Unsupported: nothing in your Documents says this.",
+  "export.comment.sentence.citedCaseUnchecked": "Cited case not checked: not in the Documents.",
   "export.comment.sentence.unsupported.folder": "Unsupported: nothing in “{folder}” says this.",
   "export.comment.sentence.unsupported.differs":
     "Unsupported: your Documents say something different (“{quote}”, {source})",
