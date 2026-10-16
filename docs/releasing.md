@@ -39,8 +39,8 @@ An unsigned macOS build can't update itself: IncarnaMind tells the user a new ve
 
 When the `SIGNPATH_API_TOKEN` secret exists, the Release workflow has [SignPath](https://about.signpath.io) sign the Windows app, and then the installer built from it:
 
-1. electron-builder packages the app into `dist/win-unpacked`. The workflow uploads that folder as a workflow artifact and sends it to SignPath, which signs `IncarnaMind.exe` (artifact configuration `windows-app`).
-2. electron-builder builds the NSIS installer from the signed app (`--prepackaged`), and SignPath signs the installer (`windows-installer`).
+1. electron-builder packages the app and an installer, as it does without signing. The workflow uploads the app, `dist/win-unpacked`, as a workflow artifact and sends it to SignPath, which signs `IncarnaMind.exe` (artifact configuration `windows-app`).
+2. electron-builder builds the NSIS installer again, from the signed app (`--prepackaged`), and SignPath signs that installer (`windows-installer`). The first installer is built only because electron-builder writes the app's update settings (`resources/app-update.yml`) when it builds an installer, and not with `--dir`.
 3. `scripts/signedInstaller.ts` puts the signed installer in `dist/` and redoes what electron-builder worked out from the unsigned one: the blockmap, and the sha512 and size in `latest.yml`. Auto-update refuses an installer whose hash doesn't match.
 4. A step checks both files with `Get-AuthenticodeSignature`, and fails the job if either isn't signed and timestamped. The job's summary lists each file's signer.
 

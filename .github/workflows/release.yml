@@ -165,17 +165,13 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Package and publish (Windows)
-        if: runner.os == 'Windows' && steps.signpath.outputs.sign != 'true'
+        if: runner.os == 'Windows'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx electron-builder --win --x64 --publish never
 
-      - name: Package the Windows app for signing
-        if: steps.signpath.outputs.sign == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx electron-builder --win --x64 --dir --publish never
-
+      # The app as the unsigned build ships it: electron-builder writes its update settings
+      # (resources/app-update.yml) only when it builds the installer too, never with --dir.
       - name: Upload the Windows app for signing
         id: unsigned-app
         if: steps.signpath.outputs.sign == 'true'
@@ -184,6 +180,7 @@ jobs:
           name: windows-app-unsigned
           path: dist/win-unpacked/
           if-no-files-found: error
+          include-hidden-files: true
           retention-days: 1
           # A re-run of the job uploads it again.
           overwrite: true
@@ -204,7 +201,7 @@ jobs:
           wait-for-completion-timeout-in-seconds: 7200
           output-artifact-directory: ${{ runner.temp }}/signed-app
 
-      - name: Package the Windows installer from the signed app
+      - name: Package the Windows installer again, from the signed app
         if: steps.signpath.outputs.sign == 'true'
         shell: bash
         env:
