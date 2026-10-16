@@ -6,7 +6,7 @@
  */
 import { describe, expect, test } from "vitest";
 import type { QuotedWords } from "../../src/core";
-import { quotedWordsIn } from "../../src/core/answers/quotedWords";
+import { quotedWordsIn, withoutQuotationMarks } from "../../src/core/answers/quotedWords";
 import {
   askAndFinish,
   citationsIn,
@@ -115,6 +115,62 @@ describe("Reading the words an Answer puts in quotation marks", () => {
 
   test("a stray mark doesn't take in the sentences after it", () => {
     expect(quotedWordsIn('A 5" pipe is fine [^1]. Then "it ended here [^2].')).toEqual([]);
+  });
+});
+
+describe("Taking quotation marks off words", () => {
+  const taken = (markdown: string, ...words: string[]) =>
+    withoutQuotationMarks(markdown, new Set(words));
+
+  test("only the words given lose their marks, in a paragraph, a heading and a table's cell", () => {
+    const markdown = [
+      "## The report says “training coverage reached 98%” [^1]",
+      "",
+      "报告称“培训覆盖率达到98%”[^1]，并写道“every site passed its audit”[^2]。",
+      "",
+      "| Claim | Where |",
+      "|:--|:--|",
+      '| "training coverage reached 98%" [^1] | p. 3 |',
+    ].join("\n");
+
+    expect(taken(markdown, "培训覆盖率达到98%", "training coverage reached 98%")).toBe(
+      [
+        "## The report says training coverage reached 98% [^1]",
+        "",
+        "报告称培训覆盖率达到98%[^1]，并写道“every site passed its audit”[^2]。",
+        "",
+        "| Claim | Where |",
+        "|:--|:--|",
+        "| training coverage reached 98% [^1] | p. 3 |",
+      ].join("\n"),
+    );
+  });
+
+  test("a quote across a line break keeps its lines, and code is left alone", () => {
+    const markdown = [
+      "It says “training coverage",
+      "reached 98%” [^1].",
+      "",
+      "```",
+      'say "training coverage reached 98%" [^1]',
+      "```",
+    ].join("\n");
+
+    expect(taken(markdown, "training coverage reached 98%")).toBe(
+      [
+        "It says training coverage",
+        "reached 98% [^1].",
+        "",
+        "```",
+        'say "training coverage reached 98%" [^1]',
+        "```",
+      ].join("\n"),
+    );
+  });
+
+  test("with no words given, nothing changes", () => {
+    const markdown = 'It says "training coverage reached 98%" [^1].';
+    expect(taken(markdown)).toBe(markdown);
   });
 });
 
