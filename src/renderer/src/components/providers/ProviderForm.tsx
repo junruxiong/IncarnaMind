@@ -29,6 +29,7 @@ import { errorMessage } from "../../errors";
 import { useLanguage, useT } from "../../i18n";
 import type { KeyRefusal } from "../../keyRefusals";
 import { useAppStore } from "../../store";
+import { MetaLine } from "../MetaLine";
 import { LineAction, type ProblemAction, ProblemMark } from "../ProblemLine";
 import {
   buttonClass,
@@ -757,11 +758,10 @@ export function TestResult({
   const line = authLine ?? t(testErrorKey(result.error.kind), { model: model ?? "" });
   return (
     <div data-testid="connection-test" role="alert" className={errorTextClass}>
-      <p>
-        <ProblemMark />
-        {line}
-        {action && <LineAction action={action} afterStop={/[。！？]$/.test(line)} />}
-      </p>
+      <div className="flex items-baseline">
+        <ProblemMark className="mr-1.5 shrink-0 translate-y-0.5" />
+        <MetaLine parts={[line, action && <LineAction action={action} />]} />
+      </div>
       {/* The provider's own words help with its errors. */}
       {result.error.message && (
         <p className="mt-1 text-[12px] leading-[18px] break-words text-ink-meta">
