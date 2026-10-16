@@ -2,7 +2,6 @@ import type { Language } from "../core/language";
 import { formatDate, formatShortDate } from "./dates";
 import type { Translate } from "./locations";
 
-/** How many characters of an address the card keeps; the middle of a longer one goes. */
 const CARD_ADDRESS_LENGTH = 40;
 
 /** `text` cut in the middle to `max` characters, ended and joined by "…": a web address keeps its site and its page. */

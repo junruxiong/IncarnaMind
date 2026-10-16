@@ -13,7 +13,7 @@ export interface CaseCitation {
   cite: string;
 }
 
-/** Where a citation is in the text it was found in: from its name or citation to its court and year. */
+/** Its span in the text, from the word that introduces it to its court and year, for a sentence break inside it to be mended (`sentenceSpans`). */
 export interface CitedCase extends CaseCitation {
   from: number;
   to: number;
