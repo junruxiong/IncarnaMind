@@ -658,7 +658,12 @@ function MindEditorView({
         {!readOnly && <TableMenu editor={editor} />}
         <FootnoteArea editor={editor} citationView={citationView} />
         {(style !== "numbered" || styleChoice.bibliography) && (
-          <ReferencesBlock mindId={mindId} editor={editor} readOnly={readOnly} />
+          <ReferencesBlock
+            mindId={mindId}
+            editor={editor}
+            readOnly={readOnly}
+            byDefault={styleChoice.chosen === null && style !== "numbered"}
+          />
         )}
         {!readOnly &&
           styleChoice.chosen === null &&

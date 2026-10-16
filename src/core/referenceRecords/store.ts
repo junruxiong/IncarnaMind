@@ -9,7 +9,7 @@
  *   earlier import gave, never what the User edited or Look up found.
  */
 import { randomUUID } from "node:crypto";
-import { emptyReferenceFields, isEmptyValue } from "../../shared/references";
+import { emptyReferenceFields, fieldsToCheck, isEmptyValue } from "../../shared/references";
 import {
   type ReferenceField,
   type ReferenceFields,
@@ -212,6 +212,24 @@ export function editReference(
     return changed.length > 0;
   });
   return changed;
+}
+
+/**
+ * The User checked what reading the file gave (`fieldsToCheck`): those fields become theirs,
+ * with their values as they are. Returns the fields that did.
+ */
+export function confirmReference(db: Database, documentId: string, at: string): ReferenceField[] {
+  const record = referenceOf(db, documentId);
+  if (!record) return [];
+  const fields = fieldsToCheck(record);
+  change(db, documentId, at, (stored) => {
+    for (const field of fields) {
+      const current = stored[field];
+      if (current) stored[field] = { value: current.value, source: "user" };
+    }
+    return fields.length > 0;
+  });
+  return fields;
 }
 
 /**

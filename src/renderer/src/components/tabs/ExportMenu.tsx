@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { type DocumentKind, EXPORT_FORMATS, type ExportFormat } from "../../../../core/api";
 import type { CommandId } from "../../../../shared/commands";
+import { useMindFormatting } from "../../citationFormatting";
+import { styleLabel, useCitationStylePicker } from "../../citationStylePicker";
 import { shortcutLabel } from "../../commands/keymap";
 import { commands } from "../../commands/registry";
 import { FORMAT_LABELS, useExports } from "../../exports";
@@ -58,7 +60,11 @@ function Item({
     >
       {icon}
       <span className="flex-1">{label}</span>
-      {hint && <span className="pl-4 text-[13px] text-ink-meta">{hint}</span>}
+      {hint && (
+        <span title={hint} className="max-w-56 truncate pl-4 text-[13px] text-ink-meta">
+          {hint}
+        </span>
+      )}
     </button>
   );
 }
@@ -71,6 +77,8 @@ export function ExportMenu({ mindId }: { mindId: string }) {
   const saving = useExports(
     (state) => state.result?.mindId === mindId && state.result.state === "saving",
   );
+  // The style the export is written in, as the Mind's editor last formatted it.
+  const style = useMindFormatting(mindId)?.style;
   const { shown, more } = exportChoices(last);
 
   const run = (id: CommandId) => {
@@ -129,6 +137,17 @@ export function ExportMenu({ mindId }: { mindId: string }) {
               <ChevronRightLineIcon className="size-3.5 text-ink-meta" />
             </button>
             <div className={menuRuleClass} />
+            <Item
+              testId="export-citation-style-menu"
+              icon={<span aria-hidden="true" className="size-4 shrink-0" />}
+              label={t("export.citationStyle")}
+              {...(style && { hint: styleLabel(style, t) })}
+              onClick={() => {
+                const button = menu.buttonProps.ref.current;
+                menu.close();
+                useCitationStylePicker.getState().show(mindId, button);
+              }}
+            />
             <Item
               testId="export-options"
               icon={<SettingsLineIcon className="size-4 shrink-0 text-ink-meta" />}
