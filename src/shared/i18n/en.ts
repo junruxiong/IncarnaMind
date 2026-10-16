@@ -1558,9 +1558,9 @@ export const en = {
   "setup.waiting": "Waiting for you to choose a model",
   "setup.chatgpt.use": "Use my ChatGPT plan",
   "setup.chatgpt.line":
-    "If you pay for ChatGPT Plus or Pro · No key needed · Your Questions, the Mind you're in, Passages from your Documents, and Document text for Tags go to OpenAI under your ChatGPT account.",
+    "If you pay for ChatGPT Plus or Pro · No key needed · Signing in lets OpenAI receive, under your ChatGPT account: {sends}.",
   "setup.chatgpt.line.china":
-    "If you pay for ChatGPT Plus or Pro (not in mainland China) · No key needed · Your Questions, the Mind you're in, Passages from your Documents, and Document text for Tags go to OpenAI under your ChatGPT account.",
+    "If you pay for ChatGPT Plus or Pro (not in mainland China) · No key needed · Signing in lets OpenAI receive, under your ChatGPT account: {sends}.",
   "setup.key.use": "Paste an API key",
   "setup.key.for": "From OpenAI, Anthropic, Google, DeepSeek and more, yours or your company's.",
   "setup.back": "Back",
@@ -1598,9 +1598,9 @@ export const en = {
   "providers.choice.local": "Stays on this computer",
   "providers.choice.apiKey": "An API key",
   "providers.choice.apiKey.body":
-    "OpenAI, Anthropic, Google, DeepSeek, Qwen, Kimi, GLM, Mistral, xAI, OpenRouter, SiliconFlow, or an OpenAI-compatible server. Your Question and the passages found for it are sent to that service.",
+    "OpenAI, Anthropic, Google, DeepSeek, Qwen, Kimi, GLM, Mistral, xAI, OpenRouter, SiliconFlow, or an OpenAI-compatible server. That service receives: {sends}.",
   "providers.choice.apiKey.firstRun.body":
-    "{providers}. More providers are in Settings. Your Question and the passages found for it are sent to that service.",
+    "{providers}. More providers are in Settings. That service receives: {sends}.",
   "providers.list.separator": ", ",
   "providers.list.last": "{rest} or {last}",
   "providers.kind.short.qwen": "Qwen",
@@ -1645,12 +1645,21 @@ export const en = {
   "providers.form.save": "Use this service",
   "providers.sends": "When you use it, {provider} receives:",
   "providers.sends.chat":
-    "your Questions, the Mind you're in, and matching passages with their Document names and pages",
+    "your Questions, the Mind you're in, matching passages with their Document names and pages, and the names of other Documents in scope",
   "providers.sends.checks": "each sentence you check",
   "providers.sends.suggestions": "the paragraph you pause on, for writing suggestions",
+  "providers.sends.edits": "the text you ask the assistant to change",
   "providers.sends.tagging":
-    "each Document's name, outline and short excerpts, to tag and file it (page images for scans with no text)",
-  "providers.sends.edits": "the text the assistant edits when you ask it to",
+    "each Document's name, outline and short excerpts, with your Folder and Tag names, to tag and file it (page images for scans with no text)",
+  "providers.sendsShort.chat":
+    "your Questions with the Mind you're in, matching passages and the names of Documents in scope",
+  "providers.sendsShort.checks": "sentences you check",
+  "providers.sendsShort.suggestions": "the paragraph you pause on",
+  "providers.sendsShort.edits": "text you ask the assistant to change",
+  "providers.sendsShort.tagging":
+    "Document names, outlines and excerpts with your Folder and Tag names, to tag and file them (page images for scans)",
+  "providers.sendsShort.separator": "; ",
+  "providers.sendsShort.last": "{rest}; and {last}",
   "providers.form.saving": "Saving…",
   "providers.form.moreShort": "More…",
   "providers.form.whereKey": "Where do I find it?",
@@ -1762,7 +1771,7 @@ export const en = {
 
   "chatgpt.title": "ChatGPT plan",
   "chatgpt.description":
-    "Use your ChatGPT Plus or Pro plan instead of an API key. Questions go to OpenAI under your ChatGPT account and count against your plan's limits.",
+    "Use your ChatGPT Plus or Pro plan instead of an API key. OpenAI receives, under your ChatGPT account: {sends}. It counts against your plan's limits.",
   "chatgpt.continue": "Continue with ChatGPT",
   "chatgpt.account.signedOut": "Not signed in.",
   "chatgpt.account.expired":
