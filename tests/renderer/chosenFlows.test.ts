@@ -50,8 +50,8 @@ describe("the lines that say what choosing a provider sends (ADR-0022)", () => {
     expect(translate("zh-CN", "providers.sendsLine", { provider: "OpenAI" })).toBe(
       "会把你的问题和文档内容发送给 OpenAI。",
     );
-    expect(translate("en", "providers.sendsDetails")).toBe("Details");
-    expect(translate("zh-CN", "providers.sendsDetails")).toBe("详情");
+    expect(translate("en", "details.label")).toBe("Details");
+    expect(translate("zh-CN", "details.label")).toBe("详情");
   });
 
   test.each([
