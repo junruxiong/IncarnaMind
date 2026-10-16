@@ -4034,6 +4034,7 @@ export const en = {
   "answer.addedToNew": "Made the Mind “{mind}” from this Answer",
   "answer.tableOpened": "Made the Mind “{mind}” from this table",
   "answer.table.open": "Open as a table",
+  "answer.table.openNth": "Open table {n} as a table",
   "answer.table.label": "Table",
   "answer.addTo": "Add to another Mind or a new Mind",
   "answer.addTo.label": "Add to",

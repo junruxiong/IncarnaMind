@@ -3827,6 +3827,7 @@ export const zhCN = {
   "answer.addedToNew": "已用这个回答新建 Mind“{mind}”",
   "answer.tableOpened": "已用这个表格新建 Mind“{mind}”",
   "answer.table.open": "以表格打开",
+  "answer.table.openNth": "以表格打开第 {n} 个表格",
   "answer.table.label": "表格",
   "answer.addTo": "添加到其他 Mind 或新建 Mind",
   "answer.addTo.label": "添加到",
