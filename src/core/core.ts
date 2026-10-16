@@ -3587,7 +3587,7 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     getMindStyle: async (mindId) => content.readSettings(minds.get(mindId).id, mindStyleOf),
     setMindStyle: async (mindId, style) => {
-      if (!isMindStyle(style)) throw new InvalidInputError("That isn't a font and text size.");
+      if (!isMindStyle(style)) throw new InvalidInputError({ key: "error.mindStyle.invalid" });
       const mind = writableMind(mindId);
       content.editSettings(mind.id, (mindSettings) => writeMindStyle(mindSettings, style));
       return content.readSettings(mind.id, mindStyleOf);
