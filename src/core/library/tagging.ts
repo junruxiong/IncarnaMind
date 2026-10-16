@@ -1,5 +1,5 @@
 /**
- * Which model tags and organizes Documents (#180): one choice for automatic
+ * Which model tags and organizes Documents: one choice for automatic
  * tagging and Organize, Automatic unless the User picks one by hand. Automatic
  * covers tagging only: Organize asks once in the Library and keeps the model
  * the User said yes to (`LibrarySettings.organizeWith`). Automatic picks from
@@ -58,7 +58,6 @@ const PICKED_FOR_TAGGING: ReadonlySet<AutomaticTaggingReason> = new Set([
 const sameChoice = (a: ChatModelChoice, b: ChatModelChoice) =>
   a.providerId === b.providerId && a.modelId === b.modelId;
 
-/** What Automatic tags with, and why. */
 export interface AutomaticTagging {
   classifier: TaggingClassifier;
   reason: AutomaticTaggingReason;
@@ -136,12 +135,9 @@ const decisionModelName = (model: string) =>
     : model.replace(/^tev1:(.+)$/i, (_, size: string) => `Tev1 ${size.toUpperCase()}`);
 
 export interface TaggingOptions {
-  /** The Tagging setting (`LibrarySettings.classifier`). */
   setting(): LibraryClassifier;
   chat: {
-    /** The saved chat providers. */
     list(): Promise<ChatProvider[]>;
-    /** The default model for Answers. */
     defaultModel(): ChatModelChoice | null;
     describeModel(choice: ChatModelChoice): DescribedModel | undefined;
     /** The quick-tasks model for Answers asked with this model (in local mode, a local one or none). */

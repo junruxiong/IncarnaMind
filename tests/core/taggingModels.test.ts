@@ -1,5 +1,5 @@
 /**
- * The models for the jobs that aren't Answers (#180): the quick-tasks model for
+ * The models for the jobs that aren't Answers: the quick-tasks model for
  * an Answer's search query, its translation and automatic tagging, the image
  * model for a scan's pages, and the one Tagging setting, Automatic unless the
  * User picks a model, which Organize uses too. Through the core's public

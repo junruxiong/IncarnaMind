@@ -500,7 +500,7 @@ describe("The providers of #178", () => {
   });
 });
 
-describe("Tagging models (#180)", () => {
+describe("Tagging models", () => {
   test("a provider tags with its quick-tasks model, except Mistral, whose tagging model is Mistral Small 4", () => {
     const tagging = CATALOG_PROVIDERS.filter((each) => each.roles.tagging !== undefined);
     expect(tagging.map((each) => [each.id, each.roles.tagging])).toEqual([
