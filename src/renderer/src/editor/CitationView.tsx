@@ -197,7 +197,7 @@ export function CitationView({
     setPinned(true);
     const place = placeOf();
     if (mindId && place !== null && groupsMerged()) pinCitation(mindId, place);
-    // "Open a check in the example", in Get started.
+    // Step 1 of the first open's steps, and step 3 of the steps in an empty Mind.
     useAppStore.getState().updateGettingStarted({ citationChecked: true });
     recordUsage({ event: "citation_opened", fields: { check: state.check } });
     if (quoteSaysSo(state.check)) openCited(true);
