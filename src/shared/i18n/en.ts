@@ -2806,7 +2806,7 @@ export const en = {
   "checkRecord.summary.exported": "Exported",
   "checkRecord.summary.folder": "Documents searched",
   "checkRecord.summary.allDocuments": "All Documents",
-  "checkRecord.summary.localMode": "Local mode when exported",
+  "checkRecord.summary.localMode": "“Keep everything on this computer” when exported",
   "checkRecord.summary.on": "On",
   "checkRecord.summary.off": "Off",
   "checkRecord.summary.models": "Models",
@@ -2937,6 +2937,9 @@ export const en = {
 
   "error.connector.notInDirectory": "That Connector isn't in the directory.",
   "error.document.notFound": "There is no such Document.",
+  "error.checkRecord.format": "The check record can be saved as PDF or CSV.",
+  "error.checkRecord.noPdf":
+    "This copy of IncarnaMind can't make PDFs. Save the check record as CSV instead.",
   "error.export.choice": "{name} must be true or false.",
   "error.export.theirChanges": "theirChanges must be “shown” or “accepted”.",
   "error.document.gone": "That Document no longer exists.",

@@ -18,7 +18,7 @@ import {
   type Mind,
 } from "../api";
 import { describeModel } from "../chatModelNames";
-import { InvalidInputError } from "../errors";
+import { InvalidInputError, TranslatableError } from "../errors";
 import { unifyIdeographs } from "../exports/pdfUnicode";
 import { safeFileName } from "../fileNames";
 import type { Language } from "../language";
@@ -70,7 +70,7 @@ export interface CheckRecordFile {
 
 function parseFormat(format: unknown): CheckRecordFormat {
   const known = CHECK_RECORD_FORMATS.find((each) => each === format);
-  if (!known) throw new InvalidInputError('The check record format must be "pdf" or "csv".');
+  if (!known) throw new InvalidInputError({ key: "error.checkRecord.format" });
   return known;
 }
 
@@ -122,7 +122,7 @@ export function createCheckRecord(deps: CheckRecordDependencies) {
           data: new TextEncoder().encode(renderCsv(record)),
         };
       }
-      if (!deps.printer) throw new Error("This copy of IncarnaMind can't make PDFs.");
+      if (!deps.printer) throw new TranslatableError({ key: "error.checkRecord.noPdf" });
       const printed = await deps.printer.print({
         language,
         paper: deps.paper(),

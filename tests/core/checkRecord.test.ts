@@ -340,7 +340,7 @@ describe("The check record as CSV", () => {
     expect(parseCsv(csv)[0]).toEqual(["Check record: Harbour notes"]);
     expect(summary.get("Exported")).toBe(NOW);
     expect(summary.get("Documents searched")).toBe("Harbours");
-    expect(summary.get("Local mode when exported")).toBe("Off");
+    expect(summary.get("“Keep everything on this computer” when exported")).toBe("Off");
     expect(summary.get("Models")).toBe("Claude Haiku 5.5 (Anthropic); local-model");
     expect(summary.get("Sentences")).toBe(
       "Supported 1; Unsupported 1; Not checked 1; Contradicted 1",
@@ -349,7 +349,7 @@ describe("The check record as CSV", () => {
 
     await setup.core.setLocalOnly(true);
     const on = readFileSync((await saveRecord(setup, "csv")).path, "utf8");
-    expect(summaryOf(on).get("Local mode when exported")).toBe("On");
+    expect(summaryOf(on).get("“Keep everything on this computer” when exported")).toBe("On");
   });
 
   test("a Mind in no Folder says it searched every Document; one never checked says so, and still has its header", async () => {
@@ -443,7 +443,9 @@ describe("The check record as PDF", () => {
     expect(body).toContain("Check record: Harbour notes");
     expect(body).toContain(formatDate(NOW, "en"));
     expect(body).toContain("Harbours");
-    expect(body).toContain('<th scope="row">Local mode when exported</th><td>On</td>');
+    expect(body).toContain(
+      '<th scope="row">“Keep everything on this computer” when exported</th><td>On</td>',
+    );
     expect(body).toContain("Claude Haiku 5.5 (Anthropic); local-model");
     expect(body).toContain("Sentences checked against the Documents (4)");
     expect(body).toContain("Citations (3)");
@@ -525,7 +527,7 @@ describe("Saving a check record", () => {
     const { core, mind } = await setUp();
     await expect(
       (core as Core).saveCheckRecord(mind.id, "docx" as CheckRecordFormat),
-    ).rejects.toThrow('The check record format must be "pdf" or "csv".');
+    ).rejects.toThrow("The check record can be saved as PDF or CSV.");
     await expect(core.saveCheckRecord(randomUUID(), "csv")).rejects.toThrow();
   });
 
