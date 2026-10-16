@@ -1472,7 +1472,11 @@ export const assistantAnswers = (window: Page) =>
  * assistant's conversation (#201); resolves with its Answer there once it is
  * written (the scripted model's, with `fakeChat`).
  */
-export async function askInAssistant(window: Page, question: string): Promise<Locator> {
+export async function askInAssistant(
+  window: Page,
+  question: string,
+  { timeout = 15_000 }: { timeout?: number } = {},
+): Promise<Locator> {
   const answers = assistantAnswers(window);
   const before = await answers.count();
   await window.keyboard.press("ControlOrMeta+j");
@@ -1483,9 +1487,20 @@ export async function askInAssistant(window: Page, question: string): Promise<Lo
   await expect(questions.last()).toContainText(question);
   await expect(answers).toHaveCount(before + 1);
   const answer = answers.last();
-  await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+  await expect(answer).toHaveAttribute("data-status", "done", { timeout });
   return answer;
 }
+
+/** Gives the Citations of an Answer in the assistant a check (#96 will produce them for real). */
+export const setCheck = (answer: Locator, patch: { check: string; verdict?: string | null }) =>
+  answer.getByTestId("assistant-answer-text").evaluate((dom, attributes) => {
+    const { view } = (dom as unknown as { editor: Editor }).editor;
+    view.state.doc.descendants((node, pos) => {
+      if (node.type.name !== "citation") return true;
+      view.dispatch(view.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, ...attributes }));
+      return false;
+    });
+  }, patch);
 
 /** The tiny MCP server the core tests use: `lookup_tide` is read-only, `book_boat` isn't. */
 const TIDE_SERVER = resolve(__dirname, "../tests/fixtures/mcp-server.mjs");
