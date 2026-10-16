@@ -28,6 +28,7 @@ import type { PictureLimits } from "./documents/web/pictures";
 import type { ChatGptPlanEndpoints } from "./providers/chatgpt/plan";
 import type { AnthropicOAuthConfig } from "./providers/claudeAccount/config";
 import type { EmbeddingModelFactory } from "./providers/embeddings";
+import type { LocalServers } from "./providers/localServers";
 import type { ChatModelFactory } from "./providers/models";
 import type { OllamaModels } from "./providers/ollamaModels";
 import type { RerankingModelFactory } from "./providers/rerank";
@@ -823,6 +824,8 @@ export interface CoreAdapters {
    * this computer's memory; tests pass a stub.
    */
   ollamaModels?: OllamaModels;
+  /** Looks for the servers of the presets on this computer. Tests pass a stand-in, so none is asked. */
+  localServers?: LocalServers;
   /**
    * Where the ChatGPT plan provider signs in and sends Questions. Defaults to
    * OpenAI's servers; tests point it at a local fake authorization server and API.

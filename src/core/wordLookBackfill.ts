@@ -18,6 +18,7 @@ import {
   type WordSource,
 } from "./api";
 import { nodesByPlace, type WordStructure } from "./documents/formats/docxImport";
+import { CONDITIONAL_FORMATTING_VERSION } from "./documents/formats/docxLook";
 
 /** The look's mark, and formatting the import reads with styles resolved. */
 const GIVEN_MARKS: ReadonlySet<string> = new Set([
@@ -103,10 +104,88 @@ function changesFor(element: Y.XmlElement, node: NodeJSON): LookChange[] | null 
   return changes;
 }
 
+const span = (value: unknown) => (typeof value === "number" ? value : 1);
+
+function looksByPosition(table: Y.XmlElement, node: NodeJSON): LookChange[] {
+  const rows = table.toArray();
+  const imported = node.content ?? [];
+  if (table.nodeName !== "table" || rows.length !== imported.length) return [];
+  const changes: LookChange[] = [];
+  const give = (element: Y.XmlElement, from: NodeJSON) => {
+    const key = from.attrs?.[WORD_LOOK_ATTRIBUTE];
+    if (typeof key === "string") changes.push({ kind: "attribute", element, value: key });
+  };
+  give(table, node);
+  for (const [index, row] of rows.entries()) {
+    const cells = row instanceof Y.XmlElement ? row.toArray() : [];
+    const importedCells = imported[index]?.content ?? [];
+    if (cells.length !== importedCells.length) return [];
+    for (const [at, cell] of cells.entries()) {
+      const from = importedCells[at];
+      if (
+        !(cell instanceof Y.XmlElement) ||
+        !from ||
+        cell.nodeName !== from.type ||
+        span(cell.getAttribute("colspan")) !== span(from.attrs?.colspan) ||
+        span(cell.getAttribute("rowspan")) !== span(from.attrs?.rowspan)
+      ) {
+        return [];
+      }
+      give(cell, from);
+    }
+  }
+  return changes;
+}
+
+const TOGGLES = ["bold", "italic", "underline", "strike"] as const;
+const CELLS = new Set(["tableCell", "tableHeader"]);
+
+type Delta = { insert: unknown; attributes?: Record<string, unknown> }[];
+
+// A look read before conditional formatting never gave these toggles, so export would write each one off.
+function conditionalToggles(paragraph: Y.XmlElement, node: NodeJSON): LookChange[] {
+  const cell = paragraph.parent;
+  if (!(cell instanceof Y.XmlElement) || !CELLS.has(cell.nodeName)) return [];
+  const imported = (node.content ?? []).filter((each) => each.type === "text" && each.text);
+  const runs = paragraph.toArray().flatMap((child) => (child instanceof Y.XmlText ? [child] : []));
+  const deltas = runs.map((run) => run.toDelta() as Delta);
+  const changes: LookChange[] = [];
+  for (const toggle of TOGGLES) {
+    const mark = imported[0]?.marks?.find((each) => each.type === toggle);
+    if (!mark || !imported.every((each) => each.marks?.some((m) => m.type === toggle))) continue;
+    if (deltas.some((delta) => delta.some((each) => each.attributes?.[toggle] !== undefined))) {
+      continue;
+    }
+    for (const [index, run] of runs.entries()) {
+      let at = 0;
+      for (const each of deltas[index] ?? []) {
+        const length = typeof each.insert === "string" ? each.insert.length : 1;
+        if (typeof each.insert === "string") {
+          changes.push({
+            kind: "marks",
+            text: run,
+            index: at,
+            length,
+            marks: { [toggle]: mark.attrs ?? {} },
+          });
+        }
+        at += length;
+      }
+    }
+  }
+  return changes;
+}
+
 const asImported = (element: Y.XmlElement, source: WordSource) =>
   wordFingerprint(element) === source.f || wordFingerprintBeforeLook(element) === source.f;
 
-export function planLook(doc: Y.Doc, blocks: Y.XmlFragment, structure: WordStructure): LookPlan {
+/** `previous`: the version of the look the Mind had, null for none. */
+export function planLook(
+  doc: Y.Doc,
+  blocks: Y.XmlFragment,
+  structure: WordStructure,
+  previous: number | null,
+): LookPlan {
   const byPlace = nodesByPlace(structure);
   const plan: LookPlan = { changes: [], given: 0, editedSinceImport: 0 };
   const given = new Set<Y.XmlElement>();
@@ -128,6 +207,10 @@ export function planLook(doc: Y.Doc, blocks: Y.XmlFragment, structure: WordStruc
         return;
       }
       plan.editedSinceImport++;
+      if (node?.type === "table") plan.changes.push(...looksByPosition(element, node));
+      if (node && (previous ?? 0) < CONDITIONAL_FORMATTING_VERSION) {
+        plan.changes.push(...conditionalToggles(element, node));
+      }
     }
     for (const child of element.toArray()) {
       if (child instanceof Y.XmlElement) look(child);
