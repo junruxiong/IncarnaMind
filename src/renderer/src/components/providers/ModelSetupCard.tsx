@@ -58,10 +58,20 @@ export function ModelSetupCard() {
   }, []);
   const running = ollama.status?.running;
   const card = useRef<HTMLElement>(null);
+  const previousView = useRef<View>(null);
   // It takes the composer's place, or opens from the steps card: either way the focus comes in.
   useEffect(() => {
-    card.current?.querySelector<HTMLButtonElement>("[data-setup-choice]:not(:disabled)")?.focus();
-  }, []);
+    if (view === null) {
+      const choice =
+        previousView.current === "key"
+          ? '[data-testid="setup-key"]'
+          : previousView.current === "local"
+            ? '[data-testid="way-local"]'
+            : "[data-setup-choice]:not(:disabled)";
+      card.current?.querySelector<HTMLButtonElement>(choice)?.focus();
+    }
+    previousView.current = view;
+  }, [view]);
 
   return (
     <section

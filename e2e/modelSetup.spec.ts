@@ -186,10 +186,11 @@ test("a newcomer pastes a key from the card in two clicks, picks Claude Sonnet 5
   }
 });
 
-test("the key step's title follows the company picked at once, and Another model… shows that company's example id, in English and Chinese", async () => {
+test("the key step follows the company picked and Back returns keyboard focus to Paste an API key, in English and Chinese", async () => {
   const { app, window } = await launchApp(dataDir);
   try {
     await setWindowSize(app, window, 1100, 900);
+    await acceptPlainTextKeys(window);
     const card = await askFirstQuestion(window);
     const title = card.getByTestId("provider-form-title");
     const form = card.getByTestId("provider-form");
@@ -210,7 +211,9 @@ test("the key step's title follows the company picked at once, and Another model
     await model.selectOption({ index: 0 });
     await expect(form.getByTestId("provider-model-text")).toHaveCount(0);
 
-    await card.getByTestId("setup-back").click();
+    await card.getByTestId("setup-back").focus();
+    await window.keyboard.press("Enter");
+    await expect(card.getByTestId("setup-key")).toBeFocused();
     await setLanguage(window, "zh-CN");
     await card.getByTestId("setup-key").click();
     // In Chinese the key step opens on DeepSeek, and says so until another company is picked.
@@ -222,6 +225,13 @@ test("the key step's title follows the company picked at once, and Another model
       "placeholder",
       "例如 claude-haiku-5-5",
     );
+    await card.getByTestId("setup-back").focus();
+    await window.keyboard.press("Enter");
+    await expect(card.getByTestId("setup-key")).toBeFocused();
+    await card.getByTestId("setup-other").press("Enter");
+    await card.getByTestId("way-local").press("Enter");
+    await card.getByTestId("setup-back").press("Enter");
+    await expect(card.getByTestId("way-local")).toBeFocused();
   } finally {
     await app.close();
   }
