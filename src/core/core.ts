@@ -3107,7 +3107,7 @@ export function createCore(adapters: CoreAdapters): Core {
     },
 
     previewMindExport: async (mindId, options) => mindExports.preview(mindId, options),
-    previewSharePage: (mindId) => mindExports.previewSharePage(mindId),
+    previewSharePage: (mindId, options) => mindExports.previewSharePage(mindId, options),
     setSharePageTextOnly: async (mindId, documentIds) => {
       if (!Array.isArray(documentIds) || documentIds.some((each) => typeof each !== "string")) {
         throw new InvalidInputError({ key: "error.export.textOnly" });

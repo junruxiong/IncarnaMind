@@ -16,10 +16,17 @@ const MAX_WIDTH = 1600;
 const WORKER_TIMEOUT_MS = 120_000;
 
 /**
- * About what a picture of a page weighs per pixel as WebP at the worker's quality, measured on a
- * text page and a scan: the sheet's size is an estimate, made without drawing.
+ * About what a picture weighs as WebP at the worker's quality, so the sheet can say the file's
+ * size without drawing: per pixel, by how much of it text covers (measured on text pages from
+ * sparse to dense); where the page has more than text, by its share of the saved picture's bytes.
+ * A scan's grain makes its picture weigh about what its share of the saved page does.
  */
-const BYTES_PER_PIXEL = 0.06;
+const BYTES_PER_PIXEL = { blank: 0.01, text: 0.34 };
+const WEBP_SHARE: Readonly<Record<DrawnPage["type"], number>> = {
+  "image/jpeg": 0.55,
+  "image/png": 0.35,
+};
+const SCAN_SHARE = 1.1;
 
 /** What the worker draws: part of a saved page, its quote washed or, contradicted, outlined. */
 export interface PictureJob {
@@ -31,6 +38,9 @@ export interface PictureJob {
   marks: PageBox[];
   tone: "wash" | "outline";
 }
+
+/** A picture the worker drew, or why it couldn't. */
+export type PictureDrawn = { data: Uint8Array } | { failed: string };
 
 export interface PicturePlan extends PictureJob {
   /** Citations whose plans share a key share a picture. */
@@ -67,6 +77,12 @@ export function planPicture(
   const width = Math.max(1, Math.round(area.width * scale));
   const height = Math.max(1, Math.round(area.height * scale));
   const tone = check === "contradicted" ? "outline" : "wash";
+  const drawn = width * height;
+  const covered = read.text.reduce((sum, run) => sum + overlap(run.box, area), 0);
+  const byText = drawn * (BYTES_PER_PIXEL.blank + (BYTES_PER_PIXEL.text * covered) / areaOf(area));
+  const saved = (page.data.length * drawn) / areaOf(wholeOf(page));
+  const estimate =
+    page.text.length === 0 ? saved * SCAN_SHARE : Math.max(byText, saved * WEBP_SHARE[page.type]);
   return {
     key: JSON.stringify([citedPageKey(attributes), area, marks, tone]),
     image: page.data,
@@ -76,7 +92,7 @@ export function planPicture(
     marks,
     tone,
     slide: kind === "slide",
-    bytes: Math.ceil(((width * height * BYTES_PER_PIXEL) / 3) * 4),
+    bytes: Math.ceil((estimate / 3) * 4),
   };
 }
 
@@ -103,6 +119,14 @@ function scannedText(page: DrawnPage, units: readonly UnitText[]): PageText[] {
       ];
     }),
   );
+}
+
+const areaOf = (box: PageBox) => Math.max(1, box.width * box.height);
+
+function overlap(a: PageBox, b: PageBox): number {
+  const width = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
+  const height = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
+  return Math.max(0, width) * Math.max(0, height);
 }
 
 const wholeOf = (page: DrawnPage): PageBox => ({
@@ -144,8 +168,8 @@ function cropAround(page: DrawnPage, marks: readonly PageBox[], pages: number): 
   return { x: left, y, width: right - left, height: Math.min(height, page.height) };
 }
 
-/** Draws the pictures in a worker, off the main thread, in order. */
-export function drawPictures(jobs: readonly PictureJob[]): Promise<Uint8Array[]> {
+/** Draws the pictures in a worker, off the main thread, in order; one that fails says why. */
+export function drawPictures(jobs: readonly PictureJob[]): Promise<PictureDrawn[]> {
   if (jobs.length === 0) return Promise.resolve([]);
   return new Promise((resolve, reject) => {
     const worker = startPictureWorker({ name: "incarnamind-share-pictures", workerData: jobs });
@@ -153,11 +177,11 @@ export function drawPictures(jobs: readonly PictureJob[]): Promise<Uint8Array[]>
       void worker.terminate();
       reject(new Error("Drawing the shared page's pictures took too long."));
     }, WORKER_TIMEOUT_MS);
-    worker.once("message", (result: { pictures?: Uint8Array[]; error?: string }) => {
+    worker.once("message", (result: { pictures?: PictureDrawn[] }) => {
       clearTimeout(timer);
       void worker.terminate();
       if (result.pictures?.length === jobs.length) resolve(result.pictures);
-      else reject(new Error(result.error ?? "The shared page's pictures weren't drawn."));
+      else reject(new Error("The shared page's picture worker gave back too few pictures."));
     });
     worker.once("error", (error) => {
       clearTimeout(timer);

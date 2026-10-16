@@ -68,12 +68,12 @@ import { unifyIdeographs } from "./pdfUnicode";
 import { renderPrintHtml } from "./printHtml";
 import {
   drawPictures,
-  type PictureJob,
+  type PictureDrawn,
   type PicturePlan,
   picturedKind,
   planPicture,
 } from "./sharedPictures";
-import { renderSharePage } from "./sharePage";
+import { renderSharePage, type SharePicture } from "./sharePage";
 import { isUnverified, numberCitations, packPages, renderSourcePack } from "./sourcePack";
 import { exportWordPatch } from "./wordPatch";
 import type { ReviewChoices } from "./wordReview";
@@ -253,10 +253,6 @@ export function createExports(deps: ExportsDependencies) {
     };
   };
 
-  /**
-   * A shared page numbers its Citations whatever the Mind's style, since its readers click a
-   * number for each; the Bibliography comes only where a Numbered Mind shows one.
-   */
   const shareBlocks = ({ bibliography, blocks, language, documents }: Prepared) =>
     bibliography
       ? addSources(blocks, { language, documents }, translate(language, "bibliography.title"))
@@ -307,6 +303,7 @@ export function createExports(deps: ExportsDependencies) {
     prepared: Prepared,
     blocks: readonly Block[],
     cards: ReadonlyMap<Footnote, CitationCard>,
+    pictures: readonly SharePicture[] = [],
   ) => {
     const { title, language, preview } = prepared;
     return new TextEncoder().encode(
@@ -318,9 +315,42 @@ export function createExports(deps: ExportsDependencies) {
         name: preview.fileName.slice(0, -".html".length),
         at: deps.now(),
         cards,
+        pictures,
         checkedLine: prepared.options.checkedLine,
       }),
     );
+  };
+
+  /**
+   * Draws each picture once, however many Citations show it. One that can't be drawn leaves its
+   * Citations their text cards, and the rest of the page is made all the same.
+   */
+  const drawShared = async (plans: ReadonlyMap<string, PicturePlan & { documentId: string }>) => {
+    let drawn: PictureDrawn[] = [];
+    try {
+      drawn = await drawPictures([...plans.values()]);
+    } catch (error) {
+      deps.log.error("export.sharePictures", {
+        pictures: plans.size,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+    const pictures: SharePicture[] = [];
+    const indexOf = new Map<string, number>();
+    [...plans].forEach(([key, plan], at) => {
+      const result = drawn[at];
+      if (!result) return;
+      if ("failed" in result) {
+        deps.log.warn("export.sharePicture", {
+          documentId: plan.documentId,
+          message: result.failed,
+        });
+        return;
+      }
+      indexOf.set(key, pictures.length);
+      pictures.push({ data: result.data, width: plan.width, height: plan.height });
+    });
+    return { pictures, indexOf };
   };
 
   /**
@@ -332,25 +362,24 @@ export function createExports(deps: ExportsDependencies) {
     const blocks = shareBlocks(prepared);
     const textOnly = new Set(deps.sharePageTextOnly(prepared.mindId));
     const entries = await shareCards(prepared, blocks);
-    const jobs = new Map<string, PictureJob>();
-    const pictured = (documentId: string | null) =>
-      documentId !== null && !textOnly.has(documentId);
+    const plans = new Map<string, PicturePlan & { documentId: string }>();
     for (const { documentId, plan } of entries) {
-      if (plan && pictured(documentId)) jobs.set(plan.key, plan);
+      if (plan && documentId !== null && !textOnly.has(documentId)) {
+        plans.set(plan.key, { ...plan, documentId });
+      }
     }
-    const drawn = await drawPictures([...jobs.values()]);
-    const pictures = new Map([...jobs.keys()].map((key, index) => [key, drawn[index]]));
+    const { pictures, indexOf } = await drawShared(plans);
     const cards = new Map<Footnote, CitationCard>();
-    for (const { footnote, documentId, card, plan } of entries) {
-      const data = plan && pictured(documentId) && pictures.get(plan.key);
+    for (const { footnote, card, plan } of entries) {
+      const picture = plan && plans.has(plan.key) ? indexOf.get(plan.key) : undefined;
       cards.set(
         footnote,
-        plan && data
+        plan && picture !== undefined
           ? {
               ...card,
               content: {
                 kind: "picture",
-                data,
+                picture,
                 width: plan.width,
                 height: plan.height,
                 slide: plan.slide,
@@ -360,11 +389,14 @@ export function createExports(deps: ExportsDependencies) {
           : card,
       );
     }
-    return renderShare(prepared, blocks, cards);
+    return renderShare(prepared, blocks, cards, pictures);
   };
 
-  const previewSharePage = async (mindId: unknown): Promise<SharePagePreview> => {
-    const prepared = prepare(mindId, { format: "share-page" });
+  const previewSharePage = async (mindId: unknown, options: unknown): Promise<SharePagePreview> => {
+    const prepared = prepare(mindId, {
+      ...(isRecord(options) ? options : {}),
+      format: "share-page",
+    });
     const blocks = shareBlocks(prepared);
     const textOnly = new Set(deps.sharePageTextOnly(prepared.mindId));
     const unnamed = translate(prepared.language, "export.unnamedDocument");

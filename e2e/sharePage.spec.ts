@@ -378,16 +378,20 @@ test("page pictures: the sheet says what goes in the file and updates as a Docum
   const pictureOf = (name: string) =>
     page
       .locator("section.card", { has: page.locator(".card-source", { hasText: name }) })
-      .locator(".card-picture img");
+      .locator(".card-picture svg");
   const sizes = savedPages(dataDir);
   for (const name of ["Tide Gauges", deck.replace(".pptx", "")]) {
     const picture = pictureOf(name);
     await expect(picture).toHaveCount(1);
-    await expect(picture).toHaveAttribute("src", /^data:image\/webp;base64,/);
-    const drawn = await picture.evaluate((image: HTMLImageElement) => [
-      image.naturalWidth,
-      image.naturalHeight,
-    ]);
+    // The card points at the page's one copy of the picture, which the browser decodes.
+    const drawn = await picture.evaluate(async (svg) => {
+      const id = svg.querySelector("use")?.getAttribute("href") ?? "";
+      const href = document.querySelector(id)?.getAttribute("href") ?? "";
+      const image = new Image();
+      image.src = href.startsWith("data:image/webp;base64,") ? href : "";
+      await image.decode();
+      return [image.naturalWidth, image.naturalHeight];
+    });
     const saved = sizes[name];
     if (!saved) throw new Error(`${name}'s page wasn't saved.`);
     if (name === "Tide Gauges") {
@@ -398,13 +402,24 @@ test("page pictures: the sheet says what goes in the file and updates as a Docum
       expect(drawn).toEqual([Math.min(saved.width, 1600), Math.round(saved.height * scale)]);
     }
   }
+  // Opened, the card draws the picture at its width.
+  const gaugesCard = page.locator("section.card", {
+    has: page.locator(".card-source", { hasText: "Tide Gauges" }),
+  });
+  const number = ((await gaugesCard.getAttribute("id")) ?? "").replace("card-", "");
+  await page.locator(`main a.cite[data-card="${number}"]`).click();
+  await expect(gaugesCard).toBeVisible();
+  const shown = await pictureOf("Tide Gauges").boundingBox();
+  const card = await gaugesCard.boundingBox();
+  expect(shown?.width ?? 0).toBeGreaterThan((card?.width ?? 0) / 2);
+  expect(shown?.height ?? 0).toBeGreaterThan(20);
   expect((await requestsMade(app)).filter((url) => !url.startsWith("file:"))).toEqual([]);
   await page.close();
 
   await setLanguage(window, "zh-CN");
   await openOptions(window, "导出选项");
   await expect(sheet.getByTestId("share-contents").locator("p").first()).toHaveText(
-    "文件中包含：来自 5 个文档的 5 段引文和 2 张页面截图。收到文件的人都能看到这些内容；文档本身不会包含在内。",
+    "文件中包含：来自 5 个文档的 5 处引文和 2 张页面截图。收到文件的人都能看到这些内容；文档本身不会包含在内。",
   );
   await app.close();
 });

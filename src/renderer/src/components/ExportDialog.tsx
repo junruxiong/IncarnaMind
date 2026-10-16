@@ -366,10 +366,14 @@ function ExportOptionsForm({ mind, onDone }: { mind: Mind; onDone(): void }) {
   const [textOnly, setTextOnly] = useState<Set<string> | null>(null);
   const wantsShared = format === "share-page";
 
+  const { includeQuestions, checkedLine } = draft["share-page"];
+  const theirChanges = draft.theirChanges ?? "shown";
+
   useEffect(() => {
     if (!wantsShared) return;
     let current = true;
-    core.previewSharePage(mind.id).then(
+    const options = { format: "share-page", includeQuestions, checkedLine, theirChanges } as const;
+    core.previewSharePage(mind.id, options).then(
       (preview) => {
         if (!current) return;
         setShared(preview);
@@ -386,7 +390,7 @@ function ExportOptionsForm({ mind, onDone }: { mind: Mind; onDone(): void }) {
     return () => {
       current = false;
     };
-  }, [mind.id, wantsShared]);
+  }, [mind.id, wantsShared, includeQuestions, checkedLine, theirChanges]);
 
   // How many Questions the Mind has, which a deliverable leaves out unless asked: said under its
   // switch; and how many Citations a source pack would hold, since with none it says so.

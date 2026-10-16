@@ -39,10 +39,10 @@ export type CardContent =
   | { kind: "cells"; columns: string[]; rows: { label: string; cells: CardCell[] }[] }
   | { kind: "lines"; lines: { time: string; speaker: string | null; runs: CardRun[] }[] }
   | { kind: "quote"; text: string; scan: boolean }
-  /** WebP, in pixels twice its size on the page. */
+  /** The page's `picture`, in pixels twice its size on the page. */
   | {
       kind: "picture";
-      data: Uint8Array;
+      picture: number;
       width: number;
       height: number;
       slide: boolean;
