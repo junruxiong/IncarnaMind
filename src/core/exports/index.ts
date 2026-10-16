@@ -38,8 +38,11 @@ import {
   type Mind,
   type MindExport,
   type MindExportPreview,
+  type SharedDocument,
+  type SharePagePreview,
   WORD_CHANGE_ID,
 } from "../api";
+import { citedPageKey } from "../citedPages";
 import { InvalidInputError, isRecord } from "../errors";
 import { safeFileName } from "../fileNames";
 import type { Language } from "../language";
@@ -63,6 +66,13 @@ import { exportLabels } from "./labels";
 import { renderMarkdown } from "./markdown";
 import { unifyIdeographs } from "./pdfUnicode";
 import { renderPrintHtml } from "./printHtml";
+import {
+  drawPictures,
+  type PictureJob,
+  type PicturePlan,
+  picturedKind,
+  planPicture,
+} from "./sharedPictures";
 import { renderSharePage } from "./sharePage";
 import { isUnverified, numberCitations, packPages, renderSourcePack } from "./sourcePack";
 import { exportWordPatch } from "./wordPatch";
@@ -95,6 +105,7 @@ export interface ExportsDependencies {
    * ../documents): what a web page to share's card shows a part of. Empty once it is gone.
    */
   citedUnits(citation: Partial<CitationAttributes>): UnitText[];
+  sharePageTextOnly(mindId: string): string[];
   /** Prints a PDF; null where this copy can't. */
   printer: Printer | null;
   /** The paper a PDF is printed on, which goes by the computer's region (`paperFor`). */
@@ -246,38 +257,159 @@ export function createExports(deps: ExportsDependencies) {
    * A shared page numbers its Citations whatever the Mind's style, since its readers click a
    * number for each; the Bibliography comes only where a Numbered Mind shows one.
    */
-  const sharePage = async (prepared: Prepared): Promise<string> => {
-    const { title, language, documents, preview } = prepared;
-    const blocks = prepared.bibliography
-      ? addSources(
-          prepared.blocks,
-          { language, documents },
-          translate(language, "bibliography.title"),
-        )
-      : prepared.blocks;
+  const shareBlocks = ({ bibliography, blocks, language, documents }: Prepared) =>
+    bibliography
+      ? addSources(blocks, { language, documents }, translate(language, "bibliography.title"))
+      : blocks;
+
+  const unitsOf = (attributes: Partial<CitationAttributes>) =>
+    deps.citedUnits({
+      ...attributes,
+      documentId:
+        citationState(attributes, deps.liveDocuments()).documentId ?? attributes.documentId ?? null,
+    });
+
+  const shareCards = async (prepared: Prepared, blocks: readonly Block[]) => {
+    const { language, documents } = prepared;
     const t: Translate = (key, params) => translate(language, key, params);
     const kept = deps.keptCitationTexts();
-    const cards = new Map<Footnote, CitationCard>();
+    const pages = new Map<string, DrawnPage | null>();
+    const cards: {
+      footnote: Footnote;
+      documentId: string | null;
+      card: CitationCard;
+      plan: PicturePlan | null;
+    }[] = [];
     for (const footnote of footnotesIn(blocks, { inFootnotes: false })) {
       const attributes = prepared.attributesOf.get(footnote) ?? {};
-      cards.set(footnote, citationCard(attributes, { documents, kept, units: deps.citedUnits, t }));
+      const card = citationCard(attributes, { documents, kept, units: deps.citedUnits, t });
+      const key =
+        picturedKind(attributes) && card.content.kind !== "missing" && citedPageKey(attributes);
+      let plan: PicturePlan | null = null;
+      if (key) {
+        if (!pages.has(key)) pages.set(key, await deps.citedPage(attributes));
+        const page = pages.get(key);
+        plan = page
+          ? planPicture(
+              page,
+              attributes,
+              card.check,
+              page.text.length > 0 ? [] : unitsOf(attributes),
+            )
+          : null;
+      }
+      cards.push({ footnote, documentId: attributes.documentId ?? null, card, plan });
     }
-    return renderSharePage({
-      title,
-      blocks: await withPictures(blocks, language, deps),
-      labels: exportLabels(language),
-      language,
-      name: preview.fileName.slice(0, -".html".length),
-      at: deps.now(),
-      cards,
-      checkedLine: prepared.options.checkedLine,
-    });
+    return cards;
+  };
+
+  const renderShare = async (
+    prepared: Prepared,
+    blocks: readonly Block[],
+    cards: ReadonlyMap<Footnote, CitationCard>,
+  ) => {
+    const { title, language, preview } = prepared;
+    return new TextEncoder().encode(
+      renderSharePage({
+        title,
+        blocks: await withPictures(blocks, language, deps),
+        labels: exportLabels(language),
+        language,
+        name: preview.fileName.slice(0, -".html".length),
+        at: deps.now(),
+        cards,
+        checkedLine: prepared.options.checkedLine,
+      }),
+    );
+  };
+
+  /**
+   * A web page to share: its Citations numbered as in Numbered whatever the Mind's style, since
+   * its readers click a number for each, with the Bibliography only where a Numbered Mind shows
+   * one. A Document the User keeps as text gives its Citations no pictures.
+   */
+  const sharePage = async (prepared: Prepared): Promise<Uint8Array> => {
+    const blocks = shareBlocks(prepared);
+    const textOnly = new Set(deps.sharePageTextOnly(prepared.mindId));
+    const entries = await shareCards(prepared, blocks);
+    const jobs = new Map<string, PictureJob>();
+    const pictured = (documentId: string | null) =>
+      documentId !== null && !textOnly.has(documentId);
+    for (const { documentId, plan } of entries) {
+      if (plan && pictured(documentId)) jobs.set(plan.key, plan);
+    }
+    const drawn = await drawPictures([...jobs.values()]);
+    const pictures = new Map([...jobs.keys()].map((key, index) => [key, drawn[index]]));
+    const cards = new Map<Footnote, CitationCard>();
+    for (const { footnote, documentId, card, plan } of entries) {
+      const data = plan && pictured(documentId) && pictures.get(plan.key);
+      cards.set(
+        footnote,
+        plan && data
+          ? {
+              ...card,
+              content: {
+                kind: "picture",
+                data,
+                width: plan.width,
+                height: plan.height,
+                slide: plan.slide,
+                scan: card.content.kind === "quote" && card.content.scan,
+              },
+            }
+          : card,
+      );
+    }
+    return renderShare(prepared, blocks, cards);
+  };
+
+  const previewSharePage = async (mindId: unknown): Promise<SharePagePreview> => {
+    const prepared = prepare(mindId, { format: "share-page" });
+    const blocks = shareBlocks(prepared);
+    const textOnly = new Set(deps.sharePageTextOnly(prepared.mindId));
+    const unnamed = translate(prepared.language, "export.unnamedDocument");
+    const entries = await shareCards(prepared, blocks);
+    const documents = new Map<string, SharedDocument & { keys: Set<string> }>();
+    for (const { footnote, documentId, plan } of entries) {
+      if (!documentId) continue;
+      let shared = documents.get(documentId);
+      if (!shared) {
+        const attributes = prepared.attributesOf.get(footnote) ?? {};
+        shared = {
+          documentId,
+          name: shownDocumentName(attributes, prepared.documents) || unnamed,
+          quotes: 0,
+          pictures: 0,
+          pictureBytes: 0,
+          textOnly: textOnly.has(documentId),
+          keys: new Set(),
+        };
+        documents.set(documentId, shared);
+      }
+      shared.quotes++;
+      if (plan && !shared.keys.has(plan.key)) {
+        shared.keys.add(plan.key);
+        shared.pictures++;
+        shared.pictureBytes += plan.bytes;
+      }
+    }
+    const text = await renderShare(
+      prepared,
+      blocks,
+      new Map(entries.map(({ footnote, card }) => [footnote, card])),
+    );
+    return {
+      documents: [...documents.values()].map(({ keys: _, ...shared }) => shared),
+      textBytes: text.length,
+    };
   };
 
   return {
     preview(mindId: unknown, options: unknown): MindExportPreview {
       return prepare(mindId, options).preview;
     },
+
+    previewSharePage,
 
     async export(mindId: unknown, options: unknown): Promise<MindExport> {
       const prepared = prepare(mindId, options);
@@ -288,8 +420,7 @@ export function createExports(deps: ExportsDependencies) {
       if (format === "source-pack") return sourcePack(prepared);
       if (format === "docx" && prepared.word) return exportIntoWord(prepared, prepared.word);
       if (format === "share-page" && prepared.options.citationCards) {
-        const data = new TextEncoder().encode(await sharePage(prepared));
-        return { ...preview, data, word: null };
+        return { ...preview, data: await sharePage(prepared), word: null };
       }
       const blocks =
         style.form !== "numbered"

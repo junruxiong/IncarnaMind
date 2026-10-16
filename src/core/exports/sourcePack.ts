@@ -139,7 +139,10 @@ function boxesOf(text: DrawnPage["text"], ranges: readonly PieceRange[]): PageBo
 }
 
 /** Where a Citation's quote is on its page, from the text saved with it; null if it isn't found there. */
-function quoteBoxes(page: DrawnPage, attributes: Partial<CitationAttributes>): PageBox[] | null {
+export function quoteBoxes(
+  page: DrawnPage,
+  attributes: Partial<CitationAttributes>,
+): PageBox[] | null {
   const { quote } = attributes;
   if (!quote) return null;
   const options = matchOptions(attributes);
