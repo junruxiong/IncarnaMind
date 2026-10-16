@@ -2651,6 +2651,7 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     setCountedAsEvidence: async (documentId, counted) =>
       documents.setCountedAsEvidence(documentId, counted),
+    setNotCited: async (documentId, notCited) => documents.setNotCited(documentId, notCited),
     getEmbeddingModel: async () => embeddingModel.status(),
     downloadEmbeddingModel: async () => embeddingModel.retry(),
     getTextRecognitionModel: async () =>
