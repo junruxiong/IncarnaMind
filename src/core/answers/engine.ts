@@ -111,6 +111,7 @@ import { retryFigures } from "./figureRetry";
 import { missingMarkerEvents, textEdits } from "./markerPlacement";
 import {
   datedDocumentsNote,
+  notCitedNote,
   SEARCH_QUERY_INSTRUCTIONS,
   searchQueryPrompt,
   TRANSLATE_QUERY_INSTRUCTIONS,
@@ -730,13 +731,16 @@ const recordsSchema = {
 
 /** Records from the model's JSON, kept only where they have the right shape. */
 function parseRecords(value: unknown): CitationRecordInput[] {
-  // Some models send the array as a JSON string.
+  // Some models send the array as a JSON string, or one record alone.
   if (typeof value === "string") {
     try {
       return parseRecords(JSON.parse(value));
     } catch {
       return [];
     }
+  }
+  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+    return parseRecords([value]);
   }
   if (!Array.isArray(value)) return [];
   return value.flatMap((item): CitationRecordInput[] => {
@@ -1274,6 +1278,7 @@ export function documentTools(
         // The dates are named from the Passages that fit, so never a Document the model wasn't handed.
         const notes = [
           datedDocumentsNote(result.text),
+          notCitedNote(result.text),
           unreadDocumentsNote(documents.unreadDocuments?.() ?? []),
         ];
         return [result.text, ...notes].filter((part) => part !== "").join("\n\n");

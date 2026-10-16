@@ -1711,6 +1711,15 @@ export const migrations: readonly Migration[] = [
     `,
   },
   {
+    version: 94,
+    description: "A Document the User keeps as their own workings: read, never cited (#897)",
+    sql: `
+      -- 1: Answers search and read the Document but never cite it, and checks never use it as
+      -- evidence; the User's choice, kept until they take it back. 0: cited as any Document.
+      ALTER TABLE documents ADD COLUMN not_cited INTEGER NOT NULL DEFAULT 0;
+    `,
+  },
+  {
     version: 95,
     description: "A web page keeps who saved it: the User, or a web search (#896)",
     // A page only the User saved can stand for a court decision's opinion in a check. Pages saved
