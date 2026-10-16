@@ -78,7 +78,7 @@ export function renderCsv(record: CheckRecord): string {
   const none = t("checkRecord.summary.none");
   const summary = [
     [t("checkRecord.title", { name: record.mind })],
-    [t("checkRecord.summary.exported"), record.exportedAt],
+    [t("checkRecord.summary.exportedUtc"), record.exportedAt],
     [t("checkRecord.summary.folder"), record.searched.join("; ") || none],
     [
       t("checkRecord.summary.localMode"),

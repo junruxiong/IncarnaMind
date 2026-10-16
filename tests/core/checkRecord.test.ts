@@ -7,7 +7,6 @@ import {
   type CheckRecordFormat,
   type CitationCheck,
   type ClaimCheckAttributes,
-  type Core,
   type Document,
   GENERATED_MARK,
 } from "../../src/core";
@@ -342,7 +341,7 @@ describe("The check record as CSV", () => {
 
     const summary = summaryOf(csv);
     expect(parseCsv(csv)[0]).toEqual(["Check record: Harbour notes"]);
-    expect(summary.get("Exported")).toBe(NOW);
+    expect(summary.get("Exported (UTC)")).toBe(NOW);
     expect(summary.get("Documents searched")).toBe("Harbours; All Documents");
     expect(summary.get("“Keep everything on this computer” when exported")).toBe("Off");
     expect(summary.get("Models")).toBe(
@@ -446,6 +445,7 @@ describe("The check record as CSV", () => {
     const csv = readFileSync(saved.path, "utf8");
     expect(parseCsv(csv)[0]).toEqual(["核对记录：Harbour notes"]);
     const summary = summaryOf(csv);
+    expect(summary.get("导出时间（UTC）")).toBe(NOW);
     expect(summary.get("搜索范围")).toBe("Harbours; 全部文档");
     expect(summary.get("AI 模型")).toBe(
       "Claude Haiku 5.5（Anthropic），1 次句子核对; local-model（在这台电脑上），2 次句子核对",
@@ -712,9 +712,9 @@ describe("The check record as PDF", () => {
 describe("Saving a check record", () => {
   test("refuses a format that isn't one, and a Mind that isn't there", async () => {
     const { core, mind } = await setUp();
-    await expect(
-      (core as Core).saveCheckRecord(mind.id, "docx" as CheckRecordFormat),
-    ).rejects.toThrow("The check record can be saved as PDF or CSV.");
+    await expect(core.saveCheckRecord(mind.id, "docx" as CheckRecordFormat)).rejects.toThrow(
+      "The check record can be saved as PDF or CSV.",
+    );
     await expect(core.saveCheckRecord(randomUUID(), "csv")).rejects.toThrow();
   });
 

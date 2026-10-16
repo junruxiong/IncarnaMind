@@ -25,7 +25,6 @@ export const FORMAT_LABELS: Readonly<Record<ExportFormat, MessageKey>> = {
   markdown: "export.format.markdown",
 };
 
-/** Each check record format's name, as the menus and ⌘K say it. */
 export const RECORD_FORMAT_LABELS: Readonly<Record<CheckRecordFormat, MessageKey>> = {
   pdf: "export.format.pdf",
   csv: "checkRecord.format.csv",
@@ -66,7 +65,6 @@ export const optionsFor = (
     : { format, theirChanges };
 };
 
-/** What an export makes: a Mind in a format, or the record of what was checked in it (#738). */
 export type ExportKind = ExportFormat | `check-record-${CheckRecordFormat}`;
 
 export const isCheckRecord = (kind: ExportKind): kind is `check-record-${CheckRecordFormat}` =>
@@ -115,11 +113,8 @@ export const useExports = create<{
   dismiss: () => set({ result: null }),
 }));
 
-/**
- * Starts an export of `kind`: the result line says "saving". Returns how to settle it, which
- * only a result still saving takes, as a newer export or a dismissal wins over a late answer;
- * null while the same Mind is still exporting, so a held ⇧⌘E makes one file.
- */
+// Null while the same Mind is still exporting, so a held ⇧⌘E makes one file; a newer export or a
+// dismissal wins over a late answer.
 function begin(mindId: string, kind: ExportKind): ((next: ExportResult | null) => void) | null {
   const { result } = useExports.getState();
   if (result?.mindId === mindId && result.state === "saving") return null;
@@ -139,7 +134,6 @@ const NO_CHECKS: SentenceChecksExported = {
   commented: false,
 };
 
-/** What a save says in the result line; null when the User didn't choose where new files go: nothing went wrong. */
 function savedResult(
   mindId: string,
   format: ExportKind,
@@ -168,6 +162,7 @@ function savedResult(
       folder: folderName(saved.linkedFolderPath),
     };
   }
+  // The User didn't choose where new files go: nothing was saved, and nothing went wrong.
   return null;
 }
 
@@ -223,10 +218,6 @@ export async function exportMind(
   }
 }
 
-/**
- * Saves the record of what was checked in a Mind (#738) into the Output location, as
- * `exportMind` does, in `format`; the result line says how it went.
- */
 export async function exportCheckRecord(
   mindId: string,
   format: CheckRecordFormat,
@@ -246,7 +237,6 @@ export async function exportCheckRecord(
   }
 }
 
-/** Exports as the result line's last try did: what its fixes (another folder, allowing a Linked folder) go on to do. */
 export function exportAgain(
   mindId: string,
   kind: ExportKind,

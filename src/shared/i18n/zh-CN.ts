@@ -2688,6 +2688,7 @@ export const zhCN = {
   "checkRecord.title": "核对记录：{name}",
   "checkRecord.summary.mind": "Mind",
   "checkRecord.summary.exported": "导出时间",
+  "checkRecord.summary.exportedUtc": "导出时间（UTC）",
   "checkRecord.summary.folder": "搜索范围",
   "checkRecord.summary.allDocuments": "全部文档",
   "checkRecord.summary.folderGone": "已删除的文件夹",
