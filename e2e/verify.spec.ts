@@ -227,3 +227,34 @@ test("a provider failure while finding the claims is worded like an Answer's, wi
   await expect(window.getByTestId("verify-problem")).toHaveCount(0);
   await app.close();
 });
+
+test("a check that fails says why in the interface language, and again in the other after a switch (#627)", async () => {
+  const running = await launch();
+  const { app, window } = running;
+  await useLocalChatModel(window);
+  await readyToVerify(running);
+  await setWindowSize(app, window, 1440, 900);
+  await verifyFromPlusMenu(window, "Verify a document…");
+  const line = window.getByTestId("verify-line");
+  await expect(line.getByTestId("verify-check")).toBeVisible();
+
+  // The core refuses the check as it does a Mind that verifies nothing: its sentence, and its wording after it.
+  await app.evaluate(({ ipcMain }) => {
+    ipcMain.removeHandler("core:verifyClaims");
+    ipcMain.handle("core:verifyClaims", () => {
+      const refused = new Error(
+        `This Mind doesn't verify a document.\n\u2063wording:${JSON.stringify({ key: "error.verify.notVerifying" })}`,
+      );
+      refused.name = "InvalidInputError";
+      throw refused;
+    });
+  });
+  await pointAndClick(window, line.getByTestId("verify-check"));
+  const problem = window.getByTestId("verify-problem");
+  await expect(problem).toContainText("Couldn't check: This Mind doesn't verify a document.");
+  await setLanguage(window, "zh-CN");
+  await expect(problem).toContainText("无法核对：这个 Mind 没有在核对文档。");
+  await setLanguage(window, "en");
+  await expect(problem).toContainText("Couldn't check: This Mind doesn't verify a document.");
+  await app.close();
+});
