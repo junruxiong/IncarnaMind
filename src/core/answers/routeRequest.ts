@@ -7,11 +7,13 @@
  * Words can't tell every request apart, so only the plain ones route: an
  * instruction, not a question, that names the User's own text ("this
  * paragraph", "my summary", "第二段") or where new text goes ("a summary
- * page", "add this to my notes", "加到我的笔记里"). A follow-up with no
- * object ("make it longer", "简单一点") is an edit only when the
- * conversation's last Answer changed a Mind (`followsAChange`); after a
- * question in the same request it is about the answer. "unclear" behaves as
- * an Answer always has: the model chooses, and its changes wait for the User.
+ * page", "add this to my notes", "加到我的笔记里"). Doubt anywhere after it
+ * ("Shorten my intro. Would that help?", "删掉第二段，可以吗") leaves it
+ * unclear. A follow-up with no object ("make it longer", "简单一点") is an
+ * edit only when the conversation's last Answer changed a Mind
+ * (`followsAChange`); after a question in the same request it is about the
+ * answer. "unclear" behaves as an Answer always has: the model chooses, and
+ * its changes wait for the User.
  */
 export type RequestKind = "answer" | "write" | "edit" | "unclear";
 
@@ -27,6 +29,10 @@ interface ClauseRead {
   kind: ClauseKind;
   asks: boolean;
   document: boolean;
+  own: boolean;
+  placed: boolean;
+  // "?", "would that help", "is that ok", "你觉得呢", "可以吗".
+  doubts: boolean;
 }
 
 const LEAD =
@@ -35,13 +41,15 @@ const POLITE = /^(?:can|could|would|will) you\s+(?:please\s+)?/;
 const ASKS =
   /^(?:what|what's|why|how|when|where|who|whom|which|whose|is|isn't|are|aren't|was|were|does|doesn't|do|don't|did|didn't|should|shall|may|might|must|has|have|had|would|could|can|will)\b/;
 const IDIOM =
-  /^(?:make sense of|cut to the chase|drop the jargon|correct me|update me|walk me through|fill me in|bring me up to speed|tell me|show me|give me|remind me)\b/;
+  /^(?:make sense of|make the case|cut to the chase|drop the jargon|correct me|update me|walk me through|fill me in|bring me up to speed|tell me|show me|give me|remind me)\b/;
 const REPLY =
   /\b(?:your|the|that|this)\s+(?:last\s+|previous\s+|first\s+)?(?:answer|reply|response|explanation)\b|\bwhat you (?:just\s+)?(?:said|wrote)\b|^(?:say|put) (?:that|it|this) (?:more |less )?(?:simply|differently|another way|in other words|in plain|plainly|clearly|briefly)/;
 const MORE_OF =
   /^(?:(?:a bit|a little|much|even|slightly|way)\s+)?(?:longer|shorter|simpler|clearer|tighter|briefer|more \p{L}+|less \p{L}+)(?:,?\s+(?:please|pls|again|still|then))?$/u;
 const CONTINUE = /^(?:continue|go on|keep going)(?:,?\s+please)?$/;
 const KEEP_IT = /^keep (?:it|this|that|them)\b/;
+const DOUBTS =
+  /\b(?:would|should|could) that\b|\bis that (?:ok|okay|alright|fine|right)\b|\bwhat do you think\b|\bdo you think\b|\bor would\b|\bor (?:keep|leave)\b|\bi (?:don't|do not) (?:get|understand)\b|\bif so\b/;
 
 const CREATE = "write|draft|compose|create|make|generate|produce|prepare|start";
 const PLACE_IT = "add|insert|append|put|save|copy|jot down|note down";
@@ -79,13 +87,18 @@ const PIECE =
 const ADD_SECTION =
   /^(?:add|insert|append)\s+(?:an?|another|one more|a new)\s+(?:[\p{L}\p{N}'’-]+\s+){0,3}(?:section|paragraph|heading|bullet|bullet points|list|table)\b/u;
 const NEW_MIND =
-  /\b(?:new|separate|another|fresh|an?)\s+(?:[\p{L}-]+\s+){0,2}(?:page|note|notes|mind|document|doc|handout|report|file)\b(?!\s+(?:to|in|into|inside)\s+(?!(?:an?|another|new)\b))|\b(?:make|take|write) notes\b/u;
+  /\b(?:new|separate|another|fresh|an?)\s+(?:[\p{L}-]+\s+){0,2}(?:page|note|notes|mind|document|doc|handout|report|file)\b|\b(?:make|take|write) notes\b/u;
+// "…to Project plan": a Mind the User has, by its name.
+const NAMES_A_MIND =
+  /\b(?:to|into|in)\s+[“"]?(?!(?:English|Chinese|French|German|Spanish|Japanese|Korean|Markdown|Word)\b)\p{Lu}/u;
 
 const ZH_LEAD = /^(?:请|麻烦你?|帮我|给我|帮忙|再|接着|然后|我想让你|那就|就|你)*/;
 const ZH_POLITE =
   /^你?(?:可以|能不能|能否|可不可以|能)(?:帮我|帮忙)?|(?<![更会很不太得])(?:可以|行|好)吗$/;
 const ZH_ASKS =
   /^(?:什么|为什么|怎么|怎样|如何|哪|谁|多少|是否|是不是|有没有)|[吗呢]$|会不会|是不是|要不要|好不好|对不对|行不行|有没有|对吗|怎么样$|如何$/;
+const ZH_DOUBTS =
+  /[吗呢吧]|你觉得|你看|是不是|会不会|还是|比较好|让我看看|能不能|可不可以|能否|如果是/;
 const ZH_REPLY = /刚才的回答|你的回答|上面的回答|这个回答|上一个回答|你刚才说的|你的解释/;
 const ZH_MORE_OF =
   /^(?:写得|改得|总结得|说得)?(?:再|更)?(?:长|短|正式|简洁|简单|清楚|详细|具体)(?:一点|一些|些)?(?:吧|啊)?$/;
@@ -105,6 +118,10 @@ const ZH_IS_CREATE = new RegExp(`^(?:${ZH_CREATE}|${ZH_PLACE_IT})$`);
 const ZH_DOCUMENT = /论文|文章|作者|原文|文中|这篇|这份文档|这份报告|文档的|报告的/;
 const ZH_OWN_NAMED =
   /这段|这一段|第[一二三四五六七八九十\d]+段|最后一段|这部分|这一部分|这句|这一句|我的(?:总结|笔记|段落|摘要|草稿|文章|报告)|选中的|(?:关于|有关)[^，。！？]{1,20}的部分/;
+// "第二段能不能删掉": the text first, then what to do with it.
+const ZH_TOPIC_EDIT = new RegExp(
+  `^(?:${ZH_OWN_NAMED.source})(?:能不能|可不可以|能否|帮我|请你?|给我)(?:${ZH_EDIT})`,
+);
 const ZH_BARE_OBJECT = /^把(?:它们?|这个|这些|其)$/;
 const ZH_BARE_REST =
   /^(?:一下|一点|一些|下|得[^，。！？]{0,6}|[长短]一?[点些]|成中文|成英文|为中文|为英文)?(?:吧|啊)?$/;
@@ -142,7 +159,7 @@ function englishImperative(rest: string, document: boolean): ClauseKind {
   if (!verb) return "none";
   if (INLINE.test(rest)) return "unclear";
   const own = !document && OWN_NAMED.test(rest.replace(IN_PLACE, " "));
-  if (IS_EXPLAIN.test(verb)) return own ? "unclear" : "answer";
+  if (IS_EXPLAIN.test(verb)) return "answer";
   if (IS_CREATE.test(verb) && (NEW_PAGE.test(rest) || PIECE.test(rest) || ADD_SECTION.test(rest)))
     return "write";
   if (/^summari[sz]e$/.test(verb)) return "answer";
@@ -158,14 +175,19 @@ function englishImperative(rest: string, document: boolean): ClauseKind {
 }
 
 function englishClause(clause: string, asked: boolean): ClauseRead {
-  const document = DOCUMENT.test(clause);
+  const read = {
+    document: DOCUMENT.test(clause),
+    own: OWN_NAMED.test(clause),
+    placed: INTO_PLACE.test(clause) || IN_PLACE.test(clause) || NEW_PAGE.test(clause),
+    doubts: asked || DOUBTS.test(clause),
+  };
   let rest = clause.replace(LEAD, "");
   const polite = POLITE.test(rest);
   if (polite) rest = rest.replace(POLITE, "").replace(LEAD, "");
-  else if (asked || ASKS.test(rest)) return { kind: "answer", asks: true, document };
-  const kind = englishImperative(rest, document);
-  if (!polite) return { kind, asks: false, document };
-  return { kind: kind === "answer" || kind === "none" ? "answer" : "polite", asks: true, document };
+  else if (asked || ASKS.test(rest)) return { ...read, kind: "answer", asks: true };
+  const kind = englishImperative(rest, read.document);
+  if (!polite) return { ...read, kind, asks: false };
+  return { ...read, kind: kind === "answer" || kind === "none" ? "answer" : "polite", asks: true };
 }
 
 function chineseImperative(clause: string, document: boolean): ClauseKind {
@@ -174,9 +196,9 @@ function chineseImperative(clause: string, document: boolean): ClauseKind {
   if (ZH_REPLY.test(clause)) return "answer";
   if (ZH_MORE_OF.test(clause)) return "follow-up";
   if (ZH_CONTINUE.test(clause)) return "continue";
-  if (!verb) return "none";
+  if (!verb) return ZH_TOPIC_EDIT.test(clause) && !document ? "edit" : "none";
   const own = ZH_OWN_NAMED.test(clause.replace(ZH_IN_PLACE, "")) && !document;
-  if (ZH_IS_EXPLAIN.test(verb)) return own ? "unclear" : "answer";
+  if (ZH_IS_EXPLAIN.test(verb)) return "answer";
   if (ZH_IS_CREATE.test(verb) && (ZH_PIECE.test(clause) || ZH_ADD_SECTION.test(clause)))
     return "write";
   if (ZH_IS_SUMMARISE.test(verb)) return "answer";
@@ -189,6 +211,12 @@ function chineseImperative(clause: string, document: boolean): ClauseKind {
 
 function chineseClause(clause: string, asked: boolean): ClauseRead {
   const document = ZH_DOCUMENT.test(clause);
+  const read = {
+    document,
+    own: ZH_OWN_NAMED.test(clause),
+    placed: ZH_INTO_PLACE.test(clause) || ZH_IN_PLACE.test(clause),
+    doubts: asked || ZH_DOUBTS.test(clause),
+  };
   let rest = clause.replace(ZH_LEAD, "");
   const polite = ZH_POLITE.test(rest);
   if (polite) {
@@ -197,28 +225,41 @@ function chineseClause(clause: string, asked: boolean): ClauseRead {
       .replace(ZH_LEAD, "")
       .replace(/[吗呢]$/, "");
   } else if (asked || ZH_ASKS.test(rest)) {
-    return { kind: "answer", asks: true, document };
+    return { ...read, kind: "answer", asks: true };
   }
   const kind = chineseImperative(rest, document);
-  if (!polite) return { kind, asks: false, document };
-  return { kind: kind === "answer" || kind === "none" ? "answer" : "polite", asks: true, document };
+  if (!polite) return { ...read, kind, asks: false };
+  return { ...read, kind: kind === "answer" || kind === "none" ? "answer" : "polite", asks: true };
 }
 
 const readClause = ({ text, asked }: { text: string; asked: boolean }): ClauseRead =>
   /\p{Script=Han}/u.test(text) ? chineseClause(text, asked) : englishClause(text, asked);
 
+const CHANGES: readonly ClauseKind[] = ["edit", "write", "follow-up", "continue"];
+
 export function routeRequest(
   question: string,
   { followsAChange }: { followsAChange: boolean },
 ): RequestRoute {
+  const reads = clausesOf(question).map(readClause);
   const kinds: ClauseKind[] = [];
-  let afterAQuestion = false;
-  for (const read of clausesOf(question).map(readClause)) {
+  let askedOfOwn = false;
+  let before = false;
+  for (const read of reads) {
+    const changes = CHANGES.includes(read.kind);
+    // "Is my intro too long? Shorten it" may hang on the answer.
+    if (askedOfOwn && changes) kinds.push("unclear");
     // "What does the abstract say? Translate it": "it" is the answer, or the Document.
-    kinds.push(afterAQuestion && read.kind !== "write" ? "answer" : read.kind);
-    afterAQuestion ||= read.asks || read.document || read.kind === "answer";
+    else if (before && changes && !(read.kind === "write" && read.placed)) kinds.push("answer");
+    else kinds.push(read.kind);
+    askedOfOwn ||= read.asks && read.own;
+    before ||= read.asks || read.document || read.kind === "answer";
   }
-  const kind: RequestKind = kinds.includes("edit")
+  // Doubted where it is asked for, or after ("Shorten my intro. Would that help?"), a change is
+  // the User's to decide.
+  const from = kinds.findIndex((kind) => CHANGES.includes(kind));
+  const doubted = from >= 0 && reads.slice(from).some((read) => read.doubts);
+  const asked: RequestKind = kinds.includes("edit")
     ? "edit"
     : kinds.includes("write")
       ? "write"
@@ -229,7 +270,10 @@ export function routeRequest(
           : kinds.some((each) => each === "follow-up" || each === "polite" || each === "unclear")
             ? "unclear"
             : "answer";
+  const kind = doubted && (asked === "edit" || asked === "write") ? "unclear" : asked;
   const newMind =
-    kind === "write" && (NEW_MIND.test(question.toLocaleLowerCase()) || ZH_NEW_MIND.test(question));
+    kind === "write" &&
+    !NAMES_A_MIND.test(question) &&
+    (NEW_MIND.test(question.toLocaleLowerCase()) || ZH_NEW_MIND.test(question));
   return { kind, newMind };
 }

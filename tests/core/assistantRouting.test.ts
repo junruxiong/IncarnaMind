@@ -217,7 +217,11 @@ describe("What each change's request records", { timeout: 30_000 }, () => {
 });
 
 describe("A second copy", { timeout: 30_000 }, () => {
-  const RISKS = "## Risks\n\nThe supplier is late.";
+  const RISKS = [
+    "## Risks",
+    "The supplier of the main part is three weeks late, and nobody has told us why.",
+    "The courier who takes the parts to the plant has raised its prices twice this year.",
+  ].join("\n\n");
 
   // protects=adding again a section the assistant wrote and that still waits is refused, the Mind keeps one, and the model is told to revise it with edit_mind, as it streams in and as it ends; fails_when=a second copy is written, or the model isn't told how to revise; no_claim=that a real model then revises.
   test.each([false, true])(
@@ -259,23 +263,32 @@ describe("A second copy", { timeout: 30_000 }, () => {
     },
   );
 
-  // protects=a section of new paragraphs goes in although its headings are those of the assistant's waiting text; fails_when=it is refused as a second copy for a heading alone; no_claim=none beyond protects.
-  test("isn't a section that only shares its headings: Paper B's “Key findings” go in beside Paper A's", async () => {
-    const paper = (name: string, finding: string) =>
-      `## ${name}\n\n### Key findings\n\n${name} finds that the tide ${finding}.`;
+  // protects=a second summary goes in beside the first though they share headings and short fixed lines, as the summarise Skill writes them; fails_when=it is refused as a second copy; no_claim=none beyond protects.
+  test("isn't a second summary that shares only headings and short lines with the first", async () => {
+    const summary = (name: string, claim: string) =>
+      [
+        `## ${name}`,
+        "### Key claims",
+        `${name} claims that ${claim}, in every harbour it measured over two years.`,
+        "### Methods",
+        "The Passages found don't describe the methods.",
+        "### Limitations",
+        "Not reported.",
+        "Not reported.",
+      ].join("\n\n");
     const model = scriptedModel((call): ScriptedReply => {
       if (called(call, "add_to_mind")) return { text: "Done." };
       const content = asked(call).includes("Paper B")
-        ? paper("Paper B", "falls")
-        : paper("Paper A", "rises");
+        ? summary("Paper B", "the tide falls faster in winter")
+        : summary("Paper A", "the tide rises faster at new moon");
       return { calls: [{ tool: "add_to_mind", input: { content } }] };
     });
     const { core, mind } = await setUp(model);
     const client = await connectToMind(core, mind.id);
-    const first = await askAssistant(core, { text: "add a section on Paper A", mindId: mind.id });
+    const first = await askAssistant(core, { text: "add a summary of Paper A", mindId: mind.id });
 
     const second = await askAssistant(core, {
-      text: "add a section on Paper B",
+      text: "add a summary of Paper B",
       mindId: mind.id,
       conversationId: first.conversationId,
     });
@@ -284,9 +297,8 @@ describe("A second copy", { timeout: 30_000 }, () => {
     expect(second.toolCalls.find((call) => call.tool === "add_to_mind")).toMatchObject({
       status: "done",
     });
-    expect(shownWithChanges(client).filter((line) => line.includes("Key findings"))).toEqual([
-      "+ Key findings",
-      "+ Key findings",
-    ]);
+    const shown = shownWithChanges(client);
+    expect(shown.filter((line) => line === "+ Key claims")).toHaveLength(2);
+    expect(shown.filter((line) => line === "+ Not reported.")).toHaveLength(4);
   });
 });

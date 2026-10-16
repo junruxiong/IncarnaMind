@@ -72,7 +72,7 @@ const REVIEWED: readonly Row[] = [
   ["Walk me through it", "answer"],
   ["Explain it again, more simply", "answer"],
   ["and the second one?", "answer"],
-  ["Make a list of the datasets", "answer"],
+  ["Make a list of the datasets", "unclear"],
   ["Put it in a table", "edit", "after a change"],
   ["Put it in a table", "unclear", "after no change"],
   ["Let's make the intro punchier", "edit"],
@@ -139,6 +139,30 @@ const REVIEWED: readonly Row[] = [
   ["这个结论对吗？改一下措辞会不会更好", "answer"],
   ["这篇论文的摘要说了什么？把它翻译成中文", "answer"],
   ["论文的结论是什么？把它缩短成一句话", "answer"],
+  ["Shorten my intro. Would that help?", "unclear"],
+  ["Remove the second paragraph. Or would that hurt the flow?", "unclear"],
+  ["Rewrite my intro or leave it as is, what do you think", "unclear"],
+  ["Delete the second paragraph, is that ok", "unclear"],
+  ["Cut the second paragraph or keep it", "unclear"],
+  ["Make the case for keeping my intro", "answer"],
+  ["Is this worth keeping? Add it to my notes if so.", "unclear"],
+  ["What does the paper argue? Write a short summary.", "answer"],
+  ["What's the paper's main finding? Write the summary.", "answer"],
+  ["What does the paper say about leverage? Rewrite my intro to match", "answer"],
+  ["Tell me if I should cut the second paragraph", "answer"],
+  ["Simplify the second paragraph for me, I don't get it", "unclear"],
+  ["把第二段删掉，你觉得呢", "unclear"],
+  ["删掉第二段，可以吗", "unclear"],
+  ["删掉第二段比较好还是保留比较好", "unclear"],
+  ["把这段改短一点，你看行吗", "unclear"],
+  ["把第二段改短，这样是不是更好", "unclear"],
+  ["缩短第二段，还是保留比较好", "unclear"],
+  ["把我的总结改短，可以吗", "unclear"],
+  ["把第二段翻译成英文让我看看", "unclear"],
+  ["第二段能不能删掉", "unclear"],
+  ["这篇论文讲了什么？写一份总结", "answer"],
+  ["第二段是不是太啰嗦了，精简一下", "unclear"],
+  ["告诉我要不要删掉第二段", "answer"],
 ];
 
 /** More of what Users ask, the eval's requests and Questions that sound like requests among them. */
@@ -183,9 +207,9 @@ const OURS: readonly Row[] = [
   ["能不能帮我把总结改长一些？", "unclear"],
   ["可以把第一段改短吗？", "unclear"],
   ["Draft an email to the board", "unclear"],
-  ["Clarify this paragraph", "unclear"],
-  ["Explain this paragraph", "unclear"],
-  ["Explain the second paragraph of my notes", "unclear"],
+  ["Clarify this paragraph", "answer"],
+  ["Explain this paragraph", "answer"],
+  ["Explain the second paragraph of my notes", "answer"],
   ["Could you translate it into Chinese?", "unclear"],
   ["make the summary section longer", "edit"],
   ["Shorten the summary", "edit"],
@@ -281,8 +305,8 @@ const OURS: readonly Row[] = [
   ["Do you think I should shorten my intro", "answer"],
   ["Let me know if my summary is too long", "answer"],
   ["Help me understand the method", "answer"],
-  ["Please explain why you changed my intro", "unclear"],
-  ["Expand on my second paragraph", "unclear"],
+  ["Please explain why you changed my intro", "answer"],
+  ["Expand on my second paragraph", "answer"],
   ["Elaborate on my notes", "answer"],
   ["Cut the second paragraph?", "answer"],
   ["Remove the second paragraph, or would that hurt the flow?", "answer"],
@@ -308,7 +332,7 @@ const OURS: readonly Row[] = [
   ["能帮我写一个总结页面吗", "unclear"],
   ["写得好吗", "answer"],
   ["删除这篇论文", "answer"],
-  ["这句话是什么意思？把它改简单一点", "answer"],
+  ["这句话是什么意思？把它改简单一点", "unclear"],
   ["为什么不把它写长一点？", "answer"],
   ["可以加到我的笔记里吗？", "unclear"],
   ["要加到笔记里吗？", "answer"],
@@ -326,7 +350,7 @@ const OURS: readonly Row[] = [
   ["Turn my notes into a table", "edit"],
   ["Help me shorten my intro", "edit"],
   ["Shorten the summary, please", "edit"],
-  ["改一下第二段吧", "edit"],
+  ["改一下第二段吧", "unclear"],
   ["把论文翻译成中文加到笔记里", "write"],
   ["Start a new page on tides", "write"],
   ["Turn this into a table", "edit", "after a change"],
@@ -352,16 +376,8 @@ describe("Routing everyday requests", () => {
     },
   );
 
-  // protects=a reviewed request for a change in a Mind is read as that change, or as unclear, never as the other change or an answer; fails_when=an edit reads as a write or the reverse; no_claim=how many are read as asked (reported with the pull request, not gated).
-  test.each(cases(REVIEWED, ["edit", "write"]))(
-    "$request reads as $kind or unclear (follows a change: $followsAChange)",
-    ({ request, kind, followsAChange }) => {
-      expect([kind, "unclear"]).toContain(routeRequest(request, { followsAChange }).kind);
-    },
-  );
-
-  // protects=each of our requests reads as it should: the User's own text named is an edit, where new text goes a write, a follow-up an edit only after a change, the rest answered or unclear; fails_when=one reads otherwise; no_claim=every wording a User may use.
-  test.each(cases(OURS, ["answer", "unclear", "edit", "write"]))(
+  // protects=each request reads as it should: the User's own text named is an edit, where new text goes a write, a follow-up an edit only after a change, anything doubted unclear, the rest answered; fails_when=one reads otherwise; no_claim=every wording a User may use.
+  test.each(cases([...REVIEWED, ...OURS], ["answer", "unclear", "edit", "write"]))(
     "$request reads as $kind (follows a change: $followsAChange)",
     ({ request, kind, followsAChange }) => {
       expect(routeRequest(request, { followsAChange }).kind).toBe(kind);
@@ -379,6 +395,8 @@ describe("Routing everyday requests", () => {
     ["I mean write a summary about these 2 papers", false],
     ["Add a risks section", false],
     ["Add a note to Project plan about the meeting", false],
+    ["Add a note about the meeting to Project plan", false],
+    ["Write a summary page in English", true],
     ["帮我在笔记里添加一个风险部分", false],
     ["写一份这两篇论文的总结", false],
   ] as const)("%s asks for a new Mind: %s", (request, newMind) => {
