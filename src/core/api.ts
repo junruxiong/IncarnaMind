@@ -4199,6 +4199,11 @@ export type ClaimCheckResult =
       says: string | null;
       /** A figure worked out that decided it; null when a Passage did. */
       calculation: ClaimCalculation | null;
+      /**
+       * "unsupported": the sentence cites a court decision that none of the Documents holds,
+       * which no check here can find or judge. Absent, or false, otherwise.
+       */
+      citesDecision?: boolean;
       /** The versions of the Documents it read, each once. */
       versions: CheckedVersion[];
       excluded: LeftOutDocument[];
@@ -4274,6 +4279,8 @@ export interface ClaimCheckAttributes {
   says: string | null;
   /** A figure worked out that decided it; null when a Passage did. */
   calculation: ClaimCalculation | null;
+  /** "unsupported": the sentence cites a court decision that none of the Documents holds. */
+  citesDecision: boolean;
   scope: ClaimCheckScope;
   versions: CheckedVersion[];
   excluded: LeftOutDocument[];

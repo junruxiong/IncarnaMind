@@ -173,7 +173,11 @@ export function caseCitations(sentence: string): CaseCitation[] {
   }
   for (const match of text.matchAll(COMMONWEALTH)) {
     const before = NAME_BEFORE.exec(text.slice(0, match.index))?.[1];
-    found.push({ at: match.index, name: before === undefined ? null : bare(before), cite: match[0] });
+    found.push({
+      at: match.index,
+      name: before === undefined ? null : bare(before),
+      cite: match[0],
+    });
   }
   return found.sort((a, b) => a.at - b.at).map(({ name, cite }) => ({ name, cite }));
 }

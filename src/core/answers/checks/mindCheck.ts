@@ -191,6 +191,7 @@ export function createMindCheck(options: MindCheckOptions) {
           evidence: null,
           says: null,
           calculation: null,
+          citesDecision: false,
           scope: scope.marked,
           versions: [],
           excluded: [],

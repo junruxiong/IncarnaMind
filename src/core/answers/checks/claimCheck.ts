@@ -54,6 +54,7 @@ import {
   type DocumentLanguage,
 } from "../engine";
 import { agreesWith, statedFigure } from "./calculated";
+import { type CaseCitation, caseCitations, namesDecision } from "./caseCitations";
 import { nearestLine } from "./nearest";
 import {
   CONFIRM_INSTRUCTIONS,
@@ -78,6 +79,7 @@ export interface ClaimCheckDependencies {
   documents: Pick<AnswerDocuments, "citationSource" | "pageTexts" | "documentDate"> & {
     searchableCount(documentIds: readonly string[] | null): number;
     searchableLanguages(documentIds: readonly string[] | null): DocumentLanguage[];
+    isWebPage(documentId: string): boolean;
   };
 }
 
@@ -123,11 +125,17 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
     const { scope, signal } = request;
     const read = new Map<string, string>();
     const excluded = new Map<string, LeftOutDocument>();
+    const decisions = caseCitations(request.claim);
     const scoped: AnswerDocuments = {
       searchableCount: () => deps.documents.searchableCount(scope.documentIds),
       async search(query, searchSignal) {
         const found = await deps.evidence.search(query, scope, searchSignal);
-        for (const passage of found.passages) read.set(passage.documentId, passage.contentHash);
+        // A page found on the web can't stand for a court decision: only a Document the User added can.
+        const passages =
+          decisions.length === 0
+            ? found.passages
+            : found.passages.filter((passage) => !deps.documents.isWebPage(passage.documentId));
+        for (const passage of passages) read.set(passage.documentId, passage.contentHash);
         for (const each of found.excluded) {
           if (excluded.has(each.documentId)) continue;
           excluded.set(each.documentId, {
@@ -136,7 +144,7 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
             reason: each.reason,
           });
         }
-        return found.passages;
+        return passages;
       },
       citationSource: (passageId) => deps.documents.citationSource(passageId),
       pageTexts: (documentId, contentHash, from, to) =>
@@ -257,12 +265,14 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
     /** Unsupported, with the nearest line when it states another value for the same thing (#770). */
     const unsupported = async (): Promise<ClaimCheckResult> => {
       const nearest = await nearestDifferent(request, session, signal);
+      const citesDecision = !signal.aborted && (await lacksDecision(decisions, scoped, signal));
       if (signal.aborted) return notChecked("stopped");
       return {
         verdict: "unsupported",
         evidence: nearest,
         says: null,
         calculation: null,
+        citesDecision,
         ...facts(),
       };
     };
@@ -403,6 +413,22 @@ async function confirmContradiction(
       console.error(`A contradiction couldn't be confirmed: ${messageOf(error)}`);
     return null;
   }
+}
+
+/** Whether one of the court decisions a sentence cites is in none of the Documents: none names it, by its Passages or its own name. */
+async function lacksDecision(
+  decisions: readonly CaseCitation[],
+  documents: AnswerDocuments,
+  signal: AbortSignal,
+): Promise<boolean> {
+  for (const decision of decisions) {
+    const query = [decision.name, decision.cite].filter(Boolean).join(" ");
+    const passages = await documents.search(query, signal);
+    if (!passages.some((each) => namesDecision(`${each.documentName} ${each.text}`, decision))) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
