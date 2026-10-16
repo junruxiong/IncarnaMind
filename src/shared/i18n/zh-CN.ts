@@ -570,6 +570,7 @@ export const zhCN = {
   "claim.calculated.title": "根据你的文档计算得出",
   "claim.calculated.stated": "这句话写的是 {stated}。",
   "claim.calculated.inputs": "计算所用的数字",
+  "claim.calculated.negative": "按负数计算",
   "claim.cited": "这句话已引用它",
   "claim.unsupported.inFolder": "“{folder}”中没有内容提到这一点。",
   "claim.unsupported.anywhere": "你的文档中没有内容提到这一点。",

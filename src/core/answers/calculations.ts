@@ -23,7 +23,8 @@
  *   亿): inputs are in base units with their page's scale applied, so the
  *   figure would be 10,000 times too small (#577); `scale` shows it in 亿.
  * In a workbook, the formula uses the number a cell stores (#435), not the one
- * it shows rounded.
+ * it shows rounded. An amount in brackets is negative; a formula that subtracts
+ * one is recorded all the same, with a line telling the model it adds (#978).
  */
 import {
   type Figure,
@@ -46,6 +47,7 @@ import {
   scaleWordOf,
   scaleWords,
   showResult,
+  subtractedNames,
 } from "../../shared/formula";
 import {
   anchorsCovered,
@@ -237,6 +239,15 @@ const either = (items: readonly (string | number)[]) =>
 
 /** A number as a message to the model writes it: no float noise. */
 const plainNumber = (value: number) => String(Number(value.toPrecision(12)));
+
+/** What the model is told when its formula subtracts inputs the reader gave as negative: "(12,500)" is -12500, so "price - fee" adds it. */
+function signNote(negatives: readonly { name: string; chars: string; value: number }[]): string {
+  const them = negatives.length > 1 ? "them" : "it";
+  const read = negatives
+    .map((each) => `${each.name} is ${each.chars}, read as ${plainNumber(each.value)}`)
+    .join("; ");
+  return ` Check the sign: ${read}, so subtracting ${them} adds ${them}. To take a deduction off, add it (price + fee); if adding ${them} is what you meant, the figure stands.`;
+}
 
 /** One of the reader's readings, as the model is offered it. */
 function readingText(reading: Reading): string {
@@ -665,6 +676,13 @@ export function createCalculationSession(options: CalculationSessionOptions) {
       return {
         problems: changes.map((change) => `${lead}: ${scaleChangeProblem(change, language)}`),
       };
+    const subtracted = new Set(subtractedNames(given.formula).map((name) => name.toLowerCase()));
+    const negatives = reads.flatMap((read, index) => {
+      const number = inputs[index] as FormulaInput;
+      return number.value < 0 && subtracted.has(number.name.toLowerCase())
+        ? [{ name: number.name, chars: read.figure.chars, value: number.value }]
+        : [];
+    });
     let show: FigureShowOptions = {
       language,
       as: SHOW_AS.find((each) => each === given.as) ?? null,
@@ -672,13 +690,13 @@ export function createCalculationSession(options: CalculationSessionOptions) {
       scale: given.scale,
     };
     let shown = showResult(result, show);
-    let note = "";
+    let note = negatives.length > 0 ? signNote(negatives) : "";
     // A result that can't be shown as asked (a difference of percents "as a percent") is shown in
     // its own unit, which is the right one, rather than refused.
     if (!shown.ok && show.as !== null) {
       const own = showResult(result, { ...show, as: null });
       if (own.ok) {
-        note = ` It is shown in its own unit: ${shown.message}`;
+        note += ` It is shown in its own unit: ${shown.message}`;
         show = { ...show, as: null };
         shown = own;
       }
@@ -785,15 +803,18 @@ export function createCalculationSession(options: CalculationSessionOptions) {
           });
         continue;
       }
-      const earlier = recorded.get(marker)?.figure;
+      const earlier = recorded.get(marker);
       recorded.set(marker, outcome.recorded);
       failed.delete(marker);
       options.onRecord?.(marker, outcome.recorded.figure);
+      // A figure that came with a note is being fixed, as the note asked: not a marker given twice.
       lines.push(
         told(marker, outcome.recorded.figure) +
           outcome.recorded.note +
-          (earlier && earlier.formula !== outcome.recorded.figure.formula
-            ? ` It replaces the earlier [=${marker}] = ${earlier.shown}: give each figure a marker of its own.`
+          (earlier &&
+          earlier.note === "" &&
+          earlier.figure.formula !== outcome.recorded.figure.formula
+            ? ` It replaces the earlier [=${marker}] = ${earlier.figure.shown}: give each figure a marker of its own.`
             : ""),
       );
     }

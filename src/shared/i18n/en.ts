@@ -590,6 +590,7 @@ export const en = {
   "claim.calculated.title": "Calculated from your Documents",
   "claim.calculated.stated": "The sentence says {stated}.",
   "claim.calculated.inputs": "Worked out from",
+  "claim.calculated.negative": "counted as negative",
   "claim.cited": "Cited in this sentence",
   "claim.unsupported.inFolder": "Nothing in “{folder}” says this.",
   "claim.unsupported.anywhere": "Nothing in your Documents says this.",

@@ -16,6 +16,7 @@ import {
   type ShowOptions,
   scaleChanges,
   showResult,
+  subtractedNames,
 } from "../../src/shared/formula";
 
 const EN: FigureContext = { language: "en" };
@@ -1061,5 +1062,21 @@ describe("a power of ten that changes an amount's scale (#577)", () => {
     expect(changes("usd / users / 1000", [usd, users]).map((each) => each.text)).toEqual([
       "usd / users / 1000",
     ]);
+  });
+});
+
+describe("the inputs a formula subtracts (#978)", () => {
+  test.each([
+    ["price - agent - legal", ["agent", "legal"]],
+    ["price + agent", []],
+    ["(b - a) / a", ["a"]],
+    ["price - agent * 2", []],
+    ["price - (agent + legal)", []],
+    ["-agent + price", []],
+    ["SUM(price, -agent) - Legal", ["Legal"]],
+    ["price -", []],
+    ["", []],
+  ])("%s", (formula, names) => {
+    expect(subtractedNames(formula).sort()).toEqual(names);
   });
 });

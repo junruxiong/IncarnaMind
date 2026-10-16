@@ -15,6 +15,9 @@
  * - a figure with no scale of its own under a header that states one
  *   ("单位：万元", "in millions");
  * - "△1,250", which some reports use for a decrease and others for a change;
+ * - "(250)" or "(£1.2m)" outside accounts, and "12,500.00 DR" anywhere: a minus
+ *   or an aside, a debit or a plain amount (#978); inside accounts an amount
+ *   in brackets is negative;
  * - "2–3%", a range, which can't be one input without choosing an end;
  * - "3 points", which may be percentage points or an index's points.
  *
@@ -72,7 +75,7 @@ export interface Reading {
  *   a figure whose decimal mark isn't the one the Document uses;
  * - "currency": "¥", yuan or yen;
  * - "scale": no scale of its own, under a header that states one;
- * - "sign": "△1,250", or a whole number in brackets, "(250)";
+ * - "sign": "△1,250", an amount in brackets that may be an aside, "(250)", or "12,500.00 DR";
  * - "range": "2–3%", two values;
  * - "points": "3 points", percentage points or an index's.
  */
@@ -126,6 +129,12 @@ export interface FigureContext {
   header?: string | null;
   /** Read years, dates, quarters and periods as plain figures too. */
   dates?: boolean;
+  /**
+   * The Document is accounts: it writes some amounts as "(12,500)" or states
+   * its unit ("£'000", "单位：万元"), so every amount in brackets is negative
+   * (see `figureContextOf`). Left out, the text read is taken as it is.
+   */
+  accounts?: boolean;
 }
 
 /** A scale or unit stated apart from the figures it applies to: "单位：万元", "(in millions)". */
@@ -409,15 +418,26 @@ const JPY_WORDS = /日元|円|JPY|\byen\b/;
  * a Passage alone may hold no number that tells.
  */
 export function figureContextOf(text: string, language?: string | null): FigureContext {
-  const { s } = prepare(text);
+  const prepared = prepare(text);
+  const { s } = prepared;
   const cny = CNY_WORDS.test(s);
   const jpy = JPY_WORDS.test(s);
   return {
     language: language ?? null,
     separators: separatorsIn(s),
     yen: cny && !jpy ? "CNY" : jpy && !cny ? "JPY" : null,
+    accounts: writesAccounts(s, statementsIn(prepared, text, settle({ language }))),
   };
 }
+
+/** An amount in brackets as accounts write a negative: "(12,500)", "(£4,620.00)", "(12.50)". */
+const BRACKETED_AMOUNT =
+  /\(\s*(?:\p{Sc}|[A-Z]{3} ?)?\s*\d{1,3}(?:,\d{3})+(?:\.\d+)?\s*\)|\(\s*\p{Sc}?\s*\d+\.\d{2}\s*\)/u;
+
+/** Whether a text is accounts: it writes an amount in brackets, or states a scale or currency ("£'000", "单位：万元"). */
+const writesAccounts = (s: string, statements: readonly Statement[]): boolean =>
+  BRACKETED_AMOUNT.test(s) ||
+  statements.some((each) => each.exponent > 0 || each.unit.kind === "currency");
 
 /** The language, script and region of a BCP 47 tag. */
 function tagOf(language: string): {
@@ -458,6 +478,7 @@ interface Settled {
   yen: string[];
   dates: boolean;
   chinese: boolean;
+  accounts: boolean;
 }
 
 function settle(context: FigureContext): Settled {
@@ -481,6 +502,7 @@ function settle(context: FigureContext): Settled {
     yen,
     dates: context.dates === true,
     chinese: tag?.language === "zh",
+    accounts: context.accounts === true,
   };
 }
 
@@ -522,9 +544,10 @@ const EN_SCALES: Readonly<Record<string, number>> = {
 const EN_SCALE_AFTER =
   /(?:[ \n]?(?:[Tt]rillion|[Bb]illion|[Mm]illion|[Tt]housand|[Ll]akh|[Cc]rore)s?|(?: ?(?:tn|trn|bn|Bn|BN|mn|Mn|MN|MM)|[kKmMbB])(?![A-Za-z0-9])|mm(?![A-Za-z0-9]))/y;
 
+const CURRENCY_TOKEN =
+  /(?:(?<![A-Za-z])(?:US|HK|AU|CA|NZ|SG|NT|MX|A|C|S|R)?\$|CN¥|JP¥|[¥€£₹₩₽₺฿₫₱]|(?<![A-Za-z])(?:USD|CNY|RMB|Rmb|HKD|EUR|GBP|JPY|AUD|CAD|SGD|TWD|CHF|INR|KRW|NZD|MOP|BRL|RUB|SEK|NOK|DKK|ZAR|MXN|THB|MYR|IDR|PHP|VND|TRY|SAR|AED|Rs\.?)|人民币|美元|港币|港元|欧元|日元|英镑)/;
 /** Currency signs before a number, and codes and names before it, with a space allowed. */
-const CURRENCY_BEFORE =
-  /(?:(?<![A-Za-z])(?:US|HK|AU|CA|NZ|SG|NT|MX|A|C|S|R)?\$|CN¥|JP¥|[¥€£₹₩₽₺฿₫₱]|(?<![A-Za-z])(?:USD|CNY|RMB|Rmb|HKD|EUR|GBP|JPY|AUD|CAD|SGD|TWD|CHF|INR|KRW|NZD|MOP|BRL|RUB|SEK|NOK|DKK|ZAR|MXN|THB|MYR|IDR|PHP|VND|TRY|SAR|AED|Rs\.?)|人民币|美元|港币|港元|欧元|日元|英镑)[ \u00a0]?$/;
+const CURRENCY_BEFORE = new RegExp(`${CURRENCY_TOKEN.source}[ \\u00a0]?$`);
 
 const CURRENCY_CODES: Readonly<Record<string, string>> = {
   US$: "USD",
@@ -598,6 +621,26 @@ const EN_CURRENCY_AFTER =
 
 /** A currency sign after the number, as many European Documents write it ("1.234 €"), unless it starts the next one. */
 const SIGN_AFTER = / ?[€£¥$](?![A-Za-z0-9])(?! ?\d)/y;
+
+/** A debit or credit mark after an amount ("12,500.00 DR"), but not a doctor's "Dr Smith". */
+const LEDGER_AFTER = / ?(?:CR|DR|Cr|Dr)(?![A-Za-z0-9])(?!\.? \p{Lu}\p{Ll})/uy;
+
+/** Every currency sign, code and name in a text, wherever it stands against its amount. */
+const CURRENCY_ANYWHERE = new RegExp(
+  [CURRENCY_TOKEN, CN_CURRENCY_AFTER, EN_CURRENCY_AFTER].map((each) => each.source).join("|"),
+  "g",
+);
+const AMOUNT_ENDS = /[\d%亿万千]$|(?:\d|\b)(?:million|billion|trillion|thousand|bn|mn|[mkb])$/i;
+
+/** The currencies of the amount that ends right before `at` on its line, if one does: "RMB 1.2 billion" before "(US$170 million)". */
+function amountBefore(s: string, at: number, settled: Settled): string[] | null {
+  const lineStart = Math.max(s.lastIndexOf("\n", at) + 1, s.lastIndexOf("\t", at) + 1, at - 40);
+  const line = s.slice(lineStart, at).trimEnd();
+  const last = [...line.matchAll(CURRENCY_ANYWHERE)].at(-1);
+  if (!last || !(AMOUNT_ENDS.test(line) || last.index + last[0].length === line.length))
+    return null;
+  return currencyCodes(last[0], settled);
+}
 
 /** Percentage points and basis points, checked before percent: "% points" isn't a percent. */
 const POINTS_AFTER =
@@ -1328,12 +1371,22 @@ function readAround(
           " \t\n".includes(afterMark) ||
           prepared.spaced.has(found.to + 1));
   if (lineStart && listMark && !found.formatted && found.to - found.from <= 2) return null;
-  const bracket = s[left - 1] === "(" && left - 1 >= floor ? left - 1 : null;
+  let open = left;
+  while (s[open - 1] === " " && open - 1 >= floor) open--;
+  const bracket = s[open - 1] === "(" && open - 1 >= floor ? open - 1 : null;
 
   // A route's or a line's name, not a figure: "1路", "2号线".
   if (/^(?:路|号线)/.test(s.slice(found.to, found.to + 2)) && !found.formatted) return null;
 
   let right = found.to;
+  /** A trailing "DR" or "CR", which is part of the figure; stuck to a plain number it is a name. */
+  const takeLedger = (): boolean => {
+    const at = right;
+    const word = matchAt(LEDGER_AFTER, s, at);
+    if (!word || (!word[0].startsWith(" ") && !found.formatted)) return false;
+    right = at + word[0].length;
+    return true;
+  };
   /** Takes what `pattern` matches at the right, and where it is, without the space before it. */
   const take = (pattern: RegExp) => {
     const match = matchAt(pattern, s, right);
@@ -1414,6 +1467,7 @@ function readAround(
   if (draft.currencies.length > 0)
     draft.unit = { kind: "currency", code: draft.currencies[0] as string };
   if (take(APPROXIMATE_AFTER)) draft.approximate = true;
+  let ledger = takeLedger();
 
   // A name, not a figure: "5G", "3D", "2025E", "1st", "600519.SH".
   if (isLatin(s[right]) && (right === found.to || isAlnum(s[right - 1]))) return null;
@@ -1457,18 +1511,34 @@ function readAround(
     return null;
 
   draft.from = left;
+  let close = right;
+  while (s[close] === " ") close++;
   // "（+2.1pct）": a sign written inside brackets makes them an aside, not an accounting negative.
-  if (bracket !== null && s[right] === ")" && !signed) {
+  if (bracket !== null && s[close] === ")" && !signed) {
     const outer = draft.currencies.length === 0 ? currencyBefore(bracket) : null;
-    // "(1,250)" and "($1,250)" are accounting negatives; "(US$170 million)" is an aside.
-    if (bare && found.formatted) {
-      draft.negative = true;
+    const codes = outer?.codes ?? draft.currencies;
+    // A sign or code makes it an amount; a word after it ("元") doesn't.
+    const marked =
+      codes.length > 0 &&
+      (outer !== null || !currencyAfter || /^(?:[€£¥$]|[A-Z]{3})$/.test(currencyAfter.word));
+    // "RMB 1.2 billion (US$170 million)": another currency restates the amount before it.
+    const before = codes.length > 0 ? amountBefore(s, outer?.from ?? bracket, settled) : null;
+    const aside =
+      before !== null && before.length > 0 && !before.some((code) => codes.includes(code));
+    const amount = draft.unit.kind === "plain" || draft.unit.kind === "currency";
+    const percent = draft.unit.kind === "percent" && draft.scaleWord === null;
+    const small = bare && whole && found.number.digits.length <= (settled.accounts ? 1 : 2);
+    // "(1,250)" and "($1,250)" are accounting negatives; "(2)" is a list's or a note's.
+    const eligible = (bare && found.formatted) || (!aside && (amount || percent));
+    if (eligible && !(small && !marked)) {
+      if ((bare && found.formatted) || settled.accounts || marked) draft.negative = true;
+      else draft.signUnsure = true;
       if (outer) {
         draft.currencies = outer.codes;
         draft.unit = { kind: "currency", code: outer.codes[0] as string };
       }
       draft.from = outer?.from ?? bracket;
-      right++;
+      right = close + 1;
       // "£(12.3)m": the scale may follow the brackets.
       const scale = draft.scaleWord === null ? take(EN_SCALE_AFTER) : null;
       if (scale && scale.word !== "mm") {
@@ -1476,14 +1546,12 @@ function readAround(
         draft.scaleAt = scale.at;
         draft.exponent = scaleExponent(scale.word);
       }
-    } else if ((bare && whole) || (draft.unit.kind === "percent" && draft.scaleWord === null)) {
-      // "(2)" is a list's or a note's; "(250)" and "(12.5%)" may be negative or an aside.
-      if (bare && found.number.digits.length <= 2) return null;
-      draft.signUnsure = true;
-      draft.from = bracket;
-      right++;
+      ledger = ledger || takeLedger();
+    } else if (small && !marked && !aside) {
+      return null;
     }
   }
+  if (ledger && !draft.negative) draft.signUnsure = true;
   const footnote = matchAt(FOOTNOTE_AFTER, s, right);
   if (footnote) {
     draft.footnote = { from: right, to: right + footnote[0].length };
@@ -1726,11 +1794,13 @@ function dateFigures(s: string, span: Span): Draft[] {
 export function readFigures(text: string, context: FigureContext = {}): Figure[] {
   const prepared = prepare(text);
   const { s } = prepared;
-  const settled = settle(context);
-  const statements = statementsIn(prepared, text, settled);
-  const header = context.header
-    ? statementsIn(prepare(context.header), context.header, settled)
-    : [];
+  const plain = settle(context);
+  const statements = statementsIn(prepared, text, plain);
+  const header = context.header ? statementsIn(prepare(context.header), context.header, plain) : [];
+  const settled = {
+    ...plain,
+    accounts: context.accounts ?? writesAccounts(s, [...statements, ...header]),
+  };
   const dateSpans = datesIn(s);
   const blocked = [...statements, ...dateSpans].sort((a, b) => a.from - b.from);
   const dates = new Set(dateSpans);
