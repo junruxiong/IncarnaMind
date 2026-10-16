@@ -706,7 +706,6 @@ export function createAnswers(options: AnswersOptions) {
      * Blocks it adds link back to. It is offered the Minds' Tools. Absent: none.
      */
     assistant?: Pick<MindToolsOptions, "focused" | "folderId" | "origin"> & {
-      /** The conversation's last Answer changed a Mind (see `routeRequest`). */
       followsAChange: boolean;
     };
   }): void {

@@ -3,15 +3,17 @@ import { type RequestKind, routeRequest } from "../../src/core/answers/routeRequ
 
 /**
  * Everyday requests in the assistant, in English and Chinese, and how each
- * is read. A request read as an edit or a write changes a Mind, so no
- * Question may read as one; what can't be told reads as "unclear", which
- * changes nothing unasked. A follow-up with no object is read after an
- * Answer that changed a Mind, or one that changed none; without either, in
- * both.
+ * is read. Only a whole request of a plain shape is an edit or a write, so
+ * no question, doubted request, or request about a Document or the reply may
+ * read as one. A request labelled "answer" changes nothing and reads as
+ * "unclear", which behaves the same: nothing is forced or tagged. A follow-up
+ * with no object is read after an Answer that changed a Mind, or one that
+ * changed none; without either, in both.
  */
 
+type Label = RequestKind | "answer";
 type After = "after a change" | "after no change";
-type Row = readonly [request: string, kind: RequestKind, after?: After];
+type Row = readonly [request: string, label: Label, after?: After];
 
 /** A review's requests and the route each should take, the earlier blockers among them. */
 const REVIEWED: readonly Row[] = [
@@ -32,8 +34,8 @@ const REVIEWED: readonly Row[] = [
   ["把它写长一点", "unclear", "after no change"],
   ["把第二段写得更正式", "edit"],
   ["把第二段改得更正式，其他段落保持不变", "edit"],
-  ["这篇论文说了什么？把这个加到我的笔记里", "write"],
-  ["What does the paper claim and add it to my notes", "write"],
+  ["这篇论文说了什么？把这个加到我的笔记里", "unclear"],
+  ["What does the paper claim and add it to my notes", "unclear"],
   ["Summarise the paper and add it to my notes", "write"],
   ["长一点", "edit", "after a change"],
   ["长一点", "unclear", "after no change"],
@@ -72,7 +74,7 @@ const REVIEWED: readonly Row[] = [
   ["Walk me through it", "answer"],
   ["Explain it again, more simply", "answer"],
   ["and the second one?", "answer"],
-  ["Make a list of the datasets", "unclear"],
+  ["Make a list of the datasets", "answer"],
   ["Put it in a table", "edit", "after a change"],
   ["Put it in a table", "unclear", "after no change"],
   ["Let's make the intro punchier", "edit"],
@@ -163,9 +165,89 @@ const REVIEWED: readonly Row[] = [
   ["这篇论文讲了什么？写一份总结", "answer"],
   ["第二段是不是太啰嗦了，精简一下", "unclear"],
   ["告诉我要不要删掉第二段", "answer"],
+  ["Shorten my intro. Does that work", "unclear"],
+  ["Delete the second paragraph, does that work", "unclear"],
+  ["Shorten my intro. Is that better", "unclear"],
+  ["Delete the second paragraph. Is it needed", "unclear"],
+  ["Shorten my intro, or is it fine as it is", "unclear"],
+  ["Shorten my intro or not", "unclear"],
+  ["Delete the second paragraph, or should I keep it", "unclear"],
+  ["Delete the second paragraph, what's your take", "unclear"],
+  ["Shorten my intro. Thoughts", "unclear"],
+  ["Shorten my intro, good idea", "unclear"],
+  ["Rewrite my conclusion, does that make sense", "unclear"],
+  ["Make my summary shorter, can you", "unclear"],
+  ["Make my summary shorter, could you", "unclear"],
+  ["Would you mind shortening my intro", "unclear"],
+  ["Mind shortening my intro", "unclear"],
+  ["How about making my intro shorter", "unclear"],
+  ["What if I removed the second paragraph", "unclear"],
+  ["Why not shorten my intro", "unclear"],
+  ["I wonder if my intro is too long", "unclear"],
+  ["Not sure whether to cut the second paragraph", "unclear"],
+  ["Wondering if I should shorten my summary", "unclear"],
+  ["Any way to make my intro shorter", "unclear"],
+  ["Tell me whether my summary is too long", "unclear"],
+  ["Maybe shorten my intro", "unclear"],
+  ["Shorten my intro maybe", "unclear"],
+  ["Shorten my intro, yes or no", "unclear"],
+  ["Shorten my intro, right", "unclear"],
+  ["Add this to my notes, or is that overkill", "unclear"],
+  ["Write a summary page, or would a note be better", "unclear"],
+  ["Add a risks section to my notes, worth it", "unclear"],
+  ["Is the paper right about tides, and add it to my notes", "unclear"],
+  ["What does the paper say, and add it to my notes", "unclear"],
+  ["Delete the second paragraph if you think it's weak", "unclear"],
+  ["Shorten my intro if you agree", "unclear"],
+  ["Shorten my intro, unless that hurts it", "unclear"],
+  ["Fix my intro. Or leave it, up to you", "unclear"],
+  ["Explain why my intro is too long", "unclear"],
+  ["Show me a shorter version of my intro", "unclear"],
+  ["Suggest a shorter intro", "unclear"],
+  ["Try making my intro shorter", "unclear"],
+  ["Rewrite my intro using the paper's framing", "unclear"],
+  ["Update my summary with what the paper says", "unclear"],
+  ["Is my intro fine. Shorten it", "unclear"],
+  ["Is my intro fine, shorten it", "unclear"],
+  ["Does my summary miss anything, add it to my notes", "unclear"],
+  ["Translate this paragraph. Is my English that bad", "unclear"],
+  ["把第二段删掉，怎么样", "unclear"],
+  ["把第二段删掉，好不好", "unclear"],
+  ["把第二段删掉，行不行", "unclear"],
+  ["把第二段删掉，对不对", "unclear"],
+  ["把第二段删掉，如何", "unclear"],
+  ["把第二段删掉，可否", "unclear"],
+  ["缩短我的总结，要不要", "unclear"],
+  ["把第二段删掉么", "unclear"],
+  ["删掉第二段可以么", "unclear"],
+  ["把第二段删掉是否更好", "unclear"],
+  ["删除第二段是否合适", "unclear"],
+  ["删掉第二段合适不合适", "unclear"],
+  ["删掉第二段值不值得", "unclear"],
+  ["删掉第二段，有没有必要", "unclear"],
+  ["删掉第二段或许更好", "unclear"],
+  ["把第二段删掉会更好", "unclear"],
+  ["把第二段翻译成英文给我看", "unclear"],
+  ["把我的总结改短，行么", "unclear"],
+  ["把我的总结改短，OK吗", "unclear"],
+  ["把我的总结改短，ok", "unclear"],
+  ["把我的总结改短，合适吗", "unclear"],
+  ["加到我的笔记里，有用吗", "unclear"],
+  ["写一个总结页面，有必要吗", "unclear"],
+  ["写一个总结页面，怎么样", "unclear"],
+  ["加到我的笔记里，好不好", "unclear"],
+  ["第二段太长了，删掉", "unclear"],
+  ["第二段太长了吗，删掉", "unclear"],
+  ["这篇论文对不对，加到我的笔记里", "unclear"],
+  ["这篇论文讲了啥，加到我的笔记里", "unclear"],
+  ["我的总结写得怎么样，改短一点", "unclear"],
+  ["帮我看看第二段要不要删", "unclear"],
+  ["第二段删掉吧", "unclear"],
+  ["把第二段改短一点，不知道合不合适", "unclear"],
+  ["把第二段改短，我拿不准", "unclear"],
 ];
 
-/** More of what Users ask, the eval's requests and Questions that sound like requests among them. */
+/** More of what Users ask, the eval's requests and questions that sound like requests among them. */
 const OURS: readonly Row[] = [
   ["What does the tutorial claim?", "answer"],
   ["no citations?", "answer"],
@@ -247,7 +329,7 @@ const OURS: readonly Row[] = [
   ["Make a new note called Fieldwork plan", "write"],
   ["make notes on these papers", "write"],
   ["Add a note about the Thursday meeting", "write"],
-  ["What do the papers claim? Add it to my notes", "write"],
+  ["What do the papers claim? Add it to my notes", "unclear"],
   ["Write a summary page of these documents", "write"],
   ["Put the key numbers in a table in my notes", "write"],
   ["写一份这两篇论文的总结", "write"],
@@ -345,7 +427,7 @@ const OURS: readonly Row[] = [
   ["Save your answer to my notes", "write"],
   ["把刚才的回答加到我的笔记里", "write"],
   ["Write the summary in Chinese", "edit"],
-  ["Write the conclusion", "write"],
+  ["Write the conclusion", "unclear"],
   ["Make my notes into a table", "edit"],
   ["Turn my notes into a table", "edit"],
   ["Help me shorten my intro", "edit"],
@@ -354,30 +436,34 @@ const OURS: readonly Row[] = [
   ["把论文翻译成中文加到笔记里", "write"],
   ["Start a new page on tides", "write"],
   ["Turn this into a table", "edit", "after a change"],
-  ["Add more detail on the methods", "edit", "after a change"],
+  ["Add more detail on the methods", "unclear", "after a change"],
 ];
 
 const contexts = ([, , after]: Row): boolean[] =>
   after === "after a change" ? [true] : after === "after no change" ? [false] : [false, true];
 
-const cases = (rows: readonly Row[], kinds: readonly RequestKind[]) =>
+const cases = (rows: readonly Row[], labels: readonly Label[]) =>
   rows
-    .filter(([, kind]) => kinds.includes(kind))
-    .flatMap((row) =>
-      contexts(row).map((followsAChange) => ({ request: row[0], kind: row[1], followsAChange })),
+    .filter(([, label]) => labels.includes(label))
+    .flatMap(([request, label, after]) =>
+      contexts([request, label, after]).map((followsAChange) => ({
+        request,
+        kind: label === "answer" ? "unclear" : label,
+        followsAChange,
+      })),
     );
 
 describe("Routing everyday requests", () => {
-  // protects=no Question, nor a request about a Document or the reply, reads as an edit or a write, after a change or not; fails_when=one does, and a Mind would change unasked; no_claim=that every request asking for a change is read as one.
+  // protects=no question, doubted request, or request about a Document or the reply reads as an edit or a write, after a change or not; fails_when=one does, and a Mind would change unasked; no_claim=that every request asking for a change is read as one.
   test.each(cases([...REVIEWED, ...OURS], ["answer", "unclear"]))(
-    "$request is no edit or write (follows a change: $followsAChange)",
+    "$request is unclear (follows a change: $followsAChange)",
     ({ request, followsAChange }) => {
-      expect(["answer", "unclear"]).toContain(routeRequest(request, { followsAChange }).kind);
+      expect(routeRequest(request, { followsAChange }).kind).toBe("unclear");
     },
   );
 
-  // protects=each request reads as it should: the User's own text named is an edit, where new text goes a write, a follow-up an edit only after a change, anything doubted unclear, the rest answered; fails_when=one reads otherwise; no_claim=every wording a User may use.
-  test.each(cases([...REVIEWED, ...OURS], ["answer", "unclear", "edit", "write"]))(
+  // protects=a plain instruction that names the User's own text is an edit, one that says where new text goes a write, and a follow-up an edit only after a change; fails_when=one reads otherwise; no_claim=every wording a User may use.
+  test.each(cases([...REVIEWED, ...OURS], ["edit", "write"]))(
     "$request reads as $kind (follows a change: $followsAChange)",
     ({ request, kind, followsAChange }) => {
       expect(routeRequest(request, { followsAChange }).kind).toBe(kind);
@@ -392,11 +478,11 @@ describe("Routing everyday requests", () => {
     ["Summarise these papers into a new note", true],
     ["make notes on these papers", true],
     ["新建一篇叫“田野计划”的笔记", true],
+    ["Write a summary page in English", true],
     ["I mean write a summary about these 2 papers", false],
     ["Add a risks section", false],
     ["Add a note to Project plan about the meeting", false],
     ["Add a note about the meeting to Project plan", false],
-    ["Write a summary page in English", true],
     ["帮我在笔记里添加一个风险部分", false],
     ["写一份这两篇论文的总结", false],
   ] as const)("%s asks for a new Mind: %s", (request, newMind) => {

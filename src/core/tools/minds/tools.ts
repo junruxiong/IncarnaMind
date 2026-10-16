@@ -439,7 +439,8 @@ const textKey = (text: string) =>
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim();
 // Two summaries may share a short line ("Not reported.", "The Passages found don't describe the
-// methods."): only long paragraphs in a row, already there, are a second copy.
+// methods."), or a long one under another heading: only long paragraphs in a row, already there
+// under the same heading, are a second copy.
 const COPY_WORDS = 8;
 const COPY_CJK = 30;
 const COPY_RUN = 2;
@@ -602,18 +603,24 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     changeIn(writer.mind.id, writer.request, created);
 
   const copyIn = (writer: Writer, blocks: readonly NodeJSON[]): string | null => {
-    const there = new Set(
-      minds.read(writer.mind.id, (note) => ownWaitingTexts(note, writer.request)).map(textKey),
-    );
+    const there = minds.read(writer.mind.id, (note) => ownWaitingTexts(note, writer.request));
+    // Before its first heading, new text goes into a section of the Mind's: any heading matches.
+    const isThere = (section: string | null, text: string) =>
+      there.some(
+        (each) =>
+          textKey(each.text) === textKey(text) &&
+          (section === null || textKey(each.heading ?? "") === textKey(section)),
+      );
     let section: string | null = null;
     let first: string | null = null;
     let run = 0;
     for (const block of blocks) {
       const text = nodeText(block);
       if (block.type === "heading") {
-        if (run === 0) section = text;
+        section = text;
+        run = 0;
       } else if (longEnough(text)) {
-        run = there.has(textKey(text)) ? run + 1 : 0;
+        run = isThere(section, text) ? run + 1 : 0;
         if (run === 1) first = section ?? text;
         if (run >= COPY_RUN) return first;
       }
