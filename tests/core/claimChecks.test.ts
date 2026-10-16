@@ -78,6 +78,8 @@ const LEFT_CHECKING: ClaimCheckAttributes = {
   state: "checking",
   reason: null,
   detail: null,
+  providerId: null,
+  modelId: null,
   text: SUPPORTED,
   evidence: null,
   says: null,

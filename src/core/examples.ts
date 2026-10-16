@@ -261,6 +261,8 @@ export function createExamples(options: ExamplesOptions) {
         state: check.verdict,
         reason: null,
         detail: null,
+        providerId: null,
+        modelId: null,
         text: check.sentence,
         evidence,
         says: check.says,
