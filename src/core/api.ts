@@ -5463,8 +5463,8 @@ export type DataKind = (typeof dataKinds)[number];
  *   arXiv, when the User asks Look up to fill its reference record (#286).
  *   Nothing else: no file, text or name. None in local mode.
  * - "reference-check": each entry of a Mind's reference list, as written,
- *   to Crossref, then to OpenAlex when Crossref has no record of it, and an
- *   arXiv number to arXiv, when the User checks the list's references
+ *   to Crossref, then to OpenAlex when Crossref has no record of it or one
+ *   that differs, and an arXiv number to arXiv, when the User checks the list's references
  *   (#711). Nothing else of the Mind. None in local mode.
  * - "find-sources": what the User (or an Answer, for them) searches for, with
  *   its filters, to each Source provider searched, and the identifier of a
