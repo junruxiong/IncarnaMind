@@ -165,9 +165,10 @@ const openBeside = (mindId: string) =>
 /**
  * Into a new Mind: named as the conversation, in its Folder, the Answer in it
  * as changes to accept or reject, in a new tab beside the focused one. Undo
- * deletes it.
+ * deletes it. With `asTable`, one table of the Answer instead, in the Mind as
+ * it is, to copy or export from the tab.
  */
-async function addToNewMind(added: AddedAnswer): Promise<void> {
+async function addToNewMind(added: AddedAnswer, asTable = false): Promise<void> {
   const title = conversationLabel(added.conversation);
   const mind = await core.createMind({
     title,
@@ -178,14 +179,25 @@ async function addToNewMind(added: AddedAnswer): Promise<void> {
     blocks: added.blocks,
     origin: originOf(added),
     model: added.answer.model,
-    proposed: true,
+    proposed: !asTable,
   });
   await openBeside(mind.id);
   useUndo.getState().push({
-    message: t("answer.addedToNew", { mind: mindName(mind) || title }),
+    message: t(asTable ? "answer.tableOpened" : "answer.addedToNew", {
+      mind: mindName(mind) || title,
+    }),
     undo: () => core.deleteMind(mind.id),
     shownAt: answerUndoPlace(added.answer.id),
   });
+}
+
+/** "Open as a table": one table of an Answer in a Mind of its own, opened beside the Mind the User is in. */
+export async function openTable(added: AddedAnswer): Promise<void> {
+  try {
+    await addToNewMind(added, true);
+  } catch (error) {
+    useAppStore.getState().reportError(error);
+  }
 }
 
 /**
