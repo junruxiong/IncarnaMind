@@ -4271,6 +4271,12 @@
     max-width: 100%;
     font-weight: 600;
   }
+  /* "Default", after a style the Mind follows rather than chose: GB/T 7714 for Chinese. */
+  .references-default {
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--color-ink-meta);
+  }
   .references-status {
     margin: 8px 0 0;
     font-size: 13px;

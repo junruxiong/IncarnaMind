@@ -2610,6 +2610,7 @@ export function createCore(adapters: CoreAdapters): Core {
     updateReference: async (documentId, patch) => references.update(documentId, patch),
     restoreReference: async (documentId, before, fields) =>
       references.restore(documentId, before, fields),
+    confirmReference: async (documentId) => references.confirm(documentId),
     lookUpReference: (documentId) => references.lookUp(documentId),
     listSourceProviders: () => sources.list(),
     setSourceProviderKey: (providerId, key) => sources.setKey(providerId, key),

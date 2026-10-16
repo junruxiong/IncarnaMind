@@ -262,6 +262,31 @@ export function isCitableWork(record: Pick<ReferenceRecord, "fields"> | null): b
 }
 
 /**
+ * What was read from the file and is waiting for the User to check it: every field with a
+ * value that reading gave ("file"), but its language, which only picks a style's terms, and a
+ * type of Other, which says nothing. A field the User edited, or Look up or an import filled,
+ * isn't one.
+ */
+export function fieldsToCheck(
+  record: Pick<ReferenceRecord, "fields" | "sources">,
+): ReferenceField[] {
+  return referenceFieldOrder.filter(
+    (field) =>
+      field !== "language" &&
+      record.sources[field] === "file" &&
+      !isEmptyValue(field, record.fields[field]),
+  );
+}
+
+/**
+ * Whether a record shows "Check" (需要核对) on its Library row: a work of a known type with
+ * something read from its file not yet checked. A record of type Other (a contract, a deck)
+ * keeps the check to its "Cite as" panel.
+ */
+export const needsCheck = (record: Pick<ReferenceRecord, "fields" | "sources">): boolean =>
+  record.fields.type !== "document" && fieldsToCheck(record).length > 0;
+
+/**
  * What a record still needs before it can be cited: its title, authors and
  * date, of a work of a known type (a web page needs only its title: its
  * site stands in for authors, and it may have no date). Empty for a record

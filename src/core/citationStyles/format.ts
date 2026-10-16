@@ -186,11 +186,15 @@ export function formatJob(
   let next = 0;
   const citations = partsByCitation.map((each) =>
     each.flatMap((part) => {
-      const runs = (output.citations[next++] ?? []).map(({ item, ...run }): EngineRun =>
-        item === undefined ? run : { ...run, item: part.works[item] as number },
+      const runs = (output.citations[next++] ?? []).map(
+        ({ item, ...run }): EngineRun =>
+          item === undefined ? run : { ...run, item: part.works[item] as number },
       );
       if (part.raised === null) return runs;
-      return [...runs, { text: part.raised, script: "sup" as const, item: part.works[0] as number }];
+      return [
+        ...runs,
+        { text: part.raised, script: "sup" as const, item: part.works[0] as number },
+      ];
     }),
   );
   const chinese = <T extends EngineRun>(runs: readonly T[]) =>

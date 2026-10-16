@@ -21,10 +21,7 @@ import { LANGUAGE_SAMPLE, writtenInChinese } from "../../core/documents/textLang
 import { type CitationStyleId, defaultCitationStyle } from "../../shared/citationStyles";
 import { displayName } from "../../shared/documentNames";
 import { bibliographyShown } from "../../shared/mindBibliography";
-import {
-  chosenCitationStyle,
-  citationStylePromptDismissed,
-} from "../../shared/mindCitationStyle";
+import { chosenCitationStyle, citationStylePromptDismissed } from "../../shared/mindCitationStyle";
 import { core } from "./core";
 import { citationClusters, citedWorkOf } from "./editor/citationClusters";
 import { errorMessage } from "./errors";
