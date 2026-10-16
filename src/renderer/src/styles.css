@@ -5868,6 +5868,23 @@
     background: var(--color-attention);
     animation: none;
   }
+  .answer-steps-wait {
+    margin: 0 0 0 20px;
+    overflow-wrap: anywhere;
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--color-ink-meta);
+  }
+  .answer-steps-wait-stop {
+    padding: 0;
+    border-radius: 4px;
+    font-weight: 600;
+    color: var(--color-ink-secondary);
+
+    &:hover {
+      color: var(--color-ink);
+    }
+  }
   .answer-timeline {
     display: flex;
     flex-direction: column;
