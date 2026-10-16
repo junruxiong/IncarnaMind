@@ -232,16 +232,20 @@ describe("formatting a Mind's Citations", () => {
       [work(prospect, printed("68", "69"))],
       [work(prospect, printed("xii"))],
       [work(prospect, printed("1-3"))],
+      [work(prospect, printed("A-3"))],
       [work(prospect, printed("iii", "iv"))],
+      [work(prospect, printed("5-12", "5-13"))],
     );
     expect(formatted.clusters.map((cluster) => plain(cluster.runs))).toEqual([
       "(Kahneman & Tversky, 1979, p. 265)",
       "(Kahneman & Tversky, 1979, pp. 68–69)",
       "(Kahneman & Tversky, 1979, p. xii)",
-      "(Kahneman & Tversky, 1979, p. 1\u20113)",
+      "(Kahneman & Tversky, 1979, p. 1-3)",
+      "(Kahneman & Tversky, 1979, p. A-3)",
       "(Kahneman & Tversky, 1979, pp. iii–iv)",
+      "(Kahneman & Tversky, 1979, pp. 5-12–5-13)",
     ]);
-    expect(locatorOf(printed("1-3"), "en")).toEqual({ locator: "p. 1\u20113", label: "custom" });
+    expect(locatorOf(printed("1-3"), "en")).toEqual({ locator: "p. 1-3", label: "custom" });
     expect(locatorOf(printed("iii", "iv"), "en")).toEqual({
       locator: "pp. iii–iv",
       label: "custom",
@@ -251,7 +255,7 @@ describe("formatting a Mind's Citations", () => {
       label: "custom",
     });
     expect(locatorOf(printed("5-12", "5-13"), "en")).toEqual({
-      locator: "pp. 5\u201112–5\u201113",
+      locator: "pp. 5-12–5-13",
       label: "custom",
     });
     expect(locatorOf(printed("68", "69"), "en")).toEqual({ locator: "68-69", label: "page" });
