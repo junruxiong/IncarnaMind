@@ -486,14 +486,17 @@ function chatGptStandIn(): CoreAdapters["chatGptPlan"] {
 }
 
 /**
- * Test-only launch flag: a local server standing in for Anthropic (#872), at
+ * Test-only launch flags: a local server standing in for Anthropic (#872), at
  * this origin, where the Claude account signs in and asks
- * (tests/helpers/fakeAnthropic.ts). Only a test build honours it.
+ * (tests/helpers/fakeAnthropic.ts), and how long its sign-in waits, in
+ * milliseconds. Only a test build honours them.
  */
 function claudeStandIn(): CoreAdapters["claudeAccount"] {
   const origin = import.meta.env.MODE === "test" ? process.env.INCARNAMIND_TEST_CLAUDE : undefined;
   if (!origin) return undefined;
+  const timeout = Number(process.env.INCARNAMIND_TEST_CLAUDE_SIGN_IN_MS);
   return {
+    ...(Number.isInteger(timeout) && timeout > 0 && { signInTimeoutMs: timeout }),
     experimental: true,
     clientId: "test-client",
     authorizeUrl: `${origin}/oauth/authorize`,

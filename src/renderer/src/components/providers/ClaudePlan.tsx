@@ -1,6 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import type { ClaudeAccount, ClaudeSignInErrorKind } from "../../../../core/api";
-import type { MessageKey } from "../../../../shared/i18n";
+import type { ClaudeAccount } from "../../../../core/api";
 import {
   cancelSignInWithClaude,
   forgetClaudeSignInFailure,
@@ -9,6 +8,7 @@ import {
   useClaudeAccount,
   useClaudeSignIn,
 } from "../../claudeSignIn";
+import { CLAUDE_SIGN_IN_FAILURES } from "../../claudeSignInFailures";
 import { core } from "../../core";
 import { useGap, useT } from "../../i18n";
 import { useAppStore } from "../../store";
@@ -29,34 +29,34 @@ const PASTE: PasteWords = {
   },
 };
 
-const FAILURES: Record<ClaudeSignInErrorKind, MessageKey> = {
-  "sign-in-cancelled": "claudeAccount.problem.signInCancelled",
-  refused: "claudeAccount.problem.refused",
-  "unexpected-response": "claudeAccount.problem.unexpectedResponse",
-  "secret-storage": "chatgpt.signIn.error.secret-storage",
-  unavailable: "claudePlan.failed",
-  failed: "claudePlan.failed",
-};
-
 const linkClass = "font-semibold text-accent underline-offset-2 hover:underline";
 
-/** Whether this build offers the Claude account route (ADR-0019): never a row where it doesn't. */
 function useOffered(): boolean {
   return useClaudeAccount()?.available === true;
 }
 
-/**
- * "Use my Claude plan", the first-run row under Other ways (#872). Picking it opens it in place
- * to say, before anything is sent, what using the plan means; then it waits for the browser.
- */
+function useRowOpen(): [boolean, (open: boolean) => void] {
+  const waiting = useClaudeSignIn((state) => state.waiting);
+  const signedIn = useClaudeSignIn((state) => state.status?.account.state === "signed-in");
+  const [open, setOpen] = useState(waiting);
+  // A sign-in started anywhere (this row, ⌘K, a problem line) opens the row, so its wait and
+  // how it ended show here.
+  useEffect(() => {
+    if (waiting) setOpen(true);
+  }, [waiting]);
+  useEffect(() => {
+    if (signedIn) setOpen(false);
+  }, [signedIn]);
+  return [open, setOpen];
+}
+
 export function ClaudePlanWay({ onUseKey }: { onUseKey(): void }) {
   const t = useT();
   const offered = useOffered();
   const waiting = useClaudeSignIn((state) => state.waiting);
-  const [open, setOpen] = useState(false);
+  const [expanded, setOpen] = useRowOpen();
   const panel = useId();
   if (!offered) return null;
-  const expanded = open || waiting;
   const Chevron = expanded ? ChevronDownLineIcon : ChevronRightLineIcon;
   return (
     <div data-testid="way-claude" className="flex flex-col">
@@ -66,7 +66,7 @@ export function ClaudePlanWay({ onUseKey }: { onUseKey(): void }) {
         aria-expanded={expanded}
         aria-controls={panel}
         onClick={() => {
-          if (!waiting) setOpen(!open);
+          if (!waiting) setOpen(!expanded);
         }}
         className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-hover"
       >
@@ -87,15 +87,10 @@ export function ClaudePlanWay({ onUseKey }: { onUseKey(): void }) {
   );
 }
 
-/**
- * Settings › Models › "Already pay for a plan?": the Claude row. Signed out, Sign in with Claude
- * opens the same words in place as first run; signed in, the account and Sign out.
- */
 export function ClaudePlanRow() {
   const t = useT();
   const status = useClaudeAccount();
-  const waiting = useClaudeSignIn((state) => state.waiting);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useRowOpen();
   const row = useRef<HTMLLIElement>(null);
   const offered = status?.available === true;
   const openedAt = useAppStore((state) => state.settingsAt === "claude-plan");
@@ -104,13 +99,13 @@ export function ClaudePlanRow() {
   useEffect(() => {
     if (!offered || !openedAt) return;
     useAppStore.setState({ settingsAt: null });
-    if (!signedIn && !useClaudeSignIn.getState().waiting) setOpen(true);
+    if (!signedIn) setOpen(true);
     row.current?.scrollIntoView({ block: "center" });
-  }, [offered, openedAt, signedIn]);
+  }, [offered, openedAt, signedIn, setOpen]);
 
   if (!status || !offered) return null;
   const { account } = status;
-  const steps = !signedIn && (open || waiting);
+  const steps = !signedIn && open;
   return (
     <li ref={row} data-testid="plans-claude-account" className={ruledRowClass}>
       <div className="flex min-w-0 flex-col gap-0.5">
@@ -191,11 +186,6 @@ function AccountLines({ account }: { account: ClaudeAccount }) {
   );
 }
 
-/**
- * What using the plan means, said before anything is sent, with the usage limits first (#872);
- * then the wait for the browser, or how it failed. `onClose`: Cancel, back to the row.
- * `onUseKey`: where an API key can be pasted instead, if the place has one.
- */
 function ClaudePlanSignIn({
   titled = false,
   keepDefault = false,
@@ -277,11 +267,7 @@ function ClaudePlanSignIn({
           type="button"
           data-testid="claude-plan-sign-in"
           disabled={!storage.canSave}
-          onClick={() =>
-            void signInWithClaude({ keepDefault }).then((signedIn) => {
-              if (signedIn) onClose();
-            })
-          }
+          onClick={() => void signInWithClaude({ keepDefault })}
           className={buttonStyle("primary", "sm")}
         >
           {t("claudePlan.signIn")}
@@ -307,7 +293,7 @@ function ClaudePlanSignIn({
         >
           <p className="text-ink">
             <ProblemMark />
-            {t(FAILURES[failure.kind])}
+            {t(CLAUDE_SIGN_IN_FAILURES[failure.kind])}
             {onUseKey && failure.kind !== "sign-in-cancelled" && (
               <>
                 <span aria-hidden="true"> · </span>

@@ -1949,6 +1949,9 @@ export const en = {
   "claudePlan.paste.problem.other-sign-in":
     "That code is from an earlier sign-in. Sign in on the page just opened, then paste its code.",
   "claudePlan.failed": "The Claude sign-in didn't work",
+  "claudePlan.failure.timedOut": "The Claude sign-in wasn't finished in time: nothing was kept",
+  "claudePlan.failure.secretStorage":
+    "This computer has no keyring, so IncarnaMind can't keep your Claude sign-in safely",
   "claudePlan.details": "Details",
   "claudePlan.settings.line": "Sign in with your Claude account.",
   "claudePlan.signedIn": "Signed in as {account}",
