@@ -34,6 +34,7 @@ const FAILURES: readonly ClaimCheckFailure[] = [
   "malformed",
   "empty",
   "no-evidence",
+  "unread",
   "rate-limit",
   "cost-cap",
   "plan-limit",

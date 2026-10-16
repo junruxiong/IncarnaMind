@@ -342,15 +342,32 @@ export function createChecks(options: ChecksOptions) {
     recordCheckUnread(blocks.doc, request, files, requests);
   }
 
-  /** Where a Mind's sentences are checked: its Folder, or every Document. */
-  function scopeOf(mindId: string, allDocuments: boolean, checked?: CheckedDocument) {
+  /** What a check of a Mind's sentence never reads: the file the Mind was imported from, and `checked`. */
+  function leftOutOf(mindId: string, checked: CheckedDocument = {}): CheckedDocument {
+    const original = options.originalOf(mindId);
+    return {
+      documentIds: [...(original?.documentIds ?? []), ...(checked.documentIds ?? [])],
+      contentHashes: [...(original?.contentHashes ?? []), ...(checked.contentHashes ?? [])],
+    };
+  }
+
+  /**
+   * Where a Mind's sentences are checked: its Folder, or every Document, never
+   * what `leftOutOf` leaves out. Every check of a Mind's sentences scopes here
+   * (the contradiction watch leaves out the same), so a sentence finds the same
+   * evidence alone or in a whole check.
+   */
+  function scopeOf(mindId: string, allDocuments: boolean, checked: CheckedDocument = {}) {
     const folderId = options.mindFolder(mindId);
     const marked: ClaimCheckScope = { folderId, widened: allDocuments };
     const wanted: SearchScope | null =
       allDocuments || folderId === null
         ? null
         : { folderIds: [folderId], tagIds: [], documentIds: [] };
-    const scope = options.evidence.scope(wanted && options.resolveScope(wanted), checked);
+    const scope = options.evidence.scope(
+      wanted && options.resolveScope(wanted),
+      leftOutOf(mindId, checked),
+    );
     return {
       searchable: options.documents.searchableCount(scope.documentIds),
       folderId: allDocuments ? null : folderId,
@@ -367,8 +384,7 @@ export function createChecks(options: ChecksOptions) {
     const read = content.read(mindId, (blocks) => selectedSentences(blocks, stretches));
     if (!read.ok) return { kind: read.reason };
 
-    const original = options.originalOf(mindId) ?? undefined;
-    const { searchable, folderId, check } = scopeOf(mindId, input.allDocuments, original);
+    const { searchable, folderId, check } = scopeOf(mindId, input.allDocuments);
     if (searchable === 0) return { kind: "no-documents", folderId };
     const { scope: evidenceScope, marked: scope } = check;
 
@@ -484,8 +500,8 @@ export function createChecks(options: ChecksOptions) {
     ...options.watch,
     folderDocuments: (folderId) =>
       options.resolveScope({ folderIds: [folderId], tagIds: [], documentIds: [] }) ?? [],
-    evidenceScope: (documentIds, citedIds) =>
-      options.evidence.scope(documentIds, { documentIds: [...citedIds] }),
+    evidenceScope: (mindId, documentIds, citedIds) =>
+      options.evidence.scope(documentIds, leftOutOf(mindId, { documentIds: [...citedIds] })),
     searchableCount: (documentIds) => options.documents.searchableCount(documentIds),
     prepare,
     prepareQuietly,
@@ -513,6 +529,7 @@ export function createChecks(options: ChecksOptions) {
     documentVersions: options.watch.documentVersions,
     prepare,
     scopeOf: (mindId, allDocuments) => scopeOf(mindId, allDocuments),
+    citedNow,
     recordUnread,
     isRunning: (requestId) => running.has(requestId),
     claimCheck,

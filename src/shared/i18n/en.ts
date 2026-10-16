@@ -608,6 +608,8 @@ export const en = {
   "claim.reason.empty": "The model gave an empty reply.",
   "claim.reason.no-evidence":
     "The model's quote isn't in the Document it named, so its verdict isn't shown.",
+  "claim.reason.unread":
+    "The model answered without reading your Documents, so its verdict isn't shown. Check again.",
   "claim.reason.rate-limit": "The model's service is busy for now. Check again in a moment.",
   "claim.reason.cost-cap": "Checking it could pass your monthly cap.",
   "claim.reason.plan-limit": "Your plan's usage limit is reached.",
