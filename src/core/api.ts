@@ -6399,10 +6399,18 @@ export interface TagMerge {
 
 /**
  * What a Mind exports to: Markdown, for an archive, or Word (.docx), PDF or HTML, for the
- * deliverable; or a source pack, a PDF of the pages the Mind cites (#134). Formats are listed
- * in the order the options sheet offers them.
+ * deliverable; a source pack, a PDF of the pages the Mind cites (#134); or a web page to share,
+ * an HTML file whose readers open each Citation's quote. Formats are listed in the order the
+ * options sheet offers them.
  */
-export const EXPORT_FORMATS = ["docx", "pdf", "source-pack", "html", "markdown"] as const;
+export const EXPORT_FORMATS = [
+  "docx",
+  "pdf",
+  "source-pack",
+  "html",
+  "share-page",
+  "markdown",
+] as const;
 export type ExportFormat = (typeof EXPORT_FORMATS)[number];
 
 /**
@@ -6415,8 +6423,15 @@ export interface ExportPreferences {
   docx: WordExportPreferences;
   pdf: { includeQuestions: boolean };
   html: { includeQuestions: boolean };
+  "share-page": SharePagePreferences;
   /** How a PDF, an HTML file or Markdown shows someone's changes still waiting (#734). Absent: shown. */
   theirChanges?: TheirChangesShown;
+}
+
+export interface SharePagePreferences {
+  includeQuestions: boolean;
+  citationCards: boolean;
+  checkedLine: boolean;
 }
 
 /**
@@ -6466,6 +6481,14 @@ export interface ExportMindOptions {
    * IncarnaMind saying so. Absent: off.
    */
   commentFailedChecks?: boolean;
+  /**
+   * A web page to share only: each Citation's marker opens a card with
+   * its quote, the part of its Document around it, and its check. Off, the
+   * file is the HTML export. Absent: on.
+   */
+  citationCards?: boolean;
+  /** A web page to share only: its foot says "Citations checked with IncarnaMind". Absent: off. */
+  checkedLine?: boolean;
 }
 
 /** What exporting a Mind will write, for the User to see before the file is written. */

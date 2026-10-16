@@ -2712,6 +2712,7 @@ export const en = {
   "export.format.pdf": "PDF",
   "export.format.source-pack": "Source pack (PDF)",
   "export.format.html": "HTML",
+  "export.format.share-page": "Web page to share (.html)",
   "export.format.markdown": "Markdown (.md)",
   "export.more": "More formats",
   "export.options": "Export options…",
@@ -2723,6 +2724,12 @@ export const en = {
   "export.options.pdf": "Citations become footnotes with the Document and Location.",
   "export.options.html":
     "One file that opens in any browser. Citations become footnotes linked both ways.",
+  "export.options.share-page":
+    "One file anyone can open in a browser, to send or put on your own site. Nothing is uploaded.",
+  "export.share.cards": "Readers can open each Citation",
+  "export.share.cards.hint": "Each quote, with the passage it comes from",
+  "export.share.checkedLine": "Say “Citations checked with IncarnaMind” at the foot",
+  "export.share.checkedLine.hint": "One line of plain text that links to how the check works.",
   "export.options.markdown": "Citations become footnotes. Questions are kept.",
   "export.options.source-pack":
     "A cover list, then each cited page as it was saved, its quotes highlighted and numbered like the Mind's Citations.",
@@ -2906,6 +2913,29 @@ export const en = {
   "export.citation.document": "{document}",
   "export.citation.separator": ", ",
   "export.citation.accessed": "accessed {date}",
+  "share.page.shared": "Shared from IncarnaMind · {date}",
+  "share.page.about":
+    "Each Citation's card shows its quote, where it is, and what the check found.",
+  "share.page.made": "Made with IncarnaMind",
+  "share.page.found.all": "Every quote was found on its page, checked on {date}.",
+  "share.page.found.some":
+    "Checked on {date}: {found} of {total} quotes found on their pages. Each other Citation's card says why.",
+  "share.page.found.none.one":
+    "Checked on {date}: the quote wasn't found on its page. Its card says why.",
+  "share.page.found.none.other":
+    "Checked on {date}: none of the {total} quotes was found on its page. Each Citation's card says why.",
+  "share.page.checkedLine": "Citations checked with IncarnaMind",
+  "share.card.label": "Citation {number}: {source}",
+  "share.card.page": "page {range}",
+  "share.card.pages": "pages {range}",
+  "share.card.checked": "as of {date}",
+  "share.card.close": "Close",
+  "share.card.unsupported": "Unsupported by the Documents checked",
+  "share.card.unchecked": "Not checked when this was shared",
+  "share.card.row": "Row {row}",
+  "share.card.part": "Only this part of the Document is in this file.",
+  "share.card.missing": "The source wasn't available when this was shared",
+  "share.card.swipe": "Swipe down or tap outside to close.",
   "export.unnamedDocument": "Untitled Document",
   "export.chart": "Chart",
   "export.chart.titled": "Chart: {title}",
