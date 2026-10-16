@@ -115,8 +115,7 @@ const NO_MIND_TOOLS =
  * The Minds' Tools, when offered (#202): the User's words decide whether the
  * Answer answers, changes a Mind or makes one, and `route` says how
  * IncarnaMind read them. IncarnaMind, not the reply, reports what changed,
- * from the calls; the reply never repeats the new text. Not offered, in the
- * assistant (`route` is not null), the model is told it can't change a Mind.
+ * from the calls; the reply never repeats the new text.
  */
 export function mindInstructions(offered: boolean, route: RequestRoute | null = null): string {
   if (!offered) return route ? NO_MIND_TOOLS : "";

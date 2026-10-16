@@ -72,12 +72,6 @@ export function UnbackedClaimLine({
   );
 }
 
-/**
- * Under the Answer of a model that can't call Tools, to a request to write
- * into a Mind or change one: it says nothing was written, and Add to Mind puts
- * the Answer there, as the Answer's own Add to note does. It goes while the
- * Answer's added line shows.
- */
 export function NoMindToolsLine({
   answerId,
   onAdd,
