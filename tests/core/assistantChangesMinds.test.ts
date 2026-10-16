@@ -148,7 +148,13 @@ describe("The assistant changes Minds as Proposals", { timeout: 30_000 }, () => 
     expect(await checkpointsOf(core, plan.id)).toHaveLength(1);
     expect(await checkpointsOf(core, mind.id)).toHaveLength(0);
     expect(changesIn(answer)).toEqual([
-      { mindId: plan.id, created: false, request: expect.any(String), proposals: 1 },
+      {
+        mindId: plan.id,
+        created: false,
+        request: expect.any(String),
+        proposals: 1,
+        paragraphs: 1,
+      },
     ]);
   });
 
@@ -430,9 +436,15 @@ describe("New Blocks come in as the model writes them", { timeout: 30_000 }, () 
       const answer = messages.find((message) => message.id === asked.answerId);
       return answer?.kind === "answer" ? changesIn(answer) : [];
     };
-    await expect
-      .poll(stored)
-      .toEqual([{ mindId: mind.id, created: false, request: expect.any(String), proposals: 2 }]);
+    await expect.poll(stored).toEqual([
+      {
+        mindId: mind.id,
+        created: false,
+        request: expect.any(String),
+        proposals: 2,
+        paragraphs: 1,
+      },
+    ]);
 
     release();
     expect((await answerEnded(core, asked.answerId)).event).toBe("finished");
@@ -544,7 +556,13 @@ describe("New Blocks come in as the model writes them", { timeout: 30_000 }, () 
     const stopped = messages.find((message) => message.id === asked.answerId);
     if (stopped?.kind !== "answer") throw new Error("No Answer.");
     expect(changesIn(stopped)).toEqual([
-      { mindId: mind.id, created: false, request: expect.any(String), proposals: 2 },
+      {
+        mindId: mind.id,
+        created: false,
+        request: expect.any(String),
+        proposals: 2,
+        paragraphs: 1,
+      },
     ]);
   });
 });

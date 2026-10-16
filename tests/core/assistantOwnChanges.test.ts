@@ -575,6 +575,47 @@ describe("Taking back a revision", { timeout: 30_000 }, () => {
     return { page, before, second, regenerate };
   }
 
+  // protects=a revision of the page saves a Checkpoint of it first, as any change the assistant makes does; fails_when=none is saved, so the old version can't be restored from history; no_claim=what the Checkpoint holds.
+  test("a revision saves a Checkpoint of the page first", async () => {
+    const model = scriptedModel((call): ScriptedReply => {
+      if (asked(call).endsWith("write a summary page")) {
+        return called(call, "create_mind")
+          ? { text: "It covers the paper." }
+          : {
+              calls: [
+                { tool: "create_mind", input: { title: "Tide notes", content: SUMMARY_PAGE } },
+              ],
+            };
+      }
+      return called(call, "edit_mind")
+        ? { text: "It says more now." }
+        : {
+            calls: [
+              {
+                tool: "edit_mind",
+                input: {
+                  mind: "Tide notes",
+                  part: "Summary",
+                  content: "## Summary\n\nThe paper is about spring tides and the moon.",
+                },
+              },
+            ],
+          };
+    });
+    const { core, mind } = await setUp(model);
+    const first = await askAssistant(core, { text: "write a summary page", mindId: mind.id });
+    const pageId = changesIn(first)[0]?.mindId ?? "";
+    const before = (await core.listCheckpoints(pageId)).checkpoints.length;
+
+    await askAssistant(core, {
+      text: "make it longer",
+      mindId: mind.id,
+      conversationId: first.conversationId,
+    });
+
+    expect((await core.listCheckpoints(pageId)).checkpoints).toHaveLength(before + 1);
+  });
+
   // protects=Reject all on the Answer that revised its own waiting text puts back exactly what was there, still waiting as the first Answer's; fails_when=the old text is lost, comes back changed, or comes back as the second Answer's; no_claim=none beyond protects.
   test("Reject all on the revising Answer brings back exactly what was there", async () => {
     const { page, before, second } = await revised(() => ({ text: "Unused." }));

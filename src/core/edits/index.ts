@@ -287,9 +287,7 @@ export interface ProposeInput {
   instruction: string;
   prepared: PreparedChatModel;
   signal: AbortSignal;
-  /** Runs just before the change's first Proposals are written: a Checkpoint (#113). */
   beforeWriting(): void;
-  /** More of its Proposals are in the Mind, as they come. */
   written(request: string, count: number): void;
 }
 

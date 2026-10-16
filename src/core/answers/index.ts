@@ -142,7 +142,7 @@ import {
   createCitationSession,
   withoutFootnoteDefinitions,
 } from "./citations";
-import { askAgainNote, unbackedClaims as claimsNoCallMade, shownUpTo } from "./claimedChanges";
+import { askAgainNote, unbackedClaims as claimsNoCallMade, holdBack } from "./claimedChanges";
 import {
   conversationContext,
   conversationContextOf,
@@ -1018,7 +1018,6 @@ export function createAnswers(options: AnswersOptions) {
     const webPages = new Map<string, WebPageCall>();
     /** What each call of a Minds' Tool changed, by call, for its card when it finishes (#202). */
     const mindChanges = new Map<string, MindChange>();
-    /** Why each call of a Minds' Tool that changed nothing didn't, by call, for its card. */
     const mindProblems = new Map<string, MindProblem>();
     /** Keeps how a script's run went on its card. */
     const setScriptRun = (id: string, run: SkillScriptRun) => {
@@ -1490,7 +1489,6 @@ export function createAnswers(options: AnswersOptions) {
 
       const learntKey = modelKey(model, prepared);
       let outcome: Outcome = { status: "stopped" };
-      const mindNames = (mindId: string) => options.readableMindName(mindId);
       let mindsNow: { id: string; name: string }[] | null = null;
       const mindsListed = () => {
         mindsNow ??= minds?.list() ?? [];
@@ -1500,7 +1498,7 @@ export function createAnswers(options: AnswersOptions) {
         mindsNow = null;
         const claims = claimsNoCallMade(text, toolCalls, mindsListed());
         return claims.length > 0
-          ? { claims, note: askAgainNote(claims, toolCalls, mindNames) }
+          ? { claims, note: askAgainNote(claims, toolCalls, options.readableMindName) }
           : null;
       };
       for await (const event of engine.generate({
@@ -1557,11 +1555,7 @@ export function createAnswers(options: AnswersOptions) {
         cacheKey: place.conversationId ?? place.mindId ?? undefined,
         ...(input.assistant && {
           checkReply,
-          shownUpTo: (text: string) =>
-            shownUpTo(
-              text,
-              mindsListed().map((mind) => mind.name),
-            ),
+          shownUpTo: holdBack(() => mindsListed().map((mind) => mind.name)),
           mayEndBlank: () =>
             [...mindChanges.values()].some(
               (change) => change.created || change.revised || change.proposals > 0,
@@ -1884,11 +1878,10 @@ export function createAnswers(options: AnswersOptions) {
         ? mind.reading.section(MIND_TOKEN_LIMIT, asking)
         : mind?.section;
     const documents = options.documents.names();
-    const mindNames = (mindId: string) => options.readableMindName(mindId);
     const { context, origins } = conversationContextOf(turn.earlier, question.text, {
       mind: section,
       documents,
-      mindNames,
+      mindNames: options.readableMindName,
     });
     const requestOf = (reading: MindReading, kept: MindCut): RequestMind => ({
       text: kept.text,
@@ -1919,7 +1912,7 @@ export function createAnswers(options: AnswersOptions) {
                 context: conversationContextOf(turn.earlier, question.text, {
                   mind: smaller,
                   documents,
-                  mindNames,
+                  mindNames: options.readableMindName,
                 }).context,
                 request: requestOf(mind.reading, smaller),
                 share: smaller.share,

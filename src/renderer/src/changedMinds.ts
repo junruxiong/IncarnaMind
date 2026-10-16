@@ -6,7 +6,8 @@ import type { ConversationAnswer } from "../../core/api";
 
 /**
  * A Mind an Answer changed or made, the requests its changes there belong to,
- * and what its calls did there: paragraphs written whole, places changed.
+ * and what its calls did there: paragraphs written in whole Blocks, places
+ * changed.
  */
 export interface ChangedMind {
   mindId: string;
@@ -26,7 +27,7 @@ export function changedMinds(answer: Pick<ConversationAnswer, "toolCalls">): Cha
     row.created ||= change.created;
     if (change.request && !row.requests.includes(change.request)) row.requests.push(change.request);
     if (call.tool === "edit_mind" && !change.revised) row.changed += change.proposals;
-    else row.wrote += change.proposals;
+    else row.wrote += change.paragraphs ?? 0;
     rows.set(change.mindId, row);
   }
   return [...rows].map(([mindId, row]) => ({ mindId, ...row }));
