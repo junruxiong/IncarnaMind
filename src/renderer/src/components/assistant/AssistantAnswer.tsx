@@ -1,7 +1,9 @@
 import { useMemo } from "react";
 import type { ConversationAnswer, ConversationQuestion } from "../../../../core/api";
+import type { NodeJSON } from "../../../../shared/blockJson";
 import { answerBlocks, hasText } from "../../answerBlocks";
 import { useAnswers } from "../../answers";
+import { useAnswerWait } from "../../answerWait";
 import { useApprovals, waitingFor } from "../../approvals";
 import { regenerateAnswer } from "../../conversations";
 import {
@@ -23,6 +25,7 @@ import { UnreadFilesLine } from "../UnreadFilesLine";
 import { AnswerActions } from "./AnswerActions";
 import { AnswerSteps, useStepsScopeOf } from "./AnswerSteps";
 import { AnswerText } from "./AnswerText";
+import { UnbackedClaimLine, WaitingChangesLine } from "./ChangeProblemLines";
 import { MindChangesCard, NoMindLine, wantedAMind } from "./MindChangesCard";
 
 /** What adding an Answer needs from the thread around it. */
@@ -31,14 +34,16 @@ export interface AnswerKeeping {
   focusedMindName: string | null;
   add(answer: ConversationAnswer): void;
   pick(answer: ConversationAnswer, anchor: HTMLElement): void;
+  openTable(answer: ConversationAnswer, table: NodeJSON): void;
 }
 
 /**
  * An Answer in the assistant (#201): no box, as an Answer in a Mind has none
  * (DESIGN.md, Answer), in the assistant's reading sizes. Its steps first
  * (#391), folded to one line; its text with its Citations and their checks
- * in the margin; the card of the Minds it changed (#202); what went wrong,
- * and the approvals it waits for, under it; then its actions (`AnswerActions`).
+ * in their badges; the card of the Minds it changed (#202), and what kept it from
+ * changing one; what went wrong, and the approvals it waits for, under
+ * it; then its actions (`AnswerActions`).
  */
 export function AssistantAnswer({
   answer,
@@ -63,6 +68,8 @@ export function AssistantAnswer({
   const problem = useAnswers((state) => state.blocked[answer.id]);
   const waiting = useApprovals((state) => state.waiting);
   const approvals = useMemo(() => waitingFor(waiting, answer.id), [waiting, answer.id]);
+  const consenting = useAnswers((state) => state.phases[answer.id] === "waiting-for-consent");
+  const { silent, usual } = useAnswerWait(answer, streaming, approvals.length > 0 || consenting);
   const openSettings = useAppStore((state) => state.openSettings);
   const regenerate = () => void regenerateAnswer(answer.id);
   const written = hasText(blocks);
@@ -91,6 +98,7 @@ export function AssistantAnswer({
         question={question}
         streaming={streaming}
         waitingForApproval={approvals.length > 0}
+        wait={silent ? { usual } : null}
         onRegenerate={regenerate}
       />
       {answer.citationSupport === "none" && (
@@ -104,13 +112,17 @@ export function AssistantAnswer({
           answerId={answer.id}
           blocks={blocks}
           label={t("answer.label")}
+          streaming={streaming}
           regenerate={regenerate}
+          onOpenTable={(table) => keeping.openTable(answer, table)}
         />
       )}
       <MindChangesCard answer={answer} streaming={streaming} />
       {!streaming && question && !question.askedFrom && wantedAMind(answer) && (
         <NoMindLine question={question} />
       )}
+      {!streaming && <WaitingChangesLine answer={answer} />}
+      {!streaming && <UnbackedClaimLine answer={answer} onRegenerate={regenerate} />}
       {!streaming && scopeEmpty && (
         <ProblemLine
           role="status"
@@ -167,6 +179,7 @@ export function AssistantAnswer({
       <AnswerActions
         answer={answer}
         streaming={streaming}
+        stopAbove={silent}
         canKeep={written}
         focusedMindName={keeping.focusedMindName}
         onAdd={() => keeping.add(answer)}

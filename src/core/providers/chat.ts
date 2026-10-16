@@ -46,6 +46,7 @@ import {
 import { billingOf, ollamaCloudPrice } from "./catalog/billing";
 import { endpointOf, fieldAccepts, fieldUrl } from "./catalog/providers";
 import type { ChatGptPlan } from "./chatgpt/plan";
+import type { ClaudeSignIn } from "./claudeAccount/account";
 import {
   acceptsApiKey,
   baseUrlFor,
@@ -179,7 +180,7 @@ function fieldEndpointUrl(
   const provider = catalogProviderOf(kind, catalogId);
   const endpoint = provider && endpointOf(provider, endpointId);
   if (!endpoint?.field) return null;
-  const given = typeof value === "string" ? value.trim() : "";
+  const given = (typeof value === "string" ? value.trim() : "") || (endpoint.field.default ?? "");
   if (given === "") throw new InvalidInputError({ key: "error.provider.fieldMissing" });
   if (!fieldAccepts(endpoint.field, given)) {
     throw new InvalidInputError({ key: "error.provider.fieldInvalid", values: { value: given } });
@@ -261,6 +262,11 @@ export type ChatGptPlanAccess = Pick<
   "hasSignIn" | "credentials" | "apiBaseUrl" | "models" | "limits"
 >;
 
+export type ClaudeAccountAccess = Pick<
+  ClaudeSignIn,
+  "hasSignIn" | "credentials" | "apiBaseUrl" | "request"
+>;
+
 export function createChat(options: {
   db: Database;
   now: () => string;
@@ -269,6 +275,7 @@ export function createChat(options: {
   consent: Consent;
   createModel: ChatModelFactory;
   chatGpt: ChatGptPlanAccess;
+  claudeAccount: ClaudeAccountAccess;
   /** Looks up models in Ollama, for the settings their requests carry and how they cite. */
   ollamaModels: OllamaModels;
   /** Whether "Keep everything on this computer" is on: Questions then go only to a model on this computer. */
@@ -276,8 +283,22 @@ export function createChat(options: {
   /** Counts every cloud request of the models handed out, and holds the monthly cap (see ../cost/meter). */
   meter: Pick<Meter, "wrap">;
 }) {
-  const { db, now, settings, secrets, consent, createModel, chatGpt, ollamaModels, meter } =
-    options;
+  const {
+    db,
+    now,
+    settings,
+    secrets,
+    consent,
+    createModel,
+    chatGpt,
+    claudeAccount,
+    ollamaModels,
+    meter,
+  } = options;
+
+  const needsSignIn = async (kind: ChatProviderKind) =>
+    (kind === "chatgpt" && !(await chatGpt.hasSignIn())) ||
+    (kind === "claude-account" && !(await claudeAccount.hasSignIn()));
 
   /** What the meter needs to know of a model: how it's billed, its price and its output limit. */
   const meteredModel = (
@@ -356,6 +377,33 @@ export function createChat(options: {
   const modelLists = new Map<string, { at: number; models: ListedModel[] }>();
   const listKey = (row: ProviderRow) => `${row.id}\n${row.base_url ?? ""}\n${row.endpoint ?? ""}`;
 
+  /** The models a saved provider lists, kept for a few minutes; none for a cloud service the User hasn't allowed yet. */
+  const listedModels = async (row: ProviderRow, provider: ChatProvider): Promise<ListedModel[]> => {
+    // A cloud service isn't asked for its list before the User allows the chat flow to it.
+    const mayAsk = !provider.service || consent.status("chat", provider.service) === "accepted";
+    const cacheKey = listKey(row);
+    const cached = modelLists.get(cacheKey);
+    let listed = cached && Date.now() - cached.at < MODEL_LIST_TTL_MS ? cached.models : null;
+    if (provider.kind === "chatgpt") {
+      // The account's own list, read with its sign-in like the sign-in's own traffic, and
+      // kept by the plan itself: it carries nothing of the User's.
+      listed = (await chatGpt.models()).map(({ id, name }) => ({ id, name }));
+    }
+    if (!listed && !mayAsk) listed = [];
+    if (!listed) {
+      const apiKey = provider.hasApiKey ? await secrets.tryGet(keyName(row.id)) : null;
+      listed = await listProviderModels({
+        kind: provider.kind,
+        baseUrl: row.base_url,
+        apiKey,
+        endpoint: row.endpoint,
+        catalogId: row.catalog_id,
+      });
+      if (listed.length > 0) modelLists.set(cacheKey, { at: Date.now(), models: listed });
+    }
+    return listed;
+  };
+
   /** The ids the User added to a provider's menu, in the order added. */
   const menuModelsOf = (providerId: string): string[] =>
     db
@@ -413,9 +461,9 @@ export function createChat(options: {
 
   /**
    * What the model factory needs: a hosted provider's endpoint from the
-   * catalog, else the server's URL. The ChatGPT plan signs with the sign-in
-   * instead of a key, and a model in Ollama gets its fixed settings, the
-   * defaults when Ollama couldn't say.
+   * catalog, else the server's URL. The ChatGPT plan and a Claude account
+   * sign with the sign-in instead of a key, and a model in Ollama gets its
+   * fixed settings, the defaults when Ollama couldn't say.
    */
   const specFor = (
     server: {
@@ -437,6 +485,17 @@ export function createChat(options: {
         apiKey: null,
         modelId,
         credentials: chatGpt.credentials,
+        ...(thinking && { thinking }),
+      };
+    }
+    if (kind === "claude-account") {
+      return {
+        kind,
+        baseUrl: claudeAccount.apiBaseUrl,
+        apiKey: null,
+        modelId,
+        credentials: claudeAccount.credentials,
+        request: claudeAccount.request,
         ...(thinking && { thinking }),
       };
     }
@@ -534,7 +593,7 @@ export function createChat(options: {
     if (requiresApiKey(provider.kind, provider.catalogId) && !provider.hasApiKey) {
       return { ready: false, reason: "missing-api-key", provider, modelId };
     }
-    if (provider.kind === "chatgpt" && !(await chatGpt.hasSignIn())) {
+    if (await needsSignIn(provider.kind)) {
       return { ready: false, reason: "sign-in-required", provider, modelId };
     }
     if (!provider.service) return { ready: true, provider, modelId, consent: "not-required" };
@@ -703,29 +762,7 @@ export function createChat(options: {
       return Promise.all(
         knownRows().map(async (row) => {
           const provider = await toProvider(row);
-          // A cloud service isn't asked for its list before the User allows the chat flow to it.
-          const mayAsk =
-            !provider.service || consent.status("chat", provider.service) === "accepted";
-          const cacheKey = listKey(row);
-          const cached = modelLists.get(cacheKey);
-          let listed = cached && Date.now() - cached.at < MODEL_LIST_TTL_MS ? cached.models : null;
-          if (provider.kind === "chatgpt") {
-            // The account's own list, read with its sign-in like the sign-in's own traffic, and
-            // kept by the plan itself: it carries nothing of the User's.
-            listed = (await chatGpt.models()).map(({ id, name }) => ({ id, name }));
-          }
-          if (!listed && !mayAsk) listed = [];
-          if (!listed) {
-            const apiKey = provider.hasApiKey ? await secrets.tryGet(keyName(row.id)) : null;
-            listed = await listProviderModels({
-              kind: provider.kind,
-              baseUrl: row.base_url,
-              apiKey,
-              endpoint: row.endpoint,
-              catalogId: row.catalog_id,
-            });
-            if (listed.length > 0) modelLists.set(cacheKey, { at: Date.now(), models: listed });
-          }
+          const listed = await listedModels(row, provider);
           const defaultModel = chatModel?.providerId === row.id ? [chatModel.modelId] : [];
           const inMenu = listed.filter((each) => !each.other).map((each) => each.id);
           const addedIds = menuModelsOf(row.id);
@@ -826,6 +863,16 @@ export function createChat(options: {
           error: { kind: "not-signed-in", message: "Continue with ChatGPT to sign in first." },
         };
       }
+      if (server.kind === "claude-account" && !(await claudeAccount.hasSignIn())) {
+        return {
+          ok: false,
+          error: {
+            kind: "not-signed-in",
+            message: "Sign in with your Claude account first.",
+            claudeAccount: "signed-out",
+          },
+        };
+      }
 
       try {
         const service = await remoteService(server, modelId);
@@ -883,14 +930,16 @@ export function createChat(options: {
      * For Answers (#29): the default model, or `choice` from a Question's model
      * picker, after checking readiness and getting consent for its service on
      * `flow` (automatic tagging passes "tagging"). `thinking: "off"` skips
-     * thinking where the model can, for a short request on the chat flow; the
-     * chat flow's other requests ask for a summary of the model's reasoning.
+     * thinking where the model can, for a short request on the chat flow;
+     * the chat flow's other requests ask for a summary of the model's
+     * reasoning, with a modest budget for `thinking: "answer"` and a larger
+     * one for `"careful"`.
      * Throws `ChatNotReadyError` or `ConsentDeclinedError`; nothing is sent then.
      */
     async prepareModel(
       choice?: ChatModelChoice,
       flow: DataFlowId = "chat",
-      thinking?: "off",
+      thinking?: Exclude<ChatModelSpec["thinking"], undefined>,
     ): Promise<PreparedChatModel> {
       const readiness = await readinessFor(choice ?? settings.get().user.chatModel, flow);
       if (!readiness.ready) throw new ChatNotReadyError(readiness);
@@ -932,6 +981,10 @@ export function createChat(options: {
         catalog_id: provider.catalogId,
         endpoint: provider.endpoint,
       };
+      // Read before the first request: a local preset's list says what its models can do, so one is sized to its window.
+      if (!provider.service && isPreset(catalogProvider(provider.catalogId))) {
+        await listedModels(row, provider);
+      }
       const capabilities = capabilitiesOf(row, modelId, profile ? ollamaFacts(profile) : undefined);
       const metered = meter.wrap(
         model,
