@@ -2807,6 +2807,20 @@ export const en = {
   "export.comment.notFound.noQuote": "Quote not found in {source}",
   "export.comment.unsupported": "Unsupported by the Documents checked ({source})",
   "export.comment.contradicted": "Contradicted by the Documents checked ({source})",
+  "export.comment.sentence.contradicted": "Contradicted: {says}",
+  "export.comment.sentence.contradicted.worked":
+    "Contradicted: your Documents give {shown}, and the sentence says {stated}.",
+  "export.comment.sentence.contradicted.plain": "Contradicted by your Documents.",
+  "export.comment.sentence.unsupported": "Unsupported: nothing in your Documents says this.",
+  "export.comment.sentence.unsupported.folder": "Unsupported: nothing in “{folder}” says this.",
+  "export.comment.sentence.unsupported.differs":
+    "Unsupported: your Documents say something different: “{quote}” ({source})",
+  "export.comment.sentence.needs-recheck.edited": "Needs re-check: changed since it was checked.",
+  "export.comment.sentence.needs-recheck.new-version":
+    "Needs re-check: a Document it was checked against has a new version.",
+  "export.comment.sentence.needs-recheck.document-removed":
+    "Needs re-check: a Document it was checked against was deleted.",
+  "export.comment.sentence.needs-recheck.scope": "Needs re-check: the Mind is in another Folder now.",
   "export.html.notes": "Notes",
   "export.html.back": "Back to text",
   "export.citation.location": "{document}, {location}",
