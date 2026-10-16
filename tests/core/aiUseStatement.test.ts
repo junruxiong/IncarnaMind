@@ -79,6 +79,7 @@ function checked(
     evidence: null,
     says: null,
     calculation: null,
+    citesDecision: false,
     scope: { folderId: null, widened: false },
     versions: [{ documentId: document.id, contentHash: document.contentHash }],
     excluded: [],

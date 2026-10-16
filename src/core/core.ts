@@ -1516,6 +1516,7 @@ export function createCore(adapters: CoreAdapters): Core {
       searchableCount: (documentIds) => documents.searchableCount(documentIds ?? undefined),
       names: () => documents.names(),
       searchableLanguages: (documentIds) => documents.searchableLanguages(documentIds ?? undefined),
+      isWebPage: (documentId) => documents.getMany([documentId])[0]?.kind === "web",
       citationSource: (passageId) => documents.citationSource(passageId),
       pageTexts: (documentId, contentHash, from, to) =>
         documents.pageTexts(documentId, contentHash, from, to),

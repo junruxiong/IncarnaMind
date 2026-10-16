@@ -33,11 +33,7 @@ describe("Court decisions a sentence cites", () => {
       "Acme Corp. v. Widget Co.",
       "25 F. Supp. 2d 345",
     ],
-    [
-      "Roe v Wade, 410 U.S. 113 is the leading case.",
-      "Roe v Wade",
-      "410 U.S. 113",
-    ],
+    ["Roe v Wade, 410 U.S. 113 is the leading case.", "Roe v Wade", "410 U.S. 113"],
     [
       "The court followed People v. Anderson, 6 Cal. 3d 628 (1972).",
       "People v. Anderson",
@@ -53,26 +49,14 @@ describe("Court decisions a sentence cites", () => {
       "Donoghue v Stevenson",
       "[1932] AC 562",
     ],
-    [
-      "Smith v Jones [2023] EWHC 123 (Ch) decides this.",
-      "Smith v Jones",
-      "[2023] EWHC 123 (Ch)",
-    ],
-    [
-      "The Supreme Court said so in R v Brown [2024] UKSC 5.",
-      "R v Brown",
-      "[2024] UKSC 5",
-    ],
+    ["Smith v Jones [2023] EWHC 123 (Ch) decides this.", "Smith v Jones", "[2023] EWHC 123 (Ch)"],
+    ["The Supreme Court said so in R v Brown [2024] UKSC 5.", "R v Brown", "[2024] UKSC 5"],
     [
       "See Carlill v Carbolic Smoke Ball Co [1893] 1 QB 256.",
       "Carlill v Carbolic Smoke Ball Co",
       "[1893] 1 QB 256",
     ],
-    [
-      "Pepper v Hart [1993] AC 593 allows it.",
-      "Pepper v Hart",
-      "[1993] AC 593",
-    ],
+    ["Pepper v Hart [1993] AC 593 allows it.", "Pepper v Hart", "[1993] AC 593"],
     ["Applicants must now meet [2023] EWCA Civ 1234.", null, "[2023] EWCA Civ 1234"],
     ["See the ruling at [2019] 1 WLR 1234.", null, "[2019] 1 WLR 1234"],
     ["Mabo v Queensland (No 2) is reported at [1992] HCA 23.", null, "[1992] HCA 23"],

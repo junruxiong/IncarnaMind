@@ -82,6 +82,7 @@ const LEFT_CHECKING: ClaimCheckAttributes = {
   evidence: null,
   says: null,
   calculation: null,
+  citesDecision: false,
   scope: { folderId: null, widened: false },
   versions: [],
   excluded: [],

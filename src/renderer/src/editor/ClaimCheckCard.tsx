@@ -277,7 +277,8 @@ function Working({ calculation, onOpen }: { calculation: ClaimCalculation; onOpe
  * Location with the quote washed in the state's colour, and Add as Citation
  * when it isn't cited yet; for a contradiction, what the Document says; for a
  * figure worked out, its working and inputs; for nothing found, where it
- * looked, with Search all Documents; otherwise why, with Check again.
+ * looked, with Search all Documents, or, for a court decision no Document
+ * holds, that it can't be checked here; otherwise why, with Check again.
  * Documents IncarnaMind wrote that matched are named, with Count it.
  */
 function ClaimCard({
@@ -315,6 +316,7 @@ function ClaimCard({
   const fromPassage = !calculation || (state === "contradicted" && calculation.agrees);
   // An unsupported sentence keeps the nearest line when it says something different (#770).
   const differs = state === "unsupported" && check.evidence !== null;
+  const courtDecision = state === "unsupported" && check.citesDecision;
   const evidence = (decided && fromPassage) || differs ? check.evidence : null;
   const location = evidence ? citationLocation(evidence) : null;
   const where = location ? formatLocation(location, t) : null;
@@ -366,7 +368,13 @@ function ClaimCard({
         </figure>
       )}
       {calculation && <Working calculation={calculation} onOpen={onOpen} />}
-      {state === "unsupported" && !differs && (
+      {courtDecision && (
+        <p data-testid="claim-court-decision" className="citation-card-note">
+          <strong className="font-semibold text-ink">{t("claim.courtDecision.title")}</strong>{" "}
+          {t("claim.courtDecision.body")}
+        </p>
+      )}
+      {state === "unsupported" && !differs && !courtDecision && (
         <p data-testid="claim-nothing" className="citation-card-note">
           {searchedFolder
             ? t("claim.unsupported.inFolder", { folder: folderName })
@@ -451,24 +459,24 @@ function ClaimCard({
         )}
         {/* Where the Documents say something different the card has Open the page and Fix the sentence already, so it offers no more ways to look. */}
         {state === "unsupported" && !differs && (
-          <>
-            <button
-              type="button"
-              data-testid="claim-find-sources"
-              className="citation-card-action"
-              onClick={onFindSources}
-            >
-              {t("claim.findSources")}
-            </button>
-            <button
-              type="button"
-              data-testid="claim-search-web"
-              className="citation-card-action"
-              onClick={() => (webSearchOn ? onSearchWeb() : setWebOffShown(true))}
-            >
-              {t("claim.searchWeb")}
-            </button>
-          </>
+          <button
+            type="button"
+            data-testid="claim-find-sources"
+            className="citation-card-action"
+            onClick={onFindSources}
+          >
+            {t("claim.findSources")}
+          </button>
+        )}
+        {state === "unsupported" && !differs && !courtDecision && (
+          <button
+            type="button"
+            data-testid="claim-search-web"
+            className="citation-card-action"
+            onClick={() => (webSearchOn ? onSearchWeb() : setWebOffShown(true))}
+          >
+            {t("claim.searchWeb")}
+          </button>
         )}
         {state === "unsupported" && (
           <button

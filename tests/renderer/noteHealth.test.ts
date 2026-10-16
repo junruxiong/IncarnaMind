@@ -52,6 +52,7 @@ function checked(
     evidence: null,
     says: null,
     calculation: null,
+    citesDecision: false,
     scope: { folderId: null, widened: false },
     versions: [],
     excluded: [],

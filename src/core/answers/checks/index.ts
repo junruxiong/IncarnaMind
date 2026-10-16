@@ -62,6 +62,7 @@ import { parseMindId } from "../../minds";
 import type { PreparedChatModel } from "../../providers/chat";
 import { parseSearchScope } from "../../scope";
 import type { AnswerEngine } from "../engine";
+import { caseCitations } from "./caseCitations";
 import { type ClaimCheckDependencies, createClaimCheck } from "./claimCheck";
 import { createMindCheck } from "./mindCheck";
 import { markedSentences, markSentence, selectedSentences, updateCheck } from "./sentences";
@@ -227,6 +228,7 @@ function withResult(
         evidence: evidenceOf(result.evidence),
         says: result.says,
         calculation: result.calculation,
+        citesDecision: result.citesDecision === true,
       };
 }
 
@@ -390,6 +392,7 @@ export function createChecks(options: ChecksOptions) {
           evidence: null,
           says: null,
           calculation: null,
+          citesDecision: false,
           scope,
           versions: [],
           excluded: [],
@@ -582,6 +585,7 @@ export function createChecks(options: ChecksOptions) {
           evidence: null,
           says: null,
           calculation: null,
+          citesDecision: caseCitations(parsed.claim).length > 0,
           versions: [],
           excluded: [],
         };
