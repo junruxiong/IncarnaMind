@@ -249,6 +249,7 @@ const REVIEWED: readonly Row[] = [
 
 /** More of what Users ask, the eval's requests and questions that sound like requests among them. */
 const OURS: readonly Row[] = [
+  ["Kindly shorten my intro", "unclear"],
   ["What does the tutorial claim?", "answer"],
   ["no citations?", "answer"],
   ["Summarise these papers", "answer"],
