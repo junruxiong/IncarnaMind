@@ -109,6 +109,35 @@ describe("A request for text in a Mind", { timeout: 30_000 }, () => {
     expect(system).not.toContain("This request asks");
   });
 
+  // protects=a follow-up with no object is read as a change to what the conversation's last Answer wrote into a Mind, and as unclear with nothing written before; fails_when=the model is pushed to change a Mind with nothing written, or isn't told to after a write; no_claim=that a real model then edits.
+  test("“make it longer” asks for an edit after an Answer that changed a Mind, and nothing in a new conversation", async () => {
+    const systems: string[] = [];
+    const model = scriptedModel((call): ScriptedReply => {
+      if (asked(call).endsWith("make it longer")) systems.push(call.system);
+      if (!asked(call).endsWith("add a risks section")) return { text: "Which text?" };
+      return called(call, "add_to_mind")
+        ? { text: "Done." }
+        : {
+            calls: [
+              { tool: "add_to_mind", input: { content: "## Risks\n\nThe supplier is late." } },
+            ],
+          };
+    });
+    const { core, mind } = await setUp(model);
+
+    await askAssistant(core, { text: "make it longer", mindId: mind.id });
+    const first = await askAssistant(core, { text: "add a risks section", mindId: mind.id });
+    await askAssistant(core, {
+      text: "make it longer",
+      mindId: mind.id,
+      conversationId: first.conversationId,
+    });
+
+    expect(systems).toHaveLength(2);
+    expect(systems[0]).not.toContain("This request asks");
+    expect(systems[1]).toContain("This request asks to change text in a Mind");
+  });
+
   // protects=a request a Tool refused (no Mind open) isn't asked for again: the refusal is the answer; fails_when=the model is asked to write after it was told it can't; no_claim=none beyond protects.
   test("one a Tool refused isn't asked for again", async () => {
     const model = scriptedModel(
@@ -226,4 +255,35 @@ describe("A second copy", { timeout: 30_000 }, () => {
       expect(lastResult(model)).toContain("Revise it with edit_mind");
     },
   );
+
+  // protects=a section of new paragraphs goes in although its headings are those of the assistant's waiting text; fails_when=it is refused as a second copy for a heading alone; no_claim=none beyond protects.
+  test("isn't a section that only shares its headings: Paper B's “Key findings” go in beside Paper A's", async () => {
+    const paper = (name: string, finding: string) =>
+      `## ${name}\n\n### Key findings\n\n${name} finds that the tide ${finding}.`;
+    const model = scriptedModel((call): ScriptedReply => {
+      if (called(call, "add_to_mind")) return { text: "Done." };
+      const content = asked(call).includes("Paper B")
+        ? paper("Paper B", "falls")
+        : paper("Paper A", "rises");
+      return { calls: [{ tool: "add_to_mind", input: { content } }] };
+    });
+    const { core, mind } = await setUp(model);
+    const client = await connectToMind(core, mind.id);
+    const first = await askAssistant(core, { text: "add a section on Paper A", mindId: mind.id });
+
+    const second = await askAssistant(core, {
+      text: "add a section on Paper B",
+      mindId: mind.id,
+      conversationId: first.conversationId,
+    });
+
+    await client.settled();
+    expect(second.toolCalls.find((call) => call.tool === "add_to_mind")).toMatchObject({
+      status: "done",
+    });
+    expect(shownWithChanges(client).filter((line) => line.includes("Key findings"))).toEqual([
+      "+ Key findings",
+      "+ Key findings",
+    ]);
+  });
 });

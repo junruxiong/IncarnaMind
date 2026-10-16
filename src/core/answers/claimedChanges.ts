@@ -286,7 +286,6 @@ export function askAgainNote(
   ].join("\n");
 }
 
-/** What to tell the model when the User asked for text in a Mind and its reply holds it instead. */
 export function askToWriteNote(calls: readonly AnswerToolCall[], names: MindNames): string {
   return [
     thisAnswersRecord(calls, names),
