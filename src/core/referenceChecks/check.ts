@@ -154,7 +154,6 @@ export async function checkReference(
   // arXiv's own DOI, which DataCite registers for every preprint, so Crossref holds none.
   const doi = cited.doi ?? (cited.arxiv ? `10.48550/arXiv.${cited.arxiv}` : null);
   if (doi) {
-    // Each record the identifier leads to, until one is the work as cited; else the closest.
     const checks: ReferenceCheck[] = [];
     const lookUp = async (
       service: ReferenceService,
