@@ -24,7 +24,7 @@ import { stepsScope } from "../../assistantContext";
 import { NO_SCOPE } from "../../composer";
 import { CallRow, SkillRow } from "../../editor/AnswerView";
 import { CheckMarkIcon, RegenerateSmallIcon } from "../../editor/icons";
-import { holdSteps, type StepHold } from "../../heldStep";
+import { holdSteps, type ShownStep, type StepHold, takeOver } from "../../heldStep";
 import { useT } from "../../i18n";
 import { useMeetings } from "../../meetings";
 import { useModelNames } from "../../modelNames";
@@ -172,12 +172,15 @@ export function LiveLine({
 
 /** The step to show (see `holdSteps`). */
 function useHeldStep(step: LiveStep): LiveStep {
-  const [shown, setShown] = useState(step);
+  const taken = useRef<ShownStep | null | undefined>(undefined);
+  if (taken.current === undefined) taken.current = takeOver(step);
+  const [shown, setShown] = useState(taken.current?.step ?? step);
   const hold = useRef<StepHold | null>(null);
-  hold.current ??= holdSteps(step, setShown);
+  hold.current ??= holdSteps(taken.current ?? { step, since: Date.now() }, setShown);
   const latest = useRef(step);
   latest.current = step;
   const key = liveStepKey(step);
+  useEffect(() => hold.current?.mount(), []);
   // biome-ignore lint/correctness/useExhaustiveDependencies: a step is offered when its kind changes; its count rides along in `step`.
   useEffect(() => {
     hold.current?.offer(latest.current);
