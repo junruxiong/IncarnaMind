@@ -3692,10 +3692,15 @@ export const en = {
   "firstOpen.step.citation.title": "See a mistake it caught",
   "firstOpen.step.citation.done": "Saw a mistake it caught",
   "firstOpen.step.citation.body":
-    "One figure in the draft is wrong. Click the red mark in the margin to see what the results actually say.",
+    "One figure in the draft is wrong. Click the red ≠ in the margin to see what the results actually say.",
   "firstOpen.step.question.title": "Ask a question",
   "firstOpen.step.question.done": "Asked a question",
-  "firstOpen.step.question.body": "Press {shortcut} to ask your own Question about the draft.",
+  "firstOpen.step.question.body":
+    "Ask the two Documents anything. The Answer quotes them, and every quote is checked.",
+  "firstOpen.step.question.ready": "Ask: “{question}”",
+  "firstOpen.step.question.own": "or press {shortcut} to type your own",
+  "firstOpen.step.question.ownOnly": "Press {shortcut} to ask your own Question.",
+  "firstOpen.ready.reading": "The example's Documents are still being read. Try again in a moment.",
   "firstOpen.step.files.title": "Add your own files",
   "firstOpen.step.files.done": "Added your files",
   "firstOpen.step.files.body":

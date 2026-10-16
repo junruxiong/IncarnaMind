@@ -3,11 +3,13 @@ import type { CommandId } from "../../../shared/commands";
 import type { MessageKey } from "../../../shared/i18n";
 import { shortcutLabel } from "../commands/keymap";
 import { type CommandContext, commands, offered } from "../commands/registry";
+import { askReadyQuestion } from "../conversations";
 import { CheckMarkIcon } from "../editor/icons";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
 import { ExampleBanner, OtherExamples } from "./GettingStarted";
 import { CloseLineIcon } from "./lineIcons";
+import { SLOT, Slotted } from "./Slotted";
 import { buttonStyle } from "./ui";
 
 type StepKey = "citation" | "question" | "files";
@@ -90,11 +92,12 @@ export function FirstOpenSteps({ mindId }: { mindId: string }) {
   const addLinkedFolder = useAppStore((state) => state.addLinkedFolder);
   const updateGettingStarted = useAppStore((state) => state.updateGettingStarted);
   const removeExamples = useAppStore((state) => state.removeExamples);
+  const ready = useAppStore((state) => state.examples?.ready ?? null);
   if (!progress) return null;
 
   const done: Record<StepKey, boolean> = {
     citation: progress.citationChecked,
-    question: progress.askedOwn,
+    question: progress.askedOwn || progress.askedReady,
     files: progress.indexed,
   };
   const order: StepKey[] = ["citation", "question", "files"];
@@ -107,10 +110,10 @@ export function FirstOpenSteps({ mindId }: { mindId: string }) {
     <section
       aria-labelledby={`first-open-${mindId}`}
       data-testid="first-open-steps"
-      className="mb-6 rounded-lg bg-sheet p-4 font-sans shadow-[inset_0_0_0_1px_var(--color-rule)]"
+      className="mb-6 rounded-[10px] bg-sheet px-3.5 pt-3.5 pb-2.5 font-sans shadow-[inset_0_0_0_1px_var(--color-rule)]"
     >
       <div className="flex items-start justify-between gap-2">
-        <h2 id={`first-open-${mindId}`} className="text-[15px] leading-6 font-semibold text-ink">
+        <h2 id={`first-open-${mindId}`} className="text-[16px] leading-6 font-semibold text-ink">
           {t(allDone ? "firstOpen.done.title" : "firstOpen.title")}
         </h2>
         {allDone && (
@@ -157,9 +160,30 @@ export function FirstOpenSteps({ mindId }: { mindId: string }) {
               </p>
             </Step>
             <Step step="question" number={2} state={stateOf("question")}>
-              <p className="text-[13px] leading-5 text-ink-secondary">
-                {t("firstOpen.step.question.body", { shortcut: shortcutLabel("composer.focus") })}
-              </p>
+              {ready ? (
+                <>
+                  <p className="text-[13px] leading-5 text-ink-secondary">
+                    {t("firstOpen.step.question.body")}
+                  </p>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                    <button
+                      type="button"
+                      data-testid="first-open-ready"
+                      onClick={() => void askReadyQuestion()}
+                      className={buttonStyle("secondary", "sm")}
+                    >
+                      {t("firstOpen.step.question.ready", { question: ready })}
+                    </button>
+                    <span className="text-[13px] leading-5 text-ink-meta">
+                      <OwnQuestion message="firstOpen.step.question.own" />
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <p className="text-[13px] leading-5 text-ink-secondary">
+                  <OwnQuestion message="firstOpen.step.question.ownOnly" />
+                </p>
+              )}
             </Step>
             <Step step="files" number={3} state={stateOf("files")}>
               <p className="text-[13px] leading-5 text-ink-secondary">
@@ -199,6 +223,20 @@ export function FirstOpenSteps({ mindId }: { mindId: string }) {
         </button>
       </div>
     </section>
+  );
+}
+
+function OwnQuestion({ message }: { message: MessageKey }) {
+  const t = useT();
+  return (
+    <Slotted
+      message={t(message, { shortcut: SLOT })}
+      slot={
+        <kbd className="rounded-sm bg-chip px-[5px] py-px font-sans text-[12px] text-ink-strong">
+          {shortcutLabel("composer.focus")}
+        </kbd>
+      }
+    />
   );
 }
 

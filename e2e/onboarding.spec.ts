@@ -138,7 +138,7 @@ test("a first run opens on the credit paper with no model set up: its Citations 
 
   // Step 1 rings the red mark; its card says what the results say, and quotes them where they say it.
   await expect(step(window, "citation")).toHaveAttribute("data-state", "open");
-  await expect(mark).toHaveAttribute("data-guided", "");
+  await expect(mark).toHaveAttribute("data-guided");
   await pointAndClick(window, mark);
   const card = window.getByTestId("claim-card");
   await expect(card.getByTestId("claim-badge")).toHaveAttribute("data-check", "contradicted");
@@ -169,8 +169,34 @@ test("a first run opens on the credit paper with no model set up: its Citations 
   await expect
     .poll(async () => (await highlight.allTextContents()).join(""))
     .toContain("Net debt to EBITDA was 3.1 times");
-
   await window.keyboard.press("Escape");
+
+  // Step 2's ready Question brings the assistant with its Answer, written in advance with no
+  // model, its Citations found, and ticks the step.
+  const assistant = window.getByTestId("assistant");
+  await expect(assistant).toBeHidden();
+  const ready = step(window, "question").getByTestId("first-open-ready");
+  await expect(ready).toHaveText(
+    "Ask: “What does the facilities agreement say about the leverage limit?”",
+  );
+  await pointAndClick(window, ready);
+  await expect(assistant).toBeVisible();
+  await expect(assistant.getByTestId("assistant-question")).toContainText(
+    "What does the facilities agreement say about the leverage limit?",
+  );
+  const readyAnswer = assistantAnswers(window).last();
+  await expect(readyAnswer).toHaveAttribute("data-status", "done");
+  await expect(readyAnswer.getByTestId("answer-example")).toHaveText(
+    "Example Answer, written in advance: no model needed to try it",
+  );
+  const chips = readyAnswer.getByTestId("citation-chip");
+  await expect(chips).toHaveCount(2);
+  for (const chip of await chips.all()) await expect(chip).toHaveAttribute("data-check", "found");
+  await expect(step(window, "question")).toHaveAttribute("data-state", "done");
+  await expect(step(window, "question")).toContainText("Asked a question");
+  await expect(step(window, "files")).toHaveAttribute("data-state", "open");
+  await expect(window.getByTestId("chat-setup")).toHaveCount(0);
+
   await leaveFirstOpen(window);
   const addOwn = pane.getByTestId("example-add-own");
   await expect(addOwn).toHaveText("Add your Documents");
@@ -371,7 +397,7 @@ test("the steps card's last step offers Add files… and Link a folder… at onc
   await setLanguage(window, "zh-CN");
   await interceptOpenDialog(app, notes);
   await pointAndClick(window, files.getByRole("button").first());
-  await expect(pane.getByTestId("first-open-steps")).toContainText("已设置完成。", {
+  await expect(pane.getByTestId("first-open-steps")).toContainText("准备好了。", {
     timeout: 15_000,
   });
 });
@@ -401,6 +427,39 @@ test('"Ask a question" is ticked by an Answer that arrives, not by one that fail
     timeout: 15_000,
   });
   await expect(asked).toHaveAttribute("data-state", "done");
+});
+
+test("in Chinese, the ready Question is the Chinese example's, answered with no model, and the card holds at 1,100 px (#123)", async () => {
+  const { app, window } = await launchApp(dataDir, { examples: true });
+  await setWindowSize(app, window, 1100, 720);
+  await setLanguage(window, "zh-CN");
+  await expect(window.getByTestId("mind-title")).toHaveValue("授信委员会报告（草稿）", {
+    timeout: 30_000,
+  });
+  const checks = window.getByTestId("mind-pane").getByTestId("margin-check");
+  await expect(checks).toHaveCount(2);
+  await expect(checks.nth(1)).toHaveAttribute("data-check", "found", { timeout: 30_000 });
+  await markSteps(window, { citationChecked: true });
+
+  const ready = step(window, "question").getByTestId("first-open-ready");
+  await expect(ready).toHaveText("提问：“贷款协议对杠杆率上限是怎么规定的？”");
+  await expect(step(window, "question")).toContainText("输入你自己的问题");
+  const card = await window.getByTestId("first-open-steps").boundingBox();
+  const button = await ready.boundingBox();
+  expect(button && card && button.x + button.width <= card.x + card.width).toBe(true);
+
+  await pointAndClick(window, ready);
+  const answer = assistantAnswers(window).last();
+  await expect(answer).toHaveAttribute("data-status", "done");
+  await expect(answer.getByTestId("answer-example")).toHaveText(
+    "预先写好的示例回答，无需模型即可体验",
+  );
+  await expect(answer.getByTestId("citation-chip")).toHaveCount(2);
+  await expect(step(window, "question")).toHaveAttribute("data-state", "done");
+  await expect(step(window, "question")).toContainText("已提过问题");
+  // Not a Question of the User's own: the usage-data ask still waits for one.
+  expect((await gettingStarted(window)).askedOwn).toBe(false);
+  await app.close();
 });
 
 test("the steps can be hidden once all are done, and stay hidden", async () => {

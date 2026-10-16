@@ -46,6 +46,7 @@ import {
   type ExampleGroup,
   type Examples,
   type LinkedFolder,
+  type MarkedCitation,
   type Mind,
   QUESTION_BLOCK,
   type RecheckCitationInput,
@@ -191,7 +192,47 @@ export function createExamples(options: ExamplesOptions) {
         ...(group === DEFAULT_GROUP ? [] : [DEFAULT_GROUP]),
         ...order().filter((each) => each !== group),
       ],
+      ready: (!old && mind && EXAMPLE_SETS[group][mind.language].ready?.question) || null,
     };
+  };
+
+  /**
+   * The ready Question with its Answer and Citations (`askReadyQuestion`),
+   * checked against the Documents now; null while the credit paper isn't
+   * made or its Documents aren't all read.
+   */
+  const readyAnswer = () => {
+    const examples = stored(DEFAULT_GROUP);
+    const ready = examples && EXAMPLE_SETS[DEFAULT_GROUP][examples.language].ready;
+    if (!examples || !ready || !options.mindExists(examples.mindId)) return null;
+    if (!options.linkedFolderExists(examples.linkedFolderId)) return null;
+    const documents = options.documentsIn(examples.linkedFolderId);
+    const citations: MarkedCitation[] = [];
+    for (const [index, quote] of ready.quotes.entries()) {
+      const document = documents.find((each) => each.name === quote.document);
+      if (!document || !hasText(document)) return null;
+      const result = options.recheck({
+        documentId: document.id,
+        pageFrom: null,
+        pageTo: null,
+        quote: quote.quote,
+      });
+      if (!result.passageId || !result.contentHash) return null;
+      citations.push({
+        marker: index + 1,
+        passageId: result.passageId,
+        documentId: document.id,
+        documentName: document.name,
+        contentHash: result.contentHash,
+        pageFrom: result.pageFrom,
+        pageTo: result.pageTo,
+        location: result.location,
+        quote: quote.quote,
+        check: result.check,
+        checkReason: result.checkReason,
+      });
+    }
+    return { mindId: examples.mindId, question: ready.question, answer: ready.answer, citations };
   };
 
   /** A Citation's attributes: what is known before it is checked, then the check's result. */
@@ -513,6 +554,8 @@ export function createExamples(options: ExamplesOptions) {
     status,
 
     create,
+
+    readyAnswer,
 
     /**
      * The interface language changed (#709): each example the User hasn't

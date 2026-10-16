@@ -136,6 +136,17 @@ export async function openConversation(conversationId: string, answerId?: string
   }
 }
 
+/** Asks the first open's ready Question: its Answer, written in advance, opens in the assistant. */
+export async function askReadyQuestion(): Promise<void> {
+  try {
+    const { conversationId } = await core.askReadyQuestion();
+    useAppStore.getState().updateGettingStarted({ askedReady: true });
+    await openConversation(conversationId);
+  } catch (error) {
+    report(error);
+  }
+}
+
 /**
  * Asks a Question from the composer in the assistant's conversation (a
  * new one for a new chat): it shows at once, and its Answer streams in there.
