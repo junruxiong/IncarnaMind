@@ -75,12 +75,16 @@ export const meetingHelpCommands: readonly Command[] = [
   {
     id: "meeting.panel",
     label: (_ctx, t) =>
-      t(useMeetingHelp.getState().panel.shown ? "meetings.panel.hide" : "meetings.panel.show"),
+      t(
+        useMeetingHelp.getState().panel.shown ? "meetings.callHelp.hide" : "meetings.callHelp.show",
+      ),
+    keywords: ["meetings.callHelp"],
     group: "main",
     // Pressed again, it undoes itself.
     reversible: true,
     when: meetingsOn,
     enabled: whileLive,
+    globalKeys: () => helpKeysLabel("panel", useAppStore.getState().settings),
     run: () => files.showMeetingPanel(!useMeetingHelp.getState().panel.shown),
   },
   {

@@ -1858,7 +1858,7 @@ export interface DeviceSettings {
    * that the other people should be told. Recording waits for it.
    */
   meetingNoticeAccepted: boolean;
-  /** Settings › Meetings › "Show the floating panel": it appears while a Meeting records. */
+  /** Settings › Meetings › "Show the call help panel": it appears while a Meeting records. */
   meetingPanel: boolean;
   /** Settings › Meetings › "Keep the panel out of my screen share", where the system honours it. */
   meetingPanelHidden: boolean;
