@@ -424,7 +424,7 @@ describe("making a Mind", () => {
   test("one started from Documents or a Folder is said by its name, in Chinese too", async () => {
     method("createMind").mockResolvedValue({ ...made, title: "Tides" });
     await useAppStore.getState().createMind({ title: "Tides", startQuestion: true });
-    expect(method("createMind")).toHaveBeenCalledWith({ title: "Tides" });
+    expect(method("createMind")).toHaveBeenCalledWith({ title: "Tides", headed: true });
     expect(top()?.message).toBe("Started “Tides”");
     useAppStore.setState({ settings: { language: "zh-CN" } as never });
     await useAppStore.getState().createMind({ title: "Tides", startQuestion: true });
