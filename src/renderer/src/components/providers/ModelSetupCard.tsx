@@ -58,17 +58,27 @@ export function ModelSetupCard() {
   }, []);
   const running = ollama.status?.running;
   const card = useRef<HTMLElement>(null);
+  const previousView = useRef<View>(null);
   // It takes the composer's place, or opens from the steps card: either way the focus comes in.
   useEffect(() => {
-    card.current?.querySelector<HTMLButtonElement>("[data-setup-choice]:not(:disabled)")?.focus();
-  }, []);
+    if (view === null) {
+      const choice =
+        previousView.current === "key"
+          ? '[data-testid="setup-key"]'
+          : previousView.current === "local"
+            ? '[data-testid="way-local"]'
+            : "[data-setup-choice]:not(:disabled)";
+      card.current?.querySelector<HTMLButtonElement>(choice)?.focus();
+    }
+    previousView.current = view;
+  }, [view]);
 
   return (
     <section
       ref={card}
       data-testid="model-setup"
       aria-labelledby="model-setup-title"
-      className="flex max-h-[85vh] flex-col gap-2.5 overflow-y-auto px-4 py-2.5"
+      className="flex min-h-0 max-h-[85vh] flex-col gap-2.5 overflow-y-auto px-4 py-2.5"
     >
       <h2
         id="model-setup-title"
@@ -111,7 +121,10 @@ export function ModelSetupCard() {
                       ? "setup.way.local.running"
                       : "setup.way.local.notRunning",
                 )}
-                onClick={() => setView("local")}
+                onClick={() => {
+                  setOthers(true);
+                  setView("local");
+                }}
                 {...(!running && {
                   link: { label: t("setup.getOllama"), href: "https://ollama.com/download" },
                 })}
