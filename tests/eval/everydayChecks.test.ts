@@ -202,6 +202,28 @@ describe("Only what was asked changes", () => {
   });
 });
 
+describe("Asked after the example's Answer", () => {
+  const reply = (text: string) =>
+    requestFailures(
+      outcome({
+        expected: { write: false, cite: false, coverAll: false, noEarlier: true },
+        answer: { text, citations: [], toolCalls: [], steps: null },
+      }),
+    ).map((failure) => failure.kind);
+
+  // protects=a reply that goes back to an earlier Answer or the example fails, in English and in Chinese, and one about the Question doesn't; fails_when=it passes, or an ordinary reply that says "leverages" or "忽略" fails; no_claim=none beyond protects.
+  test("a reply about an earlier Answer or the example fails", () => {
+    expect(reply("GraphST leverages spatial information to ignore the noise. [^1]")).toEqual([]);
+    expect(reply("GraphST 利用空间信息，忽略了噪声。")).toEqual([]);
+    expect(reply("It claims this. My first answer cited a facilities agreement.")).toEqual([
+      "earlier",
+    ]);
+    expect(reply("It claims this. Please disregard the 3.5x leverage limit.")).toEqual(["earlier"]);
+    expect(reply("它的主张是这样。另外，上一个回答讲的是租赁合同。")).toEqual(["earlier"]);
+    expect(reply("它的主张是这样。请忽略之前的杠杆率数字。")).toEqual(["earlier"]);
+  });
+});
+
 describe("Pass rates", () => {
   // protects=a request is held to its floor over its runs, per model, and runs are counted per language; fails_when=one failed run marks a request that meets its floor, or a request under it passes; no_claim=none beyond protects.
   test("per request against its floor, and per language", () => {

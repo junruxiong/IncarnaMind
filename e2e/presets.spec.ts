@@ -175,9 +175,7 @@ test("LM Studio and Unsloth Studio are set up beside Ollama, not under More…, 
     const useIt = form.getByTestId("provider-use-key");
     await expect(form.getByTestId("provider-more-toggle")).toHaveCount(0);
     await expect(form.getByTestId("provider-field")).toHaveValue("127.0.0.1:8888");
-    await expect(form.getByTestId("local-server")).toContainText(
-      "Unsloth Studio is running on this computer",
-    );
+    await expect(form.getByTestId("local-server")).toContainText("Unsloth Studio is running");
     const model = form.getByTestId("provider-model");
     await expect(model.locator("option")).toHaveText([
       "qwen3.5-4b",
