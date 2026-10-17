@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -1900,6 +1901,11 @@ export async function removeDataFolder(dataDir: string): Promise<void> {
       if (shot) await info.attach("app-window", { path, contentType: "image/png" });
     }
     await closeOrKill(app);
+  }
+  // The app's log goes with a failed test's traces: what happened on CI's machine is gone after.
+  const log = join(dataDir, "logs", "incarnamind.log");
+  if (info.status !== info.expectedStatus && existsSync(log)) {
+    await info.attach("app-log", { path: log, contentType: "text/plain" });
   }
   await rm(dataDir, { recursive: true, force: true, maxRetries: 3 });
 }

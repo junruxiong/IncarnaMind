@@ -81,6 +81,8 @@ async function openOffline(app: ElectronApplication, path: string): Promise<Page
       width: 1100,
       height: 760,
       useContentSize: true,
+      // macOS keeps a window no taller than the screen otherwise, and CI's Mac has a small one.
+      enableLargerThanScreen: true,
       webPreferences: { session: offline, sandbox: true, contextIsolation: true },
     });
     await window.loadFile(file);
