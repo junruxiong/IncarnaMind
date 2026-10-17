@@ -8,13 +8,16 @@ import { createPortal } from "react-dom";
 import type * as Y from "yjs";
 import { ANSWER_BLOCK, MIND_CONTENT_FIELD } from "../../../core/api";
 import { writingTime } from "../../../shared/blockTimes";
-import { type CitationStyleId, citationStyle } from "../../../shared/citationStyles";
+import type { CitationForm } from "../../../shared/citationStyles";
 import { translate } from "../../../shared/i18n";
 import { checkSentences } from "../checks";
 import {
+  citationForm,
   useCitationFormattingFor,
   useMindCitationStyle,
+  useMindFormatting,
   useMindStyleChoice,
+  useMindTextLanguage,
 } from "../citationFormatting";
 import { noteHandle, readMindHandle } from "../commands/handles";
 import { shortcutLabel } from "../commands/keymap";
@@ -299,7 +302,7 @@ function MindEditorView({
   const importing = useWordFile(doc).progress !== null;
   /** The Mind's citation style, followed as it changes (#289). */
   const styleChoice = useMindStyleChoice(doc);
-  const styleRef = useRef<CitationStyleId>(styleChoice.chosen ?? "numbered");
+  const formRef = useRef<CitationForm>(citationForm(styleChoice.chosen ?? "numbered", undefined));
 
   const editor = useEditor(
     {
@@ -321,7 +324,7 @@ function MindEditorView({
           wordBlockView,
         }),
         // Footnotes are numbered as the Mind's citation style counts its Citations (#289).
-        CitationNumbers.configure({ form: () => citationStyle(styleRef.current).form }),
+        CitationNumbers.configure({ form: () => formRef.current }),
         CitationClusters,
         ClaimChecks,
         CopyCitations,
@@ -423,13 +426,15 @@ function MindEditorView({
 
   // The Citations and References in the Mind's citation style (#289), formatted off the
   // window's thread, and the footnotes numbered again when the style counts Citations otherwise.
-  const style = useMindCitationStyle(editor, styleChoice);
-  styleRef.current = style;
+  const textLanguage = useMindTextLanguage(editor);
+  const style = useMindCitationStyle(editor, styleChoice, textLanguage);
+  const form = citationForm(style, useMindFormatting(mindId));
+  formRef.current = form;
   useDefaultStyleNotice({ mindId, doc, style, chosen: styleChoice.chosen, readOnly });
-  useCitationFormattingFor(editor, style, mindId);
+  useCitationFormattingFor(editor, style, mindId, textLanguage);
   useEffect(() => {
-    if (!editor.isDestroyed) setCitationForm(editor.view, citationStyle(style).form);
-  }, [editor, style]);
+    if (!editor.isDestroyed) setCitationForm(editor.view, form);
+  }, [editor, form]);
 
   useEffect(
     () => (readOnly ? undefined : registerMindEditor(mindId, editor)),
