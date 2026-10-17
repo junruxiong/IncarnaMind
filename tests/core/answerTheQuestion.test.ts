@@ -28,7 +28,6 @@ interface Walk {
   bothQuestion: string;
   wordQuestion: string;
   contract: string[];
-  /** What a model that has seen the example's Answer as its own would add; what one that hasn't says. */
   reconciled: string;
   plain: string;
 }
@@ -74,7 +73,6 @@ const WALKS: Record<Language, Walk> = {
   },
 };
 
-/** What `model` was sent in the requests it got after the first `seen`: the messages, and the instructions. */
 function sentSince(model: MockLanguageModelV4, seen: number) {
   const requests = model.doStreamCalls.slice(seen).map((_, index) => promptOf(model, seen + index));
   return {
@@ -92,7 +90,7 @@ async function setUp(language: Language) {
   const walk = WALKS[language];
   const ready = EXAMPLE_SETS.credit[language].ready;
   if (!ready) throw new Error("The credit example has no ready Question.");
-  // A model that has the example's Question in what it reads reconciles with it, as Claude Sonnet 5.5 did.
+  // Reads the example's Question in what it is sent, and goes back to it.
   const model = scriptedModel((call) => ({
     text: call.prompt.includes(ready.question) ? walk.reconciled : walk.plain,
   }));
@@ -107,7 +105,6 @@ async function setUp(language: Language) {
   return { walk, ready, core, model, made, conversationId: asked.conversationId };
 }
 
-/** The Question, in the one conversation, from a Mind of the User's own, and what the model was sent for it. */
 async function askFrom(
   core: Core,
   model: MockLanguageModelV4,
