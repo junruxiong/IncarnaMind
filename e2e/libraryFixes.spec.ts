@@ -192,11 +192,25 @@ for (const language of ["en", "zh-CN"] as const) {
     await expect(needs.getByTestId("library-organize-use")).toHaveText(
       language === "en" ? "Use llm.example.com" : "使用 llm.example.com",
     );
-    await expect(needs.getByTestId("library-organize-sends")).toHaveText(
+    const sends = needs.getByTestId("library-organize-sends");
+    await expect(sends).toHaveText(
       language === "en"
-        ? "Each Document's name and the start of its text (for a scan, images of its first pages), and your Folders' and Tags' names and descriptions, go to llm.example.com"
-        : "每个文档的名称和开头的文字（扫描件则是前几页的图片），以及文件夹和标签的名称与描述，会发送给 llm.example.com",
+        ? "Sends document names and excerpts to llm.example.com. · Details"
+        : "会把文档名称和摘录发送给 llm.example.com。 · 详情",
     );
+    const details = sends.getByTestId("library-organize-sends-details");
+    await details.focus();
+    await window.keyboard.press("Enter");
+    await expect(details).toHaveAttribute("aria-expanded", "true");
+    await expect(sends.getByTestId("library-organize-sends-list")).toHaveText(
+      language === "en"
+        ? "Each Document's name and the start of its text (for a scan, images of its first pages), and your Folders' and Tags' names and descriptions, go to llm.example.com."
+        : "每个文档的名称和开头的文字（扫描件则是前几页的图片），以及文件夹和标签的名称与描述，会发送给 llm.example.com。",
+    );
+
+    await window.keyboard.press("Space");
+    await expect(details).toHaveAttribute("aria-expanded", "false");
+    await expect(sends.getByTestId("library-organize-sends-list")).toHaveCount(0);
 
     // The answer is kept: Organize runs with that model, and asks no more.
     await pointAndClick(window, needs.getByTestId("library-organize-use"));

@@ -7,7 +7,7 @@
  * word; a style writes each cluster (Citations side by side) in the text or
  * as a note.
  */
-import type { CitationStyle } from "../../../shared/citationStyles";
+import type { ResolvedCitationStyle } from "../../../shared/citationStyles";
 import type { SourceContext } from "../../../shared/sources";
 import type { CitationFormatRequest, FormattedCitations } from "../../api";
 import type { Block, Inline } from "../../mindText";
@@ -22,7 +22,7 @@ export interface Written {
 }
 
 export interface CitationOptions {
-  style: CitationStyle;
+  style: ResolvedCitationStyle;
   /** Whether a Numbered Mind shows its Bibliography. */
   bibliography: boolean;
   heading: string;

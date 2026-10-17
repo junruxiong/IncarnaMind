@@ -7,6 +7,7 @@ import {
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  nameMind,
   newMind,
   removeDataFolder,
   setLanguage,
@@ -113,7 +114,7 @@ test("the header, the thread, the Task tray and the composer share one left edge
   await dismissChatSetup(window);
   await connectLocalChatModel(window);
   await newMind(window);
-  await window.getByTestId("mind-title").fill("Credit memo");
+  await nameMind(window, "Credit memo");
   const assistant = window.getByTestId("assistant");
 
   // The empty conversation's "Reads …" icon, before any Answer.

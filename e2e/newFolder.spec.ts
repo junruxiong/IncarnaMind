@@ -9,6 +9,7 @@ import {
   documentIdOf,
   launchApp,
   motionSettled,
+  nameMind,
   newMind,
   pointAndClick,
   removeDataFolder,
@@ -331,7 +332,7 @@ test("a sidebar selection of Documents and a Mind makes one Folder with all of t
     await dismissChatSetup(window);
     await addDocuments(window, await writeTexts("Alpha", "Beta", "Gamma"));
     await newMind(window);
-    await window.getByTestId("mind-title").fill("Plan");
+    await nameMind(window, "Plan");
     const sidebar = window.getByTestId("sidebar");
     const documentRow = (name: string) =>
       sidebar
@@ -384,7 +385,7 @@ test("a Mind's ⋯ makes a Folder with that Mind in it, and ⌘Z puts it back", 
     await setWindowSize(app, window, 1100, 700);
     await dismissChatSetup(window);
     await newMind(window);
-    await window.getByTestId("mind-title").fill("Plan");
+    await nameMind(window, "Plan");
     const mind = window.getByTestId("mind-row").filter({ hasText: "Plan" });
     await mind.hover();
     await pointAndClick(window, mind.getByTestId("mind-menu"));

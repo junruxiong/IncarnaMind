@@ -2,10 +2,15 @@
 import type { FormatJob } from "./format";
 import type { EngineOutput, StyleDescription } from "./wasm";
 
+/** A style of the pack to format with, by its file's name, and the locale its terms come from. */
+export interface EngineStyle {
+  packId: string;
+  locale?: string;
+}
+
 export interface WorkerRequest {
   id: number;
-  /** A shipped style, by its file in the styles folder. */
-  style: { file: string };
+  style: EngineStyle;
   job: FormatJob;
 }
 

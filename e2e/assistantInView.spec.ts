@@ -8,6 +8,7 @@ import {
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  nameMind,
   newMind,
   removeDataFolder,
   setWindowSize,
@@ -74,7 +75,7 @@ async function start({ task }: { task: boolean }) {
   await dismissChatSetup(window);
   await connectLocalChatModel(window);
   await newMind(window);
-  await window.getByTestId("mind-title").fill("Credit memo");
+  await nameMind(window, "Credit memo");
   for (const question of ["First", "Second", "Third", "Fourth", "Fifth"])
     await askInAssistant(window, question);
   if (task) {

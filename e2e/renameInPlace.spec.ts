@@ -7,6 +7,7 @@ import {
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  nameMind,
   newMind,
   removeDataFolder,
   setWindowSize,
@@ -239,7 +240,7 @@ test("a Mind renames in its tab by double-click and F2, and Enter that confirms 
     await setWindowSize(app, window, 1100, 700);
     await dismissChatSetup(window);
     await newMind(window);
-    await window.getByTestId("mind-title").fill("Shortlist");
+    await nameMind(window, "Shortlist");
     const tab = window.getByTestId("tab-title");
     await tab.dblclick();
     const field = window.getByTestId("tab-rename");

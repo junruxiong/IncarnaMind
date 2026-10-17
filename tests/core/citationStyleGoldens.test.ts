@@ -25,7 +25,7 @@ const text = (runs: readonly { text: string }[] | null | undefined) =>
 
 describe("each shipped style formats the 30 references as it did when its golden file was made", () => {
   for (const style of CITATION_STYLES) {
-    if (style.file === null) continue;
+    if (style.packId === null) continue;
     test(style.id, async () => {
       const output = formatHere(style.id, {
         items: fixtureReferences(),

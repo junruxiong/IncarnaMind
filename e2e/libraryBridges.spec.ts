@@ -8,7 +8,9 @@ import {
   coreOf,
   createDataFolder,
   dismissChatSetup,
+  enterContent,
   expectReadyDocuments,
+  frontMindName,
   launchApp,
   linkFolderFromSidebar,
   newMind,
@@ -223,7 +225,7 @@ test("filters by year, format, status and Folder with counts, and asks about the
     await pointAndClick(window, ask);
 
     await expect(window.getByTestId("library")).toHaveCount(0);
-    await expect(window.getByTestId("mind-title")).toHaveValue("Tide notes");
+    await expect(frontMindName(window)).toHaveText("Tide notes");
     const editor = window.getByTestId("mind-editor");
     await expect(editor).toContainText("Notes on the tides.");
     // The composer takes the focus, its Search scope the Documents chosen.
@@ -254,7 +256,7 @@ test("filters by year, format, status and Folder with counts, and asks about the
       window,
       window.getByTestId("folder-actions").filter({ visible: true }).getByTestId("folder.ask"),
     );
-    await expect(window.getByTestId("mind-title")).toHaveValue("Tide notes");
+    await expect(frontMindName(window)).toHaveText("Tide notes");
     await expect(chips).toHaveCount(1);
     await expect(chips).toHaveText(FOLDER);
     await expect(chips).toHaveAttribute("data-kind", "folder");
@@ -306,7 +308,7 @@ test("a Folder's New Mind here starts a Mind that searches the Folder, and the Q
     await pointAndClick(window, head.getByTestId("folder-menu"));
     await pointAndClick(window, menu.getByTestId("folder.newMind"));
     await expect(window.getByTestId("library")).toHaveCount(0);
-    await expect(window.getByTestId("mind-title")).toBeFocused();
+    await enterContent(window);
     await window.keyboard.type("Tides");
     const editor = window.getByTestId("mind-editor");
     await screenshot(window, "library-new-mind");
@@ -352,7 +354,7 @@ test("with no Mind yet, asking about many Documents chosen makes one, and their 
       library.getByRole("button", { name: "Ask about these 10 Documents" }),
     );
 
-    await expect(window.getByTestId("mind-title")).toHaveValue("");
+    await expect(frontMindName(window)).toHaveText("Untitled");
     // The composer's Search scope: its first chips, then "+N more".
     const composer = composerOf(window);
     const input = composer.getByTestId("composer-input");

@@ -11,6 +11,7 @@ import {
   dismissChatSetup,
   launchApp,
   motionSettled,
+  nameMind,
   newMind,
   pointAndClick,
   pointAt,
@@ -104,7 +105,7 @@ async function writeThesis(window: Page, heading: string): Promise<Locator> {
   await writeFile(join(sources, "Tides.pdf"), TIDES);
   await addDocuments(window, [join(sources, "Tides.pdf")]);
   await newMind(window);
-  await window.getByTestId("mind-title").fill("Thesis");
+  await nameMind(window, "Thesis");
   const editor = editorOf(window);
   await editor.click();
   await window.keyboard.type(`# ${heading}`);
@@ -246,7 +247,7 @@ test("an empty Mind says there is nothing to report, not a table of zeros, in bo
     await setLanguage(window, language);
     const text = TEXTS[language];
     await newMind(window);
-    await window.getByTestId("mind-title").fill("Thesis");
+    await nameMind(window, "Thesis");
     const before = await tabs(window).count();
 
     await runCommand(window, "palette", text, `ai-statement-empty-${language}`);
@@ -276,7 +277,7 @@ for (const language of ["en", "zh-CN"] as const) {
     await setWindowSize(app, window, 1440, 900);
     await addDocuments(window, [join(sources, "Tides.pdf")]);
     await newMind(window);
-    await window.getByTestId("mind-title").fill("Thesis");
+    await nameMind(window, "Thesis");
     const editor = editorOf(window);
     await editor.click();
     await window.keyboard.type(sentences.join(" "));

@@ -23,12 +23,15 @@ import {
   dismissChatSetup,
   expectReadyDocuments,
   exportFromMenu,
+  frontMindName,
   importWordFromMenu,
   interceptOpenDialog,
   launchApp,
   motionSettled,
   openDocumentMenu,
+  openPageMenu,
   openSettings,
+  pageMenuButton,
   pointAndClick,
   removeDataFolder,
   savedLine,
@@ -132,10 +135,14 @@ test("Import a Word file… asks whose it is, then opens the Mind with what is k
   await expect(dialog).toBeHidden();
 
   const pane = window.getByTestId("mind-pane");
-  await expect(window.getByTestId("mind-title")).toHaveValue("Market entry memo (Velomark)");
-  await expect(window.getByTestId("mind-word-origin")).toHaveText(
-    "From Market entry memo (Velomark).docx · Export keeps its styles",
-  );
+  await expect(frontMindName(window)).toHaveText("Market entry memo (Velomark)");
+  // Where it came from, and that export keeps its styles, are in the page's ⋯ menu.
+  const pageMenu = await openPageMenu(window);
+  const from = pageMenu.getByTestId("page-from");
+  await expect(from).toHaveText("From Market entry memo (Velomark).docx");
+  await expect(from).toHaveAttribute("title", /Export keeps its styles/);
+  await window.keyboard.press("Escape");
+  await expect(pageMenu).toBeHidden();
   const editor = window.getByTestId("mind-editor");
   await expect(editor.locator("h1")).toHaveText(["1. Summary", "2. Options"]);
   await expect(editor.locator("ol li")).toHaveText([
@@ -154,7 +161,7 @@ test("Import a Word file… asks whose it is, then opens the Mind with what is k
   await expect(box).toContainText("At a glance");
   const label = box.locator(".word-atom-label");
   // Away from where the import screen's Import button was, which may be over the box now.
-  await window.getByTestId("mind-title").hover();
+  await pageMenuButton(window).hover();
   await expect(label).toHaveCSS("opacity", "0");
   await box.hover();
   await expect(label).toHaveText("Text box · kept as is");
@@ -567,14 +574,12 @@ test("the original is also a Document: an Answer beside the Mind cites its claus
   await screenshot(dialog, "word-import-original");
   await dialog.getByTestId("word-import-confirm").click();
   await expect(dialog).toBeHidden();
-  await expect(window.getByTestId("mind-title")).toHaveValue("Supply agreement");
+  await expect(frontMindName(window)).toHaveText("Supply agreement");
   await expectReadyDocuments(window, 1);
 
-  // "From Supply agreement.docx" opens the original beside the Mind.
-  const from = window.getByTestId("mind-word-original");
-  await expect(window.getByTestId("mind-word-origin")).toHaveText(
-    "From Supply agreement.docx · Export keeps its styles",
-  );
+  // "From Supply agreement.docx", in the page's ⋯ menu, opens the original beside the Mind.
+  const from = (await openPageMenu(window)).getByTestId("page-from");
+  await expect(from).toHaveText("From Supply agreement.docx");
   await pointAndClick(window, from);
   await expect(window.getByTestId("viewer-title")).toHaveText("Supply agreement");
   await expect(window.getByTestId("mind-pane")).toBeVisible();
@@ -621,10 +626,12 @@ test("the original is also a Document: an Answer beside the Mind cites its claus
   const menu = row.getByTestId("document-file-actions");
   await expect(menu.getByTestId("document.openMind")).toHaveText("Open its Mind");
   await pointAndClick(window, menu.getByTestId("document.openMind"));
-  await expect(window.getByTestId("mind-title")).toHaveValue("Supply agreement");
+  await expect(frontMindName(window)).toHaveText("Supply agreement");
 
   await setLanguage(window, "zh-CN");
-  await expect(window.getByTestId("mind-word-original")).toHaveText("来自“Supply agreement.docx”");
+  await expect((await openPageMenu(window)).getByTestId("page-from")).toHaveText(
+    "来自“Supply agreement.docx”",
+  );
   await app.close();
 });
 
@@ -664,7 +671,7 @@ test("asked “这份简历讲了什么？” and “What is this résumé about
   await app.close();
 });
 
-test("an original the Library can't take is said under the Mind's line, and Add to Library takes it once it can", async () => {
+test("an original the Library can't take is said at the top of the page, and Add to Library takes it once it can", async () => {
   test.skip(process.platform === "win32" || process.getuid?.() === 0, "needs file permissions");
   const path = join(files, "Supply agreement.docx");
   await writeFile(path, contract());
@@ -684,18 +691,25 @@ test("an original the Library can't take is said under the Mind's line, and Add 
   await expect(problem).toHaveText(
     "“Supply agreement.docx” couldn’t be added to the Library, so Answers can’t cite it. · Add to Library",
   );
-  await expect(window.getByTestId("mind-word-original")).toHaveCount(0);
   await motionSettled(window);
   await screenshot(window.getByTestId("mind-pane"), "word-original-not-added");
+  // Not in the Library, the original can't be opened from the page's ⋯ menu yet.
+  let pageMenu = await openPageMenu(window);
+  await expect(pageMenu.getByTestId("page-from")).toHaveAttribute("aria-disabled", "true");
+  await expect(pageMenu.getByTestId("page-show-original")).toHaveCount(0);
+  await window.keyboard.press("Escape");
+  await expect(pageMenu).toBeHidden();
 
   await chmod(path, 0o644);
   await pointAndClick(window, problem.getByTestId("mind-word-add-original"));
   await expect(problem).toHaveCount(0);
-  await expect(window.getByTestId("mind-word-original")).toBeVisible();
+  pageMenu = await openPageMenu(window);
+  await expect(pageMenu.getByTestId("page-from")).not.toHaveAttribute("aria-disabled");
+  await expect(pageMenu.getByTestId("page-show-original")).toBeVisible();
   await app.close();
 });
 
-test("From the original's menu, Open the original opens it beside the Mind at the paragraph the caret is in, in English and Chinese", async () => {
+test("From {file} in the page's ⋯ menu opens the original beside the Mind at the paragraph the caret is in, in English and Chinese", async () => {
   const CAPPED = "Clause 9: each party's total liability is capped at a year's fees.";
   // Every tenth crosses a page, as Word marks it: the viewer draws it as two paragraphs.
   const recitals = (from: number, count: number) =>
@@ -730,18 +744,15 @@ test("From the original's menu, Open the original opens it beside the Mind at th
   await expect(dialog).toBeHidden();
   await expectReadyDocuments(window, 1);
 
-  // The caret in clause 9, then From › Open the original.
+  // The caret in clause 9, then ⋯ › From Supply agreement.docx.
   const editor = window.getByTestId("mind-editor");
   await editor.locator("p", { hasText: "Clause 9:" }).click();
-  await pointAndClick(window, window.getByTestId("mind-word-original-menu"));
-  const items = window.getByTestId("mind-word-original-items");
-  await expect(items.getByRole("menuitem")).toHaveText([
-    "Open the original",
-    /^Show in (Finder|folder)$/,
-  ]);
+  const items = await openPageMenu(window);
+  await expect(items.getByTestId("page-from")).toHaveText("From Supply agreement.docx");
+  await expect(items.getByTestId("page-show-original")).toHaveText(/^Show in (Finder|folder)$/);
   await motionSettled(window);
   await screenshot(window, "word-original-menu");
-  await pointAndClick(window, items.getByTestId("mind-word-open-original"));
+  await pointAndClick(window, items.getByTestId("page-from"));
 
   // Beside the Mind, at clause 9: a third of the way down the pages.
   await expect(window.getByTestId("viewer-title")).toHaveText("Supply agreement");
@@ -759,10 +770,11 @@ test("From the original's menu, Open the original opens it beside the Mind at th
   await motionSettled(window);
   await screenshot(window, "word-original-at-caret");
 
-  // A right-click on the line opens the same menu, in Chinese.
+  // In Chinese.
   await setLanguage(window, "zh-CN");
-  await window.getByTestId("mind-word-original").click({ button: "right" });
-  await expect(items.getByRole("menuitem")).toHaveText(["打开原文件", /^在(访达|文件夹)中显示$/]);
+  await openPageMenu(window);
+  await expect(items.getByTestId("page-from")).toHaveText("来自“Supply agreement.docx”");
+  await expect(items.getByTestId("page-show-original")).toHaveText(/^在(访达|文件夹)中显示$/);
   await window.keyboard.press("Escape");
   await app.close();
 });
@@ -779,10 +791,10 @@ test("unticked, the Word file is imported as a Mind alone", async () => {
   await dialog.getByTestId("word-import-confirm").click();
   await expect(dialog).toBeHidden();
 
-  await expect(window.getByTestId("mind-word-origin")).toHaveText(
-    "From Supply agreement.docx · Export keeps its styles",
-  );
-  await expect(window.getByTestId("mind-word-original")).toHaveCount(0);
+  const pageMenu = await openPageMenu(window);
+  await expect(pageMenu.getByTestId("page-from")).toHaveText("From Supply agreement.docx");
+  await expect(pageMenu.getByTestId("page-from")).toHaveAttribute("aria-disabled", "true");
+  await expect(pageMenu.getByTestId("page-show-original")).toHaveCount(0);
   const documents = await (await coreOf(window)).evaluate((bridge) => bridge.listDocuments());
   expect(documents).toEqual([]);
   await app.close();

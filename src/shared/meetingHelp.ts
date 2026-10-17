@@ -86,21 +86,35 @@ export const isMeetingHelpKind = (value: unknown): value is MeetingHelpKind =>
   ALL_HELP.some((kind) => kind === value);
 
 /**
- * A button's shortcut by default: ⌃⌥1–7 on macOS, which Zoom and Teams leave
- * free; Ctrl+Shift+1–7 elsewhere, where Ctrl+Alt is AltGr on many European
- * layouts and types characters.
+ * The global shortcuts during a call, in Settings' order: Call help's, which shows or hides the
+ * panel the buttons are in, then each general button's.
  */
-export function defaultHelpKeys(kind: GeneralHelpKind, mac: boolean): string {
-  const digit = GENERAL_HELP.indexOf(kind) + 1;
+export const HELP_SHORTCUTS = ["panel", ...GENERAL_HELP] as const;
+export type HelpShortcut = (typeof HELP_SHORTCUTS)[number];
+
+export const isHelpShortcut = (value: unknown): value is HelpShortcut =>
+  HELP_SHORTCUTS.some((shortcut) => shortcut === value);
+
+export const helpShortcutLabel = (shortcut: HelpShortcut): MessageKey =>
+  shortcut === "panel" ? "meetings.callHelp" : helpLabel(shortcut);
+
+/**
+ * A shortcut by default: ⌃⌥1–7 and ⌃⌥H on macOS, which Zoom and Teams leave
+ * free; Ctrl+Shift+1–8 elsewhere, where Ctrl+Alt is AltGr on many European
+ * layouts and types characters, and Teams leaves a call on Ctrl+Shift+H.
+ */
+export function defaultHelpKeys(shortcut: HelpShortcut, mac: boolean): string {
+  if (shortcut === "panel") return mac ? "Ctrl+Alt+H" : "Ctrl+Shift+8";
+  const digit = GENERAL_HELP.indexOf(shortcut) + 1;
   return mac ? `Ctrl+Alt+${digit}` : `Ctrl+Shift+${digit}`;
 }
 
-/** The shortcuts the User set in Settings › Meetings; "" for a button they left without one. */
-export type HelpKeys = Partial<Record<GeneralHelpKind, string>>;
+/** The shortcuts the User set in Settings › Meetings; "" for one they left without keys. */
+export type HelpKeys = Partial<Record<HelpShortcut, string>>;
 
-/** The shortcut a button has on this device: the User's, or the default. Null: none. */
-export function helpKeysOf(kind: GeneralHelpKind, chosen: HelpKeys, mac: boolean): string | null {
-  const keys = chosen[kind] ?? defaultHelpKeys(kind, mac);
+/** The keys a shortcut has on this device: the User's, or the default. Null: none. */
+export function helpKeysOf(shortcut: HelpShortcut, chosen: HelpKeys, mac: boolean): string | null {
+  const keys = chosen[shortcut] ?? defaultHelpKeys(shortcut, mac);
   return keys === "" ? null : keys;
 }
 
@@ -125,5 +139,5 @@ export const isHelpKeys = (value: unknown): value is HelpKeys =>
   !Array.isArray(value) &&
   Object.entries(value).every(
     ([kind, keys]) =>
-      isGeneralHelpKind(kind) && typeof keys === "string" && (keys === "" || isGlobalKeys(keys)),
+      isHelpShortcut(kind) && typeof keys === "string" && (keys === "" || isGlobalKeys(keys)),
   );
