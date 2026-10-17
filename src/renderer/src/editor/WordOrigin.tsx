@@ -130,7 +130,7 @@ function caretWordPlace(editor: Editor | null, doc: Y.Doc): string | null {
   return null;
 }
 
-/** The original the Library couldn't take at import (#720), said under the Mind's line, with a way to try again. */
+/** The original the Library couldn't take at import (#720), said at the top of the page, with a way to try again. */
 export function OriginalNotAdded({ mindId }: { mindId: string }) {
   const t = useT();
   const path = useWordImport((state) => state.notAdded[mindId]);
