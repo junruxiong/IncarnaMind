@@ -13,7 +13,7 @@ import { paragraph, wordFile } from "../helpers/word";
 import { importWordBytes } from "../helpers/wordMinds";
 
 /**
- * An Answer is about the Question asked (#1060), through the core's public
+ * An Answer is about the Question asked, through the core's public
  * interface: the example's Answer, written in advance, isn't the model's own
  * earlier turn, so a Question about the User's own Documents is answered
  * without a word about it. What the model is sent, and what the User sees.
@@ -130,9 +130,7 @@ function expectOnlyTheQuestionAsked(
   for (const instructions of sent.instructions) {
     expect(instructions).toContain(answerInstructions());
     expect(instructions).toContain("Answer the Question asked.");
-    expect(instructions).toContain(
-      "never tell the User to disregard one whose Citations were checked",
-    );
+    expect(instructions).toContain("never tell the User to disregard an earlier Answer");
   }
 }
 

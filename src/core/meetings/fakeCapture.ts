@@ -87,9 +87,14 @@ export function createFakeCapture(options: FakeCaptureOptions = {}): FakeCapture
       if (request.systemAudio) given.state("system", system === "denied" ? "denied" : "recording");
       const tick = options.realTime;
       if (tick) {
+        let last = Date.now();
         timer = setInterval(() => {
-          push("microphone", tick);
-          push("system", tick);
+          // A late tick sends the time it was late too, as a device's buffer does: a busy
+          // machine would otherwise lose audio a real microphone keeps.
+          const now = Date.now();
+          push("microphone", now - last);
+          push("system", now - last);
+          last = now;
         }, tick);
       }
       return {
