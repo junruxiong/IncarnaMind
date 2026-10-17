@@ -15,7 +15,7 @@ import {
 } from "./app";
 
 /*
- * A new Mind's first line starts as its title (#1088; DESIGN.md › A Mind's
+ * A new Mind's first line starts as its title (DESIGN.md › A Mind's
  * page: only its text): an empty Heading 1 with a grey "Title" (标题)
  * placeholder and the cursor on it, as Apple Notes starts a note. Enter goes
  * on in body text; Backspace on the empty heading, or Turn into, makes it
@@ -130,15 +130,27 @@ test("two paragraphs pasted into a new Mind keep their formatting: the first isn
     .poll(() => linesOf(window))
     .toEqual(["P Spring tides come at new moon.", "P Neap tides come between."]);
 
-  // One line pasted over the empty title is the title.
-  await newMind(window, { title: true });
-  await window.evaluate(() => {
-    const data = new DataTransfer();
-    data.setData("text/plain", "Harbour notes");
-    (document.activeElement ?? document.body).dispatchEvent(
-      new ClipboardEvent("paste", { clipboardData: data, bubbles: true }),
-    );
-  });
+  // One line pasted over the empty title is the title: plain text, a line with its newline,
+  // or a sentence copied from a web page, which has no paragraph around it.
+  const pasteOverTitle = async (data: { html?: string; plain: string }) => {
+    await newMind(window, { title: true });
+    await window.evaluate((given) => {
+      const clipboard = new DataTransfer();
+      if (given.html) clipboard.setData("text/html", given.html);
+      clipboard.setData("text/plain", given.plain);
+      (document.activeElement ?? document.body).dispatchEvent(
+        new ClipboardEvent("paste", { clipboardData: clipboard, bubbles: true }),
+      );
+    }, data);
+  };
+  await pasteOverTitle({ plain: "Harbour notes" });
   await expect.poll(() => linesOf(window)).toEqual(["H1 Harbour notes"]);
+  await pasteOverTitle({ plain: "Harbour notes\n" });
+  await expect.poll(() => linesOf(window)).toEqual(["H1 Harbour notes"]);
+  await pasteOverTitle({
+    html: '<meta charset="utf-8"><span style="color: rgb(0, 0, 0);">Spring tides at <b>new moon</b></span>',
+    plain: "Spring tides at new moon",
+  });
+  await expect.poll(() => linesOf(window)).toEqual(["H1 Spring tides at new moon"]);
   await app.close();
 });

@@ -26,7 +26,7 @@ interface HintLine {
 const isEmptyLine = (node: ProseMirrorNode | null) =>
   node?.type.name === "paragraph" && node.content.size === 0;
 
-/** The line a new Mind starts with: an empty Heading 1, its title to be typed (#1088). */
+/** The line a new Mind starts with: an empty Heading 1, its title to be typed. */
 export const isTitleLine = (node: ProseMirrorNode | null) =>
   node?.type.name === "heading" && node.attrs.level === 1 && node.content.size === 0;
 
