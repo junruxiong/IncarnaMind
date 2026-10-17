@@ -1980,6 +1980,7 @@ export const zhCN = {
   "consent.dialog.title": "向 {service} 发送数据？",
   "consent.dialog.body": "为了{purpose}，IncarnaMind 会向 {service} 发送：",
   "consent.dialog.bodyMore": "为了{purpose}，IncarnaMind 还将向 {service} 发送：",
+  "consent.dialog.note": "你允许之前不会发送任何内容。",
   "consent.dialog.allow": "允许",
   "consent.dialog.decline": "不允许",
 
@@ -2221,6 +2222,7 @@ export const zhCN = {
   "usageData.card.decline": "不发送",
   "usageData.card.what": "会发送什么",
   "usageData.card.example": "例如：",
+  "usageData.card.change": "可随时在“设置 › 隐私”中更改。",
   "usageData.example.question": "用 Anthropic 的云端模型提了一个问题",
   "usageData.example.answer": "一个回答用了 6 秒，有 3 处引用，每处都找到了引文",
   "usageData.example.documents": "添加了 2 个文档：一个 PDF 和一个 Word 文件",

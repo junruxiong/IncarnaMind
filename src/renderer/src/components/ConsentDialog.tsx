@@ -11,6 +11,7 @@ import {
   dialogClass,
   dialogTextClass,
   dialogTitleClass,
+  hintClass,
   primaryButtonClass,
   ruledListClass,
 } from "./ui";
@@ -104,6 +105,7 @@ export function ConsentDialog() {
               {t("chatgpt.consent.note")}
             </p>
           )}
+          <p className={hintClass}>{t("consent.dialog.note")}</p>
           <div className={dialogActionsClass}>
             <button
               type="button"
