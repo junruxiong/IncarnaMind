@@ -28,9 +28,9 @@ describe("withoutFraming", () => {
       p("合同 B 规定月租为八千元。"),
     ]);
     const english = p("You didn't say which contract, so I've summarised all four.");
-    expect(
-      withoutFraming([english, summary, p("If you meant one of them, tell me which.")]),
-    ).toEqual([summary]);
+    expect(withoutFraming([english, summary, p("Tell me if you meant one of them.")])).toEqual([
+      summary,
+    ]);
   });
   test("keeps a first or last paragraph that is the content's own, in English and Chinese", () => {
     const body = p("The landlord has not replied.");
@@ -44,10 +44,30 @@ describe("withoutFraming", () => {
       p("If you want to renew, write to the landlord before the term ends."),
       p("如果你想续租，需要在租期结束前书面通知房东。"),
       p("如需开具发票，请扫描小票底部二维码。"),
+      p("If you don't pay by Friday, I'll start proceedings."),
+      p("如果你不按时付款，我会提起诉讼。"),
+      p("I can be reached on 07700 900123 if you need to discuss it."),
     ]) {
       expect(withoutFraming([body, last])).toEqual([body, last]);
     }
-    expect(withoutFraming([body, p("如需调整篇幅，请告诉我。")])).toEqual([body]);
+  });
+  test("leaves out the model's offer or question to the User after the content, whatever it holds", () => {
+    const body = p("The landlord has not replied.");
+    for (const last of [
+      p("Tell me if you meant the 2019 lease."),
+      p("Let me know if you want the 2 other leases too."),
+      p("Would you like a shorter version?"),
+      p("If you'd like, I can add the dates."),
+      p("If you want me to cite page 4 as well, say so."),
+      p("Want me to draft the reply?"),
+      p("需要的话，我可以把摘要写得更详细。"),
+      p("如果需要我补充 2019 年的数据，请说一声。"),
+      p("要不要我再写一版？"),
+      p("告诉我你指的是哪一份合同。"),
+      p("如有需要，我可以补充租金的细节。"),
+    ]) {
+      expect(withoutFraming([body, last])).toEqual([body]);
+    }
   });
   test("keeps framing that says something: units, figures, and a sentence that starts 这是", () => {
     const units = p("Revenue and operating profit, FY2020–24 (GBP m):");
