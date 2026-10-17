@@ -8,6 +8,7 @@ import {
   interceptOpenExternal,
   launchApp,
   newMind,
+  placeAssistant,
   pointAndClick,
   removeDataFolder,
   setLanguage,
@@ -85,7 +86,7 @@ const WORDS = {
   "zh-CN": {
     title: "选择你的 AI",
     chatgpt: "Plus 或 Pro（中国大陆不可用）· 无需密钥",
-    sends: "会把你的问题和文档内容发送给 OpenAI。· 详情",
+    sends: "会把你的问题和文档内容发送给 OpenAI。 · 详情",
     key: "OpenAI、Anthropic、Google、DeepSeek 等",
   },
 } as const;
@@ -169,7 +170,7 @@ for (const language of ["en", "zh-CN"] as const) {
         for (const item of [items.first(), items.last()]) {
           await item.scrollIntoViewIfNeeded();
           // Text can end a fraction of a pixel past the scroller's edge on Linux, still readable.
-          await expect(item).toBeInViewport({ ratio: 0.95 });
+          await expect(item).toBeInViewport({ ratio: 0.99 });
         }
         const signIn = row.getByTestId("claude-plan-sign-in");
         await signIn.scrollIntoViewIfNeeded();
@@ -193,6 +194,78 @@ for (const language of ["en", "zh-CN"] as const) {
       await app.close();
     }
   });
+}
+
+/** The smallest window the app allows (`src/main/index.ts`). */
+const SMALLEST_WINDOW = { width: 900, height: 560 };
+
+async function expectInsideCardAndWindow(window: Page, card: Locator, target: Locator) {
+  const [box, cardBox, page] = await Promise.all([
+    target.boundingBox(),
+    card.boundingBox(),
+    window.evaluate(() => ({ width: globalThis.innerWidth, height: globalThis.innerHeight })),
+  ]);
+  if (!box || !cardBox) throw new Error("The card and its control aren't laid out.");
+  expect(cardBox.y).toBeGreaterThanOrEqual(0);
+  expect(cardBox.y + cardBox.height).toBeLessThanOrEqual(page.height);
+  expect(box.y).toBeGreaterThanOrEqual(cardBox.y);
+  expect(box.y + box.height).toBeLessThanOrEqual(cardBox.y + cardBox.height + 0.5);
+  expect(box.x).toBeGreaterThanOrEqual(cardBox.x);
+  expect(box.x + box.width).toBeLessThanOrEqual(cardBox.x + cardBox.width + 0.5);
+}
+
+for (const dock of ["bottom", "float"] as const) {
+  for (const language of ["en", "zh-CN"] as const) {
+    test(`at 900 px with the assistant ${dock === "bottom" ? "docked at the bottom" : "floating"}, the card scrolls inside itself and the last control under Other ways is reached by wheel and by Tab (${language})`, async () => {
+      const { app, window } = await launchApp(dataDir);
+      try {
+        await setWindowSize(app, window, SMALLEST_WINDOW.width, SMALLEST_WINDOW.height);
+        await acceptPlainTextKeys(window);
+        await setLanguage(window, language);
+        const card = await askFirstQuestion(window);
+        await placeAssistant(window, { dock });
+        await pointAndClick(window, card.getByTestId("setup-other"));
+        const last = card.locator("details").locator("button, a").last();
+
+        for (const first of [
+          card.getByRole("heading", { level: 2 }),
+          card.getByTestId("setup-chatgpt"),
+          card.getByTestId("setup-key"),
+        ]) {
+          await expectInsideCardAndWindow(window, card, first);
+        }
+
+        const cardBox = await card.boundingBox();
+        if (!cardBox) throw new Error("The card isn't laid out.");
+        await window.mouse.move(cardBox.x + cardBox.width / 2, cardBox.y + cardBox.height / 2, {
+          steps: 8,
+        });
+        await expect
+          .poll(async () => {
+            await window.mouse.wheel(0, 120);
+            const box = await last.boundingBox();
+            return box !== null && box.y + box.height <= cardBox.y + cardBox.height + 0.5;
+          })
+          .toBe(true);
+        await expectInsideCardAndWindow(window, card, last);
+        await expect(card.getByTestId("setup-later")).toBeInViewport({ ratio: 1 });
+
+        await card.evaluate((element) => {
+          element.scrollTop = 0;
+        });
+        await card.locator("[data-setup-choice]:not(:disabled)").first().focus();
+        for (let tabs = 0; tabs < 12; tabs++) {
+          await window.keyboard.press("Tab");
+          const focused = window.locator(":focus");
+          await expectInsideCardAndWindow(window, card, focused);
+          if (await last.evaluate((element) => element === document.activeElement)) break;
+        }
+        await expect(last).toBeFocused();
+      } finally {
+        await app.close();
+      }
+    });
+  }
 }
 
 test("a newcomer pastes a key from the card in two clicks, picks Claude Sonnet 5.5 from the list without typing an id, and gets an Answer", async () => {

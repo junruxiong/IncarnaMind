@@ -24,6 +24,8 @@ export interface FormatJob {
    * each work (`CitationStyle.locators`): "[3]⁵⁻⁶", "（钱学森，1990）³⁰".
    */
   raisedLocators: boolean;
+  /** The locale its terms come from, where not the style's own: a journal's, or the Mind's. */
+  locale?: string;
 }
 
 /**
@@ -221,6 +223,7 @@ export function formatJob(
   const request: EngineRequest = {
     items: job.items,
     citations: [...parts.map((part) => part.citation), ...probes.map((probe) => probe.citation)],
+    ...(job.locale && { locale: job.locale }),
   };
   let output = render(request);
   const others = new Set(job.items.filter((item) => !isChineseItem(item)).map((item) => item.id));

@@ -3,7 +3,8 @@
  * cited Documents' reference records (#286). The editor asks for them through
  * `CoreApi.formatCitations`, and the exports format with the same function, so the two agree.
  */
-import { type CitationStyle, citationStyle } from "../../shared/citationStyles";
+import { join } from "node:path";
+import type { ResolvedCitationStyle } from "../../shared/citationStyles";
 import { displayName, titleWithoutSite } from "../../shared/documentNames";
 import { missingDetails } from "../../shared/references";
 import type {
@@ -14,15 +15,17 @@ import type {
   FormattedCitations,
   StyledRun,
 } from "../api";
+import { createCatalogue } from "./catalogue";
 import { type CslItem, cslItemOf, locatorOf, nameOnlyItem, restoreHyphens } from "./csl";
 import { CitationFormatError, type CitationStyleEngine, createWorkerEngine } from "./engine";
 import type { FormatJob } from "./format";
+import type { EngineStyle } from "./protocol";
 import { parseRequest } from "./request";
 
 export { CitationFormatError } from "./engine";
 
 export interface CitationStylesOptions {
-  /** resources/citation-styles: the engine, the styles and the locales; none: Numbered only. */
+  /** resources/citation-styles: the engine and the style pack; none: Numbered only. */
   folder: string | undefined;
   /** The live Document, or undefined for one deleted since it was cited. */
   document(id: string): Document | undefined;
@@ -152,6 +155,9 @@ function numbered(request: CitationFormatRequest, references: Map<string, Refere
 }
 
 export function createCitationStyles(options: CitationStylesOptions) {
+  const catalogue = createCatalogue(
+    options.folder === undefined ? undefined : join(options.folder, "styles.pack"),
+  );
   let engine: CitationStyleEngine | undefined;
   const cache = new Map<string, FormattedCitations>();
 
@@ -165,7 +171,7 @@ export function createCitationStyles(options: CitationStylesOptions) {
   };
 
   async function formatWith(
-    style: CitationStyle & { file: string },
+    style: ResolvedCitationStyle & { engine: EngineStyle },
     request: CitationFormatRequest,
     references: Map<string, Reference>,
     keyOf: (work: CitedWork) => string,
@@ -184,10 +190,11 @@ export function createCitationStyles(options: CitationStylesOptions) {
       englishTermsForOthers: style.language === "zh-CN",
       raisedLocators,
     };
+    if (style.engine.locale) job.locale = style.engine.locale;
     const fallbacks = new Map(
       [...references.values()].map((reference) => [reference.item.id, fallbackRuns(reference)]),
     );
-    const key = JSON.stringify([style.id, job, [...fallbacks.values()]]);
+    const key = JSON.stringify([style.engine, job, [...fallbacks.values()]]);
     const known = cache.get(key);
     if (known) {
       remember(key, known);
@@ -197,7 +204,7 @@ export function createCitationStyles(options: CitationStylesOptions) {
       throw new CitationFormatError("The citation styles aren't installed.", true);
     }
     engine ??= createWorkerEngine(options.folder);
-    const { description, output } = await engine.format(style.file, job);
+    const { description, output } = await engine.format(style.engine, job);
     const byId = new Map(
       [...references.values()].map((reference) => [reference.item.id, reference]),
     );
@@ -235,12 +242,12 @@ export function createCitationStyles(options: CitationStylesOptions) {
     /** Formats a request (see `CoreApi.formatCitations`); `input` is checked first. */
     async format(input: unknown): Promise<FormattedCitations> {
       const request = parseRequest(input);
-      const style = citationStyle(request.style);
+      const style = catalogue.resolve(request.style, request.language ?? "en");
       const keyOf = (work: CitedWork) => {
         const document = work.documentId !== null ? options.document(work.documentId) : undefined;
         if (!document) return `name:${work.documentName ?? ""}`;
         // Numbered lists each Document once, by name; a style cites each version of a web page.
-        return style.file !== null && webVersionOf(work, document)
+        return style.engine !== null && webVersionOf(work, document)
           ? versionKey(document.id, work)
           : document.id;
       };
@@ -253,7 +260,10 @@ export function createCitationStyles(options: CitationStylesOptions) {
           references.set(key, referenceOf(work, document));
         }
       }
-      if (style.file === null) return numbered(request, references);
+      if (style.engine === null) {
+        const formatted = numbered(request, references);
+        return style.unavailable ? { ...formatted, unavailable: true } : formatted;
+      }
       if (references.size === 0) {
         return {
           style: style.id,
@@ -263,8 +273,15 @@ export function createCitationStyles(options: CitationStylesOptions) {
           hangingIndent: false,
         };
       }
-      return formatWith({ ...style, file: style.file }, request, references, keyOf);
+      return formatWith({ ...style, engine: style.engine }, request, references, keyOf);
     },
+
+    /** Every style the pack has (see `CoreApi.listCitationStyles`). */
+    list: () => catalogue.catalogue(),
+    /** How a Mind in a style is formatted, `language` being its text's. */
+    resolve: catalogue.resolve,
+    /** The licence notice of the pack's styles and locales. */
+    notice: () => catalogue.notice(),
 
     close(): void {
       engine?.close();

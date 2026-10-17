@@ -4,7 +4,7 @@
  * the Bibliography is added at the end. Numbered, IncarnaMind's own style, keeps its footnotes
  * and is never passed through here.
  */
-import type { CitationStyle } from "../../shared/citationStyles";
+import type { ResolvedCitationStyle } from "../../shared/citationStyles";
 import { withNeedsDetailsMark } from "../../shared/references";
 import { type SourceContext, sourceEntry, sourcesOf } from "../../shared/sources";
 import type { CitationFormatRequest, CitedWork, FormattedCitations, StyledRun } from "../api";
@@ -114,7 +114,7 @@ function runsOf(runs: FormattedCitations["clusters"][number]["runs"]): StyledRun
  */
 export async function styleCitations(
   blocks: readonly Block[],
-  style: CitationStyle,
+  style: ResolvedCitationStyle,
   format: (request: CitationFormatRequest) => Promise<FormattedCitations>,
   needsDetails: string,
 ): Promise<Block[]> {

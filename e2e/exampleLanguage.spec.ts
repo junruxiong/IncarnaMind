@@ -29,8 +29,8 @@ async function pointAndClick(window: Page, target: Locator): Promise<void> {
 test("switching the interface to Chinese and back swaps the untouched example, its check, its Answer and its Documents", async () => {
   const { app, window } = await launchApp(dataDir, { examples: true });
   await setWindowSize(app, window, 1440, 900);
-  const title = window.getByTestId("mind-title");
-  await expect(title).toHaveValue("Draft: credit committee paper");
+  const title = window.getByTestId("mind-editor").locator("h1");
+  await expect(title).toHaveText("Draft: credit committee paper");
   const pane = window.getByTestId("mind-pane");
   const checks = pane.getByTestId("margin-check");
   const mark = pane.getByTestId("claim-mark");
@@ -38,7 +38,7 @@ test("switching the interface to Chinese and back swaps the untouched example, i
   await expect(mark).toHaveAttribute("data-check", "contradicted");
 
   await setLanguage(window, "zh-CN");
-  await expect(title).toHaveValue("授信委员会报告（草稿）", { timeout: 30_000 });
+  await expect(title).toHaveText("授信委员会报告（草稿）", { timeout: 30_000 });
   await expect(window.getByTestId("mind-editor")).toContainText(
     "第三季度毛利率降至 36.8%，主要拖累来自线上业务。",
   );
@@ -75,7 +75,7 @@ test("switching the interface to Chinese and back swaps the untouched example, i
   await window.keyboard.press("Escape");
 
   await setLanguage(window, "en");
-  await expect(title).toHaveValue("Draft: credit committee paper", { timeout: 30_000 });
+  await expect(title).toHaveText("Draft: credit committee paper", { timeout: 30_000 });
   await expect(checks.nth(1)).toHaveAttribute("data-check", "found", { timeout: 30_000 });
   await expect(mark).toHaveAttribute("data-check", "contradicted");
   await app.close();

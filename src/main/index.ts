@@ -162,6 +162,9 @@ function createWindow(): BrowserWindow {
     // No title row of the system's: its window buttons sit in the app's top band.
     ...titleBarOptions(process.platform),
     ...windowIcon(),
+    // A test build's window takes the size a smoke test sets: macOS keeps a window no taller
+    // than the screen otherwise, and CI's Mac has a small one.
+    ...(import.meta.env.MODE === "test" && { enableLargerThanScreen: true }),
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),
       contextIsolation: true,

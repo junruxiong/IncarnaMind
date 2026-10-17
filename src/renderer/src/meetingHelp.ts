@@ -13,7 +13,7 @@ import type {
   Settings,
 } from "../../core/api";
 import { messageReference } from "../../core/references";
-import { helpKeysOf, helpLabel, isGeneralHelpKind } from "../../shared/meetingHelp";
+import { type HelpShortcut, helpKeysOf, helpLabel, isHelpShortcut } from "../../shared/meetingHelp";
 import type { PanelState } from "../../shared/meetingPanel";
 import { withoutFraming } from "../../shared/noteBlocks";
 import { answerBlocks } from "./answerBlocks";
@@ -139,9 +139,12 @@ export async function addHelpToNotes(
   return { mindId: meeting.mindId, blockIds };
 }
 
-/** A button's shortcut on this device, as this system writes it; null for none. */
-export function helpKeysLabel(kind: MeetingHelpKind, settings: Settings | null): string | null {
-  if (!isGeneralHelpKind(kind) || !settings) return null;
+/** A button's or Call help's shortcut on this device, as this system writes it; null for none. */
+export function helpKeysLabel(
+  kind: MeetingHelpKind | HelpShortcut,
+  settings: Settings | null,
+): string | null {
+  if (!isHelpShortcut(kind) || !settings) return null;
   const keys = helpKeysOf(kind, settings.device.meetingHelpKeys, isMac);
   return keys ? keysHere(keys) : null;
 }

@@ -480,7 +480,7 @@ export function Composer({
         scope.folderIds.length === 1 && scope.tagIds.length + scope.documentIds.length === 0
           ? (scope.folderIds[0] ?? null)
           : null;
-      void useAppStore.getState().createMind({ title, folderId: scopeFolder, focusBody: true });
+      void useAppStore.getState().createMind({ title, folderId: scopeFolder });
       return;
     }
     useAnswers.getState().dismiss(composerKey(mindId));

@@ -519,7 +519,8 @@
 
   /*
    * A switch: a native checkbox (role="switch"), so it is checked, focused
-   * and labelled like one. The knob is a background, moved when checked.
+   * and labelled like one. The knob is a background, moved when checked. In a
+   * menu, where the item is the checkbox, it is a picture marked `data-on`.
    */
   .switch {
     appearance: none;
@@ -537,7 +538,8 @@
       background-color 120ms ease-out,
       background-position 120ms ease-out;
 
-    &:checked {
+    &:checked,
+    &[data-on] {
       background-color: var(--color-ink);
       background-position: 16px 0;
     }
@@ -1134,57 +1136,20 @@
     margin-left: calc((100% - 784px) / 2 + 56px);
   }
 
-  /* The Mind's title: the display size, with the display optical size. */
-  .mind-title {
-    margin: 0 0 24px;
-
-    /* A text area that grows with the title, so a long one wraps instead of being cut off. */
-    > textarea {
-      display: block;
-      width: 100%;
-      padding: 0;
-      border: 0;
-      background: transparent;
-      outline: none;
-      field-sizing: content;
-      resize: none;
-      overflow: hidden;
-      font-family: var(--writing-font, var(--font-system));
-      font-size: var(--text-display);
-      line-height: var(--text-display--line-height);
-      font-weight: 600;
-      font-variation-settings: "opsz" 48;
-      letter-spacing: -0.01em;
-      color: var(--color-ink);
-
-      &::placeholder {
-        color: var(--color-ink-placeholder);
-      }
-    }
-  }
-
-  /* A Mind imported from a Word file: where it came from, or how far its import has got (#104). */
+  /* How far a Word import has got (#104), at the top of the page while it goes on. */
   .mind-word {
     display: flex;
     align-items: center;
     gap: 6px;
     min-width: 0;
-    margin: -16px 0 6px;
+    margin: 0 0 16px;
     font-family: var(--font-sans);
     font-size: 13px;
     line-height: 20px;
     color: var(--color-ink-meta);
-
-    + .mind-count {
-      margin-top: 0;
-    }
   }
   .mind-word-problem {
-    margin: -2px 0 6px;
-
-    + .mind-count {
-      margin-top: 0;
-    }
+    margin: 0 0 16px;
   }
 
   /*
@@ -1215,7 +1180,7 @@
     text-align: center;
   }
 
-  /* A Mind made by "Verify a document…" (#97): where its text came from. */
+  /* A verified document's references line (#818), in the Verify card. */
   .mind-verify {
     min-width: 0;
     margin: -16px 0 16px;
@@ -1223,42 +1188,6 @@
     font-size: 13px;
     line-height: 20px;
     color: var(--color-ink-meta);
-  }
-  .mind-word-original {
-    display: flex;
-    align-items: center;
-    min-width: 0;
-  }
-  .mind-word-more {
-    display: flex;
-    flex-shrink: 0;
-    align-items: center;
-    justify-content: center;
-    width: 18px;
-    height: 20px;
-    border-radius: 4px;
-    color: var(--color-ink-meta);
-
-    &:hover,
-    &[aria-expanded="true"] {
-      background: var(--color-hover);
-    }
-  }
-  .mind-verify-from,
-  .mind-word-from {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    min-width: 0;
-    max-width: 100%;
-    padding: 0 4px;
-    margin-left: -4px;
-    border-radius: 4px;
-    color: var(--color-ink-secondary);
-
-    &:hover {
-      background: var(--color-hover);
-    }
   }
   .mind-verify-link {
     border-radius: 4px;
@@ -1330,20 +1259,16 @@
     }
   }
 
-  /* The count under the title: quiet status text, pulled up into the title's margin. */
   .mind-count {
     display: flex;
-    flex-wrap: wrap;
     align-items: center;
-    column-gap: 12px;
-    row-gap: 8px;
-    padding-left: 4px;
-    margin: -16px 0 16px -4px;
-    overflow-x: clip;
+    gap: 8px;
+    min-width: 0;
     font-family: var(--font-sans);
     font-size: 12px;
-    line-height: 16px;
+    line-height: 20px;
     color: var(--color-ink-meta);
+    pointer-events: auto;
   }
   .mind-health-icon {
     box-sizing: border-box;
@@ -1367,27 +1292,88 @@
     color: var(--color-danger);
   }
 
-  /*
-   * The check badge (#909): at the page's bottom right, 16px in, over the
-   * text, which fades out over 56px above it so no line runs under it.
-   */
-  .mind-badge-slot {
+  .mind-menu-slot {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+  }
+  .page-menu-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    color: var(--color-ink-meta);
+    outline: none;
+
+    &:hover,
+    &:focus-visible,
+    &[aria-expanded="true"] {
+      background: var(--color-hover);
+      color: var(--color-ink-secondary);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--color-accent);
+      outline-offset: 1px;
+    }
+  }
+  .page-menu-foot {
+    display: flex;
+    flex-direction: column;
+    padding: 2px 0;
+    font-size: 12px;
+    line-height: 20px;
+    color: var(--color-ink-meta);
+  }
+  .page-menu-counts {
+    margin: 0;
+    padding: 2px 8px;
+  }
+  .page-menu-switch {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 30px;
+    padding: 0 8px;
+    border-radius: 6px;
+    text-align: start;
+    outline: none;
+
+    &:hover,
+    &:focus-visible {
+      background: var(--color-chip);
+      color: var(--color-ink);
+    }
+  }
+  /* Over the text, which fades out above them so no line runs under the count or the badge. */
+  .mind-foot-slot {
     position: absolute;
     right: 0;
     bottom: 0;
     left: 0;
     display: flex;
-    justify-content: flex-end;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
     padding: 0 16px 16px;
     pointer-events: none;
 
-    &:has(.check-badge)::before {
+    &:has(.check-badge, .mind-count)::before {
       content: "";
       position: absolute;
       inset: auto 0 0;
       height: 100px;
       background: linear-gradient(to top, var(--color-sheet) 44px, transparent);
     }
+  }
+  .mind-foot-count {
+    position: relative;
+    min-width: 0;
+  }
+  .mind-foot-badge {
+    position: relative;
+    margin-left: auto;
   }
   .check-badge-place {
     position: relative;
@@ -2092,12 +2078,14 @@
       color: var(--color-ink);
     }
   }
+  /* Too narrow for one row, the last controls wrap to a second, never inside a button. */
   .meeting-controls {
     display: flex;
     flex-shrink: 0;
+    flex-wrap: wrap;
     align-items: center;
     gap: 2px;
-    height: 28px;
+    min-height: 28px;
     font-size: 13px;
     line-height: 20px;
     color: var(--color-ink);
@@ -2132,6 +2120,10 @@
       background: var(--color-hover);
       color: var(--color-ink);
     }
+  }
+  .meeting-button[aria-pressed="true"] {
+    background: var(--color-chip);
+    color: var(--color-ink);
   }
   .meeting-button:disabled {
     color: var(--color-ink-placeholder);
@@ -4719,7 +4711,7 @@
     }
   }
   .references-style {
-    max-width: 100%;
+    max-width: min(100%, 280px);
     font-weight: 600;
   }
   .references-default {

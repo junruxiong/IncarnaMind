@@ -9,11 +9,7 @@ import * as Y from "yjs";
 import { layoutChart } from "../../shared/chartLayout";
 import { chartSvg } from "../../shared/chartSvg";
 import { seriesName } from "../../shared/charts";
-import {
-  type CitationStyle,
-  type CitationStyleId,
-  citationStyle,
-} from "../../shared/citationStyles";
+import type { ResolvedCitationStyle } from "../../shared/citationStyles";
 import { citationState, citedLocation, shownDocumentName } from "../../shared/citations";
 import type { DrawnPage } from "../../shared/citedPage";
 import { titleWithoutSite } from "../../shared/documentNames";
@@ -98,8 +94,8 @@ export interface ExportsDependencies {
   /** The interface language, which the export's own words are in. */
   language(): Language;
   folderName(folderId: string): string | null;
-  /** The Mind's citation style (#289). */
-  citationStyle(mindId: string): CitationStyleId;
+  /** The Mind's citation style (#289), and the language its text is in, which a style may take. */
+  citationStyle(mindId: string): { style: ResolvedCitationStyle; textLanguage: Language };
   /** The family the Mind's font is written as in Word and HTML; null: the default. */
   font(mindId: string): string | null;
   /** The Mind's line spacing, a multiple of a single line; null: its text size's own. */
@@ -158,7 +154,8 @@ interface Prepared {
   failedSentences: FailedSentence[];
   trackedChanges: number;
   language: Language;
-  style: CitationStyle;
+  style: ResolvedCitationStyle;
+  textLanguage: Language;
   documents: readonly SourceDocument[];
   bibliography: boolean;
   font: string | null;
@@ -173,7 +170,7 @@ export function createExports(deps: ExportsDependencies) {
     const { format, includeQuestions } = options;
     const mind = deps.mind(mindId);
     const language = deps.language();
-    const style = citationStyle(deps.citationStyle(mind.id));
+    const { style, textLanguage } = deps.citationStyle(mind.id);
     const documents = deps.liveDocuments();
     const kept = deps.keptCitationTexts();
     const attributesOf = new Map<Footnote, Partial<CitationAttributes>>();
@@ -256,7 +253,7 @@ export function createExports(deps: ExportsDependencies) {
       format,
       options,
       mindId: mind.id,
-      title: mind.title,
+      title: mindName(mind),
       readOptions,
       word,
       blocks,
@@ -265,6 +262,7 @@ export function createExports(deps: ExportsDependencies) {
       trackedChanges,
       language,
       style,
+      textLanguage,
       documents,
       bibliography: deps.bibliography(mind.id),
       font: deps.font(mind.id),
@@ -349,10 +347,9 @@ export function createExports(deps: ExportsDependencies) {
     cards: ReadonlyMap<Footnote, CitationCard>,
     pictures: readonly SharePicture[] = [],
   ) => {
-    const { title, language, preview } = prepared;
+    const { language, preview } = prepared;
     return new TextEncoder().encode(
       renderSharePage({
-        title,
         blocks: await withPictures(blocks, language, deps),
         labels: exportLabels(language),
         language,
@@ -496,7 +493,9 @@ export function createExports(deps: ExportsDependencies) {
         throw new Error("This copy of IncarnaMind can't make PDFs.");
       }
       if (format === "source-pack") return sourcePack(prepared);
-      const thin = thinEntries(deps.formatCitations);
+      const thin = thinEntries((request) =>
+        deps.formatCitations({ ...request, language: prepared.textLanguage }),
+      );
       if (format === "docx" && prepared.word) {
         return exportIntoWord(prepared, prepared.word, thin);
       }
@@ -523,7 +522,7 @@ export function createExports(deps: ExportsDependencies) {
       let data: Uint8Array;
       let commented: readonly FailedSentence[] = [];
       if (format === "markdown") {
-        data = new TextEncoder().encode(renderMarkdown(title, blocks, labels));
+        data = new TextEncoder().encode(renderMarkdown("", blocks, labels));
       } else if (format === "docx") {
         ({ data, commented } = renderDocx(await withPictures(blocks, language, deps), {
           title,
@@ -538,7 +537,7 @@ export function createExports(deps: ExportsDependencies) {
       } else if (format === "html" || format === "share-page") {
         const drawn = await withPictures(blocks, language, deps);
         data = new TextEncoder().encode(
-          renderHtml(title, drawn, labels, {
+          renderHtml(drawn, labels, {
             language,
             name: preview.fileName.slice(0, -".html".length),
             font: prepared.font,
@@ -548,7 +547,7 @@ export function createExports(deps: ExportsDependencies) {
       } else {
         // Charts as Word has them: the picture, drawn at twice its size, else the table of values.
         const drawn = await withPictures(blocks, language, deps);
-        const { body, notes } = renderPrintHtml(title, drawn, labels);
+        const { body, notes } = renderPrintHtml(drawn, labels);
         const printed = await (deps.printer as Printer).print({
           language,
           paper: deps.paper(),

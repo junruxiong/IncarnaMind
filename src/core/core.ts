@@ -1,12 +1,13 @@
 import { mkdirSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 import * as Y from "yjs";
-import { isCitationStyleId } from "../shared/citationStyles";
+import { isCitationStyleId, withRecentStyle } from "../shared/citationStyles";
 import type { DrawnPage } from "../shared/citedPage";
 import { translate } from "../shared/i18n";
 import { organizeModelOf, supportsLibraryImages } from "../shared/libraryModels";
+import { holdsOnlyItsTitle } from "../shared/madeMind";
 import {
   HEARD_FROM,
   helpKindsFor,
@@ -44,7 +45,6 @@ import { createAgentSetup, skillInstalled } from "./agents/setup";
 import { createAiUse } from "./aiUse";
 import { createAiUseStatement } from "./aiUseStatement";
 import { createAiSdkAnswerEngine, createAnswers } from "./answers";
-import { topLevelBlocks } from "./answers/blocks";
 import { createChecks } from "./answers/checks";
 import { AFTER_NEW_VERSION_MS, CLAIM_TIME_LIMIT_MS } from "./answers/checks/watch";
 import { recheckCitation, recheckKept } from "./answers/citations";
@@ -65,7 +65,6 @@ import {
   type ConversationAskResult,
   type CoreApi,
   type CoreEventSource,
-  type CreateMindInput,
   DEFAULT_MIND_KIND,
   type Document,
   type DocumentStatus,
@@ -168,6 +167,7 @@ import { createMindContent } from "./mindContent";
 import { createMindIndex } from "./mindIndex";
 import {
   createMinds,
+  type NewMind,
   parseCreateMindInput,
   parseFolderChoice,
   parseIds,
@@ -1241,8 +1241,8 @@ export function createCore(adapters: CoreAdapters): Core {
       checkpoint: (mindId) => {
         checkpoints.save(mindId, "accept");
       },
-      create: (title, folderId) => {
-        const mind = makeMind({ title, kind: DEFAULT_MIND_KIND, folderId });
+      create: (title, folderId, headed) => {
+        const mind = makeMind({ title, kind: DEFAULT_MIND_KIND, folderId }, { headed });
         return { id: mind.id, name: mindName(mind) || title };
       },
       folderName: (folderId) =>
@@ -1253,12 +1253,11 @@ export function createCore(adapters: CoreAdapters): Core {
     withdrawChanges: (changes) => {
       for (const change of changes) {
         if (!mindExists(change.mindId)) continue;
+        const { title } = minds.get(change.mindId);
         const emptied = content.edit(change.mindId, (blocks) => {
           resolveProposals(blocks, (ref) => ref.request === change.request, "reject");
           if (change.revised) restoreRevised(blocks, change.request);
-          return topLevelBlocks(blocks).every(
-            (block) => block.nodeName === "paragraph" && block.length === 0,
-          );
+          return holdsOnlyItsTitle(blocks, title);
         });
         if (change.created && emptied) removeMind(change.mindId);
       }
@@ -1391,7 +1390,7 @@ export function createCore(adapters: CoreAdapters): Core {
     );
     let mind = "";
     try {
-      mind = task.mindId ? minds.get(task.mindId).title : "";
+      mind = task.mindId ? mindName(minds.get(task.mindId)) : "";
     } catch {
       mind = "";
     }
@@ -1527,7 +1526,7 @@ export function createCore(adapters: CoreAdapters): Core {
     folder: adapters.paths.citationStyles,
     document: liveDocument,
   });
-  const mindCitationStyle = (mindId: string): MindCitationStyle => {
+  const mindStyleAndText = (mindId: string) => {
     const { folderId } = minds.get(mindId);
     const { chineseText, cited } = content.read(mindId, (blocks) => {
       const versions: CitedVersions = new Map();
@@ -1539,12 +1538,14 @@ export function createCore(adapters: CoreAdapters): Core {
     });
     const citesWorks = cited.some((id) => isCitableWork(liveDocument(id)?.reference ?? null));
     const context = { language: settings.get().language, chineseText, citesWorks };
-    return content.readSettings(mindId, (mindSettings) => ({
+    const style: MindCitationStyle = content.readSettings(mindId, (mindSettings) => ({
       style: citationStyleIn(mindSettings, context),
       chosen: chosenCitationStyle(mindSettings) !== null,
       folderDefault: folderId === null ? null : library.citationStyle(folderId),
     }));
+    return { style, textLanguage: chineseText ? ("zh-CN" as const) : ("en" as const) };
   };
+  const mindCitationStyle = (mindId: string): MindCitationStyle => mindStyleAndText(mindId).style;
   /** Sends a Mind to Recently deleted; its tabs close. */
   const removeMind = (mindId: unknown) => {
     const at = now();
@@ -1583,9 +1584,22 @@ export function createCore(adapters: CoreAdapters): Core {
     content.editSettings(mindId, (mindSettings) => writeMindStyle(mindSettings, style));
   };
   /** A new Mind, in the citation style last chosen for a Mind in its Folder, as its own choice (#289). */
-  const makeMind = (input: Required<CreateMindInput>): Mind => {
+  /**
+   * With `headed`, the Mind's text starts with its title as a Heading 1 and an
+   * empty line under it: a page has no title field (#908), and a Mind made with
+   * its name reads as it did with one.
+   */
+  const makeMind = (input: NewMind, { headed = false } = {}): Mind => {
     if (input.folderId !== null) library.folder(input.folderId);
     const mind = minds.create(input);
+    if (headed && mind.title !== "") {
+      content.edit(mind.id, (note) =>
+        insertBlocks(note, [
+          { type: "heading", attrs: { level: 1 }, content: [{ type: "text", text: mind.title }] },
+          { type: "paragraph" },
+        ]),
+      );
+    }
     const style = input.folderId === null ? null : library.citationStyle(input.folderId);
     if (style !== null) {
       content.editSettings(mind.id, (mindSettings) => setCitationStyle(mindSettings, style));
@@ -1711,7 +1725,10 @@ export function createCore(adapters: CoreAdapters): Core {
     language: () => settings.get().language,
     folderName: (folderId) =>
       library.folders().find((folder) => folder.id === folderId)?.name ?? null,
-    citationStyle: (mindId) => mindCitationStyle(mindId).style,
+    citationStyle: (mindId) => {
+      const { style, textLanguage } = mindStyleAndText(mindId);
+      return { style: citationStyles.resolve(style.style, textLanguage), textLanguage };
+    },
     font: (mindId) => exportedFamily(content.readSettings(mindId, mindStyleOf).font),
     lineSpacing: (mindId) => {
       const lineSpacing = lineSpacingOf(content.readSettings(mindId, mindStyleOf));
@@ -2813,7 +2830,8 @@ export function createCore(adapters: CoreAdapters): Core {
 
   // Async on purpose: the renderer reaches these over IPC, and a future hosted core may be remote.
   return {
-    createMind: async (input) => makeMind(parseCreateMindInput(input)),
+    createMind: async (input) =>
+      makeMind(parseCreateMindInput(input), { headed: isRecord(input) && input.headed === true }),
     checkWordFile: async (path, folderId) => wordImports.check(path, folderId),
     importWordFile: async (input) => wordImports.import(input),
     addWordOriginal: async (mindId, path) => {
@@ -3694,6 +3712,12 @@ export function createCore(adapters: CoreAdapters): Core {
       }
       const mind = writableMind(mindId);
       content.editSettings(mind.id, (mindSettings) => setCitationStyle(mindSettings, style));
+      // Undo passes the Folder's style back; what it puts back isn't a style the User chose.
+      if (style !== null && folderDefault === undefined) {
+        const recent = withRecentStyle(settings.get().user.recentCitationStyles, style);
+        settings.update({ user: { recentCitationStyles: recent } });
+        settingsChanged();
+      }
       // The style chosen is the one new Minds in its Folder start in, as a document app keeps
       // the last template used; Undo puts back the one before.
       const { folderId } = minds.get(mind.id);
@@ -3702,6 +3726,16 @@ export function createCore(adapters: CoreAdapters): Core {
         else if (style !== null) library.setCitationStyle(folderId, style);
       }
       return mindCitationStyle(mind.id);
+    },
+    listCitationStyles: async () => citationStyles.list(),
+    openCitationStyleLicences: async () => {
+      if (!adapters.shell)
+        throw new Error("This copy of IncarnaMind can't open files in other apps.");
+      // The notice is compressed in the pack, so it is written out, into a folder of its own.
+      const folder = await mkdtemp(join(adapters.paths.tempDir ?? tmpdir(), "incarnamind-"));
+      const path = join(folder, "IncarnaMind citation styles.txt");
+      await writeFile(path, citationStyles.notice());
+      await adapters.shell.openPath(path);
     },
     getMindStyle: async (mindId) => content.readSettings(minds.get(mindId).id, mindStyleOf),
     setMindStyle: async (mindId, style) => {

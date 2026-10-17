@@ -16,7 +16,7 @@ import { deflateRawSync } from "node:zlib";
 import { DOMParser } from "@xmldom/xmldom";
 import * as Y from "yjs";
 import type { NodeJSON } from "../../../shared/blockJson";
-import type { CitationStyle } from "../../../shared/citationStyles";
+import type { ResolvedCitationStyle } from "../../../shared/citationStyles";
 import { proposalRequestOf } from "../../../shared/proposals";
 import type { SourceContext } from "../../../shared/sources";
 import { wordFileOf, wordFingerprint, wordSourceOf } from "../../../shared/wordFiles";
@@ -73,7 +73,7 @@ export interface WordPatchInput {
   /** How the Mind's Blocks are read, as the native export reads them. */
   readOptions: ReadOptions;
   labels: ExportLabels;
-  style: CitationStyle;
+  style: ResolvedCitationStyle;
   /** Whether a Numbered Mind shows its Bibliography. */
   bibliography: boolean;
   bibliographyHeading: string;

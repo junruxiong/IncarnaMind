@@ -12,7 +12,7 @@ import {
   type WordExportPreferences,
 } from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
-import { styleLabel, useCitationStylePicker } from "../citationStylePicker";
+import { useCitationStylePicker, useStyleLabel } from "../citationStylePicker";
 import { shortcutLabel } from "../commands/keymap";
 import { core } from "../core";
 import { errorMessage } from "../errors";
@@ -245,6 +245,7 @@ function CitationStyleRow({ mindId }: { mindId: string }) {
     };
   }, [mindId, picking]);
   const byDefault = style !== null && !style.chosen && style.style !== "numbered";
+  const label = useStyleLabel(style?.style);
   return (
     <div className={rowClass}>
       <div className="flex min-w-0 flex-col">
@@ -269,7 +270,7 @@ function CitationStyleRow({ mindId }: { mindId: string }) {
         className={`${buttonClass} min-w-0 gap-1`}
       >
         <span id="export-citation-style-value" className="truncate">
-          {style ? styleLabel(style.style, t) : "…"}
+          {label ?? "…"}
         </span>
         <ChevronDownLineIcon className="size-3.5 shrink-0 text-ink-meta" />
       </button>
