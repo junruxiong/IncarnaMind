@@ -158,7 +158,6 @@ export function assistantTabOf(layout: WindowLayout | null, merged: boolean): La
   return shown.map((group) => activeTabOf(group)).find((tab) => tab?.item.kind === "mind") ?? null;
 }
 
-/** The tab showing a Mind where the User is: the focused group's, else the first on screen. */
 export function frontTabOfMind(
   layout: WindowLayout | null,
   mindId: string,

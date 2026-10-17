@@ -132,9 +132,9 @@ test("in Chinese and a narrow pane the badge shows only its marks and numbers; T
   await editor.click();
   await window.keyboard.type(`${SUPPORTED} ${UNSUPPORTED}`);
   const open = window.getByTestId("check-badge-open");
-  await expect(open).toHaveAccessibleName("句子和引用：2 句待核对");
+  await expect(open).toHaveAccessibleName("句子和引用：2 条说法待核对");
   const words = window.getByTestId("check-badge").locator(".check-badge-words");
-  await expect(words).toHaveText("句待核对");
+  await expect(words).toHaveText("条待核对");
   await expect(words).toBeVisible();
   await setWindowSize(app, window, 1100, 720);
   await expect(words).toBeVisible();

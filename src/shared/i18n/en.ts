@@ -645,8 +645,8 @@ export const en = {
   "contradictions.command.purpose": "Where your Documents disagree with this Mind's Citations",
   "badge.command.keywords":
     "checks citations health contradicted unsupported claims sentences badge",
-  "health.checkedAll.one": "Checked 1 sentence, {when}",
-  "health.checkedAll": "Checked {count} sentences, {when}",
+  "health.checkedAll.one": "Checked 1 claim, {when}",
+  "health.checkedAll": "Checked {count} claims, {when}",
   "health.checkAll": "Check all",
   "health.next": "{part}: go to the next",
   "checks.smallModel":
@@ -677,7 +677,7 @@ export const en = {
     "This Mind isn't in a Folder, so there are no other Documents to check it against.",
   "checks.problem.only-cited.folder": "“{folder}” holds only the Documents these claims cite.",
   "checks.problem.no-cited": "This Mind has no cited claims to check.",
-  "checks.problem.no-claims": "This Mind has no sentences to check.",
+  "checks.problem.no-claims": "This Mind has no claims to check.",
   "contradictions.command": "Check for contradictions",
   "contradictions.command.keywords":
     "contradictions conflict contradicted cited claims Folder watch",
@@ -694,10 +694,6 @@ export const en = {
   "contradictions.after": "After “{document}” changed: {result}",
   "mindCheck.command": "Check this Mind",
   "mindCheck.command.keywords": "check all whole draft before sending claims sentences verify",
-  "mindCheck.ask.folder.one": "Check this Mind’s sentence against this Folder’s Documents?",
-  "mindCheck.ask.folder": "Check this Mind’s {count} sentences against this Folder’s Documents?",
-  "mindCheck.ask.all.one": "Check this Mind’s sentence against your Documents?",
-  "mindCheck.ask.all": "Check this Mind’s {count} sentences against your Documents?",
   "mindCheck.ask.claims.folder.one": "Check this Mind’s claim against this Folder’s Documents?",
   "mindCheck.ask.claims.folder":
     "Check this Mind’s {count} claims against this Folder’s Documents?",

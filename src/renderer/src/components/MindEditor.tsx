@@ -654,9 +654,14 @@ function MindEditorView({
           countSlot,
         )}
       {badgeSlot &&
-        !(firstOpen && isExample) &&
         createPortal(
-          <CheckBadge editor={editor} doc={doc} mindId={mindId} verification={verification} />,
+          <CheckBadge
+            editor={editor}
+            doc={doc}
+            mindId={mindId}
+            verification={verification}
+            quiet={firstOpen && isExample}
+          />,
           badgeSlot,
         )}
       {readOnly && <MindNotice kind="read-only" />}

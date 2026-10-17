@@ -69,6 +69,7 @@ export function CheckBadge(props: {
   doc: Y.Doc;
   mindId: string;
   verification: Verification | null;
+  quiet: boolean;
 }) {
   return props.verification ? (
     <VerifyBadge {...props} verification={props.verification} />
@@ -77,7 +78,17 @@ export function CheckBadge(props: {
   );
 }
 
-function MindBadge({ editor, doc, mindId }: { editor: Editor; doc: Y.Doc; mindId: string }) {
+function MindBadge({
+  editor,
+  doc,
+  mindId,
+  quiet,
+}: {
+  editor: Editor;
+  doc: Y.Doc;
+  mindId: string;
+  quiet: boolean;
+}) {
   const t = useT();
   const checkedAll = useMindCheckRun(doc);
   const skippedKeys = checkedAll?.skipped.join(" ") ?? "";
@@ -99,6 +110,7 @@ function MindBadge({ editor, doc, mindId }: { editor: Editor; doc: Y.Doc; mindId
     asking: askingMind || askingContradictions,
     problem,
     checked: running ? null : checked,
+    quiet,
   };
   return (
     <BadgeFrame
@@ -186,11 +198,13 @@ function VerifyBadge({
   doc,
   mindId,
   verification,
+  quiet,
 }: {
   editor: Editor;
   doc: Y.Doc;
   mindId: string;
   verification: Verification;
+  quiet: boolean;
 }) {
   const t = useT();
   const language = useLanguage();
@@ -214,6 +228,7 @@ function VerifyBadge({
     asking: state.asking,
     problem: state.problem || nothing,
     checked: state.running ? null : checked,
+    quiet,
   };
   return (
     <BadgeFrame
@@ -255,8 +270,7 @@ function VerifyBadge({
   );
 }
 
-/** Where a badge's card opens: its tab, else its Mind. */
-export const useCardPlace = (mindId: string) => useTabPlace()?.tabId ?? mindId;
+const useCardPlace = (mindId: string) => useTabPlace()?.tabId ?? mindId;
 
 /**
  * The badge and its card. The card opens by itself when `ask` turns on: a
@@ -277,7 +291,6 @@ function BadgeFrame({
   ask: boolean;
   running: ReactNode;
   onStop(): void;
-  /** Beside Close, at the card's foot. */
   foot?: ReactNode;
   children: ReactNode;
 }) {

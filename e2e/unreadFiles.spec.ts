@@ -287,7 +287,10 @@ for (const language of ["en", "zh-CN"] as const) {
       await setWindowSize(app, window, 1440, 900);
       await expect(window.getByTestId("viewer")).toBeVisible();
       await screenshot(window, `verify-wrap-${language}`);
-      for (const row of await card.locator(".meta-line").all()) await expectDotsBetweenParts(row);
+      // The card is 360px wherever it opens, so its short lines fit; metaLines.spec.ts wraps a long one there.
+      const lines = await card.locator(".meta-line").all();
+      expect(lines.length).toBeGreaterThan(0);
+      for (const row of lines) await expectDotsBetweenParts(row);
 
       // Copied across its parts, a line reads as one line, "A · B", and within a part the browser copies it.
       const whole = unread.locator(".meta-line").first();
