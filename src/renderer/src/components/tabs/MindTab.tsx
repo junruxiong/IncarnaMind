@@ -8,6 +8,7 @@ import {
 } from "../../editor/mindContext";
 import { useT } from "../../i18n";
 import { assistantTabOf } from "../../layoutSlice";
+import { useQuietAssistant } from "../../quietAssistant";
 import { useAppStore } from "../../store";
 import { useFittedName } from "../../useFittedName";
 import { useGroupsMerged } from "../../useWindowWidth";
@@ -38,6 +39,7 @@ export function MindTab({ mindId }: { mindId: string }) {
   const merged = useGroupsMerged();
   const read = useAppStore((state) => assistantTabOf(state.layout, merged)?.id === tabId);
   const dropTarget = useWordFileDrop();
+  const pill = useQuietAssistant();
   if (!mind) return null;
 
   return (
@@ -62,6 +64,7 @@ export function MindTab({ mindId }: { mindId: string }) {
             <MakeSkillCard mindId={mind.id} />
           </div>
         </article>
+        {pill && <div aria-hidden="true" data-testid="ask-pill-fade" className="ask-pill-fade" />}
       </div>
       {/* The Compare Documents sheet docks here, in the column's measure, below the note. */}
       <div ref={setSheetSlot} className="compare-sheet-dock" />

@@ -40,13 +40,20 @@ export function newestWithin(
  * Mind keeps its place for the prompt cache and the selection stays right before the Question.
  */
 export function withTranscript(messages: readonly AnswerMessage[], shown: string): AnswerMessage[] {
+  return withBeforeQuestion(messages, `<live-transcript>\n${shown}\n</live-transcript>`);
+}
+
+/** The messages with `block` in the Question's message, after the Mind read with it (see `withTranscript`). */
+export function withBeforeQuestion(
+  messages: readonly AnswerMessage[],
+  block: string,
+): AnswerMessage[] {
   const last = messages.at(-1);
   if (last?.role !== "user") return [...messages];
-  const transcript = `<live-transcript>\n${shown}\n</live-transcript>`;
   const at = messages.length === 1 ? (last.stablePrefix ?? 0) : 0;
   const content =
     at > 0
-      ? `${last.content.slice(0, at)}\n\n${transcript}\n\n${last.content.slice(at).trimStart()}`
-      : `${transcript}\n\n${last.content}`;
+      ? `${last.content.slice(0, at)}\n\n${block}\n\n${last.content.slice(at).trimStart()}`
+      : `${block}\n\n${last.content}`;
   return [...messages.slice(0, -1), { ...last, content }];
 }

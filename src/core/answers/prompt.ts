@@ -109,6 +109,29 @@ export function webInstructions(offered: boolean): string {
   ].join("\n");
 }
 
+/** The Document the Mind in focus is the working copy of (#1036), by name; empty for none. */
+export function workingCopyNote(original: string | null): string {
+  if (original === null) return "";
+  return `The Mind in <mind> is the User's working copy of the Document "${listedName(original)}", imported from it: "this document", "the file", "this résumé" ("这份文档", "这份简历") and the like mean that Document. It is among the User's Documents: never say it isn't there or couldn't be found.`;
+}
+
+/**
+ * Passages as the model reads them, from a search or given whole, with the
+ * notes their text calls for: dates, the User's own workings, amounts in
+ * brackets, and Documents that couldn't be read.
+ */
+export function withPassageNotes(passages: string, unread: readonly UnreadFile[]): string {
+  return [
+    passages,
+    datedDocumentsNote(passages),
+    notCitedNote(passages),
+    bracketedAmountsNote(passages),
+    unreadDocumentsNote(unread),
+  ]
+    .filter((part) => part !== "")
+    .join("\n\n");
+}
+
 const NO_MIND_TOOLS =
   "You can't change the User's Minds (their notes) or make new ones in this chat. When the User asks you to write into a Mind or to change one, write the text in your reply, and never say or promise that you wrote, added, changed or made anything in a Mind: IncarnaMind tells the User that you can't, and lets them add your reply to a Mind.";
 
