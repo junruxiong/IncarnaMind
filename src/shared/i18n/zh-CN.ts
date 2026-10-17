@@ -448,6 +448,7 @@ export const zhCN = {
   "wordCount.target.invalid": "输入数字，如 8,000 或 3 万。",
   "wordCount.progress": "已达目标的 {percent}%",
   "editor.placeholder": "输入“/”插入标题、表格、代码或公式",
+  "editor.title": "标题",
   "editor.slash.label": "插入",
   "editor.slash.empty": "没有匹配项",
   "editor.slash.text": "正文",

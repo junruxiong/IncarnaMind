@@ -495,6 +495,8 @@ test("⌘J focuses the composer from the note; Shift+Enter breaks the Question's
   await pointAndClick(window, window.getByTestId("plus-menu"));
   await pointAndClick(window, window.getByTestId("plus-new-mind"));
   await enterContent(window);
+  // Notes, not a title: the first line made body text (#1088).
+  await window.keyboard.press("Backspace");
   await window.keyboard.type("First thought");
   await window.keyboard.press("Enter");
   await window.keyboard.type("Second thought");
