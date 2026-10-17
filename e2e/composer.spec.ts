@@ -576,9 +576,7 @@ test("the model chip chooses the model for one Mind, which remembers it after a 
     await expect(options).toHaveText([/fake-model/, /other-model/]);
     await expect(options.first()).toHaveAttribute("aria-checked", "true");
     await expect(options.first()).toBeFocused();
-    await expect(menu).toContainText(
-      "For this Mind’s next Questions. It’s remembered for the Mind.",
-    );
+    await expect(menu).toContainText("For this Mind's Questions.");
     await expect(menu).toContainText("Default for new Minds: fake-model · Change in Settings");
     // What stays on this computer says so with its icon, in ink-secondary: green is for checks.
     const stays = menu.getByTestId("on-this-computer").first();

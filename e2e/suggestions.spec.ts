@@ -67,13 +67,11 @@ test("a pause at the end of a paragraph its Documents support shows grey text wi
     "The harbour survey depends on the tides. Spring tides come twice a month, near the new moon and the full moon.",
   );
   const offer = window.getByTestId("suggestion-offer");
-  await expect(offer).toContainText(
-    "IncarnaMind can suggest the next sentence from your Documents, with a Citation.",
-  );
+  await expect(offer).toContainText("Suggest cited next sentences as you write?");
   await expect(suggestion).toHaveCount(0);
   await offer.getByTestId("suggestion-offer-turn-on").click();
   await expect(window.getByTestId("suggestion-offer-on")).toContainText(
-    "Suggestions are on: Tab accepts, Esc dismisses.",
+    "Suggestions on: Tab accepts, Esc dismisses. Turn off in Settings.",
   );
   await expect(editor).toBeFocused();
 
