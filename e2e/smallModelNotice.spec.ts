@@ -7,6 +7,7 @@ import type { CoreBridge } from "../src/core/api";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   addDocuments,
+  checkCard,
   createDataFolder,
   dismissChatSetup,
   launchApp,
@@ -104,7 +105,7 @@ async function findSupport(window: Page, modelId: string) {
   const menu = window.getByTestId("selection-menu");
   await pointAndClick(window, menu.getByTestId("selection-action-find-support"));
   await expect(window.getByTestId("claim-mark")).toHaveCount(1);
-  await expect(window.getByTestId("mind-health")).toBeVisible();
+  await expect((await checkCard(window)).getByTestId("mind-health")).toBeVisible();
 }
 
 for (const language of ["en", "zh-CN"] as const) {
@@ -118,21 +119,10 @@ for (const language of ["en", "zh-CN"] as const) {
     await findSupport(window, "scripted-4b");
     const notice = window.getByTestId("checks-small-model");
     await expect(notice).toHaveText(NOTICE[language]);
-    // Quiet: beside the health line without covering it, and not a problem.
-    // The health line's parts sit directly in the count's row, so its extent is theirs.
-    const parts = await window
-      .getByTestId("mind-health")
-      .locator(".mind-health-part")
-      .evaluateAll((elements) =>
-        elements.map((element) => {
-          const { x, y, width, height } = element.getBoundingClientRect();
-          return { x, y, width, height };
-        }),
-      );
-    const last = parts.at(-1);
+    // Quiet: in the badge's card under its rows, without covering them, and not a problem.
+    const health = await window.getByTestId("mind-health").boundingBox();
     const line = await notice.boundingBox();
-    if (!last || !line) throw new Error("The lines aren't drawn.");
-    const health = { x: last.x, y: last.y, width: last.width, height: last.height };
+    if (!health || !line) throw new Error("The lines aren't drawn.");
     const apart = line.x >= health.x + health.width - 1 || line.y >= health.y + health.height - 1;
     expect(apart).toBe(true);
     await expect(window.getByTestId("checks-problem")).toHaveCount(0);
