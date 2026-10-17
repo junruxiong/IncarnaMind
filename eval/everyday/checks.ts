@@ -11,6 +11,9 @@
  *   each is cited, or named in a sentence saying it wasn't covered.
  * - **Only what was asked changes**: asked about one paragraph, the others
  *   read as they did.
+ * - **Changed in place**: asked to make text in the Mind longer, it changes
+ *   that text, not adding a second version beside it, nor leaving it as it
+ *   was (#1061).
  */
 import { changeLogOf } from "../../src/core/answers/claimedChanges";
 import type { ConversationAnswer, MarkedCitation } from "../../src/core/api";
@@ -26,6 +29,8 @@ export interface Expected {
   coverAll: boolean;
   /** Only this top-level Block of the Mind it is asked from (from 0) may change. */
   only?: number;
+  /** It asks to change text already in the Mind: adding a new version beside it fails. */
+  inPlace?: true;
 }
 
 export interface RequestOutcome {
@@ -38,6 +43,8 @@ export interface RequestOutcome {
   citedInMinds: readonly string[];
   /** The top-level Blocks of the Mind it was asked from (from 0) that read otherwise once its changes are accepted. */
   changedBlocks: readonly number[];
+  /** The top-level Blocks Add to note put in before the request (from 0): what `inPlace` must change. */
+  addedBlocks?: readonly number[];
   scoped: readonly { id: string; name: string }[];
 }
 
@@ -47,7 +54,9 @@ export type RequestFailure =
   | { kind: "unbacked"; sentences: string[]; flagged: boolean }
   | { kind: "no-citations" }
   | { kind: "uncovered"; documents: string[] }
-  | { kind: "outside"; blocks: number[] };
+  | { kind: "outside"; blocks: number[] }
+  | { kind: "beside" }
+  | { kind: "untouched" };
 
 const key = (text: string) => text.replace(/\s+/g, " ").trim().toLocaleLowerCase();
 
@@ -98,6 +107,18 @@ export function requestFailures(outcome: RequestOutcome): RequestFailure[] {
     const outside = outcome.changedBlocks.filter((block) => block !== expected.only);
     if (outside.length > 0) failures.push({ kind: "outside", blocks: outside });
   }
+  const added = answer.toolCalls.some(
+    (call) => call.tool === "add_to_mind" && call.mindChange && call.mindChange.proposals > 0,
+  );
+  if (expected.inPlace && added) failures.push({ kind: "beside" });
+  const { addedBlocks } = outcome;
+  if (
+    expected.inPlace &&
+    addedBlocks &&
+    !addedBlocks.some((block) => outcome.changedBlocks.includes(block))
+  ) {
+    failures.push({ kind: "untouched" });
+  }
   return failures;
 }
 
@@ -114,5 +135,9 @@ export function failureLine(failure: RequestFailure): string {
       return `neither cites nor names as left out ${failure.documents.map((name) => `“${name}”`).join(", ")}`;
     case "outside":
       return `changed what it was asked to leave: Block ${failure.blocks.map((block) => block + 1).join(", ")}`;
+    case "beside":
+      return "added a new version beside the text it was asked to change";
+    case "untouched":
+      return "left the text it was asked to change as it was";
   }
 }
