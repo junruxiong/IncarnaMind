@@ -287,7 +287,7 @@ describe("Edit with AI", () => {
 
     expect(result).toMatchObject({ kind: "proposed", droppedCitations: 1 });
     expect(shownWithChanges(client)).toEqual([
-      "Spring tides [-happen-]{+come+} at new [-moon and at -]{+and +}full moon [-⟨not-found⟩, and they are the highest ⟨found⟩-]{+⟨found⟩+}.",
+      "[-Spring tides happen at new moon and at full moon ⟨not-found⟩, and they are the highest ⟨found⟩.-]{+Spring tides come at new and full moon ⟨found⟩.+}",
     ]);
 
     await resolveChanges(client, "accept");
@@ -1061,8 +1061,8 @@ describe("Edit with AI as the model writes (#202)", () => {
     controlled.push("Les marées sont fortes ici.\n\nLa lune brille ce soir.\n\nLes ports");
     await vi.waitFor(() =>
       expect(shownWithChanges(client)).toEqual([
-        "[-The tides here are very strong-]{+Les marées sont fortes ici+}.",
-        "[-The moon is really bright tonight-]{+La lune brille ce soir+}.",
+        "[-The tides here are very strong.-]{+Les marées sont fortes ici.+}",
+        "[-The moon is really bright tonight.-]{+La lune brille ce soir.+}",
         "Harbours are quite busy in spring.",
       ]),
     );
@@ -1072,7 +1072,7 @@ describe("Edit with AI as the model writes (#202)", () => {
     await client.settled();
     expect(shownWithChanges(client)).toHaveLength(3);
     expect(shownWithChanges(client)[2]).toBe(
-      "[-Harbours are quite busy in spring-]{+Les ports sont animés au printemps+}.",
+      "[-Harbours are quite busy in spring.-]{+Les ports sont animés au printemps.+}",
     );
   });
 
@@ -2045,5 +2045,161 @@ describe("An edit the User asked for (#880)", () => {
     stop();
 
     expect(causes.every((cause) => cause === undefined)).toBe(true);
+  });
+});
+
+describe("How a change reads (#1028)", () => {
+  const heading = (value: string): JSONContent => ({
+    type: "heading",
+    attrs: { id: `block-${++ids}`, level: 2 },
+    content: [text(value)],
+  });
+  const bullets = (...items: string[]): JSONContent => ({
+    type: "bulletList",
+    content: items.map((item) => ({ type: "listItem", content: [paragraph(text(item))] })),
+  });
+
+  /** As `shownWithChanges` shows them, a paragraph added or removed whole marked by a Block around it too. */
+  const shownWhole = (client: MindClient): string[] => {
+    const lines: string[] = [];
+    const visit = (node: ReturnType<typeof readMind>, whole: string | null) => {
+      const kind = (node.attrs?.[PROPOSAL_ATTRIBUTE] as { kind?: string } | null)?.kind ?? whole;
+      if (!node.isTextblock) {
+        node.forEach((child) => {
+          visit(child, kind);
+        });
+        return;
+      }
+      let line = "";
+      node.forEach((child) => {
+        const marks = child.marks.map((mark) => mark.type.name);
+        const words = child.text ?? "￼";
+        line += marks.includes("proposalDelete")
+          ? `[-${words}-]`
+          : marks.includes("proposalInsert")
+            ? `{+${words}+}`
+            : words;
+      });
+      lines.push(`${kind === "insert" ? "+ " : kind === "delete" ? "- " : ""}${line}`);
+    };
+    visit(readMind(client), null);
+    return lines.map((line) => line.replace(/-\]\[-|\+\}\{\+/g, ""));
+  };
+
+  /** The whole Mind, asked to change as `instruction` says. */
+  const everything = (client: MindClient, mindId: string, instruction: string) => {
+    const blocks: { id: string; size: number }[] = [];
+    readMind(client).descendants((node) => {
+      if (!node.isTextblock) return true;
+      blocks.push({ id: String(node.attrs.id), size: node.content.size });
+      return false;
+    });
+    const first = blocks[0] as { id: string };
+    const last = blocks.at(-1) as { id: string; size: number };
+    return {
+      requestId: `edit-${++ids}`,
+      mindId,
+      from: { blockId: first.id, offset: 0 },
+      to: { blockId: last.id, offset: last.size },
+      text: blocks.map((block) => plainOf(client, block.id)).join("\n"),
+      action: "instruction" as const,
+      instruction,
+    };
+  };
+
+  test("a word replaced reads word by word; a paragraph 40% or more of whose words change reads whole, before and after, never interleaved", async () => {
+    const before = [
+      "The tides here are strong and regular.",
+      "Spring tides happen at new moon and at full moon every month.",
+    ];
+    const after = [
+      "The tides here are strong and predictable.",
+      "Twice a month the Sun and the Moon pull together.",
+    ];
+    const { core, mind, client } = await setUp(editingModel(() => after.join("\n\n")));
+    writeMind(
+      client,
+      before.map((line) => paragraph(text(line))),
+    );
+    await client.settled();
+
+    await core.editWithAi(everything(client, mind.id, "Make it clearer"));
+    await client.settled();
+
+    expect(shownWithChanges(client)).toEqual([
+      "The tides here are strong and [-regular-]{+predictable+}.",
+      `[-${before[1]}-]{+${after[1]}+}`,
+    ]);
+  });
+
+  test("a heading changed at all reads whole", async () => {
+    const { core, mind, client } = await setUp(
+      editingModel(() => "## Key strengths\n\nSpring tides are strongest at new moon."),
+    );
+    writeMind(client, [
+      heading("Highlights and points to check"),
+      paragraph(text("Spring tides are strongest at new moon.")),
+    ]);
+    await client.settled();
+
+    await core.editWithAi(everything(client, mind.id, "Rename the heading"));
+    await client.settled();
+
+    expect(shownWithChanges(client)).toEqual([
+      "[-Highlights and points to check-]{+Key strengths+}",
+      "Spring tides are strongest at new moon.",
+    ]);
+  });
+
+  test("a list item replaced by one about something else is removed and the new one added: the degree never turns into the job", async () => {
+    const { core, mind, client } = await setUp(
+      editingModel(() =>
+        [
+          "## 经历",
+          "- 2014.09—2018.06 上海财经大学 会计学 学士",
+          "- 2021.04—至今 某证券公司研究所 食品饮料行业研究员",
+        ].join("\n\n"),
+      ),
+    );
+    writeMind(client, [
+      heading("经历"),
+      bullets("2014.09—2018.06 上海财经大学 会计学 学士", "2018.09—2020.06 复旦大学 金融学 硕士"),
+    ]);
+    await client.settled();
+
+    await core.editWithAi(everything(client, mind.id, "删掉硕士那一条，换成现在的工作"));
+    await client.settled();
+
+    expect(shownWhole(client)).toEqual([
+      "经历",
+      "2014.09—2018.06 上海财经大学 会计学 学士",
+      "+ 2021.04—至今 某证券公司研究所 食品饮料行业研究员",
+      "- 2018.09—2020.06 复旦大学 金融学 硕士",
+    ]);
+  });
+
+  test("in Chinese, a date range changed is one change, and a paragraph mostly rewritten reads whole, no old and new words alternating", async () => {
+    const before = [
+      "2017.05—2017.04 某咨询公司 分析师",
+      "张瑜的主要优势是跨医疗、金融两个行业的数据分析经验，熟悉财务建模。",
+    ];
+    const after = [
+      "2017.05—2018.09 某咨询公司 分析师",
+      "十年咨询与审计项目经验，擅长跨部门沟通与团队管理，熟悉财务建模。",
+    ];
+    const { core, mind, client } = await setUp(editingModel(() => after.join("\n\n")));
+    writeMind(
+      client,
+      before.map((line) => paragraph(text(line))),
+    );
+    await client.settled();
+
+    await core.editWithAi(everything(client, mind.id, "把日期改对，第二段重写"));
+    await client.settled();
+
+    expect(shownWithChanges(client)).toEqual([
+      "[-2017.05—2017.04-]{+2017.05—2018.09+} 某咨询公司 分析师",
+      `[-${before[1]}-]{+${after[1]}+}`,
+    ]);
   });
 });

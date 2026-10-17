@@ -6,7 +6,7 @@ import type { ConversationAnswer } from "../../core/api";
 
 /**
  * A Mind an Answer changed or made, the requests its changes there belong to,
- * and what its calls did there: paragraphs written in whole Blocks, places
+ * and what its calls did there: paragraphs written in whole Blocks, paragraphs
  * changed, tables added, and what of those tables was kept as text: sources
  * that couldn't be linked, extra cells.
  */
@@ -39,9 +39,10 @@ export function changedMinds(answer: Pick<ConversationAnswer, "toolCalls">): Cha
     row.created ||= change.created;
     if (change.request && !row.requests.includes(change.request)) row.requests.push(change.request);
     const tables = change.tables ?? 0;
-    // A rewrite's table is one of its changes, counted as a table, not a place.
-    if (call.tool === "edit_mind" && !change.revised) row.changed += change.proposals - tables;
-    else row.wrote += change.paragraphs ?? 0;
+    // Counted by paragraph; an Answer's calls from before that counted Proposals, a table one of them.
+    if (call.tool === "edit_mind" && !change.revised) {
+      row.changed += change.changed ?? change.proposals - tables;
+    } else row.wrote += change.paragraphs ?? 0;
     row.tables += tables;
     row.unlinkedSources += change.unlinkedSources ?? 0;
     row.extraCells += change.extraCells ?? 0;

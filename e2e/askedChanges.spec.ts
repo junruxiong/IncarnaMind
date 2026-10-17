@@ -69,26 +69,28 @@ test("“write a summary page” makes the page with the summary applied, “mak
   const second = await askInAssistant(window, "make it longer");
   await expect(paragraphs).toHaveText([`${SPRING} It says more.`, `${NEAP} It says more.`]);
   await expect(editor.locator("ins.proposal-insert, del.proposal-delete")).toHaveCount(0);
-  await expect(line.getByTestId("applied-count")).toHaveText("Changed 2 places");
+  await expect(line.getByTestId("applied-count")).toHaveText("Changed 2 paragraphs");
   await expect(second.getByTestId("mind-changes-title")).toHaveText(
-    "Changed 2 places in “Summary”",
+    "Changed 2 paragraphs in “Summary”",
   );
   await screenshot(window, "asked-edit-en");
   await setLanguage(window, "zh-CN");
-  await expect(line.getByTestId("applied-count")).toHaveText("已修改 2 处");
-  await expect(second.getByTestId("mind-changes-title")).toHaveText("在“Summary”中已修改 2 处");
+  await expect(line.getByTestId("applied-count")).toHaveText("修改了 2 个段落");
+  await expect(second.getByTestId("mind-changes-title")).toHaveText("在“Summary”中已修改 2 个段落");
   await setLanguage(window, "en");
 
   // Review changes from the Answer shows what was added, the text still applied.
   await pointAndClick(window, second.getByTestId("mind-changes-review"));
-  await expect(line.getByTestId("applied-count")).toHaveText("2 changes made by the assistant");
+  await expect(line.getByTestId("applied-count")).toHaveText(
+    "2 paragraphs changed by the assistant",
+  );
   await expect(editor.locator(".applied-new")).toHaveText([" It says more.", " It says more."]);
   await pointAndClick(window, line.getByTestId("applied-done"));
   await expect(paragraphs).toHaveText([`${SPRING} It says more.`, `${NEAP} It says more.`]);
 
   // Review on the first card shows the summary that Answer wrote, not the later change.
   await pointAndClick(window, assistantAnswers(window).first().getByTestId("mind-changes-review"));
-  await expect(line.getByTestId("applied-count")).toHaveText(/made by the assistant$/);
+  await expect(line.getByTestId("applied-count")).toHaveText(/changed by the assistant$/);
   await expect(editor.locator(".applied-new").filter({ hasText: "Spring tides" })).toHaveCount(1);
   await expect(editor.locator(".applied-new").filter({ hasText: /^ It says more\.$/ })).toHaveCount(
     0,
@@ -97,7 +99,7 @@ test("“write a summary page” makes the page with the summary applied, “mak
   await pointAndClick(window, line.getByTestId("applied-undo-all"));
   await expect(paragraphs).toHaveText([`${SPRING} It says more.`, `${NEAP} It says more.`]);
   await setLanguage(window, "zh-CN");
-  await expect(line.getByTestId("applied-count")).toHaveText("助手做的 3 处改动");
+  await expect(line.getByTestId("applied-count")).toHaveText("助手修改的 3 个段落");
   await expect(line.getByTestId("applied-undo-all")).toHaveAttribute("title", /Summary.*查看改动/);
   await setLanguage(window, "en");
   await screenshot(window, "asked-review-earlier-en");
@@ -235,6 +237,11 @@ test("a rewrite that would take out most of the User's own text waits, in Englis
   await expect(line.getByTestId("applied-count")).toHaveText(
     "This would rewrite most of your text, so it's waiting for you",
   );
+  // Each paragraph written anew reads whole, its old text one line above it, struck on a click (#1028).
+  const was = editor.getByTestId("change-was-line").first();
+  await expect(was).toBeVisible();
+  await expect(editor.locator("del.proposal-delete").first()).toBeHidden();
+  await pointAndClick(window, was.getByTestId("change-was"));
   await expect(editor.locator("del.proposal-delete").first()).toBeVisible();
   await screenshot(window, "asked-held-en");
   await setLanguage(window, "zh-CN");
@@ -255,7 +262,7 @@ test("a rewrite that would take out most of the User's own text waits, in Englis
     "Gulls wheel over the quay at dawn.",
     "Boats rest on the mud at low water.",
   ]);
-  await expect(line.getByTestId("applied-count")).toHaveText(/^Changed \d+ places?$/);
+  await expect(line.getByTestId("applied-count")).toHaveText(/^Changed \d+ paragraphs?$/);
   await editor.focus();
   await window.keyboard.press("ControlOrMeta+z");
   await expect(paragraphs).toHaveText(NOTES);
@@ -302,7 +309,7 @@ test("a request to write applies what it wrote, and a rewrite of the User's text
   await expect(editor.locator("del.proposal-delete, ins.proposal-insert").first()).toBeVisible();
   await expect(editor).toContainText("The supplier is late.");
   await setLanguage(window, "zh-CN");
-  await expect(answer.getByTestId("mind-changes-left")).toHaveText("· 2 处待确认");
+  await expect(answer.getByTestId("mind-changes-left")).toHaveText("· 2 个段落待确认");
   await setLanguage(window, "en");
 });
 

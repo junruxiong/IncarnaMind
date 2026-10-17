@@ -3772,6 +3772,71 @@
     display: block;
     margin-block: 4px;
   }
+  /*
+   * How a change reads (#1028; DESIGN.md, AI edits): a struck run and its
+   * replacement a thin space apart; a paragraph written anew shows its new
+   * text alone, until its "Was: …" line, or its section's line, shows the old.
+   */
+  .mind-editor :is(del.proposal-delete, del.applied-old) {
+    margin-inline-end: 0.2em;
+  }
+  .mind-editor
+    .change-rewritten:not([data-original-shown])
+    :is(del.proposal-delete, .proposal-node--delete) {
+    display: none;
+  }
+  .mind-editor .change-hidden {
+    display: none;
+  }
+  /* Each line sits with the Block it is about: a gap above it, the Block right under it. */
+  .mind-editor > * + .change-section {
+    margin-top: 32px;
+  }
+  .mind-editor > :is(.change-was, .change-section) + *,
+  .mind-editor li > .change-was + * {
+    margin-top: 2px;
+  }
+  .mind-editor .change-was,
+  .mind-editor .change-section {
+    display: flex;
+    align-items: center;
+    column-gap: 6px;
+    min-width: 0;
+    font-family: var(--font-sans);
+    font-size: 12px;
+    line-height: 20px;
+    color: var(--color-ink-meta);
+    user-select: none;
+    white-space: normal;
+  }
+  .mind-editor .change-was .change-original-button {
+    display: block;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-align: start;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mind-editor .change-section-words {
+    min-width: 0;
+  }
+  .mind-editor .change-original-button {
+    border-radius: 4px;
+    color: inherit;
+    text-underline-offset: 2px;
+
+    &:hover {
+      color: var(--color-ink-secondary);
+      text-decoration: underline;
+    }
+  }
+  .mind-editor .change-section .change-original-button {
+    flex-shrink: 0;
+    font-weight: 600;
+    color: var(--color-ink-secondary);
+    white-space: nowrap;
+  }
   .mind-editor .applied-line,
   .mind-editor .applied-kept-line {
     display: flex;

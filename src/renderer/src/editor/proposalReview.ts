@@ -11,6 +11,7 @@ import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import { ySyncPluginKey, yUndoPluginKey } from "@tiptap/y-tiptap";
 import type * as Y from "yjs";
 import {
+  BLOCK_ID_ATTRIBUTE,
   CITATION_NODE,
   type CitationAttributes,
   type KeptCitationText,
@@ -106,6 +107,56 @@ function targetTextOf(node: ProseMirrorNode): string {
 function blockEndAt(doc: ProseMirrorNode, pos: number): number {
   const $pos = doc.resolve(Math.min(pos, doc.content.size));
   return $pos.parent.isTextblock ? $pos.after() : pos;
+}
+
+/**
+ * The paragraph or heading a Proposal writes anew, all of its text removed
+ * and new text in its place (#1028); null for any other.
+ */
+export function paragraphWrittenAnew(
+  doc: ProseMirrorNode,
+  proposal: PendingProposal,
+): ProseMirrorNode | null {
+  if (proposal.block || proposal.removed.trim() === "" || proposal.added.trim() === "") return null;
+  const $from = doc.resolve(proposal.from);
+  const covered = proposal.ranges.reduce((sum, range) => sum + range.to - range.from, 0);
+  return $from.parent.isTextblock &&
+    proposal.from === $from.start() &&
+    proposal.to === $from.end() &&
+    covered === $from.end() - $from.start()
+    ? $from.parent
+    : null;
+}
+
+/** The Block id of the paragraph a Proposal writes anew, to find it once its old words are gone. */
+export function rewrittenParagraphOf(
+  doc: ProseMirrorNode,
+  proposal: PendingProposal,
+): string | null {
+  const id: unknown = paragraphWrittenAnew(doc, proposal)?.attrs[BLOCK_ID_ATTRIBUTE];
+  return typeof id === "string" ? id : null;
+}
+
+/** The Blocks a change counts by: paragraphs and headings, as `changedParagraphs` counts them in the Mind. */
+const COUNTED_BLOCKS: ReadonlySet<string> = new Set(["paragraph", "heading"]);
+
+/** How many paragraphs and headings the requests' Proposals change, add or remove. */
+export function changedParagraphsIn(doc: ProseMirrorNode, requests: ReadonlySet<string>): number {
+  const counted = new Set<number>();
+  for (const proposal of proposalsIn(doc)) {
+    if (!requests.has(proposal.request)) continue;
+    for (const range of proposal.ranges) {
+      doc.nodesBetween(range.from, range.to, (node, pos) => {
+        // A table added or removed whole counts as a table, not by its cells.
+        if (node.type.name === "table" && readProposalAttribute(node.attrs[PROPOSAL_ATTRIBUTE])) {
+          return false;
+        }
+        if (COUNTED_BLOCKS.has(node.type.name)) counted.add(pos);
+        return !node.isTextblock;
+      });
+    }
+  }
+  return counted.size;
 }
 
 /**

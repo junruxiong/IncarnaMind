@@ -6,7 +6,7 @@ import { translate } from "../../src/shared/i18n";
 /*
  * The rows of an Answer's card of Minds changed (#202): one per Mind, in the
  * order the Answer first changed each, with every request of its changes there
- * and what its calls did: paragraphs written whole, places changed.
+ * and what its calls did: paragraphs written whole, paragraphs changed.
  */
 
 let calls = 0;
@@ -26,7 +26,7 @@ describe("The Minds an Answer changed", () => {
     const rows = changedMinds({
       toolCalls: [
         call("read_mind"),
-        call("edit_mind", { mindId: "a", created: false, request: "r1", proposals: 2 }),
+        call("edit_mind", { mindId: "a", created: false, request: "r1", proposals: 5, changed: 2 }),
         call("create_mind", {
           mindId: "b",
           created: true,

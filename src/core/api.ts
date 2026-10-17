@@ -928,6 +928,8 @@ export interface MindChange {
   request: string;
   /** How many Proposals it made there. */
   proposals: number;
+  /** How many paragraphs and headings they change, add or remove (`changedParagraphs`). Absent: none. */
+  changed?: number;
   /** How many paragraphs the whole Blocks it wrote hold (a heading or a table holds none). Absent: none. */
   paragraphs?: number;
   /** How many tables it added. Absent: none. */
