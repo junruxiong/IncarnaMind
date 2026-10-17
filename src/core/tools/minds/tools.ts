@@ -968,13 +968,12 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
   const besideIn = (writer: Writer, blocks: readonly NodeJSON[]): string | null => {
     if (requested?.change !== "edit") return null;
     const there = minds.read(writer.mind.id, (note) => ownAppliedTexts(note)).filter(longEnough);
-    for (const block of blocks) {
-      const text = nodeText(block);
-      if (block.type === "heading" || !longEnough(text)) continue;
-      const earlier = there.find((each) => repeats(each, text));
-      if (earlier) return earlier;
-    }
-    return null;
+    // A longer version is often split into paragraphs: the words of all of them count.
+    const text = blocks
+      .filter((block) => block.type !== "heading")
+      .map(nodeText)
+      .join(" ");
+    return there.find((each) => repeats(each, text)) ?? null;
   };
 
   interface Repeat {
