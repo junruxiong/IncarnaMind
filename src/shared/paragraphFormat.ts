@@ -5,10 +5,7 @@
  */
 import type { ParagraphFormat, WordParagraphLook } from "../core/api";
 import { isRecord } from "../core/errors";
-import { isFontFamily } from "./mindStyle";
-
-/** Word's single line spacing for common fonts: a line is this many times the text's size. */
-export const SINGLE_LINE = 1.15;
+import { isFontFamily, SINGLE_LINE } from "./mindStyle";
 
 const ALIGNS = ["left", "center", "right", "justify", "distribute"] as const;
 const RULES = ["auto", "exact", "atLeast"] as const;

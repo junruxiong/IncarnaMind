@@ -5,16 +5,22 @@ import {
   type FontPreset,
   familyOf,
   fontFamilyList,
+  type LineSpacing,
+  lineSpacingOf,
   sameFont,
   sameStyle,
   TEXT_SIZES,
 } from "../../../shared/mindStyle";
+import { CustomSpacing } from "../editor/FormatMenu";
+import { LINE_SPACINGS } from "../editor/formatCommands";
 import { useT } from "../i18n";
 import { useMindStylePanel } from "../mindStylePanel";
 import {
   chooseFont,
+  chooseLineSpacing,
   chooseSize,
   installedFamilies,
+  lineSpacingLabel,
   makeDefaultForNewMinds,
   SIZE_LABELS,
   useFontInstalled,
@@ -67,12 +73,17 @@ export function MindStyleHost() {
     }
   }, [open, menu.buttonProps.ref, menu.menuProps.ref]);
 
-  const pickFont = () => {
+  const [spacing, setSpacing] = useState<{ mindId: string; anchor: HTMLButtonElement } | null>(
+    null,
+  );
+  // Each opens beside the button that asked for Style once the menu is gone, as the menu would close under it.
+  const besideAnchor = (show: (shown: { mindId: string; anchor: HTMLButtonElement }) => void) => {
     if (!open) return;
     const anchor = menu.buttonProps.ref.current;
     menu.close();
-    if (anchor) requestAnimationFrame(() => setPicking({ mindId: open.mindId, anchor }));
+    if (anchor) requestAnimationFrame(() => show({ mindId: open.mindId, anchor }));
   };
+  const pickFont = () => besideAnchor(setPicking);
 
   return (
     <>
@@ -99,9 +110,21 @@ export function MindStyleHost() {
         }}
       >
         {open && (
-          <MindStyleChoices mindId={open.mindId} close={menu.close} onOtherFonts={pickFont} />
+          <MindStyleChoices
+            mindId={open.mindId}
+            close={menu.close}
+            onOtherFonts={pickFont}
+            onCustomLineSpacing={() => besideAnchor(setSpacing)}
+          />
         )}
       </div>
+      {spacing && (
+        <CustomLineSpacing
+          mindId={spacing.mindId}
+          anchor={spacing.anchor}
+          onClose={() => setSpacing(null)}
+        />
+      )}
       {picking && (
         <FontPicker
           mindId={picking.mindId}
@@ -122,16 +145,20 @@ export function MindStyleChoices({
   mindId,
   close,
   onOtherFonts,
+  onCustomLineSpacing,
 }: {
   mindId: string;
   close(): void;
   onOtherFonts(): void;
+  onCustomLineSpacing(): void;
 }) {
   return (
     <>
       <FontChoices mindId={mindId} onOtherFonts={onOtherFonts} />
       <div className={menuRuleClass} />
       <SizeChoice mindId={mindId} />
+      <div className={menuRuleClass} />
+      <LineSpacingChoice mindId={mindId} onCustom={onCustomLineSpacing} />
       <div className={menuRuleClass} />
       <MakeDefault mindId={mindId} close={close} />
     </>
@@ -252,6 +279,75 @@ function SizeChoice({ mindId }: { mindId: string }) {
   );
 }
 
+const LINE_SPACING_CHOICES: readonly LineSpacing[] = ["default", ...LINE_SPACINGS];
+
+function LineSpacingChoice({ mindId, onCustom }: { mindId: string; onCustom(): void }) {
+  const t = useT();
+  const lineSpacing = lineSpacingOf(useMindStyle(mindId));
+  const typed = !LINE_SPACING_CHOICES.includes(lineSpacing);
+  const row = (key: string, chosen: boolean, label: string, onClick: () => void) => (
+    <button
+      key={key}
+      type="button"
+      role="menuitemradio"
+      aria-checked={chosen}
+      data-testid={`mind-style-line-${key}`}
+      onClick={onClick}
+      className={`${menuItemClass} px-2`}
+    >
+      <span className="flex size-4 shrink-0 items-center justify-center">
+        {chosen && <CheckLineIcon className="size-4" />}
+      </span>
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+    </button>
+  );
+  return (
+    <>
+      <p className={menuTitleClass}>{t("mindStyle.lineSpacing")}</p>
+      {/* biome-ignore lint/a11y/useSemanticElements: a menu's radio items are grouped by role; a fieldset is for a form's. */}
+      <div role="group" aria-label={t("mindStyle.lineSpacing")}>
+        {LINE_SPACING_CHOICES.map((each) =>
+          row(String(each), lineSpacing === each, lineSpacingLabel(each), () => {
+            void chooseLineSpacing(mindId, each);
+          }),
+        )}
+        {row(
+          "custom",
+          typed,
+          `${t("format.lineSpacing.custom")}${typed ? ` ${lineSpacing}` : ""}`,
+          onCustom,
+        )}
+      </div>
+    </>
+  );
+}
+
+function CustomLineSpacing({
+  mindId,
+  anchor,
+  onClose,
+}: {
+  mindId: string;
+  anchor: HTMLButtonElement;
+  onClose(): void;
+}) {
+  const lineSpacing = lineSpacingOf(useMindStyle(mindId));
+  return (
+    <CustomSpacing
+      anchor={anchor}
+      current={typeof lineSpacing === "number" ? lineSpacing : null}
+      onApply={(multiple) => {
+        onClose();
+        void chooseLineSpacing(mindId, multiple);
+      }}
+      onClose={() => {
+        onClose();
+        if (anchor.isConnected) anchor.focus();
+      }}
+    />
+  );
+}
+
 function MakeDefault({ mindId, close }: { mindId: string; close(): void }) {
   const t = useT();
   const style = useMindStyle(mindId);
@@ -286,6 +382,37 @@ function FontPicker({
 }) {
   const t = useT();
   const { font } = useMindStyle(mindId);
+  return (
+    <InstalledFontPicker
+      anchor={anchor}
+      current={familyOf(font)}
+      currentLabel={t("mindStyle.font.current")}
+      onChoose={(family) => {
+        if (!sameFont(font, { family })) void chooseFont(mindId, { family });
+      }}
+      onClose={onClose}
+      testId="mind-style-font"
+    />
+  );
+}
+
+/** The fonts installed on this computer, each name in its own face, found by typing. */
+export function InstalledFontPicker({
+  anchor,
+  current,
+  currentLabel,
+  onChoose,
+  onClose,
+  testId,
+}: {
+  anchor: HTMLElement;
+  current: string | null;
+  currentLabel: string;
+  onChoose(family: string): void;
+  onClose(): void;
+  testId: string;
+}) {
+  const t = useT();
   const [families, setFamilies] = useState<readonly string[] | null>(null);
   useEffect(() => {
     void installedFamilies().then(setFamilies);
@@ -310,13 +437,11 @@ function FontPicker({
             : t("mindStyle.font.noMatch", { query })
       }
       options={options}
-      current={familyOf(font) ?? undefined}
-      currentLabel={t("mindStyle.font.current")}
-      onChoose={(family) => {
-        if (!sameFont(font, { family })) void chooseFont(mindId, { family });
-      }}
+      current={current ?? undefined}
+      currentLabel={currentLabel}
+      onChoose={onChoose}
       onClose={onClose}
-      testId="mind-style-font"
+      testId={testId}
       className="w-72"
     />
   );

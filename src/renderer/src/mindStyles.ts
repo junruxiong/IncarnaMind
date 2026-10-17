@@ -11,6 +11,7 @@ import {
   DEFAULT_MIND_STYLE,
   familyOf,
   isFontFamily,
+  type LineSpacing,
   type MindFont,
   type MindStyle,
   mindStyleOf,
@@ -133,6 +134,21 @@ export const chooseSize = (mindId: string, size: TextSize) =>
     mindId,
     (style) => ({ ...style, size }),
     () => translateNow("mindStyle.sizeChanged", { size: translateNow(SIZE_LABELS[size]) }),
+  );
+
+/** A line spacing as menus say it: Default, Single, 1.15, 1.5, Double, or the multiple typed. */
+export function lineSpacingLabel(lineSpacing: LineSpacing): string {
+  if (lineSpacing === "default") return translateNow("format.lineSpacing.default");
+  if (lineSpacing === 1) return translateNow("format.lineSpacing.single");
+  if (lineSpacing === 2) return translateNow("format.lineSpacing.double");
+  return String(lineSpacing);
+}
+
+export const chooseLineSpacing = (mindId: string, lineSpacing: LineSpacing) =>
+  change(
+    mindId,
+    (style) => ({ ...style, lineSpacing }),
+    () => translateNow("mindStyle.lineSpacingChanged", { spacing: lineSpacingLabel(lineSpacing) }),
   );
 
 /** Makes `style` the one new Minds start in; Undo puts the one before back. */

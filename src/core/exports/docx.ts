@@ -65,6 +65,8 @@ export interface DocxOptions {
   review?: ReviewChoices;
   /** The Mind's font by name, which the body is written in; null: Word's own body font. */
   font: string | null;
+  /** The Mind's line spacing, a multiple of a single line; null: the export's own. */
+  lineSpacing: number | null;
 }
 
 /** The prefixes the writer writes, and their namespaces. */
@@ -164,7 +166,7 @@ export function renderDocx(
       { name: "word/_rels/document.xml.rels", data: relationshipsXml(relationships) },
       {
         name: "word/styles.xml",
-        data: styles(options.language, comments.length > 0, options.font),
+        data: styles(options.language, comments.length > 0, options.font, options.lineSpacing),
       },
       { name: "word/settings.xml", data: SETTINGS },
       { name: "word/numbering.xml", data: numbering(target.lists) },
@@ -1180,7 +1182,12 @@ const COMMENT_ROLES: ReadonlySet<StyleRole> = new Set(["commentText", "commentRe
 
 const DEFAULT_BODY_FONT = "Calibri";
 
-function styles(language: string, comments: boolean, font: string | null): string {
+function styles(
+  language: string,
+  comments: boolean,
+  font: string | null,
+  lineSpacing: number | null,
+): string {
   const family = escapeXml(font ?? DEFAULT_BODY_FONT);
   const bases: StyleBases = {
     paragraph: "Normal",
@@ -1194,7 +1201,7 @@ function styles(language: string, comments: boolean, font: string | null): strin
   return (
     `${XML_DECLARATION}<w:styles xmlns:w="${NS.w}">` +
     `<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="${family}" w:hAnsi="${family}" w:cs="${family}"/><w:sz w:val="22"/><w:szCs w:val="22"/><w:lang w:val="${language}"/></w:rPr></w:rPrDefault>` +
-    '<w:pPrDefault><w:pPr><w:spacing w:after="160" w:line="259" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>' +
+    `<w:pPrDefault><w:pPr><w:spacing w:after="160" w:line="${lineSpacing === null ? 259 : Math.round(lineSpacing * 240)}" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>` +
     '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style>' +
     '<w:style w:type="character" w:default="1" w:styleId="DefaultParagraphFont"><w:name w:val="Default Paragraph Font"/><w:uiPriority w:val="1"/><w:semiHidden/><w:unhideWhenUsed/></w:style>' +
     '<w:style w:type="table" w:default="1" w:styleId="TableNormal"><w:name w:val="Normal Table"/><w:uiPriority w:val="99"/><w:semiHidden/><w:unhideWhenUsed/><w:tblPr><w:tblInd w:w="0" w:type="dxa"/><w:tblCellMar><w:top w:w="0" w:type="dxa"/><w:left w:w="108" w:type="dxa"/><w:bottom w:w="0" w:type="dxa"/><w:right w:w="108" w:type="dxa"/></w:tblCellMar></w:tblPr></w:style>' +
