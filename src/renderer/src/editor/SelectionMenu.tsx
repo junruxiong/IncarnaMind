@@ -594,12 +594,13 @@ export function SelectionMenu({
         {formatting?.at === "menu" && formatButton.current && (
           <FormatMenu
             editor={editor}
-            anchor={formatButton.current}
+            anchor={menu.current ?? formatButton.current}
             placement="right-start"
             focus={formatting.focus}
             onClose={(refocus) => {
+              // Opened by mouse, the focus never left the text.
+              if (refocus && formatting.focus) formatButton.current?.focus();
               setFormatting(null);
-              if (refocus) formatButton.current?.focus();
             }}
           />
         )}

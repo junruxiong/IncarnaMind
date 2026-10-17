@@ -5004,6 +5004,20 @@
       box-shadow: none;
     }
   }
+  /* Superscript's and subscript's glyphs: an x with its raised or lowered 2, as Word's. */
+  .format-raise {
+    width: 16px;
+    flex-shrink: 0;
+    font-size: 13px;
+    line-height: 16px;
+    text-align: center;
+    color: var(--color-ink-secondary);
+
+    > :is(sup, sub) {
+      font-size: 9px;
+      line-height: 0;
+    }
+  }
   .format-menu-sizes {
     width: 120px;
     max-height: min(360px, 60vh);
