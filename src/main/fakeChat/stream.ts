@@ -25,6 +25,7 @@ import type { MockLanguageModelV4 } from "ai/test";
 import type { ChatModelSpec } from "../../core";
 import { answerReply, CITED_ANSWER, skillNamed } from "./answers";
 import { CHECK_RUN, checkReply } from "./checks";
+import { helpReply } from "./meetingHelp";
 import { mindRead, mindsReply } from "./minds";
 import { passagesIn, recordsFor } from "./passages";
 import {
@@ -109,6 +110,8 @@ function scriptNamed(
 function nextReply(prompt: Prompt, tools: readonly OfferedTool[]): Reply {
   const names = tools.map((tool) => tool.name);
   if (CHECK_RUN.test(systemOf(prompt))) return checkReply(prompt, names);
+  const help = helpReply(prompt, names);
+  if (help) return help;
   const question = lastQuestion(prompt);
   if (/blank reply/i.test(question)) return { text: "" };
   /** What the calls made first said, in order. */

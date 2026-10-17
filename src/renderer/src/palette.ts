@@ -262,7 +262,7 @@ export function actionGroup(
       name,
       ranges: byName?.ranges ?? [],
       meta: command.appliesTo ? targetName : "",
-      shortcut: command.shortcut ? shortcutLabel(command.id) : null,
+      shortcut: command.shortcut ? shortcutLabel(command.id) : (command.globalKeys?.() ?? null),
     };
     // A match by keyword or in the other language ranks below one by its name.
     const score = byName?.score ?? (elsewhere ? elsewhere.score - 4000 : 0);

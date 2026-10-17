@@ -198,11 +198,11 @@ test("in Chinese and a narrow window, and in local mode, where it says why and o
     "Crossref 和 OpenAlex 中都没有",
   );
   await screenshot(window, "references-flagged-zh");
-  // Narrow, the line wraps rather than overflowing the Mind.
+  // Narrow, the line wraps rather than overflowing the check badge's card it is in.
   const lineBox = await line.boundingBox();
-  const editorBox = await window.getByTestId("mind-editor").boundingBox();
+  const cardBox = await window.getByTestId("check-card").boundingBox();
   expect((lineBox?.x ?? 0) + (lineBox?.width ?? 0)).toBeLessThanOrEqual(
-    (editorBox?.x ?? 0) + (editorBox?.width ?? 0) + 1,
+    (cardBox?.x ?? 0) + (cardBox?.width ?? 0) + 1,
   );
   await app.close();
 });
