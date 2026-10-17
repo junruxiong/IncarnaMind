@@ -83,6 +83,7 @@ const LEFT_CHECKING: ClaimCheckAttributes = {
   text: SUPPORTED,
   evidence: null,
   says: null,
+  unsupported: null,
   calculation: null,
   citedCaseUnchecked: false,
   citedCaseFound: false,

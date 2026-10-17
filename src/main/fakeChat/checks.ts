@@ -1,7 +1,9 @@
 /**
  * Find support and Check against Documents (`checkReply`): a sentence that shares
  * three words with a Passage's line is supported, or contradicted when it has a
- * number the line doesn't; otherwise unsupported. Offered calculate, a sentence
+ * number the line doesn't; otherwise unsupported. A sentence the User cites a
+ * quote for, whose last clause shares none of the line's words, is unsupported
+ * and names that clause as the part. Offered calculate, a sentence
  * that states a multiple ("1.1x") has it worked out as the line's first number
  * over its second (#707).
  */
@@ -16,6 +18,15 @@ export const CHECK_RUN = /^You check one sentence the User wrote against the Use
 const checkWords = (text: string): string[] => [
   ...(text.toLowerCase().match(/[a-z]{4,}|\d+(?:[.,]\d+)?/g) ?? []),
 ];
+
+/** The clause after a sentence's last comma when the line shares none of its words: what the line doesn't cover. */
+function uncoveredClause(sentence: string, line: string): string | null {
+  const at = sentence.lastIndexOf(", ");
+  const clause = at < 0 ? "" : sentence.slice(at + 2).replace(/[.。]$/, "");
+  const words = checkWords(clause);
+  const covered = checkWords(line);
+  return words.length > 0 && !words.some((word) => covered.includes(word)) ? clause : null;
+}
 
 /**
  * A check of one sentence (#96): it searches for the sentence, then takes the
@@ -40,6 +51,9 @@ export function checkReply(prompt: Prompt, tools: readonly string[]): Reply {
     if (found && (!best || shared > best.shared)) best = { record: found.record, line, shared };
   }
   if (!best || best.shared < 3) return { text: "Verdict: unsupported" };
+  const cited = /^The User cites this for it/m.test(lastUserText(prompt));
+  const uncovered = cited ? uncoveredClause(sentence, best.line) : null;
+  if (uncovered) return { text: `Verdict: unsupported\nPart: ${uncovered}` };
   const lineNumbers = checkWords(best.line).filter((word) => /\d/.test(word));
   const contradicted =
     lineNumbers.length > 0 && words.some((word) => /\d/.test(word) && !lineNumbers.includes(word));

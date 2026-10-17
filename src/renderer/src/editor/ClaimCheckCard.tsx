@@ -19,10 +19,12 @@ import { groupsMerged } from "../layoutSlice";
 import { firstOpenOf } from "../nudges";
 import { openCited } from "../openCited";
 import { useAppStore } from "../store";
+import { type NumberedCitation, numberedCitations } from "./citationNumbers";
 import { useReadableQuote } from "./citationScan";
 import type { ShownClaim } from "./claimChecks";
 import { ClaimMarkIcon, type ClaimMarkState } from "./icons";
 import { Popover } from "./Popover";
+import { UnsupportedCited } from "./UnsupportedCited";
 
 /** How long a pointer rests on a mark before its card shows, and how long it may leave before it goes. */
 const SHOW_MS = 120;
@@ -53,6 +55,12 @@ function citesEvidence(editor: Editor, claim: ShownClaim): boolean {
   });
   return cited;
 }
+
+/** The Citations the sentence holds, with their numbers in the Mind. */
+const citedIn = (editor: Editor, claim: ShownClaim): NumberedCitation[] =>
+  numberedCitations(editor.state).filter(
+    (each) => each.pos >= claim.sentence.from && each.pos < claim.sentence.to,
+  );
 
 /** The words of the sentence a check is about. */
 const sentenceOf = (editor: Editor, claim: ShownClaim) =>
@@ -185,6 +193,7 @@ export function ClaimMark({
           >
             <ClaimCard
               claim={claim}
+              cited={citedIn(editor, claim)}
               addable={plus}
               added={added}
               onAdd={() => {
@@ -302,6 +311,7 @@ function Working({ calculation, onOpen }: { calculation: ClaimCalculation; onOpe
  */
 function ClaimCard({
   claim,
+  cited,
   addable,
   added,
   onAdd,
@@ -314,6 +324,7 @@ function ClaimCard({
   onRemove,
 }: {
   claim: ShownClaim;
+  cited: readonly NumberedCitation[];
   addable: boolean;
   added: number;
   onAdd(): void;
@@ -438,16 +449,28 @@ function ClaimCard({
         </p>
       )}
       {state === "unsupported" && !differs && !decisionMissing && (
-        <p
-          data-testid={ownWorkings ? "claim-own-workings" : "claim-nothing"}
-          className="citation-card-note"
-        >
-          {ownWorkings
-            ? t("claim.unsupported.ownWorkings")
-            : searchedFolder
-              ? t("claim.unsupported.inFolder", { folder: folderName })
-              : t("claim.unsupported.anywhere")}
-        </p>
+        <>
+          {!ownWorkings && cited.length > 0 && (
+            <UnsupportedCited
+              cited={cited}
+              why={check.unsupported}
+              onCheckAgain={() => onCheckAgain()}
+              onOpen={onOpen}
+            />
+          )}
+          {(ownWorkings || cited.length === 0) && (
+            <p
+              data-testid={ownWorkings ? "claim-own-workings" : "claim-nothing"}
+              className="citation-card-note"
+            >
+              {ownWorkings
+                ? t("claim.unsupported.ownWorkings")
+                : searchedFolder
+                  ? t("claim.unsupported.inFolder", { folder: folderName })
+                  : t("claim.unsupported.anywhere")}
+            </p>
+          )}
+        </>
       )}
       {webOffShown && !webSearchOn && (
         <p data-testid="claim-web-off" className="citation-card-note">

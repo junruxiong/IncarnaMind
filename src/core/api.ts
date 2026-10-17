@@ -4401,6 +4401,17 @@ export type ClaimCheckFailure =
   | "failed"
   | "stopped";
 
+/** Why a sentence was found unsupported, as the check gave it. */
+export interface UnsupportedReason {
+  /** One plain sentence on what no Passage states; null when the reply gave none. */
+  reason: string | null;
+  /**
+   * The words of the sentence that nothing supports, as the sentence has them, when the rest of
+   * it is supported. Null when the reply named none, or words the sentence doesn't hold.
+   */
+  part: string | null;
+}
+
 /** A Document version a check read, which it no longer holds for once the Document changes. */
 export interface CheckedVersion {
   documentId: string;
@@ -4456,6 +4467,8 @@ export type ClaimCheckResult =
       evidence: Citation | null;
       /** For "supported" and "contradicted": what the Document says, in one plain sentence. */
       says: string | null;
+      /** For "unsupported": why. Null for the other verdicts. */
+      unsupported: UnsupportedReason | null;
       /** A figure worked out that decided it; null when a Passage did. */
       calculation: ClaimCalculation | null;
       /**
@@ -4541,6 +4554,8 @@ export interface ClaimCheckAttributes {
   evidence: CitationAttributes | null;
   /** "supported" and "contradicted": what the Document says, in one plain sentence. */
   says: string | null;
+  /** "unsupported": why. */
+  unsupported: UnsupportedReason | null;
   /** A figure worked out that decided it; null when a Passage did. */
   calculation: ClaimCalculation | null;
   citedCaseUnchecked: boolean;

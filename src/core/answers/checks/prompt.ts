@@ -37,6 +37,7 @@ const reply = (language: Language) =>
     "Reply in exactly this form, the verdict word in English:",
     "Verdict: supported, unsupported or contradicted",
     `Then, for supported or contradicted, one plain sentence in ${LANGUAGE_NAMES[language]}, whatever language the Documents and the User's sentence are in, saying what the Document says, with the marker [^1] at its end. For contradicted, name the thing, and give the Document's value and the sentence's.`,
+    `For unsupported, one plain sentence in ${LANGUAGE_NAMES[language]} saying what no Passage states and, when the rest of the sentence is supported, a last line "Part: " and the words of the sentence no Passage states, copied exactly from it.`,
     "Write nothing else.",
   ].join("\n");
 
@@ -224,10 +225,15 @@ export function readEvidence(
   }
 }
 
-/** What a reply says: its verdict and what the Document says; null when there is no verdict to read. */
+/**
+ * What a reply says: its verdict, what the Document says (or, for unsupported,
+ * what no Passage states), and the words it names as the part nothing supports,
+ * as it wrote them (see `partOfSentence`); null when there is no verdict to read.
+ */
 export interface ReadVerdict {
   verdict: ClaimVerdict;
   says: string | null;
+  part: string | null;
 }
 
 const MARKERS = /\s*\[[\^=]?\d{1,4}\]/g;
@@ -237,6 +243,8 @@ const LABELLED =
   /^[\s>*_#`"'“”-]*(?:verdict|结论|判断)[\s*_]*[:：][\s*_"'“”`]*(supported|unsupported|contradicted)\b[\s*_"'“”`.]*/i;
 /** A first line that starts with the verdict alone: "Supported." */
 const BARE = /^[\s>*_#`"'“”-]*(supported|unsupported|contradicted)\b[\s*_"'“”`.:：]*/i;
+/** "Part: …", in bold or quoted too, on a line of its own. */
+const PART = /^[\s>*_#`"'“”-]*(?:part|部分)[\s*_]*[:：][\s*_]*(.*)$/i;
 
 /** The JSON object a reply holds, fenced or not, when it has one with a verdict. */
 function jsonVerdict(reply: string): ReadVerdict | null {
@@ -246,10 +254,14 @@ function jsonVerdict(reply: string): ReadVerdict | null {
   try {
     const value: unknown = JSON.parse(reply.slice(start, end + 1));
     if (typeof value !== "object" || value === null) return null;
-    const { verdict, says } = value as Record<string, unknown>;
+    const { verdict, says, part } = value as Record<string, unknown>;
     const known = VERDICTS.find((each) => each === String(verdict).toLowerCase());
     if (!known) return null;
-    return { verdict: known, says: typeof says === "string" ? cleanSays(says) : null };
+    return {
+      verdict: known,
+      says: typeof says === "string" ? cleanSays(says) : null,
+      part: typeof part === "string" ? cleanSays(part) : null,
+    };
   } catch {
     return null;
   }
@@ -281,7 +293,10 @@ export function readVerdict(reply: string): ReadVerdict | null {
     const verdict = match[1].toLowerCase() as ClaimVerdict;
     // One sentence: what follows the verdict on its line, else the next line. Notes after it aren't.
     const rest = line.slice(match[0].length).trim();
-    return { verdict, says: cleanSays(rest || (lines[at + 1] ?? "")) };
+    const after = lines.slice(at + 1);
+    const named = after.map((each) => PART.exec(each)?.[1]).find((each) => each !== undefined);
+    const next = after.find((each) => !PART.test(each));
+    return { verdict, says: cleanSays(rest || (next ?? "")), part: cleanSays(named ?? "") };
   }
   return jsonVerdict(text);
 }
@@ -291,3 +306,24 @@ const REFUSAL =
   /\b(?:I(?:'m| am)? (?:sorry|unable|not able)|I can(?:no|')t (?:help|assist|check|do)|I won't|cannot (?:help|assist|comply))|抱歉|无法(?:协助|帮助|完成|核对)|不能(?:协助|帮助)/i;
 
 export const readsAsRefusal = (reply: string): boolean => REFUSAL.test(reply);
+
+const QUOTES = /^[\s"'“”‘’「」『』*_`]+|[\s"'“”‘’「」『』*_`]+$/gu;
+const STOPS = /^[\s,，;；:：]+|[\s.。!！?？,，;；:：]+$/gu;
+const escaped = (word: string) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * The part of the sentence a reply names as unsupported, as the sentence has
+ * it: the words it wrote, once they are found in the sentence (whatever their
+ * case and spacing). Null when it named none, when its words aren't the
+ * sentence's, or when they are the whole of it, which is no part.
+ */
+export function partOfSentence(sentence: string, named: string | null): string | null {
+  const words = named?.replace(QUOTES, "").replace(STOPS, "").trim() ?? "";
+  if (words === "") return null;
+  const pattern = words.split(/\s+/u).map(escaped).join("\\s+");
+  const found = new RegExp(pattern, "iu").exec(sentence);
+  if (!found) return null;
+  const whole = sentence.replace(STOPS, "").trim();
+  const part = found[0].replace(/\s+/gu, " ");
+  return part.length >= whole.replace(/\s+/gu, " ").length ? null : part;
+}

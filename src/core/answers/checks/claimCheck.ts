@@ -36,6 +36,7 @@ import type {
   ProviderError,
   RecordAiUseInput,
   ThirdPartyReason,
+  UnsupportedReason,
 } from "../../api";
 import type { Evidence, EvidenceScope } from "../../documents/evidence";
 import type { Language } from "../../language";
@@ -67,6 +68,7 @@ import {
   EVIDENCE_INSTRUCTIONS,
   evidencePrompt,
   NEAREST_INSTRUCTIONS,
+  partOfSentence,
   type ReadVerdict,
   readEvidence,
   readJudgement,
@@ -301,6 +303,7 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
         verdict: "contradicted",
         evidence: worked.evidence,
         says: null,
+        unsupported: null,
         calculation: worked.calculation,
         ...citedCase(worked.evidence),
         ...facts(),
@@ -310,6 +313,7 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       verdict: "supported",
       evidence: worked.evidence,
       says: null,
+      unsupported: null,
       calculation: worked.calculation,
       ...citedCase(worked.evidence),
       ...facts(),
@@ -321,7 +325,9 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
     }
     if (byCalculation && verdict.verdict !== "contradicted") return byCalculation;
     /** Unsupported, with the nearest line when it states another value for the same thing (#770). */
-    const unsupported = async (): Promise<ClaimCheckResult> => {
+    const unsupported = async (
+      why: UnsupportedReason = { reason: null, part: null },
+    ): Promise<ClaimCheckResult> => {
       const nearest = await nearestDifferent(request, session, signal);
       if (signal.aborted) return notChecked("stopped");
       const left = facts();
@@ -329,6 +335,7 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
         verdict: "unsupported",
         evidence: nearest,
         says: null,
+        unsupported: why,
         calculation: null,
         ...citedCase(nearest),
         ...left,
@@ -336,7 +343,12 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       };
     };
     session.check();
-    if (verdict.verdict === "unsupported") return unsupported();
+    if (verdict.verdict === "unsupported") {
+      return unsupported({
+        reason: verdict.says,
+        part: partOfSentence(request.claim, verdict.part),
+      });
+    }
     const evidence =
       decidingCitation(session.finalCitation) ??
       (await askForEvidence(request, verdict, session, signal));
@@ -353,6 +365,7 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
             verdict: "supported",
             evidence,
             says: null,
+            unsupported: null,
             calculation: null,
             ...citedCase(evidence),
             ...facts(),
@@ -364,6 +377,7 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       verdict: verdict.verdict,
       evidence,
       says: verdict.says,
+      unsupported: null,
       calculation: worked?.calculation ?? null,
       ...citedCase(evidence),
       ...facts(),

@@ -307,6 +307,7 @@ export function createExamples(options: ExamplesOptions) {
         text: check.sentence,
         evidence,
         says: check.says,
+        unsupported: null,
         calculation: null,
         citedCaseUnchecked: false,
         citedCaseFound: false,
