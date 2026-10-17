@@ -8,6 +8,7 @@ import {
   interceptOpenExternal,
   launchApp,
   newMind,
+  pointAndClick,
   removeDataFolder,
   setLanguage,
   setWindowSize,
@@ -144,6 +145,55 @@ for (const [width, height] of [
   });
 }
 
+for (const language of ["en", "zh-CN"] as const) {
+  test(`after narrowing the window, Claude's notice, Details and key form remain reachable (${language})`, async () => {
+    const { app, window } = await launchApp(dataDir);
+    try {
+      await setWindowSize(app, window, 1440, 760);
+      await acceptPlainTextKeys(window);
+      await setLanguage(window, language);
+      const card = await askFirstQuestion(window);
+      await pointAndClick(window, card.getByTestId("setup-other"));
+      const row = card.getByTestId("way-claude");
+      await pointAndClick(window, row.getByTestId("way-claude-open"));
+
+      for (const width of [900, 1440]) {
+        await setWindowSize(app, window, width, 760);
+        const sends = row.getByTestId("claude-plan-sends");
+        const details = sends.getByTestId("claude-plan-sends-details");
+        await details.scrollIntoViewIfNeeded();
+        await expect(details).toBeInViewport({ ratio: 1 });
+        await pointAndClick(window, details);
+        const items = sends.getByRole("listitem");
+        await expect(items).toHaveCount(5);
+        for (const item of [items.first(), items.last()]) {
+          await item.scrollIntoViewIfNeeded();
+          await expect(item).toBeInViewport({ ratio: 1 });
+        }
+        const signIn = row.getByTestId("claude-plan-sign-in");
+        await signIn.scrollIntoViewIfNeeded();
+        await expect(signIn).toBeInViewport({ ratio: 1 });
+        await details.press("Space");
+        await expect(details).toHaveAttribute("aria-expanded", "false");
+      }
+
+      await setWindowSize(app, window, 900, 760);
+      await row.getByTestId("claude-plan-cancel").press("Enter");
+      await pointAndClick(window, card.getByTestId("setup-key"));
+      const form = card.getByTestId("provider-form");
+      for (const target of [form.getByLabel(/^API /), form.getByTestId("provider-use-key")]) {
+        await target.scrollIntoViewIfNeeded();
+        await expect(target).toBeInViewport({ ratio: 1 });
+      }
+      await card.getByTestId("setup-back").press("Enter");
+      await expect(card.getByTestId("setup-key")).toBeFocused();
+      await expect(card.getByTestId("setup-key")).toBeInViewport({ ratio: 1 });
+    } finally {
+      await app.close();
+    }
+  });
+}
+
 test("a newcomer pastes a key from the card in two clicks, picks Claude Sonnet 5.5 from the list without typing an id, and gets an Answer", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   try {
@@ -231,7 +281,9 @@ test("the key step follows the company picked and Back returns keyboard focus to
     await card.getByTestId("setup-other").press("Enter");
     await card.getByTestId("way-local").press("Enter");
     await card.getByTestId("setup-back").press("Enter");
+    await expect(card.locator("details")).toHaveAttribute("open", "");
     await expect(card.getByTestId("way-local")).toBeFocused();
+    await expect(card.getByTestId("way-local")).toBeInViewport({ ratio: 1 });
   } finally {
     await app.close();
   }
