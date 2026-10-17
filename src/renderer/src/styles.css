@@ -2444,6 +2444,17 @@
       font-size: 0.66em;
       line-height: 0;
     }
+    [data-text-color] {
+      color: var(--text-color);
+    }
+    [data-text-font] {
+      font-family: var(--text-font);
+    }
+    /* Code and links keep their own font and colour, over a Word file's text too (wordLookCss.ts). */
+    :is(code, a) :is([data-text-color], [data-text-font]) {
+      color: inherit;
+      font-family: inherit;
+    }
 
     /*
      * The text's elements are styled through :where() where the interface drawn
