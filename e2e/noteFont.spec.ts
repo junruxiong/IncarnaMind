@@ -95,6 +95,8 @@ for (const { language, width } of [
     await newMind(window);
     const editor = window.getByTestId("mind-editor");
     await editor.click();
+    await window.keyboard.type("# Tides");
+    await window.keyboard.press("Enter");
     await window.keyboard.type(words.line);
     await addToNote(window, await askInAssistant(window, "When do spring tides happen?"));
     await expect(editor.getByTestId("citation").first()).toBeVisible();
