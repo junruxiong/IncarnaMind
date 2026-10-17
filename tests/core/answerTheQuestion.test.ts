@@ -130,7 +130,9 @@ function expectOnlyTheQuestionAsked(
   for (const instructions of sent.instructions) {
     expect(instructions).toContain(answerInstructions());
     expect(instructions).toContain("Answer the Question asked.");
-    expect(instructions).toContain("Never tell the User to disregard or ignore an earlier Answer");
+    expect(instructions).toContain(
+      "never tell the User to disregard one whose Citations were checked",
+    );
   }
 }
 
