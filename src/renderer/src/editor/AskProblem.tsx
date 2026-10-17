@@ -31,7 +31,6 @@ export function AskProblem({
         testId={testIds.notReady}
         {...(className && { className })}
         setUpLabel={t("question.setUp")}
-        refused
       />
     );
   }

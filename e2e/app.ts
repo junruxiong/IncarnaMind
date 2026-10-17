@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -679,6 +679,22 @@ export async function importWordFromMenu(window: Page): Promise<Locator> {
   const dialog = window.getByTestId("word-import-dialog");
   await expect(dialog).toBeVisible();
   return dialog;
+}
+
+/** Writes a Word file named `name` into `folder` and imports it from the + menu, as the User picks one. */
+export async function importWordFile(
+  app: ElectronApplication,
+  window: Page,
+  folder: string,
+  name: string,
+  bytes: Buffer,
+): Promise<void> {
+  const path = join(folder, name);
+  await writeFile(path, bytes);
+  await interceptOpenDialog(app, path);
+  const dialog = await importWordFromMenu(window);
+  await dialog.getByTestId("word-import-confirm").click();
+  await expect(dialog).toBeHidden();
 }
 
 /** Export options…, from the tab's menu; resolves once the sheet shows `title`. */
