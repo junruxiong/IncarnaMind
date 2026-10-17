@@ -94,6 +94,10 @@ export interface FilesBridge {
   setSidebarHidden(hidden: boolean): void;
   /** Tells the Edit menu where Undo and Redo go now, and what they would take back or do again. */
   setEditMenu(state: EditMenuState): void;
+  /** The Mind File › Export names: its name, or null when no Mind is open, which disables the item. */
+  setExportMenu(mindName: string | null): void;
+  /** Whether the examples are removed: Help › Show the examples again appears only then. */
+  setExamplesRemoved(removed: boolean): void;
   /** The window's title bar (./titleBar.ts), for the page to keep room for the window's buttons. */
   readonly titleBar: TitleBar;
   /**
@@ -150,6 +154,8 @@ export const FILES_CHANNELS = {
   sidebarHidden: "app:sidebarHidden",
   /** From the page: where the Edit menu's Undo and Redo go now (`EditMenuState`). */
   editMenu: "app:editMenu",
+  exportMenu: "app:exportMenu",
+  examplesRemoved: "app:examplesRemoved",
   /** From the main process: a command chosen in the application menu. */
   menuCommand: "app:menuCommand",
   /** From the main process: the window entered (true) or left (false) full screen. */

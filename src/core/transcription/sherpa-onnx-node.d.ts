@@ -28,6 +28,8 @@ declare module "sherpa-onnx-node" {
 
   export interface OfflineStream {
     acceptWaveform(waveform: Waveform): void;
+    /** The native stream, which keeps its result once decoded. */
+    handle: unknown;
   }
 
   export class OfflineRecognizer {
@@ -59,4 +61,10 @@ declare module "sherpa-onnx-node" {
     pop(): void;
     flush(): void;
   }
+}
+
+/** The package's native addon, for what its JavaScript doesn't give: a result as the JSON the engine wrote. */
+declare module "sherpa-onnx-node/addon.js" {
+  const addon: { getOfflineStreamResultAsJson(handle: unknown): string };
+  export default addon;
 }

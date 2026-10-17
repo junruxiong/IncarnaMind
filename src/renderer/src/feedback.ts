@@ -11,7 +11,6 @@ export const ISSUES_URL = "https://github.com/IncarnaMind/IncarnaMind/issues/new
 
 const OS: Record<TitleBar, string> = { inset: "mac", overlay: "windows", native: "linux" };
 
-/** The feedback form for the interface language, with the app's version and system filled in. */
 export const feedbackUrl = (language: Language, version: string, titleBar: TitleBar): string =>
   `${FORMS[language]}?${new URLSearchParams({ version, os: OS[titleBar] })}`;
 

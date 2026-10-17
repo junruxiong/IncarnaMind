@@ -30,6 +30,7 @@ import { scriptEffects, skillTools } from "../../src/core/skills/tools";
 import { migrate, openDatabase } from "../../src/core/storage";
 import type { Tool } from "../../src/core/tools";
 import { setTextOrigin, textOriginOf } from "../../src/shared/textOrigins";
+import { askAssistant } from "../helpers/assistant";
 import { answerEnded } from "../helpers/citations";
 import {
   logFileIn,
@@ -512,7 +513,7 @@ describe("A Block's origin survives sync and reload", { timeout: 30_000 }, () =>
 describe("An Answer in a conversation that read a web page", { timeout: 30_000 }, () => {
   test('keeps where its text came from, and a later Question in the conversation asks before an "always" write', async () => {
     let turn = 0;
-    const { core, logFile } = await setUp((call) => {
+    const { core, dataDir, logFile } = await setUp((call) => {
       // The first Question searches; the second only books.
       if (call.index === 0) turn = 1;
       const searched = call.results.some((each) => each.tool === "search_documents");
@@ -527,6 +528,17 @@ describe("An Answer in a conversation that read a web page", { timeout: 30_000 }
     });
     const saved = await core.saveWebPage({ address: "https://reader.example/tea", html: ARTICLE });
     if (saved.outcome !== "saved") throw new Error("The web page wasn't saved.");
+    // Too long for the Documents' text to go with a Question: the later one reads the page only
+    // through the conversation.
+    const tides = await writeSourceFile(
+      dataDir,
+      "Sources/Tides.txt",
+      Array.from(
+        { length: 800 },
+        (_, at) => `Day ${at + 1}: high water at Dover comes twice.`,
+      ).join("\n"),
+    );
+    await addAndProcess(core, [tides]);
     await waitForProcessing(core, [saved.document.id]);
     const requested = denyEveryRequest(core);
 
@@ -594,6 +606,30 @@ describe("A Question in a conversation beside a Mind holding imported text", {
     await answerEnded(core, elsewhere.answerId);
     expect(requested).toHaveLength(1);
     expect(await callsReceived(logFile)).toEqual(["book_boat"]);
+  });
+});
+
+describe("A saved web page given whole with a Question in the assistant (#1036)", {
+  timeout: 30_000,
+}, () => {
+  // protects=a short web page's text given up front, with no search, makes the Run third-party as a search that found it does: the always-allowed write asks, the web page as the reason, and the Answer keeps the origin; fails_when=the write runs, the reason isn't the web page, or the origin is lost; no_claim=the card's words, which the approvals e2e covers.
+  test('asks before an "always" write, the web page as the reason, and keeps the origin', async () => {
+    const prompts: string[] = [];
+    const { core, logFile } = await setUp((call) => {
+      prompts.push(call.prompt);
+      return searchThenBook(null)(call);
+    });
+    const saved = await core.saveWebPage({ address: "https://reader.example/tea", html: ARTICLE });
+    if (saved.outcome !== "saved") throw new Error("The web page wasn't saved.");
+    await waitForProcessing(core, [saved.document.id]);
+    const requested = denyEveryRequest(core);
+
+    const answer = await askAssistant(core, { text: QUESTION });
+
+    expect(prompts[0]).toContain("<document-text>");
+    expect(requested).toMatchObject([{ tool: "book_boat", thirdParty: [WEB_PAGE] }]);
+    expect(await callsReceived(logFile)).toEqual([]);
+    expect(answer.textOrigin).toBe("web-page");
   });
 });
 

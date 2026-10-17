@@ -11,14 +11,15 @@ import {
   sectionTitleClass,
 } from "../ui";
 import { useContinueWithChatGpt } from "./ChatGptSignIn";
+import { ClaudePlanRow } from "./ClaudePlan";
+import { CopilotPlanRow } from "./CopilotPlan";
 
 const GOOGLE_CREDITS = "https://developers.google.com/program";
 
 /**
  * Settings → Models → "Already pay for a plan?": the routes for a plan the User already has.
- * ChatGPT signs in; Claude and Google AI plans can't be used by other apps, so the plan pays
- * where the User uses IncarnaMind from (the Claude app, Antigravity: Settings → Agents), which
- * are offered only with the agent connection.
+ * ChatGPT, a Claude account and Copilot sign in; a Google AI plan pays where the User uses IncarnaMind
+ * from (Antigravity: Settings → Agents), offered only with the agent connection.
  */
 export function PlansSettings() {
   const t = useT();
@@ -50,6 +51,8 @@ export function PlansSettings() {
             {t("chatgpt.continue")}
           </button>,
         )}
+        <ClaudePlanRow />
+        <CopilotPlanRow />
         {SHOW_AGENT_CONNECTION && (
           <>
             {row(

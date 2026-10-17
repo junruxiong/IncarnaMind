@@ -5,11 +5,13 @@ import {
   type ApprovalRequest,
   BLOCK_ID_ATTRIBUTE,
   type ProviderErrorKind,
+  type SignInRouteProblem,
   SKILL_SCRIPT_LIMITS,
   type SkillScriptApprovalRequest,
   SOURCE_KIND_PROVIDERS,
   type ToolApprovalRequest,
 } from "../../../core/api";
+import { isSignInRoute, isSignInRouteProblem } from "../../../core/providers/signInRoutes";
 import { asksAfterThirdParty } from "../../../shared/approvalRules";
 import { toolCallsOf } from "../../../shared/toolCalls";
 import { AnswerWriting } from "../answerPhase";
@@ -27,6 +29,7 @@ import {
   LocalModelRefusedLine,
   OllamaNotRunningLine,
 } from "../components/providers/OllamaProblems";
+import { RouteProblemLine } from "../components/providers/RouteProblemLine";
 import { core } from "../core";
 import { formatResetTime } from "../cost";
 import { useFindSources } from "../findSources";
@@ -35,7 +38,8 @@ import { useKeyRefusals, useKeySavedSince } from "../keyRefusals";
 import { requestModelMenu } from "../modelMenu";
 import { useModelNames } from "../modelNames";
 import { useStoppedByPlanLimit } from "../planLimits";
-import { ANSWER_PROBLEMS, answerProblem } from "../problems";
+import { ANSWER_PROBLEMS, failedAnswerLine } from "../problems";
+import { useRouteOffered } from "../routeSignIn";
 import type { SettingsPage } from "../settingsPages";
 import { useAppStore } from "../store";
 import { reasonKey } from "../webPages";
@@ -180,6 +184,9 @@ export function AnswerView({ node, editor, getPos }: ReactNodeViewProps) {
           modelId={modelId}
           providerId={text(node.attrs.providerId)}
           resetsAt={text(node.attrs.errorResetsAt)}
+          signInRoute={
+            isSignInRouteProblem(node.attrs.errorSignInRoute) ? node.attrs.errorSignInRoute : null
+          }
           details={text(node.attrs.errorMessage)}
           onRetry={questionId ? () => writeAgain() : undefined}
           onOpenSettings={openSettings}
@@ -269,9 +276,6 @@ export function NoCitationsLine({
   );
 }
 
-/** Asked for once per run: while offline, asking again on every error would only fail again. */
-let modelsAsked = false;
-
 /** Failures that can come of a model that can't answer, rather than of the connection. */
 const WRONG_MODEL: ReadonlySet<ProviderErrorKind> = new Set([
   "model",
@@ -286,6 +290,7 @@ export function AnswerError({
   modelId,
   providerId,
   resetsAt,
+  signInRoute = null,
   details,
   failedAt = null,
   onRetry,
@@ -296,6 +301,7 @@ export function AnswerError({
   providerId: string | null;
   /** When the plan's limit resets, when its provider said. */
   resetsAt: string | null;
+  signInRoute?: SignInRouteProblem | null;
   details: string | null;
   /**
    * When it failed, ISO 8601, said beside a refused key; an Answer in a Mind keeps no time, so
@@ -317,12 +323,12 @@ export function AnswerError({
     : t("answer.error.thisService");
   const [shownAt] = useState(() => new Date().toISOString());
   const keySaved = useKeySavedSince(providerId, failedAt ?? shownAt);
-  // Whose plan it was decides where its usage is managed.
+  // Whose plan or sign-in it was decides the line. A sign-in that ends changes readiness, which
+  // clears the list, so it is read again then, and not on every error (offline, that only fails).
+  const readiness = useAppStore((state) => state.chatReadiness);
   useEffect(() => {
-    if (modelsAsked) return;
-    modelsAsked = true;
-    useAnswers.getState().loadModels();
-  }, []);
+    if (readiness) useAnswers.getState().loadModels();
+  }, [readiness]);
   // A model the User added to the menu that then failed: one click takes it back out.
   const added = useAnswers((state) =>
     state.models?.some(
@@ -339,7 +345,22 @@ export function AnswerError({
           });
         }
       : undefined;
-  const { line, fix } = answerProblem(kind, provider);
+  const offered = useRouteOffered(isSignInRoute(provider) ? provider : null);
+  const shown = failedAnswerLine(kind, provider, signInRoute, offered);
+  if (shown.kind === "route") {
+    return (
+      <RouteProblemLine
+        route={shown.route}
+        words={shown.words}
+        kind={kind}
+        resetsAt={resetsAt}
+        details={details}
+        onRetry={onRetry}
+        onOpenSettings={onOpenSettings}
+      />
+    );
+  }
+  const { line, fix } = shown.problem;
   if (fix.kind === "ollama") return <OllamaNotRunningLine details={details} onRetry={onRetry} />;
   if (fix.kind === "local-model") {
     return (

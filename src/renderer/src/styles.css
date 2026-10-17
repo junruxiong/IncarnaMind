@@ -581,6 +581,9 @@
     padding-right: max(4px, var(--window-buttons-right));
     background: var(--color-tab-strip);
   }
+  .tab-strip[data-quiet] {
+    background: transparent;
+  }
   /* Only the last group reaches the window's buttons. */
   .tab-group:not(:last-of-type) {
     --window-buttons-right: 0px;
@@ -1088,6 +1091,19 @@
     container: mind / inline-size;
     padding-block: 64px 160px;
   }
+  /*
+   * Above the Ask pill (20px up, 40px tall) the page fades out over 56px, so no line runs under it.
+   * Sticky in the scroller, it leaves the scrollbar alone, and the column's 160px foot lets the
+   * last line scroll clear of it.
+   */
+  .ask-pill-fade {
+    position: sticky;
+    bottom: 0;
+    height: 116px;
+    margin-top: -116px;
+    background: linear-gradient(to bottom, transparent, var(--color-sheet) 56px);
+    pointer-events: none;
+  }
   .mind-measure {
     width: 680px;
     margin-left: calc((100% - 784px) / 2 + 56px);
@@ -1256,6 +1272,62 @@
   }
   .mind-verify-problem {
     margin: -8px 0 16px;
+  }
+  /* A checked reference list's entries, under its line: those that need a look first. */
+  .mind-references {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: -8px 0 16px;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 20px;
+  }
+  .mind-reference {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    width: 100%;
+    padding: 6px 8px;
+    margin-left: -8px;
+    border-radius: 6px;
+    text-align: left;
+    color: var(--color-ink-secondary);
+
+    &:hover {
+      background: var(--color-hover);
+    }
+  }
+  .mind-reference-mark {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+    color: var(--color-ink);
+  }
+  .mind-reference-text {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow-wrap: anywhere;
+  }
+  .mind-reference-detail {
+    color: var(--color-ink-meta);
+  }
+  .mind-reference-record {
+    margin: -4px 0 4px;
+    color: var(--color-ink-meta);
+    overflow-wrap: anywhere;
+  }
+  .mind-reference-link {
+    border-radius: 4px;
+    color: var(--color-accent);
+    text-underline-offset: 2px;
+
+    &:hover {
+      text-decoration: underline;
+    }
   }
 
   /* The count under the title: quiet status text, pulled up into the title's margin. */
@@ -4084,6 +4156,13 @@
       background: var(--color-sheet);
       box-shadow: inset 0 0 0 1.5px var(--color-danger);
     }
+    /* Step 1 of the first open: a still accent ring, as the focus ring sits, until it is opened. */
+    &[data-check="contradicted"][data-guided] {
+      box-shadow:
+        inset 0 0 0 1.5px var(--check-ink),
+        0 0 0 1px var(--color-sheet),
+        0 0 0 3px var(--color-accent);
+    }
 
     /* Only the dot pulses while it is checked: the number keeps its contrast. */
     &[data-check="checking"] .margin-check-icon {
@@ -5716,6 +5795,13 @@
       color: var(--color-accent-strong);
     }
   }
+  .answer-coverage {
+    margin: 0;
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 22px;
+    color: var(--color-ink);
+  }
   .mind-changes-no-mind {
     display: flex;
     flex-wrap: wrap;
@@ -5857,11 +5943,15 @@
   }
   .task-progress-meta {
     flex-shrink: 0;
+    max-width: calc(100% - 6rem);
     font-size: 12.5px;
     line-height: 18px;
     font-variant-numeric: tabular-nums;
-    white-space: nowrap;
     color: var(--color-ink-meta);
+
+    .meta-part {
+      white-space: nowrap;
+    }
   }
   .task-progress-bar {
     height: 3px;
