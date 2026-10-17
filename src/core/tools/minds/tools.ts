@@ -1605,8 +1605,10 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
   };
 
   // A model that began with a heading of its own keeps that one alone.
-  const make = (title: string, content: string): ChangeableMind =>
-    minds.create(title, options.folderId, !/^\s*#{1,6}\s/.test(content));
+  const headed = (content: string) => /^\s*#{1,6}\s/.test(content);
+
+  const make = (title: string, startsWithHeading: boolean): ChangeableMind =>
+    minds.create(title, options.folderId, !startsWithHeading);
 
   const create: Tool = {
     name: MIND_TOOLS.create,
@@ -1635,7 +1637,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         const title = fields.get("title");
         if (!title?.done || title.value.trim() === "") return null;
         // Its first paragraph is whole by now, so whether the model began with a heading is known.
-        const mind = make(title.value.trim(), fields.get("content")?.value ?? "");
+        const mind = make(title.value.trim(), headed(fields.get("content")?.value ?? ""));
         return { writer: writerFor(mind, null, true), created: true };
       });
     },
@@ -1644,7 +1646,12 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       const given = givenIn(input);
       // Made already, as its content came in.
       const streamed = streams.get(toolCallId)?.writer?.mind;
-      const mind = streamed ?? make(title, markdown ?? "");
+      const mind =
+        streamed ??
+        make(
+          title,
+          typeof given === "string" ? headed(given) : given?.blocks[0]?.type === "heading",
+        );
       const folder = options.folderId === null ? null : minds.folderName(options.folderId);
       const made = `Made the Mind “${mind.name}”${folder ? ` in the Folder “${folder}”` : ""}, open beside the User's Mind`;
       const empty = () =>
