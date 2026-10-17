@@ -7,7 +7,7 @@
 import type { CitationLocation } from "../core/api";
 import { citationLocation, parseRequestedLocation, type RequestedLocation } from "./locations";
 
-/** A source written as its Document's name, with the Location after a comma when there is one. */
+/** A source written as its Document's name, with the Location after a comma when there is one; a place alone ("[p. 3]") has the name "". */
 export interface NamedSource {
   name: string;
   location: RequestedLocation | null;
@@ -39,7 +39,7 @@ function sourceOf(inner: string): NamedSource | null {
   return { name: text, location: null };
 }
 
-/** The sources one bracket holds: "[Deck, slide 3; Policy, § 4]" holds two. Null: it is a marker. */
+// "[Deck, slide 3; Policy, § 4]" holds two sources; null: it is a marker.
 function sourcesOf(inner: string): NamedSource[] | null {
   const sources: NamedSource[] = [];
   for (const part of inner.split(/[;；]/)) {

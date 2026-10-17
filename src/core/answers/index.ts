@@ -355,7 +355,6 @@ const NO_SCOPE: SearchScope = { folderIds: [], tagIds: [], documentIds: [] };
 const changesAMind = (change: MindChange) =>
   change.created || change.revised === true || change.proposals > 0;
 
-/** The conversation's last Answer as Add to note puts it in a Mind, linked back to it; null: none with text. */
 function lastAnswerOf(
   conversationId: string,
   earlier: readonly ConversationMessage[],
