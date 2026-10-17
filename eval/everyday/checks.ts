@@ -11,6 +11,8 @@
  *   each is cited, or named in a sentence saying it wasn't covered.
  * - **Only what was asked changes**: asked about one paragraph, the others
  *   read as they did.
+ * - **The Question asked is the Answer's subject**: asked after the example's
+ *   Answer, nothing in the reply is about an earlier Answer or the example.
  */
 import { changeLogOf } from "../../src/core/answers/claimedChanges";
 import type { ConversationAnswer, MarkedCitation } from "../../src/core/api";
@@ -26,6 +28,8 @@ export interface Expected {
   coverAll: boolean;
   /** Only this top-level Block of the Mind it is asked from (from 0) may change. */
   only?: number;
+  /** It is asked after the example's Answer, and its reply says nothing of an earlier Answer or the example. */
+  noEarlier?: boolean;
 }
 
 export interface RequestOutcome {
@@ -47,9 +51,21 @@ export type RequestFailure =
   | { kind: "unbacked"; sentences: string[]; flagged: boolean }
   | { kind: "no-citations" }
   | { kind: "uncovered"; documents: string[] }
-  | { kind: "outside"; blocks: number[] };
+  | { kind: "outside"; blocks: number[] }
+  | { kind: "earlier"; said: string };
 
 const key = (text: string) => text.replace(/\s+/g, " ").trim().toLocaleLowerCase();
+
+const EARLIER = new RegExp(
+  [
+    String.raw`\b(?:earlier|previous|first|last|prior) (?:answer|response|reply)\b`,
+    String.raw`\b(?:disregard|ignore) (?:my|the|that|this) (?:earlier|previous|first|last|prior|answer|response|reply|figure|limit)`,
+    String.raw`Northwind|facilities agreement|leverage (?:limit|covenant)|\b3\.[15]x\b|\b3\.[15] times`,
+    "(?:之前|先前|前面|上一个|上一次|第一个)的?(?:回答|回复|答案)|(?:请|应)?(?:忽略|无视)(?:我|之前|先前|上一)",
+    "贷款协议|杠杆率",
+  ].join("|"),
+  "i",
+);
 
 const NOT_COVERED =
   /\b(?:couldn't|could not|can't|cannot|didn't|did not|wasn't|weren't|isn't|aren't|not|no|unable|left out|missing|skipped)\b|没有|未能|未|无法|不能|缺少|略去/i;
@@ -98,6 +114,8 @@ export function requestFailures(outcome: RequestOutcome): RequestFailure[] {
     const outside = outcome.changedBlocks.filter((block) => block !== expected.only);
     if (outside.length > 0) failures.push({ kind: "outside", blocks: outside });
   }
+  const said = expected.noEarlier ? answer.text.match(EARLIER)?.[0] : undefined;
+  if (said) failures.push({ kind: "earlier", said });
   return failures;
 }
 
@@ -114,5 +132,7 @@ export function failureLine(failure: RequestFailure): string {
       return `neither cites nor names as left out ${failure.documents.map((name) => `“${name}”`).join(", ")}`;
     case "outside":
       return `changed what it was asked to leave: Block ${failure.blocks.map((block) => block + 1).join(", ")}`;
+    case "earlier":
+      return `talks about an earlier Answer or the example: “${failure.said}”`;
   }
 }
