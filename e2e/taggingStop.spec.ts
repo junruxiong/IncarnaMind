@@ -289,9 +289,8 @@ test("while Organize runs, the status names the company too, with Stop", async (
     ]);
   const progress = window.getByTestId("sidebar-status").getByTestId("organization-progress");
   await expect(progress.getByTestId("status-label")).toHaveText(
-    /^Organizing [2-5] Documents with Anthropic · sends names and excerpts$/,
+    /^Organizing [2-5] Documents with Anthropic · sends names and excerpts \(page images for scans\)$/,
   );
-  // The rest is in its tooltip, which a screen reader reads too.
   await expect(progress).toHaveAttribute(
     "title",
     /^Organizing [2-5] Documents with Anthropic: each one's name, outline and short excerpts are sent \(page images for scans\)$/,

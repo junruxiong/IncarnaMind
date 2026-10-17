@@ -101,7 +101,6 @@ test("first run: Use my Copilot plan says what it costs and sends before anythin
   expect(github.requests).toEqual([]);
   await screenshot(card, "setup-copilot-notice");
 
-  // Details lists what is sent, in place.
   await notice.getByTestId("copilot-notice-sends-details").click();
   await expect(notice.getByTestId("copilot-notice-sends-list")).toHaveText(
     "Your Questions, the Mind you're in, Passages from your Documents, and Document text for Tags go to GitHub under your account.",
