@@ -857,6 +857,19 @@ export function createTranscripts(options: TranscriptsOptions) {
       await documents.check(vttPath(meetingId));
     },
 
+    /**
+     * The newest line said, by `speaker` when given (a live line's "Me" or "Them"), for the
+     * heading over help during the call; null before there is one.
+     */
+    newestLine(
+      meetingId: string,
+      speaker?: string,
+    ): { text: string; speaker: string | null } | null {
+      const cues = states.get(meetingId)?.cues ?? [];
+      const cue = cues.findLast((each) => speaker === undefined || each.speaker === speaker);
+      return cue ? { text: cue.text, speaker: cue.speaker } : null;
+    },
+
     /** The Meeting's Transcript, as the window shows it. */
     of(meetingId: string): MeetingTranscript {
       const state = load(meetingId);

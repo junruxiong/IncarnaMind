@@ -122,6 +122,8 @@ export type ClassificationStatus = "pending" | "classifying" | "classified" | "w
 export interface DocumentGroupAssignment {
   documentId: string;
   groupId: string | null;
+  /** When it joined this Folder (ISO 8601, UTC), kept by Undo; absent in older clients. */
+  filedAt?: string;
   source: "automatic" | "user";
   /**
    * `groupId` is a Suggested Folder: Organize proposed it and it waits for the

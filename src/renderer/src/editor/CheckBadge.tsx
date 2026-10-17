@@ -15,6 +15,7 @@ import { useFade } from "../motion";
 import { useAppStore } from "../store";
 import { useGroupsMerged } from "../useWindowWidth";
 import { checkClaims, stopVerify } from "../verify";
+import { useWatchAddedDocuments } from "./AddedDocumentsLine";
 import { type Badge, type BadgeInput, badgeOf } from "./badgeState";
 import { ContradictionAsk, ContradictionLine } from "./ContradictionLine";
 import { shownClaims } from "./claimChecks";
@@ -94,6 +95,7 @@ function MindBadge({
   const skippedKeys = checkedAll?.skipped.join(" ") ?? "";
   const skipped = useMemo(() => new Set(skippedKeys.split(" ").filter(Boolean)), [skippedKeys]);
   const health = useHealth(editor, skipped);
+  useWatchAddedDocuments(editor, mindId);
   const running = useChecks((state) => state.running[mindId]);
   const problem = useChecks((state) => state.problems[mindId] !== undefined);
   const askingMind = useMindCheck((state) => state.asking[mindId] !== undefined);

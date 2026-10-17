@@ -16,6 +16,7 @@ import {
   ResumeLineIcon,
   StopLineIcon,
 } from "./lineIcons";
+import { LevelBars } from "./meetings/LevelBars";
 import { type ProblemAction, ProblemLine } from "./ProblemLine";
 import { TranscriptLines } from "./TranscriptLines";
 import { useTabPlace } from "./tabs/tabItems";
@@ -46,7 +47,7 @@ export function MeetingBar({ meeting, children }: { meeting: Meeting; children?:
 
 /**
  * The live-recording dot (red, the one red outside Citation checks; grey
- * while paused), "Recording 24:16" (or "Paused"), Pause or Resume and Stop.
+ * while paused), "Recording 24:16" (or "Paused") with its level bars, Pause or Resume and Stop.
  * ⌘⇧P is the "meeting.pauseResume" command's (../commands/meetings).
  */
 function MeetingControls({ meeting }: { meeting: Meeting }) {
@@ -73,6 +74,7 @@ function MeetingControls({ meeting }: { meeting: Meeting }) {
         <span role="timer" data-testid="meeting-time" className="meeting-time">
           {time}
         </span>
+        <LevelBars meeting={meeting} />
       </span>
       <button
         type="button"
