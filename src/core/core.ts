@@ -7,6 +7,13 @@ import { isCitationStyleId } from "../shared/citationStyles";
 import type { DrawnPage } from "../shared/citedPage";
 import { translate } from "../shared/i18n";
 import { organizeModelOf, supportsLibraryImages } from "../shared/libraryModels";
+import {
+  HEARD_FROM,
+  helpKindsFor,
+  helpLabel,
+  isMeetingHelpKind,
+  isMeetingTemplate,
+} from "../shared/meetingHelp";
 import { bibliographyShown } from "../shared/mindBibliography";
 import {
   chosenCitationStyle,
@@ -19,6 +26,7 @@ import { paperFor } from "../shared/printDocument";
 import { resolveProposals, restoreRevised } from "../shared/proposals";
 import { isCitableWork } from "../shared/references";
 import { RESEARCH_TASK } from "../shared/research";
+import { SPEAKER_ME, SPEAKER_THEM } from "../shared/speakers";
 import { wordFileOf } from "../shared/wordFiles";
 import { logActivity, silentLogger } from "./activityLog";
 import type { CoreAdapters } from "./adapters";
@@ -45,6 +53,7 @@ import type { AnswerSearchOptions } from "./answers/engine";
 import {
   type AddDocumentsResult,
   type ChatModelChoice,
+  type ConversationAskResult,
   type CoreApi,
   type CoreEventSource,
   type CreateMindInput,
@@ -56,6 +65,7 @@ import {
   type ExportMindOptions,
   type ExternalService,
   type Meeting,
+  type MeetingHelpKind,
   type Mind,
   type MindCitationStyle,
   NOT_IN_A_FOLDER_ID,
@@ -80,7 +90,7 @@ import { createConnectors } from "./connectors";
 import { connectorDirectory } from "./connectors/directory";
 import { createConnectorRegistry, REGISTRY, REGISTRY_SENDS } from "./connectors/registry";
 import { createConsent, type DataFlowRegistry } from "./consent";
-import { createConversations } from "./conversations";
+import { createConversations, type QuestionInput } from "./conversations";
 import { createMeter } from "./cost/meter";
 import {
   createDocuments,
@@ -124,7 +134,7 @@ import { setTextOnlyDocuments, textOnlyDocuments } from "./exports/sharedPicture
 import { createFileLock } from "./fileLock";
 import { safeFileName, writeNewFile } from "./fileNames";
 import { createFolders } from "./folders";
-import { systemRegion } from "./language";
+import { LANGUAGES, systemRegion } from "./language";
 import { createLayouts } from "./layout";
 import { CLASSIFICATION_FLOW_SENDS, createLibrary } from "./library";
 import { automaticGroupClassifier } from "./library/automatic";
@@ -1152,6 +1162,7 @@ export function createCore(adapters: CoreAdapters): Core {
       return isKnownKind(minds.get(mindId).kind) ? found.name : null;
     },
     liveTranscript: (mindId) => liveTranscriptOf(mindId),
+    meetingHelp: (mindId, question) => meetingHelpOf(mindId, question),
     providerExists: (providerId) => chat.exists(providerId),
     readiness: async (choice) => chat.readiness(await chat.answeringModel(choice)),
     prepareModel: (choice, thinking) => chat.prepareModel(choice, "chat", thinking),
@@ -2470,6 +2481,8 @@ export function createCore(adapters: CoreAdapters): Core {
 
   // Transcripts (#136): a Meeting is transcribed on this computer as it records, where this copy can.
   let listMeetings: (() => Meeting[]) | undefined;
+  /** See `AnswersOptions.meetingHelp`; set once Meetings are. */
+  let meetingHelpOf = (_mindId: string, _question: string): MeetingHelpKind | null => null;
   /** See `AnswersOptions.liveTranscript`; set once Meetings are. */
   let liveTranscriptOf = async (_mindId: string): Promise<WindowedPassage[] | null> => null;
   const meetingsChanged = () => {
@@ -2561,6 +2574,7 @@ export function createCore(adapters: CoreAdapters): Core {
       }
     },
     changed: (list) => events.emit("meetings.changed", list),
+    level: (level) => events.emit("meetings.level", level),
     onCapturingChange: (capturing) => {
       background.setRecording(capturing);
       tasks.setRecording(capturing);
@@ -2571,6 +2585,65 @@ export function createCore(adapters: CoreAdapters): Core {
     log: adapters.log ?? silentLogger,
   });
   listMeetings = () => meetings.list();
+  meetingHelpOf = (mindId, question) => {
+    const meeting = meetings.liveOf(mindId);
+    if (!meeting) return null;
+    return (
+      helpKindsFor(meeting.helpTemplate).find((kind) =>
+        LANGUAGES.some((language) => translate(language, helpLabel(kind)) === question),
+      ) ?? null
+    );
+  };
+  /** The conversation each live Meeting's help went to last: the panel's goes on there. */
+  const helpConversations = new Map<string, string>();
+  const askMeetingHelp = async (given: unknown): Promise<ConversationAskResult> => {
+    const input = isRecord(given) ? given : {};
+    const meeting = meetings.get(input.meetingId);
+    if (meeting.status !== "recording" && meeting.status !== "paused") {
+      throw new InvalidInputError({ key: "error.meeting.notBeingRecorded" });
+    }
+    const { kind } = input;
+    if (!isMeetingHelpKind(kind) || !helpKindsFor(meeting.helpTemplate).includes(kind)) {
+      throw new InvalidInputError({ key: "error.meeting.helpButton" });
+    }
+    const { folderId } = minds.get(meeting.mindId);
+    const question = (conversationId: unknown) =>
+      conversations.parseQuestion({
+        conversationId,
+        text: translate(settings.get().language, helpLabel(kind)),
+        mindId: meeting.mindId,
+        scope: folderId ? { folderIds: [folderId], tagIds: [], documentIds: [] } : null,
+      });
+    let asked: QuestionInput;
+    if (input.conversationId !== undefined) asked = question(input.conversationId);
+    else {
+      try {
+        asked = question(helpConversations.get(meeting.id) ?? null);
+      } catch (error) {
+        // The conversation it went to last was deleted: a new one.
+        if (!(error instanceof NotFoundError)) throw error;
+        asked = question(null);
+      }
+    }
+    const result = await answers.askInConversation(asked);
+    if (result.asked) {
+      helpConversations.set(meeting.id, result.conversation.id);
+      const from = HEARD_FROM[kind];
+      const newest = (speaker?: string) => transcripts?.newestLine(meeting.id, speaker) ?? null;
+      meetings.helped(meeting.id, {
+        kind,
+        conversationId: result.conversation.id,
+        answerId: result.answerId,
+        heard:
+          from === undefined
+            ? null
+            : from === "anyone"
+              ? newest()
+              : (newest(from === "me" ? SPEAKER_ME : SPEAKER_THEM) ?? newest()),
+      });
+    }
+    return result;
+  };
   /** Resolves once a Document's newest version has its Passages, or after `ms` with the last version's. */
   const extracted = (documentId: string, ms: number) =>
     new Promise<void>((resolve) => {
@@ -3626,6 +3699,14 @@ export function createCore(adapters: CoreAdapters): Core {
     deleteMeetingAudio: async (meetingId) => meetings.deleteAudio(meetingId),
     retryTranscript: async (meetingId) => meetings.retryTranscript(meetingId),
     openAudioSettings: (source) => meetings.openSettings(source),
+    askMeetingHelp,
+    setMeetingTemplate: async (input) => {
+      const { meetingId, template } = isRecord(input) ? input : {};
+      if (template !== null && !isMeetingTemplate(template)) {
+        throw new InvalidInputError({ key: "error.meeting.template" });
+      }
+      return meetings.setTemplate(meetingId, template);
+    },
 
     openDocumentFile: async (documentId) => {
       const file = await documents.openFile(documentId);
