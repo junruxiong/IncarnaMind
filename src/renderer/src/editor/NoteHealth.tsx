@@ -1,17 +1,11 @@
 import type { Editor } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { useEditorState } from "@tiptap/react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type * as Y from "yjs";
 import type { CitationAttributes } from "../../../core/api";
 import { citationState } from "../../../shared/citations";
-import {
-  acceptAndCheck,
-  checkSentences,
-  dismissCheckProblem,
-  stopCheck,
-  useChecks,
-} from "../checks";
+import { acceptAndCheck, checkSentences, dismissCheckProblem, useChecks } from "../checks";
 import { ProblemLine } from "../components/ProblemLine";
 import {
   ReadinessExplanation,
@@ -27,19 +21,14 @@ import { useAppStore } from "../store";
 import { useCheckUnread } from "../unreadFiles";
 import { AnswerError } from "./AnswerView";
 import { coverageOf, sameCoverage, shownClaims } from "./claimChecks";
-import {
-  HEALTH_PARTS,
-  type NoteHealth as Health,
-  type HealthPart,
-  noteHealth,
-} from "./healthCounts";
+import { type NoteHealth as Health, type HealthPart, noteHealth } from "./healthCounts";
 import { CheckMarkIcon, ClaimMarkIcon } from "./icons";
-import { CheckedWhen, MindCheckAction, MindCheckProgress } from "./MindCheckLine";
+import { CheckedWhen, MindCheckAction } from "./MindCheckLine";
 import { useRunModel } from "./ModelChip";
 import { UncoveredLine } from "./UncoveredLine";
 import { COUNT_IDLE_MS } from "./WordCount";
 
-const NONE: Health = {
+const NO_HEALTH: Health = {
   found: [],
   notFound: [],
   unsupported: [],
@@ -50,8 +39,21 @@ const NONE: Health = {
   unchecked: [],
 };
 
+/** A count's words with the number in bold, as the badge shows it: "**3** claims not checked yet". */
+export function Counted({ text, count }: { text: string; count: string }) {
+  const at = text.indexOf(count);
+  if (at < 0) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, at)}
+      <b className="check-count">{count}</b>
+      {text.slice(at + count.length)}
+    </>
+  );
+}
+
 /** Each part's small mark, as the margin draws its state; none for sentences with no Citation. */
-function PartMark({ part }: { part: HealthPart }) {
+export function PartMark({ part }: { part: HealthPart }) {
   switch (part) {
     case "found":
       return <CheckMarkIcon check="found" className="mind-health-icon" />;
@@ -71,12 +73,12 @@ function PartMark({ part }: { part: HealthPart }) {
 }
 
 /** The Mind's health, worked out a moment after it last changed, as the word count is. */
-function useHealth(editor: Editor, skipped: ReadonlySet<string>): Health {
+export function useHealth(editor: Editor, skipped: ReadonlySet<string>): Health {
   const documents = useAppStore((state) =>
     state.status.kind === "ready" ? state.documents : null,
   );
   const kept = useAppStore((state) => state.keptCitationTexts);
-  const [health, setHealth] = useState<Health>(NONE);
+  const [health, setHealth] = useState<Health>(NO_HEALTH);
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const count = () => {
@@ -105,34 +107,36 @@ function useHealth(editor: Editor, skipped: ReadonlySet<string>): Health {
   return health;
 }
 
+const ROWS: readonly HealthPart[] = [
+  "contradicted",
+  "unsupported",
+  "notFound",
+  "notChecked",
+  "recheck",
+  "found",
+];
+
 /**
- * The Mind's health under its title (#96). First, while sentences are
- * checked, what is happening with Stop; or why a check gave nothing, with the
- * one thing that helps. Then the counts: "✓ 1 Citation found · ! 1
- * unsupported · ≠ 1 contradicted · 3 with no Citation", then those that need
- * a re-check or weren't checked. Each part is a button that moves to the
- * next such sentence or Citation, round to the first. Last on the line, the
- * files the checks couldn't read, if any, whose list opens below it.
- *
- * The counts come after the checks' state because they are worked out a
- * moment after each change: before it, they would move its buttons from
- * under the pointer (#968).
+ * The check badge's card for a Mind (#96, #909): one row a part of its
+ * health, each moving to the next such sentence or Citation, round to the
+ * first; the claims no check has looked at, with Check all; what is
+ * running, with Stop, or why a check gave nothing, with the one thing that
+ * helps; and the files the checks couldn't read, if any.
  */
-export function NoteHealth({
+export function HealthCard({
   editor,
   doc,
   mindId,
+  health,
 }: {
   editor: Editor;
   doc: Y.Doc;
   mindId: string;
+  health: Health;
 }) {
   const t = useT();
   const language = useLanguage();
   const checkedAll = useMindCheckRun(doc);
-  const skippedKeys = checkedAll?.skipped.join(" ") ?? "";
-  const skipped = useMemo(() => new Set(skippedKeys.split(" ").filter(Boolean)), [skippedKeys]);
-  const health = useHealth(editor, skipped);
   const unread = useCheckUnread(editor, doc);
   const asking = useMindCheck((state) => state.asking[mindId] !== undefined);
   const coverage = useEditorState({
@@ -183,7 +187,7 @@ export function NoteHealth({
     editor.view.focus();
   };
 
-  const parts = HEALTH_PARTS.filter((part) => health[part].length > 0);
+  const rows = ROWS.filter((part) => health[part].length > 0);
   const canCheck =
     !running && !asking && (health.unchecked.length > 0 || health.recheck.length > 0);
   const close = {
@@ -191,26 +195,79 @@ export function NoteHealth({
     testId: "checks-problem-close",
     onClick: () => dismissCheckProblem(mindId),
   };
+  const row = (part: HealthPart) => {
+    const text = label(part, health[part].length);
+    return (
+      <button
+        key={part}
+        type="button"
+        data-testid={`health-${part}`}
+        data-count={health[part].length}
+        data-part={part}
+        className="check-row"
+        aria-label={t("health.next", { part: text })}
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => goToNext(part)}
+      >
+        <span className="check-row-mark">
+          <PartMark part={part} />
+        </span>
+        <span className="check-row-text">
+          <Counted text={text} count={format(health[part].length)} />
+        </span>
+        <span className="check-row-next" aria-hidden="true">
+          {t("badge.next")}
+        </span>
+      </button>
+    );
+  };
 
   return (
     <>
-      {running && (
-        <ProblemLine
-          role="status"
-          testId="checks-running"
-          className="mind-health-line"
-          action={{
-            label: t("checks.stop"),
-            testId: "checks-stop",
-            onClick: () => stopCheck(mindId),
-          }}
-        >
-          {running.action === "whole-mind" ? (
-            <MindCheckProgress editor={editor} requestId={running.requestId} />
-          ) : (
-            t(`checks.running.${running.action}`)
-          )}
-        </ProblemLine>
+      <div className="check-rows" data-testid="mind-health">
+        {rows.map(row)}
+        {health.unchecked.length > 0 && (
+          <div className="check-row" data-testid="health-unchecked">
+            <span className="check-row-mark" />
+            <span className="check-row-text">
+              <Counted
+                text={t(
+                  health.unchecked.length === 1 ? "health.unchecked.one" : "health.unchecked",
+                  { count: format(health.unchecked.length) },
+                )}
+                count={format(health.unchecked.length)}
+              />
+            </span>
+            {canCheck && (
+              <MindCheckAction
+                unchecked={health.unchecked.length}
+                recheck={health.recheck.length}
+                onCheck={() => void startMindCheck(mindId, "changed")}
+              />
+            )}
+          </div>
+        )}
+        {health.unchecked.length === 0 && canCheck && (
+          <div className="check-card-actions">
+            <MindCheckAction
+              unchecked={0}
+              recheck={health.recheck.length}
+              onCheck={() => void startMindCheck(mindId, "changed")}
+            />
+          </div>
+        )}
+        {health.noCitation.length > 0 && row("noCitation")}
+      </div>
+      {checkedAll && !running && (
+        <div className="check-card-note">
+          <CheckedWhen run={checkedAll} />
+        </div>
+      )}
+      {((smallModel && rows.length > 0) ||
+        (contradictions?.kind !== "asking" && contradictions?.run.smallModel)) && (
+        <p data-testid="checks-small-model" className="mind-health-line mind-health-note">
+          {t("checks.smallModel")}
+        </p>
       )}
       {!running && problem?.kind === "not-ready" && (
         <ProblemLine
@@ -339,44 +396,6 @@ export function NoteHealth({
                 : t(`checks.problem.${problem.kind}`)}
           </ProblemLine>
         )}
-      {(parts.length > 0 || checkedAll || canCheck) && (
-        <fieldset className="mind-health" data-testid="mind-health" aria-label={t("health.label")}>
-          {checkedAll && !running && <CheckedWhen run={checkedAll} />}
-          {parts.map((part) => {
-            const text = label(part, health[part].length);
-            return (
-              <button
-                key={part}
-                type="button"
-                data-testid={`health-${part}`}
-                data-count={health[part].length}
-                data-part={part}
-                className="mind-health-part"
-                aria-label={t("health.next", { part: text })}
-                title={t("health.next", { part: text })}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => goToNext(part)}
-              >
-                <PartMark part={part} />
-                {text}
-              </button>
-            );
-          })}
-          {canCheck && (
-            <MindCheckAction
-              unchecked={health.unchecked.length}
-              recheck={health.recheck.length}
-              onCheck={() => void startMindCheck(mindId, "changed")}
-            />
-          )}
-        </fieldset>
-      )}
-      {((smallModel && parts.length > 0) ||
-        (contradictions?.kind !== "asking" && contradictions?.run.smallModel)) && (
-        <p data-testid="checks-small-model" className="mind-health-line mind-health-note">
-          {t("checks.smallModel")}
-        </p>
-      )}
       <UnreadFilesLine files={unread} testId="checks-unread" className="mind-unread" />
     </>
   );
