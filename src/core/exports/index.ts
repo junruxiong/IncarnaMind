@@ -362,6 +362,7 @@ export function createExports(deps: ExportsDependencies) {
         pictures,
         checkedLine: prepared.options.checkedLine,
         font: prepared.font,
+        lineSpacing: prepared.lineSpacing,
       }),
     );
   };
