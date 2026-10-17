@@ -132,8 +132,11 @@ win:
     - "!**/node_modules/**/coverage/**"
     - "!**/node_modules/onnxruntime-node/bin/napi-v*/{darwin,linux}{,/**}"
     - "!**/node_modules/onnxruntime-node/bin/napi-v*/win32/!(${arch}){,/**}"
-  # TODO(signing): unsigned in v1. SignPath Foundation's free signing for open-source
-  # projects is the follow-up; until then SmartScreen warns on first run (see the README).
+  # SignPath signs the app and the installer in the release workflow, not electron-builder
+  # (docs/releasing.md, Windows signing). With no certificate here, app-update.yml gets no
+  # publisherName, so updates aren't checked for their signer: right for SignPath's test
+  # certificate, which Windows doesn't trust. With the SignPath Foundation certificate, set
+  # signtoolOptions.publisherName to its subject.
   target:
     - nsis
 
