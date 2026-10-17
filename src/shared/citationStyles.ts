@@ -6,11 +6,11 @@
  * footnote naming its Document and Location, as before styles existed.
  * Pure: the core and the renderer import it.
  */
-import type { CitationFormat } from "../core/citationStyles/pack";
 import type { Language } from "../core/language";
 import type { MessageKey } from "./i18n";
 
-export type { CitationFormat };
+/** How a style's citations read, as its CSL category says. */
+export type CitationFormat = "author-date" | "author" | "numeric" | "label" | "note";
 
 /** The common list's ids, which Minds have kept since before the pack. */
 export const COMMON_CITATION_STYLE_IDS = [
@@ -237,6 +237,22 @@ export const PROMPTED_CITATION_STYLES: Readonly<
 /** Whether a value can be a style's id: a common one, or a CSL file's name, as the pack keeps them. */
 export const isCitationStyleId = (value: unknown): value is CitationStyleId =>
   typeof value === "string" && /^[a-z0-9][a-z0-9-]{0,199}$/.test(value);
+
+/** How many styles the picker's Recently used lists. */
+export const RECENT_CITATION_STYLES = 5;
+
+/** Recently used, newest first, once `id` is chosen. */
+export const withRecentStyle = (
+  recent: readonly CitationStyleId[],
+  id: CitationStyleId,
+): CitationStyleId[] =>
+  [id, ...recent.filter((each) => each !== id)].slice(0, RECENT_CITATION_STYLES);
+
+export const isRecentStyles = (value: unknown): value is CitationStyleId[] =>
+  Array.isArray(value) &&
+  value.length <= RECENT_CITATION_STYLES &&
+  value.every(isCitationStyleId) &&
+  new Set(value).size === value.length;
 
 export const commonCitationStyle = (id: CitationStyleId): CitationStyle | undefined =>
   CITATION_STYLES.find((each) => each.id === id);

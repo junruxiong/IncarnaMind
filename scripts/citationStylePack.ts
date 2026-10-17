@@ -1,9 +1,9 @@
 /**
  * Writes resources/citation-styles/styles.pack (see src/core/citationStyles/pack.ts): every style
  * of the CSL styles repository and every locale of its locales repository, at the commits pinned
- * below, unmodified. `node --import ./scripts/tsResolve.mjs scripts/citationStylePack.ts`, or
- * with `--check` to build into a temporary file and fail unless it is byte for byte the
- * committed pack. It runs on a maintainer's computer and in CI, never in the app.
+ * below, unmodified. `npm run styles:pack`, or `npm run styles:pack -- --check` to build into a
+ * temporary file and fail unless it is byte for byte the committed pack. It runs on a
+ * maintainer's computer, never in the app.
  *
  * Each independent style is parsed by the app's own engine (resources/citation-styles/
  * engine.wasm) and formats one reference; a style that fails either is left out, and so are the
@@ -17,14 +17,9 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "n
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { constants, brotliCompressSync } from "node:zlib";
-import { CslEngine } from "../src/core/citationStyles/wasm.ts";
-import {
-  type CitationFormat,
-  PACK_MAGIC,
-  type PackIndex,
-  type PackSlot,
-  type PackStyle,
-} from "../src/core/citationStyles/pack.ts";
+import { CslEngine } from "../src/core/citationStyles/wasm";
+import { PACK_MAGIC, type PackIndex, type PackSlot, type PackStyle } from "../src/core/citationStyles/pack";
+import type { CitationFormat } from "../src/shared/citationStyles";
 
 const STYLES_COMMIT = "6ba2e9c6aa6e0dab87d3a20b833ed8ff6500f698";
 const LOCALES_COMMIT = "a89adece41013402236e2c9020972d7e931fbab8";
@@ -50,6 +45,7 @@ const COMMON = [
 
 const ROOT = resolve(import.meta.dirname, "..");
 const OUT = join(ROOT, "resources/citation-styles/styles.pack");
+const SHORT_NOTICE = join(ROOT, "resources/notices/citation-styles.txt");
 const ENGINE = join(ROOT, "resources/citation-styles/engine.wasm");
 const LICENCE = join(ROOT, "resources/notices/cc-by-sa-3.0.txt");
 
@@ -182,19 +178,43 @@ const compress = (json: string) =>
     },
   });
 
-function notice(kept: readonly Read[], locales: readonly { code: string; translators: string[] }[]) {
-  const lines = [
+const NOTICE_HEADER = [
     "IncarnaMind formats Citations and Bibliographies with styles and locales from the Citation Style",
     "Language (CSL) project: https://citationstyles.org/",
     "",
-    "They are shipped unmodified, in one file of compressed chunks in the app's resources",
-    "(citation-styles/styles.pack), taken from https://github.com/citation-style-language/styles at",
-    `commit ${STYLES_COMMIT} and https://github.com/citation-style-language/locales at commit`,
-    `${LOCALES_COMMIT}. Each is released under the Creative Commons Attribution-ShareAlike 3.0`,
-    "Unported licence (https://creativecommons.org/licenses/by-sa/3.0/), whose text follows the",
-    "list. Each file's metadata, with its authors, contributors and translators, is kept as it is;",
-    "they are named here too. Shipped this way, the files and IncarnaMind form a Collection under",
-    "that licence (section 1(b)): IncarnaMind's own code stays under the Apache License 2.0.",
+    "They come from the CSL styles repository (https://github.com/citation-style-language/styles)",
+    `at commit ${STYLES_COMMIT} and its locales repository`,
+    `(https://github.com/citation-style-language/locales) at commit ${LOCALES_COMMIT}.`,
+    "Each is released under the Creative Commons Attribution-ShareAlike 3.0 Unported licence",
+    "(https://creativecommons.org/licenses/by-sa/3.0/).",
+    "",
+    "The styles and locales are shipped unmodified, in one file of compressed chunks in the app's",
+    "resources (citation-styles/styles.pack). Each file's metadata, with its authors, contributors",
+    "and translators, is kept as it is. A journal style, which names the style it follows, is kept",
+    "as its title, fields and locale and the name of that style. Shipped this way, the files and",
+    "IncarnaMind form a Collection under that licence (section 1(b)): IncarnaMind's own code stays",
+    "under the Apache License 2.0.",
+];
+
+/**
+ * The notice in resources/notices: who the styles are from and under what licence, pointing to
+ * the full notice in the pack, which names every style's people and is too long to ship twice.
+ */
+const shortNotice = () =>
+  [
+    ...NOTICE_HEADER,
+    "",
+    "Every style and locale, with its authors, contributors and translators, is named in the",
+    "notice inside styles.pack, which Settings › About › Citation style licences opens. The",
+    "licence's text is in cc-by-sa-3.0.txt, next to this file.",
+    "",
+  ].join("\n");
+
+function notice(kept: readonly Read[], locales: readonly { code: string; translators: string[] }[]) {
+  const lines = [
+    ...NOTICE_HEADER,
+    "",
+    "Each style and locale is named below with its people; the licence's text follows the list.",
     "",
     "Styles:",
     "",
@@ -346,11 +366,11 @@ console.log(
 );
 const sha = createHash("sha256").update(pack).digest("hex");
 if (check) {
-  const committed = readFileSync(OUT);
-  if (!committed.equals(pack)) {
-    console.error("The committed styles.pack isn't what its sources build to.");
+  if (!readFileSync(OUT).equals(pack) || readFileSync(SHORT_NOTICE, "utf8") !== shortNotice()) {
+    console.error("The committed styles.pack or its notice isn't what its sources build to.");
     process.exit(1);
   }
 } else {
   writeFileSync(`${OUT}.sha256`, `${sha}  styles.pack\n`);
+  writeFileSync(SHORT_NOTICE, shortNotice());
 }

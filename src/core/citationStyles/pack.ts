@@ -9,12 +9,10 @@
  */
 import { closeSync, openSync, readSync } from "node:fs";
 import { brotliDecompressSync } from "node:zlib";
+import type { CitationFormat } from "../../shared/citationStyles";
 
 export const PACK_MAGIC = "IMCSLPK1";
 export const PACK_HEADER_BYTES = PACK_MAGIC.length + 4;
-
-/** How a style's citations read, as its CSL category says. */
-export type CitationFormat = "author-date" | "author" | "numeric" | "label" | "note";
 
 /** Where a file is in the pack: its chunk, and its place in that chunk. */
 export type PackSlot = readonly [chunk: number, slot: number];

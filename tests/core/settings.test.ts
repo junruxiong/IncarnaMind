@@ -52,6 +52,7 @@ describe("Settings", () => {
         monthlyCap: null,
         webSearch: false,
         keepWebPageLook: false,
+        recentCitationStyles: [],
       },
       device: {
         sidebarWidth: 248,
@@ -150,6 +151,7 @@ describe("Settings", () => {
       monthlyCap: null,
       webSearch: false,
       keepWebPageLook: false,
+      recentCitationStyles: [],
     });
     expect(settings.device).toEqual({
       sidebarWidth: 320,
@@ -270,6 +272,7 @@ describe("Settings", () => {
         monthlyCap: { amount: 20, currency: "USD" },
         webSearch: true,
         keepWebPageLook: true,
+        recentCitationStyles: [],
       },
       device,
       language: "zh-CN",

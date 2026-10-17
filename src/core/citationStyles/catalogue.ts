@@ -16,22 +16,28 @@ import {
   styleIdOf,
 } from "../../shared/citationStyles";
 import type { Language } from "../language";
-import { type PackIndex, PackFiles, type PackStyle, readPackIndex } from "./pack";
+import { PackFiles, type PackIndex, type PackStyle, readPackIndex } from "./pack";
 
 /** The standard whose styles raise a Location after the work (`CitationStyle.locators`). */
 const RAISED_LOCATORS = /gb-t-7714/;
 
 export function createCatalogue(packPath: string | undefined) {
-  let read: { index: PackIndex & { dataOffset: number }; byId: Map<string, PackStyle> } | null =
-    null;
-  let files: PackFiles | null = null;
+  let read: {
+    index: PackIndex & { dataOffset: number };
+    byId: Map<string, PackStyle>;
+    files: PackFiles;
+  } | null = null;
   const commonPackIds = new Set(CITATION_STYLES.flatMap((style) => style.packId ?? []));
 
   const pack = () => {
     if (packPath === undefined) throw new Error("The citation styles aren't installed.");
     if (!read) {
       const index = readPackIndex(packPath);
-      read = { index, byId: new Map(index.styles.map((style) => [style.id, style])) };
+      read = {
+        index,
+        byId: new Map(index.styles.map((style) => [style.id, style])),
+        files: new PackFiles(packPath, index, 1),
+      };
     }
     return read;
   };
@@ -55,13 +61,6 @@ export function createCatalogue(packPath: string | undefined) {
         styles.push(summary);
       }
       return { count: index.styles.length, styles };
-    },
-
-    /** Whether a style is one this version can format in: common, or in the pack. */
-    has(id: CitationStyleId): boolean {
-      if (commonCitationStyle(id)) return true;
-      const packId = packIdOf(id);
-      return packId !== null && pack().byId.has(packId);
     },
 
     /** How a Mind in `id` is formatted, `language` being the Mind's: "zh-CN" for Chinese text. */
@@ -98,11 +97,8 @@ export function createCatalogue(packPath: string | undefined) {
 
     /** The licence notice made from every style's and locale's `<info>`. */
     notice(): string {
-      const { index } = pack();
-      files ??= new PackFiles(packPath as string, index, 1);
+      const { index, files } = pack();
       return files.text(index.notice);
     },
   };
 }
-
-export type Catalogue = ReturnType<typeof createCatalogue>;

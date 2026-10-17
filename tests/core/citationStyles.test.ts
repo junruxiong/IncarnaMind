@@ -4,7 +4,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { cp, writeFile } from "node:fs/promises";
+import { cp } from "node:fs/promises";
 import { join } from "node:path";
 import type { JSONContent } from "@tiptap/core";
 import { describe, expect, onTestFinished, test } from "vitest";
@@ -18,7 +18,8 @@ import type {
 } from "../../src/core";
 import { FOOTNOTE_NODE } from "../../src/core/api";
 import { locatorOf } from "../../src/core/citationStyles/csl";
-import { CITATION_STYLE_IDS } from "../../src/shared/citationStyles";
+import { COMMON_CITATION_STYLE_IDS } from "../../src/shared/citationStyles";
+import { shippedLocale, shippedStyle, writePack } from "../helpers/citationStyles";
 import { CITATION_STYLES, createTempDataFolder, manualClock, startCore } from "../helpers/core";
 import { addAndProcess, waitForProcessing, writeSourceFile } from "../helpers/documents";
 import { footnotesOf, paragraphsOf, part, textOf, unzip } from "../helpers/docx";
@@ -175,11 +176,14 @@ describe("a Mind's citation style", () => {
     expect(client.doc.getMap("settings").get("citationStyle")).toBe("ieee");
   });
 
-  test("refuses what isn't a style", async () => {
+  test("refuses what can't be a style's name, but keeps one this version doesn't have", async () => {
     const { core, mind } = await setUp();
-    await expect(
-      core.setMindCitationStyle(mind.id, "harvard-2" as unknown as "harvard"),
-    ).rejects.toThrow("isn't a citation style");
+    for (const name of ["Harvard 2", "../apa", ""]) {
+      await expect(core.setMindCitationStyle(mind.id, name)).rejects.toThrow(
+        "isn't a citation style",
+      );
+    }
+    expect((await core.setMindCitationStyle(mind.id, "harvard-2")).style).toBe("harvard-2");
   });
 });
 
@@ -307,7 +311,7 @@ describe("formatting a Mind's Citations", () => {
   test("a Document with no details gets an entry from its name alone, never its format or the day it was added, in every style", async () => {
     const { core, prospect, lease } = await setUp();
     const style = (id: FormattedCitations["style"]) => format(core, id, [work(lease)]);
-    for (const id of CITATION_STYLE_IDS.filter((each) => each !== "numbered")) {
+    for (const id of COMMON_CITATION_STYLE_IDS.filter((each) => each !== "numbered")) {
       const { bibliography } = await style(id);
       const entry = bibliography.find((each) => each.documentId === lease.id);
       expect(entry?.needsDetails, id).toBe(true);
@@ -451,8 +455,12 @@ describe("the style thread", () => {
   });
 
   test("a style that can't be read fails its request, and other styles still format", async () => {
-    const core = await withStyles((folder) =>
-      writeFile(join(folder, "styles", "apa.csl"), "<style>not a whole style"),
+    const core = await withStyles(async (folder) =>
+      writePack(
+        join(folder, "styles.pack"),
+        { apa: "<style>not a whole style", ieee: shippedStyle("ieee") },
+        Object.fromEntries(["en-US", "en-GB", "zh-CN"].map((code) => [code, shippedLocale(code)])),
+      ),
     );
     const request = (style: FormattedCitations["style"]) =>
       core.formatCitations({ style, clusters: [{ works: [named("A book")] }] });
@@ -539,7 +547,7 @@ describe("exporting a Mind in its citation style", () => {
     const { core, mind, client, lease } = await setUp();
     writeMind(client, [paragraph(text("Rent is monthly "), citation(lease, page(2)), text("."))]);
     await client.settled();
-    for (const id of CITATION_STYLE_IDS.filter((each) => each !== "numbered")) {
+    for (const id of COMMON_CITATION_STYLE_IDS.filter((each) => each !== "numbered")) {
       await core.setMindCitationStyle(mind.id, id);
       const markdown = new TextDecoder().decode(
         (await core.exportMind(mind.id, { format: "markdown" })).data,

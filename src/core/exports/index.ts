@@ -9,11 +9,7 @@ import * as Y from "yjs";
 import { layoutChart } from "../../shared/chartLayout";
 import { chartSvg } from "../../shared/chartSvg";
 import { seriesName } from "../../shared/charts";
-import {
-  type CitationStyle,
-  type CitationStyleId,
-  citationStyle,
-} from "../../shared/citationStyles";
+import type { ResolvedCitationStyle } from "../../shared/citationStyles";
 import { citationState, citedLocation, shownDocumentName } from "../../shared/citations";
 import type { DrawnPage } from "../../shared/citedPage";
 import { titleWithoutSite } from "../../shared/documentNames";
@@ -98,8 +94,8 @@ export interface ExportsDependencies {
   /** The interface language, which the export's own words are in. */
   language(): Language;
   folderName(folderId: string): string | null;
-  /** The Mind's citation style (#289). */
-  citationStyle(mindId: string): CitationStyleId;
+  /** The Mind's citation style (#289), and the language its text is in, which a style may take. */
+  citationStyle(mindId: string): { style: ResolvedCitationStyle; textLanguage: Language };
   /** Whether the Mind shows its Bibliography without a citation style (#102). */
   bibliography(mindId: string): boolean;
   /** Formats Citations in a style, as the editor does (see `CoreApi.formatCitations`). */
@@ -154,7 +150,8 @@ interface Prepared {
   failedSentences: FailedSentence[];
   trackedChanges: number;
   language: Language;
-  style: CitationStyle;
+  style: ResolvedCitationStyle;
+  textLanguage: Language;
   documents: readonly SourceDocument[];
   bibliography: boolean;
   /** Each Citation's footnote with the attributes it was made from, for the source pack. */
@@ -167,7 +164,7 @@ export function createExports(deps: ExportsDependencies) {
     const { format, includeQuestions } = options;
     const mind = deps.mind(mindId);
     const language = deps.language();
-    const style = citationStyle(deps.citationStyle(mind.id));
+    const { style, textLanguage } = deps.citationStyle(mind.id);
     const documents = deps.liveDocuments();
     const kept = deps.keptCitationTexts();
     const attributesOf = new Map<Footnote, Partial<CitationAttributes>>();
@@ -259,6 +256,7 @@ export function createExports(deps: ExportsDependencies) {
       trackedChanges,
       language,
       style,
+      textLanguage,
       documents,
       bibliography: deps.bibliography(mind.id),
       attributesOf,
@@ -486,7 +484,9 @@ export function createExports(deps: ExportsDependencies) {
         throw new Error("This copy of IncarnaMind can't make PDFs.");
       }
       if (format === "source-pack") return sourcePack(prepared);
-      const thin = thinEntries(deps.formatCitations);
+      const thin = thinEntries((request) =>
+        deps.formatCitations({ ...request, language: prepared.textLanguage }),
+      );
       if (format === "docx" && prepared.word) {
         return exportIntoWord(prepared, prepared.word, thin);
       }
