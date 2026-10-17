@@ -585,6 +585,10 @@ export const zhCN = {
   "claim.unsupported.inFolder": "“{folder}”中没有内容提到这一点。",
   "claim.unsupported.anywhere": "你的文档中没有内容提到这一点。",
   "claim.unsupported.differs": "你的文档里是另一种说法：",
+  "claim.unsupported.part.one": "引用 {number} 没有提到这部分：“{part}”。",
+  "claim.unsupported.part.other": "引用 {number} 没有提到这部分：“{part}”。",
+  "claim.unsupported.noReason": "没有给出原因",
+  "claim.openCitation": "打开引用 {number}",
   "claim.courtDecision.title": "本句引用了法院判决。",
   "claim.courtDecision.body":
     "IncarnaMind 无法核对这个判决是否存在、是否这样说。依赖它之前，请在你使用的法律数据库中查一下。",

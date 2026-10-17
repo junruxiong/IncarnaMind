@@ -252,6 +252,7 @@ export function createVerify(options: VerifyOptions) {
           text: sentence.text,
           evidence: null,
           says: null,
+          unsupported: null,
           calculation: null,
           citedCaseUnchecked: false,
           citedCaseFound: false,

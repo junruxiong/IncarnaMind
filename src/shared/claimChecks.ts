@@ -18,6 +18,7 @@ import {
   claimCheckActions,
   type EvidenceExclusion,
   type LeftOutDocument,
+  type UnsupportedReason,
 } from "../core/api";
 import { comparableSentence } from "./sentences";
 
@@ -84,6 +85,11 @@ function calculationOf(value: unknown): ClaimCalculation | null {
   };
 }
 
+function unsupportedOf(value: unknown): UnsupportedReason | null {
+  if (!isRecord(value)) return null;
+  return { reason: text(value.reason), part: text(value.part) };
+}
+
 function scopeOf(value: unknown): ClaimCheckScope {
   if (!isRecord(value)) return { folderId: null, widened: false };
   return { folderId: text(value.folderId), widened: value.widened === true };
@@ -109,6 +115,7 @@ export function readClaimCheck(value: unknown): ClaimCheckAttributes | null {
     text: text(value.text) ?? "",
     evidence: isRecord(value.evidence) ? (value.evidence as unknown as CitationAttributes) : null,
     says: text(value.says),
+    unsupported: unsupportedOf(value.unsupported),
     calculation: calculationOf(value.calculation),
     citedCaseUnchecked: value.citedCaseUnchecked === true,
     citedCaseFound: value.citedCaseFound === true,
