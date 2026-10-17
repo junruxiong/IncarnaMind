@@ -92,6 +92,27 @@ describe("The everyday request guards", () => {
     expect(asked("edit_mind")).toEqual([]);
   });
 
+  // protects=asked to make the summary added with Add to note longer, changing other text and leaving the summary as it was fails; fails_when=any change in the Mind passes; no_claim=none beyond protects.
+  test("a change that leaves the added summary as it was fails", () => {
+    const edited: AnswerToolCall = {
+      ...created,
+      tool: "edit_mind",
+      input: {},
+      mindChange: { mindId: "m1", created: false, request: "r2", proposals: 1 },
+    };
+    const failures = (changedBlocks: number[]) =>
+      requestFailures(
+        outcome({
+          expected: { write: true, cite: false, coverAll: false, inPlace: true },
+          answer: { text: "", citations: [], toolCalls: [edited], steps: null },
+          changedBlocks,
+          addedBlocks: [3],
+        }),
+      ).map((failure) => failure.kind);
+    expect(failures([1])).toEqual(["untouched"]);
+    expect(failures([3])).toEqual([]);
+  });
+
   // protects=a page made with no Citations in it fails, whatever the reply cites; fails_when=the reply's Citations count for the page's; no_claim=none beyond protects.
   test("a page whose Citations were lost fails, whatever the reply cites", () => {
     const failures = requestFailures(
