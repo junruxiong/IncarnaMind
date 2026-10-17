@@ -1515,16 +1515,23 @@ export async function slideSelect(
   words: string,
   to?: { line: Locator; words: string },
 ): Promise<void> {
-  const box = await wordsBox(line, words);
-  const end = to ? await wordsBox(to.line, to.words) : box;
-  await window.mouse.move(box.left - 6, box.y, { steps: 4 });
-  await window.mouse.move(box.left + 1, box.y, { steps: 2 });
-  await window.mouse.down();
-  await window.mouse.move(end.right - 1, end.y, { steps: 12 });
-  await window.mouse.up();
-  // After a drag, ProseMirror puts its selection back into the page in a task queued as the
-  // mouse comes up; a key pressed before that task runs is undone by it. This waits for it.
-  await window.evaluate(() => new Promise((resolve) => setTimeout(resolve)));
+  // On a busy machine a drag can stop a letter short; a person sees it and drags again, after a
+  // click beside the words, as a press inside a selection would drag the text away.
+  let tries = 0;
+  await expect(async () => {
+    const box = await wordsBox(line, words);
+    const end = to ? await wordsBox(to.line, to.words) : box;
+    if (tries++ > 0) await window.mouse.click(box.left - 6, box.y);
+    await window.mouse.move(box.left - 6, box.y, { steps: 4 });
+    await window.mouse.move(box.left + 1, box.y, { steps: 2 });
+    await window.mouse.down();
+    await window.mouse.move(end.right - 1, end.y, { steps: 12 });
+    await window.mouse.up();
+    // After a drag, ProseMirror puts its selection back into the page in a task queued as the
+    // mouse comes up; a key pressed before that task runs is undone by it. This waits for it.
+    await window.evaluate(() => new Promise((resolve) => setTimeout(resolve)));
+    if (!to) expect(await window.evaluate(() => getSelection()?.toString())).toBe(words);
+  }).toPass();
 }
 
 /**
