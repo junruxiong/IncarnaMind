@@ -1985,3 +1985,24 @@ export async function exportFromMenu(window: Page, format?: ExportFormat): Promi
   }
   await pointAndClick(window, item);
 }
+
+/** The fonts Chromium drew an element's text with, by name, and whether each is bundled with the app. */
+export async function fontsDrawing(window: Page, selector: string) {
+  const session = await window.context().newCDPSession(window);
+  try {
+    await session.send("DOM.enable");
+    await session.send("CSS.enable");
+    const { root } = await session.send("DOM.getDocument", { depth: -1 });
+    const { nodeId } = await session.send("DOM.querySelector", { nodeId: root.nodeId, selector });
+    const { fonts } = await session.send("CSS.getPlatformFontsForNode", { nodeId });
+    return fonts
+      .map((font) => ({
+        family: font.familyName,
+        name: font.postScriptName,
+        bundled: font.isCustomFont,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  } finally {
+    await session.detach();
+  }
+}
