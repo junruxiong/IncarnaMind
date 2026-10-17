@@ -94,6 +94,7 @@ import { markSelectionAsMine } from "../markAsMine";
 import { useMeetingOf, useMeetings } from "../meetings";
 import { type OpenedCopy, openMindCopy } from "../mindCopies";
 import { isWritingIn } from "../mindStatus";
+import { followMindStyle } from "../mindStyles";
 import { useMindTools } from "../mindTools";
 import { onMindWriting, writingPlaceOf } from "../mindWriting";
 import { firstOpenOf } from "../nudges";
@@ -646,6 +647,7 @@ function MindEditorView({
   const wordLook = useWordLookStyle(doc, mindId, editor);
   // A read-only copy sends nothing to the core, so a switch there wouldn't be remembered.
   useEffect(() => (readOnly ? undefined : holdShownPage(mindId, doc)), [mindId, doc, readOnly]);
+  useEffect(() => followMindStyle(mindId, doc), [mindId, doc]);
 
   return (
     <MindIdContext.Provider value={mindId}>

@@ -3,15 +3,24 @@ import { useRef, useState } from "react";
 import type * as Y from "yjs";
 import { mindName } from "../../../shared/naming";
 import type { Verification } from "../../../shared/verification";
+import { ChevronRightLineIcon } from "../components/lineIcons";
+import { MindStyleChoices, useStyleValue } from "../components/MindStyle";
 import { MoveToPicker } from "../components/MoveToPicker";
 import { ObjectMenu } from "../components/ObjectMenu";
 import { useTabPlace } from "../components/tabs/tabItems";
-import { menuItemClass, menuItemUnavailableClass } from "../components/ui";
+import {
+  menuClass,
+  menuItemClass,
+  menuItemUnavailableClass,
+  menuRuleClass,
+} from "../components/ui";
+import { useSubmenu } from "../components/usePopoverMenu";
 import { files } from "../core";
 import { showFileLabelKey } from "../fileInfo";
 import { useFirstOpen } from "../firstOpen";
 import { useLanguage, useT } from "../i18n";
 import { fileStatusLabel } from "../linkedFolders";
+import { useMindStylePanel } from "../mindStylePanel";
 import { useAppStore } from "../store";
 import { openDocumentBeside } from "../verify";
 import { MindCounts } from "./WordCount";
@@ -19,10 +28,10 @@ import { openOriginalAtCaret, useWordFile, wordFileTooltip } from "./WordOrigin"
 
 /**
  * The ⋯ button at a Mind's page's top right (#908; the board
- * Page-Clean-Menu): the Mind's menu in the sidebar row's order; "From
- * {file}" with Show in Finder for a Mind imported from Word or made by
- * Verify, which opens the original beside it; and at its foot the counts and
- * the switch that shows the count while writing.
+ * Page-Clean-Menu): the Mind's menu in the sidebar row's order; Style ›, its
+ * choices beside it; "From {file}" with Show in Finder for a Mind imported
+ * from Word or made by Verify, which opens the original beside it; and at its
+ * foot the counts and the switch that shows the count while writing.
  */
 export function PageMenu({
   editor,
@@ -46,7 +55,10 @@ export function PageMenu({
   const firstOpen = useFirstOpen();
   const holder = useRef<HTMLSpanElement>(null);
   const [moving, setMoving] = useState<HTMLElement | null>(null);
-  const button = () => holder.current?.querySelector<HTMLElement>("[data-object-menu]") ?? null;
+  const button = () =>
+    holder.current?.querySelector<HTMLButtonElement>("[data-object-menu]") ?? null;
+  const style = useSubmenu();
+  const styleValue = useStyleValue(mindId);
   const { file, report } = useWordFile(doc);
   const origin = verification
     ? { name: verification.documentName, documentId: verification.documentId, word: false }
@@ -74,55 +86,103 @@ export function PageMenu({
             }),
           "mind.moveTo": () => requestAnimationFrame(() => setMoving(button())),
         }}
+        without={["mind.style"]}
         more={
-          origin
-            ? (close) => (
+          readOnly && !origin
+            ? undefined
+            : (close) => (
                 <>
-                  {/* Not in the Library, the original can't be opened: what it says of the file is still true. */}
-                  <button
-                    type="button"
-                    role="menuitem"
-                    data-testid="page-from"
-                    aria-disabled={original ? undefined : true}
-                    title={
-                      origin.word
-                        ? wordFileTooltip(report, t, language)
-                        : t("verify.from.title", { name: origin.name })
-                    }
-                    onClick={() => {
-                      if (!original) return;
-                      close();
-                      if (origin.word) openOriginalAtCaret(original.id, editor, doc);
-                      else openDocumentBeside(original.id);
-                    }}
-                    className={`${menuItemClass} ${menuItemUnavailableClass} pl-2`}
-                  >
-                    <span className="min-w-0 flex-1 truncate">
-                      {t(origin.word ? "wordImport.from" : "verify.from", { name: origin.name })}
-                    </span>
-                  </button>
-                  {original && (
+                  {!readOnly && (
                     <button
+                      {...style.itemProps}
                       type="button"
-                      role="menuitem"
-                      data-testid="page-show-original"
-                      aria-disabled={away ? true : undefined}
-                      title={away ? t(away.reason) : undefined}
-                      onClick={() => {
-                        if (away) return;
-                        close();
-                        files
-                          .showDocumentInFolder(original.id)
-                          .catch((error) => useAppStore.getState().reportError(error));
-                      }}
-                      className={`${menuItemClass} ${menuItemUnavailableClass} pl-2`}
+                      data-testid="page-style"
+                      className={`${menuItemClass} pl-2 aria-expanded:bg-hover`}
                     >
-                      {t(showFileLabelKey(navigator.platform))}
+                      <span className="flex-1">{t("mindStyle.title")}</span>
+                      <span className="max-w-32 truncate pl-4 text-[13px] text-ink-meta">
+                        {styleValue}
+                      </span>
+                      <ChevronRightLineIcon className="size-3.5 shrink-0 text-ink-meta" />
                     </button>
+                  )}
+                  {origin && (
+                    <>
+                      {!readOnly && <div className={menuRuleClass} />}
+                      {/* Not in the Library, the original can't be opened: what it says of the file is still true. */}
+                      <button
+                        type="button"
+                        role="menuitem"
+                        data-testid="page-from"
+                        aria-disabled={original ? undefined : true}
+                        title={
+                          origin.word
+                            ? wordFileTooltip(report, t, language)
+                            : t("verify.from.title", { name: origin.name })
+                        }
+                        onClick={() => {
+                          if (!original) return;
+                          close();
+                          if (origin.word) openOriginalAtCaret(original.id, editor, doc);
+                          else openDocumentBeside(original.id);
+                        }}
+                        className={`${menuItemClass} ${menuItemUnavailableClass} pl-2`}
+                      >
+                        <span className="min-w-0 flex-1 truncate">
+                          {t(origin.word ? "wordImport.from" : "verify.from", {
+                            name: origin.name,
+                          })}
+                        </span>
+                      </button>
+                      {original && (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          data-testid="page-show-original"
+                          aria-disabled={away ? true : undefined}
+                          title={away ? t(away.reason) : undefined}
+                          onClick={() => {
+                            if (away) return;
+                            close();
+                            files
+                              .showDocumentInFolder(original.id)
+                              .catch((error) => useAppStore.getState().reportError(error));
+                          }}
+                          className={`${menuItemClass} ${menuItemUnavailableClass} pl-2`}
+                        >
+                          {t(showFileLabelKey(navigator.platform))}
+                        </button>
+                      )}
+                    </>
                   )}
                 </>
               )
-            : undefined
+        }
+        aside={
+          readOnly
+            ? undefined
+            : (close) => (
+                <div
+                  {...style.menuProps}
+                  role="menu"
+                  aria-label={t("mindStyle.title")}
+                  data-testid="page-style-menu"
+                  className={`${menuClass} w-[280px] max-w-[280px]`}
+                >
+                  <MindStyleChoices
+                    mindId={mindId}
+                    close={close}
+                    onOtherFonts={() => {
+                      const anchor = button();
+                      close();
+                      if (anchor)
+                        requestAnimationFrame(() =>
+                          useMindStylePanel.getState().pickFont(mindId, anchor),
+                        );
+                    }}
+                  />
+                </div>
+              )
         }
         foot={<MindCounts editor={editor} doc={doc} switchable={!readOnly} />}
       />

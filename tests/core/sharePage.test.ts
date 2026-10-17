@@ -554,7 +554,11 @@ const card = (check: CitationCheck, more: Partial<CitationCard> = {}): CitationC
 /** The page for these cards, each behind a marker of its own. */
 function pageOf(
   cards: readonly CitationCard[],
-  { language = "en", footnote }: { language?: Language; footnote?: Partial<Footnote> } = {},
+  {
+    language = "en",
+    footnote,
+    font = null,
+  }: { language?: Language; footnote?: Partial<Footnote>; font?: string | null } = {},
 ) {
   const footnotes: Footnote[] = cards.map((each) => ({
     source: each.source,
@@ -579,9 +583,20 @@ function pageOf(
     cards: new Map(footnotes.map((each, index) => [each, cards[index] ?? card("found")])),
     pictures: [],
     checkedLine: false,
+    font,
   });
   return { html, document: parseHTML(html).document };
 }
+
+describe("a web page to share in the Mind's font", () => {
+  test("its policy allows the stylesheet it writes, the font's rule included", () => {
+    const { html, document } = pageOf([card("found")], { font: "JetBrains Mono" });
+    const styles = document.querySelector("style")?.textContent ?? "";
+    expect(styles).toContain('font-family:"JetBrains Mono"');
+    const hash = createHash("sha256").update(styles).digest("base64");
+    expect(html).toContain(`style-src 'sha256-${hash}'`);
+  });
+});
 
 const foot = (cards: readonly CitationCard[], language: Language = "en") =>
   pageOf(cards, { language }).document.querySelector(".shared-foot p")?.textContent;

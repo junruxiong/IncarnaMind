@@ -7,6 +7,7 @@ import {
 } from "../../editor/mindContext";
 import { useT } from "../../i18n";
 import { assistantTabOf } from "../../layoutSlice";
+import { useWritingProperties } from "../../mindStyles";
 import { useQuietAssistant } from "../../quietAssistant";
 import { useAppStore } from "../../store";
 import { useGroupsMerged } from "../../useWindowWidth";
@@ -41,6 +42,7 @@ export function MindTab({ mindId }: { mindId: string }) {
   const merged = useGroupsMerged();
   const read = useAppStore((state) => assistantTabOf(state.layout, merged)?.id === tabId);
   const dropTarget = useWordFileDrop();
+  const writing = useWritingProperties(mindId);
   const pill = useQuietAssistant();
   if (!mind) return null;
 
@@ -49,7 +51,12 @@ export function MindTab({ mindId }: { mindId: string }) {
       <div className="relative flex min-h-0 flex-grow flex-col">
         <div ref={dropTarget} className="mind-scroller min-h-0 flex-grow overflow-auto">
           {/* Every text in it starts at one edge (styles.css, `.mind-column`). */}
-          <article data-testid="mind-pane" data-mind-id={mind.id} className="mind-column">
+          <article
+            data-testid="mind-pane"
+            data-mind-id={mind.id}
+            className="mind-column"
+            style={writing}
+          >
             <div className="mind-measure">
               {isExample && <ExampleIntro mindId={mindId} />}
               <div ref={setTop} data-testid="mind-top-slot" />
