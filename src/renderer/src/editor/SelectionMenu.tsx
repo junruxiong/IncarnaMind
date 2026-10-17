@@ -1,3 +1,4 @@
+import type { VirtualElement } from "@floating-ui/dom";
 import { isMacOS } from "@tiptap/core";
 import { PluginKey, TextSelection } from "@tiptap/pm/state";
 import { type Editor, useEditorState } from "@tiptap/react";
@@ -173,16 +174,22 @@ export function SelectionMenu({
   const [linking, setLinking] = useState(false);
   /**
    * The Aa menu: beside this menu, or at the caret (⌘K), or only its custom line spacing there.
-   * Beside this menu, it stays where it opened (`place`), though a choice moves the text and this menu with it.
+   * Its anchor is made once, as the popover places itself again whenever its anchor changes;
+   * beside this menu, it stays where it opened, though a choice moves the text and this menu with it.
    */
   const [formatting, setFormatting] = useState<{
     at: "menu" | "caret" | "custom";
     focus: boolean;
-    place?: DOMRect;
+    anchor: VirtualElement;
   } | null>(null);
-  const placed = (rect: DOMRect | undefined) => rect && { getBoundingClientRect: () => rect };
-  const formatBeside = (focus: boolean) =>
-    setFormatting({ at: "menu", focus, place: menu.current?.getBoundingClientRect() });
+  const besideMenu = (): VirtualElement | null => {
+    const rect = menu.current?.getBoundingClientRect();
+    return rect ? { getBoundingClientRect: () => rect } : null;
+  };
+  const formatBeside = (focus: boolean) => {
+    const anchor = besideMenu();
+    if (anchor) setFormatting({ at: "menu", focus, anchor });
+  };
   /** The AI action whose choices are open, and how it was opened. */
   const [choosing, setChoosing] = useState<{
     action: SelectionAction;
@@ -261,8 +268,12 @@ export function SelectionMenu({
     };
     const openFormat = (event: Event) => {
       const part = event instanceof CustomEvent && event.detail === "custom" ? "custom" : null;
-      const place = !part && shown.current ? menu.current?.getBoundingClientRect() : undefined;
-      setFormatting({ at: part ?? (place ? "menu" : "caret"), focus: true, place });
+      const rect = !part && shown.current ? menu.current?.getBoundingClientRect() : undefined;
+      setFormatting(
+        rect
+          ? { at: "menu", focus: true, anchor: { getBoundingClientRect: () => rect } }
+          : { at: part ?? "caret", focus: true, anchor: caretAnchor(editor) },
+      );
     };
     dom.addEventListener(LINK_EDIT, editLink);
     dom.addEventListener(FORMAT_OPEN, openFormat);
@@ -600,10 +611,10 @@ export function SelectionMenu({
             }}
           />
         )}
-        {formatting?.at === "menu" && formatButton.current && (
+        {formatting?.at === "menu" && (
           <FormatMenu
             editor={editor}
-            anchor={placed(formatting.place) ?? formatButton.current}
+            anchor={formatting.anchor}
             placement="right-start"
             focus={formatting.focus}
             onClose={(refocus) => {
@@ -632,7 +643,7 @@ export function SelectionMenu({
       {formatting?.at === "caret" && (
         <FormatMenu
           editor={editor}
-          anchor={caretAnchor(editor)}
+          anchor={formatting.anchor}
           placement="bottom-start"
           focus={formatting.focus}
           onClose={closeFormat}
@@ -640,7 +651,7 @@ export function SelectionMenu({
       )}
       {formatting?.at === "custom" && (
         <CustomSpacing
-          anchor={caretAnchor(editor)}
+          anchor={formatting.anchor}
           current={null}
           onApply={(multiple) => {
             closeFormat();
