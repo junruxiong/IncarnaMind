@@ -62,10 +62,14 @@ test("over changes it can't revise, the assistant changes nothing, says why, and
   await expect(timeline.getByTestId("answer-mind-call")).toHaveText(
     /Couldn't change “Q3 review”: 2 changes are waiting there/,
   );
-  // The line sits under the Answer's text, inside the assistant.
-  const text = await refused.getByTestId("assistant-answer-text").boundingBox();
-  const shown = await line.boundingBox();
-  expect(shown && text && shown.y >= text.y + text.height).toBe(true);
+  // The line sits under the Answer's text, inside the assistant, once the steps have opened.
+  await expect
+    .poll(async () => {
+      const text = await refused.getByTestId("assistant-answer-text").boundingBox();
+      const shown = await line.boundingBox();
+      return shown !== null && text !== null && shown.y >= text.y + text.height;
+    })
+    .toBe(true);
 
   await pointAndClick(window, line.getByTestId("answer-waiting-review"));
   await expect(window.getByTestId("mind-editor")).toBeFocused();
