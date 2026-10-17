@@ -135,7 +135,6 @@ function imageHtml(src: string, alt: string): string {
 /** A point in proportion to the page's text, which is 11 pt in the Mind as in Word export. */
 const pointLength = (points: number) => `calc(1.0625rem * ${points} / 11)`;
 
-/** A paragraph's format as its `style` attribute, or nothing. */
 function formatStyle(format: ParagraphFormat | undefined): string {
   const declarations = format ? paragraphFormatDeclarations(format, pointLength) : [];
   return declarations.length > 0 ? ` style="${escapeHtml(declarations.join(";"))}"` : "";
