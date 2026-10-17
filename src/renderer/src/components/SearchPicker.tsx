@@ -110,6 +110,7 @@ export function SearchPicker<Id>({
 }) {
   const id = useId();
   const panel = useRef<HTMLDivElement>(null);
+  const opener = useRef<HTMLElement | null>(null);
   const field = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState("");
@@ -151,6 +152,7 @@ export function SearchPicker<Id>({
     setActive(0);
     setScrollTop(0);
     element.showPopover();
+    opener.current = anchor;
     const box = anchor.getBoundingClientRect();
     const width = element.offsetWidth;
     const elementHeight = element.offsetHeight;
@@ -179,9 +181,11 @@ export function SearchPicker<Id>({
     }
   }, [virtual, shownTop]);
 
+  // Closed at once, not on the toggle event: a choice can remove what it opened beside before
+  // that event, and the picker would open again beside the fallback.
   const close = () => {
     if (panel.current?.matches(":popover-open")) panel.current.hidePopover();
-    else onClose();
+    onClose();
   };
 
   const choose = (option: PickerOption<Id>) => {
@@ -301,7 +305,7 @@ export function SearchPicker<Id>({
           setActive(0);
           setScrollTop(0);
           onClose();
-          anchor?.focus();
+          opener.current?.focus();
         }
       }}
       onKeyDown={onKeyDown}
