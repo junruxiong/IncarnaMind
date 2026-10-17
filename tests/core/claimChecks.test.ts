@@ -28,7 +28,6 @@ import {
   scriptedModel,
   scriptedModels,
 } from "../helpers/models";
-import { buildPdf } from "../helpers/pdf";
 
 const TIDES = {
   name: "Tides.md",
@@ -836,21 +835,25 @@ describe("A memo's figure worked out from amounts in brackets (#978)", () => {
 });
 
 describe("A count of people in brackets is a count (#1023)", () => {
-  // The counts are on a page that states no unit, so that only their sign is in question.
   const ACCOUNTS = {
-    name: "Statement of accounts.pdf",
-    contents: buildPdf([
-      {
-        lines: [
-          "Statement of accounts",
-          "£'000",
-          "Revenue 45,300",
-          "Administrative expenses (12,500)",
-        ],
-      },
-      { lines: ["Headcount (250)", "Employees (1,250)", "Impairment (£1.2m)"] },
-      { chineseLines: ["Staff 人数（250）"] },
-    ]),
+    name: "Statement of accounts.md",
+    contents: [
+      "# Statement of accounts",
+      "",
+      "£'000",
+      "",
+      "Revenue 45,300",
+      "",
+      "Administrative expenses (12,500)",
+      "",
+      "Headcount (250)",
+      "",
+      "Employees (1,250)",
+      "",
+      "Staff 人数（250）",
+      "",
+      "Impairment (£1.2m)",
+    ].join("\n"),
   };
   const HEADCOUNT = "Headcount (250)";
   const IMPAIRMENT = "Impairment (£1.2m)";
@@ -904,9 +907,7 @@ describe("A count of people in brackets is a count (#1023)", () => {
             {
               tool: "cite",
               input: {
-                citations: [
-                  { marker: 1, passage: passage?.id, location: "p. 2", quote: HEADCOUNT },
-                ],
+                citations: [{ marker: 1, passage: passage?.id, quote: HEADCOUNT }],
               },
             },
             { tool: "calculate", input: { figures: [figure] } },
