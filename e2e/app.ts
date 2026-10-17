@@ -105,6 +105,13 @@ export interface LaunchOptions {
   /** A local stand-in for GitHub and Copilot at this origin, where the Copilot plan signs in and asks. */
   copilot?: string;
   /**
+   * Where the Claude account signs in and asks: the origin of a local server
+   * standing in for Anthropic (tests/helpers/fakeAnthropic.ts). A test build honours it.
+   */
+  claude?: string;
+  /** How long the Claude sign-in waits for its code, in milliseconds. A test build honours it. */
+  claudeSignInMs?: number;
+  /**
    * Leaves the window at the size and place it opened at, instead of making
    * it `WINDOW_SIZE`: for a test of how the window opens.
    */
@@ -188,6 +195,8 @@ export async function launchApp(
     connectorDirectory,
     connectorRegistry,
     chatGpt,
+    claude,
+    claudeSignInMs,
     copilot,
     keepWindow = false,
     computerSound = "allowed",
@@ -221,6 +230,8 @@ export async function launchApp(
   delete env.INCARNAMIND_TEST_CONNECTOR_DIRECTORY;
   delete env.INCARNAMIND_TEST_CONNECTOR_REGISTRY;
   delete env.INCARNAMIND_TEST_CHATGPT;
+  delete env.INCARNAMIND_TEST_CLAUDE;
+  delete env.INCARNAMIND_TEST_CLAUDE_SIGN_IN_MS;
   delete env.INCARNAMIND_TEST_COPILOT;
   delete env.INCARNAMIND_TEST_TRANSCRIBER_OPTIONS;
   delete env.INCARNAMIND_TEST_SCANS;
@@ -247,6 +258,8 @@ export async function launchApp(
   // Nowhere, unless a test serves one: a search in a test never reaches the real Registry.
   env.INCARNAMIND_TEST_CONNECTOR_REGISTRY = connectorRegistry ?? "http://127.0.0.1:9";
   if (chatGpt) env.INCARNAMIND_TEST_CHATGPT = chatGpt;
+  if (claude) env.INCARNAMIND_TEST_CLAUDE = claude;
+  if (claudeSignInMs) env.INCARNAMIND_TEST_CLAUDE_SIGN_IN_MS = String(claudeSignInMs);
   if (copilot) env.INCARNAMIND_TEST_COPILOT = copilot;
   if (scans) env.INCARNAMIND_TEST_SCANS = scans;
   if (web) env.INCARNAMIND_TEST_WEB = String(web);
@@ -1097,10 +1110,16 @@ export async function expectReadyDocuments(window: Page, count: number): Promise
     .toBe(count);
 }
 
-/** Ends the first open (hides Get started), so the shell shows everything, as it does for a returning User. */
+/** Ends the first open (hides its steps), so the shell shows everything, as it does for a returning User. */
 export async function leaveFirstOpen(window: Page): Promise<void> {
-  await window.getByTestId("get-started-hide").click();
-  await expect(window.getByTestId("get-started")).toHaveCount(0);
+  await window.evaluate(async () => {
+    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    const { device } = await bridge.getSettings();
+    await bridge.updateSettings({
+      device: { gettingStarted: { ...device.gettingStarted, hidden: true } },
+    });
+  });
+  await expect(window.getByTestId("first-open-steps")).toHaveCount(0);
 }
 
 /** The id of the Document listed in the sidebar under `name`. */
@@ -1280,6 +1299,41 @@ export async function pointAndClick(
   } finally {
     for (const key of modifiers.toReversed()) await window.keyboard.up(key);
   }
+}
+
+/**
+ * A Mind's check badge card (#909): open already, as a question opens it,
+ * or opened as a person opens it: from the badge, or from ⌘K while no badge shows.
+ */
+export async function checkCard(window: Page, scope: Page | Locator = window): Promise<Locator> {
+  const card = window.getByTestId("check-card");
+  if (!(await card.isVisible())) {
+    const badge = scope.getByTestId("check-badge-open").first();
+    if (await badge.isVisible()) {
+      // "Checking 2 of 2 · Stop" shrinks to the counts as a check ends: aim once it has.
+      await expect(scope.getByTestId("badge-stop")).toHaveCount(0);
+      await motionSettled(window);
+      // The counts are worked out a moment after a change, and the badge can narrow under the pointer: aim again.
+      await expect(async () => {
+        if (!(await card.isVisible())) await pointAndClick(window, badge);
+        await expect(card).toBeVisible({ timeout: 1000 });
+      }).toPass();
+    } else {
+      const chinese = (await window.evaluate(() => document.documentElement.lang)) === "zh-CN";
+      const command = chinese ? "句子和引用" : "Sentences and Citations";
+      await window.keyboard.press("ControlOrMeta+k");
+      await expect(window.getByTestId("palette-search")).toBeFocused();
+      await window.keyboard.type(command);
+      await pointAndClick(
+        window,
+        window.getByTestId("palette-item").filter({ hasText: command }).first(),
+      );
+    }
+  }
+  await expect(card).toBeVisible();
+  // It grows from the badge: a click while it moves could land on the page behind.
+  await motionSettled(window);
+  return card;
 }
 
 /**

@@ -10,6 +10,7 @@ import {
   createDataFolder,
   flushUsageData,
   launchApp,
+  leaveFirstOpen,
   newMind,
   openPrivacySettings,
   removeDataFolder,
@@ -98,10 +99,8 @@ async function askOwnQuestion(window: Page, card: Locator): Promise<void> {
   });
   await expect(card).toBeHidden();
   await askInAssistant(window, "Where does tea come from?");
-  // One nudge at a time: Get started keeps the place until it is done or hidden.
-  await expect(window.getByTestId("get-started")).toBeVisible();
   await expect(card).toBeHidden();
-  await window.getByTestId("get-started-hide").click();
+  await leaveFirstOpen(window);
 }
 
 const releaseOptions = () => ({
@@ -116,7 +115,7 @@ test("a release build asks after the first Answer to the User's own Question, se
 
   // A first run asks nothing before the example, nor does an Answer that fails.
   const card = window.getByTestId("usage-data-card");
-  await expect(window.getByTestId("example-banner")).toBeVisible();
+  await expect(window.getByTestId("first-open-steps")).toBeVisible();
   await expect(card).toBeHidden();
   await useLocalChatModel(window);
   await askOwnQuestion(window, card);
@@ -190,10 +189,25 @@ test("a release build asks after the first Answer to the User's own Question, se
   await second.app.close();
 });
 
+test("a release waits for the steps: with them open the card comes at the next launch (#123)", async () => {
+  const first = await launchApp(dataDir, releaseOptions());
+  await useLocalChatModel(first.window);
+  await askInAssistant(first.window, "Where does tea come from?");
+  await expect(first.window.getByTestId("first-open-steps")).toBeVisible();
+  await expect(first.window.getByTestId("usage-data-card")).toBeHidden();
+  await flushUsageData(first.app);
+  expect(posthog.requests).toEqual([]);
+  await first.app.close();
+
+  const again = await launchApp(dataDir, releaseOptions());
+  await expect(again.window.getByTestId("usage-data-card")).toBeVisible();
+  await again.app.close();
+});
+
 test("nothing is sent or kept to send before Send; after it, an example opened carries its group only", async () => {
   const { app, window } = await launchApp(dataDir, releaseOptions());
   const card = window.getByTestId("usage-data-card");
-  const banner = window.getByTestId("example-banner");
+  const banner = window.getByTestId("first-open-steps");
 
   // An example opened before the question: its event is neither sent nor kept.
   await banner.locator('[data-testid="example-more-link"][data-group="meetings"]').click();
@@ -228,9 +242,7 @@ test("a test build says so from the first run, in the sidebar, with the switch, 
   });
 
   const card = window.getByTestId("usage-data-card");
-  // A test build says so first, before Get started, which waits for its place.
   await expect(card).toBeVisible();
-  await expect(window.getByTestId("get-started")).toBeHidden();
   await expect(card).toHaveAttribute("data-tester", "true");
   await expect(card).toContainText("This test version sends usage data");
   const usageSwitch = card.getByTestId("usage-data-switch");
@@ -257,7 +269,6 @@ test("a test build says so from the first run, in the sidebar, with the switch, 
   await closeSettings(window);
   await card.getByTestId("usage-data-hide").click();
   await expect(card).toBeHidden();
-  await expect(window.getByTestId("get-started")).toBeVisible();
   await flushUsageData(app);
   expect(posthog.events()).toHaveLength(sent);
   await app.close();
@@ -267,7 +278,7 @@ test("a test build says so from the first run, in the sidebar, with the switch, 
     usageData: { host: posthog.host, testerBuild: true },
     examples: true,
   });
-  await expect(again.window.getByTestId("example-banner")).toBeVisible();
+  await expect(again.window.getByTestId("first-open-steps")).toBeVisible();
   await expect(again.window.getByTestId("usage-data-card")).toBeHidden();
   await again.app.close();
 });

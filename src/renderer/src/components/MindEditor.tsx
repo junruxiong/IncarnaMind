@@ -29,11 +29,11 @@ import { BlockHandle } from "../editor/BlockHandle";
 import { BlockCommands } from "../editor/blockCommands";
 import { BlockOrigins } from "../editor/blockOrigins";
 import { ChartView } from "../editor/ChartView";
+import { CheckBadge } from "../editor/CheckBadge";
 import { CitationStylePrompt } from "../editor/CitationStylePrompt";
 import { CitationView } from "../editor/CitationView";
 import { CodeBlockView } from "../editor/CodeBlockView";
 import { ComparisonTableView } from "../editor/ComparisonTableView";
-import { ContradictionLine } from "../editor/ContradictionLine";
 import { CitationClusters } from "../editor/citationClusters";
 import { CitationNumbers, redrawFootnotes, setCitationForm } from "../editor/citationNumbers";
 import { ClaimChecks, setClaimContext } from "../editor/claimChecks";
@@ -55,16 +55,15 @@ import { HeldSelection } from "../editor/heldSelection";
 import { LinkBubble } from "../editor/LinkBubble";
 import { MarginChecks } from "../editor/MarginChecks";
 import { MathEditing, MathEditor } from "../editor/MathEditor";
-import { MindCheckAsk } from "../editor/MindCheckLine";
 import { MindOutline } from "../editor/MindOutline";
 import { MeetingNotes } from "../editor/meetingNotes";
 import {
+  BadgeSlotContext,
   CompareSheetSlotContext,
   ComposerDockContext,
   CountSlotContext,
   MindIdContext,
 } from "../editor/mindContext";
-import { NoteHealth } from "../editor/NoteHealth";
 import { NoteKeymap } from "../editor/noteKeymap";
 import { noteExtensions } from "../editor/noteSchema";
 import { ProposalBars } from "../editor/ProposalBars";
@@ -81,7 +80,7 @@ import { Suggestions } from "../editor/suggestions";
 import { TableMenu } from "../editor/TableMenu";
 import { TableKeys } from "../editor/tableCommands";
 import { SmartTypography } from "../editor/typography";
-import { useVerification, VerifyLine } from "../editor/VerifyLine";
+import { useVerification, VerifyFrom } from "../editor/VerifyLine";
 import { wordAtomView, wordBlockView } from "../editor/WordAtomView";
 import { WordCount } from "../editor/WordCount";
 import { OriginalNotAdded, useWordFile, WordOrigin } from "../editor/WordOrigin";
@@ -96,11 +95,12 @@ import { type OpenedCopy, openMindCopy } from "../mindCopies";
 import { isWritingIn } from "../mindStatus";
 import { useMindTools } from "../mindTools";
 import { onMindWriting, writingPlaceOf } from "../mindWriting";
+import { firstOpenOf } from "../nudges";
 import { skillDescription } from "../skills";
 import { useAppStore } from "../store";
 import { askForSuggestion, describeSuggestion } from "../suggestions";
 import { CompareSheet } from "./CompareSheet";
-import { StartGuide, useGettingStarted, useIsExample } from "./GettingStarted";
+import { StartGuide, useIsExample } from "./GettingStarted";
 import { CheckLineIcon, MineLineIcon, SearchLineIcon, SparkLineIcon } from "./lineIcons";
 import { MindNotice } from "./MindNotice";
 
@@ -253,6 +253,7 @@ function MindEditorView({
   const isExample = useIsExample(mindId);
   const dock = useContext(ComposerDockContext);
   const countSlot = useContext(CountSlotContext);
+  const badgeSlot = useContext(BadgeSlotContext);
   const sheetSlot = useContext(CompareSheetSlotContext);
   const comparing = useComparisons((state) => state.sheets[mindId] !== undefined);
   /**
@@ -630,7 +631,8 @@ function MindEditorView({
   const findShown = useMindTools((state) => state.findMindId === mindId);
   const outlineShown = useMindTools((state) => state.outlineMindId === mindId);
   const firstOpen = useFirstOpen();
-  const guide = useGettingStarted() !== null && empty && !isExample && !readOnly;
+  const stepsUnderWay = useAppStore((state) => firstOpenOf(state.settings?.device.gettingStarted));
+  const guide = stepsUnderWay && empty && !isExample && !readOnly;
   const verification = useVerification(doc);
   const frame = useRef<HTMLDivElement>(null);
   useClickBelowNote(editor, frame);
@@ -644,16 +646,23 @@ function MindEditorView({
             <WordOrigin doc={doc} editor={editor} />
             <OriginalNotAdded mindId={mindId} />
             {verification ? (
-              <VerifyLine editor={editor} doc={doc} mindId={mindId} verification={verification} />
+              <VerifyFrom verification={verification} />
             ) : (
-              <WordCount editor={editor} doc={doc} quiet={firstOpen && isExample}>
-                <NoteHealth editor={editor} doc={doc} mindId={mindId} />
-                <ContradictionLine doc={doc} mindId={mindId} />
-                <MindCheckAsk mindId={mindId} />
-              </WordCount>
+              <WordCount editor={editor} doc={doc} quiet={firstOpen && isExample} />
             )}
           </>,
           countSlot,
+        )}
+      {badgeSlot &&
+        createPortal(
+          <CheckBadge
+            editor={editor}
+            doc={doc}
+            mindId={mindId}
+            verification={verification}
+            quiet={firstOpen && isExample}
+          />,
+          badgeSlot,
         )}
       {readOnly && <MindNotice kind="read-only" />}
       <div

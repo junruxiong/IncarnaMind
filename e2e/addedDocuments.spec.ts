@@ -6,6 +6,7 @@ import { buildPdf } from "../tests/helpers/pdf";
 import {
   acceptPlainTextKeys,
   addDocuments,
+  checkCard,
   createDataFolder,
   dismissChatSetup,
   launchApp,
@@ -96,18 +97,29 @@ test("a sentence nothing supported is offered a check again once a Document is a
 
   await window.getByTestId("mind-tab").first().click({ button: "right" });
   await pointAndClick(window, window.getByRole("menuitem", { name: "Check this Mind" }));
-  const ask = window.getByTestId("mind-check-ask");
+  const ask = window.getByTestId("check-card").getByTestId("mind-check-ask");
   await pointAndClick(window, ask.getByTestId("mind-check-check"));
   const marks = window.getByTestId("claim-mark");
   await expect(marks).toHaveCount(2);
   await expect(marks.and(window.locator('[data-check="unsupported"]'))).toHaveCount(1);
-  const line = window.getByTestId("checks-added");
+  const line = window.getByTestId("check-card").getByTestId("checks-added");
+  await checkCard(window);
   await expect(line).toHaveCount(0);
+  await window.keyboard.press("Escape");
 
   await fileInto(window, ["Seabirds"], join(sources, "Seabirds.pdf"));
+  await expect
+    .poll(async () => {
+      await checkCard(window);
+      return line.count();
+    })
+    .toBe(1);
   await expect(line).toHaveText(
     /^1 Document added since these checks\s*·\s*Check again\s*·\s*Close$/,
   );
+  await motionSettled(window);
+  await screenshot(window, "added-line-en");
+  await window.keyboard.press("Escape");
   const unsupported = marks.and(window.locator('[data-check="unsupported"]'));
   await pointAndClick(window, unsupported);
   const card = window.getByTestId("claim-card");
@@ -118,10 +130,9 @@ test("a sentence nothing supported is offered a check again once a Document is a
   await screenshot(window, "added-card-en");
   await window.keyboard.press("Escape");
   await expect(card).toHaveCount(0);
-  await motionSettled(window);
-  await screenshot(window, "added-line-en");
 
   await setLanguage(window, "zh-CN");
+  await checkCard(window);
   await expect(line).toHaveText(/^检查之后新增了 1 个文档\s*·\s*重新核对\s*·\s*关闭$/);
   const box = await line.boundingBox();
   const lineHeight = await line.evaluate((element) =>
@@ -132,6 +143,7 @@ test("a sentence nothing supported is offered a check again once a Document is a
   await screenshot(window, "added-line-zh");
   await setLanguage(window, "en");
 
+  await checkCard(window);
   await pointAndClick(window, line.getByTestId("checks-added-check"));
   await expect(marks.and(window.locator('[data-check="supported"]'))).toHaveCount(2);
   await expect(marks).toHaveCount(2);
@@ -174,7 +186,10 @@ for (const widened of [false, true]) {
     await pointAndClick(window, window.getByRole("menuitem", { name: "Check this Mind" }));
     await pointAndClick(
       window,
-      window.getByTestId("mind-check-ask").getByTestId("mind-check-check"),
+      window
+        .getByTestId("check-card")
+        .getByTestId("mind-check-ask")
+        .getByTestId("mind-check-check"),
     );
     await expect(
       window.getByTestId("claim-mark").and(window.locator('[data-check="unsupported"]')),
@@ -187,7 +202,7 @@ for (const widened of [false, true]) {
       await pointAndClick(window, unsupported);
       const card = window.getByTestId("claim-card");
       await pointAndClick(window, card.getByTestId("claim-search-all"));
-      await expect(window.getByTestId("checks-running")).toHaveCount(0);
+      await expect(window.getByTestId("badge-stop")).toHaveCount(0);
       await expect(unsupported).toHaveCount(1);
       await pointAndClick(window, unsupported);
       await expect(card).toBeVisible();
@@ -196,13 +211,26 @@ for (const widened of [false, true]) {
     }
 
     await fileInto(window, ["Ferries"], join(sources, "Ferries.pdf"));
-    const line = window.getByTestId("checks-added");
-    await expect(line).toBeVisible();
+    const line = window.getByTestId("check-card").getByTestId("checks-added");
+    await expect
+      .poll(async () => {
+        await checkCard(window);
+        return line.count();
+      })
+      .toBe(1);
     await pointAndClick(window, line.getByTestId("checks-added-close"));
     await expect(line).toHaveCount(0);
+    await window.keyboard.press("Escape");
 
     await fileInto(window, ["Cranes"], join(sources, "Cranes.pdf"));
+    await expect
+      .poll(async () => {
+        await checkCard(window);
+        return line.count();
+      })
+      .toBe(1);
     await expect(line).toHaveText(/^2 Documents added since these checks/);
+    await window.keyboard.press("Escape");
 
     await window.getByTestId("mind-editor").click();
     await window.keyboard.press("ControlOrMeta+k");
@@ -213,24 +241,25 @@ for (const widened of [false, true]) {
         .getByTestId("palette-item")
         .filter({ hasText: "Check again with the Documents added since" }),
     );
-    const ask = window.getByTestId("mind-check-ask");
+    const ask = window.getByTestId("check-card").getByTestId("mind-check-ask");
     await expect(ask).toContainText(
       widened
-        ? "Check this Mind’s sentence against your Documents?"
-        : "Check this Mind’s sentence against this Folder’s Documents?",
+        ? "Check this Mind’s claim against your Documents?"
+        : "Check this Mind’s claim against this Folder’s Documents?",
     );
     await expect(ask).toContainText("About $");
     await motionSettled(window);
     await screenshot(window, widened ? "ask-all-en" : "ask-folder-en");
     if (widened) {
       await setLanguage(window, "zh-CN");
-      await expect(ask).toContainText("要对照你的文档，核对这个 Mind 的这一句吗？");
+      await expect(ask).toContainText("要对照你的文档，核对这个 Mind 中的这条说法吗？");
       await motionSettled(window);
       await screenshot(window, "ask-all-zh");
       await setLanguage(window, "en");
     }
     await pointAndClick(window, ask.getByTestId("mind-check-check"));
-    await expect(window.getByTestId("checks-running")).toHaveCount(0);
+    await expect(window.getByTestId("badge-stop")).toHaveCount(0);
+    await checkCard(window);
     await expect(line).toHaveCount(0);
     await expect(
       window.getByTestId("claim-mark").and(window.locator('[data-check="unsupported"]')),

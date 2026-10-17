@@ -19,7 +19,7 @@ import { useAppStore } from "../store";
 import { shownClaims } from "./claimChecks";
 import { COUNT_IDLE_MS } from "./WordCount";
 
-function useWatchAddedDocuments(editor: Editor, mindId: string): void {
+export function useWatchAddedDocuments(editor: Editor, mindId: string): void {
   const checks = useEditorState({
     editor,
     selector: ({ editor: current }) =>
@@ -60,18 +60,9 @@ function useWatchAddedDocuments(editor: Editor, mindId: string): void {
   useEffect(() => () => setAdded(mindId, null), [mindId]);
 }
 
-export function AddedDocumentsLine({
-  editor,
-  doc,
-  mindId,
-}: {
-  editor: Editor;
-  doc: Y.Doc;
-  mindId: string;
-}) {
+export function AddedDocumentsLine({ doc, mindId }: { doc: Y.Doc; mindId: string }) {
   const t = useT();
   const language = useLanguage();
-  useWatchAddedDocuments(editor, mindId);
   const added = useAddedDocuments((state) => state.byMind[mindId]);
   const closed = useClosedAdded(doc);
   const running = useChecks((state) => state.running[mindId] !== undefined);

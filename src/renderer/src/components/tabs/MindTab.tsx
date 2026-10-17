@@ -2,18 +2,21 @@ import { type KeyboardEvent, useContext, useEffect, useRef, useState } from "rea
 import type { Mind } from "../../../../core/api";
 import { files } from "../../core";
 import {
+  BadgeSlotContext,
   CompareSheetSlotContext,
   ComposerDockContext,
   CountSlotContext,
 } from "../../editor/mindContext";
 import { useT } from "../../i18n";
 import { assistantTabOf } from "../../layoutSlice";
+import { useQuietAssistant } from "../../quietAssistant";
 import { useAppStore } from "../../store";
 import { useFittedName } from "../../useFittedName";
 import { useGroupsMerged } from "../../useWindowWidth";
 import { isWordFile, useWordImport } from "../../wordImport";
 import { ExportResultLine } from "../ExportResultLine";
-import { ExampleBanner, useIsExample } from "../GettingStarted";
+import { ExampleIntro } from "../FirstOpenSteps";
+import { useIsExample } from "../GettingStarted";
 import { PlusLineIcon } from "../lineIcons";
 import { MakeSkillCard } from "../MakeSkillCard";
 import { MeetingInMind } from "../MeetingInMind";
@@ -32,35 +35,43 @@ export function MindTab({ mindId }: { mindId: string }) {
   const isExample = useIsExample(mindId);
   const [countSlot, setCountSlot] = useState<HTMLElement | null>(null);
   const [sheetSlot, setSheetSlot] = useState<HTMLElement | null>(null);
+  const [badgeSlot, setBadgeSlot] = useState<HTMLElement | null>(null);
   const assistantSlot = useContext(ComposerDockContext);
   const tabId = useTabPlace()?.tabId;
   const merged = useGroupsMerged();
   const read = useAppStore((state) => assistantTabOf(state.layout, merged)?.id === tabId);
   const dropTarget = useWordFileDrop();
+  const pill = useQuietAssistant();
   if (!mind) return null;
 
   return (
     <div className="relative flex min-h-0 flex-grow flex-col">
-      <div ref={dropTarget} className="mind-scroller min-h-0 flex-grow overflow-auto">
-        {/* Every text in it starts at one edge (styles.css, `.mind-column`). */}
-        <article data-testid="mind-pane" data-mind-id={mind.id} className="mind-column">
-          <div className="mind-measure">
-            {isExample && <ExampleBanner mindId={mindId} />}
-            <MindTitle mind={mind} />
-            <div ref={setCountSlot} data-testid="mind-count-slot" />
-            <MeetingInMind mindId={mind.id} />
-            {/* The example works without a chat model: it says so in its Answer instead. */}
-            {!isExample && <ChatReadinessNotice />}
-            <ComposerDockContext.Provider value={read ? assistantSlot : null}>
-              <CountSlotContext.Provider value={countSlot}>
-                <CompareSheetSlotContext.Provider value={sheetSlot}>
-                  <MindEditor mindId={mind.id} />
-                </CompareSheetSlotContext.Provider>
-              </CountSlotContext.Provider>
-            </ComposerDockContext.Provider>
-            <MakeSkillCard mindId={mind.id} />
-          </div>
-        </article>
+      <div className="relative flex min-h-0 flex-grow flex-col">
+        <div ref={dropTarget} className="mind-scroller min-h-0 flex-grow overflow-auto">
+          {/* Every text in it starts at one edge (styles.css, `.mind-column`). */}
+          <article data-testid="mind-pane" data-mind-id={mind.id} className="mind-column">
+            <div className="mind-measure">
+              {isExample && <ExampleIntro mindId={mindId} />}
+              <MindTitle mind={mind} />
+              <div ref={setCountSlot} data-testid="mind-count-slot" />
+              <MeetingInMind mindId={mind.id} />
+              {/* The example works without a chat model: it says so in its Answer instead. */}
+              {!isExample && <ChatReadinessNotice />}
+              <ComposerDockContext.Provider value={read ? assistantSlot : null}>
+                <CountSlotContext.Provider value={countSlot}>
+                  <CompareSheetSlotContext.Provider value={sheetSlot}>
+                    <BadgeSlotContext.Provider value={badgeSlot}>
+                      <MindEditor mindId={mind.id} />
+                    </BadgeSlotContext.Provider>
+                  </CompareSheetSlotContext.Provider>
+                </CountSlotContext.Provider>
+              </ComposerDockContext.Provider>
+              <MakeSkillCard mindId={mind.id} />
+            </div>
+          </article>
+          {pill && <div aria-hidden="true" data-testid="ask-pill-fade" className="ask-pill-fade" />}
+        </div>
+        <div ref={setBadgeSlot} className="mind-badge-slot" />
       </div>
       {/* The Compare Documents sheet docks here, in the column's measure, below the note. */}
       <div ref={setSheetSlot} className="compare-sheet-dock" />
