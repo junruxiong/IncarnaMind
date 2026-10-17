@@ -205,7 +205,7 @@ export interface AppState extends LayoutSlice {
     startQuestion?: boolean;
     /** Its name, which its text starts with as a Heading 1 ("Create a new note called …"). */
     title?: string;
-    /** A new Mind to write in: its first line is an empty Heading 1, its title to be typed (#1088). */
+    /** A new Mind to write in: its first line is an empty Heading 1, its title to be typed. */
     titled?: boolean;
     scope?: SearchScope | null;
     folderId?: string | null;

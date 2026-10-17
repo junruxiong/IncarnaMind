@@ -86,7 +86,7 @@ export interface CreateMindInput {
   title?: string;
   /**
    * Its text starts with its title as a Heading 1, as a Mind made with its
-   * name does (#908); with no title, an empty one, its title to be typed (#1088).
+   * name does (#908); with no title, an empty one, its title to be typed.
    */
   headed?: boolean;
   /** Defaults to `"mind"`. */
