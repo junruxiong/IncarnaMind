@@ -250,7 +250,7 @@ export function createExports(deps: ExportsDependencies) {
       format,
       options,
       mindId: mind.id,
-      title: mind.title,
+      title: mindName(mind),
       readOptions,
       word,
       blocks,

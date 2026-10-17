@@ -373,13 +373,28 @@ export const clickEditItem = (app: ElectronApplication, id: "edit.undo" | "edit.
 
 /**
  * "New Mind" from the sidebar header's "+" menu, the one place to add: a Mind
- * in no Folder. Returns once the menu has gone: keys a test presses a
- * millisecond apart can outrun the editor while frames are busy.
+ * in no Folder. Returns once its first line has the cursor: keys a test
+ * presses a millisecond apart can outrun the editor while frames are busy.
  */
 export async function newMind(window: Page): Promise<void> {
+  const before = await (await coreOf(window)).evaluate(async (core) =>
+    (await core.listMinds()).map((mind) => mind.id),
+  );
   await window.getByTestId("plus-menu").click();
   await window.getByTestId("plus-new-mind").click();
   await motionSettled(window);
+  // Until the new Mind's text has the cursor, keys and names go to the Mind open before it.
+  await expect
+    .poll(async () => {
+      const id = await window.evaluate(
+        () =>
+          document.activeElement
+            ?.closest('[data-testid="mind-pane"]')
+            ?.getAttribute("data-mind-id") ?? null,
+      );
+      return id !== null && !before.includes(id);
+    })
+    .toBe(true);
 }
 
 /** A Folder's row in the sidebar's Folders view, with what is listed in it, by its name. */
@@ -1527,12 +1542,31 @@ export async function showCountWhileWriting(window: Page): Promise<void> {
   await expect(menu).toBeHidden();
 }
 
+/** Renames the Mind the User is in from its tab, as a person does: double-click, a name, Enter. */
+export async function renameInTab(window: Page, name: string): Promise<void> {
+  await frontMindName(window).dblclick();
+  const field = window.locator(
+    '[data-testid="tab-group"][data-focused] [data-testid="tab-rename"]',
+  );
+  await expect(field).toBeFocused();
+  await field.fill(name);
+  await field.press("Enter");
+  await expect(frontMindName(window)).toHaveText(name);
+}
+
 /**
  * Names the Mind the User is in, as Rename does, leaving its text and the
  * cursor as they are: a Mind's page has no title field (#908).
  */
 export async function nameMind(window: Page, name: string): Promise<void> {
-  const mindId = await frontMind(window).getAttribute("data-mind-id");
+  // The tab changes before its page does: a Mind just opened is the tab's.
+  const tab = window.locator(
+    '[data-testid="tab-group"][data-focused] [data-testid="mind-tab"][aria-selected="true"]',
+  );
+  const mindId =
+    (await tab.count()) > 0
+      ? await tab.getAttribute("data-mind-id")
+      : await frontMind(window).getAttribute("data-mind-id");
   if (!mindId) throw new Error("No Mind is in front.");
   await (await coreOf(window)).evaluate(
     (core, named) => core.renameMind(named.mindId, named.name),

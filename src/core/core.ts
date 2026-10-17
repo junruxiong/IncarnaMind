@@ -1370,7 +1370,7 @@ export function createCore(adapters: CoreAdapters): Core {
     );
     let mind = "";
     try {
-      mind = task.mindId ? minds.get(task.mindId).title : "";
+      mind = task.mindId ? mindName(minds.get(task.mindId)) : "";
     } catch {
       mind = "";
     }
