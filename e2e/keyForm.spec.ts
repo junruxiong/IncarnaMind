@@ -239,10 +239,10 @@ test("a way that can't be used yet says why, with the next step: Ollama not runn
     const card = await openKeyForm(window);
     await card.getByTestId("setup-other").click();
     const local = card.getByTestId("way-local");
-    await expect(local).toContainText("Ollama isn't running on this computer. It's free to get.");
+    await expect(local).toContainText("Needs the free Ollama app");
     await expect(local.locator("xpath=..").getByRole("link", { name: /Get Ollama/ })).toBeVisible();
     await language(window, "zh-CN");
-    await expect(local).toContainText("这台电脑上没有运行 Ollama。可以免费获取。");
+    await expect(local).toContainText("需要免费的 Ollama 应用");
     await language(window, "en");
     await card.getByTestId("setup-key").click();
     const form = card.getByTestId("provider-form");

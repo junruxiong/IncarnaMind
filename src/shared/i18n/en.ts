@@ -1732,29 +1732,22 @@ export const en = {
   "fileWrite.linked.deny": "Don't allow",
 
   "providers.setup.title": "Where should Answers come from?",
-  "providers.setup.body":
-    "Asking Questions needs an AI model. Notes and Documents work without one, and you can change this later in Settings.",
+  "providers.setup.body": "Asking needs an AI model. Notes work without one.",
   "providers.setup.later": "Set up later",
-  "setup.title": "Choose where Answers come from",
-  "setup.body": "Your Question waits here and is answered as soon as you pick.",
-  "setup.body.ask": "Your Questions are answered with the one you pick.",
+  "setup.title": "Choose your AI",
   "setup.waiting": "Waiting for you to choose a model",
   "setup.chatgpt.use": "Use my ChatGPT plan",
-  "setup.chatgpt.line":
-    "If you pay for ChatGPT Plus or Pro · No key needed · Signing in lets OpenAI receive, under your ChatGPT account: {sends}.",
-  "setup.chatgpt.line.china":
-    "If you pay for ChatGPT Plus or Pro (not in mainland China) · No key needed · Signing in lets OpenAI receive, under your ChatGPT account: {sends}.",
+  "setup.chatgpt.line": "Plus or Pro \u00b7 no key needed",
+  "setup.chatgpt.line.china": "Plus or Pro, outside mainland China \u00b7 no key needed",
   "setup.key.use": "Paste an API key",
-  "setup.key.for": "From OpenAI, Anthropic, Google, DeepSeek and more, yours or your company's.",
+  "setup.key.for": "OpenAI, Anthropic, Google, DeepSeek and more",
   "setup.back": "Back",
   "setup.getOllama": "Get Ollama",
   "setup.other": "Other ways",
   "setup.way.local": "Use a model on this computer",
-  "setup.way.local.line":
-    "Free and private. Needs the free Ollama app. Slower, and cites less reliably.",
-  "setup.way.local.running":
-    "Ollama is running here. Free and private; slower, and cites less reliably.",
-  "setup.way.local.notRunning": "Ollama isn't running on this computer. It's free to get.",
+  "setup.way.local.line": "Free and private \u00b7 slower",
+  "setup.way.local.running": "Ollama is running \u00b7 free, slower",
+  "setup.way.local.notRunning": "Needs the free Ollama app",
   "setup.claude.title": "Already pay for Claude?",
   "setup.claude.line":
     "Anthropic doesn’t let other apps use a Claude plan. You can ask your Documents in the Claude app instead.",
@@ -1781,9 +1774,8 @@ export const en = {
   "providers.choice.local": "Stays on this computer",
   "providers.choice.apiKey": "An API key",
   "providers.choice.apiKey.body":
-    "OpenAI, Anthropic, Google, DeepSeek, Qwen, Kimi, GLM, Mistral, xAI, OpenRouter, SiliconFlow, or an OpenAI-compatible server. The service you choose receives: {sends}.",
-  "providers.choice.apiKey.firstRun.body":
-    "{providers}. More providers are in Settings. The service you choose receives: {sends}.",
+    "OpenAI, Anthropic, Google, DeepSeek, Qwen, Kimi, GLM, Mistral, xAI, OpenRouter, SiliconFlow, or an OpenAI-compatible server.",
+  "providers.choice.apiKey.firstRun.body": "{providers}. More providers are in Settings.",
   "providers.list.separator": ", ",
   "providers.list.last": "{rest} or {last}",
   "providers.kind.short.qwen": "Qwen",
@@ -1832,7 +1824,6 @@ export const en = {
   "providers.form.test": "Test connection",
   "providers.form.testing": "Testing…",
   "providers.form.save": "Use this service",
-  "providers.sends": "When you use it, {provider} receives:",
   "providers.sendsLine": "Sends your questions and document text to {provider}.",
   "providers.sends.chat":
     "your Questions, the Mind you're in, matching passages with their Document names and pages, and the names of other Documents in scope",
@@ -1841,15 +1832,6 @@ export const en = {
   "providers.sends.edits": "the text you ask the assistant to change",
   "providers.sends.tagging":
     "each Document's name, outline and short excerpts, with your Folder and Tag names, to tag and file it (page images for scans with no text)",
-  "providers.sendsShort.chat":
-    "your Questions with the Mind you're in, matching passages and the names of Documents in scope",
-  "providers.sendsShort.checks": "sentences you check",
-  "providers.sendsShort.suggestions": "the paragraph you pause on",
-  "providers.sendsShort.edits": "text you ask the assistant to change",
-  "providers.sendsShort.tagging":
-    "Document names, outlines and excerpts with your Folder and Tag names, to tag and file them (page images for scans)",
-  "providers.sendsShort.separator": "; ",
-  "providers.sendsShort.last": "{rest}; and {last}",
   "providers.sends.tagsOnSave": "Tagging starts when you save the key.",
   "providers.form.saving": "Saving…",
   "providers.form.moreShort": "More…",
@@ -1922,8 +1904,7 @@ export const en = {
   "providers.local.rowNotRunning": "Not running yet.",
   "providers.ollama.get": "Get Ollama",
 
-  "providers.readiness.no-provider":
-    "Asking Questions needs an AI model. Notes and Documents work without one.",
+  "providers.readiness.no-provider": "Asking needs an AI model. Notes work without one.",
   "providers.readiness.missing-api-key":
     "The API key for {service} isn't saved on this device. Add it in Settings to ask Questions.",
   "providers.readiness.consent-declined":
@@ -1962,7 +1943,7 @@ export const en = {
 
   "chatgpt.title": "ChatGPT plan",
   "chatgpt.description":
-    "Use your ChatGPT Plus or Pro plan instead of an API key. OpenAI receives, under your ChatGPT account: {sends}. It counts against your plan's limits.",
+    "Use your ChatGPT Plus or Pro plan instead of an API key. It counts against your plan's limits.",
   "chatgpt.continue": "Continue with ChatGPT",
   "chatgpt.account.signedOut": "Not signed in.",
   "chatgpt.account.expired":
@@ -2010,7 +1991,7 @@ export const en = {
   "claudeAccount.page.failure.title": "The Claude sign-in didn't work",
   "claudeAccount.page.failure.body": "Close this tab and try again in IncarnaMind.",
   "copilot.way.title": "Use my Copilot plan",
-  "copilot.way.line": "Pro, Pro+, Business or Enterprise · Sign in with GitHub",
+  "copilot.way.line": "Pro, Pro+ or Business",
   "copilot.experimental": "Experimental",
   "copilot.notice.title": "Use your Copilot plan",
   "copilot.notice.usage": "Answers count toward your Copilot plan's usage limits.",

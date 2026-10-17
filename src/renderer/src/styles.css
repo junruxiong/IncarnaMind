@@ -6981,6 +6981,13 @@
     flex: none;
     padding: 0 var(--edge) 10px;
 
+    &[data-setup] {
+      display: flex;
+      flex: 0 1 auto;
+      flex-direction: column;
+      min-height: 0;
+    }
+
     &:empty {
       display: none;
     }

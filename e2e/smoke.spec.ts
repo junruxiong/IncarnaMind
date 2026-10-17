@@ -213,12 +213,13 @@ test("first run asks for no model; the first own Question waits while the setup 
   await expect(window.getByTestId("assistant-waiting-model")).toHaveText(
     "Waiting for you to choose a model",
   );
-  await expect(card).toContainText("Choose where Answers come from");
+  await expect(card).toContainText("Choose your AI");
   await expect(card.getByTestId("setup-chatgpt")).toHaveText("Use my ChatGPT plan");
   await expect(card.getByTestId("setup-key")).toHaveText("Paste an API key");
-  // Choosing it is the consent (ADR-0022), so its line names everything that goes.
-  await expect(card.getByTestId("setup-chatgpt-sends")).toHaveText(
-    "If you pay for ChatGPT Plus or Pro · No key needed · Signing in lets OpenAI receive, under your ChatGPT account: your Questions with the Mind you're in, matching passages and the names of Documents in scope; sentences you check; the paragraph you pause on; text you ask the assistant to change; and Document names, outlines and excerpts with your Folder and Tag names, to tag and file them (page images for scans).",
+  // Choosing it is the consent (ADR-0022): one line says what goes, and Details names it all.
+  await expect(card.getByTestId("setup-chatgpt-line")).toHaveText("Plus or Pro · no key needed");
+  await expect(card.getByTestId("setup-chatgpt-sends").locator("p")).toHaveText(
+    "Sends your questions and document text to OpenAI. · Details",
   );
   // The card says what the Mind's "needs an AI model" line would, so that line steps aside.
   await expect(window.getByTestId("chat-readiness")).toHaveCount(0);
@@ -234,8 +235,11 @@ test("first run asks for no model; the first own Question waits while the setup 
     }),
   );
   await expect(card.getByTestId("setup-key")).toHaveText("粘贴 API 密钥");
-  await expect(card.getByTestId("setup-chatgpt-sends")).toHaveText(
-    "如果你订阅了 ChatGPT Plus 或 Pro（中国大陆无法使用）· 无需密钥 · 登录后，以下内容会通过你的 ChatGPT 账号发送给 OpenAI：你的问题连同你所在的 Mind、相关段落和范围内文档的名称；你核对的句子；写作建议时你停下的段落；你让助手修改的文字；以及文档名称、目录和摘录，连同你的文件夹和标签名称，用于打标签和归档（扫描件发送页面图片）。",
+  await expect(card.getByTestId("setup-chatgpt-line")).toHaveText(
+    "Plus 或 Pro（中国大陆不可用）· 无需密钥",
+  );
+  await expect(card.getByTestId("setup-chatgpt-sends").locator("p")).toHaveText(
+    "会把你的问题和文档内容发送给 OpenAI。 · 详情",
   );
   await window.evaluate(async () =>
     (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({

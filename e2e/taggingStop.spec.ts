@@ -82,9 +82,7 @@ async function pasteKey(window: Page): Promise<void> {
     .locator("label")
     .filter({ hasText: /^Anthropic$/ })
     .click();
-  await expect(form.getByTestId("provider-sends")).toContainText(
-    "Tagging starts when you save the key.",
-  );
+  await expect(form.getByText("Tagging starts when you save the key.")).toBeVisible();
   await acceptPlainTextKeys(window, form);
   await form.getByLabel(/^API key/).fill("sk-ant-not-a-real-key");
   await form.getByTestId("provider-use-key").click();
