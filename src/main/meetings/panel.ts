@@ -218,9 +218,10 @@ export function serveMeetingPanel(core: Core, options: MeetingPanelOptions): voi
   function sync(): void {
     const meeting = liveMeeting();
     if (!meeting) choice = null;
-    const wanted =
-      !!meeting &&
-      (choice?.meetingId === meeting.id ? choice.shown : !!settings?.device.meetingPanel);
+    // A Meeting recovered as paused at launch opens no panel: it opens only once one records.
+    const byDefault =
+      !!settings?.device.meetingPanel && (meeting?.status === "recording" || !!panel);
+    const wanted = !!meeting && (choice?.meetingId === meeting.id ? choice.shown : byDefault);
     if (wanted && !panel) open();
     else if (!wanted && panel) panel.destroy();
     if (panel && settings) panel.setContentProtection(settings.device.meetingPanelHidden);
