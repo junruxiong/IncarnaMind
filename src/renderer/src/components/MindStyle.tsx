@@ -303,7 +303,7 @@ function LineSpacingChoice({ mindId, onCustom }: { mindId: string; onCustom(): v
       <div
         role="group"
         aria-label={t("mindStyle.lineSpacing")}
-        className="mx-2 mt-0.5 mb-1 grid grid-cols-5 gap-0.5 rounded-lg bg-chip p-0.5"
+        className="mx-2 mt-0.5 mb-1 flex gap-0.5 rounded-lg bg-chip p-0.5"
       >
         {LINE_SPACING_CHOICES.map((each) => {
           const chosen = lineSpacing === each;
@@ -315,7 +315,7 @@ function LineSpacingChoice({ mindId, onCustom }: { mindId: string; onCustom(): v
               aria-checked={chosen}
               data-testid={`mind-style-line-${each}`}
               onClick={() => void chooseLineSpacing(mindId, each)}
-              className={`h-6 truncate rounded-md px-0.5 text-[13px] leading-5 -outline-offset-2 ${
+              className={`h-6 flex-auto truncate rounded-md px-1 text-[13px] leading-5 -outline-offset-2 ${
                 chosen
                   ? "bg-sheet font-semibold text-ink shadow-[0_0_0_1px_var(--color-rule),0_1px_2px_rgb(23_25_28/0.08)]"
                   : "text-ink-secondary hover:text-ink"
