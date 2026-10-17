@@ -130,6 +130,7 @@ describe("Check this Mind", () => {
       kind: "ready",
       sentences: 5,
       findsClaims: true,
+      inFolder: true,
       model: null,
     });
 
@@ -179,6 +180,7 @@ describe("Check this Mind", () => {
       kind: "ready",
       sentences: 2,
       findsClaims: false,
+      inFolder: true,
       model: null,
     });
     expect(await core.checkMind(request(mindId, "changed"))).toMatchObject({
