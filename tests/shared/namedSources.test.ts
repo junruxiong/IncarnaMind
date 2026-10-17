@@ -63,7 +63,7 @@ describe("A source written as a name in brackets", () => {
 });
 
 describe("Sources written as text in what the assistant writes into a Mind (#1075)", () => {
-  const NAMES = ["5_Rue_Berryer_Paris.pptx", "执行概要.md", "Tides.md"];
+  const NAMES = ["5_Rue_Berryer_Paris.pptx", "执行概要.md", "Tides.md", "Deck.pptx"];
   const known = (source: { name: string }) => namesOneOf(source.name, NAMES);
   const link = (source: NamedSource) =>
     source.name === "5_Rue_Berryer_Paris" &&
@@ -102,6 +102,29 @@ describe("Sources written as text in what the assistant writes into a Mind (#107
     expect(sourcesAsText(text, known)).toEqual([]);
     expect(linkKnownSources(text, known, link)).toEqual({ text, dropped: 0 });
   });
+
+  // protects=a source between two dollar amounts or two inch marks is still found and linked or left out, while real maths and a real quoted phrase keep their brackets, as pandoc reads $ and straight quotes (#1087 review); fails_when=a source beside money or inches stays as bracket text, or a bracket in maths or quotes is touched; no_claim=none beyond protects.
+  test.each([
+    [
+      "Revenue was $4.2m [5_Rue_Berryer_Paris, slide 3], up from $3.1m.",
+      "Revenue was $4.2m [^1], up from $3.1m.",
+      0,
+    ],
+    ["$100 万 [执行概要, § 6.3.1 未来三年财务预测]，高于 $80 万", "$100 万，高于 $80 万", 1],
+    ['12" pipes [Deck, slide 3] and the 6" ones', '12" pipes and the 6" ones', 1],
+  ])("finds the source in %s", (text, linked, dropped) => {
+    expect(sourcesAsText(text, known)).toHaveLength(1);
+    expect(linkKnownSources(text, known, link)).toEqual({ text: linked, dropped });
+  });
+
+  // protects=a bracket inside real maths or a real straight-quoted phrase is never a source; fails_when=either is found or changed; no_claim=none beyond protects.
+  test.each(["The area is $x^2 [Tides]$ here.", 'He wrote "see [Tides] first" in the margin.'])(
+    "keeps the bracket in %s",
+    (text) => {
+      expect(sourcesAsText(text, known)).toEqual([]);
+      expect(linkKnownSources(text, known, link)).toEqual({ text, dropped: 0 });
+    },
+  );
 
   // protects=a source with a recorded Citation becomes its marker, and one with none, a bare Document name too, is left out with the space before it and counted; fails_when=a bracket stays as text, a space is left before the punctuation, or one left out isn't counted; no_claim=none beyond protects.
   test("links what it can, and leaves out and counts the rest", () => {

@@ -56,9 +56,11 @@ export function linkSources(
 
 // The write path's brackets: "[Deck, slide 3]", "【执行概要，第 3 页】", several sources in one.
 const SOURCE_BRACKET = /([ \t]*)(?:\[([^[\]\n]+)\](?!\()|【([^【】\n]+)】)/gu;
-// Code, maths and quoted words are the text's own: a bracket in them is never a source.
+// Code, maths and quoted words are the text's own: a bracket in them is never a source. Maths and
+// straight quotes open and close as pandoc reads them, so dollar amounts or inch marks on either
+// side of a source don't hide it.
 const KEPT_AS_WRITTEN =
-  /```[\s\S]*?(?:```|$)|~~~[\s\S]*?(?:~~~|$)|`[^`\n]*`|\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$[^$\n]+\$|“[^”\n]*”|"[^"\n]*"|「[^」\n]*」|『[^』\n]*』/g;
+  /```[\s\S]*?(?:```|$)|~~~[\s\S]*?(?:~~~|$)|`[^`\n]*`|\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$(?=\S)[^$\n]*?(?<=\S)\$(?!\d)|“[^”\n]*”|(?<![\p{L}\p{N}_])"[^"\n]*"(?![\p{L}\p{N}_])|「[^」\n]*」|『[^』\n]*』/gu;
 
 interface Recognised {
   start: number;
