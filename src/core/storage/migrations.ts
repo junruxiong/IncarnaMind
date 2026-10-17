@@ -1761,6 +1761,15 @@ export const migrations: readonly Migration[] = [
       ALTER TABLE conversation_messages ADD COLUMN error_sign_in_route TEXT;
     `,
   },
+  {
+    version: 98,
+    description: "A Document's Folder keeps when it was filed there",
+    // When the Document joined the Folder's scope, for checks of a Mind there it could change
+    // (#993). NULL on a row filed before: its created_at stands for it.
+    sql: `
+      ALTER TABLE document_groups ADD COLUMN filed_at TEXT;
+    `,
+  },
 ];
 
 /**

@@ -18,6 +18,7 @@ import { ProblemMark } from "../ProblemLine";
 import { buttonStyle, rowButtonsClass, rowTextClass, rowTitleClass, ruledRowClass } from "../ui";
 import { ChatGptStorageNotice, useChatGptStorage } from "./ChatGptSignIn";
 import { PasteSignInAddress, type PasteWords } from "./PasteSignInAddress";
+import { SendsLine } from "./SendsLine";
 
 const PASTE: PasteWords = {
   testId: "claude-paste",
@@ -248,9 +249,7 @@ function ClaudePlanSignIn({
       <p data-testid="claude-plan-usage" className="text-[13px] leading-5 font-semibold text-ink">
         {t("claudePlan.usage")}
       </p>
-      <p data-testid="claude-plan-sends" className="text-[13px] leading-5 text-ink-secondary">
-        {t("providers.sendsLine", { provider: "Anthropic" })}
-      </p>
+      <SendsLine provider="Anthropic" testId="claude-plan-sends" />
       <ChatGptStorageNotice storage={storage} />
       <div className="flex flex-wrap items-center gap-2">
         <button
