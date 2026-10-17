@@ -1,6 +1,6 @@
 import type { WordLook, WordParagraphLook, WordRunLook } from "../../../core/api";
 import { attribute, border, pt, rule } from "./wordCss";
-import { wordLookZoomCss } from "./wordLookZoom";
+import { DEFAULT_BODY, pageWidth, wordLookZoomCss } from "./wordLookZoom";
 import { WORD_LOOK_DOM_ATTRIBUTE, WORD_RUN_DOM_ATTRIBUTE } from "./wordSchema";
 import { wordTableCss } from "./wordTableCss";
 import { alignsColumns, DEFAULT_TAB_STOP } from "./wordTabStops";
@@ -19,7 +19,6 @@ const LEADER_LENGTH = 400;
 const SINGLE_LINE = 1.15;
 /** Word draws super- and subscript at about two thirds of the size. */
 const RAISED_SIZE = 0.66;
-const DEFAULT_BODY = 11;
 
 const HIGHLIGHTS = new Map([
   ["yellow", "#FFFF00"],
@@ -128,7 +127,11 @@ export function wordLookCss(mindId: string, look: WordLook): string {
   const tab = pt(look.defaultTab ?? DEFAULT_TAB_STOP);
   const rules = [
     `${scope} { --word-pt: calc(var(--text-body) / ${look.body ?? DEFAULT_BODY}); }`,
-    look.width ? `${scope} { max-width: ${pt(look.width)}; }` : "",
+    pageWidth(look) ? `${scope} { max-width: ${pt(pageWidth(look))}; }` : "",
+    // A table reaching past the text's width widens the page; the text keeps its own.
+    look.width && pageWidth(look) > look.width
+      ? `${scope} .mind-editor > :not(.tableWrapper) { max-width: ${pt(look.width)}; }`
+      : "",
     // A list draws its own indents.
     `${scope} li > [${WORD_LOOK_DOM_ATTRIBUTE}] { margin-left: 0; margin-right: 0; text-indent: 0; }`,
     // Until measured, a tab takes one default stop. overflow: clip, unlike hidden, leaves the baseline where it is.
