@@ -12,7 +12,8 @@
  * - **Only what was asked changes**: asked about one paragraph, the others
  *   read as they did.
  * - **Changed in place**: asked to make text in the Mind longer, it changes
- *   that text, not adding a second version beside it (#1061).
+ *   that text, not adding a second version beside it, nor leaving it as it
+ *   was (#1061).
  */
 import { changeLogOf } from "../../src/core/answers/claimedChanges";
 import type { ConversationAnswer, MarkedCitation } from "../../src/core/api";
@@ -42,6 +43,8 @@ export interface RequestOutcome {
   citedInMinds: readonly string[];
   /** The top-level Blocks of the Mind it was asked from (from 0) that read otherwise once its changes are accepted. */
   changedBlocks: readonly number[];
+  /** The top-level Blocks Add to note put in before the request (from 0): what `inPlace` must change. */
+  addedBlocks?: readonly number[];
   scoped: readonly { id: string; name: string }[];
 }
 
@@ -52,7 +55,8 @@ export type RequestFailure =
   | { kind: "no-citations" }
   | { kind: "uncovered"; documents: string[] }
   | { kind: "outside"; blocks: number[] }
-  | { kind: "beside" };
+  | { kind: "beside" }
+  | { kind: "untouched" };
 
 const key = (text: string) => text.replace(/\s+/g, " ").trim().toLocaleLowerCase();
 
@@ -107,6 +111,14 @@ export function requestFailures(outcome: RequestOutcome): RequestFailure[] {
     (call) => call.tool === "add_to_mind" && call.mindChange && call.mindChange.proposals > 0,
   );
   if (expected.inPlace && added) failures.push({ kind: "beside" });
+  const { addedBlocks } = outcome;
+  if (
+    expected.inPlace &&
+    addedBlocks &&
+    !addedBlocks.some((block) => outcome.changedBlocks.includes(block))
+  ) {
+    failures.push({ kind: "untouched" });
+  }
   return failures;
 }
 
@@ -125,5 +137,7 @@ export function failureLine(failure: RequestFailure): string {
       return `changed what it was asked to leave: Block ${failure.blocks.map((block) => block + 1).join(", ")}`;
     case "beside":
       return "added a new version beside the text it was asked to change";
+    case "untouched":
+      return "left the text it was asked to change as it was";
   }
 }

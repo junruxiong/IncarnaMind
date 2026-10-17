@@ -1784,7 +1784,7 @@ function jsonTokens(content: readonly NodeJSON[]): NewToken[] {
 }
 
 /** Every Citation in an element, or in the new Answer's Block, by what it cites. */
-function citationsIn(node: Y.XmlElement | NodeJSON): string[] {
+export function citationsIn(node: Y.XmlElement | NodeJSON): string[] {
   if (node instanceof Y.XmlElement) {
     if (node.nodeName === CITATION_NODE) return [citedKey(node.getAttributes() as Attributes)];
     return node

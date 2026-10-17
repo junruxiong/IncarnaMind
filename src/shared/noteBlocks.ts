@@ -204,11 +204,14 @@ export function citedTables(blocks: readonly NodeJSON[]): NodeJSON[] {
 
 const LEAD_IN =
   /^(?:(?:sure|certainly|of course|okay|ok)\b|here(?:'s| is| are)\b|below (?:is|are)\b|以下是|下面是|好的|当然|如下)/iu;
-// The model saying how it went about the request: "你没有说明是哪一份合同，所以我把四份文档各写了…" (#1061).
+// Only the shape "you didn't say which…, so I…": a first paragraph that starts "I have written…" or "我先后给…写了" is often the content itself (#1061).
 const EXPLAINING =
-  /^(?:(?:since|as|because)\s+)?you\s+(?:didn['’]t|did not)\s+(?:say|specify|mention)\b|^i\s+(?:wasn['’]t sure\b|(?:have\s+|['’]ve\s+)?(?:written|wrote|summari[sz]ed|put together)\b)|^(?:由于|因为)?你(?:没有|没)(?:说明|指定|说|提到)|^(?:所以)?我(?:把|为|将|先)[^。！？]{0,30}?(?:写了|整理了|总结了|概括了)/iu;
+  /^(?:(?:since|as|because)\s+)?you\s+(?:didn['’]t|did not)\s+(?:say|specify|mention)\s+which\b[^.!?]*?(?:,\s*|\bso\s+)(?:so\s+)?i\b|^(?:由于|因为)?你(?:没有|没)(?:说明|指定|说|提到)[^。！？]*?哪[^。！？]*?[，,]\s*(?:所以|因此|于是)?我/iu;
 const CLOSING_NOTE =
-  /^(?:(?:note|notes|please note|n\.b\.|i hope|hope this|let me know|feel free|if you(?:['’]d| would| want| meant))\b|注[：:]|备注|说明[：:]|希望|如需|如果需要|如有|如果你|要是你)/iu;
+  /^(?:(?:note|notes|please note|n\.b\.|let me know|feel free)\b|(?:i\s+)?hope (?:this|that|it) helps\b|注[：:]|备注|说明[：:]|希望(?:这|以上|对你))/iu;
+// "If you want to renew, write to the landlord…" and "如需开具发票，请扫描…" end real content; only a closing that asks the User to tell the model something is framing.
+const OFFER =
+  /^(?:if you\b[^.!?]*?\b(?:tell me|let me know|ask me|i can|i['’]ll|i could)\b|(?:如果你|要是你|如需|如果需要|如有)[^。！？]*?(?:告诉我|跟我说|我可以|我会|我再|我来))/iu;
 /** A figure or a bracketed unit, "(GBP m)": framing that says something about the content stays. */
 const SAYS_SOMETHING =
   /\d|[(（][^)）]+[)）]|\b(?:figures?|currency|units?|thousands?|millions?|billions?|[A-Z]{3})\b|[%％万亿元]/u;
@@ -243,7 +246,7 @@ export function withoutFraming(blocks: readonly NodeJSON[]): NodeJSON[] {
     kept.length > 1 &&
     !holdsCitation(last) &&
     !SAYS_SOMETHING.test(textOf(last)) &&
-    CLOSING_NOTE.test(textOf(last).trim())
+    (CLOSING_NOTE.test(textOf(last).trim()) || OFFER.test(textOf(last).trim()))
   ) {
     kept = kept.slice(0, -1);
   }

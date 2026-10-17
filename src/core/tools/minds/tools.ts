@@ -60,6 +60,7 @@ import type { Language } from "../../language";
 import { plainText } from "../../mindText";
 import { insertBlocks } from "../../noteAdding";
 import {
+  citationsDropped,
   type OwnApplied,
   type OwnWaiting,
   ownAppliedIn,
@@ -608,7 +609,7 @@ const WAITING =
   "They wait in the Mind for the User to accept or reject them; until then nothing of the User's text has changed.";
 // The window that asked applies what the User asked for (#880), so the reply mustn't say it waits.
 const APPLIES =
-  "As the User asked for this, it applies in the Mind at once, with Undo: say what changed, not that anything waits.";
+  "As the User asked for this, it applies in the Mind at once, with Undo. IncarnaMind lists what changed under your reply: don't describe it, nor say that anything waits.";
 
 const held = (name: string) =>
   `The User asked for this, but it would take out most of their own text in “${name}”, so it waits there for them to apply or discard; nothing of their text has changed yet. Say that it waits for them, not that it changed.`;
@@ -680,6 +681,13 @@ const citedIn = ({ cited, unrecorded }: { cited: number; unrecorded: number }) =
   ...(cited > 0 && { cited }),
   ...(unrecorded > 0 && { unrecorded }),
 });
+
+const droppedSaid = (dropped: number) =>
+  dropped > 0
+    ? [
+        `${dropped === 1 ? "1 Citation" : `${dropped} Citations`} would be removed with the words they belong to; the User sees that on the change: say so.`,
+      ]
+    : [];
 
 interface Written {
   notFound: number;
@@ -985,7 +993,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
   const repeatRefusal = (mind: ChangeableMind, repeat: Repeat) => {
     const shown = repeat.text.length > 80 ? `${repeat.text.slice(0, 80)}…` : repeat.text;
     return new Refusal(
-      { kind: "copy", mindId: mind.id, text: shown },
+      { kind: repeat.kind === "waiting" ? "copy" : "new-version", mindId: mind.id, text: shown },
       repeat.kind === "waiting"
         ? `Nothing was added to “${mind.name}”: “${shown}” is there already, as your own text still waiting. Revise it with edit_mind, naming its heading in part and giving its whole new text as content, instead of adding a second copy.`
         : `Nothing was added to “${mind.name}”: it is a new version of your own text there, “${shown}”. Change that text in place with edit_mind, naming its first words in part and giving its whole new text as content, instead of adding it again beside it.`,
@@ -1219,10 +1227,11 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     mind: ChangeableMind,
     over: OwnWaiting | OwnApplied,
     markdown: string,
-  ): Written & { change: MindChange } => {
+  ): Written & { change: MindChange; dropped: number } => {
     const { blocks, cited, notFound, unrecorded, searchTalk, ...notes } =
       options.blocksOf(markdown);
     if (blocks.some(unmadeTable)) throw noTable(mind);
+    const dropped = minds.read(mind.id, (note) => citationsDropped(note, over, blocks));
     const request = randomUUID();
     minds.checkpoint(mind.id);
     const ids = minds.edit(mind.id, (note) => {
@@ -1266,7 +1275,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     if (unrecorded > 0) {
       unsettled.set(toolCallId, { mindId: mind.id, ids, markdown, change: revision });
     }
-    return { change, notFound, unrecorded, searchTalk };
+    return { change, notFound, unrecorded, searchTalk, dropped };
   };
 
   const unmadeSaid = (name: string) =>
@@ -1360,6 +1369,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
             : `Proposed your new text in place of your own in “${mind.name}”${went}. ${outcomeOf(mind, written.change.request)}`,
           ...tableNotes(written.change),
           ...writtenNotes(written),
+          ...droppedSaid(written.dropped),
         ].join(" ");
       }
       // Only a request for an edit rewrites the User's text at once; one to write waits there (#880).
@@ -1416,11 +1426,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
           : `Proposed ${changes(result.proposals)} in “${mind.name}”${went}. ${outcomeOf(mind, result.request)}`,
         ...tableNotes(change, result.unmatchedMarkers),
         ...(reason ? [`Why, as the rewrite says: ${reason}`] : []),
-        ...(result.droppedCitations > 0
-          ? [
-              `${result.droppedCitations === 1 ? "1 Citation" : `${result.droppedCitations} Citations`} would be removed with the words they belong to; the User sees that on the change: say so.`,
-            ]
-          : []),
+        ...droppedSaid(result.droppedCitations),
         ...(result.outOfDate > 0
           ? [
               `${result.outOfDate === 1 ? "1 change is" : `${result.outOfDate} changes are`} already out of date: the User changed that text meanwhile.`,

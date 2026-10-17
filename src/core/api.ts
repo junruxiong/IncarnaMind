@@ -896,7 +896,7 @@ export type MindProblem =
     }
   | { kind: "local-mode" | "not-ready" }
   | { kind: "model"; mindId: string; message: string }
-  | { kind: "copy"; mindId: string; text: string };
+  | { kind: "copy" | "new-version"; mindId: string; text: string };
 
 /**
  * Where the assistant writes next in a Mind, as its changes come in (#202):

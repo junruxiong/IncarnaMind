@@ -32,6 +32,23 @@ describe("withoutFraming", () => {
       withoutFraming([english, summary, p("If you meant one of them, tell me which.")]),
     ).toEqual([summary]);
   });
+  test("keeps a first or last paragraph that is the content's own, in English and Chinese", () => {
+    const body = p("The landlord has not replied.");
+    for (const first of [
+      p("I have written to you twice about the damp in the bedroom and nothing has been done."),
+      p("我先后给物业写了三封信，反映卧室漏水的问题。"),
+    ]) {
+      expect(withoutFraming([first, body])).toEqual([first, body]);
+    }
+    for (const last of [
+      p("If you want to renew, write to the landlord before the term ends."),
+      p("如果你想续租，需要在租期结束前书面通知房东。"),
+      p("如需开具发票，请扫描小票底部二维码。"),
+    ]) {
+      expect(withoutFraming([body, last])).toEqual([body, last]);
+    }
+    expect(withoutFraming([body, p("如需调整篇幅，请告诉我。")])).toEqual([body]);
+  });
   test("keeps framing that says something: units, figures, and a sentence that starts 这是", () => {
     const units = p("Revenue and operating profit, FY2020–24 (GBP m):");
     const note = p("Note: figures in GBP millions.");

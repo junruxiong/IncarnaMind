@@ -237,7 +237,9 @@ async function runCase(
     earlierCalls.push(...answer.toolCalls);
     last = answer;
   }
+  let addedBlocks: number[] | undefined;
   if (each.addToNote && last && mind && client) {
+    const earlier = new Set(ids);
     await core.addToNote({
       mindId: mind.id,
       blocks: withoutFraming(answerBlocks({ ...last, status: "done" })),
@@ -249,6 +251,7 @@ async function runCase(
     });
     await client.settled();
     ids = idsNow();
+    addedBlocks = ids.flatMap((id, block) => (earlier.has(id) ? [] : [block]));
     before = acceptedTexts(client.doc, new Set());
   }
   const answer = await ask(core, {
@@ -296,6 +299,7 @@ async function runCase(
     verdict,
     citedInMinds,
     changedBlocks,
+    addedBlocks,
     scoped,
   });
   return {

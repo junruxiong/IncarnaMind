@@ -19,16 +19,17 @@ import {
   readProposalRef,
   resolveProposals,
 } from "../../shared/proposals";
-import { topLevelBlocks } from "../answers/blocks";
+import { type NodeJSON, topLevelBlocks } from "../answers/blocks";
 import {
   BLOCK_ID_ATTRIBUTE,
+  CITATION_NODE,
   GENERATED_MARK,
   PROPOSAL_ATTRIBUTE,
   PROPOSAL_DELETE_MARK,
   PROPOSAL_INSERT_MARK,
   type TextPlace,
 } from "../api";
-import { setProposal, textBlocks } from "./write";
+import { citationsIn, setProposal, textBlocks } from "./write";
 
 /** The assistant's own waiting Blocks a stretch is in, from the first's top-level Block to the last's. */
 export interface OwnWaiting {
@@ -76,11 +77,25 @@ function holdsProposal(nodes: readonly (Y.XmlElement | Y.XmlText | Y.XmlHook)[])
   });
 }
 
-function allAiText(element: Y.XmlElement): boolean {
+const WRITTEN_ATOMS: ReadonlySet<string> = new Set([
+  CITATION_NODE,
+  "hardBreak",
+  "paragraph",
+  "heading",
+]);
+// A formula, picture, chart or code block carries no mark in the Mind, so one among the
+// assistant's text already there may be the User's: only Citations, line breaks and empty
+// paragraphs are its own.
+const writtenAtom = (atom: Y.XmlElement): boolean => WRITTEN_ATOMS.has(atom.nodeName);
+
+function allAiText(
+  element: Y.XmlElement,
+  ownAtom: (atom: Y.XmlElement) => boolean = () => true,
+): boolean {
   // A code block's text can't carry the mark.
-  if (element.nodeName === "codeBlock") return true;
+  if (element.nodeName === "codeBlock" || element.length === 0) return ownAtom(element);
   return element.toArray().every((node) => {
-    if (node instanceof Y.XmlElement) return allAiText(node);
+    if (node instanceof Y.XmlElement) return allAiText(node, ownAtom);
     if (!(node instanceof Y.XmlText)) return true;
     return (node.toDelta() as Run[]).every(
       (run) =>
@@ -239,7 +254,13 @@ export function ownAppliedIn(
   to: TextPlace,
 ): OwnApplied | null {
   const range = rangeOf(blocks, from, to);
-  if (range.length === 0 || holdsProposal(range) || !range.every(allAiText)) return null;
+  if (
+    range.length === 0 ||
+    holdsProposal(range) ||
+    !range.every((element) => allAiText(element, writtenAtom))
+  ) {
+    return null;
+  }
   return { kind: "applied", blockIds: range.map(idOf), fingerprint: fingerprintOf(range) };
 }
 
@@ -263,6 +284,16 @@ export function replaceApplied(
   for (const element of revised)
     setProposal(element, { id: randomUUID(), request, kind: "insert" });
   return revised.map(idOf);
+}
+
+/** How many of the Citations in `over`'s Blocks `revised` leaves out; 0 once they have changed. */
+export function citationsDropped(
+  blocks: Y.XmlFragment,
+  over: Pick<OwnWaiting, "blockIds" | "fingerprint">,
+  revised: readonly NodeJSON[],
+): number {
+  const kept = new Set(revised.flatMap(citationsIn));
+  return (blocksOf(blocks, over) ?? []).flatMap(citationsIn).filter((key) => !kept.has(key)).length;
 }
 
 /** Whether the User asked for all of the text `own` holds (#880): a revision of it is asked for too. */
