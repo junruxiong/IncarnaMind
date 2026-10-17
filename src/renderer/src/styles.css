@@ -6665,7 +6665,6 @@
   }
   .answer-steps-wait {
     margin: 0 0 0 20px;
-    overflow-wrap: anywhere;
     font-size: 13px;
     line-height: 18px;
     color: var(--color-ink-meta);
