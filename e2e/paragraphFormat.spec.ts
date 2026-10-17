@@ -287,8 +287,25 @@ for (const { language, width } of SETTINGS) {
     await slideSelect(window, lines[1], WORDS);
     await click(window, selectionMenu.getByTestId("format-aa"));
     const before = await allDrawn(lines);
+    await expect(menu).toBeVisible();
+    await motionSettled(window);
     await click(window, menu.getByTestId("format-align-right"));
+    await expect.poll(async () => (await drawn(lines[1])).align).toBe("right");
+    const probe = () =>
+      window.evaluate(() => ({
+        selection: getSelection()?.toString(),
+        active: document.activeElement?.outerHTML.slice(0, 80),
+        swatch: JSON.stringify(
+          document.querySelector('[data-testid="format-color-blue"]')?.getBoundingClientRect(),
+        ),
+        line: document
+          .querySelectorAll('[data-testid="mind-editor"] p')[1]
+          ?.innerHTML.slice(0, 300),
+      }));
+    console.log("BEFORE BLUE", JSON.stringify(await probe()));
     await click(window, menu.getByTestId("format-color-blue"));
+    console.log("AFTER BLUE", JSON.stringify(await probe()));
+    await expect(lines[1].locator('[data-text-color="1D4ED8"]')).not.toHaveCount(0);
     await inSpacing(window, menu, "format-line-spacing-2");
     await expect
       .poll(async () => Math.abs((await drawn(lines[1])).leading - 16 * 1.15 * 2) <= 1)
