@@ -82,7 +82,6 @@ describe("Text written into a Mind keeps its Citations", { timeout: 30_000 }, ()
     expect(made?.unrecorded).toBeUndefined();
     const page = await connectToMind(core, made?.mindId ?? "");
     expect(shownWithChanges(page)).toEqual([
-      "Tide notes",
       "+ Tides",
       "+ Spring tides come at new and full moon ⟨found⟩.",
       "+ Neap tides come between.",
@@ -144,7 +143,6 @@ describe("Text written into a Mind keeps its Citations", { timeout: 30_000 }, ()
     expect(revised?.unrecorded).toBeUndefined();
     const page = await connectToMind(core, revised?.mindId ?? "");
     expect(shownWithChanges(page)).toEqual([
-      "Tide notes",
       "+ Tides",
       "+ Spring tides come at new and full moon ⟨found⟩.",
       "+ Neap tides come between, at half moon.",

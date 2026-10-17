@@ -1,15 +1,13 @@
 import * as Y from "yjs";
+import { isRecord } from "../core/errors";
+
+const textOfRun = (run: unknown): string =>
+  isRecord(run) && typeof run.insert === "string" ? run.insert : "";
 
 const textOf = (element: Y.XmlElement): string =>
   element
     .toArray()
-    .map((child) =>
-      child instanceof Y.XmlText
-        ? (child.toDelta() as { insert: unknown }[])
-            .map((run) => (typeof run.insert === "string" ? run.insert : ""))
-            .join("")
-        : "",
-    )
+    .map((child) => (child instanceof Y.XmlText ? child.toDelta().map(textOfRun).join("") : ""))
     .join("");
 
 /**

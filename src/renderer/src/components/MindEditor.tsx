@@ -587,11 +587,11 @@ function MindEditorView({
     });
   }, [editor, mindId]);
 
-  // A Mind just made with its title given ("Create a new note called …", #202): its text has the cursor.
+  // A Mind just made: its text has the cursor, under its title when it starts with one (#908).
   const bodyHere = useAppStore((state) => state.bodyToFocus === mindId);
   useEffect(() => {
     if (!bodyHere || editor.isDestroyed) return;
-    editor.commands.focus("start");
+    editor.commands.focus("end");
     useAppStore.getState().bodyFocused();
   }, [bodyHere, editor]);
 

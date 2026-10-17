@@ -203,6 +203,7 @@ export interface AppState extends LayoutSlice {
    */
   createMind(options?: {
     startQuestion?: boolean;
+    /** Its name, which its text starts with as a Heading 1 ("Create a new note called …"). */
     title?: string;
     scope?: SearchScope | null;
     folderId?: string | null;
@@ -809,7 +810,7 @@ export const useAppStore = create<AppState>()((set, get) => {
       let made: Undoable | undefined;
       await attempt(async () => {
         const mind = await core.createMind({
-          ...(options?.title && { title: options.title }),
+          ...(options?.title && { title: options.title, headed: true }),
           ...(options?.folderId && { folderId: options.folderId }),
         });
         made = mindMade(

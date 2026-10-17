@@ -120,7 +120,6 @@ describe("The assistant remembers in a long conversation", { timeout: 120_000 },
     );
     await page.settled();
     expect(shownWithChanges(page)).toEqual([
-      "Tide notes",
       "+ Summary",
       "+ The paper is about spring tides. It also covers neap tides.",
     ]);
