@@ -7,23 +7,14 @@
 import type { CitationLocation } from "../core/api";
 import { citationLocation, parseRequestedLocation, type RequestedLocation } from "./locations";
 
-/** A source written as its Document's name, with the Location after a comma when there is one; a place alone ("[p. 3]") has the name "". */
+/** A source written as its Document's name, with the Location after a comma when there is one. */
 export interface NamedSource {
   name: string;
   location: RequestedLocation | null;
 }
 
-const BRACKETED = /([ \t]*)(?:\[([^[\]]+)\](?!\()|【([^【】]+)】)/gu;
+const BRACKETED = /\[([^[\]]+)\](?!\()/g;
 const CHINESE_PAGES = /^第\s*(\d+)(?:\s*[-–—]\s*(\d+))?\s*页$/u;
-// Written alone, "[B12]" or "[14:26]" may be anything; a page, slide or section reads as a source.
-const ALONE: ReadonlySet<RequestedLocation["kind"]> = new Set(["page", "slide", "section"]);
-
-function locationOf(written: string): RequestedLocation | null {
-  const pages = CHINESE_PAGES.exec(written);
-  return parseRequestedLocation(
-    pages ? `p. ${pages[1]}${pages[2] ? `-${pages[2]}` : ""}` : written,
-  );
-}
 
 function sourceOf(inner: string): NamedSource | null {
   const text = inner.trim();
@@ -31,67 +22,105 @@ function sourceOf(inner: string): NamedSource | null {
   // A name may hold a comma itself: the first split whose rest reads as a Location.
   for (const comma of text.matchAll(/[,，]/g)) {
     const name = text.slice(0, comma.index).trim();
-    const location = locationOf(text.slice(comma.index + 1).trim());
+    const written = text.slice(comma.index + 1).trim();
+    const pages = CHINESE_PAGES.exec(written);
+    const location = parseRequestedLocation(
+      pages ? `p. ${pages[1]}${pages[2] ? `-${pages[2]}` : ""}` : written,
+    );
     if (name && location) return { name, location };
   }
-  const alone = locationOf(text);
-  if (alone && ALONE.has(alone.kind)) return { name: "", location: alone };
   return { name: text, location: null };
-}
-
-// "[Deck, slide 3; Policy, § 4]" holds two sources; null: it is a marker.
-function sourcesOf(inner: string): NamedSource[] | null {
-  const sources: NamedSource[] = [];
-  for (const part of inner.split(/[;；]/)) {
-    const source = sourceOf(part);
-    if (!source) return null;
-    sources.push(source);
-  }
-  return sources;
 }
 
 /**
  * Each source in `text` written as a name in brackets, in place of what
- * `link` gives for it (a Citation's marker); one it gives null for stays as
- * text, or with `unmatched` "drop" is left out. A bracket with no Location
- * counts only when `link` knows its name: "[sic]" is no source. `unlinked`:
- * the sources with a Location that `link` gave null for.
+ * `link` gives for it (a Citation's marker), or left as text when it gives
+ * null. A bracket with no Location counts only when `link` knows its name:
+ * "[sic]" is no source. `unlinked`: the sources left as text.
  */
 export function linkSources(
   text: string,
   link: (source: NamedSource) => string | null,
-  unmatched: "keep" | "drop" = "keep",
 ): { text: string; unlinked: number } {
   let unlinked = 0;
-  const linked = text.replace(
-    BRACKETED,
-    (whole, space: string, square: string | undefined, full: string | undefined) => {
-      const sources = sourcesOf(square ?? full ?? "");
-      if (!sources) return whole;
-      const markers = sources.map(link);
-      const missed = sources.filter(
-        (source, index) => markers[index] === null && source.location !== null,
-      ).length;
-      if (missed === 0 && markers.every((marker) => marker === null)) return whole;
-      unlinked += missed;
-      if (unmatched === "keep" && markers.some((marker) => marker === null)) return whole;
-      const kept = markers.filter((marker) => marker !== null).join("");
-      return kept ? `${space}${kept}` : "";
-    },
-  );
+  const linked = text.replace(BRACKETED, (whole, inner: string) => {
+    const source = sourceOf(inner);
+    if (!source) return whole;
+    const marker = link(source);
+    if (marker !== null) return marker;
+    if (source.location !== null) unlinked++;
+    return whole;
+  });
   return { text: linked, unlinked };
 }
 
+// The write path's brackets: "[Deck, slide 3]", "【执行概要，第 3 页】", several sources in one.
+const SOURCE_BRACKET = /([ \t]*)(?:\[([^[\]\n]+)\](?!\()|【([^【】\n]+)】)/gu;
+// Code, maths and quoted words are the text's own: a bracket in them is never a source.
+const KEPT_AS_WRITTEN =
+  /```[\s\S]*?(?:```|$)|~~~[\s\S]*?(?:~~~|$)|`[^`\n]*`|\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$[^$\n]+\$|“[^”\n]*”|"[^"\n]*"|「[^」\n]*」|『[^』\n]*』/g;
+
+interface Recognised {
+  start: number;
+  end: number;
+  space: string;
+  written: string;
+  sources: NamedSource[];
+}
+
+function recognised(text: string, known: (source: NamedSource) => boolean): Recognised[] {
+  const kept = [...text.matchAll(KEPT_AS_WRITTEN)].map(
+    (match) => [match.index, match.index + match[0].length] as const,
+  );
+  return [...text.matchAll(SOURCE_BRACKET)].flatMap((match) => {
+    const space = match[1] ?? "";
+    const at = match.index + space.length;
+    if (text[at - 1] === "!" || kept.some(([from, to]) => at >= from && at < to)) return [];
+    const parts = (match[2] ?? match[3] ?? "").split(/[;；]/).map(sourceOf);
+    const sources = parts.filter((part): part is NamedSource => part !== null);
+    if (sources.length === 0 || sources.length < parts.length || !sources.every(known)) return [];
+    return [
+      {
+        start: match.index,
+        end: match.index + match[0].length,
+        space,
+        written: match[0].slice(space.length),
+        sources,
+      },
+    ];
+  });
+}
+
 /**
- * The brackets in `text` that hold a source, as written: one with a Location
- * ("[Deck, slide 3]", "[§ 6.3.1 Forecast]"), or one whose name `known` knows.
+ * The brackets in `text` whose every source `known` knows, as written, but
+ * none in code, maths or quoted words: "[Deck, slide 3]", "[Deck]". A
+ * checkbox, "[1]" or "[Section 4]" names no Document, so is none.
  */
 export function sourcesAsText(text: string, known: (source: NamedSource) => boolean): string[] {
-  return [...text.matchAll(BRACKETED)].flatMap((match) => {
-    const sources = sourcesOf(match[2] ?? match[3] ?? "");
-    const named = sources?.some((source) => source.location !== null || known(source));
-    return named ? [match[0].trim()] : [];
-  });
+  return recognised(text, known).map((each) => each.written);
+}
+
+/**
+ * `text` with each bracket `sourcesAsText` finds in place of what `link`
+ * gives for its sources (Citations' markers); a source it gives null for is
+ * left out, and a bracket with none left goes with the space before it.
+ * Everything else stays as written. `dropped`: the sources left out.
+ */
+export function linkKnownSources(
+  text: string,
+  known: (source: NamedSource) => boolean,
+  link: (source: NamedSource) => string | null,
+): { text: string; dropped: number } {
+  let dropped = 0;
+  let out = "";
+  let at = 0;
+  for (const each of recognised(text, known)) {
+    const markers = each.sources.flatMap((source) => link(source) ?? []);
+    dropped += each.sources.length - markers.length;
+    out += text.slice(at, each.start) + (markers.length > 0 ? each.space + markers.join("") : "");
+    at = each.end;
+  }
+  return { text: out + text.slice(at), dropped };
 }
 
 const simplified = (text: string) =>
@@ -145,7 +174,7 @@ export function citesSource(
   source: NamedSource,
 ): boolean {
   if (typeof citation.documentName !== "string") return false;
-  if (source.name !== "" && nameKey(citation.documentName) !== nameKey(source.name)) return false;
+  if (nameKey(citation.documentName) !== nameKey(source.name)) return false;
   if (source.location === null) return true;
   const at = citationLocation({
     location: citation.location,

@@ -1256,20 +1256,12 @@ export function createCitationSession(
       return citationNode(toCitation(record, record.result));
     },
 
-    /**
-     * The marker of a Citation recorded for a source written as its name in
-     * brackets; null for none, and for a place alone ("[p. 3]") that more
-     * than one Document's Citations are at.
-     */
+    /** The marker of a Citation recorded for a source written as its name in brackets; null for none. */
     markerFor(source: NamedSource): number | null {
-      const fitting = [...records.values()].filter((record) =>
-        citesSource(toCitation(record, record.result), source),
-      );
-      const documents = new Set(
-        fitting.map((record) => toCitation(record, record.result).documentId),
-      );
-      if (source.name === "" && documents.size > 1) return null;
-      return fitting[0]?.marker ?? null;
+      for (const record of records.values()) {
+        if (citesSource(toCitation(record, record.result), source)) return record.marker;
+      }
+      return null;
     },
 
     /** A marker's node once the Answer has finished: `finalCitation`'s, or null to remove the marker. */

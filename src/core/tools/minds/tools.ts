@@ -110,6 +110,8 @@ export interface MindsForTools {
   checkpoint(mindId: string): void;
   /** Makes a Mind, in the Folder `folderId` or in none; `headed`, its text starts with its title (`makeMind`). */
   create(title: string, folderId: string | null, headed: boolean): ChangeableMind;
+  /** Removes a Mind a call made, when it holds nothing but its title. */
+  discard(mindId: string): void;
   /** The name of a Folder, or null when there is none by that id. */
   folderName(folderId: string): string | null;
   /** Says where a call is writing a Mind's new Blocks as they come (#202); `place` null once it has stopped. */
@@ -175,6 +177,8 @@ export interface MindToolsOptions {
     sourcesAsText: string[];
     /** Sources written as a name in brackets that matched no recorded Citation, so left out. */
     droppedSources: number;
+    /** Sources in its tables' cells written as a name in brackets that matched no recorded Citation. */
+    unlinkedSources: number;
     /** Cells beyond its tables' columns, their text kept in the row's last cell. */
     extraCells: number;
     searchTalk: number;
@@ -891,7 +895,6 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     /** The ids of those in, in order. */
     ids: string[];
     made: boolean;
-    /** The Answer its Blocks link back to. */
     origin: BlockOrigin;
   }
 
@@ -1051,7 +1054,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       created: boolean;
       breaks: number;
       copy: Repeat | null;
-      /** It writes sources as text: it is refused once all of it is in, so none of it goes in. */
+      /** It writes sources as text: nothing more goes in until all of it is in, as it may be refused. */
       uncited: boolean;
     }
   >();
@@ -1101,8 +1104,6 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     if (stream.copy !== null || stream.uncited) return;
     const { blocks, firstUnrecorded, sourcesAsText } = options.blocksOf(content.value);
     if (!uncitedRefused && sourcesAsText.length > 0) {
-      withdraw(writer);
-      minds.writing(writer.mind.id, null);
       stream.uncited = true;
       return;
     }
@@ -1136,27 +1137,29 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       firstUnrecorded: -1,
       sourcesAsText: [],
       droppedSources: 0,
+      unlinkedSources: 0,
       extraCells: 0,
       searchTalk: 0,
     };
   };
 
-  // Refused once a Run: a later call goes in, each source made its Citation or left out. A marker
-  // with no Citation yet isn't refused: `cite` may record it later in the same step.
+  // Refused once a Run, and only with a step left to try again: otherwise the text goes in, each
+  // source made its Citation or left out. A marker with no Citation yet isn't refused: `cite` may
+  // record it later in the same step.
   let uncitedRefused = false;
 
   const uncitedIn = (
     mind: ChangeableMind,
     { sourcesAsText }: Content,
     again: string,
-    answer: boolean,
+    { answer, retry, made = false }: { answer: boolean; retry: boolean; made?: boolean },
   ): Refusal | null => {
-    if (uncitedRefused || sourcesAsText.length === 0) return null;
+    if (uncitedRefused || !retry || sourcesAsText.length === 0) return null;
     uncitedRefused = true;
     return new Refusal(
       { kind: "uncited", mindId: mind.id },
       [
-        `Nothing was written in “${mind.name}”: each source in content must be a marker like [^3], for a Citation you recorded with cite.`,
+        `${made ? `“${mind.name}” wasn't made` : `Nothing was written in “${mind.name}”`}: each source in content must be a marker like [^3], for a Citation you recorded with cite.`,
         `These sources are written as text instead: ${someOf(sourcesAsText.map((each) => `“${each}”`))}. A source in brackets is how IncarnaMind shows you a Citation, never a way to write one.`,
         `Record each source with cite, its Passage and exact words, searching first for one that isn't in this Answer's results. Then ${again} with the same text, each source replaced by its marker, as in “Rent is due on the 1st [^3].”`,
         ...(answer && options.lastAnswer
@@ -1180,6 +1183,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     after: string | null,
     given: string | NonNullable<MindToolsOptions["lastAnswer"]>,
     made: boolean,
+    retry: boolean,
   ): (Written & { change: MindChange }) | null => {
     const stream = streams.get(toolCallId);
     streams.delete(toolCallId);
@@ -1190,12 +1194,9 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     const { blocks, cited, notFound, unrecorded, searchTalk, ...notes } = content;
     let writer = stream?.writer ?? null;
     const unmade = blocks.some(unmadeTable);
-    const again = made ? `call add_to_mind with mind “${mind.name}”` : "call add_to_mind again";
-    const uncited = unmade ? null : uncitedIn(mind, content, again, true);
-    if (
-      writer &&
-      (unmade || uncited || stream?.uncited || writer.mind.id !== mind.id || writer.named !== after)
-    ) {
+    const again = made ? "call create_mind again" : "call add_to_mind again";
+    const uncited = unmade ? null : uncitedIn(mind, content, again, { answer: true, retry, made });
+    if (writer && (unmade || uncited || writer.mind.id !== mind.id || writer.named !== after)) {
       withdraw(writer);
       minds.writing(writer.mind.id, null);
       writer = null;
@@ -1341,11 +1342,12 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     mind: ChangeableMind,
     over: OwnWaiting | OwnApplied,
     markdown: string,
+    retry: boolean,
   ): Written & { change: MindChange; dropped: number } => {
     const content = options.blocksOf(markdown);
     const { blocks, cited, notFound, unrecorded, searchTalk, ...notes } = content;
     if (blocks.some(unmadeTable)) throw noTable(mind);
-    const uncited = uncitedIn(mind, content, "call edit_mind again", false);
+    const uncited = uncitedIn(mind, content, "call edit_mind again", { answer: false, retry });
     if (uncited) throw uncited;
     const dropped = minds.read(mind.id, (note) => citationsDropped(note, over, blocks));
     const request = randomUUID();
@@ -1439,7 +1441,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     providerTool: MIND_TOOLS.edit,
     effects: effectOn("write"),
     untrustedResult: false,
-    async call(input, { toolCallId, signal }) {
+    async call(input, { toolCallId, signal, canCallAgain }) {
       const markdown = optional(input.content);
       const instruction = markdown === null ? text(input.instruction, "instruction") : "";
       const mind = found(targetOf(input));
@@ -1477,7 +1479,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
           );
         }
         const before = minds.read(mind.id, (blocks) => stretchText(blocks, stretch));
-        const written = writeOver(toolCallId, mind, over, markdown);
+        const written = writeOver(toolCallId, mind, over, markdown, canCallAgain?.() ?? true);
         const went = ` (${lengths(before, markdown)})`;
         return [
           over.kind === "own"
@@ -1590,11 +1592,18 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         return { writer: writerFor(mind, after, false), created: false };
       });
     },
-    async call(input, { toolCallId }) {
+    async call(input, { toolCallId, canCallAgain }) {
       const given = givenIn(input) ?? text(input.content, "content");
       const mind = found(targetOf(input));
       const after = optional(input.after);
-      const written = finishContent(toolCallId, mind, after, given, false);
+      const written = finishContent(
+        toolCallId,
+        mind,
+        after,
+        given,
+        false,
+        canCallAgain?.() ?? true,
+      );
       if (!written) throw noTable(mind);
       return added(
         mind,
@@ -1641,7 +1650,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         return { writer: writerFor(mind, null, true), created: true };
       });
     },
-    async call(input, { toolCallId }) {
+    async call(input, { toolCallId, canCallAgain }) {
       const title = text(input.title, "title");
       const given = givenIn(input);
       // Made already, as its content came in.
@@ -1662,11 +1671,10 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       }
       let written: ReturnType<typeof finishContent>;
       try {
-        written = finishContent(toolCallId, mind, null, given, true);
+        written = finishContent(toolCallId, mind, null, given, true, canCallAgain?.() ?? true);
       } catch (error) {
-        if (!(error instanceof Refusal) || error.problem.kind !== "uncited") throw error;
-        empty();
-        return `${made}. It is empty. ${error.message}`;
+        if (error instanceof Refusal && error.problem.kind === "uncited") minds.discard(mind.id);
+        throw error;
       }
       if (!written) {
         empty();

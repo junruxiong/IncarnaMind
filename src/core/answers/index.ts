@@ -51,7 +51,7 @@ import { withFigures, withFigureText } from "../../shared/figureMarkers";
 import { linkTableSources } from "../../shared/markdownTables";
 import type { MeetingHelpKind } from "../../shared/meetingHelp";
 import {
-  linkSources,
+  linkKnownSources,
   type NamedSource,
   namesOneOf,
   sourcesAsText,
@@ -1650,11 +1650,10 @@ export function createAnswers(options: AnswersOptions) {
                   .searchableBySize(input.documentIds)
                   .map((each) => each.name);
                 const names = documentNames;
-                const asText = sourcesAsText(
-                  written.markdown,
-                  (source) => link(source) !== null || namesOneOf(source.name, names),
-                );
-                const sourced = linkSources(written.markdown, link, "drop");
+                const known = (source: NamedSource) =>
+                  namesOneOf(source.name, names) || link({ ...source, location: null }) !== null;
+                const asText = sourcesAsText(written.markdown, known);
+                const sourced = linkKnownSources(written.markdown, known, link);
                 const tables = linkTableSources(sourced.text, link);
                 const cited = markdownToBlocks(tables.markdown).flatMap((block, index) =>
                   withCitations([block], (marker) => {
@@ -1683,7 +1682,8 @@ export function createAnswers(options: AnswersOptions) {
                   unrecorded,
                   firstUnrecorded,
                   sourcesAsText: asText,
-                  droppedSources: sourced.unlinked + tables.unlinked,
+                  droppedSources: sourced.dropped,
+                  unlinkedSources: tables.unlinked,
                   extraCells: tables.extraCells,
                   searchTalk: written.left,
                 };
