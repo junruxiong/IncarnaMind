@@ -2087,6 +2087,7 @@ export const en = {
   "consent.dialog.body": "To {purpose}, IncarnaMind sends this to {service}:",
   "consent.dialog.bodyMore": "To {purpose}, IncarnaMind will now also send this to {service}:",
   "consent.dialog.note": "Nothing is sent unless you allow it.",
+  "privacy.changeAnyTime": "Change it any time in Settings → Privacy.",
   "consent.dialog.allow": "Allow",
   "consent.dialog.decline": "Don't allow",
 
@@ -2336,7 +2337,6 @@ export const en = {
   "usageData.card.decline": "Don't send",
   "usageData.card.what": "What's sent",
   "usageData.card.example": "For example:",
-  "usageData.card.change": "Change it any time in Settings › Privacy.",
   "usageData.example.question": "A Question was asked with a cloud model from Anthropic",
   "usageData.example.answer": "An Answer took 6 seconds and has 3 Citations, each quote found",
   "usageData.example.documents": "2 Documents were added: a PDF and a Word file",

@@ -1962,7 +1962,7 @@ export const zhCN = {
   "claudePlan.paste.continue": "完成登录",
   "claudePlan.paste.problem.not-sign-in-address": "这不是 Claude 页面上的代码。",
   "claudePlan.paste.problem.other-sign-in":
-    "这是之前登录的代码。请在新打开的页面登录，再粘贴它的代码。",
+    "这个代码来自之前的一次登录。在刚打开的页面上登录后，再粘贴那里的代码。",
   "claudePlan.failed": "未能登录 Claude",
   "claudePlan.failure.timedOut": "Claude 登录未在时限内完成，未保存任何内容",
   "claudePlan.failure.secretStorage": "无法安全保存 Claude 登录：没有可用的密钥环",
@@ -1984,13 +1984,14 @@ export const zhCN = {
   "chatgpt.paste.continue": "继续",
   "chatgpt.paste.problem.not-sign-in-address": "这不是登录地址。",
   "chatgpt.paste.problem.other-sign-in":
-    "这是之前登录的地址。请在新打开的页面登录，再粘贴它的地址。",
+    "这个地址来自之前的一次登录。在刚打开的页面上登录后，再粘贴地址栏里的地址。",
   "chatgpt.paste.problem.finished": "这次登录已经结束。",
 
   "consent.dialog.title": "向 {service} 发送数据？",
   "consent.dialog.body": "为了{purpose}，IncarnaMind 会向 {service} 发送：",
   "consent.dialog.bodyMore": "为了{purpose}，IncarnaMind 还将向 {service} 发送：",
-  "consent.dialog.note": "你允许之前不会发送任何内容。",
+  "consent.dialog.note": "在你允许之前不会发送任何内容。",
+  "privacy.changeAnyTime": "你可以随时在“设置”的“隐私”中更改。",
   "consent.dialog.allow": "允许",
   "consent.dialog.decline": "不允许",
 
@@ -2232,7 +2233,6 @@ export const zhCN = {
   "usageData.card.decline": "不发送",
   "usageData.card.what": "会发送什么",
   "usageData.card.example": "例如：",
-  "usageData.card.change": "可随时在“设置 › 隐私”中更改。",
   "usageData.example.question": "用 Anthropic 的云端模型提了一个问题",
   "usageData.example.answer": "一个回答用了 6 秒，有 3 处引用，每处都找到了引文",
   "usageData.example.documents": "添加了 2 个文档：一个 PDF 和一个 Word 文件",

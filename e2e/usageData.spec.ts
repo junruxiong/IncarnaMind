@@ -127,7 +127,7 @@ test("a release build asks after the first Answer to the User's own Question, se
   await expect(window.getByTestId("usage-data-examples")).toBeHidden();
   await card.getByTestId("usage-data-what").click();
   await expect(card.getByTestId("usage-data-examples")).toContainText("A Question was asked");
-  await expect(card).toContainText("Change it any time in Settings › Privacy.");
+  await expect(card).toContainText("Change it any time in Settings → Privacy.");
   await expect(card.getByRole("link", { name: "See every event" })).toBeVisible();
   const sendBox = await card.getByTestId("usage-data-send").boundingBox();
   const declineBox = await card.getByTestId("usage-data-decline").boundingBox();
