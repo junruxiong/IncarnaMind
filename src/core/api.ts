@@ -41,6 +41,7 @@ export type {
  */
 import type { CitationForm, CitationStyleId, StyleCatalogue } from "../shared/citationStyles";
 import type { FormulaInput, FormulaLiteral, ResultUnit, ShowAs } from "../shared/formula";
+import type { HelpKeys, MeetingHelpKind, MeetingHelpTemplate } from "../shared/meetingHelp";
 import type { TagColour } from "../shared/tagColours";
 import type { Anchor, UnitKind, UnitLabel } from "../shared/units";
 import type { ErrorWording } from "./errors";
@@ -1851,6 +1852,12 @@ export interface DeviceSettings {
    * that the other people should be told. Recording waits for it.
    */
   meetingNoticeAccepted: boolean;
+  /** Settings › Meetings › "Show the floating panel": it appears while a Meeting records. */
+  meetingPanel: boolean;
+  /** Settings › Meetings › "Keep the panel out of my screen share", where the system honours it. */
+  meetingPanelHidden: boolean;
+  /** The help buttons' global shortcuts the User changed; the others keep their defaults. */
+  meetingHelpKeys: HelpKeys;
   /** How the window moves here (Settings → General → Motion): see `MotionPreference`. */
   motion: MotionPreference;
 }
@@ -4637,9 +4644,21 @@ export interface ContradictionWatchRun extends ContradictionCheckOutcome {
  * What "Check this Mind" checks (#737): "all", every sentence that makes a
  * claim, found afresh; "changed", the checks that need a re-check and the
  * sentences never checked since, found among those the last run didn't
- * leave out.
+ * leave out; "added", only the checks Documents added since could change
+ * (`documentsAddedSinceChecks`), each in the scope it used.
  */
-export type CheckMindMode = "all" | "changed";
+export type CheckMindMode = "all" | "changed" | "added";
+
+/**
+ * A sentence's check that Documents added since could change (#993): one
+ * found unsupported or not checked, and the Documents added to the scope it
+ * used after it was made. Supported and contradicted checks already have
+ * their evidence, and contradiction watch checks its own marks.
+ */
+export interface DocumentsAddedSince {
+  checkId: string;
+  documentIds: string[];
+}
 
 export interface CheckMindInput {
   requestId: string;
@@ -4659,6 +4678,8 @@ export type MindCheckPlan =
       sentences: number;
       /** Whether the model first names the claims among them; only checks made again don't need it. */
       findsClaims: boolean;
+      /** Every sentence searches only the Mind's Folder; false also for mixed scopes. */
+      inFolder: boolean;
       /** The Mind's own model; null for the default. */
       model: ChatModelChoice | null;
     }
@@ -7203,8 +7224,49 @@ export interface Meeting {
   transcript: MeetingTranscript | null;
   /** How well its capture went, so a bad recording can be explained (#161). */
   health: CaptureHealth;
+  /** The help asked for last during the call, whose Answer the floating panel shows; null before any and after Stop. */
+  help: MeetingHelp | null;
+  /** The kind of meeting the help buttons are for, as the User chose it; null: the general buttons only. */
+  helpTemplate: MeetingHelpTemplate | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export type { HelpKeys, MeetingHelpKind, MeetingHelpTemplate };
+
+/** Help asked for during a call: its button, and its Answer in a conversation. */
+export interface MeetingHelp {
+  kind: MeetingHelpKind;
+  conversationId: string;
+  answerId: string;
+  /**
+   * The line it answers, for its heading: the other side's newest ("Them"), the User's own for
+   * "Am I leading them?", or the newest of all where speakers aren't told apart. `speaker` as
+   * the Transcript has it ("Me", "Them", "Speaker ?"). Null for the buttons about the whole call.
+   */
+  heard: { text: string; speaker: string | null } | null;
+}
+
+export interface AskMeetingHelpInput {
+  meetingId: string;
+  kind: MeetingHelpKind;
+  /**
+   * The conversation to ask in, as the assistant shows it; null: a new one. Absent: the one
+   * this meeting's help went to last, or a new one.
+   */
+  conversationId?: string | null;
+}
+
+export interface SetMeetingTemplateInput {
+  meetingId: string;
+  template: MeetingHelpTemplate | null;
+}
+
+/** How loud each source of a recording Meeting is now, from 0 (silence) to 1. */
+export interface MeetingLevel {
+  meetingId: string;
+  microphone: number;
+  system: number;
 }
 
 /**
@@ -8525,6 +8587,8 @@ export interface CoreApi {
    * the run in the Mind (`MindCheckRun`). `cancelCheck` stops it.
    */
   checkMind(input: CheckMindInput): Promise<CheckMindResult>;
+  /** The Mind's checks that Documents added since could change, with those Documents (#993). Sends nothing. */
+  documentsAddedSinceChecks(mindId: string): Promise<DocumentsAddedSince[]>;
 
   getSecretStorage(): Promise<SecretStorageStatus>;
   /** The User accepts storing keys without keyring protection on this device. */
@@ -9036,6 +9100,15 @@ export interface CoreApi {
   retryTranscript(meetingId: string): Promise<Meeting>;
   /** Opens the system's settings where the User allows IncarnaMind to record this source. */
   openAudioSettings(source: AudioSource): Promise<void>;
+  /**
+   * One-click help during the call: asks the button's Question in a conversation, from
+   * the Meeting's Mind, while it records or is paused; its Answer is one or two options to
+   * say, read from the live transcript and from what the Mind's Folder says about its newest
+   * lines. The Meeting's `help` names it. As `askInConversation` otherwise.
+   */
+  askMeetingHelp(input: AskMeetingHelpInput): Promise<ConversationAskResult>;
+  /** Sets the kind of meeting a live Meeting's help buttons are for: its template adds two or three. */
+  setMeetingTemplate(input: SetMeetingTemplateInput): Promise<Meeting>;
 
   /** Outside agents (#351, experimental): the setting, what pauses them, and every pairing. */
   getAgents(): Promise<AgentSettings>;
@@ -9259,6 +9332,8 @@ export interface CoreEvents {
    * `listMeetings` now returns it.
    */
   "meetings.changed": Meeting[];
+  /** About ten times a second while a Meeting's audio is captured: how loud each source is. */
+  "meetings.level": MeetingLevel;
   /**
    * Connecting agents was turned on or off, Local mode paused or resumed them, or a pairing
    * was made, changed, used or removed: as `getAgents` now returns it.
@@ -9429,6 +9504,7 @@ const methods: Record<CoreApiMethod, true> = {
   planMindCheck: true,
   findMindClaims: true,
   checkMind: true,
+  documentsAddedSinceChecks: true,
   getSecretStorage: true,
   acceptPlainTextSecretStorage: true,
   detectOllama: true,
@@ -9569,6 +9645,8 @@ const methods: Record<CoreApiMethod, true> = {
   deleteMeetingAudio: true,
   retryTranscript: true,
   openAudioSettings: true,
+  askMeetingHelp: true,
+  setMeetingTemplate: true,
   getAgents: true,
   setAgentsEnabled: true,
   connectAgent: true,

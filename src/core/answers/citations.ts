@@ -1167,6 +1167,10 @@ export function createCitationSession(
     /** What `show` would send for these Passages, recording nothing. */
     measure: (found: readonly WindowedPassage[]) => show(found, true),
 
+    /** Searches the Answer's Search scope as its search Tool does, for Passages to `show`. */
+    find: (query: string, signal?: AbortSignal, options?: AnswerSearchOptions) =>
+      documents.search(query, signal, undefined, options),
+
     quotes,
 
     /** The Passages the model was given, by the id it cites them by, as it read them. */
