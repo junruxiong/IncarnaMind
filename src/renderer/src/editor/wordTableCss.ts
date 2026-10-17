@@ -23,32 +23,66 @@ const padding = (margins: WordTableLook["margins"]) =>
     return value === undefined ? [] : [`padding-${side}: ${pt(value)}`];
   });
 
-function width(table: WordTableLook, textWidth: number | null): string {
+const columnsWidth = (table: WordTableLook) =>
+  table.columns?.reduce((sum, each) => sum + each, 0) ?? 0;
+
+/** In points; null for a table as wide as its text. */
+function widthOf(table: WordTableLook, textWidth: number | null): number | null {
   if (table.width?.unit === "percent") {
-    return textWidth ? pt((textWidth * table.width.value) / 100) : `${table.width.value}%`;
+    return textWidth ? (textWidth * table.width.value) / 100 : null;
   }
-  const columns = table.columns?.reduce((sum, each) => sum + each, 0);
-  if (columns) return pt(columns);
-  return table.width ? pt(table.width.value) : "auto";
+  return columnsWidth(table) || table.width?.value || null;
 }
 
-function placement(table: WordTableLook): string[] {
+function width(table: WordTableLook, textWidth: number | null): string {
+  const points = widthOf(table, textWidth);
+  if (points !== null) return pt(points);
+  return table.width?.unit === "percent" ? `${table.width.value}%` : "auto";
+}
+
+/** From the text's left edge to the table's, in points: its indent, less the cell margin Word hangs it by. */
+function offsetOf(table: WordTableLook, look: WordLook): number {
+  if (table.align === "center" || table.align === "right") return 0;
+  return (table.indent ?? 0) - (look.tablesHang ? (table.margins?.left ?? CELL_MARGIN) : 0);
+}
+
+/** How far right of the text's left edge the widest table reaches, in points; the page fits it. */
+export function widestTable(look: WordLook): number {
+  return Math.max(
+    0,
+    ...Object.values(look.tables).map((table) => {
+      const points = widthOf(table, look.width) ?? 0;
+      return table.align === "center" || table.align === "right"
+        ? points
+        : offsetOf(table, look) + points;
+    }),
+  );
+}
+
+function placement(table: WordTableLook, look: WordLook): string[] {
   if (table.align === "center") return ["margin-left: auto", "margin-right: auto"];
   if (table.align === "right") return ["margin-left: auto"];
-  return table.indent && table.indent > 0 ? [`margin-left: ${pt(table.indent)}`] : [];
+  const offset = offsetOf(table, look);
+  return offset > 0 ? [`margin-left: ${pt(offset)}`] : [];
 }
 
-function tableRules(scope: string, key: string, table: WordTableLook, textWidth: number | null) {
+function tableRules(scope: string, key: string, table: WordTableLook, look: WordLook) {
   const selector = `${scope} table${looked(key)}`;
+  const offset = offsetOf(table, look);
+  const total = columnsWidth(table);
   const cells = (rows: string, cell: string) =>
     `${scope} :where(table${looked(key)} > tbody > ${rows} > ${cell})`;
   const outer = table.borders ?? {};
   const across = table.borders?.insideH;
   const down = table.borders?.insideV;
   return [
+    // Into the margin, its frame with it: the frame would cut what reaches out of it.
+    offset < 0
+      ? `${scope} .tableWrapper:has(> table${looked(key)}) { margin-left: calc(-1 * ${pt(BORDER_ROOM)} + ${pt(offset)}); }`
+      : "",
     rule(selector, [
-      `width: ${width(table, textWidth)}`,
-      ...placement(table),
+      `width: ${width(table, look.width)}`,
+      ...placement(table, look),
       ...SIDES.flatMap((side) => {
         const value = outer[side];
         return value ? [`border-${side}: ${border(value)}`] : [];
@@ -59,9 +93,10 @@ function tableRules(scope: string, key: string, table: WordTableLook, textWidth:
     across ? rule(cells("tr + tr", "*"), [`border-top: ${border(across)}`]) : "",
     down ? rule(cells("tr", "* + *"), [`border-left: ${border(down)}`]) : "",
     down ? rule(cells("tr", "[rowspan]:not(:last-child)"), [`border-right: ${border(down)}`]) : "",
+    // In proportion, so a table narrower than the file's shrinks every column alike.
     ...(table.columns ?? []).map(
       (column, index) =>
-        `${selector} > colgroup > col:nth-child(${index + 1}) { width: ${pt(column)}; }`,
+        `${selector} > colgroup > col:nth-child(${index + 1}) { width: ${(column / total) * 100}%; }`,
     ),
   ];
 }
@@ -84,19 +119,28 @@ function cellRule(scope: string, key: string, cell: WordCellLook): string {
   );
 }
 
-/** Only the file's lines, collapsed as in Word: insideH and insideV on the cells between, a cell's own sides over them. */
+/**
+ * Only the file's lines, collapsed as in Word: insideH and insideV on the
+ * cells between, a cell's own sides over them. A table narrower than the
+ * file's wraps its cells; only one whose words can't fit scrolls, its cut
+ * edge faded (`useTableFades`) and its scrollbar shown.
+ */
 export function wordTableCss(scope: string, look: WordLook): string[] {
   if (Object.keys(look.tables).length === 0) return [];
+  const frame = `${scope} .tableWrapper`;
   return [
     // Room for the outer lines' halves outside the table, which the scrolling frame would cut.
     `${scope} :where(.tableWrapper:has(> ${WORD_TABLE})) { margin: 0 calc(-1 * ${pt(BORDER_ROOM)}); padding: 0 ${pt(BORDER_ROOM)} 1px; }`,
-    `${scope} :where(${WORD_TABLE}) { width: auto; border: 0; border-radius: 0; border-collapse: collapse; table-layout: fixed; }`,
+    `${scope} :where(${WORD_TABLE}) { width: auto; max-width: 100%; border: 0; border-radius: 0; border-collapse: collapse; table-layout: auto; }`,
+    `${frame}[data-more-after] { mask-image: linear-gradient(to left, transparent, #000 28px); }`,
+    `${frame}[data-more-before] { mask-image: linear-gradient(to right, transparent, #000 28px); }`,
+    `${frame}[data-more-before][data-more-after] { mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent); }`,
+    `${frame}::-webkit-scrollbar { height: 8px; }`,
+    `${frame}::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 4px; background: var(--color-rule-strong) padding-box; }`,
     `${scope} :where(${WORD_TABLE} > colgroup > col) { width: ${pt(UNSIZED_COLUMN)}; }`,
     `${scope} :where(${WORD_TABLE} > tbody > tr > :is(td, th)) { min-width: 0; padding: 0 ${pt(CELL_MARGIN)}; border: 0; border-radius: 0; vertical-align: top; background: none; font: inherit; color: inherit; text-align: inherit; }`,
     `${scope} :where(${WORD_TABLE} > tbody > tr > * > * + *) { margin-top: 0; }`,
-    ...Object.entries(look.tables).flatMap(([key, table]) =>
-      tableRules(scope, key, table, look.width),
-    ),
+    ...Object.entries(look.tables).flatMap(([key, table]) => tableRules(scope, key, table, look)),
     ...Object.entries(look.cells).map(([key, cell]) => cellRule(scope, key, cell)),
   ].filter(Boolean);
 }

@@ -24,7 +24,7 @@ import { child, descendants, elements, local, onOff, parseXml, type XmlElement }
  * How the look was read. A Mind whose look an earlier version read has it
  * cleared (attributes, marks and map) and given again at the next start.
  */
-export const WORD_LOOK_VERSION = 4;
+export const WORD_LOOK_VERSION = 5;
 
 /** The first version that read table styles' conditional formatting. */
 export const CONDITIONAL_FORMATTING_VERSION = 3;
@@ -806,6 +806,7 @@ export class LookReader {
   private readonly levels = new Map<string, Map<number, { pPr?: XmlElement; rPr?: XmlElement }>>();
   private readonly width: number | null;
   private readonly defaultTab: number | null;
+  private readonly tablesHang: boolean;
   /** Parts the look would read but couldn't parse; the look goes on without them. */
   readonly unreadable: string[] = [];
 
@@ -813,8 +814,16 @@ export class LookReader {
     const settings = this.readable("settings", parts.settings, (root) => ({
       language: child(root, "w:themeFontLang")?.attrs["w:eastAsia"],
       defaultTab: points(child(root, "w:defaultTabStop")?.attrs["w:val"]),
+      mode: Number(
+        elements(child(root, "w:compat") ?? EMPTY).find(
+          (setting) =>
+            setting.name === "w:compatSetting" && setting.attrs["w:name"] === "compatibilityMode",
+        )?.attrs["w:val"],
+      ),
     }));
     this.defaultTab = settings?.defaultTab ?? null;
+    // A file that names no mode is opened in an earlier one: only Word 2013's mode 15 and later stop the hang.
+    this.tablesHang = !(Number.isFinite(settings?.mode) && (settings?.mode ?? 0) >= 15);
     this.theme = this.readable("theme", parts.theme, (root) =>
       readTheme(root, settings?.language),
     ) ?? {
@@ -1150,6 +1159,7 @@ export class LookReader {
       body,
       width: this.width,
       defaultTab: this.defaultTab,
+      ...(this.tablesHang && { tablesHang: true as const }),
       paragraphs: this.paragraphs.entries,
       runs: this.runs.entries,
       tables: this.tables.entries,

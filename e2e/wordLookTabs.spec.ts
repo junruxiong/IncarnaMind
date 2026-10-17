@@ -1,14 +1,12 @@
-import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { type ElectronApplication, expect, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 import type { Editor } from "@tiptap/core";
 import { paragraph, run, W_NS, wordFile } from "../tests/helpers/word";
 import { contractFile, RESUME_TEXT_WIDTH_TWIPS, resumeFile } from "../tests/helpers/wordLookFiles";
 import {
   createDataFolder,
   dismissChatSetup,
-  importWordFromMenu,
-  interceptOpenDialog,
+  importWordFile,
   launchApp,
   pointAndClick,
   removeDataFolder,
@@ -34,15 +32,6 @@ test.afterEach(async () => {
   await removeDataFolder(home);
   await removeDataFolder(files);
 });
-
-async function importFile(app: ElectronApplication, window: Page, name: string, bytes: Buffer) {
-  const path = join(files, name);
-  await writeFile(path, bytes);
-  await interceptOpenDialog(app, path);
-  const dialog = await importWordFromMenu(window);
-  await dialog.getByTestId("word-import-confirm").click();
-  await expect(dialog).toBeHidden();
-}
 
 /** Where `text` starts and ends in the paragraph holding it, from the paragraph's left edge; `pt` is a point in pixels for a file whose body size is `body`. */
 function placeOf(window: Page, text: string, body = RESUME_BODY) {
@@ -120,7 +109,7 @@ test("a résumé's tab stops line its columns up at the file's stops, its dates 
   const { app, window } = await launchApp(dataDir, { home });
   await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
-  await importFile(app, window, "林晓_简历.docx", resumeFile());
+  await importWordFile(app, window, files, "林晓_简历.docx", resumeFile());
 
   const date = "2023.09 – 2026.06";
   await expect.poll(async () => (await placeOf(window, date))?.right).toBeDefined();
@@ -170,7 +159,7 @@ test("a clause's text after its number starts at the clause's hanging indent", a
   const { app, window } = await launchApp(dataDir, { home });
   await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
-  await importFile(app, window, "Supply agreement.docx", contractFile());
+  await importWordFile(app, window, files, "Supply agreement.docx", contractFile());
   const clause = window.getByTestId("mind-editor").locator("p", { hasText: "Prices are fixed" });
   await expect(clause.locator("[data-word-tab]")).toHaveCount(1);
   // The second line starts at the indent; so does the first line's text, after "2.1".
@@ -229,9 +218,10 @@ test("a tab that wraps onto another line when the column narrows reaches that li
   await dismissChatSetup(window);
   // One line in a whole window's column; two in half of it, where the tab follows "Leeds" on the second.
   const sentence = "The supplier delivers the goods to the buyer's warehouse in Leeds";
-  await importFile(
+  await importWordFile(
     app,
     window,
+    files,
     "Delivery.docx",
     wordFile({
       styles:
@@ -267,9 +257,10 @@ test("two tabs in a row reach two stops, a decimal stop lines up the point, and 
   const { app, window } = await launchApp(dataDir, { home });
   await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
-  await importFile(
+  await importWordFile(
     app,
     window,
+    files,
     "Stops.docx",
     wordFile({
       styles: TWELVE_POINT,
@@ -299,9 +290,10 @@ test("the caret and a selection of a tab fall where the text is drawn", async ()
   const { app, window } = await launchApp(dataDir, { home });
   await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
-  await importFile(
+  await importWordFile(
     app,
     window,
+    files,
     "Centred.docx",
     wordFile({
       styles: TWELVE_POINT,
@@ -358,9 +350,10 @@ test("leaders fill their tabs, dots, dashes and underscores alike, and neither t
   const { app, window } = await launchApp(dataDir, { home });
   await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
-  await importFile(
+  await importWordFile(
     app,
     window,
+    files,
     "Contents.docx",
     wordFile({
       styles: TWELVE_POINT,
@@ -398,7 +391,7 @@ test("at 1,100 px a line of tab stops scrolls in its own frame, in English and C
   const { app, window } = await launchApp(dataDir, { home });
   await setWindowSize(app, window, 1100, 720);
   await dismissChatSetup(window);
-  await importFile(app, window, "林晓_简历.docx", resumeFile());
+  await importWordFile(app, window, files, "林晓_简历.docx", resumeFile());
   const date = "2023.09 – 2026.06";
   for (const language of ["en", "zh-CN"] as const) {
     await setLanguage(window, language);
