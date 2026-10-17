@@ -7005,6 +7005,67 @@
     }
   }
   /*
+   * The title and a form's action row stay in view as the short setup card scrolls. Their
+   * margins undo their padding, so nothing moves until the card does, and the padding covers
+   * the card's own, so no content shows past them. A rule shows only while content is under one.
+   */
+  .setup-card {
+    --pad: 10px;
+    padding-block: var(--pad);
+
+    /* Room for the title and for the tallest action row (it wraps) with its focus ring, so Tab never lands a control under them. */
+    &:has([data-setup-title]) {
+      scroll-padding-top: 3rem;
+    }
+    &:has([data-setup-foot]) {
+      scroll-padding-bottom: 6rem;
+    }
+    [data-setup-title],
+    [data-setup-foot] {
+      position: sticky;
+      z-index: 1;
+      background: var(--color-sheet);
+      container-type: scroll-state;
+
+      &::before {
+        content: "";
+        position: absolute;
+        inset-inline: -16px;
+        height: 1px;
+        background: var(--color-rule);
+        display: none;
+      }
+    }
+    [data-setup-title] {
+      top: calc(-1 * var(--pad));
+      margin-block: calc(-1 * var(--pad)) -6px;
+      padding-block: var(--pad) 6px;
+
+      &::before {
+        bottom: 0;
+      }
+    }
+    [data-setup-foot] {
+      bottom: calc(-1 * var(--pad));
+      margin-block: -8px calc(-1 * var(--pad));
+      padding-block: 8px var(--pad);
+
+      &::before {
+        top: 0;
+      }
+    }
+    @container scroll-state(stuck: top) {
+      [data-setup-title]::before {
+        display: block;
+      }
+    }
+    @container scroll-state(stuck: bottom) {
+      [data-setup-foot]::before {
+        display: block;
+      }
+    }
+  }
+  /*
    * The Task tray (#126, narrowed by #657; DESIGN.md, Task tray): joined to
    * the top of the composer, its width, sharing its edge: the plan card, the
    * one ask, its buttons pinned at the bottom while the rest scrolls, and

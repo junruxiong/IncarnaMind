@@ -195,6 +195,11 @@ export function ProviderForm({
     keyField.current?.scrollIntoView({ block: "center" });
     keyField.current?.focus({ preventScroll: true });
   }, []);
+  const outcome = useRef<HTMLDivElement>(null);
+  // The setup card keeps the action row at its foot, which would leave a failure under it out of sight.
+  useEffect(() => {
+    if (test?.ok === false || error) outcome.current?.scrollIntoView({ block: "nearest" });
+  }, [test, error]);
   const catalog = kind ? catalogProvider(kind) : undefined;
   const local = catalog?.group === "local";
   const server = useLocalServer(local ? kind : null);
@@ -604,7 +609,7 @@ export function ProviderForm({
               dataUse={catalog?.dataUse}
             />
           )}
-          <div className="flex flex-wrap items-center gap-2">
+          <div data-setup-foot className="flex flex-wrap items-center gap-2">
             <button
               type="submit"
               data-testid="provider-use-key"
@@ -624,27 +629,31 @@ export function ProviderForm({
             )}
           </div>
 
-          {test && !test.ok && (
-            <TestResult
-              result={test}
-              model={shownName(modelId)}
-              {...(test.error.kind === "auth" && site
-                ? { authLine: t("providers.form.badKey", { provider: providerName, site }) }
-                : {})}
-              {...(test.error.kind === "data-retention" && {
-                action: {
-                  label: t("answer.error.chooseModel"),
-                  testId: "connection-test-choose-model",
-                  onClick: openModelPicker,
-                },
-              })}
-            />
-          )}
-          {error && (
-            <p role="alert" className={errorTextClass}>
-              <ProblemMark />
-              {error}
-            </p>
+          {(test?.ok === false || error) && (
+            <div ref={outcome} className="flex flex-col gap-3">
+              {test && !test.ok && (
+                <TestResult
+                  result={test}
+                  model={shownName(modelId)}
+                  {...(test.error.kind === "auth" && site
+                    ? { authLine: t("providers.form.badKey", { provider: providerName, site }) }
+                    : {})}
+                  {...(test.error.kind === "data-retention" && {
+                    action: {
+                      label: t("answer.error.chooseModel"),
+                      testId: "connection-test-choose-model",
+                      onClick: openModelPicker,
+                    },
+                  })}
+                />
+              )}
+              {error && (
+                <p role="alert" className={errorTextClass}>
+                  <ProblemMark />
+                  {error}
+                </p>
+              )}
+            </div>
           )}
         </>
       )}
