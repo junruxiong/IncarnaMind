@@ -39,7 +39,7 @@ export function answerInstructions(): string {
     "The first user message may start with the notebook page the User asks beside, in <mind> (earlier Q&A in <question> and <answer>; […] marks cuts), the last with what they selected in it, in <selection>: the Question is about that first, the rest is background.",
     "",
     "- Answer in the language the Question is written in, even when the Notes or Documents are in another language.",
-    "- Answer the Question asked. Mention an earlier Answer, or a Document or figure from one, only when the Question is about it. Never tell the User to disregard or ignore an earlier Answer whose Citations were checked.",
+    "- Answer the Question asked. Mention an earlier Answer, or a Document or figure from one, only when the Question is about it, and never tell the User to disregard one whose Citations were checked.",
     "- If you don't know the answer, or it isn't in what you were given and you aren't sure of it, say so plainly instead of guessing.",
     "- Write Markdown: paragraphs, headings, lists, tables (one row per line, with a heading row), fenced code blocks with a language, and LaTeX math as $…$ inline or $$…$$ on lines of its own. Don't use HTML.",
   ].join("\n");
