@@ -927,44 +927,59 @@ describe("The assistant's own text already in the Mind (#1061)", { timeout: 30_0
   });
 
   // protects=asked to make the summary longer, a longer version added beside the summary from an Answer is refused, with how to change it in place, and the change in place follows; fails_when=a second summary goes in, or the model isn't told to use edit_mind; no_claim=that a real model then changes it in place.
-  test("a longer version added beside it is refused, and the summary is changed in place", async () => {
-    const summary = "The paper is about spring tides and the times they come at.";
-    const longer =
-      "The paper is about spring tides and the times they come at, new and full moon, when the tide rises highest.";
-    const told: string[] = [];
-    const model = scriptedModel((call): ScriptedReply => {
-      const results = call.results.map((each) => each.text);
-      if (results.length === 0) {
-        return { calls: [{ tool: "add_to_mind", input: { content: longer } }] };
-      }
-      if (results.length === 1) {
-        told.push(results[0] ?? "");
-        return {
-          calls: [{ tool: "edit_mind", input: { part: "The paper is about", content: longer } }],
-        };
-      }
-      return { text: "Done." };
-    });
-    const { core, mind, client } = await setUp(model);
-    await core.addToNote({
-      mindId: mind.id,
-      blocks: [{ type: "paragraph", content: [{ type: "text", text: summary }] }],
-      origin: null,
-      model: null,
-    });
-    await client.settled();
+  test.each([
+    [
+      "in one paragraph",
+      "The paper is about spring tides and the times they come at, new and full moon, when the tide rises highest.",
+    ],
+    [
+      "split into paragraphs",
+      "The paper looks at spring tides, new and full moon.\n\nThey come at the times the tide rises highest.",
+    ],
+  ])(
+    "a longer version added beside it %s is refused, and the summary is changed in place",
+    async (_, beside) => {
+      const summary = "The paper is about spring tides and the times they come at.";
+      const longer =
+        "The paper is about spring tides and the times they come at, new and full moon, when the tide rises highest.";
+      const told: string[] = [];
+      const model = scriptedModel((call): ScriptedReply => {
+        const results = call.results.map((each) => each.text);
+        if (results.length === 0) {
+          return { calls: [{ tool: "add_to_mind", input: { content: beside } }] };
+        }
+        if (results.length === 1) {
+          told.push(results[0] ?? "");
+          return {
+            calls: [{ tool: "edit_mind", input: { part: "The paper is about", content: longer } }],
+          };
+        }
+        return { text: "Done." };
+      });
+      const { core, mind, client } = await setUp(model);
+      await core.addToNote({
+        mindId: mind.id,
+        blocks: [{ type: "paragraph", content: [{ type: "text", text: summary }] }],
+        origin: null,
+        model: null,
+      });
+      await client.settled();
 
-    const answer = await askAssistant(core, { text: "Make the summary longer.", mindId: mind.id });
+      const answer = await askAssistant(core, {
+        text: "Make the summary longer.",
+        mindId: mind.id,
+      });
 
-    await client.settled();
-    expect(told[0]).toContain("Change that text in place with edit_mind");
-    expect(mindCalls(answer)[0]?.mindProblem).toMatchObject({ kind: "new-version" });
-    client.doc.transact(() => resolveProposals(client.blocks, () => true, "accept"));
-    await client.settled();
-    expect(shownWithChanges(client)).toEqual([
-      "Summary",
-      "The quarter was very good, and sales were really strong.",
-      longer,
-    ]);
-  });
+      await client.settled();
+      expect(told[0]).toContain("Change that text in place with edit_mind");
+      expect(mindCalls(answer)[0]?.mindProblem).toMatchObject({ kind: "new-version" });
+      client.doc.transact(() => resolveProposals(client.blocks, () => true, "accept"));
+      await client.settled();
+      expect(shownWithChanges(client)).toEqual([
+        "Summary",
+        "The quarter was very good, and sales were really strong.",
+        longer,
+      ]);
+    },
+  );
 });
