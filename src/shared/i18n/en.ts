@@ -3488,6 +3488,8 @@ export const en = {
   "error.restore.unlinked":
     "“{name}” can't be restored: the Linked folder it was in has been unlinked.",
   "error.restore.documentBack": "“{name}” is in the Library again, so it can't be restored.",
+  "error.citationStyle.language":
+    "Citations can't be formatted in “{language}”: a Mind is in English or Chinese.",
   "error.restore.documentGone": "That Document was deleted. Restore it first.",
   "error.restore.tagGone": "The Tag “{name}” was deleted. Restore it first.",
   "error.restore.folderGone": "The Folder “{name}” was deleted. Restore it first.",

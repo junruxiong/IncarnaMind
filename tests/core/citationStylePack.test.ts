@@ -147,6 +147,17 @@ describe("a Mind in a style of the pack", () => {
     expect(plain(formatted.bibliography[0]?.runs)).toBe("A report");
   });
 
+  test("a request's language is the Mind's, English or Chinese", async () => {
+    const { core } = await coreWith();
+    await expect(
+      core.formatCitations({
+        style: "apa",
+        clusters: [{ works: [named("A report")] }],
+        language: "fr" as unknown as "en",
+      }),
+    ).rejects.toMatchObject({ wording: { key: "error.citationStyle.language" } });
+  });
+
   test("a sample of the pack's styles each formats the 30 references", () => {
     const index = readPackIndex(PACK);
     const independent = index.styles.filter((style) => style.at !== undefined);

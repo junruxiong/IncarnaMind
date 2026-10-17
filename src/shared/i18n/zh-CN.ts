@@ -3333,6 +3333,7 @@ export const zhCN = {
   "error.restore.expired": "“{name}”已删除超过 {days} 天，无法恢复。",
   "error.restore.unlinked": "“{name}”所在的同步文件夹已移除，无法恢复。",
   "error.restore.documentBack": "“{name}”已重新加入资料库，无法恢复。",
+  "error.citationStyle.language": "无法按“{language}”格式化引用：Mind 只能是英文或中文。",
   "error.restore.documentGone": "这个文档已删除，请先恢复。",
   "error.restore.tagGone": "标签“{name}”已删除，请先恢复。",
   "error.restore.folderGone": "文件夹“{name}”已删除，请先恢复。",
