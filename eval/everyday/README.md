@@ -15,7 +15,7 @@
 
 ## The requests
 
-`cases.ts`: 48 requests in eight groups. The owner's four turns (2026-10-15). Only the paragraph asked about. Questions about the Documents. Text asked for in a Mind. The User's own text changed. Follow-ups after a write. Several Documents. No Mind in focus. Questions that only sound like requests. Questions asked after the example's Answer, about the User's own Documents, the two main ones, and a Word file just imported, in the example's language. Each is asked from a Mind of its own, after the requests it follows, in one conversation.
+`cases.ts`: 50 requests in eight groups. The owner's four turns (2026-10-15). Only the paragraph asked about. Questions about the Documents. Text asked for in a Mind. The User's own text changed. Follow-ups after a write. Several Documents. No Mind in focus. Questions that only sound like requests. Questions asked after the example's Answer, about the User's own Documents (also from the example's own Mind), the two main ones, and a Word file just imported, in the example's language. Each is asked from a Mind of its own, after the requests it follows, in one conversation.
 
 The Documents:
 

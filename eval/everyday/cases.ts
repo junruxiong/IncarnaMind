@@ -21,6 +21,8 @@ export interface EverydayCase {
   word?: { name: string; paragraphs: readonly string[] };
   /** The example's Answer, written in advance, is the conversation's first turn, in the case's language. */
   afterExample?: true;
+  /** With `afterExample`: asked from the example's own Mind, where the User stays, instead of from a Mind of its own. */
+  inExample?: true;
   /** Asked first, in the same conversation, and not checked. */
   before?: readonly string[];
   request: string;
@@ -521,6 +523,26 @@ export const CASES: readonly EverydayCase[] = [
     word: SUPPLY_AGREEMENT_ZH,
     afterExample: true,
     request: "赔偿责任的上限是多少？",
+    expected: ABOUT_THE_QUESTION,
+  },
+  {
+    id: "example-stay",
+    language: "en",
+    library: "papers",
+    mind: null,
+    afterExample: true,
+    inExample: true,
+    request: "What does the GraphST paper claim?",
+    expected: ABOUT_THE_QUESTION,
+  },
+  {
+    id: "example-stay-zh",
+    language: "zh-CN",
+    library: "papers",
+    mind: null,
+    afterExample: true,
+    inExample: true,
+    request: "GraphST 这篇论文的主要主张是什么？",
     expected: ABOUT_THE_QUESTION,
   },
 ];
