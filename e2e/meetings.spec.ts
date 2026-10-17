@@ -689,9 +689,11 @@ test("killed mid-recording, IncarnaMind recovers the audio up to the last part a
   // The next part was being written when it died.
   await writeFile(join(dataDir, "meetings", meetingId, "microphone-0000010000.wav.writing"), "");
 
-  const { window } = await launchApp(dataDir);
+  const { app, window } = await launchApp(dataDir);
   const bar = window.getByTestId("meeting-bar");
   await expect(bar).toHaveAttribute("data-status", "paused");
+  // A recovered, paused Meeting opens no call help panel: it would open before the app's window.
+  expect(app.windows()).toHaveLength(1);
   const interrupted = window.getByTestId("meeting-line-interrupted");
   await expect(interrupted).toContainText(
     "IncarnaMind closed while recording. Everything up to 0:10 is saved.",
