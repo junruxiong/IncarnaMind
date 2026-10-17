@@ -4171,8 +4171,8 @@ export const zhCN = {
   "mindChanges.also": "另外在“{mind}”中建议了 {count} 处修改",
   "mindChanges.also.one": "另外在“{mind}”中建议了 1 处修改",
   "mindChanges.undone": "已撤销",
-  "mindChanges.undo.changedSince":
-    "“{mind}”之后又有改动，无法在这里单独撤销。可在“查看改动”中逐处恢复。",
+  "mindChanges.undo.changedSince": "“{mind}”之后又改过了。请在“查看改动”里逐处恢复。",
+  "mindChanges.onTop": "· 叠加在上一版之上，上一版仍保留",
   "mindChanges.undo.closed": "“{mind}”关闭过，无法在这里撤销。",
   "mindChanges.also.review": "查看",
   "mindChanges.row.created": "新建：{mind}",
