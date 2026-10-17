@@ -435,6 +435,12 @@ test("help during the call: Call help in the meeting bar shows and hides the pan
   await expect(
     window.getByTestId("palette-item").filter({ hasText: "Show the call help panel" }),
   ).toContainText(PANEL_LABEL);
+  if (SCREENSHOTS) {
+    await window.evaluate(() =>
+      Promise.all(document.getAnimations().map((animation) => animation.finished)),
+    );
+  }
+  await shot(window, "call-help-palette-en");
   await window.keyboard.press("Enter");
   await panelOf(app);
   await expect(callHelp).toHaveAttribute("aria-pressed", "true");
@@ -444,6 +450,7 @@ test("help during the call: Call help in the meeting bar shows and hides the pan
   const keys = settings.locator('[data-testid="help-keys"][data-kind="panel"]');
   await expect(settings.getByTestId("help-keys-row").first()).toContainText("Call help");
   await expect(keys).toHaveText(PANEL_LABEL);
+  await shot(settings.getByTestId("help-settings"), "call-help-settings-en");
   await keys.click();
   await window.keyboard.press("Control+Alt+J");
   await expect(keys).toHaveText(mac ? "⌃⌥J" : "Ctrl+Alt+J");
@@ -457,6 +464,7 @@ test("help during the call: Call help in the meeting bar shows and hides the pan
   );
 
   // Wide, the bar is one row; at 1,100 px it wraps before Show transcript. The same in Chinese.
+  await window.mouse.move(1, 1);
   await expectBarRows(bar, 1);
   await shot(bar, "call-help-bar-en-1600");
   await setWindowSize(app, window, 1100, 800);
@@ -470,6 +478,10 @@ test("help during the call: Call help in the meeting bar shows and hides the pan
     "title",
     `显示通话助手浮窗（${mac ? "⌃⌥J" : "Ctrl+Alt+J"}）`,
   );
+  await pointAndClick(window, callHelp);
+  await panelOf(app);
+  await expect(callHelp).toHaveAttribute("title", "隐藏通话助手浮窗");
+  await window.mouse.move(1, 1);
   await expectBarRows(bar, 2);
   await shot(bar, "call-help-bar-zh-1100");
   await setWindowSize(app, window, 1600, 900);
