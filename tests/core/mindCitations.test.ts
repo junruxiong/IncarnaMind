@@ -135,7 +135,7 @@ describe("Sources written as text into a Mind (#1075)", { timeout: 30_000 }, () 
       const made = changesIn(answer).find((change) => change.created);
       if (!made) throw new Error("No Mind was made.");
       expect(await mindText(core, made.mindId)).toBe(
-        `${DECK_QUOTE} ⟨found⟩.\n${PLAN_QUOTE}⟨found⟩。`,
+        `${title}\n${DECK_QUOTE} ⟨found⟩.\n${PLAN_QUOTE}⟨found⟩。`,
       );
     },
   );
@@ -196,6 +196,6 @@ describe("The last Answer put into a Mind (#1075)", { timeout: 30_000 }, () => {
 
     const made = changesIn(answer).find((change) => change.created);
     if (!made) throw new Error("No Mind was made.");
-    expect(await mindText(core, made.mindId)).toBe(`${DECK_QUOTE} ⟨found⟩.`);
+    expect(await mindText(core, made.mindId)).toBe(`${title}\n${DECK_QUOTE} ⟨found⟩.`);
   });
 });
