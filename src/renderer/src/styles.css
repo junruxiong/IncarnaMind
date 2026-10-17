@@ -7007,7 +7007,9 @@
   /*
    * The title and a form's action row stay in view as the short setup card scrolls. Their
    * margins undo their padding, so nothing moves until the card does, and the padding covers
-   * the card's own, so no content shows past them. A rule shows only while content is under one.
+   * the card's own, so no content shows past them. A row's side padding holds a focus ring. The
+   * title is above the rows: a row that scrolled up to the top passes under it. A rule shows only
+   * while content is under a part.
    */
   .setup-card {
     --pad: 10px;
@@ -7037,6 +7039,7 @@
       }
     }
     [data-setup-title] {
+      z-index: 2;
       top: calc(-1 * var(--pad));
       margin-block: calc(-1 * var(--pad)) -6px;
       padding-block: var(--pad) 6px;
@@ -7047,11 +7050,12 @@
     }
     [data-setup-foot] {
       bottom: calc(-1 * var(--pad));
-      margin-block: -8px calc(-1 * var(--pad));
-      padding-block: 8px var(--pad);
+      margin: -8px -4px calc(-1 * var(--pad));
+      padding: 8px 4px var(--pad);
 
       &::before {
         top: 0;
+        inset-inline: -12px;
       }
     }
     @container scroll-state(stuck: top) {

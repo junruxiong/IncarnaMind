@@ -215,14 +215,16 @@ async function expectInsideCardAndWindow(window: Page, card: Locator, target: Lo
   expect(box.x + box.width).toBeLessThanOrEqual(cardBox.x + cardBox.width + 0.5);
 }
 
-/** The parts that stay in view as the card scrolls. */
 const PINNED = "[data-setup-title], [data-setup-foot]";
 
 async function expectStaysOverContent(window: Page, card: Locator, part: Locator) {
   await expectInsideCardAndWindow(window, card, part);
   const { onTop, under } = await part.evaluate((element) => {
     const box = element.getBoundingClientRect();
-    const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+    const onTop = [box.x + 8, box.x + box.width / 2, box.right - 8].every((x) => {
+      const hit = document.elementFromPoint(x, box.y + box.height / 2);
+      return hit !== null && element.contains(hit);
+    });
     const root = element.closest("[data-testid=model-setup]");
     const covered = [
       ...(root?.querySelectorAll("button, a, input, select, summary, p, label") ?? []),
@@ -234,7 +236,7 @@ async function expectStaysOverContent(window: Page, card: Locator, part: Locator
         const columns = Math.min(other.right, box.right) - Math.max(other.left, box.left);
         return rows > 4 && columns > 8;
       });
-    return { onTop: hit !== null && element.contains(hit), under: covered.length };
+    return { onTop, under: covered.length };
   });
   expect(onTop).toBe(true);
   expect(under).toBeGreaterThan(0);
@@ -249,21 +251,42 @@ async function expectClearOfPinned(card: Locator, target: Locator) {
     target.boundingBox(),
     card.locator(PINNED).evaluateAll((elements) =>
       elements.map((element) => {
-        const { top, bottom } = element.getBoundingClientRect();
-        return { top, bottom, holdsFocus: element.contains(document.activeElement) };
+        const part = element.getBoundingClientRect();
+        const focused = document.activeElement;
+        const holdsFocus = focused !== null && element.contains(focused);
+        let ringInside = true;
+        if (holdsFocus) {
+          const control = focused.getBoundingClientRect();
+          const { outlineStyle, outlineWidth, outlineOffset } = getComputedStyle(focused);
+          const reach =
+            outlineStyle === "none"
+              ? 0
+              : Number.parseFloat(outlineWidth) + Math.max(0, Number.parseFloat(outlineOffset));
+          ringInside =
+            control.left - reach >= part.left - 0.5 &&
+            control.right + reach <= part.right + 0.5 &&
+            control.top - reach >= part.top - 0.5 &&
+            control.bottom + reach <= part.bottom + 0.5;
+        }
+        return { top: part.top, bottom: part.bottom, holdsFocus, ringInside };
       }),
     ),
   ]);
   if (!box) throw new Error("The focused control isn't laid out.");
-  for (const part of parts.filter((each) => !each.holdsFocus)) {
-    expect(box.y >= part.bottom - 0.5 || box.y + box.height <= part.top + 0.5).toBe(true);
+  for (const part of parts) {
+    if (part.holdsFocus) expect(part.ringInside).toBe(true);
+    else expect(box.y >= part.bottom - 0.5 || box.y + box.height <= part.top + 0.5).toBe(true);
   }
 }
 
 const TABBABLE =
   "a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), summary";
 
-async function tabThroughEveryControl(window: Page, card: Locator) {
+async function tabThroughEveryControl(
+  window: Page,
+  card: Locator,
+  direction: "forward" | "backward" = "forward",
+) {
   const place = (focus?: number) =>
     card.evaluate(
       (root, given) => {
@@ -275,16 +298,21 @@ async function tabThroughEveryControl(window: Page, card: Locator) {
         if (given.focus === 0) root.scrollTop = 0;
         if (given.focus !== undefined) controls[given.focus]?.focus();
         return {
-          index: controls.indexOf(document.activeElement as HTMLElement),
+          index: controls.findIndex((each) => each === document.activeElement),
           count: controls.length,
         };
       },
       { selector: TABBABLE, focus },
     );
-  const { count } = await place(0);
+  const { count } = await place(direction === "forward" ? 0 : undefined);
   expect(count).toBeGreaterThan(3);
-  for (let index = 0; index < count; index++) {
-    if (index > 0) await window.keyboard.press("Tab");
+  const order = [...Array(count).keys()];
+  if (direction === "backward") {
+    order.reverse();
+    await place(count - 1);
+  }
+  for (const [step, index] of order.entries()) {
+    if (step > 0) await window.keyboard.press(direction === "forward" ? "Tab" : "Shift+Tab");
     expect((await place()).index).toBe(index);
     const focused = window.locator(":focus");
     await expectInsideCardAndWindow(window, card, focused);
@@ -350,6 +378,7 @@ for (const dock of ["bottom", "float"] as const) {
         await expect(last).toBeFocused();
         await expectInsideCardAndWindow(window, card, last);
         await expectClearOfPinned(card, last);
+        await tabThroughEveryControl(window, card, "backward");
       } finally {
         await app.close();
       }
@@ -402,6 +431,7 @@ for (const dock of ["bottom", "float"] as const) {
         );
         await expect.poll(() => edgeShown(foot)).toBe(false);
         await tabThroughEveryControl(window, card);
+        await tabThroughEveryControl(window, card, "backward");
 
         await pointAndClick(window, card.getByTestId("setup-back"));
         await pointAndClick(window, card.getByTestId("setup-other"));
@@ -431,6 +461,11 @@ for (const dock of ["bottom", "float"] as const) {
         await expectInsideCardAndWindow(window, card, finish);
         await expect.poll(() => edgeShown(paste)).toBe(true);
         await tabThroughEveryControl(window, card);
+        await tabThroughEveryControl(window, card, "backward");
+
+        // The row is in its own place now, up under the title, which stays over it.
+        await wheelToEnd(window, card);
+        await expectStaysOverContent(window, card, card.getByRole("heading", { level: 2 }));
       } finally {
         await app.close();
         await fake.close();
