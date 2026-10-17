@@ -124,6 +124,24 @@
 }
 
 /*
+ * The fonts a Mind's Style chooses between (src/shared/mindStyle.ts): the system's, the Mono
+ * style's, and the system's Chinese faces of each kind, which a font installed on the computer
+ * takes after it. Outside @theme, so they are written whether or not a class uses them: the
+ * Mind's page names them from script.
+ */
+:root {
+  --font-cjk-sans:
+    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Source Han Sans SC";
+  --font-cjk-serif: "Songti SC", "STSong", "SimSun", "Noto Serif CJK SC", "Source Han Serif SC";
+  --font-system:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", var(--font-cjk-sans), system-ui,
+    sans-serif;
+  --font-mono-writing:
+    "JetBrains Mono", var(--font-cjk-sans), ui-monospace, "SFMono-Regular", Menlo, Consolas,
+    monospace;
+}
+
+/*
  * The app's chrome (sidebar, pane headers, dialogs, Settings), from the
  * approved mockups: values they use that DESIGN.md's palette doesn't name.
  */
@@ -494,7 +512,8 @@
 
   /*
    * A switch: a native checkbox (role="switch"), so it is checked, focused
-   * and labelled like one. The knob is a background, moved when checked.
+   * and labelled like one. The knob is a background, moved when checked. In a
+   * menu, where the item is the checkbox, it is a picture marked `data-on`.
    */
   .switch {
     appearance: none;
@@ -512,7 +531,8 @@
       background-color 120ms ease-out,
       background-position 120ms ease-out;
 
-    &:checked {
+    &:checked,
+    &[data-on] {
       background-color: var(--color-ink);
       background-position: 16px 0;
     }
@@ -580,6 +600,9 @@
     /* At the card's right end: clear of Windows' window buttons (see "The title bar"). */
     padding-right: max(4px, var(--window-buttons-right));
     background: var(--color-tab-strip);
+  }
+  .tab-strip[data-quiet] {
+    background: transparent;
   }
   /* Only the last group reaches the window's buttons. */
   .tab-group:not(:last-of-type) {
@@ -1088,62 +1111,38 @@
     container: mind / inline-size;
     padding-block: 64px 160px;
   }
+  /*
+   * Above the Ask pill (20px up, 40px tall) the page fades out over 56px, so no line runs under it.
+   * Sticky in the scroller, it leaves the scrollbar alone, and the column's 160px foot lets the
+   * last line scroll clear of it.
+   */
+  .ask-pill-fade {
+    position: sticky;
+    bottom: 0;
+    height: 116px;
+    margin-top: -116px;
+    background: linear-gradient(to bottom, transparent, var(--color-sheet) 56px);
+    pointer-events: none;
+  }
   .mind-measure {
     width: 680px;
     margin-left: calc((100% - 784px) / 2 + 56px);
   }
 
-  /* The Mind's title: the display size, with the display optical size. */
-  .mind-title {
-    margin: 0 0 24px;
-
-    /* A text area that grows with the title, so a long one wraps instead of being cut off. */
-    > textarea {
-      display: block;
-      width: 100%;
-      padding: 0;
-      border: 0;
-      background: transparent;
-      outline: none;
-      field-sizing: content;
-      resize: none;
-      overflow: hidden;
-      font-family: var(--font-serif);
-      font-size: var(--text-display);
-      line-height: var(--text-display--line-height);
-      font-weight: 600;
-      font-variation-settings: "opsz" 48;
-      letter-spacing: -0.01em;
-      color: var(--color-ink);
-
-      &::placeholder {
-        color: var(--color-ink-placeholder);
-      }
-    }
-  }
-
-  /* A Mind imported from a Word file: where it came from, or how far its import has got (#104). */
+  /* How far a Word import has got (#104), at the top of the page while it goes on. */
   .mind-word {
     display: flex;
     align-items: center;
     gap: 6px;
     min-width: 0;
-    margin: -16px 0 6px;
+    margin: 0 0 16px;
     font-family: var(--font-sans);
     font-size: 13px;
     line-height: 20px;
     color: var(--color-ink-meta);
-
-    + .mind-count {
-      margin-top: 0;
-    }
   }
   .mind-word-problem {
-    margin: -2px 0 6px;
-
-    + .mind-count {
-      margin-top: 0;
-    }
+    margin: 0 0 16px;
   }
 
   /*
@@ -1166,36 +1165,15 @@
     min-width: 0;
     overflow-wrap: anywhere;
   }
-  .meta-dot,
-  .mind-health-part::before,
-  .mind-health-when::before,
-  .mind-health-action::before,
-  .mind-health-line::before,
-  .mind-unread > :first-child::before {
+  .meta-dot {
     content: "·" / "";
     position: absolute;
     right: 100%;
     width: 12px;
     text-align: center;
   }
-  .mind-health-when,
-  .mind-health-action,
-  .mind-health-line,
-  .mind-unread > :first-child {
-    position: relative;
-  }
-  .mind-health-line {
-    color: inherit;
-  }
-  .mind-health-part::before,
-  .mind-health-when::before,
-  .mind-health-action::before,
-  .mind-health-line::before,
-  .mind-unread > :first-child::before {
-    color: var(--color-rule-strong);
-  }
 
-  /* A Mind made by "Verify a document…" (#97): where its text came from, then where its verify is. */
+  /* A verified document's references line (#818), in the Verify card. */
   .mind-verify {
     min-width: 0;
     margin: -16px 0 16px;
@@ -1203,46 +1181,6 @@
     font-size: 13px;
     line-height: 20px;
     color: var(--color-ink-meta);
-  }
-  .mind-word-original {
-    display: flex;
-    align-items: center;
-    min-width: 0;
-  }
-  .mind-word-more {
-    display: flex;
-    flex-shrink: 0;
-    align-items: center;
-    justify-content: center;
-    width: 18px;
-    height: 20px;
-    border-radius: 4px;
-    color: var(--color-ink-meta);
-
-    &:hover,
-    &[aria-expanded="true"] {
-      background: var(--color-hover);
-    }
-  }
-  .mind-verify-from,
-  .mind-word-from {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    min-width: 0;
-    max-width: 100%;
-    padding: 0 4px;
-    margin-left: -4px;
-    border-radius: 4px;
-    color: var(--color-ink-secondary);
-
-    &:hover {
-      background: var(--color-hover);
-    }
-  }
-  /* Its negative margin narrows the part by 4px; the cap gives them back, or the name loses its last letters. */
-  .meta-part > .mind-verify-from {
-    max-width: calc(100% + 4px);
   }
   .mind-verify-link {
     border-radius: 4px;
@@ -1314,55 +1252,16 @@
     }
   }
 
-  /* The count under the title: quiet status text, pulled up into the title's margin. */
   .mind-count {
     display: flex;
-    flex-wrap: wrap;
     align-items: center;
-    column-gap: 12px;
-    row-gap: 8px;
-    padding-left: 4px;
-    margin: -16px 0 16px -4px;
-    overflow-x: clip;
+    gap: 8px;
+    min-width: 0;
     font-family: var(--font-sans);
     font-size: 12px;
-    line-height: 16px;
+    line-height: 20px;
     color: var(--color-ink-meta);
-  }
-  /* The Mind's health under its title (#96), on the count's line: each part moves to its next sentence or Citation. */
-  .mind-health {
-    display: contents;
-    min-width: 0;
-    margin: 0;
-    padding: 0;
-    border: 0;
-  }
-  .mind-health-part {
-    position: relative;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    padding: 0 3px;
-    border-radius: 4px;
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-    outline: none;
-
-    &:hover,
-    &:focus-visible {
-      background: var(--color-hover);
-      color: var(--color-ink-secondary);
-    }
-    &:focus-visible {
-      outline: 2px solid var(--color-accent);
-      outline-offset: 1px;
-    }
-  }
-  /* When the whole Mind was last checked (#737): text, not a part to go to. */
-  .mind-health-when {
-    padding: 0 3px;
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
+    pointer-events: auto;
   }
   .mind-health-icon {
     box-sizing: border-box;
@@ -1372,29 +1271,366 @@
     padding: 1px;
     border-radius: 3px;
   }
-  .mind-health-part[data-part="found"] .mind-health-icon {
+  :is(.check-row, .check-badge-mark)[data-part="found"] .mind-health-icon {
     padding: 0;
     color: var(--color-success);
   }
-  .mind-health-part:is([data-part="unsupported"], [data-part="notFound"]) .mind-health-icon {
+  :is(.check-row, .check-badge-mark):is([data-part="unsupported"], [data-part="notFound"])
+    .mind-health-icon {
     background: var(--color-warning);
     color: var(--color-sheet);
   }
-  .mind-health-part[data-part="contradicted"] .mind-health-icon {
+  :is(.check-row, .check-badge-mark)[data-part="contradicted"] .mind-health-icon {
     box-shadow: inset 0 0 0 1.25px var(--color-danger);
     color: var(--color-danger);
   }
-  /* The files the checks couldn't read sit on the line of the checks' state, never a line of their own; Show's list opens under it. */
-  .mind-unread {
-    display: contents;
 
-    & > ul {
-      flex-basis: 100%;
+  .mind-menu-slot {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+  }
+  .page-menu-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    color: var(--color-ink-meta);
+    outline: none;
+
+    &:hover,
+    &:focus-visible,
+    &[aria-expanded="true"] {
+      background: var(--color-hover);
+      color: var(--color-ink-secondary);
     }
+    &:focus-visible {
+      outline: 2px solid var(--color-accent);
+      outline-offset: 1px;
+    }
+  }
+  .page-menu-foot {
+    display: flex;
+    flex-direction: column;
+    padding: 2px 0;
+    font-size: 12px;
+    line-height: 20px;
+    color: var(--color-ink-meta);
+  }
+  .page-menu-counts {
+    margin: 0;
+    padding: 2px 8px;
+  }
+  .page-menu-switch {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 30px;
+    padding: 0 8px;
+    border-radius: 6px;
+    text-align: start;
+    outline: none;
+
+    &:hover,
+    &:focus-visible {
+      background: var(--color-chip);
+      color: var(--color-ink);
+    }
+  }
+  /* Over the text, which fades out above them so no line runs under the count or the badge. */
+  .mind-foot-slot {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 0 16px 16px;
+    pointer-events: none;
+
+    &:has(.check-badge, .mind-count)::before {
+      content: "";
+      position: absolute;
+      inset: auto 0 0;
+      height: 100px;
+      background: linear-gradient(to top, var(--color-sheet) 44px, transparent);
+    }
+  }
+  .mind-foot-count {
+    position: relative;
+    min-width: 0;
+  }
+  .mind-foot-badge {
+    position: relative;
+    margin-left: auto;
+  }
+  .check-badge-place {
+    position: relative;
+  }
+  .check-badge-anchor {
+    display: block;
+    width: 1px;
+    height: 28px;
+  }
+  .check-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 6px;
+    border-radius: 14px;
+    background: var(--color-sheet);
+    box-shadow: var(--shadow-popover);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--color-ink);
+    white-space: nowrap;
+    pointer-events: auto;
+  }
+  .check-badge-open,
+  .check-badge-stop {
+    display: flex;
+    align-items: center;
+    height: 22px;
+    padding: 0 6px;
+    border-radius: 11px;
+    outline: none;
+
+    &:hover,
+    &:focus-visible {
+      background: var(--color-hover);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--color-accent);
+      outline-offset: 1px;
+    }
+  }
+  .check-badge-stop {
+    font-weight: 600;
+  }
+  .check-badge-mark {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+
+    & + &::before {
+      content: "·";
+      margin: 0 2px 0 6px;
+      font-weight: 400;
+      color: var(--color-rule-strong);
+    }
+  }
+  .check-badge-words {
+    font-weight: 400;
+    color: var(--color-ink-secondary);
+  }
+  .check-badge-sep {
+    color: var(--color-rule-strong);
+  }
+  .check-badge-running {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--color-ink-secondary);
+  }
+  .check-badge-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 3px;
+    background: var(--color-accent);
   }
   .mind-health-note {
     margin: 0;
     color: var(--color-ink-meta);
+  }
+  .editor-popover.check-card {
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    width: 360px;
+    max-width: calc(100vw - 16px);
+    padding: 6px;
+    border-radius: 10px;
+    background: var(--color-sheet);
+    box-shadow: var(--shadow-popover);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--color-ink-secondary);
+    pointer-events: auto;
+    overflow-y: auto;
+
+    /* Its lines of what a check found or why it couldn't run sit in from its edge, as its rows do. */
+    & .mind-health-line,
+    & .mind-health-note,
+    & .mind-verify,
+    & .mind-verify-problem,
+    & .mind-references,
+    & .mind-unread,
+    & .answer-error {
+      margin: 0;
+      padding: 4px 8px;
+    }
+  }
+  .check-card-title {
+    padding: 6px 8px 4px;
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 600;
+    color: var(--color-ink-meta);
+  }
+  .check-count {
+    font-weight: 600;
+    color: var(--color-ink);
+  }
+  .check-rows {
+    display: flex;
+    flex-direction: column;
+  }
+  .check-row {
+    display: grid;
+    grid-template-columns: 16px 1fr auto;
+    align-items: center;
+    column-gap: 8px;
+    min-height: 32px;
+    padding: 0 2px 0 8px;
+    border-radius: 6px;
+    text-align: start;
+    font-variant-numeric: tabular-nums;
+    outline: none;
+
+    &:focus-visible {
+      outline: 2px solid var(--color-accent);
+      outline-offset: -2px;
+    }
+  }
+  .check-row-next,
+  .check-row-action {
+    display: inline-flex;
+    align-items: center;
+    height: 24px;
+    padding: 0 8px;
+    border-radius: 6px;
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 600;
+  }
+  .check-row-next {
+    color: var(--color-ink-secondary);
+  }
+  .check-row:is(:hover, :focus-visible) > .check-row-next {
+    background: var(--color-hover);
+    color: var(--color-ink);
+  }
+  .check-row-action {
+    box-shadow: inset 0 0 0 1px var(--color-rule-strong);
+    color: var(--color-ink);
+
+    &:hover,
+    &:focus-visible {
+      background: var(--color-hover);
+    }
+  }
+  .check-card-summary {
+    margin: 0;
+    padding: 0 8px 6px;
+  }
+  .check-card-note {
+    padding: 4px 8px 6px;
+    font-size: 12px;
+    line-height: 18px;
+    color: var(--color-ink-meta);
+    font-variant-numeric: tabular-nums;
+  }
+  .check-card-actions {
+    display: flex;
+    justify-content: flex-end;
+    padding: 2px;
+  }
+  .check-card-actions-list {
+    display: flex;
+    flex-direction: column;
+  }
+  .check-card-sep {
+    height: 1px;
+    margin: 6px 4px;
+    background: var(--color-rule);
+  }
+  .check-card-action {
+    display: flex;
+    flex-direction: column;
+    padding: 6px 8px;
+    border-radius: 6px;
+    text-align: start;
+    outline: none;
+
+    &:hover:not(:disabled),
+    &:focus-visible {
+      background: var(--color-chip);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--color-accent);
+      outline-offset: -2px;
+    }
+    &:disabled {
+      opacity: 0.5;
+    }
+  }
+  .check-card-action-title {
+    font-weight: 600;
+    color: var(--color-ink);
+  }
+  .check-card-action-about {
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--color-ink-meta);
+  }
+  .check-card-ask {
+    display: flex;
+    flex-direction: column;
+    margin: 2px 0;
+    padding: 10px;
+    border-radius: 6px;
+    background: var(--color-frame);
+
+    & > p:not(.check-card-ask-title) {
+      margin-top: 2px;
+      font-size: 12px;
+      line-height: 16px;
+      color: var(--color-ink-meta);
+    }
+  }
+  .check-card-ask-title {
+    font-weight: 600;
+    color: var(--color-ink);
+  }
+  .check-card-ask-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .check-card-foot {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 2px;
+
+    & > :last-child {
+      margin-left: auto;
+    }
+  }
+  @container group (width < 400px) {
+    .check-badge-words {
+      display: none;
+    }
   }
   .mind-count-button {
     min-width: 0;
@@ -1493,7 +1729,7 @@
     position: absolute;
     margin: 0;
     pointer-events: none;
-    font-family: var(--font-serif);
+    font-family: var(--writing-font, var(--font-system));
     font-size: var(--text-body);
     line-height: var(--text-body--line-height);
     color: var(--color-ink-meta);
@@ -1835,12 +2071,14 @@
       color: var(--color-ink);
     }
   }
+  /* Too narrow for one row, the last controls wrap to a second, never inside a button. */
   .meeting-controls {
     display: flex;
     flex-shrink: 0;
+    flex-wrap: wrap;
     align-items: center;
     gap: 2px;
-    height: 28px;
+    min-height: 28px;
     font-size: 13px;
     line-height: 20px;
     color: var(--color-ink);
@@ -1875,6 +2113,10 @@
       background: var(--color-hover);
       color: var(--color-ink);
     }
+  }
+  .meeting-button[aria-pressed="true"] {
+    background: var(--color-chip);
+    color: var(--color-ink);
   }
   .meeting-button:disabled {
     color: var(--color-ink-placeholder);
@@ -2150,7 +2392,7 @@
     padding-left: var(--editor-gutter);
     min-height: 10rem;
     outline: none;
-    font-family: var(--font-serif);
+    font-family: var(--writing-font, var(--font-system));
     font-size: var(--text-body);
     line-height: var(--text-body--line-height);
     color: var(--color-ink);
@@ -4145,6 +4387,13 @@
       background: var(--color-sheet);
       box-shadow: inset 0 0 0 1.5px var(--color-danger);
     }
+    /* Step 1 of the first open: a still accent ring, as the focus ring sits, until it is opened. */
+    &[data-check="contradicted"][data-guided] {
+      box-shadow:
+        inset 0 0 0 1.5px var(--check-ink),
+        0 0 0 1px var(--color-sheet),
+        0 0 0 3px var(--color-accent);
+    }
 
     /* Only the dot pulses while it is checked: the number keeps its contrast. */
     &[data-check="checking"] .margin-check-icon {
@@ -4434,7 +4683,7 @@
     }
   }
   .references-style {
-    max-width: 100%;
+    max-width: min(100%, 280px);
     font-weight: 600;
   }
   .references-default {
@@ -5427,6 +5676,267 @@
       background: var(--color-hover);
       color: var(--color-ink);
     }
+  }
+
+  /*
+   * Help during a call (the canvas boards Meet-Help-*): the buttons, in the floating
+   * panel two to a row with their keys, and at the top of the assistant as a strip; then a
+   * suggestion: one or two options, the recommended first and starred, each with what it
+   * leads to, read in a second or two.
+   */
+  .help-strip {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px var(--edge);
+    border-bottom: 1px solid var(--color-rule);
+  }
+  .help-strip-label {
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--color-ink-meta);
+  }
+  .help-buttons--grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    padding: 0 10px 10px;
+  }
+  .help-buttons--strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .help-buttons--grid .help-button {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+    min-width: 0;
+    height: 34px;
+    padding: 0 6px 0 8px;
+    border-radius: 8px;
+    background: var(--color-frame);
+    font-size: 12px;
+    font-weight: 600;
+    text-align: left;
+    color: var(--color-ink-strong);
+
+    &:hover {
+      background: var(--color-hover);
+    }
+    &[data-general="false"] {
+      background: var(--color-sheet);
+      box-shadow: inset 0 0 0 1px var(--color-rule-strong);
+    }
+    &[aria-pressed="true"] {
+      background: var(--color-accent-wash);
+      box-shadow: inset 0 0 0 1.5px var(--color-accent);
+      color: var(--color-accent);
+    }
+  }
+  .help-buttons--strip .help-button {
+    padding: 3px 10px;
+    border: 1px solid var(--color-rule);
+    border-radius: 999px;
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--color-ink-secondary);
+
+    &:hover {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
+    &[data-general="false"] {
+      border-color: var(--color-rule-strong);
+    }
+    &[aria-pressed="true"] {
+      border-color: var(--color-accent);
+      background: var(--color-accent-wash);
+      color: var(--color-accent);
+    }
+  }
+  .help-button-name {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .help-button-keys {
+    flex-shrink: 0;
+    padding: 1px 4px;
+    border-radius: 4px;
+    background: var(--color-sheet);
+    box-shadow: inset 0 0 0 1px var(--color-rule);
+    font-family: var(--font-sans);
+    font-size: 10.5px;
+    font-weight: 600;
+    color: var(--color-ink-meta);
+  }
+  .help-suggestion {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .help-heading {
+    display: flex;
+    gap: 4px;
+    margin: 0;
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--color-ink-meta);
+
+    & b {
+      flex: none;
+      font-weight: 600;
+      white-space: nowrap;
+      color: var(--color-ink-secondary);
+    }
+  }
+  .help-heading-after {
+    display: -webkit-box;
+    min-width: 0;
+    overflow: hidden;
+    overflow-wrap: break-word;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+  .help-option {
+    display: grid;
+    grid-template-columns: 16px 1fr;
+    column-gap: 6px;
+    row-gap: 2px;
+  }
+  .help-option-mark {
+    font-size: 13px;
+    line-height: 20px;
+    text-align: center;
+    color: var(--color-accent);
+  }
+  .help-option-say {
+    font-size: 14.5px;
+    line-height: 20px;
+    overflow-wrap: break-word;
+    color: var(--color-ink-strong);
+  }
+  .help-option--recommended .help-option-say {
+    font-weight: 600;
+    color: var(--color-ink);
+  }
+  .help-option-note {
+    grid-column: 2;
+    justify-self: start;
+    max-width: 100%;
+    margin: 2px 0;
+    padding: 0 6px;
+    border-radius: 4px;
+    background: var(--color-chip);
+    font-size: 12px;
+    line-height: 20px;
+    overflow-wrap: break-word;
+    color: var(--color-ink-meta);
+  }
+  .help-option-effect {
+    grid-column: 2;
+    font-size: 12.5px;
+    line-height: 17px;
+    overflow-wrap: break-word;
+    color: var(--color-ink-meta);
+  }
+  .help-citation {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    height: 18px;
+    margin-left: 4px;
+    padding: 0 5px;
+    border-radius: 4px;
+    background: var(--color-chip);
+    font-size: 11px;
+    font-weight: 600;
+    vertical-align: 1px;
+    color: var(--color-ink-secondary);
+
+    &[data-check="not-found"],
+    &[data-check="unsupported"],
+    &[data-check="contradicted"] {
+      color: var(--color-warning);
+    }
+  }
+  .help-citation-found {
+    width: 10px;
+    height: 10px;
+    color: var(--color-success);
+  }
+  .help-sources {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .help-source {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--color-ink-meta);
+  }
+  .help-outline-lines {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 4px 0;
+  }
+  .help-outline-line {
+    height: 12px;
+    border-radius: 4px;
+    background: var(--color-chip);
+  }
+  .help-failed {
+    margin: 0;
+    font-size: 12.5px;
+    line-height: 18px;
+    color: var(--color-ink-secondary);
+  }
+
+  /*
+   * The level bars while a Meeting records (the canvas board Meet-Polish-Live): the one
+   * thing that moves, so the User knows they're heard. Their heights change; nothing slides.
+   */
+  .level-meter {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    color: var(--color-ink-secondary);
+  }
+  .level-meter--stop:hover,
+  .level-meter--stop:focus-visible {
+    background: var(--color-hover);
+    color: var(--color-ink);
+  }
+  .level-bars {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    height: 12px;
+  }
+  .level-bar {
+    width: 2px;
+    border-radius: 1px;
+    background: currentColor;
+  }
+  .level-warning {
+    display: inline-flex;
+    align-items: center;
+    color: var(--color-warning);
   }
 
   /*
@@ -6481,6 +6991,13 @@
     flex: none;
     padding: 0 var(--edge) 10px;
 
+    &[data-setup] {
+      display: flex;
+      flex: 0 1 auto;
+      flex-direction: column;
+      min-height: 0;
+    }
+
     &:empty {
       display: none;
     }
@@ -7246,7 +7763,7 @@
   }
   .history-rows {
     padding: 40px 0 48px;
-    font-family: var(--font-serif);
+    font-family: var(--writing-font, var(--font-system));
     font-size: var(--text-body);
     line-height: var(--text-body--line-height);
     color: var(--color-ink);

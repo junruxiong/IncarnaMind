@@ -1,4 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { isRecentStyles } from "../shared/citationStyles";
+import { isHelpKeys } from "../shared/meetingHelp";
+import { DEFAULT_MIND_STYLE, isMindStyle } from "../shared/mindStyle";
 import {
   type ChatModelChoice,
   type DeviceSettings,
@@ -134,6 +137,8 @@ const userScope: Scope<UserSettings> = {
     monthlyCap: null,
     webSearch: false,
     keepWebPageLook: false,
+    recentCitationStyles: [],
+    newMindStyle: DEFAULT_MIND_STYLE,
   },
   validators: {
     language: isLanguagePreference,
@@ -147,15 +152,27 @@ const userScope: Scope<UserSettings> = {
     monthlyCap: (value): value is MonthlyCap | null => value === null || isMonthlyCap(value),
     webSearch: isBoolean,
     keepWebPageLook: isBoolean,
+    recentCitationStyles: isRecentStyles,
+    newMindStyle: isMindStyle,
   },
 };
 
-const GETTING_STARTED_STEPS = ["started", "citationChecked", "indexed", "askedOwn", "hidden"];
+const GETTING_STARTED_STEPS = [
+  "started",
+  "citationChecked",
+  "indexed",
+  "askedOwn",
+  "askedReady",
+  "hidden",
+];
 
+// Progress kept before the ready Question (#123) has no `askedReady`; `get` reads it as not asked.
 const isGettingStarted = (value: unknown): value is GettingStarted =>
   isRecord(value) &&
-  Object.keys(value).length === GETTING_STARTED_STEPS.length &&
-  GETTING_STARTED_STEPS.every((key) => isBoolean(value[key]));
+  Object.keys(value).every((key) => GETTING_STARTED_STEPS.includes(key)) &&
+  GETTING_STARTED_STEPS.every(
+    (key) => isBoolean(value[key]) || (key === "askedReady" && value[key] === undefined),
+  );
 
 const isScriptTimeout = (value: unknown): value is number =>
   typeof value === "number" &&
@@ -176,6 +193,7 @@ const deviceScope: Scope<DeviceSettings> = {
       citationChecked: false,
       indexed: false,
       askedOwn: false,
+      askedReady: false,
       hidden: false,
     },
     skillScriptsEnabled: true,
@@ -184,6 +202,9 @@ const deviceScope: Scope<DeviceSettings> = {
     meetingsEnabled: false,
     meetingSystemAudio: true,
     meetingNoticeAccepted: false,
+    meetingPanel: true,
+    meetingPanelHidden: true,
+    meetingHelpKeys: {},
     motion: "system",
   },
   validators: {
@@ -198,6 +219,9 @@ const deviceScope: Scope<DeviceSettings> = {
     meetingsEnabled: isBoolean,
     meetingSystemAudio: isBoolean,
     meetingNoticeAccepted: isBoolean,
+    meetingPanel: isBoolean,
+    meetingPanelHidden: isBoolean,
+    meetingHelpKeys: isHelpKeys,
     motion: (value): value is MotionPreference =>
       MOTION_PREFERENCES.some((preference) => preference === value),
   },
@@ -289,6 +313,7 @@ export function createSettings(
       "share-page": stored["share-page"] ?? SHARE_PAGE_DEFAULTS,
     };
     const device = read(db, deviceScope);
+    device.gettingStarted = { ...deviceScope.defaults.gettingStarted, ...device.gettingStarted };
     const language = resolveLanguage(user.language, systemLanguages());
     const author = user.authorName ?? systemUserName().trim();
     return { user, device, language, scriptSandbox, meetingAudio, author };

@@ -27,8 +27,9 @@ export const en = {
     "Suggests a Folder and Tags for each Document here. You accept or change each one.",
   "library.organize.needsModel": "Organize needs an AI model",
   "library.organize.use": "Use {company}",
-  "library.organize.sends":
-    "Each Document's name and the start of its text (for a scan, images of its first pages), and your Folders' and Tags' names and descriptions, go to {company}",
+  "library.organize.sends": "Sends document names and excerpts to {company}.",
+  "library.organize.sends.details":
+    "Each Document's name and the start of its text (for a scan, images of its first pages), and your Folders' and Tags' names and descriptions, go to {company}.",
   "library.organize.dismiss": "Not now",
   "library.organize.setUp": "Set up a model on this computer",
   "library.organize.done.one": "Organize suggested a Folder for 1 Document",
@@ -102,9 +103,12 @@ export const en = {
   "library.progress.other": "Organizing {count} Documents…",
   "library.progressWith.one": "Organizing 1 Document with {service}…",
   "library.progressWith.other": "Organizing {count} Documents with {service}…",
-  "library.progressSends.one":
-    "Organizing 1 Document with {service}: its name, outline and short excerpts are sent",
+  "library.progressSends.one": "Organizing 1 Document with {service} · sends its name and excerpts",
   "library.progressSends.other":
+    "Organizing {count} Documents with {service} · sends names and excerpts",
+  "library.progressSends.full.one":
+    "Organizing 1 Document with {service}: its name, outline and short excerpts are sent",
+  "library.progressSends.full.other":
     "Organizing {count} Documents with {service}: each one's name, outline and short excerpts are sent",
   "library.waiting":
     "{count} Documents need text, a model or permission. Open their details to check.",
@@ -232,6 +236,7 @@ export const en = {
   "folder.newMindHere": "New Mind here",
   "folder.untitled": "Untitled Folder",
   "folder.untitled.numbered": "Untitled Folder {number}",
+  "folder.fromStarters": "From starter folders…",
   "folder.newWith": "New Folder with these",
   "folder.newWith.document": "New Folder with this Document",
   "folder.newWith.mind": "New Folder with this Mind",
@@ -284,6 +289,8 @@ export const en = {
   "undo.tagEdited": "Changed the Tag “{name}”",
   "undo.folderEdited": "Changed the Folder “{name}”",
   "undo.examplesRemoved": "Removed the examples",
+  "undo.examplesShown": "Showed the examples",
+  "menu.showExamples": "Show the examples again",
   "undo.mindStarted": "Started “{name}”",
   "undo.mindMade": "Made a new Mind",
   "undo.linkedFolderPaused": "Paused reading in “{name}”",
@@ -364,6 +371,8 @@ export const en = {
   "undo.name.editFolder": "Edit Folder",
   "undo.name.newFolder": "New Folder",
   "undo.name.removeExamples": "Remove the Examples",
+  "undo.name.showExamples": "Show the Examples",
+  "firstOpen.remove": "Remove the examples",
   "undo.nothing": "Nothing to undo",
   "redo.nothing": "Nothing to redo",
   "undo.refused": "Couldn't put it back: {reason}",
@@ -376,7 +385,6 @@ export const en = {
   "conversation.untitled": "New chat",
   "mind.noneOpen.title": "Start a Mind",
   "mind.noneOpen.body": "A Mind is a notebook for a topic or project.",
-  "mind.title.label": "Mind title",
   "mind.editor.label": "Mind content",
   "mind.update.title": "Update IncarnaMind to open this",
   "mind.update.body":
@@ -438,6 +446,16 @@ export const en = {
   "wordCount.target": "{count} / {target} {unit}",
   "wordCount.rule":
     "Counts words in English and characters in Chinese and Japanese. Citation markers and Questions are left out.",
+  "page.count.words": "{count} words",
+  "page.count.words.one": "1 word",
+  "page.count.characters": "{count} characters",
+  "page.count.characters.one": "1 character",
+  "page.count.selected.words": "{selected} of {count} words",
+  "page.count.selected.characters": "{selected} of {count} characters",
+  "page.countShown": "Show word count while writing",
+  "page.countShown.command": "Show word count while writing",
+  "page.countHidden.command": "Hide word count while writing",
+  "page.countShown.keywords": "word count characters length target while writing page bottom",
   "wordCount.menu": "Word count",
   "wordCount.scope": "Counts the selection while text is selected, otherwise the whole Mind.",
   "wordCount.basis.words": "Words (Chinese by character)",
@@ -604,6 +622,8 @@ export const en = {
   "claim.webQuestion": "Search the web for sources that support or contradict this: “{sentence}”",
   "claim.searchAll": "Search all Documents",
   "claim.checkAgain": "Check again",
+  "claim.added.one": "1 Document added since this check",
+  "claim.added": "{count} Documents added since this check",
   "claim.reason.refused": "The model declined to check it.",
   "claim.reason.malformed": "The model's reply couldn't be read.",
   "claim.reason.empty": "The model gave an empty reply.",
@@ -629,8 +649,19 @@ export const en = {
   "health.recheck": "{count} needs re-check",
   "health.recheck.other": "{count} need re-check",
   "health.notChecked": "{count} not checked",
-  "health.checkedAll.one": "Checked 1 sentence, {when}",
-  "health.checkedAll": "Checked {count} sentences, {when}",
+  "health.unchecked.one": "1 claim not checked yet",
+  "health.unchecked": "{count} claims not checked yet",
+  "badge.label": "{label}: {parts}",
+  "badge.next": "Next",
+  "badge.toCheck": "to check",
+  "badge.checked": "{count} checked",
+  "badge.checking": "Checking {done} of {total}",
+  "mindCheck.command.purpose": "Whether each claim has support in your Documents",
+  "contradictions.command.purpose": "Where your Documents disagree with this Mind's Citations",
+  "badge.command.keywords":
+    "checks citations health contradicted unsupported claims sentences badge",
+  "health.checkedAll.one": "Checked 1 claim, {when}",
+  "health.checkedAll": "Checked {count} claims, {when}",
   "health.checkAll": "Check all",
   "health.next": "{part}: go to the next",
   "checks.smallModel":
@@ -640,6 +671,9 @@ export const en = {
   "checks.running.contradiction-watch": "Checking cited claims for contradictions…",
   "checks.stop": "Stop",
   "checks.close": "Close",
+  "checks.added.one": "1 Document added since these checks",
+  "checks.added": "{count} Documents added since these checks",
+  "checks.added.command": "Check again with the Documents added since",
   "checks.problem.no-documents.folder":
     "Nothing to check against: “{folder}” has no Documents yet.",
   "checks.addFiles": "Add files…",
@@ -652,8 +686,7 @@ export const en = {
   "checks.waiting.one": "1 sentence with changes waiting wasn't checked",
   "checks.waiting": "{count} sentences with changes waiting weren't checked",
   "checks.acceptAndCheck": "Accept all and check",
-  "checks.problem.local-mode":
-    "“Keep everything on this computer” is on, and the model isn't on this computer, so nothing was checked.",
+  "checks.problem.local-mode": "Not checked: “Keep everything on this computer” is on.",
   "checks.problem.chooseModel": "Choose a model",
   "checks.tryAgain": "Try again",
   "checks.problem.failed": "Couldn't check: {message}",
@@ -661,7 +694,7 @@ export const en = {
     "This Mind isn't in a Folder, so there are no other Documents to check it against.",
   "checks.problem.only-cited.folder": "“{folder}” holds only the Documents these claims cite.",
   "checks.problem.no-cited": "This Mind has no cited claims to check.",
-  "checks.problem.no-claims": "This Mind has no sentences to check.",
+  "checks.problem.no-claims": "This Mind has no claims to check.",
   "contradictions.command": "Check for contradictions",
   "contradictions.command.keywords":
     "contradictions conflict contradicted cited claims Folder watch",
@@ -678,10 +711,7 @@ export const en = {
   "contradictions.after": "After “{document}” changed: {result}",
   "mindCheck.command": "Check this Mind",
   "mindCheck.command.keywords": "check all whole draft before sending claims sentences verify",
-  "mindCheck.ask.folder.one": "Check this Mind’s sentence against this Folder’s Documents?",
-  "mindCheck.ask.folder": "Check this Mind’s {count} sentences against this Folder’s Documents?",
-  "mindCheck.ask.all.one": "Check this Mind’s sentence against your Documents?",
-  "mindCheck.ask.all": "Check this Mind’s {count} sentences against your Documents?",
+  "mindCheck.ask.unestimated": "The cost couldn't be estimated",
   "mindCheck.ask.claims.folder.one": "Check this Mind’s claim against this Folder’s Documents?",
   "mindCheck.ask.claims.folder":
     "Check this Mind’s {count} claims against this Folder’s Documents?",
@@ -710,6 +740,10 @@ export const en = {
   "verify.checking": "Checking {done} of {total}…",
   "verify.checked.one": "Checked 1 claim",
   "verify.checked": "Checked {count} claims",
+  "verify.card.title": "Verifying this document",
+  "verify.row.contradicted": "{count} contradicted",
+  "verify.row.unsupported": "{count} unsupported",
+  "verify.row.supported": "{count} supported",
   "verify.checkedOf.one": "Checked {checked} of 1 claim",
   "verify.checkedOf": "Checked {checked} of {count} claims",
   "verify.needLook.one": "1 needs a look",
@@ -722,10 +756,8 @@ export const en = {
   "verify.noDocuments.all": "Nothing to check against: add Documents first",
   "verify.problem.error": "Couldn't check: {message}",
   "verify.tryAgain": "Try again",
-  "references.ask":
-    "Looks up the list's {count} references in Crossref, then OpenAlex or arXiv if needed, sending only each reference as written.",
-  "references.ask.one":
-    "Looks up the list's reference in Crossref, then OpenAlex or arXiv if needed, sending only the reference as written.",
+  "references.ask": "Sends {count} references, as written, to Crossref, OpenAlex or arXiv.",
+  "references.ask.one": "Sends the reference, as written, to Crossref, OpenAlex or arXiv.",
   "references.check": "Check references",
   "references.checking": "Checking {done} of {total} references…",
   "references.checked": "Checked {count} references",
@@ -764,10 +796,7 @@ export const en = {
   "references.difference.year.cited": "Year: {cited} here, {found} in {service}",
   "references.difference.title": "Title in {service}: {found}",
   "references.difference.authors": "Authors in {service}: {found}",
-  "references.localMode":
-    "The {count} references can't be looked up while “Keep everything on this computer” is on.",
-  "references.localMode.one":
-    "The reference can't be looked up while “Keep everything on this computer” is on.",
+  "references.localMode": "Can't look up references: “Keep everything on this computer” is on.",
   "references.localMode.turnOff": "Turn it off",
   "references.problem": "The references couldn't be checked: {message}",
   "consent.flow.checks": "Find support and Verify",
@@ -786,8 +815,7 @@ export const en = {
   "edit.problem.has-proposals":
     "The selection holds changes that are waiting: accept or reject them first.",
   "edit.problem.too-long": "That is more text than the model can take at once: select less.",
-  "edit.problem.local-mode":
-    "“Keep everything on this computer” is on, so Edit with AI uses only a model on this computer.",
+  "edit.problem.local-mode": "Couldn't edit: “Keep everything on this computer” is on.",
   "edit.problem.chooseModel": "Choose a model",
   "edit.problem.failed": "Edit with AI didn't work: {message}",
   "edit.problem.retry": "Try again",
@@ -1279,9 +1307,12 @@ export const en = {
   "status.tagging.other": "Tagging {count} Documents…",
   "status.taggingWith.one": "Tagging 1 Document with {service}…",
   "status.taggingWith.other": "Tagging {count} Documents with {service}…",
-  "status.taggingSends.one":
-    "Tagging 1 Document with {service}: its name, outline and short excerpts are sent",
+  "status.taggingSends.one": "Tagging 1 Document with {service} · sends its name and excerpts",
   "status.taggingSends.other":
+    "Tagging {count} Documents with {service} · sends names and excerpts",
+  "status.taggingSends.full.one":
+    "Tagging 1 Document with {service}: its name, outline and short excerpts are sent",
+  "status.taggingSends.full.other":
     "Tagging {count} Documents with {service}: each one's name, outline and short excerpts are sent",
   "status.sendsScans": " (page images for scans)",
   "status.taggingWaiting": "No AI model for Tags",
@@ -1314,10 +1345,12 @@ export const en = {
   "status.skipped.one": "Skipped 1 file",
   "status.skipped.other": "Skipped {count} files",
   "webPages.add.title": "Add web pages",
-  "webPages.add.note":
-    "Paste an address, or several, one per line. Each page is fetched once, from this computer, with the article's pictures, which may come from the site's image servers, and kept as a Document whose quotes can be checked. Nothing else on the page is loaded.",
-  "webPages.add.note.keepLook":
-    "Paste an address, or several, one per line. Each page is fetched once, from this computer, with the article's pictures, which may come from the site's image servers, and kept as a Document whose quotes can be checked.",
+  "webPages.add.note": "Paste an address, or several, one per line.",
+  "webPages.add.fetch": "Fetched once from this computer, kept as a Document.",
+  "webPages.add.fetch.details":
+    "The article's pictures come with it, and may come from the site's image servers. Nothing else on the page is loaded.",
+  "webPages.add.fetch.details.keepLook":
+    "The article's pictures come with it, and may come from the site's image servers.",
   "webPages.add.label": "Addresses",
   "webPages.add.invalid": "Not a web address: {line}",
   "webPages.add.cancel": "Cancel",
@@ -1398,9 +1431,9 @@ export const en = {
   "embeddingProviders.form.offHint":
     "Documents are searched by their words, best matches first, as soon as they are read. Nothing is downloaded.",
   "embeddingProviders.form.localOnly":
-    "“Keep everything on this computer” is on, so only models on this computer can be chosen.",
+    "Cloud models unavailable: “Keep everything on this computer” is on.",
   "embeddingProviders.form.localOnlyServer":
-    "“Keep everything on this computer” is on, and this server isn’t on this computer: use one at localhost or 127.0.0.1, or turn off “Keep everything on this computer” above.",
+    "Use a server on this computer: “Keep everything on this computer” is on.",
   "embeddingProviders.form.builtInHint":
     "multilingual-e5-small: about 135 MB, downloaded once, and runs on this computer. English and Chinese.",
   "embeddingProviders.form.ollamaUrl": "Ollama URL (optional)",
@@ -1434,7 +1467,7 @@ export const en = {
     "Your AI model is on {service}, so Questions aren't sent while this is on: choose a local model under AI model to ask them.",
   "embeddingProviders.rebuild.title": "Reading Documents for search: {done} of {total}",
   "embeddingProviders.rebuild.localMode":
-    "To keep everything on this computer, search now uses the built-in model.",
+    "Search uses the built-in model: “Keep everything on this computer” is on.",
   "embeddingProviders.rebuild.note":
     "Search finds passages by their words until each Document is done.",
   "embeddingProviders.error.notice": "Search can't use {provider}. {reason}",
@@ -1458,13 +1491,12 @@ export const en = {
   "rerank.settings.loadFailed":
     "The model that orders search results couldn't start on this computer.",
   "rerank.settings.retry": "Try again",
-  "rerank.settings.paused":
-    "Paused while “Keep everything on this computer” is on: search results stay on this computer.",
+  "rerank.settings.paused": "Paused: “Keep everything on this computer” is on.",
   "rerank.settings.keyMissing":
     "No key for {service} can be read on this device, so results aren't reordered. Enter the key again.",
   "rerank.settings.setUp": "Set up…",
   "rerank.settings.localOnly":
-    "“Keep everything on this computer” is on: Cohere and Voyage AI would receive search matches, so only the built-in model can be chosen.",
+    "Cloud models unavailable: “Keep everything on this computer” is on.",
   "rerank.settings.change": "Change",
   "rerank.settings.remove": "Turn off",
   "rerank.kind.built-in": "On this computer (built-in model)",
@@ -1632,8 +1664,7 @@ export const en = {
   "tagging.organize.ask": "Organize asks in the Library before it first uses a model.",
   "tagging.organize.with": "Organize uses {model}, as you chose in the Library.",
   "tagging.organize.same": "Organize uses this model too.",
-  "tagging.localMode":
-    "“Keep everything on this computer” is on, so only models on this computer tag your Documents.",
+  "tagging.localMode": "Cloud models can't tag: “Keep everything on this computer” is on.",
   "tagging.plan":
     "Uses your ChatGPT plan, one Document at a time, so it doesn't use up what you chat with. If the plan's limit is reached, tagging waits for it to reset.",
   "tagging.plan.local": "To keep your plan for chatting, tag on this computer instead.",
@@ -1657,7 +1688,7 @@ export const en = {
   "status.taggingPaused": "Tagging waits for your ChatGPT plan",
   "status.taggingPaused.full":
     "Your ChatGPT plan's limit is reached, so tagging waits for it to reset, then goes on by itself.",
-  "jev.form.sends": "Document text for Tags goes to Jev when it tags your Documents.",
+  "jev.form.sends": "Sends Document text to Jev for tagging.",
 
   "settings.title": "Settings",
   "settings.pages.models": "Models",
@@ -1680,6 +1711,7 @@ export const en = {
   "settings.about.title": "About",
   "settings.about.body": "IncarnaMind is open source, under the Apache 2.0 licence.",
   "settings.about.repository": "IncarnaMind on GitHub",
+  "settings.about.citationLicences": "Citation style licences",
   "outputLocation.title": "Output location",
   "outputLocation.body":
     "Where exports and files that Tasks save go. IncarnaMind writes nowhere else without asking.",
@@ -1710,28 +1742,22 @@ export const en = {
   "fileWrite.linked.deny": "Don't allow",
 
   "providers.setup.title": "Where should Answers come from?",
-  "providers.setup.body":
-    "Asking Questions needs an AI model. Notes and Documents work without one, and you can change this later in Settings.",
+  "providers.setup.body": "Asking needs an AI model. Notes work without one.",
   "providers.setup.later": "Set up later",
-  "setup.title": "Choose where Answers come from",
-  "setup.body": "Your Question waits here and is answered as soon as you pick.",
+  "setup.title": "Choose your AI",
   "setup.waiting": "Waiting for you to choose a model",
   "setup.chatgpt.use": "Use my ChatGPT plan",
-  "setup.chatgpt.line":
-    "If you pay for ChatGPT Plus or Pro · No key needed · Signing in lets OpenAI receive, under your ChatGPT account: {sends}.",
-  "setup.chatgpt.line.china":
-    "If you pay for ChatGPT Plus or Pro (not in mainland China) · No key needed · Signing in lets OpenAI receive, under your ChatGPT account: {sends}.",
+  "setup.chatgpt.line": "Plus or Pro \u00b7 no key needed",
+  "setup.chatgpt.line.china": "Plus or Pro, outside mainland China \u00b7 no key needed",
   "setup.key.use": "Paste an API key",
-  "setup.key.for": "From OpenAI, Anthropic, Google, DeepSeek and more, yours or your company's.",
+  "setup.key.for": "OpenAI, Anthropic, Google, DeepSeek and more",
   "setup.back": "Back",
   "setup.getOllama": "Get Ollama",
   "setup.other": "Other ways",
   "setup.way.local": "Use a model on this computer",
-  "setup.way.local.line":
-    "Free and private. Needs the free Ollama app. Slower, and cites less reliably.",
-  "setup.way.local.running":
-    "Ollama is running here. Free and private; slower, and cites less reliably.",
-  "setup.way.local.notRunning": "Ollama isn't running on this computer. It's free to get.",
+  "setup.way.local.line": "Free and private \u00b7 slower",
+  "setup.way.local.running": "Ollama is running \u00b7 free, slower",
+  "setup.way.local.notRunning": "Needs the free Ollama app",
   "setup.claude.title": "Already pay for Claude?",
   "setup.claude.line":
     "Anthropic doesn’t let other apps use a Claude plan. You can ask your Documents in the Claude app instead.",
@@ -1758,9 +1784,8 @@ export const en = {
   "providers.choice.local": "Stays on this computer",
   "providers.choice.apiKey": "An API key",
   "providers.choice.apiKey.body":
-    "OpenAI, Anthropic, Google, DeepSeek, Qwen, Kimi, GLM, Mistral, xAI, OpenRouter, SiliconFlow, or an OpenAI-compatible server. The service you choose receives: {sends}.",
-  "providers.choice.apiKey.firstRun.body":
-    "{providers}. More providers are in Settings. The service you choose receives: {sends}.",
+    "OpenAI, Anthropic, Google, DeepSeek, Qwen, Kimi, GLM, Mistral, xAI, OpenRouter, SiliconFlow, or an OpenAI-compatible server.",
+  "providers.choice.apiKey.firstRun.body": "{providers}. More providers are in Settings.",
   "providers.list.separator": ", ",
   "providers.list.last": "{rest} or {last}",
   "providers.kind.short.qwen": "Qwen",
@@ -1809,7 +1834,7 @@ export const en = {
   "providers.form.test": "Test connection",
   "providers.form.testing": "Testing…",
   "providers.form.save": "Use this service",
-  "providers.sends": "When you use it, {provider} receives:",
+  "providers.sendsLine": "Sends your questions and document text to {provider}.",
   "providers.sends.chat":
     "your Questions, the Mind you're in, matching passages with their Document names and pages, and the names of other Documents in scope",
   "providers.sends.checks": "each sentence you check",
@@ -1817,15 +1842,6 @@ export const en = {
   "providers.sends.edits": "the text you ask the assistant to change",
   "providers.sends.tagging":
     "each Document's name, outline and short excerpts, with your Folder and Tag names, to tag and file it (page images for scans with no text)",
-  "providers.sendsShort.chat":
-    "your Questions with the Mind you're in, matching passages and the names of Documents in scope",
-  "providers.sendsShort.checks": "sentences you check",
-  "providers.sendsShort.suggestions": "the paragraph you pause on",
-  "providers.sendsShort.edits": "text you ask the assistant to change",
-  "providers.sendsShort.tagging":
-    "Document names, outlines and excerpts with your Folder and Tag names, to tag and file them (page images for scans)",
-  "providers.sendsShort.separator": "; ",
-  "providers.sendsShort.last": "{rest}; and {last}",
   "providers.sends.tagsOnSave": "Tagging starts when you save the key.",
   "providers.form.saving": "Saving…",
   "providers.form.moreShort": "More…",
@@ -1857,8 +1873,7 @@ export const en = {
   "providers.test.rate-limit": "The provider is limiting requests for this key. Try again shortly.",
   "providers.test.network": "Couldn't reach the server. Check its URL and your connection.",
   "providers.test.provider": "The provider returned an error.",
-  "providers.test.local-mode":
-    "Nothing was sent: “Keep everything on this computer” is on, and this model isn't on this computer.",
+  "providers.test.local-mode": "Not sent: “Keep everything on this computer” is on.",
   "providers.test.consent-declined":
     "Nothing was sent, because you chose not to send data to this service.",
   "providers.test.too-long": "The model's context window is too small for even a short request.",
@@ -1899,17 +1914,15 @@ export const en = {
   "providers.local.rowNotRunning": "Not running yet.",
   "providers.ollama.get": "Get Ollama",
 
-  "providers.readiness.no-provider":
-    "Asking Questions needs an AI model. Notes and Documents work without one.",
+  "providers.readiness.no-provider": "Asking needs an AI model. Notes work without one.",
   "providers.readiness.missing-api-key":
     "The API key for {service} isn't saved on this device. Add it in Settings to ask Questions.",
   "providers.readiness.consent-declined":
     "You chose not to send data to {service}, so Questions are off. Choose another provider or a local model, or allow it in Settings.",
   "providers.readiness.local-mode":
-    "“Keep everything on this computer” is on, so Questions aren't sent to {service}.",
+    "Not sent to {service}: “Keep everything on this computer” is on.",
   "providers.readiness.setUp": "Set up",
-  "localMode.refused":
-    "“Keep everything on this computer” is on, so this Question wasn't sent to {service}",
+  "localMode.refused": "Not sent to {service}: “Keep everything on this computer” is on",
   "localMode.useLocal": "Use a local model",
   "localMode.turnOff": "Allow cloud models",
   "localMode.turnedOff": "Turned off “Keep everything on this computer”",
@@ -1940,7 +1953,7 @@ export const en = {
 
   "chatgpt.title": "ChatGPT plan",
   "chatgpt.description":
-    "Use your ChatGPT Plus or Pro plan instead of an API key. OpenAI receives, under your ChatGPT account: {sends}. It counts against your plan's limits.",
+    "Use your ChatGPT Plus or Pro plan instead of an API key. It counts against your plan's limits.",
   "chatgpt.continue": "Continue with ChatGPT",
   "chatgpt.account.signedOut": "Not signed in.",
   "chatgpt.account.expired":
@@ -1987,6 +2000,39 @@ export const en = {
   "claudeAccount.page.success.body": "You can close this tab and go back to IncarnaMind.",
   "claudeAccount.page.failure.title": "The Claude sign-in didn't work",
   "claudeAccount.page.failure.body": "Close this tab and try again in IncarnaMind.",
+  "copilot.way.title": "Use my Copilot plan",
+  "copilot.way.line": "Pro, Pro+ or Business",
+  "copilot.experimental": "Experimental",
+  "copilot.notice.title": "Use your Copilot plan",
+  "copilot.notice.usage": "Answers count toward your Copilot plan's usage limits.",
+  "copilot.notice.experimental":
+    "This way of signing in is experimental: GitHub may refuse or block it.",
+  "copilot.notice.sends": "Sends your questions and document text to GitHub.",
+  "copilot.notice.sends.details":
+    "Your Questions, the Mind you're in, Passages from your Documents, and Document text for Tags go to GitHub under your account.",
+  "copilot.notice.off":
+    "It stays off until you sign in here, and you can sign out any time in Settings › Models.",
+  "copilot.cancel": "Cancel",
+  "copilot.code.asking": "Asking GitHub for a code…",
+  "copilot.code.title": "Enter this code on GitHub's page",
+  "copilot.code.copy": "Copy code",
+  "copilot.code.waiting": "Waiting for you to approve it in the browser…",
+  "copilot.code.reopen": "Open the page again",
+  "copilot.signIn.noModels": "GitHub Copilot listed no models for this account",
+  "copilot.policyBlocked.body":
+    "Your organization's Copilot policy blocks IncarnaMind. Ask an admin to allow it, or choose another way.",
+  "copilot.chooseAnotherWay": "Choose another way",
+  "copilot.plan.free": "Copilot Free",
+  "copilot.plan.pro": "Copilot Pro",
+  "copilot.plan.pro-plus": "Copilot Pro+",
+  "copilot.plan.business": "Copilot Business",
+  "copilot.plan.enterprise": "Copilot Enterprise",
+  "copilot.plan.unknown": "GitHub Copilot",
+  "copilot.signedIn.usage": "Answers count toward your plan's usage limits.",
+  "copilot.use": "Use for Questions",
+  "copilot.signOut": "Sign out",
+  "plans.copilot.title": "GitHub Copilot Pro, Pro+, Business or Enterprise",
+  "plans.copilot.line": "Sign in with GitHub. Answers count toward your plan's usage limits.",
   "copilot.wayBack.signIn": "Sign in with GitHub",
   "copilot.problem.signInCancelled": "GitHub sign-in cancelled: nothing was kept",
   "copilot.problem.signedOut": "You're not signed in to GitHub Copilot",
@@ -2014,11 +2060,29 @@ export const en = {
   "claudeAccount.problem.planLimitUntil": "Your Claude plan's usage limit is reached until {time}",
   "claudeAccount.problem.unexpectedResponse": "Claude answered in a way IncarnaMind didn't expect",
   "claudeAccount.wayBack.signIn": "Sign in with Claude",
+  "claudePlan.way.title": "Use my Claude plan",
+  "claudePlan.way.line": "Pro, Max or Team",
+  "claudePlan.usage": "Answers count toward your Claude plan's usage limits.",
+  "claudePlan.signIn": "Sign in with Claude",
+  "claudePlan.cancel": "Cancel",
+  "claudePlan.waiting": "Sign in to Claude in your browser, then paste the code it shows.",
+  "claudePlan.reopen": "Open the sign-in page again",
+  "claudePlan.paste.label": "Code from Claude's page",
+  "claudePlan.paste.continue": "Finish signing in",
+  "claudePlan.paste.problem.not-sign-in-address": "That isn't the code from Claude's page.",
+  "claudePlan.paste.problem.other-sign-in":
+    "That code is from an earlier sign-in. Sign in on the page just opened, then paste its code.",
+  "claudePlan.failed": "The Claude sign-in didn't work",
+  "claudePlan.failure.timedOut": "The Claude sign-in wasn't finished in time: nothing was kept",
+  "claudePlan.failure.secretStorage": "Can't keep the Claude sign-in safely: no keyring",
+  "claudePlan.details": "Details",
+  "claudePlan.signedIn": "Signed in as {account}",
+  "claudePlan.account.unknown": "your Claude account",
+  "claudePlan.signOut": "Sign out",
   "signInRoute.wayBack.tryAgain": "Try again",
   "signInRoute.wayBack.signInAgain": "Sign in again",
   "signInRoute.wayBack.useAnotherModel": "Use another model",
   "signInRoute.wayBack.pasteApiKey": "Use an API key instead",
-  "signInRoute.wayBack.useClaudeCode": "Use Claude Code",
   "chatgpt.welcome.title": "You're using your ChatGPT plan",
   "chatgpt.welcome.body":
     "Questions you ask in IncarnaMind with a ChatGPT model now use your ChatGPT plan. You can see and limit this in ChatGPT's settings.",
@@ -2142,10 +2206,9 @@ export const en = {
   "reference.addIdentifier": "Add its DOI or arXiv address, and Look up can fill in the rest.",
   "reference.lookUp": "Look up",
   "reference.lookingUp": "Looking up…",
-  "reference.lookUp.doi": "Fills the empty fields from Crossref, by the DOI. Only the DOI is sent.",
-  "reference.lookUp.arxiv":
-    "Fills the empty fields from arXiv, by the arXiv ID. Only the ID is sent.",
-  "reference.lookUp.localMode": "Look up is off while “Keep everything on this computer” is on",
+  "reference.lookUp.doi": "Fills empty fields from Crossref. Sends only the DOI.",
+  "reference.lookUp.arxiv": "Fills empty fields from arXiv. Sends only the arXiv ID.",
+  "reference.lookUp.localMode": "Look up is off: “Keep everything on this computer” is on",
   "reference.lookUp.filled": "Filled {count} fields from {service}",
   "reference.lookUp.filled.one": "Filled 1 field from {service}",
   "reference.lookUp.nothing": "{service} had nothing to add",
@@ -2217,7 +2280,7 @@ export const en = {
   "privacy.intro":
     "IncarnaMind collects no usage data. This page lists everything it sends from this computer, and lets you change it.",
   "privacy.flows.intro":
-    "These send your content to a service outside this computer. Choosing a service, where IncarnaMind says what goes to it, allows these; nothing is sent on one you haven't allowed, and nothing at all while “Keep everything on this computer” is on. Where a provider offers the choice, IncarnaMind asks it not to store your requests.",
+    "These send your content outside this computer. Choosing a service allows them; nothing goes to one you haven't allowed, or at all while “Keep everything on this computer” is on. Where a provider offers it, IncarnaMind asks it not to store your requests.",
   "privacy.flows.service": "to {service}",
   "privacy.flows.local": "Stays on this computer",
   "privacy.flows.sends": "Sends:",
@@ -2257,7 +2320,7 @@ export const en = {
     "When you sign in with your Claude account, IncarnaMind signs you in with Anthropic and renews the sign-in. Questions asked with your plan are the chat flow above.",
   "privacy.traffic.copilot-sign-in": "Sign in with GitHub for Copilot",
   "privacy.traffic.copilot-sign-in.description":
-    "When you sign in with GitHub for Copilot, IncarnaMind signs you in with GitHub, renews the sign-in and reads the models your plan offers. Questions asked with your plan are the chat flow above.",
+    "When you sign in with GitHub for Copilot, IncarnaMind signs you in with GitHub, renews the sign-in, and reads your account's name and the models your plan offers. Questions asked with your plan are the chat flow above.",
   "privacy.traffic.remote-connectors": "Remote Connectors and their sign-in",
   "privacy.traffic.remote-connectors.description":
     "IncarnaMind connects to your remote Connectors' servers to list their Tools, and to the sign-in services they name to sign you in and renew the sign-in. What their Tools are sent is the Connectors flow above.",
@@ -2283,7 +2346,7 @@ export const en = {
   "privacy.usageData.tester":
     "On unless you turn it off in this test version, as agreed when you joined as a tester.",
   "privacy.usageData.localMode":
-    "Off while “Keep everything on this computer” is on, in Settings → Search.",
+    "Off while “Keep everything on this computer” is on · Settings › Search",
   "privacy.usageData.details": "Every event and field",
   "privacy.usageData.resetId": "Reset install ID",
   "privacy.usageData.resetDone": "Reset: events from now on carry a new ID.",
@@ -2437,8 +2500,7 @@ export const en = {
   "answer.error.network": "Couldn't reach {service}. Check your internet connection",
   "answer.error.provider": "{service} ran into a problem",
   "answer.error.consent-declined": "Nothing was sent: you chose not to send data to this service",
-  "answer.error.local-mode":
-    "Stopped: “Keep everything on this computer” was turned on, and {model} isn't on this computer",
+  "answer.error.local-mode": "Stopped: “Keep everything on this computer” is on",
   "answer.error.useLocal": "Use a local model",
   "answer.error.ollama-not-running": "Ollama isn't running on this computer",
   "answer.error.too-long":
@@ -2598,7 +2660,7 @@ export const en = {
   "research.plan.webOff": "Web search is off",
   "research.plan.webOff.action": "Turn on",
   "research.plan.webUnavailable": "{model} can't search the web",
-  "research.plan.localMode": "“Keep everything on this computer” is on: nothing goes to the web",
+  "research.plan.localMode": "No web search: “Keep everything on this computer” is on",
   "task.notify.needsYou": "{task} needs you",
   "task.notify.finished": "{task} finished",
   "task.notify.failed": "{task} couldn't finish",
@@ -2905,8 +2967,7 @@ export const en = {
   "suggestions.settings.paused.no-model": "Paused until an AI model is set up, in Models.",
   "suggestions.settings.paused.consent":
     "Paused until you allow sending your writing to {service}.",
-  "suggestions.settings.paused.local-mode":
-    "Paused while “Keep everything on this computer” is on: your AI model isn't on this computer.",
+  "suggestions.settings.paused.local-mode": "Paused: “Keep everything on this computer” is on.",
   "suggestions.settings.allow": "Allow…",
   "scripts.card.title": "{skill} wants to run {script}",
   "scripts.card.skill": "Skill",
@@ -3285,6 +3346,7 @@ export const en = {
   "error.action": "That didn't work: {message}",
   "error.dismiss": "Dismiss",
   "error.details": "Details",
+  "details.label": "Details",
   "error.system.notAllowed": "IncarnaMind isn't allowed to change that file or folder.",
   "error.system.full": "The disk is full.",
   "error.system.gone": "That file or folder isn't there any more.",
@@ -3299,6 +3361,7 @@ export const en = {
   "error.startup.newer.quit": "Quit",
 
   "error.connector.notInDirectory": "That Connector isn't in the directory.",
+  "error.examples.reading": "The example's Documents are still being read. Try again in a moment.",
   "error.document.notFound": "There is no such Document.",
   "error.checkRecord.format": "The check record can be saved as PDF or CSV.",
   "error.checkRecord.noPdf":
@@ -3397,9 +3460,9 @@ export const en = {
   "error.provider.ollamaCloud":
     "{model} runs on ollama.com, not on this computer. Choose a local model, or pick it in the model menu.",
   "error.provider.rerankLocalMode":
-    "“Keep everything on this computer” is on: search results aren't sent to a reranking service. Turn it off in Settings first.",
+    "Cloud models unavailable: “Keep everything on this computer” is on.",
   "error.provider.embeddingLocalMode":
-    "“Keep everything on this computer” is on: Document search keeps everything on this computer. Turn it off in Settings to use a cloud embedding provider.",
+    "Cloud models unavailable: “Keep everything on this computer” is on.",
   "error.provider.embeddingsOff": "Search by meaning is off: turn it on in Settings → Search.",
   "error.secrets.plainText":
     "No keyring is running, so API keys would be stored in plain text. Start GNOME Keyring or KWallet, or accept plain-text storage in Settings.",
@@ -3411,8 +3474,7 @@ export const en = {
   "error.connector.nameTooLong": "A Connector's name can't be longer than {max} characters.",
   "error.connector.nameTaken": "A Connector named “{name}” already exists.",
   "error.connector.off": "Turn the Connector on first.",
-  "error.connector.localMode":
-    "“Keep everything on this computer” is on, and this Connector isn't on this computer, so it isn't used.",
+  "error.connector.localMode": "Connector paused: “Keep everything on this computer” is on.",
   "error.connector.urlMissing": "Enter the server's URL.",
   "error.connector.urlTooLong": "That URL is too long.",
   "error.connector.urlInvalid": "“{url}” isn't a valid URL.",
@@ -3437,6 +3499,8 @@ export const en = {
   "error.restore.unlinked":
     "“{name}” can't be restored: the Linked folder it was in has been unlinked.",
   "error.restore.documentBack": "“{name}” is in the Library again, so it can't be restored.",
+  "error.citationStyle.language":
+    "Citations can't be formatted in “{language}”: a Mind is in English or Chinese.",
   "error.restore.documentGone": "That Document was deleted. Restore it first.",
   "error.restore.tagGone": "The Tag “{name}” was deleted. Restore it first.",
   "error.restore.folderGone": "The Folder “{name}” was deleted. Restore it first.",
@@ -3477,6 +3541,9 @@ export const en = {
   "error.meeting.notRecording": "That Meeting isn't recording.",
   "error.meeting.notPaused": "That Meeting isn't paused.",
   "error.meeting.notBeingRecorded": "That Meeting isn't being recorded.",
+  "error.meeting.helpButton": "That isn't one of this meeting's help buttons.",
+  "error.meeting.template":
+    "A meeting's template is a sales call, a user interview or a team meeting.",
   "error.comparison.noQuestion": "Add a Question to compare by.",
   "error.comparison.tooManyQuestions": "A comparison table has at most {max} Questions.",
   "error.comparison.noDocuments": "There are no Documents to compare.",
@@ -3503,17 +3570,16 @@ export const en = {
     "“{name}” is the name of a built-in Skill, whose files can't be replaced. Give the Skill another name in its SKILL.md, or duplicate the built-in Skill to make your own.",
   "error.approval.riskNotAccepted":
     "Confirm the risk warning before always running a Skill's scripts.",
+  "error.mindStyle.invalid": "That isn't a font and a text size IncarnaMind has.",
   "error.privacy.usageDataLocalMode":
-    "Usage data stays off while “Keep everything on this computer” is on.",
+    "Usage data stays off: “Keep everything on this computer” is on.",
   "error.check.claimTooLong": "The claim is too long to check: at most {max} characters.",
-  "error.check.localMode":
-    "“Keep everything on this computer” is on, and the model isn't on this computer.",
+  "error.check.localMode": "Not checked: “Keep everything on this computer” is on.",
   "error.check.declined":
     "You declined sending the claim to the model's service, so nothing was sent.",
   "error.tagging.noModel": "Choose a classification model.",
   "error.tagging.place": "Choose where to tag with AI: a Folder, or Not in a Folder.",
-  "error.tagging.cloudPaused":
-    "Cloud classification is paused while “Keep everything on this computer” is on.",
+  "error.tagging.cloudPaused": "Cloud tagging paused: “Keep everything on this computer” is on.",
   "error.tagging.jevNotSetUp": "Jev isn't set up.",
   "error.tagging.jevKeyUnreadable": "The Jev key can't be read on this device.",
   "error.tagging.startOllama": "Start Ollama to use automatic local classification.",
@@ -3561,6 +3627,8 @@ export const en = {
   "menu.reload": "Reload",
   "menu.forceReload": "Force Reload",
   "menu.devTools": "Toggle Developer Tools",
+  "menu.export": "Export…",
+  "menu.export.named": "Export “{name}”…",
   "menu.help": "Help",
   "menu.sendFeedback": "Send feedback…",
   "feedback.title": "Send feedback",
@@ -3631,7 +3699,7 @@ export const en = {
   "connectors.registry.searching": "Searching the MCP Registry…",
   "connectors.registry.none": "Nothing in the MCP Registry matches “{query}”.",
   "connectors.registry.failed.local-mode":
-    "“Keep everything on this computer” is on, so the MCP Registry isn't searched.",
+    "MCP Registry not searched: “Keep everything on this computer” is on.",
   "connectors.registry.failed.declined":
     "You chose not to send your search to the MCP Registry. You can change that in Privacy.",
   "connectors.registry.failed.unreachable":
@@ -3817,27 +3885,21 @@ export const en = {
   "approvals.card.alwaysAllowHint":
     "Run {tool} from now on without asking. You can reset it in Settings, under Approvals.",
   "approvals.card.deny": "Deny",
-  "approvals.thirdParty.read.imported":
-    "This Answer read a Mind with imported text, so it asks you first.",
-  "approvals.thirdParty.read.webPage": "This Answer read a web page, so it asks you first.",
-  "approvals.thirdParty.read.checkedDocument":
-    "This Answer read the document being checked, so it asks you first.",
-  "approvals.thirdParty.task.imported":
-    "This Task read a Mind with imported text, so it asks you first.",
-  "approvals.thirdParty.task.webPage": "This Task read web pages, so it asks you first.",
-  "approvals.thirdParty.task.checkedDocument":
-    "This Task read the document being checked, so it asks you first.",
-  "approvals.thirdParty.mind.imported": "This Mind contains imported text, so it asks you first.",
-  "approvals.thirdParty.mind.webPage":
-    "This Mind contains text from a web page, so it asks you first.",
+  "approvals.thirdParty.read.imported": "Asks first: this Answer read a Mind with imported text.",
+  "approvals.thirdParty.read.webPage": "Asks first: this Answer read a web page.",
+  "approvals.thirdParty.read.checkedDocument": "Asks first: this Answer read the checked document.",
+  "approvals.thirdParty.task.imported": "Asks first: this Task read a Mind with imported text.",
+  "approvals.thirdParty.task.webPage": "Asks first: this Task read web pages.",
+  "approvals.thirdParty.task.checkedDocument": "Asks first: this Task read the checked document.",
+  "approvals.thirdParty.mind.imported": "Asks first: this Mind has imported text.",
+  "approvals.thirdParty.mind.webPage": "Asks first: this Mind has text from a web page.",
   "approvals.thirdParty.mind.checkedDocument":
-    "This Mind contains text from the document being checked, so it asks you first.",
-  "approvals.thirdParty.conversation.imported":
-    "This conversation contains imported text, so it asks you first.",
+    "Asks first: this Mind has text from the checked document.",
+  "approvals.thirdParty.conversation.imported": "Asks first: this conversation has imported text.",
   "approvals.thirdParty.conversation.webPage":
-    "This conversation contains text from a web page, so it asks you first.",
+    "Asks first: this conversation has text from a web page.",
   "approvals.thirdParty.conversation.checkedDocument":
-    "This conversation contains text from the document being checked, so it asks you first.",
+    "Asks first: this conversation has text from the checked document.",
   "approvals.call.waiting": "Waiting for your approval: {connector}: {tool}",
   "approvals.call.denied": "Not allowed: {connector}: {tool}",
   "approvals.call.allowed": "Asked {connector} with your approval: {tool}",
@@ -3862,8 +3924,7 @@ export const en = {
   // Onboarding: the example Mind, the "Get started" checklist and the three steps.
   "editor.hint.empty": "Start writing, or {ask}",
   "editor.hint.empty.ask": "press {shortcut} to ask a Question…",
-  "editor.hint.first":
-    "A Mind is a page where you write, and ask your Documents with every quote checked. {ask}",
+  "editor.hint.first": "A Mind: write here and ask your Documents, every quote checked. {ask}",
   "editor.hint.first.ask": "Press {shortcut} to ask.",
   "tabs.new.about": "New Mind: a page to write in and ask your Documents ({shortcut})",
   "editor.hint.afterAnswer": "Keep writing, or {ask}",
@@ -3871,12 +3932,39 @@ export const en = {
   "editor.hint.example": "Try it: write a line here, or {ask}",
   "editor.hint.example.ask": "press {shortcut} to ask your own Question",
   "examples.chip": "Example",
+  "firstOpen.title": "Welcome to IncarnaMind",
+  "firstOpen.lead": "This example was checked against its Documents. Three steps, about a minute.",
+  "firstOpen.step.citation.title": "See a mistake it caught",
+  "firstOpen.step.citation.done": "Saw a mistake it caught",
+  "firstOpen.step.citation.body":
+    "One figure in the draft is wrong. Click the red ≠ in the margin to see what the results actually say.",
+  "firstOpen.step.question.title": "Ask a question",
+  "firstOpen.step.question.done": "Asked a question",
+  "firstOpen.step.question.body":
+    "Ask the two Documents anything. The Answer quotes them, and every quote is checked.",
+  "firstOpen.step.question.ready": "Ask: “{question}”",
+  "firstOpen.step.question.own": "or press {shortcut} to type your own",
+  "firstOpen.step.question.ownOnly": "Press {shortcut} to ask your own Question.",
+  "firstOpen.step.files.title": "Add your own files",
+  "firstOpen.step.files.done": "Added your files",
+  "firstOpen.step.files.body":
+    "Your files stay where they are. IncarnaMind reads them on this computer.",
+  "firstOpen.done.title": "You're set up.",
+  "firstOpen.model.body": "One more step: choose an AI model to ask about your own files.",
+  "firstOpen.model.choose": "Choose a model",
+  "firstOpen.next.lead": "Try next:",
+  "firstOpen.next.compare": "Compare documents in a table",
+  "firstOpen.next.meeting": "Record a meeting",
+  "firstOpen.next.export": "Export to Word",
+  "firstOpen.hide": "Hide this",
+  "assistant.pill": "Ask anything",
+  "sidebar.examples": "Examples",
   "examples.banner.label": "About this example",
   "examples.banner.title": "This is an example Mind.",
   "examples.banner.body":
-    "A Mind is a page where you write, and ask your Documents with every quote checked. This draft was checked against its two Documents, and one figure is wrong: click the red mark beside it to see what the results say.",
+    "A Mind: write here and ask your Documents, every quote checked. This draft was checked against its two Documents, and one figure is wrong: click the red mark beside it to see what the results say.",
   "examples.banner.body.tea":
-    "A Mind is a page where you write, and ask your Documents with every quote checked. You write here like in any document, ask Questions about your Documents, and every claim in an Answer links to the page it came from. Click a check to see the quote; green means it was found.",
+    "A Mind: write here and ask your Documents, every quote checked. You write here like in any document, ask Questions about your Documents, and every claim in an Answer links to the page it came from. Click a check to see the quote; green means it was found.",
   "examples.banner.addOwn": "Add your Documents",
   "examples.banner.remove": "Remove the examples",
   "examples.banner.more": "Try an example closer to your work:",
@@ -3886,13 +3974,8 @@ export const en = {
   "examples.group.contracts": "Contracts",
   "examples.group.meetings": "Meetings",
   "examples.answer": "Example Answer, written in advance: no model needed to try it",
-  "gettingStarted.title": "Get started",
-  "gettingStarted.count": "· {done} of {total}",
-  "gettingStarted.hide": "Hide Get started",
   "gettingStarted.done": "Done: ",
-  "gettingStarted.step.citation": "Open a check in the example",
   "gettingStarted.step.documents": "Add your Documents",
-  "gettingStarted.step.question": "Ask your own Question",
   "startGuide.title": "Start in three steps",
   "startGuide.documents.title": "Add your Documents, or connect your apps",
   "startGuide.documents.body":
@@ -3928,15 +4011,11 @@ export const en = {
   "meetings.start.copied": "Copied",
   "meetings.start.noticeText":
     "I’m recording this meeting with IncarnaMind to take notes. The recording stays on my computer.",
-  "meetings.start.kept.mac": "Audio stays on this Mac and is deleted within a day.",
-  "meetings.start.kept.other": "Audio stays on this computer and is deleted within a day.",
   "meetings.start.dismiss": "Don’t record; keep this as a note (Esc)",
   "meetings.notice.title": "Before you record",
   "meetings.notice.both":
     "IncarnaMind records your microphone and the computer’s sound, which carries everyone else in the meeting.",
   "meetings.notice.microphone": "IncarnaMind records your microphone.",
-  "meetings.notice.kept.mac": "The audio stays on this Mac and is deleted within a day.",
-  "meetings.notice.kept.other": "The audio stays on this computer and is deleted within a day.",
   "meetings.notice.tell":
     "In many places it’s against the law to record people without telling them. Tell everyone you’re recording before you start.",
   "meetings.notice.cancel": "Cancel",
@@ -4012,8 +4091,9 @@ export const en = {
   "meetings.duration.minutes": "{count} min",
   "meetings.duration.hours": "{hours} h {minutes} min",
   "meetings.audio.recorded": "Recorded {time}",
-  "meetings.audio.keptUntil": "Audio kept on this computer until {time}",
-  "meetings.audio.keptWhile": "Audio kept on this computer until a day after the meeting",
+  "meetings.audio.kept": "Audio stays on this computer, deleted within a day.",
+  "meetings.audio.keptUntil": "Audio stays on this computer until {time}",
+  "meetings.audio.keptWhile": "Audio stays on this computer until a day after the meeting",
   "meetings.audio.delete": "Delete audio now",
   "meetings.audio.confirm":
     "Delete this meeting’s audio? It can’t be brought back. Your notes stay.",
@@ -4061,10 +4141,6 @@ export const en = {
   "meetings.settings.what": "What is recorded",
   "meetings.settings.whatBoth": "Your microphone and the other people (the computer’s sound).",
   "meetings.settings.whatMe": "Only your microphone.",
-  "meetings.settings.kept.mac":
-    "Audio stays on this Mac and is deleted a day after each meeting at the latest.",
-  "meetings.settings.kept.other":
-    "Audio stays on this computer and is deleted a day after each meeting at the latest.",
 
   "sources.title": "Find sources",
   "sources.intro":
@@ -4083,7 +4159,7 @@ export const en = {
   "sources.count.one": "1 result",
   "sources.count": "{count} results",
   "sources.none": "Nothing found. Try other words, or an earlier year.",
-  "sources.localMode": "Find sources is off while “Keep everything on this computer” is on",
+  "sources.localMode": "Find sources is off: “Keep everything on this computer” is on",
   "sources.problem.declined": "{provider} wasn't searched: you didn't allow it",
   "sources.problem.unreachable": "Couldn't reach {provider}",
   "sources.problem.rate-limited":
@@ -4121,8 +4197,7 @@ export const en = {
   "sources.added.download-failed": "Couldn't download the open copy, so its reference was added",
   "sources.failed.declined": "Downloading it isn't allowed",
   "sources.failed.not-found": "Search again to add it",
-  "sources.failed.local-mode":
-    "Nothing can be added while “Keep everything on this computer” is on",
+  "sources.failed.local-mode": "Not added: “Keep everything on this computer” is on",
   "sources.failed.rate-limited": "The service asked to slow down: try again later",
   "sources.failed.needs-key": "It needs your own key: add it above, then try again",
   "sources.failed.key-rejected": "Your key wasn't accepted: change it above, then try again",
@@ -4187,7 +4262,7 @@ export const en = {
   "web.settings.supported": "{model} searches the web through {provider}.",
   "web.settings.unsupported":
     "{provider} has no web search of its own, so Questions asked with {model} don't search the web. Claude, OpenAI and ChatGPT models do.",
-  "web.settings.localMode": "Off while “Keep everything on this computer” is on.",
+  "web.settings.localMode": "Unavailable: “Keep everything on this computer” is on.",
   "meetings.command.pause": "Pause recording",
   "meetings.command.resume": "Resume recording",
   "meetings.command.stop": "Stop recording",
@@ -4228,7 +4303,19 @@ export const en = {
   "citationStyle.command": "Citation style…",
   "citationStyle.keywords": "Bibliography, references, APA, MLA, Chicago, IEEE, GB/T 7714",
   "citationStyle.button": "Citation style: {style}",
-  "citationStyle.search": "Search styles…",
+  "citationStyle.search": "Search styles and journals…",
+  "citationStyle.searchCount": "Search {count} styles and journals…",
+  "citationStyle.recent": "Recently used",
+  "citationStyle.common": "Common",
+  "citationStyle.styles": "Styles",
+  "citationStyle.journals": "Journals",
+  "citationStyle.form.author-date": "author-date",
+  "citationStyle.form.author": "author",
+  "citationStyle.form.numeric": "numeric",
+  "citationStyle.form.label": "label",
+  "citationStyle.form.note": "note",
+  "citationStyle.follows": "follows {style}",
+  "citationStyle.unavailable": "{style} isn't available in this version",
   "citationStyle.current": "The Mind's style now",
   "citationStyle.credit": "Styles from the Citation Style Language project,",
   "citationStyle.noMatch": "No style matches “{query}”.",
@@ -4242,6 +4329,31 @@ export const en = {
   "citationStyle.change": "Change",
   "citationStyle.prompt.dismiss": "Don't ask in this Mind",
   "citationStyle.prompt.dismissed": "Won't ask about a citation style in this Mind",
+  "mindStyle.command": "Style…",
+  "mindStyle.keywords":
+    "Font, typeface, text size, serif, mono, Source Serif, JetBrains Mono, small, large, default for new Minds",
+  "mindStyle.title": "Style",
+  "mindStyle.font": "Font",
+  "mindStyle.font.default": "Default",
+  "mindStyle.font.serif": "Serif",
+  "mindStyle.font.mono": "Mono",
+  "mindStyle.font.other": "Other fonts…",
+  "mindStyle.font.missing": "Not installed on this computer",
+  "mindStyle.font.pickerTitle": "Fonts",
+  "mindStyle.font.search": "Search fonts…",
+  "mindStyle.font.current": "The Mind's font now",
+  "mindStyle.font.noMatch": "No font matches “{query}”.",
+  "mindStyle.font.loading": "Looking for fonts…",
+  "mindStyle.font.none": "No other fonts found on this computer.",
+  "mindStyle.size": "Text size",
+  "mindStyle.size.small": "Small",
+  "mindStyle.size.default": "Default",
+  "mindStyle.size.large": "Large",
+  "mindStyle.makeDefault": "Make this the default for new Minds",
+  "mindStyle.makeDefault.already": "New Minds already start in this style",
+  "mindStyle.fontChanged": "Font changed to {font}",
+  "mindStyle.sizeChanged": "Text size changed to {size}",
+  "mindStyle.defaultSet": "New Minds will start in this style",
   "references.title": "References",
   "references.copy": "Copy",
   "references.copy.label": "Copy the references",
@@ -4295,11 +4407,77 @@ export const en = {
   "assistant.reads.more": "Reads “{mind}” · searches “{scope}” and {count} more",
   "assistant.reads.listening": "Reads “{mind}” · listening to the live transcript",
   "meeting.ask.label": "Ask about the call",
-  "meeting.ask.catchUp": "Catch me up",
   "meeting.ask.recap": "Recap the last 5 minutes",
   "meeting.ask.next": "What should I ask next?",
-  "meeting.ask.check": "Check what was just said",
-  "meeting.ask.check.question": "Check what was just said against my Documents",
+  "meeting.ask.actions": "Action items so far",
+  "meetings.help.label": "Help during the call",
+  "meetings.help.say": "What should I say?",
+  "meetings.help.answer": "Answer their question",
+  "meetings.help.want": "What do they want?",
+  "meetings.help.sum": "Sum up so far",
+  "meetings.help.no": "Say no politely",
+  "meetings.help.ask": "What to ask next",
+  "meetings.help.check": "Check what was said",
+  "meetings.help.objection": "Handle the objection",
+  "meetings.help.nextStep": "Propose the next step",
+  "meetings.help.facts": "Facts from my documents",
+  "meetings.help.followUp": "A follow-up question",
+  "meetings.help.leading": "Am I leading them?",
+  "meetings.help.notCovered": "Not covered yet",
+  "meetings.help.decisions": "Decisions and owners so far",
+  "meetings.help.disagree": "Where we disagree",
+  "meetings.help.button": "{name} ({shortcut})",
+  "meetings.help.setUp": "Choose an AI model to get help during the call",
+  "meetings.help.failed": "No help this time: {message}",
+  "meetings.help.retry": "Try again",
+  "meetings.help.theySaid": "They said: “{text}”",
+  "meetings.help.youSaid": "You said: “{text}”",
+  "meetings.help.said": "“{text}”",
+  "meetings.help.readFrom": "Read from what they said",
+  "meetings.help.pin": "Pin",
+  "meetings.help.unpin": "Unpin",
+  "meetings.help.addToNotes": "Add to notes",
+  "meetings.help.added": "Added to notes",
+  "meetings.help.recommended": "Recommended",
+  "meetings.template.chip": "Template",
+  "meetings.template.title": "Template: it adds buttons for this kind of meeting",
+  "meetings.template.none": "None",
+  "meetings.template.sales": "Sales call",
+  "meetings.template.interview": "User interview",
+  "meetings.template.team": "Team meeting",
+  "meetings.template.command": "Meeting template: {name}",
+  "meetings.panel.collapse": "Collapse",
+  "meetings.panel.expand": "Expand",
+  "meetings.panel.close": "Close the panel",
+  "meetings.panel.hidden": "Hidden from your screen share where your system allows",
+  "meetings.callHelp": "Call help",
+  "meetings.callHelp.show": "Show the call help panel",
+  "meetings.callHelp.showKeys": "Show the call help panel ({keys})",
+  "meetings.callHelp.hide": "Hide the call help panel",
+  "meetings.panel.collapseCommand": "Collapse the call help panel",
+  "meetings.panel.expandCommand": "Expand the call help panel",
+  "meetings.panel.notShown": "The call help panel isn't shown",
+  "meetings.help.pinCommand": "Pin the latest suggestion",
+  "meetings.help.unpinCommand": "Unpin the latest suggestion",
+  "meetings.help.addCommand": "Add the latest suggestion to notes",
+  "meetings.help.none": "Press a help button first",
+  "meetings.help.stillWriting": "The suggestion is still being written.",
+  "meetings.level.label": "Sound level",
+  "meetings.settings.panelBody":
+    "While a meeting records, a small panel stays above the meeting app with the help buttons. It never takes the focus from the call.",
+  "meetings.settings.hidden": "Keep the panel out of my screen share",
+  "meetings.settings.keys": "Shortcuts",
+  "meetings.settings.keysBody":
+    "They work while the meeting app is in front, and only while a meeting records.",
+  "meetings.settings.keysChange": "Change the shortcut for “{name}”",
+  "meetings.settings.keysPress": "Press the new keys…",
+  "meetings.settings.keysNone": "None",
+  "meetings.settings.keysDefault": "Use the default",
+  "meetings.settings.keysInUse": "In use by another app",
+  "meetings.settings.keysChooseAnother": "Choose another",
+  "meetings.settings.keysTaken": "Already the shortcut for “{name}”",
+  "meetings.settings.keysInvalid.mac": "Hold ⌘, ⌃ or ⌥ with a letter, a digit or an F-key.",
+  "meetings.settings.keysInvalid.other": "Hold Ctrl or Alt with a letter, a digit or an F-key.",
   "assistant.searchesAll": "Searches All Documents",
   "assistant.searches.one": "Searches “{scope}”",
   "assistant.searches.more": "Searches “{scope}” and {count} more",
@@ -4456,8 +4634,7 @@ export const en = {
   "mindChanges.dropped.one": "· 1 source couldn't be matched, so it was left out",
   "mindChanges.extraCells": "· {count} extra cells were kept as text",
   "mindChanges.extraCells.one": "· 1 extra cell was kept as text",
-  "mindCall.failed.localMode":
-    "Couldn't change “{mind}”: “Keep everything on this computer” is on, and the model isn't on this computer",
+  "mindCall.failed.localMode": "Couldn't change “{mind}”: “Keep everything on this computer” is on",
   "mindCall.failed.notReady": "Couldn't change “{mind}”: the model can't be used now",
   "mindCall.failed.model": "Couldn't change “{mind}”: the model failed",
   "mindChanges.waiting": "{count} changes are waiting in “{mind}”. Accept or reject them first?",
@@ -4467,6 +4644,8 @@ export const en = {
   "answer.unbacked.removed":
     "This reply says it removed or replaced text, but nothing was removed.",
   "answer.unbacked.changed": "This reply says it changed a Mind, but no change was made.",
+  "answer.noMindTools": "This model can't write into your Mind itself.",
+  "answer.noMindTools.add": "Add to Mind",
   "answer.added": "Added to “{mind}”",
   "answer.addedToNew": "Made the Mind “{mind}” from this Answer",
   "answer.tableOpened": "Made the Mind “{mind}” from this table",
@@ -4524,7 +4703,7 @@ export const en = {
   "agents.problem.off":
     "Connecting agents is turned off in IncarnaMind. Turn it on in Settings → Agents.",
   "agents.problem.local-mode":
-    "Connected agents are paused while IncarnaMind keeps everything on this computer, because an agent sends what it reads to its own AI model. To go on, turn off “Keep everything on this computer” in IncarnaMind, in Settings → Search.",
+    "Agents are paused: “Keep everything on this computer” is on in IncarnaMind. Turn it off in Settings → Search to go on.",
   "agents.problem.consent":
     "This agent isn’t allowed to read your Documents any more. Allow it again in IncarnaMind, in Settings → Privacy.",
   "agents.problem.no-folders":
@@ -4553,8 +4732,7 @@ export const en = {
   "agents.settings.switch.off": "Off: no agent can reach your Documents.",
   "agents.settings.switch.on":
     "On: while IncarnaMind is open, each agent below can read the folders you gave it.",
-  "agents.settings.paused":
-    "Paused while “Keep everything on this computer” is on, because an agent sends what it reads to its own AI model.",
+  "agents.settings.paused": "Agents paused: “Keep everything on this computer” is on.",
   "agents.settings.paused.open": "Search settings",
   "agents.settings.connected": "Connected agents",
   "agents.settings.connect": "Connect an agent",
@@ -4728,8 +4906,6 @@ export const en = {
   "look.command.word": "Look: the Word file’s look",
   "look.command.plain": "Look: Plain Mind",
   "look.keywords": "Word style format plain",
-  "wordImport.from.open": "Open {name} beside it",
-  "wordImport.original.more": "More for {name}",
   "wordImport.openOriginal": "Open the original",
   "wordImport.notAdded": "“{name}” couldn’t be added to the Library, so Answers can’t cite it.",
   "wordImport.addToLibrary": "Add to Library",

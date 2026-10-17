@@ -13,13 +13,13 @@ import type { NodeJSON } from "../answers/blocks";
 import {
   type AiUseEntry,
   type ChatProvider,
-  type CreateMindInput,
   DEFAULT_MIND_KIND,
   type KeptCitationText,
   type Mind,
 } from "../api";
 import { describeModel } from "../chatModelNames";
 import type { Language } from "../language";
+import type { NewMind } from "../minds";
 import { readFigures } from "./figures";
 import { statementBlocks } from "./template";
 
@@ -34,7 +34,7 @@ export interface AiUseStatementOptions {
   documents(): readonly LiveDocument[];
   keptCitationTexts(): readonly KeptCitationText[];
   language(): Language;
-  createMind(input: Required<CreateMindInput>): Mind;
+  createMind(input: NewMind): Mind;
   /** Puts Blocks at the end of a Mind's text. */
   write(mindId: string, blocks: NodeJSON[]): void;
   now(): string;

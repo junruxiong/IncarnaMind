@@ -9,6 +9,7 @@ import {
   dismissChatSetup,
   expectDotsBetweenParts,
   launchApp,
+  nameMind,
   newMind,
   pointAndClick,
   removeDataFolder,
@@ -68,7 +69,7 @@ const LONG_FOLDER =
   "Supplier agreements and framework contracts reviewed by legal in the second half";
 
 for (const value of ["en", "zh-CN"] as const) {
-  test(`a problem line in the Mind's health line that wraps onto a row of its own never starts or ends with a dot, at 1,100 and 1,440 px (${value}, #887)`, async () => {
+  test(`a problem line in the check badge's card wraps between its parts and never starts or ends with a dot, at 1,100 and 1,440 px (${value}, #887)`, async () => {
     test.setTimeout(120_000);
     await writeFile(join(sources, "Tides.pdf"), TIDES);
     const { app, window } = await launchApp(dataDir, { fakeChat: true, home: sources });
@@ -78,7 +79,7 @@ for (const value of ["en", "zh-CN"] as const) {
     await setWindowSize(app, window, 1440, 900);
     await addDocuments(window, [join(sources, "Tides.pdf")]);
     await newMind(window);
-    await window.getByTestId("mind-title").fill("Deal memo");
+    await nameMind(window, "Deal memo");
     // Filed in a Folder with a long name and no Document: its checks have nothing to check against.
     await window.evaluate(async (name) => {
       const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
@@ -95,15 +96,14 @@ for (const value of ["en", "zh-CN"] as const) {
       window,
       window.getByTestId("selection-menu").getByTestId("selection-action-check-against-documents"),
     );
-    const problem = window.getByTestId("checks-problem");
+    // A check that can't run opens the card to say why.
+    const problem = window.getByTestId("check-card").getByTestId("checks-problem");
     await expect(problem).toBeVisible();
 
     for (const width of [1100, 1440]) {
       await setWindowSize(app, window, width, 900);
-      // The row of the count: the problem line is a part of it, and wraps onto a row of its own.
-      expect(await expectDotsBetweenParts(window.getByTestId("mind-count"))).toBe(true);
-      // And the problem's own words and actions wrap between parts inside it.
-      await expectDotsBetweenParts(problem.locator(".meta-line").first());
+      // The long Folder name doesn't fit the card's width: its words and actions wrap between parts.
+      expect(await expectDotsBetweenParts(problem.locator(".meta-line").first())).toBe(true);
     }
     await app.close();
   });

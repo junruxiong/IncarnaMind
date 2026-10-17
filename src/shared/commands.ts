@@ -31,6 +31,8 @@ export const MENU_COMMANDS = {
   "edit.redo": { label: "menu.redo", keys: "CmdOrCtrl+Shift+Z" },
   // A list's own key selects its rows; anywhere else the system's Select All (src/renderer/src/commands/selection.ts).
   "edit.selectAll": { label: "menu.selectAll", keys: "CmdOrCtrl+A" },
+  "mind.export": { label: "menu.export", keys: "CmdOrCtrl+Shift+E" },
+  "examples.show": { label: "menu.showExamples", keys: undefined },
   "help.feedback": { label: "menu.sendFeedback", keys: undefined },
 } as const satisfies Record<CommandId, { label: MessageKey; keys: Keys | undefined }>;
 

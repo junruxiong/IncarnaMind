@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { generateText, streamText } from "ai";
-import { describe, expect, test, vi } from "vitest";
+import { describe, expect, onTestFinished, test, vi } from "vitest";
 import { version } from "../../package.json";
 import { type Core, createAiSdkChatModel } from "../../src/core";
 import type { SignInRouteProblem } from "../../src/core/api";
@@ -13,6 +13,7 @@ import { classifyProviderError } from "../../src/core/providers/providerErrors";
 import { SIGN_IN_ROUTES, wayBackLabel } from "../../src/core/providers/signInRoutes";
 import { createFileKeychain, SECRETS_FILE } from "../../src/main/secretsFile";
 import { translate } from "../../src/shared/i18n";
+import { askAssistant } from "../helpers/assistant";
 import { createFakeCipher } from "../helpers/cipher";
 import {
   createMemoryKeychain,
@@ -26,16 +27,23 @@ import {
 import {
   ANSWER,
   BETA_FLAG,
+  createFakeAnthropic,
   createFakeClaudeBrowser,
   type FakeAnthropic,
   type FakeClaudeBrowser,
   SYSTEM_BLOCK,
-  startFakeAnthropic,
 } from "../helpers/fakeAnthropic";
 
 const MODEL = "claude-sonnet-5-5";
 
+async function startFakeAnthropic(): Promise<FakeAnthropic> {
+  const fake = await createFakeAnthropic();
+  onTestFinished(() => fake.close());
+  return fake;
+}
+
 interface Setup {
+  dataDir: string;
   core: Core;
   fake: FakeAnthropic;
   browser: FakeClaudeBrowser;
@@ -51,7 +59,8 @@ async function setUp(
   const fake = await startFakeAnthropic();
   const browser = createFakeClaudeBrowser(fake);
   const keychain = createMemoryKeychain();
-  const core = startCore(await createTempDataFolder(), {
+  const dataDir = await createTempDataFolder();
+  const core = startCore(dataDir, {
     keychain,
     browser,
     now: clock.now,
@@ -59,7 +68,7 @@ async function setUp(
     claudeAccount: fake.profile(redirect),
     ...overrides,
   });
-  return { core, fake, browser, keychain, clock };
+  return { dataDir, core, fake, browser, keychain, clock };
 }
 
 /** Waits until the browser is open and the sign-in can take a pasted address. */
@@ -69,7 +78,7 @@ async function browserOpened(browser: FakeClaudeBrowser, count = 1) {
 }
 
 /** Signs in by pasting the code Anthropic's page shows, as the User does. */
-async function signIn({ core, browser }: Setup) {
+async function signIn({ core, browser }: Pick<Setup, "core" | "browser">) {
   const result = core.signInToClaude();
   await browserOpened(browser, browser.opened.length + 1);
   expect(await core.pasteClaudeSignInAddress(browser.shown?.code ?? "")).toEqual({ ok: true });
@@ -164,7 +173,7 @@ describe("Sign in with Claude", () => {
       claudeAccount: { ...fake.profile("page"), authorizeParams: { code: "true", ...taken } },
     });
 
-    await signIn({ core, fake, browser, keychain, clock: manualClock() });
+    await signIn({ core, browser });
 
     const params = Object.fromEntries(new URL(browser.opened[0] ?? "").searchParams);
     expect(params).toMatchObject({
@@ -460,7 +469,7 @@ describe("Tokens", () => {
       createChatModel: createAiSdkChatModel,
       claudeAccount: { ...fake.profile("page"), revokeUrl: `${fake.origin}/v1/oauth/revoke` },
     });
-    await signIn({ core, fake, browser, keychain, clock });
+    await signIn({ core, browser });
     await core.saveChatProvider({ kind: "claude-account", modelId: MODEL });
     let release = () => {};
     fake.holdRefresh = new Promise<void>((resolve) => {
@@ -586,7 +595,7 @@ describe("Requests", () => {
       browser,
       claudeAccount: profile,
     });
-    await signIn({ core, fake, browser, keychain, clock: manualClock() });
+    await signIn({ core, browser });
 
     const services = (await core.listNetworkTraffic())
       .filter((traffic) => traffic.id === "claude-sign-in")
@@ -704,7 +713,36 @@ describe("Failures", () => {
 
       expect(await failure(core)).toMatchObject({ kind, signInRoute: problem });
     });
+
+    test(`${name} stops an Answer in the assistant, which keeps "${problem}" for its line`, async () => {
+      const { core, fake } = await signedIn();
+      const error = { kind: "error" as const, ...reply };
+      // Every request fails alike, a search rewrite included.
+      fake.replies.push(error, error, error, error);
+
+      const answer = await askAssistant(core, { text: "What does my plan cover?" }, "failed");
+
+      expect(answer).toMatchObject({ errorKind: kind, errorSignInRoute: problem });
+    });
   }
+
+  test("an Answer the expired sign-in stopped keeps its problem after a restart", async () => {
+    const setup = await signedIn();
+    const { core, fake, clock, keychain, dataDir } = setup;
+    fake.refuseRefresh = "invalid_grant";
+    clock.advance(fake.expiresIn * 1000);
+    const answer = await askAssistant(core, { text: "What does my plan cover?" }, "failed");
+    expect(answer.errorSignInRoute).toBe("sign-in-expired");
+    core.close();
+
+    const again = startCore(dataDir, { keychain, claudeAccount: fake.profile("page") });
+    const { messages } = await again.getConversation(answer.conversationId);
+
+    expect(messages.find((message) => message.id === answer.id)).toMatchObject({
+      errorKind: "not-signed-in",
+      errorSignInRoute: "sign-in-expired",
+    });
+  });
 
   test("the plan's limit says when it resets", async () => {
     const { core, fake } = await signedIn();
@@ -752,9 +790,9 @@ describe("Failures", () => {
       "sign-in-cancelled": ["sign-in"],
       "signed-out": ["sign-in"],
       "sign-in-expired": ["sign-in-again"],
-      refused: ["paste-api-key", "use-claude-code"],
+      refused: ["paste-api-key"],
       "plan-limit": ["use-another-model"],
-      "unexpected-response": ["paste-api-key", "use-claude-code"],
+      "unexpected-response": ["paste-api-key"],
     });
     for (const language of ["en", "zh-CN"] as const) {
       const lines = Object.values(problems).map(({ line }) => translate(language, line));

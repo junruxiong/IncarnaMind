@@ -90,12 +90,15 @@ function fontLicences(): Plugin {
 // Entry points follow electron-vite's defaults (src/main, src/preload and src/renderer), plus the
 // hidden window that records a Meeting's audio: its preload and its page (ADR-0015), the hidden
 // window that prints PDF exports (#100), the page of the hidden window that draws a cited page
-// (#133), and the shim an outside agent starts to reach the app (#351), run by the app's binary as
-// plain Node.
+// (#133), the floating panel during a call (#839), and the shim an outside agent starts to reach
+// the app (#351), run by the app's binary as plain Node.
+// false leaves the experimental sign-in routes out of the bundle, and their entries out of the window
+// (src/core/buildFlags.ts).
+const SIGN_IN_ROUTES = { __EXPERIMENTAL_SIGN_IN_ROUTES__: "true" };
+
 export default defineConfig({
   main: {
-    // false leaves the experimental sign-in routes out of the bundle (src/core/buildFlags.ts).
-    define: { __EXPERIMENTAL_SIGN_IN_ROUTES__: "true" },
+    define: SIGN_IN_ROUTES,
     build: {
       rollupOptions: {
         input: {
@@ -117,6 +120,7 @@ export default defineConfig({
   },
   renderer: {
     define: {
+      ...SIGN_IN_ROUTES,
       __APP_VERSION__: JSON.stringify(
         (
           JSON.parse(readFileSync(resolve(__dirname, "package.json"), "utf8")) as {
@@ -136,6 +140,7 @@ export default defineConfig({
           capture: resolve(__dirname, "src/renderer/capture.html"),
           print: resolve(__dirname, "src/renderer/print.html"),
           citedPage: resolve(__dirname, "src/renderer/citedPage.html"),
+          meetingPanel: resolve(__dirname, "src/renderer/meetingPanel.html"),
         },
       },
     },

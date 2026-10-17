@@ -14,6 +14,7 @@ import {
   dismissChatSetup,
   enterContent,
   launchApp,
+  nameMind,
   ollamaListing,
   openSteps,
   pointAndClick,
@@ -186,8 +187,7 @@ test("typing in the composer and pressing Enter shows the Question in the assist
 
   await pointAndClick(window, window.getByTestId("plus-menu"));
   await pointAndClick(window, window.getByTestId("plus-new-mind"));
-  const title = window.getByTestId("mind-title");
-  await title.fill("Reading notes: tides");
+  await nameMind(window, "Reading notes: tides");
   await enterContent(window);
   await window.keyboard.type("Spring tides come twice a month.");
   const editor = window.getByTestId("mind-editor");
@@ -531,8 +531,8 @@ test("⌘J focuses the composer from the note; Shift+Enter breaks the Question's
   await window.keyboard.type(" noted");
   await expect.poll(() => order(editor)).toEqual(["First thought noted", "Second thought"]);
 
-  // From the title, ⌘J too: the assistant unfolds into its composer.
-  await pointAndClick(window, window.getByTestId("mind-title"));
+  // From the Mind's tab, ⌘J too: the assistant unfolds into its composer.
+  await pointAndClick(window, window.getByTestId("mind-tab"));
   await window.keyboard.press("ControlOrMeta+j");
   await expect(assistant).not.toHaveAttribute("data-folded");
   await expect(input).toBeFocused();
@@ -565,7 +565,7 @@ test("the model chip chooses the model for one Mind, which remembers it after a 
     // A Mind that chooses another model, with the mouse.
     await pointAndClick(window, window.getByTestId("plus-menu"));
     await pointAndClick(window, window.getByTestId("plus-new-mind"));
-    await window.getByTestId("mind-title").fill("Other model");
+    await nameMind(window, "Other model");
     const chip = window.getByTestId("composer-model");
     await expect(chip).toHaveText("fake-model");
     await pointAndClick(window, chip);
@@ -598,7 +598,7 @@ test("the model chip chooses the model for one Mind, which remembers it after a 
     // A new Mind takes the default; by keyboard, the menu opens and closes again.
     await pointAndClick(window, window.getByTestId("plus-menu"));
     await pointAndClick(window, window.getByTestId("plus-new-mind"));
-    await window.getByTestId("mind-title").fill("Default model");
+    await nameMind(window, "Default model");
     await expect(chip).toHaveText("fake-model");
     await chip.focus();
     await window.keyboard.press("Enter");
@@ -763,7 +763,7 @@ test("in Chinese: the composer with a Search scope and a Skill chosen from its p
 
   await pointAndClick(window, window.getByTestId("plus-menu"));
   await pointAndClick(window, window.getByTestId("plus-new-mind"));
-  await window.getByTestId("mind-title").fill("潮汐笔记");
+  await nameMind(window, "潮汐笔记");
   await enterContent(window);
   await window.keyboard.type("大潮每月出现两次。");
   const composer = window.getByTestId("composer");

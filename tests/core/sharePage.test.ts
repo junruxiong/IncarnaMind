@@ -361,7 +361,9 @@ describe("a web page to share (#72)", { timeout: 60_000 }, () => {
     expect(document.querySelector(".shared-from")?.textContent).toBe(
       "Shared from IncarnaMind · 13 Oct 2026",
     );
-    expect(document.querySelector("h1")?.textContent).toBe("Credit memo: Northwind <Retail>");
+    // The page has no title line (#908): the name names the file and the browser's tab.
+    expect(document.querySelector("h1")).toBeNull();
+    expect(document.querySelector("title")?.textContent).toBe("Credit memo Northwind Retail");
     expect(document.querySelector(".shared-about")?.textContent).toBe(
       "Each Citation's card shows its quote, where it is, and what the check found.",
     );
@@ -552,7 +554,11 @@ const card = (check: CitationCheck, more: Partial<CitationCard> = {}): CitationC
 /** The page for these cards, each behind a marker of its own. */
 function pageOf(
   cards: readonly CitationCard[],
-  { language = "en", footnote }: { language?: Language; footnote?: Partial<Footnote> } = {},
+  {
+    language = "en",
+    footnote,
+    font = null,
+  }: { language?: Language; footnote?: Partial<Footnote>; font?: string | null } = {},
 ) {
   const footnotes: Footnote[] = cards.map((each) => ({
     source: each.source,
@@ -560,7 +566,6 @@ function pageOf(
     ...footnote,
   }));
   const html = renderSharePage({
-    title: "Tides",
     blocks: [
       {
         kind: "paragraph",
@@ -578,9 +583,20 @@ function pageOf(
     cards: new Map(footnotes.map((each, index) => [each, cards[index] ?? card("found")])),
     pictures: [],
     checkedLine: false,
+    font,
   });
   return { html, document: parseHTML(html).document };
 }
+
+describe("a web page to share in the Mind's font", () => {
+  test("its policy allows the stylesheet it writes, the font's rule included", () => {
+    const { html, document } = pageOf([card("found")], { font: "JetBrains Mono" });
+    const styles = document.querySelector("style")?.textContent ?? "";
+    expect(styles).toContain('font-family:"JetBrains Mono"');
+    const hash = createHash("sha256").update(styles).digest("base64");
+    expect(html).toContain(`style-src 'sha256-${hash}'`);
+  });
+});
 
 const foot = (cards: readonly CitationCard[], language: Language = "en") =>
   pageOf(cards, { language }).document.querySelector(".shared-foot p")?.textContent;

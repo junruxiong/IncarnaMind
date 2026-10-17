@@ -8,9 +8,12 @@ import {
   addDocuments,
   createDataFolder,
   dismissChatSetup,
+  enterContent,
+  frontMindName,
   interceptOpenExternal,
   launchApp,
   linkFolderFromSidebar,
+  nameMind,
   newMind,
   openDocumentMenu,
   openSettings,
@@ -39,7 +42,7 @@ test("a Mind created before quitting is still there after reopening the app", as
   const mindId = await created.getAttribute("data-mind-id");
   expect(mindId).toBeTruthy();
   await expect(first.window.getByTestId("mind-pane")).toHaveAttribute("data-mind-id", `${mindId}`);
-  await expect(first.window.getByTestId("mind-title")).toBeVisible();
+  await expect(first.window.getByTestId("mind-editor")).toBeVisible();
   await first.app.close();
 
   // Second run on the same data folder: the Mind is listed and opens.
@@ -49,7 +52,7 @@ test("a Mind created before quitting is still there after reopening the app", as
   await expect(restored).toHaveAttribute("data-mind-id", `${mindId}`);
   await restored.click();
   await expect(second.window.getByTestId("mind-pane")).toHaveAttribute("data-mind-id", `${mindId}`);
-  await expect(second.window.getByTestId("mind-title")).toBeVisible();
+  await expect(second.window.getByTestId("mind-editor")).toBeVisible();
   await second.app.close();
 });
 
@@ -59,7 +62,7 @@ test("what was typed in a Mind, and its title, are still there after reopening t
   const first = await launchApp(dataDir);
   await dismissChatSetup(first.window);
   await newMind(first.window);
-  await first.window.getByTestId("mind-title").fill("Field notes");
+  await nameMind(first.window, "Field notes");
   const editor = first.window.getByTestId("mind-editor");
   await editor.click();
   await first.window.keyboard.type(paragraphs[0] ?? "");
@@ -73,7 +76,7 @@ test("what was typed in a Mind, and its title, are still there after reopening t
   const item = second.window.getByTestId("mind-list-item");
   await expect(item).toHaveText("Field notes");
   await item.click();
-  await expect(second.window.getByTestId("mind-title")).toHaveValue("Field notes");
+  await expect(frontMindName(second.window)).toHaveText("Field notes");
   await expect(second.window.getByTestId("mind-editor").locator("p")).toHaveText(paragraphs);
   await second.app.close();
 });
@@ -85,7 +88,7 @@ test("the sidebar lists the most recently edited Mind first, and a deleted Mind 
   const items = window.getByTestId("mind-list-item");
   for (const title of ["Older", "Newer"]) {
     await newMind(window);
-    await window.getByTestId("mind-title").fill(title);
+    await nameMind(window, title);
     await expect(items.first()).toHaveText(title);
   }
   await expect(items).toHaveText(["Newer", "Older"]);
@@ -213,12 +216,13 @@ test("first run asks for no model; the first own Question waits while the setup 
   await expect(window.getByTestId("assistant-waiting-model")).toHaveText(
     "Waiting for you to choose a model",
   );
-  await expect(card).toContainText("Choose where Answers come from");
+  await expect(card).toContainText("Choose your AI");
   await expect(card.getByTestId("setup-chatgpt")).toHaveText("Use my ChatGPT plan");
   await expect(card.getByTestId("setup-key")).toHaveText("Paste an API key");
-  // Choosing it is the consent (ADR-0022), so its line names everything that goes.
-  await expect(card.getByTestId("setup-chatgpt-sends")).toHaveText(
-    "If you pay for ChatGPT Plus or Pro · No key needed · Signing in lets OpenAI receive, under your ChatGPT account: your Questions with the Mind you're in, matching passages and the names of Documents in scope; sentences you check; the paragraph you pause on; text you ask the assistant to change; and Document names, outlines and excerpts with your Folder and Tag names, to tag and file them (page images for scans).",
+  // Choosing it is the consent (ADR-0022): one line says what goes, and Details names it all.
+  await expect(card.getByTestId("setup-chatgpt-line")).toHaveText("Plus or Pro · no key needed");
+  await expect(card.getByTestId("setup-chatgpt-sends").locator("p")).toHaveText(
+    "Sends your questions and document text to OpenAI. · Details",
   );
   // The card says what the Mind's "needs an AI model" line would, so that line steps aside.
   await expect(window.getByTestId("chat-readiness")).toHaveCount(0);
@@ -234,8 +238,11 @@ test("first run asks for no model; the first own Question waits while the setup 
     }),
   );
   await expect(card.getByTestId("setup-key")).toHaveText("粘贴 API 密钥");
-  await expect(card.getByTestId("setup-chatgpt-sends")).toHaveText(
-    "如果你订阅了 ChatGPT Plus 或 Pro（中国大陆无法使用）· 无需密钥 · 登录后，以下内容会通过你的 ChatGPT 账号发送给 OpenAI：你的问题连同你所在的 Mind、相关段落和范围内文档的名称；你核对的句子；写作建议时你停下的段落；你让助手修改的文字；以及文档名称、目录和摘录，连同你的文件夹和标签名称，用于打标签和归档（扫描件发送页面图片）。",
+  await expect(card.getByTestId("setup-chatgpt-line")).toHaveText(
+    "Plus 或 Pro（中国大陆不可用）· 无需密钥",
+  );
+  await expect(card.getByTestId("setup-chatgpt-sends").locator("p")).toHaveText(
+    "会把你的问题和文档内容发送给 OpenAI。 · 详情",
   );
   await window.evaluate(async () =>
     (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
@@ -272,26 +279,27 @@ test("Settings → Models lists the key providers, and “Already pay for a plan
   await app.close();
 });
 
-test("first run fits a small window; the not-ready notice and a long title keep the Mind's text edge", async () => {
+test("first run fits a small window; the not-ready notice and a long first line keep the Mind's text edge", async () => {
   const { app, window } = await launchApp(dataDir);
   await setWindowSize(app, window, 1000, 600);
 
   await newMind(window);
-  const title = window.getByTestId("mind-title");
-  await expect(title).toBeFocused();
-  const long = "Reading notes on spring and neap tides, harbour tables and the Moon's pull";
+  await enterContent(window);
+  const long = "Reading notes on spring and neap tides, harbour tables and the pull of the Moon";
   await window.keyboard.type(long);
-  // Long, the title wraps instead of being cut off.
-  await expect(title).toHaveValue(long);
-  const titleBox = await title.boundingBox();
-  if (!titleBox) throw new Error("The title isn't visible.");
-  expect(titleBox.height).toBeGreaterThan(70);
+  // Long, the first line wraps instead of being cut off.
+  const line = window.getByTestId("mind-editor").locator("p").first();
+  await expect(line).toHaveText(long);
+  const lineBox = await line.boundingBox();
+  if (!lineBox) throw new Error("The line isn't visible.");
+  const lineHeight = await line.evaluate((p) => Number.parseFloat(getComputedStyle(p).lineHeight));
+  expect(lineBox.height).toBeGreaterThan(lineHeight * 1.5);
 
-  // The notice's box reaches into the margin; its text starts where the title's does.
+  // The notice's box reaches into the margin; its text starts where the Mind's does.
   const notice = window.getByTestId("chat-readiness").locator("span").first();
   const noticeBox = await notice.boundingBox();
   if (!noticeBox) throw new Error("The notice isn't visible.");
-  expect(Math.abs(noticeBox.x - titleBox.x)).toBeLessThan(1);
+  expect(Math.abs(noticeBox.x - lineBox.x)).toBeLessThan(1);
   await app.close();
 });
 

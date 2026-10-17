@@ -1,19 +1,31 @@
 /**
- * The citation-style engine run in the test's own thread, on the files the app ships, and the
- * spike's 30 English and Chinese references (#288), for the golden tests (#289).
+ * The citation-style engine run in the test's own thread, on the style pack the app ships, and
+ * the spike's 30 English and Chinese references (#288), for the golden tests (#289).
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { brotliCompressSync } from "node:zlib";
 import type { StyledRun } from "../../src/core/api";
+import { createCatalogue } from "../../src/core/citationStyles/catalogue";
 import type { CslItem } from "../../src/core/citationStyles/csl";
 import { type FormatJob, formatJob } from "../../src/core/citationStyles/format";
+import {
+  PACK_HEADER_BYTES,
+  PACK_MAGIC,
+  PackFiles,
+  type PackIndex,
+  type PackStyle,
+  readPackIndex,
+} from "../../src/core/citationStyles/pack";
+import { createPackStyles } from "../../src/core/citationStyles/packStyles";
 import {
   CslEngine,
   type EngineCitation,
   type EngineOutput,
 } from "../../src/core/citationStyles/wasm";
-import { type CitationStyleId, citationStyle } from "../../src/shared/citationStyles";
+import type { Language } from "../../src/core/language";
+import { type CitationStyleId, packIdOf } from "../../src/shared/citationStyles";
 import { CITATION_STYLES } from "./core";
 
 const FIXTURES = fileURLToPath(new URL("../fixtures/citation-styles", import.meta.url));
@@ -29,40 +41,105 @@ export const goldenFile = (style: CitationStyleId) => join(FIXTURES, "golden", `
 
 let engine: CslEngine | undefined;
 const handles = new Map<string, number>();
+const catalogue = createCatalogue(join(CITATION_STYLES, "styles.pack"));
+const pack = createPackStyles(CITATION_STYLES);
 
-/** Formats a job with a shipped style, as the worker does, but on this thread. */
+/**
+ * Formats a job with a shipped style, as the worker does, but on this thread: a common style or
+ * any style of the pack, in a Mind whose text is in `language`.
+ */
 export function formatHere(
   style: CitationStyleId,
   job: Omit<FormatJob, "englishTermsForOthers" | "raisedLocators">,
+  language: Language = "en",
 ) {
-  const { file, language, locators } = citationStyle(style);
-  if (!file) throw new Error(`${style} isn't a CSL style.`);
+  const resolved = catalogue.resolve(style, language);
+  const { engine: wanted } = resolved;
+  if (!wanted) throw new Error(`${style} isn't a CSL style.`);
   if (!engine) {
     engine = new CslEngine(
       new WebAssembly.Module(readFileSync(join(CITATION_STYLES, "engine.wasm"))),
     );
   }
   const live = engine;
-  let handle = handles.get(file);
+  const key = `${wanted.packId} ${wanted.locale ?? ""}`;
+  let handle = handles.get(key);
   if (handle === undefined) {
-    const locales = ["en-US", "en-GB", "zh-CN"].map((code) =>
-      readFileSync(join(CITATION_STYLES, "locales", `locales-${code}.xml`), "utf8"),
-    );
-    handle = live.parse(
-      readFileSync(join(CITATION_STYLES, "styles", file), "utf8"),
-      locales,
-    ).handle;
-    handles.set(file, handle);
+    const { text, locales } = pack.style(wanted);
+    handle = live.parse(text, locales).handle;
+    handles.set(key, handle);
   }
   const parsed = handle;
   return formatJob(
     {
       ...job,
-      englishTermsForOthers: language === "zh-CN",
-      raisedLocators: locators === "raised-after",
+      englishTermsForOthers: resolved.language === "zh-CN",
+      raisedLocators: resolved.locators === "raised-after",
+      ...(wanted.locale ? { locale: wanted.locale } : {}),
     },
     (request) => live.render(parsed, request),
   );
+}
+
+const shipped = (() => {
+  const path = join(CITATION_STYLES, "styles.pack");
+  const index = readPackIndex(path);
+  return { index, files: new PackFiles(path, index) };
+})();
+
+/** A style's file as the app ships it, by its id in the pack. */
+export function shippedStyle(id: string): string {
+  const at = shipped.index.styles.find((style) => style.id === id)?.at;
+  if (!at) throw new Error(`The pack has no file for ${id}.`);
+  return shipped.files.text(at);
+}
+
+/** A locale's file as the app ships it: "en-US". */
+export function shippedLocale(code: string): string {
+  const at = shipped.index.locales[code];
+  if (!at) throw new Error(`The pack has no locale ${code}.`);
+  return shipped.files.text(at);
+}
+
+/** Writes a pack of these files, laid out as scripts/citationStylePack.ts lays out the real one. */
+export function writePack(
+  path: string,
+  styles: Readonly<Record<string, string>>,
+  locales: Readonly<Record<string, string>>,
+): void {
+  const chunks: Buffer[] = [];
+  const add = (files: readonly string[]) => {
+    chunks.push(brotliCompressSync(JSON.stringify(files)));
+    return chunks.length - 1;
+  };
+  const entries: PackStyle[] = Object.entries(styles).map(([id, text]) => ({
+    id,
+    title: id,
+    format: "numeric",
+    at: [add([text]), 0],
+  }));
+  const localeChunk = add(Object.values(locales));
+  const notice = add(["A notice."]);
+  let offset = 0;
+  const index: PackIndex = {
+    version: 1,
+    source: { styles: "test", locales: "test" },
+    chunks: chunks.map((bytes) => {
+      const where = { offset, length: bytes.length };
+      offset += bytes.length;
+      return where;
+    }),
+    styles: entries,
+    locales: Object.fromEntries(
+      Object.keys(locales).map((code, slot) => [code, [localeChunk, slot]]),
+    ),
+    notice: [notice, 0],
+  };
+  const indexBytes = brotliCompressSync(JSON.stringify(index));
+  const header = Buffer.alloc(PACK_HEADER_BYTES);
+  header.write(PACK_MAGIC, 0, "latin1");
+  header.writeUInt32LE(indexBytes.length, PACK_MAGIC.length);
+  writeFileSync(path, Buffer.concat([header, indexBytes, ...chunks]));
 }
 
 const escapeText = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;");
@@ -101,9 +178,8 @@ export function markup(runs: readonly StyledRun[]): string {
 
 /** A style's output as the golden file keeps it. */
 export function goldenText(style: CitationStyleId, output: EngineOutput): string {
-  const { file } = citationStyle(style);
   const lines = [
-    `# ${style} (${file})`,
+    `# ${style} (${packIdOf(style)}.csl)`,
     "",
     `## Citations (${output.citations.length})`,
     "",

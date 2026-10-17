@@ -48,7 +48,7 @@ beforeAll(async () => {
 });
 
 describe("the menus", () => {
-  test("a Mind's is Open, Open to the side, Outline, Export as… and Export options…, Export AI use statement, Export check record as PDF and as CSV, History, Check this Mind, Check for contradictions, Make this a Skill, Move to and New Folder with this Mind, Rename, then Delete after a rule", () => {
+  test("a Mind's is Open, Open to the side, Outline, Export as… and Export options…, Export AI use statement, Export check record as PDF and as CSV, History, Check this Mind, Check for contradictions, Style, Make this a Skill, Move to and New Folder with this Mind, Rename, then Delete after a rule", () => {
     const here = {
       "mind.citationStyle": () => undefined,
       "mind.moveTo": () => undefined,
@@ -73,6 +73,7 @@ describe("the menus", () => {
       "mind.checkAll",
       "mind.checkContradictions",
       "mind.citationStyle",
+      "mind.style",
       "skill.fromMind",
       "—",
       "mind.moveTo",
@@ -101,12 +102,17 @@ describe("the menus", () => {
       "mind.history",
       "mind.checkAll",
       "mind.checkContradictions",
+      "mind.style",
       "skill.fromMind",
       "—",
       "folder.newWith",
       "—",
       "mind.delete",
     ]);
+    // The page's ⋯ offers Style as a submenu of its own, so its list leaves the command out.
+    const page = idsIn(buildMenu("mind", focusOn("mind"), ["mind.style"]));
+    expect(page).not.toContain("mind.style");
+    expect(page).toContain("skill.fromMind");
   });
 
   test("a Document's file group is Open in default app, Show the file, Copy path, then Get info", () => {

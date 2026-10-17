@@ -16,6 +16,7 @@ import { FileWriteDialog } from "./components/FileWriteDialog";
 import { HistoryView } from "./components/history/HistoryView";
 import { InfoPanel } from "./components/InfoPanel";
 import { MeetingNoticeDialog } from "./components/MeetingNoticeDialog";
+import { MindStyleHost } from "./components/MindStyle";
 import { Peek } from "./components/Peek";
 import { ProblemMark } from "./components/ProblemLine";
 import { ChatGptWelcomeDialog } from "./components/providers/ChatGptSignIn";
@@ -30,7 +31,9 @@ import { TabNoticeLine } from "./components/tabs/TabNoticeLine";
 import { WordImportDialog } from "./components/WordImportDialog";
 import { files } from "./core";
 import { useEscapeToDismiss } from "./escapeDismiss";
+import { useExamplesMenu, useExportMenu } from "./exportMenu";
 import { useLanguage, useT } from "./i18n";
+import { useMeetingHelpInWindow } from "./meetingHelp";
 import { useMeetings } from "./meetings";
 import { setMotionPreference } from "./motion";
 import { importReferenceFile, isReferenceFile } from "./referenceImport";
@@ -195,12 +198,15 @@ function Workspace() {
   });
   const openSettings = useAppStore((state) => state.openSettings);
   useKeymap();
+  useMeetingHelpInWindow();
   useEditMenu();
   useEscapeToDismiss();
   useRememberSidebarWidth(device?.sidebarWidth);
   const workbench = useRef<HTMLDivElement>(null);
   const beforeSlide = useSidebarSlide(workbench);
   const sidebar = useSidebarControl(device?.sidebarHidden ?? false, beforeSlide);
+  useExportMenu();
+  useExamplesMenu();
   const peek = useSidebarPeek(sidebar.hidden, beforeSlide);
   const [announcement, setAnnouncement] = useState("");
   const announced = useRef(sidebar.hidden);
@@ -287,6 +293,7 @@ function Workspace() {
         <WordImportDialog />
         <ChatGptWelcomeDialog />
         <CitationStylePickerHost />
+        <MindStyleHost />
         {/* Open after the dialog that triggered the request, so they show on top of it. */}
         <ConsentDialog />
         <MeetingNoticeDialog />

@@ -72,7 +72,7 @@ import {
 import { untitledFolderName } from "./newFolder";
 import { useNotices } from "./notices";
 import { useRequests } from "./requests";
-import { resolveSettingsPage, type SettingsPage } from "./settingsPages";
+import { resolveSettingsPage, type SettingsPage, type SettingsTarget } from "./settingsPages";
 import { type Undoable, UndoRefused, useUndo } from "./undo";
 
 type Status = { kind: "loading" } | { kind: "ready" } | { kind: "failed"; message: string };
@@ -115,12 +115,7 @@ export interface OpenDocumentHow {
 export interface AppState extends LayoutSlice {
   status: Status;
   minds: Mind[];
-  /**
-   * A Mind just created, whose title takes the focus once it shows (see
-   * `MindTitle`), so typing names it instead of pressing the button again.
-   */
-  titleToFocus: string | null;
-  /** A Mind just created with its title given: its text takes the focus once it shows. */
+  /** A Mind just created: its first line takes the focus once it shows (#908). */
   bodyToFocus: string | null;
   /** Set once loaded. */
   settings: Settings | null;
@@ -147,7 +142,7 @@ export interface AppState extends LayoutSlice {
   /** The page Settings shows. */
   settingsPage: SettingsPage;
   /** A setting Settings opened at, shown and focused once it is drawn, which then clears this. */
-  settingsAt: "output-location" | null;
+  settingsAt: SettingsTarget | null;
   /**
    * Every Folder of every Linked folder, flat, in name order: each Linked
    * folder's own Folder and those inside it. The sidebar builds the tree from each `parentId`.
@@ -186,6 +181,7 @@ export interface AppState extends LayoutSlice {
   examples: Examples | null;
   otherExamples: Examples[];
   ownAnswerArrived: boolean;
+  askedOwnAtLaunch: boolean;
   usageNotice: "auto" | "kept" | "answered";
   /**
    * The privacy choices on this device: the first run asks about usage data
@@ -207,8 +203,7 @@ export interface AppState extends LayoutSlice {
    */
   createMind(options?: {
     startQuestion?: boolean;
-    /** Its text takes the focus, not its title: one asked for by name (#202). */
-    focusBody?: boolean;
+    /** Its name, which its text starts with as a Heading 1 ("Create a new note called …"). */
     title?: string;
     scope?: SearchScope | null;
     folderId?: string | null;
@@ -239,8 +234,6 @@ export interface AppState extends LayoutSlice {
   deleteFolder(folderId: string): Promise<void>;
   /** Lists a Mind just made and opens it in a new tab after the shown one, in the focused group or `groupId`. */
   showNewMind(mind: Mind, groupId?: string): Promise<void>;
-  /** Called once the new Mind's title has the focus. */
-  titleFocused(): void;
   /** Called once the new Mind's text has the focus. */
   bodyFocused(): void;
   /** Starts a Question at the end of the open Mind, or of a new Mind if none is open. */
@@ -262,6 +255,8 @@ export interface AppState extends LayoutSlice {
   startMindFrom(bridge: LibraryBridge): Promise<Undoable | undefined>;
   /** Opens the first-run example Mind, making the examples again if they were removed. */
   openExamples(): Promise<void>;
+  /** Makes the first-run example again and opens it, with Undo. */
+  showExamples(): Promise<void>;
   /** Opens another example in a new tab, making it first if it isn't there; the Mind in view stays. */
   openExample(group: ExampleGroup): Promise<void>;
   removeExamples(): Promise<void>;
@@ -279,10 +274,8 @@ export interface AppState extends LayoutSlice {
   closeTab(tabId: string): void;
   /** ⇧⌘T: reopens the tab closed last, where it was. */
   reopenTab(): void;
-  /** Renames a Mind, with Undo; `typing`: as the User types its title, which becomes one step once they leave it (`titleLeft`). */
-  renameMind(id: string, title: string, options?: { typing?: boolean }): Promise<void>;
-  /** The User left a Mind's title: what they typed, from `before` to `after`, becomes one step to undo. */
-  titleLeft(id: string, before: string, after: string): void;
+  /** Renames a Mind, with Undo. */
+  renameMind(id: string, title: string): Promise<void>;
   deleteMind(id: string): Promise<void>;
   /** Shows a failure that happened outside a store action, e.g. while saving an edit. */
   reportError(error: unknown): void;
@@ -291,7 +284,7 @@ export interface AppState extends LayoutSlice {
    * Models to set one up, or Privacy to allow a declined flow; and, with
    * `at`, at one setting on it.
    */
-  openSettings(page?: SettingsPage, at?: "output-location"): void;
+  openSettings(page?: SettingsPage, at?: SettingsTarget): void;
   closeSettings(): void;
   showSettingsPage(page: SettingsPage): void;
   /**
@@ -683,7 +676,6 @@ export const useAppStore = create<AppState>()((set, get) => {
     ...createLayoutSlice(set, get, (error) => useNotices.getState().showError(error)),
     status: { kind: "loading" },
     minds: [],
-    titleToFocus: null,
     bodyToFocus: null,
     pickingDocuments: false,
     settings: null,
@@ -733,6 +725,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     examples: null,
     otherExamples: [],
     ownAnswerArrived: false,
+    askedOwnAtLaunch: false,
     usageNotice: "auto",
     privacy: null,
     questionToStart: null,
@@ -803,6 +796,7 @@ export const useAppStore = create<AppState>()((set, get) => {
           documents,
           examples,
           otherExamples: otherExamples.filter(isMade),
+          askedOwnAtLaunch: settings.device.gettingStarted.askedOwn,
           status: { kind: "ready" },
         });
         await get().refreshLibrary();
@@ -816,7 +810,7 @@ export const useAppStore = create<AppState>()((set, get) => {
       let made: Undoable | undefined;
       await attempt(async () => {
         const mind = await core.createMind({
-          ...(options?.title && { title: options.title }),
+          ...(options?.title && { title: options.title, headed: true }),
           ...(options?.folderId && { folderId: options.folderId }),
         });
         made = mindMade(
@@ -832,9 +826,7 @@ export const useAppStore = create<AppState>()((set, get) => {
         set(
           options?.startQuestion
             ? { questionToStart: { mindId: mind.id, scope: options.scope ?? null } }
-            : options?.focusBody
-              ? { bodyToFocus: mind.id }
-              : { titleToFocus: mind.id },
+            : { bodyToFocus: mind.id },
         );
         await get().showNewMind(mind, options?.groupId);
         options?.made?.(mind.id);
@@ -852,7 +844,6 @@ export const useAppStore = create<AppState>()((set, get) => {
       });
     },
 
-    titleFocused: () => set({ titleToFocus: null }),
     bodyFocused: () => set({ bodyToFocus: null }),
 
     startQuestion() {
@@ -1026,6 +1017,19 @@ export const useAppStore = create<AppState>()((set, get) => {
         if (examples.mindId) get().openMind(examples.mindId);
       }),
 
+    showExamples: () =>
+      attempt(async () => {
+        await get().openExamples();
+        push({
+          message: t("undo.examplesShown"),
+          name: t("undo.name.showExamples"),
+          undo: () => core.removeExamples(),
+          redo: async () => {
+            await core.createExamples();
+          },
+        });
+      }),
+
     openExample: (group) =>
       attempt(async () => {
         const made = await core.createExamples(group);
@@ -1040,8 +1044,11 @@ export const useAppStore = create<AppState>()((set, get) => {
         const groups = madeExamples(get()).map((each) =>
           each.group === "tea" ? undefined : each.group,
         );
+        // The first open can't go on without its example: removing them ends it, Undo resumes it.
+        const hidden = get().settings?.device.gettingStarted.hidden ?? false;
         const remove = async () => {
           for (const group of groups) await core.removeExamples(group);
+          get().updateGettingStarted({ hidden: true });
         };
         await remove();
         push({
@@ -1049,6 +1056,7 @@ export const useAppStore = create<AppState>()((set, get) => {
           name: t("undo.name.removeExamples"),
           undo: async () => {
             for (const group of groups) await core.createExamples(group);
+            get().updateGettingStarted({ hidden });
           },
           redo: remove,
         });
@@ -1091,18 +1099,12 @@ export const useAppStore = create<AppState>()((set, get) => {
     },
 
     // The list follows the core's "minds.changed" event, which arrives before these calls return.
-    renameMind: (id, title, options) =>
+    renameMind: (id, title) =>
       attempt(async () => {
         const before = get().minds.find((mind) => mind.id === id)?.title;
         const mind = await core.renameMind(id, title);
-        if (!options?.typing && before !== undefined) offerRename(mind, before);
+        if (before !== undefined) offerRename(mind, before);
       }),
-
-    titleLeft(id, before, after) {
-      const mind = get().minds.find((each) => each.id === id);
-      // Its last letters may still be on their way to the core: the title is what was typed.
-      if (mind) offerRename({ ...mind, title: after.trim() }, before);
-    },
 
     deleteMind: (id) =>
       attempt(async () => {

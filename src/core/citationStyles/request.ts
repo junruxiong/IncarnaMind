@@ -34,5 +34,13 @@ export function parseRequest(input: unknown): CitationFormatRequest {
     if (works > MAX_WORKS) throw new InvalidInputError("Too many Citations to format at once.");
     return { works: cluster.works.map(parseWork) };
   });
-  return { style: input.style, clusters };
+  if (input.language !== undefined && input.language !== "en" && input.language !== "zh-CN") {
+    throw new InvalidInputError({
+      key: "error.citationStyle.language",
+      values: { language: String(input.language) },
+    });
+  }
+  return input.language === undefined
+    ? { style: input.style, clusters }
+    : { style: input.style, clusters, language: input.language };
 }

@@ -7,9 +7,8 @@ import type { OAuthCredentials } from "../../oauthAccount";
 import type { ChatLanguageModel } from "../models";
 import { SignInRouteError } from "../providerErrors";
 import { createSignedFetch, errorOf, isAnswer } from "../signedFetch";
-import { NO_COPILOT_ACCESS } from "./service";
+import { NO_COPILOT_ACCESS, ORGANIZATION_POLICY } from "./service";
 
-const POLICY = /polic|organi[sz]ation|enterprise|administrator/i;
 const MODEL_UNAVAILABLE = /model.*not (supported|available|enabled)|unsupported model/i;
 const QUOTA = /quota|allowance|premium requests?/i;
 
@@ -23,7 +22,7 @@ async function refusalOf(response: Response): Promise<Error | null> {
   if (status === 403) {
     const { message, code } = await errorOf(response);
     const said = `${code ?? ""} ${message}`;
-    const problem = POLICY.test(said)
+    const problem = ORGANIZATION_POLICY.test(said)
       ? "policy-blocked"
       : NO_COPILOT_ACCESS.test(said)
         ? "no-plan"

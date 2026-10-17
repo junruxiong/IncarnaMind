@@ -128,7 +128,6 @@ export function FolderForm({
   );
 }
 
-/** The starter Folders first run offers ("Starter folders" in Get started), each chosen or not. */
 export function StarterFolders({ close }: { close(): void }) {
   const t = useT();
   const { busy, error, act } = useLibraryAction();

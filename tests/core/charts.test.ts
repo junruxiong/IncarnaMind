@@ -213,8 +213,6 @@ describe("a chart from a cited table", { timeout: 30_000 }, () => {
     const exported = await core.exportMind(mind.id, { format: "markdown" });
     expect(new TextDecoder().decode(exported.data)).toBe(
       [
-        "# Tides",
-        "",
         "*Chart: Revenue by quarter*",
         "",
         "| Quarter | 2024 | 2025 |",
@@ -255,8 +253,6 @@ describe("a chart from a cited table", { timeout: 30_000 }, () => {
     const exported = await core.exportMind(mind.id, { format: "markdown" });
     expect(new TextDecoder().decode(exported.data)).toBe(
       [
-        "# Tides",
-        "",
         "*Chart: Revenue by quarter*",
         "",
         "| Quarter | 2025 |",

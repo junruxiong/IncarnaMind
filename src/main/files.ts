@@ -26,7 +26,13 @@ import { FILES_CHANNELS } from "../shared/bridge";
 import { type MessageKey, translate } from "../shared/i18n";
 import { handle } from "./ipc";
 import { type FileLogger, logsFolder, logWindowError } from "./log";
-import { isEditMenuState, setEditMenu, setMenuSidebarHidden } from "./menu";
+import {
+  isEditMenuState,
+  setEditMenu,
+  setExamplesRemoved,
+  setExportMenu,
+  setMenuSidebarHidden,
+} from "./menu";
 import { rememberPick, startFolder, startNear } from "./pickerFolders";
 
 /** What "Add Documents" offers; the core decides what it takes (and says what it skipped). */
@@ -264,6 +270,16 @@ export function serveFileActions(
 
   ipcMain.on(FILES_CHANNELS.editMenu, (event, state: unknown) => {
     if (trusted(event) && isEditMenuState(state)) setEditMenu(state);
+  });
+
+  ipcMain.on(FILES_CHANNELS.examplesRemoved, (event, removed: unknown) => {
+    if (trusted(event) && typeof removed === "boolean") setExamplesRemoved(removed);
+  });
+
+  ipcMain.on(FILES_CHANNELS.exportMenu, (event, mindName: unknown) => {
+    if (trusted(event) && (typeof mindName === "string" || mindName === null)) {
+      setExportMenu(mindName);
+    }
   });
 
   ipcMain.on(FILES_CHANNELS.logError, (event, report: unknown) => {

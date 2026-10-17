@@ -12,6 +12,7 @@ import {
 import {
   createDataFolder,
   dismissChatSetup,
+  frontMindName,
   interceptOpenDialog,
   launchApp,
   pointAndClick,
@@ -110,7 +111,7 @@ async function verifyPaper(width: number) {
   await interceptOpenDialog(app, join(sources, "Memory paper.pdf"));
   await pointAndClick(window, window.getByTestId("plus-menu"));
   await pointAndClick(window, window.getByTestId("plus-verify-document"));
-  await expect(window.getByTestId("mind-title")).toHaveValue("Checking: Memory paper");
+  await expect(frontMindName(window)).toHaveText("Checking: Memory paper");
   return { app, window };
 }
 
@@ -130,7 +131,7 @@ test("a verified document's references are looked up, and the invented one is fl
 
   const line = window.getByTestId("references-line");
   await expect(line.getByTestId("references-sends")).toHaveText(
-    "Looks up the list's 4 references in Crossref, then OpenAlex or arXiv if needed, sending only each reference as written.",
+    "Sends 4 references, as written, to Crossref, OpenAlex or arXiv.",
   );
   await screenshot(window, "references-start-en");
   await pointAndClick(window, line.getByTestId("references-check"));
@@ -182,13 +183,13 @@ test("in Chinese and a narrow window, and in local mode, where it says why and o
   });
 
   const local = window.getByTestId("references-local-mode");
-  await expect(local).toContainText("无法查询这 4 条参考文献");
+  await expect(local).toContainText("无法查询参考文献：已开启“所有内容都留在这台电脑上”");
   await screenshot(window, "references-local-zh");
   await pointAndClick(window, local.getByTestId("references-local-mode-off"));
 
   const line = window.getByTestId("references-line");
   await expect(line.getByTestId("references-sends")).toHaveText(
-    "在 Crossref 中查询列表里的 4 条参考文献，必要时再在 OpenAlex 或 arXiv 中查询，只发送每条参考文献的原文。",
+    "会把 4 条参考文献的原文发送给 Crossref、OpenAlex 或 arXiv。",
   );
   await pointAndClick(window, line.getByTestId("references-check"));
   await expect(line.getByTestId("references-done")).toHaveText(
@@ -198,11 +199,11 @@ test("in Chinese and a narrow window, and in local mode, where it says why and o
     "Crossref 和 OpenAlex 中都没有",
   );
   await screenshot(window, "references-flagged-zh");
-  // Narrow, the line wraps rather than overflowing the Mind.
+  // Narrow, the line wraps rather than overflowing the check badge's card it is in.
   const lineBox = await line.boundingBox();
-  const editorBox = await window.getByTestId("mind-editor").boundingBox();
+  const cardBox = await window.getByTestId("check-card").boundingBox();
   expect((lineBox?.x ?? 0) + (lineBox?.width ?? 0)).toBeLessThanOrEqual(
-    (editorBox?.x ?? 0) + (editorBox?.width ?? 0) + 1,
+    (cardBox?.x ?? 0) + (cardBox?.width ?? 0) + 1,
   );
   await app.close();
 });

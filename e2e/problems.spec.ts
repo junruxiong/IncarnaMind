@@ -15,6 +15,7 @@ import {
   interceptShowItemInFolder,
   launchApp,
   motionSettled,
+  nameMind,
   newMind,
   openDocumentAt,
   openSteps,
@@ -173,13 +174,13 @@ test("asking without a chat model says what to set up at the top of the Mind, an
 
   // At the top of the Mind: one line and one action, read as a status.
   const top = window.getByTestId("chat-readiness");
-  await expect(top).toContainText("Asking Questions needs an AI model");
+  await expect(top).toContainText("Asking needs an AI model");
   await expect(top.getByRole("button")).toHaveText("Set up");
   await expect(window.getByRole("status").filter({ has: top })).toHaveCount(0);
   await screenshot(window, "needs-chat-model-en");
 
   // The notice's action opens Settings on Models, by keyboard too.
-  await window.getByTestId("mind-title").fill("Tides");
+  await nameMind(window, "Tides");
   await window.keyboard.press("End");
   await top.getByRole("button").focus();
   await expect(top.getByRole("button")).toHaveCSS("outline-style", "solid");
@@ -189,7 +190,7 @@ test("asking without a chat model says what to set up at the top of the Mind, an
 
   // In Chinese.
   await bridge(window).settings("zh-CN");
-  await expect(top).toContainText("提问需要先设置 AI 模型");
+  await expect(top).toContainText("提问需要 AI 模型");
   await expect(top.getByRole("button")).toHaveText("去设置");
   await screenshot(window, "needs-chat-model-zh");
   await bridge(window).settings("en");
@@ -302,7 +303,7 @@ test("an export that can't be saved says why in the Mind, and Change output loca
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   await newMind(window);
-  await window.getByTestId("mind-title").fill("Tides");
+  await nameMind(window, "Tides");
   await window.getByTestId("mind-editor").click();
   await window.keyboard.type("Spring tides come twice a month.");
 

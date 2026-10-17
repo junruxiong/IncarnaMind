@@ -456,7 +456,7 @@ test("Local mode pauses agents, and the page reads in Chinese at a narrow window
     const page = await showSettingsPage(window, "agents");
     await expect(window.getByTestId("settings-page-title")).toHaveText("智能体");
     await expect(page.getByTestId("agents-paused")).toContainText(
-      "开启“所有内容都留在这台电脑上”时暂停使用",
+      "智能体已暂停：已开启“所有内容都留在这台电脑上”",
     );
     await shot(window, "agents-paused-zh-narrow");
     // The first-class agents and "Other agent" (其他智能体), and nothing spills out at either width.
